@@ -244,7 +244,19 @@ describe('cloned voice client calls', () => {
   });
 
   it('gets one cloned voice with an encoded id', async () => {
-    const request = vi.fn().mockResolvedValue({ success: true, voice: { id: 'a/b c', status: 'ready' } });
+    const request = vi.fn().mockResolvedValue({
+      success: true,
+      voice: {
+        id: 'a/b c',
+        status: 'ready',
+        language: 'en',
+        voice_id: 'chatterbox:u1',
+        error_code: null,
+        consent_at: '2026-01-01T00:00:00Z',
+        created_at: '2026-01-01T00:00:00Z',
+        updated_at: '2026-01-02T00:00:00Z',
+      },
+    });
     const host = fakeHost(request);
     await getClonedVoice(host, 'a/b c');
     expect(request).toHaveBeenCalledWith(
@@ -262,6 +274,33 @@ describe('cloned voice client calls', () => {
       '/api/persona/cloned-voices/a%2Fb%20c',
       expect.objectContaining({ method: 'DELETE' }),
       'delete cloned voice'
+    );
+  });
+
+  it('rejects a malformed list 200 with a partial row', async () => {
+    const request = vi.fn().mockResolvedValue({
+      success: true,
+      voices: [{ id: 'c1', status: 'ready' }],
+    });
+    await expect(listClonedVoices(fakeHost(request))).rejects.toThrow(
+      'Malformed response from GET /api/persona/cloned-voices',
+    );
+  });
+
+  it('rejects a malformed get 200 with a partial row', async () => {
+    const request = vi.fn().mockResolvedValue({
+      success: true,
+      voice: { id: 'clone-1', status: 'ready' },
+    });
+    await expect(getClonedVoice(fakeHost(request), 'clone-1')).rejects.toThrow(
+      'Malformed response from GET /api/persona/cloned-voices/:cloneId',
+    );
+  });
+
+  it('rejects a malformed delete 200 with a false success flag', async () => {
+    const request = vi.fn().mockResolvedValue({ success: false });
+    await expect(deleteClonedVoice(fakeHost(request), 'clone-1')).rejects.toThrow(
+      'Malformed response from DELETE /api/persona/cloned-voices/:cloneId',
     );
   });
 
@@ -441,7 +480,19 @@ describe('createClonedVoiceFromUrl', () => {
   });
 
   it('uploads the downloaded reference as multipart form data', async () => {
-    const request = vi.fn().mockResolvedValue({ success: true, body: { id: 'clone-1' } });
+    const request = vi.fn().mockResolvedValue({
+      success: true,
+      voice: {
+        id: 'clone-1',
+        status: 'pending',
+        language: 'pt',
+        voice_id: null,
+        error_code: null,
+        consent_at: '2026-01-01T00:00:00Z',
+        created_at: '2026-01-01T00:00:00Z',
+        updated_at: null,
+      },
+    });
     const host = fakeHost(request);
     global.fetch = vi.fn().mockResolvedValue(audioResponse([1, 2, 3, 4]));
     const result = await createClonedVoiceFromUrl(
@@ -451,7 +502,19 @@ describe('createClonedVoiceFromUrl', () => {
       true,
       false
     );
-    expect(result).toEqual({ success: true, body: { id: 'clone-1' } });
+    expect(result).toEqual({
+      success: true,
+      voice: {
+        id: 'clone-1',
+        status: 'pending',
+        language: 'pt',
+        voice_id: null,
+        error_code: null,
+        consent_at: '2026-01-01T00:00:00Z',
+        created_at: '2026-01-01T00:00:00Z',
+        updated_at: null,
+      },
+    });
     expect(request).toHaveBeenCalledTimes(1);
     const [path, init, label, timeout] = request.mock.calls[0] as [
       string,
@@ -468,6 +531,18 @@ describe('createClonedVoiceFromUrl', () => {
     expect(form.get('denoise')).toBe('false');
     expect(form.get('language')).toBe('pt');
     expect(form.get('file')).toBeInstanceOf(Blob);
+  });
+
+  it('rejects a malformed create 200 with a partial row', async () => {
+    const request = vi.fn().mockResolvedValue({
+      success: true,
+      voice: { id: 'clone-1', status: 'pending' },
+    });
+    const host = fakeHost(request);
+    global.fetch = vi.fn().mockResolvedValue(audioResponse([1, 2, 3, 4]));
+    await expect(
+      createClonedVoiceFromUrl(host, 'https://cdn.example.com/ref.wav', 'pt', true, false),
+    ).rejects.toThrow('Malformed response from POST /api/persona/cloned-voices');
   });
 });
 
@@ -555,9 +630,33 @@ describe('readCloneReferenceFile / createClonedVoiceFromFile (audioPath)', () =>
   it('uploads the local file as the multipart file field', async () => {
     const path = join(dir, 'take1.wav');
     await writeFile(path, Buffer.from([4, 4, 4, 4]));
-    const request = vi.fn().mockResolvedValue({ success: true, body: { id: 'clone-2' } });
+    const request = vi.fn().mockResolvedValue({
+      success: true,
+      voice: {
+        id: 'clone-2',
+        status: 'pending',
+        language: 'en',
+        voice_id: null,
+        error_code: null,
+        consent_at: '2026-01-01T00:00:00Z',
+        created_at: '2026-01-01T00:00:00Z',
+        updated_at: null,
+      },
+    });
     const result = await createClonedVoiceFromFile(fakeHost(request), path, 'en', true, true);
-    expect(result).toEqual({ success: true, body: { id: 'clone-2' } });
+    expect(result).toEqual({
+      success: true,
+      voice: {
+        id: 'clone-2',
+        status: 'pending',
+        language: 'en',
+        voice_id: null,
+        error_code: null,
+        consent_at: '2026-01-01T00:00:00Z',
+        created_at: '2026-01-01T00:00:00Z',
+        updated_at: null,
+      },
+    });
     const [route, init, label, timeout] = request.mock.calls[0] as [string, RequestInit, string, number];
     expect(route).toBe('/api/persona/cloned-voices');
     expect(init.method).toBe('POST');
@@ -574,17 +673,30 @@ describe('readCloneReferenceFile / createClonedVoiceFromFile (audioPath)', () =>
   });
 });
 
+// Full production shape of a cloned-voice row (the web route narrows the
+// engine row to exactly these 8 fields; partial rows are malformed 200s).
+const FULL_CLONE_ROW = {
+  id: 'clone-1',
+  status: 'ready',
+  language: 'en',
+  voice_id: 'chatterbox:u1',
+  error_code: null,
+  consent_at: '2026-01-01T00:00:00Z',
+  created_at: '2026-01-01T00:00:00Z',
+  updated_at: '2026-01-02T00:00:00Z',
+};
+
 describe('cloned voice tool handlers', () => {
   afterEach(() => {
     global.fetch = realFetch;
   });
 
   it('handleListClonedVoices returns the payload as JSON text', async () => {
-    const request = vi.fn().mockResolvedValue({ voices: [{ id: 'c1', status: 'ready' }] });
+    const request = vi.fn().mockResolvedValue({ success: true, voices: [FULL_CLONE_ROW] });
     const client = fakeHost(request) as unknown as PostEngineerClient;
     const result = await handleListClonedVoices(client);
     expect(result.isError).toBeFalsy();
-    expect(firstText(result)).toContain('"c1"');
+    expect(firstText(result)).toContain('"clone-1"');
   });
 
   it('handleListClonedVoices maps failures to an error response', async () => {
@@ -596,7 +708,7 @@ describe('cloned voice tool handlers', () => {
   });
 
   it('handleCreateClonedVoice prefixes the success message', async () => {
-    const request = vi.fn().mockResolvedValue({ success: true, body: { id: 'clone-1' } });
+    const request = vi.fn().mockResolvedValue({ success: true, voice: FULL_CLONE_ROW });
     const client = fakeHost(request) as unknown as PostEngineerClient;
     global.fetch = vi.fn().mockResolvedValue(audioResponse([7, 7]));
     const result = await handleCreateClonedVoice(client, {
@@ -612,11 +724,11 @@ describe('cloned voice tool handlers', () => {
   });
 
   it('handleGetClonedVoice returns the clone row', async () => {
-    const request = vi.fn().mockResolvedValue({ success: true, voice: { id: 'clone-1', status: 'pending' } });
+    const request = vi.fn().mockResolvedValue({ success: true, voice: FULL_CLONE_ROW });
     const client = fakeHost(request) as unknown as PostEngineerClient;
     const result = await handleGetClonedVoice(client, { cloneId: 'clone-1' });
     expect(result.isError).toBeFalsy();
-    expect(JSON.parse(firstText(result))).toEqual({ success: true, voice: { id: 'clone-1', status: 'pending' } });
+    expect(JSON.parse(firstText(result))).toEqual({ success: true, voice: FULL_CLONE_ROW });
   });
 
   it('handleGetClonedVoice maps failures to an error response', async () => {
@@ -710,7 +822,7 @@ describe('cloned voice tools run through the MCP server', () => {
   }
 
   it('voices list_clones calls the client request', async () => {
-    const request = vi.fn().mockResolvedValue({ voices: [] });
+    const request = vi.fn().mockResolvedValue({ success: true, voices: [] });
     await callTool('voices', { action: 'list_clones' }, request);
     expect(request).toHaveBeenCalledWith(
       '/api/persona/cloned-voices',
@@ -720,7 +832,7 @@ describe('cloned voice tools run through the MCP server', () => {
   });
 
   it('voices create_clone on the remote server uses the URL-only schema', async () => {
-    const request = vi.fn().mockResolvedValue({ success: true, body: { id: 'clone-http' } });
+    const request = vi.fn().mockResolvedValue({ success: true, voice: FULL_CLONE_ROW });
     armHttpsAudio([5, 5, 5]);
     const apiClient = fakeHost(request) as unknown as PostEngineerClient;
     const server = createPostEngineerMcpServer(apiClient, 'http');
@@ -740,7 +852,7 @@ describe('cloned voice tools run through the MCP server', () => {
   });
 
   it('voices create_clone downloads then uploads', async () => {
-    const request = vi.fn().mockResolvedValue({ success: true, body: { id: 'clone-1' } });
+    const request = vi.fn().mockResolvedValue({ success: true, voice: FULL_CLONE_ROW });
     global.fetch = vi.fn().mockResolvedValue(audioResponse([5, 5, 5]));
     const result = await callTool(
       'voices',
@@ -759,7 +871,7 @@ describe('cloned voice tools run through the MCP server', () => {
   });
 
   it('voices create_clone rejects a non-English language (English-only launch)', async () => {
-    const request = vi.fn().mockResolvedValue({ success: true, body: { id: 'clone-1' } });
+    const request = vi.fn().mockResolvedValue({ success: true, voice: FULL_CLONE_ROW });
     global.fetch = vi.fn().mockResolvedValue(audioResponse([5, 5, 5]));
     // callTool asserts success, so this rejection case drives the linked
     // pair directly: the schema gate must error before any handler runs.
@@ -822,7 +934,7 @@ describe('cloned voice tools run through the MCP server', () => {
     try {
       const path = join(dir, 'voice.m4a');
       await writeFile(path, Buffer.from([7, 7]));
-      const request = vi.fn().mockResolvedValue({ success: true, body: { id: 'clone-3' } });
+      const request = vi.fn().mockResolvedValue({ success: true, voice: FULL_CLONE_ROW });
       global.fetch = vi.fn();
       const result = await callTool(
       'voices',
@@ -865,7 +977,7 @@ describe('cloned voice tools run through the MCP server', () => {
   });
 
   it('get_cloned_voice calls the client request', async () => {
-    const request = vi.fn().mockResolvedValue({ success: true, voice: { id: 'clone-1', status: 'ready' } });
+    const request = vi.fn().mockResolvedValue({ success: true, voice: FULL_CLONE_ROW });
     await callTool('voices', { action: 'get_clone', cloneId: 'clone-1' }, request);
     expect(request).toHaveBeenCalledWith(
       '/api/persona/cloned-voices/clone-1',

@@ -14,9 +14,9 @@ const JPEG_BYTES = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 
 type FetchMock = ReturnType<typeof vi.fn<typeof fetch>>;
 
 // A real Response, as production receives; each test makes one request.
-function okFetch(): FetchMock {
+function okFetch(body: unknown = { success: true }): FetchMock {
   const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
-    new Response(JSON.stringify({ success: true }), { status: 200 }),
+    new Response(JSON.stringify(body), { status: 200 }),
   );
   vi.stubGlobal('fetch', fetchMock);
   return fetchMock;
@@ -49,7 +49,7 @@ describe('persona avatar from a local file (avatarPath)', () => {
   });
 
   it('createPersona uploads avatarPath as the photo file and sends no avatarUrl', async () => {
-    const fetchMock = okFetch();
+    const fetchMock = okFetch({ success: true, personaId: 'persona-123', imageIds: [] });
     await client.createPersona({ accounts: { youtube: ['acct-1'] }, name: 'Ryan', voiceId: 'voice-1', avatarPath: photoPath });
 
     const form = sentForm(fetchMock);

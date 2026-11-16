@@ -6,6 +6,7 @@ import { fetchPinterestBoards } from '@/lib/pinterest';
 import { getValidPinterestAccessToken } from '@/lib/pinterest-tokens';
 import { PinterestError } from '@/lib/errors';
 import { logger } from '@/lib/logger';
+import { parseListPinterestBoardsQuery } from '@/lib/contracts/accounts';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
 //---------------
@@ -23,10 +24,11 @@ async function getHandler(request: NextRequest) {
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
 
-  const accountId = new URL(request.url).searchParams.get('accountId');
-  if (accountId === null || accountId.trim() === '') {
-    return NextResponse.json({ success: false, error: 'accountId is required.' }, { status: 400 });
+  const parsed = parseListPinterestBoardsQuery(new URL(request.url).searchParams);
+  if (!parsed.ok) {
+    return NextResponse.json({ success: false, error: parsed.error }, { status: 400 });
   }
+  const accountId = parsed.accountId;
 
   try {
     const supabase = createSupabaseServiceClient();

@@ -102,10 +102,16 @@ export async function uploadPublishMedia(
   const { client, bucketUrl } = r2Config();
   const url = objectUrl(bucketUrl, `${PUBLISH_MEDIA_PREFIX}/${path}`);
 
+  // Content-Length is set explicitly: Next's patched fetch rebuilds a
+  // Request-input fetch with a stream body, which undici sends chunked with
+  // no Content-Length, and R2 rejects the SigV4 PUT with 411 Length
+  // Required. The header survives the rebuild, so the length always reaches
+  // R2. aws4fetch leaves content-length out of the signature, so this does
+  // not change the signed headers.
   const put = await client.sign(url, {
     method: 'PUT',
     body: new Uint8Array(buffer),
-    headers: { 'Content-Type': contentType },
+    headers: { 'Content-Type': contentType, 'Content-Length': String(buffer.byteLength) },
   });
   const response = await deps.fetch(put, { signal: AbortSignal.timeout(PUT_TIMEOUT_MS) });
   if (!response.ok) {

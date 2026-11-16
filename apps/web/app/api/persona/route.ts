@@ -22,6 +22,8 @@ import { validateLibraryInputs } from '@/lib/persona-library-validate';
 import { resolvePersonaAvatar, rollbackStoragePath } from '@/lib/persona-remote-face';
 import { logger } from '@/lib/logger';
 import { parsePatchBody } from './patch-body';
+import { parsePersonaIdQuery } from '@/lib/contracts/personas';
+import { collectPersonaStoragePaths } from './delete-storage-paths';
 import { applyPersonaPatchFields } from './patch-updates';
 import { parseJsonStringArray, parsePrimaryIndex } from './form-parsing';
 import { errorResponse } from './error-response';
@@ -271,8 +273,9 @@ async function patchHandler(request: Request): Promise<NextResponse> {
     ? createSupabaseServiceClient()
     : await createSupabaseServerClient();
 
-  const personaId = new URL(request.url).searchParams.get('personaId');
-  if (!personaId) return personaValidationError('personaId is required.', 'PATCH /api/persona', { field: 'personaId' });
+  const parsedPersonaId = parsePersonaIdQuery(request.url);
+  if (!parsedPersonaId.ok) return personaValidationError(parsedPersonaId.error, 'PATCH /api/persona', { field: 'personaId' });
+  const personaId = parsedPersonaId.query.personaId;
   if (!isPersonaAllowed(auth.personaIds, personaId)) {
     return errorResponse(403, 'This API key does not have access to this persona.', 'PATCH /api/persona');
   }
@@ -386,14 +389,15 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
     ? createSupabaseServiceClient()
     : await createSupabaseServerClient();
 
-  const personaId = new URL(request.url).searchParams.get('personaId');
-  if (!personaId) {
-    return apiErrorResponse(400, 'personaId is required.', {
+  const parsedPersonaId = parsePersonaIdQuery(request.url);
+  if (!parsedPersonaId.ok) {
+    return apiErrorResponse(400, parsedPersonaId.error, {
       route: ROUTE,
       code: ERROR_CODES.VALIDATION_FAILED,
       field: 'personaId',
     });
   }
+  const personaId = parsedPersonaId.query.personaId;
   if (!isPersonaAllowed(auth.personaIds, personaId)) {
     return apiErrorResponse(403, 'This API key cannot access this persona.', {
       route: ROUTE,
@@ -424,28 +428,13 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
     });
   }
 
-  const paths = [persona.photo_path, persona.voice_audio_path].filter(
-    (value): value is string => typeof value === 'string' && value.length > 0,
-  );
-  // Library images: their rows vanish via on delete cascade, but the storage
-  // objects would orphan forever — collect the paths BEFORE the persona row
-  // is deleted, while they are still recoverable.
-  const { data: libraryRows, error: libraryError } = await supabase
-    .from('persona_images')
-    .select('image_path')
-    .eq('persona_id', personaId)
-    .eq('user_id', user.id);
+  const { paths, error: libraryError } = await collectPersonaStoragePaths(supabase, persona, personaId, user.id);
   if (libraryError) {
     logger.error('[api/persona] library image cleanup lookup failed', libraryError);
     return apiErrorResponse(500, 'Failed to remove persona files.', {
       route: ROUTE,
       code: ERROR_CODES.INTERNAL_ERROR,
     });
-  }
-  for (const row of libraryRows ?? []) {
-    if (typeof row.image_path === 'string' && row.image_path.length > 0) {
-      paths.push(row.image_path);
-    }
   }
 
   //--------------- Cascade delete: children before parents.

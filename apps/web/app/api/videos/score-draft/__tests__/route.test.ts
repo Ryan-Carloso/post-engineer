@@ -25,6 +25,7 @@ import { POST } from '../route';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { BASELINE_ROW_LIMIT, DRAFT_KINDS, DRAFT_MAX_INPUT_CHARS, PUBLISH_NETWORKS } from '@/lib/draft-scoring';
+import { ScoreDraftResponseSchema } from '@/lib/contracts/videos';
 import { findRepoRoot } from '@/test/repo-root';
 
 const PERSONA = '11111111-2222-4333-8444-555555555555';
@@ -98,6 +99,7 @@ describe('POST /api/videos/score-draft', () => {
     const payload = (await response.json()) as Record<string, unknown>;
     expect(payload.success).toBe(true);
     expect(payload.score).toBe(100);
+    expect(ScoreDraftResponseSchema.safeParse(payload).success).toBe(true);
     expect(payload.publishCheck).toEqual({ network: 'linkedin', ok: true, failures: [], warnings: [] });
     const baseline = payload.baseline as Record<string, unknown>;
     expect(baseline.postsMeasured).toBe(2);

@@ -58,7 +58,7 @@ const ENDPOINT_TOOLS = endpointToolNames(ENDPOINT_MAPPING);
 // (preview, then confirm) lists one sample per call. `{{tmp:NAME}}` in a
 // string is the path of a small file the test writes for a local-file action.
 // The confirmToken of personas.delete is the digest of the persona id and of
-// the stubbed (all-null) preview: it changes when persona-delete.ts changes
+// the stubbed preview: it changes when persona-delete.ts changes
 // how the token is built, and that failure says so.
 const SampleSchema = z.object({ args: z.record(z.string(), z.unknown()), responses: z.record(z.string(), z.unknown()).optional() }).strict();
 const ACTION_SAMPLES: Record<string, Array<z.infer<typeof SampleSchema>>> = z

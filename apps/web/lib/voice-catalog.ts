@@ -3,27 +3,23 @@
 // house voices (Phonon + Kokoro) carry gender/accent/kind for the picker
 // filters; OpenRouter voices carry none; the caller's clones are kind
 // "cloned". Shared by the /api/persona/voices proxy and the client fetcher so
-// both validate the same shape.
+// both validate the same shape. The enums and the option shape live in the
+// shared voices contract; this module keeps the picker helpers.
 //---------------
 
-export const VOICE_GENDERS = ['female', 'male'] as const;
-export const VOICE_ACCENTS = ['us', 'gb'] as const;
-export const VOICE_KINDS = ['standard', 'character', 'cloned'] as const;
+import {
+  VOICE_ACCENTS,
+  VOICE_GENDERS,
+  VOICE_KINDS,
+  type VoiceOption,
+} from '@/lib/contracts/voices';
+
+export { VOICE_ACCENTS, VOICE_GENDERS, VOICE_KINDS };
+export type { VoiceOption };
 
 export type VoiceGender = (typeof VOICE_GENDERS)[number];
 export type VoiceAccent = (typeof VOICE_ACCENTS)[number];
 export type VoiceKind = (typeof VOICE_KINDS)[number];
-
-export interface VoiceOption {
-  id: string;
-  label: string | null;
-  provider: string;
-  gender: VoiceGender | null;
-  accent: VoiceAccent | null;
-  kind: VoiceKind;
-  /** English text about how the voice sounds; null for OpenRouter and clones. */
-  description: string | null;
-}
 
 function isOneOf<T extends string>(values: readonly T[], value: unknown): value is T {
   return typeof value === 'string' && values.some((candidate) => candidate === value);

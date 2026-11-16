@@ -62,7 +62,13 @@ describe('generate_persona_video description', () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      text: async () => JSON.stringify({ success: true }),
+      text: async () =>
+        JSON.stringify({
+          success: true,
+          schedule: { id: 'sch-1', mode: 'scheduled' },
+          slots: [{ slotId: 's1', slotAt: '2026-10-30T18:00:00Z', title: 'Porto trip', taskId: 'task-1', status: 'scheduled' }],
+          replayed: false,
+        }),
     });
   });
 

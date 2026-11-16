@@ -22,6 +22,7 @@ import { trackApiEvent } from '@/lib/analytics';
 import { logger } from '@/lib/logger';
 import { deterministicUuid } from '@/lib/idempotency';
 import { createFakeSupabase, slotRow, type FakeOptions, type Row } from './fake-supabase';
+import { BatchDiscountResponseSchema } from '@/lib/contracts/videos';
 
 const USER_ID = 'user-1';
 const BATCH_ID = deterministicUuid('batch-discount/v1', `${USER_ID}:launch-week`);
@@ -80,6 +81,7 @@ describe('POST /api/videos/batch-discount', () => {
       warnings: [],
     });
     expect(json.freeVideos).toEqual([{ scheduleId: slots[5]?.schedule_id, slotId: '6', discountTokens: 2 }]);
+    expect(BatchDiscountResponseSchema.safeParse(json).success).toBe(true);
     // One credit, under the free video's own schedule charge, idempotent key.
     expect(fake.rpcCalls).toEqual([
       {

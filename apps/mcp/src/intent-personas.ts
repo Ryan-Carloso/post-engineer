@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { actionDescription, actionShape, byAction, offeredSpecs, type ActionOptions } from './action-tool.js';
 import type { PostEngineerClient } from './client.js';
 import { getPersonaPublishingAccounts } from './client-publishing-accounts.js';
+import { MalformedContractResponseError } from './contract-response.js';
 import { handlePersonaDelete } from './persona-delete.js';
 import { UpdatePersonaShape, handleUpdatePersona } from './persona-update.js';
 import { PERSONA_REF, personaRefShape, withPersona } from './refs.js';
@@ -63,15 +64,22 @@ async function getPersona(client: PostEngineerClient, args: { personaId: string 
   return handleLibraryCall(async () => {
     const [listing, images, publishing] = await Promise.all([
       client.listPersonas(),
-      client.listPersonaImages(args.personaId),
-      getPersonaPublishingAccounts(client, args.personaId),
+      // A malformed library listing degrades to a null size (same as a
+      // missing one); a transport failure still fails the read.
+      client.listPersonaImages(args.personaId).catch((error) => {
+        if (error instanceof MalformedContractResponseError) return undefined;
+        throw error;
+      }),
+      // A malformed binding degrades to null bindings (same as a missing
+      // one); a transport failure still fails the read.
+      getPersonaPublishingAccounts(client, args.personaId).catch((error) => {
+        if (error instanceof MalformedContractResponseError) return undefined;
+        throw error;
+      }),
     ]);
-    const personas = typeof listing === 'object' && listing !== null ? (listing as { personas?: unknown }).personas : undefined;
-    const persona = Array.isArray(personas) ? personas.find((entry) => typeof entry === 'object' && entry !== null && (entry as { id?: unknown }).id === args.personaId) : undefined;
+    const persona = listing.personas.find((entry) => entry.id === args.personaId);
     if (persona === undefined) throw new Error(`No persona with id ${args.personaId}. Call personas with action "list" to see them.`);
-    const imageList = typeof images === 'object' && images !== null ? (images as { images?: unknown }).images : undefined;
-    const defaults = typeof publishing === 'object' && publishing !== null ? (publishing as { defaults?: unknown }).defaults : undefined;
-    return { persona, libraryImages: Array.isArray(imageList) ? imageList.length : null, boundAccounts: defaults ?? null };
+    return { persona, libraryImages: images?.images.length ?? null, boundAccounts: publishing?.defaults ?? null };
   }, 'getting persona');
 }
 

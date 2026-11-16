@@ -1,23 +1,24 @@
 import { ApiError } from './errors.js';
 import type { PostEngineerClient } from './client.js';
+import { parseContractResponse } from './contract-response.js';
+import {
+  getPrompt as getPromptContract,
+  listPrompts as listPromptsContract,
+} from './contracts/prompts.js';
+import type { ResponseOf } from './contracts/endpoint.js';
 
 //---------------
 // Recipe prompts (GET /api/prompts and GET /api/prompts/[slug]) — HTTP
-// calls plus response narrowing. The web hub is the single source of the
+// calls plus response parsing against the shared contract
+// (shared/contracts/prompts.ts). The web hub is the single source of the
 // recipes, so a recipe edit reaches every install without a package
 // release. Standalone functions because client.ts is grandfathered over
-// the 500-line cap and may not grow.
+// the 500-line cap and may not grow. The request sites stay literal for
+// the parity gate.
 //---------------
 
-export interface PromptSummary {
-  slug: string;
-  title: string;
-  description: string;
-}
-
-export interface PromptDetail extends PromptSummary {
-  prompt: string;
-}
+export type PromptSummary = ResponseOf<typeof listPromptsContract>['prompts'][number];
+export type PromptDetail = ResponseOf<typeof getPromptContract>['prompt'];
 
 // Thrown by getPrompt on a 404: fetches the valid slugs with a follow-up
 // listPrompts request so the agent can recover.
@@ -28,38 +29,19 @@ export class UnknownPromptSlugError extends Error {
   }
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function narrowSummary(value: unknown): PromptSummary {
-  if (
-    !isRecord(value) ||
-    typeof value.slug !== 'string' ||
-    typeof value.title !== 'string' ||
-    typeof value.description !== 'string'
-  ) {
-    throw new Error('Malformed prompts response from the API.');
-  }
-  return { slug: value.slug, title: value.title, description: value.description };
-}
-
 export async function listPrompts(client: PostEngineerClient): Promise<PromptSummary[]> {
-  const payload = await client.request(
+  const raw = await client.request(
     '/api/prompts',
     { method: 'GET', headers: client.getHeaders() },
     'list prompts',
   );
-  if (!isRecord(payload) || payload.success !== true || !Array.isArray(payload.prompts)) {
-    throw new Error('Malformed prompts response from the API.');
-  }
-  return payload.prompts.map(narrowSummary);
+  return parseContractResponse(listPromptsContract, raw).prompts;
 }
 
 export async function getPrompt(client: PostEngineerClient, slug: string): Promise<PromptDetail> {
-  let payload: unknown;
+  let raw: unknown;
   try {
-    payload = await client.request(
+    raw = await client.request(
       `/api/prompts/${encodeURIComponent(slug)}`,
       { method: 'GET', headers: client.getHeaders() },
       'get prompt',
@@ -70,9 +52,5 @@ export async function getPrompt(client: PostEngineerClient, slug: string): Promi
     }
     throw error;
   }
-  const prompt = isRecord(payload) && payload.success === true ? payload.prompt : undefined;
-  if (!isRecord(prompt) || typeof prompt.prompt !== 'string') {
-    throw new Error('Malformed prompt response from the API.');
-  }
-  return { ...narrowSummary(prompt), prompt: prompt.prompt };
+  return parseContractResponse(getPromptContract, raw).prompt;
 }

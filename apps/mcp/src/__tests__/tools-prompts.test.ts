@@ -117,7 +117,7 @@ describe('handleListPrompts', () => {
     fetchMock.mockResolvedValueOnce(json(200, { success: true, prompts: [{ slug: 'x' }] }));
     const result = await handleListPrompts(client());
     expect(result.isError).toBe(true);
-    expect(textOf(result)).toContain('Malformed prompts response');
+    expect(textOf(result)).toContain('Malformed response from GET /api/prompts');
   });
 
   it('keeps both shapes argument-only', () => {
@@ -169,7 +169,7 @@ describe('handleGetPrompt', () => {
     fetchMock.mockResolvedValueOnce(json(200, { success: true, prompt: CATALOG[0] }));
     const result = await handleGetPrompt(client(), { slug: 'daily-news' });
     expect(result.isError).toBe(true);
-    expect(textOf(result)).toContain('Malformed prompt response');
+    expect(textOf(result)).toContain('Malformed response from GET /api/prompts/:slug');
   });
 });
 

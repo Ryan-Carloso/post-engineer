@@ -280,11 +280,11 @@ async function postHandler(request: NextRequest) {
     logger.info('[upload-content] handler finalizado', { provider, success: response.success, logId });
     return NextResponse.json(response);
   } catch (error) {
-    logger.error('[upload-content] ERRO', undefined, {
-      message: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined,
-      name: error instanceof Error ? error.name : 'UNKNOWN',
-    });
+    // Pass the error itself as the cause: the logger reports it to
+    // PostHog, so the real message surfaces instead of 'Unknown error'
+    // with the message buried in metadata. The log id stays as metadata
+    // for correlation with the client-facing errorId.
+    logger.error('[upload-content] ERRO', error, { logId });
     return buildUploadErrorResponse(error, logId, startTime);
   }
 }

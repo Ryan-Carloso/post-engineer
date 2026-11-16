@@ -1,0 +1,291 @@
+// Schedule contract: the single source of truth for the schedule reads and
+// slot mutations (GET/DELETE /api/schedule, GET /api/schedule/status,
+// GET/PATCH/DELETE /api/schedule/slots/[slotId]). Both apps generate a copy
+// of this file (see scripts/sync-contracts.mjs); never edit a generated
+// copy by hand.
+//
+// Shapes mirror the routes, not a cleaned-up ideal:
+// - GET /api/schedule returns the raw Supabase rows, so the schedule row
+//   keeps its snake_case keys and DB nullability (persona_id is nullable
+//   for faceless schedules, migration 012; publish_mode is pinned to the
+//   'scheduled'/'asap' CHECK of migration 015).
+// - GET /api/schedule/status returns the presented slots: the snake_case
+//   row fields (RESULT_SELECT) plus the camelCase enrichment
+//   (apps/web/lib/schedule-slot-presentation.ts) and the publish rows
+//   (apps/web/lib/publish-user-notice.ts). `status` is the PRESENTED
+//   status: pending shows as 'awaiting', a failed slot with published
+//   outcomes shows as 'completed'.
+// - PATCH /api/schedule/slots/[slotId] does not use readBody (its coded
+//   error envelope would change), so the body schema below mirrors the
+//   route's messages and the equivalence test pins them; the 3h/30d
+//   window rule stays server-side (apps/web/lib/schedule-window.ts).
+// `success` is a literal `true`: the routes never return success:false
+// with a 200.
+import { z } from 'zod';
+
+import { defineEndpoint } from './endpoint.js';
+import {
+  PublishProviderFailureSchema,
+  PublishUserNoticeSchema,
+  SlotDetailSchema,
+} from './posts.js';
+
+/** A row of the schedules table, as GET /api/schedule returns it. */
+export const ScheduleRowSchema = z.object({
+  id: z.string(),
+  persona_id: z.string().nullable(),
+  providers: z.array(z.string()),
+  youtube_account_ids: z.array(z.string()),
+  instagram_account_ids: z.array(z.string()),
+  linkedin_account_ids: z.array(z.string()),
+  bluesky_account_ids: z.array(z.string()),
+  threads_account_ids: z.array(z.string()),
+  facebook_account_ids: z.array(z.string()),
+  pinterest_account_ids: z.array(z.string()),
+  pinterest_board_id: z.string().nullable(),
+  threespeak_account_ids: z.array(z.string()),
+  rumble_account_ids: z.array(z.string()),
+  days_of_week: z.array(z.number()).nullable(),
+  start_hour: z.number().nullable(),
+  end_hour: z.number().nullable(),
+  posts_per_day: z.number(),
+  timezone: z.string(),
+  active: z.boolean(),
+  created_at: z.string(),
+  publish_mode: z.enum(['scheduled', 'asap']),
+});
+
+export const ListSchedulesResponseSchema = z.object({
+  success: z.literal(true),
+  schedules: z.array(ScheduleRowSchema),
+});
+
+//---------------
+// DELETE /api/schedule?id= — the id check, as a parser so the MCP side
+// can pin it. The route returns the same 400 message as before.
+//---------------
+export function parseCancelScheduleQuery(params: URLSearchParams):
+  | { ok: true; query: { id: string } }
+  | { ok: false; error: string } {
+  const id = params.get('id');
+  if (!id) {
+    return { ok: false, error: 'id query param is required.' };
+  }
+  return { ok: true, query: { id } };
+}
+
+export const CancelRefundSchema = z.object({
+  slotId: z.string(),
+  refunded: z.boolean(),
+  alreadyRefunded: z.boolean(),
+  reason: z.enum([
+    'not_generated',
+    'already_generated',
+    'already_refunded',
+    'not_charged',
+    'refund_failed',
+    'discount_withheld',
+  ]),
+});
+
+export const CancelScheduleResponseSchema = z.object({
+  success: z.literal(true),
+  cancelledSlotIds: z.array(z.string()),
+  refunds: z.array(CancelRefundSchema),
+  batchDiscountWithheld: z.number(),
+});
+
+//---------------
+// GET /api/schedule/status — the limit and range parsers, moved verbatim
+// from apps/web/app/api/schedule/status/route.ts and range.ts.
+//---------------
+export const STATUS_LIMIT_DEFAULT = 10;
+export const STATUS_LIMIT_MAX = 500;
+
+export function parseStatusLimit(value: string | null): number {
+  if (value === null || !/^\d+$/.test(value)) return STATUS_LIMIT_DEFAULT;
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isInteger(parsed) || parsed < 1) return STATUS_LIMIT_DEFAULT;
+  return Math.min(parsed, STATUS_LIMIT_MAX);
+}
+
+export const RANGE_MAX_SPAN_DAYS = 62;
+export const RANGE_MAX_SLOTS = 1000;
+export const RANGE_STATUSES = [
+  'pending',
+  'generating',
+  'ready',
+  'publishing',
+  'published',
+  'failed',
+] as const;
+
+export type RangeParseResult =
+  | { kind: 'none' }
+  | { kind: 'range'; from: string; to: string }
+  | { kind: 'error'; message: string };
+
+const ISO_INSTANT =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/;
+
+function parseInstant(value: string): Date | null {
+  if (!ISO_INSTANT.test(value)) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+export function parseStatusRange(params: URLSearchParams): RangeParseResult {
+  const from = params.get('from');
+  const to = params.get('to');
+  if (from === null && to === null) return { kind: 'none' };
+  if (from === null || to === null) {
+    return { kind: 'error', message: 'from and to must be provided together.' };
+  }
+  if (params.has('limit')) {
+    return { kind: 'error', message: 'limit cannot be combined with from/to.' };
+  }
+  const fromDate = parseInstant(from);
+  const toDate = parseInstant(to);
+  if (fromDate === null || toDate === null) {
+    return {
+      kind: 'error',
+      message: 'from and to must be ISO-8601 timestamps with a UTC offset.',
+    };
+  }
+  if (fromDate.getTime() >= toDate.getTime()) {
+    return { kind: 'error', message: 'from must be before to.' };
+  }
+  if (toDate.getTime() - fromDate.getTime() > RANGE_MAX_SPAN_DAYS * 86_400_000) {
+    return { kind: 'error', message: `The range cannot exceed ${RANGE_MAX_SPAN_DAYS} days.` };
+  }
+  return { kind: 'range', from: fromDate.toISOString(), to: toDate.toISOString() };
+}
+
+/** Mirrors apps/web/lib/timezone.ts hasExplicitOffset (Z or ±hh:mm / ±hhmm). */
+export function hasExplicitOffset(value: string): boolean {
+  return /(?:Z|[+-]\d{2}:?\d{2})$/.test(value.trim());
+}
+
+/** A presented slot: the row fields plus the enrichment spread over them. */
+export const StatusSlotSchema = z.object({
+  id: z.string(),
+  slot_at: z.string(),
+  status: z.enum([
+    'awaiting',
+    'generating',
+    'ready',
+    'publishing',
+    'published',
+    'failed',
+    'completed',
+  ]),
+  title: z.string().nullable(),
+  error: z.string().nullable(),
+  published_at: z.string().nullable(),
+  schedule_id: z.string(),
+  task_id: z.string().nullable(),
+  progress: z.number(),
+  stage: z.string().nullable(),
+  queuePosition: z.number().nullable(),
+  queueTotal: z.number().nullable(),
+  retryable: z.boolean().nullable(),
+  postUrl: z.string().nullable(),
+  userNotices: z.array(PublishUserNoticeSchema).optional(),
+  providerFailures: z.array(PublishProviderFailureSchema).optional(),
+});
+
+export const ListPostsResponseSchema = z.object({
+  success: z.literal(true),
+  upcoming: z.array(StatusSlotSchema),
+  recent: z.array(StatusSlotSchema),
+  hasAnyPost: z.boolean(),
+});
+
+export const ListPostsInRangeResponseSchema = z.object({
+  success: z.literal(true),
+  slots: z.array(StatusSlotSchema),
+  truncated: z.boolean(),
+});
+
+//---------------
+// GET /api/schedule/slots/[slotId] — the same detail as GET /api/posts/[id]
+// returns for a slot, without the `kind` wrapper the posts route adds.
+//---------------
+export const GetSlotResponseSchema = SlotDetailSchema.extend({
+  success: z.literal(true),
+});
+
+//---------------
+// PATCH /api/schedule/slots/[slotId] — mirrors the route's validation
+// messages; the 3h/30d window rule stays server-side.
+//---------------
+function nonBlank(message: string) {
+  return z.string().min(1, message).refine((value) => value.trim().length > 0, message);
+}
+
+export const UpdateSlotBodySchema = z
+  .object({
+    title: nonBlank('title must be a non-empty string.').optional(),
+    slotAt: z
+      .string()
+      .refine((value) => hasExplicitOffset(value), {
+        message: 'slotAt must carry an explicit timezone offset (Z or ±hh:mm).',
+      })
+      .optional(),
+  })
+  .refine((value) => value.title !== undefined || value.slotAt !== undefined, {
+    message: 'Provide title or slotAt to update.',
+  });
+
+export const UpdateSlotResponseSchema = z.object({
+  success: z.literal(true),
+  title: z.string().optional(),
+  slotAt: z.string().optional(),
+});
+
+export const DeleteSlotResponseSchema = z.object({
+  success: z.literal(true),
+});
+
+export const listSchedules = defineEndpoint({
+  method: 'GET',
+  path: '/api/schedule',
+  response: ListSchedulesResponseSchema,
+});
+
+export const cancelSchedule = defineEndpoint({
+  method: 'DELETE',
+  path: '/api/schedule',
+  response: CancelScheduleResponseSchema,
+});
+
+export const listPosts = defineEndpoint({
+  method: 'GET',
+  path: '/api/schedule/status',
+  response: ListPostsResponseSchema,
+});
+
+export const listPostsInRange = defineEndpoint({
+  method: 'GET',
+  path: '/api/schedule/status',
+  response: ListPostsInRangeResponseSchema,
+});
+
+export const getSlot = defineEndpoint({
+  method: 'GET',
+  path: '/api/schedule/slots/:slotId',
+  response: GetSlotResponseSchema,
+});
+
+export const updateSlotTitle = defineEndpoint({
+  method: 'PATCH',
+  path: '/api/schedule/slots/:slotId',
+  body: UpdateSlotBodySchema,
+  response: UpdateSlotResponseSchema,
+});
+
+export const deleteSlot = defineEndpoint({
+  method: 'DELETE',
+  path: '/api/schedule/slots/:slotId',
+  response: DeleteSlotResponseSchema,
+});

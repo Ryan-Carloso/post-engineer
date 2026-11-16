@@ -6,13 +6,14 @@
   "packageManager": "pnpm@10.22.0",
   "scripts": {
     "prepare": "husky",
+    "postinstall": "node scripts/sync-contracts.mjs",
     "dev:web": "pnpm exec nx dev web",
     "dev:engine": "pnpm exec nx serve engine",
-    "build": "pnpm exec nx build web",
+    "build": "node scripts/sync-contracts.mjs && pnpm exec nx build web",
     "test": "pnpm exec nx run-many -t test",
     "lint": "pnpm exec nx run-many -t lint",
     "lint:fix": "pnpm exec nx run web:lint:fix && pnpm exec nx run-many -t lint typecheck",
-    "typecheck": "pnpm exec nx run-many -t typecheck",
+    "typecheck": "node scripts/sync-contracts.mjs && pnpm exec nx run-many -t typecheck",
     "graph": "pnpm exec nx graph",
     "typecheck:global": "pnpm exec nx run-many -t typecheck",
     "security:audit": "node .github/scripts/audit/verify-accepted.mjs"

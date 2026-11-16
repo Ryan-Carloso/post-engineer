@@ -7,12 +7,15 @@ import { CircleHelp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { SUPPORT_EMAIL } from '@/components/ui/pricing-contact';
+import { logClientError } from '@/lib/client-logger';
 import { useI18n } from '@/lib/i18n/provider';
 import {
+  markOnboardingWizardSeen,
   readOnboardingWizardSeen,
-  readOnboardingWizardStep,
+  shouldAutoOpenOnboardingWizard,
   useOnboardingWizardStore,
 } from '@/lib/onboarding-wizard';
+import { createSupabaseClient } from '@/lib/supabase/client';
 import { whatsappUrl } from '@/lib/whatsapp';
 import { CREATE_POSTS_HREF } from './day-section';
 import { WizardStepTwo } from './onboarding-step2';
@@ -20,10 +23,9 @@ import { WizardStepTwo } from './onboarding-step2';
 //---------------
 // First-visit onboarding wizard (issue #573). Four steps with room to
 // explain: what the app is, connect an account, connect the agent, tokens.
-// It opens on the first visit to the posts calendar and resumes at the
-// saved step after a detour (to /recipes for the setup prompt). Closing it
-// or finishing it marks the visit seen; the header button reopens it from
-// step 1. Step 2 connects inline, inside this dialog (issue #578): no
+// It opens on its own once per account, on the first visit to the posts
+// calendar, and is marked seen as it opens (lib/onboarding-wizard.ts);
+// the header button reopens it from step 1. Step 2 connects inline, inside this dialog (issue #578): no
 // step-2 action navigates away, so the dialog never unmounts mid-connect.
 // Tokens are contact-only (WhatsApp / email, no billing UI).
 //---------------
@@ -50,21 +52,36 @@ export function OnboardingWizard() {
   const { t } = useI18n();
   const isOpen = useOnboardingWizardStore((s) => s.isOpen);
   const step = useOnboardingWizardStore((s) => s.step);
-  const openAtStep = useOnboardingWizardStore((s) => s.openAtStep);
-  const dismiss = useOnboardingWizardStore((s) => s.dismiss);
+  const open = useOnboardingWizardStore((s) => s.open);
+  const close = useOnboardingWizardStore((s) => s.close);
 
-  // Mount-only check by design: the wizard reads the seen flag once, when
-  // the posts page mounts. A later localStorage change (another tab) must
-  // not reopen it mid-session, so the readers stay out of the deps.
+  // Mount-only check by design: the seen flag is read once, when the posts
+  // page mounts, so a later change (another tab) never reopens it
+  // mid-session. The cancel flag drops a late answer after unmount.
   useEffect(() => {
-    if (!readOnboardingWizardSeen()) openAtStep(readOnboardingWizardStep());
-  }, [openAtStep]);
+    // The local flag answers without a network read on every later visit.
+    if (readOnboardingWizardSeen()) return;
+    let cancelled = false;
+    const client = createSupabaseClient();
+    shouldAutoOpenOnboardingWizard(client)
+      .then((show) => {
+        if (cancelled || !show) return;
+        open();
+        return markOnboardingWizardSeen(client);
+      })
+      .catch((error: unknown) => {
+        logClientError('[onboarding] first-visit check failed', error);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
 
   return (
     <Dialog
       open={isOpen}
       onOpenChange={(next) => {
-        if (!next) dismiss();
+        if (!next) close();
       }}
     >
       <DialogContent className="max-w-md" data-testid="onboarding-wizard-dialog">
@@ -139,7 +156,7 @@ function WizardStepThree() {
 
 function WizardStepFour() {
   const { t } = useI18n();
-  const dismiss = useOnboardingWizardStore((s) => s.dismiss);
+  const close = useOnboardingWizardStore((s) => s.close);
   const whatsappHref = whatsappUrl(t('onboarding.step4Whatsapp'));
   return (
     <>
@@ -162,7 +179,7 @@ function WizardStepFour() {
         </Button>
       </div>
       <div className="flex justify-end">
-        <Button type="button" size="sm" onClick={dismiss}>
+        <Button type="button" size="sm" onClick={close}>
           {t('onboarding.startPublishing')}
         </Button>
       </div>

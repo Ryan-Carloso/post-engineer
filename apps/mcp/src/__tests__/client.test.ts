@@ -22,6 +22,7 @@ describe('PostEngineerClient', () => {
     const mockResponse = {
       success: true,
       personaId: 'persona-123',
+      imageIds: [],
     };
 
     global.fetch = vi.fn().mockResolvedValue({
@@ -64,11 +65,27 @@ describe('PostEngineerClient', () => {
     expect(result).toEqual(mockResponse);
   });
 
-  it('createPersona sends the binding as publishingAccounts JSON (issue #572)', async () => {
+  it('rejects a malformed create 200 without imageIds', async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
       text: async () => JSON.stringify({ success: true, personaId: 'persona-123' }),
+    });
+    await expect(
+      client.createPersona({
+        accounts: { youtube: ['acct-1'] },
+        name: 'Tech Creator',
+        avatarUrl: 'https://example.com/avatar.png',
+        voiceId: 'voice-alloy',
+      }),
+    ).rejects.toThrow('Malformed response from POST /api/persona');
+  });
+
+  it('createPersona sends the binding as publishingAccounts JSON (issue #572)', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ success: true, personaId: 'persona-123', imageIds: [] }),
     });
 
     await client.createPersona({
@@ -104,7 +121,7 @@ describe('PostEngineerClient', () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      text: async () => JSON.stringify({ success: true }),
+      text: async () => JSON.stringify({ success: true, personaId: 'persona-123', imageIds: [] }),
     });
 
     await client.createPersona({
@@ -124,7 +141,7 @@ describe('PostEngineerClient', () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      text: async () => JSON.stringify({ success: true }),
+      text: async () => JSON.stringify({ success: true, personaId: 'persona-123', imageIds: [] }),
     });
 
     await client.createPersona({
@@ -201,11 +218,23 @@ describe('PostEngineerClient', () => {
   );
 
   it('lists personas successfully', async () => {
+    const emptyAccounts = {
+      youtube: [],
+      instagram: [],
+      bluesky: [],
+      linkedin: [],
+      threads: [],
+      facebook: [],
+      pinterest: [],
+      '3speak': [],
+      rumble: [],
+      fanvue: [],
+    };
     const mockList = {
-      success: true,
+      authenticated: true,
       personas: [
-        { id: 'p1', name: 'Persona 1' },
-        { id: 'p2', name: 'Persona 2' },
+        { id: 'p1', name: 'Persona 1', createdAt: '2026-01-01T00:00:00Z', boundAccounts: emptyAccounts },
+        { id: 'p2', name: 'Persona 2', createdAt: '2026-01-02T00:00:00Z', boundAccounts: emptyAccounts },
       ],
     };
 
@@ -228,9 +257,39 @@ describe('PostEngineerClient', () => {
     expect(result).toEqual(mockList);
   });
 
+  it('rejects a malformed list 200 with a partial persona', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ authenticated: true, personas: [{ id: 'p1', name: 'Persona 1' }] }),
+    });
+    await expect(client.listPersonas()).rejects.toThrow(
+      'Malformed response from GET /api/persona/list',
+    );
+  });
+
   it('lists voices successfully', async () => {
     const mockVoices = {
-      voices: [{ id: 'calm' }, { id: 'energetic' }],
+      voices: [
+        {
+          id: 'calm',
+          label: 'Calm',
+          provider: 'kokoro',
+          gender: 'female',
+          accent: 'us',
+          kind: 'standard',
+          description: 'A calm voice.',
+        },
+        {
+          id: 'energetic',
+          label: 'Energetic',
+          provider: 'phonon',
+          gender: 'male',
+          accent: 'gb',
+          kind: 'character',
+          description: null,
+        },
+      ],
     };
 
     global.fetch = vi.fn().mockResolvedValue({
@@ -260,6 +319,18 @@ describe('PostEngineerClient', () => {
     });
 
     await expect(client.listVoices()).rejects.toThrow(/Failed to list voices: 502/);
+  });
+
+  it('rejects a malformed voices 200 with a partial entry', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ voices: [{ id: 'calm' }] }),
+    });
+
+    await expect(client.listVoices()).rejects.toThrow(
+      'Malformed response from GET /api/persona/voices',
+    );
   });
 
 
@@ -296,6 +367,17 @@ describe('PostEngineerClient', () => {
       })
     );
     expect(result).toEqual(mockFaces);
+  });
+
+  it('rejects a malformed faces 200 with a partial entry', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ faces: [{ id: 'file-1', url: 'https://example.test/f1.png' }] }),
+    });
+    await expect(client.listFaces()).rejects.toThrow(
+      'Malformed response from GET /api/persona/faces',
+    );
   });
 
   it('throws when listing faces fails', async () => {
@@ -335,6 +417,17 @@ describe('PostEngineerClient', () => {
     expect(result).toEqual({ success: true });
   });
 
+  it('rejects a malformed update 200 with a false success flag', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ success: false }),
+    });
+    await expect(client.updatePersona({ personaId: 'persona-123', voiceId: 'energetic' })).rejects.toThrow(
+      'Malformed response from PATCH /api/persona',
+    );
+  });
+
   it('updatePersona omits empty-string avatarUrl (consistent with createPersona faceless mode)', async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -365,7 +458,17 @@ describe('PostEngineerClient', () => {
   it('lists social accounts successfully', async () => {
     const mockAccounts = {
       authenticated: true,
-      accounts: [{ provider: 'youtube', channelId: 'chan-1' }],
+      accounts: [
+        {
+          provider: 'youtube',
+          recordId: 'rec-1',
+          channelId: 'chan-1',
+          channelName: 'Chan',
+          connectedAt: 1700000000000,
+          lastUsed: 1700000000000,
+        },
+      ],
+      message: 'Accounts retrieved from Supabase',
     };
 
     global.fetch = vi.fn().mockResolvedValue({
@@ -388,7 +491,34 @@ describe('PostEngineerClient', () => {
   });
 
   it('lists schedules successfully', async () => {
-    const mockSchedules = { success: true, schedules: [{ id: 'sched-1' }] };
+    const mockSchedules = {
+      success: true,
+      schedules: [
+        {
+          id: 'sched-1',
+          persona_id: 'persona-123',
+          providers: ['youtube'],
+          youtube_account_ids: ['yt-1'],
+          instagram_account_ids: [],
+          linkedin_account_ids: [],
+          bluesky_account_ids: [],
+          threads_account_ids: [],
+          facebook_account_ids: [],
+          pinterest_account_ids: [],
+          pinterest_board_id: null,
+          threespeak_account_ids: [],
+          rumble_account_ids: [],
+          days_of_week: [1, 3, 5],
+          start_hour: 9,
+          end_hour: 17,
+          posts_per_day: 2,
+          timezone: 'Europe/Lisbon',
+          active: true,
+          created_at: '2026-10-01T00:00:00Z',
+          publish_mode: 'scheduled',
+        },
+      ],
+    };
 
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -407,8 +537,43 @@ describe('PostEngineerClient', () => {
   it('lists posts with the default limit', async () => {
     const mockPosts = {
       success: true,
-      upcoming: [{ id: 'up-1', slot_at: '2026-09-24T10:00:00Z', status: 'pending' }],
-      recent: [{ id: 're-1', slot_at: '2026-09-20T10:00:00Z', status: 'published' }],
+      upcoming: [
+        {
+          id: 'up-1',
+          slot_at: '2026-09-24T10:00:00Z',
+          status: 'awaiting',
+          title: 'Next',
+          error: null,
+          published_at: null,
+          schedule_id: 's1',
+          task_id: null,
+          progress: 0,
+          stage: null,
+          queuePosition: null,
+          queueTotal: null,
+          retryable: null,
+          postUrl: null,
+        },
+      ],
+      recent: [
+        {
+          id: 're-1',
+          slot_at: '2026-09-20T10:00:00Z',
+          status: 'published',
+          title: 'Old',
+          error: null,
+          published_at: '2026-09-20T10:05:00Z',
+          schedule_id: 's1',
+          task_id: 'task-1',
+          progress: 100,
+          stage: 'done',
+          queuePosition: null,
+          queueTotal: null,
+          retryable: null,
+          postUrl: 'https://post-engineer.com/posts/re-1',
+        },
+      ],
+      hasAnyPost: true,
     };
 
     global.fetch = vi.fn().mockResolvedValue({
@@ -434,7 +599,7 @@ describe('PostEngineerClient', () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      text: async () => JSON.stringify(({ success: true, upcoming: [], recent: [] })),
+      text: async () => JSON.stringify(({ success: true, upcoming: [], recent: [], hasAnyPost: false })),
     });
 
     await client.listPosts(50);
@@ -458,7 +623,13 @@ describe('PostEngineerClient', () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      text: async () => JSON.stringify(({ success: true })),
+      text: async () =>
+        JSON.stringify({
+          success: true,
+          cancelledSlotIds: ['slot-1'],
+          refunds: [{ slotId: 'slot-1', refunded: true, alreadyRefunded: false, reason: 'not_generated' }],
+          batchDiscountWithheld: 0,
+        }),
     });
 
     await client.cancelSchedule('sched-1');
@@ -469,7 +640,59 @@ describe('PostEngineerClient', () => {
   });
 
   it('gets one slot by id', async () => {
-    const mockSlot = { success: true, slot: { id: 'slot-1', title: 'Hello' } };
+    const mockSlot = {
+      success: true,
+      slot: {
+        id: 'slot-1',
+        scheduleId: 'sched-1',
+        slotAt: '2026-10-10T20:00:00Z',
+        status: 'awaiting',
+        title: 'Hello',
+        taskId: null,
+        progress: 0,
+        stage: null,
+        error: null,
+        publishedAt: null,
+        postUrl: null,
+        publishLinks: [],
+        progressHistory: [],
+        scriptAngle: null,
+        retryable: null,
+        queuePosition: null,
+        queueTotal: null,
+        userNotices: [],
+        providerFailures: [],
+      },
+      schedule: {
+        id: 'sched-1',
+        personaId: null,
+        providers: ['youtube'],
+        youtubeAccountIds: [],
+        instagramAccountIds: [],
+        linkedinAccountIds: [],
+        blueskyAccountIds: [],
+        threadsAccountIds: [],
+        facebookAccountIds: [],
+        pinterestAccountIds: [],
+        pinterestBoardId: null,
+        threespeakAccountIds: [],
+        rumbleAccountIds: [],
+        fanvueAccountIds: [],
+        timezone: 'UTC',
+        publishMode: 'scheduled',
+      },
+      persona: null,
+      generation: {
+        faceless: true,
+        language: null,
+        voiceId: null,
+        videoAspect: '9:16',
+        videoLayout: null,
+        niche: null,
+        paragraphNumber: null,
+        faceQuality: null,
+      },
+    };
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
@@ -539,7 +762,23 @@ describe('PostEngineerClient', () => {
   });
 
   it('lists video generations with an optional limit', async () => {
-    const mockHistory = { success: true, generations: [{ generationId: 'gen-1' }] };
+    const mockHistory = {
+      success: true,
+      generations: [
+        {
+          id: 'row-1',
+          generationId: 'gen-1',
+          engineTaskId: 'task-1',
+          personaName: 'Ava',
+          videoSubject: 'Launch day',
+          status: 'completed',
+          errorCode: null,
+          tokensRefunded: false,
+          createdAt: '2026-10-08T10:00:00Z',
+          completedAt: '2026-10-08T10:05:00Z',
+        },
+      ],
+    };
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
@@ -569,7 +808,21 @@ describe('PostEngineerClient', () => {
   });
 
   it('gets one video generation by id', async () => {
-    const mockGeneration = { success: true, generation: { generationId: 'gen-1' } };
+    const mockGeneration = {
+      success: true,
+      generation: {
+        id: 'row-1',
+        generationId: 'gen-1',
+        engineTaskId: 'task-1',
+        personaName: 'Ava',
+        videoSubject: 'Launch day',
+        status: 'completed',
+        errorCode: null,
+        tokensRefunded: false,
+        createdAt: '2026-10-08T10:00:00Z',
+        completedAt: '2026-10-08T10:05:00Z',
+      },
+    };
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
@@ -587,7 +840,17 @@ describe('PostEngineerClient', () => {
   it('lists token transactions with limit and offset', async () => {
     const mockLedger = {
       success: true,
-      transactions: [{ id: 'tx-1', amount: -1 }],
+      transactions: [
+        {
+          id: 'tx-1',
+          amount: -1,
+          type: 'spend',
+          description: 'Video generation',
+          reason: 'generation_completed',
+          generationId: 'gen-1',
+          createdAt: '2026-10-08T10:00:00Z',
+        },
+      ],
       total: 42,
       limit: 20,
       offset: 0,
@@ -624,7 +887,23 @@ describe('PostEngineerClient', () => {
   });
 
   it('gets a persona delete preview by persona id', async () => {
-    const mockPreview = { success: true, persona: { id: 'persona-1', name: 'Ava' }, counts: {} };
+    const mockPreview = {
+      success: true,
+      persona: { id: 'persona-1', name: 'Ava' },
+      counts: {
+        schedules: 1,
+        upcomingSlots: 2,
+        publishedSlots: 3,
+        failedSlots: 0,
+        generatedVideos: 4,
+        personaImages: 5,
+      },
+      videos: [
+        { taskId: 'task-1', title: 'Video 1', status: 'completed', downloadUrl: null },
+      ],
+      videosTruncated: false,
+      linksIncomplete: false,
+    };
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
@@ -639,6 +918,17 @@ describe('PostEngineerClient', () => {
     expect(result).toEqual(mockPreview);
   });
 
+  it('rejects a malformed delete-preview 200 with empty counts', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ success: true, persona: { id: 'persona-1', name: 'Ava' }, counts: {} }),
+    });
+    await expect(client.getPersonaDeletePreview('persona-1')).rejects.toThrow(
+      'Malformed response from GET /api/persona/delete-preview',
+    );
+  });
+
   it('deletes a persona by id', async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -650,6 +940,17 @@ describe('PostEngineerClient', () => {
     expect(global.fetch).toHaveBeenCalledWith(
       `${baseUrl}/api/persona?personaId=persona-1`,
       expect.objectContaining({ method: 'DELETE' })
+    );
+  });
+
+  it('rejects a malformed delete 200 with a false success flag', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ success: false }),
+    });
+    await expect(client.deletePersona('persona-1')).rejects.toThrow(
+      'Malformed response from DELETE /api/persona',
     );
   });
 
@@ -697,13 +998,37 @@ describe('generate and schedule video client', () => {
     options: { videoType: 'hook_lipsync' as const },
   };
 
+  // Full production shapes: generatePersonaVideo and validateScript parse
+  // every 200 against the videos contract now, so the mock answers each
+  // endpoint with the shape its route returns.
+  const GENERATE_RESPONSE = {
+    success: true,
+    schedule: { id: 'sch-1', mode: 'scheduled' },
+    slots: [{ slotId: 'slot-1', slotAt: '2026-10-05T20:00:00Z', title: 'Launch a SaaS in days', taskId: 'task-1', status: 'scheduled' }],
+    replayed: false,
+  };
+  const VALIDATE_RESPONSE = {
+    success: true,
+    valid: true,
+    segmentCount: 1,
+    totalWords: 3,
+    hookWords: 3,
+    contentWords: 0,
+    mediaCount: 0,
+    hookWindowSeconds: { min: 8, max: 12 },
+    measuredDurationSeconds: null,
+    measured: 'pending',
+    measuredReason: 'No hook-only TTS endpoint exists yet, so the measured hook duration cannot be checked in this phase.',
+  };
+
   beforeEach(() => {
     client = new PostEngineerClient({ apiKey: 'test-token-123' });
-    global.fetch = vi.fn().mockResolvedValue({
+    global.fetch = vi.fn().mockImplementation(async (url: unknown) => ({
       ok: true,
       status: 200,
-      text: async () => JSON.stringify({ success: true }),
-    });
+      text: async () =>
+        JSON.stringify(String(url).includes('/api/videos/validate-script') ? VALIDATE_RESPONSE : GENERATE_RESPONSE),
+    }));
   });
 
   function requestBody(callIndex = 0): Record<string, unknown> {
@@ -743,7 +1068,7 @@ describe('generate and schedule video client', () => {
         timezone: 'Europe/Lisbon',
       },
     });
-    expect(result).toEqual({ success: true });
+    expect(result).toEqual(GENERATE_RESPONSE);
   });
 
   it('posts segments to the validate-script endpoint and returns its payload', async () => {
@@ -761,7 +1086,54 @@ describe('generate and schedule video client', () => {
     );
     expect(lastRequestBody().segments).toEqual(segments);
     expect(lastRequestBody().videoType).toBe('hook_lipsync');
-    expect(result).toEqual({ success: true });
+    expect(result).toEqual(VALIDATE_RESPONSE);
+  });
+
+  it('reports a malformed generate 200 as an error instead of an empty result', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ success: true }),
+    });
+    await expect(client.generatePersonaVideo(baseInput)).rejects.toThrow(
+      'Malformed response from POST /api/videos/generate-and-schedule',
+    );
+  });
+
+  it('carries the voice-fallback warning objects the route returns', async () => {
+    const withWarnings = {
+      ...GENERATE_RESPONSE,
+      warnings: [{ code: 'voice_fallback_applied', fromVoice: '', toVoice: 'chatterbox:kokoro_af_heart' }],
+    };
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify(withWarnings),
+    });
+    const result = await client.generatePersonaVideo(baseInput);
+    expect(result).toEqual(withWarnings);
+  });
+
+  it('reports string warnings as a malformed generate 200', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ ...GENERATE_RESPONSE, warnings: ['voice_fallback_applied'] }),
+    });
+    await expect(client.generatePersonaVideo(baseInput)).rejects.toThrow(
+      'Malformed response from POST /api/videos/generate-and-schedule at warnings.0',
+    );
+  });
+
+  it('reports a malformed validate 200 as an error instead of an empty result', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ success: true }),
+    });
+    await expect(client.validateScript([{ kind: 'hook', text: 'Hook text here.' }])).rejects.toThrow(
+      'Malformed response from POST /api/videos/validate-script',
+    );
   });
 
   it('nests each provider account array under publishing.accounts', async () => {
@@ -1080,9 +1452,16 @@ describe('generate and schedule video client', () => {
 
   it('retrieves video task status', async () => {
     const mockStatus = {
-      success: true,
-      status: 'completed',
-      videoUrl: 'https://cdn.example.com/video.mp4',
+      status: 200,
+      message: 'success',
+      body: {
+        task_id: 'task-abc-123',
+        state: 1,
+        progress: 100,
+        stage: null,
+        error: null,
+        postUrl: null,
+      },
     };
 
     global.fetch = vi.fn().mockResolvedValue({
@@ -1178,7 +1557,7 @@ describe('generate and schedule video client', () => {
   });
 
   it('connects a 3Speak account with username + posting key', async () => {
-    const mockResponse = { success: true, accountId: 'acc-1', providerAccountId: 'alice' };
+    const mockResponse = { success: true, accountId: 'acc-1', username: 'alice' };
 
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -1253,7 +1632,7 @@ describe('PostEngineerClient configuration', () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      text: async () => JSON.stringify(({ ok: true })),
+      text: async () => JSON.stringify({ authenticated: true, personas: [] }),
     });
     const c = new PostEngineerClient({ apiKey: 'k' });
     await c.listPersonas();
@@ -1267,7 +1646,7 @@ describe('PostEngineerClient configuration', () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      text: async () => JSON.stringify(({ ok: true })),
+      text: async () => JSON.stringify({ authenticated: true, personas: [] }),
     });
     const c = new PostEngineerClient({ apiKey: 'k', baseUrl: 'https://staging.example.test' });
     await c.listPersonas();
@@ -1281,7 +1660,7 @@ describe('PostEngineerClient configuration', () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      text: async () => JSON.stringify(({ ok: true })),
+      text: async () => JSON.stringify({ authenticated: true, personas: [] }),
     });
     const c = new PostEngineerClient({ apiKey: 'k' });
     const prev = process.env.POST_ENGINEER_API_URL;
@@ -1379,6 +1758,144 @@ describe('PostEngineerClient configuration', () => {
     expect((error as Error).message).toContain('[redacted]');
   });
 
+  it('rejects a malformed accounts 200 instead of listing a partial account', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ authenticated: true, accounts: [{ provider: 'youtube', channelId: 'chan-1' }], message: 'ok' }),
+    });
+
+    await expect(new PostEngineerClient({ apiKey: 'k' }).listSocialAccounts()).rejects.toThrow('Malformed response from GET /api/account');
+  });
+
+  it('rejects a malformed connect-url 200', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ success: true }),
+    });
+
+    await expect(new PostEngineerClient({ apiKey: 'k' }).getOAuthConnectUrl('instagram')).rejects.toThrow('Malformed response from POST /api/account/connect-url');
+  });
+
+  it('rejects a malformed Bluesky connect 200', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ success: true, accountId: 'acc-1' }),
+    });
+
+    await expect(new PostEngineerClient({ apiKey: 'k' }).connectBlueskyAccount('user.bsky.social', 'app-password-123')).rejects.toThrow(
+      'Malformed response from POST /api/bluesky-connect',
+    );
+  });
+
+  it('rejects a malformed disconnect 200', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ success: false }),
+    });
+
+    await expect(new PostEngineerClient({ apiKey: 'k' }).disconnectAccount('youtube', 'chan-1')).rejects.toThrow('Malformed response from DELETE /api/account');
+  });
+
+  it('rejects a malformed schedules 200 instead of listing a partial row', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ success: true, schedules: [{ id: 'sched-1' }] }),
+    });
+
+    await expect(new PostEngineerClient({ apiKey: 'k' }).listSchedules()).rejects.toThrow('Malformed response from GET /api/schedule');
+  });
+
+  it('rejects a malformed posts 200 with a raw DB status instead of a presented one', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          success: true,
+          upcoming: [{ id: 'up-1', slot_at: '2026-09-24T10:00:00Z', status: 'pending' }],
+          recent: [],
+        }),
+    });
+
+    await expect(new PostEngineerClient({ apiKey: 'k' }).listPosts()).rejects.toThrow('Malformed response from GET /api/schedule/status');
+  });
+
+  it('rejects a malformed cancel 200 without the cancel facts', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ success: true }),
+    });
+
+    await expect(new PostEngineerClient({ apiKey: 'k' }).cancelSchedule('sched-1')).rejects.toThrow('Malformed response from DELETE /api/schedule');
+  });
+
+  it('rejects a malformed slot 200 instead of presenting a partial detail', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ success: true, slot: { id: 'slot-1', title: 'Hello' } }),
+    });
+
+    await expect(new PostEngineerClient({ apiKey: 'k' }).getSlot('slot-1')).rejects.toThrow('Malformed response from GET /api/schedule/slots/:slotId');
+  });
+
+  it('rejects a malformed title update 200 with a wrong-typed title', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ success: true, title: 42 }),
+    });
+
+    await expect(new PostEngineerClient({ apiKey: 'k' }).updateSlotTitle('slot-1', 'New')).rejects.toThrow('Malformed response from PATCH /api/schedule/slots/:slotId');
+  });
+
+  it('rejects a malformed slot delete 200', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ success: false }),
+    });
+
+    await expect(new PostEngineerClient({ apiKey: 'k' }).deleteSlot('slot-1')).rejects.toThrow('Malformed response from DELETE /api/schedule/slots/:slotId');
+  });
+
+  it('rejects a malformed generations 200 instead of listing a partial row', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ success: true, generations: [{ generationId: 'gen-1' }] }),
+    });
+
+    await expect(new PostEngineerClient({ apiKey: 'k' }).listVideoGenerations()).rejects.toThrow('Malformed response from GET /api/persona/video-generations');
+  });
+
+  it('rejects a malformed generation 200 instead of presenting a partial row', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ success: true, generation: { generationId: 'gen-1' } }),
+    });
+
+    await expect(new PostEngineerClient({ apiKey: 'k' }).getVideoGeneration('gen-1')).rejects.toThrow('Malformed response from GET /api/persona/video-generations/:generationId');
+  });
+
+  it('rejects a malformed video status 200 without the engine envelope', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () =>
+        JSON.stringify({ success: true, status: 'completed', videoUrl: 'https://cdn.example.com/video.mp4' }),
+    });
+
+    await expect(new PostEngineerClient({ apiKey: 'k' }).getVideoStatus('task-abc-123')).rejects.toThrow('Malformed response from GET /api/persona/video-status/:taskId');
+  });
+
   it('rejects a non-http(s) POST_ENGINEER_API_URL override', () => {
     expect(() => new PostEngineerClient({ apiKey: 'k', baseUrl: 'javascript:alert(1)' })).toThrow(
       /POST_ENGINEER_API_URL/
@@ -1408,7 +1925,10 @@ describe('PostEngineerClient configuration', () => {
     expect(message).not.toContain('s3cret');
   });
 
-  it('cancelSchedule resolves an ok sentinel on 204 No Content instead of undefined', async () => {
+  it('cancelSchedule reports an empty 204 as a malformed response', async () => {
+    // The cancel route always returns the cancel facts; an empty body is
+    // not a production shape for this endpoint, so the contract parse
+    // rejects it instead of resolving the generic ok sentinel.
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 204,
@@ -1416,10 +1936,15 @@ describe('PostEngineerClient configuration', () => {
     });
 
     const c = new PostEngineerClient({ apiKey: 'k' });
-    await expect(c.cancelSchedule('sched-123')).resolves.toEqual({ ok: true });
+    await expect(c.cancelSchedule('sched-123')).rejects.toThrow(
+      'Malformed response from DELETE /api/schedule',
+    );
   });
 
-  it('resolves an ok sentinel on 200 with an empty body', async () => {
+  it('listPersonas reports an empty 200 body as a malformed response', async () => {
+    // The list route always returns the list envelope; an empty body is
+    // not a production shape for this endpoint, so the contract parse
+    // rejects it instead of resolving the generic ok sentinel.
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
@@ -1427,7 +1952,9 @@ describe('PostEngineerClient configuration', () => {
     });
 
     const c = new PostEngineerClient({ apiKey: 'k' });
-    await expect(c.listPersonas()).resolves.toEqual({ ok: true });
+    await expect(c.listPersonas()).rejects.toThrow(
+      'Malformed response from GET /api/persona/list',
+    );
   });
 
   it('rejects a 200 response with a non-JSON body instead of reporting success', async () => {
@@ -1445,7 +1972,7 @@ describe('PostEngineerClient configuration', () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      text: async () => JSON.stringify({ ok: true }),
+      text: async () => JSON.stringify({ authenticated: true, personas: [] }),
     });
 
     const c = new PostEngineerClient({ apiKey: 'k', baseUrl: 'https://user:pass@api.example.com/' });
@@ -1457,7 +1984,7 @@ describe('PostEngineerClient configuration', () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      text: async () => JSON.stringify({ ok: true }),
+      text: async () => JSON.stringify({ authenticated: true, personas: [] }),
     });
 
     const c = new PostEngineerClient({ apiKey: 'k', baseUrl: 'https://staging.example.com/' });
@@ -1472,7 +1999,7 @@ describe('PostEngineerClient configuration', () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      text: async () => JSON.stringify(({ ok: true })),
+      text: async () => JSON.stringify({ authenticated: true, personas: [] }),
     });
     const c = new PostEngineerClient({ apiKey: 'k' });
     await c.listPersonas();
@@ -1498,6 +2025,22 @@ describe('PostEngineerClient error truncation', () => {
     }
   });
 });
+
+const FULL_LIBRARY_IMAGE_ROW = {
+  id: 'img-1',
+  tag: 'casual',
+  description: 'smiling at the beach',
+  is_primary: false,
+  created_at: '2026-01-01T00:00:00Z',
+};
+
+function mockFetchJson(body: unknown): void {
+  global.fetch = vi.fn().mockResolvedValue({
+    ok: true,
+    status: 200,
+    text: async () => JSON.stringify(body),
+  });
+}
 
 describe('PostEngineerClient persona image library', () => {
   let client: PostEngineerClient;
@@ -1537,6 +2080,7 @@ describe('PostEngineerClient persona image library', () => {
   }
 
   it('createPersona uploads library images with parallel tags and descriptions', async () => {
+    mockFetchJson({ success: true, personaId: 'persona-123', imageIds: ['img-1', 'img-2'] });
     const first = await writeTempImage('a.jpg');
     const second = await writeTempImage('b.png');
     await client.createPersona({
@@ -1595,6 +2139,7 @@ describe('PostEngineerClient persona image library', () => {
   });
 
   it('createPersona normalizes whitespace-only tag/description to empty strings (server stores \'\' on both paths)', async () => {
+    mockFetchJson({ success: true, personaId: 'persona-123', imageIds: ['img-1'] });
     const path = await writeTempImage('a.jpg');
     await client.createPersona({
       accounts: { youtube: ['acct-1'] },
@@ -1767,6 +2312,7 @@ describe('PostEngineerClient persona image library', () => {
   });
 
   it('listPersonaImages hits the library endpoint', async () => {
+    mockFetchJson({ success: true, images: [{ ...FULL_LIBRARY_IMAGE_ROW, image_url: 'https://example.test/signed' }] });
     await client.listPersonaImages('p-1');
     expect(global.fetch).toHaveBeenCalledWith(
       `${baseUrl}/api/persona/images?personaId=p-1`,
@@ -1775,6 +2321,7 @@ describe('PostEngineerClient persona image library', () => {
   });
 
   it('addPersonaImage uploads a single image as multipart', async () => {
+    mockFetchJson({ success: true, image: FULL_LIBRARY_IMAGE_ROW });
     const path = await writeTempImage('c.webp');
     await client.addPersonaImage('p-1', { path, tag: 'gym', description: 'training', isPrimary: true });
 
@@ -1790,6 +2337,7 @@ describe('PostEngineerClient persona image library', () => {
   });
 
   it('addPersonaImage omits empty tag/description keys (the server stores \'\' on both upload paths)', async () => {
+    mockFetchJson({ success: true, image: FULL_LIBRARY_IMAGE_ROW });
     // An empty tag can never match the deterministic keyword selection;
     // the server stores metadata verbatim, so the client must normalize.
     const path = await writeTempImage('d.png');
@@ -1802,6 +2350,7 @@ describe('PostEngineerClient persona image library', () => {
   });
 
   it('updatePersonaImage sends a PATCH with the metadata', async () => {
+    mockFetchJson({ success: true, image: { ...FULL_LIBRARY_IMAGE_ROW, tag: 'casual', is_primary: true } });
     await client.updatePersonaImage({ id: 'img-1', tag: 'casual', isPrimary: true });
     expect(global.fetch).toHaveBeenCalledWith(
       `${baseUrl}/api/persona/images`,
@@ -1862,6 +2411,7 @@ describe('PostEngineerClient persona image library', () => {
   });
 
   it('createPersona uses the longer upload timeout for file-carrying requests', async () => {
+    mockFetchJson({ success: true, personaId: 'persona-123', imageIds: [] });
     const path = await writeTempImage('a.jpg');
     const timeouts: number[] = [];
     const realTimeout = AbortSignal.timeout;
@@ -1885,6 +2435,7 @@ describe('PostEngineerClient persona image library', () => {
   });
 
   it('createPersona always uses the upload timeout (multipart request)', async () => {
+    mockFetchJson({ success: true, personaId: 'persona-123', imageIds: [] });
     const timeouts: number[] = [];
     const realTimeout = AbortSignal.timeout;
     const spy = vi
@@ -1902,6 +2453,7 @@ describe('PostEngineerClient persona image library', () => {
   });
 
   it('listPersonas uses the default timeout', async () => {
+    mockFetchJson({ authenticated: true, personas: [] });
     const timeouts: number[] = [];
     const realTimeout = AbortSignal.timeout;
     const spy = vi
@@ -1916,6 +2468,35 @@ describe('PostEngineerClient persona image library', () => {
       spy.mockRestore();
     }
     expect(timeouts).toEqual([30_000]);
+  });
+
+  it('rejects a malformed images list 200 with a partial row', async () => {
+    mockFetchJson({ success: true, images: [{ id: 'img-1', tag: 'casual' }] });
+    await expect(client.listPersonaImages('p-1')).rejects.toThrow(
+      'Malformed response from GET /api/persona/images',
+    );
+  });
+
+  it('rejects a malformed add-image 200 with a partial row', async () => {
+    const path = await writeTempImage('e.jpg');
+    mockFetchJson({ success: true, image: { id: 'img-1', tag: 'casual' } });
+    await expect(client.addPersonaImage('p-1', { path })).rejects.toThrow(
+      'Malformed response from POST /api/persona/images',
+    );
+  });
+
+  it('rejects a malformed update-image 200 without an image', async () => {
+    mockFetchJson({ success: true });
+    await expect(client.updatePersonaImage({ id: 'img-1', tag: 'casual' })).rejects.toThrow(
+      'Malformed response from PATCH /api/persona/images',
+    );
+  });
+
+  it('rejects a malformed delete-image 200 with a false success flag', async () => {
+    mockFetchJson({ success: false });
+    await expect(client.deletePersonaImage('img-1')).rejects.toThrow(
+      'Malformed response from DELETE /api/persona/images',
+    );
   });
 
   it('deletePersonaImage sends a DELETE with the id query', async () => {
@@ -1997,6 +2578,19 @@ describe('publishVideoDirect', () => {
     const video = formData.get('video');
     expect(video).toBeInstanceOf(Blob);
     expect((video as Blob).size).toBe(8);
+  });
+
+  it('does not send a JSON content type with the multipart body', async () => {
+    // A FormData body with an explicit Content-Type: application/json
+    // reaches the server as JSON, so Next's request.formData() rejects it
+    // ("Content-Type was not one of multipart/form-data ...") and the
+    // publish fails with a 500. fetch must set the multipart boundary.
+    const videoPath = await writeTempVideo('clip.mp4');
+    await client.publishVideoDirect(youtubeInput(videoPath));
+
+    const request = vi.mocked(global.fetch).mock.calls[0]?.[1];
+    expect(request?.body).toBeInstanceOf(FormData);
+    expect(new Headers(request?.headers).get('content-type')).toBeNull();
   });
 
   it('maps account ids to the instagram field names', async () => {

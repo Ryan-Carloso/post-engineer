@@ -18,6 +18,7 @@ vi.mock('@/lib/request-auth', () => ({
 }));
 
 import { GET } from '../list/route';
+import { ListPersonasResponseSchema } from '@/lib/contracts/personas';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { logger } from '@/lib/logger';
@@ -267,6 +268,7 @@ describe('GET /api/persona/list', () => {
     };
 
     expect(res.status).toBe(200);
+    expect(ListPersonasResponseSchema.safeParse(body).success).toBe(true);
     expect(body.authenticated).toBe(true);
     expect(body.personas).toHaveLength(2);
 

@@ -19,6 +19,7 @@ vi.mock('@/lib/supabase/service', () => ({
 }));
 
 import { GET, parseGenerationsLimit } from '../video-generations/route';
+import { ListVideoGenerationsResponseSchema } from '@/lib/contracts/video-tasks';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 
@@ -68,6 +69,7 @@ describe('GET /api/persona/video-generations', () => {
     expect(response.status).toBe(200);
     const body = await response.json();
     expect(body.success).toBe(true);
+    expect(ListVideoGenerationsResponseSchema.safeParse(body).success).toBe(true);
     expect(body.generations).toEqual([
       {
         id: 'row-1',

@@ -9,22 +9,10 @@ import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-r
 import { AuthError } from '@/lib/errors';
 import { getAuthenticatedClient } from '@/lib/upload/handlers';
 import { getYouTubeVideoInfo } from '@/lib/youtube';
-import { AnalyticsAuthError, VIDEO_ID, analyticsDate, queryRetentionCurve, videoSnippet } from '@/lib/youtube-analytics';
-import { METRICS_FILTER_MAX_LENGTH, UUID, isProvisional } from '@/lib/metrics/metrics-query';
+import { AnalyticsAuthError, analyticsDate, queryRetentionCurve, videoSnippet } from '@/lib/youtube-analytics';
+import { UUID, isProvisional, parseRetentionCurveQuery } from '@/lib/metrics/metrics-query';
 
 const ROUTE = 'GET /api/metrics/retention-curve';
-
-function readParams(params: URLSearchParams): { account: string; video: string } | { error: string } {
-  for (const key of params.keys()) {
-    if (key !== 'account' && key !== 'video') return { error: `Unknown parameter: ${key}.` };
-  }
-  const account = params.getAll('account');
-  const video = params.getAll('video');
-  if (account.length !== 1 || video.length !== 1) return { error: 'account and video are each required once.' };
-  if (account[0] === '' || account[0].length > METRICS_FILTER_MAX_LENGTH) return { error: 'Invalid account.' };
-  if (!VIDEO_ID.test(video[0])) return { error: 'Invalid video.' };
-  return { account: account[0], video: video[0] };
-}
 
 //---------------
 // GET /api/metrics/retention-curve?account=&video= — the audience
@@ -43,7 +31,7 @@ async function getHandler(request: Request): Promise<NextResponse> {
   const limited = await applyRateLimit(request, RATE_LIMITS.retentionCurve, auth.userId);
   if (limited) return limited;
 
-  const parsed = readParams(new URL(request.url).searchParams);
+  const parsed = parseRetentionCurveQuery(new URL(request.url).searchParams);
   if ('error' in parsed) {
     return apiErrorResponse(400, parsed.error, {
       route: ROUTE,

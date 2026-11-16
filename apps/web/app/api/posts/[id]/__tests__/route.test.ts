@@ -37,6 +37,7 @@ vi.mock('@/lib/api-error-reporting', async (importOriginal) => {
 
 import { NextResponse } from 'next/server';
 import { GET } from '../route';
+import { GetPostResponseSchema } from '@/lib/contracts/posts';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
@@ -88,6 +89,8 @@ describe('GET /api/posts/[id]', () => {
     expect(body.success).toBe(true);
     expect(body.kind).toBe('generation');
     expect(body.generation.progress).toBe(67);
+    // The 200 body parses against the shared contract the MCP reads.
+    expect(GetPostResponseSchema.safeParse(body).success).toBe(true);
     expect(getSlotPost).not.toHaveBeenCalled();
   });
 
@@ -152,6 +155,8 @@ describe('GET /api/posts/[id]', () => {
     expect(body.success).toBe(true);
     expect(body.kind).toBe('slot');
     expect(body.slot.id).toBe('slot-1');
+    // The 200 body parses against the shared contract the MCP reads.
+    expect(GetPostResponseSchema.safeParse(body).success).toBe(true);
     expect(getSlotPost).toHaveBeenCalledWith(expect.anything(), SLOT_ID, USER_ID, null);
   });
 

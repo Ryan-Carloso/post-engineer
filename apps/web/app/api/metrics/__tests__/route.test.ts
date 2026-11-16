@@ -14,6 +14,7 @@ import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { applyRateLimit } from '@/lib/rate-limit';
 import { logger } from '@/lib/logger';
 import { METRICS_NONE, METRICS_ROW_LIMIT } from '@/lib/metrics/metrics-query';
+import { MetricsResponseSchema } from '@/lib/contracts/metrics';
 
 const PERSONA = '11111111-2222-4333-8444-555555555555';
 
@@ -71,7 +72,8 @@ describe('GET /api/metrics', () => {
     expect(calls).toContainEqual(['eq', 'metrics_window', '24h']);
     expect(calls).toContainEqual(['limit', METRICS_ROW_LIMIT + 1]);
     expect(applyRateLimit).toHaveBeenCalled();
-    await expect(response.json()).resolves.toEqual({
+    const body = await response.json();
+    expect(body).toEqual({
       success: true,
       truncated: false,
       coverage: [],
@@ -84,6 +86,8 @@ describe('GET /api/metrics', () => {
         averageViewPercentage: null, contentType: null, analyticsStatus: null, provisional: false,
       }],
     });
+    // The 200 body parses against the shared contract the MCP reads.
+    expect(MetricsResponseSchema.safeParse(body).success).toBe(true);
   });
 
   it('maps the YouTube Analytics columns, derives stayed-to-watch and the provisional flag', async () => {

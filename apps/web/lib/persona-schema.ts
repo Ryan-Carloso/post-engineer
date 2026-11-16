@@ -1,22 +1,17 @@
 import { z } from 'zod';
 import {
+  FACE_QUALITIES,
+  PERSONA_CTA_MAX_LENGTH,
+  VALID_VIDEO_ASPECTS,
+  VIDEO_LAYOUTS,
+} from './contracts/personas';
+import {
   emptyPersonaDefaultAccounts,
   parsePublishingAccountsField,
   type PersonaDefaultAccounts,
 } from './persona-publishing-accounts';
 
-//---------------
-// Zod schema for the persona form — the SINGLE source of validation.
-// Used by POST /api/persona, by the video-job debug branch, and by the
-// client (fails before the POST).
-//---------------
-
-export const VALID_VIDEO_ASPECTS = ['9:16', '16:9', '1:1'] as const;
-export const FACE_QUALITIES = ['ok', 'very_good'] as const;
-// How the persona is composed with the video material during the hook. Must match
-// the CHECK constraint in supabase/migrations/018 and the engine's
-// VideoLayout enum — persona-video-layout-migration.test.ts pins all three.
-export const VIDEO_LAYOUTS = ['standard', 'react'] as const;
+export { FACE_QUALITIES, PERSONA_CTA_MAX_LENGTH, VALID_VIDEO_ASPECTS, VIDEO_LAYOUTS };
 
 export const PHOTO_EXTENSIONS: Record<string, string> = {
   'image/png': 'png',
@@ -41,12 +36,11 @@ const optionalText = <T extends z.ZodType>(schema: T) =>
 // persona, which is the only persona this product makes.
 //---------------
 //---------------
-// PERSONA_CTA_MAX_LENGTH — cap on the persona's call to action. Mirrored by
-// the DB check (migration 024) and the engine schema
-// (video_cta: Field(max_length=200)); pinned by a sync test.
+// Zod schema for the persona form — the SINGLE source of validation.
+// Used by POST /api/persona, by the video-job debug branch, and by the
+// client (fails before the POST). The field caps and enums live in the
+// shared personas contract; this schema keeps the form's mode rules.
 //---------------
-export const PERSONA_CTA_MAX_LENGTH = 200;
-
 export const personaFormSchema = z.object({
   name: z.string().trim().min(1).optional(),
   avatarUrl: optionalText(z.string()),

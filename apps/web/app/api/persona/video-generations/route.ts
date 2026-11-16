@@ -4,6 +4,14 @@ import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { logger } from '@/lib/logger';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
+import {
+  parseGenerationsLimit,
+  type VideoGenerationRow,
+} from '@/lib/contracts/video-tasks';
+
+// The limit parser lives in the shared contract; the route re-exports it
+// so the existing import path keeps working.
+export { parseGenerationsLimit } from '@/lib/contracts/video-tasks';
 
 //---------------
 // GET /api/persona/video-generations — the user's video generation history
@@ -11,33 +19,6 @@ import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-r
 // (default 50, max 200). Rows are written by the video-job and video-status
 // routes via lib/generation/video-generation record helpers.
 //---------------
-
-const DEFAULT_LIMIT = 50;
-const MAX_LIMIT = 200;
-
-export function parseGenerationsLimit(value: string | null): number {
-  if (value === null || !/^\d+$/.test(value)) return DEFAULT_LIMIT;
-  const parsed = Number.parseInt(value, 10);
-  if (!Number.isInteger(parsed) || parsed < 1) return DEFAULT_LIMIT;
-  return Math.min(parsed, MAX_LIMIT);
-}
-
-export interface VideoGenerationRow {
-  id: string;
-  generationId: string;
-  engineTaskId: string | null;
-  personaName: string | null;
-  videoSubject: string | null;
-  status: string;
-  errorCode: string | null;
-  // No errorMessage: the raw engine/upstream text may contain paths or
-  // upstream bodies and is kept server-side (DB) for support only. The UI
-  // renders the categorized errorCode, so shipping the raw text would only
-  // expose it via devtools without ever being displayed.
-  tokensRefunded: boolean;
-  createdAt: string;
-  completedAt: string | null;
-}
 
 async function getHandler(request: Request): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);

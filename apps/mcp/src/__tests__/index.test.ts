@@ -222,10 +222,30 @@ describe('every action runs its handler against the client', () => {
     ['persona_media', { action: 'remove_image', id: 'img1' }, 'deletePersonaImage', { success: true }],
     ['accounts', { action: 'list' }, 'listSocialAccounts', { accounts: [] }],
     ['accounts', { action: 'disconnect', account: 'did:plc:x', provider: 'bluesky' }, 'disconnectAccount', { success: true }],
-    ['schedules', { action: 'list' }, 'listSchedules', { schedules: [] }],
-    ['schedules', { action: 'cancel', scheduleId: 's1' }, 'cancelSchedule', { success: true }],
-    ['schedules', { action: 'get_slot', slotId: 's1' }, 'getSlot', { slot: { id: 's1' } }],
-    ['schedules', { action: 'update_slot_title', slotId: 's1', title: 'T' }, 'updateSlotTitle', { title: 'T' }],
+    ['schedules', { action: 'list' }, 'listSchedules', { success: true, schedules: [] }],
+    ['schedules', { action: 'cancel', scheduleId: 's1' }, 'cancelSchedule', { success: true, cancelledSlotIds: [], refunds: [], batchDiscountWithheld: 0 }],
+    ['schedules', { action: 'get_slot', slotId: 's1' }, 'getSlot', {
+      success: true,
+      slot: {
+        id: 's1', scheduleId: 'sched-1', slotAt: '2026-10-10T20:00:00Z', status: 'awaiting',
+        title: 'T', taskId: null, progress: 0, stage: null, error: null, publishedAt: null,
+        postUrl: null, publishLinks: [], progressHistory: [], scriptAngle: null,
+        retryable: null, queuePosition: null, queueTotal: null, userNotices: [], providerFailures: [],
+      },
+      schedule: {
+        id: 'sched-1', personaId: null, providers: [], youtubeAccountIds: [],
+        instagramAccountIds: [], linkedinAccountIds: [], blueskyAccountIds: [],
+        threadsAccountIds: [], facebookAccountIds: [], pinterestAccountIds: [],
+        pinterestBoardId: null, threespeakAccountIds: [], rumbleAccountIds: [],
+        fanvueAccountIds: [], timezone: 'UTC', publishMode: 'scheduled',
+      },
+      persona: null,
+      generation: {
+        faceless: true, language: null, voiceId: null, videoAspect: '9:16',
+        videoLayout: null, niche: null, paragraphNumber: null, faceQuality: null,
+      },
+    }],
+    ['schedules', { action: 'update_slot_title', slotId: 's1', title: 'T' }, 'updateSlotTitle', { success: true, title: 'T' }],
     ['schedules', { action: 'delete_slot', slotId: 's1' }, 'deleteSlot', { success: true }],
     ['video_tasks', { action: 'list_generations' }, 'listVideoGenerations', { generations: [] }],
     ['video_tasks', { action: 'get_generation', generationId: 'g1' }, 'getVideoGeneration', { generation: { generationId: 'g1' } }],
@@ -235,7 +255,7 @@ describe('every action runs its handler against the client', () => {
 
   it.each(CASES)('%s %j calls %s', async (name, args, method, payload) => {
     if (name === 'accounts' && args.action === 'disconnect') {
-      vi.mocked(mockClient.listSocialAccounts).mockResolvedValue({ accounts: [{ provider: 'bluesky', did: 'did:plc:x', handle: 'a.bsky.social' }] });
+      vi.mocked(mockClient.listSocialAccounts).mockResolvedValue({ authenticated: true, accounts: [{ provider: 'bluesky', recordId: 'rec-1', did: 'did:plc:x', handle: 'a.bsky.social', connectedAt: 1700000000000, lastUsed: 1700000000000 }], message: 'ok' });
     }
     vi.mocked(mockClient[method] as ReturnType<typeof vi.fn>).mockResolvedValue(payload);
     const result = await call(name, args);
@@ -256,15 +276,15 @@ describe('every action runs its handler against the client', () => {
   });
 
   it('resolves a persona given by name before the call', async () => {
-    vi.mocked(mockClient.listPersonas).mockResolvedValue({ personas: [{ id: PERSONA, name: 'Maria' }] });
-    vi.mocked(mockClient.listPersonaImages).mockResolvedValue({ images: [] });
+    vi.mocked(mockClient.listPersonas).mockResolvedValue({ authenticated: true, personas: [{ id: PERSONA, name: 'Maria', createdAt: '2026-01-01T00:00:00Z', boundAccounts: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [] } }] });
+    vi.mocked(mockClient.listPersonaImages).mockResolvedValue({ success: true, images: [] });
     const result = await call('persona_media', { action: 'list_images', persona: 'maria' });
     expect(result.isError).toBeFalsy();
     expect(mockClient.listPersonaImages).toHaveBeenCalledWith(PERSONA);
   });
 
   it('answers an unknown persona name with the way to list them and calls nothing else', async () => {
-    vi.mocked(mockClient.listPersonas).mockResolvedValue({ personas: [{ id: PERSONA, name: 'Maria' }] });
+    vi.mocked(mockClient.listPersonas).mockResolvedValue({ authenticated: true, personas: [{ id: PERSONA, name: 'Maria', createdAt: '2026-01-01T00:00:00Z', boundAccounts: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [] } }] });
     const result = await call('persona_media', { action: 'list_images', persona: 'Ghost' });
     expect(result.isError).toBe(true);
     expect(JSON.stringify(result.content)).toContain('No persona named');
@@ -272,9 +292,16 @@ describe('every action runs its handler against the client', () => {
   });
 
   it('filters the accounts list by network', async () => {
-    vi.mocked(mockClient.listSocialAccounts).mockResolvedValue({ accounts: [{ provider: 'youtube', channelId: 'UC1' }, { provider: 'bluesky', did: 'd1' }] });
+    vi.mocked(mockClient.listSocialAccounts).mockResolvedValue({
+      authenticated: true,
+      accounts: [
+        { provider: 'youtube', recordId: 'rec-1', channelId: 'UC1', channelName: 'Maria', connectedAt: 1700000000000, lastUsed: 1700000000000 },
+        { provider: 'bluesky', recordId: 'rec-2', did: 'd1', handle: 'b.bsky.social', connectedAt: 1700000000000, lastUsed: 1700000000000 },
+      ],
+      message: 'ok',
+    });
     const result = await call('accounts', { action: 'list', provider: 'bluesky' });
     const text = (result.content as Array<{ text: string }>)[0].text;
-    expect(JSON.parse(text).accounts).toEqual([{ provider: 'bluesky', did: 'd1' }]);
+    expect(JSON.parse(text).accounts).toEqual([{ provider: 'bluesky', recordId: 'rec-2', did: 'd1', handle: 'b.bsky.social', connectedAt: 1700000000000, lastUsed: 1700000000000 }]);
   });
 });

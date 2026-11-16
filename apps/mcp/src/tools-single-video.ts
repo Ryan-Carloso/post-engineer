@@ -43,27 +43,6 @@ type ValidatedScriptPayload = {
   contentWords: number;
 };
 
-function narrowValidateScriptPayload(result: unknown): ValidatedScriptPayload | string | null {
-  if (typeof result !== 'object' || result === null) return null;
-  const record = result as Record<string, unknown>;
-  if (record.success !== true) {
-    return typeof record.error === 'string' && record.error.length > 0
-      ? record.error
-      : 'The web validation endpoint rejected the script.';
-  }
-  const numbers = ['segmentCount', 'totalWords', 'hookWords', 'contentWords'];
-  for (const key of numbers) {
-    if (typeof record[key] !== 'number') return null;
-  }
-  if (record.measured !== 'pending' || record.measuredDurationSeconds !== null) return null;
-  return {
-    segmentCount: record.segmentCount as number,
-    totalWords: record.totalWords as number,
-    hookWords: record.hookWords as number,
-    contentWords: record.contentWords as number,
-  };
-}
-
 export async function handleValidateScript(
   client: PostEngineerClient,
   args: ValidateScriptArgs,
@@ -76,17 +55,17 @@ export async function handleValidateScript(
       `Script validation failed: ${result.error.field}: ${result.error.rule} Fix: ${result.error.fix}`,
     );
   }
-  let payload: ValidatedScriptPayload | string | null;
+  let payload: ValidatedScriptPayload;
   try {
-    payload = narrowValidateScriptPayload(await client.validateScript(args.segments, args.videoType ?? 'hook_lipsync'));
+    const result = await client.validateScript(args.segments, args.videoType ?? 'hook_lipsync');
+    payload = {
+      segmentCount: result.segmentCount,
+      totalWords: result.totalWords,
+      hookWords: result.hookWords,
+      contentWords: result.contentWords,
+    };
   } catch (error) {
     return errorResponse(`Error validating the script: ${sanitizeEngineError(getErrorMessage(error))}`);
-  }
-  if (typeof payload === 'string') {
-    return errorResponse(`Script validation failed: ${payload}`);
-  }
-  if (payload === null) {
-    return errorResponse('Script validation failed: the web validation endpoint returned an unexpected response.');
   }
   return {
     content: [
@@ -162,8 +141,7 @@ export async function generatePersonaVideoOutcome(
     // reads options.language: forward it there unless options already
     // sets one, or the top-level value is silently dropped.
     const language = args.options?.language ?? args.language;
-    const narrowed = narrowScheduledVideos(
-      await client.generatePersonaVideo({
+    const narrowed = await client.generatePersonaVideo({
         personaId: args.personaId,
         title: args.title,
         description: args.description,
@@ -195,16 +173,15 @@ export async function generatePersonaVideoOutcome(
         },
         idempotencyKey: args.idempotencyKey,
         experiment: args.experiment,
-      }),
-    );
-    const scheduleId = narrowed.schedule.id ?? '(unknown id)';
+      });
+    const scheduleId = narrowed.schedule.id;
     const humanSummary =
       mode === 'asap'
         ? `Generating 1 video in schedule ${scheduleId}: it publishes as soon as its generation finishes (ASAP mode).`
         : `Scheduled 1 video in schedule ${scheduleId}: it is generated and auto-published at its slot.`;
     const slotLines = narrowed.slots.map(
       (slot, i) =>
-        `${i + 1}. ${slot.title ?? '(untitled)'} → ${slot.slotAt ?? '(unscheduled)'} [${slot.status ?? 'unknown'}${slot.taskId ? `, task ${slot.taskId}` : ''}]`,
+        `${i + 1}. ${slot.title} → ${slot.slotAt} [${slot.status}${slot.taskId ? `, task ${slot.taskId}` : ''}]`,
     );
     return {
       response: {
@@ -215,7 +192,7 @@ export async function generatePersonaVideoOutcome(
           },
         ],
       },
-      failedSlotIds: narrowed.slots.filter((slot) => slot.status === 'failed').map((slot) => slot.slotId ?? '(unknown slot id)'),
+      failedSlotIds: narrowed.slots.filter((slot) => slot.status === 'failed').map((slot) => slot.slotId),
       scheduleId: narrowed.schedule.id,
     };
   } catch (error) {
@@ -225,25 +202,6 @@ export async function generatePersonaVideoOutcome(
       scheduleId: null,
     };
   }
-}
-
-function narrowScheduledVideos(result: unknown): {
-  schedule: { id: string | null; mode: string | null };
-  slots: Array<{ slotId: string | null; slotAt: string | null; title: string | null; taskId: string | null; status: string | null }>;
-  replayed: boolean | null;
-} {
-  const record = typeof result === 'object' && result !== null ? (result as Record<string, unknown>) : {};
-  const schedule = typeof record.schedule === 'object' && record.schedule !== null ? (record.schedule as Record<string, unknown>) : {};
-  const rawSlots = Array.isArray(record.slots) ? record.slots : [];
-  const str = (value: unknown): string | null => (typeof value === 'string' ? value : null);
-  return {
-    schedule: { id: str(schedule.id), mode: str(schedule.mode) },
-    slots: rawSlots.map((slot) => {
-      const s = typeof slot === 'object' && slot !== null ? (slot as Record<string, unknown>) : {};
-      return { slotId: str(s.slotId), slotAt: str(s.slotAt), title: str(s.title), taskId: str(s.taskId), status: str(s.status) };
-    }),
-    replayed: typeof record.replayed === 'boolean' ? record.replayed : null,
-  };
 }
 
 // NOTE: check_script (action: validate) is registered by intent-content.ts and

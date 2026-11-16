@@ -81,6 +81,11 @@ apps/web/supabase/.temp/
 /bench-work/
 .playwright-mcp/
 
+# Generated endpoint contracts (shared/contracts/*.ts synced by
+# scripts/sync-contracts.mjs on postinstall/typecheck/prebuild/pretest).
+apps/web/lib/contracts/
+apps/mcp/src/contracts/
+
 # Nx
 .nx/
 

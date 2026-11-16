@@ -9,7 +9,22 @@ import type { McpToolResponse } from '../tools-call.js';
 // persona that changed since then needs a fresh preview.
 
 function client(preview: { counts: Record<string, number>; videos?: Array<{ taskId: string; downloadUrl: string }> }) {
-  const getPersonaDeletePreview = vi.fn(async () => ({ persona: { id: 'p1', name: 'Maria' }, counts: preview.counts, videos: preview.videos ?? [] }));
+  const getPersonaDeletePreview = vi.fn(async () => ({
+    success: true,
+    persona: { id: 'p1', name: 'Maria' },
+    counts: {
+      schedules: 0,
+      upcomingSlots: 0,
+      publishedSlots: 0,
+      failedSlots: 0,
+      generatedVideos: 0,
+      personaImages: 0,
+      ...preview.counts,
+    },
+    videos: (preview.videos ?? []).map((video) => ({ title: 'Untitled', status: 'completed', ...video })),
+    videosTruncated: false,
+    linksIncomplete: false,
+  }));
   const deletePersona = vi.fn(async () => ({ success: true }));
   return { client: { getPersonaDeletePreview, deletePersona } as unknown as PostEngineerClient, getPersonaDeletePreview, deletePersona };
 }
@@ -90,32 +105,30 @@ describe('personas · delete', () => {
     expect(c.deletePersona).not.toHaveBeenCalled();
   });
 
-  it('coerces a malformed preview envelope to nulls and still previews', async () => {
+  it('reports a malformed preview 200 as an error instead of previewing with nulls', async () => {
+    // The client parses the preview against the contract: a malformed 200
+    // throws before the handler ever sees it, so there is no null-coerced
+    // preview to show.
+    const { MalformedContractResponseError } = await import('../contract-response.js');
     const c = {
-      getPersonaDeletePreview: vi.fn(async () => ({ persona: { id: 5 }, counts: { schedules: 'many' }, videos: [null], videosTruncated: 'yes' })),
+      getPersonaDeletePreview: vi.fn(async () => {
+        throw new MalformedContractResponseError('Malformed response from GET /api/persona/delete-preview');
+      }),
       deletePersona: vi.fn(),
     } as unknown as PostEngineerClient;
     const response = await handlePersonaDelete(c, { personaId: 'persona-1' });
-    expect(response.isError).not.toBe(true);
-    expect(text(response)).toContain('Deleting persona "persona-1" would remove ? schedule(s)');
-    expect(text(response)).toContain('"schedules": null');
-    expect(text(response)).toContain('"taskId": null');
+    expect(response.isError).toBe(true);
+    expect(text(response)).toContain('Malformed response from GET /api/persona/delete-preview');
+    expect(c.deletePersona).not.toHaveBeenCalled();
   });
 
-  it('treats a missing envelope as all-null', async () => {
-    const c = { getPersonaDeletePreview: vi.fn(async () => null), deletePersona: vi.fn() } as unknown as PostEngineerClient;
-    const response = await handlePersonaDelete(c, { personaId: 'persona-1' });
-    expect(response.isError).not.toBe(true);
-    expect(text(response)).toContain('"videos": []');
-  });
-
-  it('narrows the counts and the per-video download links of the preview', async () => {
+  it('previews the counts and the per-video download links', async () => {
     const c = {
       getPersonaDeletePreview: vi.fn(async () => ({
         success: true,
         persona: { id: 'persona-1', name: 'Ava' },
         counts: { schedules: 2, upcomingSlots: 5, publishedSlots: 10, failedSlots: 1, generatedVideos: 12, personaImages: 4 },
-        videos: [{ taskId: 'task-1', title: 'Gym', status: 'completed', downloadUrl: 'https://cdn.test/v1.mp4', extra: 'dropped' }],
+        videos: [{ taskId: 'task-1', title: 'Gym', status: 'completed', downloadUrl: 'https://cdn.test/v1.mp4' }],
         videosTruncated: false,
         linksIncomplete: false,
       })),
@@ -124,6 +137,5 @@ describe('personas · delete', () => {
     const response = await handlePersonaDelete(c, { personaId: 'persona-1' });
     expect(text(response)).toContain('Deleting persona "Ava" would remove 2 schedule(s), 5 upcoming slot(s), 10 published slot(s), 12 generated video(s), and 4 library image(s).');
     expect(text(response)).toContain('"downloadUrl": "https://cdn.test/v1.mp4"');
-    expect(text(response)).not.toContain('dropped');
   });
 });

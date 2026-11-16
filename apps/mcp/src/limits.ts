@@ -6,6 +6,8 @@
  * a client<->errors import cycle.
  */
 
+import { MAX_VIDEO_UPLOAD_BYTES } from './contracts/videos.js';
+
 /**
  * Max caller text for voices (action: preview_clone), in characters after trimming.
  * Same literal as the engine (app/services/cloned_voices/preview_text.py)
@@ -62,69 +64,65 @@ export const MAX_SEGMENT_MEDIA_BYTES = 8 * 1024 * 1024;
 export const MAX_SEGMENT_MEDIA_MB = MAX_SEGMENT_MEDIA_BYTES / (1024 * 1024);
 
 /**
- * Max direct-publish video size in bytes (2GB). Mirrors the server-side
- * limit in POST /api/upload-content (youtube handler): the MCP fails fast
- * locally instead of uploading gigabytes the server would reject.
+ * Max direct-publish video size in bytes (2GB). Lives in the shared videos
+ * contract (`shared/contracts/videos.ts`): the MCP fails fast locally
+ * instead of uploading gigabytes the server would reject.
  */
-export const MAX_UPLOAD_VIDEO_BYTES = 2 * 1024 * 1024 * 1024;
+export { MAX_VIDEO_UPLOAD_BYTES as MAX_UPLOAD_VIDEO_BYTES };
 
 /**
  * Same limit in whole GB, derived from the byte limit so user-facing copy
  * can't drift from the enforced bound.
  */
-export const MAX_UPLOAD_VIDEO_GB = MAX_UPLOAD_VIDEO_BYTES / (1024 * 1024 * 1024);
+export const MAX_UPLOAD_VIDEO_GB = MAX_VIDEO_UPLOAD_BYTES / (1024 * 1024 * 1024);
 
 /**
- * Persona-hook layouts the server accepts, as an inline literal rather than
- * an enum: it feeds `z.enum(...)`, whose generic argument is a tuple.
- *
- * This list is duplicated in `apps/web/lib/persona-schema.ts` (the web zod
- * enum), in `supabase/migrations/019_personas-video-layout.sql` (the CHECK)
- * and in the engine's `VideoLayout` (apps/engine/app/models/schema.py).
- * Nothing shares a module across those four runtimes, so a one-sided edit
- * would silently teach agents a layout the database rejects at write time --
- * pinned by `persona-video-layout-sync.test.ts`.
+ * Persona-hook layouts the server accepts. The list lives in the shared
+ * personas contract (`shared/contracts/personas.ts`) — the web zod enum
+ * and the MCP schemas share that one literal now. The DB CHECK
+ * (migration 019) and the engine's VideoLayout enum are still independent
+ * literals, pinned by `persona-video-layout-migration.test.ts`.
  */
-export const VIDEO_LAYOUTS = ['standard', 'react'] as const;
+export { VIDEO_LAYOUTS } from './contracts/personas.js';
 
 /**
- * GET /api/metrics query contract, mirrored from
- * `apps/web/lib/metrics/metrics-query.ts` (METRICS_FILTER_MAX_LENGTH,
- * METRICS_NONE, the window values) and `apps/web/lib/providers/registry.ts`
- * (SOCIAL_PROVIDERS). The MCP rejects what the route would 400 on before
- * the request goes out. Pinned by `metrics-query-sync.test.ts`.
+ * GET /api/metrics query contract, re-exported from the shared contract
+ * (`shared/contracts/metrics.ts`) so the MCP and the web routes cannot
+ * drift. Existing importers keep importing from this path. Pinned by
+ * `metrics-query-sync.test.ts`.
  */
-export const METRICS_FILTER_MAX_LENGTH = 200;
-export const METRICS_NONE = '^@none';
-export const METRICS_WINDOWS = ['24h', '7d', '28d'] as const;
-/**
- * GET /api/metrics/retention-curve `video` param, mirrored from VIDEO_ID in
- * `apps/web/lib/youtube-analytics.ts` (pinned by `metrics-query-sync.test.ts`).
- */
-export const YOUTUBE_VIDEO_ID = /^[A-Za-z0-9_-]{1,64}$/;
-export const METRICS_PROVIDERS = ['youtube', 'instagram', 'bluesky', 'linkedin', 'threads', 'facebook', 'pinterest', '3speak', 'rumble', 'fanvue'] as const;
+export {
+  METRICS_FILTER_MAX_LENGTH,
+  METRICS_NONE,
+  METRICS_WINDOWS,
+  YOUTUBE_VIDEO_ID,
+} from './contracts/metrics.js';
+export { SOCIAL_PROVIDERS as METRICS_PROVIDERS } from './contracts/metrics.js';
 
 /**
- * Paired A/B experiment limits (issue #476), mirrored from
- * `apps/web/lib/experiments/limits.ts` (pinned by
- * `experiments-limits-sync.test.ts`).
+ * Paired A/B experiment limits (issue #476), re-exported from the shared
+ * contract (`shared/contracts/experiments.ts`) so the MCP and the web
+ * routes cannot drift. Existing importers keep importing from this path.
  */
-export const EXPERIMENT_TARGET_PAIRS_MIN = 3;
-export const EXPERIMENT_TARGET_PAIRS_MAX = 20;
-export const EXPERIMENT_NAME_MAX_LENGTH = 120;
-export const EXPERIMENT_VARIANT_NAME_MAX_LENGTH = 80;
-export const EXPERIMENT_VARIANT_DESCRIPTION_MAX_LENGTH = 500;
-export const EXPERIMENT_VARIANT_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,47}$/;
+export {
+  EXPERIMENT_NAME_MAX_LENGTH,
+  EXPERIMENT_TARGET_PAIRS_MAX,
+  EXPERIMENT_TARGET_PAIRS_MIN,
+  EXPERIMENT_VARIABLES,
+  EXPERIMENT_VARIANT_COUNT,
+  EXPERIMENT_VARIANT_DESCRIPTION_MAX_LENGTH,
+  EXPERIMENT_VARIANT_ID_PATTERN,
+  EXPERIMENT_VARIANT_NAME_MAX_LENGTH,
+} from './contracts/experiments.js';
+export type { ExperimentVariable } from './contracts/experiments.js';
 
 /**
- * Batch discount limits (issue #487), mirrored from
- * `apps/web/lib/billing/batch-discount.ts` (MAX_BATCH_VIDEOS,
- * BATCH_FREE_EVERY) and the batchKey rule of
- * `apps/web/app/api/videos/batch-discount/route.ts`. Pinned by
+ * Batch discount limits (issue #487). MAX_BATCH_VIDEOS and the batchKey
+ * rule live in the shared videos contract (`shared/contracts/videos.ts`);
+ * BATCH_FREE_EVERY and the window stay mirrored from
+ * `apps/web/lib/billing/batch-discount.ts`. Pinned by
  * `batch-discount-sync.test.ts`.
  */
-export const MAX_BATCH_VIDEOS = 12;
+export { BATCH_KEY_MAX_LENGTH, BATCH_KEY_PATTERN, MAX_BATCH_VIDEOS } from './contracts/videos.js';
 export const BATCH_FREE_EVERY = 6;
 export const BATCH_WINDOW_MINUTES = 10;
-export const BATCH_KEY_MAX_LENGTH = 100;
-export const BATCH_KEY_PATTERN = /^[A-Za-z0-9_-]+$/;

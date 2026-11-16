@@ -3,6 +3,8 @@ import type { PostEngineerClient } from './client.js';
 import { ApiError, getErrorMessage } from './errors.js';
 import { sanitizeEngineError } from './tools.js';
 import type { McpToolResponse } from './tools-call.js';
+import { parseContractResponse } from './contract-response.js';
+import { listPinterestBoards as listPinterestBoardsContract } from './contracts/accounts.js';
 
 //---------------
 // accounts (action: list_boards) — the board picker for Pinterest publishing.
@@ -18,32 +20,12 @@ export const ListPinterestBoardsShape = {
   accountId: z
     .string()
     .min(1, 'accountId is required')
+    // The route trims and rejects a blank id, so the tool does too.
+    .refine((value) => value.trim().length > 0, { message: 'accountId is required.' })
     .describe('The Pinterest account ID (the providerAccountId field from accounts (action: list)).'),
 };
 
 export const ListPinterestBoardsSchema = z.object(ListPinterestBoardsShape);
-
-interface PinterestBoard {
-  id: string;
-  name: string;
-}
-
-function narrowBoards(value: unknown): PinterestBoard[] {
-  if (typeof value !== 'object' || value === null || !Array.isArray((value as { boards?: unknown }).boards)) {
-    throw new Error('Malformed boards response from the API.');
-  }
-  return (value as { boards: unknown[] }).boards.map((entry) => {
-    if (
-      typeof entry !== 'object' ||
-      entry === null ||
-      typeof (entry as { id?: unknown }).id !== 'string' ||
-      typeof (entry as { name?: unknown }).name !== 'string'
-    ) {
-      throw new Error('Malformed boards response from the API.');
-    }
-    return { id: (entry as { id: string }).id, name: (entry as { name: string }).name };
-  });
-}
 
 export async function handleListPinterestBoards(
   client: PostEngineerClient,
@@ -55,7 +37,7 @@ export async function handleListPinterestBoards(
       { method: 'GET', headers: client.getHeaders() },
       'list Pinterest boards',
     );
-    const boards = narrowBoards(result);
+    const { boards } = parseContractResponse(listPinterestBoardsContract, result);
     return {
       content: [
         {

@@ -34,6 +34,7 @@ import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { buildOAuthConnectUrl, storeOAuthState } from '@/lib/oauth-connect';
 import { resolveOAuthRedirectUri } from '@/lib/oauth-utils';
 import { logger } from '@/lib/logger';
+import { ConnectUrlResponseSchema } from '@/lib/contracts/accounts';
 
 const USER_ID = 'user-1';
 
@@ -122,6 +123,7 @@ describe('POST /api/account/connect-url', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { success: boolean; auth_url: string };
     expect(body.success).toBe(true);
+    expect(ConnectUrlResponseSchema.safeParse(body).success).toBe(true);
     expect(body.auth_url).toContain('instagram.com');
     expect(vi.mocked(storeOAuthState)).toHaveBeenCalledWith(
       expect.anything(),

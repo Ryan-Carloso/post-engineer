@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { filterVoicesPayload, ListVoicesSchema, personaVoiceField, withResolvedPersonaVoice, type ListVoicesArgs } from './voice-filters.js';
-import { noticeSummary, readNoticeList } from './publish-notices.js';
+import { noticeSummary } from './publish-notices.js';
 import {
   CancelScheduleSchema,
   CancelScheduleShape,
@@ -50,6 +50,9 @@ import {
 import { getErrorMessage, ApiError } from './errors.js';
 import { isEnglishLanguage, ONLY_ENGLISH_VIDEOS_MESSAGE } from './language.js';
 import { CreatePersonaAvatarFields, refinePersonaAvatar } from './persona-avatar.js';
+import { getSlot as getSlotContract } from './contracts/schedule.js';
+import { FACE_QUALITIES, VIDEO_ASPECTS } from './contracts/personas.js';
+import type { ResponseOf } from './contracts/endpoint.js';
 
 export type { McpToolResponse } from './tools-call.js';
 // Image path/tag/description limits are shared by create-persona and persona_media (action: add_image).
@@ -72,7 +75,7 @@ export const CreatePersonaShape = {
     .refine(isEnglishLanguage, { message: ONLY_ENGLISH_VIDEOS_MESSAGE })
     .default('en-US')
     .describe('Language code — English only for now (e.g. en-US, en-GB)'),
-  videoAspect: z.enum(['9:16', '16:9', '1:1']).default('9:16').describe('Video aspect ratio'),
+  videoAspect: z.enum(VIDEO_ASPECTS).default('9:16').describe('Video aspect ratio'),
   videoLayout: z
     .enum(VIDEO_LAYOUTS)
     .default('standard')
@@ -82,7 +85,7 @@ export const CreatePersonaShape = {
   scriptPrompt: z.string().optional().default('').describe('System prompt instructions for video scripts'),
   paragraphNumber: z.number().int().min(1).max(10).default(1).describe('Number of paragraphs'),
   niche: z.string().optional().default('General').describe('Content niche'),
-  faceQuality: z.enum(['ok', 'very_good']).default('very_good').describe('Face resolution of the rendered videos: ok (480p, 2 tokens/video) or very_good (720p, 3 tokens/video)'),
+  faceQuality: z.enum(FACE_QUALITIES).default('very_good').describe('Face resolution of the rendered videos: ok (480p, 2 tokens/video) or very_good (720p, 3 tokens/video)'),
   accounts: createPersonaAccountsField,
   images: z.array(PersonaLibraryImageInputShape).max(MAX_LIBRARY_IMAGES).optional().describe(`Up to ${MAX_LIBRARY_IMAGES} local image files of the same person for the persona image library. Each video deterministically picks the best-matching image by tag.`),
   imagePrimaryIndex: z.number().int().min(0).max(MAX_LIBRARY_IMAGES - 1).optional().describe('Index into images[] marking the primary library image (no primary is set when omitted)'),
@@ -285,14 +288,14 @@ export async function handleGetSlot(
   args: z.infer<typeof GetSlotSchema>
 ): Promise<McpToolResponse> {
   try {
-    const narrowed = narrowSlotDetail(await client.getSlot(args.slotId));
-    const slot = narrowed.slot;
-    const humanSummary = `Slot ${slot.id ?? args.slotId}: "${slot.title ?? '(untitled)'}" — ${slot.status ?? 'unknown'}, scheduled for ${slot.slotAt ?? '(unscheduled)'}.${noticeSummary(slot.userNotices)}`;
+    const presented = presentSlotDetail(await client.getSlot(args.slotId));
+    const slot = presented.slot;
+    const humanSummary = `Slot ${slot.id}: "${slot.title ?? '(untitled)'}" — ${slot.status}, scheduled for ${slot.slotAt}.${noticeSummary(slot.userNotices)}`;
     return {
       content: [
         {
           type: 'text',
-          text: `${humanSummary}\n${JSON.stringify(narrowed, null, 2)}`,
+          text: `${humanSummary}\n${JSON.stringify(presented, null, 2)}`,
         },
       ],
     };
@@ -329,10 +332,8 @@ export async function handleUpdateSlotTitle(
   args: z.infer<typeof UpdateSlotTitleSchema>
 ): Promise<McpToolResponse> {
   try {
-    const result = (await client.updateSlotTitle(args.slotId, args.title)) as {
-      title?: unknown;
-    };
-    const title = typeof result.title === 'string' ? result.title : args.title;
+    const result = await client.updateSlotTitle(args.slotId, args.title);
+    const title = result.title ?? args.title;
     return {
       content: [
         {
@@ -428,12 +429,8 @@ export async function handleGetVideoGeneration(
   args: z.infer<typeof GetVideoGenerationSchema>
 ): Promise<McpToolResponse> {
   try {
-    const result = (await client.getVideoGeneration(args.generationId)) as {
-      generation?: unknown;
-    } | null;
-    const generation = narrowVideoGeneration(
-      result !== null && typeof result === 'object' ? result.generation : null
-    );
+    const result = await client.getVideoGeneration(args.generationId);
+    const generation = narrowVideoGeneration(result.generation);
     const humanSummary = `Generation ${generation.generationId ?? args.generationId}: "${generation.videoSubject ?? '(untitled)'}" — ${generation.status ?? 'unknown'}.`;
     return {
       content: [
@@ -654,71 +651,6 @@ export async function handleDisconnectAccount(
 /** Narrows the GET /api/persona/delete-preview envelope: the persona, the
  * removal counts, and the per-video download links. Anything the API adds
  * later rides through unparsed. */
-export function narrowDeletePreview(result: unknown): {
-  persona: { id: string | null; name: string | null };
-  counts: {
-    schedules: number | null;
-    upcomingSlots: number | null;
-    publishedSlots: number | null;
-    failedSlots: number | null;
-    generatedVideos: number | null;
-    personaImages: number | null;
-  };
-  videos: Array<{
-    taskId: string | null;
-    title: string | null;
-    status: string | null;
-    downloadUrl: string | null;
-  }>;
-  videosTruncated: boolean | null;
-  linksIncomplete: boolean | null;
-} {
-  const record =
-    typeof result === 'object' && result !== null
-      ? (result as Record<string, unknown>)
-      : {};
-  const persona =
-    typeof record.persona === 'object' && record.persona !== null
-      ? (record.persona as Record<string, unknown>)
-      : {};
-  const counts =
-    typeof record.counts === 'object' && record.counts !== null
-      ? (record.counts as Record<string, unknown>)
-      : {};
-  const rawVideos = Array.isArray(record.videos) ? record.videos : [];
-  const str = (value: unknown): string | null =>
-    typeof value === 'string' ? value : null;
-  const num = (value: unknown): number | null =>
-    typeof value === 'number' ? value : null;
-  const bool = (value: unknown): boolean | null =>
-    typeof value === 'boolean' ? value : null;
-  return {
-    persona: { id: str(persona.id), name: str(persona.name) },
-    counts: {
-      schedules: num(counts.schedules),
-      upcomingSlots: num(counts.upcomingSlots),
-      publishedSlots: num(counts.publishedSlots),
-      failedSlots: num(counts.failedSlots),
-      generatedVideos: num(counts.generatedVideos),
-      personaImages: num(counts.personaImages),
-    },
-    videos: rawVideos.map((video) => {
-      const v =
-        typeof video === 'object' && video !== null
-          ? (video as Record<string, unknown>)
-          : {};
-      return {
-        taskId: str(v.taskId),
-        title: str(v.title),
-        status: str(v.status),
-        downloadUrl: str(v.downloadUrl),
-      };
-    }),
-    videosTruncated: bool(record.videosTruncated),
-    linksIncomplete: bool(record.linksIncomplete),
-  };
-}
-
 /** One narrowed token_transactions row: the fields the tool contract promises. */
 interface NarrowedTokenTransaction {
   id: string | null;
@@ -768,83 +700,53 @@ function narrowTokenTransactions(result: unknown): {
   };
 }
 
-/** Slot, schedule, and persona fields schedules (action: get_slot) returns. */
-function narrowSlotDetail(result: unknown): {
-  slot: {
-    id: string | null;
-    scheduleId: string | null;
-    slotAt: string | null;
-    status: string | null;
-    title: string | null;
-    taskId: string | null;
-    progress: number | null;
-    stage: string | null;
-    error: string | null;
-    publishedAt: string | null;
-    postUrl: string | null;
-    userNotices: unknown[];
-    providerFailures: unknown[];
-  };
-  schedule: {
-    id: string | null;
-    providers: string[];
-    publishMode: string | null;
-    timezone: string | null;
-  } | null;
-  persona: { id: string | null; name: string | null } | null;
-} {
-  const record =
-    typeof result === 'object' && result !== null
-      ? (result as Record<string, unknown>)
-      : {};
-  const slot =
-    typeof record.slot === 'object' && record.slot !== null
-      ? (record.slot as Record<string, unknown>)
-      : {};
-  const schedule =
-    typeof record.schedule === 'object' && record.schedule !== null
-      ? (record.schedule as Record<string, unknown>)
-      : null;
-  const persona =
-    typeof record.persona === 'object' && record.persona !== null
-      ? (record.persona as Record<string, unknown>)
-      : null;
-  const str = (value: unknown): string | null =>
-    typeof value === 'string' ? value : null;
-  const num = (value: unknown): number | null =>
-    typeof value === 'number' ? value : null;
-  const providers = Array.isArray(schedule?.providers)
-    ? schedule.providers.filter((p): p is string => typeof p === 'string')
-    : [];
+/** The agent-facing shape of a slot detail: the parsed contract result
+ * with the `success` envelope and the `generation` block dropped (the
+ * slot's own progress/stage already carry it). Fields are picked, never
+ * spread, so unknown fields can never ride through to the agent. */
+function presentSlotDetail(detail: ResponseOf<typeof getSlotContract>) {
+  const { slot, schedule, persona } = detail;
   return {
     slot: {
-      id: str(slot.id),
-      scheduleId: str(slot.scheduleId),
-      slotAt: str(slot.slotAt),
-      status: str(slot.status),
-      title: str(slot.title),
-      taskId: str(slot.taskId),
-      progress: num(slot.progress),
-      stage: str(slot.stage),
-      error: str(slot.error),
-      publishedAt: str(slot.publishedAt),
-      postUrl: str(slot.postUrl),
-      userNotices: readNoticeList(slot.userNotices),
-      providerFailures: readNoticeList(slot.providerFailures),
+      id: slot.id,
+      scheduleId: slot.scheduleId,
+      slotAt: slot.slotAt,
+      status: slot.status,
+      title: slot.title,
+      taskId: slot.taskId,
+      progress: slot.progress,
+      stage: slot.stage,
+      error: slot.error,
+      publishedAt: slot.publishedAt,
+      postUrl: slot.postUrl,
+      publishLinks: slot.publishLinks,
+      progressHistory: slot.progressHistory,
+      scriptAngle: slot.scriptAngle,
+      retryable: slot.retryable,
+      queuePosition: slot.queuePosition,
+      queueTotal: slot.queueTotal,
+      userNotices: slot.userNotices,
+      providerFailures: slot.providerFailures,
     },
-    schedule:
-      schedule === null
-        ? null
-        : {
-            id: str(schedule.id),
-            providers,
-            publishMode: str(schedule.publishMode),
-            timezone: str(schedule.timezone),
-          },
-    persona:
-      persona === null
-        ? null
-        : { id: str(persona.id), name: str(persona.name) },
+    schedule: {
+      id: schedule.id,
+      personaId: schedule.personaId,
+      providers: schedule.providers,
+      youtubeAccountIds: schedule.youtubeAccountIds,
+      instagramAccountIds: schedule.instagramAccountIds,
+      linkedinAccountIds: schedule.linkedinAccountIds,
+      blueskyAccountIds: schedule.blueskyAccountIds,
+      threadsAccountIds: schedule.threadsAccountIds,
+      facebookAccountIds: schedule.facebookAccountIds,
+      pinterestAccountIds: schedule.pinterestAccountIds,
+      pinterestBoardId: schedule.pinterestBoardId,
+      threespeakAccountIds: schedule.threespeakAccountIds,
+      rumbleAccountIds: schedule.rumbleAccountIds,
+      fanvueAccountIds: schedule.fanvueAccountIds,
+      timezone: schedule.timezone,
+      publishMode: schedule.publishMode,
+    },
+    persona: persona === null ? null : { id: persona.id, name: persona.name },
   };
 }
 

@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DELETE, GET } from '../route';
+import { DeleteClonedVoiceResponseSchema, GetClonedVoiceResponseSchema } from '@/lib/contracts/voices';
 
 vi.mock('@/lib/request-auth', () => ({
   requireSupabaseSession: vi.fn(async () => ({
@@ -68,6 +69,7 @@ describe('GET /api/persona/cloned-voices/:cloneId', () => {
     });
     const json = await response.json();
     expect(json.success).toBe(true);
+    expect(GetClonedVoiceResponseSchema.safeParse(json).success).toBe(true);
     expect(json.voice.id).toBe('clone-1');
   });
 
@@ -113,6 +115,7 @@ describe('DELETE /api/persona/cloned-voices/:cloneId', () => {
     });
     const json = await response.json();
     expect(json.success).toBe(true);
+    expect(DeleteClonedVoiceResponseSchema.safeParse(json).success).toBe(true);
   });
 });
 

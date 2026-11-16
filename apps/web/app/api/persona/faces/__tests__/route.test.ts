@@ -19,6 +19,7 @@ vi.mock('@/lib/api-keys', () => ({
 //---------------
 
 import { GET } from '../route';
+import { ListFacesResponseSchema } from '@/lib/contracts/personas';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { resolveApiKey } from '@/lib/api-keys';
@@ -61,6 +62,7 @@ describe('GET /api/persona/faces', () => {
 
     expect(res.status).toBe(200);
     const body = await res.json();
+    expect(ListFacesResponseSchema.safeParse(body).success).toBe(true);
     expect(body.faces).toHaveLength(14);
     expect(body.faces[0]).toMatchObject({
       id: 'file-1',

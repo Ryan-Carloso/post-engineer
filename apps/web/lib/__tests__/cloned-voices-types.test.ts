@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { narrowClonedVoiceRow } from '@/lib/cloned-voices-types';
+import { ClonedVoiceRowSchema } from '@/lib/contracts/voices';
 
 describe('narrowClonedVoiceRow', () => {
   it('returns null for non-object values', () => {
@@ -63,5 +64,24 @@ describe('narrowClonedVoiceRow', () => {
       created_at: null,
       updated_at: null,
     });
+  });
+
+  it('returns rows the shared ClonedVoiceRowSchema accepts', () => {
+    // The contract schema is the zod mirror of the narrowed row. A
+    // one-sided edit would make the MCP reject a row the route serves.
+    const full = narrowClonedVoiceRow({
+      id: 'clone-1',
+      status: 'ready',
+      language: 'pt',
+      voice_id: 'chatterbox:u1',
+      error_code: 'E1',
+      consent_at: '2026-01-01T00:00:00Z',
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-02T00:00:00Z',
+    });
+    expect(ClonedVoiceRowSchema.safeParse(full).success).toBe(true);
+    const minimal = narrowClonedVoiceRow({ id: 'clone-2', status: 'pending' });
+    expect(ClonedVoiceRowSchema.safeParse(minimal).success).toBe(true);
+    expect(Object.keys(ClonedVoiceRowSchema.shape)).toHaveLength(8);
   });
 });

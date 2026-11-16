@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NextResponse } from 'next/server';
+import { MintVideoUploadResponseSchema } from '@/lib/contracts/videos';
 
 vi.mock('@/lib/request-auth', () => ({ requireSupabaseSession: vi.fn() }));
 vi.mock('@/lib/rate-limit', () => ({
@@ -76,6 +77,7 @@ describe('POST /api/videos/upload-url', () => {
     const payload = (await response.json()) as Record<string, unknown>;
     expect(payload.success).toBe(true);
     expect(payload.uploadId).toBe('11111111-1111-4111-8111-111111111111');
+    expect(MintVideoUploadResponseSchema.safeParse(payload).success).toBe(true);
     expect(payload.signedUrl).toContain('token=');
     expect(vi.mocked(mintVideoUpload).mock.calls[0]?.[2]).toBe('user-uuid-1');
   });

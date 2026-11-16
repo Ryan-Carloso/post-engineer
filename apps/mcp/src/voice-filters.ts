@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { PostEngineerClient } from './client.js';
+import { VOICE_GENDERS } from './contracts/voices.js';
 
 //---------------
 // voices (action: list) filters — mirror the web picker: gender (female/male), origin
@@ -11,7 +12,7 @@ import type { PostEngineerClient } from './client.js';
 //---------------
 
 export const ListVoicesShape = {
-  gender: z.enum(['female', 'male']).optional().describe('Only voices of this gender'),
+  gender: z.enum(VOICE_GENDERS).optional().describe('Only voices of this gender'),
   origin: z
     .enum(['us', 'gb', 'character'])
     .optional()

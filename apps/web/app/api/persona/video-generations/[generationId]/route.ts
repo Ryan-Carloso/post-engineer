@@ -5,6 +5,7 @@ import { requireSupabaseSession } from '@/lib/request-auth';
 import { apiErrorResponse } from '@/lib/api-error';
 import { logger } from '@/lib/logger';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
+import type { VideoGenerationRow } from '@/lib/contracts/video-tasks';
 
 //---------------
 // GET /api/persona/video-generations/[generationId] — one generation's
@@ -13,7 +14,10 @@ import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-r
 // or another user's row → 404.
 //---------------
 
-interface GenerationRow {
+// The DB row is snake_case; the response object below is the contract's
+// camelCase VideoGenerationRow (the select list is pinned to it in
+// contracts-shared.test).
+interface DbGenerationRow {
   id: string;
   generation_id: string;
   engine_task_id: string | null;
@@ -65,22 +69,24 @@ async function getHandler(
       cause: error,
     });
   }
-  const row = data as GenerationRow;
+  const row = data as DbGenerationRow;
+
+  const generation: VideoGenerationRow = {
+    id: row.id,
+    generationId: row.generation_id,
+    engineTaskId: row.engine_task_id,
+    personaName: row.persona_name,
+    videoSubject: row.video_subject,
+    status: row.status,
+    errorCode: row.error_code,
+    tokensRefunded: row.tokens_refunded === true,
+    createdAt: row.created_at,
+    completedAt: row.completed_at,
+  };
 
   return NextResponse.json({
     success: true,
-    generation: {
-      id: row.id,
-      generationId: row.generation_id,
-      engineTaskId: row.engine_task_id,
-      personaName: row.persona_name,
-      videoSubject: row.video_subject,
-      status: row.status,
-      errorCode: row.error_code,
-      tokensRefunded: row.tokens_refunded === true,
-      createdAt: row.created_at,
-      completedAt: row.completed_at,
-    },
+    generation,
   });
 }
 
