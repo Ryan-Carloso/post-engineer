@@ -74,7 +74,13 @@ def _stub_stages(monkeypatch, entered: list[str], cancel_after: str | None = "au
         return ["/tmp/mat.mp4"]
 
     monkeypatch.setattr(tm, "get_video_materials", _materials)
-    monkeypatch.setattr(tm, "generate_final_videos", lambda *a, **k: entered.append("render") or (["/tmp/final.mp4"], ["/tmp/final.mp4"], None))
+    def _render(task_id, *a, **k):
+        entered.append("render")
+        if cancel_after == "render":
+            _cancel(task_id)
+        return (["/tmp/final.mp4"], ["/tmp/final.mp4"], None)
+
+    monkeypatch.setattr(tm, "generate_final_videos", _render)
     monkeypatch.setattr(tm, "archive_final_videos", lambda *a, **k: entered.append("archive"))
     monkeypatch.setattr(tm.user_media, "prepare_segment_panels", lambda *a, **k: None)
     monkeypatch.setattr(tm.audio_trim, "task_local_copy", lambda *a, **k: None)
@@ -119,14 +125,17 @@ def test_cancel_before_start_runs_no_stage(monkeypatch):
         ("audio", ["script", "audio"]),
         ("subtitle", ["script", "audio", "subtitle"]),
         ("materials", ["script", "audio", "subtitle", "materials"]),
+        # The post-render boundary (before archive): render itself ran
+        # because the cancel landed while it was executing.
+        ("render", ["script", "audio", "subtitle", "materials", "render"]),
     ],
 )
 def test_cancel_at_each_stage_boundary_stops_before_next_stage(
     monkeypatch, cancel_after, expected_entered
 ):
     # Every abort_if_cancelled boundary (script, audio, subtitle,
-    # materials, render): a cancel landing after stage N must stop the
-    # pipeline before stage N+1 runs.
+    # materials, render, post-render/archive): a cancel landing after
+    # stage N must stop the pipeline before stage N+1 runs.
     task_id = f"cancel-stage-{cancel_after}"
     sm.state.update_task(
         task_id, user_id="u-1", flow="batch", state=const.TASK_STATE_PROCESSING, progress=0
@@ -139,6 +148,97 @@ def test_cancel_at_each_stage_boundary_stops_before_next_stage(
     assert result is None
     assert entered == expected_entered
     assert sm.state.get_task(task_id) is None
+
+
+@pytest.mark.parametrize(
+    "cancel_after",
+    ["script", "audio", "subtitle", "materials", "render"],
+)
+def test_abort_pops_progress_milestones(monkeypatch, cancel_after):
+    # The milestone cache is popped only by the terminal transitions
+    # (_complete_task/_fail_task); every abort boundary must pop it too
+    # or the process-local entry leaks. Pre-seed an entry because the
+    # early boundaries abort before progress crosses 50.
+    task_id = f"cancel-milestone-{cancel_after}"
+    sm.state.update_task(
+        task_id, user_id="u-1", flow="batch", state=const.TASK_STATE_PROCESSING, progress=0
+    )
+    tm._progress_milestones[task_id] = 50
+    entered: list[str] = []
+    _stub_stages(monkeypatch, entered, cancel_after=cancel_after)
+
+    result = tm.start(task_id, _params(), stop_at="video")
+
+    assert result is None
+    assert task_id not in tm._progress_milestones
+
+
+def test_cancel_during_render_skips_archive_cross_post_and_terminal_webhook(monkeypatch):
+    task_id = "cancel-during-render-1"
+    sm.state.update_task(
+        task_id,
+        user_id="u-1",
+        flow="direct",
+        state=const.TASK_STATE_PROCESSING,
+        progress=0,
+        video_storage_path="task/cancel-during-render-1/final.mp4",
+    )
+    tm._progress_milestones[task_id] = 50
+    entered: list[str] = []
+    _stub_stages(monkeypatch, entered, cancel_after="render")
+
+    webhook_calls: list[dict] = []
+    monkeypatch.setattr(
+        tm.task_webhook,
+        "notify_terminal_task",
+        lambda *a, **k: webhook_calls.append(k),
+    )
+    cross_post_calls: list[dict] = []
+    monkeypatch.setattr(tm.upload_post.upload_post_service, "is_configured", lambda: True)
+    monkeypatch.setattr(tm.upload_post.upload_post_service, "auto_upload", True)
+    monkeypatch.setattr(tm.upload_post.upload_post_service, "platforms", ["youtube"])
+    monkeypatch.setattr(
+        tm.upload_post, "cross_post_video",
+        lambda *a, **k: cross_post_calls.append(k) or {"success": True},
+    )
+    monkeypatch.setattr(tm.video_storage, "read_final_video_r2", lambda *a, **k: b"bytes")
+
+    result = tm.start(task_id, _params(), stop_at="video")
+
+    assert result is None
+    assert entered == ["script", "audio", "subtitle", "materials", "render"]
+    # No R2 write, no cross-post, no terminal webhook, no recreated row.
+    assert webhook_calls == []
+    assert cross_post_calls == []
+    assert sm.state.get_task(task_id) is None
+    assert task_id not in tm._progress_milestones
+
+
+def test_empty_render_result_fails_without_archiving(monkeypatch):
+    task_id = "cancel-empty-render-1"
+    sm.state.update_task(
+        task_id, user_id="u-1", flow="direct", state=const.TASK_STATE_PROCESSING, progress=0
+    )
+    entered: list[str] = []
+    _stub_stages(monkeypatch, entered, cancel_after=None)
+
+    def _empty_render(task_id, *a, **k):
+        entered.append("render")
+        return ([], [], None)
+
+    webhook_calls: list[dict] = []
+    monkeypatch.setattr(
+        tm.task_webhook,
+        "notify_terminal_task",
+        lambda *a, **k: webhook_calls.append(k),
+    )
+    monkeypatch.setattr(tm, "generate_final_videos", _empty_render)
+
+    result = tm.start(task_id, _params(), stop_at="video")
+
+    assert result is None
+    assert entered == ["script", "audio", "subtitle", "materials", "render"]
+    assert [call.get("status") for call in webhook_calls] == ["failed"]
 
 
 def test_cancelled_task_progress_write_does_not_resurrect_memory_row():

@@ -29,7 +29,7 @@ from app.services import image_coverage, task_webhook, user_media
 from app.services.lipsync_active import lip_sync_cap_seconds, persona_lipsync_active  # noqa: F401 - re-exported for existing callers
 from app.services import full_lipsync
 from app.services.music_mood import resolve_music_mood
-from app.services.task_cleanup import abort_if_cancelled
+from app.services.task_cleanup import _first_http_url, abort_if_cancelled
 from app.services.pipeline_stage import PhaseTracker
 from app.services.intro_cost import IntroCostReport, completion_cost_kwargs, cost_event_props, report_from_job_cost
 from app.services.longcat_cost import ModalJobCost
@@ -199,16 +199,6 @@ def _task_already_failed(task_id: str) -> bool:
     return bool(task) and task.get("state") == const.TASK_STATE_FAILED
 
 
-def _first_http_url(paths: object) -> str | None:
-    """First http(s) URL in ``paths`` (local artifact paths are not URLs)."""
-    if not isinstance(paths, (list, tuple)):
-        return None
-    for item in paths:
-        if isinstance(item, str) and item.startswith(("http://", "https://")):
-            return item
-    return None
-
-
 #---------------
 # PostHog lifecycle funnel: video_generation_requested (at acceptance,
 # BEFORE the pipeline starts) -> video_generation_started ->
@@ -223,6 +213,11 @@ def _first_http_url(paths: object) -> str | None:
 # transitions pop the entry — no double-report in one process lifetime.
 PROGRESS_MILESTONES = (50, 70)
 _progress_milestones: dict[str, int] = {}
+
+
+def _forget_milestone(task_id: str) -> None:
+    """Abort hook: drop the task's progress-milestone cache entry."""
+    _progress_milestones.pop(task_id, None)
 
 
 def _task_tracking_context(task_id: str) -> dict[str, object]:
@@ -904,7 +899,7 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
         track_generation_started(task_id)
 
         # Cancel (issue #447): stop before the first paid stage.
-        if abort_if_cancelled(task_id, "script"):
+        if abort_if_cancelled(task_id, "script", _forget_milestone):
             return
         # 1. Generate script
         phases.begin("script")
@@ -926,7 +921,7 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
         _update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=20)
 
         # Cancel (issue #447): stop before the next paid stage.
-        if abort_if_cancelled(task_id, "audio"):
+        if abort_if_cancelled(task_id, "audio", _forget_milestone):
             return
         # 3. Generate audio
         phases.begin("audio")
@@ -963,7 +958,7 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
             return
 
         # Cancel (issue #447): stop before the next paid stage.
-        if abort_if_cancelled(task_id, "subtitle"):
+        if abort_if_cancelled(task_id, "subtitle", _forget_milestone):
             return
         # 4. Generate subtitle
         phases.begin("subtitle")
@@ -1008,7 +1003,7 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
         _update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=40)
 
         # Cancel (issue #447): stop before the next paid stage.
-        if abort_if_cancelled(task_id, "materials"):
+        if abort_if_cancelled(task_id, "materials", _forget_milestone):
             return
         # 5. Get video materials: local files, or the neutral canvas the
         # agent's segment photos cover (image_coverage).
@@ -1050,7 +1045,7 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
             params.video_concat_mode = VideoConcatMode(params.video_concat_mode)
 
         # Cancel (issue #447): stop before the next paid stage.
-        if abort_if_cancelled(task_id, "render"):
+        if abort_if_cancelled(task_id, "render", _forget_milestone):
             return
         # 6. Generate final videos (marked first: a crash reports stage=render)
         phases.begin("render")
@@ -1068,6 +1063,11 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
         if not final_video_paths:
             _fail_task(task_id, "failed to generate final videos", params, stage="render")
             cleanup_task_intermediates(task_id, ())
+            return
+
+        # Cancel (issue #447): a cancel landing mid-render must not run
+        # the tail — no archive, cross-post, or terminal webhook.
+        if abort_if_cancelled(task_id, "archive", _forget_milestone):
             return
 
         # Durable copy of the final video in R2 before

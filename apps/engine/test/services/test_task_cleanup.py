@@ -1,13 +1,17 @@
-"""Direct tests for the extracted cleanup_task_intermediates helper.
+"""Direct tests for the extracted task_cleanup helpers.
 
-The helper moved into its own module so task.py stays under the size
-ratchet; these tests import it from its new home so mutation coverage
+The helpers moved into their own module so task.py stays under the size
+ratchet; these tests import them from their new home so mutation coverage
 follows the code (mutmut rule in AGENTS.md).
 """
 
 from pathlib import Path
 
-from app.services.task_cleanup import abort_if_cancelled, cleanup_task_intermediates
+from app.services.task_cleanup import (
+    _first_http_url,
+    abort_if_cancelled,
+    cleanup_task_intermediates,
+)
 from app.services.task_cancellation import request_cancel
 from app.utils import utils
 
@@ -67,3 +71,21 @@ def test_abort_if_cancelled_true_only_when_cancelled(tmp_path, monkeypatch):
     request_cancel("cancel-clean-1")
     assert abort_if_cancelled("cancel-clean-1", "audio") is True
     assert not staged.exists()
+
+
+def test_abort_if_cancelled_runs_on_abort_hook_only_when_cancelled(tmp_path, monkeypatch):
+    monkeypatch.setenv("MPT_STORAGE_DIR", str(tmp_path))
+    calls: list[str] = []
+    assert abort_if_cancelled("cancel-hook-1", "audio", calls.append) is False
+    assert calls == []
+    request_cancel("cancel-hook-1")
+    assert abort_if_cancelled("cancel-hook-1", "audio", calls.append) is True
+    assert calls == ["cancel-hook-1"]
+
+
+def test_first_http_url_returns_first_url_or_none():
+    assert _first_http_url(["/tmp/final.mp4", "https://cdn/a.mp4", "https://cdn/b.mp4"]) == "https://cdn/a.mp4"
+    assert _first_http_url(["http://cdn/a.mp4"]) == "http://cdn/a.mp4"
+    assert _first_http_url(["/tmp/final.mp4", ""]) is None
+    assert _first_http_url(None) is None
+    assert _first_http_url("https://cdn/a.mp4") is None
