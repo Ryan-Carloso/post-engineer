@@ -1,6 +1,7 @@
 import sys
 import threading
 import unittest
+from unittest.mock import MagicMock
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -225,6 +226,13 @@ class TestRedisState(unittest.TestCase):
         state.delete_task("task:0")
         self.assertTrue(is_cancelled("task:0"))
         self.assertIsNone(state.get_task("task:0"))
+
+    def test_failed_delete_clears_the_cancel_mark(self):
+        state = self._build_state([1])
+        state._redis.delete = MagicMock(side_effect=ConnectionError("redis down"))
+        with self.assertRaises(ConnectionError):
+            state.delete_task("task:0")
+        self.assertFalse(is_cancelled("task:0"))
 
 
 if __name__ == "__main__":

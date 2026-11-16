@@ -23,6 +23,7 @@ can recreate the row.
 
 import threading
 from collections import deque
+from collections.abc import Callable
 
 
 MAX_CANCELLED_TASKS = 10000
@@ -53,6 +54,23 @@ def forget(task_id: str) -> None:
     """Clear the cancel mark for ``task_id``. No-op when not marked."""
     with _CANCEL_LOCK:
         _CANCELLED_IDS.discard(task_id)
+
+
+def cancel_and_delete(task_id: str, delete: Callable[[], object]) -> None:
+    """Mark ``task_id`` cancelled, then run the backend ``delete``.
+
+    The mark goes first so a running worker detaches before its next
+    progress write could recreate the row. If ``delete`` raises, the row
+    still exists: the mark is cleared so the live task stays updatable
+    (a lingering mark would no-op every later write and strand the row in
+    PROCESSING), and the error propagates to the caller.
+    """
+    request_cancel(task_id)
+    try:
+        delete()
+    except Exception:
+        forget(task_id)
+        raise
 
 
 def reset() -> None:

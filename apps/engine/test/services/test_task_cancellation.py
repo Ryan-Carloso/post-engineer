@@ -6,6 +6,8 @@ reads this registry between stages. Registry operations are thread-safe
 and idempotent.
 """
 
+import pytest
+
 from app.services import task_cancellation
 from app.services.task_cancellation import is_cancelled, request_cancel, forget
 
@@ -54,3 +56,22 @@ def test_evicted_id_is_no_longer_cancelled(monkeypatch):
     assert is_cancelled("evict-1") is False
     assert is_cancelled("evict-2") is True
     assert is_cancelled("evict-4") is True
+
+
+
+def test_cancel_and_delete_marks_before_running_the_delete():
+    seen = []
+    task_cancellation.cancel_and_delete(
+        "cad-ok", lambda: seen.append(is_cancelled("cad-ok"))
+    )
+    assert seen == [True]
+    assert is_cancelled("cad-ok") is True
+
+
+def test_cancel_and_delete_clears_the_mark_when_the_delete_fails():
+    def boom():
+        raise ConnectionError("backend down")
+
+    with pytest.raises(ConnectionError):
+        task_cancellation.cancel_and_delete("cad-fail", boom)
+    assert is_cancelled("cad-fail") is False

@@ -24,6 +24,11 @@ def persist_state_update(backend: "BaseState", task_id: str, **kwargs: object) -
     eliminate. Retry once, then log loudly and report the loss. Never
     raises: a persistence failure must not mask the task outcome it was
     recording.
+
+    Cancelled tasks (app.services.task_cancellation) are the one deliberate
+    exception: update_task() no-ops for them and this helper still returns
+    True. The row is gone on purpose, so the dropped write is not a
+    persistence failure and is neither retried nor logged.
     """
     try:
         backend.update_task(task_id, **kwargs)

@@ -243,6 +243,14 @@ class SupabaseStateReadTests(unittest.TestCase):
         self.backend.delete_task("t-1")
         self.assertTrue(is_cancelled("t-1"))
 
+    def test_failed_delete_clears_the_cancel_mark(self):
+        # The row survives a failed DELETE, so the id must stay updatable:
+        # a lingering mark would no-op every later write on a live row.
+        self.requests.request.side_effect = ConnectionError("supabase down")
+        with self.assertRaises(Exception):
+            self.backend.delete_task("t-1")
+        self.assertFalse(is_cancelled("t-1"))
+
 
 class SupabaseStateReconcileTests(unittest.TestCase):
     def setUp(self):

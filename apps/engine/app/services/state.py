@@ -11,7 +11,7 @@ from loguru import logger
 
 from app.config import config
 from app.models import const
-from app.services.task_cancellation import is_cancelled, request_cancel
+from app.services.task_cancellation import cancel_and_delete, is_cancelled
 from app.utils.supabase_retry import build_retrying_session
 
 
@@ -90,9 +90,11 @@ class MemoryState(BaseState):
     def delete_task(self, task_id: str):
         # Deleting cancels first, so a running worker detaches instead of
         # recreating the row on its next progress write (issue #447).
-        request_cancel(task_id)
-        with self._lock:
-            self._tasks.pop(task_id, None)
+        def _pop() -> None:
+            with self._lock:
+                self._tasks.pop(task_id, None)
+
+        cancel_and_delete(task_id, _pop)
 
 
 # Redis state management
@@ -171,8 +173,7 @@ class RedisState(BaseState):
         return task
 
     def delete_task(self, task_id: str):
-        request_cancel(task_id)
-        self._redis.delete(task_id)
+        cancel_and_delete(task_id, lambda: self._redis.delete(task_id))
 
     @staticmethod
     def _convert_to_original_type(value):
@@ -463,8 +464,7 @@ class SupabaseTaskState(BaseState):
         return tasks, total
 
     def delete_task(self, task_id: str) -> None:
-        request_cancel(task_id)
-        self._request("DELETE", f"task_id=eq.{self._eq(task_id)}")
+        cancel_and_delete(task_id, lambda: self._request("DELETE", f"task_id=eq.{self._eq(task_id)}"))
 
     def reconcile_orphaned_tasks(self) -> int:
         """Triage tasks left running across a restart, then settle the rest.
