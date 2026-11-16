@@ -35,6 +35,7 @@ import { NextResponse } from 'next/server';
 import { GET, PUT } from '../publishing-accounts/route';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { requireSupabaseSession } from '@/lib/request-auth';
+import { logger } from '@/lib/logger';
 import { PersonaPublishingAccountsResponseSchema } from '@/lib/contracts/accounts';
 
 const USER_ID = 'user-uuid-1';
@@ -120,6 +121,32 @@ describe('GET /api/persona/publishing-accounts', () => {
     expect(PersonaPublishingAccountsResponseSchema.safeParse(body).success).toBe(true);
     expect(body.defaults.bluesky).toEqual(['did:plc:a']);
     expect(body.defaults.youtube).toEqual([]);
+  });
+
+  it('answers a logged 500 without the DB message when a lookup fails', async () => {
+    const client = makeSupabase(baseTables());
+    const failing = {
+      from(table: string) {
+        const chain = client.from(table);
+        if (table === 'personas') {
+          chain.maybeSingle = () => Promise.resolve({ data: null, error: { message: 'connection reset' } });
+        }
+        return chain;
+      },
+    };
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(failing as never);
+
+    const res = await GET(req('GET'));
+
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body.code).toBe('INTERNAL_ERROR');
+    expect(JSON.stringify(body)).not.toContain('connection reset');
+    expect(logger.error).toHaveBeenCalledWith(
+      '[api/persona/publishing-accounts] lookup failed',
+      expect.objectContaining({ message: 'Failed to load persona: connection reset' }),
+      { route: 'GET /api/persona/publishing-accounts' },
+    );
   });
 
   it('401s when unauthenticated', async () => {
