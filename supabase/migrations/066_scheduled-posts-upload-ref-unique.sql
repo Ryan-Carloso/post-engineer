@@ -1,5 +1,5 @@
 -- ============================================================================
--- 065 — One live slot per signed upload (issue #384 follow-up).
+-- 066 — One live slot per signed upload (issue #384 follow-up).
 --
 -- A signed video upload is single-use: the engine claims it ready →
 -- consumed when its slot publishes. Nothing stopped a second

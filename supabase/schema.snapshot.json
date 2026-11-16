@@ -1462,7 +1462,7 @@
             }
         },
         "mcp_oauth_clients": {
-            "rls": false,
+            "rls": true,
             "columns": [
                 {
                     "name": "client_id",

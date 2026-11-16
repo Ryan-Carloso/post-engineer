@@ -1,18 +1,22 @@
 import sys
 import threading
 import unittest
+from unittest.mock import MagicMock
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from app.models import const
 from app.services.state import MemoryState, RedisState
+from app.services.task_cancellation import is_cancelled, request_cancel
 
 
 class _FakeRedis:
     def __init__(self, batches):
         self.batches = batches
         self.data = {}
+        self.hset_calls = []
+        self.deleted_keys = []
         for key in [key for batch in batches for key in batch]:
             index = int(key.decode("utf-8").split(":")[-1])
             self.data[key] = {
@@ -34,6 +38,7 @@ class _FakeRedis:
         return self.data.get(key, {})
 
     def hset(self, key, field, value):
+        self.hset_calls.append((key, field, value))
         if isinstance(key, str):
             key = key.encode("utf-8")
         if isinstance(field, str):
@@ -41,6 +46,12 @@ class _FakeRedis:
         if isinstance(value, str):
             value = value.encode("utf-8")
         self.data.setdefault(key, {})[field] = value
+
+    def delete(self, key):
+        if isinstance(key, str):
+            key = key.encode("utf-8")
+        self.data.pop(key, None)
+        self.deleted_keys.append(key)
 
 
 class TestMemoryState(unittest.TestCase):
@@ -156,15 +167,17 @@ class TestRedisState(unittest.TestCase):
 
         state = RedisState.__new__(RedisState)
         state._redis = _FakeRedis(batches)
+        state._lock = threading.RLock()
         return state
 
     def test_get_all_tasks_paginates_across_scan_batches(self):
         """
-        Redis SCAN 分批返回 key 时，分页切片必须按当前批次起始位置计算。
+        When Redis SCAN returns keys in batches, the page slice is taken
+        from the full collected list, not from the current batch alone.
 
-        这个用例复现 PR #890 描述的 18 条任务、page_size=10 场景：
-        第一批 10 条，第二批 8 条。旧逻辑第一页会返回空列表，第二页
-        只返回 2 条；修复后第一页返回 10 条，第二页返回剩余 8 条。
+        Reproduces the 18-task, page_size=10 case: a first batch of 10 keys
+        and a second of 8. The old logic returned an empty first page and
+        only 2 rows on the second; the fix returns 10, then the remaining 8.
         """
         state = self._build_state([10, 8])
 
@@ -196,10 +209,28 @@ class TestRedisState(unittest.TestCase):
         self.assertEqual(task["state"], const.TASK_STATE_PROCESSING)
         self.assertEqual(task["music_mood"], "chill")
 
-    def test_convert_values_preserves_literals_and_converts_numbers(self):
-        self.assertEqual(RedisState._convert_to_original_type(b"['clip.mp4']"), ["clip.mp4"])
-        self.assertEqual(RedisState._convert_to_original_type(b"42"), 42)
-        self.assertEqual(RedisState._convert_to_original_type(b"ready"), "ready")
+    def test_cancelled_update_writes_nothing_to_redis(self):
+        # A cancelled task's row is gone on purpose: a late progress write
+        # from the doomed worker must not resurrect it (issue #447).
+        state = self._build_state([1])
+        request_cancel("task:0")
+        state.update_task("task:0", state=const.TASK_STATE_COMPLETE, progress=100)
+        self.assertEqual(state._redis.hset_calls, [])
+
+    def test_delete_task_marks_cancelled_and_removes_row(self):
+        state = self._build_state([1])
+        self.assertIsNotNone(state.get_task("task:0"))
+        state.delete_task("task:0")
+        self.assertTrue(is_cancelled("task:0"))
+        self.assertIsNone(state.get_task("task:0"))
+        self.assertEqual(state._redis.deleted_keys, [b"task:0"])
+
+    def test_failed_delete_clears_the_cancel_mark(self):
+        state = self._build_state([1])
+        state._redis.delete = MagicMock(side_effect=ConnectionError("redis down"))
+        with self.assertRaises(ConnectionError):
+            state.delete_task("task:0")
+        self.assertFalse(is_cancelled("task:0"))
 
 
 if __name__ == "__main__":

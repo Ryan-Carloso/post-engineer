@@ -1,8 +1,7 @@
-"""Video generation dispatch: pending slots (parallel) to the video pipeline."""
+"""Video generation dispatch: pending slots through the shared task manager."""
 
 from __future__ import annotations
 
-import threading
 import uuid
 from datetime import datetime
 from typing import Any
@@ -14,6 +13,12 @@ from app.models import const as model_const
 from app.services import notify as notify_module
 from app.services import task as tm
 from app.services.analytics import nonempty_error_reason, scrub_secret_values, track_event
+from app.services.fill_schedule.batch_admission import (
+    SlotDeferred,
+    free_running_slots,
+    read_pending_slots,
+    submit_batch_start,
+)
 from app.services.fill_schedule.constants import (
     SLOT_FAILED,
     SLOT_GENERATING,
@@ -66,12 +71,25 @@ class BatchGenerator:
         self.notify = notify
 
     def run(self, now: datetime) -> int:
-        """Dispatch generation for pending slots. Returns enqueued count."""
+        """Dispatch generation for pending slots the manager can start now.
+
+        Returns how many slots were started. A slot that cannot start on
+        this tick stays pending: it is not queued, not failed, and not
+        refunded. Batch dispatch never fills the task-manager queue.
+        """
+        # Lazy: app.controllers.v1.video builds the process-wide manager
+        # at import, which must not run at fill-schedule import time.
+        from app.controllers.v1.video import task_manager
+
+        budget = free_running_slots(task_manager)
         enqueued = 0
         enqueued_titles: list[str] = []
 
-        # Pending slots: parallel dispatch within the generation horizon.
-        for slot in self.store.pending_slots(now):
+        # Soonest slot_at first. read_pending_slots already returns at
+        # most `budget` rows, including when the store ignores limit, so
+        # the page cannot outrun the free running slots. A validation
+        # failure does not consume a slot; a deferral does not either.
+        for slot in read_pending_slots(self.store, now, budget):
             label = self._generate_slot(slot)
             if label is not None:
                 enqueued += 1
@@ -84,7 +102,8 @@ class BatchGenerator:
     def _generate_slot(self, slot: dict[str, Any]) -> str | None:
         """Process one pending slot. Returns the notify label on success,
         None when the slot failed (already recorded + notified) or was
-        left pending for a later tick (transient binding-read failure)."""
+        left pending for a later tick (transient binding-read failure,
+        or the shared task manager could not accept it)."""
         schedule = slot.get("schedules") or {}
         identity: dict[str, Any] = {}
         task_id: str | None = None
@@ -246,17 +265,21 @@ class BatchGenerator:
                 # slot is a data error, not a generation attempt.
                 if request.video_language.strip() and not is_english_language(request.video_language):
                     raise ValueError(ENGLISH_ONLY_VIDEO_MESSAGE)
-                # Funnel entry: requested BEFORE dispatch, so a dispatch
-                # failure still counts as requested -> failed in the
-                # failure % funnel.
-                tm.track_generation_requested(
-                    task_id,
-                    user_id=user_id,
-                    flow="batch",
-                    pipeline="video",
-                    slot_id=slot["id"],
-                    persona_id=identity.get("id"),
-                )
+                # Funnel entry fires from on_accepted: after the reservation
+                # and the task-row write, before the worker. SlotDeferred is
+                # no attempt (no event, no refund, slot stays pending). A
+                # failed task-row write emits failed with no requested event
+                # (outside the denominator); later failures have both.
+                def _accepted() -> None:
+                    tm.track_generation_requested(
+                        task_id,
+                        user_id=user_id,
+                        flow="batch",
+                        pipeline="video",
+                        slot_id=slot["id"],
+                        persona_id=identity.get("id"),
+                    )
+
                 self._dispatch_generation(
                     task_id,
                     request,
@@ -264,7 +287,10 @@ class BatchGenerator:
                     slot_id=str(slot["id"]),
                     schedule_id=str(schedule.get("id") or ""),
                     persona_id=str(schedule.get("persona_id") or ""),
+                    on_accepted=_accepted,
                 )
+            except SlotDeferred:
+                raise
             except Exception as dispatch_exc:
                 # Refund just this video's stored charge; the id keeps the
                 # other videos' charges intact. A free slot (charged 0) has
@@ -305,10 +331,19 @@ class BatchGenerator:
                         engine_task_id=task_id,
                     )
                 raise dispatch_exc
+            # Claim only after the worker has started. A slot the manager
+            # could not start never reaches this write, and it has no
+            # task-state row for boot triage to fail or refund.
             self.store.update_slot(
                 slot["id"], status=SLOT_GENERATING, title=title, task_id=task_id
             )
             return f"{identity.get('name', 'Persona')}: {title}"
+        except SlotDeferred:
+            logger.info(
+                f"fill_schedule: slot {slot['id']} stays pending: "
+                "the task manager cannot accept it on this tick"
+            )
+            return None
         except Exception as exc:
             # A failed slot is a real recurring error: log at ERROR so the
             # PostHog bridge (loguru sink, ERROR+) forwards it, scrubbed.
@@ -386,13 +421,19 @@ class BatchGenerator:
         slot_id: str | None = None,
         schedule_id: str | None = None,
         persona_id: str | None = None,
+        on_accepted: Any | None = None,
     ) -> None:
-        """Start the video pipeline immediately for a due slot.
+        """Start one due slot on a free running slot of the shared manager.
 
-        This is the same immediate path the /persona-videos route uses:
-        create the task state first (so the reconciler can observe it),
-        then run the pipeline in a daemon thread so the tick never blocks
-        on a long generation.
+        Reserve the running slot first. The task row is written only after
+        that reservation, outside the manager lock. ``SlotDeferred`` means
+        no running slot was free: the caller leaves the slot pending and
+        this method has written no task row. A write that raises releases
+        the reservation before the exception propagates. Batch dispatch
+        does not queue; direct ``add_task`` still does.
+
+        The caller claims the slot (pending → generating) only after
+        this returns. The next tick must not dispatch a started slot again.
 
         The slot/schedule/persona ids are persisted on the task row so the
         PostHog tracking context can attribute every lifecycle event
@@ -405,22 +446,30 @@ class BatchGenerator:
             tracking_ids["schedule_id"] = schedule_id
         if persona_id:
             tracking_ids["persona_id"] = persona_id
-        self.task_state.update_task(
-            task_id,
-            user_id=user_id,
-            flow="batch",
-            pipeline="video",
-            # New tasks start at explicit 0/PROCESSING: update_task() only
-            # overwrites state/progress when they are passed, so the initial
-            # values are set here rather than relying on defaults.
-            state=model_const.TASK_STATE_PROCESSING,
-            progress=0,
-            **tracking_ids,
+
+        def _write_task_row() -> None:
+            self.task_state.update_task(
+                task_id,
+                user_id=user_id,
+                flow="batch",
+                pipeline="video",
+                # New tasks start at explicit 0/PROCESSING: update_task() only
+                # overwrites state/progress when they are passed, so the initial
+                # values are set here rather than relying on defaults.
+                state=model_const.TASK_STATE_PROCESSING,
+                progress=0,
+                **tracking_ids,
+            )
+
+        # Same lazy import as run(): the controller module builds the
+        # process-wide manager at import time.
+        from app.controllers.v1.video import task_manager
+
+        submit_batch_start(
+            task_manager,
+            tm.start,
+            task_id=task_id,
+            params=request,
+            on_accepted=on_accepted,
+            before_start=_write_task_row,
         )
-        thread = threading.Thread(
-            target=tm.start,
-            kwargs={"task_id": task_id, "params": request, "stop_at": "video"},
-            name=f"fill-schedule-generate-{task_id}",
-            daemon=True,
-        )
-        thread.start()

@@ -35,6 +35,7 @@ import { NextResponse } from 'next/server';
 import { GET, PUT } from '../publishing-accounts/route';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { requireSupabaseSession } from '@/lib/request-auth';
+import { logger } from '@/lib/logger';
 import { PersonaPublishingAccountsResponseSchema } from '@/lib/contracts/accounts';
 
 const USER_ID = 'user-uuid-1';
@@ -122,6 +123,32 @@ describe('GET /api/persona/publishing-accounts', () => {
     expect(body.defaults.youtube).toEqual([]);
   });
 
+  it('answers a logged 500 without the DB message when a lookup fails', async () => {
+    const client = makeSupabase(baseTables());
+    const failing = {
+      from(table: string) {
+        const chain = client.from(table);
+        if (table === 'personas') {
+          chain.maybeSingle = () => Promise.resolve({ data: null, error: { message: 'connection reset' } });
+        }
+        return chain;
+      },
+    };
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(failing as never);
+
+    const res = await GET(req('GET'));
+
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body.code).toBe('INTERNAL_ERROR');
+    expect(JSON.stringify(body)).not.toContain('connection reset');
+    expect(logger.error).toHaveBeenCalledWith(
+      '[api/persona/publishing-accounts] lookup failed',
+      expect.objectContaining({ message: 'Failed to load persona: connection reset' }),
+      { route: 'GET /api/persona/publishing-accounts' },
+    );
+  });
+
   it('401s when unauthenticated', async () => {
     // requireSupabaseSession returns a NextResponse (not a plain Response)
     // on auth failure, and the route passes it through via `instanceof
@@ -164,6 +191,30 @@ describe('GET /api/persona/publishing-accounts', () => {
     vi.mocked(createSupabaseServiceClient).mockReturnValue(makeSupabase(baseTables()) as never);
     const res = await GET(req('GET'));
     expect(res.status).toBe(403);
+  });
+
+  it.each([
+    { name: 'unscoped API key', auth: { userId: USER_ID, isApiKey: true, personaIds: null } },
+    { name: 'OAuth token', auth: { userId: USER_ID, isOAuth: true, personaIds: null } },
+  ])('404s a foreign persona for a $name and does not return its accounts', async ({ auth }) => {
+    const foreignId = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
+    const tables = baseTables();
+    tables.personas = [{ id: foreignId, user_id: 'user-b' }];
+    tables.persona_default_accounts = [
+      { persona_id: foreignId, provider: 'youtube', provider_account_id: 'UC-victim' },
+      { persona_id: foreignId, provider: 'bluesky', provider_account_id: 'did:plc:victim' },
+    ];
+    vi.mocked(requireSupabaseSession).mockResolvedValue({ auth, error: null } as never);
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(makeSupabase(tables) as never);
+
+    const res = await GET(
+      new Request(`https://app.test/api/persona/publishing-accounts?personaId=${foreignId}`, { method: 'GET' }),
+    );
+    const text = await res.text();
+
+    expect(res.status, text).toBe(404);
+    expect(text).not.toContain('UC-victim');
+    expect(text).not.toContain('did:plc:victim');
   });
 });
 

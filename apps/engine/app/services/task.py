@@ -4,7 +4,6 @@ import re
 from collections import deque
 from os import path
 from threading import Lock
-from typing import Sequence
 
 from loguru import logger
 
@@ -30,6 +29,8 @@ from app.services import image_coverage, task_webhook, user_media
 from app.services.lipsync_active import lip_sync_cap_seconds, persona_lipsync_active  # noqa: F401 - re-exported for existing callers
 from app.services import full_lipsync
 from app.services.music_mood import resolve_music_mood
+from app.services.task_cleanup import _first_http_url, abort_if_cancelled
+from app.services.task_outcome import crash_or_stop, fail_or_stop, finish_or_stop
 from app.services.pipeline_stage import PhaseTracker
 from app.services.intro_cost import IntroCostReport, completion_cost_kwargs, cost_event_props, report_from_job_cost
 from app.services.longcat_cost import ModalJobCost
@@ -199,16 +200,6 @@ def _task_already_failed(task_id: str) -> bool:
     return bool(task) and task.get("state") == const.TASK_STATE_FAILED
 
 
-def _first_http_url(paths: object) -> str | None:
-    """First http(s) URL in ``paths`` (local artifact paths are not URLs)."""
-    if not isinstance(paths, (list, tuple)):
-        return None
-    for item in paths:
-        if isinstance(item, str) and item.startswith(("http://", "https://")):
-            return item
-    return None
-
-
 #---------------
 # PostHog lifecycle funnel: video_generation_requested (at acceptance,
 # BEFORE the pipeline starts) -> video_generation_started ->
@@ -223,6 +214,11 @@ def _first_http_url(paths: object) -> str | None:
 # transitions pop the entry — no double-report in one process lifetime.
 PROGRESS_MILESTONES = (50, 70)
 _progress_milestones: dict[str, int] = {}
+
+
+def _forget_milestone(task_id: str) -> None:
+    """Abort hook: drop the task's progress-milestone cache entry."""
+    _progress_milestones.pop(task_id, None)
 
 
 def _task_tracking_context(task_id: str) -> dict[str, object]:
@@ -457,7 +453,7 @@ def generate_script(task_id, params):
         # The script arrives with the job (segments joined by the caller);
         # there is no LLM fallback here. An empty script fails the task
         # loudly, before any generation or token spend.
-        _fail_task(task_id, "failed to generate video script", params, stage="script")
+        fail_or_stop(task_id, "failed to generate video script", params, stage="script")
         logger.error("failed to generate video script.")
         return None
 
@@ -540,27 +536,10 @@ def resolve_custom_audio_file(task_id: str, custom_audio_file: str | None) -> st
     )
 
 
-def cleanup_task_intermediates(task_id: str, preserved_paths: Sequence[str]) -> None:
-    """Remove task-local files except paths still needed for recovery/publishing."""
-    task_directory = path.realpath(utils.task_dir(task_id))
-    preserved = {
-        path.realpath(file_path)
-        for file_path in preserved_paths
-        if file_path
-    }
-
-    if not path.isdir(task_directory):
-        return
-
-    for root, directories, files in os.walk(task_directory, topdown=False):
-        for file_name in files:
-            file_path = path.realpath(path.join(root, file_name))
-            if file_path not in preserved:
-                os.remove(file_path)
-        for directory_name in directories:
-            directory_path = path.join(root, directory_name)
-            if not os.listdir(directory_path):
-                os.rmdir(directory_path)
+# cleanup_task_intermediates lives in task_cleanup.py (extracted so this
+# file stays under the size ratchet) and is re-exported here for existing
+# callers and tests that import it as ``task.cleanup_task_intermediates``.
+from app.services.task_cleanup import cleanup_task_intermediates  # noqa: F401,E402
 
 
 def resolve_persona_audio(params: VideoParams) -> tuple[str, str | None]:
@@ -613,7 +592,9 @@ def generate_audio(task_id, params, video_script):
             "custom audio file is invalid, "
             f"task_id: {task_id}, path: {requested_custom_audio_file}, error: {reason}"
         )
-        _fail_task(task_id, f"custom audio file is invalid: {reason}", params, stage="custom_audio")
+        fail_or_stop(
+            task_id, f"custom audio file is invalid: {reason}", params, stage="custom_audio"
+        )
         return None, None, None
 
     # Persona inline: the house voice overrides voice_name; the user's voice
@@ -623,7 +604,7 @@ def generate_audio(task_id, params, video_script):
         try:
             custom_audio_file = _download_persona_voice(task_id, persona_voice_audio)
         except PersonaVoiceError as exc:
-            _fail_task(task_id, f"Custom audio rejected: {safe_reason(exc)}", params, stage="custom_audio", exc=exc)
+            fail_or_stop(task_id, f"Custom audio rejected: {safe_reason(exc)}", params, stage="custom_audio", exc=exc)
             return None, None, None
 
     if not custom_audio_file:
@@ -634,7 +615,7 @@ def generate_audio(task_id, params, video_script):
         # the provider and burn its retries before dying with a cryptic
         # "voice/subtitle mismatch".
         if not (persona_voice_name or "").strip():
-            _fail_task(
+            fail_or_stop(
                 task_id,
                 "no voice configured: the persona has no voice_id/voice_audio_url "
                 "and no voice_name was provided",
@@ -660,7 +641,7 @@ def generate_audio(task_id, params, video_script):
         if not result.ok:
             # Forward the real TTS failure cause to _fail_task (stored error + PostHog reason).
             reason = result.error or "unknown TTS failure"
-            _fail_task(task_id, f"failed to generate audio: {reason}", params, stage="audio")
+            fail_or_stop(task_id, f"failed to generate audio: {reason}", params, stage="audio")
             logger.error(f"failed to generate audio: {reason} "
                          "(check voice name, provider API key, network)")
             return None, None, None
@@ -668,7 +649,7 @@ def generate_audio(task_id, params, video_script):
         audio_trim.trim_trailing_silence(audio_file)  # the video is cut to the file's length
         audio_duration = math.ceil(voice.get_audio_duration(sub_maker))
         if audio_duration == 0:
-            _fail_task(task_id, "failed to get audio duration", params, stage="audio")
+            fail_or_stop(task_id, "failed to get audio duration", params, stage="audio")
             logger.error("failed to get audio duration.")
             return None, None, None
         return audio_file, audio_duration, sub_maker
@@ -676,7 +657,7 @@ def generate_audio(task_id, params, video_script):
         logger.info(f"using custom audio file: {custom_audio_file}")
         audio_duration = voice.get_audio_duration(custom_audio_file)
         if audio_duration == 0:
-            _fail_task(task_id, "failed to get audio duration from custom audio file", params, stage="audio")
+            fail_or_stop(task_id, "failed to get audio duration from custom audio file", params, stage="audio")
             logger.error("failed to get audio duration from custom audio file.")
             return None, None, None
         return custom_audio_file, audio_duration, None
@@ -697,7 +678,7 @@ def get_video_materials(task_id, params, audio_duration):
         materials = video.preprocess_video(materials=params.video_materials,
             clip_duration=params.video_clip_duration, video_aspect=params.video_aspect)
         if not materials:
-            _fail_task(task_id, "no valid materials found", params, stage="materials")
+            fail_or_stop(task_id, "no valid materials found", params, stage="materials")
             logger.error("no valid materials found, please check the materials and try again.")
             return None
         return [material_info.url for material_info in materials]
@@ -917,28 +898,35 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
         if stop_at == "video":
             video_storage.require_r2_configuration()
         start_preflight.run(phases, task_id, params, _PERSONA_IMAGE_MAX_BYTES, stop_at)
+        # Cancel (issue #447): before PROCESSING/started, so a task cancelled
+        # while queued emits no dangling video_generation_started.
+        if abort_if_cancelled(task_id, "script", _forget_milestone):
+            return
         _update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=5)
         track_generation_started(task_id)
-
         # 1. Generate script
         phases.begin("script")
         video_script = generate_script(task_id, params)
         phases.complete("script")
         if not video_script or "Error: " in video_script:
-            _fail_task(task_id, "failed to generate video script", params, stage="script")
+            fail_or_stop(task_id, "failed to generate video script", params, stage="script")
             cleanup_task_intermediates(task_id, ())
             return
 
         _update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=10)
 
         if stop_at == "script":
-            _complete_task(task_id, params, script=video_script)
-            return {"script": video_script}
+            return finish_or_stop(
+                task_id, params, "script", {"script": video_script}, script=video_script
+            )
 
         save_script_data(task_id, video_script, params)
 
         _update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=20)
 
+        # Cancel (issue #447): stop before the next paid stage.
+        if abort_if_cancelled(task_id, "audio", _forget_milestone):
+            return
         # 3. Generate audio
         phases.begin("audio")
         audio_file, audio_duration, sub_maker = generate_audio(
@@ -946,18 +934,18 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
         )
         phases.complete("audio")
         if not audio_file:
-            _fail_task(task_id, "failed to generate audio", params, stage="audio")
+            fail_or_stop(task_id, "failed to generate audio", params, stage="audio")
             cleanup_task_intermediates(task_id, ())
             return
 
         _update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=30)
 
         if stop_at == "audio":
-            _complete_task(
-                task_id, params, video_url=_first_http_url([audio_file]),
-                audio_file=audio_file,
+            return finish_or_stop(
+                task_id, params, "audio",
+                {"audio_file": audio_file, "audio_duration": audio_duration},
+                video_url=_first_http_url([audio_file]), audio_file=audio_file,
             )
-            return {"audio_file": audio_file, "audio_duration": audio_duration}
 
         # Fail loudly: cutting the tail would drop the CTA (#534).
         max_duration = lip_sync_cap_seconds(params)
@@ -965,7 +953,7 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
             stop_at == "video" and persona_lipsync_active(params)
             and audio_duration is not None and audio_duration > max_duration
         ):
-            _fail_task(
+            fail_or_stop(
                 task_id,
                 f"narration is {audio_duration:.1f}s, over the {max_duration:g}s lip-sync cap",
                 params, stage="audio",
@@ -973,6 +961,9 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
             cleanup_task_intermediates(task_id, ())
             return
 
+        # Cancel (issue #447): stop before the next paid stage.
+        if abort_if_cancelled(task_id, "subtitle", _forget_milestone):
+            return
         # 4. Generate subtitle
         phases.begin("subtitle")
         subtitle_path = generate_subtitle(
@@ -981,8 +972,10 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
         phases.complete("subtitle")
 
         if stop_at == "subtitle":
-            _complete_task(task_id, params, subtitle_path=subtitle_path)
-            return {"subtitle_path": subtitle_path}
+            return finish_or_stop(
+                task_id, params, "subtitle",
+                {"subtitle_path": subtitle_path}, subtitle_path=subtitle_path,
+            )
 
         task_local = audio_trim.task_local_copy(audio_file, utils.task_dir(task_id))
         if task_local is not None:  # None: copy failed; skip the trim, never cut shared
@@ -1007,7 +1000,7 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
             sub_maker, subtitle_path,
         )
         if not audio_file:
-            _fail_task(task_id, "failed to generate audio", params, stage="audio")
+            fail_or_stop(task_id, "failed to generate audio", params, stage="audio")
             cleanup_task_intermediates(task_id, ())
             return
         if video_script != script_before_hook_guard:
@@ -1015,13 +1008,16 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
 
         _update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=40)
 
+        # Cancel (issue #447): stop before the next paid stage.
+        if abort_if_cancelled(task_id, "materials", _forget_milestone):
+            return
         # 5. Get video materials: local files, or the neutral canvas the
         # agent's segment photos cover (image_coverage).
         phases.begin("materials")
         downloaded_videos = get_video_materials(task_id, params, audio_duration)
         phases.complete("materials")
         if not downloaded_videos:
-            _fail_task(task_id, "failed to get video materials", params, stage="download")
+            fail_or_stop(task_id, "failed to get video materials", params, stage="download")
             cleanup_task_intermediates(task_id, ())
             return
 
@@ -1029,15 +1025,17 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
         try:
             media_warnings = user_media.prepare_segment_panels(task_id, params, subtitle_path, audio_duration)
         except image_coverage.ImagesDoNotCoverAudio as exc:  # images material: a photo was skipped or none survived
-            _fail_task(task_id, str(exc), params, stage="materials", exc=exc)
+            fail_or_stop(task_id, str(exc), params, stage="materials", exc=exc)
             cleanup_task_intermediates(task_id, ())
             return
         if media_warnings or getattr(params, "segments", None):
             _update_task(task_id, media_warnings=media_warnings)
 
         if stop_at == "materials":
-            _complete_task(task_id, params, materials=downloaded_videos)
-            return {"materials": downloaded_videos}
+            return finish_or_stop(
+                task_id, params, "materials",
+                {"materials": downloaded_videos}, materials=downloaded_videos,
+            )
 
         _update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=50)
 
@@ -1054,6 +1052,9 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
         if type(params.video_concat_mode) is str:
             params.video_concat_mode = VideoConcatMode(params.video_concat_mode)
 
+        # Cancel (issue #447): stop before the next paid stage.
+        if abort_if_cancelled(task_id, "render", _forget_milestone):
+            return
         # 6. Generate final videos (marked first: a crash reports stage=render)
         phases.begin("render")
         phases.complete("render")
@@ -1068,8 +1069,13 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
         )
 
         if not final_video_paths:
-            _fail_task(task_id, "failed to generate final videos", params, stage="render")
+            fail_or_stop(task_id, "failed to generate final videos", params, stage="render")
             cleanup_task_intermediates(task_id, ())
+            return
+
+        # Cancel (issue #447): a cancel landing mid-render must not run
+        # the tail — no archive, cross-post, or terminal webhook.
+        if abort_if_cancelled(task_id, "archive", _forget_milestone):
             return
 
         # Durable copy of the final video in R2 before
@@ -1141,11 +1147,11 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
         # every response — it is never visible to users, only in the
         # operator's PostHog.
         kwargs.update(completion_cost_kwargs(task_id, intro_report))
-        _complete_task(
-            task_id, params,
-            video_url=_first_http_url(final_video_paths),
-            **kwargs,
-        )
+        if finish_or_stop(
+            task_id, params, "complete", kwargs,
+            video_url=_first_http_url(final_video_paths), **kwargs,
+        ) is None:
+            return
         try:
             completed_task = sm.state.get_task(task_id) or {}
             archived = bool(completed_task.get("video_storage_path")) and not bool(
@@ -1162,16 +1168,9 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
             )
         return kwargs
     except Exception as exc:
-        logger.exception("task %s crashed", task_id)
-        _fail_task(task_id, safe_reason(exc), params, stage=phases.current, exc=exc, music_mood=music_mood)
-        try:
-            cleanup_task_intermediates(task_id, final_video_paths)
-        except OSError as cleanup_error:
-            logger.warning(
-                "failed to clean task intermediates for failed task %s: %s",
-                task_id,
-                cleanup_error,
-            )
+        crash_or_stop(
+            task_id, exc, params, phases.current, music_mood, final_video_paths
+        )
         return
 
 

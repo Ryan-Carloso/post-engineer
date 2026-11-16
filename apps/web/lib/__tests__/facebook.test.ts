@@ -272,6 +272,26 @@ describe('publishFacebookVideo', () => {
     await expect(publishFacebookVideo(input)).rejects.toThrow('FACEBOOK_PUBLISH_FAILED: missing id');
     expect(mockFetch).toHaveBeenCalledTimes(2);
   });
+
+  it('keeps the Meta provider code when a dead token answers 400 + code 190', async () => {
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse(
+        {
+          error: {
+            code: 190,
+            message: 'Error validating access token: The session has been invalidated.',
+            type: 'OAuthException',
+          },
+        },
+        400,
+      ),
+    );
+    const error = await publishFacebookVideo(input).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(FacebookError);
+    expect((error as FacebookError).statusCode).toBe(400);
+    expect((error as FacebookError).providerCode).toBe(190);
+    expect((error as FacebookError).message).toContain('Error validating access token');
+  });
 });
 
 describe('getFacebookVideoInsights', () => {

@@ -19,7 +19,7 @@
 // >= 1 bound account; publish only to bound accounts), and a scheduled
 // post is one instant (publishAt) inside the same 3h–30d window as
 // generate-and-schedule. A signed upload backs at most one live slot
-// (migration 065). An ASAP call with an idempotency key publishes once per
+// (migration 066). An ASAP call with an idempotency key publishes once per
 // account across retries (asap.ts).
 //---------------
 
@@ -32,10 +32,6 @@ import { trackApiEvent } from '@/lib/analytics';
 import { ERROR_CODES, formatErrorMessage } from '@/lib/error-codes';
 import { PUBLISH_EXISTING_NAMESPACE, resolveIdempotency } from '@/lib/idempotency';
 import { logger } from '@/lib/logger';
-import {
-  getPersonaDefaultAccounts,
-  type PersonaDefaultAccounts,
-} from '@/lib/persona-publishing-accounts';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
@@ -58,6 +54,7 @@ import { resolvePublishingAccounts } from '../../videos/generate-and-schedule/pe
 import { rejectInvalidRequest } from '../../videos/generate-and-schedule/request-validation';
 import { buildSlotRows } from '../../videos/generate-and-schedule/slot-rows';
 import { validateAccounts } from '../../videos/generate-and-schedule/validate-accounts';
+import { loadPublishBinding } from './bound-accounts';
 import { invalid } from '../../videos/generate-and-schedule/validation-issues';
 import {
   asapReplayResponse,
@@ -78,7 +75,7 @@ import {
 } from './schema';
 import {
   ExistingMediaError,
-  fetchEngineTaskRecord,
+  fetchScopedEngineTask,
   loadReadyVideoUpload,
   storeScheduledImage,
   type EngineTaskRecord,
@@ -219,7 +216,7 @@ async function scheduleExistingMedia(ctx: PublishExistingContext): Promise<NextR
     .insert(rows)
     .select('id, slot_at, title');
   if (slotsError || inserted === null) {
-    // A concurrent call scheduled the same upload first (migration 065):
+    // A concurrent call scheduled the same upload first (migration 066):
     // a caller error, not a server one.
     const uploadTaken = violatedConstraint(slotsError) === UPLOAD_SLOT_REFERENCE_INDEX;
     if (!uploadTaken) logger.error('[publish-existing] slot insert failed', slotsError, { scheduleId, userId });
@@ -299,31 +296,9 @@ async function postHandler(request: Request): Promise<NextResponse> {
 
   // Persona existence + bound accounts (issue #572): a persona with zero
   // bound accounts cannot publish at all; explicit accounts must be bound.
-  let bound: PersonaDefaultAccounts | null = null;
-  if (personaId !== null) {
-    const { data: persona, error: personaError } = await supabase
-      .from('personas')
-      .select('id')
-      .eq('id', personaId)
-      .eq('user_id', userId)
-      .maybeSingle();
-    if (personaError) {
-      logger.error('[publish-existing] persona lookup failed', personaError, { userId });
-      return apiErrorResponse(500, formatErrorMessage(ERROR_CODES.INTERNAL_ERROR), {
-        route: ROUTE,
-        code: ERROR_CODES.INTERNAL_ERROR,
-      });
-    }
-    if (!persona) {
-      return apiErrorResponse(404, formatErrorMessage(ERROR_CODES.PERSONA_NOT_FOUND), {
-        route: ROUTE,
-        code: ERROR_CODES.PERSONA_NOT_FOUND,
-        field: 'personaId',
-      });
-    }
-    bound = await getPersonaDefaultAccounts(supabase, personaId);
-  }
-  const resolvedAccounts = await resolvePublishingAccounts(supabase, personaId, input.publishing.accounts, bound ?? undefined);
+  const bound = await loadPublishBinding(supabase, personaId, userId, ROUTE);
+  if (bound instanceof NextResponse) return bound;
+  const resolvedAccounts = await resolvePublishingAccounts(supabase, personaId, input.publishing.accounts, bound ?? undefined, userId);
   const accountIds = await validateAccounts(supabase, userId, input.publishing.providers, resolvedAccounts, bound);
   if (accountIds instanceof NextResponse) return accountIds;
 
@@ -345,7 +320,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
     if (!hasGrantedAccounts(ledger)) return asapReplayResponse(input, userId, logId, ledger);
   }
 
-  const verified = await verifyMedia(supabase, userId, input);
+  const verified = await verifyMedia(supabase, auth, input);
   if (verified instanceof NextResponse) {
     if (ledger !== null) await releaseAsapLedger(ledger, 'media verification failed');
     return verified;
@@ -372,15 +347,16 @@ interface VerifiedMedia {
  */
 async function verifyMedia(
   supabase: PublishExistingContext['supabase'],
-  userId: string,
+  auth: Parameters<typeof fetchScopedEngineTask>[1],
   input: PublishExistingContext['input'],
 ): Promise<VerifiedMedia | NextResponse> {
+  const { userId } = auth;
   let taskRecord: EngineTaskRecord | null = null;
   let uploadRow: VideoUploadRow | null = null;
   let image: { buffer: Buffer; contentType: ImageContentType } | null = null;
   try {
     if (input.media.kind === 'task') {
-      taskRecord = await fetchEngineTaskRecord(input.media.taskId, userId);
+      taskRecord = await fetchScopedEngineTask(supabase, auth, input.media.taskId);
       if (taskRecord === null) {
         return apiErrorResponse(404, 'Video not found.', { route: ROUTE, code: 'MEDIA_NOT_FOUND', field: 'media.taskId' });
       }

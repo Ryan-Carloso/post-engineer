@@ -4,6 +4,7 @@ import { apiErrorResponse } from '@/lib/api-error';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { logger } from '@/lib/logger';
 import { SAFE_TASK_ID } from '@/lib/video-urls';
+import { enforceScopedTaskRead } from '@/lib/video-task-scope';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
 type DownloadContext = {
@@ -36,6 +37,16 @@ async function getHandler(request: Request, context: DownloadContext): Promise<N
   if (!isSafePath(taskId, path)) {
     return apiErrorResponse(400, 'Invalid video filename.', { route: 'GET /api/persona/video-download' });
   }
+
+  // Before either engine fetch (the file, and the 404 path fallback).
+  // Out of scope answers the same 404 as a missing file.
+  const scopeError = await enforceScopedTaskRead(
+    auth,
+    taskId,
+    'GET /api/persona/video-download',
+    'Video file not found.',
+  );
+  if (scopeError) return scopeError;
 
   const source = new URL(request.url).searchParams.get('source') === 'stream' ? 'stream' : 'download';
   const upstreamUrl = `${baseUrl}/api/v1/${source}/${[taskId, ...path].map(encodeURIComponent).join('/')}`;

@@ -43,7 +43,7 @@ export const ERROR_CODES = {
   // the time the scheduled publish tried to hold it.
   VIDEO_UPLOAD_CONSUMED: 'VIDEO_UPLOAD_CONSUMED',
   // A signed upload is single-use: it already backs a live scheduled slot
-  // (migration 065), so a second call cannot schedule or publish it.
+  // (migration 066), so a second call cannot schedule or publish it.
   VIDEO_UPLOAD_SCHEDULED: 'VIDEO_UPLOAD_SCHEDULED',
   MCP_VERSION_MISMATCH: 'MCP_VERSION_MISMATCH',
 } as const;

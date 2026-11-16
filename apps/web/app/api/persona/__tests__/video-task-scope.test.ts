@@ -137,6 +137,20 @@ describe('DELETE /api/persona/video-task/:taskId — bearer auth and persona sco
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it('fails closed (404) when the slot schedule row is gone', async () => {
+    authFor({ userId: USER_ID, accessToken: 'pe_live_key', isApiKey: true, personaIds: [PERSONA_A] });
+    makeService({
+      video_generations: EMPTY,
+      scheduled_posts: { data: { schedule_id: 'schedule-1' }, error: null },
+      schedules: EMPTY,
+    });
+
+    const response = await callDelete();
+
+    expect(response.status).toBe(404);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('fails closed (404) when a scoped key task has no resolvable persona link', async () => {
     authFor({ userId: USER_ID, accessToken: 'pe_live_key', isApiKey: true, personaIds: [PERSONA_A] });
     makeService({ video_generations: EMPTY, scheduled_posts: EMPTY });

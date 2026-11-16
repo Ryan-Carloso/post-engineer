@@ -52,7 +52,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
   try {
     const input = parsePublishBody(body);
     // An upload a scheduled slot holds publishes from that slot: publishing
-    // it now would consume it and fail the slot later (migration 065).
+    // it now would consume it and fail the slot later (migration 066).
     await assertUploadNotScheduled(createSupabaseServiceClient(), auth.userId, input.uploadId);
     const response = await publishUploadedVideo(
       createSupabaseVideoUploadStore(),

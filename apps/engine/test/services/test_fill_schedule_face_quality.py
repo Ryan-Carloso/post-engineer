@@ -70,7 +70,7 @@ class _Store:
         self.updates = []
         self.refund_batch_calls = []
 
-    def pending_slots(self, now):
+    def pending_slots(self, now, limit):
         return [self._slot]
 
     def update_slot(self, slot_id, **fields):

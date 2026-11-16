@@ -192,6 +192,36 @@ describe('DELETE /api/schedule/slots/[slotId]', () => {
     expect(createSupabaseServerClient).not.toHaveBeenCalled();
   });
 
+  it('runs delete_slot_if_not_last on the service client for a cookie session (service-role-only RPC)', async () => {
+    const sessionClient = mockSlotsClient({
+      slot: { id: 'slot-1', schedule_id: 's1', status: 'pending', title: 'T' },
+      schedule: { id: 's1', user_id: USER_ID },
+      rpcResult: 'deleted',
+    });
+    const serviceClient = mockSlotsClient({
+      slot: { id: 'slot-1', schedule_id: 's1', status: 'pending', title: 'T' },
+      schedule: { id: 's1', user_id: USER_ID },
+      rpcResult: 'deleted',
+    });
+    vi.mocked(requireSupabaseSession).mockResolvedValue({
+      auth: { userId: USER_ID, accessToken: 'jwt', isApiKey: false, isOAuth: false },
+      error: null,
+    } as never);
+    vi.mocked(createSupabaseServerClient).mockResolvedValue(sessionClient as never);
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(serviceClient as never);
+
+    const response = await deleteSlot(SLOT_ID);
+
+    expect(response.status).toBe(200);
+    // Ownership is read with the session client; only the RPC moves.
+    expect(sessionClient.from).toHaveBeenCalled();
+    expect(sessionClient.rpc).not.toHaveBeenCalled();
+    expect(serviceClient.rpc).toHaveBeenCalledWith('delete_slot_if_not_last', {
+      p_slot_id: 'slot-1',
+      p_user_id: USER_ID,
+    });
+  });
+
   it('returns 409 for a published slot', async () => {
     const client = mockSlotsClient({
       slot: { id: 'slot-1', schedule_id: 's1', status: 'published', title: 'T' },

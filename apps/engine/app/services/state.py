@@ -1,4 +1,3 @@
-import ast
 import copy
 import threading
 import os
@@ -11,6 +10,8 @@ from loguru import logger
 
 from app.config import config
 from app.models import const
+from app.services.redis_task_values import convert_redis_task_value
+from app.services.task_cancellation import cancel_and_delete, is_cancelled
 from app.utils.supabase_retry import build_retrying_session
 
 
@@ -68,12 +69,13 @@ class MemoryState(BaseState):
                 clamped = 100
             update["progress"] = clamped
 
+        # Re-check under the lock delete_task holds around the pop, so a
+        # delete that already marked this id cannot be undone (issue #447).
         with self._lock:
-            self._tasks[task_id] = {
-                **self._tasks.get(task_id, {}),
-                **update,
-                **kwargs,
-            }
+            if is_cancelled(task_id):
+                return
+            current = self._tasks.get(task_id, {})
+            self._tasks[task_id] = {**current, **update, **kwargs}
 
     def get_task(self, task_id: str, user_id: str | None = None):
         with self._lock:
@@ -83,8 +85,13 @@ class MemoryState(BaseState):
             return copy.deepcopy(task) if task is not None else None
 
     def delete_task(self, task_id: str):
-        with self._lock:
-            self._tasks.pop(task_id, None)
+        # Deleting cancels first, so a running worker detaches instead of
+        # recreating the row on its next progress write (issue #447).
+        def _pop() -> None:
+            with self._lock:
+                self._tasks.pop(task_id, None)
+
+        cancel_and_delete(task_id, _pop)
 
 
 # Redis state management
@@ -103,6 +110,8 @@ class RedisState(BaseState):
         import redis
 
         self._redis = redis.StrictRedis(host=host, port=port, db=db, password=password)
+        # Same lock update_task holds across the cancel check and the hsets.
+        self._lock = threading.RLock()
 
     def get_all_tasks(self, page: int, page_size: int, user_id: str | None = None):
         start = (page - 1) * page_size
@@ -114,7 +123,7 @@ class RedisState(BaseState):
             for key in keys:
                 task_data = self._redis.hgetall(key)
                 task = {
-                    k.decode("utf-8"): self._convert_to_original_type(v)
+                    k.decode("utf-8"): convert_redis_task_value(v)
                     for k, v in task_data.items()
                 }
                 if user_id is None or task.get("user_id") == user_id:
@@ -143,8 +152,12 @@ class RedisState(BaseState):
             fields["progress"] = clamped
         fields.update(kwargs)
 
-        for field, value in fields.items():
-            self._redis.hset(task_id, field, str(value))
+        # Check and hsets share the lock with delete_task's DEL (issue #447).
+        with self._lock:
+            if is_cancelled(task_id):
+                return
+            for field, value in fields.items():
+                self._redis.hset(task_id, field, str(value))
 
     def get_task(self, task_id: str, user_id: str | None = None):
         task_data = self._redis.hgetall(task_id)
@@ -152,7 +165,7 @@ class RedisState(BaseState):
             return None
 
         task = {
-            key.decode("utf-8"): self._convert_to_original_type(value)
+            key.decode("utf-8"): convert_redis_task_value(value)
             for key, value in task_data.items()
         }
         if user_id is not None and task.get("user_id") != user_id:
@@ -160,30 +173,11 @@ class RedisState(BaseState):
         return task
 
     def delete_task(self, task_id: str):
-        self._redis.delete(task_id)
+        def _delete() -> None:
+            with self._lock:
+                self._redis.delete(task_id)
 
-    @staticmethod
-    def _convert_to_original_type(value):
-        """
-        Convert values written by this application back to common Python types.
-
-        This compatibility parser assumes Redis is inside the application's
-        trust boundary. If Redis can be written by untrusted clients, task state
-        should move to a strict JSON/schema parser instead of open-ended literal
-        conversion.
-        """
-        value_str = value.decode("utf-8")
-
-        try:
-            # try to convert byte string array to list
-            return ast.literal_eval(value_str)
-        except (ValueError, SyntaxError):
-            pass
-
-        if value_str.isdigit():
-            return int(value_str)
-        # Add more conversions here if needed
-        return value_str
+        cancel_and_delete(task_id, _delete)
 
 
 # HTTP timeouts for task-state requests, (connect, read): short enough that a
@@ -389,7 +383,11 @@ class SupabaseTaskState(BaseState):
         # The SELECT→POST below is a read-modify-write: hold the lock for
         # the whole sequence so concurrent writers cannot read the same
         # base row and silently drop each other's kwargs (last POST wins).
+        # The cancel check stays inside that lock, which delete_task also
+        # holds around the DELETE, so a removed row is not upserted back.
         with self._lock:
+            if is_cancelled(task_id):
+                return
             existing = self._select_row(task_id)
             data: dict[str, Any] = (
                 dict(self._safe_data(existing)) if existing else {}
@@ -447,7 +445,11 @@ class SupabaseTaskState(BaseState):
         return tasks, total
 
     def delete_task(self, task_id: str) -> None:
-        self._request("DELETE", f"task_id=eq.{self._eq(task_id)}")
+        def _delete() -> None:
+            with self._lock:
+                self._request("DELETE", f"task_id=eq.{self._eq(task_id)}")
+
+        cancel_and_delete(task_id, _delete)
 
     def reconcile_orphaned_tasks(self) -> int:
         """Triage tasks left running across a restart, then settle the rest.
@@ -592,32 +594,12 @@ class SupabaseTaskState(BaseState):
             json=patch,
         )
 
-def persist_state_update(backend: BaseState, task_id: str, **kwargs: object) -> bool:
-    """Write a task-state update that must not be silently lost, retrying once.
+# persist_state_update lives in state_persistence.py (extracted so this
+# file stays under the size ratchet) and is re-exported here: callers and
+# tests import it as ``state.persist_state_update``.
+from app.services.state_persistence import persist_state_update  # noqa: F401,E402
 
-    With the memory backend update_task() effectively cannot fail; with a
-    network backend (Supabase) every write is an HTTP request that can raise
-    (timeout, 5xx, rotated key). A lost terminal write leaves the row
-    PROCESSING forever — the web polls with no failure recorded and no
-    refund, which is exactly the failure mode persistence was added to
-    eliminate. Retry once, then log loudly and report the loss. Never
-    raises: a persistence failure must not mask the task outcome it was
-    recording.
-    """
-    try:
-        backend.update_task(task_id, **kwargs)
-        return True
-    except Exception as exc:  # noqa: BLE001 - one retry before giving up
-        logger.warning(f"task state write failed for {task_id}, retrying: {exc}")
-    try:
-        backend.update_task(task_id, **kwargs)
-        return True
-    except Exception as exc:  # noqa: BLE001 - loud, then report the loss
-        logger.error(
-            f"task state write permanently failed for {task_id}; "
-            f"the task row may be stale: {exc}"
-        )
-        return False
+__all__ = ["BaseState", "MemoryState", "RedisState", "SupabaseTaskState", "persist_state_update"]
 
 
 # Global state — memory by default; redis when enable_redis=true; supabase
