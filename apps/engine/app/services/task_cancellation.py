@@ -61,9 +61,11 @@ def cancel_and_delete(task_id: str, delete: Callable[[], object]) -> None:
 
     The mark goes first so a running worker detaches before its next
     progress write could recreate the row. If ``delete`` raises, the row
-    still exists: the mark is cleared so the live task stays updatable
-    (a lingering mark would no-op every later write and strand the row in
-    PROCESSING), and the error propagates to the caller.
+    is *assumed* to still exist and the mark is cleared so a live task
+    stays updatable. A delete that committed but reported failure (timeout
+    after commit, or a retry that 404s) re-opens the recreate window; that
+    is accepted because keeping the mark would no-op every later write and
+    strand a live row in PROCESSING. The error propagates to the caller.
     """
     request_cancel(task_id)
     try:

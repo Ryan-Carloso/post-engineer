@@ -167,15 +167,17 @@ class TestRedisState(unittest.TestCase):
 
         state = RedisState.__new__(RedisState)
         state._redis = _FakeRedis(batches)
+        state._lock = threading.RLock()
         return state
 
     def test_get_all_tasks_paginates_across_scan_batches(self):
         """
-        Redis SCAN 分批返回 key 时，分页切片必须按当前批次起始位置计算。
+        When Redis SCAN returns keys in batches, the page slice is taken
+        from the full collected list, not from the current batch alone.
 
-        这个用例复现 PR #890 描述的 18 条任务、page_size=10 场景：
-        第一批 10 条，第二批 8 条。旧逻辑第一页会返回空列表，第二页
-        只返回 2 条；修复后第一页返回 10 条，第二页返回剩余 8 条。
+        Reproduces the 18-task, page_size=10 case: a first batch of 10 keys
+        and a second of 8. The old logic returned an empty first page and
+        only 2 rows on the second; the fix returns 10, then the remaining 8.
         """
         state = self._build_state([10, 8])
 
@@ -206,11 +208,6 @@ class TestRedisState(unittest.TestCase):
         self.assertEqual(task["progress"], 40)
         self.assertEqual(task["state"], const.TASK_STATE_PROCESSING)
         self.assertEqual(task["music_mood"], "chill")
-
-    def test_convert_values_preserves_literals_and_converts_numbers(self):
-        self.assertEqual(RedisState._convert_to_original_type(b"['clip.mp4']"), ["clip.mp4"])
-        self.assertEqual(RedisState._convert_to_original_type(b"42"), 42)
-        self.assertEqual(RedisState._convert_to_original_type(b"ready"), "ready")
 
     def test_cancelled_update_writes_nothing_to_redis(self):
         # A cancelled task's row is gone on purpose: a late progress write

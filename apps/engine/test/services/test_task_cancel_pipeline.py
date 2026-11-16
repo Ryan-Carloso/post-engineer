@@ -28,7 +28,12 @@ def _params() -> VideoParams:
     )
 
 
-def _stub_stages(monkeypatch, entered: list[str], cancel_after: str | None = "audio"):
+def _stub_stages(
+    monkeypatch,
+    entered: list[str],
+    cancel_after: str | None = "audio",
+    render=None,
+):
     """Stage stubs that record entry; the cancel lands right after the
     ``cancel_after`` stage (schedule cancel + row delete, like the real
     delete path), so the pipeline must stop before the NEXT stage."""
@@ -74,13 +79,17 @@ def _stub_stages(monkeypatch, entered: list[str], cancel_after: str | None = "au
         return ["/tmp/mat.mp4"]
 
     monkeypatch.setattr(tm, "get_video_materials", _materials)
-    def _render(task_id, *a, **k):
-        entered.append("render")
-        if cancel_after == "render":
-            _cancel(task_id)
-        return (["/tmp/final.mp4"], ["/tmp/final.mp4"], None)
 
-    monkeypatch.setattr(tm, "generate_final_videos", _render)
+    if render is None:
+        def _render(task_id, *a, **k):
+            entered.append("render")
+            if cancel_after == "render":
+                _cancel(task_id)
+            return (["/tmp/final.mp4"], ["/tmp/final.mp4"], None)
+
+        render = _render
+
+    monkeypatch.setattr(tm, "generate_final_videos", render)
     monkeypatch.setattr(tm, "archive_final_videos", lambda *a, **k: entered.append("archive"))
     monkeypatch.setattr(tm.user_media, "prepare_segment_panels", lambda *a, **k: None)
     monkeypatch.setattr(tm.audio_trim, "task_local_copy", lambda *a, **k: None)
@@ -220,11 +229,12 @@ def test_empty_render_result_fails_without_archiving(monkeypatch):
         task_id, user_id="u-1", flow="direct", state=const.TASK_STATE_PROCESSING, progress=0
     )
     entered: list[str] = []
-    _stub_stages(monkeypatch, entered, cancel_after=None)
 
     def _empty_render(task_id, *a, **k):
         entered.append("render")
         return ([], [], None)
+
+    _stub_stages(monkeypatch, entered, cancel_after=None, render=_empty_render)
 
     webhook_calls: list[dict] = []
     monkeypatch.setattr(
@@ -232,7 +242,6 @@ def test_empty_render_result_fails_without_archiving(monkeypatch):
         "notify_terminal_task",
         lambda *a, **k: webhook_calls.append(k),
     )
-    monkeypatch.setattr(tm, "generate_final_videos", _empty_render)
 
     result = tm.start(task_id, _params(), stop_at="video")
 

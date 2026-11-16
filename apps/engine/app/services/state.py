@@ -1,4 +1,3 @@
-import ast
 import copy
 import threading
 import os
@@ -11,6 +10,7 @@ from loguru import logger
 
 from app.config import config
 from app.models import const
+from app.services.redis_task_values import convert_redis_task_value
 from app.services.task_cancellation import cancel_and_delete, is_cancelled
 from app.utils.supabase_retry import build_retrying_session
 
@@ -60,10 +60,6 @@ class MemoryState(BaseState):
         progress: int | None = None,
         **kwargs,
     ):
-        # A cancelled task's row is gone on purpose: a late progress write
-        # from the doomed worker must not recreate it (issue #447).
-        if is_cancelled(task_id):
-            return
         update: dict[str, object] = {"task_id": task_id}
         if state is not None:
             update["state"] = state
@@ -73,12 +69,13 @@ class MemoryState(BaseState):
                 clamped = 100
             update["progress"] = clamped
 
+        # Re-check under the lock delete_task holds around the pop, so a
+        # delete that already marked this id cannot be undone (issue #447).
         with self._lock:
-            self._tasks[task_id] = {
-                **self._tasks.get(task_id, {}),
-                **update,
-                **kwargs,
-            }
+            if is_cancelled(task_id):
+                return
+            current = self._tasks.get(task_id, {})
+            self._tasks[task_id] = {**current, **update, **kwargs}
 
     def get_task(self, task_id: str, user_id: str | None = None):
         with self._lock:
@@ -113,6 +110,8 @@ class RedisState(BaseState):
         import redis
 
         self._redis = redis.StrictRedis(host=host, port=port, db=db, password=password)
+        # Same lock update_task holds across the cancel check and the hsets.
+        self._lock = threading.RLock()
 
     def get_all_tasks(self, page: int, page_size: int, user_id: str | None = None):
         start = (page - 1) * page_size
@@ -124,7 +123,7 @@ class RedisState(BaseState):
             for key in keys:
                 task_data = self._redis.hgetall(key)
                 task = {
-                    k.decode("utf-8"): self._convert_to_original_type(v)
+                    k.decode("utf-8"): convert_redis_task_value(v)
                     for k, v in task_data.items()
                 }
                 if user_id is None or task.get("user_id") == user_id:
@@ -143,9 +142,6 @@ class RedisState(BaseState):
         progress: int | None = None,
         **kwargs,
     ):
-        # Same cancel guard as MemoryState (issue #447).
-        if is_cancelled(task_id):
-            return
         fields: dict[str, object] = {"task_id": task_id}
         if state is not None:
             fields["state"] = state
@@ -156,8 +152,12 @@ class RedisState(BaseState):
             fields["progress"] = clamped
         fields.update(kwargs)
 
-        for field, value in fields.items():
-            self._redis.hset(task_id, field, str(value))
+        # Check and hsets share the lock with delete_task's DEL (issue #447).
+        with self._lock:
+            if is_cancelled(task_id):
+                return
+            for field, value in fields.items():
+                self._redis.hset(task_id, field, str(value))
 
     def get_task(self, task_id: str, user_id: str | None = None):
         task_data = self._redis.hgetall(task_id)
@@ -165,7 +165,7 @@ class RedisState(BaseState):
             return None
 
         task = {
-            key.decode("utf-8"): self._convert_to_original_type(value)
+            key.decode("utf-8"): convert_redis_task_value(value)
             for key, value in task_data.items()
         }
         if user_id is not None and task.get("user_id") != user_id:
@@ -173,30 +173,11 @@ class RedisState(BaseState):
         return task
 
     def delete_task(self, task_id: str):
-        cancel_and_delete(task_id, lambda: self._redis.delete(task_id))
+        def _delete() -> None:
+            with self._lock:
+                self._redis.delete(task_id)
 
-    @staticmethod
-    def _convert_to_original_type(value):
-        """
-        Convert values written by this application back to common Python types.
-
-        This compatibility parser assumes Redis is inside the application's
-        trust boundary. If Redis can be written by untrusted clients, task state
-        should move to a strict JSON/schema parser instead of open-ended literal
-        conversion.
-        """
-        value_str = value.decode("utf-8")
-
-        try:
-            # try to convert byte string array to list
-            return ast.literal_eval(value_str)
-        except (ValueError, SyntaxError):
-            pass
-
-        if value_str.isdigit():
-            return int(value_str)
-        # Add more conversions here if needed
-        return value_str
+        cancel_and_delete(task_id, _delete)
 
 
 # HTTP timeouts for task-state requests, (connect, read): short enough that a
@@ -394,10 +375,6 @@ class SupabaseTaskState(BaseState):
         progress: int | None = None,
         **kwargs: object,
     ) -> None:
-        # A cancelled task's row is gone on purpose: the merge-duplicates
-        # upsert below would otherwise recreate it (issue #447).
-        if is_cancelled(task_id):
-            return
         clamped_progress: int | None = None
         if progress is not None:
             clamped_progress = int(progress)
@@ -406,7 +383,11 @@ class SupabaseTaskState(BaseState):
         # The SELECT→POST below is a read-modify-write: hold the lock for
         # the whole sequence so concurrent writers cannot read the same
         # base row and silently drop each other's kwargs (last POST wins).
+        # The cancel check stays inside that lock, which delete_task also
+        # holds around the DELETE, so a removed row is not upserted back.
         with self._lock:
+            if is_cancelled(task_id):
+                return
             existing = self._select_row(task_id)
             data: dict[str, Any] = (
                 dict(self._safe_data(existing)) if existing else {}
@@ -464,7 +445,11 @@ class SupabaseTaskState(BaseState):
         return tasks, total
 
     def delete_task(self, task_id: str) -> None:
-        cancel_and_delete(task_id, lambda: self._request("DELETE", f"task_id=eq.{self._eq(task_id)}"))
+        def _delete() -> None:
+            with self._lock:
+                self._request("DELETE", f"task_id=eq.{self._eq(task_id)}")
+
+        cancel_and_delete(task_id, _delete)
 
     def reconcile_orphaned_tasks(self) -> int:
         """Triage tasks left running across a restart, then settle the rest.
