@@ -9,7 +9,7 @@ import {
   truncateBlueskyCaption,
   validateVideoForBluesky,
 } from '@/lib/bluesky';
-import { reportAccountUnauthorized } from '@/lib/upload/account-unauthorized';
+import { rememberDeadCredential, reportAccountUnauthorized } from '@/lib/upload/account-unauthorized';
 
 //---------------
 // handleBlueskyUpload — publishes the video to the user's Bluesky account.
@@ -96,6 +96,7 @@ export async function handleBlueskyUpload(
       const appPassword = tokens.access_token;
       const handle = typeof tokens.handle === 'string' ? tokens.handle : did;
       if (typeof appPassword !== 'string' || appPassword === '') {
+        rememberDeadCredential('bluesky', did, ownerUserId);
         results.push(accountFailure(did, 'Bluesky credential not found', 'token_missing'));
         continue;
       }

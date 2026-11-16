@@ -585,6 +585,39 @@ describe('POST /api/media/publish-existing', () => {
     expect(vi.mocked(dispatchPublish)).not.toHaveBeenCalled();
   });
 
+  it('schedules a dead account and returns account_needs_reconnect', async () => {
+    const fetchFn = vi.fn(async () => new Response(JSON.stringify(taskEnvelope()), { status: 200 }));
+    vi.stubGlobal('fetch', fetchFn);
+    const { startAt, times } = futureStartAt(48);
+    const client = fakeSupabase({
+      socialRows: [{ provider: 'youtube', provider_account_id: 'UC1', needs_reconnect: true }],
+    });
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await POST(
+      jsonRequest({
+        media: { kind: 'task', taskId: TASK_ID },
+        title: 'Porto walk',
+        description: 'Walking the riverside.',
+        publishing: {
+          mode: 'scheduled',
+          providers: ['youtube'],
+          accounts: { youtube: ['UC1'] },
+          schedule: { startAt, times, timezone: 'UTC' },
+        },
+        idempotencyKey: 'key-dead',
+      }),
+    );
+    const body = await response.json();
+    expect(response.status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(body.mode).toBe('scheduled');
+    expect(body.warnings).toEqual([
+      { code: 'account_needs_reconnect', accounts: [{ provider: 'youtube', accountId: 'UC1' }] },
+    ]);
+    expect(client.__insertedSchedules).toHaveLength(1);
+  });
+
   it('schedules a ready upload, holding the row until the slot time', async () => {
     const { startAt, times } = futureStartAt(48);
     const client = fakeSupabase({

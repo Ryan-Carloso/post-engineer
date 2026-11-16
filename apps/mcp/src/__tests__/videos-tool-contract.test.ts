@@ -246,6 +246,15 @@ describe('generate response warnings are objects, not strings', () => {
     expect(accepts(GenerateAndScheduleResponseSchema, { ...base, warnings: ['voice_fallback_applied'] })).toBe(false);
     expect(firstIssue(GenerateAndScheduleResponseSchema, { ...base, warnings: ['voice_fallback_applied'] })).toContain('expected object');
   });
+
+  it('accepts an account_needs_reconnect warning without voice fields', () => {
+    expect(
+      accepts(GenerateAndScheduleResponseSchema, {
+        ...base,
+        warnings: [{ code: 'account_needs_reconnect', accounts: [{ provider: 'bluesky', accountId: 'did:plc:1' }] }],
+      }),
+    ).toBe(true);
+  });
 });
 
 describe('validate tool shape vs the videos contract', () => {

@@ -38,6 +38,7 @@ export interface SocialAccountRecord {
   createdAt: string;
   updatedAt: string;
   lastUsedAt: string | null;
+  needsReconnect: boolean;
 }
 
 // Columns a session JWT may read. encrypted_tokens is omitted: 066 grants
@@ -45,7 +46,7 @@ export interface SocialAccountRecord {
 // for it. Ciphertext is loaded with the service client after ownership
 // is proven (getSocialAccountTokens).
 export const SOCIAL_ACCOUNT_PUBLIC_COLUMNS =
-  'id, user_id, provider, provider_account_id, account_name, account_metadata, token_expires_at, created_at, updated_at, last_used_at';
+  'id, user_id, provider, provider_account_id, account_name, account_metadata, token_expires_at, created_at, updated_at, last_used_at, needs_reconnect';
 
 interface SocialAccountPublicRow {
   id: string;
@@ -58,6 +59,7 @@ interface SocialAccountPublicRow {
   created_at: string;
   updated_at: string;
   last_used_at: string | null;
+  needs_reconnect: boolean | null;
 }
 
 export interface UpsertSocialAccountParams {
@@ -85,6 +87,7 @@ function rowToRecord(row: SocialAccountPublicRow): SocialAccountRecord {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     lastUsedAt: row.last_used_at,
+    needsReconnect: row.needs_reconnect === true,
   };
 }
 
@@ -169,6 +172,7 @@ export async function upsertSocialAccount(
     token_expires_at: expiresAt,
     updated_at: new Date().toISOString(),
     last_used_at: new Date().toISOString(),
+    needs_reconnect: false,
   };
 
   const { data, error } = await serviceSocial()
@@ -312,6 +316,7 @@ export async function updateSocialAccountTokens(
       encrypted_tokens: encrypted,
       token_expires_at: expiresAt,
       updated_at: new Date().toISOString(),
+      needs_reconnect: false,
     })
     .eq('id', accountId)
     .eq('user_id', userId);

@@ -274,6 +274,26 @@ describe('GET /api/account', () => {
     expect(body.accounts.find((account) => account.recordId === 'rec-unknown')?.status).toBe('ok');
   });
 
+  it('marks a persisted needs_reconnect row as error even when profile sync succeeds', async () => {
+    mockSession();
+    const dead = {
+      id: 'rec-dead', provider: 'bluesky', providerAccountId: 'did:plc:dead', accountName: 'dead.bsky.social',
+      createdAt: '2024-01-01T00:00:00.000Z', lastUsedAt: null, accountMetadata: {}, needsReconnect: true,
+    };
+    const healthy = {
+      id: 'rec-ok', provider: 'youtube', providerAccountId: 'chan-ok', accountName: 'Healthy',
+      createdAt: '2024-01-01T00:00:00.000Z', lastUsedAt: null, accountMetadata: {}, needsReconnect: false,
+    };
+    vi.mocked(listSocialAccounts).mockResolvedValue([dead, healthy] as never);
+
+    const res = await GET();
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { accounts: Array<{ recordId: string; status?: string; handle?: string }> };
+    expect(body.accounts.find((account) => account.recordId === 'rec-dead')?.status).toBe('error');
+    expect(body.accounts.find((account) => account.recordId === 'rec-ok')?.status).toBe('ok');
+    expect(JSON.stringify(body)).not.toContain('invalid_credentials');
+  });
+
   it('leaves a row deleted mid-list unflagged: a missing row is not a dead token', async () => {
     mockSession();
     vi.mocked(listSocialAccounts).mockResolvedValue([{
@@ -413,7 +433,7 @@ describe('GET /api/account', () => {
     expect(body.accounts).toHaveLength(1);
     expect(body.accounts[0]?.provider).toBe('youtube');
     expect(consoleError).toHaveBeenCalledWith(
-      '[ACCOUNT] Registro com provider desconhecido ignorado',
+      '[ACCOUNT] Dropped a row with an unknown provider',
       expect.objectContaining({ recordId: 'rec-5', provider: 'tiktok' }),
     );
     consoleError.mockRestore();
@@ -483,7 +503,7 @@ describe('GET /api/account', () => {
       expect(res.status).toBe(500);
       const body = (await res.json()) as { error: string };
       expect(body.error).toBe('LIST_ERROR');
-      expect(errorSpy).toHaveBeenCalledWith('[ACCOUNT] Erro ao listar contas', listError);
+      expect(errorSpy).toHaveBeenCalledWith('[ACCOUNT] Failed to list accounts', listError);
     } finally {
       errorSpy.mockRestore();
     }
@@ -557,7 +577,7 @@ describe('DELETE /api/account', () => {
       expect(res.status).toBe(500);
       const body = (await res.json()) as { error: string };
       expect(body.error).toBe('DELETE_ERROR');
-      expect(errorSpy).toHaveBeenCalledWith('[ACCOUNT] Erro ao desconectar conta', deleteError);
+      expect(errorSpy).toHaveBeenCalledWith('[ACCOUNT] Failed to disconnect account', deleteError);
     } finally {
       errorSpy.mockRestore();
     }

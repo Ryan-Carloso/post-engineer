@@ -2,7 +2,7 @@ import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { getSocialAccountTokens, touchSocialAccount } from '@/lib/social-accounts';
 import { uploadRumbleVideo, RUMBLE_TITLE_MAX_LENGTH, RUMBLE_VIDEO_MAX_BYTES } from '@/lib/rumble';
 import { accountFailure } from '@/lib/upload/account-error';
-import { reportAccountUnauthorized } from '@/lib/upload/account-unauthorized';
+import { rememberDeadCredential, reportAccountUnauthorized } from '@/lib/upload/account-unauthorized';
 import { getAccountIdsFromFormData } from '@/lib/upload/account-utils';
 
 //---------------
@@ -77,6 +77,7 @@ export async function handleRumbleUpload(
       const accessToken = tokens.access_token;
 
       if (typeof accessToken !== 'string' || accessToken === '') {
+        rememberDeadCredential('rumble', accountId, ownerUserId);
         results.push(accountFailure(accountId, 'Rumble access token not found', 'token_missing'));
         continue;
       }

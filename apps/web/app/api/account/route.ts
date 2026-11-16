@@ -74,11 +74,12 @@ async function getHandler(request?: Request) {
     }));
     const accounts: PublicAccountItem[] = [];
     for (const effectiveRecord of effectiveRecords) {
-      const mapped = toPublicAccountSafe(effectiveRecord, failedRecordIds.has(effectiveRecord.id) ? 'error' : 'ok');
+      const deadLogin = failedRecordIds.has(effectiveRecord.id) || effectiveRecord.needsReconnect === true;
+      const mapped = toPublicAccountSafe(effectiveRecord, deadLogin ? 'error' : 'ok');
       if (mapped) {
         accounts.push(mapped);
       } else {
-        logger.error('[ACCOUNT] Registro com provider desconhecido ignorado', undefined, { recordId: effectiveRecord.id, provider: effectiveRecord.provider });
+        logger.error('[ACCOUNT] Dropped a row with an unknown provider', undefined, { recordId: effectiveRecord.id, provider: effectiveRecord.provider });
       }
     }
 
@@ -89,7 +90,7 @@ async function getHandler(request?: Request) {
     });
   } catch (error) {
     // Generic message for the client: internal details stay server-side only
-    logger.error('[ACCOUNT] Erro ao listar contas', error);
+    logger.error('[ACCOUNT] Failed to list accounts', error);
     return NextResponse.json(
       { authenticated: false, accounts: [], message: 'Failed to list accounts.', error: 'LIST_ERROR' },
       { status: 500 }
@@ -101,8 +102,8 @@ async function getHandler(request?: Request) {
 // DELETE /api/account — disconnects (removes) a social account of the logged-in user.
 // Query params: provider (youtube|instagram|bluesky|linkedin|threads|facebook|3speak) and providerAccountId.
 // Query params: provider (youtube|instagram|bluesky|linkedin|threads|facebook|rumble) and providerAccountId.
-// Auth = sessão Supabase (cookie) OU API key pessoal (Bearer/x-api-key, MCP),
-// igual ao GET.
+// Auth = Supabase session (cookie) OR personal API key (Bearer/x-api-key, MCP),
+// same as GET.
 //---------------
 
 async function deleteHandler(request: Request): Promise<NextResponse> {
@@ -132,7 +133,7 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
     await deleteSocialAccount(supabase, auth.userId, provider as SocialProvider, providerAccountId);
     return NextResponse.json({ success: true });
   } catch (error) {
-    logger.error('[ACCOUNT] Erro ao desconectar conta', error);
+    logger.error('[ACCOUNT] Failed to disconnect account', error);
     return NextResponse.json(
       { success: false, message: 'Failed to disconnect account.', error: 'DELETE_ERROR' },
       { status: 500 }

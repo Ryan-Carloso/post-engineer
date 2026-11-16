@@ -141,7 +141,7 @@ const PERSONA = {
 interface DbConfig {
   persona?: Record<string, unknown> | null;
   personaErrorCode?: string;
-  socialAccounts?: Array<{ provider: string; provider_account_id: string }>;
+  socialAccounts?: Array<{ provider: string; provider_account_id: string; needs_reconnect?: boolean }>;
   /** Per-persona default publishing accounts (issue #212). */
   personaDefaultAccounts?: Array<{ provider: string; provider_account_id: string }>;
   existingScheduleId?: string | null;
@@ -1751,6 +1751,22 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(res.status).toBe(400);
       expect(json.code).toBe('INVALID_SCHEDULE_TIME');
       expect(json.field).toBe('publishing.schedule.times');
+    });
+
+    it('schedules a known-dead account and warns instead of refusing the slot', async () => {
+      setup({
+        ...DEFAULT_CFG,
+        socialAccounts: [{ provider: 'youtube', provider_account_id: 'acct-1', needs_reconnect: true }],
+      });
+      const res = await post(baseBody());
+      const json = await res.json();
+      expect(res.status).toBe(200);
+      expect(json.success).toBe(true);
+      expect(json.warnings).toEqual([
+        { code: 'account_needs_reconnect', accounts: [{ provider: 'youtube', accountId: 'acct-1' }] },
+      ]);
+      expect(GenerateAndScheduleResponseSchema.safeParse(json).success).toBe(true);
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(1);
     });
 
     it('500s when the social accounts lookup fails', async () => {

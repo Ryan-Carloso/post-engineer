@@ -99,6 +99,23 @@ describe('replaySchedule', () => {
     const body = await result?.json();
     expect(body.replayed).toBe(true);
     expect(body.slots).toHaveLength(1);
+    expect(body.warnings).toBeUndefined();
     expect(calls.filter((call) => call.op === 'delete')).toHaveLength(0);
+  });
+
+  it('names a dead account on an idempotent replay', async () => {
+    const schedule = { id: SCHEDULE_ID, created_at: new Date(Date.now() - 10 * 60_000).toISOString() };
+    const { client } = stubSupabase({
+      schedule,
+      slots: [{ id: 'slot-1', slot_at: '2026-11-20T18:00:00Z', title: 'Ready video', status: 'ready' }],
+    });
+    const warning = {
+      code: 'account_needs_reconnect' as const,
+      accounts: [{ provider: 'youtube', accountId: 'UC1' }],
+    };
+    const result = await replaySchedule(client, SCHEDULE_ID, USER_ID, ROUTE, warning);
+    const body = await result?.json();
+    expect(body.warnings).toEqual([warning]);
+    expect(JSON.stringify(body)).not.toMatch(/invalid_credentials|401|OAuthException/);
   });
 });

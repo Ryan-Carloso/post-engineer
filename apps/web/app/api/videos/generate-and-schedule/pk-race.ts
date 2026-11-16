@@ -16,6 +16,7 @@ import { logger } from '@/lib/logger';
 import { coded } from './prepare-persona';
 import { fetchReplay } from './replay';
 import { refundRollbackSpend } from './rollback-refund';
+import { type ScheduleWarning } from './schedule-warnings';
 
 export async function answerSchedulePkRace(
   supabase: SupabaseClient,
@@ -27,7 +28,7 @@ export async function answerSchedulePkRace(
     alreadySpent: boolean;
     scheduleError: unknown;
     constraint: string;
-    voiceFallbackWarning: { code: string; fromVoice: string; toVoice: string } | null;
+    warnings: ScheduleWarning[];
   },
 ): Promise<NextResponse> {
   const { userId, scheduleId, generationId, perVideoCost, alreadySpent, scheduleError, constraint } = input;
@@ -71,7 +72,7 @@ export async function answerSchedulePkRace(
     errorCode: 'IDEMPOTENCY_CONFLICT',
     failureStage: 'schedule_insert_race',
   });
-  const replayed = await fetchReplay(supabase, userId, scheduleId, input.voiceFallbackWarning);
+  const replayed = await fetchReplay(supabase, userId, scheduleId, input.warnings);
   if (replayed) return replayed;
   // The winner's schedule exists but could not be read back. Never fall
   // through to the generic insert-failure refund: that refund would return

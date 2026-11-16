@@ -225,6 +225,7 @@ describe('POST /api/bluesky-connect', () => {
       user_id: USER_ID,
       provider: 'bluesky',
       provider_account_id: 'did:plc:abc',
+      needs_reconnect: false,
     });
   });
 

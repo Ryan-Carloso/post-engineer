@@ -24,6 +24,7 @@ import { NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { apiErrorResponse } from '@/lib/api-error';
+import type { AccountNeedsReconnectWarning } from '@/lib/account-needs-reconnect';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 import { isPersonaAllowed } from '@/lib/api-keys';
 import { trackApiEvent } from '@/lib/analytics';
@@ -49,13 +50,11 @@ import {
   SCHEDULE_PK_CONSTRAINT,
   violatedConstraint,
 } from '../../videos/generate-and-schedule/constraint-violations';
-import { resolvePublishingAccounts } from '../../videos/generate-and-schedule/persona-prep';
 import { rejectInvalidRequest } from '../../videos/generate-and-schedule/request-validation';
 import { buildSlotRows } from '../../videos/generate-and-schedule/slot-rows';
 import { validateSlots } from '../../videos/generate-and-schedule/slot-validation';
-import { validateAccounts } from '../../videos/generate-and-schedule/validate-accounts';
-import { loadPublishBinding } from './bound-accounts';
 import type { Provider } from '../../videos/generate-and-schedule/providers-validation';
+import { resolvePublishAccounts } from './resolve-accounts';
 import { invalid } from '../../videos/generate-and-schedule/validation-issues';
 import {
   checkPublishExistingSemantics,
@@ -84,6 +83,7 @@ interface PublishExistingContext {
   request: Request;
   input: PublishExistingRequest;
   accountIds: Record<Provider, string[]>;
+  reconnectWarning: AccountNeedsReconnectWarning | null;
   taskRecord: EngineTaskRecord | null;
   uploadRow: VideoUploadRow | null;
   image: { buffer: Buffer; contentType: ImageContentType } | null;
@@ -113,7 +113,7 @@ function fieldsFor(
 }
 
 async function scheduleExistingMedia(ctx: PublishExistingContext): Promise<NextResponse> {
-  const { supabase, userId, input, accountIds } = ctx;
+  const { supabase, userId, input, accountIds, reconnectWarning } = ctx;
   const schedule = input.publishing.schedule;
   if (schedule === undefined) {
     return apiErrorResponse(400, 'publishing.schedule is required when publishing.mode is \'scheduled\'.', {
@@ -214,7 +214,7 @@ async function scheduleExistingMedia(ctx: PublishExistingContext): Promise<NextR
     }
     if (violatedConstraint(scheduleError) === SCHEDULE_PK_CONSTRAINT) {
       // Lost a PK race with a concurrent duplicate: replay the winner.
-      const replay = await replaySchedule(supabase, scheduleId, userId, ROUTE);
+      const replay = await replaySchedule(supabase, scheduleId, userId, ROUTE, reconnectWarning);
       if (replay !== null) return replay;
     }
     logger.error('[publish-existing] schedule insert failed', scheduleError, { scheduleId, userId });
@@ -274,6 +274,7 @@ async function scheduleExistingMedia(ctx: PublishExistingContext): Promise<NextR
     replayed: false,
     schedule: { id: scheduleId },
     slots: toSlotSummaries(inserted),
+    ...(reconnectWarning === null ? {} : { warnings: [reconnectWarning] }),
   });
 }
 
@@ -399,22 +400,27 @@ async function postHandler(request: Request): Promise<NextResponse> {
     });
   }
 
-  // Scheduled replays answer before any other work: the same key is the
-  // same request, and re-running it would re-verify (and, for uploads,
-  // re-claim) media the first attempt already handled.
+  // A dead login warns; it does not refuse the slot. Validation runs
+  // before the idempotent replay so a retry of an existing schedule still
+  // names the accounts that need a reconnect. A validation failure still
+  // replays a schedule that already exists (warning omitted): the first
+  // attempt already passed these checks.
+  const resolved = await resolvePublishAccounts(
+    supabase,
+    userId,
+    personaId,
+    input.publishing.providers,
+    input.publishing.accounts,
+    ROUTE,
+  );
+  const reconnectWarning = resolved instanceof NextResponse ? null : resolved.reconnectWarning;
   if (input.publishing.mode === 'scheduled') {
     const idem = resolveIdempotency(userId, input.idempotencyKey, request, PUBLISH_EXISTING_NAMESPACE);
-    const replay = await replaySchedule(supabase, idem.scheduleId, userId, ROUTE);
+    const replay = await replaySchedule(supabase, idem.scheduleId, userId, ROUTE, reconnectWarning);
     if (replay !== null) return replay;
   }
-
-  // Persona existence + bound accounts (issue #572): a persona with zero
-  // bound accounts cannot publish at all; explicit accounts must be bound.
-  const bound = await loadPublishBinding(supabase, personaId, userId, ROUTE);
-  if (bound instanceof NextResponse) return bound;
-  const resolvedAccounts = await resolvePublishingAccounts(supabase, personaId, input.publishing.accounts, bound ?? undefined, userId);
-  const accountIds = await validateAccounts(supabase, userId, input.publishing.providers, resolvedAccounts, bound);
-  if (accountIds instanceof NextResponse) return accountIds;
+  if (resolved instanceof NextResponse) return resolved;
+  const { accountIds } = resolved;
 
   // Media verification: no side effects yet — a 404/409 here leaves
   // nothing behind to clean up.
@@ -454,6 +460,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
     request,
     input,
     accountIds,
+    reconnectWarning,
     taskRecord,
     uploadRow,
     image,

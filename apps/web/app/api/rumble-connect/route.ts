@@ -137,6 +137,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
           account_name: channelId,
           account_metadata: {},
           encrypted_tokens: encrypted,
+          needs_reconnect: false,
         },
         { onConflict: 'user_id,provider,provider_account_id' },
       )

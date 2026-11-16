@@ -2,6 +2,7 @@ import type { z } from 'zod';
 
 import type { PostEngineerClient } from './client.js';
 import { publishExisting } from './client-publish-existing.js';
+import type { PublishExistingResult } from './client-types.js';
 import { ApiError, getErrorMessage } from './errors.js';
 import { PublishExistingSchema } from './publish-existing-shape.js';
 import { sanitizeEngineError } from './tools.js';
@@ -17,6 +18,13 @@ import { type McpToolResponse } from './tools-call.js';
 // import cycle through tools.js that is safe: handlers run after module
 // init).
 //---------------
+
+function reconnectSentence(result: Extract<PublishExistingResult, { mode: 'scheduled' }>): string {
+  const warning = result.warnings?.find((item) => item.code === 'account_needs_reconnect');
+  if (warning === undefined) return '';
+  const named = warning.accounts.map((account) => `${account.provider} ${account.accountId}`).join(', ');
+  return `Warning account_needs_reconnect: reconnect ${named} before the slot publishes.\n`;
+}
 
 export async function handlePublishExisting(
   client: PostEngineerClient,
@@ -34,7 +42,15 @@ export async function handlePublishExisting(
             text:
               `Scheduled existing ${input.mediaKind} to ${input.provider}${result.replayed ? ' (replayed: the same request was already scheduled)' : ''}.\n` +
               `Schedule ${result.scheduleId}.\n${slots}\n` +
-              JSON.stringify({ success: true, mode: 'scheduled', replayed: result.replayed, scheduleId: result.scheduleId, slots: result.slots }),
+              reconnectSentence(result) +
+              JSON.stringify({
+                success: true,
+                mode: 'scheduled',
+                replayed: result.replayed,
+                scheduleId: result.scheduleId,
+                slots: result.slots,
+                ...(result.warnings === undefined ? {} : { warnings: result.warnings }),
+              }),
           },
         ],
       };

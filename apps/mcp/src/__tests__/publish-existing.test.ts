@@ -294,6 +294,27 @@ describe('publish_existing client call', () => {
     expect(body.publishing).not.toHaveProperty('pinterestBoardId');
   });
 
+  it('keeps a dead-account warning and drops a malformed one', async () => {
+    const warning = { code: 'account_needs_reconnect', accounts: [{ provider: 'youtube', accountId: 'UC1' }] };
+    const request = vi.fn(async () => ({
+      ...SCHEDULED_REPLY,
+      warnings: [warning, { code: 'account_needs_reconnect', accounts: [{ provider: 'not-a-provider', accountId: 'x' }] }, 'invalid_credentials'],
+    }));
+    const result = await publishExisting(fakeClient(request), SCHEDULED_TASK);
+    expect(result.mode).toBe('scheduled');
+    if (result.mode !== 'scheduled') return;
+    expect(result.warnings).toEqual([warning]);
+    expect(JSON.stringify(result)).not.toContain('invalid_credentials');
+  });
+
+  it('schedules when the warning list is malformed', async () => {
+    const request = vi.fn(async () => ({ ...SCHEDULED_REPLY, warnings: 'invalid_credentials' }));
+    const result = await publishExisting(fakeClient(request), SCHEDULED_TASK);
+    expect(result.mode).toBe('scheduled');
+    if (result.mode !== 'scheduled') return;
+    expect(result.warnings).toBeUndefined();
+  });
+
   it('defaults mode to scheduled with UTC timezone and passes optional fields through', async () => {
     const request = vi.fn(async (_path: string, _init?: unknown) => SCHEDULED_REPLY);
     await publishExisting(fakeClient(request), {
@@ -332,6 +353,21 @@ describe('publish_existing tool handler', () => {
     expect(block.text).toContain('Schedule sched-1');
     expect(block.text).toContain('slot slot-1 at 2026-11-15T20:00:00.000Z (ready)');
     expect(block.text).toContain('"scheduleId":"sched-1"');
+    expect(block.text).not.toContain('account_needs_reconnect');
+  });
+
+  it('names account_needs_reconnect in the tool text without a provider error', async () => {
+    const request = vi.fn(async () => ({
+      ...SCHEDULED_REPLY,
+      warnings: [{ code: 'account_needs_reconnect', accounts: [{ provider: 'youtube', accountId: 'UC1' }] }],
+    }));
+    const response = await handlePublishExisting(fakeClient(request), SCHEDULED_TASK);
+    const block = response.content[0];
+    expect(block?.type).toBe('text');
+    if (block?.type !== 'text') return;
+    expect(block.text).toContain('Warning account_needs_reconnect: reconnect youtube UC1');
+    expect(block.text).toContain('"code":"account_needs_reconnect"');
+    expect(block.text).not.toMatch(/invalid_credentials|OAuthException|Unauthorized/);
   });
 
   it('summarizes an ASAP publish per provider and account', async () => {

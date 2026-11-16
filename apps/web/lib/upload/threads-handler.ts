@@ -4,7 +4,7 @@ import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { getSocialAccountTokens, touchSocialAccount } from '@/lib/social-accounts';
 import { publishThreadsVideo, THREADS_TEXT_MAX_CHARS, THREADS_VIDEO_MAX_BYTES } from '@/lib/threads';
 import { accountFailure } from '@/lib/upload/account-error';
-import { reportAccountUnauthorized } from '@/lib/upload/account-unauthorized';
+import { rememberDeadCredential, reportAccountUnauthorized } from '@/lib/upload/account-unauthorized';
 import { getAccountIdsFromFormData } from '@/lib/upload/account-utils';
 import { cleanupPublishMedia, presignPublishMedia, uploadPublishMedia } from '@/lib/upload/publish-media';
 
@@ -86,10 +86,12 @@ export async function handleThreadsUpload(
       const accessToken = tokens.access_token;
 
       if (typeof accessToken !== 'string' || accessToken === '') {
+        rememberDeadCredential('threads', accountId, ownerUserId);
         results.push(accountFailure(accountId, 'Threads token not found', 'token_missing'));
         continue;
       }
       if (typeof tokens.expiry_date === 'number' && Date.now() >= tokens.expiry_date) {
+        rememberDeadCredential('threads', accountId, ownerUserId);
         results.push(accountFailure(accountId, 'Threads token expired. Please reconnect the account.', 'token_expired'));
         continue;
       }

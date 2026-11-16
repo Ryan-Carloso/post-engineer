@@ -805,6 +805,7 @@ export interface Database {
         created_at: string;
         updated_at: string;
         last_used_at: string | null;
+        needs_reconnect: boolean;
         };
         Insert: {
         id?: string;
@@ -818,6 +819,7 @@ export interface Database {
         created_at?: string;
         updated_at?: string;
         last_used_at?: string | null;
+        needs_reconnect?: boolean;
         };
         Update: {
         id?: string;
@@ -831,6 +833,7 @@ export interface Database {
         created_at?: string;
         updated_at?: string;
         last_used_at?: string | null;
+        needs_reconnect?: boolean;
         };
         Relationships: [];
       };

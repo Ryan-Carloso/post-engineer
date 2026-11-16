@@ -64,6 +64,7 @@ function makeRecord(overrides: Partial<SocialAccountRecord> = {}): SocialAccount
     updatedAt: '2026-01-02T00:00:00.000Z',
     lastUsedAt: null,
     ...overrides,
+    needsReconnect: overrides.needsReconnect ?? false,
   };
 }
 

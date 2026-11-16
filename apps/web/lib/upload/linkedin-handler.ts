@@ -8,7 +8,7 @@ import {
   createLinkedInOrganizationPost,
 } from '@/lib/linkedin';
 import { accountFailure } from '@/lib/upload/account-error';
-import { reportAccountUnauthorized } from '@/lib/upload/account-unauthorized';
+import { rememberDeadCredential, reportAccountUnauthorized } from '@/lib/upload/account-unauthorized';
 import { getAccountIdsFromFormData } from '@/lib/upload/account-utils';
 
 //---------------
@@ -65,10 +65,12 @@ export async function handleLinkedinUpload(
       const accessToken = tokens.access_token;
 
       if (typeof accessToken !== 'string' || accessToken === '') {
+        rememberDeadCredential('linkedin', accountId, ownerUserId);
         results.push(accountFailure(accountId, 'LinkedIn token not found', 'token_missing'));
         continue;
       }
       if (typeof tokens.expiry_date === 'number' && Date.now() >= tokens.expiry_date) {
+        rememberDeadCredential('linkedin', accountId, ownerUserId);
         results.push(accountFailure(accountId, 'LinkedIn token expired. Please reconnect the account.', 'token_expired'));
         continue;
       }
