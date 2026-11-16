@@ -53,7 +53,11 @@ def is_cancelled(task_id: str) -> bool:
 def forget(task_id: str) -> None:
     """Clear the cancel mark for ``task_id``. No-op when not marked."""
     with _CANCEL_LOCK:
-        _CANCELLED_IDS.discard(task_id)
+        if task_id in _CANCELLED_IDS:
+            _CANCELLED_IDS.discard(task_id)
+            # Keep the eviction order in step with the live marks: a stale
+            # copy would later evict a re-issued mark for the same id early.
+            _CANCELLED_ORDER.remove(task_id)
 
 
 def cancel_and_delete(task_id: str, delete: Callable[[], object]) -> None:

@@ -75,3 +75,20 @@ def test_cancel_and_delete_clears_the_mark_when_the_delete_fails():
     with pytest.raises(ConnectionError):
         task_cancellation.cancel_and_delete("cad-fail", boom)
     assert is_cancelled("cad-fail") is False
+
+
+def test_forget_then_recancel_keeps_the_live_mark_within_the_cap(monkeypatch):
+    # forget() must drop the id from the eviction order too: a stale copy
+    # left behind would be evicted first and take the re-issued live mark
+    # with it, before the cap is actually reached.
+    task_cancellation.reset()
+    monkeypatch.setattr(task_cancellation, "MAX_CANCELLED_TASKS", 3)
+    request_cancel("live")
+    forget("live")
+    request_cancel("live")
+    request_cancel("a")
+    request_cancel("b")
+    assert is_cancelled("live") is True
+    assert is_cancelled("a") is True
+    assert is_cancelled("b") is True
+    task_cancellation.reset()
