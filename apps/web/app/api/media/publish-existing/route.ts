@@ -30,10 +30,6 @@ import { trackApiEvent } from '@/lib/analytics';
 import { ERROR_CODES, formatErrorMessage } from '@/lib/error-codes';
 import { PUBLISH_EXISTING_NAMESPACE, resolveIdempotency } from '@/lib/idempotency';
 import { logger } from '@/lib/logger';
-import {
-  getPersonaDefaultAccounts,
-  type PersonaDefaultAccounts,
-} from '@/lib/persona-publishing-accounts';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
@@ -58,6 +54,7 @@ import { rejectInvalidRequest } from '../../videos/generate-and-schedule/request
 import { buildSlotRows } from '../../videos/generate-and-schedule/slot-rows';
 import { validateSlots } from '../../videos/generate-and-schedule/slot-validation';
 import { validateAccounts } from '../../videos/generate-and-schedule/validate-accounts';
+import { loadPublishBinding } from './bound-accounts';
 import type { Provider } from '../../videos/generate-and-schedule/providers-validation';
 import { invalid } from '../../videos/generate-and-schedule/validation-issues';
 import {
@@ -413,30 +410,8 @@ async function postHandler(request: Request): Promise<NextResponse> {
 
   // Persona existence + bound accounts (issue #572): a persona with zero
   // bound accounts cannot publish at all; explicit accounts must be bound.
-  let bound: PersonaDefaultAccounts | null = null;
-  if (personaId !== null) {
-    const { data: persona, error: personaError } = await supabase
-      .from('personas')
-      .select('id')
-      .eq('id', personaId)
-      .eq('user_id', userId)
-      .maybeSingle();
-    if (personaError) {
-      logger.error('[publish-existing] persona lookup failed', personaError, { userId });
-      return apiErrorResponse(500, formatErrorMessage(ERROR_CODES.INTERNAL_ERROR), {
-        route: ROUTE,
-        code: ERROR_CODES.INTERNAL_ERROR,
-      });
-    }
-    if (!persona) {
-      return apiErrorResponse(404, formatErrorMessage(ERROR_CODES.PERSONA_NOT_FOUND), {
-        route: ROUTE,
-        code: ERROR_CODES.PERSONA_NOT_FOUND,
-        field: 'personaId',
-      });
-    }
-    bound = await getPersonaDefaultAccounts(supabase, personaId, userId);
-  }
+  const bound = await loadPublishBinding(supabase, personaId, userId, ROUTE);
+  if (bound instanceof NextResponse) return bound;
   const resolvedAccounts = await resolvePublishingAccounts(supabase, personaId, input.publishing.accounts, bound ?? undefined, userId);
   const accountIds = await validateAccounts(supabase, userId, input.publishing.providers, resolvedAccounts, bound);
   if (accountIds instanceof NextResponse) return accountIds;

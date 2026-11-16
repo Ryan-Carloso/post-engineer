@@ -117,6 +117,9 @@ function taskEnvelope(overrides: Record<string, unknown> = {}): Record<string, u
 
 interface FakeConfig {
   personaRow?: Record<string, unknown> | null;
+  // Successive personas maybeSingle() answers; falls back to personaRow
+  // once exhausted (a persona deleted or a DB error between two reads).
+  personaReads?: { data: unknown; error: unknown }[];
   socialRows?: Record<string, unknown>[];
   boundRows?: Record<string, unknown>[];
   generationRow?: Record<string, unknown> | null;
@@ -194,7 +197,11 @@ function fakeSupabase(config: FakeConfig = {}) {
     }
 
     async maybeSingle(): Promise<{ data: unknown; error: unknown }> {
-      if (this.table === 'personas') return { data: config.personaRow ?? null, error: null };
+      if (this.table === 'personas') {
+        const next = config.personaReads?.shift();
+        if (next !== undefined) return next;
+        return { data: config.personaRow ?? null, error: null };
+      }
       if (this.table === 'schedules') return { data: config.existingSchedule ?? null, error: null };
       if (this.table === 'video_generations') {
         if (config.generationError) return { data: null, error: config.generationError };
@@ -953,6 +960,53 @@ describe('POST /api/media/publish-existing', () => {
     expect(response.status).toBe(403);
     const body = await response.json();
     expect(body.code).toBe('PERSONA_SCOPE_DENIED');
+  });
+
+  const boundRequest = () =>
+    jsonRequest({
+      media: { kind: 'task', taskId: TASK_ID },
+      title: 'Porto walk',
+      description: 'Walking the riverside.',
+      personaId: PERSONA_ID,
+      publishing: { mode: 'asap', providers: ['youtube'] },
+      tags: ['porto'],
+      privacyStatus: 'public',
+    });
+
+  it('answers 404 PERSONA_NOT_FOUND when the persona is gone by the binding read', async () => {
+    const client = fakeSupabase({
+      personaReads: [{ data: { id: PERSONA_ID }, error: null }, { data: null, error: null }],
+      socialRows: [{ provider: 'youtube', provider_account_id: 'UC1' }],
+      boundRows: [{ provider: 'youtube', provider_account_id: 'UC1' }],
+    });
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await POST(boundRequest());
+
+    expect(response.status).toBe(404);
+    const body = await response.json();
+    expect(body.code).toBe('PERSONA_NOT_FOUND');
+  });
+
+  it('answers a logged 500 when the binding ownership read fails', async () => {
+    const dbError = { message: 'connection reset' };
+    const client = fakeSupabase({
+      personaReads: [{ data: { id: PERSONA_ID }, error: null }, { data: null, error: dbError }],
+      socialRows: [{ provider: 'youtube', provider_account_id: 'UC1' }],
+      boundRows: [{ provider: 'youtube', provider_account_id: 'UC1' }],
+    });
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await POST(boundRequest());
+
+    expect(response.status).toBe(500);
+    const body = await response.json();
+    expect(body.code).toBe('INTERNAL_ERROR');
+    expect(logger.error).toHaveBeenCalledWith(
+      '[publish-existing] persona lookup failed',
+      expect.objectContaining({ message: 'Failed to load persona: connection reset' }),
+      { userId: USER_ID },
+    );
   });
 
   it('answers 400 when a persona has no bound accounts and none are given', async () => {
