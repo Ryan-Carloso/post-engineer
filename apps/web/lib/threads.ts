@@ -154,7 +154,8 @@ export async function fetchThreadsProfile(accessToken: string): Promise<ThreadsP
 }
 
 //---------------
-// publishThreadsVideo — container → wait until FINISHED → publish. The sleep
+// publishThreadsMedia — container → wait until FINISHED → publish, for a
+// video (media_type VIDEO, video_url) or an image (IMAGE, image_url). The sleep
 // is injected so tests never wait on the real poll interval. The permalink
 // read is best-effort: the post is already live when it runs, so its failure
 // must not turn a published post into a failed one.
@@ -164,10 +165,10 @@ export interface ThreadsPublishResult {
   permalink: string | null;
 }
 
-export interface PublishThreadsVideoInput {
+export interface PublishThreadsMediaInput {
   accessToken: string;
   userId: string;
-  videoUrl: string;
+  media: { kind: 'video' | 'image'; url: string };
   text: string;
   sleep?: (ms: number) => Promise<void>;
   onPermalinkError?: (error: unknown) => void;
@@ -195,13 +196,14 @@ async function waitForContainer(
   throw new ThreadsError('THREADS_CONTAINER_TIMEOUT: container did not finish processing', 504);
 }
 
-export async function publishThreadsVideo(input: PublishThreadsVideoInput): Promise<ThreadsPublishResult> {
-  const { accessToken, userId, videoUrl, text } = input;
+export async function publishThreadsMedia(input: PublishThreadsMediaInput): Promise<ThreadsPublishResult> {
+  const { accessToken, userId, media, text } = input;
+  const mediaParams: Record<string, string> = media.kind === 'image' ? { media_type: 'IMAGE', image_url: media.url } : { media_type: 'VIDEO', video_url: media.url };
   const graphUser = `${THREADS_GRAPH}/${encodeURIComponent(userId)}`;
   const container = await threadsFetch(
     'THREADS_CONTAINER_FAILED',
     `${graphUser}/threads`,
-    formPost({ media_type: 'VIDEO', video_url: videoUrl, text, access_token: accessToken }),
+    formPost({ ...mediaParams, text, access_token: accessToken }),
   );
   const containerId = requireId('THREADS_CONTAINER_FAILED', container);
   await waitForContainer(containerId, accessToken, input.sleep ?? realSleep);

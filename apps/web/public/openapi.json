@@ -5404,7 +5404,7 @@
             }
           },
           "413": {
-            "description": "Declared size over the 2GB video limit.",
+            "description": "Declared size over the 2GB video or 8 MB image limit.",
             "content": {
               "application/json": {
                 "schema": {
@@ -5445,7 +5445,9 @@
                     "type": "string",
                     "enum": [
                       "video/mp4",
-                      "video/quicktime"
+                      "video/quicktime",
+                      "image/jpeg",
+                      "image/png"
                     ]
                   },
                   "sizeBytes": {
@@ -5462,7 +5464,7 @@
             }
           }
         },
-        "description": "Mint a signed video upload: returns the uploadId, the signedUrl to PUT the video bytes to directly, and the expiry. The upload is bound to the caller and capped at 2GB."
+        "description": "Mint a signed upload: returns the uploadId, the signedUrl to PUT the bytes to directly, and the expiry. The upload is bound to the caller and carries a video (capped at 2GB) or a JPEG/PNG image (capped at 8 MB) for the image networks."
       }
     },
     "/api/videos/uploads/{uploadId}/complete": {
@@ -5504,7 +5506,9 @@
                       "type": "string",
                       "enum": [
                         "video/mp4",
-                        "video/quicktime"
+                        "video/quicktime",
+                        "image/jpeg",
+                        "image/png"
                       ]
                     },
                     "sizeBytes": {
@@ -5599,7 +5603,7 @@
             }
           }
         ],
-        "description": "Verify a signed video upload after the PUT: the server checks the real content (magic bytes) and size, then marks it ready. Idempotent for an already-ready upload."
+        "description": "Verify a signed upload after the PUT: the server checks the real content (magic bytes) and size, then marks it ready. Idempotent for an already-ready upload."
       }
     },
     "/api/videos/publish-by-id": {

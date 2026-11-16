@@ -71,6 +71,7 @@ the order — you never need to guess or read docs to know what comes next:
 | 063 | `migrations/063_scheduled-posts-existing-media.sql` | Existing-media columns on `scheduled_posts` (issue #384): `media_kind` (`'upload'`/`'image'`, NULL on generation-born slots), `media_ref` (upload id or storage path), `media_content_type` — a scheduled post can publish media that already exists without an engine task id |
 | 064 | `migrations/064_scheduled-posts-media-claimed-at.sql` | `scheduled_posts` gains nullable `media_claimed_at` (issue #384): the `consumed_at` of the `video_uploads` row this slot's own first attempt claimed, so a resume trusts a `consumed` row only when it is the slot's own claim — a foreign claim fails permanently instead of double-publishing or retrying forever |
 | 065 | `migrations/065_scheduled-posts-upload-ref-unique.sql` | Partial unique index `scheduled_posts_upload_media_ref_key` on `media_ref` where `media_kind = 'upload'` and `status <> 'failed'`: a single-use signed upload backs at most one live slot, so a second publish-existing call for the same upload answers 409 `VIDEO_UPLOAD_SCHEDULED` instead of scheduling a slot that fails at publish time |
+| 066 | `migrations/066_video-uploads-image-types.sql` | Widens `video_uploads_declared_content_type_check` and `video_uploads_detected_content_type_check` to `image/jpeg` and `image/png`: a signed upload can carry an image (8 MB cap, magic bytes verified) for the image networks, so the remote MCP server never sends image bytes as base64 |
 
 ## Schema snapshot
 

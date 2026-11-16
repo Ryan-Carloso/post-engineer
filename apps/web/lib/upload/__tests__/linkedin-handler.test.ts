@@ -73,6 +73,11 @@ function mockHappyFetch() {
   mockFetch.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     const method = init?.method ?? 'GET';
+    if (url.includes('/rest/images?action=initializeUpload')) {
+      return new Response(JSON.stringify({
+        value: { uploadUrl: 'https://upload.li/image1', image: 'urn:li:image:I1' },
+      }), { status: 200 });
+    }
     if (url.includes('initializeUpload')) {
       return new Response(JSON.stringify({
         value: {
@@ -140,6 +145,46 @@ describe('handleLinkedinUpload', () => {
     const results = (res as { results: Array<{ success: boolean; postId?: string }> }).results;
     expect(results[0]?.success).toBe(true);
     expect(results[0]?.postId).toBe('urn:li:share:789');
+  });
+
+  it('publishes an image through the Images API: one PUT, the image URN as the post media, no video calls', async () => {
+    mockMemberTokens();
+    mockHappyFetch();
+    const jpeg = new File([new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2])], 'photo.jpg', { type: 'image/jpeg' });
+    const res = await handleLinkedinUpload(formData({ video: jpeg }), USER_ID);
+
+    expect(res.success).toBe(true);
+    const urls = mockFetch.mock.calls.map(([url]) => String(url));
+    expect(urls.some((url) => url.includes('/rest/videos'))).toBe(false);
+    const init = mockFetch.mock.calls.find(([url]) => String(url).includes('/rest/images?action=initializeUpload'));
+    expect(JSON.parse((init?.[1] as RequestInit).body as string)).toEqual({ initializeUploadRequest: { owner: `urn:li:person:${MEMBER_ID}` } });
+    const put = mockFetch.mock.calls.find(([url]) => String(url) === 'https://upload.li/image1');
+    expect((put?.[1] as RequestInit).method).toBe('PUT');
+    const postCall = mockFetch.mock.calls.find(([url]) => String(url).includes('/rest/posts'));
+    expect(JSON.parse((postCall?.[1] as RequestInit).body as string).content).toEqual({ media: { id: 'urn:li:image:I1' } });
+  });
+
+  it('rejects an image over 8 MB before any network call', async () => {
+    mockMemberTokens();
+    mockHappyFetch();
+    const big = new Uint8Array(8 * 1024 * 1024 + 1);
+    big.set([0xff, 0xd8, 0xff]);
+    const res = await handleLinkedinUpload(formData({ video: new File([big], 'big.jpg', { type: 'image/jpeg' }) }), USER_ID);
+    expect(res.success).toBe(false);
+    expect(res.results[0].error).toContain('8 MB');
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('fails the account when the image PUT is rejected', async () => {
+    mockMemberTokens();
+    mockHappyFetch();
+    const happy = mockFetch.getMockImplementation();
+    mockFetch.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) =>
+      String(input) === 'https://upload.li/image1' ? new Response(null, { status: 500 }) : happy!(input, init));
+    const png = new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])], 'p.png', { type: 'image/png' });
+    const res = await handleLinkedinUpload(formData({ video: png }), USER_ID);
+    expect(res.success).toBe(false);
+    expect(res.results[0].error).toContain('LINKEDIN_PART_FAILED: image status 500');
   });
 
   it('publishes to the organization: provider_account_id is the org URN', async () => {

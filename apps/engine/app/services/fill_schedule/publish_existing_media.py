@@ -59,6 +59,17 @@ def _slot_owns_upload_claim(slot: dict[str, Any], row: dict[str, Any]) -> bool:
     return claimed_at is not None and claimed_at == consumed_at
 
 
+# A signed upload carries a video or, for the image networks, a JPEG/PNG
+# image (web migration 066). The file name only labels the part: the web
+# handlers tell video from image by the bytes.
+UPLOAD_EXTENSIONS: dict[str, str] = {
+    "video/mp4": "mp4",
+    "video/quicktime": "mov",
+    "image/jpeg": "jpg",
+    "image/png": "png",
+}
+
+
 def _is_not_found(exc: BaseException) -> bool:
     """True when a storage download failed because the object is gone.
 
@@ -231,7 +242,7 @@ def resolve_existing_media(
         content_type = str(
             row.get("declared_content_type") or row.get("detected_content_type") or "video/mp4"
         )
-        extension = "mov" if content_type == "video/quicktime" else "mp4"
+        extension = UPLOAD_EXTENSIONS.get(content_type, "mp4")
         return (
             [f"{media_ref}.{extension}"],
             lambda: video_bytes,

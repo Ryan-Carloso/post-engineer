@@ -262,7 +262,7 @@ export async function fetchFacebookPageProfile(
 }
 
 //---------------
-// publishFacebookVideo — posts the video to the Page by URL and returns
+// publishFacebookMedia — posts the video or image to the Page by URL and returns
 // the video id plus its permalink. The permalink read is best-effort: the
 // video is already live when it runs, so its failure must not turn a
 // published post into a failed one (same contract as Threads).
@@ -272,10 +272,10 @@ export interface FacebookPublishResult {
   permalink: string | null;
 }
 
-export interface PublishFacebookVideoInput {
+export interface PublishFacebookMediaInput {
   pageAccessToken: string;
   pageId: string;
-  videoUrl: string;
+  media: { kind: 'video' | 'image'; url: string };
   description: string;
   onPermalinkError: (error: unknown) => void;
 }
@@ -285,14 +285,27 @@ function absolutePermalink(raw: string): string {
   return `https://www.facebook.com${raw.startsWith('/') ? '' : '/'}${raw}`;
 }
 
-export async function publishFacebookVideo(
-  input: PublishFacebookVideoInput,
+//---------------
+// publishFacebookMedia — a video goes to /{page}/videos on the video host
+// (file_url); an image goes to /{page}/photos (url, message). Both fetch
+// the file from the presigned URL. A photo answers its photo id and the
+// feed post_id; the permalink is read from the photo.
+//---------------
+export async function publishFacebookMedia(
+  input: PublishFacebookMediaInput,
 ): Promise<FacebookPublishResult> {
-  const published = await facebookFetch(
-    'FACEBOOK_PUBLISH_FAILED',
-    `${FACEBOOK_GRAPH_VIDEO}/${encodeURIComponent(input.pageId)}/videos`,
-    formPost({ file_url: input.videoUrl, description: input.description }, input.pageAccessToken),
-  );
+  const page = encodeURIComponent(input.pageId);
+  const published = input.media.kind === 'image'
+    ? await facebookFetch(
+      'FACEBOOK_PUBLISH_FAILED',
+      `${FACEBOOK_GRAPH}/${page}/photos`,
+      formPost({ url: input.media.url, message: input.description }, input.pageAccessToken),
+    )
+    : await facebookFetch(
+      'FACEBOOK_PUBLISH_FAILED',
+      `${FACEBOOK_GRAPH_VIDEO}/${page}/videos`,
+      formPost({ file_url: input.media.url, description: input.description }, input.pageAccessToken),
+    );
   const postId = readOptionalString(published, 'id');
   if (postId === null) throw new FacebookError('FACEBOOK_PUBLISH_FAILED: missing id', 502);
 

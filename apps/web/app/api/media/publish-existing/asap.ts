@@ -176,9 +176,9 @@ function mediaErrorResponse(error: unknown, ctx: PublishExistingContext): NextRe
 
 export async function publishExistingMediaAsap(ctx: PublishExistingContext, ledger: AsapLedger | null): Promise<NextResponse> {
   const { userId, input, logId } = ctx;
-  // Images go to Instagram only: the semantics check already rejected any
-  // other provider list for an image.
-  const providers: Provider[] = ctx.image !== null ? ['instagram'] : input.publishing.providers;
+  // An image reaches only IMAGE_PROVIDERS: the semantics check (inline
+  // image) and verifyMedia (an image upload) already rejected the rest.
+  const providers: Provider[] = input.publishing.providers;
   const publishes: ProviderPublish[] = [];
 
   if (ctx.uploadRow !== null) {
@@ -186,7 +186,7 @@ export async function publishExistingMediaAsap(ctx: PublishExistingContext, ledg
     const storage = createSupabaseVideoUploadStorage();
     let claimed;
     try {
-      claimed = await claimUploadForPublish(store, storage, userId, ctx.uploadRow.id, new Date());
+      claimed = await claimUploadForPublish(store, storage, userId, ctx.uploadRow.id, new Date(), providers);
     } catch (error) {
       if (ledger !== null) await releaseAsapLedger(ledger, error);
       return mediaErrorResponse(error, ctx);

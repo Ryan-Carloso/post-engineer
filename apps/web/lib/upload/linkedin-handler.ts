@@ -6,18 +6,20 @@ import {
   finalizeLinkedInVideoUpload,
   createLinkedInMemberPost,
   createLinkedInOrganizationPost,
+  uploadLinkedInImage,
 } from '@/lib/linkedin';
 import { accountFailure } from '@/lib/upload/account-error';
 import { reportAccountUnauthorized } from '@/lib/upload/account-unauthorized';
 import { getAccountIdsFromFormData } from '@/lib/upload/account-utils';
+import { MAX_IMAGE_UPLOAD_BYTES, sniffPublishMedia } from '@/lib/upload/publish-media-file';
 
 //---------------
-// handleLinkedinUpload — publishes the video to the user's LinkedIn accounts
+// handleLinkedinUpload — publishes the video or image to the user's LinkedIn accounts
 // (profile and/or organization pages). The target comes from linkedinAccountIds
 // (repeated): if the value starts with "urn:li:organization:" it is a page
 // post; otherwise it is a post on the member's profile.
 // FormData (multipart, coming from the engine or the UI):
-//   provider=linkedin, video (File), caption, linkedinAccountIds (repetido),
+//   provider=linkedin, video (File: a video, or a JPEG/PNG image), caption, linkedinAccountIds (repeated),
 //   userId (internal engine call only).
 //---------------
 
@@ -51,10 +53,17 @@ export async function handleLinkedinUpload(
     return { success: false, results: [accountFailure('', 'Caption is required', 'publish_rejected')] };
   }
   if (!(rawFile instanceof File)) {
-    return { success: false, results: [accountFailure('', 'Video file is required', 'publish_rejected')] };
+    return { success: false, results: [accountFailure('', 'A video or image file is required', 'publish_rejected')] };
   }
 
   const buffer = new Uint8Array(await rawFile.arrayBuffer());
+  // An image (JPEG/PNG, told apart by its bytes) goes through the Images
+  // API; anything else keeps the video path, which LinkedIn validates.
+  const sniffed = sniffPublishMedia(Buffer.from(buffer), rawFile.type);
+  const isImage = sniffed !== null && sniffed.kind === 'image';
+  if (isImage && buffer.length > MAX_IMAGE_UPLOAD_BYTES) {
+    return { success: false, results: [accountFailure('', 'Image exceeds the 8 MB limit', 'publish_rejected')] };
+  }
   const supabase = createSupabaseServiceClient();
   const results: LinkedinAccountResult[] = [];
 
@@ -75,15 +84,21 @@ export async function handleLinkedinUpload(
 
       const isOrganization = accountId.startsWith(ORG_URN_PREFIX);
 
-      // Video: initialize (owner = post target) → parts → finalize
       const ownerUrn = isOrganization ? accountId : `urn:li:person:${accountId}`;
-      const upload = await initializeLinkedInVideoUpload(accessToken, ownerUrn, buffer.length, rawFile.type || 'video/mp4');
-      await uploadLinkedInVideoParts(accessToken, upload.uploadInstructions, [buffer]);
-      await finalizeLinkedInVideoUpload(accessToken, upload.video, upload.uploadToken);
+      let mediaUrn: string;
+      if (isImage) {
+        mediaUrn = await uploadLinkedInImage(accessToken, ownerUrn, buffer);
+      } else {
+        // Video: initialize (owner = post target) → parts → finalize
+        const upload = await initializeLinkedInVideoUpload(accessToken, ownerUrn, buffer.length, rawFile.type || 'video/mp4');
+        await uploadLinkedInVideoParts(accessToken, upload.uploadInstructions, [buffer]);
+        await finalizeLinkedInVideoUpload(accessToken, upload.video, upload.uploadToken);
+        mediaUrn = upload.video;
+      }
 
       const postId = isOrganization
-        ? await createLinkedInOrganizationPost(accessToken, accountId, upload.video, captionRaw.trim())
-        : await createLinkedInMemberPost(accessToken, accountId, upload.video, captionRaw.trim());
+        ? await createLinkedInOrganizationPost(accessToken, accountId, mediaUrn, captionRaw.trim())
+        : await createLinkedInMemberPost(accessToken, accountId, mediaUrn, captionRaw.trim());
 
       await touchSocialAccount(supabase, ownerUserId, 'linkedin', accountId);
       results.push({ accountId, success: true, postId });
