@@ -93,6 +93,10 @@ def measure_narration_duration(
             language=language,
             user_id=user_id,
             task_id="audio-preflight",
+            # Preflight only measures duration: the narration check (and
+            # its Whisper transcription) belongs in generate_audio, where
+            # the video is built — not in this synchronous endpoint.
+            validate=False,
         )
         if not result.ok:
             raise AudioPreflightError(result.error or "unknown TTS failure")
