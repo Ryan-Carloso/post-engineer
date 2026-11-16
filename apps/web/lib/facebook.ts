@@ -18,6 +18,7 @@
 //---------------
 
 import { FacebookError } from '@/lib/errors';
+import { readMetaErrorCode } from '@/lib/meta-error-code';
 
 // Facebook's documented feed-post ceiling; a video description rides the
 // same field. lib/draft-scoring.ts and the engine pin the same value.
@@ -84,7 +85,7 @@ async function facebookFetch(code: string, url: string, init: RequestInit = {}):
   const parsed: unknown = await response.json().catch(() => null);
   const body = isRecord(parsed) ? parsed : null;
   if (!response.ok) {
-    throw new FacebookError(`${code}: ${describeFailure(body, response.status)}`, response.status);
+    throw new FacebookError(`${code}: ${describeFailure(body, response.status)}`, response.status, readMetaErrorCode(body));
   }
   if (body === null) {
     throw new FacebookError(`${code}: invalid response body`, 502);
