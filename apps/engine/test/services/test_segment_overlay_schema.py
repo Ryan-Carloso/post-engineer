@@ -59,7 +59,7 @@ def test_overlay_text_is_measured_after_trimming_like_the_validators():
 
 
 def _request_segments(with_media):
-    hook = "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today."
+    hook = "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is still waiting nearby for you today."
     body = (
         "Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed "
         "since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight."
@@ -71,7 +71,7 @@ def _request_segments(with_media):
         {"kind": "content", "text": cta},
     ]
     if with_media:
-        counts = (3, 6, 2)
+        counts = (4, 6, 2)
         segments = [
             {
                 **segment,

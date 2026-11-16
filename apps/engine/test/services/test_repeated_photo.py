@@ -14,7 +14,7 @@ REPEAT_FIX = "Use a different photo for each media item."
 
 HOOK = (
     "Stop wasting your trip stuck in a ninety minute line for the "
-    "original dish when a better table is waiting nearby for you today."
+    "original dish when a better table is still waiting nearby for you today."
 )
 BODY = (
     "Locals skip the famous house and walk two minutes to a smaller "
@@ -77,7 +77,7 @@ def test_same_string_as_media_id_and_url_is_not_the_same_photo():
 
 
 def test_images_mode_rejects_a_repeated_url_when_the_count_would_pass():
-    # The hook is 24 words, so three photos meet the images density rule.
+    # The hook is 25 words, so four photos meet the images density rule.
     # The third repeats the first, and that rule fires before a later
     # segment that has no media at all.
     segments = _segments()
@@ -85,6 +85,7 @@ def test_images_mode_rejects_a_repeated_url_when_the_count_would_pass():
         {"url": "https://example.com/a.jpg"},
         {"url": "https://example.com/b.jpg"},
         {"url": "https://example.com/a.jpg"},
+        {"url": "https://example.com/c.jpg"},
     ]
     with pytest.raises(SegmentValidationError) as exc_info:
         script_segments.validate_segments(segments)

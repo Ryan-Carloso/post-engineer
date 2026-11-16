@@ -11,7 +11,7 @@ import {
 // The images material: every segment carries a list of photos, about one
 // per ~3s of speech. Mirrors validate_segments(segments, "images").
 const hook =
-  'Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today.';
+  'Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is still waiting nearby for you today.';
 const content =
   'Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight.';
 const cta = 'Save this video before your next trip to Porto.';
@@ -22,7 +22,7 @@ function photos(count: number, prefix: string): Array<{ url: string }> {
 
 function withMedia(): Array<Record<string, unknown>> {
   return [
-    { kind: 'hook', text: hook, media: photos(3, 'h') },
+    { kind: 'hook', text: hook, media: photos(4, 'h') },
     { kind: 'content', text: content, media: photos(6, 'b') },
     { kind: 'content', text: cta, media: photos(2, 'c') },
   ];
@@ -30,7 +30,7 @@ function withMedia(): Array<Record<string, unknown>> {
 
 function manyMedia(count: number): Array<Record<string, unknown>> {
   const segments: Array<Record<string, unknown>> = [
-    { kind: 'hook', text: `${Array(20).fill('word').join(' ')}.`, media: photos(1, 'h') },
+    { kind: 'hook', text: `${Array(25).fill('word').join(' ')}.`, media: photos(1, 'h') },
   ];
   for (let i = 0; i < count; i += 1) {
     segments.push({
@@ -52,7 +52,7 @@ describe('validateSegments with the images material', () => {
 
   it('accepts enough photos on every segment', () => {
     const result = validateSegments(withMedia());
-    expect(result.ok && result.value.mediaCount).toBe(11);
+    expect(result.ok && result.value.mediaCount).toBe(12);
   });
 
   it('rejects a 32-word segment that has only one photo and says how many are missing', () => {
@@ -96,7 +96,7 @@ describe('validateSegments with the images material', () => {
     const enough = withMedia();
     enough[1] = { kind: 'content', text: Array(32).fill('word').join(' '), media: photos(4, 'ok') };
     const passed = validateSegments(enough);
-    expect(passed.ok && passed.value.mediaCount).toBe(9);
+    expect(passed.ok && passed.value.mediaCount).toBe(10);
     const tooMany = withMedia();
     tooMany[1] = { kind: 'content', text: Array(32).fill('word').join(' '), media: photos(11, 'many') };
     const failed = validateSegments(tooMany);

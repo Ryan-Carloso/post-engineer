@@ -3,7 +3,7 @@ import { joinSegments, validateSegments } from '../script-segments.js';
 import { GeneratePersonaVideoSchema, ValidateScriptSchema } from '../single-video-shape.js';
 
 const hook =
-  'Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today.';
+  'Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is still waiting nearby for you today.';
 const content =
   'Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight.';
 const cta = 'Save this video before your next trip to Porto.';
@@ -138,9 +138,9 @@ describe('validateSegments (shared module)', () => {
   });
 
   it('rejects more than 12 segments and more than 6 medias via the cap rules', () => {
-    // 20 + 11*14 + 5 = 179 words: inside the total, so the segment cap fires.
-    const hook20 = Array.from({ length: 20 }, () => 'word').join(' ') + '.';
-    const segments: Array<{ kind: string; text: string }> = [{ kind: 'hook', text: hook20 }];
+    // 25 + 11*14 + 5 = 184 words: inside the total, so the segment cap fires.
+    const hook25 = Array.from({ length: 25 }, () => 'word').join(' ') + '.';
+    const segments: Array<{ kind: string; text: string }> = [{ kind: 'hook', text: hook25 }];
     for (let i = 0; i < 11; i += 1) {
       segments.push({ kind: 'content', text: Array.from({ length: 12 }, () => 'body').join(' ') + ` number ${i}.` });
     }
@@ -148,8 +148,8 @@ describe('validateSegments (shared module)', () => {
     const many = validateSegments(segments);
     expect(many.ok).toBe(false);
     if (!many.ok) expect(many.error.rule).toBe('at most 12 segments are allowed');
-    // 20 + 7*14 + 5 = 123 words and 9 segments: only the media cap fires.
-    const mediaSegments: Array<{ kind: string; text: string; media?: Array<{ url: string }> }> = [{ kind: 'hook', text: hook20 }];
+    // 25 + 7*14 + 5 = 128 words and 9 segments: only the media cap fires.
+    const mediaSegments: Array<{ kind: string; text: string; media?: Array<{ url: string }> }> = [{ kind: 'hook', text: hook25 }];
     for (let i = 0; i < 7; i += 1) {
       mediaSegments.push({
         kind: 'content',
@@ -236,7 +236,7 @@ describe('validateSegments (fail paths reformatted by the shared copy)', () => {
     expect(long.ok).toBe(true);
   });
 
-  it('rejects a hook outside the 15-40 word range', () => {
+  it('rejects a hook outside the 25-40 word range', () => {
     const result = validateSegments([
       { kind: 'hook', text: 'Stop wasting your trip today.' },
       { kind: 'content', text: content },
@@ -244,15 +244,23 @@ describe('validateSegments (fail paths reformatted by the shared copy)', () => {
     ]);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.field).toBe('segments.0.text');
+    // Issue #563: 24 words cannot fill the 8-12s window at the measured
+    // pace (~0.34s/word); 25 is the smallest count that always lands inside.
+    const tooShort = validateSegments([
+      { kind: 'hook', text: Array.from({ length: 24 }, () => 'word').join(' ') + '.' },
+      { kind: 'content', text: content },
+      { kind: 'content', text: cta },
+    ]);
+    expect(tooShort.ok).toBe(false);
   });
 
   it('rejects a script below the 60 word total', () => {
-    const shortHook = 'Stop wasting your trip stuck in a ninety minute line for the original dish today.';
+    const hook25 = 'Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is still waiting nearby for you today.';
     const content30 = Array.from({ length: 30 }, (_, i) => `word${i}`).join(' ') + '.';
     const result = validateSegments([
-      { kind: 'hook', text: shortHook },
+      { kind: 'hook', text: hook25 },
       { kind: 'content', text: content30 },
-      { kind: 'content', text: 'Save this video before bed.' },
+      { kind: 'content', text: 'Save this video now.' },
     ]);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.rule).toBe('the script must be 60-200 words in total');

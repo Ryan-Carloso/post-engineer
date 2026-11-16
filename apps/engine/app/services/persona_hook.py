@@ -21,8 +21,8 @@ from app.services.analytics import track_event
 # (hooks over the GPU ceiling).
 PERSONA_HOOK_MIN_SECONDS = 8.0
 PERSONA_HOOK_MAX_SECONDS = 12.0
-PERSONA_HOOK_TARGET_WORDS_MIN = 20
-PERSONA_HOOK_TARGET_WORDS_MAX = 30
+PERSONA_HOOK_TARGET_WORDS_MIN = 25
+PERSONA_HOOK_TARGET_WORDS_MAX = 35
 
 
 # A hook outside the 8-12s quality window is only a cosmetic miss: the

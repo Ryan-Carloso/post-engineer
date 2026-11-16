@@ -8,7 +8,7 @@ from app.models.schema import TaskVideoRequest
 
 HOOK = (
     "Stop wasting your trip stuck in a ninety minute line for the original dish "
-    "when a better table is waiting nearby for you today."
+    "when a better table is still waiting nearby for you today."
 )
 BODY = (
     "Locals skip the famous house and walk two minutes to a smaller kitchen where "
@@ -23,10 +23,10 @@ def _photos(prefix, count):
 
 
 def valid_segments():
-    # Images mode needs about one photo per 3s: hook 24 words → 3,
+    # Images mode needs about one photo per 3s: hook 25 words → 4,
     # body 42 → 6, CTA 9 → 2.
     return [
-        {"kind": "hook", "text": HOOK, "media": _photos("h", 3)},
+        {"kind": "hook", "text": HOOK, "media": _photos("h", 4)},
         {"kind": "content", "text": BODY, "media": _photos("b", 6)},
         {"kind": "content", "text": CTA, "media": _photos("c", 2)},
     ]
@@ -129,7 +129,7 @@ def test_segments_joining_beyond_video_script_cap_is_rejected():
     # supplied video_script.
     long_body = "x" * 20001 + " " + " ".join(["word"] * 29) + "."
     segments = [
-        {"kind": "hook", "text": HOOK, "media": _photos("h", 3)},
+        {"kind": "hook", "text": HOOK, "media": _photos("h", 4)},
         {"kind": "content", "text": long_body, "media": _photos("b", 4)},
         {"kind": "content", "text": CTA, "media": _photos("c", 2)},
     ]

@@ -199,13 +199,13 @@ class ResolvePersonaImageFirstPhotoTests(unittest.TestCase):
     """
 
     def _task_params(self, hook_media):
-        # The valid-segments fixture (hook 24 words / 3 photos, body 42
+        # The valid-segments fixture (hook 25 words / 4 photos, body 42
         # words / 6, CTA / 2): the test's media replaces the hook's, with
-        # fillers keeping the 3-photo minimum.
+        # fillers keeping the 4-photo minimum.
         segments = valid_segments()
         fillers = [
             {"url": f"https://e.com/filler{i}.jpg"}
-            for i in range(max(0, 3 - len(hook_media)))
+            for i in range(max(0, 4 - len(hook_media)))
         ]
         segments[0]["media"] = [*hook_media, *fillers]
         return TaskVideoRequest(

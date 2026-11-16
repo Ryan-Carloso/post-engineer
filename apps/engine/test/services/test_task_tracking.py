@@ -505,12 +505,8 @@ class BatchRequestedTests(unittest.TestCase):
             "segments": [
                 {
                     "kind": "hook",
-                    "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today.",
-                    "media": [
-                        {"url": "https://example.com/h0.jpg"},
-                        {"url": "https://example.com/h1.jpg"},
-                        {"url": "https://example.com/h2.jpg"},
-                    ],
+                    "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is still waiting nearby for you today.",
+                    "media": [{"url": "https://example.com/h0.jpg"}, {"url": "https://example.com/h1.jpg"}, {"url": "https://example.com/h2.jpg"}, {"url": "https://example.com/h3.jpg"}],
                 },
                 {
                     "kind": "content",
@@ -603,12 +599,8 @@ class BatchFailedTests(unittest.TestCase):
             "segments": [
                 {
                     "kind": "hook",
-                    "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today.",
-                    "media": [
-                        {"url": "https://example.com/h0.jpg"},
-                        {"url": "https://example.com/h1.jpg"},
-                        {"url": "https://example.com/h2.jpg"},
-                    ],
+                    "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is still waiting nearby for you today.",
+                    "media": [{"url": "https://example.com/h0.jpg"}, {"url": "https://example.com/h1.jpg"}, {"url": "https://example.com/h2.jpg"}, {"url": "https://example.com/h3.jpg"}],
                 },
                 {
                     "kind": "content",
