@@ -346,7 +346,7 @@ export const AB_HOOK_TEST_PROMPT = [
   '   10-12 pairs: ask me before you raise targetPairs above 6.',
   '2. Ask me the topic of each pair, one pair at a time. Write both hooks',
   "   following each variant's style. Only the hook differs inside a pair:",
-  '   same title, same content takes, same accounts, same schedule, and the',
+  '   same title, same content takes, same accounts, same mode, and the',
   "   same voiceId. Pass options.videoType 'faceless' on every call to",
   '   experiments (action: add_pair).',
   "3. Build each full script (that variant's hook, then the shared content)",
