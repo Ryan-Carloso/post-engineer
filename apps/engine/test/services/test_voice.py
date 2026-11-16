@@ -476,7 +476,7 @@ class TestVoiceService(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir, patch.object(
             app_config, "chatterbox", {}
         ), patch(
-            "app.services.voice.chatterbox_tts", return_value=chatterbox_marker
+            "app.services.voice.synthesize_chatterbox_with_validation", return_value=chatterbox_marker
         ), patch.object(
             vs, "elevenlabs_tts"
         ) as elevenlabs:
@@ -497,7 +497,7 @@ class TestVoiceService(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir, patch.object(
             app_config, "chatterbox", {}
         ), patch(
-            "app.services.voice.chatterbox_tts", return_value=chatterbox_marker
+            "app.services.voice.synthesize_chatterbox_with_validation", return_value=chatterbox_marker
         ) as mock_tts:
             result = vs.tts(
                 "hello world", "chatterbox_nano:phonon_zoey", 1.0, str(Path(tmp_dir) / "v.mp3")
@@ -732,12 +732,12 @@ class TestTtsFailureReasons(unittest.TestCase):
 
     def test_chatterbox_user_clone_allowed_for_owner_reaches_tts(self):
         # Allow path through the moved guard: an owner's clone key must
-        # proceed to chatterbox_tts instead of being denied.
+        # proceed to Chatterbox synthesis (validated) instead of being denied.
         owner = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
         key = "uaaaaaaaabbbb_cccccccccccc"
         marker = vs.SubMaker()
         with patch(
-            "app.services.voice.chatterbox_tts", return_value=marker
+            "app.services.voice.synthesize_chatterbox_with_validation", return_value=marker
         ) as chatterbox:
             result = vs.tts(
                 text="hello",

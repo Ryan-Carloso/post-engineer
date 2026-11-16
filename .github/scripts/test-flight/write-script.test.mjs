@@ -14,7 +14,7 @@ function goodScript(overrides = {}) {
   return {
     title: 'Porto in one day: what to visit first',
     segments: [
-      { kind: 'hook', text: 'You have one day in Porto, so do not try to see everything, see the river, the old town, and one port cellar properly.' },
+      { kind: 'hook', text: 'You have one day in Porto, so do not try to see everything, see the river, the old town, and one port cellar properly today.' },
       { kind: 'content', text: 'Start in Ribeira in the morning, walk along the water, cross the Dom Luis I bridge on the lower deck, and look back at the coloured houses from the Gaia side.' },
       { kind: 'content', text: 'Spend the afternoon in one cellar in Vila Nova de Gaia, taste a ruby and a tawny port, and finish back in Ribeira for dinner when the lights come on over the river.' },
       { kind: 'content', text: 'Save this one day plan and tell me which stop you would skip first.' },
@@ -26,7 +26,7 @@ function goodScript(overrides = {}) {
 test('validateScript accepts a good script', () => {
   const result = validateScript(goodScript());
   assert.equal(result.ok, true);
-  assert.equal(result.value.totalWords, 102);
+  assert.equal(result.value.totalWords, 103);
 });
 
 test('validateScript rejects a hook that is too short and content that is too short', () => {
@@ -36,7 +36,7 @@ test('validateScript rejects a hook that is too short and content that is too sh
     { kind: 'content', text: 'Save this.' },
   ] })).ok, false);
   assert.match(validateScript(goodScript({ segments: [
-    { kind: 'hook', text: 'You have one day in Porto, so do not try to see everything, see the river, the old town, and one port cellar properly.' },
+    { kind: 'hook', text: 'You have one day in Porto, so do not try to see everything, see the river, the old town, and one port cellar properly today.' },
     { kind: 'content', text: 'Walk around.' },
     { kind: 'content', text: 'Save this one day plan and tell me which stop you would skip first.' },
   ] })).error.rule, /Content must have at least/);
@@ -46,13 +46,13 @@ test('validateScript accepts short and long content takes: there is no CTA word 
   // Issue #577: a two-word content take and a 21-word content take
   // both pass — the old 5-20 CTA range does not apply to content takes.
   assert.equal(validateScript(goodScript({ segments: [
-    { kind: 'hook', text: 'You have one day in Porto, so do not try to see everything, see the river, the old town, and one port cellar properly.' },
+    { kind: 'hook', text: 'You have one day in Porto, so do not try to see everything, see the river, the old town, and one port cellar properly today.' },
     { kind: 'content', text: 'Start in Ribeira in the morning, walk along the water, cross the Dom Luis I bridge on the lower deck, and look back at the coloured houses from the Gaia side.' },
     { kind: 'content', text: 'Spend the afternoon in one cellar in Vila Nova de Gaia, taste a ruby and a tawny port, and finish back in Ribeira for dinner when the lights come on over the river.' },
     { kind: 'content', text: 'Save this.' },
   ] })).ok, true);
   assert.equal(validateScript(goodScript({ segments: [
-    { kind: 'hook', text: 'You have one day in Porto, so do not try to see everything, see the river, the old town, and one port cellar properly.' },
+    { kind: 'hook', text: 'You have one day in Porto, so do not try to see everything, see the river, the old town, and one port cellar properly today.' },
     { kind: 'content', text: 'Start in Ribeira in the morning, walk along the water, cross the Dom Luis I bridge on the lower deck, and look back at the coloured houses from the Gaia side.' },
     { kind: 'content', text: Array.from({ length: 21 }, () => 'word').join(' ') + '.' },
   ] })).ok, true);
@@ -63,7 +63,7 @@ test('validateScript accepts a CTA take in the middle of the video', () => {
   // after the hook — here in the middle — and the video still renders
   // in take order.
   assert.equal(validateScript(goodScript({ segments: [
-    { kind: 'hook', text: 'You have one day in Porto, so do not try to see everything, see the river, the old town, and one port cellar properly.' },
+    { kind: 'hook', text: 'You have one day in Porto, so do not try to see everything, see the river, the old town, and one port cellar properly today.' },
     { kind: 'content', text: 'Save this one day plan and tell me which stop you would skip first.' },
     { kind: 'content', text: 'Start in Ribeira in the morning, walk along the water, cross the Dom Luis I bridge on the lower deck, and look back at the coloured houses from the Gaia side.' },
   ] })).ok, true);
@@ -189,7 +189,7 @@ test('buildPrompt is standalone: it carries topic, angle, contract, and banned p
   assert.ok(prompt.includes('Porto in one day'));
   assert.ok(prompt.includes('budget:'));
   assert.ok(prompt.includes('60-200 words'));
-  assert.ok(prompt.includes('Hook 15-40 words'));
+  assert.ok(prompt.includes('Hook 25-40 words'));
   assert.ok(prompt.includes('unlock'));
   assert.ok(prompt.includes('JSON only'));
   assert.equal(prompt.includes('—'), false);

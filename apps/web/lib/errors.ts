@@ -52,7 +52,12 @@ export class InstagramApiError extends Error {
   constructor(
     message: string,
     public statusCode: number,
-    public instagramError?: Error
+    public instagramError?: Error,
+    // Meta's numeric error code (e.g. 190 for a dead token), preserved so
+    // isUnauthorizedError can tell it apart from any other HTTP 400. Named
+    // `providerCode`, not `code`: httpStatusOf reads a numeric `code` as an
+    // HTTP status, and 190 is not one.
+    public providerCode?: number
   ) {
     super(message);
     this.name = 'InstagramApiError';
@@ -71,14 +76,24 @@ export class LinkedInError extends Error {
 }
 
 export class ThreadsError extends Error {
-  constructor(message: string, public statusCode: number) {
+  constructor(
+    message: string,
+    public statusCode: number,
+    // Meta's numeric error code (e.g. 190 for a dead token). See InstagramApiError.
+    public providerCode?: number
+  ) {
     super(message);
     this.name = 'ThreadsError';
   }
 }
 
 export class FacebookError extends Error {
-  constructor(message: string, public statusCode: number) {
+  constructor(
+    message: string,
+    public statusCode: number,
+    // Meta's numeric error code (e.g. 190 for a dead token). See InstagramApiError.
+    public providerCode?: number
+  ) {
     super(message);
     this.name = 'FacebookError';
   }

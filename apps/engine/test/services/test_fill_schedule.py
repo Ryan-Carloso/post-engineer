@@ -55,7 +55,7 @@ class _FakeStore:
         self.retry_calls.append(n)
         self.connect_retries = n
 
-    def pending_slots(self, now):
+    def pending_slots(self, now, limit):
         raise AssertionError("override pending_slots per test")
 
     def generating_slots(self):
@@ -116,12 +116,8 @@ class BatchScheduleTests(unittest.TestCase):
             "segments": [
                 {
                     "kind": "hook",
-                    "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today.",
-                    "media": [
-                        {"url": "https://example.com/h0.jpg"},
-                        {"url": "https://example.com/h1.jpg"},
-                        {"url": "https://example.com/h2.jpg"},
-                    ],
+                    "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is still waiting nearby for you today.",
+                    "media": [{"url": "https://example.com/h0.jpg"}, {"url": "https://example.com/h1.jpg"}, {"url": "https://example.com/h2.jpg"}, {"url": "https://example.com/h3.jpg"}],
                 },
                 {
                     "kind": "content",
@@ -175,7 +171,7 @@ class BatchScheduleTests(unittest.TestCase):
     def test_generate_batch_slot_uses_stored_segments_no_llm_no_spend(self):
         slot = self._batch_slot()
         store = _FakeStore()
-        store.pending_slots = lambda now: [slot]
+        store.pending_slots = lambda now, limit: [slot]
         scheduler = self._scheduler(store)
         scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
 
@@ -202,7 +198,7 @@ class BatchScheduleTests(unittest.TestCase):
         slot = self._batch_slot()
         slot["music_mood"] = "calm"
         store = _FakeStore()
-        store.pending_slots = lambda now: [slot]
+        store.pending_slots = lambda now, limit: [slot]
         scheduler = self._scheduler(store)
         scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
 
@@ -221,7 +217,7 @@ class BatchScheduleTests(unittest.TestCase):
         slot = self._batch_slot()
         slot["description"] = "Agent description."
         store = _FakeStore()
-        store.pending_slots = lambda now: [slot]
+        store.pending_slots = lambda now, limit: [slot]
         scheduler = self._scheduler(store)
         scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
 
@@ -244,7 +240,7 @@ class BatchScheduleTests(unittest.TestCase):
         slot["title"] = ""
         del slot["description"]
         store = _FakeStore()
-        store.pending_slots = lambda now: [slot]
+        store.pending_slots = lambda now, limit: [slot]
         scheduler = self._scheduler(store)
         scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
 
@@ -265,7 +261,7 @@ class BatchScheduleTests(unittest.TestCase):
         slot["schedules"]["persona_id"] = "persona-1"
         store = _FakeStore()
         store.bound_accounts = {"youtube": ["yt-other"]}
-        store.pending_slots = lambda now: [slot]
+        store.pending_slots = lambda now, limit: [slot]
         scheduler = self._scheduler(store)
         scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
 
@@ -287,7 +283,7 @@ class BatchScheduleTests(unittest.TestCase):
         slot["schedules"]["persona_id"] = "persona-1"
         store = _FakeStore()
         store.persona_bound_accounts = MagicMock(side_effect=RuntimeError("supabase down"))
-        store.pending_slots = lambda now: [slot]
+        store.pending_slots = lambda now, limit: [slot]
         scheduler = self._scheduler(store)
         scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
 
@@ -305,7 +301,7 @@ class BatchScheduleTests(unittest.TestCase):
         slot["schedules"]["persona_id"] = "persona-1"
         store = _FakeStore()
         store.bound_accounts = {"youtube": ["yt-1"]}
-        store.pending_slots = lambda now: [slot]
+        store.pending_slots = lambda now, limit: [slot]
         scheduler = self._scheduler(store)
         scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
 
@@ -325,7 +321,7 @@ class BatchScheduleTests(unittest.TestCase):
                 if stored is not None:
                     slot["music_mood"] = stored
                 store = _FakeStore()
-                store.pending_slots = lambda now: [slot]
+                store.pending_slots = lambda now, limit: [slot]
                 scheduler = self._scheduler(store)
                 scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
 
@@ -345,7 +341,7 @@ class BatchScheduleTests(unittest.TestCase):
         # fallback (same language as the title) - a coin toss.
         slot = self._batch_slot()
         store = _FakeStore()
-        store.pending_slots = lambda now: [slot]
+        store.pending_slots = lambda now, limit: [slot]
         scheduler = self._scheduler(store)
         scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
 
@@ -371,7 +367,7 @@ class BatchScheduleTests(unittest.TestCase):
             }
         )
         store = _FakeStore()
-        store.pending_slots = lambda now: [slot]
+        store.pending_slots = lambda now, limit: [slot]
         scheduler = self._scheduler(store)
         scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
 
@@ -390,7 +386,7 @@ class BatchScheduleTests(unittest.TestCase):
         slot["title"] = "Porto trip"
         slot["segments"] = None
         store = _FakeStore()
-        store.pending_slots = lambda now: [slot]
+        store.pending_slots = lambda now, limit: [slot]
         scheduler = self._scheduler(store)
         scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
 
@@ -412,12 +408,8 @@ class BatchScheduleTests(unittest.TestCase):
         slot["segments"] = [
             {
                 "kind": "hook",
-                "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today.",
-                "media": [
-                    {"url": "https://example.com/h0.jpg"},
-                    {"url": "https://example.com/h1.jpg"},
-                    {"url": "https://example.com/h2.jpg"},
-                ],
+                "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is still waiting nearby for you today.",
+                "media": [{"url": "https://example.com/h0.jpg"}, {"url": "https://example.com/h1.jpg"}, {"url": "https://example.com/h2.jpg"}, {"url": "https://example.com/h3.jpg"}],
             },
             {
                 "kind": "content",
@@ -441,7 +433,7 @@ class BatchScheduleTests(unittest.TestCase):
             },
         ]
         store = _FakeStore()
-        store.pending_slots = lambda now: [slot]
+        store.pending_slots = lambda now, limit: [slot]
         scheduler = self._scheduler(store)
         scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
 
@@ -465,7 +457,7 @@ class BatchScheduleTests(unittest.TestCase):
         slot = self._batch_slot()
         del slot["schedules"]["personas"]
         store = _FakeStore()
-        store.pending_slots = lambda now: [slot]
+        store.pending_slots = lambda now, limit: [slot]
         scheduler = self._scheduler(store)
         scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
 
@@ -493,7 +485,7 @@ class BatchScheduleTests(unittest.TestCase):
             }
         )
         store = _FakeStore()
-        store.pending_slots = lambda now: [slot]
+        store.pending_slots = lambda now, limit: [slot]
         scheduler = self._scheduler(store)
         scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
 
@@ -525,7 +517,7 @@ class BatchScheduleTests(unittest.TestCase):
             }
         )
         store = _FakeStore()
-        store.pending_slots = lambda now: [slot]
+        store.pending_slots = lambda now, limit: [slot]
         scheduler = self._scheduler(store)
         scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
 
@@ -542,7 +534,7 @@ class BatchScheduleTests(unittest.TestCase):
         slot = self._batch_slot()
         slot["schedules"]["personas"] = {"name": "Ana"}
         store = _FakeStore()
-        store.pending_slots = lambda now: [slot]
+        store.pending_slots = lambda now, limit: [slot]
         scheduler = self._scheduler(store)
         scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
 
@@ -557,7 +549,7 @@ class BatchScheduleTests(unittest.TestCase):
     def test_generate_batch_dispatch_failure_refunds_single_video(self):
         slot = self._batch_slot()
         store = _FakeStore()
-        store.pending_slots = lambda now: [slot]
+        store.pending_slots = lambda now, limit: [slot]
         store.refund_batch_calls = []
         store.refund_batch_tokens = lambda *args, **kwargs: (
             store.refund_batch_calls.append(args + (kwargs.get("engine_task_id"),)) or True
@@ -594,7 +586,7 @@ class BatchScheduleTests(unittest.TestCase):
             for segment in slot["segments"]
         ]
         store = _FakeStore()
-        store.pending_slots = lambda now: [slot]
+        store.pending_slots = lambda now, limit: [slot]
         store.refund_batch_calls = []
         store.refund_batch_tokens = lambda *args, **kwargs: (
             store.refund_batch_calls.append(args + (kwargs.get("engine_task_id"),)) or True
@@ -617,7 +609,7 @@ class BatchScheduleTests(unittest.TestCase):
         slot = self._batch_slot()
         slot["charged_tokens"] = 0
         store = _FakeStore()
-        store.pending_slots = lambda now: [slot]
+        store.pending_slots = lambda now, limit: [slot]
         store.refund_batch_tokens = MagicMock(return_value=True)
         scheduler = self._scheduler(store)
         scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
@@ -637,7 +629,7 @@ class BatchScheduleTests(unittest.TestCase):
         slot = self._batch_slot()
         slot["schedules"]["personas"]["language"] = "pt-BR"
         store = _FakeStore()
-        store.pending_slots = lambda now: [slot]
+        store.pending_slots = lambda now, limit: [slot]
         store.refund_batch_calls = []
         store.refund_batch_tokens = lambda *args, **kwargs: (
             store.refund_batch_calls.append(args) or True
@@ -669,7 +661,7 @@ class BatchScheduleTests(unittest.TestCase):
 
         slot = self._batch_slot()
         store = _FakeStore()
-        store.pending_slots = lambda now: [slot]
+        store.pending_slots = lambda now, limit: [slot]
         refund_kwargs = {}
 
         def fake_refund(*args, **kwargs):
@@ -706,7 +698,7 @@ class BatchScheduleTests(unittest.TestCase):
 
         slot = self._batch_slot()
         store = _FakeStore()
-        store.pending_slots = lambda now: [slot]
+        store.pending_slots = lambda now, limit: [slot]
         store.refund_batch_tokens = lambda *args, **kwargs: False
         scheduler = self._scheduler(store)
         scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
@@ -722,11 +714,14 @@ class BatchScheduleTests(unittest.TestCase):
         refund_calls = [c for c in track.call_args_list if c[0][0] == "refund_issued"]
         self.assertEqual(refund_calls, [])
 
-    def test_dispatch_generation_updates_state_and_starts_pipeline_thread(self):
-        # _dispatch_generation is the immediate path: task state is created
-        # first (so reconcile() sees the task), then tm.start runs in a
-        # daemon thread — the tick itself never blocks on the pipeline.
+    def test_dispatch_generation_updates_state_and_submits_to_the_task_manager(self):
+        # The row is written only after a running slot is reserved, then
+        # tm.start is handed to that reservation. The manager — not a
+        # private daemon thread — owns the worker, so the batch slot counts
+        # toward max_concurrent_tasks. add_task is the direct path and is
+        # not used here.
         from app.models.schema import TaskVideoRequest
+        from app.services import task as tm
 
         store = _FakeStore()
         scheduler = self._scheduler(store)
@@ -736,10 +731,7 @@ class BatchScheduleTests(unittest.TestCase):
             video_description="Batch description.",
         )
 
-        with (
-            patch("app.services.task.start") as mock_start,
-            patch("app.services.fill_schedule.generate.threading.Thread") as mock_thread,
-        ):
+        with patch("app.controllers.v1.video.task_manager") as manager:
             scheduler.generator._dispatch_generation(
                 "task-1",
                 request,
@@ -760,12 +752,15 @@ class BatchScheduleTests(unittest.TestCase):
             schedule_id="sched-1",
             persona_id="persona-1",
         )
-        mock_thread.assert_called_once()
-        _, kwargs = mock_thread.call_args
-        self.assertTrue(kwargs["daemon"])
-        # Run the thread target inline to prove the wiring.
-        kwargs["target"](**kwargs["kwargs"])
-        mock_start.assert_called_once_with(task_id="task-1", params=request, stop_at="video")
+        manager.try_reserve_running.assert_called_once_with()
+        manager.add_task.assert_not_called()
+        reservation = manager.try_reserve_running.return_value
+        reservation.start.assert_called_once()
+        self.assertIs(reservation.start.call_args.args[0], tm.start)
+        kwargs = reservation.start.call_args.kwargs
+        self.assertEqual(kwargs["task_id"], "task-1")
+        self.assertIs(kwargs["params"], request)
+        self.assertEqual(kwargs["stop_at"], "video")
 
     def test_dispatch_generation_omits_blank_identity_ids(self):
         # Identity props are optional: a dispatch without slot context
@@ -780,10 +775,7 @@ class BatchScheduleTests(unittest.TestCase):
             video_description="Batch description.",
         )
 
-        with (
-            patch("app.services.task.start"),
-            patch("app.services.fill_schedule.generate.threading.Thread"),
-        ):
+        with patch("app.controllers.v1.video.task_manager"):
             scheduler.generator._dispatch_generation("task-2", request, "user-1")
 
         scheduler.task_state.update_task.assert_called_once_with(
@@ -810,10 +802,7 @@ class BatchScheduleTests(unittest.TestCase):
             video_description="Batch description.",
         )
 
-        with (
-            patch("app.services.task.start"),
-            patch("app.services.fill_schedule.generate.threading.Thread"),
-        ):
+        with patch("app.controllers.v1.video.task_manager"):
             scheduler.generator._dispatch_generation(
                 "task-3",
                 request,
@@ -848,10 +837,7 @@ class BatchScheduleTests(unittest.TestCase):
             video_description="Batch description.",
         )
 
-        with (
-            patch("app.services.task.start"),
-            patch("app.services.fill_schedule.generate.threading.Thread"),
-        ):
+        with patch("app.controllers.v1.video.task_manager"):
             scheduler.generator._dispatch_generation(
                 "task-4",
                 request,
@@ -885,10 +871,7 @@ class BatchScheduleTests(unittest.TestCase):
             video_description="Batch description.",
         )
 
-        with (
-            patch("app.services.task.start"),
-            patch("app.services.fill_schedule.generate.threading.Thread"),
-        ):
+        with patch("app.controllers.v1.video.task_manager"):
             scheduler.generator._dispatch_generation(
                 "task-5",
                 request,
@@ -2027,12 +2010,8 @@ class NotifyIntegrationTests(unittest.TestCase):
             "segments": [
                 {
                     "kind": "hook",
-                    "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today.",
-                    "media": [
-                        {"url": "https://example.com/h0.jpg"},
-                        {"url": "https://example.com/h1.jpg"},
-                        {"url": "https://example.com/h2.jpg"},
-                    ],
+                    "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is still waiting nearby for you today.",
+                    "media": [{"url": "https://example.com/h0.jpg"}, {"url": "https://example.com/h1.jpg"}, {"url": "https://example.com/h2.jpg"}, {"url": "https://example.com/h3.jpg"}],
                 },
                 {
                     "kind": "content",
@@ -2069,7 +2048,7 @@ class NotifyIntegrationTests(unittest.TestCase):
             },
         }
         store = _FakeStore()
-        store.pending_slots = lambda now: [slot]
+        store.pending_slots = lambda now, limit: [slot]
         notify = MagicMock()
         scheduler = self._scheduler(
             store,
@@ -2093,12 +2072,8 @@ class NotifyIntegrationTests(unittest.TestCase):
             "segments": [
                 {
                     "kind": "hook",
-                    "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today.",
-                    "media": [
-                        {"url": "https://example.com/h0.jpg"},
-                        {"url": "https://example.com/h1.jpg"},
-                        {"url": "https://example.com/h2.jpg"},
-                    ],
+                    "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is still waiting nearby for you today.",
+                    "media": [{"url": "https://example.com/h0.jpg"}, {"url": "https://example.com/h1.jpg"}, {"url": "https://example.com/h2.jpg"}, {"url": "https://example.com/h3.jpg"}],
                 },
                 {
                     "kind": "content",
@@ -2130,7 +2105,7 @@ class NotifyIntegrationTests(unittest.TestCase):
             },
         }
         store = _FakeStore()
-        store.pending_slots = lambda now: [slot]
+        store.pending_slots = lambda now, limit: [slot]
         notify = MagicMock()
         scheduler = self._scheduler(
             store,
@@ -2157,12 +2132,8 @@ class NotifyIntegrationTests(unittest.TestCase):
             "segments": [
                 {
                     "kind": "hook",
-                    "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today.",
-                    "media": [
-                        {"url": "https://example.com/h0.jpg"},
-                        {"url": "https://example.com/h1.jpg"},
-                        {"url": "https://example.com/h2.jpg"},
-                    ],
+                    "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is still waiting nearby for you today.",
+                    "media": [{"url": "https://example.com/h0.jpg"}, {"url": "https://example.com/h1.jpg"}, {"url": "https://example.com/h2.jpg"}, {"url": "https://example.com/h3.jpg"}],
                 },
                 {
                     "kind": "content",
@@ -2193,7 +2164,7 @@ class NotifyIntegrationTests(unittest.TestCase):
             },
         }
         store = _FakeStore()
-        store.pending_slots = lambda now: [slot]
+        store.pending_slots = lambda now, limit: [slot]
         notify = MagicMock()
         scheduler = self._scheduler(store, notify=notify)
         scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
@@ -2296,12 +2267,8 @@ class NotifyIntegrationTests(unittest.TestCase):
             "segments": [
                 {
                     "kind": "hook",
-                    "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today.",
-                    "media": [
-                        {"url": "https://example.com/h0.jpg"},
-                        {"url": "https://example.com/h1.jpg"},
-                        {"url": "https://example.com/h2.jpg"},
-                    ],
+                    "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is still waiting nearby for you today.",
+                    "media": [{"url": "https://example.com/h0.jpg"}, {"url": "https://example.com/h1.jpg"}, {"url": "https://example.com/h2.jpg"}, {"url": "https://example.com/h3.jpg"}],
                 },
                 {
                     "kind": "content",
@@ -2338,7 +2305,7 @@ class NotifyIntegrationTests(unittest.TestCase):
             },
         }
         store = _FakeStore()
-        store.pending_slots = lambda now: [slot]
+        store.pending_slots = lambda now, limit: [slot]
         notify = MagicMock(side_effect=RuntimeError("discord exploded"))
         scheduler = self._scheduler(
             store,
@@ -2568,7 +2535,7 @@ class CoverageGapTests(unittest.TestCase):
     # -- run_once aggregates the four stages ----------------------------------
     def test_run_once_returns_stage_counts(self):
         store = _FakeStore()
-        store.pending_slots = lambda now: []
+        store.pending_slots = lambda now, limit: []
         store.generating_slots = lambda: []
         store.ready_due_slots = lambda now: []
         scheduler = fs.FillScheduleScheduler(
@@ -2988,12 +2955,8 @@ class CoverageGapTests(unittest.TestCase):
             "segments": [
                 {
                     "kind": "hook",
-                    "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today.",
-                    "media": [
-                        {"url": "https://example.com/h0.jpg"},
-                        {"url": "https://example.com/h1.jpg"},
-                        {"url": "https://example.com/h2.jpg"},
-                    ],
+                    "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is still waiting nearby for you today.",
+                    "media": [{"url": "https://example.com/h0.jpg"}, {"url": "https://example.com/h1.jpg"}, {"url": "https://example.com/h2.jpg"}, {"url": "https://example.com/h3.jpg"}],
                 },
                 {
                     "kind": "content",
@@ -3030,7 +2993,7 @@ class CoverageGapTests(unittest.TestCase):
             },
         }
         store = _FakeStore()
-        store.pending_slots = lambda now: [slot]
+        store.pending_slots = lambda now, limit: [slot]
         scheduler = self._scheduler(
             store,
         )
@@ -3151,12 +3114,8 @@ class BatchDispatchTests(unittest.TestCase):
             "segments": [
                 {
                     "kind": "hook",
-                    "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today.",
-                    "media": [
-                        {"url": "https://example.com/h0.jpg"},
-                        {"url": "https://example.com/h1.jpg"},
-                        {"url": "https://example.com/h2.jpg"},
-                    ],
+                    "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is still waiting nearby for you today.",
+                    "media": [{"url": "https://example.com/h0.jpg"}, {"url": "https://example.com/h1.jpg"}, {"url": "https://example.com/h2.jpg"}, {"url": "https://example.com/h3.jpg"}],
                 },
                 {
                     "kind": "content",
@@ -3213,7 +3172,7 @@ class BatchDispatchTests(unittest.TestCase):
         store = _FakeStore()
         # pending_slots is horizon-filtered by the store; an empty result
         # means the batch slot stays untouched.
-        store.pending_slots = lambda now: []
+        store.pending_slots = lambda now, limit: []
         scheduler = self._scheduler(store)
         with patch.object(scheduler.generator, "_dispatch_generation") as dispatch:
             enqueued = scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
@@ -3221,14 +3180,24 @@ class BatchDispatchTests(unittest.TestCase):
         dispatch.assert_not_called()
 
     def test_batch_slots_keep_parallel_dispatch(self):
+        # Two pending slots both dispatch when the shared manager has a
+        # free running slot for each. The cap itself is pinned in
+        # test_batch_admission.py; this test pins that a tick still
+        # admits every slot that fits.
+        from app.controllers.manager.memory_manager import InMemoryTaskManager
+
         slot1 = self._batch_slot()
         slot1["id"] = "slot-b1"
         slot2 = self._batch_slot()
         slot2["id"] = "slot-b2"
         store = _FakeStore()
-        store.pending_slots = lambda now: [slot1, slot2]
+        store.pending_slots = lambda now, limit: [slot1, slot2]
         scheduler = self._scheduler(store)
-        with patch.object(scheduler.generator, "_dispatch_generation") as dispatch:
+        manager = InMemoryTaskManager(max_concurrent_tasks=2, max_queued_tasks=10)
+        with (
+            patch("app.controllers.v1.video.task_manager", manager),
+            patch.object(scheduler.generator, "_dispatch_generation") as dispatch,
+        ):
             enqueued = scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
         self.assertEqual(enqueued, 2)
         self.assertEqual(dispatch.call_count, 2)

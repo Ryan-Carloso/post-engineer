@@ -1,11 +1,14 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   clampProgress,
+  cancelEngineTask,
   fetchEnginePublishResults,
   fetchEngineScriptAngle,
   fetchEnginePostMetricsSource,
   fetchEngineTaskProgress,
   ENGINE_TASK_PROGRESS_TIMEOUT_MS,
+  ENGINE_CANCEL_TIMEOUT_MS,
+  ENGINE_CANCEL_BUDGET_MS,
 } from '../engine-tasks';
 
 afterEach(() => {
@@ -273,5 +276,77 @@ describe('fetchEnginePostMetricsSource', () => {
   it('throws on non-OK engine responses', async () => {
     mockEngine({}, false, 503);
     await expect(fetchEnginePostMetricsSource(TASK_ID, 'user-1')).rejects.toThrow(/status 503/);
+  });
+});
+
+describe('cancelEngineTask', () => {
+  const TASK_ID = 'abc-123_DEF.4';
+
+  function mockEngine(ok = true, status = 200) {
+    vi.stubEnv('MONEYPRINT_API_URL', 'https://engine.test');
+    vi.stubEnv('MONEYPRINT_API_SECRET', 'secret');
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok, status })));
+  }
+
+  it('sends DELETE for the task', async () => {
+    mockEngine();
+    await expect(cancelEngineTask(TASK_ID, 'user-1')).resolves.toBeUndefined();
+    expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+      'https://engine.test/api/v1/tasks/abc-123_DEF.4',
+      expect.objectContaining({ method: 'DELETE' }),
+    );
+  });
+
+  it('treats a missing task as already cancelled', async () => {
+    mockEngine(false, 404);
+    await expect(cancelEngineTask(TASK_ID, 'user-1')).resolves.toBeUndefined();
+  });
+
+  it('throws on a non-404 failure', async () => {
+    mockEngine(false, 503);
+    await expect(cancelEngineTask(TASK_ID, 'user-1')).rejects.toThrow(/status 503/);
+  });
+
+  it('rejects unsafe task ids without touching the network', async () => {
+    mockEngine();
+    await expect(cancelEngineTask('../evil', 'user-1')).rejects.toThrow(/taskId/i);
+    expect(vi.mocked(fetch)).not.toHaveBeenCalled();
+  });
+
+  it('throws when the engine is not configured', async () => {
+    vi.stubEnv('MONEYPRINT_API_URL', '');
+    vi.stubEnv('MONEYPRINT_API_SECRET', 'secret');
+    vi.stubGlobal('fetch', vi.fn());
+    await expect(cancelEngineTask(TASK_ID, 'user-1')).rejects.toThrow(/MONEYPRINT_API_URL/);
+    expect(vi.mocked(fetch)).not.toHaveBeenCalled();
+  });
+
+  it('aborts a hung engine cancel after the dedicated per-call timeout', async () => {
+    vi.stubEnv('MONEYPRINT_API_URL', 'https://engine.test');
+    vi.stubEnv('MONEYPRINT_API_SECRET', 'secret');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        (_url: unknown, init?: { signal?: AbortSignal }) =>
+          new Promise((_resolve, reject) => {
+            init?.signal?.addEventListener('abort', () =>
+              reject(new DOMException('The operation was aborted.', 'AbortError')),
+            );
+          }),
+      ),
+    );
+    vi.useFakeTimers();
+    try {
+      const pending = cancelEngineTask(TASK_ID, 'user-1');
+      pending.catch(() => {});
+      // The per-call budget is shorter than the aggregate budget and the
+      // progress-lookup timeout: a hung engine gives up fast.
+      expect(ENGINE_CANCEL_TIMEOUT_MS).toBeLessThan(ENGINE_CANCEL_BUDGET_MS);
+      expect(ENGINE_CANCEL_TIMEOUT_MS).toBeLessThan(ENGINE_TASK_PROGRESS_TIMEOUT_MS);
+      await vi.advanceTimersByTimeAsync(ENGINE_CANCEL_TIMEOUT_MS + 100);
+      await expect(pending).rejects.toThrow();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

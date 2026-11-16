@@ -12,11 +12,11 @@ from moviepy.audio.io.AudioFileClip import AudioFileClip
 from moviepy.video.tools import subtitles
 
 from app.services import subtitle_cues
+from app.services.tts_validation import synthesize_chatterbox_with_validation
 from app.services.openrouter_tts import dispatch_openrouter_tts
 from app.services.voice_providers import (
     SubMaker,
     TtsResult,
-    chatterbox_tts,
     elevenlabs_tts,
     ensure_file_path_exists,
     populate_legacy_submaker_with_full_text,
@@ -194,7 +194,8 @@ def tts(
     voice_file: str,
     voice_volume: float = 1.0,
     voice_pitch: str = "",
-    user_id: str | None = None, task_id: str | None = None, language: str | None = None,
+    user_id: str | None = None, task_id: str | None = None,
+    language: str | None = None, validate: bool = True,
 ) -> TtsResult:
     """Synthesize speech. Failures return a TtsResult with a specific, sanitized
     `error` naming the real cause (forwarded to the task failure for PostHog).
@@ -238,7 +239,10 @@ def tts(
         from app.services.cloned_voices.ownership import chatterbox_voice_allowed_for_user
         if not chatterbox_voice_allowed_for_user(user_id, chatterbox_voice):
             return TtsResult(error="cloned voice is not available for this user")
-        return chatterbox_tts(text, chatterbox_voice, voice_file, voice_rate, voice_volume)
+        return synthesize_chatterbox_with_validation(
+            text, chatterbox_voice, voice_file, voice_rate, voice_volume,
+            task_id, validate, user_id,
+        )
     routed = dispatch_openrouter_tts(voice_name, text, voice_file, voice_rate, voice_volume)
     if routed is not None:
         return routed

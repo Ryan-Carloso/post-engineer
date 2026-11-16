@@ -93,7 +93,7 @@ function baseDb() {
 describe('getPersonaDefaultAccounts', () => {
   it('returns every provider grouped, empty when none stored', async () => {
     const db = baseDb();
-    expect(await getPersonaDefaultAccounts(db as never, PERSONA)).toEqual({
+    expect(await getPersonaDefaultAccounts(db as never, PERSONA, USER)).toEqual({
       youtube: [],
       instagram: [],
       bluesky: [],
@@ -116,11 +116,37 @@ describe('getPersonaDefaultAccounts', () => {
       { persona_id: PERSONA, provider: 'tiktok', provider_account_id: 'tt-1' },
       { persona_id: 'other-persona', provider: 'bluesky', provider_account_id: 'did:plc:z' },
     ];
-    const got = await getPersonaDefaultAccounts(db as never, PERSONA);
+    const got = await getPersonaDefaultAccounts(db as never, PERSONA, USER);
     expect(got.bluesky).toEqual(['did:plc:a', 'did:plc:b']);
     expect(got.youtube).toEqual(['UC-1']);
     expect(got.instagram).toEqual([]);
     expect(got.linkedin).toEqual([]);
+  });
+
+  it('rejects a persona that belongs to another user', async () => {
+    const db = baseDb();
+    db.tables.persona_default_accounts = [
+      { persona_id: PERSONA, provider: 'youtube', provider_account_id: 'UC-victim' },
+    ];
+    await expect(getPersonaDefaultAccounts(db as never, PERSONA, 'other-user')).rejects.toMatchObject({
+      code: 'PERSONA_NOT_FOUND',
+    });
+  });
+
+  it('throws when the persona ownership lookup returns an error', async () => {
+    const chain = {
+      select() {
+        return chain;
+      },
+      eq() {
+        return chain;
+      },
+      maybeSingle: async () => ({ data: null, error: { message: 'connection reset' } }),
+    };
+    const db = { from: () => chain };
+    await expect(getPersonaDefaultAccounts(db as never, PERSONA, USER)).rejects.toThrow(
+      'Failed to load persona: connection reset',
+    );
   });
 });
 

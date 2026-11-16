@@ -1,5 +1,5 @@
 //---------------
-// One live slot per signed upload (migration 065). A signed upload is
+// One live slot per signed upload (migration 066). A signed upload is
 // single-use: the engine claims it when its slot publishes. A second
 // schedule of the same upload id would answer "scheduled" and then fail
 // at publish time, and an immediate publish of an upload a slot already
@@ -13,7 +13,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { ERROR_CODES, formatErrorMessage } from '@/lib/error-codes';
 import { VideoUploadError } from '@/lib/videos/signed-upload';
 
-/** The partial unique index from migration 065. */
+/** The partial unique index from migration 066. */
 export const UPLOAD_SLOT_REFERENCE_INDEX = 'scheduled_posts_upload_media_ref_key';
 
 export function uploadAlreadyScheduledError(): VideoUploadError {

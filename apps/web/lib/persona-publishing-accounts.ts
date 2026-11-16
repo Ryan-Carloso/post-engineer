@@ -149,7 +149,25 @@ export async function validateOwnedAccounts(
 export async function getPersonaDefaultAccounts(
   supabase: SupabaseClient,
   personaId: string,
+  userId: string,
 ): Promise<PersonaDefaultAccounts> {
+  // Service role bypasses RLS. The persona row is the ownership proof:
+  // a foreign persona id must not return that persona's account ids.
+  const { data: persona, error: personaError } = await supabase
+    .from('personas')
+    .select('id')
+    .eq('id', personaId)
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (personaError) {
+    throw new Error(`Failed to load persona: ${personaError.message}`);
+  }
+  if (!persona) {
+    const notFound = new Error('Persona not found.');
+    (notFound as { code?: string }).code = 'PERSONA_NOT_FOUND';
+    throw notFound;
+  }
+
   const defaults = emptyPersonaDefaultAccounts();
   const { data, error } = await supabase
     .from('persona_default_accounts')

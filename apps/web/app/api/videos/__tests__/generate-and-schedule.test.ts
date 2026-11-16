@@ -196,6 +196,9 @@ interface DbConfig {
    *  fail-open paths must keep the dispatch alive). */
   cloneReadyError?: boolean;
   cloneReadyThrows?: boolean;
+  /** maybeSingle() on personas disagrees with single(). 'missing' is no
+   *  row; an object is the PostgREST error from the binding lookup. */
+  personaBindingLookup?: 'missing' | { message: string };
 }
 
 const rpcCalls: Array<{ name: string; args: Record<string, unknown> }> = [];
@@ -238,6 +241,14 @@ function makeClient(cfg: DbConfig): unknown {
             };
           }
           return { data: null, error: null };
+        }
+        // getPersonaDefaultAccounts proves persona ownership with
+        // maybeSingle(); serve the same persona row single() serves.
+        if (name === 'personas') {
+          if (cfg.personaBindingLookup === 'missing') return { data: null, error: null };
+          if (cfg.personaBindingLookup) return { data: null, error: cfg.personaBindingLookup };
+          if (cfg.personaErrorCode) return { data: null, error: { code: cfg.personaErrorCode, message: 'db down' } };
+          return { data: cfg.persona ?? null, error: null };
         }
         return { data: null, error: null };
       },
@@ -420,13 +431,13 @@ function setup(cfg: DbConfig = {}): void {
   });
 }
 
-// Images mode needs media on every segment (one photo per ~3s): hook 24
-// words -> 3, content 42 -> 6, content take 9 -> 2.
+// Images mode needs media on every segment (one photo per ~3s): hook 25
+// words -> 4, content 42 -> 6, content take 9 -> 2.
 const DEFAULT_SEGMENTS = [
   {
     kind: 'hook',
-    text: 'Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today.',
-    media: [0, 1, 2].map((photo) => ({ url: `https://e.com/h${photo}.jpg` })),
+    text: 'Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is still waiting nearby for you today.',
+    media: [0, 1, 2, 3].map((photo) => ({ url: `https://e.com/h${photo}.jpg` })),
   },
   {
     kind: 'content',
@@ -944,12 +955,12 @@ describe('POST /api/videos/generate-and-schedule', () => {
     });
 
     const segmentsHook =
-      'Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today.';
+      'Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is still waiting nearby for you today.';
     const segmentsContent =
       'Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight.';
     const segmentsCtaTake = 'Save this video before your next trip to Porto.';
     const validSegments = [
-      { kind: 'hook', text: segmentsHook, media: [0, 1, 2].map((photo) => ({ url: `https://e.com/h${photo}.jpg` })) },
+      { kind: 'hook', text: segmentsHook, media: [0, 1, 2, 3].map((photo) => ({ url: `https://e.com/h${photo}.jpg` })) },
       {
         kind: 'content',
         text: segmentsContent,
@@ -1048,6 +1059,32 @@ describe('POST /api/videos/generate-and-schedule', () => {
       const json = await res.json();
       expect(res.status).toBe(500);
       expect(json.code).toBe('INTERNAL_ERROR');
+    });
+
+    it('404s with PERSONA_NOT_FOUND when the binding lookup cannot see the persona', async () => {
+      setup({ ...DEFAULT_CFG, personaBindingLookup: 'missing' });
+      const res = await post(baseBody());
+      const json = await res.json();
+      expect(res.status).toBe(404);
+      expect(json.code).toBe('PERSONA_NOT_FOUND');
+      expect(json.field).toBe('personaId');
+      expect(json.error).toBe('Persona does not exist or is not accessible.');
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
+    });
+
+    it('logs the binding lookup error and answers 500', async () => {
+      const dbError = { message: 'connection reset' };
+      setup({ ...DEFAULT_CFG, personaBindingLookup: dbError });
+      const res = await post(baseBody());
+      const json = await res.json();
+      expect(res.status).toBe(500);
+      expect(json.code).toBe('INTERNAL_ERROR');
+      expect(logger.error).toHaveBeenCalledWith(
+        '[generate-and-schedule] persona binding lookup failed',
+        expect.objectContaining({ message: 'Failed to load persona: connection reset' }),
+        { userId: USER_ID, personaId: 'persona-1' },
+      );
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
     });
 
     it('403s with PERSONA_SCOPE_DENIED for an out-of-scope API key', async () => {
@@ -3234,12 +3271,12 @@ describe('POST /api/videos/generate-and-schedule', () => {
 
 describe('segments-only contract (Phase 4)', () => {
   const hook =
-    'Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today.';
+    'Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is still waiting nearby for you today.';
   const contentText =
     'Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight.';
   const ctaTake = 'Save this video before your next trip to Porto.';
   const segments = [
-    { kind: 'hook', text: hook, media: [0, 1, 2].map((photo) => ({ url: `https://e.com/h${photo}.jpg` })) },
+    { kind: 'hook', text: hook, media: [0, 1, 2, 3].map((photo) => ({ url: `https://e.com/h${photo}.jpg` })) },
     {
       kind: 'content',
       text: contentText,
@@ -3372,7 +3409,7 @@ describe('full lip-sync preflight — pre-charge rejection', () => {
   it('skips the narration preflight for non-full videos but still checks segment ratios', async () => {
     // The narration check (audio/preflight-duration) is full-lip-sync
     // only; the aspect check (media/check) still runs for the segments'
-    // full-frame photos — the default persona has no face, so all 11 do —
+    // full-frame photos — the default persona has no face, so all 12 do —
     // plus the first-photo face check, which re-checks the first photo
     // for a face (issue #589).
     const calls: Array<string> = [];
@@ -3388,7 +3425,7 @@ describe('full lip-sync preflight — pre-charge rejection', () => {
     );
     const res = await post(baseBody());
     expect(res.status).toBe(200);
-    expect(calls).toHaveLength(12);
+    expect(calls).toHaveLength(13);
     expect(calls.every((url) => url.includes('/api/v1/media/check'))).toBe(true);
     expect(calls.some((url) => url.includes('preflight-duration'))).toBe(false);
     expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(1);

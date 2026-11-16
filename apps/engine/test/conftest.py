@@ -15,6 +15,21 @@ if str(TEST_ROOT) not in sys.path:
 
 
 @pytest.fixture(autouse=True)
+def _clean_cancellation_registry():
+    """Each test sees a fresh cancel registry (issue #447).
+
+    ``delete_task`` marks a task cancelled, and existing tests reuse
+    task ids across cases; without a reset, one case's delete would
+    cancel the id for the next case's fresh row.
+    """
+    from app.services import task_cancellation
+
+    task_cancellation.reset()
+    yield
+    task_cancellation.reset()
+
+
+@pytest.fixture(autouse=True)
 def _no_real_posthog_client(monkeypatch: pytest.MonkeyPatch):
     """Never let a test construct a real PostHog client.
 

@@ -35,6 +35,7 @@ import { requireSupabaseSession } from '@/lib/request-auth';
 import { logger } from '@/lib/logger';
 import { trackApiEvent } from '@/lib/analytics';
 import { getPostHogServer } from '@/lib/posthog-server';
+import { ENGINE_CANCEL_BUDGET_MS } from '@/lib/engine-tasks';
 
 const USER_ID = 'user-1';
 
@@ -951,5 +952,145 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
       reason: 'slots_reread_failed',
       userId: USER_ID,
     });
+  });
+
+  // Issue #447: cancelling a generating slot must signal the engine to
+  // stop the pipeline; the refund still happens when the signal fails.
+  it('signals the engine to cancel generating slots', async () => {
+    vi.stubEnv('MONEYPRINT_API_URL', 'https://engine.test');
+    const fetchMock = vi.fn(async () => ({ ok: true, status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      mockSupabase({
+        scheduleSlots: MIXED_SLOTS,
+        remove: { error: null },
+      });
+      const res = await DELETE(new Request('http://localhost/api/schedule?id=s-1'));
+      expect(res.status).toBe(200);
+      const calls = fetchMock.mock.calls.map((call: unknown[]) => ({
+        url: String(call[0]),
+        method: (call[1] as RequestInit | undefined)?.method,
+      }));
+      expect(calls).toEqual([
+        { url: 'https://engine.test/api/v1/tasks/task-g', method: 'DELETE' },
+      ]);
+    } finally {
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('still refunds when the engine cancel call fails', async () => {
+    vi.stubEnv('MONEYPRINT_API_URL', 'https://engine.test');
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('engine down'); }));
+    try {
+      const db = mockSupabase({
+        scheduleSlots: [
+          { id: 'slot-g', status: 'generating', charged_tokens: 2, task_id: 'task-g' },
+          { id: 'slot-n', status: 'pending', charged_tokens: 3, task_id: null },
+        ],
+        remove: { error: null },
+      });
+      const res = await DELETE(new Request('http://localhost/api/schedule?id=s-1'));
+      expect(res.status).toBe(200);
+      // The generating slot keeps its charge (GPU sunk), the pending slot
+      // is refunded anyway, and the cancel failure is logged loudly
+      // without failing the cancel.
+      const body = (await res.json()) as { cancelledSlotIds: string[] };
+      expect(body.cancelledSlotIds).toEqual(['slot-g', 'slot-n']);
+      expect(refundCalls(db).map((params) => params.p_amount)).toEqual([3]);
+      expect(logger.error).toHaveBeenCalledWith(
+        '[api/schedule] engine cancel failed',
+        expect.anything(),
+        expect.objectContaining({ scheduleId: 's-1', slotId: 'slot-g', userId: USER_ID }),
+      );
+    } finally {
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('does not let a hung engine cancel block refunds beyond the budget', async () => {
+    vi.stubEnv('MONEYPRINT_API_URL', 'https://engine.test');
+    // A hung engine: the fetch never settles until its abort signal fires.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        (_url: unknown, init?: { signal?: AbortSignal }) =>
+          new Promise((_resolve, reject) => {
+            init?.signal?.addEventListener('abort', () =>
+              reject(new DOMException('The operation was aborted.', 'AbortError')),
+            );
+          }),
+      ),
+    );
+    vi.useFakeTimers();
+    try {
+      const db = mockSupabase({
+        scheduleSlots: [
+          { id: 'slot-g1', status: 'generating', charged_tokens: 2, task_id: 'task-g1' },
+          { id: 'slot-g2', status: 'generating', charged_tokens: 2, task_id: 'task-g2' },
+          { id: 'slot-n', status: 'pending', charged_tokens: 3, task_id: null },
+        ],
+        remove: { error: null },
+      });
+      let settled = false;
+      const pending = DELETE(new Request('http://localhost/api/schedule?id=s-1')).then((res) => {
+        settled = true;
+        return res;
+      });
+      await vi.advanceTimersByTimeAsync(ENGINE_CANCEL_BUDGET_MS + 100);
+      // The refunds ran inside the aggregate budget even though every
+      // engine cancel is still hung/aborting.
+      expect(settled).toBe(true);
+      const res = await pending;
+      expect(res.status).toBe(200);
+      expect(refundCalls(db).map((params) => params.p_amount)).toEqual([3]);
+    } finally {
+      vi.useRealTimers();
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('cancels generating slots concurrently', async () => {
+    vi.stubEnv('MONEYPRINT_API_URL', 'https://engine.test');
+    const started: string[] = [];
+    const resolvers: (() => void)[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        (url: string) =>
+          new Promise((resolve) => {
+            started.push(url);
+            resolvers.push(() => resolve({ ok: true, status: 200 }));
+          }),
+      ),
+    );
+    try {
+      mockSupabase({
+        scheduleSlots: [
+          { id: 'slot-g1', status: 'generating', charged_tokens: 2, task_id: 'task-g1' },
+          { id: 'slot-g2', status: 'generating', charged_tokens: 2, task_id: 'task-g2' },
+          { id: 'slot-g3', status: 'generating', charged_tokens: 2, task_id: 'task-g3' },
+        ],
+        remove: { error: null },
+      });
+      const pending = DELETE(new Request('http://localhost/api/schedule?id=s-1'));
+      // Let the handler run up to the engine-cancel step: every cancel must
+      // have started before any of them is allowed to finish.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(started.sort()).toEqual([
+        'https://engine.test/api/v1/tasks/task-g1',
+        'https://engine.test/api/v1/tasks/task-g2',
+        'https://engine.test/api/v1/tasks/task-g3',
+      ]);
+      for (const resolve of resolvers) resolve();
+      const res = await pending;
+      expect(res.status).toBe(200);
+    } finally {
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+    }
   });
 });

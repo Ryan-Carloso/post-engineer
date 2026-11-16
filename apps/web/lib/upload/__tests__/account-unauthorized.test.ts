@@ -5,6 +5,7 @@ vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), error: vi.fn() } }));
 vi.mock('@/lib/owner-alert-mail', () => ({ notifyAccountBreak: vi.fn(() => Promise.resolve()) }));
 
 import { trackApiEvent } from '@/lib/analytics';
+import { FacebookError, InstagramApiError, ThreadsError } from '@/lib/errors';
 import { logger } from '@/lib/logger';
 import { notifyAccountBreak } from '@/lib/owner-alert-mail';
 import {
@@ -35,6 +36,12 @@ describe('httpStatusOf', () => {
 
   it('reads a statusCode (InstagramApiError)', () => {
     expect(httpStatusOf({ statusCode: 401 })).toBe(401);
+  });
+
+  it('reads the HTTP status, never the Meta provider code, on a 190 error', () => {
+    expect(httpStatusOf(new InstagramApiError('Error validating access token', 400, undefined, 190))).toBe(400);
+    expect(httpStatusOf(new FacebookError('Error validating access token', 400, 190))).toBe(400);
+    expect(httpStatusOf(new ThreadsError('Error validating access token', 400, 190))).toBe(400);
   });
 
   it('ignores non-numeric codes and non-objects', () => {
@@ -72,6 +79,25 @@ describe('isUnauthorizedError', () => {
     expect(isUnauthorizedError({ name: 'BlueskyError', code: 'rate_limited' })).toBe(false);
   });
 
+  it('is true for a dead Meta token (HTTP 400 + OAuthException code 190, never a 401)', () => {
+    const message =
+      'Error validating access token: The session has been invalidated because the user changed their password.';
+    expect(isUnauthorizedError(new InstagramApiError(message, 400, undefined, 190))).toBe(true);
+    expect(isUnauthorizedError(new FacebookError(message, 400, 190))).toBe(true);
+    expect(isUnauthorizedError(new ThreadsError(message, 400, 190))).toBe(true);
+  });
+
+  it('is false for other Meta provider codes', () => {
+    expect(isUnauthorizedError(new InstagramApiError('bad request', 400, undefined, 100))).toBe(false);
+    expect(isUnauthorizedError(new FacebookError('bad request', 400, 191))).toBe(false);
+    expect(isUnauthorizedError(new ThreadsError('bad request', 400, 200))).toBe(false);
+  });
+
+  it('is false for a Meta 400 without a provider code', () => {
+    expect(isUnauthorizedError(new InstagramApiError('Media ID not found', 400))).toBe(false);
+    expect(isUnauthorizedError(new FacebookError('no permission', 403))).toBe(false);
+  });
+
   it('is false for other failures', () => {
     expect(isUnauthorizedError(new Error('socket hang up'))).toBe(false);
     expect(isUnauthorizedError({ response: { status: 500 } })).toBe(false);
@@ -94,6 +120,24 @@ describe('reportAccountUnauthorized', () => {
       userId: 'user-1',
       provider: 'youtube',
       accountId: 'UC123',
+      error,
+    });
+  });
+
+  it('emits publish_account_unauthorized with the HTTP status for a Meta 190 dead token', () => {
+    const error = new InstagramApiError('Error validating access token', 400, undefined, 190);
+    reportAccountUnauthorized('instagram', 'ig-1', 'user-1', error);
+    expect(trackApiEvent).toHaveBeenCalledTimes(1);
+    expect(trackApiEvent).toHaveBeenCalledWith(PUBLISH_ACCOUNT_UNAUTHORIZED_EVENT, {
+      provider: 'instagram',
+      account_id: 'ig-1',
+      user_id: 'user-1',
+      status: 400,
+    });
+    expect(notifyAccountBreak).toHaveBeenCalledWith({
+      userId: 'user-1',
+      provider: 'instagram',
+      accountId: 'ig-1',
       error,
     });
   });

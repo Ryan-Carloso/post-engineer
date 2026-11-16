@@ -70,7 +70,7 @@ class StoreRequestsTests(unittest.TestCase):
 
 
     def test_pending_slots_filters_status_and_horizon(self):
-        self.store.pending_slots(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+        self.store.pending_slots(datetime(2026, 9, 6, 12, 0, tzinfo=UTC), limit=10)
         _, url, kwargs = self._last_call()
         self.assertEqual(kwargs["params"]["status"], f"eq.{fs.SLOT_PENDING}")
         self.assertTrue(kwargs["params"]["slot_at"].startswith("lte."))
@@ -85,7 +85,7 @@ class StoreRequestsTests(unittest.TestCase):
         # injecting personas inline in the fixture).
         # `!left` (not `!inner`) since migration 012: a schedule may have no
         # persona, and an inner join would drop those slots from every tick.
-        self.store.pending_slots(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+        self.store.pending_slots(datetime(2026, 9, 6, 12, 0, tzinfo=UTC), limit=10)
         _, _, kwargs = self._last_call()
         select = kwargs["params"]["select"]
         self.assertIn("personas(", select)
@@ -214,7 +214,7 @@ class StoreRequestsTests(unittest.TestCase):
 
     def test_non_dict_rows_filtered(self):
         self.requests.request.return_value = _response(json_data=[{"id": "s1"}, "junk", 42])
-        slots = self.store.pending_slots(datetime(2026, 9, 6, 12, 0, tzinfo=timezone.utc))
+        slots = self.store.pending_slots(datetime(2026, 9, 6, 12, 0, tzinfo=timezone.utc), limit=10)
         self.assertEqual(len(slots), 1)
 
     def _last_call(self):
@@ -264,7 +264,7 @@ class GenerationHorizonTests(unittest.TestCase):
         original = app_config.app.get("fill_schedule_generation_horizon_hours")
         app_config.app["fill_schedule_generation_horizon_hours"] = 1
         try:
-            store.pending_slots(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+            store.pending_slots(datetime(2026, 9, 6, 12, 0, tzinfo=UTC), limit=10)
         finally:
             if original is None:
                 app_config.app.pop("fill_schedule_generation_horizon_hours", None)
@@ -355,7 +355,7 @@ class RetryingSessionTests(unittest.TestCase):
     def test_default_store_retries_a_connect_failure(self):
         attempts, patcher = self._patch_new_conn(failures=1)
         with patcher:
-            rows = self.store.pending_slots(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+            rows = self.store.pending_slots(datetime(2026, 9, 6, 12, 0, tzinfo=UTC), limit=10)
         self.assertEqual(rows, [{"id": "slot-1"}])
         self.assertEqual(len(attempts), 2)
 
@@ -364,7 +364,7 @@ class RetryingSessionTests(unittest.TestCase):
 
         attempts, patcher = self._patch_new_conn(failures=10)
         with patcher, self.assertRaises(requests.ConnectionError):
-            self.store.pending_slots(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+            self.store.pending_slots(datetime(2026, 9, 6, 12, 0, tzinfo=UTC), limit=10)
         self.assertEqual(len(attempts), fs.store.CONNECT_RETRIES + 1)
 
     def _patch_getresponse(self, failures):
@@ -392,7 +392,7 @@ class RetryingSessionTests(unittest.TestCase):
 
         attempts, patcher = self._patch_getresponse(failures=1)
         with patcher, self.assertRaises(requests.ConnectionError):
-            self.store.pending_slots(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+            self.store.pending_slots(datetime(2026, 9, 6, 12, 0, tzinfo=UTC), limit=10)
         self.assertEqual(len(attempts), 1, "a read failure was retried")
 
     def test_post_rpc_retries_a_connect_failure(self):

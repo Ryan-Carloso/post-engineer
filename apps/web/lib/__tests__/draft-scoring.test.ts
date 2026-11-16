@@ -233,7 +233,7 @@ describe('scoreDraft for a video script', () => {
   function script(hookWords: number, bodyWords: number, cta: string): string {
     return ['word '.repeat(hookWords).trim() + '.', 'body '.repeat(bodyWords).trim() + '.', cta].join('\n');
   }
-  const STRONG = script(20, 40, 'Comment below with your favorite morning ritual today');
+  const STRONG = script(30, 40, 'Comment below with your favorite morning ritual today');
   const THEMED: DraftBaseline = {
     ...EMPTY_BASELINE,
     postsMeasured: 1,
@@ -259,7 +259,7 @@ describe('scoreDraft for a video script', () => {
   });
 
   it.each([
-    [14, 5], [15, 25], [40, 25], [41, 5],
+    [24, 5], [25, 25], [40, 25], [41, 5],
   ])('scores a %i-word hook %i points', (hookWords, points) => {
     const result = scoreDraft(script(hookWords, 40, 'Share this.'), EMPTY_BASELINE, 'linkedin', 'script');
     expect(result.reasons.find((reason) => reason.rule === 'hook')?.points).toBe(points);
@@ -268,7 +268,7 @@ describe('scoreDraft for a video script', () => {
   it.each([
     [39, 0], [40, 8], [59, 8], [60, 20], [200, 20], [201, 8], [250, 8], [251, 0],
   ])('scores %i total words %i length points', (total, points) => {
-    const result = scoreDraft(script(20, total - 22, 'Share this.'), EMPTY_BASELINE, 'linkedin', 'script');
+    const result = scoreDraft(script(30, total - 32, 'Share this.'), EMPTY_BASELINE, 'linkedin', 'script');
     expect(result.counts.words).toBe(total);
     expect(result.reasons.find((reason) => reason.rule === 'length')?.points).toBe(points);
   });

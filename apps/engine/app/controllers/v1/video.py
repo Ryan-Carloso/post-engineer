@@ -3,7 +3,6 @@ import glob
 import json
 import os
 import pathlib
-import shutil
 import time
 from typing import Union
 
@@ -35,6 +34,7 @@ from app.models.schema import (
 )
 from app.services import state as sm, task as tm
 from app.services import video_storage
+from app.services.task_cleanup import remove_task_directory
 from app.services.language_gate import ensure_english_video_language
 from app.services.music_mood import validate_music_mood
 from app.services.upload_filenames import sanitize_upload_filename as _sanitize_upload_filename
@@ -540,12 +540,11 @@ def delete_video(request: Request, task_id: str = Path(..., description="Task ID
     auth = base.get_auth_context(request)
     task = sm.state.get_task(task_id, user_id=auth.user_id)
     if task:
-        tasks_dir = utils.task_dir()
-        current_task_dir = os.path.join(tasks_dir, task_id)
-        if os.path.exists(current_task_dir):
-            shutil.rmtree(current_task_dir)
-
+        # Cancel the row before removing the directory so a worker that
+        # loses its files aborts; removal failure is logged, not raised,
+        # because the delete is already committed (see task_cleanup).
         sm.state.delete_task(task_id)
+        remove_task_directory(task_id)
         logger.success(f"video deleted: task_id={task_id}")
         return utils.get_response(200)
 

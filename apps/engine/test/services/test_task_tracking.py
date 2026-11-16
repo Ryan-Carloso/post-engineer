@@ -505,12 +505,8 @@ class BatchRequestedTests(unittest.TestCase):
             "segments": [
                 {
                     "kind": "hook",
-                    "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today.",
-                    "media": [
-                        {"url": "https://example.com/h0.jpg"},
-                        {"url": "https://example.com/h1.jpg"},
-                        {"url": "https://example.com/h2.jpg"},
-                    ],
+                    "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is still waiting nearby for you today.",
+                    "media": [{"url": "https://example.com/h0.jpg"}, {"url": "https://example.com/h1.jpg"}, {"url": "https://example.com/h2.jpg"}, {"url": "https://example.com/h3.jpg"}],
                 },
                 {
                     "kind": "content",
@@ -555,7 +551,7 @@ class BatchRequestedTests(unittest.TestCase):
             },
         }
 
-    def test_generate_slot_tracks_requested_before_dispatch(self):
+    def test_generate_slot_tracks_requested_when_the_manager_accepts(self):
         from app.services.fill_schedule import generate as gen_module
 
         store = MagicMock()
@@ -564,30 +560,39 @@ class BatchRequestedTests(unittest.TestCase):
             store=store, task_state=MagicMock(), notify=MagicMock()
         )
         with (
-            patch("threading.Thread") as thread_cls,
+            patch("app.controllers.v1.video.task_manager") as manager,
             patch.object(gen_module.tm, "track_generation_requested") as requested,
         ):
-            order = MagicMock()
-            order.attach_mock(requested, "requested")
-            order.attach_mock(thread_cls, "thread_cls")
-            label = generator._generate_slot(self._slot())
-            self.assertIsNotNone(label)
-            task_id = thread_cls.call_args.kwargs["kwargs"]["task_id"]
-            requested.assert_called_once_with(
-                task_id,
-                user_id="user-1",
-                flow="batch",
-                pipeline="video",
-                slot_id="slot-batch-req-1",
-                persona_id="persona-1",
+            # Pin the order, not just the calls: the funnel entry must be
+            # recorded before the worker starts, or PostHog timestamps
+            # video_generation_started first and drops the conversion.
+            order: list[str] = []
+            requested.side_effect = lambda *a, **k: order.append("requested")
+            manager.try_reserve_running.return_value.start.side_effect = (
+                lambda *a, **k: order.append("start")
             )
-            # The funnel entry fires before the worker thread is spawned.
-            call_order = [c[0] for c in order.mock_calls]
-            self.assertLess(call_order.index("requested"), call_order.index("thread_cls"))
-            # The batch task state carries the funnel context.
-            _, kwargs = generator.task_state.update_task.call_args
-            self.assertEqual(kwargs["flow"], "batch")
-            self.assertEqual(kwargs["pipeline"], "video")
+            self.assertIsNotNone(generator._generate_slot(self._slot()))
+        self.assertEqual(order, ["requested", "start"])
+        # Acceptance is a running reservation, not add_task. on_accepted
+        # fires after the task row and before the worker.
+        manager.try_reserve_running.assert_called_once_with()
+        manager.add_task.assert_not_called()
+        reservation = manager.try_reserve_running.return_value
+        reservation.start.assert_called_once()
+        started = reservation.start.call_args
+        self.assertIs(started.args[0], gen_module.tm.start)
+        task_kwargs = started.kwargs
+        requested.assert_called_once_with(
+            task_kwargs["task_id"],
+            user_id="user-1",
+            flow="batch",
+            pipeline="video",
+            slot_id="slot-batch-req-1",
+            persona_id="persona-1",
+        )
+        self.assertEqual(task_kwargs["stop_at"], "video")
+        saved = generator.task_state.update_task.call_args.kwargs
+        self.assertEqual((saved["flow"], saved["pipeline"]), ("batch", "video"))
 
 
 class BatchFailedTests(unittest.TestCase):
@@ -603,12 +608,8 @@ class BatchFailedTests(unittest.TestCase):
             "segments": [
                 {
                     "kind": "hook",
-                    "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today.",
-                    "media": [
-                        {"url": "https://example.com/h0.jpg"},
-                        {"url": "https://example.com/h1.jpg"},
-                        {"url": "https://example.com/h2.jpg"},
-                    ],
+                    "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is still waiting nearby for you today.",
+                    "media": [{"url": "https://example.com/h0.jpg"}, {"url": "https://example.com/h1.jpg"}, {"url": "https://example.com/h2.jpg"}, {"url": "https://example.com/h3.jpg"}],
                 },
                 {
                     "kind": "content",

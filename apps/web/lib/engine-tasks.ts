@@ -2,13 +2,14 @@ import { engineAuthHeaders } from '@/lib/request-auth';
 import { SAFE_TASK_ID } from './video-urls';
 
 //---------------
-// engine-tasks — pure-read engine task lookups (no side effects).
+// engine-tasks — engine task lookups that only read task state.
 //
 // Unlike GET /api/persona/video-status/[taskId] — which advances the
 // video_generations history row and refunds on terminal states — these
-// helpers NEVER write. They only fetch the engine task record so list
-// endpoints (e.g. GET /api/schedule/status) can surface live progress
-// without changing any billing or history state.
+// helpers never touch billing or history state. The one deliberate write
+// is cancelEngineTask (DELETE, issue #447): it marks a running engine
+// task cancelled so a cancelled slot's worker stops instead of finishing
+// (and potentially publishing) after the charge is gone.
 //---------------
 
 //---------------
@@ -17,6 +18,16 @@ import { SAFE_TASK_ID } from './video-urls';
 // to 0 (caught by the caller) instead of blocking the whole request.
 //---------------
 export const ENGINE_TASK_PROGRESS_TIMEOUT_MS = 10_000;
+
+//---------------
+// ENGINE_CANCEL_TIMEOUT_MS / ENGINE_CANCEL_BUDGET_MS — a schedule cancel
+// runs before the refunds, on the request path: a hung engine must not
+// delay the refund. Cancels run concurrently, each capped by the per-call
+// timeout, and the caller never waits past the aggregate budget (mirrors
+// ENGINE_CLEANUP_BUDGET_MS in apps/web/app/api/persona/route.ts).
+//---------------
+export const ENGINE_CANCEL_TIMEOUT_MS = 3_000;
+export const ENGINE_CANCEL_BUDGET_MS = 5_000;
 
 //---------------
 // TASK_STATE_FAILED — the engine's numeric failed state (const.py). A gone
@@ -259,4 +270,44 @@ export async function fetchEnginePostMetricsSource(
     publishResults: Array.isArray(results) ? results : [],
     scriptAngle: trimmed.length > 0 ? trimmed : null,
   };
+}
+
+//---------------
+// cancelEngineTask — DELETE {MONEYPRINT_API_URL}/api/v1/tasks/{taskId}
+// (issue #447). The engine's delete marks the task cancelled before
+// removing the row, so a running worker detaches at its next stage
+// boundary instead of finishing (and potentially publishing) after the
+// caller was refunded. A 404 is benign (the task is already gone) and
+// resolves; any other non-ok / network / unconfigured failure is a throw
+// so the caller can log it loudly and continue the cancel.
+//---------------
+export async function cancelEngineTask(
+  taskId: string,
+  userId: string,
+  timeoutMs: number = ENGINE_CANCEL_TIMEOUT_MS,
+): Promise<void> {
+  if (!SAFE_TASK_ID.test(taskId)) {
+    throw new Error(`Invalid taskId: ${taskId}`);
+  }
+  const baseUrl = process.env.MONEYPRINT_API_URL;
+  if (!baseUrl) {
+    throw new Error('MONEYPRINT_API_URL is not defined');
+  }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(
+      `${baseUrl.replace(/\/+$/, '')}/api/v1/tasks/${encodeURIComponent(taskId)}`,
+      {
+        method: 'DELETE',
+        headers: engineAuthHeaders(userId),
+        cache: 'no-store',
+        signal: controller.signal,
+      },
+    );
+    if (response.ok || response.status === 404) return;
+    throw new EngineTaskLookupError(response.status);
+  } finally {
+    clearTimeout(timeout);
+  }
 }

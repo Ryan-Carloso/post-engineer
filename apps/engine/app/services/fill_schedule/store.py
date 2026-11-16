@@ -135,8 +135,16 @@ class ScheduleStore:
             return None
         return response.json()
 
-    def pending_slots(self, now_utc: datetime) -> list[dict[str, Any]]:
+    def pending_slots(self, now_utc: datetime, *, limit: int) -> list[dict[str, Any]]:
+        """Soonest pending rows in the horizon, at most ``limit`` rows.
+
+        The caller chooses the page. The tick passes the free running slots.
+        This store does not read the task manager.
+        """
+        from app.services.fill_schedule.batch_admission import pending_page_limit
+
         horizon = (now_utc + timedelta(hours=self.generation_horizon_hours())).isoformat()
+        page = pending_page_limit(limit)
         rows = self._request(
             "GET",
             "scheduled_posts",
@@ -145,6 +153,7 @@ class ScheduleStore:
                 "slot_at": f"lte.{horizon}",
                 "select": self.SLOT_SELECT,
                 "order": "slot_at.asc",
+                "limit": str(page),
             },
         )
         return [row for row in rows if isinstance(row, dict)] if isinstance(rows, list) else []

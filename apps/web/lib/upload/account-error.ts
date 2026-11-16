@@ -1,6 +1,6 @@
 import { BlueskyError } from '@/lib/bluesky';
 import { AccountNotFoundError, AuthError } from '@/lib/errors';
-import { httpStatusOf } from './account-unauthorized';
+import { httpStatusOf, isMetaInvalidToken } from './account-unauthorized';
 import type { UploadAccountErrorCode } from './account-error-codes';
 
 //---------------
@@ -47,6 +47,10 @@ function codeForError(error: unknown): UploadAccountErrorCode {
     if (error.code === 'invalid_credentials') return 'token_expired';
     if (error.code === 'rate_limited') return 'transient';
   }
+  // Meta answers a dead token with HTTP 400 + code 190, never a 401: without
+  // this the account reads as publish_rejected and the user is never told
+  // only they can fix it by reconnecting.
+  if (isMetaInvalidToken(error)) return 'token_expired';
   return codeForStatus(httpStatusOf(error));
 }
 

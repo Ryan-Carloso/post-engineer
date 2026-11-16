@@ -27,12 +27,12 @@ export type PublishNetwork = 'linkedin' | 'youtube' | 'instagram' | 'bluesky' | 
 // apply and the caption publish check would be vacuous.
 export type DraftKind = 'post' | 'script';
 
-// Script ranges mirror the segments contract (hook 15-40 words, 60-200 in
+// Script ranges mirror the segments contract (hook 25-40 words, 60-200 in
 // total). The freed hashtag points go to hook, length and slop, so both
 // profiles still top out at exactly 100.
 const SCORE_PROFILES = {
   post: { hook: 20, hookWords: [3, 30], length: 15, words: [40, 400], nearWords: [20, 600], slop: 20 },
-  script: { hook: 25, hookWords: [15, 40], length: 20, words: [60, 200], nearWords: [40, 250], slop: 25 },
+  script: { hook: 25, hookWords: [25, 40], length: 20, words: [60, 200], nearWords: [40, 250], slop: 25 },
 } as const;
 
 

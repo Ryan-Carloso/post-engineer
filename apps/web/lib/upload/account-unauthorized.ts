@@ -16,7 +16,7 @@ import type { SocialProvider } from '../providers/registry';
 // PostHog stays limited to isUnauthorizedError. The mailer dedupes.
 //---------------
 
-export { classifyAccountBreak, httpStatusOf, isUnauthorizedError } from '../account-break';
+export { classifyAccountBreak, httpStatusOf, isMetaInvalidToken, isUnauthorizedError } from '../account-break';
 
 export const PUBLISH_ACCOUNT_UNAUTHORIZED_EVENT = 'publish_account_unauthorized';
 
