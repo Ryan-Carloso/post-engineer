@@ -91,6 +91,17 @@ describe('webhookUrl rejects loopback and private literals', () => {
     }
   });
 
+  // Zod runs .refine even after .url() fails, so the refine must not throw
+  // on a string URL cannot parse: a malformed webhookUrl is a validation
+  // issue, never an exception out of the schema.
+  it.each(['not a url', 'https://', '://missing-scheme'])('reports %s as an issue instead of throwing', (webhookUrl) => {
+    const parsed = parseOptions({ webhookUrl });
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) {
+      expect(JSON.stringify(parsed.error.issues)).toContain('webhookUrl');
+    }
+  });
+
   it('accepts a public https webhook and still allows a loopback audioUrl', () => {
     const parsed = parseOptions({
       webhookUrl: 'https://example.com/hook',

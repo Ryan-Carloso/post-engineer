@@ -103,7 +103,9 @@ function httpsUrlField(fieldName: string) {
 
 /** https only. A loopback or private literal host is rejected; a name is left to the engine. */
 function isPublicHttpsWebhookUrl(url: string): boolean {
-  // `.url()` already required a string URL.canParse accepts, so this does not throw.
+  // Zod still runs this refine when `.url()` failed, so a malformed string
+  // must be a validation issue here, never a thrown TypeError.
+  if (!URL.canParse(url)) return false;
   const parsed = new URL(url);
   if (parsed.protocol !== 'https:') return false;
   // Node keeps the brackets on an IPv6 hostname (`[::1]`).
