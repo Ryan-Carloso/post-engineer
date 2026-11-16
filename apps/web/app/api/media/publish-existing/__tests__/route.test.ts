@@ -40,6 +40,7 @@ vi.mock('@/lib/videos/signed-upload', () => {
   }
   return {
     VideoUploadError,
+    assertUploadFitsProviders: vi.fn(),
     claimUploadForPublish: vi.fn(),
     createSupabaseVideoUploadStore: vi.fn(),
     createSupabaseVideoUploadStorage: vi.fn(),
@@ -67,6 +68,7 @@ import { applyRateLimit } from '@/lib/rate-limit';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import {
   VideoUploadError,
+  assertUploadFitsProviders,
   claimUploadForPublish,
   createSupabaseVideoUploadStore,
   createSupabaseVideoUploadStorage,
@@ -409,7 +411,35 @@ describe('POST /api/media/publish-existing', () => {
     expect(vi.mocked(dispatchPublish)).toHaveBeenCalledTimes(2);
     // Claimed exactly once for all providers, then the bytes are removed.
     expect(vi.mocked(claimUploadForPublish)).toHaveBeenCalledTimes(1);
+    // The claim re-checks the networks (an image upload never reaches a video-only one).
+    expect(vi.mocked(claimUploadForPublish).mock.calls[0]?.[5]).toEqual(['youtube', 'instagram']);
     expect(storage.remove).toHaveBeenCalledWith([`${USER_ID}/direct-uploads/${UPLOAD_ID}.mp4`]);
+  });
+
+  it('refuses an image upload for a video-only network before claiming it (400 IMAGE_PROVIDER_UNSUPPORTED)', async () => {
+    const client = fakeSupabase({ socialRows: [{ provider: 'youtube', provider_account_id: 'UC1' }] });
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+    const imageRow = uploadRow({ declared_content_type: 'image/jpeg', detected_content_type: 'image/jpeg' });
+    mockUploadStore({ uploadRow: imageRow });
+    vi.mocked(assertUploadFitsProviders).mockImplementationOnce(() => {
+      throw new VideoUploadError('This upload is an image: youtube publishes video only.', 400, 'IMAGE_PROVIDER_UNSUPPORTED');
+    });
+
+    const response = await POST(
+      jsonRequest({
+        media: { kind: 'upload', uploadId: UPLOAD_ID },
+        title: 'Photo',
+        description: 'A photo.',
+        publishing: { mode: 'asap', providers: ['youtube'], accounts: { youtube: ['UC1'] } },
+        tags: ['photo'],
+        privacyStatus: 'public',
+      }),
+    );
+    expect(response.status).toBe(400);
+    expect((await response.json()).code).toBe('IMAGE_PROVIDER_UNSUPPORTED');
+    expect(vi.mocked(assertUploadFitsProviders)).toHaveBeenCalledWith(imageRow, ['youtube']);
+    expect(vi.mocked(claimUploadForPublish)).not.toHaveBeenCalled();
+    expect(vi.mocked(dispatchPublish)).not.toHaveBeenCalled();
   });
 
   it('keeps the first provider result when a later provider dispatch throws', async () => {
@@ -490,6 +520,39 @@ describe('POST /api/media/publish-existing', () => {
     expect(provider).toBe('instagram');
     expect(form?.get('file')).toBeInstanceOf(File);
     expect(form?.get('caption')).toBe('Edited photo.');
+  });
+
+  it('publishes an image ASAP to several image networks: the image rides in each form', async () => {
+    const client = fakeSupabase({
+      socialRows: [
+        { provider: 'instagram', provider_account_id: 'ig-1' },
+        { provider: 'bluesky', provider_account_id: 'did:plc:a' },
+        { provider: 'threads', provider_account_id: 'th-1' },
+      ],
+    });
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+    const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01]);
+
+    const response = await POST(
+      jsonRequest({
+        media: { kind: 'image', imageData: jpeg.toString('base64'), contentType: 'image/jpeg' },
+        title: 'Sunset photo',
+        description: 'Edited photo.',
+        publishing: {
+          mode: 'asap',
+          providers: ['instagram', 'bluesky', 'threads'],
+          accounts: { instagram: ['ig-1'], bluesky: ['did:plc:a'], threads: ['th-1'] },
+        },
+      }),
+    );
+    expect(response.status).toBe(200);
+    const calls = vi.mocked(dispatchPublish).mock.calls;
+    expect(calls.map(([provider]) => provider)).toEqual(['instagram', 'bluesky', 'threads']);
+    for (const [provider, form] of calls) {
+      const file = form.get(provider === 'instagram' ? 'file' : 'video');
+      expect(file).toBeInstanceOf(File);
+      expect((file as File).type).toBe('image/jpeg');
+    }
   });
 
   it('reports a throwing image dispatch as a per-account failure instead of a 500', async () => {

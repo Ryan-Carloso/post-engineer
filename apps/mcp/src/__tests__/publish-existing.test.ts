@@ -108,12 +108,13 @@ describe('publish_existing schema', () => {
     expect(PublishExistingSchema.safeParse(args({ mediaKind: 'upload', taskId: undefined, uploadId: 'not-a-uuid' })).success).toBe(false);
   });
 
-  it('takes the image from exactly one of imagePath and imageData', () => {
+  it('takes an image only from imagePath: base64 bytes are never a tool argument', () => {
     const image = { mediaKind: 'image' as const, taskId: undefined };
-    expect(PublishExistingSchema.safeParse(args(image)).success).toBe(false);
+    const missing = PublishExistingSchema.safeParse(args(image));
+    expect(missing.success).toBe(false);
+    expect(JSON.stringify(missing.error?.issues)).toContain('create_upload');
     expect(PublishExistingSchema.safeParse(args({ ...image, imagePath: '/tmp/a.png' })).success).toBe(true);
-    expect(PublishExistingSchema.safeParse(args({ ...image, imageData: 'iVBORw0KGgo=' })).success).toBe(true);
-    expect(PublishExistingSchema.safeParse(args({ ...image, imagePath: '/tmp/a.png', imageData: 'iVBORw0KGgo=' })).success).toBe(false);
+    expect(PublishExistingSchema.safeParse({ ...args({ ...image, imagePath: '/tmp/a.png' }), imageData: 'iVBORw0KGgo=' }).success).toBe(false);
   });
 
   it('requires mode, and publishAt exactly when scheduled', () => {
@@ -249,12 +250,12 @@ describe('publish_existing tool handler', () => {
     expect(none.request.mock.calls.some(([path]) => path === '/api/media/publish-existing')).toBe(false);
   });
 
-  it('rejects an image bound for a network other than instagram before reading it', async () => {
+  it('rejects an image bound for a video-only network before reading it', async () => {
     const { client, request } = fakeClient(async () => ASAP_REPLY);
     const response = await handlePublishExisting(client, args({ mediaKind: 'image', taskId: undefined, imagePath: join(dir, 'missing.png'), accounts: ['UC1', 'ig-1'] }));
     expect(response.isError).toBe(true);
-    expect(textOf(response)).toContain('images can only be published to instagram for now; drop the youtube account(s).');
-    expect(request).not.toHaveBeenCalled();
+    expect(textOf(response)).toContain('images go to instagram, bluesky, linkedin, threads, facebook, pinterest only; drop the youtube account(s).');
+    expect(request.mock.calls.some(([path]) => path === '/api/media/publish-existing')).toBe(false);
   });
 
   it('reads a local PNG and sends it as base64 with its real type', async () => {
@@ -277,15 +278,6 @@ describe('publish_existing tool handler', () => {
     const response = await handlePublishExisting(client, args({ mediaKind: 'image', taskId: undefined, imagePath: path, accounts: ['ig-1'] }));
     expect(textOf(response)).toContain('JPEG or PNG');
     expect(request).not.toHaveBeenCalled();
-  });
-
-  it.each([
-    ['PNG', Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), 'image/png'],
-    ['JPEG', Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46]), 'image/jpeg'],
-  ])('labels remote %s bytes with their type', async (_label, bytes, contentType) => {
-    const { client, request } = fakeClient(async () => SCHEDULED_REPLY);
-    await handlePublishExisting(client, args({ mediaKind: 'image', taskId: undefined, imageData: bytes.toString('base64'), accounts: ['ig-1'] }));
-    expect(publishBody(request).media).toEqual({ kind: 'image', imageData: bytes.toString('base64'), contentType });
   });
 
   it('passes the caller key through, and generates one per call when omitted', async () => {
@@ -371,13 +363,12 @@ describe('publish_existing tool on both transports', () => {
     }
   }
 
-  it('offers a local image path on stdio and base64 on http, and no single-provider fields', async () => {
+  it('offers a local image path on stdio, no image bytes anywhere, and no single-provider fields', async () => {
     const stdio = await publishProperties('stdio');
     const http = await publishProperties('http');
     expect(stdio).toHaveProperty('imagePath');
-    expect(stdio).not.toHaveProperty('imageData');
-    expect(http).toHaveProperty('imageData');
     expect(http).not.toHaveProperty('imagePath');
+    for (const properties of [stdio, http]) expect(properties).not.toHaveProperty('imageData');
     for (const properties of [stdio, http]) {
       expect(properties).toHaveProperty('publishAt');
       expect(properties).not.toHaveProperty('startAt');

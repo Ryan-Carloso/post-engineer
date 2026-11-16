@@ -4,16 +4,17 @@
 // so this module has no import cycle with openapi-schemas.mjs.
 
 import { SOCIAL_PROVIDERS as PROVIDERS } from '../../../shared/contracts/providers.ts';
+import { UPLOAD_CONTENT_TYPES } from '../../../shared/contracts/upload-types.ts';
 
 export function videoOperationSchemas({ success, object, str }) {
   return {
     // apps/web/app/api/videos/upload-url/route.ts (parseMintBody)
     'POST /api/videos/upload-url': {
       description:
-        'Mint a signed video upload: returns the uploadId, the signedUrl to PUT the video bytes to directly, and the expiry. The upload is bound to the caller and capped at 2GB.',
+        'Mint a signed upload: returns the uploadId, the signedUrl to PUT the bytes to directly, and the expiry. The upload is bound to the caller and carries a video (capped at 2GB) or a JPEG/PNG image (capped at 8 MB) for the image networks.',
       request: object(
         {
-          contentType: { type: 'string', enum: ['video/mp4', 'video/quicktime'] },
+          contentType: { type: 'string', enum: [...UPLOAD_CONTENT_TYPES] },
           sizeBytes: { type: 'integer', minimum: 1, maximum: 2147483648 },
         },
         ['contentType', 'sizeBytes'],
@@ -27,18 +28,18 @@ export function videoOperationSchemas({ success, object, str }) {
         maxBytes: { type: 'integer' },
       }),
       extraResponses: {
-        413: 'Declared size over the 2GB video limit.',
+        413: 'Declared size over the 2GB video or 8 MB image limit.',
         502: 'The signed upload URL could not be created.',
       },
     },
     // apps/web/app/api/videos/uploads/[uploadId]/complete/route.ts
     'POST /api/videos/uploads/[uploadId]/complete': {
       description:
-        'Verify a signed video upload after the PUT: the server checks the real content (magic bytes) and size, then marks it ready. Idempotent for an already-ready upload.',
+        'Verify a signed upload after the PUT: the server checks the real content (magic bytes) and size, then marks it ready. Idempotent for an already-ready upload.',
       response: success({
         uploadId: str,
         status: { type: 'string', enum: ['ready'] },
-        contentType: { type: 'string', enum: ['video/mp4', 'video/quicktime'] },
+        contentType: { type: 'string', enum: [...UPLOAD_CONTENT_TYPES] },
         sizeBytes: { type: 'integer' },
       }),
       extraResponses: {

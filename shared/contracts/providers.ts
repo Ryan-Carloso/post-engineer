@@ -48,3 +48,13 @@ export const OAUTH_CONNECT_PROVIDERS: readonly OAuthConnectProvider[] = SOCIAL_P
 export function isOAuthConnectProvider(value: unknown): value is OAuthConnectProvider {
   return typeof value === 'string' && (OAUTH_CONNECT_PROVIDERS as readonly string[]).includes(value);
 }
+
+/** Networks whose publish handler posts an image (JPEG/PNG) as well as a
+ * video. YouTube, Rumble and 3Speak are video-only platforms; Fanvue's
+ * vault upload is wired for video only. */
+export const IMAGE_PROVIDERS = ['instagram', 'bluesky', 'linkedin', 'threads', 'facebook', 'pinterest'] as const satisfies readonly SocialProvider[];
+export type ImageProvider = (typeof IMAGE_PROVIDERS)[number];
+
+export function isImageProvider(value: unknown): value is ImageProvider {
+  return typeof value === 'string' && (IMAGE_PROVIDERS as readonly string[]).includes(value);
+}

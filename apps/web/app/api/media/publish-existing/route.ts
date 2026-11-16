@@ -5,13 +5,14 @@
 //   task   — a finished engine video, by task id. Scheduled posts ride the
 //            engine's own tick (the slot keeps its task_id, status ready);
 //            ASAP downloads the finished video and dispatches it now.
-//   upload — a ready signed-upload video, by upload id. ASAP claims it once
-//            and dispatches; scheduled holds the row (expiry extended to
-//            the slot time + 24h) for the engine to claim at publish time.
-//   image  — plain image bytes, inline (<= 8 MB). Instagram only for now:
-//            its handler is the only one that accepts images. ASAP posts it
-//            directly; scheduled stores the bytes in the `uploads` bucket
-//            and the slot points at the path.
+//   upload — a ready signed upload (a video, or a JPEG/PNG image), by
+//            upload id. ASAP claims it once and dispatches; scheduled holds
+//            the row (expiry extended to the slot time + 24h) for the
+//            engine to claim at publish time.
+//   image  — plain image bytes, inline (<= 8 MB). ASAP posts it directly;
+//            scheduled stores the bytes in the `uploads` bucket and the
+//            slot points at the path.
+//   An image (inline or uploaded) goes only to IMAGE_PROVIDERS.
 //
 // No generation tokens are charged on this path (charged_tokens = 0), so
 // cancelling never refunds. Title + description stay required (issue #542),
@@ -37,6 +38,7 @@ import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import {
   VideoUploadError,
+  assertUploadFitsProviders,
   createSupabaseVideoUploadStore,
   type VideoUploadRow,
 } from '@/lib/videos/signed-upload';
@@ -369,6 +371,7 @@ async function verifyMedia(
       }
     } else if (input.media.kind === 'upload') {
       uploadRow = await loadReadyVideoUpload(createSupabaseVideoUploadStore(), userId, input.media.uploadId, new Date());
+      assertUploadFitsProviders(uploadRow, input.publishing.providers);
       await assertUploadNotScheduled(supabase, userId, input.media.uploadId);
     } else {
       const decoded = decodeImageMedia(input.media);

@@ -11,7 +11,7 @@ import type {
 import { parseContractResponse } from './contract-response.js';
 import { uploadContent as uploadContentContract } from './contracts/media.js';
 import {
-  VIDEO_UPLOAD_CONTENT_TYPES,
+  MintVideoUploadBodySchema,
   completeVideoUpload as completeVideoUploadContract,
   mintVideoUpload as mintVideoUploadContract,
   publishUploadedVideo as publishUploadedVideoContract,
@@ -39,11 +39,11 @@ export async function createVideoUpload(
   client: PostEngineerClient,
   input: { contentType: string; sizeBytes: number },
 ): Promise<MintedVideoUpload> {
-  if (!(VIDEO_UPLOAD_CONTENT_TYPES as readonly string[]).includes(input.contentType)) {
-    throw new Error('contentType must be video/mp4 or video/quicktime.');
-  }
-  if (!Number.isInteger(input.sizeBytes) || input.sizeBytes < 1 || input.sizeBytes > MAX_UPLOAD_VIDEO_BYTES) {
-    throw new Error('sizeBytes must be an integer between 1 and the 2GB video limit.');
+  // The contract body schema carries the per-type ceiling (8 MB for an
+  // image, 2GB for a video): fail fast with the route's own message.
+  const body = MintVideoUploadBodySchema.safeParse(input);
+  if (!body.success) {
+    throw new Error(body.error.issues[0]?.message ?? 'Invalid upload request.');
   }
   const raw = await client.request(
     '/api/videos/upload-url',
