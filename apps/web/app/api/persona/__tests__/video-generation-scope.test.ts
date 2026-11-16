@@ -28,6 +28,7 @@ vi.mock('@/lib/logger', () => ({
 
 import { GET as listGenerations } from '../video-generations/route';
 import { GET as getGeneration } from '../video-generations/[generationId]/route';
+import { logger } from '@/lib/logger';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 
@@ -126,9 +127,13 @@ function mockDetail(item: (GenerationFixture & Record<string, unknown>) | null) 
   return { from, chain };
 }
 
-function authAs(personaIds: string[] | null, isApiKey = true): void {
+function authAs(
+  personaIds: string[] | null,
+  isApiKey = true,
+  extra: Record<string, unknown> = {},
+): void {
   vi.mocked(requireSupabaseSession).mockResolvedValue({
-    auth: { userId: USER_ID, accessToken: 'pe_live_key', isApiKey, personaIds },
+    auth: { userId: USER_ID, accessToken: 'pe_live_key', isApiKey, personaIds, ...extra },
     error: null,
   } as never);
 }
@@ -201,6 +206,39 @@ describe('GET /api/persona/video-generations persona scope', () => {
     expect(filter).not.toContain('hack');
     expect(filter).not.toContain(PERSONA_B);
   });
+
+  it('does not add a persona filter for an OAuth caller', async () => {
+    authAs([PERSONA_A], false, { isOAuth: true });
+    const client = mockList([ALLOWED, OTHER, FACELESS]);
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await listGenerations(new Request('https://x/api/persona/video-generations'));
+    const body = (await response.json()) as { generations: Array<{ videoSubject: string | null }> };
+
+    expect(response.status).toBe(200);
+    expect(body.generations.map((generation) => generation.videoSubject)).toEqual([
+      'allowed-subject',
+      'secret-other-persona',
+      'faceless-subject',
+    ]);
+    expect(client.chain.or).not.toHaveBeenCalled();
+    expect(client.chain.is).not.toHaveBeenCalled();
+  });
+
+  it('logs the database error and answers 500 when a scoped list query fails', async () => {
+    authAs([PERSONA_A]);
+    const dbError = { code: 'XX000', message: 'connection reset' };
+    const client = mockList([ALLOWED]);
+    client.chain.limit.mockResolvedValueOnce({ data: null, error: dbError } as never);
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await listGenerations(new Request('https://x/api/persona/video-generations'));
+    const body = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(body).toEqual({ success: false, error: 'Could not load generation history.' });
+    expect(logger.error).toHaveBeenCalledWith('[api/persona/video-generations] list failed', dbError);
+  });
 });
 
 describe('GET /api/persona/video-generations/[generationId] persona scope', () => {
@@ -250,5 +288,37 @@ describe('GET /api/persona/video-generations/[generationId] persona scope', () =
 
     expect(response.status).toBe(200);
     expect(body.generation.videoSubject).toBe('secret-other-persona');
+  });
+
+  it('filters with persona_id is null when every scoped id is not a UUID', async () => {
+    authAs(['not-a-uuid', INJECTED]);
+    const client = mockDetail(FACELESS);
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await getGeneration(new Request('https://x/api/persona/video-generations/gen-f'), {
+      params: Promise.resolve({ generationId: 'gen-f' }),
+    });
+    const body = (await response.json()) as { generation: { videoSubject: string } };
+
+    expect(response.status).toBe(200);
+    expect(body.generation.videoSubject).toBe('faceless-subject');
+    expect(client.chain.is).toHaveBeenCalledWith('persona_id', null);
+    expect(client.chain.or).not.toHaveBeenCalled();
+  });
+
+  it('does not add a persona filter for an OAuth caller', async () => {
+    authAs([PERSONA_A], false, { isOAuth: true });
+    const client = mockDetail(OTHER);
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await getGeneration(new Request('https://x/api/persona/video-generations/gen-b'), {
+      params: Promise.resolve({ generationId: 'gen-b' }),
+    });
+    const body = (await response.json()) as { generation: { videoSubject: string } };
+
+    expect(response.status).toBe(200);
+    expect(body.generation.videoSubject).toBe('secret-other-persona');
+    expect(client.chain.or).not.toHaveBeenCalled();
+    expect(client.chain.is).not.toHaveBeenCalled();
   });
 });

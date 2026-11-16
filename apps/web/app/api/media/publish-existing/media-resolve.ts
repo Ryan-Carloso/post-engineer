@@ -136,7 +136,7 @@ export async function fetchScopedEngineTask(
   if (isScopedApiKey(auth)) {
     try {
       const scope = await resolveTaskScope(supabase, auth.userId, taskId);
-      if (!isTaskVisibleToScopedKey(scope, auth.personaIds ?? [])) return null;
+      if (!isTaskVisibleToScopedKey(scope, auth.personaIds)) return null;
     } catch (error) {
       logger.error('[publish-existing] task scope lookup failed', error, { taskId });
       throw new ExistingMediaError('Failed to load video task.', 500, ERROR_CODES.INTERNAL_ERROR);

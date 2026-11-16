@@ -44,7 +44,7 @@ async function getHandler(request: Request): Promise<NextResponse> {
     )
     .eq('user_id', auth.userId);
   if (isScopedApiKey(auth)) {
-    const personaFilter = generationPersonaOrFilter(auth.personaIds ?? []);
+    const personaFilter = generationPersonaOrFilter(auth.personaIds);
     generationsQuery =
       personaFilter.kind === 'null'
         ? generationsQuery.is('persona_id', null)

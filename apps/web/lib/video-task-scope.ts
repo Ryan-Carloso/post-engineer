@@ -132,7 +132,7 @@ export async function enforceScopedTaskRead(
   if (!isScopedApiKey(auth)) return null;
   try {
     const scope = await resolveTaskScope(createSupabaseServiceClient(), auth.userId, taskId);
-    if (!isTaskVisibleToScopedKey(scope, auth.personaIds ?? [])) {
+    if (!isTaskVisibleToScopedKey(scope, auth.personaIds)) {
       return apiErrorResponse(404, notFoundMessage, { route });
     }
     return null;

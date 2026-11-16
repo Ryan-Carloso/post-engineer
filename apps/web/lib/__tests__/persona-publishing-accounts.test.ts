@@ -132,6 +132,22 @@ describe('getPersonaDefaultAccounts', () => {
       code: 'PERSONA_NOT_FOUND',
     });
   });
+
+  it('throws when the persona ownership lookup returns an error', async () => {
+    const chain = {
+      select() {
+        return chain;
+      },
+      eq() {
+        return chain;
+      },
+      maybeSingle: async () => ({ data: null, error: { message: 'connection reset' } }),
+    };
+    const db = { from: () => chain };
+    await expect(getPersonaDefaultAccounts(db as never, PERSONA, USER)).rejects.toThrow(
+      'Failed to load persona: connection reset',
+    );
+  });
 });
 
 describe('getPersonaDefaultAccountsForPersonas', () => {
