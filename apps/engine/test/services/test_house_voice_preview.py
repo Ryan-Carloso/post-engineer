@@ -42,6 +42,9 @@ class PreviewHouseVoiceTests(unittest.TestCase):
         self.assertEqual(call.args[2], 1.0)
         self.assertEqual(call.kwargs.get("language"), "en")
         self.assertEqual(call.kwargs.get("user_id"), "user-1")
+        # A preview samples the voice, it does not ship a video: the
+        # narration check (and its Whisper transcription) is skipped.
+        self.assertEqual(call.kwargs.get("validate"), False)
 
     def test_bare_catalog_name_is_accepted(self):
         with patch("app.services.persona.voice_service.tts", side_effect=_ok_tts()) as mock_tts:

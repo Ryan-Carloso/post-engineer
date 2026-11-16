@@ -26,6 +26,7 @@ import {
 } from './script-segments.js';
 import { GeneratePersonaVideoSchema, ValidateScriptSchema } from './single-video-shape.js';
 import { resolvePersonaVoiceId } from './voice-filters.js';
+import { PUBLISH_NETWORKS } from './contracts/videos.js';
 
 export { GeneratePersonaVideoShape, ValidateScriptShape } from './single-video-shape.js';
 
@@ -73,8 +74,8 @@ export async function handleValidateScript(
         type: 'text',
         text: [
           `Script valid: ${payload.segmentCount} segment(s), ${payload.totalWords} words total, hook ${payload.hookWords} words, content ${payload.contentWords} words.`,
-          `Hook window: ${HOOK_MIN_SECONDS}-${HOOK_MAX_SECONDS} seconds spoken (target 20-30 words).`,
-          'Measured duration: pending — no hook-only TTS endpoint exists yet, so the measured hook duration cannot be checked in this phase; the hook word guard (15-40 words) already ran above.',
+          `Hook window: ${HOOK_MIN_SECONDS}-${HOOK_MAX_SECONDS} seconds spoken (target 25-35 words).`,
+          'Measured duration: pending — no hook-only TTS endpoint exists yet, so the measured hook duration cannot be checked in this phase; the hook word guard (25-40 words) already ran above.',
         ].join('\n'),
       },
     ],
@@ -226,7 +227,7 @@ export const ScoreDraftShape = {
     .max(10000, 'draft must be at most 10000 characters')
     .describe('The text to score: a post body, or with kind "script" the video segments joined by newlines, hook first, then content takes.'),
   network: z
-    .enum(['linkedin', 'youtube', 'instagram', 'bluesky', 'threads', 'facebook', 'pinterest', '3speak', 'rumble', 'fanvue'])
+    .enum(PUBLISH_NETWORKS)
     .optional()
     .describe('Network the draft is for; the publish check uses that network\'s rules. Defaults to linkedin.'),
   personaId: z

@@ -15,24 +15,25 @@
 //---------------
 
 import { BLUESKY_CAPTION_MAX_GRAPHEMES, countBlueskyGraphemes } from './bluesky';
+import type { PublishNetwork } from '@/lib/contracts/videos';
 
 // The networks Post Engineer publishes to (post_metrics.provider
 // check constraint, re-created with the full list by the latest provider
 // migration, 053). The scorer buckets are universal;
 // only the publish check varies by network.
-export type PublishNetwork = 'linkedin' | 'youtube' | 'instagram' | 'bluesky' | 'threads' | 'facebook' | 'pinterest' | '3speak' | 'rumble' | 'fanvue';
+export type { PublishNetwork };
 
 // What the text is: a post body, or a video script (segments joined by
 // newlines, hook first, then content takes). A script is spoken, so hashtags do not
 // apply and the caption publish check would be vacuous.
 export type DraftKind = 'post' | 'script';
 
-// Script ranges mirror the segments contract (hook 15-40 words, 60-200 in
+// Script ranges mirror the segments contract (hook 25-40 words, 60-200 in
 // total). The freed hashtag points go to hook, length and slop, so both
 // profiles still top out at exactly 100.
 const SCORE_PROFILES = {
   post: { hook: 20, hookWords: [3, 30], length: 15, words: [40, 400], nearWords: [20, 600], slop: 20 },
-  script: { hook: 25, hookWords: [15, 40], length: 20, words: [60, 200], nearWords: [40, 250], slop: 25 },
+  script: { hook: 25, hookWords: [25, 40], length: 20, words: [60, 200], nearWords: [40, 250], slop: 25 },
 } as const;
 
 

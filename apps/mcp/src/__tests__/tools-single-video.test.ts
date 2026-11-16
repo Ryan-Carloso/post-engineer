@@ -25,7 +25,7 @@ function textOf(response: McpToolResponse): string {
 }
 
 const hook =
-  'Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today.';
+  'Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is still waiting nearby for you today.';
 const content =
   'Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight.';
 const ctaTake = 'Save this video before your next trip to Porto.';
@@ -34,7 +34,7 @@ function photos(count: number, prefix: string): Array<{ url: string }> {
 }
 
 const segments = [
-  { kind: 'hook' as const, text: hook, media: photos(3, 'hook') },
+  { kind: 'hook' as const, text: hook, media: photos(4, 'hook') },
   { kind: 'content' as const, text: content, media: photos(6, 'content') },
   { kind: 'content' as const, text: ctaTake, media: photos(2, 'ctaTake') },
 ];
@@ -50,8 +50,8 @@ function mockClient() {
     validateScript: vi.fn().mockResolvedValue({
       success: true,
       segmentCount: 3,
-      totalWords: 75,
-      hookWords: 24,
+      totalWords: 76,
+      hookWords: 25,
       contentWords: 51,
       hookWindowSeconds: { min: 8, max: 12 },
       measuredDurationSeconds: null,
@@ -263,11 +263,11 @@ describe('validate_script tool', () => {
     expect(vi.mocked(client.validateScript)).toHaveBeenCalledWith(segments, 'hook_lipsync');
     const text = textOf(response);
     expect(text).toContain('3 segment(s)');
-    expect(text).toContain('75 words total');
+    expect(text).toContain('76 words total');
     expect(text).toContain('pending');
   });
 
-  it('rejects a hook outside the 15-40 word guard without calling the endpoint or measuring TTS', async () => {
+  it('rejects a hook outside the 25-40 word guard without calling the endpoint or measuring TTS', async () => {
     const client = mockClient();
     const response = await handleValidateScript(client, {
       segments: [

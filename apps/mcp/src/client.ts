@@ -60,6 +60,7 @@ import {
 import {
   listVoices as listVoicesContract,
 } from './contracts/voices.js';
+import { isSocialProvider, SOCIAL_PROVIDERS } from './contracts/providers.js';
 import {
   generateAndSchedule as generateAndScheduleContract,
   validateScript as validateScriptContract,
@@ -522,9 +523,8 @@ export class PostEngineerClient {
   async disconnectAccount(provider: string, providerAccountId: string): Promise<ResponseOf<typeof disconnectAccountContract>> {
     // The route 400s INVALID_PROVIDER / INVALID_PARAMS — fail fast with the
     // field named before any fetch goes out.
-    const validProviders = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'pinterest', 'fanvue', '3speak', 'rumble'];
-    if (!validProviders.includes(provider)) {
-      throw new Error(`provider must be one of: ${validProviders.join(', ')}.`);
+    if (!isSocialProvider(provider)) {
+      throw new Error(`provider must be one of: ${SOCIAL_PROVIDERS.join(', ')}.`);
     }
     if (providerAccountId.trim().length === 0) {
       throw new Error('providerAccountId must be a non-empty string.');

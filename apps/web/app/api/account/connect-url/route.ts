@@ -19,7 +19,7 @@ import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-r
 // a new social account. Built for the MCP flow: authenticates via API key
 // (or session), without depending on the browser's httpOnly nonce cookie.
 // The state is stored server-side (oauth_states table) and the callback
-// consumes it as a fallback. Body: { provider: 'youtube' | 'instagram' | 'linkedin' | 'threads' | 'facebook' | 'pinterest' | 'fanvue' }.
+// consumes it as a fallback. Body: { provider: one of OAUTH_CONNECT_PROVIDERS (shared/contracts/providers.ts) }.
 // Bluesky uses an app password: POST /api/bluesky-connect.
 // Rumble uses a manual access token: POST /api/rumble-connect.
 //

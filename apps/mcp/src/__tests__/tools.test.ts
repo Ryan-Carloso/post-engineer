@@ -566,6 +566,30 @@ describe('MCP Tool Handlers', () => {
     expect(ConnectAccountSchema.safeParse({ provider: 'myspace' }).success).toBe(false);
   });
 
+  it('ConnectAccountSchema accepts every network, pinterest included', async () => {
+    // The connect list used to be its own copy and missed pinterest,
+    // although POST /api/account/connect-url serves it.
+    const { ConnectAccountSchema } = await import('../tools.js');
+    const { SOCIAL_PROVIDERS } = await import('../contracts/providers.js');
+    for (const provider of SOCIAL_PROVIDERS) {
+      expect(ConnectAccountSchema.safeParse({ provider }).success, provider).toBe(true);
+    }
+    expect(ConnectAccountSchema.safeParse({ provider: 'pinterest' }).success).toBe(true);
+  });
+
+  it('handleConnectAccount returns the OAuth authorization URL for pinterest', async () => {
+    vi.mocked(mockClient.getOAuthConnectUrl).mockResolvedValue({
+      success: true,
+      auth_url: 'https://www.pinterest.com/oauth/?state=abc',
+    });
+
+    const response = await handleConnectAccount(mockClient, { provider: 'pinterest' });
+
+    expect(mockClient.getOAuthConnectUrl).toHaveBeenCalledWith('pinterest');
+    expect(response.isError).toBeUndefined();
+    expect(textOf(response)).toContain('https://www.pinterest.com/oauth/?state=abc');
+  });
+
   it('handleConnectAccount rejects non-https auth_url schemes', async () => {
     vi.mocked(mockClient.getOAuthConnectUrl).mockResolvedValue({
       success: true,

@@ -83,7 +83,7 @@ export function registerContentTools(server: McpServer, client: PostEngineerClie
   server.tool(
     'check_script',
     actionDescription(
-      'Check a script before spending tokens. validate: the mechanical rules (hook first, exactly one hook, no placeholders/links/markdown/emoji/stage directions, hook terminal punctuation, word limits: total 60-200, content at least 30, hook 15-40 words; a CTA is a content take, placed anywhere), no tokens spent. score: a 0-100 score of a draft against your own measured posts, every point explained.',
+      'Check a script before spending tokens. validate: the mechanical rules (hook first, exactly one hook, no placeholders/links/markdown/emoji/stage directions, hook terminal punctuation, word limits: total 60-200, content at least 30, hook 25-40 words; a CTA is a content take, placed anywhere), no tokens spent. score: a 0-100 score of a draft against your own measured posts, every point explained.',
       CHECK_SCRIPT_SPECS,
     ),
     actionShape(CHECK_SCRIPT_SPECS),

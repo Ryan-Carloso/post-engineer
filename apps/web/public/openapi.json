@@ -379,8 +379,8 @@
               "enum": [
                 "youtube",
                 "instagram",
-                "linkedin",
                 "bluesky",
+                "linkedin",
                 "threads",
                 "facebook",
                 "pinterest",
@@ -5297,8 +5297,8 @@
                     "enum": [
                       "youtube",
                       "instagram",
-                      "linkedin",
                       "bluesky",
+                      "linkedin",
                       "threads",
                       "facebook",
                       "pinterest",
@@ -5633,8 +5633,8 @@
                       "enum": [
                         "youtube",
                         "instagram",
-                        "linkedin",
                         "bluesky",
+                        "linkedin",
                         "threads",
                         "facebook",
                         "pinterest",
@@ -5761,8 +5761,8 @@
                     "enum": [
                       "youtube",
                       "instagram",
-                      "linkedin",
                       "bluesky",
+                      "linkedin",
                       "threads",
                       "facebook",
                       "pinterest",
@@ -6657,12 +6657,16 @@
                   "network": {
                     "type": "string",
                     "enum": [
-                      "linkedin",
                       "youtube",
                       "instagram",
                       "bluesky",
+                      "linkedin",
                       "threads",
-                      "facebook"
+                      "facebook",
+                      "pinterest",
+                      "3speak",
+                      "rumble",
+                      "fanvue"
                     ]
                   },
                   "personaId": {

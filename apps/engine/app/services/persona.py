@@ -58,7 +58,8 @@ def preview_house_voice_mp3(user_id: str, voice_id: str, text: str | None = None
     endpoint, OpenRouter voices have no catalog entry. No text renders the
     fixed English sample. Custom text is never cached: every preview
     synthesizes. Renders through voice.tts — the same path video jobs use —
-    so the preview is the voice the video gets.
+    so the preview is the voice the video gets. Validation is skipped
+    (validate=False): a preview samples the voice, it does not ship a video.
     """
     bare_name = voice_id[len("chatterbox:") :] if voice_id.startswith("chatterbox:") else voice_id
     if find_voice(bare_name) is None:
@@ -80,6 +81,9 @@ def preview_house_voice_mp3(user_id: str, voice_id: str, text: str | None = None
             voice_file,
             language="en",
             user_id=user_id,
+            # A preview samples the voice, it does not ship a video: skip
+            # the narration check (and its Whisper transcription) here.
+            validate=False,
         )
         if not result.ok:
             raise HouseVoicePreviewError(502, "voice preview failed")

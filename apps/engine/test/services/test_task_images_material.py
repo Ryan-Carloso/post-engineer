@@ -11,7 +11,7 @@ from app.services import task as tm
 SEGMENTS = [
     {
         "kind": "hook",
-        "text": "Porto is the city that wins you over slowly, one riverside morning and one golden sunset at a time.",
+        "text": "Porto is the city that wins you over slowly, one riverside morning and one golden sunset at a time, in the soft golden evening light.",
     },
     {
         "kind": "content",
@@ -26,8 +26,8 @@ def _photos(count, prefix):
 
 
 def _params():
-    # Images mode needs about one photo per 3s (hook 19 words → 3, body 38 → 5, CTA 7 → 1).
-    counts = (3, 5, 1)
+    # Images mode needs about one photo per 3s (hook 25 words → 4, body 38 → 5, CTA 7 → 1).
+    counts = (4, 5, 1)
     segments = []
     for index, segment in enumerate(SEGMENTS):
         copied = dict(segment)

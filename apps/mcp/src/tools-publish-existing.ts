@@ -5,7 +5,8 @@ import type { PublishExistingInput, PublishExistingResult } from './client-types
 import { publishExisting } from './client-publish-existing.js';
 import { readLocalImage } from './client-user-media.js';
 import { ApiError, getErrorMessage } from './errors.js';
-import { boundAccounts, type Provider } from './generate-video.js';
+import { SOCIAL_PROVIDERS, type SocialProvider as Provider } from './contracts/providers.js';
+import { boundAccounts } from './generate-video.js';
 import { PublishExistingSchema, type PublishExistingArgs } from './publish-existing-shape.js';
 import { createRefResolvers } from './refs.js';
 import { sanitizeEngineError } from './tools.js';

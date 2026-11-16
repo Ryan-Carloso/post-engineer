@@ -20,8 +20,8 @@ UTC = timezone.utc
 SEGMENTS = [
     {
         "kind": "hook",
-        "text": "Porto is the city that wins you over slowly, one riverside morning and one golden sunset at a time.",
-        "media": [{"url": f"https://e.com/h{i}.jpg"} for i in range(3)],
+        "text": "Porto is the city that wins you over slowly, one riverside morning and one golden sunset at a time, in the soft golden evening light.",
+        "media": [{"url": f"https://e.com/h{i}.jpg"} for i in range(4)],
     },
     {
         "kind": "content",
@@ -108,7 +108,7 @@ class BatchDispatchSegmentsTests(unittest.TestCase):
         self.assertEqual(
             request.video_script,
             "Porto is the city that wins you over slowly, one riverside morning "
-            "and one golden sunset at a time.\n\n"
+            "and one golden sunset at a time, in the soft golden evening light.\n\n"
             "Walk the Ribeira in the morning light, cross the Dom Luis bridge, "
             "taste francesinha where the locals eat, and finish with port wine "
             "as the river turns gold at sunset before heading home through "
@@ -133,7 +133,7 @@ class BatchDispatchSegmentsTests(unittest.TestCase):
         self.assertEqual(
             request.video_script,
             "Porto is the city that wins you over slowly, one riverside morning "
-            "and one golden sunset at a time.\n\n"
+            "and one golden sunset at a time, in the soft golden evening light.\n\n"
             "Walk the Ribeira in the morning light, cross the Dom Luis bridge, "
             "taste francesinha where the locals eat, and finish with port wine "
             "as the river turns gold at sunset before heading home through "

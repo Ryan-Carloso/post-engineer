@@ -26,7 +26,7 @@ export const MAX_IMAGES_MODE_MEDIAS = 30;
 export const MIN_TOTAL_WORDS = 60;
 export const MAX_TOTAL_WORDS = 200;
 export const MIN_CONTENT_WORDS = 30;
-export const MIN_HOOK_WORDS = 15;
+export const MIN_HOOK_WORDS = 25;
 export const MAX_HOOK_WORDS = 40;
 // The info card painted inside a segment photo's panel (engine media_overlay). Same
 // numbers as MAX_OVERLAY_*_CHARS in apps/engine/app/services/script_segments.py;

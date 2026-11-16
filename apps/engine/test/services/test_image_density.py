@@ -54,7 +54,7 @@ def test_split_interval_covers_the_segment_without_a_gap_or_an_overlap():
 
 def test_validate_segments_reports_the_same_density_counts():
     segments = [
-        {"kind": "hook", "text": _words(24, "hook"), "media": _photos(3, "h")},
+        {"kind": "hook", "text": _words(25, "hook"), "media": _photos(4, "h")},
         {"kind": "content", "text": _words(32, "body"), "media": _photos(1, "b")},
         {"kind": "content", "text": _words(8, "cta"), "media": _photos(1, "c")},
     ]
@@ -66,7 +66,7 @@ def test_validate_segments_reports_the_same_density_counts():
     )
     assert exc_info.value.fix == "Add 3 more images to this segment's media array."
     segments[1]["media"] = _photos(4, "b")
-    assert validate_segments(segments)["media_count"] == 8
+    assert validate_segments(segments)["media_count"] == 9
     segments[1]["media"] = _photos(11, "b")
     with pytest.raises(SegmentValidationError) as exc_info:
         validate_segments(segments)
@@ -84,7 +84,7 @@ def test_validate_segments_rejects_more_than_thirty_photos_and_seven_on_full_lip
     assert exc_info.value.field == "segments"
     assert "30" in exc_info.value.rule
     full_lipsync = [
-        {"kind": "hook", "text": _words(24, "hook"), "media": _photos(7, "h")},
+        {"kind": "hook", "text": _words(25, "hook"), "media": _photos(7, "h")},
         {"kind": "content", "text": _words(32, "body")},
         {"kind": "content", "text": _words(8, "cta")},
     ]
@@ -95,7 +95,7 @@ def test_validate_segments_rejects_more_than_thirty_photos_and_seven_on_full_lip
 
 def test_an_item_without_a_reference_fails_on_that_item():
     segments = [
-        {"kind": "hook", "text": _words(24, "hook"), "media": _photos(3, "h")},
+        {"kind": "hook", "text": _words(25, "hook"), "media": _photos(4, "h")},
         {"kind": "content", "text": _words(32, "body"), "media": [{}, *_photos(3, "b")]},
         {"kind": "content", "text": _words(8, "cta"), "media": _photos(1, "c")},
     ]

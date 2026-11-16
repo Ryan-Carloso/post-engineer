@@ -45,8 +45,8 @@ function bodyWithDescription(description: string) {
       segments: [
         {
           kind: 'hook',
-          text: 'Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is waiting nearby for you today.',
-          media: photos(3, 'hook'),
+          text: 'Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is still waiting nearby for you today.',
+          media: photos(4, 'hook'),
         },
         {
           kind: 'content',

@@ -80,7 +80,7 @@ export class ScriptError extends Error {}
 export const MIN_TOTAL_WORDS = 60;
 export const MAX_TOTAL_WORDS = 200;
 export const MIN_CONTENT_WORDS = 30;
-export const MIN_HOOK_WORDS = 15;
+export const MIN_HOOK_WORDS = 25;
 export const MAX_HOOK_WORDS = 40;
 export const MAX_SEGMENTS = 12;
 // Streaming timeouts: abort only on silence (a thinking model sends
@@ -281,7 +281,7 @@ export function buildPrompt({ topic, angle, facts = '' }) {
     '',
     'Script contract, every line of it is required:',
     `Segments: first hook, then content takes in order, exactly one hook, at least one content take, at most ${MAX_SEGMENTS} segments.`,
-    `Length: ${MIN_TOTAL_WORDS}-${MAX_TOTAL_WORDS} words in total. Hook ${MIN_HOOK_WORDS}-${MAX_HOOK_WORDS} words, aim for 20-30, ending with a period, exclamation mark, or question mark. Content at least ${MIN_CONTENT_WORDS} words. A CTA is a content take and may appear anywhere after the hook.`,
+    `Length: ${MIN_TOTAL_WORDS}-${MAX_TOTAL_WORDS} words in total. Hook ${MIN_HOOK_WORDS}-${MAX_HOOK_WORDS} words, aim for 25-35, ending with a period, exclamation mark, or question mark. Content at least ${MIN_CONTENT_WORDS} words. A CTA is a content take and may appear anywhere after the hook.`,
     'Title: short, specific, and true to this script. Never clickbait that promises more than the video delivers.',
     '',
     'Respond with JSON only, exactly this shape, no other text:',
