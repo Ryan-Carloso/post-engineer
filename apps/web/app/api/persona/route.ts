@@ -169,7 +169,9 @@ async function postHandler(request: Request): Promise<NextResponse> {
     avatarUrl = resolved.avatarUrl;
   }
 
-  const { data: persona, error: insertError } = await supabase
+  // Service role bypasses RLS. user.id is the authenticated owner. A cookie
+  // JWT must not write coerced columns (language, face_quality, recent_image_ids).
+  const { data: persona, error: insertError } = await createSupabaseServiceClient()
     .from('personas')
     .insert({
       // Explicit id so the storage folder is known before the row exists.
@@ -227,7 +229,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
     // Storage folder uses the minted id that went into the row.
     const added = await addLibraryImages(supabase, user.id, personaId, validatedLibraryInputs);
     if ('error' in added) {
-      return rollbackLibraryCreation(supabase, persona.id, photoPathToRollback, added);
+      return rollbackLibraryCreation(supabase, user.id, persona.id, photoPathToRollback, added);
     }
     libraryImageIds = added.images.map((image) => image.id);
     // Defensive: addLibraryImages rolls back partial work and returns exactly
@@ -351,10 +353,12 @@ async function patchHandler(request: Request): Promise<NextResponse> {
     return personaValidationError('Nothing to update.', 'PATCH /api/persona');
   }
 
-  const { error: updateError } = await supabase
+  // Service role bypasses RLS. The select above proved user.id owns this row.
+  const { error: updateError } = await createSupabaseServiceClient()
     .from('personas')
     .update(updates)
-    .eq('id', personaId);
+    .eq('id', personaId)
+    .eq('user_id', user.id);
   if (updateError) {
     logger.error('[api/persona] update failed', updateError);
     if (replacementPhotoPath && replacementPhotoPath !== persona.photo_path) {
@@ -437,24 +441,12 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
     });
   }
 
-  //--------------- Cascade delete: children before parents.
-  //
-  // Deleting a persona used to leave schedules, slots and generation rows
-  // orphaned (a real orphan schedule kept failing the engine's reconcile
-  // tick every 60s). Everything tied to the persona goes now, in
-  // dependency order: slots -> schedules -> generations -> persona row
-  // (persona_images rows vanish via ON DELETE CASCADE).
-  //
-  // No token refunds, ever: this is a deliberate product decision, stated
-  // here and in the UI confirmation dialog. Note the forfeiture is real —
-  // the batch flow prepays generation cost up front, so deleting a persona
-  // with pending/ready slots destroys prepaid tokens for work that will now
-  // never happen.
-  //
-  // PostgREST has no multi-statement transactions, so a mid-cascade
-  // failure cannot roll back. completedSteps names what already went
-  // through — the 500 is loud, never a silent half-delete.
-  //---------------
+  // Service role bypasses RLS. The select above proved this persona belongs
+  // to user.id. Deletes run here so a cookie JWT cannot drop published slots
+  // and make find_zombie_schedule_candidates refund the batch. No token
+  // refunds: pending work is forfeited. PostgREST has no transaction;
+  // completedSteps names what already went through.
+  const service = createSupabaseServiceClient();
   const completedSteps: string[] = [];
   const cascadeFail = (step: string, error: unknown): NextResponse => {
     logger.error(`[api/persona] cascade delete failed at ${step}`, error, {
@@ -485,7 +477,7 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
     // concurrently (another tab racing the delete) would leave its slots
     // behind. The persona-scoped schedules delete below catches the schedule
     // row itself; the residual slot race is noted, not solved, here.
-    const { error: slotsError, count: slotsCount } = await supabase
+    const { error: slotsError, count: slotsCount } = await service
       .from('scheduled_posts')
       .delete({ count: 'exact' })
       .in('schedule_id', scheduleIds)
@@ -495,7 +487,7 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
     completedSteps.push('scheduled_posts');
   }
 
-  const { error: schedulesDeleteError, count: schedulesCount } = await supabase
+  const { error: schedulesDeleteError, count: schedulesCount } = await service
     .from('schedules')
     .delete({ count: 'exact' })
     .eq('persona_id', personaId)
@@ -528,7 +520,7 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
       typeof row === 'object' && row !== null ? (row as { engine_task_id: unknown }).engine_task_id : null,
     )
     .filter((id): id is string => typeof id === 'string' && id.length > 0);
-  const { error: generationsError, count: generationsCount } = await supabase
+  const { error: generationsError, count: generationsCount } = await service
     .from('video_generations')
     .delete({ count: 'exact' })
     .eq('persona_id', personaId)
@@ -540,7 +532,7 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
   // the storage remove fails afterwards, the persona is already gone and the
   // orphaned files are cleanable — never destroy data still referenced by a
   // surviving row.
-  const { error: deleteError } = await supabase
+  const { error: deleteError } = await service
     .from('personas')
     .delete()
     .eq('id', personaId)

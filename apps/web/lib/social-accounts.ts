@@ -5,12 +5,13 @@ import type { Database } from '@/lib/supabase/database.gen';
 import { encryptTokens, decryptTokens } from '@/lib/token-crypto';
 import { AccountNotFoundError } from '@/lib/errors';
 import type { SocialProvider } from '@/lib/providers/registry';
+import { createSupabaseServiceClient } from '@/lib/supabase/service';
 
 //---------------
 // Social Accounts — OAuth account persistence in Supabase.
 // Tokens are always encrypted (AES-256-GCM) before going to the database.
-// The client is passed by the caller: session client (RLS) for routes
-// authenticated by cookie, or a service_role client for API key routes.
+// Reads use the caller client (session RLS, or the caller's user_id filter).
+// Writes use the service client: a cookie JWT cannot store ciphertext.
 // The provider list lives in lib/providers/registry.ts (single source).
 //---------------
 
@@ -39,14 +40,20 @@ export interface SocialAccountRecord {
   lastUsedAt: string | null;
 }
 
-interface SocialAccountRow {
+// Columns a session JWT may read. encrypted_tokens is omitted: 066 grants
+// no SELECT on that column, and PostgREST rejects a select list that asks
+// for it. Ciphertext is loaded with the service client after ownership
+// is proven (getSocialAccountTokens).
+export const SOCIAL_ACCOUNT_PUBLIC_COLUMNS =
+  'id, user_id, provider, provider_account_id, account_name, account_metadata, token_expires_at, created_at, updated_at, last_used_at';
+
+interface SocialAccountPublicRow {
   id: string;
   user_id: string;
   provider: SocialProvider;
   provider_account_id: string;
   account_name: string | null;
   account_metadata: unknown;
-  encrypted_tokens: string;
   token_expires_at: string | null;
   created_at: string;
   updated_at: string;
@@ -66,7 +73,7 @@ export interface UpsertSocialAccountParams {
 //---------------
 // rowToRecord — converts a database row into a public record (no tokens)
 //---------------
-function rowToRecord(row: SocialAccountRow): SocialAccountRecord {
+function rowToRecord(row: SocialAccountPublicRow): SocialAccountRecord {
   return {
     id: row.id,
     userId: row.user_id,
@@ -101,11 +108,41 @@ export function isPlaceholderProviderAccountId(id: string): boolean {
 }
 
 //---------------
+// Service role bypasses RLS. Writes store ciphertext and identity columns
+// a cookie JWT must not set. Update, touch, and delete first prove the row
+// is visible to the caller client, then write with id and user_id. The
+// upsert's userId is the authenticated user the route already checked.
+//---------------
+function serviceSocial(): SupabaseClient<Database> {
+  return createSupabaseServiceClient();
+}
+
+async function ownedAccountId(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  provider: SocialProvider,
+  providerAccountId: string,
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('social_accounts')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('provider', provider)
+    .eq('provider_account_id', providerAccountId)
+    .maybeSingle();
+  if (error) {
+    throw new Error(`Failed to get social account: ${error.message}`);
+  }
+  if (typeof data?.id !== 'string') return null;
+  return data.id;
+}
+
+//---------------
 // upsertSocialAccount — encrypts the tokens and upserts
 // (unique: user_id + provider + provider_account_id)
 //---------------
 export async function upsertSocialAccount(
-  supabase: SupabaseClient<Database>,
+  _supabase: SupabaseClient<Database>,
   params: UpsertSocialAccountParams,
 ): Promise<SocialAccountRecord> {
   // A placeholder id poisons the row (every later publish targets a
@@ -134,17 +171,17 @@ export async function upsertSocialAccount(
     last_used_at: new Date().toISOString(),
   };
 
-  const { data, error } = await supabase
+  const { data, error } = await serviceSocial()
     .from('social_accounts')
     .upsert(payload, { onConflict: 'user_id,provider,provider_account_id' })
-    .select()
+    .select(SOCIAL_ACCOUNT_PUBLIC_COLUMNS)
     .single();
 
   if (error) {
     throw new Error(`Failed to upsert social account: ${error.message}`);
   }
 
-  return rowToRecord(asRow(data));
+  return rowToRecord(asPublicRow(data));
 }
 
 //---------------
@@ -157,7 +194,7 @@ export async function listSocialAccounts(
 ): Promise<SocialAccountRecord[]> {
   let query = supabase
     .from('social_accounts')
-    .select('*')
+    .select(SOCIAL_ACCOUNT_PUBLIC_COLUMNS)
     .eq('user_id', userId);
 
   if (provider) {
@@ -170,7 +207,7 @@ export async function listSocialAccounts(
     throw new Error(`Failed to list social accounts: ${error.message}`);
   }
 
-  return (data ?? []).map((row) => rowToRecord(asRow(row)));
+  return (data ?? []).map((row) => rowToRecord(asPublicRow(row)));
 }
 
 //---------------
@@ -184,7 +221,7 @@ export async function getSocialAccountTokens(
 ): Promise<{ tokens: SocialTokenPayload; account: SocialAccountRecord }> {
   const { data, error } = await supabase
     .from('social_accounts')
-    .select('*')
+    .select(SOCIAL_ACCOUNT_PUBLIC_COLUMNS)
     .eq('user_id', userId)
     .eq('provider', provider)
     .eq('provider_account_id', providerAccountId)
@@ -200,14 +237,34 @@ export async function getSocialAccountTokens(
     );
   }
 
-  const row = asRow(data);
-  const tokens = decryptTokens(row.encrypted_tokens);
+  const account = rowToRecord(asPublicRow(data));
 
-  return { tokens, account: rowToRecord(row) };
+  // Service role bypasses RLS. The caller client just proved this row
+  // belongs to userId (session RLS, or that client's own user_id filter).
+  // Both predicates are required: a mismatched id must not return another
+  // user's ciphertext.
+  const { data: secret, error: secretError } = await createSupabaseServiceClient()
+    .from('social_accounts')
+    .select('encrypted_tokens')
+    .eq('id', account.id)
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (secretError) {
+    throw new Error(`Failed to get social account: ${secretError.message}`);
+  }
+
+  if (!secret) {
+    throw new AccountNotFoundError(
+      `Social account not found for ${provider}/${providerAccountId}`,
+    );
+  }
+
+  return { tokens: decryptTokens(encryptedTokensFrom(secret)), account };
 }
 
 //---------------
-// touchSocialAccount — atualiza last_used_at
+// touchSocialAccount — records last_used_at after a successful publish
 //---------------
 export async function touchSocialAccount(
   supabase: SupabaseClient<Database>,
@@ -215,12 +272,13 @@ export async function touchSocialAccount(
   provider: SocialProvider,
   providerAccountId: string,
 ): Promise<void> {
-  const { error } = await supabase
+  const accountId = await ownedAccountId(supabase, userId, provider, providerAccountId);
+  if (accountId === null) return;
+  const { error } = await serviceSocial()
     .from('social_accounts')
     .update({ last_used_at: new Date().toISOString() })
-    .eq('user_id', userId)
-    .eq('provider', provider)
-    .eq('provider_account_id', providerAccountId);
+    .eq('id', accountId)
+    .eq('user_id', userId);
 
   if (error) {
     throw new Error(`Failed to touch social account: ${error.message}`);
@@ -237,21 +295,26 @@ export async function updateSocialAccountTokens(
   providerAccountId: string,
   tokens: SocialTokenPayload,
 ): Promise<void> {
+  const accountId = await ownedAccountId(supabase, userId, provider, providerAccountId);
+  if (accountId === null) {
+    throw new AccountNotFoundError(
+      `Social account not found for ${provider}/${providerAccountId}`,
+    );
+  }
   const encrypted = encryptTokens(tokens);
   const expiresAt = tokens.expiry_date
     ? new Date(tokens.expiry_date).toISOString()
     : null;
 
-  const { error } = await supabase
+  const { error } = await serviceSocial()
     .from('social_accounts')
     .update({
       encrypted_tokens: encrypted,
       token_expires_at: expiresAt,
       updated_at: new Date().toISOString(),
     })
-    .eq('user_id', userId)
-    .eq('provider', provider)
-    .eq('provider_account_id', providerAccountId);
+    .eq('id', accountId)
+    .eq('user_id', userId);
 
   if (error) {
     throw new Error(`Failed to update social account tokens: ${error.message}`);
@@ -269,16 +332,21 @@ export async function updateSocialAccountMetadata(
   accountMetadata: Record<string, unknown>,
   accountName?: string,
 ): Promise<void> {
-  const { error } = await supabase
+  const accountId = await ownedAccountId(supabase, userId, provider, providerAccountId);
+  if (accountId === null) {
+    throw new AccountNotFoundError(
+      `Social account not found for ${provider}/${providerAccountId}`,
+    );
+  }
+  const { error } = await serviceSocial()
     .from('social_accounts')
     .update({
       account_metadata: accountMetadata,
       ...(accountName === undefined ? {} : { account_name: accountName }),
       updated_at: new Date().toISOString(),
     })
-    .eq('user_id', userId)
-    .eq('provider', provider)
-    .eq('provider_account_id', providerAccountId);
+    .eq('id', accountId)
+    .eq('user_id', userId);
 
   if (error) {
     throw new Error(`Failed to update social account metadata: ${error.message}`);
@@ -294,12 +362,13 @@ export async function deleteSocialAccount(
   provider: SocialProvider,
   providerAccountId: string,
 ): Promise<void> {
-  const { error } = await supabase
+  const accountId = await ownedAccountId(supabase, userId, provider, providerAccountId);
+  if (accountId === null) return;
+  const { error } = await serviceSocial()
     .from('social_accounts')
     .delete()
-    .eq('user_id', userId)
-    .eq('provider', provider)
-    .eq('provider_account_id', providerAccountId);
+    .eq('id', accountId)
+    .eq('user_id', userId);
 
   if (error) {
     throw new Error(`Failed to delete social account: ${error.message}`);
@@ -307,11 +376,22 @@ export async function deleteSocialAccount(
 }
 
 //---------------
-// asRow — types supabase-js's generic return without using any
+// asPublicRow — types supabase-js's generic return without using any
 //---------------
-function asRow(data: unknown): SocialAccountRow {
+function asPublicRow(data: unknown): SocialAccountPublicRow {
   if (typeof data !== 'object' || data === null) {
     throw new Error('Invalid social account row');
   }
-  return data as SocialAccountRow;
+  return data as SocialAccountPublicRow;
+}
+
+function encryptedTokensFrom(data: unknown): string {
+  if (typeof data !== 'object' || data === null || !('encrypted_tokens' in data)) {
+    throw new Error('Invalid social account row');
+  }
+  const value = (data as { encrypted_tokens: unknown }).encrypted_tokens;
+  if (typeof value !== 'string') {
+    throw new Error('Invalid social account row');
+  }
+  return value;
 }

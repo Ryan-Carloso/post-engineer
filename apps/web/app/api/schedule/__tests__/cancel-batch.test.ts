@@ -196,8 +196,8 @@ describe('DELETE /api/schedule on a discounted batch', () => {
 
 //---------------
 // Cookie-session cancel: refund_batch_tokens and settle_batch_clawback are
-// service-role only (migration 065), so the route must run them on the
-// service client even when it reads the slots with the session client.
+// service-role only (migration 065), and slot/schedule deletes are service-role
+// only (migration 066). The route runs both on the service client.
 //---------------
 
 describe('DELETE /api/schedule from a cookie session', () => {
@@ -220,5 +220,50 @@ describe('DELETE /api/schedule from a cookie session', () => {
     expect(second.status).toBe(200);
     expect(sessionRpc).not.toHaveBeenCalled();
     expect(fake.rpcCalls.map((call) => call.name)).toEqual(['settle_batch_clawback', 'refund_batch_tokens']);
+  });
+
+  it('deletes slots and the schedule on the service client when the session delete is denied', async () => {
+    const slot = slotRow('1', { status: 'pending', task_id: null, charged_tokens: 2, batch_id: null });
+    const scheduleId = String(slot.schedule_id);
+    const fake = createFakeSupabase({
+      tables: {
+        scheduled_posts: [slot],
+        schedules: [{ id: scheduleId, user_id: USER_ID, persona_id: null }],
+      },
+    });
+    const sessionDeletes: string[] = [];
+    const session = {
+      from(table: string) {
+        const query = fake.client.from(table) as { delete: () => unknown };
+        query.delete = () => {
+          sessionDeletes.push(table);
+          const denied = {
+            eq: () => denied,
+            in: () => denied,
+            select: () => denied,
+            then: (resolve: (value: unknown) => unknown) =>
+              Promise.resolve({
+                data: null,
+                error: { code: '42501', message: 'permission denied for table' },
+              }).then(resolve),
+          };
+          return denied;
+        };
+        return query;
+      },
+      rpc: fake.client.rpc.bind(fake.client),
+    };
+    vi.mocked(createSupabaseServerClient).mockResolvedValue(session as never);
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(fake.client as never);
+    vi.mocked(requireSupabaseSession).mockResolvedValue({
+      auth: { userId: USER_ID, accessToken: 'cookie-token', isApiKey: false, personaIds: null },
+      error: null,
+    } as never);
+
+    const res = await cancel(scheduleId);
+    expect(res.status).toBe(200);
+    expect(sessionDeletes).toEqual([]);
+    expect(fake.tables.scheduled_posts).toEqual([]);
+    expect(fake.tables.schedules).toEqual([]);
   });
 });

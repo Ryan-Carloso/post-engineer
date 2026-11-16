@@ -68,8 +68,8 @@ async function getHandler(request: NextRequest) {
       });
     }
     // Both flows resolve to the signed-in session user (the connect-url
-    // fallback only accepts the state owner), so persistence always runs
-    // with the session client (RLS as the user), never the service role.
+    // fallback only accepts the state owner); upsertSocialAccount then writes
+    // with the service client (066 leaves the session client select-only).
     const supabase = await createSupabaseServerClient();
     const { upsertSocialAccount } = await import('@/lib/social-accounts');
 

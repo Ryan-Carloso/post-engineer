@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { encryptTokens } from '@/lib/token-crypto';
@@ -93,8 +92,9 @@ async function postHandler(request: Request): Promise<NextResponse> {
   }
   const { username, postingKey } = credentials;
 
-  const supabase =
-    auth.isApiKey === true || auth.isOAuth === true ? createSupabaseServiceClient() : await createSupabaseServerClient();
+  // Service role bypasses RLS. auth.userId is the owner. A cookie JWT must
+  // not write encrypted_tokens.
+  const supabase = createSupabaseServiceClient();
 
   try {
     const { username: normalizedUsername } = await loginToThreespeak(username, postingKey);

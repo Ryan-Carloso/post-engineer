@@ -7,7 +7,7 @@
     },
     "tables": {
         "personas": {
-            "rls": false,
+            "rls": true,
             "columns": [
                 {
                     "name": "id",
@@ -113,6 +113,11 @@
                 }
             ],
             "policies": {
+                "personas_select_own": {
+                    "cmd": "r",
+                    "qual": "(auth.uid() = user_id)",
+                    "withCheck": null
+                }
             },
             "constraints": {
                 "personas_pkey": "PRIMARY KEY (id)",
@@ -122,7 +127,7 @@
             }
         },
         "schedules": {
-            "rls": false,
+            "rls": true,
             "columns": [
                 {
                     "name": "id",
@@ -336,6 +341,11 @@
                 }
             ],
             "policies": {
+                "schedules_select_own": {
+                    "cmd": "r",
+                    "qual": "(auth.uid() = user_id)",
+                    "withCheck": null
+                }
             },
             "constraints": {
                 "schedules_pkey": "PRIMARY KEY (id)",
@@ -404,7 +414,7 @@
             }
         },
         "oauth_states": {
-            "rls": false,
+            "rls": true,
             "columns": [
                 {
                     "name": "state_hash",
@@ -709,7 +719,7 @@
             }
         },
         "user_api_keys": {
-            "rls": false,
+            "rls": true,
             "columns": [
                 {
                     "name": "id",
@@ -773,7 +783,7 @@
             }
         },
         "user_profiles": {
-            "rls": false,
+            "rls": true,
             "columns": [
                 {
                     "name": "id",
@@ -813,6 +823,11 @@
                 }
             ],
             "policies": {
+                "user_profiles_select_own": {
+                    "cmd": "r",
+                    "qual": "(auth.uid() = id)",
+                    "withCheck": null
+                }
             },
             "constraints": {
                 "user_profiles_pkey": "PRIMARY KEY (id)"
@@ -1046,7 +1061,7 @@
             }
         },
         "scheduled_posts": {
-            "rls": false,
+            "rls": true,
             "columns": [
                 {
                     "name": "id",
@@ -1236,6 +1251,11 @@
                 }
             ],
             "policies": {
+                "scheduled_posts_select_own": {
+                    "cmd": "r",
+                    "qual": "(auth.uid() = user_id)",
+                    "withCheck": null
+                }
             },
             "constraints": {
                 "scheduled_posts_pkey": "PRIMARY KEY (id)",
@@ -1251,7 +1271,7 @@
             }
         },
         "social_accounts": {
-            "rls": false,
+            "rls": true,
             "columns": [
                 {
                     "name": "id",
@@ -1321,6 +1341,11 @@
                 }
             ],
             "policies": {
+                "social_accounts_select_own": {
+                    "cmd": "r",
+                    "qual": "(auth.uid() = user_id)",
+                    "withCheck": null
+                }
             },
             "constraints": {
                 "social_accounts_pkey": "PRIMARY KEY (id)",
@@ -1329,7 +1354,7 @@
             }
         },
         "engine_heartbeat": {
-            "rls": false,
+            "rls": true,
             "columns": [
                 {
                     "name": "id",
@@ -1526,7 +1551,7 @@
             }
         },
         "video_generations": {
-            "rls": false,
+            "rls": true,
             "columns": [
                 {
                     "name": "id",
@@ -1632,6 +1657,11 @@
                 }
             ],
             "policies": {
+                "video_generations_select_own": {
+                    "cmd": "r",
+                    "qual": "(auth.uid() = user_id)",
+                    "withCheck": null
+                }
             },
             "constraints": {
                 "video_generations_pkey": "PRIMARY KEY (id)",
@@ -1639,7 +1669,7 @@
             }
         },
         "token_transactions": {
-            "rls": false,
+            "rls": true,
             "columns": [
                 {
                     "name": "id",
@@ -1721,6 +1751,11 @@
                 }
             ],
             "policies": {
+                "token_transactions_select_own": {
+                    "cmd": "r",
+                    "qual": "(auth.uid() = user_id)",
+                    "withCheck": null
+                }
             },
             "constraints": {
                 "token_transactions_pkey": "PRIMARY KEY (id)"
@@ -1840,7 +1875,7 @@
             }
         },
         "stripe_webhook_events": {
-            "rls": false,
+            "rls": true,
             "columns": [
                 {
                     "name": "event_id",

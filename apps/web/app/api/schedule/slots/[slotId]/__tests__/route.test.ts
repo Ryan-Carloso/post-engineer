@@ -1474,4 +1474,24 @@ describe('slot id normalization', () => {
       expect.objectContaining({ route: 'PATCH /api/schedule/slots' }),
     );
   });
+
+  it('updates a cookie session slot on the service client when the session update is denied', async () => {
+    const slot = { id: 'slot-1', schedule_id: 's1', status: 'pending', title: 'Old' };
+    const schedule = { id: 's1', user_id: USER_ID };
+    const session = mockSlotsClient({ slot, schedule, updateConflict: true });
+    const service = mockSlotsClient({ slot, schedule });
+    vi.mocked(createSupabaseServerClient).mockResolvedValue(session as never);
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(service as never);
+    vi.mocked(requireSupabaseSession).mockResolvedValue({
+      auth: { userId: USER_ID, accessToken: 'cookie-token', isApiKey: false },
+      error: null,
+    } as never);
+
+    const response = await patchSlot(SLOT_ID, { title: 'Novo tema' });
+
+    expect(response.status).toBe(200);
+    expect(session.calls.some((call) => call.op === 'update')).toBe(false);
+    expect(service.calls.find((call) => call.op === 'update')?.args?.[0]).toEqual({ title: 'Novo tema' });
+    expect(service.calls.some((call) => call.op === 'eq' && call.args[0] === 'user_id' && call.args[1] === USER_ID)).toBe(true);
+  });
 });

@@ -21,7 +21,9 @@ import { findRepoRoot } from '@/test/repo-root';
 //
 // Trigger functions (RETURNS trigger) cannot be invoked as RPCs, so they
 // are classified separately: the test fails when a new definer trigger
-// appears until it is classified here.
+// appears until it is classified here. enforce_persona_image_limit is
+// one: a session insert into persona_images locks public.personas, and
+// authenticated has SELECT only on that table (migration 066).
 //
 // The billing RPCs below (spend_tokens, refund_generation_tokens,
 // credit_tokens_for_payment, grant_signup_bonus) are called by the app
@@ -40,7 +42,14 @@ const SNAPSHOT_PATH = join(root, 'supabase', 'schema.snapshot.json');
 const DEFINER_TRIGGER_FUNCTIONS = new Set([
   'post_metrics_set_persona',
   'post_metrics_set_experiment',
+  'enforce_persona_image_limit',
 ]);
+
+// The one non-trigger definer the browser calls. Every other non-trigger
+// definer RPC is service-role only. Migration 066 makes this function
+// security definer so its SELECT ... FOR UPDATE of public.personas
+// succeeds after authenticated lost UPDATE on that table.
+const AUTHENTICATED_DEFINER_RPCS = new Set(['set_primary_persona_image']);
 
 // Scheduler-lease infrastructure RPCs (migration 027). They are SECURITY
 // INVOKER, not definer, but they read/write scheduler_leases with no RLS
@@ -129,6 +138,7 @@ describe('definer-function-grants', () => {
         'reset_post_metrics_windows',
         'restore_batch_discount_credit',
         'rotate_mcp_refresh_token',
+        'set_primary_persona_image',
         'settle_batch_clawback',
         'touch_publish_ledger',
       ].sort(),
@@ -147,7 +157,10 @@ describe('definer-function-grants', () => {
     }
     // The scheduler-lease RPCs are invoker, not definer, but the same
     // trust boundary applies: they must stay revoked too.
+    // set_primary_persona_image is the authenticated-callable definer
+    // and is asserted on its own below.
     const restricted = new Set([...definers, ...SCHEDULER_LEASE_FUNCTIONS]);
+    for (const name of AUTHENTICATED_DEFINER_RPCS) restricted.delete(name);
     for (const name of restricted) {
       expect(hasRevoke(chain, name, 'anon'), `${name} must revoke EXECUTE from anon`).toBe(true);
       expect(hasRevoke(chain, name, 'authenticated'), `${name} must revoke EXECUTE from authenticated`).toBe(true);
@@ -167,14 +180,35 @@ describe('definer-function-grants', () => {
     // so authenticated EXECUTE stays while anon is revoked.
     expect(hasRevoke(chain, 'set_primary_persona_image', 'anon')).toBe(true);
     expect(hasRevoke(chain, 'set_primary_persona_image', 'authenticated')).toBe(false);
+    expect(
+      /grant\s+execute\s+on\s+function\s+public\.set_primary_persona_image\b[^;]*to\s+service_role\b/i.test(chain),
+    ).toBe(true);
+    expect(
+      /grant\s+execute\s+on\s+function\s+public\.set_primary_persona_image\b[^;]*to\s+authenticated\b/i.test(chain),
+    ).toBe(true);
     // Ownership must not trust a caller-supplied p_user_id over the JWT
     // subject: the session id wins and the argument is only the fallback
     // for service-role callers where auth.uid() is null. The shipped 002
-    // file keeps its original order (never edited); migration 065 is the
-    // replacement that carries the safe order and must not carry the old.
-    const latest = readFileSync(join(MIGRATIONS_DIR, '065_definer-function-grants.sql'), 'utf8');
+    // file keeps its original order (never edited). 065 swapped the
+    // coalesce order. 066 is the definition that runs: security definer,
+    // search_path pinned, same safe order.
+    const grants065 = readFileSync(join(MIGRATIONS_DIR, '065_definer-function-grants.sql'), 'utf8');
+    const latest = readFileSync(join(MIGRATIONS_DIR, '066_core-tables-rls.sql'), 'utf8');
+    expect(grants065).toContain('coalesce(auth.uid(), p_user_id)');
+    expect(grants065).not.toContain('coalesce(p_user_id, auth.uid())');
     expect(latest).toContain('coalesce(auth.uid(), p_user_id)');
     expect(latest).not.toContain('coalesce(p_user_id, auth.uid())');
+    const definition = latest.match(
+      /create\s+(?:or\s+replace\s+)?function\s+public\.set_primary_persona_image[\s\S]*?as\s+\$\$/i,
+    );
+    expect(definition?.[0]).toContain('security definer');
+    expect(definition?.[0]).toContain('set search_path = public');
+    const trigger = latest.match(
+      /create\s+(?:or\s+replace\s+)?function\s+public\.enforce_persona_image_limit[\s\S]*?as\s+\$\$/i,
+    );
+    expect(trigger?.[0]).toContain('security definer');
+    expect(trigger?.[0]).toContain('set search_path = public');
+    expect(trigger?.[0]).toMatch(/returns\s+trigger/i);
   });
 
   it('restricts record_persona_image_use to service_role like other infrastructure RPCs', () => {
