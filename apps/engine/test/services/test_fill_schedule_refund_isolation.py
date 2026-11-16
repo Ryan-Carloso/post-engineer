@@ -34,7 +34,7 @@ class _GenerateStore:
         self._refund = refund
         self.updates = []
 
-    def pending_slots(self, now):
+    def pending_slots(self, now, limit):
         return [self._slot]
 
     def update_slot(self, slot_id, **fields):

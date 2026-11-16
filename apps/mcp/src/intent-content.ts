@@ -100,7 +100,8 @@ export function registerContentTools(server: McpServer, client: PostEngineerClie
   );
 
   // from_file reads a local video: only the stdio server offers it. A
-  // publish_existing image is a local file on stdio and base64 remotely.
+  // publish_existing image is a local file (imagePath) on stdio only;
+  // remotely it goes through a signed upload (create_upload) instead.
   const publishOptions: ActionOptions<typeof PUBLISH_SPECS> = remote
     ? { unavailable: ['from_file'], variants: { publish_existing: optionalPersonaRefShape(PublishExistingRemoteShape) } }
     : { variants: { publish_existing: optionalPersonaRefShape(PublishExistingLocalShape) } };

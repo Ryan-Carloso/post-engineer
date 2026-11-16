@@ -19,6 +19,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from app.models.schema import TaskVideoRequest
 from app.services import task as task_service
+from app.services import task_outcome
 
 
 class _LogCapture:
@@ -264,6 +265,13 @@ class StartCrashStageTests(unittest.TestCase):
             ),
             patch.object(task_service, "send_discord", return_value=True),
             patch.object(task_service, "cleanup_task_intermediates"),
+            # The crash path runs through task_outcome.crash_or_stop, which
+            # resolves cleanup from its own module globals — patching only
+            # task.cleanup_task_intermediates would leave the real cleanup
+            # running (live pattern: test_task_outcome.py).
+            patch.object(
+                task_outcome, "cleanup_task_intermediates"
+            ) as crash_cleanup,
             patch.object(
                 task_service.video_storage,
                 "require_r2_configuration",
@@ -276,6 +284,7 @@ class StartCrashStageTests(unittest.TestCase):
             else:
                 # script succeeds (or the crash happens even earlier)
                 task_service.start(task_id, params, stop_at="video")
+        capture.crash_cleanup = crash_cleanup
         return capture
 
     def test_crash_before_any_phase_logs_stage_start(self):
@@ -297,6 +306,14 @@ class StartCrashStageTests(unittest.TestCase):
         capture = self._run_start_until_crash("generate_audio")
         stages = [r["extra"].get("stage") for r in capture.errors()]
         self.assertIn("audio", stages)
+
+    def test_crash_path_cleanup_mock_is_actually_invoked(self):
+        # crash_or_stop resolves cleanup_task_intermediates from
+        # task_outcome's globals, so that mock — not the task-module one —
+        # must be the one called on the crash path.
+        capture = self._run_start_until_crash("generate_script")
+        self.assertEqual(capture.crash_cleanup.call_count, 1)
+        self.assertEqual(capture.crash_cleanup.call_args.args[0], "crash-task")
 
     def test_mark_records_stage_in_task_state(self):
         # The SSE progress endpoint reads the stage from task state, so the

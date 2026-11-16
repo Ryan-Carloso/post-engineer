@@ -6,7 +6,8 @@ import { requireSupabaseSession } from '@/lib/request-auth';
 import { isPersonaAllowed } from '@/lib/api-keys';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { apiErrorResponse } from '@/lib/api-error';
-import { ERROR_CODES } from '@/lib/error-codes';
+import { ERROR_CODES, formatErrorMessage } from '@/lib/error-codes';
+import { logger } from '@/lib/logger';
 import {
   getPersonaDefaultAccounts,
   setPersonaDefaultAccounts,
@@ -50,8 +51,14 @@ function codedError(
   return apiErrorResponse(status, message, { route, code: errorCode, field });
 }
 
+// The lib marks caller mistakes with a code; an uncoded error is a server
+// fault (a failed DB read or write). It is logged and answered as a generic
+// 500 — never a 400, and never with the raw DB message.
 function libErrorToResponse(route: string, error: unknown): NextResponse {
-  const code = (error as { code?: string } | null)?.code ?? 'UNKNOWN';
+  const code =
+    typeof error === 'object' && error !== null && 'code' in error && typeof error.code === 'string'
+      ? error.code
+      : null;
   const message = error instanceof Error ? error.message : 'Failed to load publishing accounts.';
   if (code === 'PERSONA_NOT_FOUND') {
     return codedError(route, 404, code, message, 'personaId');
@@ -59,7 +66,14 @@ function libErrorToResponse(route: string, error: unknown): NextResponse {
   if (code === 'INVALID_PROVIDER_ACCOUNT') {
     return codedError(route, 400, code, message, 'accounts');
   }
-  return codedError(route, 400, 'VALIDATION_FAILED', message, 'accounts');
+  if (code === 'VALIDATION_FAILED' || code === 'INVALID_PARAMS') {
+    return codedError(route, 400, 'VALIDATION_FAILED', message, 'accounts');
+  }
+  logger.error('[api/persona/publishing-accounts] lookup failed', error, { route });
+  return apiErrorResponse(500, formatErrorMessage(ERROR_CODES.INTERNAL_ERROR), {
+    route,
+    code: ERROR_CODES.INTERNAL_ERROR,
+  });
 }
 
 interface RouteContext {
@@ -107,7 +121,7 @@ async function getHandler(request: Request): Promise<NextResponse> {
   const ctx = await resolveContext(request, ROUTE);
   if (ctx instanceof NextResponse) return ctx;
   try {
-    const defaults = await getPersonaDefaultAccounts(ctx.supabase, ctx.personaId);
+    const defaults = await getPersonaDefaultAccounts(ctx.supabase, ctx.personaId, ctx.auth.userId);
     return NextResponse.json({ success: true, defaults });
   } catch (error) {
     return libErrorToResponse(ROUTE, error);

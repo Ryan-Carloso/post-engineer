@@ -2,7 +2,9 @@ import { NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { requireSupabaseSession } from '@/lib/request-auth';
+import { isScopedApiKey } from '@/lib/api-keys';
 import { apiErrorResponse } from '@/lib/api-error';
+import { generationPersonaOrFilter } from '@/lib/video-task-scope';
 import { logger } from '@/lib/logger';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 import type { VideoGenerationRow } from '@/lib/contracts/video-tasks';
@@ -45,14 +47,23 @@ async function getHandler(
 
   const { generationId } = await context.params;
 
-  const { data, error } = await supabase
+  // Same persona filter as the list. A miss is PGRST116, the same 404 as
+  // an unknown id, so an out-of-scope row is not distinguishable.
+  let generationQuery = supabase
     .from('video_generations')
     .select(
       'id, generation_id, engine_task_id, persona_name, video_subject, status, error_code, tokens_refunded, created_at, completed_at',
     )
     .eq('user_id', auth.userId)
-    .eq('generation_id', generationId)
-    .single();
+    .eq('generation_id', generationId);
+  if (isScopedApiKey(auth)) {
+    const personaFilter = generationPersonaOrFilter(auth.personaIds);
+    generationQuery =
+      personaFilter.kind === 'null'
+        ? generationQuery.is('persona_id', null)
+        : generationQuery.or(personaFilter.filter);
+  }
+  const { data, error } = await generationQuery.single();
 
   if (error) {
     // PGRST116 (zero rows) is the only honest 404 — unknown id or another

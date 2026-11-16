@@ -10,6 +10,7 @@ import {
   getThreadsInsights,
   publishThreadsMedia,
 } from '@/lib/threads';
+import { ThreadsError } from '@/lib/errors';
 import { findRepoRoot } from '@/test/repo-root';
 
 const mockFetch = vi.fn();
@@ -138,6 +139,26 @@ describe('publishThreadsMedia', () => {
     mockFetch.mockResolvedValueOnce(jsonResponse({}, 500));
     const error = await publishThreadsMedia(input).catch((caught: Error) => caught);
     expect(String(error)).not.toContain('tok-secret');
+  });
+
+  it('keeps the Meta provider code when a dead token answers 400 + code 190', async () => {
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse(
+        {
+          error: {
+            code: 190,
+            message: 'Error validating access token: The session has been invalidated.',
+            type: 'OAuthException',
+          },
+        },
+        400,
+      ),
+    );
+    const error = await publishThreadsMedia(input).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(ThreadsError);
+    expect((error as ThreadsError).statusCode).toBe(400);
+    expect((error as ThreadsError).providerCode).toBe(190);
+    expect((error as ThreadsError).message).toContain('Error validating access token');
   });
 });
 

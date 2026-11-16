@@ -1997,6 +1997,9 @@ class TestFinalVideoUri(unittest.TestCase):
         finally:
             sm.state.delete_task(task_id)
 
+        # A deleted task id is terminal (cancelled): reuse a fresh id
+        # for the no-archive case instead of resurrecting the deleted row.
+        task_id = "has-archive-task-2"
         sm.state.update_task(
             task_id, state=const.TASK_STATE_COMPLETE, user_id="internal"
         )

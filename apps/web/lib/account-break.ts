@@ -39,10 +39,29 @@ export function httpStatusOf(error: unknown): number | undefined {
 
 export function isUnauthorizedError(error: unknown): boolean {
   if (httpStatusOf(error) === 401) return true;
+  if (isMetaInvalidToken(error)) return true;
   if (isNamedCode(error, 'BlueskyError', 'invalid_credentials')) return true;
   if (isNamedCode(error, 'ThreespeakError', 'invalid_credentials')) return true;
   if (isNamedCode(error, 'RumbleError', 'invalid_token')) return true;
   return error instanceof Error && /^unauthorized$/i.test(error.message.trim());
+}
+
+//---------------
+// isMetaInvalidToken — Meta (Instagram, Facebook, Threads) answers a dead
+// token with HTTP 400 + error.code 190 (OAuthException), never a 401, and
+// the libs preserve that code as providerCode on the thrown error. Without
+// this, a revoked token is invisible: no publish_account_unauthorized event
+// and no owner email, even though the publish handler reports it.
+//---------------
+export function isMetaInvalidToken(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const record = error as Record<string, unknown>;
+  return (
+    (record.name === 'InstagramApiError' ||
+      record.name === 'FacebookError' ||
+      record.name === 'ThreadsError') &&
+    record.providerCode === 190
+  );
 }
 
 //---------------

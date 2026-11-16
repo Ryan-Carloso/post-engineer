@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { engineAuthHeaders, requireSupabaseSession } from '@/lib/request-auth';
 import { apiErrorResponse } from '@/lib/api-error';
 import { SAFE_TASK_ID } from '@/lib/video-urls';
+import { enforceScopedTaskRead } from '@/lib/video-task-scope';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
 //---------------
@@ -32,6 +33,14 @@ async function getHandler(
   if (!SAFE_TASK_ID.test(taskId)) {
     return apiErrorResponse(400, 'Invalid taskId.', { route: 'GET /api/persona/video-events' });
   }
+
+  const scopeError = await enforceScopedTaskRead(
+    auth,
+    taskId,
+    'GET /api/persona/video-events',
+    'Video task not found.',
+  );
+  if (scopeError) return scopeError;
 
   try {
     const upstream = await fetch(

@@ -60,7 +60,7 @@ def _slot_owns_upload_claim(slot: dict[str, Any], row: dict[str, Any]) -> bool:
 
 
 # A signed upload carries a video or, for the image networks, a JPEG/PNG
-# image (web migration 066). The file name only labels the part: the web
+# image (web migration 067). The file name only labels the part: the web
 # handlers tell video from image by the bytes.
 UPLOAD_EXTENSIONS: dict[str, str] = {
     "video/mp4": "mp4",

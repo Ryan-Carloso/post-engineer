@@ -8,14 +8,18 @@ vi.mock('@/lib/supabase/service', () => ({
   createSupabaseServiceClient: vi.fn(),
 }));
 
-vi.mock('@/lib/api-keys', () => ({
-  resolveApiKey: vi.fn(),
-  validateApiKeyFormat: (key: string) => key.startsWith('post-engineer_'),
-}));
+vi.mock('@/lib/api-keys', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/api-keys')>();
+  return {
+    ...actual,
+    resolveApiKey: vi.fn(),
+    validateApiKeyFormat: (key: string) => key.startsWith('post-engineer_'),
+  };
+});
 
 //---------------
-// Testes de GET /api/persona/video-download/:taskId/*path — proxy binário
-// autenticado. Auth = sessão Supabase.
+// Tests for GET /api/persona/video-download/:taskId/*path — authenticated
+// binary proxy. Auth = Supabase session.
 //---------------
 
 import { GET } from '../video-download/[taskId]/[...path]/route';
@@ -57,7 +61,7 @@ describe('GET /api/persona/video-download/:taskId/*path', () => {
     mockSession();
   });
 
-  it('retorna 401 sem sessão sem contatar o motor', async () => {
+  it('returns 401 without a session and does not contact the engine', async () => {
     mockSession({ noSession: true });
     const fetchMock = vi.fn<typeof fetch>();
     vi.stubGlobal('fetch', fetchMock);
@@ -68,7 +72,7 @@ describe('GET /api/persona/video-download/:taskId/*path', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('retorna 401 com sessão sem access token', async () => {
+  it('returns 401 when the session has no access token', async () => {
     mockSession({ noToken: true });
     const fetchMock = vi.fn<typeof fetch>();
     vi.stubGlobal('fetch', fetchMock);
@@ -79,7 +83,7 @@ describe('GET /api/persona/video-download/:taskId/*path', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('rejeita path traversal e nomes de arquivo inválidos', async () => {
+  it('rejects path traversal and invalid file names', async () => {
     const fetchMock = vi.fn<typeof fetch>();
     vi.stubGlobal('fetch', fetchMock);
 
@@ -91,7 +95,7 @@ describe('GET /api/persona/video-download/:taskId/*path', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('streama o binário upstream com o token da sessão e headers seguros', async () => {
+  it('streams the upstream binary with the session token and safe headers', async () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response('video bytes', {
       status: 206,
       headers: {
@@ -126,7 +130,7 @@ describe('GET /api/persona/video-download/:taskId/*path', () => {
     expect(sentHeaders.get('x-user-id')).toBe(USER_ID);
   });
 
-  it('retorna 502 quando o motor está indisponível', async () => {
+  it('returns 502 when the engine is unavailable', async () => {
     const fetchMock = vi.fn<typeof fetch>().mockRejectedValue(new Error('refused'));
     vi.stubGlobal('fetch', fetchMock);
 
@@ -135,7 +139,7 @@ describe('GET /api/persona/video-download/:taskId/*path', () => {
     expect(response.status).toBe(502);
   });
 
-  it('retorna 500 quando MONEYPRINT_API_URL não está definida', async () => {
+  it('returns 500 when MONEYPRINT_API_URL is not defined', async () => {
     vi.stubEnv('MONEYPRINT_API_URL', '');
     const fetchMock = vi.fn<typeof fetch>();
     vi.stubGlobal('fetch', fetchMock);
@@ -146,7 +150,7 @@ describe('GET /api/persona/video-download/:taskId/*path', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('aceita API key via x-api-key (sem sessão web)', async () => {
+  it('accepts an API key via x-api-key without a web session', async () => {
     // Regression: the route called requireSupabaseSession() without the
     // request, so the API-key path never ran and API callers got 401.
     mockSession({ noSession: true });
@@ -174,7 +178,7 @@ describe('GET /api/persona/video-download/:taskId/*path', () => {
     expect(fetchMock).toHaveBeenCalled();
   });
 
-  it('retorna 401 com API key inválida', async () => {
+  it('returns 401 for an invalid API key', async () => {
     mockSession({ noSession: true });
     vi.mocked(createSupabaseServiceClient).mockReturnValue({} as never);
     vi.mocked(resolveApiKey).mockResolvedValue(null);
