@@ -85,13 +85,11 @@ class BatchGenerator:
         enqueued = 0
         enqueued_titles: list[str] = []
 
-        # Soonest slot_at first, at most one page of free running slots.
-        # A validation failure does not consume a slot; a deferral does
-        # not either. Stop once the budget is admitted so a store that
-        # returned extra rows cannot start them.
+        # Soonest slot_at first. read_pending_slots already returns at
+        # most `budget` rows, including when the store ignores limit, so
+        # the page cannot outrun the free running slots. A validation
+        # failure does not consume a slot; a deferral does not either.
         for slot in read_pending_slots(self.store, now, budget):
-            if enqueued >= budget:
-                break
             label = self._generate_slot(slot)
             if label is not None:
                 enqueued += 1

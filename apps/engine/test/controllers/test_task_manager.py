@@ -138,6 +138,51 @@ class RunningReservationTests(unittest.TestCase):
         # open keeps the count at 1; a lambda that returns would drop it.
         self.assertEqual(manager.current_tasks, 1)
 
+    def test_release_is_idempotent_and_starts_a_queued_direct_task(self):
+        manager = InMemoryTaskManager(max_concurrent_tasks=1, max_queued_tasks=2)
+        reservation = manager.try_reserve_running()
+        self.assertIsNotNone(reservation)
+        release = threading.Event()
+        self.addCleanup(release.set)
+        started: list[bool] = []
+
+        def work() -> None:
+            started.append(True)
+            release.wait(2)
+
+        manager.add_task(work)
+        self.assertEqual(manager.queue_size(), 1)
+        self.assertEqual(started, [])
+        reservation.release()
+        deadline = time.monotonic() + 1
+        while time.monotonic() < deadline and not started:
+            time.sleep(0.01)
+        self.assertEqual(started, [True])
+        self.assertEqual(manager.queue_size(), 0)
+        # The queued task now owns the running slot.
+        self.assertEqual(manager.current_tasks, 1)
+        # A second release must not drop the slot that task holds.
+        reservation.release()
+        self.assertEqual(manager.current_tasks, 1)
+        self.assertEqual(manager.queue_size(), 0)
+
+    def test_start_after_release_raises_and_does_not_double_decrement(self):
+        manager = InMemoryTaskManager(max_concurrent_tasks=1, max_queued_tasks=2)
+        reservation = manager.try_reserve_running()
+        self.assertIsNotNone(reservation)
+        self.assertEqual(manager.current_tasks, 1)
+        reservation.release()
+        self.assertEqual(manager.current_tasks, 0)
+        with self.assertRaises(RuntimeError) as caught:
+            reservation.start(lambda **_kwargs: None, task_id="late")
+        self.assertEqual(str(caught.exception), "running reservation is not held")
+        self.assertEqual(manager.current_tasks, 0)
+        release = threading.Event()
+        self.addCleanup(release.set)
+        manager.add_task(lambda: release.wait(2))
+        self.assertEqual(manager.current_tasks, 1)
+        self.assertEqual(manager.queue_size(), 0)
+
 
 class BurstReservationTests(unittest.TestCase):
     def test_burst_reserves_one_slot_and_queues_the_rest(self):

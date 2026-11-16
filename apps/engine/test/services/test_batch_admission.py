@@ -22,6 +22,7 @@ from app.services.fill_schedule.batch_admission import (
     SlotDeferred,
     free_running_slots,
     pending_page_limit,
+    pending_read_limit,
     read_pending_slots,
     submit_batch_start,
 )
@@ -488,6 +489,17 @@ class BatchAdmissionHelperTests(unittest.TestCase):
         manager.current_tasks = 3
         self.assertEqual(free_running_slots(manager), 0)
 
+    def test_pending_read_limit_without_a_manager_uses_the_process_manager(self):
+        # The default page size is the process-wide manager. Passing no
+        # manager must import it lazily and read its free running slots.
+        class _Manager:
+            max_concurrent_tasks = 4
+            current_tasks = 1
+
+        with patch.object(video_controller, "task_manager", _Manager()):
+            self.assertEqual(pending_read_limit(), 3)
+            self.assertEqual(pending_page_limit(None), 3)
+
     def test_pending_page_limit_rejects_bools_and_reads_free_capacity(self):
         manager = InMemoryTaskManager(max_concurrent_tasks=2, max_queued_tasks=9)
         self.assertEqual(pending_page_limit(None, manager), 2)
@@ -497,6 +509,13 @@ class BatchAdmissionHelperTests(unittest.TestCase):
         self.assertEqual(pending_page_limit(0, manager), 0)
         self.assertEqual(pending_page_limit(True, manager), 0)
         self.assertEqual(pending_page_limit(-3, manager), 0)
+
+    def test_read_pending_slots_returns_empty_when_the_store_returns_a_non_list(self):
+        class _Store:
+            def pending_slots(self, now, limit):
+                return None
+
+        self.assertEqual(read_pending_slots(_Store(), NOW, 3), [])
 
     def test_read_pending_slots_does_not_query_when_there_is_no_room(self):
         called: list[object] = []
@@ -577,6 +596,40 @@ class BatchAdmissionHelperTests(unittest.TestCase):
         )
         self.assertEqual(held, [True])
         self.assertEqual(manager.current_tasks, 1)
+
+    def test_submit_releases_the_slot_when_on_accepted_raises(self):
+        # The task row is written, then the funnel callback raises. The
+        # reservation must come back before the error propagates: no
+        # worker, and the running cap is not held.
+        manager = InMemoryTaskManager(max_concurrent_tasks=1, max_queued_tasks=2)
+        wrote: list[int] = []
+        started: list[str] = []
+
+        def before_start() -> None:
+            wrote.append(manager.current_tasks)
+
+        def on_accepted() -> None:
+            raise RuntimeError("funnel event failed")
+
+        with self.assertRaises(RuntimeError) as caught:
+            submit_batch_start(
+                manager,
+                lambda **kwargs: started.append(kwargs["task_id"]),
+                task_id="batch-1",
+                params=object(),
+                before_start=before_start,
+                on_accepted=on_accepted,
+            )
+        self.assertEqual(str(caught.exception), "funnel event failed")
+        self.assertEqual(wrote, [1])
+        self.assertEqual(started, [])
+        self.assertEqual(manager.current_tasks, 0)
+        self.assertEqual(manager.queue_size(), 0)
+        release = threading.Event()
+        self.addCleanup(release.set)
+        manager.add_task(lambda: release.wait(2))
+        self.assertEqual(manager.current_tasks, 1)
+        self.assertEqual(manager.queue_size(), 0)
 
     def test_submit_defers_when_the_running_cap_is_full(self):
         # Queue room is not admission. A batch slot only starts now.
