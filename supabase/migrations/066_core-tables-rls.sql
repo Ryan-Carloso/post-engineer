@@ -41,6 +41,20 @@
 -- ALL then re-grant the session columns. service_role is not revoked.
 -- Idempotent: enable RLS is idempotent; policies are dropped and recreated;
 -- role creation is skipped when the Supabase roles already exist.
+--
+-- Persona-image session writes still lock public.personas. PostgreSQL
+-- requires UPDATE privilege for SELECT ... FOR UPDATE, and an UPDATE
+-- policy must pass for the locked row. authenticated has SELECT only, so
+-- the invoker trigger enforce_persona_image_limit (fired by a session
+-- insert into persona_images) and set_primary_persona_image (the browser
+-- RPC) both fail with 42501. This migration recreates both as security
+-- definer with search_path pinned to public. The RPC body is 065's: the
+-- JWT subject wins over p_user_id. EXECUTE stays with authenticated and
+-- service_role, and stays revoked from anon and public.
+-- record_persona_image_use also updates personas, but authenticated
+-- cannot execute it (065) and its only caller uses the service client,
+-- which bypasses RLS. The scheduler-lease functions are invoker and
+-- service-role only; they do not touch these tables.
 -- ============================================================================
 
 do $$
@@ -160,3 +174,77 @@ revoke all on table public.stripe_webhook_events from anon, authenticated;
 revoke all on table public.mcp_oauth_clients from anon, authenticated;
 revoke all on table public.oauth_states from anon, authenticated;
 revoke all on table public.engine_heartbeat from anon, authenticated;
+
+-- Session inserts into persona_images fire this trigger. The body matches
+-- 002. security definer lets the lock take the parent persona row, which
+-- authenticated can only select. The insert itself is still gated by
+-- persona_images RLS, so the locked persona_id is one the caller owns.
+create or replace function public.enforce_persona_image_limit()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  -- Lock the parent persona row: concurrent inserts for the same persona
+  -- serialize here instead of racing on the count below.
+  -- NOTE: the limit literal below mirrors MAX_PERSONA_IMAGES in
+  -- apps/web/lib/persona-images.ts. SQL has no import of that constant, so
+  -- keep the two in sync manually when the limit ever changes.
+  perform 1 from public.personas where id = new.persona_id for update;
+  if (select count(*) from public.persona_images where persona_id = new.persona_id) > 10 then
+    -- Stable SQLSTATE (not the English message): the app maps PEL01 to a
+    -- 400 "library full" instead of a generic 500. Keep the code in sync
+    -- with PERSONA_IMAGE_LIMIT_SQLSTATE in apps/web/lib/persona-images.ts.
+    raise exception 'persona image library is limited to 10 images' using errcode = 'PEL01';
+  end if;
+  return new;
+end;
+$$;
+
+-- Browser RPC. Body matches 065: auth.uid() wins over p_user_id, so a
+-- JWT cannot pass another user's id and move that user's primary image.
+-- security definer is what makes the persona lock succeed once
+-- authenticated no longer has UPDATE on public.personas.
+create or replace function public.set_primary_persona_image(p_persona_id uuid, p_image_id uuid, p_user_id uuid default null)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  -- Serialize concurrent swaps on the parent row. The explicit user_id
+  -- guard keeps the lock scoped to the caller's own persona. As above,
+  -- the JWT subject wins over a spoofed p_user_id.
+  perform 1 from public.personas
+  where id = p_persona_id
+    and user_id = coalesce(auth.uid(), p_user_id)
+  for update;
+  -- Enforcing, not advisory: without the raise below, a service-role caller
+  -- with a wrong/omitted p_user_id would fall through to the persona_id-scoped
+  -- UPDATEs and corrupt another tenant's rows. (Session/JWT callers are
+  -- additionally contained by RLS.)
+  if not found then
+    raise exception 'persona % not found for caller', p_persona_id using errcode = 'P0002';
+  end if;
+  update public.persona_images
+  set is_primary = false
+  where persona_id = p_persona_id and is_primary;
+  update public.persona_images
+  set is_primary = true
+  where id = p_image_id and persona_id = p_persona_id;
+  if not found then
+    -- P0002 (no_data_found) lets the app distinguish "the image row
+    -- vanished between the route's ownership pre-check and this swap"
+    -- (a 404) from a genuine failure (a 500). The exception rolls back
+    -- the demote above too.
+    raise exception 'image % does not belong to persona %', p_image_id, p_persona_id
+      using errcode = 'P0002';
+  end if;
+end;
+$$;
+
+revoke execute on function public.set_primary_persona_image(uuid, uuid, uuid) from public;
+revoke execute on function public.set_primary_persona_image(uuid, uuid, uuid) from anon;
+grant execute on function public.set_primary_persona_image(uuid, uuid, uuid) to authenticated;
+grant execute on function public.set_primary_persona_image(uuid, uuid, uuid) to service_role;

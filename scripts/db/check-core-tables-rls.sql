@@ -119,6 +119,26 @@ values
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa06', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 5, 'grant'),
   ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbb06', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 7, 'grant');
 
+-- User B's library, inserted as the table owner so the limit trigger can
+-- lock the parent persona. The authenticated probes below must not move
+-- the primary flag onto the second image.
+insert into public.persona_images (id, persona_id, user_id, image_path, is_primary)
+values
+  (
+    'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbb11',
+    'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbb01',
+    'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+    'b/primary.png',
+    true
+  ),
+  (
+    'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbb12',
+    'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbb01',
+    'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+    'b/other.png',
+    false
+  );
+
 -- No policy may be FOR ALL, and every core-table policy is TO authenticated.
 do $$
 declare
@@ -317,6 +337,59 @@ select pg_temp.expect_state(
 select pg_temp.expect_state(
   $$select encrypted_tokens from public.social_accounts where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa04'$$,
   '42501', 'encrypted_tokens still unreadable');
+
+-- Persona image library. The session client inserts persona_images and
+-- calls set_primary_persona_image. Both lock public.personas with
+-- SELECT ... FOR UPDATE, which needs UPDATE privilege plus an UPDATE
+-- policy. authenticated has SELECT only, so the invoker forms fail with
+-- 42501. The functions run as the owner (security definer) and the RPC
+-- still binds the row to auth.uid() before p_user_id.
+select pg_temp.expect_state(
+  $$insert into public.persona_images (id, persona_id, user_id, image_path)
+    values (
+      'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa11',
+      'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa01',
+      'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+      'a/one.png'
+    )$$,
+  'ok', 'own persona image insert locks the parent persona');
+select pg_temp.expect_state(
+  $$select public.set_primary_persona_image(
+      'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa01',
+      'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa11',
+      null
+    )$$,
+  'ok', 'set primary on own persona');
+select pg_temp.expect_count(
+  $$select count(*) from public.persona_images
+    where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa11' and is_primary$$,
+  1, 'own image became primary');
+select pg_temp.expect_state(
+  $$select public.set_primary_persona_image(
+      'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbb01',
+      'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbb12',
+      null
+    )$$,
+  'P0002', 'cannot set primary on another user persona');
+select pg_temp.expect_state(
+  $$select public.set_primary_persona_image(
+      'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbb01',
+      'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbb12',
+      'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'
+    )$$,
+  'P0002', 'spoofed p_user_id cannot retarget another persona');
+
+-- A's session cannot see B's rows, so confirm the primary flag as the
+-- table owner. A successful spoof would have moved it.
+reset role;
+select pg_temp.expect_count(
+  $$select count(*) from public.persona_images
+    where id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbb11' and is_primary$$,
+  1, 'user B primary image unchanged');
+select pg_temp.expect_count(
+  $$select count(*) from public.persona_images
+    where id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbb12' and is_primary$$,
+  0, 'user B second image stayed non-primary');
 
 -- anon has no table privilege.
 reset role;
