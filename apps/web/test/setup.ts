@@ -1,5 +1,5 @@
 import { beforeEach } from 'vitest';
-import { ONBOARDING_WIZARD_SEEN_KEY } from '@/lib/onboarding-wizard';
+import { ONBOARDING_WIZARD_SEEN_KEY } from '@/lib/onboarding-wizard-keys';
 
 process.env.MCP_RESOURCE = 'https://mcp.post-engineer.test';
 

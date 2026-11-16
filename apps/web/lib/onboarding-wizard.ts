@@ -2,47 +2,75 @@
 
 import { create } from 'zustand';
 
+import { logClientError } from '@/lib/client-logger';
+import { ONBOARDING_WIZARD_SEEN_KEY, ONBOARDING_WIZARD_SEEN_METADATA_KEY } from '@/lib/onboarding-wizard-keys';
+
 //---------------
-// First-visit onboarding wizard state (issue #573). The wizard shows on
-// the first visit to the posts calendar and is dismissable: closing it or
-// finishing it marks the visit seen, so it never pops again on its own.
-// The current step is saved as the user advances, so a detour (e.g. to
-// /recipes for the setup prompt) resumes where it stopped. Step 2
-// connects inline and never navigates; the resume stays as a safety net.
-// The reopen button clears nothing — it always starts at step 1.
+// First-visit onboarding wizard state (issue #573). The wizard opens on
+// its own once per account: the first time it auto-opens, it is marked
+// seen right away, both in this browser (localStorage, a fast cache) and
+// on the account (Supabase user_metadata), so another browser, another
+// device, or cleared site data never shows it again. Leaving the page
+// without closing the dialog still counts as seen. The reopen button
+// always starts at step 1.
 //---------------
 
-export const ONBOARDING_WIZARD_SEEN_KEY = 'post-engineer-onboarding-wizard-seen';
-export const ONBOARDING_WIZARD_STEP_KEY = 'post-engineer-onboarding-wizard-step';
 export const ONBOARDING_WIZARD_STEPS = 4;
+
+// The slice of the Supabase browser client the account flag needs, so
+// tests inject a stub instead of a real client.
+export interface OnboardingAuthClient {
+  auth: {
+    getUser: () => Promise<{
+      data: { user: { user_metadata?: Record<string, unknown> } | null };
+      error: unknown;
+    }>;
+    updateUser: (attributes: { data: Record<string, unknown> }) => Promise<{ error: unknown }>;
+  };
+}
 
 export function readOnboardingWizardSeen(): boolean {
   if (typeof window === 'undefined') return false;
   return window.localStorage.getItem(ONBOARDING_WIZARD_SEEN_KEY) === '1';
 }
 
-export function markOnboardingWizardSeen(): void {
+export function markOnboardingWizardSeenLocally(): void {
   window.localStorage.setItem(ONBOARDING_WIZARD_SEEN_KEY, '1');
-  window.localStorage.removeItem(ONBOARDING_WIZARD_STEP_KEY);
 }
 
-export function readOnboardingWizardStep(): number {
-  if (typeof window === 'undefined') return 1;
-  const step = Number.parseInt(window.localStorage.getItem(ONBOARDING_WIZARD_STEP_KEY) ?? '', 10);
-  return Number.isInteger(step) && step >= 1 && step <= ONBOARDING_WIZARD_STEPS ? step : 1;
+// Decides whether the wizard auto-opens. A failed account read keeps it
+// closed: the reopen button is always there, and showing the wizard again
+// to a returning user is the bug this flag exists to prevent.
+export async function shouldAutoOpenOnboardingWizard(client: OnboardingAuthClient): Promise<boolean> {
+  if (readOnboardingWizardSeen()) return false;
+  const { data, error } = await client.auth.getUser();
+  if (error !== null && error !== undefined) {
+    logClientError('[onboarding] account read failed; wizard stays closed', error);
+    return false;
+  }
+  if (data.user === null) return false;
+  if (data.user.user_metadata?.[ONBOARDING_WIZARD_SEEN_METADATA_KEY] === true) {
+    markOnboardingWizardSeenLocally();
+    return false;
+  }
+  return true;
 }
 
-export function saveOnboardingWizardStep(step: number): void {
-  window.localStorage.setItem(ONBOARDING_WIZARD_STEP_KEY, String(step));
+// Records the first auto-open on this browser and on the account. A failed
+// account write is logged; the local flag still keeps this browser quiet.
+export async function markOnboardingWizardSeen(client: OnboardingAuthClient): Promise<void> {
+  markOnboardingWizardSeenLocally();
+  const { error } = await client.auth.updateUser({ data: { [ONBOARDING_WIZARD_SEEN_METADATA_KEY]: true } });
+  if (error !== null && error !== undefined) {
+    logClientError('[onboarding] account seen-flag write failed', error);
+  }
 }
 
 interface OnboardingWizardState {
   isOpen: boolean;
   step: number;
   open: () => void;
-  openAtStep: (step: number) => void;
-  dismiss: () => void;
-  goToStep: (step: number) => void;
+  close: () => void;
   next: () => void;
 }
 
@@ -50,18 +78,6 @@ export const useOnboardingWizardStore = create<OnboardingWizardState>((set, get)
   isOpen: false,
   step: 1,
   open: () => set({ isOpen: true, step: 1 }),
-  openAtStep: (step) => set({ isOpen: true, step }),
-  dismiss: () => {
-    markOnboardingWizardSeen();
-    set({ isOpen: false, step: 1 });
-  },
-  goToStep: (step) => {
-    saveOnboardingWizardStep(step);
-    set({ step });
-  },
-  next: () => {
-    const nextStep = Math.min(get().step + 1, ONBOARDING_WIZARD_STEPS);
-    saveOnboardingWizardStep(nextStep);
-    set({ step: nextStep });
-  },
+  close: () => set({ isOpen: false, step: 1 }),
+  next: () => set({ step: Math.min(get().step + 1, ONBOARDING_WIZARD_STEPS) }),
 }));
