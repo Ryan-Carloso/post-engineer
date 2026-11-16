@@ -8,9 +8,12 @@ import { PROMPTS } from '@/app/recipes/prompts';
 // The MCP package never talks to PostHog: every API request it sends
 // carries X-MCP-Tool / X-MCP-Call-Id / X-MCP-Version headers
 // (apps/mcp/src/analytics.ts). requireSupabaseSession calls
-// trackMcpToolCall on the API-key and OAuth branches only (a cookie session
-// is the browser, never the MCP), and this module records one
-// `mcp_tool_called` event per request against the authenticated user.
+// noteMcpToolCaller on the API-key and OAuth branches only (a cookie
+// session is the browser, never the MCP) and stores the caller on the
+// Request. withApiErrorReporting calls recordMcpToolCall once the
+// response status is known, and this module records one `mcp_tool_called`
+// event per request against that user, with `status` and `ok` (2xx).
+// A handler that throws is recorded as status 500 by the wrapper.
 //
 // - Headers are validated by format; an absent or malformed tool header
 //   records nothing and never affects the request.
@@ -21,8 +24,9 @@ import { PROMPTS } from '@/app/recipes/prompts';
 // - One tool call can send several API requests sharing one call id, so
 //   PostHog counts tool calls with count(distinct properties.call_id).
 // - requireSupabaseSession can run more than once for the same request
-//   (the route, then resolveReportingUserId in withApiErrorReporting);
-//   a WeakSet keeps it to one event per request.
+//   (the route, then resolveReportingUserId in withApiErrorReporting).
+//   The caller is kept in a WeakMap keyed by that Request (no process-wide
+//   user table). A WeakSet keeps the capture to one event per request.
 // - `path` never carries caller text: dynamic segments (ids, the prompt
 //   slug an agent typed) are replaced by `:param` unless they look like a
 //   static route word, and the result still passes the credential-fragment
@@ -43,7 +47,16 @@ const VERSION = /^\d{1,4}\.\d{1,4}\.\d{1,6}(?:-[0-9A-Za-z.-]{1,20})?$/;
 
 export type McpAuthMethod = 'api_key' | 'oauth';
 
-const trackedRequests = new WeakSet<Request>();
+interface McpToolCaller {
+  userId: string;
+  authMethod: McpAuthMethod;
+}
+
+// Caller identity lives on the Request, not in a process-wide map, so two
+// concurrent calls never share a user. The set remembers which Requests
+// already produced an event.
+const callers = new WeakMap<Request, McpToolCaller>();
+const recorded = new WeakSet<Request>();
 
 export const RECIPE_NUDGE_SURFACES: ReadonlySet<string> = new Set([
   'none',
@@ -114,20 +127,43 @@ function headerMatching(request: Request, name: string, pattern: RegExp): string
   return value !== null && pattern.test(value) ? value : undefined;
 }
 
-export function trackMcpToolCall(request: Request, userId: string, authMethod: McpAuthMethod): void {
+/**
+ * Remember who called, for the capture that runs once the response status
+ * is known. API-key and OAuth only. A cookie session never calls this.
+ * The first note wins; a later auth of the same Request does not replace it.
+ */
+export function noteMcpToolCaller(request: Request, userId: string, authMethod: McpAuthMethod): void {
   try {
-    if (trackedRequests.has(request)) return;
+    if (recorded.has(request) || callers.has(request)) return;
+    callers.set(request, { userId, authMethod });
+  } catch {
+    // Telemetry must never break the request path.
+  }
+}
+
+/**
+ * Record `mcp_tool_called` for a Request whose caller was noted at auth.
+ * `ok` is true only for a 2xx status. One event per Request. No noted
+ * caller (a cookie session, a failed auth) records nothing.
+ */
+export function recordMcpToolCall(request: Request | undefined, status: number): void {
+  try {
+    if (request === undefined || recorded.has(request)) return;
+    const caller = callers.get(request);
+    if (caller === undefined) return;
     const tool = headerMatching(request, 'x-mcp-tool', TOOL_NAME);
     if (tool === undefined) return;
-    trackedRequests.add(request);
+    recorded.add(request);
     const client = getPostHogServer();
     if (client === null) return;
     const properties: Record<string, unknown> = {
       ...recipeAdoptionProperties(request),
       tool,
-      auth_method: authMethod,
+      auth_method: caller.authMethod,
       method: request.method,
       path: telemetryPath(request.url),
+      status,
+      ok: status >= 200 && status < 300,
     };
     const action = headerMatching(request, 'x-mcp-action', TOOL_NAME);
     if (action !== undefined) properties.action = action;
@@ -135,7 +171,7 @@ export function trackMcpToolCall(request: Request, userId: string, authMethod: M
     if (callId !== undefined) properties.call_id = callId;
     const version = headerMatching(request, 'x-mcp-version', VERSION);
     if (version !== undefined) properties.mcp_version = version;
-    client.captureAs(userId, 'mcp_tool_called', properties);
+    client.captureAs(caller.userId, 'mcp_tool_called', properties);
   } catch {
     // Telemetry must never break the request path.
   }

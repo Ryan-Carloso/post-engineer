@@ -5,7 +5,9 @@ import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { apiErrorResponse } from '@/lib/api-error';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { logger } from '@/lib/logger';
-import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
+import { attachApiErrorProperties, resolveReportingUserId, withApiErrorReporting } from '@/lib/api-error-reporting';
+import { experimentResultsTelemetry } from '@/lib/experiments/results-telemetry';
+import type { ExperimentResults } from '@/lib/experiments/results';
 import { personaScopeOf } from '@/lib/post-detail';
 import { UUID } from '@/lib/metrics/metrics-query';
 import { parseExperimentDetailQuery } from '@/lib/experiments/requests';
@@ -33,6 +35,14 @@ import { fetchProviderCounters } from '@/lib/metrics/provider-counters';
 //---------------
 
 const ROUTE = 'GET /api/experiments/[id]';
+
+// The wrapper names the 2xx event experiment_results_fetched. Pair counts
+// and the label per provider ride on that event. Codes only.
+function jsonDetail<T extends { results: ExperimentResults }>(body: T): NextResponse {
+  const response = NextResponse.json({ success: true, ...body });
+  attachApiErrorProperties(response, experimentResultsTelemetry(body.results));
+  return response;
+}
 
 async function getHandler(
   request: Request,
@@ -80,7 +90,7 @@ async function getHandler(
       logger.error('[api/experiments] live results read failed', result.cause, { experimentId: id });
       return apiErrorResponse(500, 'Failed to load the experiment.', { route: ROUTE, cause: result.cause });
     }
-    return NextResponse.json({ success: true, ...result.value });
+    return jsonDetail(result.value);
   }
 
   const result = await loadExperimentResults(supabase, {
@@ -94,7 +104,7 @@ async function getHandler(
     logger.error('[api/experiments] results read failed', result.cause, { experimentId: id });
     return apiErrorResponse(500, 'Failed to load the experiment.', { route: ROUTE, cause: result.cause });
   }
-  return NextResponse.json({ success: true, ...result.value });
+  return jsonDetail(result.value);
 }
 
 export const GET = withApiErrorReporting(ROUTE, getHandler, {

@@ -41,6 +41,7 @@ import { getPostHogServer } from './posthog-server';
 import { rejectionEventName, successEventName } from './api-telemetry-names';
 import { scrubSecrets } from './scrub';
 import { requireSupabaseSession } from './request-auth';
+import { recordMcpToolCall } from './mcp-tool-telemetry';
 
 /**
  * User identity for PostHog attribution. The uuid is the stable
@@ -314,7 +315,9 @@ async function reportApiSuccess(
  * takes none at all), plain Request and NextRequest both typecheck, and
  * extra args such as the route-params context pass through. The handler's
  * response is returned untouched, and handler errors rethrow for
- * onRequestError to report.
+ * onRequestError to report. Before that rethrow, and before returning a
+ * response, mcp_tool_called is recorded with the status (500 when the
+ * handler throws). That capture never replaces the $exception report.
  */
 export function withApiErrorReporting<TReq extends Request | undefined, TArgs extends unknown[]>(
   route: string,
@@ -330,8 +333,17 @@ export function withApiErrorReporting(
   options?: ApiErrorReportingOptions,
 ): (request?: Request, ...args: unknown[]) => Promise<Response> {
   return async (request?: Request, ...args: unknown[]): Promise<Response> => {
-    const response = await handler(request, ...args);
+    let response: Response;
+    try {
+      response = await handler(request, ...args);
+    } catch (error) {
+      // The handler never produced a response. Record the tool call as 500
+      // and rethrow so onRequestError still owns the $exception.
+      recordMcpToolCall(request, 500);
+      throw error;
+    }
     const status = (response as { status?: unknown } | null | undefined)?.status;
+    if (typeof status === 'number') recordMcpToolCall(request, status);
     if (typeof status !== 'number' || reportedResponses.has(response)) return response;
     // Fire-and-forget: never awaited, never throws, never mutates the response.
     if (status >= 400) {
