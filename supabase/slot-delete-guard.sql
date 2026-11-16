@@ -1,10 +1,12 @@
 -- ============================================================================
 -- Atomic slot delete guard (prevents the last-slot check-then-act race)
 -- ----------------------------------------------------------------------------
--- SOURCE OF TRUTH: supabase/migrations/058_slot-delete-ready.sql (the
--- versioned migration). This file keeps the same body for reference; do
--- not apply it by hand — the migration chain applies the function.
--- Safe to re-run (CREATE OR REPLACE is idempotent).
+-- SOURCE OF TRUTH: supabase/migrations/065_definer-function-grants.sql (the
+-- newest versioned migration that redefines it: 058's body plus a pinned
+-- search_path; 065 also makes it service-role only). This file keeps the
+-- same body for reference, pinned by slot-delete-ready-migration.test.ts;
+-- do not apply it by hand — the migration chain applies the function and
+-- its grants.
 --
 -- WHY: DELETE /api/schedule/slots checked "is this the schedule's last
 -- slot?" with a SELECT and then DELETEd in two steps. Two concurrent
@@ -23,6 +25,7 @@ create or replace function public.delete_slot_if_not_last(
 returns text
 language plpgsql
 security definer
+set search_path = public
 as $$
 declare
   v_schedule_id uuid;
@@ -39,9 +42,9 @@ begin
     return 'not_found';
   end if;
 
-  -- Only pending (not yet dispatched), ready (generated, not yet
-  -- dispatched) and failed (dead row cleanup) slots can be deleted; the
-  -- engine owns everything mid-flight.
+  -- Pending (not yet dispatched), ready (generated, not yet dispatched)
+  -- and failed (dead row cleanup) slots can be deleted; the engine owns
+  -- everything mid-flight.
   if v_status not in ('pending', 'ready', 'failed') then
     return 'not_deletable';
   end if;
