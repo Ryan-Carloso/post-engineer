@@ -239,6 +239,12 @@ function makeClient(cfg: DbConfig): unknown {
           }
           return { data: null, error: null };
         }
+        // getPersonaDefaultAccounts proves persona ownership with
+        // maybeSingle(); serve the same persona row single() serves.
+        if (name === 'personas') {
+          if (cfg.personaErrorCode) return { data: null, error: { code: cfg.personaErrorCode, message: 'db down' } };
+          return { data: cfg.persona ?? null, error: null };
+        }
         return { data: null, error: null };
       },
       single: async () => {
