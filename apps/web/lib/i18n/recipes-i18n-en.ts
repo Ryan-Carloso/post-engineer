@@ -179,6 +179,24 @@ export const recipesI18nEn = {
   fullSetupExampleInput: 'Starting with zero accounts and no persona.',
   fullSetupExampleOutput:
       'Accounts connected, persona created, script validated, one video published.',
+  abHookTestTitle: 'Test two hooks (A/B)',
+  abHookTestObjective:
+      'Compare two hook styles on the same videos. Faceless is the cheapest test. A variant is the winner only when the label is clear.',
+  abHookTestStep1: 'For creators comparing two hook styles on the same video.',
+  abHookTestStep2:
+      'Faceless is the cheapest test: 1 token per video, created with no persona.',
+  abHookTestStep3:
+      'Create the experiment with 6 pairs. 6 is the smallest target that can ever be clear. A moderate effect needs about 10-12.',
+  abHookTestStep4:
+      "Write both hooks per pair in each variant's style. Only the hook differs inside a pair.",
+  abHookTestStep5:
+      'Wait for publication and metrics, then read the result. Never call a variant the winner unless the label is clear.',
+  abHookTestDeliver1: 'One faceless experiment with two hook variants.',
+  abHookTestDeliver2: 'Pairs of videos at 1 token each, with the same voice on every pair.',
+  abHookTestDeliver3: 'A result that names a winner only when the label is clear.',
+  abHookTestExampleInput: 'A calm hook against a direct hook, faceless, on my niche.',
+  abHookTestExampleOutput:
+      'Experiment with 6 pairs. No winner named unless the label is clear.',
   stepKeyTitle: 'Create your API key',
   stepKeyHint:
       'It connects your agent to your account. You can create several, one per agent.',

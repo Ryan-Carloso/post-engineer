@@ -27,6 +27,7 @@ describe('Prompts hub', () => {
     cy.contains('Last 30 days become a video').should('be.visible');
     cy.contains('One week, one video per network').should('be.visible');
     cy.contains('A viral video becomes your Short').should('be.visible');
+    cy.contains('Test two hooks (A/B)').should('be.visible');
     cy.get('a[href="/recipes/daily-news"]').should('be.visible');
     cy.get('a[href="/recipes/place-spotlight"]').should('be.visible');
     cy.get('a[href="/recipes/subject-spotlight"]').should('be.visible');
@@ -35,6 +36,7 @@ describe('Prompts hub', () => {
     cy.get('a[href="/recipes/multi-rede"]').should('be.visible');
     cy.get('a[href="/recipes/viral-shorts"]').should('be.visible');
     cy.get('a[href="/recipes/full-setup"]').should('be.visible');
+    cy.get('a[href="/recipes/ab-hook-test"]').should('be.visible');
   });
 
   it('shows a signed-out visitor the sign-in step and the setup prompt', () => {
@@ -99,6 +101,14 @@ describe('Prompts hub', () => {
     cy.contains('h2', 'What this prompt does').should('be.visible');
     cy.contains('button', 'Copy this prompt').should('be.visible');
     cy.get('a[href*="docs/recipes/github-prs.md"]').should('be.visible');
+  });
+
+  it('shows the A/B hook test detail: steps and copy button', () => {
+    visitEnglish('/recipes/ab-hook-test');
+    cy.contains('h1', 'Test two hooks (A/B)').should('be.visible');
+    cy.contains('h2', 'What this prompt does').should('be.visible');
+    cy.contains('button', 'Copy this prompt').should('be.visible');
+    cy.get('a[href*="docs/recipes/ab-hook-test.md"]').should('be.visible');
   });
 
   it('shows a not-found line with a back link for an unknown slug', () => {
