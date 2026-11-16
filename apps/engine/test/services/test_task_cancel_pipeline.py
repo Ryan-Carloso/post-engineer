@@ -120,11 +120,17 @@ def test_cancel_before_start_runs_no_stage(monkeypatch):
     entered: list[str] = []
     _stub_stages(monkeypatch, entered)
 
+    started: list[str] = []
+    monkeypatch.setattr(tm, "track_generation_started", started.append)
+
     result = tm.start(task_id, _params(), stop_at="video")
 
     assert result is None
     assert entered == []
     assert sm.state.get_task(task_id) is None
+    # A task cancelled while still queued never began executing: no
+    # video_generation_started event (it would dangle with no terminal).
+    assert started == []
 
 
 @pytest.mark.parametrize(

@@ -895,12 +895,12 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
         if stop_at == "video":
             video_storage.require_r2_configuration()
         start_preflight.run(phases, task_id, params, _PERSONA_IMAGE_MAX_BYTES, stop_at)
-        _update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=5)
-        track_generation_started(task_id)
-
-        # Cancel (issue #447): stop before the first paid stage.
+        # Cancel (issue #447): before PROCESSING/started, so a task cancelled
+        # while queued emits no dangling video_generation_started.
         if abort_if_cancelled(task_id, "script", _forget_milestone):
             return
+        _update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=5)
+        track_generation_started(task_id)
         # 1. Generate script
         phases.begin("script")
         video_script = generate_script(task_id, params)

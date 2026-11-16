@@ -223,6 +223,7 @@ class TestRedisState(unittest.TestCase):
         state.delete_task("task:0")
         self.assertTrue(is_cancelled("task:0"))
         self.assertIsNone(state.get_task("task:0"))
+        self.assertEqual(state._redis.deleted_keys, [b"task:0"])
 
     def test_failed_delete_clears_the_cancel_mark(self):
         state = self._build_state([1])
