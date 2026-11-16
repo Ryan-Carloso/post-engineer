@@ -40,12 +40,12 @@ const cases = loadCases();
 const ENGINE_BLOCKED = ['127.0.0.1', '169.254.169.254', '::1', '10.0.0.5'];
 const ENGINE_ALLOWED = ['1.1.1.1', '2606:4700:4700::1111', '93.184.215.14'];
 
-describe('isPublicIp — shared SSRF fixture (Python is_global parity)', () => {
-  it.each(cases.blocked)('blocks %s (engine is_global is false)', (ip) => {
+describe('isPublicIp — shared SSRF fixture', () => {
+  it.each(cases.blocked)('blocks %s', (ip) => {
     expect(isPublicIp(ip)).toBe(false);
   });
 
-  it.each(cases.allowed)('allows %s (engine is_global is true)', (ip) => {
+  it.each(cases.allowed)('allows %s', (ip) => {
     expect(isPublicIp(ip)).toBe(true);
   });
 

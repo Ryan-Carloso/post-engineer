@@ -1,21 +1,34 @@
-// Verbatim copy of isPublicIp from apps/web/lib/generation/custom-audio.ts
-// (the MCP package cannot import web code). Pinned to
-// shared/ssrf/public-ip-cases.json by __tests__/clone-audio-ssrf.test.ts.
-// Both copies change together with the JSON file.
+// Verbatim copy of the isPublicIp classifier in
+// apps/web/lib/ssrf/public-ip.ts (the MCP package cannot import web code).
+// Pinned to shared/ssrf/public-ip-cases.json by
+// __tests__/clone-audio-ssrf.test.ts. Both copies change together.
 
 import { isIP } from 'node:net';
 
-// isPublicIp mirrors CPython ipaddress is_global, the engine's SSRF rule
-// (apps/engine/app/utils/ssrf.py checks ip.is_global): an address counts as
-// public only when Python reports it globally reachable. The one deliberate
-// divergence is multicast (224.0.0.0/4, ff00::/8): Python reports it global,
-// the web blocks it anyway — stricter than the engine, never looser.
-// Pinned by shared/ssrf/public-ip-cases.json via
-// lib/generation/__tests__/public-ip-ssrf-sync.test.ts.
+// URL.hostname keeps the brackets on an IPv6 literal (`[::1]`). isIP does
+// not recognize that form, so classification strips them in this one place.
+export function unbracketIpLiteral(host: string): string {
+  if (host.startsWith('[') && host.endsWith(']') && host.length > 2) {
+    return host.slice(1, -1);
+  }
+  return host;
+}
+
+// isPublicIp is the web/MCP SSRF address rule. It follows CPython
+// ipaddress is_global (the engine checks ip.is_global) except where this
+// CPython still reports an address global and IANA does not:
+// multicast (224.0.0.0/4, ff00::/8), the deprecated 6to4 anycast
+// 192.88.99.0/24 (RFC 7526), the dummy prefix 100:0:0:1::/64 (RFC 9780),
+// SRv6 5f00::/16 (RFC 9602), and 64:ff9b::/96 when the embedded IPv4 is
+// not public. 64:ff9b::8.8.8.8 stays public. 192.0.0.9 and 192.0.0.10
+// stay public (IANA global anycast). Stricter than today's engine
+// is_global, never looser; the engine mirror is a sibling change.
+// Pinned by shared/ssrf/public-ip-cases.json.
 export function isPublicIp(ip: string): boolean {
-  const family = isIP(ip);
-  if (family === 4) return isPublicIpv4(ip);
-  if (family === 6) return isPublicIpv6(ip);
+  const bare = unbracketIpLiteral(ip);
+  const family = isIP(bare);
+  if (family === 4) return isPublicIpv4(bare);
+  if (family === 6) return isPublicIpv6(bare);
   return false;
 }
 
@@ -32,6 +45,7 @@ function isPublicIpv4(ip: string): boolean {
     return d === 9 || d === 10;
   }
   if (a === 192 && b === 0 && c === 2) return false; // 192.0.2.0/24 documentation
+  if (a === 192 && b === 88 && c === 99) return false; // 192.88.99.0/24 deprecated 6to4 anycast
   if (a === 192 && b === 168) return false; // 192.168.0.0/16
   if (a === 198 && (b === 18 || b === 19)) return false; // 198.18.0.0/15 benchmarking
   if (a === 198 && b === 51 && c === 100) return false; // 198.51.100.0/24 documentation
@@ -79,10 +93,12 @@ const IPV6_NON_GLOBAL: ReadonlyArray<readonly [string, number]> = [
   ['::1', 128], // loopback
   ['64:ff9b:1::', 48], // local-use NAT64
   ['100::', 64], // discard-only
+  ['100:0:0:1::', 64], // dummy prefix (RFC 9780), not globally reachable
   ['2001::', 23], // Teredo / benchmarking / orchestid and peers (see exceptions)
   ['2001:db8::', 32], // documentation
   ['2002::', 16], // 6to4
   ['3fff::', 20], // documentation
+  ['5f00::', 16], // SRv6 SIDs (RFC 9602), not globally reachable
   ['fc00::', 7], // unique-local
   ['fe80::', 10], // link-local
   ['ff00::', 8], // multicast (blocked beyond Python, see header note)
@@ -98,13 +114,21 @@ const IPV6_GLOBAL_EXCEPTIONS: ReadonlyArray<readonly [string, number]> = [
   ['2001:30::', 28],
 ];
 
+function embeddedIpv4(addr: bigint): string {
+  return [24, 16, 8, 0].map((shift) => Number((addr >> BigInt(shift)) & 0xffn)).join('.');
+}
+
 function isPublicIpv6(ip: string): boolean {
   const addr = ipv6ToBigInt(ip);
   if (addr === null) return false;
   if ((addr >> 32n) === 0xffffn) {
     // IPv4-mapped address: Python derives globality from the embedded IPv4.
-    const mapped = [24, 16, 8, 0].map((shift) => Number((addr >> BigInt(shift)) & 0xffn)).join('.');
-    return isPublicIpv4(mapped);
+    return isPublicIpv4(embeddedIpv4(addr));
+  }
+  // Well-known NAT64 (64:ff9b::/96). A blanket block of the prefix would
+  // reject 64:ff9b::8.8.8.8; globality follows the embedded IPv4 instead.
+  if (inIpv6Network(addr, '64:ff9b::', 96)) {
+    return isPublicIpv4(embeddedIpv4(addr & 0xffffffffn));
   }
   if (IPV6_GLOBAL_EXCEPTIONS.some(([net, len]) => inIpv6Network(addr, net, len))) return true;
   if (IPV6_NON_GLOBAL.some(([net, len]) => inIpv6Network(addr, net, len))) return false;

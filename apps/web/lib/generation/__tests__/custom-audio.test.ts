@@ -1,4 +1,7 @@
 // @vitest-environment node
+import { EventEmitter } from 'node:events';
+import http from 'node:http';
+import https from 'node:https';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { lookup } from 'node:dns/promises';
 import type { LookupAddress } from 'node:dns';
@@ -18,23 +21,62 @@ const mockLookup = vi.mocked(
 );
 const warn = vi.mocked(logger.warn);
 
+type PinnedLookup = (
+  hostname: string,
+  options: { all?: boolean; family?: number },
+  callback: (error: NodeJS.ErrnoException | null, address: unknown, family?: number) => void,
+) => void;
+
+type CapturedCall = { url: string; method: string; lookup: PinnedLookup | undefined };
+
 function headResponse(status: number, headers: Record<string, string> = {}): Response {
   return new Response(null, { status, headers });
 }
 
-function stubHead(responses: Array<Response | Error>) {
-  const calls: Array<{ url: string; init: RequestInit }> = [];
+function stubHead(responses: Array<Response | Error>): CapturedCall[] {
+  const calls: CapturedCall[] = [];
   let index = 0;
-  vi.stubGlobal(
-    'fetch',
-    vi.fn(async (url: string, init: RequestInit) => {
-      calls.push({ url, init });
+  const impl = (
+    url: URL | string,
+    options: { method?: string; lookup?: PinnedLookup },
+    callback: (incoming: EventEmitter) => void,
+  ) => {
+    calls.push({
+      url: typeof url === 'string' ? url : url.toString(),
+      method: options.method ?? 'GET',
+      lookup: options.lookup,
+    });
+    const req = new EventEmitter() as EventEmitter & { end: () => void; destroy: () => void };
+    req.destroy = () => undefined;
+    req.end = () => {
       const next = responses[Math.min(index, responses.length - 1)];
       index += 1;
-      if (next instanceof Error) throw next;
-      return next;
-    }),
-  );
+      if (next instanceof Error) {
+        req.emit('error', next);
+        req.emit('close');
+        return;
+      }
+      const incoming = new EventEmitter() as EventEmitter & {
+        statusCode: number;
+        headers: Record<string, string>;
+        resume: () => void;
+      };
+      incoming.statusCode = next.status;
+      incoming.headers = {};
+      next.headers.forEach((value, key) => {
+        incoming.headers[key] = value;
+      });
+      incoming.resume = () => undefined;
+      callback(incoming);
+      queueMicrotask(() => {
+        incoming.emit('end');
+        req.emit('close');
+      });
+    };
+    return req;
+  };
+  vi.spyOn(http, 'request').mockImplementation(impl as never);
+  vi.spyOn(https, 'request').mockImplementation(impl as never);
   return calls;
 }
 
@@ -63,6 +105,7 @@ describe('checkCustomAudioUrl — happy path', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
   it('accepts a public literal IP with a valid audio HEAD', async () => {
@@ -70,8 +113,8 @@ describe('checkCustomAudioUrl — happy path', () => {
     const result = await checkCustomAudioUrl('http://93.184.216.34/audio.mp3');
     expect(result).toEqual({ ok: true });
     expect(mockLookup).not.toHaveBeenCalled();
-    expect(calls[0].init.method).toBe('HEAD');
-    expect(calls[0].init.redirect).toBe('manual');
+    expect(calls[0].method).toBe('HEAD');
+    expect(calls[0].lookup).toEqual(expect.any(Function));
   });
 
   it('resolves a hostname and accepts it when every address is public', async () => {
@@ -80,6 +123,29 @@ describe('checkCustomAudioUrl — happy path', () => {
     const result = await checkCustomAudioUrl('https://audio.example.com/a.mp3?token=abc');
     expect(result).toEqual({ ok: true });
     expect(mockLookup).toHaveBeenCalledWith('audio.example.com', { all: true });
+  });
+
+  it('pins the HEAD lookup to the validated address', async () => {
+    mockLookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 }]);
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+    const calls = stubHead([audioHead()]);
+    const result = await checkCustomAudioUrl('https://audio.example.com/a.mp3');
+    expect(result).toEqual({ ok: true });
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(mockLookup).toHaveBeenCalledTimes(1);
+    const pinnedLookup = calls[0]?.lookup;
+    if (pinnedLookup === undefined) {
+      throw new Error('HEAD request did not install a pinned lookup');
+    }
+    const pinned = await new Promise<{ error: unknown; address: unknown }>((resolve) => {
+      pinnedLookup('attacker.example', { all: true }, (error, address) => {
+        resolve({ error, address });
+      });
+    });
+    expect(pinned.error).toBeNull();
+    expect(pinned.address).toEqual([{ address: '93.184.216.34', family: 4 }]);
+    expect(JSON.stringify(pinned.address)).not.toContain('127.0.0.1');
   });
 
   it('tolerates parameters on the content-type header', async () => {
@@ -131,6 +197,7 @@ describe('checkCustomAudioUrl — private IPv4 ranges', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
   it.each([
@@ -146,6 +213,13 @@ describe('checkCustomAudioUrl — private IPv4 ranges', () => {
     ['http://203.0.113.1/a.mp3', 'documentation 203.0.113/24'],
     ['http://224.0.0.1/a.mp3', 'multicast'],
     ['http://240.0.0.1/a.mp3', 'reserved'],
+    ['http://192.88.99.0/a.mp3', '6to4 anycast first'],
+    ['http://192.88.99.2/a.mp3', '6to4 anycast'],
+    ['http://192.88.99.255/a.mp3', '6to4 anycast last'],
+    ['http://198.18.0.0/a.mp3', 'benchmarking first'],
+    ['http://198.19.255.255/a.mp3', 'benchmarking last'],
+    ['http://100.64.0.0/a.mp3', 'CGNAT first'],
+    ['http://100.127.255.255/a.mp3', 'CGNAT last'],
   ])('blocks %s (%s)', async (url) => {
     const calls = stubHead([audioHead()]);
     const result = await checkCustomAudioUrl(url);
@@ -159,6 +233,13 @@ describe('checkCustomAudioUrl — private IPv4 ranges', () => {
     'http://172.32.0.1/a.mp3',
     'http://8.8.8.8/a.mp3',
     'http://1.1.1.1/a.mp3',
+    'http://192.88.100.0/a.mp3',
+    'http://192.0.0.9/a.mp3',
+    'http://192.0.0.10/a.mp3',
+    'http://100.63.255.255/a.mp3',
+    'http://100.128.0.0/a.mp3',
+    'http://198.17.255.255/a.mp3',
+    'http://198.20.0.0/a.mp3',
   ])('treats %s as public', async (url) => {
     stubHead([audioHead()]);
     const result = await checkCustomAudioUrl(url);
@@ -185,18 +266,23 @@ describe('checkCustomAudioUrl — IPv6', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
   // IPv6 branches of isPublicIp are exercised through DNS-resolved
-  // addresses: URL.hostname keeps the brackets on literals, so literals
-  // take the DNS path (fail closed when unresolvable).
+  // addresses and through bracketed literals (URL.hostname keeps the brackets).
   it.each([
     ['::1', 'loopback'],
     ['::', 'unspecified'],
     ['::ffff:127.0.0.1', 'mapped IPv4 loopback'],
+    ['::ffff:7f00:1', 'mapped IPv4 loopback in hex'],
     ['fe80::1', 'link-local'],
     ['fc00::1', 'unique-local'],
     ['ff02::1', 'multicast'],
+    ['64:ff9b::7f00:1', 'NAT64 embed of loopback'],
+    ['64:ff9b::a9fe:a9fe', 'NAT64 embed of link-local'],
+    ['100:0:0:1::1', 'dummy prefix'],
+    ['5f00::1', 'SRv6'],
   ])('blocks resolved %s (%s)', async (address) => {
     mockLookup.mockResolvedValue([{ address, family: 6 }]);
     const calls = stubHead([audioHead()]);
@@ -220,15 +306,29 @@ describe('checkCustomAudioUrl — IPv6', () => {
     expect(result).toEqual({ ok: true });
   });
 
-  it('fails closed on an IPv6 literal, which takes the DNS path', async () => {
-    // new URL('http://[::1]/a.mp3').hostname keeps the brackets, so
-    // isIP() does not recognize it and the code falls through to DNS.
-    mockLookup.mockRejectedValue(new Error('ENOTFOUND'));
+  it('accepts NAT64 only when the embedded IPv4 is public', async () => {
+    mockLookup.mockResolvedValue([{ address: '64:ff9b::8.8.8.8', family: 6 }]);
+    stubHead([audioHead()]);
+    const result = await checkCustomAudioUrl('https://v6.example.com/a.mp3');
+    expect(result).toEqual({ ok: true });
+  });
+
+  it('rejects a bracketed IPv6 loopback literal without DNS', async () => {
     const calls = stubHead([audioHead()]);
     const result = await checkCustomAudioUrl('http://[::1]/a.mp3');
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error).toContain('could not be resolved');
+    if (!result.ok) expect(result.error).toContain('public address');
+    expect(mockLookup).not.toHaveBeenCalled();
     expect(calls).toHaveLength(0);
+  });
+
+  it('accepts a bracketed public IPv6 literal without DNS', async () => {
+    const calls = stubHead([audioHead()]);
+    const result = await checkCustomAudioUrl('http://[2606:4700:4700::1111]/a.mp3');
+    expect(result).toEqual({ ok: true });
+    expect(mockLookup).not.toHaveBeenCalled();
+    expect(calls).toHaveLength(1);
+    expect(calls[0].method).toBe('HEAD');
   });
 });
 
@@ -240,6 +340,7 @@ describe('checkCustomAudioUrl — HEAD failures and content checks', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
   it('fails closed and redacts the query string when HEAD is unreachable', async () => {

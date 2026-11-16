@@ -4,9 +4,12 @@ import { lookup as dnsLookup } from 'node:dns/promises';
 import type { LookupAddress } from 'node:dns';
 
 import { isLocalHostname } from '@/lib/oauth-utils';
+import { requestPinned } from '@/lib/ssrf/pinned-request';
+import { isPublicIp } from '@/lib/ssrf/public-ip';
+import { resolvePublicHost } from '@/lib/ssrf/resolve-public-host';
 
 //---------------
-// Clientes OAuth (RFC 7591 DCR + Client ID Metadata Documents).
+// OAuth clients (RFC 7591 DCR + Client ID Metadata Documents).
 //
 // Two `client_id` formats:
 // - `mcp_client_<hex>` — registered via POST /oauth/register, persisted in
@@ -97,58 +100,18 @@ type DnsLookup = (hostname: string) => Promise<LookupAddress[]>;
 const defaultLookup: DnsLookup = (hostname) =>
   dnsLookup(hostname, { all: true });
 
-// IPv4 networks that must never be fetched server-side, as [network, prefix].
-const BLOCKED_IPV4: Array<readonly [number, number]> = [
-  [0x00000000, 8], // 0.0.0.0/8 — this network
-  [0x0a000000, 8], // 10.0.0.0/8 — private
-  [0x64400000, 10], // 100.64.0.0/10 — CGNAT
-  [0x7f000000, 8], // 127.0.0.0/8 — loopback
-  [0xa9fe0000, 16], // 169.254.0.0/16 — link-local (cloud metadata)
-  [0xac100000, 12], // 172.16.0.0/12 — private
-  [0xc0000200, 24], // 192.0.2.0/24 — documentation (TEST-NET-1)
-  [0xc0a80000, 16], // 192.168.0.0/16 — private
-  [0xc6336400, 24], // 198.51.100.0/24 — documentation (TEST-NET-2)
-  [0xcb007100, 24], // 203.0.113.0/24 — documentation (TEST-NET-3)
-  [0xe0000000, 4], // 224.0.0.0/4 — multicast
-  [0xf0000000, 4], // 240.0.0.0/4 — reserved
-];
+const CIMD_FETCH_TIMEOUT_MS = 8000;
+const CIMD_MAX_BYTES = 1024 * 1024;
 
-function ipv4ToInt(ip: string): number | null {
-  const parts = ip.split('.');
-  if (parts.length !== 4) return null;
-  let n = 0;
-  for (const part of parts) {
-    if (!/^\d{1,3}$/.test(part)) return null;
-    const byte = Number(part);
-    if (byte > 255) return null;
-    n = n * 256 + byte;
-  }
-  return n;
-}
-
-/** True when the address is non-public and must never be fetched server-side. */
+// True when the address is not a public IP. The table is isPublicIp, the
+// same classifier custom-audio and the MCP copy use.
 export function isBlockedIpAddress(address: string): boolean {
-  // An IPv6 literal can embed an IPv4 address after the last colon
-  // (e.g. ::ffff:127.0.0.1) — check the embedded IPv4 in that case.
-  const lastColon = address.lastIndexOf(':');
-  const maybeV4 = lastColon >= 0 ? address.slice(lastColon + 1) : address;
-  const v4 = ipv4ToInt(maybeV4);
-  if (v4 !== null) {
-    return BLOCKED_IPV4.some(
-      ([network, prefix]) => v4 >>> (32 - prefix) === network >>> (32 - prefix),
-    );
-  }
-  const lower = address.toLowerCase();
-  if (lower === '::1' || lower === '::') return true; // loopback / unspecified
-  if (lower.startsWith('fc') || lower.startsWith('fd')) return true; // fc00::/7 unique local
-  if (/^fe[89ab]/.test(lower)) return true; // fe80::/10 link-local
-  if (lower.startsWith('ff')) return true; // ff00::/8 multicast
-  return false;
+  return !isPublicIp(address);
 }
 
 export async function fetchCimdDocument(
   clientId: string,
-  fetchImpl: typeof fetch = fetch,
+  fetchImpl?: typeof fetch,
   lookupImpl: DnsLookup = defaultLookup,
 ): Promise<CimdDocument | null> {
   let parsed: URL;
@@ -163,38 +126,34 @@ export async function fetchCimdDocument(
   if (parsed.hash) return null;
   if (parsed.port && parsed.port !== '443') return null;
 
-  // Resolve the host and refuse non-public IPs before fetching (fail closed
-  // when the host does not resolve). Residual risk: DNS rebinding between
-  // this check and the fetch — the no-redirect fetch below bounds the
-  // exposure to a single request against the checked hostname.
-  let addresses: LookupAddress[];
-  try {
-    addresses = await lookupImpl(parsed.hostname);
-  } catch {
-    return null;
-  }
-  if (
-    addresses.length === 0 ||
-    addresses.some((entry) => isBlockedIpAddress(entry.address))
-  ) {
-    return null;
-  }
+  // Resolve the host and refuse non-public IPs before connecting (fail
+  // closed when the host does not resolve). The default path then pins the
+  // socket to those addresses. fetchImpl is the test seam and still refuses
+  // redirects; production callers omit it.
+  const safety = await resolvePublicHost(parsed.hostname, (hostname) => lookupImpl(hostname));
+  if (!safety.ok) return null;
 
   const fetchUrl = parsed.toString();
   let response: Response;
   try {
-    // False positive: every URL reaching this fetch passed the SSRF guards
-    // above (https-only, no credentials/fragment/non-default port, DNS
-    // resolution with non-public IP rejection), and redirects are rejected,
-    // not followed.
-    // codeql[js/request-forgery]
-    response = await fetchImpl(fetchUrl, {
-      headers: { Accept: 'application/json' },
-      // Never follow redirects: a 3xx to an internal URL would otherwise be
-      // fetched with the server's network privileges (SSRF).
-      redirect: 'error',
-      signal: AbortSignal.timeout(8000),
-    });
+    if (fetchImpl) {
+      // codeql[js/request-forgery]: false positive on the injected fetch — the
+      // host already passed resolvePublicHost, and redirect is 'error'.
+      response = await fetchImpl(fetchUrl, {
+        headers: { Accept: 'application/json' },
+        // Never follow redirects: a 3xx to an internal URL would otherwise be
+        // fetched with the server's network privileges (SSRF).
+        redirect: 'error',
+        signal: AbortSignal.timeout(CIMD_FETCH_TIMEOUT_MS),
+      });
+    } else {
+      // Production path: connect only to the addresses already accepted.
+      response = await requestPinned(fetchUrl, safety.addresses, {
+        headers: { Accept: 'application/json' },
+        timeoutMs: CIMD_FETCH_TIMEOUT_MS,
+        maxBytes: CIMD_MAX_BYTES,
+      });
+    }
   } catch {
     return null;
   }
