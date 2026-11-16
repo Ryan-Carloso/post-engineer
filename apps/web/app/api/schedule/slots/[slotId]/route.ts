@@ -201,8 +201,9 @@ async function deleteHandler(
   // schedule instead (DELETE /api/schedule?id=...). The check-and-delete is
   // atomic via the delete_slot_if_not_last RPC (row lock + count + delete
   // in one transaction); two concurrent deletes cannot both slip past the
-  // guard.
-  const { data: deleteResult, error: rpcError } = await supabase.rpc('delete_slot_if_not_last', {
+  // guard. The RPC is service-role only (migration 065), so it runs with
+  // the service client after the ownership check above.
+  const { data: deleteResult, error: rpcError } = await createSupabaseServiceClient().rpc('delete_slot_if_not_last', {
     p_slot_id: slot.id,
     p_user_id: auth.userId,
   });

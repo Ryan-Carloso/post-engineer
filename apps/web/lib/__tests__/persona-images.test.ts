@@ -679,8 +679,11 @@ describe('supabase/migrations/002_persona-images.sql literals', () => {
 
     // Ownership guard: both RPCs take p_user_id and enforce it explicitly
     // instead of relying on out-of-repo personas RLS. The app always passes
-    // the verified caller id; direct PostgREST callers fall back to
-    // auth.uid() via coalesce.
+    // the verified caller id; migration 065 redefines both bodies so the
+    // JWT subject wins (coalesce(auth.uid(), p_user_id)) — the spoofable
+    // order in this file is pinned here only because shipped migrations
+    // are never edited. definer-function-grants.test.ts pins the
+    // replacement.
     for (const fn of ['record_persona_image_use', 'set_primary_persona_image']) {
       expect(sql).toContain(`function public.${fn}(`);
       expect(sql).toMatch(
