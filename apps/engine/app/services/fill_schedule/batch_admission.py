@@ -32,25 +32,12 @@ def free_running_slots(manager: Any) -> int:
     return free
 
 
-def pending_read_limit(manager: Any | None = None) -> int:
-    """Page size for one pending-slot read: the free running slots."""
-    if manager is None:
-        # Lazy: the controller builds the process-wide manager at import,
-        # which must not run while this module is imported.
-        from app.controllers.v1.video import task_manager
+def pending_page_limit(limit: int) -> int:
+    """Non-negative page size chosen by the caller.
 
-        manager = task_manager
-    return free_running_slots(manager)
-
-
-def pending_page_limit(limit: int | None, manager: Any | None = None) -> int:
-    """Non-negative page size. ``None`` reads the live free capacity.
-
-    A bool is not a limit (``bool`` is an ``int`` subclass). A full
-    manager pages zero rows.
+    A bool is not a limit (``bool`` is an ``int`` subclass); anything that
+    is not a non-negative int pages zero rows. Never reads the task manager.
     """
-    if limit is None:
-        limit = pending_read_limit(manager)
     if isinstance(limit, bool) or not isinstance(limit, int) or limit < 0:
         return 0
     return limit

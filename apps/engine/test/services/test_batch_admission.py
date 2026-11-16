@@ -22,7 +22,6 @@ from app.services.fill_schedule.batch_admission import (
     SlotDeferred,
     free_running_slots,
     pending_page_limit,
-    pending_read_limit,
     read_pending_slots,
     submit_batch_start,
 )
@@ -489,26 +488,12 @@ class BatchAdmissionHelperTests(unittest.TestCase):
         manager.current_tasks = 3
         self.assertEqual(free_running_slots(manager), 0)
 
-    def test_pending_read_limit_without_a_manager_uses_the_process_manager(self):
-        # The default page size is the process-wide manager. Passing no
-        # manager must import it lazily and read its free running slots.
-        class _Manager:
-            max_concurrent_tasks = 4
-            current_tasks = 1
-
-        with patch.object(video_controller, "task_manager", _Manager()):
-            self.assertEqual(pending_read_limit(), 3)
-            self.assertEqual(pending_page_limit(None), 3)
-
-    def test_pending_page_limit_rejects_bools_and_reads_free_capacity(self):
-        manager = InMemoryTaskManager(max_concurrent_tasks=2, max_queued_tasks=9)
-        self.assertEqual(pending_page_limit(None, manager), 2)
-        manager.current_tasks = 2
-        self.assertEqual(pending_page_limit(None, manager), 0)
-        self.assertEqual(pending_page_limit(4, manager), 4)
-        self.assertEqual(pending_page_limit(0, manager), 0)
-        self.assertEqual(pending_page_limit(True, manager), 0)
-        self.assertEqual(pending_page_limit(-3, manager), 0)
+    def test_pending_page_limit_accepts_only_non_negative_ints(self):
+        self.assertEqual(pending_page_limit(4), 4)
+        self.assertEqual(pending_page_limit(0), 0)
+        self.assertEqual(pending_page_limit(True), 0)
+        self.assertEqual(pending_page_limit(-3), 0)
+        self.assertEqual(pending_page_limit(None), 0)
 
     def test_read_pending_slots_returns_empty_when_the_store_returns_a_non_list(self):
         class _Store:
