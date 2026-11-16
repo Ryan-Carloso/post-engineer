@@ -714,11 +714,13 @@ class BatchScheduleTests(unittest.TestCase):
         refund_calls = [c for c in track.call_args_list if c[0][0] == "refund_issued"]
         self.assertEqual(refund_calls, [])
 
-    def test_dispatch_generation_updates_state_and_starts_pipeline_thread(self):
-        # _dispatch_generation is the immediate path: task state is created
-        # first (so reconcile() sees the task), then tm.start runs in a
-        # daemon thread — the tick itself never blocks on the pipeline.
+    def test_dispatch_generation_updates_state_and_submits_to_the_task_manager(self):
+        # _dispatch_generation creates the task state first (so reconcile()
+        # sees it), then hands tm.start to the shared task manager. The
+        # manager — not a private daemon thread — owns the worker, so the
+        # batch slot counts toward max_concurrent_tasks.
         from app.models.schema import TaskVideoRequest
+        from app.services import task as tm
 
         store = _FakeStore()
         scheduler = self._scheduler(store)
@@ -728,10 +730,7 @@ class BatchScheduleTests(unittest.TestCase):
             video_description="Batch description.",
         )
 
-        with (
-            patch("app.services.task.start") as mock_start,
-            patch("app.services.fill_schedule.generate.threading.Thread") as mock_thread,
-        ):
+        with patch("app.controllers.v1.video.task_manager") as manager:
             scheduler.generator._dispatch_generation(
                 "task-1",
                 request,
@@ -752,12 +751,12 @@ class BatchScheduleTests(unittest.TestCase):
             schedule_id="sched-1",
             persona_id="persona-1",
         )
-        mock_thread.assert_called_once()
-        _, kwargs = mock_thread.call_args
-        self.assertTrue(kwargs["daemon"])
-        # Run the thread target inline to prove the wiring.
-        kwargs["target"](**kwargs["kwargs"])
-        mock_start.assert_called_once_with(task_id="task-1", params=request, stop_at="video")
+        manager.add_task.assert_called_once()
+        self.assertIs(manager.add_task.call_args.args[0], tm.start)
+        kwargs = manager.add_task.call_args.kwargs
+        self.assertEqual(kwargs["task_id"], "task-1")
+        self.assertIs(kwargs["params"], request)
+        self.assertEqual(kwargs["stop_at"], "video")
 
     def test_dispatch_generation_omits_blank_identity_ids(self):
         # Identity props are optional: a dispatch without slot context
@@ -772,10 +771,7 @@ class BatchScheduleTests(unittest.TestCase):
             video_description="Batch description.",
         )
 
-        with (
-            patch("app.services.task.start"),
-            patch("app.services.fill_schedule.generate.threading.Thread"),
-        ):
+        with patch("app.controllers.v1.video.task_manager"):
             scheduler.generator._dispatch_generation("task-2", request, "user-1")
 
         scheduler.task_state.update_task.assert_called_once_with(
@@ -802,10 +798,7 @@ class BatchScheduleTests(unittest.TestCase):
             video_description="Batch description.",
         )
 
-        with (
-            patch("app.services.task.start"),
-            patch("app.services.fill_schedule.generate.threading.Thread"),
-        ):
+        with patch("app.controllers.v1.video.task_manager"):
             scheduler.generator._dispatch_generation(
                 "task-3",
                 request,
@@ -840,10 +833,7 @@ class BatchScheduleTests(unittest.TestCase):
             video_description="Batch description.",
         )
 
-        with (
-            patch("app.services.task.start"),
-            patch("app.services.fill_schedule.generate.threading.Thread"),
-        ):
+        with patch("app.controllers.v1.video.task_manager"):
             scheduler.generator._dispatch_generation(
                 "task-4",
                 request,
@@ -877,10 +867,7 @@ class BatchScheduleTests(unittest.TestCase):
             video_description="Batch description.",
         )
 
-        with (
-            patch("app.services.task.start"),
-            patch("app.services.fill_schedule.generate.threading.Thread"),
-        ):
+        with patch("app.controllers.v1.video.task_manager"):
             scheduler.generator._dispatch_generation(
                 "task-5",
                 request,
@@ -3189,6 +3176,12 @@ class BatchDispatchTests(unittest.TestCase):
         dispatch.assert_not_called()
 
     def test_batch_slots_keep_parallel_dispatch(self):
+        # Two pending slots both dispatch when the shared manager has a
+        # free running slot for each. The cap itself is pinned in
+        # test_batch_admission.py; this test pins that a tick still
+        # admits every slot that fits.
+        from app.controllers.manager.memory_manager import InMemoryTaskManager
+
         slot1 = self._batch_slot()
         slot1["id"] = "slot-b1"
         slot2 = self._batch_slot()
@@ -3196,7 +3189,11 @@ class BatchDispatchTests(unittest.TestCase):
         store = _FakeStore()
         store.pending_slots = lambda now: [slot1, slot2]
         scheduler = self._scheduler(store)
-        with patch.object(scheduler.generator, "_dispatch_generation") as dispatch:
+        manager = InMemoryTaskManager(max_concurrent_tasks=2, max_queued_tasks=10)
+        with (
+            patch("app.controllers.v1.video.task_manager", manager),
+            patch.object(scheduler.generator, "_dispatch_generation") as dispatch,
+        ):
             enqueued = scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
         self.assertEqual(enqueued, 2)
         self.assertEqual(dispatch.call_count, 2)

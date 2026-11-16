@@ -551,7 +551,7 @@ class BatchRequestedTests(unittest.TestCase):
             },
         }
 
-    def test_generate_slot_tracks_requested_before_dispatch(self):
+    def test_generate_slot_tracks_requested_when_the_manager_accepts(self):
         from app.services.fill_schedule import generate as gen_module
 
         store = MagicMock()
@@ -559,31 +559,31 @@ class BatchRequestedTests(unittest.TestCase):
         generator = gen_module.BatchGenerator(
             store=store, task_state=MagicMock(), notify=MagicMock()
         )
+        accepted = {}
+
+        def fake_add_task(func, **kwargs):
+            accepted.update(func=func, kwargs=kwargs)
+            kwargs["on_accepted"]()
+
         with (
-            patch("threading.Thread") as thread_cls,
+            patch("app.controllers.v1.video.task_manager") as manager,
             patch.object(gen_module.tm, "track_generation_requested") as requested,
         ):
-            order = MagicMock()
-            order.attach_mock(requested, "requested")
-            order.attach_mock(thread_cls, "thread_cls")
-            label = generator._generate_slot(self._slot())
-            self.assertIsNotNone(label)
-            task_id = thread_cls.call_args.kwargs["kwargs"]["task_id"]
-            requested.assert_called_once_with(
-                task_id,
-                user_id="user-1",
-                flow="batch",
-                pipeline="video",
-                slot_id="slot-batch-req-1",
-                persona_id="persona-1",
-            )
-            # The funnel entry fires before the worker thread is spawned.
-            call_order = [c[0] for c in order.mock_calls]
-            self.assertLess(call_order.index("requested"), call_order.index("thread_cls"))
-            # The batch task state carries the funnel context.
-            _, kwargs = generator.task_state.update_task.call_args
-            self.assertEqual(kwargs["flow"], "batch")
-            self.assertEqual(kwargs["pipeline"], "video")
+            manager.add_task.side_effect = fake_add_task
+            self.assertIsNotNone(generator._generate_slot(self._slot()))
+        task_kwargs = accepted["kwargs"]
+        self.assertIs(accepted["func"], gen_module.tm.start)
+        requested.assert_called_once_with(
+            task_kwargs["task_id"],
+            user_id="user-1",
+            flow="batch",
+            pipeline="video",
+            slot_id="slot-batch-req-1",
+            persona_id="persona-1",
+        )
+        self.assertEqual(task_kwargs["stop_at"], "video")
+        saved = generator.task_state.update_task.call_args.kwargs
+        self.assertEqual((saved["flow"], saved["pipeline"]), ("batch", "video"))
 
 
 class BatchFailedTests(unittest.TestCase):
