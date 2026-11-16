@@ -307,11 +307,11 @@ class BaseResponse(BaseModel):
 
 
 def _validate_webhook_url(value: Optional[str]) -> Optional[str]:
-    """Reject a webhook that is not a public http(s) URL."""
+    """Reject a webhook that is not a public https URL."""
     if value is None:
         return None
     try:
-        assert_public_url(value, what="webhook_url")
+        assert_public_url(value, what="webhook_url", https_only=True)
     except UnsafeUrlError as exc:
         raise ValueError(str(exc)) from exc
     return value
@@ -360,7 +360,7 @@ class ScriptSegment(BaseModel):
 
 class TaskVideoRequest(VideoParams, BaseModel):
     # Optional callback fired once when the task reaches a terminal state
-    # (completed/failed). Must be a public http(s) URL; delivery is best-effort.
+    # (completed/failed). Must be a public https URL; delivery is best-effort.
     webhook_url: Optional[str] = None
     # Segments contract (MCP first, Phase 1): one call = one video. When
     # present, segments are mechanically validated and joined into

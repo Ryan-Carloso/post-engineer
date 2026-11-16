@@ -6,8 +6,9 @@ public IP addresses, and open the TCP connection only to those addresses.
 The URL host is left in place for the Host header and for TLS SNI.
 
 Downloads follow redirects manually. Every hop resolves again and pins
-again. http stays allowed: the product accepts http image URLs. Webhook
-delivery does not follow redirects (a 3xx response is a failed delivery).
+again. http stays allowed: the product accepts http image URLs. A webhook
+is https only, and delivery does not follow redirects (a 3xx response is
+a failed delivery).
 """
 
 import ipaddress
@@ -95,7 +96,7 @@ def is_public_ip(ip) -> bool:
     return True
 
 
-def _public_ips(url: str, *, what: str) -> list:
+def _public_ips(url: str, *, what: str, https_only: bool = False) -> list:
     """Validate *url* and return the addresses a later dial may use.
 
     The host checked is the one the HTTP client would dial from the URL:
@@ -110,6 +111,9 @@ def _public_ips(url: str, *, what: str) -> list:
         raise UnsafeUrlError(f"{what} must be a valid http(s) URL.") from exc
     if parsed.scheme not in ("http", "https") or not parsed.hostname:
         raise UnsafeUrlError(f"{what} must be a valid http(s) URL.")
+    # Webhooks are https only. Downloads keep the http allowlist above.
+    if https_only and parsed.scheme != "https":
+        raise UnsafeUrlError(f"{what} must be a valid https URL.")
     if any(char == "\\" or ord(char) <= 0x20 or ord(char) == 0x7F for char in url):
         raise UnsafeUrlError(f"{what} must be a canonical http(s) URL.")
     try:
@@ -132,12 +136,13 @@ def _public_ips(url: str, *, what: str) -> list:
     return ips
 
 
-def assert_public_url(url: str, *, what: str = "URL") -> None:
+def assert_public_url(url: str, *, what: str = "URL", https_only: bool = False) -> None:
     """Ensure *url* points at a public address (anti-SSRF).
 
     Blocks non-http(s) schemes, missing hostnames, literal private IPs,
     hostnames resolving to private IPs, and hosts that do not resolve at all
-    (fail closed). Raises :class:`UnsafeUrlError`.
+    (fail closed). ``https_only`` also rejects cleartext http (webhooks).
+    Raises :class:`UnsafeUrlError`.
 
     The host checked is the one the HTTP client dials: requests connects
     where urllib3's parser says, and urllib3 ends the authority at a
@@ -145,7 +150,7 @@ def assert_public_url(url: str, *, what: str = "URL") -> None:
     the two parsers read differently (backslash, whitespace or control
     characters, or any scheme/host/port mismatch) is rejected outright.
     """
-    _public_ips(url, what=what)
+    _public_ips(url, what=what, https_only=https_only)
 
 
 def _header(headers, name: str):
@@ -406,13 +411,13 @@ def download_public_file(
 
 
 def post_public_url(url: str, *, json: dict, timeout, session=None):
-    """POST *json* to a public *url*, pinned to the addresses just validated.
+    """POST *json* to a public https *url*, pinned to the addresses just validated.
 
-    Redirects are not followed. The caller treats a 3xx status as delivery
-    failure. Raises :class:`UnsafeUrlError` before any dial when *url* is
-    not public.
+    Cleartext http is rejected before any dial. Redirects are not followed.
+    The caller treats a 3xx status as delivery failure. Raises
+    :class:`UnsafeUrlError` before any dial when *url* is not public https.
     """
-    ips = _public_ips(url, what="webhook_url")
+    ips = _public_ips(url, what="webhook_url", https_only=True)
     return _open(
         "post",
         url,

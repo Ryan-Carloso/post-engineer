@@ -1,7 +1,7 @@
 """Fire-and-forget terminal webhook for video tasks.
 
 When a task reaches a terminal state (``completed``/``failed``), the engine
-POSTs a small JSON payload to the caller-supplied ``webhook_url`` (if any):
+POSTs a small JSON payload to the caller-supplied https ``webhook_url`` (if any):
 
     {"task_id": ..., "status": "completed|failed", "progress": 100,
      "video_url": ...|null, "error": ...}

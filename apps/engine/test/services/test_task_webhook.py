@@ -46,17 +46,24 @@ class WebhookUrlValidationTests(unittest.TestCase):
                 webhook_url="not-a-url",
             )
 
-    def test_accepts_http_and_https(self):
+    def test_rejects_http_and_accepts_https(self):
         public = [ipaddress.ip_address("93.184.215.14")]
         with patch("app.utils.ssrf._resolve_global_ips", return_value=public):
-            for url in ("http://example.com/hook", "https://example.com/hook"):
-                request = TaskVideoRequest(
+            with self.assertRaises(ValidationError) as caught:
+                TaskVideoRequest(
                     video_title="x",
                     video_description="Test description.",
                     video_type="faceless",
-                    webhook_url=url,
+                    webhook_url="http://example.com/hook",
                 )
-                self.assertEqual(request.webhook_url, url)
+            self.assertIn("https", str(caught.exception))
+            request = TaskVideoRequest(
+                video_title="x",
+                video_description="Test description.",
+                video_type="faceless",
+                webhook_url="https://example.com/hook",
+            )
+            self.assertEqual(request.webhook_url, "https://example.com/hook")
 
     def test_webhook_url_defaults_to_none(self):
         self.assertIsNone(
@@ -416,21 +423,27 @@ class PinnedWebhookTests(unittest.TestCase):
             dials.append(address)
             raise OSError("should not dial")
 
-        targets = (
-            "http://127.0.0.1/hook",
-            "http://10.0.0.5/hook",
-            "http://169.254.169.254/latest/meta-data/",
+        literals = (
+            "https://127.0.0.1/hook",
+            "https://10.0.0.5/hook",
+            "https://169.254.169.254/latest/meta-data/",
         )
+        public = [ipaddress.ip_address("93.184.215.14")]
+        private = [ipaddress.ip_address("10.0.0.5")]
         with (
             patch("app.utils.ssrf.socket.create_connection", side_effect=create_connection),
             patch("socket.socket.connect", connect),
         ):
-            for url in targets:
+            for url in literals:
                 task_webhook._post(url, {"task_id": "t-priv"}, "t-priv")
-            private = [ipaddress.ip_address("10.0.0.5")]
+            # A public answer must still not be dialed: the scheme is http.
+            with patch("app.utils.ssrf._resolve_global_ips", return_value=public):
+                task_webhook._post(
+                    "http://example.com/hook", {"task_id": "t-http"}, "t-http"
+                )
             with patch("app.utils.ssrf._resolve_global_ips", return_value=private):
                 task_webhook._post(
-                    "http://rebind.test/hook", {"task_id": "t-dns"}, "t-dns"
+                    "https://rebind.test/hook", {"task_id": "t-dns"}, "t-dns"
                 )
         self.assertEqual(dials, [])
 
@@ -456,15 +469,24 @@ class PinnedWebhookTests(unittest.TestCase):
             )
             return _scripted_socket(response, seen)
 
+        def wrap(sock, *args, **kwargs):
+            # Speak HTTP on the pinned socket. The production path still
+            # asks for TLS, and SNI is covered by the ssrf unit test.
+            wrapped = type("Wrapped", (), {})()
+            wrapped.socket = sock
+            wrapped.is_verified = True
+            return wrapped
+
         with (
             patch("app.utils.ssrf._resolve_global_ips", side_effect=resolve),
             patch("app.utils.ssrf.socket.create_connection", side_effect=create_connection),
+            patch("urllib3.connection._ssl_wrap_socket_and_match_hostname", side_effect=wrap),
             patch("app.services.task_webhook.logger") as mock_logger,
         ):
             task_webhook._post(
-                "http://rebind.test/hook", {"task_id": "t-307"}, "t-307"
+                "https://rebind.test/hook", {"task_id": "t-307"}, "t-307"
             )
-        self.assertEqual(dials, [("93.184.215.14", 80)])
+        self.assertEqual(dials, [("93.184.215.14", 443)])
         self.assertEqual(len(seen), 1)
         self.assertIn(b"Host: rebind.test", seen[0])
         self.assertNotIn(b"127.0.0.1", seen[0])
