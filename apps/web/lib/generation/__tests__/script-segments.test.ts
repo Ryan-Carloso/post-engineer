@@ -182,8 +182,9 @@ describe('validateSegments', () => {
         { kind: 'content', text: cta },
       ]).ok,
     ).toBe(false);
-    // Issue #563: 24 words cannot fill the 8-12s window at the measured
-    // pace (~0.34s/word); 25 is the smallest count that always lands inside.
+    // Issue #563: at the fastest measured pace (0.330s/word, 182 wpm) a
+    // 24-word hook lasts 7.9s, under the 8s floor, so 24 words cannot
+    // always fill the 8-12s window; 25 is the smallest count that does.
     expect(
       validateSegments([
         { kind: 'hook', text: Array.from({ length: 24 }, () => 'word').join(' ') + '.' },

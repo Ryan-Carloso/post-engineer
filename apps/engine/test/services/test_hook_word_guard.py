@@ -1,10 +1,11 @@
 """The hook word guard floor (issue #563).
 
-At the measured pace (~0.34s/word, 173-182 wpm on the HabitLoom
-cloned voice) a 24-word hook lands under the 8s floor of the 8-12s
-lip-sync window, so the guard rejects it. 25 words is the smallest
-count that always fills the window; the target range is 25-35 words
-(middle 30 -> ~10s, the window centre).
+At the fastest measured pace (0.330 s/word, 182 wpm on the HabitLoom
+cloned voice) a 24-word hook lasts 7.9s, under the 8s floor of the
+8-12s lip-sync window, so 24 words cannot always fill the window and
+the guard rejects it. 25 words is the smallest count that always fills
+the window; the target range is 25-35 words (middle 30 -> ~10s, the
+window centre).
 """
 
 import pytest

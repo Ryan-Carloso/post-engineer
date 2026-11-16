@@ -244,8 +244,9 @@ describe('validateSegments (fail paths reformatted by the shared copy)', () => {
     ]);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.field).toBe('segments.0.text');
-    // Issue #563: 24 words cannot fill the 8-12s window at the measured
-    // pace (~0.34s/word); 25 is the smallest count that always lands inside.
+    // Issue #563: at the fastest measured pace (0.330s/word, 182 wpm) a
+    // 24-word hook lasts 7.9s, under the 8s floor, so 24 words cannot
+    // always fill the 8-12s window; 25 is the smallest count that does.
     const tooShort = validateSegments([
       { kind: 'hook', text: Array.from({ length: 24 }, () => 'word').join(' ') + '.' },
       { kind: 'content', text: content },
