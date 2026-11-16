@@ -113,8 +113,23 @@
                 }
             ],
             "policies": {
-                "personas_owner_all": {
-                    "cmd": "*",
+                "personas_delete_own": {
+                    "cmd": "d",
+                    "qual": "(auth.uid() = user_id)",
+                    "withCheck": null
+                },
+                "personas_insert_own": {
+                    "cmd": "a",
+                    "qual": null,
+                    "withCheck": "(auth.uid() = user_id)"
+                },
+                "personas_select_own": {
+                    "cmd": "r",
+                    "qual": "(auth.uid() = user_id)",
+                    "withCheck": null
+                },
+                "personas_update_own": {
+                    "cmd": "w",
                     "qual": "(auth.uid() = user_id)",
                     "withCheck": "(auth.uid() = user_id)"
                 }
@@ -341,10 +356,15 @@
                 }
             ],
             "policies": {
-                "schedules_owner_all": {
-                    "cmd": "*",
+                "schedules_delete_own": {
+                    "cmd": "d",
                     "qual": "(auth.uid() = user_id)",
-                    "withCheck": "(auth.uid() = user_id)"
+                    "withCheck": null
+                },
+                "schedules_select_own": {
+                    "cmd": "r",
+                    "qual": "(auth.uid() = user_id)",
+                    "withCheck": null
                 }
             },
             "constraints": {
@@ -823,10 +843,10 @@
                 }
             ],
             "policies": {
-                "user_profiles_owner_all": {
-                    "cmd": "*",
+                "user_profiles_select_own": {
+                    "cmd": "r",
                     "qual": "(auth.uid() = id)",
-                    "withCheck": "(auth.uid() = id)"
+                    "withCheck": null
                 }
             },
             "constraints": {
@@ -1251,8 +1271,18 @@
                 }
             ],
             "policies": {
-                "scheduled_posts_owner_all": {
-                    "cmd": "*",
+                "scheduled_posts_delete_own": {
+                    "cmd": "d",
+                    "qual": "(auth.uid() = user_id)",
+                    "withCheck": null
+                },
+                "scheduled_posts_select_own": {
+                    "cmd": "r",
+                    "qual": "(auth.uid() = user_id)",
+                    "withCheck": null
+                },
+                "scheduled_posts_update_own": {
+                    "cmd": "w",
                     "qual": "(auth.uid() = user_id)",
                     "withCheck": "(auth.uid() = user_id)"
                 }
@@ -1341,8 +1371,23 @@
                 }
             ],
             "policies": {
-                "social_accounts_owner_all": {
-                    "cmd": "*",
+                "social_accounts_delete_own": {
+                    "cmd": "d",
+                    "qual": "(auth.uid() = user_id)",
+                    "withCheck": null
+                },
+                "social_accounts_insert_own": {
+                    "cmd": "a",
+                    "qual": null,
+                    "withCheck": "(auth.uid() = user_id)"
+                },
+                "social_accounts_select_own": {
+                    "cmd": "r",
+                    "qual": "(auth.uid() = user_id)",
+                    "withCheck": null
+                },
+                "social_accounts_update_own": {
+                    "cmd": "w",
                     "qual": "(auth.uid() = user_id)",
                     "withCheck": "(auth.uid() = user_id)"
                 }
@@ -1657,10 +1702,15 @@
                 }
             ],
             "policies": {
-                "video_generations_owner_all": {
-                    "cmd": "*",
+                "video_generations_delete_own": {
+                    "cmd": "d",
                     "qual": "(auth.uid() = user_id)",
-                    "withCheck": "(auth.uid() = user_id)"
+                    "withCheck": null
+                },
+                "video_generations_select_own": {
+                    "cmd": "r",
+                    "qual": "(auth.uid() = user_id)",
+                    "withCheck": null
                 }
             },
             "constraints": {

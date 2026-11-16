@@ -5,6 +5,7 @@ import type { Database } from '@/lib/supabase/database.gen';
 import { encryptTokens, decryptTokens } from '@/lib/token-crypto';
 import { AccountNotFoundError } from '@/lib/errors';
 import type { SocialProvider } from '@/lib/providers/registry';
+import { createSupabaseServiceClient } from '@/lib/supabase/service';
 
 //---------------
 // Social Accounts — OAuth account persistence in Supabase.
@@ -39,14 +40,20 @@ export interface SocialAccountRecord {
   lastUsedAt: string | null;
 }
 
-interface SocialAccountRow {
+// Columns a session JWT may read. encrypted_tokens is omitted: 066 grants
+// no SELECT on that column, and PostgREST rejects a select list that asks
+// for it. Ciphertext is loaded with the service client after ownership
+// is proven (getSocialAccountTokens).
+export const SOCIAL_ACCOUNT_PUBLIC_COLUMNS =
+  'id, user_id, provider, provider_account_id, account_name, account_metadata, token_expires_at, created_at, updated_at, last_used_at';
+
+interface SocialAccountPublicRow {
   id: string;
   user_id: string;
   provider: SocialProvider;
   provider_account_id: string;
   account_name: string | null;
   account_metadata: unknown;
-  encrypted_tokens: string;
   token_expires_at: string | null;
   created_at: string;
   updated_at: string;
@@ -66,7 +73,7 @@ export interface UpsertSocialAccountParams {
 //---------------
 // rowToRecord — converts a database row into a public record (no tokens)
 //---------------
-function rowToRecord(row: SocialAccountRow): SocialAccountRecord {
+function rowToRecord(row: SocialAccountPublicRow): SocialAccountRecord {
   return {
     id: row.id,
     userId: row.user_id,
@@ -137,14 +144,14 @@ export async function upsertSocialAccount(
   const { data, error } = await supabase
     .from('social_accounts')
     .upsert(payload, { onConflict: 'user_id,provider,provider_account_id' })
-    .select()
+    .select(SOCIAL_ACCOUNT_PUBLIC_COLUMNS)
     .single();
 
   if (error) {
     throw new Error(`Failed to upsert social account: ${error.message}`);
   }
 
-  return rowToRecord(asRow(data));
+  return rowToRecord(asPublicRow(data));
 }
 
 //---------------
@@ -157,7 +164,7 @@ export async function listSocialAccounts(
 ): Promise<SocialAccountRecord[]> {
   let query = supabase
     .from('social_accounts')
-    .select('*')
+    .select(SOCIAL_ACCOUNT_PUBLIC_COLUMNS)
     .eq('user_id', userId);
 
   if (provider) {
@@ -170,7 +177,7 @@ export async function listSocialAccounts(
     throw new Error(`Failed to list social accounts: ${error.message}`);
   }
 
-  return (data ?? []).map((row) => rowToRecord(asRow(row)));
+  return (data ?? []).map((row) => rowToRecord(asPublicRow(row)));
 }
 
 //---------------
@@ -184,7 +191,7 @@ export async function getSocialAccountTokens(
 ): Promise<{ tokens: SocialTokenPayload; account: SocialAccountRecord }> {
   const { data, error } = await supabase
     .from('social_accounts')
-    .select('*')
+    .select(SOCIAL_ACCOUNT_PUBLIC_COLUMNS)
     .eq('user_id', userId)
     .eq('provider', provider)
     .eq('provider_account_id', providerAccountId)
@@ -200,10 +207,30 @@ export async function getSocialAccountTokens(
     );
   }
 
-  const row = asRow(data);
-  const tokens = decryptTokens(row.encrypted_tokens);
+  const account = rowToRecord(asPublicRow(data));
 
-  return { tokens, account: rowToRecord(row) };
+  // Service role bypasses RLS. The caller client just proved this row
+  // belongs to userId (session RLS, or that client's own user_id filter).
+  // Both predicates are required: a mismatched id must not return another
+  // user's ciphertext.
+  const { data: secret, error: secretError } = await createSupabaseServiceClient()
+    .from('social_accounts')
+    .select('encrypted_tokens')
+    .eq('id', account.id)
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (secretError) {
+    throw new Error(`Failed to get social account: ${secretError.message}`);
+  }
+
+  if (!secret) {
+    throw new AccountNotFoundError(
+      `Social account not found for ${provider}/${providerAccountId}`,
+    );
+  }
+
+  return { tokens: decryptTokens(encryptedTokensFrom(secret)), account };
 }
 
 //---------------
@@ -307,11 +334,22 @@ export async function deleteSocialAccount(
 }
 
 //---------------
-// asRow — types supabase-js's generic return without using any
+// asPublicRow — types supabase-js's generic return without using any
 //---------------
-function asRow(data: unknown): SocialAccountRow {
+function asPublicRow(data: unknown): SocialAccountPublicRow {
   if (typeof data !== 'object' || data === null) {
     throw new Error('Invalid social account row');
   }
-  return data as SocialAccountRow;
+  return data as SocialAccountPublicRow;
+}
+
+function encryptedTokensFrom(data: unknown): string {
+  if (typeof data !== 'object' || data === null || !('encrypted_tokens' in data)) {
+    throw new Error('Invalid social account row');
+  }
+  const value = (data as { encrypted_tokens: unknown }).encrypted_tokens;
+  if (typeof value !== 'string') {
+    throw new Error('Invalid social account row');
+  }
+  return value;
 }

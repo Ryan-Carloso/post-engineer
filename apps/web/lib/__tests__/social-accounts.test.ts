@@ -7,7 +7,14 @@ import {
   deleteSocialAccount,
   updateSocialAccountTokens,
   updateSocialAccountMetadata,
+  SOCIAL_ACCOUNT_PUBLIC_COLUMNS,
 } from '@/lib/social-accounts';
+
+const serviceFrom = vi.hoisted(() => vi.fn());
+
+vi.mock('@/lib/supabase/service', () => ({
+  createSupabaseServiceClient: () => ({ from: serviceFrom }),
+}));
 
 vi.mock('@/lib/token-crypto', () => ({
   encryptTokens: vi.fn((payload: unknown) => `encrypted.${JSON.stringify(payload)}`),
@@ -58,7 +65,8 @@ describe('social-accounts', () => {
 
   describe('upsertSocialAccount', () => {
     it('encrypts tokens and returns record', async () => {
-      fromReturn.upsert.mockReturnValue({ select: vi.fn().mockReturnThis(), single: vi.fn().mockResolvedValue({ data: mockRow, error: null }) });
+      const select = vi.fn().mockReturnThis();
+      fromReturn.upsert.mockReturnValue({ select, single: vi.fn().mockResolvedValue({ data: mockRow, error: null }) });
 
       const result = await upsertSocialAccount(mockSupabase as never, {
         userId: 'u1',
@@ -71,6 +79,8 @@ describe('social-accounts', () => {
       expect(result.id).toBe('id-1');
       expect(result.provider).toBe('instagram');
       expect(result.providerAccountId).toBe('ig-1');
+      expect(select).toHaveBeenCalledWith(SOCIAL_ACCOUNT_PUBLIC_COLUMNS);
+      expect(SOCIAL_ACCOUNT_PUBLIC_COLUMNS).not.toContain('encrypted_tokens');
     });
 
     it.each(['unknown', 'UNKNOWN', '', '  '])(
@@ -104,6 +114,7 @@ describe('social-accounts', () => {
       const result = await listSocialAccounts(mockSupabase as never, 'u1');
       expect(result).toHaveLength(1);
       expect(result[0].provider).toBe('instagram');
+      expect(fromReturn.select).toHaveBeenCalledWith(SOCIAL_ACCOUNT_PUBLIC_COLUMNS);
     });
 
     it('filters by provider when specified', async () => {
@@ -128,18 +139,33 @@ describe('social-accounts', () => {
   });
 
   describe('getSocialAccountTokens', () => {
-    it('returns decrypted tokens and account', async () => {
+    it('proves ownership on the caller client, then reads ciphertext with the service client', async () => {
+      const secretChain = {
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        maybeSingle: vi.fn().mockResolvedValue({
+          data: { encrypted_tokens: mockRow.encrypted_tokens },
+          error: null,
+        }),
+      };
+      serviceFrom.mockReturnValue(secretChain);
+
       const result = await getSocialAccountTokens(mockSupabase as never, 'u1', 'instagram', 'ig-1');
       expect(result.tokens.access_token).toBe('tok');
       expect(result.account.providerAccountId).toBe('ig-1');
+      expect(fromReturn.select).toHaveBeenCalledWith(SOCIAL_ACCOUNT_PUBLIC_COLUMNS);
+      expect(secretChain.select).toHaveBeenCalledWith('encrypted_tokens');
+      expect(secretChain.eq).toHaveBeenCalledWith('id', 'id-1');
+      expect(secretChain.eq).toHaveBeenCalledWith('user_id', 'u1');
     });
 
-    it('throws when not found', async () => {
+    it('throws when not found and does not read ciphertext', async () => {
       fromReturn.maybeSingle.mockResolvedValue({ data: null, error: null });
 
       await expect(
         getSocialAccountTokens(mockSupabase as never, 'u1', 'instagram', 'ig-x')
       ).rejects.toThrow('Social account not found');
+      expect(serviceFrom).not.toHaveBeenCalled();
     });
   });
 
