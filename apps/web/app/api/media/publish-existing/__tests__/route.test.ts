@@ -973,6 +973,36 @@ describe('POST /api/media/publish-existing', () => {
       privacyStatus: 'public',
     });
 
+  it('answers 404 PERSONA_NOT_FOUND for a persona the caller does not own', async () => {
+    const client = fakeSupabase({
+      personaRow: null,
+      socialRows: [{ provider: 'youtube', provider_account_id: 'UC1' }],
+    });
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await POST(boundRequest());
+
+    expect(response.status).toBe(404);
+    const body = await response.json();
+    expect(body.code).toBe('PERSONA_NOT_FOUND');
+  });
+
+  it('answers a logged 500 when the first persona read fails', async () => {
+    const dbError = { message: 'db down' };
+    const client = fakeSupabase({
+      personaReads: [{ data: null, error: dbError }],
+      socialRows: [{ provider: 'youtube', provider_account_id: 'UC1' }],
+    });
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await POST(boundRequest());
+
+    expect(response.status).toBe(500);
+    const body = await response.json();
+    expect(body.code).toBe('INTERNAL_ERROR');
+    expect(logger.error).toHaveBeenCalledWith('[publish-existing] persona lookup failed', dbError, { userId: USER_ID });
+  });
+
   it('answers 404 PERSONA_NOT_FOUND when the persona is gone by the binding read', async () => {
     const client = fakeSupabase({
       personaReads: [{ data: { id: PERSONA_ID }, error: null }, { data: null, error: null }],
