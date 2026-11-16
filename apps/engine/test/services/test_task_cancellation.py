@@ -68,6 +68,20 @@ def test_cancel_and_delete_marks_before_running_the_delete():
     assert is_cancelled("cad-ok") is True
 
 
+def test_cancel_and_delete_documents_the_failed_delete_detach_window():
+    """A worker that already returned cannot be failed here.
+
+    Between request_cancel and a delete() that raises, a boundary check
+    may already have returned. forget() leaves the surviving row writable
+    and nobody writes a terminal state. Recovery is the next boot
+    reconcile, not a FAILED write (that can refund a direct task the
+    caller already refunded).
+    """
+    text = task_cancellation.cancel_and_delete.__doc__ or ""
+    assert "reconcile_orphaned_tasks" in text
+    assert "FAILED" in text
+
+
 def test_cancel_and_delete_clears_the_mark_when_the_delete_fails():
     def boom():
         raise ConnectionError("backend down")

@@ -542,10 +542,10 @@ def delete_video(request: Request, task_id: str = Path(..., description="Task ID
     if task:
         tasks_dir = utils.task_dir()
         current_task_dir = os.path.join(tasks_dir, task_id)
+        # Cancel the row before rmtree so a worker that loses its files aborts.
+        sm.state.delete_task(task_id)
         if os.path.exists(current_task_dir):
             shutil.rmtree(current_task_dir)
-
-        sm.state.delete_task(task_id)
         logger.success(f"video deleted: task_id={task_id}")
         return utils.get_response(200)
 

@@ -73,6 +73,25 @@ def test_abort_if_cancelled_true_only_when_cancelled(tmp_path, monkeypatch):
     assert not staged.exists()
 
 
+def test_abort_if_cancelled_stopped_logs_that_the_task_stopped(tmp_path, monkeypatch):
+    from loguru import logger
+
+    monkeypatch.setenv("MPT_STORAGE_DIR", str(tmp_path))
+    task_directory = Path(utils.task_dir("cancel-stopped-1"))
+    staged = task_directory / "audio.mp3"
+    staged.write_text("tmp", encoding="utf-8")
+    request_cancel("cancel-stopped-1")
+    lines: list[str] = []
+    sink = logger.add(lambda message: lines.append(str(message)), level="INFO")
+    try:
+        assert abort_if_cancelled("cancel-stopped-1", "audio", stopped=True) is True
+    finally:
+        logger.remove(sink)
+    assert not staged.exists()
+    assert any("cancelled, stopped during audio" in line for line in lines)
+    assert not any("stopping before" in line for line in lines)
+
+
 def test_abort_if_cancelled_runs_on_abort_hook_only_when_cancelled(tmp_path, monkeypatch):
     monkeypatch.setenv("MPT_STORAGE_DIR", str(tmp_path))
     calls: list[str] = []

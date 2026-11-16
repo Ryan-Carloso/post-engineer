@@ -69,7 +69,17 @@ def cancel_and_delete(task_id: str, delete: Callable[[], object]) -> None:
     stays updatable. A delete that committed but reported failure (timeout
     after commit, or a retry that 404s) re-opens the recreate window; that
     is accepted because keeping the mark would no-op every later write and
-    strand a live row in PROCESSING. The error propagates to the caller.
+    strand a live row in PROCESSING.
+
+    Detach window: a worker that hits a boundary check between
+    ``request_cancel`` and a ``delete`` that then raises has already
+    returned. ``forget`` keeps that surviving row writable, and no worker
+    writes a terminal state, so the row stays PROCESSING until the next
+    boot ``reconcile_orphaned_tasks``. This function does not write FAILED.
+    A terminal FAILED row can trigger web refund/settle paths for direct
+    tasks whose charge the caller may already have refunded.
+
+    The error propagates to the caller.
     """
     request_cancel(task_id)
     try:

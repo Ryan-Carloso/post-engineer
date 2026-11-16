@@ -12,7 +12,11 @@ from app.utils import utils
 
 
 def abort_if_cancelled(
-    task_id: str, stage: str, on_abort: Callable[[str], None] | None = None
+    task_id: str,
+    stage: str,
+    on_abort: Callable[[str], None] | None = None,
+    *,
+    stopped: bool = False,
 ) -> bool:
     """Stop a cancelled pipeline before ``stage`` (issue #447).
 
@@ -20,10 +24,17 @@ def abort_if_cancelled(
     milestone-cache pop so no boundary forgets it), removes intermediates,
     and returns True when the caller must return without running the
     stage; False otherwise.
+
+    ``stopped=True`` is the mid-stage path: the stage already started and
+    then lost its files (or returned empty) after the cancel mark. The log
+    says the cancelled task stopped, instead of "stopping before".
     """
     if not is_cancelled(task_id):
         return False
-    logger.info(f"task {task_id} cancelled, stopping before {stage}")
+    if stopped:
+        logger.info(f"task {task_id} cancelled, stopped during {stage}")
+    else:
+        logger.info(f"task {task_id} cancelled, stopping before {stage}")
     if on_abort is not None:
         on_abort(task_id)
     cleanup_task_intermediates(task_id, ())
