@@ -10,10 +10,12 @@ import { randomUUID } from 'node:crypto';
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+import { isScopedApiKey } from '@/lib/api-keys';
 import { ERROR_CODES, formatErrorMessage } from '@/lib/error-codes';
 import { logger } from '@/lib/logger';
 import { engineAuthHeaders } from '@/lib/request-auth';
 import { SAFE_TASK_ID } from '@/lib/video-urls';
+import { isTaskVisibleToScopedKey, resolveTaskScope } from '@/lib/video-task-scope';
 import {
   type VideoUploadRow,
   type VideoUploadStore,
@@ -118,6 +120,29 @@ export async function fetchEngineTaskRecord(
   } finally {
     done();
   }
+}
+
+/**
+ * fetchEngineTaskRecord after a persona-scope check. A scoped key that
+ * cannot see the task gets null — the same answer as an unknown task —
+ * and the engine is not called. A lookup error is a 500, not a 404.
+ */
+export async function fetchScopedEngineTask(
+  supabase: SupabaseClient,
+  auth: { userId: string; isApiKey?: boolean; personaIds?: string[] | null },
+  taskId: string,
+  fetchFn: typeof fetch = fetch,
+): Promise<EngineTaskRecord | null> {
+  if (isScopedApiKey(auth)) {
+    try {
+      const scope = await resolveTaskScope(supabase, auth.userId, taskId);
+      if (!isTaskVisibleToScopedKey(scope, auth.personaIds ?? [])) return null;
+    } catch (error) {
+      logger.error('[publish-existing] task scope lookup failed', error, { taskId });
+      throw new ExistingMediaError('Failed to load video task.', 500, ERROR_CODES.INTERNAL_ERROR);
+    }
+  }
+  return fetchEngineTaskRecord(taskId, auth.userId, fetchFn);
 }
 
 /**

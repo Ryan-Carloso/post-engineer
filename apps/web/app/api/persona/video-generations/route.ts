@@ -2,7 +2,9 @@ import { NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { requireSupabaseSession } from '@/lib/request-auth';
+import { isScopedApiKey } from '@/lib/api-keys';
 import { logger } from '@/lib/logger';
+import { generationPersonaOrFilter } from '@/lib/video-task-scope';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 import {
   parseGenerationsLimit,
@@ -32,12 +34,23 @@ async function getHandler(request: Request): Promise<NextResponse> {
 
   const limit = parseGenerationsLimit(new URL(request.url).searchParams.get('limit'));
 
-  const { data, error } = await supabase
+  // Filter in the query, before limit, so a capped page cannot hide an
+  // allowed row behind another persona's rows. Null persona_id on this
+  // table was stored at dispatch for a persona-less generation.
+  let generationsQuery = supabase
     .from('video_generations')
     .select(
       'id, generation_id, engine_task_id, persona_name, video_subject, status, error_code, tokens_refunded, created_at, completed_at',
     )
-    .eq('user_id', auth.userId)
+    .eq('user_id', auth.userId);
+  if (isScopedApiKey(auth)) {
+    const personaFilter = generationPersonaOrFilter(auth.personaIds ?? []);
+    generationsQuery =
+      personaFilter.kind === 'null'
+        ? generationsQuery.is('persona_id', null)
+        : generationsQuery.or(personaFilter.filter);
+  }
+  const { data, error } = await generationsQuery
     .order('created_at', { ascending: false })
     .limit(limit);
 

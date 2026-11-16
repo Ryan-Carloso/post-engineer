@@ -5,6 +5,7 @@ import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { apiErrorResponse } from '@/lib/api-error';
 import { SAFE_TASK_ID } from '@/lib/video-urls';
 import { logger } from '@/lib/logger';
+import { resolveTaskScope, type TaskScope } from '@/lib/video-task-scope';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
 //---------------
@@ -18,72 +19,11 @@ import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-r
 // delete another user's task.
 //
 // A persona-scoped API key must not cancel a task outside its scope. The
-// web rows that link a task to a persona are video_generations.engine_task_id
-// (direct jobs) and scheduled_posts.task_id -> schedules.persona_id (scheduled
-// jobs). The lookup is scoped by user_id explicitly because the service client
-// bypasses RLS. An unresolvable link fails closed for a scoped key (404): the
-// scope cannot be proven, so the key may not act on it.
+// lookup (lib/video-task-scope) is scoped by user_id because the service
+// client bypasses RLS. An unresolvable link, including a slot whose
+// schedule row is gone, fails closed (404): the scope cannot be proven.
+// A null persona stays allowed here. Reads use a stricter rule.
 //---------------
-
-interface TaskScope {
-  found: boolean;
-  personaId: string | null;
-}
-
-function stringOrNull(value: unknown): string | null {
-  return typeof value === 'string' ? value : null;
-}
-
-async function resolveTaskScope(
-  supabase: ReturnType<typeof createSupabaseServiceClient>,
-  userId: string,
-  taskId: string,
-): Promise<TaskScope> {
-  const { data: generation, error: generationError } = await supabase
-    .from('video_generations')
-    .select('persona_id')
-    .eq('user_id', userId)
-    .eq('engine_task_id', taskId)
-    .limit(1)
-    .maybeSingle();
-  if (generationError) throw generationError;
-  if (generation !== null) {
-    return {
-      found: true,
-      personaId: stringOrNull((generation as { persona_id?: unknown }).persona_id),
-    };
-  }
-
-  const { data: slot, error: slotError } = await supabase
-    .from('scheduled_posts')
-    .select('schedule_id')
-    .eq('user_id', userId)
-    .eq('task_id', taskId)
-    .limit(1)
-    .maybeSingle();
-  if (slotError) throw slotError;
-  if (slot === null) return { found: false, personaId: null };
-
-  const scheduleId = stringOrNull((slot as { schedule_id?: unknown }).schedule_id);
-  if (scheduleId === null) {
-    // The slot row belongs to the caller (user_id filter above) but its
-    // schedule link is unusable; treat it like a persona-less post.
-    return { found: true, personaId: null };
-  }
-
-  const { data: schedule, error: scheduleError } = await supabase
-    .from('schedules')
-    .select('persona_id')
-    .eq('id', scheduleId)
-    .eq('user_id', userId)
-    .maybeSingle();
-  if (scheduleError) throw scheduleError;
-  if (schedule === null) return { found: false, personaId: null };
-  return {
-    found: true,
-    personaId: stringOrNull((schedule as { persona_id?: unknown }).persona_id),
-  };
-}
 
 async function deleteHandler(
   request: NextRequest,
@@ -109,7 +49,9 @@ async function deleteHandler(
         cause: error,
       });
     }
-    if (!scope.found) {
+    // scheduleMissing is fail-closed: a deleted schedule is not proof the
+    // post was persona-less, so a scoped key may not cancel it.
+    if (!scope.found || scope.scheduleMissing) {
       return apiErrorResponse(404, 'Video task not found.', { route: 'DELETE /api/persona/video-task' });
     }
     if (scope.personaId !== null && !isPersonaAllowed(auth.personaIds, scope.personaId)) {

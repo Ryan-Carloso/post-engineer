@@ -71,7 +71,7 @@ import {
 import {
   ExistingMediaError,
   downloadEngineTaskVideo,
-  fetchEngineTaskRecord,
+  fetchScopedEngineTask,
   loadReadyVideoUpload,
   storeScheduledImage,
   type EngineTaskRecord,
@@ -435,9 +435,9 @@ async function postHandler(request: Request): Promise<NextResponse> {
         field: 'personaId',
       });
     }
-    bound = await getPersonaDefaultAccounts(supabase, personaId);
+    bound = await getPersonaDefaultAccounts(supabase, personaId, userId);
   }
-  const resolvedAccounts = await resolvePublishingAccounts(supabase, personaId, input.publishing.accounts, bound ?? undefined);
+  const resolvedAccounts = await resolvePublishingAccounts(supabase, personaId, input.publishing.accounts, bound ?? undefined, userId);
   const accountIds = await validateAccounts(supabase, userId, input.publishing.providers, resolvedAccounts, bound);
   if (accountIds instanceof NextResponse) return accountIds;
 
@@ -448,7 +448,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
   let image: { buffer: Buffer; contentType: ImageContentType } | null = null;
   try {
     if (input.media.kind === 'task') {
-      taskRecord = await fetchEngineTaskRecord(input.media.taskId, userId);
+      taskRecord = await fetchScopedEngineTask(supabase, auth, input.media.taskId);
       if (taskRecord === null) {
         return apiErrorResponse(404, 'Video not found.', { route: ROUTE, code: 'MEDIA_NOT_FOUND', field: 'media.taskId' });
       }

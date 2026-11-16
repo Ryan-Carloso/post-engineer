@@ -265,12 +265,12 @@ async function postHandler(request: Request): Promise<NextResponse> {
   // The binding is loaded once here: resolvePublishingAccounts falls back
   // to it when accounts are omitted, and validateAccounts proves every
   // requested id is bound to the persona (issue #572).
-  const bound = personaId !== null ? await getPersonaDefaultAccounts(supabase, personaId) : null;
+  const bound = personaId !== null ? await getPersonaDefaultAccounts(supabase, personaId, userId) : null;
   const accountIds = await validateAccounts(
     supabase,
     userId,
     providers,
-    await resolvePublishingAccounts(supabase, personaId, publishing.accounts, bound ?? undefined),
+    await resolvePublishingAccounts(supabase, personaId, publishing.accounts, bound ?? undefined, userId),
     bound,
   );
   if (accountIds instanceof NextResponse) return accountIds;

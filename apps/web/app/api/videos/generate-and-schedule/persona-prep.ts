@@ -87,10 +87,15 @@ export async function resolvePublishingAccounts(
   personaId: string | null,
   explicitAccounts: Record<string, string[] | undefined> | undefined,
   bound?: PersonaDefaultAccounts,
+  userId?: string,
 ): Promise<Record<string, string[] | undefined>> {
   const accounts = explicitAccounts ?? {};
   if (Object.keys(accounts).length === 0 && personaId !== null) {
-    return bound ?? (await getPersonaDefaultAccounts(supabase, personaId));
+    if (bound !== undefined) return bound;
+    if (userId === undefined) {
+      throw new Error('Failed to load persona: owner is required.');
+    }
+    return getPersonaDefaultAccounts(supabase, personaId, userId);
   }
   return accounts;
 }

@@ -165,6 +165,30 @@ describe('GET /api/persona/publishing-accounts', () => {
     const res = await GET(req('GET'));
     expect(res.status).toBe(403);
   });
+
+  it.each([
+    { name: 'unscoped API key', auth: { userId: USER_ID, isApiKey: true, personaIds: null } },
+    { name: 'OAuth token', auth: { userId: USER_ID, isOAuth: true, personaIds: null } },
+  ])('404s a foreign persona for a $name and does not return its accounts', async ({ auth }) => {
+    const foreignId = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
+    const tables = baseTables();
+    tables.personas = [{ id: foreignId, user_id: 'user-b' }];
+    tables.persona_default_accounts = [
+      { persona_id: foreignId, provider: 'youtube', provider_account_id: 'UC-victim' },
+      { persona_id: foreignId, provider: 'bluesky', provider_account_id: 'did:plc:victim' },
+    ];
+    vi.mocked(requireSupabaseSession).mockResolvedValue({ auth, error: null } as never);
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(makeSupabase(tables) as never);
+
+    const res = await GET(
+      new Request(`https://app.test/api/persona/publishing-accounts?personaId=${foreignId}`, { method: 'GET' }),
+    );
+    const text = await res.text();
+
+    expect(res.status, text).toBe(404);
+    expect(text).not.toContain('UC-victim');
+    expect(text).not.toContain('did:plc:victim');
+  });
 });
 
 describe('PUT /api/persona/publishing-accounts', () => {

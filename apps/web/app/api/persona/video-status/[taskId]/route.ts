@@ -10,6 +10,7 @@ import {
 } from '@/lib/generation/generation-errors';
 import { apiErrorResponse } from '@/lib/api-error';
 import { rewriteVideoUrls, SAFE_TASK_ID } from '@/lib/video-urls';
+import { enforceScopedTaskRead } from '@/lib/video-task-scope';
 import { taskPayload, taskState, extractTaskError } from '@/lib/engine-task-state';
 import { hasPublishedSlotForTask, readDurableTaskState } from '@/lib/generation/gone-settle';
 import { lookupSlotIdForTask } from '@/lib/slot-by-task';
@@ -49,6 +50,16 @@ async function getHandler(
   if (!SAFE_TASK_ID.test(taskId)) {
     return apiErrorResponse(400, 'Invalid taskId.', { route: 'GET /api/persona/video-status' });
   }
+
+  // Before the engine fetch and before any terminal write or refund.
+  // Out of scope is the same 404 as an unknown task.
+  const scopeError = await enforceScopedTaskRead(
+    auth,
+    taskId,
+    'GET /api/persona/video-status',
+    'Video task not found.',
+  );
+  if (scopeError) return scopeError;
 
   try {
     const response = await fetch(`${baseUrl.replace(/\/+$/, '')}/api/v1/tasks/${encodeURIComponent(taskId)}`, {

@@ -118,6 +118,8 @@ interface FakeConfig {
   personaRow?: Record<string, unknown> | null;
   socialRows?: Record<string, unknown>[];
   boundRows?: Record<string, unknown>[];
+  generationRow?: Record<string, unknown> | null;
+  generationError?: { message: string } | null;
   existingSchedule?: Record<string, unknown> | null;
   existingSlots?: Record<string, unknown>[];
   scheduleInsertError?: unknown;
@@ -193,6 +195,10 @@ function fakeSupabase(config: FakeConfig = {}) {
     async maybeSingle(): Promise<{ data: unknown; error: unknown }> {
       if (this.table === 'personas') return { data: config.personaRow ?? null, error: null };
       if (this.table === 'schedules') return { data: config.existingSchedule ?? null, error: null };
+      if (this.table === 'video_generations') {
+        if (config.generationError) return { data: null, error: config.generationError };
+        return { data: config.generationRow === undefined ? null : config.generationRow, error: null };
+      }
       return { data: null, error: null };
     }
 
@@ -703,6 +709,60 @@ describe('POST /api/media/publish-existing', () => {
     const body = await response.json();
     expect(body.code).toBe('MEDIA_NOT_FOUND');
     expect(vi.mocked(dispatchPublish)).not.toHaveBeenCalled();
+  });
+
+  it('answers 404 for a scoped key whose task belongs to another persona and does not fetch it', async () => {
+    authAs([PERSONA_ID], true);
+    const fetchFn = vi.fn(async () => new Response(JSON.stringify(taskEnvelope()), { status: 200 }));
+    vi.stubGlobal('fetch', fetchFn);
+    const client = fakeSupabase({
+      socialRows: [{ provider: 'youtube', provider_account_id: 'UC1' }],
+      generationRow: { persona_id: '44444444-4444-4444-8444-444444444444' },
+    });
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await POST(
+      jsonRequest({
+        media: { kind: 'task', taskId: TASK_ID },
+        title: 'Porto walk',
+        description: 'Walking the riverside.',
+        publishing: { mode: 'asap', providers: ['youtube'], accounts: { youtube: ['UC1'] } },
+        tags: ['porto'],
+        privacyStatus: 'public',
+      }),
+    );
+    const body = await response.json();
+    expect(response.status).toBe(404);
+    expect(body.code).toBe('MEDIA_NOT_FOUND');
+    expect(fetchFn).not.toHaveBeenCalled();
+    expect(vi.mocked(dispatchPublish)).not.toHaveBeenCalled();
+  });
+
+  it('publishes a scoped key task that belongs to an allowed persona', async () => {
+    authAs([PERSONA_ID], true);
+    const fetchFn = vi.fn(async (url: string) => {
+      if (url.includes('/api/v1/tasks/')) return new Response(JSON.stringify(taskEnvelope()), { status: 200 });
+      return new Response(new Uint8Array([1, 2, 3, 4]), { status: 200, headers: { 'content-type': 'video/mp4' } });
+    });
+    vi.stubGlobal('fetch', fetchFn);
+    const client = fakeSupabase({
+      socialRows: [{ provider: 'youtube', provider_account_id: 'UC1' }],
+      generationRow: { persona_id: PERSONA_ID },
+    });
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await POST(
+      jsonRequest({
+        media: { kind: 'task', taskId: TASK_ID },
+        title: 'Porto walk',
+        description: 'Walking the riverside.',
+        publishing: { mode: 'asap', providers: ['youtube'], accounts: { youtube: ['UC1'] } },
+        tags: ['porto'],
+        privacyStatus: 'public',
+      }),
+    );
+    expect(response.status).toBe(200);
+    expect(fetchFn).toHaveBeenCalled();
   });
 
   it('answers 400 for a task that has not finished', async () => {

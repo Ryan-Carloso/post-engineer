@@ -107,7 +107,7 @@ async function getHandler(request: Request): Promise<NextResponse> {
   const ctx = await resolveContext(request, ROUTE);
   if (ctx instanceof NextResponse) return ctx;
   try {
-    const defaults = await getPersonaDefaultAccounts(ctx.supabase, ctx.personaId);
+    const defaults = await getPersonaDefaultAccounts(ctx.supabase, ctx.personaId, ctx.auth.userId);
     return NextResponse.json({ success: true, defaults });
   } catch (error) {
     return libErrorToResponse(ROUTE, error);
