@@ -11,6 +11,7 @@ vi.mock('@/lib/posthog-server', () => ({ getPostHogServer: vi.fn() }));
 
 import { DELETE } from '../route';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
+import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { trackApiEvent } from '@/lib/analytics';
 import { getPostHogServer } from '@/lib/posthog-server';
@@ -190,5 +191,34 @@ describe('DELETE /api/schedule on a discounted batch', () => {
       reason: 'batch_recheck_failed',
       userId: USER_ID,
     });
+  });
+});
+
+//---------------
+// Cookie-session cancel: refund_batch_tokens and settle_batch_clawback are
+// service-role only (migration 065), so the route must run them on the
+// service client even when it reads the slots with the session client.
+//---------------
+
+describe('DELETE /api/schedule from a cookie session', () => {
+  it('runs the clawback and refund RPCs on the service client, never the session client', async () => {
+    const { fake, paid } = batchOfSix();
+    vi.mocked(requireSupabaseSession).mockResolvedValue({
+      auth: { userId: USER_ID, accessToken: 'jwt', isApiKey: false, isOAuth: false, personaIds: null },
+      error: null,
+    } as never);
+    // The session client can read the tables but holds no EXECUTE grant.
+    const sessionRpc = vi.fn(async () => ({ data: null, error: { code: '42501', message: 'permission denied' } }));
+    vi.mocked(createSupabaseServerClient).mockResolvedValue({ ...fake.client, rpc: sessionRpc } as never);
+
+    // First cancel withholds the discount (settlement only), the second
+    // refunds in full (refund only): together they reach both RPCs.
+    const first = await cancel(paid[0]?.schedule_id);
+    const second = await cancel(paid[1]?.schedule_id);
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect(sessionRpc).not.toHaveBeenCalled();
+    expect(fake.rpcCalls.map((call) => call.name)).toEqual(['settle_batch_clawback', 'refund_batch_tokens']);
   });
 });

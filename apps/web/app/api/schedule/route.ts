@@ -274,7 +274,10 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
   // the free video's discount either, because the charges that earned it
   // still stand.
   const refundable = removed.filter(neverGenerated);
-  const clawback = await refundsAfterClawback(supabase, user.id, refundable, scheduleId);
+  // settle_batch_clawback is service-role only (migration 065): the route
+  // validated ownership above, so the settlement runs with the service
+  // client instead of the caller's session client.
+  const clawback = await refundsAfterClawback(createSupabaseServiceClient(), user.id, refundable, scheduleId);
   if (!clawback.ok) {
     // The slots are gone but the batch could not be re-checked: refunding
     // blind could leave a free batch video behind, so no refund is issued
@@ -386,9 +389,11 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
     }
     // The shared helper moves the tokens (same key the dispatch-failure
     // refund uses, so a slot already refunded is not credited twice) and
-    // emits refund_issued on a landed refund.
+    // emits refund_issued on a landed refund. refund_batch_tokens is
+    // service-role only (migration 065), so the refund uses the service
+    // client like the clawback settlement above.
     const { refunded, alreadyRefunded, error: refundError } = await refundSlotTokens({
-      supabase,
+      supabase: createSupabaseServiceClient(),
       userId: user.id,
       scheduleId,
       slotId: slot.id,
