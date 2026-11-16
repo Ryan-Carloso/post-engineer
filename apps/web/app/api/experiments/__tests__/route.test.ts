@@ -1,5 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+const captureAs = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/posthog-server', () => ({
+  getPostHogServer: () => ({
+    capture: vi.fn(),
+    captureAs,
+    captureException: vi.fn(),
+    captureExceptionAs: vi.fn(),
+  }),
+}));
 vi.mock('@/lib/supabase/service', () => ({ createSupabaseServiceClient: vi.fn() }));
 vi.mock('@/lib/request-auth', () => ({ requireSupabaseSession: vi.fn() }));
 vi.mock('@/lib/rate-limit', () => ({
@@ -23,6 +32,7 @@ import { LIST_LIMIT } from '@/lib/experiments/read';
 import { clearLiveExperimentCache } from '@/lib/experiments/live';
 import { fetchEnginePostMetricsSource } from '@/lib/engine-tasks';
 import { fetchProviderCounters } from '@/lib/metrics/provider-counters';
+import { successEventName } from '@/lib/api-telemetry-names';
 
 //---------------
 // /api/experiments (issue #476). The Supabase mock answers per table and
@@ -79,6 +89,15 @@ function post(body: unknown): Promise<Response> {
 
 function detail(id: string, query = ''): Promise<Response> {
   return DETAIL(new Request(`http://localhost/api/experiments/${id}${query}`), { params: Promise.resolve({ id }) });
+}
+
+async function resultsEventProperties(): Promise<Record<string, unknown>> {
+  const event = successEventName('GET /api/experiments/[id]');
+  await vi.waitFor(() => {
+    expect(captureAs.mock.calls.some((call) => call[1] === event)).toBe(true);
+  });
+  const match = captureAs.mock.calls.find((call) => call[1] === event);
+  return match?.[2] as Record<string, unknown>;
 }
 
 beforeEach(() => {
@@ -225,6 +244,16 @@ describe('GET /api/experiments/[id]', () => {
     expect(youtube.comparisons[0].values['hook-calm'].averageViewDurationSeconds).toBe(12.5);
     // 3 of 3 is p = 0.25: never a clear winner.
     expect(youtube.label).toBe('indicative');
+    const properties = await resultsEventProperties();
+    expect(properties).toMatchObject({
+      pairs_created: 3,
+      pairs_published: 3,
+      labels: { youtube: 'indicative' },
+    });
+    const serialized = JSON.stringify(properties);
+    expect(serialized).not.toContain('Hook test');
+    expect(serialized).not.toContain('Calm');
+    expect(serialized).not.toContain('hook-calm');
   });
 
   it('reads another window when asked; 400 on an unknown window', async () => {
@@ -308,6 +337,12 @@ describe('GET /api/experiments/[id] ?live=1', () => {
     expect(json.frozen).toBe(false);
     expect(json.results.providers[0].wins).toEqual({ 'hook-calm': 3, 'hook-aggressive': 0 });
     expect(json.results.providers[0].comparisons[0].values['hook-calm'].views).toBe(500);
+    const properties = await resultsEventProperties();
+    expect(properties).toMatchObject({
+      pairs_created: 3,
+      pairs_published: 3,
+      labels: { youtube: 'indicative' },
+    });
   });
 
   it('snapshot mode (no live param) has no live fields, so the MCP tool is unchanged', async () => {

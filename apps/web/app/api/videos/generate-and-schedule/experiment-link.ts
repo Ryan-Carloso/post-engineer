@@ -31,6 +31,7 @@ import { logger } from '@/lib/logger';
 import { isVideoType, type VideoType } from '@/lib/tokens';
 import type { PersonaPrep } from './persona-prep';
 import { PROVIDER_ACCOUNT_COLUMNS } from './account-columns';
+import { recordExperimentVideoLinked } from './experiment-link-telemetry';
 
 
 /** What a video in a pair must share with its partner. */
@@ -291,11 +292,22 @@ async function comparePartner(
   return mismatch === null ? { ok: true } : failure(400, mismatch.message, mismatch.field);
 }
 
+function bothVariantsSlotted(slots: ReadonlyArray<{ variant_id: string }>, variantId: string): boolean {
+  let hasSelf = false;
+  let hasOther = false;
+  for (const slot of slots) {
+    if (slot.variant_id === variantId) hasSelf = true;
+    else hasOther = true;
+  }
+  return hasSelf && hasOther;
+}
+
 /**
  * Post-insert re-check for the race where both variants of a pair were
  * validated against an empty pair. Call it once this video's slot row is
  * inserted: a partner that committed meanwhile is now visible. A failed
- * result (any status) means the caller must roll the video back.
+ * result (any status) means the caller must roll the video back. A pass
+ * emits experiment_video_linked. The pre-charge check does not.
  */
 export async function verifyExperimentPairAfterInsert(
   supabase: SupabaseClient,
@@ -312,7 +324,18 @@ export async function verifyExperimentPairAfterInsert(
     logger.error('[generate-and-schedule] experiment pair re-check failed', error, { experimentId: link.experimentId });
     return failure(500, 'Failed to verify the experiment pair.', 'experiment.pair');
   }
-  const partner = (pairSlots ?? []).find((slot) => slot.variant_id !== link.variantId);
-  if (partner === undefined) return { ok: true };
-  return comparePartner(supabase, { link, userId, partner, facts: input.facts });
+  const slots = pairSlots ?? [];
+  const partner = slots.find((slot) => slot.variant_id !== link.variantId);
+  if (partner !== undefined) {
+    const compared = await comparePartner(supabase, { link, userId, partner, facts: input.facts });
+    if (!compared.ok) return compared;
+  }
+  recordExperimentVideoLinked({
+    experimentId: link.experimentId,
+    variantId: link.variantId,
+    pair: link.pair,
+    faceless: input.facts.videoType === 'faceless',
+    pairComplete: bothVariantsSlotted(slots, link.variantId),
+  });
+  return { ok: true };
 }
