@@ -549,6 +549,19 @@ def test_engine_public_ip_matches_the_shared_cases():
         assert ssrf.is_public_ip(ipaddress.ip_address(ip)) is True, ip
 
 
+def test_post_public_url_rejects_cleartext_http_before_a_dial():
+    def create_connection(*_args, **_kwargs):
+        raise AssertionError("an http webhook must not dial")
+
+    with patch.object(
+        ssrf, "_resolve_global_ips", return_value=[ipaddress.ip_address(CHECKED_IP)]
+    ), patch.object(ssrf.socket, "create_connection", side_effect=create_connection):
+        with pytest.raises(ssrf.UnsafeUrlError, match="https"):
+            ssrf.post_public_url(
+                "http://rebind.test/hook", json={"ok": True}, timeout=10
+            )
+
+
 def test_https_sni_is_the_url_host_while_the_dial_is_the_checked_ip():
     dials = []
     seen = {}

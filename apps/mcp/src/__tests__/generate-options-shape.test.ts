@@ -75,6 +75,7 @@ function parseOptions(options: Record<string, unknown>) {
 describe('webhookUrl rejects loopback and private literals', () => {
   it.each([
     'http://127.0.0.1/hook',
+    'http://example.com/hook',
     'https://127.0.0.1/hook',
     'https://10.0.0.5/hook',
     'https://169.254.169.254/latest',
