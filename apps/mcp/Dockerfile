@@ -14,6 +14,12 @@ WORKDIR /repo
 # Dependency layer first: rebuilds only when the lockfile changes.
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps/mcp/package.json apps/mcp/
+# The root postinstall syncs the generated contract copies from
+# shared/contracts, so the script and its source must exist before
+# `pnpm install` runs it — otherwise the install layer fails with
+# MODULE_NOT_FOUND, same as the web image.
+COPY scripts/sync-contracts.mjs scripts/
+COPY shared/contracts shared/contracts
 RUN pnpm install --frozen-lockfile --filter post-engineer-mcp
 
 # Application code. apps/mcp's prebuild syncs generated copies from

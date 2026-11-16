@@ -51,9 +51,9 @@ describe('fetchScheduleRange', () => {
 });
 
 describe('RANGE_MAX_SLOTS sync', () => {
-  it('matches the API route constant', () => {
+  it('matches the shared contract constant', () => {
     const root = findRepoRoot(import.meta.url);
-    const source = readFileSync(join(root, 'apps/web/app/api/schedule/status/range.ts'), 'utf8');
+    const source = readFileSync(join(root, 'shared/contracts/schedule.ts'), 'utf8');
     expect(source.includes(`export const RANGE_MAX_SLOTS = ${RANGE_MAX_SLOTS};`)).toBe(true);
   });
 });

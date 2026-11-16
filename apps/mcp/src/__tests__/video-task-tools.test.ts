@@ -3,6 +3,8 @@ import { ApiError } from '../errors.js';
 import type { PostEngineerClient } from '../client.js';
 import type { McpToolResponse } from '../tools-call.js';
 import { WaitForVideoTasksSchema, handleWaitForVideoTasks } from '../video-task-tools.js';
+import type { ResponseOf } from '../contracts/endpoint.js';
+import { getVideoStatus } from '../contracts/video-tasks.js';
 
 vi.mock('../analytics.js', () => ({
   mcpTelemetryHeaders: () => ({}),
@@ -43,7 +45,7 @@ function statusBody(
   stage: string | null,
   error?: string,
   postUrl?: string,
-): unknown {
+): ResponseOf<typeof getVideoStatus> {
   return {
     status: 200,
     message: 'success',

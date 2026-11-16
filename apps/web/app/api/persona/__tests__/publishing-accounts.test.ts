@@ -35,6 +35,7 @@ import { NextResponse } from 'next/server';
 import { GET, PUT } from '../publishing-accounts/route';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { requireSupabaseSession } from '@/lib/request-auth';
+import { PersonaPublishingAccountsResponseSchema } from '@/lib/contracts/accounts';
 
 const USER_ID = 'user-uuid-1';
 const PERSONA_ID = '11111111-2222-3333-4444-555555555555';
@@ -116,6 +117,7 @@ describe('GET /api/persona/publishing-accounts', () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.success).toBe(true);
+    expect(PersonaPublishingAccountsResponseSchema.safeParse(body).success).toBe(true);
     expect(body.defaults.bluesky).toEqual(['did:plc:a']);
     expect(body.defaults.youtube).toEqual([]);
   });
@@ -176,6 +178,7 @@ describe('PUT /api/persona/publishing-accounts', () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.success).toBe(true);
+    expect(PersonaPublishingAccountsResponseSchema.safeParse(body).success).toBe(true);
     expect(body.defaults.bluesky).toEqual(['did:plc:a']);
     expect(body.defaults.youtube).toEqual([]);
     expect(tables.persona_default_accounts).toHaveLength(1);

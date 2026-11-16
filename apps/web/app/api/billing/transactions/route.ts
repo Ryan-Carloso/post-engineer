@@ -6,6 +6,12 @@ import { toFiniteNumber } from '@/lib/tokens';
 import type { TokenTransaction } from '@/lib/token-transactions';
 import { logger } from '@/lib/logger';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
+import { parseTransactionsLimit, parseTransactionsOffset } from '@/lib/contracts/billing';
+
+// The paging parse helpers live in the shared contract
+// (shared/contracts/billing.ts) and are re-exported here so existing
+// importers keep their path.
+export { parseTransactionsLimit, parseTransactionsOffset } from '@/lib/contracts/billing';
 
 //---------------
 // GET /api/billing/transactions — the current user's token ledger,
@@ -14,32 +20,6 @@ import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-r
 // RLS already scopes session queries to the caller; the service client used
 // for API keys bypasses RLS, so every query is explicitly filtered by user_id.
 //---------------
-
-const DEFAULT_LIMIT = 20;
-const MAX_LIMIT = 100;
-const DEFAULT_OFFSET = 0;
-
-//---------------
-// parseTransactionsLimit — validates the ?limit= query param; invalid or
-// out-of-range values fall back to the default instead of failing.
-//---------------
-export function parseTransactionsLimit(value: string | null): number {
-  if (value === null || !/^\d+$/.test(value)) return DEFAULT_LIMIT;
-  const parsed = Number.parseInt(value, 10);
-  if (!Number.isInteger(parsed) || parsed < 1) return DEFAULT_LIMIT;
-  return Math.min(parsed, MAX_LIMIT);
-}
-
-//---------------
-// parseTransactionsOffset — validates the ?offset= query param; invalid or
-// negative values fall back to 0 instead of failing.
-//---------------
-export function parseTransactionsOffset(value: string | null): number {
-  if (value === null || !/^\d+$/.test(value)) return DEFAULT_OFFSET;
-  const parsed = Number.parseInt(value, 10);
-  if (!Number.isInteger(parsed) || parsed < 0) return DEFAULT_OFFSET;
-  return parsed;
-}
 
 //---------------
 // toTransaction — maps a raw ledger row to the public response shape.

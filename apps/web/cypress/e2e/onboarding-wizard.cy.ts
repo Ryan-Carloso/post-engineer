@@ -1,7 +1,8 @@
 //---------------
-// First-visit onboarding wizard (issue #573): opens on a first visit to
-// /posts, walks four steps, persists the step across a detour, and stays
-// closed once seen. Every app-page spec logs in for real; the page's API
+// First-visit onboarding wizard (issue #573): opens once per account on a
+// first visit to /posts, walks four steps, and stays closed once seen —
+// in this browser (localStorage) or on the account (Supabase
+// user_metadata, read and written through the intercepted /auth/v1/user). Every app-page spec logs in for real; the page's API
 // reads are intercepted with empty payloads so the wizard is the only
 // thing under test. PT is the default locale; EN is pinned via localStorage.
 //---------------
@@ -9,7 +10,18 @@
 // The wizard keys live in lib/onboarding-wizard.ts; a Cypress spec cannot
 // import the module, so the literals are pinned here.
 const SEEN_KEY = 'post-engineer-onboarding-wizard-seen';
-const STEP_KEY = 'post-engineer-onboarding-wizard-step';
+const SEEN_METADATA_KEY = 'onboarding_wizard_seen';
+
+// The Supabase auth user endpoint (GET reads the account, PUT writes the
+// seen flag). Stubbed so the real E2E account's flag never leaks between
+// runs: every run starts as an account that never saw the wizard.
+function stubAccount(userMetadata: Record<string, unknown>) {
+  const user = { id: 'e2e-user', aud: 'authenticated', role: 'authenticated', app_metadata: {}, user_metadata: userMetadata };
+  cy.intercept('GET', '**/auth/v1/user', { statusCode: 200, body: user }).as('authUser');
+  cy.intercept('PUT', '**/auth/v1/user', (req) => {
+    req.reply({ statusCode: 200, body: { ...user, user_metadata: { ...userMetadata, ...req.body.data } } });
+  }).as('authUserUpdate');
+}
 
 function visitPosts(setup?: (win: Window) => void) {
   cy.visit('/posts', {
@@ -28,6 +40,7 @@ describe('Onboarding wizard', () => {
     cy.intercept('GET', '/api/persona/video-generations*', { success: true, generations: [] }).as('generations');
     cy.intercept('GET', '/api/schedule', { success: true, schedules: [] }).as('schedules');
     cy.intercept('GET', '/api/schedule/status*', { success: true, upcoming: [], recent: [], slots: [] }).as('status');
+    stubAccount({});
   });
 
   it('opens on the first visit and walks all four steps', () => {
@@ -88,12 +101,21 @@ describe('Onboarding wizard', () => {
     cy.get('[data-testid=onboarding-provider-back]').should('be.visible');
   });
 
-  it('resumes at the saved step after a detour', () => {
-    visitPosts((win) => {
-      win.localStorage.setItem(STEP_KEY, '2');
+  it('marks this browser and the account seen as it opens', () => {
+    visitPosts();
+    cy.get('[data-testid=onboarding-wizard-dialog]').should('be.visible');
+    cy.wait('@authUserUpdate').its('request.body.data').should('deep.equal', { [SEEN_METADATA_KEY]: true });
+    cy.window().then((win) => {
+      expect(win.localStorage.getItem(SEEN_KEY)).to.eq('1');
     });
-    cy.contains('Conecte a sua conta').should('be.visible');
-    cy.contains('Passo 2 de 4').should('be.visible');
+  });
+
+  it('stays closed on a new browser once the account saw it', () => {
+    stubAccount({ [SEEN_METADATA_KEY]: true });
+    visitPosts();
+    cy.wait('@authUser');
+    cy.window().its('localStorage').invoke('getItem', SEEN_KEY).should('eq', '1');
+    cy.get('[data-testid=onboarding-wizard-dialog]').should('not.exist');
   });
 
   it('stays closed once seen, and reopens from the header button', () => {
@@ -107,7 +129,7 @@ describe('Onboarding wizard', () => {
     cy.contains('Passo 1 de 4').should('be.visible');
   });
 
-  it('closes from the X button and marks the visit seen', () => {
+  it('closes from the X button', () => {
     visitPosts();
     cy.get('[data-testid=onboarding-wizard-dialog]').should('be.visible');
     cy.get('[data-testid=onboarding-wizard-dialog]').contains('button', 'Close').click();

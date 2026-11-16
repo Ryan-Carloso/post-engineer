@@ -4,6 +4,9 @@ import { randomUUID } from 'node:crypto';
 
 import { detectMagicMimeType } from '@/lib/media/magic-bytes';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
+import { MAX_VIDEO_UPLOAD_BYTES, VIDEO_UPLOAD_CONTENT_TYPES, type VideoUploadContentType } from '@/lib/contracts/videos';
+
+export { MAX_VIDEO_UPLOAD_BYTES, VIDEO_UPLOAD_CONTENT_TYPES, type VideoUploadContentType };
 
 //---------------
 // Signed video uploads (issue #561) — the remote replacement for sending
@@ -20,15 +23,12 @@ import { createSupabaseServiceClient } from '@/lib/supabase/service';
 
 export const VIDEO_UPLOAD_BUCKET = 'videos';
 // Same 2GB ceiling as POST /api/upload-content and the MCP client guard.
-export const MAX_VIDEO_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024;
 export const VIDEO_UPLOAD_TTL_MS = 15 * 60 * 1000;
 // One mint, and one hourly scheduler tick, each remove at most this
 // many expired objects. A quieter pass continues on the next tick.
 export const VIDEO_UPLOAD_SWEEP_LIMIT = 20;
-export const VIDEO_UPLOAD_CONTENT_TYPES = ['video/mp4', 'video/quicktime'] as const;
 export const VIDEO_UPLOAD_STATUSES = ['pending', 'ready', 'consumed'] as const;
 
-export type VideoUploadContentType = (typeof VIDEO_UPLOAD_CONTENT_TYPES)[number];
 export type VideoUploadStatus = (typeof VIDEO_UPLOAD_STATUSES)[number];
 
 export interface VideoUploadRow {

@@ -1,0 +1,16 @@
+# Build context is the monorepo root (apps/mcp/docker-compose.yml), so without
+# this file `COPY apps/mcp ./apps/mcp` also copies the host's
+# apps/mcp/node_modules over the install `pnpm install --frozen-lockfile` just
+# created in the image. Those host entries are relative symlinks into
+# node_modules/.pnpm/<pkg>@<version> for whatever versions the host installed
+# last, so a stale host install points at .pnpm directories the image never
+# created and the build dies with "Cannot find module 'zod'" (2026-11-15: the
+# remote MCP image failed on every deploy while a clean checkout built fine).
+# Mirrors apps/web/Dockerfile.dockerignore, which fixed the same leak for web.
+**/node_modules
+**/.next
+.git
+**/coverage
+**/.stryker-tmp
+apps/engine
+apps/web

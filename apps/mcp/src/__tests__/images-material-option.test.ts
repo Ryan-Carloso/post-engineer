@@ -67,8 +67,9 @@ function mockClient() {
   return {
     listVoices: vi.fn().mockResolvedValue({ voices: [] }),
     validateScript: vi.fn().mockResolvedValue({
-      success: true, valid: true, segmentCount: 3, totalWords: 76, hookWords: 25, contentWords: 51,
-      measured: 'pending', measuredDurationSeconds: null,
+      success: true, valid: true, segmentCount: 3, totalWords: 76, hookWords: 25, contentWords: 51, mediaCount: 0,
+      hookWindowSeconds: { min: 8, max: 12 }, measured: 'pending', measuredDurationSeconds: null,
+      measuredReason: 'No hook-only TTS endpoint exists yet, so the measured hook duration cannot be checked in this phase.',
     }),
     generatePersonaVideo: vi.fn().mockResolvedValue({
       schedule: { id: 'sch-1', mode: 'scheduled' },
@@ -79,7 +80,37 @@ function mockClient() {
 }
 
 beforeEach(() => {
-  global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200, text: async () => JSON.stringify({ success: true }) });
+  global.fetch = vi.fn().mockImplementation(async (url: unknown) => {
+  const validate = String(url).includes('/validate-script');
+  return {
+    ok: true,
+    status: 200,
+    text: async () =>
+      JSON.stringify(
+        validate
+          ? {
+              success: true,
+              valid: true,
+              segmentCount: 3,
+              totalWords: 76,
+              hookWords: 25,
+              contentWords: 51,
+              mediaCount: 12,
+              hookWindowSeconds: { min: 8, max: 12 },
+              measuredDurationSeconds: null,
+              measured: 'pending',
+              measuredReason:
+                'No hook-only TTS endpoint exists yet, so the measured hook duration cannot be checked in this phase.',
+            }
+          : {
+              success: true,
+              schedule: { id: 'sch-1', mode: 'scheduled' },
+              slots: [{ slotId: 's1', slotAt: '2026-10-30T18:00:00Z', title: 'Porto trip', taskId: 'task-1', status: 'scheduled' }],
+              replayed: false,
+            },
+      ),
+  };
+});
 });
 
 describe('generate_persona_video with the images material', () => {

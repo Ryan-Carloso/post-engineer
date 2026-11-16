@@ -5,14 +5,15 @@ import { findRepoRoot } from '@/test/repo-root';
 
 //---------------
 // supabase/migrations/019_personas-video-layout.sql — the layout contract
-// spanning four surfaces.
+// spanning the database, the engine, and the shared TS literal.
 //
-// The DB CHECK constraint, the zod enum the web validates against, the
-// engine's VideoLayout enum and the MCP's VIDEO_LAYOUTS are four independent
-// literals (no module is shared across those runtimes). A value that
-// reaches the database but not one of the enums produces a task that fails at
-// RENDER time, after a paid LongCat submit — so the drift between them has to
-// be caught by a test, not by a user.
+// The DB CHECK constraint, the engine's VideoLayout enum and the shared
+// personas contract are three independent literals (no module is shared
+// across those runtimes). A value that reaches the database but not one of
+// the enums produces a task that fails at RENDER time, after a paid
+// LongCat submit — so the drift between them has to be caught by a test,
+// not by a user. The web zod enum and the MCP schemas both import the
+// contract literal, so they cannot drift from each other.
 //
 // This mirrors the SQL-literals sync tests already in the repo.
 //---------------
@@ -26,12 +27,14 @@ const migrationPath = join(
   '019_personas-video-layout.sql',
 );
 
-const schemaPath = join(repoRoot, 'apps', 'web', 'lib', 'persona-schema.ts');
+// The single TS literal both apps share.
+const contractPath = join(repoRoot, 'shared', 'contracts', 'personas.ts');
 
 const engineSchemaPath = join(repoRoot, 'apps', 'engine', 'app', 'models', 'schema.py');
 
-// The MCP constant lives in limits.ts (a dependency-free leaf) and is
-// re-exported by client.ts for the tool schemas.
+// The web schema and the MCP limits re-export the contract literal; a
+// one-sided local definition would silently fork the lists again.
+const schemaPath = join(repoRoot, 'apps', 'web', 'lib', 'persona-schema.ts');
 const mcpLimitsPath = join(repoRoot, 'apps', 'mcp', 'src', 'limits.ts');
 
 /** The layout values the migration's CHECK constraint accepts. */
@@ -47,12 +50,17 @@ function sqlAllowedLayouts(): string[] {
     .filter((value) => value.length > 0);
 }
 
-/** The layout values the web zod enum accepts. */
-function webAllowedLayouts(): string[] {
-  const source = readFileSync(schemaPath, 'utf8');
+/** The layout values the shared contract accepts. */
+function contractAllowedLayouts(): string[] {
+  const source = readFileSync(contractPath, 'utf8');
   const match = source.match(/VIDEO_LAYOUTS\s*(?::[^=]+)?=\s*\[([^\]]*)\]/);
-  if (!match) throw new Error('persona-schema.ts has no VIDEO_LAYOUTS constant');
+  if (!match) throw new Error('shared/contracts/personas.ts has no VIDEO_LAYOUTS constant');
   return [...match[1].matchAll(/['"]([^'"]+)['"]/g)].map((entry) => entry[1]);
+}
+
+/** The layout values the web zod enum accepts (a re-export of the contract). */
+function webAllowedLayouts(): string[] {
+  return contractAllowedLayouts();
 }
 
 /** The layout values the engine's VideoLayout enum accepts. */
@@ -67,12 +75,9 @@ function engineAllowedLayouts(): string[] {
   );
 }
 
-/** The layout values the MCP zod schemas accept (apps/mcp/src/limits.ts). */
+/** The layout values the MCP zod schemas accept (a re-export of the contract). */
 function mcpAllowedLayouts(): string[] {
-  const source = readFileSync(mcpLimitsPath, 'utf8');
-  const match = source.match(/VIDEO_LAYOUTS\s*(?::[^=]+)?=\s*\[([^\]]*)\]/);
-  if (!match) throw new Error('mcp limits.ts has no VIDEO_LAYOUTS constant');
-  return [...match[1].matchAll(/['"]([^'"]+)['"]/g)].map((entry) => entry[1]);
+  return contractAllowedLayouts();
 }
 
 describe('supabase/migrations/019_personas-video-layout.sql', () => {
@@ -95,7 +100,18 @@ describe('supabase/migrations/019_personas-video-layout.sql', () => {
   });
 });
 
-describe('video_layout literal sync across the four surfaces', () => {
+describe('video_layout literal sync across the three surfaces', () => {
+  it('the web and MCP re-export the contract literal instead of defining their own', () => {
+    const schema = readFileSync(schemaPath, 'utf8');
+    expect(schema).toContain("from './contracts/personas'");
+    expect(schema).toContain('VIDEO_LAYOUTS,');
+    expect(schema).not.toMatch(/VIDEO_LAYOUTS\s*=\s*\[/);
+    const limits = readFileSync(mcpLimitsPath, 'utf8');
+    expect(limits).toContain("from './contracts/personas.js'");
+    expect(limits).toContain('VIDEO_LAYOUTS');
+    expect(limits).not.toMatch(/VIDEO_LAYOUTS\s*=\s*\[/);
+  });
+
   it('the web enum matches the database CHECK constraint', () => {
     expect(webAllowedLayouts()).toEqual(sqlAllowedLayouts());
   });

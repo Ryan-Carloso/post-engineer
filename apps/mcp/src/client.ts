@@ -1,7 +1,7 @@
-import { getErrorMessage, VideoTooLargeError, ApiError, readApiFailure } from './errors.js';
+import { ApiError, readApiFailure } from './errors.js';
 import { redactSecretFromError } from './secret-redaction.js';
 import {
-  DIRECT_PUBLISH_TIMEOUT_MS, MAX_LIBRARY_IMAGE_BYTES, MAX_LIBRARY_IMAGE_MB,
+  MAX_LIBRARY_IMAGE_BYTES, MAX_LIBRARY_IMAGE_MB,
   MAX_UPLOAD_VIDEO_BYTES, MAX_UPLOAD_VIDEO_GB, VIDEO_LAYOUTS,
 } from './limits.js';
 
@@ -23,9 +23,62 @@ import type {
   PublishVideoDirectInput,
   UpdatePersonaInput, VideoType,
 } from './client-types.js';
-import { buildDirectPublishForm, requireDirectPublishFields } from './direct-publish-form.js';
-import { isRecord, narrowDirectPublishAccountResult } from './direct-publish-narrowing.js';
 import { requirePublishingAccounts } from './require-publishing-accounts.js';
+import { publishVideoDirect } from './client-publish-uploaded.js';
+import {
+  getTokenBalance,
+  listTokenTransactions,
+} from './client-billing.js';
+import type { ResponseOf } from './contracts/endpoint.js';
+import { parseContractResponse } from './contract-response.js';
+import {
+  getTokenBalance as getTokenBalanceContract,
+  listTokenTransactions as listTokenTransactionsContract,
+} from './contracts/billing.js';
+import {
+  connectBlueskyAccount as connectBlueskyAccountContract,
+  connectRumbleAccount as connectRumbleAccountContract,
+  connectThreespeakAccount as connectThreespeakAccountContract,
+  disconnectAccount as disconnectAccountContract,
+  getOAuthConnectUrl as getOAuthConnectUrlContract,
+  listSocialAccounts as listSocialAccountsContract,
+} from './contracts/accounts.js';
+import {
+  cancelSchedule as cancelScheduleContract,
+  deleteSlot as deleteSlotContract,
+  getSlot as getSlotContract,
+  listPosts as listPostsContract,
+  listSchedules as listSchedulesContract,
+  updateSlotTitle as updateSlotTitleContract,
+} from './contracts/schedule.js';
+import {
+  VIDEO_GENERATIONS_MAX_LIMIT,
+  getVideoGeneration as getVideoGenerationContract,
+  getVideoStatus as getVideoStatusContract,
+  listVideoGenerations as listVideoGenerationsContract,
+} from './contracts/video-tasks.js';
+import {
+  listVoices as listVoicesContract,
+} from './contracts/voices.js';
+import {
+  generateAndSchedule as generateAndScheduleContract,
+  validateScript as validateScriptContract,
+} from './contracts/videos.js';
+import {
+  MAX_DESCRIPTION_LENGTH as MAX_LIBRARY_DESCRIPTION_LENGTH,
+  MAX_LIBRARY_IMAGES,
+  MAX_TAG_LENGTH as MAX_LIBRARY_TAG_LENGTH,
+  addPersonaImage as addPersonaImageContract,
+  createPersona as createPersonaContract,
+  deletePersona as deletePersonaContract,
+  deletePersonaImage as deletePersonaImageContract,
+  getPersonaDeletePreview as getPersonaDeletePreviewContract,
+  listFaces as listFacesContract,
+  listPersonaImages as listPersonaImagesContract,
+  listPersonas as listPersonasContract,
+  updatePersona as updatePersonaContract,
+  updatePersonaImage as updatePersonaImageContract,
+} from './contracts/personas.js';
 
 // Re-exported so existing import sites (`./client.js`) keep working.
 export type {
@@ -39,9 +92,8 @@ export type {
   UpdatePersonaInput,
   VideoLayout,
 } from './client-types.js';
-import { readFile, stat } from 'node:fs/promises';
 import { requireTitle } from './require-title.js';
-import { basename, extname } from 'node:path';
+import { basename } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { mcpTelemetryHeaders } from './analytics.js';
 
@@ -51,73 +103,22 @@ const REQUEST_TIMEOUT_MS = 30_000;
 // Multipart uploads can exceed the 30s default (up to 10 10MB images).
 const UPLOAD_TIMEOUT_MS = 120_000;
 // Shared with tools.ts so the client-side guards, the Zod schema limits,
-// and the field description strings can't drift apart.
-export const MAX_LIBRARY_IMAGES = 10;
-
-// Mirrors the server-side addLibraryImages limits: checked in createPersona
-// so an oversized tag/description fails locally before the multipart upload.
-export const MAX_LIBRARY_TAG_LENGTH = 100;
-export const MAX_LIBRARY_DESCRIPTION_LENGTH = 500;
+// and the field description strings can't drift apart. The values live in
+// the shared personas contract; re-exported here so existing import sites
+// (`../client.js`) keep working.
+export {
+  MAX_LIBRARY_DESCRIPTION_LENGTH,
+  MAX_LIBRARY_IMAGES,
+  MAX_LIBRARY_TAG_LENGTH,
+};
 
 // Re-exported from image-guards.ts so existing import sites
 // (`../client.js`) keep working after the extraction.
 export { assertImageSize } from './image-guards.js';
+// Re-exported so existing import sites (`../client.js`) keep working after
+// the direct-publish extraction (client-publish-uploaded.ts).
+export { assertVideoSize } from './client-publish-uploaded.js';
 import { appendPersonaAvatar, imageFormFile } from './persona-avatar.js';
-
-/**
- * Shared size guard for direct-publish videos: the server rejects anything
- * over 2GB, so fail fast locally before uploading gigabytes. Throws the
- * typed VideoTooLargeError carrying the full path.
- */
-export function assertVideoSize(sizeBytes: number, path: string): void {
-  if (sizeBytes > MAX_UPLOAD_VIDEO_BYTES) {
-    throw new VideoTooLargeError(path, sizeBytes);
-  }
-}
-
-function mimeTypeForVideoPath(path: string): string {
-  const extension = extname(path).toLowerCase();
-  if (extension === '.mp4') return 'video/mp4';
-  if (extension === '.mov') return 'video/quicktime';
-  throw new Error(
-    `Unsupported video extension "${extension || '(none)'}": use MP4 or MOV.`,
-  );
-}
-
-async function videoFormFile(path: string): Promise<Blob> {
-  // Validate before uploading: the API rejects the file anyway, so an
-  // oversized or unsupported video fails fast locally instead of wasting an
-  // upload. A stat() pre-check bounds memory before readFile — a multi-GB
-  // file would otherwise load fully into this stdio process. The TOCTOU
-  // window is benign: the authoritative size check still runs on the buffer.
-  // Any failure surfaces with the full path for a consistent, actionable
-  // message. The server re-validates content via magic bytes, so a
-  // mislabeled file still fails server-side.
-  const mimeType = mimeTypeForVideoPath(path);
-  try {
-    const fileStat = await stat(path);
-    assertVideoSize(fileStat.size, path);
-  } catch (error) {
-    // Discriminate by type, not by message text: the typed size error
-    // passes through untouched, while stat failures become the actionable
-    // "Failed to read video" wrapper.
-    if (error instanceof VideoTooLargeError) throw error;
-    throw new Error(`Failed to read video "${path}": ${getErrorMessage(error)}`);
-  }
-  let buffer: Buffer;
-  try {
-    buffer = await readFile(path);
-  } catch (error) {
-    throw new Error(`Failed to read video "${path}": ${getErrorMessage(error)}`);
-  }
-  if (buffer.length === 0) {
-    throw new Error(`Video "${path}" is empty.`);
-  }
-  // The post-read check reuses the shared guard: same limit, same message,
-  // full path — and it covers the (benign) TOCTOU window after stat.
-  assertVideoSize(buffer.length, path);
-  return new Blob([buffer], { type: mimeType });
-}
 
 // Normalize library metadata: trim; empty/whitespace-only values normalize
 // to ''. Both upload paths (the create-persona imageTags/imageDescriptions
@@ -183,25 +184,6 @@ function resolveBaseUrl(override: string | undefined): string {
   return url.origin + url.pathname.replace(/\/+$/, '');
 }
 
-// A 200 with a malformed body is an error, never a silent success: the agent
-// must not report "published" on a body it can't read.
-function narrowDirectPublishResult(value: unknown): DirectPublishResult {
-  if (!isRecord(value)) {
-    throw new Error('Malformed direct-publish response from the API.');
-  }
-  const resultsRaw = value.results;
-  if (!Array.isArray(resultsRaw)) {
-    throw new Error('Malformed direct-publish response from the API: results is not an array.');
-  }
-  return {
-    success: value.success === true,
-    provider: typeof value.provider === 'string' ? value.provider : 'unknown',
-    results: resultsRaw.map(narrowDirectPublishAccountResult),
-    successCount: typeof value.successCount === 'number' ? value.successCount : 0,
-    logId: typeof value.logId === 'string' ? value.logId : '',
-  };
-}
-
 export class PostEngineerClient {
   readonly baseUrl: string;
   private readonly apiKey?: string;
@@ -264,7 +246,7 @@ export class PostEngineerClient {
     }
   }
 
-  async createPersona(input: CreatePersonaInput): Promise<unknown> {
+  async createPersona(input: CreatePersonaInput): Promise<ResponseOf<typeof createPersonaContract>> {
     const formData = new FormData();
     formData.set('publishingAccounts', JSON.stringify(requirePublishingAccounts(input.accounts)));
     // Every persona has a face: exactly one of avatarUrl or avatarPath (the
@@ -314,39 +296,43 @@ export class PostEngineerClient {
       formData.set('imageTags', JSON.stringify(tags));
       formData.set('imageDescriptions', JSON.stringify(descriptions));
     }
-    return this.request(
+    const raw = await this.request(
       '/api/persona',
       { method: 'POST', headers: this.getHeaders(false), body: formData },
       'create persona',
       UPLOAD_TIMEOUT_MS,
     );
+    return parseContractResponse(createPersonaContract, raw);
   }
 
-  async listPersonas(): Promise<unknown> {
-    return this.request(
+  async listPersonas(): Promise<ResponseOf<typeof listPersonasContract>> {
+    const raw = await this.request(
       '/api/persona/list',
       { method: 'GET', headers: this.getHeaders() },
       'list personas'
     );
+    return parseContractResponse(listPersonasContract, raw);
   }
 
-  async listVoices(): Promise<unknown> {
-    return this.request(
+  async listVoices(): Promise<ResponseOf<typeof listVoicesContract>> {
+    const raw = await this.request(
       '/api/persona/voices',
       { method: 'GET', headers: this.getHeaders() },
       'list voices'
     );
+    return parseContractResponse(listVoicesContract, raw);
   }
 
-  async listFaces(): Promise<unknown> {
-    return this.request(
+  async listFaces(): Promise<ResponseOf<typeof listFacesContract>> {
+    const raw = await this.request(
       '/api/persona/faces',
       { method: 'GET', headers: this.getHeaders() },
       'list faces'
     );
+    return parseContractResponse(listFacesContract, raw);
   }
 
-  async updatePersona(input: UpdatePersonaInput): Promise<unknown> {
+  async updatePersona(input: UpdatePersonaInput): Promise<ResponseOf<typeof updatePersonaContract>> {
     const formData = new FormData();
     if (input.name !== undefined) formData.set('name', input.name);
     await appendPersonaAvatar(formData, input, false);
@@ -359,94 +345,104 @@ export class PostEngineerClient {
     if (input.paragraphNumber !== undefined) formData.set('paragraphNumber', String(input.paragraphNumber));
     if (input.niche !== undefined) formData.set('niche', input.niche);
     if (input.faceQuality !== undefined) formData.set('faceQuality', input.faceQuality);
-    return this.request(
+    const raw = await this.request(
       `/api/persona?personaId=${encodeURIComponent(input.personaId)}`,
       { method: 'PATCH', headers: this.getHeaders(false), body: formData },
       'update persona'
     );
+    return parseContractResponse(updatePersonaContract, raw);
   }
 
-  async listSocialAccounts(): Promise<unknown> {
-    return this.request(
+  async listSocialAccounts(): Promise<ResponseOf<typeof listSocialAccountsContract>> {
+    const raw = await this.request(
       '/api/account',
       { method: 'GET', headers: this.getHeaders() },
       'list social accounts'
     );
+    return parseContractResponse(listSocialAccountsContract, raw);
   }
 
-  async getOAuthConnectUrl(provider: string): Promise<unknown> {
-    return this.request(
+  async getOAuthConnectUrl(provider: string): Promise<ResponseOf<typeof getOAuthConnectUrlContract>> {
+    const raw = await this.request(
       '/api/account/connect-url',
       { method: 'POST', headers: this.getHeaders(), body: JSON.stringify({ provider }) },
       'get OAuth connect URL'
     );
+    return parseContractResponse(getOAuthConnectUrlContract, raw);
   }
 
-  async connectBlueskyAccount(handle: string, appPassword: string): Promise<unknown> {
+  async connectBlueskyAccount(handle: string, appPassword: string): Promise<ResponseOf<typeof connectBlueskyAccountContract>> {
     const endpoint = '/api/bluesky-connect';
     try {
-      return await this.request(endpoint, { method: 'POST', headers: this.getHeaders(), body: JSON.stringify({ handle, appPassword }) }, 'connect Bluesky account');
+      const raw = await this.request(endpoint, { method: 'POST', headers: this.getHeaders(), body: JSON.stringify({ handle, appPassword }) }, 'connect Bluesky account');
+      return parseContractResponse(connectBlueskyAccountContract, raw);
     } catch (error) {
       throw redactSecretFromError(error, appPassword);
     }
   }
 
-  async connectThreespeakAccount(username: string, postingKey: string): Promise<unknown> {
+  async connectThreespeakAccount(username: string, postingKey: string): Promise<ResponseOf<typeof connectThreespeakAccountContract>> {
     const endpoint = '/api/threespeak-connect';
     try {
-      return await this.request(endpoint, { method: 'POST', headers: this.getHeaders(), body: JSON.stringify({ username, postingKey }) }, 'connect 3Speak account');
+      const raw = await this.request(endpoint, { method: 'POST', headers: this.getHeaders(), body: JSON.stringify({ username, postingKey }) }, 'connect 3Speak account');
+      return parseContractResponse(connectThreespeakAccountContract, raw);
     } catch (error) {
       throw redactSecretFromError(error, postingKey);
     }
   }
 
-  async connectRumbleAccount(channelId: string, accessToken: string): Promise<unknown> {
+  async connectRumbleAccount(channelId: string, accessToken: string): Promise<ResponseOf<typeof connectRumbleAccountContract>> {
     try {
-      return await this.request(
+      const raw = await this.request(
         '/api/rumble-connect',
         { method: 'POST', headers: this.getHeaders(), body: JSON.stringify({ channelId, accessToken }) },
         'connect Rumble account',
       );
+      return parseContractResponse(connectRumbleAccountContract, raw);
     } catch (error) {
       throw redactSecretFromError(error, accessToken);
     }
   }
 
-  async listSchedules(): Promise<unknown> {
-    return this.request(
+  async listSchedules(): Promise<ResponseOf<typeof listSchedulesContract>> {
+    const raw = await this.request(
       '/api/schedule',
       { method: 'GET', headers: this.getHeaders() },
       'list schedules'
     );
+    return parseContractResponse(listSchedulesContract, raw);
   }
 
-  async listPosts(limit = 20): Promise<unknown> {
-    return this.request(
+  async listPosts(limit = 20): Promise<ResponseOf<typeof listPostsContract>> {
+    const raw = await this.request(
       `/api/schedule/status?limit=${encodeURIComponent(String(limit))}`,
       { method: 'GET', headers: this.getHeaders() },
       'list posts'
     );
+    return parseContractResponse(listPostsContract, raw);
   }
 
-  async cancelSchedule(scheduleId: string): Promise<unknown> {
-    return this.request(
+  async cancelSchedule(scheduleId: string): Promise<ResponseOf<typeof cancelScheduleContract>> {
+    const raw = await this.request(
       `/api/schedule?id=${encodeURIComponent(scheduleId)}`,
       { method: 'DELETE', headers: this.getHeaders() },
       'cancel schedule'
     );
+    return parseContractResponse(cancelScheduleContract, raw);
   }
 
-  async getSlot(slotId: string): Promise<unknown> {
-    return this.request(
+  async getSlot(slotId: string): Promise<ResponseOf<typeof getSlotContract>> {
+    const raw = await this.request(
       `/api/schedule/slots/${encodeURIComponent(slotId)}`,
       { method: 'GET', headers: this.getHeaders() },
       'get slot'
     );
+    return parseContractResponse(getSlotContract, raw);
   }
 
-  async updateSlotTitle(slotId: string, title: string): Promise<unknown> {
+  async updateSlotTitle(slotId: string, title: string): Promise<ResponseOf<typeof updateSlotTitleContract>> {
     const trimmed = requireTitle(title);
-    return this.request(
+    const raw = await this.request(
       `/api/schedule/slots/${encodeURIComponent(slotId)}`,
       {
         method: 'PATCH',
@@ -455,90 +451,75 @@ export class PostEngineerClient {
       },
       'update slot title'
     );
+    return parseContractResponse(updateSlotTitleContract, raw);
   }
 
-  async deleteSlot(slotId: string): Promise<unknown> {
+  async deleteSlot(slotId: string): Promise<ResponseOf<typeof deleteSlotContract>> {
     // Only pending (awaiting) or failed slots are deletable; the server
     // 409s anything mid-flight or published, and the schedule's last slot.
-    return this.request(
+    const raw = await this.request(
       `/api/schedule/slots/${encodeURIComponent(slotId)}`,
       { method: 'DELETE', headers: this.getHeaders() },
       'delete slot'
     );
+    return parseContractResponse(deleteSlotContract, raw);
   }
 
-  async getTokenBalance(): Promise<unknown> {
-    return this.request(
-      '/api/billing/tokens',
-      { method: 'GET', headers: this.getHeaders() },
-      'get token balance'
-    );
+  async getTokenBalance(): Promise<ResponseOf<typeof getTokenBalanceContract>> {
+    return getTokenBalance(this);
   }
 
-  async listVideoGenerations(limit?: number): Promise<unknown> {
+  async listVideoGenerations(limit?: number): Promise<ResponseOf<typeof listVideoGenerationsContract>> {
     // The server silently falls back to its default on an invalid limit —
     // fail fast with the field named instead of sending a value the caller
     // never meant.
-    if (limit !== undefined && (!Number.isInteger(limit) || limit < 1 || limit > 200)) {
-      throw new Error('limit must be an integer between 1 and 200.');
+    if (limit !== undefined && (!Number.isInteger(limit) || limit < 1 || limit > VIDEO_GENERATIONS_MAX_LIMIT)) {
+      throw new Error(`limit must be an integer between 1 and ${VIDEO_GENERATIONS_MAX_LIMIT}.`);
     }
     const query = limit !== undefined ? `?limit=${encodeURIComponent(String(limit))}` : '';
-    return this.request(
+    const raw = await this.request(
       `/api/persona/video-generations${query}`,
       { method: 'GET', headers: this.getHeaders() },
       'list video generations'
     );
+    return parseContractResponse(listVideoGenerationsContract, raw);
   }
 
-  async getVideoGeneration(generationId: string): Promise<unknown> {
-    return this.request(
+  async getVideoGeneration(generationId: string): Promise<ResponseOf<typeof getVideoGenerationContract>> {
+    const raw = await this.request(
       `/api/persona/video-generations/${encodeURIComponent(generationId)}`,
       { method: 'GET', headers: this.getHeaders() },
       'get video generation'
     );
+    return parseContractResponse(getVideoGenerationContract, raw);
   }
 
-  async listTokenTransactions(limit?: number, offset?: number): Promise<unknown> {
-    // The server silently falls back to its defaults on invalid paging —
-    // fail fast with the field named instead of sending values the caller
-    // never meant.
-    if (limit !== undefined && (!Number.isInteger(limit) || limit < 1 || limit > 100)) {
-      throw new Error('limit must be an integer between 1 and 100.');
-    }
-    if (offset !== undefined && (!Number.isInteger(offset) || offset < 0)) {
-      throw new Error('offset must be a non-negative integer.');
-    }
-    const params = new URLSearchParams();
-    if (limit !== undefined) params.set('limit', String(limit));
-    if (offset !== undefined) params.set('offset', String(offset));
-    const query = params.size > 0 ? `?${params.toString()}` : '';
-    return this.request(
-      `/api/billing/transactions${query}`,
-      { method: 'GET', headers: this.getHeaders() },
-      'list token transactions'
-    );
+  async listTokenTransactions(limit?: number, offset?: number): Promise<ResponseOf<typeof listTokenTransactionsContract>> {
+    return listTokenTransactions(this, limit, offset);
   }
 
-  async getPersonaDeletePreview(personaId: string): Promise<unknown> {
-    return this.request(
+  async getPersonaDeletePreview(personaId: string): Promise<ResponseOf<typeof getPersonaDeletePreviewContract>> {
+    const raw = await this.request(
       `/api/persona/delete-preview?personaId=${encodeURIComponent(personaId)}`,
       { method: 'GET', headers: this.getHeaders() },
       'get persona delete preview'
     );
+    return parseContractResponse(getPersonaDeletePreviewContract, raw);
   }
 
-  async deletePersona(personaId: string): Promise<unknown> {
+  async deletePersona(personaId: string): Promise<ResponseOf<typeof deletePersonaContract>> {
     // Destructive and irreversible: the persona, all its schedules, slots,
     // generated videos, and image library are removed. No token refunds —
     // prepaid tokens for pending slots are forfeited.
-    return this.request(
+    const raw = await this.request(
       `/api/persona?personaId=${encodeURIComponent(personaId)}`,
       { method: 'DELETE', headers: this.getHeaders() },
       'delete persona'
     );
+    return parseContractResponse(deletePersonaContract, raw);
   }
 
-  async disconnectAccount(provider: string, providerAccountId: string): Promise<unknown> {
+  async disconnectAccount(provider: string, providerAccountId: string): Promise<ResponseOf<typeof disconnectAccountContract>> {
     // The route 400s INVALID_PROVIDER / INVALID_PARAMS — fail fast with the
     // field named before any fetch goes out.
     const validProviders = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'pinterest', 'fanvue', '3speak', 'rumble'];
@@ -552,17 +533,18 @@ export class PostEngineerClient {
       provider,
       providerAccountId: providerAccountId.trim(),
     });
-    return this.request(
+    const raw = await this.request(
       `/api/account?${params.toString()}`,
       { method: 'DELETE', headers: this.getHeaders() },
       'disconnect account'
     );
+    return parseContractResponse(disconnectAccountContract, raw);
   }
 
-  async validateScript(segments: unknown, videoType: VideoType = 'hook_lipsync'): Promise<unknown> {
+  async validateScript(segments: unknown, videoType: VideoType = 'hook_lipsync'): Promise<ResponseOf<typeof validateScriptContract>> {
     // Mechanical validation only: the web route debits no tokens and
     // schedules nothing — it re-runs the generate route's validation.
-    return this.request(
+    const raw = await this.request(
       '/api/videos/validate-script',
       {
         method: 'POST',
@@ -571,9 +553,10 @@ export class PostEngineerClient {
       },
       'validate script'
     );
+    return parseContractResponse(validateScriptContract, raw);
   }
 
-  async generatePersonaVideo(input: GeneratePersonaVideoInput): Promise<unknown> {
+  async generatePersonaVideo(input: GeneratePersonaVideoInput): Promise<ResponseOf<typeof generateAndScheduleContract>> {
     const title = requireTitle(input.title);
     // Map the per-provider account arrays into the publishing.accounts
     // record. Only set entries the caller provided: the server enforces
@@ -592,7 +575,7 @@ export class PostEngineerClient {
     if (mode === 'scheduled' && (input.startAt === undefined || input.times === undefined)) {
       throw new Error("startAt and times are required when mode is 'scheduled'.");
     }
-    return this.request(
+    const raw = await this.request(
       '/api/videos/generate-and-schedule',
       {
         method: 'POST',
@@ -628,28 +611,31 @@ export class PostEngineerClient {
       },
       'generate and schedule video'
     );
+    return parseContractResponse(generateAndScheduleContract, raw);
   }
 
-  async getVideoStatus(taskId: string): Promise<unknown> {
-    return this.request(
+  async getVideoStatus(taskId: string): Promise<ResponseOf<typeof getVideoStatusContract>> {
+    const raw = await this.request(
       `/api/persona/video-status/${encodeURIComponent(taskId)}`,
       { method: 'GET', headers: this.getHeaders() },
       'get video status'
     );
+    return parseContractResponse(getVideoStatusContract, raw);
   }
 
-  async listPersonaImages(personaId: string): Promise<unknown> {
-    return this.request(
+  async listPersonaImages(personaId: string): Promise<ResponseOf<typeof listPersonaImagesContract>> {
+    const raw = await this.request(
       `/api/persona/images?personaId=${encodeURIComponent(personaId)}`,
       { method: 'GET', headers: this.getHeaders() },
       'list persona images'
     );
+    return parseContractResponse(listPersonaImagesContract, raw);
   }
 
   async addPersonaImage(
     personaId: string,
     image: PersonaLibraryImageInput & { isPrimary?: true }
-  ): Promise<unknown> {
+  ): Promise<ResponseOf<typeof addPersonaImageContract>> {
     const formData = new FormData();
     formData.set('personaId', personaId);
     formData.append('image', await imageFormFile(image.path), basename(image.path));
@@ -664,12 +650,13 @@ export class PostEngineerClient {
     // persona_media (action: update_image)): an explicit false is rejected at schema parse
     // time and can never reach this branch.
     if (image.isPrimary) formData.set('isPrimary', 'true');
-    return this.request(
+    const raw = await this.request(
       '/api/persona/images',
       { method: 'POST', headers: this.getHeaders(false), body: formData },
       'add persona image',
       UPLOAD_TIMEOUT_MS,
     );
+    return parseContractResponse(addPersonaImageContract, raw);
   }
 
   async updatePersonaImage(input: {
@@ -677,7 +664,7 @@ export class PostEngineerClient {
     tag?: string;
     description?: string;
     isPrimary?: boolean;
-  }): Promise<unknown> {
+  }): Promise<ResponseOf<typeof updatePersonaImageContract>> {
     if (
       input.tag === undefined &&
       input.description === undefined &&
@@ -707,7 +694,7 @@ export class PostEngineerClient {
     // the add/create paths (undefined = leave unchanged, so the check must
     // skip undefined instead of defaulting to '').
     checkLibraryMetadataLengths(tag, description);
-    return this.request(
+    const raw = await this.request(
       '/api/persona/images',
       {
         method: 'PATCH',
@@ -721,38 +708,19 @@ export class PostEngineerClient {
       },
       'update persona image'
     );
+    return parseContractResponse(updatePersonaImageContract, raw);
   }
 
-  async deletePersonaImage(id: string): Promise<unknown> {
-    return this.request(
+  async deletePersonaImage(id: string): Promise<ResponseOf<typeof deletePersonaImageContract>> {
+    const raw = await this.request(
       `/api/persona/images?id=${encodeURIComponent(id)}`,
       { method: 'DELETE', headers: this.getHeaders() },
       'delete persona image'
     );
+    return parseContractResponse(deletePersonaImageContract, raw);
   }
 
   async publishVideoDirect(input: PublishVideoDirectInput): Promise<DirectPublishResult> {
-    // Direct publish of a user-provided video — no generation, no schedule.
-    // Mirrors the server-side 400s: provider-specific required fields and
-    // per-provider account-id field names fail fast here, before any fetch.
-    const validProviders = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'pinterest', 'fanvue', '3speak', 'rumble'];
-    if (!validProviders.includes(input.provider)) {
-      throw new Error(`provider must be one of: ${validProviders.join(', ')}.`);
-    }
-    if (input.accountIds.length === 0) {
-      throw new Error('At least one account ID is required.');
-    }
-    const fields = requireDirectPublishFields(input);
-    const videoBlob = await videoFormFile(input.videoPath);
-    const filename = basename(input.videoPath);
-    const formData = buildDirectPublishForm(input, fields, videoBlob, filename);
-
-    const result: unknown = await this.request(
-      '/api/upload-content',
-      { method: 'POST', headers: this.getHeaders(), body: formData },
-      'publish video direct',
-      DIRECT_PUBLISH_TIMEOUT_MS
-    );
-    return narrowDirectPublishResult(result);
+    return publishVideoDirect(this, input);
   }
 }

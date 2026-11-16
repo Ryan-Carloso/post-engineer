@@ -23,6 +23,7 @@ vi.mock('@/lib/posthog-server', () => ({
 //---------------
 
 import { GET } from '../route';
+import { TokenBalanceResponseSchema } from '@/lib/contracts/billing';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { resolveApiKey } from '@/lib/api-keys';
@@ -80,7 +81,10 @@ describe('GET /api/billing/tokens', () => {
     const res = await GET();
 
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ success: true, balance: 8, free: 3 });
+    const body: unknown = await res.json();
+    expect(body).toEqual({ success: true, balance: 8, free: 3 });
+    // The 200 body parses against the shared contract the MCP reads.
+    expect(TokenBalanceResponseSchema.safeParse(body).success).toBe(true);
   });
 
   it('carries the fetched balance on the token_balance_fetched event', async () => {

@@ -65,7 +65,7 @@ describe('HTTP startup client identity', () => {
 });
 
 async function headersFrom(server: McpServer): Promise<Record<string, string>> {
-  const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => new Response(JSON.stringify({ personas: [] }), { status: 200 }));
+  const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => new Response(JSON.stringify({ authenticated: true, personas: [] }), { status: 200 }));
   vi.stubGlobal('fetch', fetchMock);
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: 'test-client', version: '0.0.0' });

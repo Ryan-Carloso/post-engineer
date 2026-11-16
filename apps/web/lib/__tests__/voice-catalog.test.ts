@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { cloneKeyOf, filterHouseVoices, isCloneVoiceId, isVoiceOption, searchVoices, voiceSampleName, type VoiceOption } from '../voice-catalog';
+import { VoiceOptionSchema } from '@/lib/contracts/voices';
 
 const v = (overrides: Partial<VoiceOption> & { id: string }): VoiceOption => ({
   label: 'X',
@@ -88,6 +89,29 @@ describe('isVoiceOption', () => {
     expect(isVoiceOption({ ...CATALOG[0], description: 3 })).toBe(false);
     expect(isVoiceOption({ ...CATALOG[0], description: 'Warm.' })).toBe(true);
     expect(isVoiceOption(null)).toBe(false);
+  });
+
+  it('agrees with the shared VoiceOptionSchema on every case', () => {
+    // The contract schema is the zod mirror of isVoiceOption. A one-sided
+    // edit would make the MCP accept a voice the web picker rejects (or
+    // the reverse), so both must give the same verdict on each case.
+    const cases: Array<{ value: unknown; ok: boolean }> = [
+      { value: CATALOG[0], ok: true },
+      { value: CATALOG[4], ok: true },
+      { value: { ...CATALOG[0], description: 'Warm.' }, ok: true },
+      { value: { id: 'chatterbox:x' }, ok: false },
+      { value: { ...CATALOG[0], gender: 'other' }, ok: false },
+      { value: { ...CATALOG[0], accent: 'au' }, ok: false },
+      { value: { ...CATALOG[0], kind: 'robot' }, ok: false },
+      { value: { ...CATALOG[0], id: '' }, ok: false },
+      { value: { ...CATALOG[0], label: 3 }, ok: false },
+      { value: { ...CATALOG[0], description: 3 }, ok: false },
+      { value: null, ok: false },
+    ];
+    for (const { value, ok } of cases) {
+      expect(isVoiceOption(value)).toBe(ok);
+      expect(VoiceOptionSchema.safeParse(value).success).toBe(ok);
+    }
   });
 });
 

@@ -8,7 +8,8 @@ import userEvent from '@testing-library/user-event';
 // Tests for the first-visit onboarding wizard (issue #573). The i18n mock
 // carries the real English copy, so assertions pin the words, not the keys.
 // The store is reset and localStorage cleared before every test, because
-// both survive across tests in one file.
+// both survive across tests in one file. Tests past the first visit open
+// the store at their step with the visit already seen.
 //---------------
 
 vi.mock('@/lib/i18n/provider', () => ({
@@ -92,6 +93,28 @@ vi.mock('@/lib/i18n/provider', () => ({
   }),
 }));
 
+// The wizard reads and writes the account's seen flag through the Supabase
+// browser client; each first-visit test sets what the account holds.
+const { mockGetUser, mockUpdateUser } = vi.hoisted(() => ({
+  mockGetUser: vi.fn(),
+  mockUpdateUser: vi.fn(),
+}));
+vi.mock('@/lib/supabase/client', () => ({
+  createSupabaseClient: () => ({ auth: { getUser: mockGetUser, updateUser: mockUpdateUser } }),
+}));
+
+function accountMetadata(metadata: Record<string, unknown>) {
+  mockGetUser.mockResolvedValue({ data: { user: { user_metadata: metadata } }, error: null });
+  mockUpdateUser.mockResolvedValue({ error: null });
+}
+
+// Opens the wizard at a given step the way the reopen button and Continue
+// get there, with the visit already seen so it never auto-opens.
+function openAtStep(step: number) {
+  window.localStorage.setItem(ONBOARDING_WIZARD_SEEN_KEY, '1');
+  useOnboardingWizardStore.setState({ isOpen: true, step });
+}
+
 // The inline credential connect calls notifyIfSessionExpired on a failed
 // POST; the redirect itself is pinned in lib/__tests__/session-expiry.test.tsx.
 vi.mock('@/lib/session-expiry', () => ({
@@ -100,10 +123,9 @@ vi.mock('@/lib/session-expiry', () => ({
 
 import { OnboardingWizard, OnboardingWizardButton } from '../onboarding-wizard';
 import {
-  ONBOARDING_WIZARD_SEEN_KEY,
-  ONBOARDING_WIZARD_STEP_KEY,
   useOnboardingWizardStore,
 } from '@/lib/onboarding-wizard';
+import { ONBOARDING_WIZARD_SEEN_KEY, ONBOARDING_WIZARD_SEEN_METADATA_KEY } from '@/lib/onboarding-wizard-keys';
 import { notifyIfSessionExpired } from '@/lib/session-expiry';
 
 const WHATSAPP_ENV = 'NEXT_PUBLIC_WHATSAPP_NUMBER';
@@ -131,6 +153,9 @@ describe('OnboardingWizard first visit', () => {
     window.localStorage.clear();
     useOnboardingWizardStore.setState({ isOpen: false, step: 1 });
     vi.stubEnv(WHATSAPP_ENV, TEST_NUMBER);
+    mockGetUser.mockReset();
+    mockUpdateUser.mockReset();
+    accountMetadata({ name: 'A' });
   });
 
   afterEach(() => {
@@ -150,22 +175,43 @@ describe('OnboardingWizard first visit', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
-  it('resumes at the saved step after a detour', async () => {
-    window.localStorage.setItem(ONBOARDING_WIZARD_STEP_KEY, '3');
+  it('marks this browser and the account seen as it opens', async () => {
     renderWizard();
-    const dialog = await screen.findByRole('dialog');
-    expect(within(dialog).getByText('Connect your agent')).toBeInTheDocument();
-    expect(within(dialog).getByText('Step 3 of 4')).toBeInTheDocument();
+    await screen.findByRole('dialog');
+    await waitFor(() => {
+      expect(mockUpdateUser).toHaveBeenCalledWith({ data: { [ONBOARDING_WIZARD_SEEN_METADATA_KEY]: true } });
+    });
+    expect(window.localStorage.getItem(ONBOARDING_WIZARD_SEEN_KEY)).toBe('1');
   });
 
-  it('walks all four steps and finishes, marking the visit seen', async () => {
+  it('stays closed on a new browser once the account saw it', async () => {
+    accountMetadata({ [ONBOARDING_WIZARD_SEEN_METADATA_KEY]: true });
+    renderWizard();
+    await waitFor(() => {
+      expect(window.localStorage.getItem(ONBOARDING_WIZARD_SEEN_KEY)).toBe('1');
+    });
+    expect(mockGetUser).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(mockUpdateUser).not.toHaveBeenCalled();
+  });
+
+  it('stays closed when the account read fails', async () => {
+    mockGetUser.mockResolvedValue({ data: { user: null }, error: new Error('network') });
+    renderWizard();
+    await waitFor(() => {
+      expect(mockGetUser).toHaveBeenCalledTimes(1);
+    });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(mockUpdateUser).not.toHaveBeenCalled();
+  });
+
+  it('walks all four steps and finishes', async () => {
     const user = userEvent.setup();
     renderWizard();
     const dialog = await screen.findByRole('dialog');
 
     await user.click(within(dialog).getByRole('button', { name: 'Continue' }));
     expect(within(dialog).getByText('Connect your account')).toBeInTheDocument();
-    expect(window.localStorage.getItem(ONBOARDING_WIZARD_STEP_KEY)).toBe('2');
 
     await user.click(within(dialog).getByRole('button', { name: 'Skip for now' }));
     expect(within(dialog).getByText('Connect your agent')).toBeInTheDocument();
@@ -184,7 +230,7 @@ describe('OnboardingWizard first visit', () => {
     expect(window.localStorage.getItem(ONBOARDING_WIZARD_SEEN_KEY)).toBe('1');
   });
 
-  it('closes with Escape and marks the visit seen', async () => {
+  it('closes with Escape', async () => {
     const user = userEvent.setup();
     renderWizard();
     await screen.findByRole('dialog');
@@ -301,10 +347,7 @@ function dispatchOAuthMessage(type: string, error?: string) {
 describe('OnboardingWizard step 2', () => {
   beforeEach(() => {
     window.localStorage.clear();
-    // The wizard opens at the saved step: step 2 is reached by resuming,
-    // the same way a return from /accounts used to get there.
-    window.localStorage.setItem(ONBOARDING_WIZARD_STEP_KEY, '2');
-    useOnboardingWizardStore.setState({ isOpen: false, step: 1 });
+    openAtStep(2);
     vi.stubEnv(WHATSAPP_ENV, TEST_NUMBER);
     installStep2Mocks();
     vi.mocked(notifyIfSessionExpired).mockClear();
@@ -561,8 +604,7 @@ describe('OnboardingWizard step 2', () => {
 describe('OnboardingWizard step 3', () => {
   beforeEach(() => {
     window.localStorage.clear();
-    window.localStorage.setItem(ONBOARDING_WIZARD_STEP_KEY, '3');
-    useOnboardingWizardStore.setState({ isOpen: false, step: 1 });
+    openAtStep(3);
     vi.stubEnv(WHATSAPP_ENV, TEST_NUMBER);
   });
 
@@ -582,8 +624,7 @@ describe('OnboardingWizard step 3', () => {
 describe('OnboardingWizard step 4', () => {
   beforeEach(() => {
     window.localStorage.clear();
-    window.localStorage.setItem(ONBOARDING_WIZARD_STEP_KEY, '4');
-    useOnboardingWizardStore.setState({ isOpen: false, step: 1 });
+    openAtStep(4);
   });
 
   afterEach(() => {

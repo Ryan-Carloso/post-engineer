@@ -167,10 +167,16 @@ def test_cta_max_length_is_the_same_literal_everywhere():
     """DB check, web form cap and engine schema must agree."""
     repo = _repo_root()
     sql = (repo / "supabase/migrations/024_persona-cta.sql").read_text()
+    # The 200-char cap lives in the shared personas contract now (PR #596
+    # moved it out of persona-schema.ts); the web form still gets it from
+    # there, so the pin reads the contract and checks the import path.
+    contract = (repo / "shared/contracts/personas.ts").read_text()
     web = (repo / "apps/web/lib/persona-schema.ts").read_text()
     schema = (repo / "apps/engine/app/models/schema.py").read_text()
 
     assert "char_length(cta_text) <= 200" in sql
     assert "char_length(post_cta_text) <= 200" in sql
-    assert "export const PERSONA_CTA_MAX_LENGTH = 200;" in web
+    assert "export const PERSONA_CTA_MAX_LENGTH = 200;" in contract
+    assert "PERSONA_CTA_MAX_LENGTH" in web
+    assert "from './contracts/personas'" in web
     assert 'video_cta: str = Field(default="", max_length=200)' in schema

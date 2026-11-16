@@ -21,6 +21,7 @@ vi.mock('@/lib/logger', () => ({
 }));
 
 import { POST } from '../validate-script/route';
+import { ValidateScriptResponseSchema } from '@/lib/contracts/videos';
 import { requireSupabaseSession } from '@/lib/request-auth';
 
 const hook =
@@ -62,6 +63,7 @@ describe('POST /api/videos/validate-script', () => {
     const payload = (await response.json()) as Record<string, unknown>;
     expect(payload.success).toBe(true);
     expect(payload.segmentCount).toBe(3);
+    expect(ValidateScriptResponseSchema.safeParse(payload).success).toBe(true);
     expect(payload.totalWords).toBe(76);
     expect(payload.hookWords).toBe(25);
     expect(payload.contentWords).toBe(51);

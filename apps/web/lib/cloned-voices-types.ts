@@ -1,13 +1,8 @@
-export interface ClonedVoicePublicRow {
-  id: string;
-  status: string;
-  language: string | null;
-  voice_id: string | null;
-  error_code: string | null;
-  consent_at: string | null;
-  created_at: string | null;
-  updated_at: string | null;
-}
+// The public row is the shared contract's ClonedVoiceRow; the alias keeps
+// the existing import sites working.
+import type { ClonedVoiceRow as ClonedVoicePublicRow } from '@/lib/contracts/voices';
+
+export type { ClonedVoicePublicRow };
 
 export function narrowClonedVoiceRow(value: unknown): ClonedVoicePublicRow | null {
   if (typeof value !== 'object' || value === null) {

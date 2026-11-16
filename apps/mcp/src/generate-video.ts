@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { PostEngineerClient } from './client.js';
 import { getPersonaPublishingAccounts } from './client-publishing-accounts.js';
+import { MalformedContractResponseError } from './contract-response.js';
 import { getErrorMessage } from './errors.js';
 import { BATCH_FREE_EVERY, BATCH_KEY_MAX_LENGTH, BATCH_KEY_PATTERN, BATCH_WINDOW_MINUTES, MAX_BATCH_VIDEOS } from './limits.js';
 import { createRefResolvers, type RefResolvers } from './refs.js';
@@ -110,7 +111,16 @@ export interface PreparedVideo {
 
 /** The persona's bound accounts per provider, from GET /api/persona/publishing-accounts. */
 async function boundAccounts(client: PostEngineerClient, personaId: string): Promise<Map<Provider, string[]>> {
-  const payload = await getPersonaPublishingAccounts(client, personaId);
+  let payload: unknown;
+  try {
+    payload = await getPersonaPublishingAccounts(client, personaId);
+  } catch (error) {
+    // A malformed binding is no binding (the video then fails with "no
+    // bound publishing accounts"); a transport failure still propagates
+    // and surfaces as "Error reading the persona's publishing accounts".
+    if (error instanceof MalformedContractResponseError) return new Map();
+    throw error;
+  }
   const defaults = typeof payload === 'object' && payload !== null ? (payload as { defaults?: unknown }).defaults : undefined;
   const bound = new Map<Provider, string[]>();
   if (typeof defaults !== 'object' || defaults === null) return bound;

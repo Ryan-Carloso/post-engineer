@@ -28,6 +28,7 @@ import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { resolveApiKey } from '@/lib/api-keys';
 import { listSocialAccounts, deleteSocialAccount, type SocialAccountRecord } from '@/lib/social-accounts';
 import { syncAccountProfile } from '@/lib/account-profile-sync';
+import { DisconnectAccountResponseSchema, ListSocialAccountsResponseSchema } from '@/lib/contracts/accounts';
 import { TokenDecryptError } from '@/lib/token-crypto';
 import { AccountNotFoundError } from '@/lib/errors';
 import { logger } from '@/lib/logger';
@@ -90,6 +91,7 @@ describe('GET /api/account', () => {
       accounts: Array<{ provider: string; channelId: string; statistics?: { subscriberCount: string; viewCount: string } }>;
     };
     expect(body.authenticated).toBe(true);
+    expect(ListSocialAccountsResponseSchema.safeParse(body).success).toBe(true);
     expect(body.accounts).toHaveLength(1);
     expect(body.accounts[0].provider).toBe('youtube');
     expect(body.accounts[0].channelId).toBe('chan-1');
@@ -447,6 +449,7 @@ describe('GET /api/account', () => {
       accounts: Array<{ provider: string; channelId: string }>;
     };
     expect(body.authenticated).toBe(true);
+    expect(ListSocialAccountsResponseSchema.safeParse(body).success).toBe(true);
     expect(body.accounts).toHaveLength(1);
     expect(body.accounts[0].channelId).toBe('chan-1');
     expect(listSocialAccounts).toHaveBeenCalledWith(expect.anything(), 'u1');
@@ -536,6 +539,7 @@ describe('DELETE /api/account', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { success: boolean };
     expect(body.success).toBe(true);
+    expect(DisconnectAccountResponseSchema.safeParse(body).success).toBe(true);
     expect(deleteSocialAccount).toHaveBeenCalledTimes(1);
     const args = vi.mocked(deleteSocialAccount).mock.calls[0];
     expect(args[1]).toBe('u1');

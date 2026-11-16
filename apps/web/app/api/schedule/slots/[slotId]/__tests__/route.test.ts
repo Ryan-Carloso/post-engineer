@@ -23,6 +23,7 @@ vi.mock('@/lib/rate-limit', async (importOriginal) => {
 });
 
 import { DELETE, GET, PATCH } from '../route';
+import { DeleteSlotResponseSchema, GetSlotResponseSchema, UpdateSlotResponseSchema } from '@/lib/contracts/schedule';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
@@ -166,6 +167,7 @@ describe('DELETE /api/schedule/slots/[slotId]', () => {
     const response = await deleteSlot(SLOT_ID);
 
     expect(response.status).toBe(200);    const body = (await response.json()) as { success: boolean };
+    expect(DeleteSlotResponseSchema.safeParse(body).success).toBe(true);
     expect(body.success).toBe(true);
     // The atomic RPC scopes the delete to the slot id AND the owner.
     expect(client.rpc).toHaveBeenCalledWith('delete_slot_if_not_last', {
@@ -355,6 +357,7 @@ describe('PATCH /api/schedule/slots/[slotId]', () => {
 
     expect(response.status).toBe(200);
     const body = (await response.json()) as { success: boolean; title: string };
+    expect(UpdateSlotResponseSchema.safeParse(body).success).toBe(true);
     expect(body).toEqual({ success: true, title: 'Novo tema' });
     const updateCall = client.calls.find((c) => c.op === 'update');
     expect(updateCall).toBeDefined();
@@ -673,6 +676,7 @@ describe('GET /api/schedule/slots/[slotId]', () => {
       schedule: Record<string, unknown>;
       persona: { id: string; name: string };
     };
+    expect(GetSlotResponseSchema.safeParse(body).success).toBe(true);
     expect(body.success).toBe(true);
     expect(body.slot).toMatchObject({
       id: 'slot-1',

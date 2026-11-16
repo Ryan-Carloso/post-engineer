@@ -21,24 +21,17 @@
 // user_id, or through an experiment id whose ownership was checked first.
 //---------------
 
-import { z } from 'zod';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-import { EXPERIMENT_TARGET_PAIRS_MAX, EXPERIMENT_VARIANT_ID_PATTERN } from '@/lib/experiments/limits';
+import { ExperimentLinkSchema, type ExperimentLink } from '@/lib/contracts/videos';
+
+export { ExperimentLinkSchema, type ExperimentLink };
+
 import { logger } from '@/lib/logger';
 import { isVideoType, type VideoType } from '@/lib/tokens';
 import type { PersonaPrep } from './persona-prep';
 import { PROVIDER_ACCOUNT_COLUMNS } from './account-columns';
 
-export const ExperimentLinkSchema = z
-  .object({
-    experimentId: z.string().uuid(),
-    variantId: z.string().regex(EXPERIMENT_VARIANT_ID_PATTERN),
-    pair: z.number().int().min(1).max(EXPERIMENT_TARGET_PAIRS_MAX),
-  })
-  .strict();
-
-export type ExperimentLink = z.infer<typeof ExperimentLinkSchema>;
 
 /** What a video in a pair must share with its partner. */
 export interface PairFacts {

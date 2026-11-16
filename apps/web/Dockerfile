@@ -18,6 +18,12 @@ COPY apps/web/package.json apps/web/
 # The web depends on the MCP package (workspace:*), so its package.json
 # must exist before `pnpm install` links it into apps/web/node_modules.
 COPY apps/mcp/package.json apps/mcp/
+# The root postinstall syncs the generated contract copies from
+# shared/contracts, so the script and its source must exist before
+# `pnpm install` runs it — otherwise the install layer fails with
+# MODULE_NOT_FOUND and the production web deploy breaks.
+COPY scripts/sync-contracts.mjs scripts/
+COPY shared/contracts shared/contracts
 RUN pnpm install --frozen-lockfile
 
 # apps/web/tsconfig.json extends this root config, so it must exist before

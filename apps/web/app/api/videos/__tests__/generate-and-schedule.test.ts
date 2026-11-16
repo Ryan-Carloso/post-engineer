@@ -9,6 +9,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NextResponse } from 'next/server';
 import { findRepoRoot } from '@/test/repo-root';
+import { GenerateAndScheduleResponseSchema } from '@/lib/contracts/videos';
 
 vi.mock('@/lib/request-auth', () => ({
   requireSupabaseSession: vi.fn(),
@@ -509,6 +510,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(res.status).toBe(200);
       expect(json.success).toBe(true);
       expect(json.replayed).toBe(false);
+      expect(GenerateAndScheduleResponseSchema.safeParse(json).success).toBe(true);
       expect(typeof json.schedule.id).toBe('string');
       expect(json.schedule.id.length).toBeGreaterThan(0);      expect(json.slots).toHaveLength(1);
       expect(json.slots[0]).toMatchObject({ title: 'Porto trip', taskId: 'task-Porto trip', status: 'generating' });
@@ -2145,6 +2147,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(json.warnings).toEqual([
         { code: 'voice_fallback_applied', fromVoice: '', toVoice: 'chatterbox:kokoro_af_heart' },
       ]);
+      expect(GenerateAndScheduleResponseSchema.safeParse(json).success).toBe(true);
       const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
       const enginePersona = payload.persona as Record<string, unknown>;
       expect(enginePersona.voice_id).toBe('chatterbox:kokoro_af_heart');
@@ -2247,6 +2250,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(json.warnings).toEqual([
         { code: 'voice_fallback_applied', fromVoice: '', toVoice: 'chatterbox:kokoro_af_heart' },
       ]);
+      expect(GenerateAndScheduleResponseSchema.safeParse(json).success).toBe(true);
       // The mock records the attempted personas update; no DB row was
       // committed (the client threw). Dispatch still uses the swapped voice.
       expect(updates.some((u) => u.table === 'personas')).toBe(true);
