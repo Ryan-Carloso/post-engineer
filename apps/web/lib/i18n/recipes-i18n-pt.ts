@@ -178,6 +178,24 @@ export const recipesI18nPt = {
   fullSetupExampleInput: 'Começando sem nenhuma conta e sem persona.',
   fullSetupExampleOutput:
       'Contas conectadas, persona criada, roteiro validado, um vídeo publicado.',
+  abHookTestTitle: 'Teste dois hooks (A/B)',
+  abHookTestObjective:
+      'Compare dois estilos de hook nos mesmos vídeos. Sem rosto é o teste mais barato. Uma variante só é vencedora quando o rótulo é clear.',
+  abHookTestStep1: 'Para quem quer comparar dois estilos de hook no mesmo vídeo.',
+  abHookTestStep2:
+      'Sem rosto é o teste mais barato: 1 token por vídeo, criado sem persona.',
+  abHookTestStep3:
+      'Crie o experimento com 6 pares. 6 é o menor alvo que pode ficar clear. Um efeito moderado pede cerca de 10 a 12.',
+  abHookTestStep4:
+      'Escreva os dois hooks de cada par no estilo de cada variante. Dentro do par, só o hook muda.',
+  abHookTestStep5:
+      'Espere a publicação e as métricas, depois leia o resultado. Só chame um vencedor quando o rótulo for clear.',
+  abHookTestDeliver1: 'Um experimento sem rosto com duas variantes de hook.',
+  abHookTestDeliver2: 'Pares de vídeos a 1 token cada, com a mesma voz em todos.',
+  abHookTestDeliver3: 'Um resultado que só aponta vencedor quando o rótulo é clear.',
+  abHookTestExampleInput: 'Um hook calmo contra um hook direto, sem rosto, no meu nicho.',
+  abHookTestExampleOutput:
+      'Experimento com 6 pares. Nenhum vencedor enquanto o rótulo não for clear.',
   stepKeyTitle: 'Crie sua API key',
   stepKeyHint:
       'Ela conecta seu agente à sua conta. Você pode criar várias, uma por agente.',

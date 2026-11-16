@@ -219,6 +219,9 @@ describe('prompt tools over MCP', () => {
       const generate = tools.find((tool) => tool.name === 'generate_video');
       expect(generate?.description).toContain('call prompts (action: list) first');
       expect(generate?.description).toContain('prompts (action: get)');
+      expect(generate?.description).toContain(
+        'To compare two hooks, use experiments; never generate the variants by hand.',
+      );
     });
   });
 

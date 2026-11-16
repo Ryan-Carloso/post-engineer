@@ -13,6 +13,7 @@ describe('prompts hub data', () => {
       'multi-rede',
       'viral-shorts',
       'full-setup',
+      'ab-hook-test',
     ]);
     for (const prompt of PROMPTS) {
       expect(prompt.titleKey).toMatch(/^recipes\./);
@@ -175,7 +176,7 @@ describe('prompts hub data', () => {
     expect(text).toContain('lives one hour');
   });
 
-  it('adds full-setup as the last recipe entry with the compose icon', () => {
+  it('keeps full-setup with the compose icon and recipe kind', () => {
     expect(PROMPTS.map((prompt) => prompt.slug)).toEqual([
       'daily-news',
       'place-spotlight',
@@ -185,6 +186,7 @@ describe('prompts hub data', () => {
       'multi-rede',
       'viral-shorts',
       'full-setup',
+      'ab-hook-test',
     ]);
     const fullSetup = getPrompt('full-setup');
     if (fullSetup === undefined) {
@@ -530,5 +532,62 @@ describe('prompts hub data', () => {
     ].map((needle) => text.indexOf(needle));
     expect(order.every((i) => i >= 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
+  });
+
+  it('adds ab-hook-test last and describes only the experiment actions that exist', () => {
+    expect(PROMPTS.map((prompt) => prompt.slug).at(-1)).toBe('ab-hook-test');
+    const entry = getPrompt('ab-hook-test');
+    if (entry === undefined) {
+      throw new Error('ab-hook-test prompt entry is missing');
+    }
+    expect(entry.icon).toBe('compose');
+    expect(entry.kindKey).toBe('recipes.kindRecipe');
+    expect(entry.titleKey).toBe('recipes.abHookTestTitle');
+    expect(entry.objectiveKey).toBe('recipes.abHookTestObjective');
+    expect(entry.stepKeys).toEqual([
+      'recipes.abHookTestStep1',
+      'recipes.abHookTestStep2',
+      'recipes.abHookTestStep3',
+      'recipes.abHookTestStep4',
+      'recipes.abHookTestStep5',
+    ]);
+    expect(entry.deliverKeys).toEqual([
+      'recipes.abHookTestDeliver1',
+      'recipes.abHookTestDeliver2',
+      'recipes.abHookTestDeliver3',
+    ]);
+    expect(entry.exampleInputKey).toBe('recipes.abHookTestExampleInput');
+    expect(entry.exampleOutputKey).toBe('recipes.abHookTestExampleOutput');
+    expect(entry.docHref).toEqual(
+      'https://github.com/Ryan-Carloso/post-engineer/blob/main/docs/recipes/ab-hook-test.md',
+    );
+    const baseText = SHARED_PROMPT_BASE.join('\n');
+    expect(entry.prompt.startsWith(baseText)).toBe(true);
+    const text = entry.prompt.slice(baseText.length + 2);
+    const positions = [
+      'experiments (action: create)',
+      'targetPairs 6',
+      'experiments (action: add_pair)',
+      'next free pair number',
+      'experiments (action: list)',
+      'experiments (action: results)',
+    ].map((needle) => text.indexOf(needle));
+    expect(positions.every((index) => index >= 0)).toBe(true);
+    expect([...positions].sort((a, b) => a - b)).toEqual(positions);
+    expect(text).toContain('no persona');
+    expect(text).toContain('1 token per video');
+    expect(text).toContain("options.videoType 'faceless'");
+    expect(text).toContain('same voiceId');
+    expect(text).toContain('smallest target that can ever be clear');
+    expect(text).toContain('10-12');
+    expect(text).toContain("each variant's style");
+    expect(text).toContain('Only the hook differs inside a pair');
+    expect(text).toContain('Wait for publication and metrics');
+    expect(text).toContain('unless the label is clear');
+    expect(text).toContain('never generate the variants by hand');
+    expect(text).not.toContain('add_pairs');
+    expect(text).not.toContain('attach');
+    expect(text).not.toContain('nextStep');
+    expect(text).not.toContain('CTA variable');
   });
 });
