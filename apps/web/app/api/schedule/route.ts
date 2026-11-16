@@ -58,8 +58,6 @@ import { cancelRemovedEngineTasks } from './cancel-engine-tasks';
 // publishing at each slot's time via /api/upload-content.
 //---------------
 
-const VALID_PROVIDERS = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'pinterest', '3speak', 'rumble', 'fanvue'] as const;
-export const VALID_SCHEDULE_PROVIDERS = VALID_PROVIDERS;
 
 function errorResponse(
   status: number,

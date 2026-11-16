@@ -4,9 +4,19 @@ import { randomUUID } from 'node:crypto';
 
 import { detectMagicMimeType } from '@/lib/media/magic-bytes';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
-import { MAX_VIDEO_UPLOAD_BYTES, VIDEO_UPLOAD_CONTENT_TYPES, type VideoUploadContentType } from '@/lib/contracts/videos';
+import {
+  MAX_IMAGE_UPLOAD_BYTES,
+  MAX_VIDEO_UPLOAD_BYTES,
+  UPLOAD_CONTENT_TYPE_MESSAGE,
+  UPLOAD_CONTENT_TYPES,
+  VIDEO_UPLOAD_CONTENT_TYPES,
+  isImageUploadContentType,
+  type UploadContentType,
+  type VideoUploadContentType,
+} from '@/lib/contracts/videos';
+import { IMAGE_PROVIDERS, isImageProvider } from '@/lib/contracts/providers';
 
-export { MAX_VIDEO_UPLOAD_BYTES, VIDEO_UPLOAD_CONTENT_TYPES, type VideoUploadContentType };
+export { MAX_VIDEO_UPLOAD_BYTES, VIDEO_UPLOAD_CONTENT_TYPES, type UploadContentType, type VideoUploadContentType };
 
 //---------------
 // Signed video uploads (issue #561) — the remote replacement for sending
@@ -19,6 +29,9 @@ export { MAX_VIDEO_UPLOAD_BYTES, VIDEO_UPLOAD_CONTENT_TYPES, type VideoUploadCon
 // single conditional update, so a replay or a concurrent second publish
 // loses). The row is the capability record: the upload id alone is never
 // enough — every step re-checks the owner and the expiry.
+// An upload may also carry a JPEG/PNG image (capped at 8 MB) for the
+// networks that post images: the remote MCP server sends images this way
+// instead of base64 in a tool argument.
 //---------------
 
 export const VIDEO_UPLOAD_BUCKET = 'videos';
@@ -88,28 +101,41 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function extensionFor(contentType: VideoUploadContentType): string {
-  return contentType === 'video/quicktime' ? 'mov' : 'mp4';
+const EXTENSIONS: Record<UploadContentType, string> = {
+  'video/mp4': 'mp4',
+  'video/quicktime': 'mov',
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+};
+
+/** The byte ceiling for one upload of this type: 8 MB for an image, 2GB for a video. */
+export function maxUploadBytes(contentType: UploadContentType): number {
+  return isImageUploadContentType(contentType) ? MAX_IMAGE_UPLOAD_BYTES : MAX_VIDEO_UPLOAD_BYTES;
 }
 
-export function parseMintBody(body: unknown): { contentType: VideoUploadContentType; sizeBytes: number } {
+function tooLarge(contentType: UploadContentType): VideoUploadError {
+  return isImageUploadContentType(contentType)
+    ? new VideoUploadError('Image is too large. Maximum is 8 MB.', 413, 'VIDEO_UPLOAD_TOO_LARGE')
+    : new VideoUploadError('Video is too large. Maximum is 2GB.', 413, 'VIDEO_UPLOAD_TOO_LARGE');
+}
+
+export function parseMintBody(body: unknown): { contentType: UploadContentType; sizeBytes: number } {
   if (!isRecord(body)) {
     throw new VideoUploadError('A JSON body with contentType and sizeBytes is required.', 400, 'VIDEO_UPLOAD_INVALID_BODY');
   }
   const { contentType, sizeBytes } = body;
   if (
     typeof contentType !== 'string' ||
-    !(VIDEO_UPLOAD_CONTENT_TYPES as readonly string[]).includes(contentType)
+    !(UPLOAD_CONTENT_TYPES as readonly string[]).includes(contentType)
   ) {
-    throw new VideoUploadError('contentType must be video/mp4 or video/quicktime.', 400, 'VIDEO_UPLOAD_INVALID_CONTENT_TYPE');
+    throw new VideoUploadError(UPLOAD_CONTENT_TYPE_MESSAGE, 400, 'VIDEO_UPLOAD_INVALID_CONTENT_TYPE');
   }
+  const declared = contentType as UploadContentType;
   if (typeof sizeBytes !== 'number' || !Number.isInteger(sizeBytes) || sizeBytes <= 0) {
     throw new VideoUploadError('sizeBytes must be a positive integer.', 400, 'VIDEO_UPLOAD_INVALID_SIZE');
   }
-  if (sizeBytes > MAX_VIDEO_UPLOAD_BYTES) {
-    throw new VideoUploadError('Video is too large. Maximum is 2GB.', 413, 'VIDEO_UPLOAD_TOO_LARGE');
-  }
-  return { contentType: contentType as VideoUploadContentType, sizeBytes };
+  if (sizeBytes > maxUploadBytes(declared)) throw tooLarge(declared);
+  return { contentType: declared, sizeBytes };
 }
 
 export interface MintedVideoUpload {
@@ -125,7 +151,7 @@ export async function mintVideoUpload(
   store: VideoUploadStore,
   storage: VideoUploadStorage,
   userId: string,
-  input: { contentType: VideoUploadContentType; sizeBytes: number },
+  input: { contentType: UploadContentType; sizeBytes: number },
   now: Date,
 ): Promise<MintedVideoUpload> {
   try {
@@ -136,7 +162,7 @@ export async function mintVideoUpload(
     // The error is the sweep's. The mint below is independent.
   }
   const id = randomUUID();
-  const storagePath = `${userId}/direct-uploads/${id}.${extensionFor(input.contentType)}`;
+  const storagePath = `${userId}/direct-uploads/${id}.${EXTENSIONS[input.contentType]}`;
   const expiresAt = new Date(now.getTime() + VIDEO_UPLOAD_TTL_MS).toISOString();
   await store.insertUpload({
     id,
@@ -162,7 +188,7 @@ export async function mintVideoUpload(
     token: data.token,
     storagePath,
     expiresAt,
-    maxBytes: MAX_VIDEO_UPLOAD_BYTES,
+    maxBytes: maxUploadBytes(input.contentType),
   };
 }
 
@@ -217,10 +243,10 @@ async function rejectIfExpired(storage: VideoUploadStorage, row: VideoUploadRow,
   }
 }
 
-async function downloadVerifiedVideo(
+async function downloadVerifiedMedia(
   storage: VideoUploadStorage,
   row: VideoUploadRow,
-): Promise<{ buffer: Buffer; detectedType: VideoUploadContentType }> {
+): Promise<{ buffer: Buffer; detectedType: UploadContentType }> {
   const { data, error } = await storage.download(row.storage_path);
   if (error !== null || data === null) {
     throw new VideoUploadError('No uploaded file was found for this upload. Upload the video first.', 400, 'VIDEO_UPLOAD_FILE_MISSING');
@@ -237,9 +263,14 @@ async function downloadVerifiedVideo(
     return refuse('Video is too large. Maximum is 2GB.', 413, 'VIDEO_UPLOAD_TOO_LARGE');
   }
   // Real content, never the declared type: both are caller-controlled.
-  const detected = detectMagicMimeType(buffer);
-  if (detected !== 'video/mp4' && detected !== 'video/quicktime') {
-    return refuse('The uploaded file is not an MP4 or MOV video.', 400, 'VIDEO_UPLOAD_CONTENT_UNRECOGNIZED');
+  const magic = detectMagicMimeType(buffer);
+  const detected = (UPLOAD_CONTENT_TYPES as readonly (string | null)[]).includes(magic) ? (magic as UploadContentType) : null;
+  if (detected === null) {
+    return refuse('The uploaded file is not an MP4 or MOV video, or a JPEG or PNG image.', 400, 'VIDEO_UPLOAD_CONTENT_UNRECOGNIZED');
+  }
+  if (buffer.length > maxUploadBytes(detected)) {
+    const error = tooLarge(detected);
+    return refuse(error.message, error.status, error.code);
   }
   if (row.declared_content_type !== null && row.declared_content_type !== detected) {
     return refuse('The uploaded video content does not match the declared content type.', 400, 'VIDEO_UPLOAD_TYPE_MISMATCH');
@@ -250,7 +281,7 @@ async function downloadVerifiedVideo(
 export interface CompletedVideoUpload {
   uploadId: string;
   status: 'ready';
-  contentType: VideoUploadContentType;
+  contentType: UploadContentType;
   sizeBytes: number;
 }
 
@@ -271,11 +302,11 @@ export async function completeVideoUpload(
     return {
       uploadId: row.id,
       status: 'ready',
-      contentType: (row.detected_content_type ?? row.declared_content_type ?? 'video/mp4') as VideoUploadContentType,
+      contentType: (row.detected_content_type ?? row.declared_content_type ?? 'video/mp4') as UploadContentType,
       sizeBytes: row.size_bytes ?? 0,
     };
   }
-  const { buffer, detectedType } = await downloadVerifiedVideo(storage, row);
+  const { buffer, detectedType } = await downloadVerifiedMedia(storage, row);
   const sizeBytes = buffer.length;
   const updated = await store.updateUpload(row.id, 'pending', {
     status: 'ready',
@@ -291,7 +322,22 @@ export async function completeVideoUpload(
 export interface ClaimedVideoUpload {
   row: VideoUploadRow;
   buffer: Buffer;
-  contentType: VideoUploadContentType;
+  contentType: UploadContentType;
+}
+
+/**
+ * An image upload publishes only to the networks that post images: the
+ * check runs before the claim, so a refused call leaves the upload ready.
+ */
+export function assertUploadFitsProviders(row: VideoUploadRow, providers: readonly string[]): void {
+  if (!isImageUploadContentType(row.detected_content_type ?? row.declared_content_type)) return;
+  const videoOnly = providers.filter((provider) => !isImageProvider(provider));
+  if (videoOnly.length === 0) return;
+  throw new VideoUploadError(
+    `This upload is an image: ${videoOnly.join(', ')} publish${videoOnly.length === 1 ? 'es' : ''} video only. Images go to ${IMAGE_PROVIDERS.join(', ')}.`,
+    400,
+    'IMAGE_PROVIDER_UNSUPPORTED',
+  );
 }
 
 // Single-use consumption: the bytes are verified first, then the row is
@@ -304,6 +350,7 @@ export async function claimUploadForPublish(
   userId: string,
   uploadId: string,
   now: Date,
+  providers: readonly string[],
 ): Promise<ClaimedVideoUpload> {
   const row = await loadOwnedUpload(store, userId, uploadId);
   if (row.status === 'consumed') {
@@ -313,7 +360,8 @@ export async function claimUploadForPublish(
   if (row.status === 'pending') {
     throw new VideoUploadError('This video upload is not completed yet. Complete it before publishing.', 409, 'VIDEO_UPLOAD_NOT_READY');
   }
-  const { buffer, detectedType } = await downloadVerifiedVideo(storage, row);
+  assertUploadFitsProviders(row, providers);
+  const { buffer, detectedType } = await downloadVerifiedMedia(storage, row);
   const updated = await store.updateUpload(row.id, 'ready', {
     status: 'consumed',
     consumed_at: now.toISOString(),

@@ -241,7 +241,37 @@ export async function finalizeLinkedInVideoUpload(
 }
 
 //---------------
-// Posts API — createRecord with a video embed
+// Images API — initializeUpload → one PUT of the bytes. The image URN is
+// the post's media id, exactly like a video URN.
+//---------------
+export async function uploadLinkedInImage(accessToken: string, ownerUrn: string, bytes: Uint8Array): Promise<string> {
+  const response = await fetch(`${LINKEDIN_API}/rest/images?action=initializeUpload`, {
+    method: 'POST',
+    headers: { ...linkedinHeaders(accessToken), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ initializeUploadRequest: { owner: ownerUrn } }),
+  });
+  if (!response.ok) {
+    throw new LinkedinError(`LINKEDIN_INIT_FAILED: status ${response.status}`, response.status);
+  }
+  const body = (await response.json().catch(() => ({}))) as { value?: { uploadUrl?: unknown; image?: unknown } };
+  const uploadUrl = body.value?.uploadUrl;
+  const image = body.value?.image;
+  if (typeof uploadUrl !== 'string' || typeof image !== 'string') {
+    throw new LinkedinError('LINKEDIN_INIT_FAILED: missing value', 502);
+  }
+  const put = await fetch(uploadUrl, {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/octet-stream' },
+    body: new Uint8Array(bytes),
+  });
+  if (!put.ok) {
+    throw new LinkedinError(`LINKEDIN_PART_FAILED: image status ${put.status}`, put.status);
+  }
+  return image;
+}
+
+//---------------
+// Posts API — a post with one media item (a video or an image URN)
 //---------------
 
 interface PostRequestBody {
@@ -274,7 +304,7 @@ async function createPost(accessToken: string, requestBody: PostRequestBody): Pr
 export async function createLinkedInMemberPost(
   accessToken: string,
   memberId: string,
-  videoUrn: string,
+  mediaUrn: string,
   commentary: string,
 ): Promise<string> {
   return createPost(accessToken, {
@@ -286,7 +316,7 @@ export async function createLinkedInMemberPost(
       targetEntities: [],
       thirdPartyDistributionChannels: [],
     },
-    content: { media: { id: videoUrn } },
+    content: { media: { id: mediaUrn } },
     lifecycleState: 'PUBLISHED',
     isReshareDisabledByAuthor: false,
   });
@@ -295,7 +325,7 @@ export async function createLinkedInMemberPost(
 export async function createLinkedInOrganizationPost(
   accessToken: string,
   organizationUrn: string,
-  videoUrn: string,
+  mediaUrn: string,
   commentary: string,
 ): Promise<string> {
   return createPost(accessToken, {
@@ -307,7 +337,7 @@ export async function createLinkedInOrganizationPost(
       targetEntities: [],
       thirdPartyDistributionChannels: [],
     },
-    content: { media: { id: videoUrn } },
+    content: { media: { id: mediaUrn } },
     lifecycleState: 'PUBLISHED',
     isReshareDisabledByAuthor: false,
   });

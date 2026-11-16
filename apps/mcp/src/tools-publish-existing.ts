@@ -5,7 +5,8 @@ import type { PublishExistingInput, PublishExistingResult } from './client-types
 import { publishExisting } from './client-publish-existing.js';
 import { readLocalImage } from './client-user-media.js';
 import { ApiError, getErrorMessage } from './errors.js';
-import { boundAccounts, type Provider } from './generate-video.js';
+import { IMAGE_PROVIDERS, isImageProvider, type SocialProvider as Provider } from './contracts/providers.js';
+import { boundAccounts } from './generate-video.js';
 import { PublishExistingSchema, type PublishExistingArgs } from './publish-existing-shape.js';
 import { createRefResolvers } from './refs.js';
 import { sanitizeEngineError } from './tools.js';
@@ -67,12 +68,6 @@ async function resolveTargets(
 async function resolveMedia(args: PublishExistingArgs): Promise<Resolved<PublishExistingInput['media']>> {
   if (args.mediaKind === 'task' && args.taskId !== undefined) return { kind: 'ok', value: { kind: 'task', taskId: args.taskId } };
   if (args.mediaKind === 'upload' && args.uploadId !== undefined) return { kind: 'ok', value: { kind: 'upload', uploadId: args.uploadId } };
-  if (args.imageData !== undefined) {
-    // Remote: the bytes arrive as base64; the server sniffs the real type.
-    const head = Buffer.from(args.imageData.slice(0, 16), 'base64');
-    const contentType = head[0] === 0x89 && head[1] === 0x50 ? 'image/png' : 'image/jpeg';
-    return { kind: 'ok', value: { kind: 'image', imageData: args.imageData, contentType } };
-  }
   if (args.imagePath !== undefined) {
     let image: { buffer: Buffer; mimeType: string };
     try {
@@ -81,7 +76,7 @@ async function resolveMedia(args: PublishExistingArgs): Promise<Resolved<Publish
       return { kind: 'response', response: failure(getErrorMessage(error)) };
     }
     if (image.mimeType !== 'image/jpeg' && image.mimeType !== 'image/png') {
-      return { kind: 'response', response: failure('Instagram image posts take a JPEG or PNG; convert the WebP first.') };
+      return { kind: 'response', response: failure('Image posts take a JPEG or PNG; convert the WebP first.') };
     }
     return { kind: 'ok', value: { kind: 'image', imageData: image.buffer.toString('base64'), contentType: image.mimeType } };
   }
@@ -132,9 +127,11 @@ export async function handlePublishExisting(client: PostEngineerClient, args: Pu
     const targets = await resolveTargets(client, input);
     if (targets.kind === 'response') return targets.response;
     const providers = [...targets.value.accounts.keys()];
-    // Images post only where a handler accepts them: Instagram today.
-    if (input.mediaKind === 'image' && providers.some((provider) => provider !== 'instagram')) {
-      return failure(`images can only be published to instagram for now; drop the ${providers.filter((provider) => provider !== 'instagram').join(', ')} account(s).`);
+    // Images post only to the image networks: refuse before reading the file.
+    // (An image upload is checked by the server, which knows its type.)
+    const videoOnly = providers.filter((provider) => !isImageProvider(provider));
+    if (input.mediaKind === 'image' && videoOnly.length > 0) {
+      return failure(`images go to ${IMAGE_PROVIDERS.join(', ')} only; drop the ${videoOnly.join(', ')} account(s).`);
     }
     const media = await resolveMedia(input);
     if (media.kind === 'response') return media.response;

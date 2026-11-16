@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { PROVIDER_ACCOUNT_COLUMNS, scheduleAccountColumns } from '../account-columns';
-import { VALID_SCHEDULE_PROVIDERS } from '@/app/api/schedule/route';
+import { SOCIAL_PROVIDERS } from '@/lib/contracts/providers';
 import { REQUIRED_COLUMNS } from '@/lib/schema-expectations.gen';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -16,7 +16,7 @@ const snapshot = JSON.parse(
 
 describe('account-columns', () => {
   it('maps every schedule provider to its own <provider>_account_ids column', () => {
-    expect(Object.keys(PROVIDER_ACCOUNT_COLUMNS).sort()).toEqual([...VALID_SCHEDULE_PROVIDERS].sort());
+    expect(Object.keys(PROVIDER_ACCOUNT_COLUMNS).sort()).toEqual([...SOCIAL_PROVIDERS].sort());
     for (const [provider, column] of Object.entries(PROVIDER_ACCOUNT_COLUMNS)) {
       // 3Speak's column spells the name out: a bare column name cannot
       // start with a digit, so `3speak_account_ids` is not a valid
@@ -47,7 +47,7 @@ describe('account-columns', () => {
   });
 
   it('writes each provider to its own column', () => {
-    for (const provider of VALID_SCHEDULE_PROVIDERS) {
+    for (const provider of SOCIAL_PROVIDERS) {
       const columns: Record<string, string[]> = scheduleAccountColumns({ [provider]: ['id'] });
       for (const [other, column] of Object.entries(PROVIDER_ACCOUNT_COLUMNS)) {
         expect(columns[column], `${provider} -> ${column}`).toEqual(other === provider ? ['id'] : []);

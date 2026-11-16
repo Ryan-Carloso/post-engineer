@@ -11,7 +11,7 @@ import type {
 import { parseContractResponse } from './contract-response.js';
 import { uploadContent as uploadContentContract } from './contracts/media.js';
 import {
-  VIDEO_UPLOAD_CONTENT_TYPES,
+  MintVideoUploadBodySchema,
   completeVideoUpload as completeVideoUploadContract,
   mintVideoUpload as mintVideoUploadContract,
   publishUploadedVideo as publishUploadedVideoContract,
@@ -20,6 +20,7 @@ import { buildDirectPublishForm, requireDirectPublishFields } from './direct-pub
 import { narrowDirectPublishAccountResult } from './direct-publish-narrowing.js';
 import { getErrorMessage, VideoTooLargeError } from './errors.js';
 import { DIRECT_PUBLISH_TIMEOUT_MS, MAX_UPLOAD_VIDEO_BYTES } from './limits.js';
+import { isSocialProvider, SOCIAL_PROVIDERS } from './contracts/providers.js';
 
 //---------------
 // Signed-upload publish client calls (issue #561). Standalone functions
@@ -38,11 +39,11 @@ export async function createVideoUpload(
   client: PostEngineerClient,
   input: { contentType: string; sizeBytes: number },
 ): Promise<MintedVideoUpload> {
-  if (!(VIDEO_UPLOAD_CONTENT_TYPES as readonly string[]).includes(input.contentType)) {
-    throw new Error('contentType must be video/mp4 or video/quicktime.');
-  }
-  if (!Number.isInteger(input.sizeBytes) || input.sizeBytes < 1 || input.sizeBytes > MAX_UPLOAD_VIDEO_BYTES) {
-    throw new Error('sizeBytes must be an integer between 1 and the 2GB video limit.');
+  // The contract body schema carries the per-type ceiling (8 MB for an
+  // image, 2GB for a video): fail fast with the route's own message.
+  const body = MintVideoUploadBodySchema.safeParse(input);
+  if (!body.success) {
+    throw new Error(body.error.issues[0]?.message ?? 'Invalid upload request.');
   }
   const raw = await client.request(
     '/api/videos/upload-url',
@@ -85,9 +86,8 @@ export async function publishUploadedVideo(
 ): Promise<DirectPublishResult> {
   // Mirrors the server-side 400s before any fetch: provider-specific
   // required fields fail fast here, exactly like publishVideoDirect.
-  const validProviders = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'pinterest', 'fanvue', '3speak', 'rumble'];
-  if (!validProviders.includes(input.provider)) {
-    throw new Error(`provider must be one of: ${validProviders.join(', ')}.`);
+  if (!isSocialProvider(input.provider)) {
+    throw new Error(`provider must be one of: ${SOCIAL_PROVIDERS.join(', ')}.`);
   }
   if (input.uploadId.trim().length === 0) {
     throw new Error('uploadId is required.');
@@ -196,9 +196,8 @@ export async function publishVideoDirect(
   // Direct publish of a user-provided video — no generation, no schedule.
   // Mirrors the server-side 400s: provider-specific required fields and
   // per-provider account-id field names fail fast here, before any fetch.
-  const validProviders = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'pinterest', 'fanvue', '3speak', 'rumble'];
-  if (!validProviders.includes(input.provider)) {
-    throw new Error(`provider must be one of: ${validProviders.join(', ')}.`);
+  if (!isSocialProvider(input.provider)) {
+    throw new Error(`provider must be one of: ${SOCIAL_PROVIDERS.join(', ')}.`);
   }
   if (input.accountIds.length === 0) {
     throw new Error('At least one account ID is required.');

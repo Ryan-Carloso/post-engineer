@@ -41,9 +41,11 @@ describe('signed-upload schemas are JSON-only', () => {
     expect(PublishUploadedVideoSchema.safeParse({ ...base, videoPath: '/tmp/v.mp4' }).success).toBe(false);
   });
 
-  it('create_video_upload accepts only video types within the size ceiling', () => {
+  it('create_video_upload accepts video and JPEG/PNG types within the size ceiling', () => {
     expect(CreateVideoUploadSchema.safeParse({ contentType: 'video/mp4', sizeBytes: 10 }).success).toBe(true);
-    expect(CreateVideoUploadSchema.safeParse({ contentType: 'image/png', sizeBytes: 10 }).success).toBe(false);
+    expect(CreateVideoUploadSchema.safeParse({ contentType: 'image/png', sizeBytes: 10 }).success).toBe(true);
+    expect(CreateVideoUploadSchema.safeParse({ contentType: 'image/jpeg', sizeBytes: 10 }).success).toBe(true);
+    expect(CreateVideoUploadSchema.safeParse({ contentType: 'image/webp', sizeBytes: 10 }).success).toBe(false);
     expect(CreateVideoUploadSchema.safeParse({ contentType: 'video/mp4', sizeBytes: 0 }).success).toBe(false);
     expect(
       CreateVideoUploadSchema.safeParse({ contentType: 'video/mp4', sizeBytes: 3 * 1024 * 1024 * 1024 }).success,
@@ -76,8 +78,12 @@ describe('signed-upload client calls', () => {
 
   it('createVideoUpload fails fast on a bad type or size before any fetch', async () => {
     const request = vi.fn(async (_path: string, _init?: unknown) => ({}));
-    await expect(createVideoUpload(fakeClient(request), { contentType: 'image/png', sizeBytes: 1 })).rejects.toThrow(
+    await expect(createVideoUpload(fakeClient(request), { contentType: 'image/webp', sizeBytes: 1 })).rejects.toThrow(
       /contentType/,
+    );
+    // An image keeps the 8 MB ceiling locally, like the route.
+    await expect(createVideoUpload(fakeClient(request), { contentType: 'image/png', sizeBytes: 8 * 1024 * 1024 + 1 })).rejects.toThrow(
+      'Image is too large. Maximum is 8 MB.',
     );
     await expect(createVideoUpload(fakeClient(request), { contentType: 'video/mp4', sizeBytes: 0 })).rejects.toThrow(
       /sizeBytes/,

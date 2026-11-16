@@ -6,6 +6,7 @@ import { optionalPersonaRefShape, withOptionalPersona } from './refs.js';
 import { withScriptOutcome, type RecipeSession } from './recipe-session.js';
 import { CompleteVideoUploadShape, CreateVideoUploadShape, PublishUploadedVideoShape } from './publish-uploaded-shape.js';
 import { PublishExistingLocalShape, PublishExistingRemoteShape, PublishExistingShape } from './publish-existing-shape.js';
+import { IMAGE_PROVIDERS } from './contracts/providers.js';
 import { handlePublishExisting } from './tools-publish-existing.js';
 import { DESTRUCTIVE, MUTATING, READ_ONLY } from './tool-annotations.js';
 import { PublishVideoDirectShape, handlePublishVideoDirect } from './tools.js';
@@ -99,14 +100,15 @@ export function registerContentTools(server: McpServer, client: PostEngineerClie
   );
 
   // from_file reads a local video: only the stdio server offers it. A
-  // publish_existing image is a local file on stdio and base64 remotely.
+  // publish_existing image is a local file (imagePath) on stdio only;
+  // remotely it goes through a signed upload (create_upload) instead.
   const publishOptions: ActionOptions<typeof PUBLISH_SPECS> = remote
     ? { unavailable: ['from_file'], variants: { publish_existing: optionalPersonaRefShape(PublishExistingRemoteShape) } }
     : { variants: { publish_existing: optionalPersonaRefShape(PublishExistingLocalShape) } };
   server.tool(
     'publish_video',
     actionDescription(
-      `Publish media that already exists, with no generation and no charge. ${remote ? '' : 'from_file: a local video (.mp4 or .mov) is published now. '}create_upload → complete_upload → publish_upload: a signed upload (the bytes are PUT straight to storage, never through this server; the upload expires in 15 minutes) published now; publishing consumes it. publish_existing: a finished generated video (taskId), a completed upload (uploadId) or an image (${remote ? 'imageData, base64' : 'imagePath'}; instagram only), to every network of its accounts in one call, with mode asap (now) or scheduled (once, at publishAt). YouTube needs title, description, tags and privacyStatus; Rumble and Fanvue title and description; the other networks a caption (publish_existing uses description). If a call times out, retry with the same idempotencyKey: the original result is replayed. A result with errorCode publish_unknown must NOT be retried: the post may be live, check the account first.`,
+      `Publish media that already exists, with no generation and no charge. ${remote ? '' : 'from_file: a local video (.mp4 or .mov) is published now. '}create_upload → complete_upload → publish_upload: a signed upload, video or JPEG/PNG (PUT straight to storage, never via this server; expires in 15 min), published now; publishing consumes it. publish_existing: a finished generated video (taskId), a completed upload (uploadId)${remote ? '' : ' or a local image (imagePath)'}, to every network of its accounts in one call (images: ${IMAGE_PROVIDERS.join('/')}), with mode asap (now) or scheduled (once, at publishAt). YouTube needs title, description, tags and privacyStatus; Rumble and Fanvue title and description; the other networks a caption (publish_existing uses description). If a call times out, retry with the same idempotencyKey: the original result is replayed. A result with errorCode publish_unknown must NOT be retried: the post may be live, check the account first.`,
       offeredSpecs(PUBLISH_SPECS, publishOptions),
     ),
     actionShape(offeredSpecs(PUBLISH_SPECS, publishOptions)),

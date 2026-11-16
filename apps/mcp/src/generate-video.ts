@@ -9,6 +9,7 @@ import { GeneratePersonaVideoSchema, GeneratePersonaVideoShape } from './single-
 import type { McpToolResponse } from './tools-call.js';
 import { handleGeneratePersonaVideoBatch } from './tools-batch.js';
 import { generatePersonaVideoOutcome } from './tools-single-video.js';
+import { SOCIAL_PROVIDERS, type SocialProvider } from './contracts/providers.js';
 
 //---------------
 // generate_video (issue #566): one intent, one call. Replaces
@@ -24,8 +25,7 @@ import { generatePersonaVideoOutcome } from './tools-single-video.js';
 // back in the result.
 //---------------
 
-export const PROVIDERS = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'pinterest', 'fanvue', '3speak', 'rumble'] as const;
-export type Provider = (typeof PROVIDERS)[number];
+type Provider = SocialProvider;
 
 // Where each provider's account ids go in the web request (the per-provider arrays the route reads).
 const ACCOUNT_FIELD: Record<Provider, string> = {
@@ -63,7 +63,7 @@ export const GenerateVideoItemSchema = z
   .omit(OMITTED_PER_VIDEO)
   .extend({
     persona: z.string().min(1).optional().describe('The persona, by name or id. Omit for a faceless post with no persona: then set options.videoType to \'faceless\' and options.voiceId (or options.audioUrl).'),
-    providers: z.array(z.enum(PROVIDERS)).min(1).optional().describe('Networks to publish to. Omit to use the networks of `accounts`, or of the persona\'s bound publishing accounts when `accounts` is omitted too.'),
+    providers: z.array(z.enum(SOCIAL_PROVIDERS)).min(1).optional().describe('Networks to publish to. Omit to use the networks of `accounts`, or of the persona\'s bound publishing accounts when `accounts` is omitted too.'),
     accounts: z.array(z.string().min(1)).optional().describe('Accounts to publish to, each an account name or id from accounts (the network is read from the account). Omit for the persona\'s bound publishing accounts.'),
   })
   .strict();
@@ -124,7 +124,7 @@ export async function boundAccounts(client: PostEngineerClient, personaId: strin
   const defaults = typeof payload === 'object' && payload !== null ? (payload as { defaults?: unknown }).defaults : undefined;
   const bound = new Map<Provider, string[]>();
   if (typeof defaults !== 'object' || defaults === null) return bound;
-  for (const provider of PROVIDERS) {
+  for (const provider of SOCIAL_PROVIDERS) {
     const ids = (defaults as Record<string, unknown>)[provider];
     if (Array.isArray(ids) && ids.length > 0) bound.set(provider, ids.filter((id): id is string => typeof id === 'string'));
   }

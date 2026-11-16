@@ -3,6 +3,7 @@ import { describe, it, expect } from 'vitest';
 
 import {
   IMAGE_MAX_BYTES,
+  imageProvidersIssue,
   checkPublishExistingSemantics,
   decodeImageMedia,
   parsePublishExistingBody,
@@ -166,7 +167,7 @@ describe('checkPublishExistingSemantics', () => {
     }
   });
 
-  it('rejects an image for any provider but instagram', () => {
+  it('rejects an image for a video-only network, naming it', () => {
     const parsed = parsePublishExistingBody({
       media: { kind: 'image', imageData: JPEG_BASE64, contentType: 'image/jpeg' },
       title: 'Sunset photo',
@@ -179,19 +180,34 @@ describe('checkPublishExistingSemantics', () => {
     if (parsed.ok) {
       const checked = checkPublishExistingSemantics(parsed.value);
       expect(checked.ok).toBe(false);
-      if (!checked.ok) expect(checked.issues[0]?.field).toBe('publishing.providers');
+      if (!checked.ok) {
+        expect(checked.issues[0]?.field).toBe('publishing.providers');
+        expect(checked.issues[0]?.message).toBe(
+          'Images can be published to instagram, bluesky, linkedin, threads, facebook, pinterest only; youtube takes video.',
+        );
+      }
     }
   });
 
-  it('accepts an image for instagram', () => {
+  it('accepts an image for every image network at once', () => {
     const parsed = parsePublishExistingBody({
       media: { kind: 'image', imageData: JPEG_BASE64, contentType: 'image/jpeg' },
       title: 'Sunset photo',
       description: 'Edited photo, straight to the feed.',
-      publishing: { mode: 'asap', providers: ['instagram'], accounts: { instagram: ['ig-1'] } },
+      publishing: {
+        mode: 'asap',
+        providers: ['instagram', 'bluesky', 'linkedin', 'threads', 'facebook', 'pinterest'],
+        accounts: { instagram: ['ig-1'], bluesky: ['did:plc:a'], linkedin: ['li-1'], threads: ['th-1'], facebook: ['fb-1'], pinterest: ['pi-1'] },
+        pinterestBoardId: '123',
+      },
     });
     expect(parsed.ok).toBe(true);
-    if (parsed.ok) expect(checkPublishExistingSemantics(parsed.value).ok).toBe(true);
+    if (parsed.ok) expect(checkPublishExistingSemantics(parsed.value)).toMatchObject({ ok: true });
+  });
+
+  it('imageProvidersIssue names every video-only network', () => {
+    expect(imageProvidersIssue(['instagram', 'rumble', '3speak'])?.message).toContain('rumble, 3speak take video');
+    expect(imageProvidersIssue(['bluesky'])).toBeNull();
   });
 
   it('requires youtube tags and privacyStatus for ASAP, but not for scheduled', () => {

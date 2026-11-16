@@ -14,26 +14,10 @@
 import { z } from 'zod';
 
 import { defineEndpoint } from './endpoint.js';
-
-/** Providers a publish link can name. Mirrors the PROVIDERS set of
- * apps/web/lib/publish-links.ts (resolvePublishLinks drops any other
- * provider before a link is built); pinned by
- * apps/web/lib/__tests__/contracts-shared.test.ts. */
-export const PUBLISH_PROVIDERS = [
-  'youtube',
-  'instagram',
-  'bluesky',
-  'linkedin',
-  'threads',
-  'facebook',
-  'pinterest',
-  '3speak',
-  'rumble',
-  'fanvue',
-] as const;
+import { SOCIAL_PROVIDERS } from './providers.js';
 
 export const PublishLinkSchema = z.object({
-  provider: z.enum(PUBLISH_PROVIDERS),
+  provider: z.enum(SOCIAL_PROVIDERS),
   url: z.string(),
 });
 

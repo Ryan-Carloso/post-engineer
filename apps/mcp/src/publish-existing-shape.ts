@@ -7,9 +7,12 @@
 // from each account, so one call reaches every network (an upload is
 // single-use, so one call is the only way to cross-post it). A scheduled
 // post is one moment (publishAt), and mode is required: a publish tool
-// never guesses "now" or "later". The image comes from a local file on
-// the stdio server and as base64 on the remote one (intent-content.ts
-// offers one field per server).
+// never guesses "now" or "later". An image goes to the image networks
+// (IMAGE_PROVIDERS). On the stdio server it comes from a local file
+// (imagePath); the remote server never takes image bytes in a tool
+// argument: the image goes through create_upload → PUT → complete_upload
+// and is published as mediaKind upload (intent-content.ts offers
+// imagePath on stdio only).
 // Kept in a new module so intent-content.ts stays under the file-size
 // ratchet.
 import { z } from 'zod';
@@ -21,7 +24,7 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 export const PublishExistingShape = {
   mediaKind: z
     .enum(['task', 'upload', 'image'])
-    .describe('task = a finished generated video (taskId); upload = a completed signed upload (uploadId); image = a JPEG or PNG (instagram only for now).'),
+    .describe('task = a finished generated video (taskId); upload = a completed signed upload, video or image (uploadId); image = a local JPEG/PNG (imagePath).'),
   taskId: z
     .string()
     .min(1, 'taskId is required')
@@ -37,11 +40,6 @@ export const PublishExistingShape = {
     .min(1, 'imagePath is required')
     .optional()
     .describe(`mediaKind image: local path of the JPEG or PNG (max ${MAX_SEGMENT_MEDIA_MB} MB).`),
-  imageData: z
-    .string()
-    .min(1, 'imageData is required')
-    .optional()
-    .describe(`mediaKind image: the JPEG or PNG bytes as base64 (max ${MAX_SEGMENT_MEDIA_MB} MB).`),
   accounts: z
     .array(z.string().min(1))
     .min(1, 'Provide at least one account')
@@ -88,13 +86,12 @@ export const PublishExistingShape = {
 };
 
 const { imagePath: _imagePath, ...remoteFields } = PublishExistingShape;
-const { imageData: _imageData, ...localFields } = PublishExistingShape;
 
-/** The remote server reads no local files: base64 bytes instead of a path. */
+/** The remote server reads no local files: an image arrives as a signed upload (mediaKind upload). */
 export const PublishExistingRemoteShape = remoteFields;
 
-/** The stdio server reads the image from disk: an agent cannot type megabytes of base64. */
-export const PublishExistingLocalShape = localFields;
+/** The stdio server reads the image from disk. */
+export const PublishExistingLocalShape = PublishExistingShape;
 
 export const PublishExistingSchema = z.object(PublishExistingShape).strict().superRefine((value, ctx) => {
   // One media reference per kind: the server 400s a missing one, so fail
@@ -105,8 +102,12 @@ export const PublishExistingSchema = z.object(PublishExistingShape).strict().sup
   if (value.mediaKind === 'upload' && value.uploadId === undefined) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['uploadId'], message: 'uploadId is required when mediaKind is upload.' });
   }
-  if (value.mediaKind === 'image' && (value.imagePath === undefined) === (value.imageData === undefined)) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['imagePath'], message: 'mediaKind image needs the image: imagePath on a local server, imageData (base64) on a remote one.' });
+  if (value.mediaKind === 'image' && value.imagePath === undefined) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['imagePath'],
+      message: 'mediaKind image needs imagePath (a local JPEG or PNG). On a remote server, upload the image with create_upload → PUT → complete_upload and publish it as mediaKind upload.',
+    });
   }
   if (value.mode === 'scheduled' && value.publishAt === undefined) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['publishAt'], message: 'publishAt is required when mode is scheduled.' });

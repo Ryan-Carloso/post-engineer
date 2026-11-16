@@ -23,7 +23,8 @@ import { useFanvueAccountsQuery } from '@/lib/fanvue-accounts';
 import { useI18n } from '@/lib/i18n/provider';
 import { SpinnerIcon } from '@/lib/ui';
 import { InlineFieldError, SectionDivider } from './persona-section-parts';
-import type { SocialProvider } from '@/lib/providers/registry';
+import { SOCIAL_PROVIDERS, type SocialProvider } from '@/lib/providers/registry';
+import { PROVIDER_LABELS } from '@/lib/account-options';
 import { emptyPersonaDefaultAccounts, totalBoundAccounts } from '@/lib/persona-publishing-accounts';
 import { usePersonaStore } from '@/lib/store';
 
@@ -45,18 +46,10 @@ import { usePersonaStore } from '@/lib/store';
 type PublishingProvider = SocialProvider;
 type PublishingBinding = Record<PublishingProvider, string[]>;
 
-const PROVIDERS: readonly { provider: PublishingProvider; label: string }[] = [
-  { provider: 'youtube', label: 'YouTube' },
-  { provider: 'instagram', label: 'Instagram' },
-  { provider: 'bluesky', label: 'Bluesky' },
-  { provider: 'linkedin', label: 'LinkedIn' },
-  { provider: 'threads', label: 'Threads' },
-  { provider: 'facebook', label: 'Facebook' },
-  { provider: 'pinterest', label: 'Pinterest' },
-  { provider: '3speak', label: '3Speak' },
-  { provider: 'rumble', label: 'Rumble' },
-  { provider: 'fanvue', label: 'Fanvue' },
-];
+const PROVIDERS: readonly { provider: PublishingProvider; label: string }[] = SOCIAL_PROVIDERS.map((provider) => ({
+  provider,
+  label: PROVIDER_LABELS[provider],
+}));
 
 const EMPTY_BINDING: PublishingBinding = emptyPersonaDefaultAccounts();
 

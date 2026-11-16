@@ -10,14 +10,17 @@ import {
   validateVideoForBluesky,
 } from '@/lib/bluesky';
 import { reportAccountUnauthorized } from '@/lib/upload/account-unauthorized';
+import { sniffPublishMedia } from '@/lib/upload/publish-media-file';
 
 //---------------
-// handleBlueskyUpload — publishes the video to the user's Bluesky account.
-// AT Protocol flow: service auth → upload to video.bsky.app → poll the
-// job up to the BlobRef → post with a video embed. The app password comes
-// encrypted blob in social_accounts (encrypted_tokens).
+// handleBlueskyUpload — publishes the video or image to the user's Bluesky
+// account. AT Protocol flow for a video: service auth → upload to
+// video.bsky.app → poll the job up to the BlobRef → post with a video
+// embed. An image (JPEG/PNG, told apart by its bytes) is one
+// com.atproto.repo.uploadBlob call → post with an images embed. The app
+// password comes encrypted blob in social_accounts (encrypted_tokens).
 // FormData (multipart, coming from the engine or the UI):
-//   provider=bluesky, video (File mp4), caption, did (repeated),
+//   provider=bluesky, video (File: mp4, or a JPEG/PNG image), caption, did (repeated),
 //   userId (internal engine call only).
 //---------------
 
@@ -25,6 +28,8 @@ const VIDEO_SERVICE = 'https://video.bsky.app';
 const BSKY_SERVICE = 'https://bsky.social';
 const POLL_INTERVAL_MS = 1_000;
 const POLL_MAX_MS = 60_000;
+/** Bluesky's per-image blob cap (app.bsky.embed.images: maxSize 1000000). */
+export const BLUESKY_IMAGE_MAX_BYTES = 1_000_000;
 
 interface BlueskyAccountResult {
   accountId: string;
@@ -47,11 +52,13 @@ interface BlueskyPostRecord {
   text: string;
   createdAt: string;
   langs: string[];
-  embed: {
-    $type: 'app.bsky.embed.video';
-    video: unknown;
-    aspectRatio?: { width: number; height: number };
-  };
+  embed:
+    | {
+      $type: 'app.bsky.embed.video';
+      video: unknown;
+      aspectRatio?: { width: number; height: number };
+    }
+    | { $type: 'app.bsky.embed.images'; images: { alt: string; image: unknown }[] };
 }
 
 export async function handleBlueskyUpload(
@@ -69,11 +76,19 @@ export async function handleBlueskyUpload(
     return { success: false, results: [accountFailure('', 'Caption is required', 'publish_rejected')] };
   }
   if (!(rawFile instanceof File)) {
-    return { success: false, results: [accountFailure('', 'Video file is required', 'publish_rejected')] };
+    return { success: false, results: [accountFailure('', 'A video or image file is required', 'publish_rejected')] };
   }
 
   const buffer = Buffer.from(await rawFile.arrayBuffer());
-  const validation = validateVideoForBluesky({
+  const sniffed = sniffPublishMedia(buffer, rawFile.type);
+  const image = sniffed !== null && sniffed.kind === 'image' ? sniffed : null;
+  if (image !== null && image.buffer.length > BLUESKY_IMAGE_MAX_BYTES) {
+    return {
+      success: false,
+      results: [accountFailure('', 'Image exceeds the Bluesky 1 MB limit', 'publish_rejected')],
+    };
+  }
+  const validation = image !== null ? { ok: true as const } : validateVideoForBluesky({
     sizeBytes: buffer.length,
     // duration cannot be inferred from the buffer without decoding; the engine
     // validates it before calling. Here we only enforce the static limits.
@@ -100,13 +115,14 @@ export async function handleBlueskyUpload(
         continue;
       }
 
-      const postId = await publishVideoToBluesky({
+      const postId = await publishToBluesky({
         appPassword,
         handle,
         did,
         caption,
         buffer,
-        mimeType: rawFile.type || 'video/mp4',
+        mimeType: image !== null ? image.contentType : rawFile.type || 'video/mp4',
+        kind: image !== null ? 'image' : 'video',
       });
 
       await touchSocialAccount(supabase, ownerUserId, 'bluesky', did);
@@ -201,38 +217,68 @@ async function uploadVideoBlob(
 }
 
 //---------------
-// publishVideoToBluesky — orchestrates session → upload → post
+// uploadImageBlob — one com.atproto.repo.uploadBlob call; the blob ref is
+// what the images embed carries.
 //---------------
-async function publishVideoToBluesky(args: {
+async function uploadImageBlob(accessJwt: string, buffer: Buffer, mimeType: string): Promise<unknown> {
+  const response = await fetch(`${BSKY_SERVICE}/xrpc/com.atproto.repo.uploadBlob`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessJwt}`,
+      'Content-Type': mimeType,
+      'Content-Length': String(buffer.length),
+    },
+    body: new Uint8Array(buffer),
+  });
+  if (!response.ok) {
+    throw new Error(`Bluesky image upload failed (${response.status})`);
+  }
+  const body = (await response.json().catch(() => ({}))) as { blob?: unknown };
+  if (body.blob === undefined || body.blob === null) {
+    throw new Error('Bluesky image upload returned no blob');
+  }
+  return body.blob;
+}
+
+//---------------
+// publishToBluesky — orchestrates session → upload → post
+//---------------
+async function publishToBluesky(args: {
   appPassword: string;
   handle: string;
   did: string;
   caption: string;
   buffer: Buffer;
   mimeType: string;
+  kind: 'video' | 'image';
 }): Promise<string> {
   const session = await loginToBlueskySession(args.handle, args.appPassword);
   if (session.emailConfirmed === false) {
     throw new BlueskyError('email_not_verified', 'Bluesky email is not verified.');
   }
-  const blob = await uploadVideoBlob({
-    accessJwt: session.accessJwt,
-    pdsHost: session.pdsHost,
-    did: session.did,
-    buffer: args.buffer,
-    mimeType: args.mimeType,
-    filename: 'video.mp4',
-  });
+  const embed: BlueskyPostRecord['embed'] = args.kind === 'image'
+    ? {
+      $type: 'app.bsky.embed.images',
+      images: [{ alt: '', image: await uploadImageBlob(session.accessJwt, args.buffer, args.mimeType) }],
+    }
+    : {
+      $type: 'app.bsky.embed.video',
+      video: await uploadVideoBlob({
+        accessJwt: session.accessJwt,
+        pdsHost: session.pdsHost,
+        did: session.did,
+        buffer: args.buffer,
+        mimeType: args.mimeType,
+        filename: 'video.mp4',
+      }),
+    };
 
   const record: BlueskyPostRecord = {
     $type: 'app.bsky.feed.post',
     text: args.caption.slice(0, Math.min(args.caption.length, countBlueskyGraphemes(args.caption) + 1)),
     createdAt: new Date().toISOString(),
     langs: ['pt'],
-    embed: {
-      $type: 'app.bsky.embed.video',
-      video: blob,
-    },
+    embed,
   };
 
   const postUrl = `${BSKY_SERVICE}/xrpc/com.atproto.repo.createRecord`;

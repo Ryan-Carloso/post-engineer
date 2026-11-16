@@ -8,7 +8,7 @@ import {
   exchangeThreadsCodeForToken,
   fetchThreadsProfile,
   getThreadsInsights,
-  publishThreadsVideo,
+  publishThreadsMedia,
 } from '@/lib/threads';
 import { ThreadsError } from '@/lib/errors';
 import { findRepoRoot } from '@/test/repo-root';
@@ -21,7 +21,7 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 const noSleep = vi.fn(async () => undefined);
-const input = { accessToken: 'tok-secret', userId: '42', videoUrl: 'https://s.example/v.mp4', text: 'hello', sleep: noSleep };
+const input = { accessToken: 'tok-secret', userId: '42', media: { kind: 'video' as const, url: 'https://s.example/v.mp4' }, text: 'hello', sleep: noSleep };
 
 beforeEach(() => {
   mockFetch.mockReset();
@@ -79,7 +79,7 @@ describe('fetchThreadsProfile', () => {
   });
 });
 
-describe('publishThreadsVideo', () => {
+describe('publishThreadsMedia', () => {
   it('waits for FINISHED before publishing and returns the permalink', async () => {
     mockFetch
       .mockResolvedValueOnce(jsonResponse({ id: 'c1' }))
@@ -87,26 +87,40 @@ describe('publishThreadsVideo', () => {
       .mockResolvedValueOnce(jsonResponse({ status: 'FINISHED' }))
       .mockResolvedValueOnce(jsonResponse({ id: 'p1' }))
       .mockResolvedValueOnce(jsonResponse({ permalink: 'https://www.threads.net/@a/post/x' }));
-    await expect(publishThreadsVideo(input)).resolves.toEqual({ postId: 'p1', permalink: 'https://www.threads.net/@a/post/x' });
+    await expect(publishThreadsMedia(input)).resolves.toEqual({ postId: 'p1', permalink: 'https://www.threads.net/@a/post/x' });
     expect(noSleep).toHaveBeenCalledTimes(1);
     expect(String(mockFetch.mock.calls[3][0])).toContain('/42/threads_publish');
     const containerBody = new URLSearchParams(String((mockFetch.mock.calls[0][1] as RequestInit).body));
     expect(containerBody.get('media_type')).toBe('VIDEO');
-    expect(containerBody.get('video_url')).toBe(input.videoUrl);
+    expect(containerBody.get('video_url')).toBe(input.media.url);
+  });
+
+  it('creates an IMAGE container with image_url for an image, and no video_url', async () => {
+    mockFetch
+      .mockResolvedValueOnce(jsonResponse({ id: 'c1' }))
+      .mockResolvedValueOnce(jsonResponse({ status: 'FINISHED' }))
+      .mockResolvedValueOnce(jsonResponse({ id: 'p1' }))
+      .mockResolvedValueOnce(jsonResponse({ permalink: 'https://www.threads.net/@a/post/y' }));
+    const image = { ...input, media: { kind: 'image' as const, url: 'https://s.example/i.jpg' } };
+    await expect(publishThreadsMedia(image)).resolves.toEqual({ postId: 'p1', permalink: 'https://www.threads.net/@a/post/y' });
+    const containerBody = new URLSearchParams(String((mockFetch.mock.calls[0][1] as RequestInit).body));
+    expect(containerBody.get('media_type')).toBe('IMAGE');
+    expect(containerBody.get('image_url')).toBe('https://s.example/i.jpg');
+    expect(containerBody.has('video_url')).toBe(false);
   });
 
   it('never publishes a container that errored, and surfaces Meta\'s reason', async () => {
     mockFetch
       .mockResolvedValueOnce(jsonResponse({ id: 'c1' }))
       .mockResolvedValueOnce(jsonResponse({ status: 'ERROR', error_message: 'bad codec' }));
-    await expect(publishThreadsVideo(input)).rejects.toThrow('THREADS_CONTAINER_FAILED: bad codec');
+    await expect(publishThreadsMedia(input)).rejects.toThrow('THREADS_CONTAINER_FAILED: bad codec');
     expect(mockFetch).toHaveBeenCalledTimes(2);
   });
 
   it('gives up after the poll budget without publishing', async () => {
     mockFetch.mockImplementation(async (url: string) =>
       jsonResponse(String(url).endsWith('/threads') ? { id: 'c1' } : { status: 'IN_PROGRESS' }));
-    await expect(publishThreadsVideo(input)).rejects.toThrow('THREADS_CONTAINER_TIMEOUT');
+    await expect(publishThreadsMedia(input)).rejects.toThrow('THREADS_CONTAINER_TIMEOUT');
     expect(mockFetch.mock.calls.some(([url]) => String(url).includes('threads_publish'))).toBe(false);
   });
 
@@ -117,13 +131,13 @@ describe('publishThreadsVideo', () => {
       .mockResolvedValueOnce(jsonResponse({ status: 'FINISHED' }))
       .mockResolvedValueOnce(jsonResponse({ id: 'p1' }))
       .mockResolvedValueOnce(jsonResponse({}, 500));
-    await expect(publishThreadsVideo({ ...input, onPermalinkError })).resolves.toEqual({ postId: 'p1', permalink: null });
+    await expect(publishThreadsMedia({ ...input, onPermalinkError })).resolves.toEqual({ postId: 'p1', permalink: null });
     expect(onPermalinkError).toHaveBeenCalledTimes(1);
   });
 
   it('does not put the access token in a raised message', async () => {
     mockFetch.mockResolvedValueOnce(jsonResponse({}, 500));
-    const error = await publishThreadsVideo(input).catch((caught: Error) => caught);
+    const error = await publishThreadsMedia(input).catch((caught: Error) => caught);
     expect(String(error)).not.toContain('tok-secret');
   });
 
@@ -140,7 +154,7 @@ describe('publishThreadsVideo', () => {
         400,
       ),
     );
-    const error = await publishThreadsVideo(input).catch((caught: unknown) => caught);
+    const error = await publishThreadsMedia(input).catch((caught: unknown) => caught);
     expect(error).toBeInstanceOf(ThreadsError);
     expect((error as ThreadsError).statusCode).toBe(400);
     expect((error as ThreadsError).providerCode).toBe(190);
