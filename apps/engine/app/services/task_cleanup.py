@@ -1,6 +1,7 @@
 """Task-intermediate cleanup, extracted from task.py (size ratchet)."""
 
 import os
+import shutil
 from collections.abc import Callable
 from os import path
 from typing import Sequence
@@ -49,6 +50,28 @@ def _first_http_url(paths: object) -> str | None:
         if isinstance(item, str) and item.startswith(("http://", "https://")):
             return item
     return None
+
+
+def remove_task_directory(task_id: str) -> None:
+    """Remove a deleted task's directory; log loudly, never raise, on OSError.
+
+    The caller deletes the state row first (so a running worker aborts),
+    so the delete is already committed when this runs: raising would fail
+    a committed delete, and a retry would 404, stranding the directory
+    with no API recourse.
+    """
+    task_directory = utils.task_dir(task_id)
+    if not path.isdir(task_directory):
+        return
+    try:
+        shutil.rmtree(task_directory)
+    except OSError as exc:
+        # str(exc) carries the full path; log only the directory basename
+        # and the typed errno so no machine-local path reaches the log.
+        logger.error(
+            f"failed to remove task directory {path.basename(task_directory)} "
+            f"for deleted task {task_id}: {type(exc).__name__} (errno {exc.errno})"
+        )
 
 
 def cleanup_task_intermediates(task_id: str, preserved_paths: Sequence[str]) -> None:

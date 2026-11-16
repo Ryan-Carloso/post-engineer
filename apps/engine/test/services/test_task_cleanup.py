@@ -11,6 +11,7 @@ from app.services.task_cleanup import (
     _first_http_url,
     abort_if_cancelled,
     cleanup_task_intermediates,
+    remove_task_directory,
 )
 from app.services.task_cancellation import request_cancel
 from app.utils import utils
@@ -100,6 +101,47 @@ def test_abort_if_cancelled_runs_on_abort_hook_only_when_cancelled(tmp_path, mon
     request_cancel("cancel-hook-1")
     assert abort_if_cancelled("cancel-hook-1", "audio", calls.append) is True
     assert calls == ["cancel-hook-1"]
+
+
+def test_remove_task_directory_removes_the_directory(tmp_path, monkeypatch):
+    monkeypatch.setenv("MPT_STORAGE_DIR", str(tmp_path))
+    task_directory = Path(utils.task_dir("remove-dir-1"))
+    (task_directory / "audio.mp3").write_text("audio", encoding="utf-8")
+
+    remove_task_directory("remove-dir-1")
+
+    assert not task_directory.exists()
+
+
+def test_remove_task_directory_missing_dir_is_noop(tmp_path, monkeypatch):
+    monkeypatch.setenv("MPT_STORAGE_DIR", str(tmp_path))
+    remove_task_directory("remove-dir-missing")
+
+
+def test_remove_task_directory_logs_error_and_does_not_raise(tmp_path, monkeypatch):
+    import shutil
+
+    from loguru import logger
+
+    monkeypatch.setenv("MPT_STORAGE_DIR", str(tmp_path))
+    task_directory = Path(utils.task_dir("remove-dir-fails"))
+    (task_directory / "audio.mp3").write_text("audio", encoding="utf-8")
+
+    def _rmtree(path, *args, **kwargs):
+        raise OSError(13, f"Permission denied: '{path}'")
+
+    monkeypatch.setattr(shutil, "rmtree", _rmtree)
+    lines: list[str] = []
+    sink = logger.add(lambda message: lines.append(str(message)), level="ERROR")
+    try:
+        remove_task_directory("remove-dir-fails")
+    finally:
+        logger.remove(sink)
+
+    assert task_directory.exists()
+    errors = [line for line in lines if "ERROR" in line]
+    assert any("remove-dir-fails" in line for line in errors)
+    assert not any(str(tmp_path) in line for line in errors)
 
 
 def test_first_http_url_returns_first_url_or_none():
