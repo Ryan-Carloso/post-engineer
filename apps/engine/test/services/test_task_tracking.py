@@ -563,9 +563,18 @@ class BatchRequestedTests(unittest.TestCase):
             patch("app.controllers.v1.video.task_manager") as manager,
             patch.object(gen_module.tm, "track_generation_requested") as requested,
         ):
+            # Pin the order, not just the calls: the funnel entry must be
+            # recorded before the worker starts, or PostHog timestamps
+            # video_generation_started first and drops the conversion.
+            order: list[str] = []
+            requested.side_effect = lambda *a, **k: order.append("requested")
+            manager.try_reserve_running.return_value.start.side_effect = (
+                lambda *a, **k: order.append("start")
+            )
             self.assertIsNotNone(generator._generate_slot(self._slot()))
+        self.assertEqual(order, ["requested", "start"])
         # Acceptance is a running reservation, not add_task. on_accepted
-        # still fires after the task row and before the worker.
+        # fires after the task row and before the worker.
         manager.try_reserve_running.assert_called_once_with()
         manager.add_task.assert_not_called()
         reservation = manager.try_reserve_running.return_value
