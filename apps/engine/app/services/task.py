@@ -1193,25 +1193,10 @@ _PERSONA_IMAGE_MAX_BYTES = 20 * 1024 * 1024  # 20 MB cap for the avatar/photo
 # The 60s max duration is a temporary product limit ("for now").
 PERSONA_VOICE_MAX_BYTES = 20 * 1024 * 1024  # 20 MB — fits 1 min of uncompressed audio
 PERSONA_VOICE_MAX_SECONDS = 60
-_PERSONA_VOICE_MAX_REDIRECTS = 5
-_REDIRECT_STATUSES = {301, 302, 303, 307, 308}
 
 
 class PersonaVoiceError(ValueError):
     """Friendly reason (user-facing) why the persona voice URL was rejected."""
-
-
-def _assert_public_url(url: str) -> None:
-    """Ensure the URL points to a public address (anti-SSRF).
-
-    Shared helper: blocks non-http(s) schemes, literal private IPs,
-    hostnames resolving to private IPs, and hosts that don't resolve
-    (closed failure). Raises PersonaVoiceError.
-    """
-    try:
-        ssrf.assert_public_url(url, what="Audio URL")
-    except ssrf.UnsafeUrlError as exc:
-        raise PersonaVoiceError(str(exc)) from exc
 
 
 def _probe_persona_voice_duration(audio_path: str) -> float | None:
@@ -1267,12 +1252,11 @@ def _download_persona_voice(task_id: str, voice_audio_url: str) -> str:
 
     Only accepts a real audio file (audio stream detected by ffprobe),
     at most PERSONA_VOICE_MAX_SECONDS seconds and
-    PERSONA_VOICE_MAX_BYTES bytes, served from a public address (anti-SSRF).
-    Any violation raises PersonaVoiceError and cleans up the partial file.
+    PERSONA_VOICE_MAX_BYTES bytes. The bytes come from
+    :func:`app.utils.ssrf.download_public_file`, which pins each hop to
+    the addresses it just validated. Any violation raises PersonaVoiceError
+    and cleans up the partial file.
     """
-    import requests as http_client
-    from urllib.parse import urljoin
-
     audio_file = path.join(utils.task_dir(task_id), "persona_voice")
 
     def _cleanup_partial() -> None:
@@ -1290,46 +1274,18 @@ def _download_persona_voice(task_id: str, voice_audio_url: str) -> str:
         return PersonaVoiceError(reason)
 
     try:
-        # Redirects followed manually to validate each destination (anti-SSRF).
-        current_url = voice_audio_url
-        for hop in range(_PERSONA_VOICE_MAX_REDIRECTS + 1):
-            _assert_public_url(current_url)
-            # codeql[py/full-ssrf]: guarded, see _assert_public_url per hop
-            response = http_client.get(
-                current_url, timeout=60, stream=True, allow_redirects=False
-            )
-            location = response.headers.get("location")
-            if response.status_code in _REDIRECT_STATUSES and location:
-                response.close()
-                if hop == _PERSONA_VOICE_MAX_REDIRECTS:
-                    raise _reject("audio URL redirected too many times")
-                current_url = urljoin(current_url, location)
-                continue
-            break
-        else:
-            raise _reject("audio URL redirected too many times")
-
-        response.raise_for_status()
-        content_type = (
-            (response.headers.get("content-type") or "").split(";")[0].strip().lower()
+        ssrf.download_public_file(
+            voice_audio_url,
+            audio_file,
+            what="Audio URL",
+            max_bytes=PERSONA_VOICE_MAX_BYTES,
+            allowed_content_types=("audio/",),
+            timeout=60,
         )
-        if not content_type.startswith("audio/"):
-            raise _reject(
-                f"not an audio file (content-type: {content_type or 'unknown'})"
-            )
-        downloaded = 0
-        with open(audio_file, "wb") as f:
-            for chunk in response.iter_content(chunk_size=8192):
-                if not chunk:
-                    continue
-                downloaded += len(chunk)
-                if downloaded > PERSONA_VOICE_MAX_BYTES:
-                    raise _reject(
-                        f"exceeds the {PERSONA_VOICE_MAX_BYTES // 1024 // 1024} MB size limit"
-                    )
-                f.write(chunk)
     except PersonaVoiceError:
         raise
+    except ssrf.UnsafeUrlError as exc:
+        raise _reject(str(exc)) from exc
     except Exception as exc:
         raise _reject(f"could not be downloaded ({exc}") from exc
 

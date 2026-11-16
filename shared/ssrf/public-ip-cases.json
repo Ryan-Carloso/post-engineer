@@ -1,5 +1,5 @@
 {
-  "description": "SSRF address cases shared by apps/web/lib/ssrf/public-ip.ts and the verbatim MCP copy apps/mcp/src/public-ip.ts. blocked must be rejected and allowed must be accepted. The lists follow CPython ipaddress is_global (apps/engine/app/utils/ssrf.py) except where this CPython still reports an address global and the web/MCP rule does not: multicast (blockedBeyondPython), 192.88.99.0/24, 64:ff9b::/96 when the embedded IPv4 is not public, 100:0:0:1::/64, and 5f00::/16. 64:ff9b::8.8.8.8 and 192.0.0.9/10 stay allowed. The engine mirror of those extra blocks is a sibling change. The blocked/allowed lists include every literal representative asserted in apps/engine/test/utils/test_ssrf.py.",
+  "description": "SSRF address cases shared by apps/web/lib/ssrf/public-ip.ts, the verbatim MCP copy apps/mcp/src/public-ip.ts, and the engine mirror apps/engine/app/utils/ssrf.py. blocked must be rejected and allowed must be accepted. The lists follow CPython ipaddress is_global (apps/engine/app/utils/ssrf.py) except where this CPython still reports an address global and the web/MCP rule does not: multicast (blockedBeyondPython), 192.88.99.0/24, 64:ff9b::/96 when the embedded IPv4 is not public, 100:0:0:1::/64, and 5f00::/16. 64:ff9b::8.8.8.8 and 192.0.0.9/10 stay allowed. The blocked/allowed lists include every literal representative asserted in apps/engine/test/utils/test_ssrf.py.",
   "blocked": [
     "0.0.0.0",
     "0.255.255.255",
@@ -42,7 +42,15 @@
     "3fff::1",
     "fc00::1",
     "fd00::1",
-    "fe80::1"
+    "fe80::1",
+    "64:ff9b::a00:1",
+    "64:ff9b::c058:6301",
+    "64:ff9b::",
+    "64:ff9b::ffff:ffff",
+    "100:0:0:1::",
+    "100:0:0:1:ffff:ffff:ffff:ffff",
+    "5f00::",
+    "5f00:ffff:ffff:ffff:ffff:ffff:ffff:ffff"
   ],
   "allowed": [
     "1.1.1.1",
@@ -55,6 +63,7 @@
     "192.0.0.9",
     "192.0.0.10",
     "192.0.1.1",
+    "192.88.98.255",
     "192.88.100.0",
     "198.17.255.255",
     "198.20.0.0",
@@ -73,7 +82,13 @@
     "100:0:0:2::1",
     "5eff::1",
     "[2606:4700:4700::1111]",
-    "3fff:1000::1"
+    "3fff:1000::1",
+    "100:0:0:2::",
+    "5f01::",
+    "5eff:ffff:ffff:ffff:ffff:ffff:ffff:ffff"
   ],
-  "blockedBeyondPython": ["224.0.0.1", "ff02::1"]
+  "blockedBeyondPython": [
+    "224.0.0.1",
+    "ff02::1"
+  ]
 }

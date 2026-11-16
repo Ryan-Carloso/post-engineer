@@ -23,6 +23,7 @@ from loguru import logger
 
 from app.services.analytics import scrub_secret_values
 from app.services.notify import redact_known_url
+from app.utils import ssrf
 
 WEBHOOK_TIMEOUT_SECONDS = 10
 
@@ -44,10 +45,21 @@ def _already_notified(task_id: str) -> bool:
 
 def _post(webhook_url: str, payload: dict, task_id: str) -> None:
     try:
-        response = requests.post(
+        response = ssrf.post_public_url(
             webhook_url, json=payload, timeout=WEBHOOK_TIMEOUT_SECONDS
         )
-        response.raise_for_status()
+        try:
+            # requests does not treat a 3xx as an error, and the pinned POST
+            # does not follow it. A redirect is a failed delivery: following
+            # it would dial whatever the Location host resolves to.
+            status = response.status_code
+            if isinstance(status, int) and not isinstance(status, bool) and 300 <= status < 400:
+                raise requests.HTTPError(
+                    f"{status} redirect not followed for url: {webhook_url}"
+                )
+            response.raise_for_status()
+        finally:
+            response.close()
     except Exception as exc:  # noqa: BLE001 — delivery is best-effort by design
         # Never raise: a dead webhook must not fail or stall the task.
         # ERROR goes to PostHog via the asgi sink so the user can see why
