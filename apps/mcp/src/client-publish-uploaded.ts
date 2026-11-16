@@ -20,6 +20,7 @@ import { buildDirectPublishForm, requireDirectPublishFields } from './direct-pub
 import { narrowDirectPublishAccountResult } from './direct-publish-narrowing.js';
 import { getErrorMessage, VideoTooLargeError } from './errors.js';
 import { DIRECT_PUBLISH_TIMEOUT_MS, MAX_UPLOAD_VIDEO_BYTES } from './limits.js';
+import { isSocialProvider, SOCIAL_PROVIDERS } from './contracts/providers.js';
 
 //---------------
 // Signed-upload publish client calls (issue #561). Standalone functions
@@ -85,9 +86,8 @@ export async function publishUploadedVideo(
 ): Promise<DirectPublishResult> {
   // Mirrors the server-side 400s before any fetch: provider-specific
   // required fields fail fast here, exactly like publishVideoDirect.
-  const validProviders = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'pinterest', 'fanvue', '3speak', 'rumble'];
-  if (!validProviders.includes(input.provider)) {
-    throw new Error(`provider must be one of: ${validProviders.join(', ')}.`);
+  if (!isSocialProvider(input.provider)) {
+    throw new Error(`provider must be one of: ${SOCIAL_PROVIDERS.join(', ')}.`);
   }
   if (input.uploadId.trim().length === 0) {
     throw new Error('uploadId is required.');
@@ -196,9 +196,8 @@ export async function publishVideoDirect(
   // Direct publish of a user-provided video — no generation, no schedule.
   // Mirrors the server-side 400s: provider-specific required fields and
   // per-provider account-id field names fail fast here, before any fetch.
-  const validProviders = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'pinterest', 'fanvue', '3speak', 'rumble'];
-  if (!validProviders.includes(input.provider)) {
-    throw new Error(`provider must be one of: ${validProviders.join(', ')}.`);
+  if (!isSocialProvider(input.provider)) {
+    throw new Error(`provider must be one of: ${SOCIAL_PROVIDERS.join(', ')}.`);
   }
   if (input.accountIds.length === 0) {
     throw new Error('At least one account ID is required.');

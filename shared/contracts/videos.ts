@@ -24,7 +24,8 @@ import { z } from 'zod';
 import { defineEndpoint } from './endpoint.js';
 import { EXPERIMENT_TARGET_PAIRS_MAX, EXPERIMENT_VARIANT_ID_PATTERN } from './experiments.js';
 import { UploadContentResponseSchema } from './media.js';
-import { SOCIAL_PROVIDERS, UUID } from './metrics.js';
+import { UUID } from './metrics.js';
+import { SOCIAL_PROVIDERS } from './providers.js';
 
 /** The one video mode (issue #542): it decides render path + price. */
 export const VIDEO_TYPES = ['full_lipsync', 'hook_lipsync', 'faceless'] as const;
@@ -75,19 +76,8 @@ export const BATCH_KEY_PATTERN = /^[A-Za-z0-9_-]+$/;
 export const DRAFT_KINDS = ['post', 'script'] as const;
 export type DraftKind = (typeof DRAFT_KINDS)[number];
 
-/** The networks score-draft can publish-check. Same 10 as SOCIAL_PROVIDERS. */
-export const PUBLISH_NETWORKS = [
-  'linkedin',
-  'youtube',
-  'instagram',
-  'bluesky',
-  'threads',
-  'facebook',
-  'pinterest',
-  '3speak',
-  'rumble',
-  'fanvue',
-] as const;
+/** The networks score-draft can publish-check: every network. */
+export const PUBLISH_NETWORKS = SOCIAL_PROVIDERS;
 export type PublishNetwork = (typeof PUBLISH_NETWORKS)[number];
 
 /** Drafts over this input cap are a 400, never silently truncated. */

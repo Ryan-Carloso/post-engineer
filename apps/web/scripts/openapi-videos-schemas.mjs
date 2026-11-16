@@ -3,7 +3,7 @@
 // the file-size cap and may not grow. The helpers come in as arguments
 // so this module has no import cycle with openapi-schemas.mjs.
 
-const PROVIDERS = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'pinterest', '3speak', 'rumble', 'fanvue'];
+import { SOCIAL_PROVIDERS as PROVIDERS } from '../../../shared/contracts/providers.ts';
 
 export function videoOperationSchemas({ success, object, str }) {
   return {

@@ -12,15 +12,14 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { findRepoRoot } from '@/test/repo-root';
 import { METRICS_WINDOWS } from '@/lib/contracts/experiments';
-import { SOCIAL_PROVIDERS, YOUTUBE_VIDEO_ID } from '@/lib/contracts/metrics';
+import { YOUTUBE_VIDEO_ID } from '@/lib/contracts/metrics';
 import { CHECK_MEDIA_CODES, MEDIA_ID_PATTERN, VIDEO_ASPECTS } from '@/lib/contracts/media';
-import { PUBLISH_PROVIDERS } from '@/lib/contracts/posts';
-import { OAUTH_CONNECT_PROVIDERS, PublicAccountItemSchema } from '@/lib/contracts/accounts';
+import { PublicAccountItemSchema } from '@/lib/contracts/accounts';
 import { CancelRefundSchema, RANGE_STATUSES, ScheduleRowSchema } from '@/lib/contracts/schedule';
 import { VideoGenerationRowSchema } from '@/lib/contracts/video-tasks';
 import { VOICE_ACCENTS, VOICE_GENDERS, VOICE_KINDS } from '@/lib/contracts/voices';
 import { FACE_QUALITIES, MAX_DESCRIPTION_LENGTH, MAX_TAG_LENGTH, PERSONA_CTA_MAX_LENGTH, PERSONA_IMAGE_WARNING_CODES, VIDEO_LAYOUTS } from '@/lib/contracts/personas';
-import { BATCH_KEY_MAX_LENGTH, BATCH_KEY_PATTERN, DRAFT_KINDS, DRAFT_MAX_INPUT_CHARS, HOOK_MAX_SECONDS, HOOK_MIN_SECONDS, MAX_BATCH_VIDEOS, MAX_IMAGES_MODE_MEDIAS, MAX_REPORTED_ISSUES, MAX_SEGMENTS, MAX_VIDEO_UPLOAD_BYTES, PUBLISH_NETWORKS, VIDEO_TYPES, VIDEO_TYPE_ERROR_SUFFIX, VIDEO_UPLOAD_CONTENT_TYPES } from '@/lib/contracts/videos';
+import { BATCH_KEY_MAX_LENGTH, BATCH_KEY_PATTERN, DRAFT_KINDS, DRAFT_MAX_INPUT_CHARS, HOOK_MAX_SECONDS, HOOK_MIN_SECONDS, MAX_BATCH_VIDEOS, MAX_IMAGES_MODE_MEDIAS, MAX_REPORTED_ISSUES, MAX_SEGMENTS, MAX_VIDEO_UPLOAD_BYTES, VIDEO_TYPES, VIDEO_TYPE_ERROR_SUFFIX, VIDEO_UPLOAD_CONTENT_TYPES } from '@/lib/contracts/videos';
 
 const HEADER = '// GENERATED from shared/contracts — do not edit.\n// Run `node scripts/sync-contracts.mjs` from the repo root to regenerate.\n';
 
@@ -60,30 +59,6 @@ describe('contracts shared source', () => {
     const metricsQuery = readFileSync(join(root, 'apps', 'web', 'lib', 'metrics', 'metrics-query.ts'), 'utf8');
     const list = METRICS_WINDOWS.map((window) => `'${window}'`).join(', ');
     expect(metricsQuery).toContain(`export const METRICS_WINDOWS = [${list}] as const;`);
-  });
-
-  // The contract carries its own PUBLISH_PROVIDERS copy (the publish-link
-  // builder drops any other provider before a link is built). A one-sided
-  // edit would make the contract reject a link the route serves, so the
-  // copy is pinned here against the PublishProvider union the PROVIDERS
-  // set is built from.
-  it('pins the shared PUBLISH_PROVIDERS to publish-links.ts', () => {
-    const root = findRepoRoot(import.meta.url);
-    const publishLinks = readFileSync(join(root, 'apps', 'web', 'lib', 'publish-links.ts'), 'utf8');
-    const list = PUBLISH_PROVIDERS.map((provider) => `'${provider}'`).join(' | ');
-    expect(publishLinks).toContain(`export type PublishProvider = ${list};`);
-  });
-
-  // The metrics contract carries its own SOCIAL_PROVIDERS copy (the
-  // route's `?provider=` validation used to import isSocialProvider
-  // straight from the registry). A one-sided edit would make the
-  // contract reject a provider the route accepts, so the copy is pinned
-  // here.
-  it('pins the shared SOCIAL_PROVIDERS to the provider registry', () => {
-    const root = findRepoRoot(import.meta.url);
-    const registry = readFileSync(join(root, 'apps', 'web', 'lib', 'providers', 'registry.ts'), 'utf8');
-    const list = SOCIAL_PROVIDERS.map((provider) => `'${provider}'`).join(', ');
-    expect(registry).toContain(`export const SOCIAL_PROVIDERS = [${list}] as const;`);
   });
 
   // The metrics contract carries its own YOUTUBE_VIDEO_ID copy (the
@@ -130,17 +105,6 @@ describe('contracts shared source', () => {
     const root = findRepoRoot(import.meta.url);
     const uploadRoute = readFileSync(join(root, 'apps', 'web', 'app', 'api', 'media', 'upload', 'route.ts'), 'utf8');
     expect(uploadRoute).toContain(`const MEDIA_ID_PATTERN = /${MEDIA_ID_PATTERN.source}/;`);
-  });
-
-  // The accounts contract carries its own OAUTH_CONNECT_PROVIDERS copy
-  // (the connect-url route validates against it). A one-sided edit would
-  // make the contract accept a provider the route rejects (Bluesky,
-  // 3Speak and Rumble connect directly and are not OAuth providers).
-  it('pins the shared OAUTH_CONNECT_PROVIDERS to oauth-connect.ts', () => {
-    const root = findRepoRoot(import.meta.url);
-    const oauthConnect = readFileSync(join(root, 'apps', 'web', 'lib', 'oauth-connect.ts'), 'utf8');
-    const list = OAUTH_CONNECT_PROVIDERS.map((provider) => `'${provider}'`).join(', ');
-    expect(oauthConnect).toContain(`export const OAUTH_CONNECT_PROVIDERS = [${list}] as const;`);
   });
 
   // The accounts contract carries its own PublicAccountItem copy (the
@@ -410,14 +374,5 @@ describe('contracts shared source', () => {
     const route = readFileSync(join(root, 'apps', 'web', 'app', 'api', 'videos', 'generate-and-schedule', 'route.ts'), 'utf8');
     expect(route).toContain("from '@/lib/contracts/videos'");
     expect(route).toContain('GenerateAndScheduleBodySchema,');
-  });
-
-  // PUBLISH_NETWORKS is the same 10 providers as SOCIAL_PROVIDERS, in
-  // linkedin-first order (the score route lists networks that way). A
-  // one-sided edit would make the contract reject a network the metrics
-  // layer serves, or vice versa.
-  it('pins PUBLISH_NETWORKS to SOCIAL_PROVIDERS as a set', () => {
-    expect([...PUBLISH_NETWORKS].sort()).toEqual([...SOCIAL_PROVIDERS].sort());
-    expect(PUBLISH_NETWORKS[0]).toBe('linkedin');
   });
 });

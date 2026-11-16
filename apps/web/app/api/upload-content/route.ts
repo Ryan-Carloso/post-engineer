@@ -37,7 +37,7 @@ import { startLedgerHeartbeat } from '@/lib/upload/publish-ledger-heartbeat';
 //---------------
 // Unified content upload — POST /api/upload-content
 // FormData:
-//   provider = 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook' | 'pinterest' | 'fanvue' | '3speak' | 'rumble'
+//   provider = one of SOCIAL_PROVIDERS (shared/contracts/providers.ts)
 //   youtube:    video, title, description, tags, privacyStatus, accountIds (repeatable)
 //   instagram:  file xor videoStoragePath, caption, igAccountIds (repeatable)
 //   bluesky:    video, caption, did (repeatable)

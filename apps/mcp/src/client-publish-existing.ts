@@ -2,6 +2,7 @@ import type { PostEngineerClient } from './client.js';
 import type { DirectPublishAccountResult, PublishExistingInput, PublishExistingResult } from './client-types.js';
 import { isRecord, narrowDirectPublishAccountResult } from './direct-publish-narrowing.js';
 import { MAX_SEGMENT_MEDIA_BYTES, MAX_SEGMENT_MEDIA_MB } from './limits.js';
+import { isSocialProvider, SOCIAL_PROVIDERS } from './contracts/providers.js';
 
 //---------------
 // Publish-existing client call (issue #384). Standalone function (not a
@@ -14,7 +15,6 @@ import { MAX_SEGMENT_MEDIA_BYTES, MAX_SEGMENT_MEDIA_MB } from './limits.js';
 //---------------
 
 const PUBLISH_EXISTING_TIMEOUT_MS = 120_000;
-const VALID_PROVIDERS = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'pinterest', 'fanvue', '3speak', 'rumble'];
 
 /** Base64 strictness is a length + round-trip check, never a regex: the alphabet pattern backtracks on multi-megabyte input. */
 function decodedImageBytes(imageData: string): Buffer | null {
@@ -89,8 +89,8 @@ export async function publishExisting(
   // Mirrors the server-side 400s before any fetch: the media reference for
   // the kind, the single-provider shape, and the schedule fields fail fast
   // here, exactly like publishUploadedVideo.
-  if (!VALID_PROVIDERS.includes(input.provider)) {
-    throw new Error(`provider must be one of: ${VALID_PROVIDERS.join(', ')}.`);
+  if (!isSocialProvider(input.provider)) {
+    throw new Error(`provider must be one of: ${SOCIAL_PROVIDERS.join(', ')}.`);
   }
   if (input.accountIds.length === 0) {
     throw new Error('At least one account ID is required.');

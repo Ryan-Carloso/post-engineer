@@ -6,6 +6,7 @@
 import { VIDEO_LAYOUTS } from './limits.js';
 import type { FaceQuality, VideoAspect } from './contracts/personas.js';
 import type { VideoType } from './video-type.js';
+import type { SocialProvider } from './contracts/providers.js';
 
 export type { VideoType } from './video-type.js';
 
@@ -80,7 +81,7 @@ export interface GeneratePersonaVideoInput {
   description: string;
   /** Paired A/B experiment link (issue #476); checked server-side before the charge. */
   experiment?: { experimentId: string; variantId: string; pair: number };
-  providers: ('youtube' | 'instagram' | 'linkedin' | 'bluesky' | 'threads' | 'facebook' | 'pinterest' | 'fanvue' | '3speak' | 'rumble')[];
+  providers: SocialProvider[];
   youtubeAccountIds?: string[];
   instagramAccountIds?: string[];
   linkedinAccountIds?: string[];
@@ -147,7 +148,7 @@ export interface UpdatePersonaInput {
 
 /** Input for publishing a user-provided video directly, without generation. */
 export interface PublishVideoDirectInput {
-  provider: 'youtube' | 'instagram' | 'linkedin' | 'bluesky' | 'threads' | 'facebook' | 'pinterest' | 'fanvue' | '3speak' | 'rumble';
+  provider: SocialProvider;
   /** Local path to the video file (.mp4 or .mov, max 2GB). */
   videoPath: string;
   /** Target accounts (channel IDs / IG user IDs / DIDs / LinkedIn member IDs or org URNs / Threads user IDs / Facebook Page IDs / Pinterest user IDs / Fanvue account IDs / Hive usernames / Rumble Channel IDs). */
@@ -176,7 +177,7 @@ export interface PublishVideoDirectInput {
 
 /** Input for publishing a signed-upload video by id, without generation. */
 export interface PublishUploadedVideoInput {
-  provider: 'youtube' | 'instagram' | 'linkedin' | 'bluesky' | 'threads' | 'facebook' | 'pinterest' | 'fanvue' | '3speak' | 'rumble';
+  provider: SocialProvider;
   /** The uploadId of a completed signed upload (create + complete). Single-use. */
   uploadId: string;
   /** Target accounts (same IDs as PublishVideoDirectInput). */
@@ -223,7 +224,7 @@ export interface PublishExistingInput {
   imageData?: string;
   /** mediaKind image: the real image type; the server verifies the bytes match it. */
   imageContentType?: 'image/jpeg' | 'image/png';
-  provider: 'youtube' | 'instagram' | 'linkedin' | 'bluesky' | 'threads' | 'facebook' | 'pinterest' | 'fanvue' | '3speak' | 'rumble';
+  provider: SocialProvider;
   /** Target accounts (same IDs as PublishVideoDirectInput). */
   accountIds: string[];
   /** Required: the video/image title, at most 100 characters. */
