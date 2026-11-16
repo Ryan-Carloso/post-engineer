@@ -559,20 +559,20 @@ class BatchRequestedTests(unittest.TestCase):
         generator = gen_module.BatchGenerator(
             store=store, task_state=MagicMock(), notify=MagicMock()
         )
-        accepted = {}
-
-        def fake_add_task(func, **kwargs):
-            accepted.update(func=func, kwargs=kwargs)
-            kwargs["on_accepted"]()
-
         with (
             patch("app.controllers.v1.video.task_manager") as manager,
             patch.object(gen_module.tm, "track_generation_requested") as requested,
         ):
-            manager.add_task.side_effect = fake_add_task
             self.assertIsNotNone(generator._generate_slot(self._slot()))
-        task_kwargs = accepted["kwargs"]
-        self.assertIs(accepted["func"], gen_module.tm.start)
+        # Acceptance is a running reservation, not add_task. on_accepted
+        # still fires after the task row and before the worker.
+        manager.try_reserve_running.assert_called_once_with()
+        manager.add_task.assert_not_called()
+        reservation = manager.try_reserve_running.return_value
+        reservation.start.assert_called_once()
+        started = reservation.start.call_args
+        self.assertIs(started.args[0], gen_module.tm.start)
+        task_kwargs = started.kwargs
         requested.assert_called_once_with(
             task_kwargs["task_id"],
             user_id="user-1",

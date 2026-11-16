@@ -69,7 +69,7 @@ class _Store:
         self._slot = slot
         self.updates = []
 
-    def pending_slots(self, now):
+    def pending_slots(self, now, limit):
         return [self._slot]
 
     def update_slot(self, slot_id, **fields):

@@ -8,6 +8,37 @@ class TaskQueueFullError(ValueError):
     pass
 
 
+class RunningReservation:
+    """One running slot already counted in ``current_tasks``.
+
+    The caller writes task state after ``try_reserve_running`` returns,
+    outside the manager lock, then either starts the worker or gives the
+    slot back. ``start`` hands the count to the worker (``task_done``
+    releases it, and a failed spawn releases it inside ``_spawn_reserved``).
+    ``release`` returns the count now and lets a queued direct task start.
+    """
+
+    def __init__(self, manager: "TaskManager") -> None:
+        self._manager = manager
+        self._held = True
+
+    def release(self) -> None:
+        if not self._held:
+            return
+        self._held = False
+        with self._manager.lock:
+            self._manager.current_tasks -= 1
+        self._manager.check_queue()
+
+    def start(self, func: Callable, *args: Any, **kwargs: Any) -> None:
+        if not self._held:
+            raise RuntimeError("running reservation is not held")
+        # The worker owns the count from here. A spawn failure releases
+        # it inside _spawn_reserved; a second release would drop it twice.
+        self._held = False
+        self._manager._spawn_reserved(func, *args, **kwargs)
+
+
 class TaskManager:
     def __init__(self, max_concurrent_tasks: int, max_queued_tasks: int = 100):
         self.max_concurrent_tasks = max_concurrent_tasks
@@ -77,6 +108,23 @@ class TaskManager:
         # The slot is already reserved, so a concurrent add_task queues.
         if start_now:
             self._spawn_reserved(func, *args, **kwargs)
+
+    def try_reserve_running(self) -> RunningReservation | None:
+        """Reserve one running slot, or return None when none is free.
+
+        Does not queue. The lock is released before this returns, so the
+        caller can write task state and then ``RunningReservation.start``
+        or ``release``. Direct ``add_task`` is unchanged and still queues
+        when the running cap is already taken.
+        """
+        with self.lock:
+            if self.current_tasks >= self.max_concurrent_tasks:
+                return None
+            self.current_tasks += 1
+            logger.info(
+                f"reserve running slot, current_tasks: {self.current_tasks}"
+            )
+            return RunningReservation(self)
 
     def _spawn_reserved(self, func: Callable, *args: Any, **kwargs: Any) -> None:
         """Start a worker for a concurrency slot that is already reserved.

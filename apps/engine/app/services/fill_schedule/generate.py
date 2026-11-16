@@ -73,9 +73,9 @@ class BatchGenerator:
     def run(self, now: datetime) -> int:
         """Dispatch generation for pending slots the manager can start now.
 
-        Returns how many slots were admitted (running, or queued when a
-        race filled the last running slot). Slots past that budget stay
-        pending for a later tick: they are not failed and not refunded.
+        Returns how many slots were started. A slot that cannot start on
+        this tick stays pending: it is not queued, not failed, and not
+        refunded. Batch dispatch never fills the task-manager queue.
         """
         # Lazy: app.controllers.v1.video builds the process-wide manager
         # at import, which must not run at fill-schedule import time.
@@ -334,9 +334,9 @@ class BatchGenerator:
                         engine_task_id=task_id,
                     )
                 raise dispatch_exc
-            # Claim only after admission. A queued acceptance is claimed
-            # too: the next tick's pending read must not dispatch it again.
-            # A slot that was not admitted never reaches this write.
+            # Claim only after the worker has started. A slot the manager
+            # could not start never reaches this write, and it has no
+            # task-state row for boot triage to fail or refund.
             self.store.update_slot(
                 slot["id"], status=SLOT_GENERATING, title=title, task_id=task_id
             )
@@ -426,18 +426,17 @@ class BatchGenerator:
         persona_id: str | None = None,
         on_accepted: Any | None = None,
     ) -> None:
-        """Accept one due slot into the shared task manager.
+        """Start one due slot on a free running slot of the shared manager.
 
-        Create the task state first (so the reconciler can observe it),
-        then hand ``tm.start`` to the manager. The manager starts the
-        worker when a running slot is free and queues it otherwise, so
-        batch generation counts toward ``max_concurrent_tasks`` alongside
-        direct jobs. ``SlotDeferred`` means the manager rejected the
-        task: the caller leaves the slot pending.
+        Reserve the running slot first. The task row is written only after
+        that reservation, outside the manager lock. ``SlotDeferred`` means
+        no running slot was free: the caller leaves the slot pending and
+        this method has written no task row. A write that raises releases
+        the reservation before the exception propagates. Batch dispatch
+        does not queue; direct ``add_task`` still does.
 
         The caller claims the slot (pending → generating) only after
-        this returns, including when the manager queued the task. The
-        next tick must not dispatch a queued slot again.
+        this returns. The next tick must not dispatch a started slot again.
 
         The slot/schedule/persona ids are persisted on the task row so the
         PostHog tracking context can attribute every lifecycle event
@@ -450,18 +449,21 @@ class BatchGenerator:
             tracking_ids["schedule_id"] = schedule_id
         if persona_id:
             tracking_ids["persona_id"] = persona_id
-        self.task_state.update_task(
-            task_id,
-            user_id=user_id,
-            flow="batch",
-            pipeline="video",
-            # New tasks start at explicit 0/PROCESSING: update_task() only
-            # overwrites state/progress when they are passed, so the initial
-            # values are set here rather than relying on defaults.
-            state=model_const.TASK_STATE_PROCESSING,
-            progress=0,
-            **tracking_ids,
-        )
+
+        def _write_task_row() -> None:
+            self.task_state.update_task(
+                task_id,
+                user_id=user_id,
+                flow="batch",
+                pipeline="video",
+                # New tasks start at explicit 0/PROCESSING: update_task() only
+                # overwrites state/progress when they are passed, so the initial
+                # values are set here rather than relying on defaults.
+                state=model_const.TASK_STATE_PROCESSING,
+                progress=0,
+                **tracking_ids,
+            )
+
         # Same lazy import as run(): the controller module builds the
         # process-wide manager at import time.
         from app.controllers.v1.video import task_manager
@@ -472,4 +474,5 @@ class BatchGenerator:
             task_id=task_id,
             params=request,
             on_accepted=on_accepted,
+            before_start=_write_task_row,
         )

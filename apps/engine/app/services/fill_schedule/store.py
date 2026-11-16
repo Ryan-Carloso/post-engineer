@@ -135,13 +135,12 @@ class ScheduleStore:
             return None
         return response.json()
 
-    def pending_slots(self, now_utc: datetime, *, limit: int | None = None) -> list[dict[str, Any]]:
-        """Soonest pending rows in the horizon, at most one page.
+    def pending_slots(self, now_utc: datetime, *, limit: int) -> list[dict[str, Any]]:
+        """Soonest pending rows in the horizon, at most ``limit`` rows.
 
-        ``limit`` is that page. ``None`` uses the task manager's free
-        running slots. A full manager sends ``limit=0`` and reads nothing.
+        The caller chooses the page. The tick passes the free running slots.
+        This store does not read the task manager.
         """
-        # Lazy: pending_page_limit must not touch the task manager at import.
         from app.services.fill_schedule.batch_admission import pending_page_limit
 
         horizon = (now_utc + timedelta(hours=self.generation_horizon_hours())).isoformat()

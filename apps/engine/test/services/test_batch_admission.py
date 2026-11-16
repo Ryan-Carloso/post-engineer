@@ -16,7 +16,6 @@ import unittest
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
-from app.controllers.manager.base_manager import TaskQueueFullError
 from app.controllers.manager.memory_manager import InMemoryTaskManager
 from app.controllers.v1 import video as video_controller
 from app.services.fill_schedule.batch_admission import (
@@ -27,9 +26,11 @@ from app.services.fill_schedule.batch_admission import (
     submit_batch_start,
 )
 from app.services.fill_schedule.constants import SLOT_GENERATING, SLOT_PENDING
+from app.models import const
 from app.services.fill_schedule.generate import BatchGenerator, new_task_id
 from app.services.fill_schedule.store import ScheduleStore
-from app.services.orphan_requeue import triage_requeue
+from app.services.orphan_requeue import triage_orphan, triage_requeue
+from app.services.state import MemoryState
 
 UTC = timezone.utc
 NOW = datetime(2026, 9, 6, 12, 0, tzinfo=UTC)
@@ -111,7 +112,7 @@ class _MemorySlots:
         self.slots = {slot["id"]: slot for slot in slots}
         self.refund_batch_calls: list[tuple] = []
 
-    def pending_slots(self, now):
+    def pending_slots(self, now, limit):
         rows = [slot for slot in self.slots.values() if slot.get("status") == SLOT_PENDING]
         return sorted(rows, key=lambda slot: slot["slot_at"])
 
@@ -131,6 +132,41 @@ class _MemorySlots:
 
 def _statuses(store: _MemorySlots) -> dict[str, str]:
     return {slot_id: slot["status"] for slot_id, slot in store.slots.items()}
+
+
+def _boot_triage(state: MemoryState, store: _MemorySlots) -> list[str]:
+    """Fail the non-terminal rows boot reconcile would fail.
+
+    Mirrors ``reconcile_orphaned_tasks``: ``triage_orphan`` claims a row
+    or the caller marks it failed. A claimed row is not a refund.
+    """
+    failed: list[str] = []
+    tasks, _total = state.get_all_tasks(1, 100)
+    for task in tasks:
+        if task.get("state") in (const.TASK_STATE_FAILED, const.TASK_STATE_COMPLETE):
+            continue
+        task_id = str(task["task_id"])
+        data = {
+            key: value
+            for key, value in task.items()
+            if key not in ("state", "progress")
+        }
+        if triage_orphan(state, task_id, data, store):
+            continue
+        failed.append(task_id)
+        state.update_task(task_id, state=const.TASK_STATE_FAILED)
+        slot_id = data.get("slot_id")
+        slot = store.get_slot(slot_id) if isinstance(slot_id, str) else None
+        if isinstance(slot, dict):
+            store.refund_batch_tokens(
+                "user-1",
+                "batch:sched-batch-1",
+                f"batch:sched-batch-1:slot:{slot_id}",
+                2,
+                "engine restarted while the task was still running",
+                engine_task_id=task_id,
+            )
+    return failed
 
 
 class BatchDispatchCapTests(unittest.TestCase):
@@ -305,8 +341,8 @@ class BatchDispatchCapTests(unittest.TestCase):
             def queue_size(self):
                 return 0
 
-            def add_task(self, func, *args, **kwargs):
-                raise TaskQueueFullError("task queue is full, please try again later")
+            def try_reserve_running(self):
+                return None
 
         store = _MemorySlots([_slot(0), _slot(1)])
         generator = self._generator(store, _RejectManager())
@@ -316,44 +352,88 @@ class BatchDispatchCapTests(unittest.TestCase):
         self.assertEqual(store.refund_batch_calls, [])
         self.assertEqual(self._wait_started(1, timeout=0.2), 0)
 
-    def test_queued_acceptance_is_claimed_and_not_redispatched(self):
-        # The running cap is already taken, but this tick still submits
-        # one slot (the budget says so) and the manager queues it. The
-        # slot leaves pending. A later tick that walks the pending rows
-        # again must not submit that same task id a second time.
+    def test_full_running_cap_defers_instead_of_filling_the_queue(self):
+        # The page was sized as if one running slot were free, then a
+        # direct job took it. Batch dispatch does not fill the queue:
+        # every slot stays pending, and no task row is written.
         manager = InMemoryTaskManager(max_concurrent_tasks=1, max_queued_tasks=5)
         direct = threading.Event()
         manager.add_task(lambda: direct.wait(5))
         self.addCleanup(direct.set)
         store = _MemorySlots([_slot(index) for index in range(3)])
+        state = MemoryState()
         generator = self._generator(store, manager)
+        generator.task_state = state
         with patch(
             "app.services.fill_schedule.generate.free_running_slots", return_value=1
         ):
             admitted = self._run(generator)
-        self.assertEqual(admitted, 1)
-        self.assertEqual(manager.queue_size(), 1)
-        self.assertEqual(_statuses(store)["slot-0"], SLOT_GENERATING)
-        self.assertEqual(self._wait_started(1, timeout=0.2), 0)
-
-        with patch(
-            "app.services.fill_schedule.generate.free_running_slots", return_value=5
-        ):
-            again = self._run(generator)
-        self.assertEqual(again, 2)
-        queued_ids = [item["kwargs"]["task_id"] for item in list(manager.queue.queue)]
-        slot0_task = new_task_id(store.slots["slot-0"])
-        self.assertEqual(queued_ids.count(slot0_task), 1)
-        self.assertEqual(len(queued_ids), 3)
-        self.assertEqual(_statuses(store)["slot-0"], SLOT_GENERATING)
-        self.assertNotIn(SLOT_PENDING, _statuses(store).values())
+        self.assertEqual(admitted, 0)
+        self.assertEqual(manager.queue_size(), 0)
+        self.assertEqual(manager.current_tasks, 1)
+        self.assertTrue(all(status == SLOT_PENDING for status in _statuses(store).values()))
         self.assertEqual(store.refund_batch_calls, [])
+        for slot in store.slots.values():
+            self.assertIsNone(state.get_task(new_task_id(slot)))
+
+    def test_rejected_admission_leaves_no_task_row_for_boot_triage(self):
+        # The tick still tries one slot, then the manager cannot start it
+        # (running cap taken, queue unable to absorb). The slot stays
+        # pending and the memory task state has no row for its task id.
+        # Boot triage over that state therefore fails and refunds nothing.
+        manager = InMemoryTaskManager(max_concurrent_tasks=1, max_queued_tasks=0)
+        manager.current_tasks = 1
+        store = _MemorySlots([_slot(0)])
+        state = MemoryState()
+        generator = self._generator(store, manager)
+        generator.task_state = state
+        with patch(
+            "app.services.fill_schedule.generate.free_running_slots", return_value=1
+        ):
+            admitted = self._run(generator)
+
+        self.assertEqual(admitted, 0)
+        self.assertEqual(_statuses(store)["slot-0"], SLOT_PENDING)
+        self.assertEqual(store.refund_batch_calls, [])
+        task_id = new_task_id(store.slots["slot-0"])
+        self.assertIsNone(state.get_task(task_id))
+
+        failed = _boot_triage(state, store)
+        self.assertEqual(failed, [])
+        self.assertEqual(store.refund_batch_calls, [])
+        self.assertEqual(_statuses(store)["slot-0"], SLOT_PENDING)
+        self.assertIsNone(state.get_task(task_id))
+
+    def test_task_row_write_failure_does_not_hold_a_running_slot(self):
+        # Admission reserves the running slot before the task row is
+        # written. If that write raises, the reservation is released and
+        # a later direct job can still take the only running slot.
+        manager = InMemoryTaskManager(max_concurrent_tasks=1, max_queued_tasks=5)
+        seen: list[int] = []
+
+        class _State:
+            def update_task(self, *args, **kwargs):
+                seen.append(manager.current_tasks)
+                raise RuntimeError("supabase down")
+
+        store = _MemorySlots([_slot(0)])
+        generator = self._generator(store, manager)
+        generator.task_state = _State()
+        admitted = self._run(generator)
+        self.assertEqual(admitted, 0)
+        self.assertEqual(seen, [1])
+        self.assertEqual(manager.current_tasks, 0)
+        self.assertEqual(manager.queue_size(), 0)
+        release = threading.Event()
+        self.addCleanup(release.set)
+        manager.add_task(lambda: release.wait(2))
+        self.assertEqual(manager.current_tasks, 1)
 
 
 class PendingSlotReadTests(unittest.TestCase):
-    """pending_slots pages in slot_at order, bounded by free capacity."""
+    """pending_slots pages in slot_at order, at the caller's limit."""
 
-    def test_pending_slots_sends_a_limit_sized_to_free_capacity(self):
+    def test_pending_slots_sends_the_caller_limit(self):
         env = {
             "SUPABASE_URL": "https://supabase.example",
             "SUPABASE_SERVICE_ROLE_KEY": "service-key",
@@ -367,16 +447,14 @@ class PendingSlotReadTests(unittest.TestCase):
         response.raise_for_status.return_value = None
         store._requests.request.return_value = response
 
-        manager = InMemoryTaskManager(max_concurrent_tasks=2, max_queued_tasks=10)
-        with patch("app.controllers.v1.video.task_manager", manager):
-            store.pending_slots(NOW)
+        store.pending_slots(NOW, limit=2)
 
         params = store._requests.request.call_args.kwargs["params"]
         self.assertEqual(params["order"], "slot_at.asc")
         self.assertEqual(params["status"], f"eq.{SLOT_PENDING}")
         self.assertEqual(params["limit"], "2")
 
-    def test_pending_slots_sends_limit_zero_when_the_manager_is_full(self):
+    def test_pending_slots_sends_limit_zero(self):
         env = {
             "SUPABASE_URL": "https://supabase.example",
             "SUPABASE_SERVICE_ROLE_KEY": "service-key",
@@ -389,10 +467,7 @@ class PendingSlotReadTests(unittest.TestCase):
         response.json.return_value = []
         response.raise_for_status.return_value = None
         store._requests.request.return_value = response
-        manager = InMemoryTaskManager(max_concurrent_tasks=1, max_queued_tasks=10)
-        manager.current_tasks = 1
-        with patch("app.controllers.v1.video.task_manager", manager):
-            store.pending_slots(NOW)
+        store.pending_slots(NOW, limit=0)
         params = store._requests.request.call_args.kwargs["params"]
         self.assertEqual(params["limit"], "0")
         self.assertEqual(params["order"], "slot_at.asc")
@@ -425,7 +500,7 @@ class BatchAdmissionHelperTests(unittest.TestCase):
         called: list[object] = []
 
         class _Store:
-            def pending_slots(self, now):
+            def pending_slots(self, now, limit):
                 called.append(now)
                 return [{"id": "a"}]
 
@@ -434,7 +509,7 @@ class BatchAdmissionHelperTests(unittest.TestCase):
 
     def test_read_pending_slots_slices_a_store_that_ignores_limit(self):
         class _Store:
-            def pending_slots(self, now):
+            def pending_slots(self, now, limit):
                 return [{"id": "a"}, {"id": "b"}, {"id": "c"}, "junk"]
 
         self.assertEqual(
@@ -453,21 +528,69 @@ class BatchAdmissionHelperTests(unittest.TestCase):
         self.assertEqual(read_pending_slots(_Store(), NOW, 1), [{"id": "a"}])
         self.assertEqual(seen["limit"], 1)
 
-    def test_submit_queues_an_accepted_slot_instead_of_deferring(self):
+    def test_submit_starts_immediately_when_a_running_slot_is_free(self):
+        manager = InMemoryTaskManager(max_concurrent_tasks=1, max_queued_tasks=2)
+        release = threading.Event()
+        self.addCleanup(release.set)
+        started: list[str] = []
+
+        def work(**kwargs):
+            started.append(kwargs["task_id"])
+            release.wait(2)
+
+        submit_batch_start(
+            manager,
+            work,
+            task_id="batch-1",
+            params=object(),
+        )
+        self.assertEqual(manager.current_tasks, 1)
+        self.assertEqual(manager.queue_size(), 0)
+        deadline = time.monotonic() + 1
+        while time.monotonic() < deadline and not started:
+            time.sleep(0.01)
+        self.assertEqual(started, ["batch-1"])
+
+    def test_row_write_runs_outside_the_manager_lock(self):
+        # The manager lock is not reentrant. The task-row write must be
+        # able to take it, which it can only do when submit is not holding
+        # it across the write.
+        manager = InMemoryTaskManager(max_concurrent_tasks=1, max_queued_tasks=1)
+        release = threading.Event()
+        self.addCleanup(release.set)
+        held: list[bool] = []
+
+        def before_start():
+            got = manager.lock.acquire(timeout=0.2)
+            held.append(got)
+            if got:
+                manager.lock.release()
+
+        submit_batch_start(
+            manager,
+            lambda **kwargs: release.wait(2),
+            task_id="batch-1",
+            params=object(),
+            before_start=before_start,
+        )
+        self.assertEqual(held, [True])
+        self.assertEqual(manager.current_tasks, 1)
+
+    def test_submit_defers_when_the_running_cap_is_full(self):
+        # Queue room is not admission. A batch slot only starts now.
         manager = InMemoryTaskManager(max_concurrent_tasks=1, max_queued_tasks=2)
         release = threading.Event()
         manager.add_task(lambda: release.wait(2))
         self.addCleanup(release.set)
-        started: list[str] = []
-        submit_batch_start(
-            manager,
-            lambda **kwargs: started.append(kwargs["task_id"]),
-            task_id="batch-1",
-            params=object(),
-        )
-        self.assertEqual(manager.queue_size(), 1)
+        with self.assertRaises(SlotDeferred):
+            submit_batch_start(
+                manager,
+                lambda **kwargs: None,
+                task_id="batch-1",
+                params=object(),
+            )
         self.assertEqual(manager.current_tasks, 1)
-        self.assertEqual(started, [])
+        self.assertEqual(manager.queue_size(), 0)
 
     def test_submit_raises_slot_deferred_when_the_queue_is_full(self):
         manager = InMemoryTaskManager(max_concurrent_tasks=0, max_queued_tasks=0)
