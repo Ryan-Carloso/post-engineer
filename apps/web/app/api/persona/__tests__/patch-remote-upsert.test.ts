@@ -43,7 +43,8 @@ describe('PATCH remote ingest onto an existing photo object', () => {
   function patchClient(existing: Record<string, unknown>, updateError: { message: string } | null = null) {
     const uploaded: Array<{ path: string; upsert?: boolean }> = [];
     const removeMock = vi.fn(async () => ({ error: null }));
-    const client = {
+    const patchEqCalls: Array<[string, string]> = [];
+    const sessionClient = {
       storage: {
         from: vi.fn(() => ({
           upload: vi.fn(async (path: string, _body: unknown, options: { upsert?: boolean }) => {
@@ -61,16 +62,27 @@ describe('PATCH remote ingest onto an existing photo object', () => {
             })),
           })),
         })),
-        // update(...).eq('id').eq('user_id'): the service-client write
-        // re-scopes to the owner.
+      })),
+    };
+    const serviceClient = {
+      from: vi.fn(() => ({
         update: vi.fn(() => ({
-          eq: vi.fn(() => ({
-            eq: vi.fn(async () => ({ error: updateError })),
-          })),
+          eq: vi.fn((col: string, val: string) => {
+            patchEqCalls.push([col, val]);
+            return {
+              eq: vi.fn((col2: string, val2: string) => {
+                patchEqCalls.push([col2, val2]);
+                return Promise.resolve({ error: updateError });
+              }),
+            };
+          }),
         })),
       })),
     };
-    return { client, uploaded, removeMock };
+    // Backwards-compat: the session client also carries storage for
+    // rollback paths that still use the session client.
+    const client = { ...sessionClient, from: sessionClient.from };
+    return { client, serviceClient, uploaded, removeMock, patchEqCalls };
   }
 
   function stubPng() {
@@ -87,9 +99,9 @@ describe('PATCH remote ingest onto an existing photo object', () => {
       voice_id: 'voz-antiga',
       voice_audio_path: null,
     };
-    const { client, uploaded, removeMock } = patchClient(existing);
+    const { client, serviceClient, uploaded, removeMock, patchEqCalls } = patchClient(existing);
     vi.mocked(createSupabaseServerClient).mockResolvedValue(client as never);
-    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(serviceClient as never);
     vi.mocked(requireSupabaseSession).mockResolvedValue({
       auth: { userId: USER_ID, accessToken: 'cookie-token' },
       error: null,
@@ -107,6 +119,10 @@ describe('PATCH remote ingest onto an existing photo object', () => {
     expect(uploaded[0]?.path).toMatch(new RegExp(`^${USER_ID}/persona-uuid-1/ingest/.+\\.png$`));
     expect(uploaded[0]?.upsert).toBe(false);
     expect(removeMock).toHaveBeenCalledWith([`${USER_ID}/persona-uuid-1/photo.png`]);
+    expect(serviceClient.from).toHaveBeenCalledWith('personas');
+    expect(patchEqCalls).toContainEqual(['id', 'persona-uuid-1']);
+    expect(patchEqCalls).toContainEqual(['user_id', USER_ID]);
+    expect(createSupabaseServiceClient).toHaveBeenCalled();
   });
 
   it('keeps the previous photo when the row update fails after upload', async () => {
@@ -120,9 +136,9 @@ describe('PATCH remote ingest onto an existing photo object', () => {
       voice_id: 'voz-antiga',
       voice_audio_path: null,
     };
-    const { client, uploaded, removeMock } = patchClient(existing, { message: 'constraint' });
+    const { client, serviceClient, uploaded, removeMock } = patchClient(existing, { message: 'constraint' });
     vi.mocked(createSupabaseServerClient).mockResolvedValue(client as never);
-    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(serviceClient as never);
     vi.mocked(requireSupabaseSession).mockResolvedValue({
       auth: { userId: USER_ID, accessToken: 'cookie-token' },
       error: null,
@@ -152,9 +168,9 @@ describe('PATCH remote ingest onto an existing photo object', () => {
       voice_id: 'voz-antiga',
       voice_audio_path: null,
     };
-    const { client, removeMock } = patchClient(existing);
+    const { client, serviceClient, removeMock } = patchClient(existing);
     vi.mocked(createSupabaseServerClient).mockResolvedValue(client as never);
-    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(serviceClient as never);
     vi.mocked(requireSupabaseSession).mockResolvedValue({
       auth: { userId: USER_ID, accessToken: 'cookie-token' },
       error: null,

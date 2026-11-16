@@ -90,6 +90,7 @@ describe('POST/PATCH personaWrite coverage', () => {
 
   it('rolls back the ingested photo when library add fails after insert', async () => {
     const removed: string[][] = [];
+    const rollbackEq: Array<[string, string]> = [];
     const chain = (result: unknown) => {
       const node: Record<string, ReturnType<typeof vi.fn>> = {
         select: vi.fn(),
@@ -122,7 +123,19 @@ describe('POST/PATCH personaWrite coverage', () => {
                 single: vi.fn(async () => ({ data: { id: 'persona-uuid-1' }, error: null })),
               })),
             })),
-            delete: vi.fn(() => chain({ error: null })),
+            delete: vi.fn(() => ({
+              eq: vi.fn((col: string, val: string) => {
+                rollbackEq.push([col, val]);
+                return {
+                  eq: vi.fn((col2: string, val2: string) => {
+                    rollbackEq.push([col2, val2]);
+                    return Promise.resolve({ error: null });
+                  }),
+                  then: (resolve: (v: unknown) => void) => resolve({ error: null }),
+                };
+              }),
+              then: (resolve: (v: unknown) => void) => resolve({ error: null }),
+            })),
             // Issue #572: the binding save checks persona ownership.
             select: vi.fn(() => ({
               eq: vi.fn(() => ({
@@ -181,6 +194,10 @@ describe('POST/PATCH personaWrite coverage', () => {
     const res = await POST(new Request('http://localhost/api/persona', { method: 'POST', body: form }));
     expect(res.status).toBe(500);
     expect(removed.some((paths) => paths.some((path) => path.endsWith('/photo.png')))).toBe(true);
+    expect(client.from).toHaveBeenCalledWith('personas');
+    expect(rollbackEq).toContainEqual(['id', 'persona-uuid-1']);
+    expect(rollbackEq).toContainEqual(['user_id', USER_ID]);
+    expect(createSupabaseServiceClient).toHaveBeenCalled();
   });
 
   it('removes photoPathToRollback when the persona insert fails', async () => {
