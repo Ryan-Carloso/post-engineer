@@ -305,7 +305,7 @@ export type ResolveOAuthCallbackAuthResult =
 // a connect-url state is only consumed by the user who created it, so a
 // browser signed in as someone else (or not signed in) can never attach its
 // provider tokens to the state owner's account. viaMcp only tells which flow
-// ran (for logs); persistence always goes through the session client.
+// ran (for logs); persistence writes with the service client for that user.
 // The store is only built (getStore) if the fallback is needed.
 // expectedProvider binds the callback to the provider: an Instagram state
 // is never accepted in the YouTube callback (and vice-versa), in both flows.
