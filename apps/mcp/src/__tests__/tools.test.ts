@@ -32,6 +32,14 @@ import {
   UpdatePersonaImageShape,
   RemovePersonaImageSchema,
 } from '../tools.js';
+import type { ResponseOf } from '../contracts/endpoint.js';
+import {
+  cancelSchedule as cancelScheduleContract,
+  getSlot as getSlotContract,
+  listPosts as listPostsContract,
+  listSchedules as listSchedulesContract,
+} from '../contracts/schedule.js';
+
 import { handleListPosts } from '../tools-posts.js';
 import { listPostsInRange } from '../client-posts.js';
 import {
@@ -46,6 +54,111 @@ function textOf(response: McpToolResponse): string {
   if (!block || block.type !== 'text') throw new Error('expected a text content block');
   return block.text;
 }
+
+// Full production-shaped schedule fixtures: the client methods now parse
+// 200s against the shared schedule contract, so a partial mock is a
+// malformed response at runtime and a type error under tsconfig.spec.
+const FULL_SCHEDULE_ROW: ResponseOf<typeof listSchedulesContract>['schedules'][number] = {
+  id: 'sched-1',
+  persona_id: 'persona-123',
+  providers: ['youtube'],
+  youtube_account_ids: ['yt-1'],
+  instagram_account_ids: [],
+  linkedin_account_ids: [],
+  bluesky_account_ids: [],
+  threads_account_ids: [],
+  facebook_account_ids: [],
+  pinterest_account_ids: [],
+  pinterest_board_id: null,
+  threespeak_account_ids: [],
+  rumble_account_ids: [],
+  days_of_week: [1, 3, 5],
+  start_hour: 9,
+  end_hour: 17,
+  posts_per_day: 2,
+  timezone: 'Europe/Lisbon',
+  active: true,
+  created_at: '2026-10-01T00:00:00Z',
+  publish_mode: 'scheduled',
+};
+
+const FULL_STATUS_SLOT: ResponseOf<typeof listPostsContract>['upcoming'][number] = {
+  id: 'up-1',
+  slot_at: '2026-09-24T10:00:00Z',
+  status: 'awaiting',
+  title: 'Next',
+  error: null,
+  published_at: null,
+  schedule_id: 's1',
+  task_id: null,
+  progress: 0,
+  stage: null,
+  queuePosition: null,
+  queueTotal: null,
+  retryable: null,
+  postUrl: null,
+};
+
+const FULL_CANCEL_RESULT: ResponseOf<typeof cancelScheduleContract> = {
+  success: true,
+  cancelledSlotIds: ['slot-1'],
+  refunds: [{ slotId: 'slot-1', refunded: true, alreadyRefunded: false, reason: 'not_generated' }],
+  batchDiscountWithheld: 0,
+};
+
+const FULL_SLOT_DETAIL: ResponseOf<typeof getSlotContract> = {
+  success: true,
+  slot: {
+    id: 'slot-1',
+    scheduleId: 'sched-1',
+    slotAt: '2026-10-10T20:00:00Z',
+    status: 'awaiting',
+    title: 'Launch day',
+    taskId: 'task-1',
+    progress: 0,
+    stage: null,
+    error: null,
+    publishedAt: null,
+    postUrl: 'https://post-engineer.com/posts/slot-1',
+    publishLinks: [],
+    progressHistory: [],
+    scriptAngle: null,
+    retryable: null,
+    queuePosition: null,
+    queueTotal: null,
+    userNotices: [],
+    providerFailures: [],
+  },
+  schedule: {
+    id: 'sched-1',
+    personaId: 'persona-1',
+    providers: ['youtube'],
+    youtubeAccountIds: ['yt-1'],
+    instagramAccountIds: [],
+    linkedinAccountIds: [],
+    blueskyAccountIds: [],
+    threadsAccountIds: [],
+    facebookAccountIds: [],
+    pinterestAccountIds: [],
+    pinterestBoardId: null,
+    threespeakAccountIds: [],
+    rumbleAccountIds: [],
+    fanvueAccountIds: [],
+    timezone: 'Europe/Lisbon',
+    publishMode: 'scheduled',
+  },
+  persona: { id: 'persona-1', name: 'Ava' },
+  generation: {
+    faceless: false,
+    language: 'en-US',
+    voiceId: null,
+    videoAspect: '9:16',
+    videoLayout: null,
+    niche: null,
+    paragraphNumber: null,
+    faceQuality: null,
+  },
+};
 
 describe('MCP Tool Handlers', () => {
   const mockClient = {
@@ -73,6 +186,7 @@ describe('MCP Tool Handlers', () => {
     vi.mocked(mockClient.createPersona).mockResolvedValue({
       success: true,
       personaId: 'persona-123',
+      imageIds: [],
     });
 
     const response = await handleCreatePersona(
@@ -98,6 +212,7 @@ describe('MCP Tool Handlers', () => {
     vi.mocked(mockClient.createPersona).mockResolvedValue({
       success: true,
       personaId: 'persona-123',
+      imageIds: [],
     });
 
     const response = await handleCreatePersona(
@@ -144,7 +259,26 @@ describe('MCP Tool Handlers', () => {
   it('handleListVoices returns the voice catalog', async () => {
     vi.mocked(mockClient.listVoices).mockClear();
     vi.mocked(mockClient.listVoices).mockResolvedValue({
-      voices: [{ id: 'calm', kind: 'standard' }, { id: 'energetic', kind: 'standard' }],
+      voices: [
+        {
+          id: 'calm',
+          label: 'Calm',
+          provider: 'kokoro',
+          gender: 'female',
+          accent: 'us',
+          kind: 'standard',
+          description: 'A calm voice.',
+        },
+        {
+          id: 'energetic',
+          label: 'Energetic',
+          provider: 'phonon',
+          gender: 'male',
+          accent: 'gb',
+          kind: 'character',
+          description: null,
+        },
+      ],
     });
 
     const response = await handleListVoices(mockClient);
@@ -223,7 +357,8 @@ describe('MCP Tool Handlers', () => {
   it('handleListSocialAccounts returns connected accounts', async () => {
     vi.mocked(mockClient.listSocialAccounts).mockResolvedValue({
       authenticated: true,
-      accounts: [{ provider: 'youtube', channelId: 'chan-1' }],
+      accounts: [{ provider: 'youtube', recordId: 'rec-1', channelId: 'chan-1', channelName: 'Chan', connectedAt: 1700000000000, lastUsed: 1700000000000 }],
+      message: 'Accounts retrieved from Supabase',
     });
 
     const response = await handleListSocialAccounts(mockClient);
@@ -235,7 +370,7 @@ describe('MCP Tool Handlers', () => {
   it('handleGetPersonaPublishingAccounts returns the persona defaults', async () => {
     vi.mocked(mockClient.request).mockResolvedValue({
       success: true,
-      defaults: { youtube: [], instagram: [], bluesky: ['did:plc:a'], linkedin: [] },
+      defaults: { youtube: [], instagram: [], bluesky: ['did:plc:a'], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [] },
     });
 
     const response = await handleGetPersonaPublishingAccounts(mockClient, { personaId: 'p-1' });
@@ -251,7 +386,7 @@ describe('MCP Tool Handlers', () => {
   it('handleSetPersonaPublishingAccounts replaces the defaults', async () => {
     vi.mocked(mockClient.request).mockResolvedValue({
       success: true,
-      defaults: { youtube: ['UC-1'], instagram: [], bluesky: [], linkedin: [] },
+      defaults: { youtube: ['UC-1'], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [] },
     });
 
     const response = await handleSetPersonaPublishingAccounts(mockClient, {
@@ -274,7 +409,7 @@ describe('MCP Tool Handlers', () => {
   it('handleListSchedules returns schedules', async () => {
     vi.mocked(mockClient.listSchedules).mockResolvedValue({
       success: true,
-      schedules: [{ id: 'sched-1', persona_id: 'persona-123' }],
+      schedules: [FULL_SCHEDULE_ROW],
     });
 
     const response = await handleListSchedules(mockClient);
@@ -294,8 +429,20 @@ describe('MCP Tool Handlers', () => {
   it('handleListPosts returns upcoming and past posts', async () => {
     vi.mocked(mockClient.listPosts).mockResolvedValue({
       success: true,
-      upcoming: [{ id: 'up-1', status: 'pending' }],
-      recent: [{ id: 're-1', status: 'published' }],
+      upcoming: [{ ...FULL_STATUS_SLOT, id: 'up-1' }],
+      recent: [
+        {
+          ...FULL_STATUS_SLOT,
+          id: 're-1',
+          slot_at: '2026-09-20T10:00:00Z',
+          status: 'published',
+          title: 'Old',
+          progress: 100,
+          stage: 'done',
+          postUrl: 'https://post-engineer.com/posts/re-1',
+        },
+      ],
+      hasAnyPost: true,
     });
 
     const response = await handleListPosts(mockClient, { limit: 20 });
@@ -327,7 +474,11 @@ describe('MCP Tool Handlers', () => {
   it('handleListPosts in range mode calls the range endpoint and never sends limit', async () => {
     vi.mocked(mockClient.listPosts).mockClear();
     vi.mocked(mockClient.request).mockClear();
-    vi.mocked(mockClient.request).mockResolvedValue({ success: true, slots: [{ id: 's-1' }], truncated: false });
+    vi.mocked(mockClient.request).mockResolvedValue({
+      success: true,
+      slots: [{ ...FULL_STATUS_SLOT, id: 's-1' }],
+      truncated: false,
+    });
 
     const response = await handleListPosts(mockClient, {
       limit: 20,
@@ -359,7 +510,7 @@ describe('MCP Tool Handlers', () => {
   });
 
   it('handleCancelSchedule cancels by id', async () => {
-    vi.mocked(mockClient.cancelSchedule).mockResolvedValue({ success: true });
+    vi.mocked(mockClient.cancelSchedule).mockResolvedValue(FULL_CANCEL_RESULT);
 
     const response = await handleCancelSchedule(mockClient, { scheduleId: 'sched-1' });
 
@@ -667,7 +818,9 @@ describe('schema bounds', () => {
 
   it('handleConnectAccount errors clearly when the response has no auth_url', async () => {
     const client = { getOAuthConnectUrl: vi.fn() } as unknown as PostEngineerClient;
-    vi.mocked(client.getOAuthConnectUrl).mockResolvedValue({ success: true });
+    // The typed client cannot return this; the cast stands in for a
+    // malformed 200 the handler guards against.
+    vi.mocked(client.getOAuthConnectUrl).mockResolvedValue({ success: true } as never);
 
     const response = await handleConnectAccount(client, { provider: 'youtube' });
 
@@ -690,7 +843,7 @@ describe('persona image library tools', () => {
   });
 
   it('personas (action: create) accepts images and imagePrimaryIndex', async () => {
-    vi.mocked(mockClient.createPersona).mockResolvedValue({ success: true, personaId: 'p-1' });
+    vi.mocked(mockClient.createPersona).mockResolvedValue({ success: true, personaId: 'p-1', imageIds: [] });
     const args = CreatePersonaSchema.parse({
       accounts: { youtube: ['acct-1'] },
       name: 'Alex AI',
@@ -775,7 +928,7 @@ describe('persona image library tools', () => {
     // handler re-parses with the full schema, so the required avatarUrl
     // becomes a loud isError — no file is read, no fetch happens.
     vi.clearAllMocks();
-    vi.mocked(mockClient.createPersona).mockResolvedValue({ success: true });
+    vi.mocked(mockClient.createPersona).mockResolvedValue({ success: true, personaId: 'p-1', imageIds: [] });
     // voiceId is valid so the parse reaches the face refine (zod skips
     // superRefine while any field is still invalid).
     const sdkArgs = {
@@ -799,7 +952,7 @@ describe('persona image library tools', () => {
 
   it('personas (action: create) handler fails on a missing voiceId before the client call', async () => {
     vi.clearAllMocks();
-    vi.mocked(mockClient.createPersona).mockResolvedValue({ success: true });
+    vi.mocked(mockClient.createPersona).mockResolvedValue({ success: true, personaId: 'p-1', imageIds: [] });
     const sdkArgs = {
       name: 'X',
       avatarUrl: 'https://example.com/a.png',
@@ -822,7 +975,7 @@ describe('persona image library tools', () => {
   });
 
   it('persona_media (action: list_images) returns the library', async () => {
-    vi.mocked(mockClient.listPersonaImages).mockResolvedValue({ images: [] });
+    vi.mocked(mockClient.listPersonaImages).mockResolvedValue({ success: true, images: [] });
     const response = await handleListPersonaImages(
       mockClient,
       ListPersonaImagesSchema.parse({ personaId: 'p-1' })
@@ -832,7 +985,7 @@ describe('persona image library tools', () => {
   });
 
   it('persona_media (action: add_image) forwards path, tag, description, isPrimary', async () => {
-    vi.mocked(mockClient.addPersonaImage).mockResolvedValue({ success: true, id: 'img-1' });
+    vi.mocked(mockClient.addPersonaImage).mockResolvedValue({ success: true, image: { id: 'img-1', tag: 'gym', description: '', is_primary: false, created_at: '2026-01-01T00:00:00Z' } });
     const response = await handleAddPersonaImage(
       mockClient,
       AddPersonaImageSchema.parse({ personaId: 'p-1', path: '/tmp/a.jpg', tag: 'gym', isPrimary: true })
@@ -854,7 +1007,7 @@ describe('persona image library tools', () => {
   });
 
   it('persona_media (action: update_image) forwards metadata', async () => {
-    vi.mocked(mockClient.updatePersonaImage).mockResolvedValue({ success: true });
+    vi.mocked(mockClient.updatePersonaImage).mockResolvedValue({ success: true, image: { id: 'img-1', tag: 'formal', description: '', is_primary: true, created_at: '2026-01-01T00:00:00Z' } });
     await handleUpdatePersonaImage(
       mockClient,
       UpdatePersonaImageSchema.parse({ id: 'img-1', tag: 'formal', isPrimary: true })
@@ -1025,7 +1178,7 @@ describe('video task progress narrowing', () => {
   });
 
   it('narrowTaskProgress reports explicit nulls when the task payload is missing', async () => {
-    vi.mocked(mockClient.getVideoStatus).mockResolvedValue({ ok: true });
+    vi.mocked(mockClient.getVideoStatus).mockResolvedValue({ ok: true } as never);
 
     const response = await progressResponse(mockClient, 'task-9');
     const text = textOf(response);
@@ -1070,7 +1223,7 @@ describe('handleLibraryCall message contracts', () => {
   });
 
   it('handleCreatePersona prefixes success with "Persona created successfully:"', async () => {
-    vi.mocked(mockClient.createPersona).mockResolvedValue({ personaId: 'p-1' });
+    vi.mocked(mockClient.createPersona).mockResolvedValue({ success: true, personaId: 'p-1', imageIds: [] });
     const response = await handleCreatePersona(
       mockClient,
       CreatePersonaSchema.parse({
@@ -1120,7 +1273,7 @@ describe('narrowTaskProgress type narrowing', () => {
         error: { reason: 'x' },
         postUrl: 42,
       },
-    });
+    } as never);
 
     const response = await progressResponse(mockClient, 't-1');
     const text = textOf(response);
@@ -1133,7 +1286,7 @@ describe('narrowTaskProgress type narrowing', () => {
   });
 
   it('reports all nulls when the payload is not an object', async () => {
-    vi.mocked(mockClient.getVideoStatus).mockResolvedValue('not-an-object');
+    vi.mocked(mockClient.getVideoStatus).mockResolvedValue('not-an-object' as never);
 
     const response = await progressResponse(mockClient, 't-1');
     const text = textOf(response);
@@ -1148,7 +1301,7 @@ describe('narrowTaskProgress type narrowing', () => {
   it('keeps well-typed fields and nulls only the missing ones', async () => {
     vi.mocked(mockClient.getVideoStatus).mockResolvedValue({
       body: { task_id: 't-2', state: 1, progress: 60, postUrl: 'https://post-engineer.com/posts/slot-1' },
-    });
+    } as never);
 
     const response = await progressResponse(mockClient, 't-2');
     const text = textOf(response);
@@ -1192,25 +1345,12 @@ describe('slot tools', () => {
 
   it('handleGetSlot narrows the detail envelope and summarizes', async () => {
     const { handleGetSlot } = await import('../tools.js');
+    // The extra top-level field is not a production shape: the cast keeps
+    // the pin that the presentation drops it instead of echoing it.
     vi.mocked(mockClient.getSlot).mockResolvedValue({
-      success: true,
-      slot: {
-        id: 'slot-1',
-        scheduleId: 'sched-1',
-        slotAt: '2026-10-10T20:00:00Z',
-        status: 'awaiting',
-        title: 'Launch day',
-        taskId: 'task-1',
-        progress: 0,
-        stage: null,
-        error: null,
-        publishedAt: null,
-        postUrl: 'https://post-engineer.com/posts/slot-1',
-      },
-      schedule: { id: 'sched-1', providers: ['youtube'], publishMode: 'scheduled', timezone: 'Europe/Lisbon' },
-      persona: { id: 'persona-1', name: 'Ava' },
+      ...FULL_SLOT_DETAIL,
       extraUnpinnedField: 'rides through unparsed',
-    });
+    } as never);
 
     const response = await handleGetSlot(mockClient, { slotId: 'slot-1' });
     expect(mockClient.getSlot).toHaveBeenCalledWith('slot-1');
@@ -1229,13 +1369,10 @@ describe('slot tools', () => {
     const { handleGetSlot } = await import('../tools.js');
     const notice = 'Bluesky did not publish because the email on this account is not verified. This is a problem with your account. Only you can fix it: verify the email.';
     vi.mocked(mockClient.getSlot).mockResolvedValue({
-      success: true,
+      ...FULL_SLOT_DETAIL,
       slot: {
-        id: 'slot-1',
-        scheduleId: 'sched-1',
-        slotAt: '2026-10-10T20:00:00Z',
+        ...FULL_SLOT_DETAIL.slot,
         status: 'publishing',
-        title: 'Launch day',
         userNotices: [{ provider: 'bluesky', accountId: 'b1', code: 'email_not_verified', requiresUser: true, notice }],
         providerFailures: [{ provider: 'bluesky', accountId: 'b1', code: 'email_not_verified', requiresUser: false, notice }],
       },
@@ -1331,7 +1468,7 @@ describe('video generation history tools', () => {
           internalField: 'rides through unparsed',
         },
       ],
-    });
+    } as never);
 
     const response = await handleListVideoGenerations(mockClient, { limit: 10 });
     expect(mockClient.listVideoGenerations).toHaveBeenCalledWith(10);
@@ -1435,7 +1572,7 @@ describe('token ledger tool', () => {
       total: 42,
       limit: 20,
       offset: 0,
-    });
+    } as never);
 
     const response = await handleListTokenTransactions(mockClient, { limit: 20, offset: 0 });
     expect(mockClient.listTokenTransactions).toHaveBeenCalledWith(20, 0);
@@ -1585,29 +1722,32 @@ describe('new tool error paths and narrowing fallbacks', () => {
     expect(textOf(response)).toBe('Error getting slot: network down');
   });
 
-  it('handleGetSlot falls back to arg values when the detail has no fields', async () => {
+  it('handleGetSlot surfaces a malformed detail as an error instead of falling back to arg values', async () => {
     const { handleGetSlot } = await import('../tools.js');
-    vi.mocked(mockClient.getSlot).mockResolvedValue(null);
+    const { MalformedContractResponseError } = await import('../contract-response.js');
+    vi.mocked(mockClient.getSlot).mockRejectedValue(
+      new MalformedContractResponseError('Malformed response from GET /api/schedule/slots/:slotId.'),
+    );
 
     const response = await handleGetSlot(mockClient, { slotId: 'slot-1' });
-    expect(response.isError).toBeUndefined();
-    expect(textOf(response)).toContain('Slot slot-1: "(untitled)" — unknown, scheduled for (unscheduled).');
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toBe('Error getting slot: Malformed response from GET /api/schedule/slots/:slotId.');
   });
 
-  it('handleGetSlot coerces wrong-typed detail fields to null', async () => {
+  it('handleGetSlot surfaces wrong-typed detail fields as a malformed error instead of coercing them', async () => {
     const { handleGetSlot } = await import('../tools.js');
-    vi.mocked(mockClient.getSlot).mockResolvedValue({
-      slot: { id: 'slot-1', progress: 'fast' },
-      schedule: { id: 'sched-1', providers: ['youtube', 42] },
-      persona: { id: 'persona-1', name: 'Ava' },
-    });
+    const { MalformedContractResponseError } = await import('../contract-response.js');
+    vi.mocked(mockClient.getSlot).mockRejectedValue(
+      new MalformedContractResponseError(
+        'Malformed response from GET /api/schedule/slots/:slotId at slot.progress.',
+      ),
+    );
 
     const response = await handleGetSlot(mockClient, { slotId: 'slot-1' });
-    expect(response.isError).toBeUndefined();
-    const text = textOf(response);
-    expect(text).toContain('"progress": null');
-    expect(text).toContain('"providers": [\n      "youtube"\n    ]');
-    expect(text).not.toContain('42');
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toBe(
+      'Error getting slot: Malformed response from GET /api/schedule/slots/:slotId at slot.progress.',
+    );
   });
 
   it('handleUpdateSlotTitle surfaces API errors with the structured contract', async () => {
@@ -1633,7 +1773,7 @@ describe('new tool error paths and narrowing fallbacks', () => {
 
   it('handleUpdateSlotTitle falls back to the requested title when the response has none', async () => {
     const { handleUpdateSlotTitle } = await import('../tools.js');
-    vi.mocked(mockClient.updateSlotTitle).mockResolvedValue({ success: true, title: 42 });
+    vi.mocked(mockClient.updateSlotTitle).mockResolvedValue({ success: true });
 
     const response = await handleUpdateSlotTitle(mockClient, { slotId: 'slot-1', title: 'New' });
     expect(response.isError).toBeUndefined();
@@ -1649,26 +1789,16 @@ describe('new tool error paths and narrowing fallbacks', () => {
     expect(textOf(response)).toBe('Error listing video generations: network down');
   });
 
-  it('handleListVideoGenerations treats a missing envelope as an empty history', async () => {
+  it('handleListVideoGenerations surfaces a malformed 200 as a plain failure', async () => {
     const { handleListVideoGenerations } = await import('../tools.js');
-    vi.mocked(mockClient.listVideoGenerations).mockResolvedValue(null);
+    const { MalformedContractResponseError } = await import('../contract-response.js');
+    vi.mocked(mockClient.listVideoGenerations).mockRejectedValue(
+      new MalformedContractResponseError('Malformed response from GET /api/persona/video-generations.'),
+    );
 
     const response = await handleListVideoGenerations(mockClient, {});
-    expect(response.isError).toBeUndefined();
-    expect(textOf(response)).toContain('0 video generation(s) in history (newest first).');
-  });
-
-  it('handleListVideoGenerations coerces malformed rows to nulls', async () => {
-    const { handleListVideoGenerations } = await import('../tools.js');
-    vi.mocked(mockClient.listVideoGenerations).mockResolvedValue({
-      generations: [null, { id: 7, generationId: 'gen-1', tokensRefunded: 'yes' }],
-    });
-
-    const response = await handleListVideoGenerations(mockClient, {});
-    expect(response.isError).toBeUndefined();
-    const text = textOf(response);
-    expect(text).toContain('"id": null');
-    expect(text).toContain('"tokensRefunded": null');
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toBe('Error listing video generations: Malformed response from GET /api/persona/video-generations.');
   });
 
   it('handleGetVideoGeneration surfaces API errors with the structured contract', async () => {
@@ -1692,13 +1822,16 @@ describe('new tool error paths and narrowing fallbacks', () => {
     expect(textOf(response)).toBe('Error getting video generation: network down');
   });
 
-  it('handleGetVideoGeneration falls back to arg values when the detail has no fields', async () => {
+  it('handleGetVideoGeneration surfaces a malformed detail as an error instead of falling back to arg values', async () => {
     const { handleGetVideoGeneration } = await import('../tools.js');
-    vi.mocked(mockClient.getVideoGeneration).mockResolvedValue(null);
+    const { MalformedContractResponseError } = await import('../contract-response.js');
+    vi.mocked(mockClient.getVideoGeneration).mockRejectedValue(
+      new MalformedContractResponseError('Malformed response from GET /api/persona/video-generations/:generationId.'),
+    );
 
     const response = await handleGetVideoGeneration(mockClient, { generationId: 'gen-1' });
-    expect(response.isError).toBeUndefined();
-    expect(textOf(response)).toContain('Generation gen-1: "(untitled)" — unknown.');
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toBe('Error getting video generation: Malformed response from GET /api/persona/video-generations/:generationId.');
   });
 
   it('handleListTokenTransactions surfaces a plain failure without the structured contract', async () => {
@@ -1710,28 +1843,19 @@ describe('new tool error paths and narrowing fallbacks', () => {
     expect(textOf(response)).toBe('Error listing token transactions: network down');
   });
 
-  it('handleListTokenTransactions treats a missing envelope as an empty ledger', async () => {
+  it('handleListTokenTransactions surfaces a malformed 200 as a plain failure', async () => {
     const { handleListTokenTransactions } = await import('../tools.js');
-    vi.mocked(mockClient.listTokenTransactions).mockResolvedValue(null);
+    // The contract-typed client rejects a missing envelope with a
+    // malformed-response error instead of rendering an empty ledger.
+    vi.mocked(mockClient.listTokenTransactions).mockRejectedValue(
+      new Error('Malformed response from GET /api/billing/transactions.'),
+    );
 
     const response = await handleListTokenTransactions(mockClient, {});
-    expect(response.isError).toBeUndefined();
-    const text = textOf(response);
-    expect(text).toContain('showing 0 of ? transaction(s)');
-  });
-
-  it('handleListTokenTransactions coerces malformed rows to nulls', async () => {
-    const { handleListTokenTransactions } = await import('../tools.js');
-    vi.mocked(mockClient.listTokenTransactions).mockResolvedValue({
-      transactions: [42, { id: 'tx-1', amount: 'a lot' }],
-      total: 2,
-    });
-
-    const response = await handleListTokenTransactions(mockClient, {});
-    expect(response.isError).toBeUndefined();
-    const text = textOf(response);
-    expect(text).toContain('"id": null');
-    expect(text).toContain('"amount": null');
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toBe(
+      'Error listing token transactions: Malformed response from GET /api/billing/transactions.',
+    );
   });
 
   it('handleDeletePersona surfaces a plain failure without the structured contract', async () => {

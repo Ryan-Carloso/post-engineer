@@ -55,6 +55,6 @@ describe('accounts list_boards (Pinterest boards)', () => {
     vi.mocked(client.request).mockResolvedValue({ success: true, boards: 'not-an-array' });
     const response = await handleListPinterestBoards(client, { accountId: 'user-9' });
     expect(response.isError).toBe(true);
-    expect(textOf(response)).toContain('Malformed boards response');
+    expect(textOf(response)).toContain('Malformed response from GET /api/pinterest/boards');
   });
 });

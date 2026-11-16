@@ -33,6 +33,7 @@ vi.mock('@/lib/supabase/service', () => ({
 }));
 
 import { GET, POST, PATCH, DELETE } from '../images/route';
+import { AddPersonaImageResponseSchema, DeletePersonaImageResponseSchema, ListPersonaImagesResponseSchema, UpdatePersonaImageResponseSchema } from '@/lib/contracts/personas';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { logger } from '@/lib/logger';
@@ -295,6 +296,7 @@ describe('GET /api/persona/images', () => {
       images: Array<{ id: string; image_url: string | null }>;
     };
     expect(body.success).toBe(true);
+    expect(ListPersonaImagesResponseSchema.safeParse(body).success).toBe(true);
     expect(body.images).toHaveLength(1);
     expect(body.images[0]?.image_url).toBe(
       `https://supabase.test/signed/${IMAGE_ROW.image_path}`,
@@ -579,6 +581,7 @@ describe('POST /api/persona/images', () => {
     expect(res.status).toBe(201);
     const body = (await res.json()) as { success: boolean; image: { id: string } };
     expect(body.success).toBe(true);
+    expect(AddPersonaImageResponseSchema.safeParse(body).success).toBe(true);
     expect(body.image.id).toBe(IMAGE_ROW.id);
   });
 
@@ -710,6 +713,7 @@ describe('PATCH /api/persona/images', () => {
     );
     expect(res.status).toBe(200);
     const body = (await res.json()) as { success: boolean; image: { tag: string } };
+    expect(UpdatePersonaImageResponseSchema.safeParse(body).success).toBe(true);
     expect(body.image.tag).toBe('formal');
   });
 
@@ -897,6 +901,8 @@ describe('DELETE /api/persona/images', () => {
       new Request(`http://localhost/api/persona/images?id=${IMAGE_ROW.id}`),
     );
     expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(DeletePersonaImageResponseSchema.safeParse(body).success).toBe(true);
     expect(calls.removedPaths).toEqual([IMAGE_ROW.image_path]);
   });
 

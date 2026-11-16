@@ -57,9 +57,9 @@ function fakes(options: { personas?: unknown; accounts?: unknown; bound?: unknow
   const listPersonas = vi.fn(async () => options.personas ?? { personas: [{ id: MARIA, name: 'Maria' }, { id: JOAO, name: 'João' }] });
   const listSocialAccounts = vi.fn(async () => options.accounts ?? { accounts: [{ provider: 'youtube', channelId: 'UC1', channelName: 'Maria Cooks' }, { provider: '3speak', providerAccountId: 'maria-hive', accountName: 'Maria Hive' }] });
   const request = vi.fn(async (path: string) => {
-    if (path.startsWith('/api/persona/publishing-accounts')) return options.bound ?? { success: true, defaults: { youtube: ['UC1'], bluesky: ['did:plc:abc'] } };
+    if (path.startsWith('/api/persona/publishing-accounts')) return options.bound ?? { success: true, defaults: { youtube: ['UC1'], instagram: [], bluesky: ['did:plc:abc'], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [] } };
     if (path === '/api/videos/batch-discount') {
-      return { success: true, faceVideos: 2, earnedFreeVideos: 0, freeVideos: [], discountTokens: 0, chargedTokens: 6, videos: 2, warnings: [] };
+      return { success: true, batchId: 'batch-1', faceVideos: 2, earnedFreeVideos: 0, freeVideos: [], discountTokens: 0, chargedTokens: 6, videos: 2, warnings: [] };
     }
     throw new Error(`unexpected request ${path}`);
   });
@@ -149,7 +149,7 @@ describe('generate_video: one video', () => {
   });
 
   it('fails when the persona has no bound accounts and none were given', async () => {
-    const f = fakes({ bound: { success: true, defaults: { youtube: [] } } });
+    const f = fakes({ bound: { success: true, defaults: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [] } } });
     const response = await handleGenerateVideo(f.client, parse({ videos: [video()] }));
     expect(response.isError).toBe(true);
     expect(text(response)).toContain('no bound publishing accounts');

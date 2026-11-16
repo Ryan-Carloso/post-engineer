@@ -1,4 +1,15 @@
 import type { PostEngineerClient } from './client.js';
+import { parseContractResponse } from './contract-response.js';
+import {
+  getRetentionCurve as getRetentionCurveContract,
+  listMetrics as listMetricsContract,
+  metricsSearchParams,
+} from './contracts/metrics.js';
+import type { SocialProvider } from './contracts/metrics.js';
+import { getPost as getPostContract } from './contracts/posts.js';
+import { listPostsInRange as listPostsInRangeContract } from './contracts/schedule.js';
+import { scoreDraft as scoreDraftContract } from './contracts/videos.js';
+import type { ResponseOf } from './contracts/endpoint.js';
 
 //---------------
 // Unified post detail (GET /api/posts/[id], issue #208), per-video
@@ -13,46 +24,51 @@ export interface PostMetricsQuery {
   window: '24h' | '7d' | '28d';
   persona?: string;
   account?: string;
-  provider?: string;
+  provider?: SocialProvider;
   angle?: string;
 }
 
-export async function getPost(client: PostEngineerClient, id: string): Promise<unknown> {
-  return client.request(
+export async function getPost(client: PostEngineerClient, id: string): Promise<ResponseOf<typeof getPostContract>> {
+  const raw = await client.request(
     `/api/posts/${encodeURIComponent(id)}`,
     { method: 'GET', headers: client.getHeaders() },
     'get post',
   );
+  return parseContractResponse(getPostContract, raw);
 }
 
 export async function getPostMetrics(
   client: PostEngineerClient,
   query: PostMetricsQuery,
-): Promise<unknown> {
+): Promise<ResponseOf<typeof listMetricsContract>> {
   // Same parameter names as the route's parseMetricsQuery; omitted filters
   // are not sent (the route rejects empty parameters).
-  const params = new URLSearchParams({ window: query.window });
-  for (const key of ['persona', 'account', 'provider', 'angle'] as const) {
-    const value = query[key];
-    if (value !== undefined) params.set(key, value);
-  }
-  return client.request(
+  const params = metricsSearchParams({
+    window: query.window,
+    personaId: query.persona ?? null,
+    accountId: query.account ?? null,
+    provider: query.provider ?? null,
+    angle: query.angle ?? null,
+  });
+  const raw = await client.request(
     `/api/metrics?${params.toString()}`,
     { method: 'GET', headers: client.getHeaders() },
     'get post metrics',
   );
+  return parseContractResponse(listMetricsContract, raw);
 }
 
 export async function getYouTubeRetentionCurve(
   client: PostEngineerClient,
   query: { account: string; video: string },
-): Promise<unknown> {
+): Promise<ResponseOf<typeof getRetentionCurveContract>> {
   const params = new URLSearchParams({ account: query.account, video: query.video });
-  return client.request(
+  const raw = await client.request(
     `/api/metrics/retention-curve?${params.toString()}`,
     { method: 'GET', headers: client.getHeaders() },
     'get YouTube retention curve',
   );
+  return parseContractResponse(getRetentionCurveContract, raw);
 }
 
 export interface ScoreDraftInput {
@@ -65,18 +81,19 @@ export interface ScoreDraftInput {
 export async function scoreDraft(
   client: PostEngineerClient,
   input: ScoreDraftInput,
-): Promise<unknown> {
+): Promise<ResponseOf<typeof scoreDraftContract>> {
   // Same parameter names as the route's body; omitted optionals are not
   // sent (the route rejects empty parameters).
   const body: Record<string, unknown> = { draft: input.draft };
   if (input.network !== undefined) body.network = input.network;
   if (input.personaId !== undefined) body.personaId = input.personaId;
   if (input.kind !== undefined) body.kind = input.kind;
-  return client.request(
+  const raw = await client.request(
     '/api/videos/score-draft',
     { method: 'POST', headers: client.getHeaders(), body: JSON.stringify(body) },
     'score draft',
   );
+  return parseContractResponse(scoreDraftContract, raw);
 }
 
 // GET /api/schedule/status in range mode (?from=&to=): every post, any status,
@@ -85,11 +102,12 @@ export async function scoreDraft(
 export async function listPostsInRange(
   client: PostEngineerClient,
   range: { from: string; to: string },
-): Promise<unknown> {
+): Promise<ResponseOf<typeof listPostsInRangeContract>> {
   const params = new URLSearchParams({ from: range.from, to: range.to });
-  return client.request(
+  const raw = await client.request(
     `/api/schedule/status?${params.toString()}`,
     { method: 'GET', headers: client.getHeaders() },
     'list posts',
   );
+  return parseContractResponse(listPostsInRangeContract, raw);
 }

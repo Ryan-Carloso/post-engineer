@@ -34,6 +34,7 @@ import { requireSupabaseSession } from '@/lib/request-auth';
 import { encryptTokens } from '@/lib/token-crypto';
 import { applyRateLimit } from '@/lib/rate-limit';
 import { NextResponse } from 'next/server';
+import { RumbleConnectResponseSchema } from '@/lib/contracts/accounts';
 
 const USER_ID = 'user-uuid-1';
 const TOKEN = 'a'.repeat(40);
@@ -165,6 +166,7 @@ describe('POST /api/rumble-connect', () => {
     const { upserted } = mockSupabase();
     const jsonRes = await POST(jsonRequest({ channelId: '  chan-1  ', accessToken: `  ${TOKEN}  ` }));
     expect(jsonRes.status).toBe(200);
+    expect(RumbleConnectResponseSchema.safeParse(await jsonRes.json()).success).toBe(true);
     expect(upserted[0]).toMatchObject({ provider_account_id: 'chan-1', account_name: 'chan-1' });
     expect(encryptTokens).toHaveBeenCalledWith(
       expect.objectContaining({ access_token: TOKEN, channel_id: 'chan-1' }),

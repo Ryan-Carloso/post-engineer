@@ -72,13 +72,13 @@ function apiResponse(url: string): Response {
   if (path.startsWith('/api/prompts/')) {
     return json(404, { success: false, error: 'Unknown prompt slug.', code: 'PROMPT_NOT_FOUND' });
   }
-  if (path === '/api/persona/list') return json(200, { success: true, personas: [] });
+  if (path === '/api/persona/list') return json(200, { authenticated: true, personas: [] });
   if (path === '/api/billing/tokens') return json(200, { success: true, balance: 10 });
   if (path === '/api/videos/generate-and-schedule') {
     return json(200, {
       success: true,
       schedule: { id: 'sch-1', mode: 'asap' },
-      slots: [{ slotId: 's1', slotAt: null, title: 'Porto trip', taskId: 'task-1', status: 'queued' }],
+      slots: [{ slotId: 's1', slotAt: '2026-10-30T18:00:00Z', title: 'Porto trip', taskId: 'task-1', status: 'queued' }],
       replayed: false,
     });
   }

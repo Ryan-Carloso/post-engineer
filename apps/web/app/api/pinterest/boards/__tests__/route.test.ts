@@ -15,6 +15,7 @@ import { requireSupabaseSession } from '@/lib/request-auth';
 import { getValidPinterestAccessToken } from '@/lib/pinterest-tokens';
 import { fetchPinterestBoards } from '@/lib/pinterest';
 import { PinterestError } from '@/lib/errors';
+import { ListPinterestBoardsResponseSchema } from '@/lib/contracts/accounts';
 
 const BOARDS = 'https://app.example/api/pinterest/boards';
 
@@ -32,6 +33,7 @@ describe('GET /api/pinterest/boards', () => {
     const res = await GET(new NextRequest(`${BOARDS}?accountId=user-9`));
     expect(res.status).toBe(200);
     const body = (await res.json()) as { success: boolean; boards: unknown[] };
+    expect(ListPinterestBoardsResponseSchema.safeParse(body).success).toBe(true);
     expect(body).toEqual({
       success: true,
       boards: [

@@ -9,6 +9,14 @@ import type { IncomingMessage } from 'node:http';
 import { readApiFailure } from './errors.js';
 import { MAX_CLONE_AUDIO_BYTES, MAX_CLONE_AUDIO_MB } from './limits.js';
 import { isPublicIp } from './public-ip.js';
+import { parseContractResponse } from './contract-response.js';
+import type { ResponseOf } from './contracts/endpoint.js';
+import {
+  createClonedVoice as createClonedVoiceContract,
+  deleteClonedVoice as deleteClonedVoiceContract,
+  getClonedVoice as getClonedVoiceContract,
+  listClonedVoices as listClonedVoicesContract,
+} from './contracts/voices.js';
 
 const UPLOAD_TIMEOUT_MS = 120_000;
 
@@ -295,12 +303,13 @@ export async function readCloneReferenceFile(
   return { blob: new Blob([buffer], { type: mimeType }), filename: name };
 }
 
-export async function listClonedVoices(client: ClonedVoiceClientHost): Promise<unknown> {
-  return client.request(
+export async function listClonedVoices(client: ClonedVoiceClientHost): Promise<ResponseOf<typeof listClonedVoicesContract>> {
+  const raw = await client.request(
     '/api/persona/cloned-voices',
     { method: 'GET', headers: client.getHeaders() },
     'list cloned voices',
   );
+  return parseContractResponse(listClonedVoicesContract, raw);
 }
 
 export async function createClonedVoiceFromUrl(
@@ -310,7 +319,7 @@ export async function createClonedVoiceFromUrl(
   consent: boolean,
   denoise: boolean,
   options: CloneAudioFetchOptions = {},
-): Promise<unknown> {
+): Promise<ResponseOf<typeof createClonedVoiceContract>> {
   if (!consent) {
     throw new Error('consent must be true to create a voice clone');
   }
@@ -324,7 +333,7 @@ export async function createClonedVoiceFromFile(
   language: string,
   consent: boolean,
   denoise: boolean,
-): Promise<unknown> {
+): Promise<ResponseOf<typeof createClonedVoiceContract>> {
   if (!consent) {
     throw new Error('consent must be true to create a voice clone');
   }
@@ -338,40 +347,43 @@ async function postCloneReference(
   filename: string,
   language: string,
   denoise: boolean,
-): Promise<unknown> {
+): Promise<ResponseOf<typeof createClonedVoiceContract>> {
   const formData = new FormData();
   formData.set('consent', 'true');
   formData.set('denoise', denoise ? 'true' : 'false');
   formData.set('language', language);
   formData.set('file', blob, filename);
-  return client.request(
+  const raw = await client.request(
     '/api/persona/cloned-voices',
     { method: 'POST', headers: client.getHeaders(false), body: formData },
     'create cloned voice',
     UPLOAD_TIMEOUT_MS,
   );
+  return parseContractResponse(createClonedVoiceContract, raw);
 }
 
 export async function getClonedVoice(
   client: ClonedVoiceClientHost,
   cloneId: string,
-): Promise<unknown> {
-  return client.request(
+): Promise<ResponseOf<typeof getClonedVoiceContract>> {
+  const raw = await client.request(
     `/api/persona/cloned-voices/${encodeURIComponent(cloneId)}`,
     { method: 'GET', headers: client.getHeaders() },
     'get cloned voice',
   );
+  return parseContractResponse(getClonedVoiceContract, raw);
 }
 
 export async function deleteClonedVoice(
   client: ClonedVoiceClientHost,
   cloneId: string,
-): Promise<unknown> {
-  return client.request(
+): Promise<ResponseOf<typeof deleteClonedVoiceContract>> {
+  const raw = await client.request(
     `/api/persona/cloned-voices/${encodeURIComponent(cloneId)}`,
     { method: 'DELETE', headers: client.getHeaders() },
     'delete cloned voice',
   );
+  return parseContractResponse(deleteClonedVoiceContract, raw);
 }
 
 export async function previewClonedVoice(

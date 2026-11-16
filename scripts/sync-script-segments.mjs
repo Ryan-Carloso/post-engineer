@@ -18,10 +18,11 @@
 // Wiring: apps/mcp and apps/web both run this from their prebuild and
 // pretest scripts, so `pnpm build` and `pnpm test` always regenerate
 // before compiling or testing. This script then runs
-// sync-music-mood-field.mjs and forwards --check. That second sync is
-// not named in either package.json: those files are guarded by the
-// parity-exclusion gate. The per-app sync tests
-// (script-segments-shared.test.ts) fail loudly if a copy ever drifts.
+// sync-music-mood-field.mjs and sync-contracts.mjs and forwards
+// --check. Those syncs are not named in either package.json: those
+// files are guarded by the parity-exclusion gate. The per-app sync
+// tests (script-segments-shared.test.ts) fail loudly if a copy ever
+// drifts.
 // Usage: node scripts/sync-script-segments.mjs [--check]
 //   --check  exit 1 (without writing) when any copy differs from shared.
 import { spawnSync } from 'node:child_process';
@@ -81,6 +82,30 @@ if (music.error) {
   console.error(music.error.message);
 }
 const musicFailed = music.status !== 0;
-if ((checkOnly && drifted) || musicFailed) {
-  process.exit(music.status !== 0 && music.status !== null ? music.status : 1);
+// Run after the music-mood report so a drift here does not hide a
+// drift in the contract copies. A partial checkout predating the
+// contracts sync has no sync-contracts.mjs yet; skip it there.
+const contractsScript = join(root, 'scripts', 'sync-contracts.mjs');
+let contractsFailed = false;
+let contractsStatus = null;
+if (!existsSync(contractsScript)) {
+  console.log(`skipped ${contractsScript} (contracts sync not present in this checkout)`);
+} else {
+  const contracts = spawnSync(
+    process.execPath,
+    [contractsScript, ...(checkOnly ? ['--check'] : [])],
+    { stdio: 'inherit' },
+  );
+  if (contracts.error) {
+    console.error(contracts.error.message);
+  }
+  contractsFailed = contracts.status !== 0;
+  contractsStatus = contracts.status;
+}
+if ((checkOnly && drifted) || musicFailed || contractsFailed) {
+  const code =
+    music.status !== 0 && music.status !== null ? music.status
+    : contractsStatus !== 0 && contractsStatus !== null ? contractsStatus
+    : 1;
+  process.exit(code);
 }

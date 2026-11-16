@@ -28,8 +28,22 @@ function failedSlot(id: string, replayed: boolean) {
 }
 
 function mockClient(overrides: Partial<Record<'request' | 'generatePersonaVideo', ReturnType<typeof vi.fn>>> = {}) {
+  const fallbackRequest = async (path: unknown, init: { method?: string }) => {
+    const method = init.method ?? 'GET';
+    const text = typeof path === 'string' ? path : '';
+    if (method === 'POST' && text === '/api/experiments') {
+      return { success: true, experiment: { id: EXPERIMENT_ID, name: 'Hook test', variable: 'hook', personaId: null, targetPairs: 6, variants: [{ variantId: 'hook-calm', name: 'Calm', description: 'calm' }, { variantId: 'hook-aggressive', name: 'Aggressive', description: 'direct' }] } };
+    }
+    if (method === 'GET' && text === '/api/experiments') {
+      return { success: true, experiments: [], truncated: false };
+    }
+    if (text.startsWith('/api/experiments/')) {
+      return { success: true, experiment: { id: EXPERIMENT_ID, name: 'Hook test', variable: 'hook', personaId: null, targetPairs: 6, createdAt: '2026-11-07T00:00:00Z', variants: [{ variantId: 'hook-calm', name: 'Calm', description: 'calm' }, { variantId: 'hook-aggressive', name: 'Aggressive', description: 'direct' }] }, window: '7d', videos: [], results: { targetPairs: 6, pairsCreated: 0, pairsPublished: 0, providers: [] }, truncated: false };
+    }
+    return { success: true };
+  };
   const client = {
-    request: overrides.request ?? vi.fn(async () => ({ success: true })),
+    request: overrides.request ?? vi.fn(fallbackRequest),
     getHeaders: () => ({ Authorization: 'Bearer k' }),
     generatePersonaVideo: overrides.generatePersonaVideo ?? vi.fn(async (input: { experiment: { variantId: string } }) => scheduled(input.experiment.variantId)),
   };

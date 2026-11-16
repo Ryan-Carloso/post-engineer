@@ -26,7 +26,6 @@ export type PublishNetwork = 'linkedin' | 'youtube' | 'instagram' | 'bluesky' | 
 // newlines, hook first, then content takes). A script is spoken, so hashtags do not
 // apply and the caption publish check would be vacuous.
 export type DraftKind = 'post' | 'script';
-export const DRAFT_KINDS: DraftKind[] = ['post', 'script'];
 
 // Script ranges mirror the segments contract (hook 15-40 words, 60-200 in
 // total). The freed hashtag points go to hook, length and slop, so both
@@ -36,9 +35,9 @@ const SCORE_PROFILES = {
   script: { hook: 25, hookWords: [15, 40], length: 20, words: [60, 200], nearWords: [40, 250], slop: 25 },
 } as const;
 
-export const PUBLISH_NETWORKS: PublishNetwork[] = ['linkedin', 'youtube', 'instagram', 'bluesky', 'threads', 'facebook', 'pinterest', '3speak', 'rumble', 'fanvue'];
 
 import { LINKEDIN_POST_MAX_CHARS, THREADS_POST_MAX_CHARS, FACEBOOK_POST_MAX_CHARS, PINTEREST_DESCRIPTION_MAX_CHARS } from './draft-ceilings';
+export { DRAFT_KINDS, DRAFT_MAX_INPUT_CHARS, PUBLISH_NETWORKS } from '@/lib/contracts/videos';
 export { LINKEDIN_POST_MAX_CHARS, THREADS_POST_MAX_CHARS, FACEBOOK_POST_MAX_CHARS, PINTEREST_DESCRIPTION_MAX_CHARS };
 // Rumble has no documented description ceiling, so the publish check has
 // no failure branch for it — the 100-character title ceiling lives at the
@@ -58,7 +57,6 @@ export const YOUTUBE_DESCRIPTION_MAX_CHARS = 5000;
 export const INSTAGRAM_CAPTION_MAX_CHARS = 2200;
 // The route rejects drafts over this input cap with a 400 instead of
 // silently truncating (repo rule: never silently truncate/coerce).
-export const DRAFT_MAX_INPUT_CHARS = 10000;
 // Bound the baseline fan-out: one capped metrics read per score call.
 export const BASELINE_ROW_LIMIT = 200;
 

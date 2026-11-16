@@ -28,6 +28,7 @@ vi.mock('@/lib/logger', () => ({
 
 import { POST } from '../check/route';
 import { requireSupabaseSession } from '@/lib/request-auth';
+import { MediaCheckResponseSchema } from '@/lib/contracts/media';
 
 function checkRequest(url: string, videoAspect?: string): Request {
   return new Request('https://post-engineer.com/api/media/check', {
@@ -65,6 +66,8 @@ describe('POST /api/media/check', () => {
     const payload = (await response.json()) as Record<string, unknown>;
     expect(payload.success).toBe(true);
     expect(payload.code).toBe('ok');
+    // The 200 body parses against the shared contract the MCP reads.
+    expect(MediaCheckResponseSchema.safeParse(payload).success).toBe(true);
     expect(JSON.stringify(payload)).not.toContain('secret-value');
     const fetchCall = vi.mocked(global.fetch).mock.calls[0];
     expect(fetchCall?.[0]).toBe('https://engine.test/api/v1/media/check');
@@ -112,6 +115,8 @@ describe('POST /api/media/check', () => {
     expect(payload.code).toBe('wrong_aspect');
     expect(payload.width).toBe(1920);
     expect(payload.height).toBe(1080);
+    // The 200 body parses against the shared contract the MCP reads.
+    expect(MediaCheckResponseSchema.safeParse(payload).success).toBe(true);
     const fetchCall = vi.mocked(global.fetch).mock.calls[0];
     expect(JSON.parse(String(fetchCall?.[1]?.body))).toEqual({
       url: 'https://e.com/porto.jpg',
@@ -142,6 +147,9 @@ describe('POST /api/media/check', () => {
     expect(response.status).toBe(200);
     const payload = (await response.json()) as Record<string, unknown>;
     expect(payload.code).toBe('media_expired');
+    // The 200 body parses against the shared contract the MCP reads
+    // (null dimensions are dropped by the route, never served).
+    expect(MediaCheckResponseSchema.safeParse(payload).success).toBe(true);
   });
 
   it('rejects an unknown videoAspect before calling the engine', async () => {

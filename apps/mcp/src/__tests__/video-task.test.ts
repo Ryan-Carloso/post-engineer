@@ -24,6 +24,20 @@ vi.mock('../analytics.js', () => ({
 
 const HEADERS = { Authorization: 'Bearer test-token' };
 
+// The engine's TaskDeletionResponse: the deleted task record inside the
+// BaseResponse envelope.
+const DELETED_TASK = {
+  status: 200,
+  message: 'success',
+  body: {
+    task_id: 'task-1',
+    state: 1,
+    progress: 100,
+    videos: ['http://127.0.0.1:8080/tasks/task-1/final-1.mp4'],
+    combined_videos: ['http://127.0.0.1:8080/tasks/task-1/combined-1.mp4'],
+  },
+};
+
 function fakeClient(request: ReturnType<typeof vi.fn>): PostEngineerClient {
   return {
     request,
@@ -40,12 +54,19 @@ function textOf(response: unknown): string {
 
 describe('cancelVideoTask', () => {
   it('DELETEs the task with the id percent-encoded', async () => {
-    const request = vi.fn().mockResolvedValue({ status: 'deleted' });
+    const request = vi.fn().mockResolvedValue(DELETED_TASK);
     await cancelVideoTask(fakeClient(request), 'batch:s-1:slot:a/b');
     expect(request).toHaveBeenCalledWith(
       '/api/persona/video-task/batch%3As-1%3Aslot%3Aa%2Fb',
       { method: 'DELETE', headers: HEADERS },
       'cancel video task',
+    );
+  });
+
+  it('rejects a malformed delete 200 without the engine envelope', async () => {
+    const request = vi.fn().mockResolvedValue({ status: 'deleted' });
+    await expect(cancelVideoTask(fakeClient(request), 'task-1')).rejects.toThrow(
+      'Malformed response from DELETE /api/persona/video-task/:taskId',
     );
   });
 });
@@ -60,10 +81,10 @@ describe('CancelVideoTaskSchema', () => {
 
 describe('handleCancelVideoTask', () => {
   it('returns the engine response', async () => {
-    const request = vi.fn().mockResolvedValue({ status: 'deleted' });
+    const request = vi.fn().mockResolvedValue(DELETED_TASK);
     const result = await handleCancelVideoTask(fakeClient(request), { taskId: 'task-1' });
     expect(result.isError).toBeFalsy();
-    expect(JSON.parse(textOf(result))).toEqual({ status: 'deleted' });
+    expect(JSON.parse(textOf(result))).toEqual(DELETED_TASK);
   });
 
   it('maps failures to an error response', async () => {
@@ -88,7 +109,7 @@ describe('registered cancel_video tool', () => {
   }
 
   it('calls DELETE /api/persona/video-task/[taskId] through the server', async () => {
-    const request = vi.fn().mockResolvedValue({ status: 'deleted' });
+    const request = vi.fn().mockResolvedValue(DELETED_TASK);
     const result = await callTool('cancel_video', { taskId: 'task-1' }, request);
     expect(result.isError).toBeFalsy();
     expect(request).toHaveBeenCalledWith(

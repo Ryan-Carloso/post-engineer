@@ -23,6 +23,7 @@ import { getAuthenticatedClient } from '@/lib/upload/handlers';
 import { getYouTubeVideoInfo } from '@/lib/youtube';
 import { AnalyticsAuthError, queryRetentionCurve } from '@/lib/youtube-analytics';
 import { AuthError } from '@/lib/errors';
+import { RetentionCurveResponseSchema } from '@/lib/contracts/metrics';
 
 const PERSONA = '11111111-2222-4333-8444-555555555555';
 const OWN_VIDEO = { snippet: { channelId: 'UC-own', publishedAt: '2026-10-01T10:00:00Z' } };
@@ -68,6 +69,8 @@ describe('GET /api/metrics/retention-curve', () => {
     expect(queryRetentionCurve).toHaveBeenCalledWith('client', expect.objectContaining({ videoId: 'vid_1', startDate: '2026-10-01' }));
     const body: unknown = await response.json();
     expect(body).toMatchObject({ success: true, points: POINTS, startDate: '2026-10-01', provisional: true });
+    // The 200 body parses against the shared contract the MCP reads.
+    expect(RetentionCurveResponseSchema.safeParse(body).success).toBe(true);
   });
 
   it('rejects unknown, missing, duplicate and malformed params with 400', async () => {

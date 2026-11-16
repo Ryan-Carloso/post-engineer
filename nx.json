@@ -18,13 +18,16 @@
       "dependsOn": ["^build"]
     },
     "test": {
-      "cache": true
+      "cache": true,
+      "inputs": ["default", "{workspaceRoot}/shared/**/*", "{workspaceRoot}/scripts/sync-*.mjs"]
     },
     "lint": {
-      "cache": true
+      "cache": true,
+      "inputs": ["default", "{workspaceRoot}/shared/**/*", "{workspaceRoot}/scripts/sync-*.mjs"]
     },
     "typecheck": {
-      "cache": true
+      "cache": true,
+      "inputs": ["default", "{workspaceRoot}/shared/**/*", "{workspaceRoot}/scripts/sync-*.mjs"]
     }
   },
   "nxCloudAccessToken": ""

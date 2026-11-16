@@ -27,6 +27,7 @@ vi.mock('@/lib/logger', () => ({
 import { POST } from '../upload/route';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { uploadEngineTempAsset } from '@/lib/generation/video-generation';
+import { UploadMediaResponseSchema } from '@/lib/contracts/media';
 
 const PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0, 0, 0]);
 
@@ -55,6 +56,8 @@ describe('POST /api/media/upload', () => {
     expect(payload.success).toBe(true);
     expect(payload.mediaId).toBe('aabbccddeeff00112233445566778899.png');
     expect(payload.expiresInSeconds).toBe(3600);
+    // The 200 body parses against the shared contract the MCP reads.
+    expect(UploadMediaResponseSchema.safeParse(payload).success).toBe(true);
     expect(payload).not.toHaveProperty('url');
     expect(JSON.stringify(payload)).not.toContain('temp_assets');
     const call = vi.mocked(uploadEngineTempAsset).mock.calls[0];

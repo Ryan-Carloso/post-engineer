@@ -57,6 +57,7 @@ vi.mock('@/lib/posthog-server', () => ({
 }));
 
 import { POST, PATCH, DELETE } from '../route';
+import { CreatePersonaResponseSchema, DeletePersonaResponseSchema, UpdatePersonaResponseSchema } from '@/lib/contracts/personas';
 import { fetchPersonaVoiceCatalogIds } from '@/lib/voice-catalog-fetch';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
@@ -229,6 +230,7 @@ describe('POST /api/persona — toda persona tem rosto', () => {
     const body = (await res.json()) as { success: boolean; personaId?: string };
 
     expect(res.status).toBe(200);
+    expect(CreatePersonaResponseSchema.safeParse(body).success).toBe(true);
     expect(body.success).toBe(true);
     expect(uploaded).toHaveLength(0);
     expect(inserted[0]).toMatchObject({
@@ -1226,6 +1228,7 @@ describe('PATCH /api/persona', () => {
     const body = (await res.json()) as { success: boolean };
 
     expect(res.status).toBe(200);
+    expect(UpdatePersonaResponseSchema.safeParse(body).success).toBe(true);
     expect(body.success).toBe(true);
     expect(updated[0]).toMatchObject({ name: 'Novo Nome' });
   });
@@ -1789,6 +1792,7 @@ describe('DELETE /api/persona', () => {
     const body = (await res.json()) as { success: boolean };
 
     expect(res.status).toBe(200);
+    expect(DeletePersonaResponseSchema.safeParse(body).success).toBe(true);
     expect(body.success).toBe(true);
     expect(removed).toHaveLength(1);
     expect(removed[0]).toEqual(['uid/img1.png', 'uid/img2.png']);

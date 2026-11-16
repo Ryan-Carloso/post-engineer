@@ -83,7 +83,7 @@ describe('PostEngineerClient telemetry headers', () => {
 
   it('sends the tool headers on a real API request made inside a tool call', async () => {
     const fetchMock = vi.fn(
-      async (_url: string, _init: RequestInit) => new Response(JSON.stringify({ personas: [] }), { status: 200 }),
+      async (_url: string, _init: RequestInit) => new Response(JSON.stringify({ authenticated: true, personas: [] }), { status: 200 }),
     );
     vi.stubGlobal('fetch', fetchMock);
     const client = new PostEngineerClient({ apiKey: 'pe_test', baseUrl: 'https://api.example.test' });
@@ -114,7 +114,7 @@ describe('PostEngineerClient telemetry headers', () => {
 
   it('suppresses the version header on a real API request while keeping tool headers', async () => {
     const fetchMock = vi.fn(
-      async (_url: string, _init: RequestInit) => new Response(JSON.stringify({ personas: [] }), { status: 200 }),
+      async (_url: string, _init: RequestInit) => new Response(JSON.stringify({ authenticated: true, personas: [] }), { status: 200 }),
     );
     vi.stubGlobal('fetch', fetchMock);
     const client = new PostEngineerClient({

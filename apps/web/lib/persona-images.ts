@@ -18,6 +18,7 @@ import {
   type PersonaLibraryImage,
 } from './persona-image-select';
 import { logger } from '@/lib/logger';
+import { MAX_DESCRIPTION_LENGTH, MAX_TAG_LENGTH } from '@/lib/contracts/personas';
 
 export {
   ALLOWED_IMAGE_MIME_TYPES,
@@ -34,8 +35,7 @@ export {
 //---------------
 
 export const ALLOWED_IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'webp']);
-export const MAX_TAG_LENGTH = 100;
-export const MAX_DESCRIPTION_LENGTH = 500;
+export { MAX_DESCRIPTION_LENGTH, MAX_TAG_LENGTH };
 export const IMAGE_BUCKET = 'personas';
 /** Signed URL TTL (seconds): thumbnails are refetched on every library invalidation. */
 export const IMAGE_URL_TTL_SECONDS = 3600;

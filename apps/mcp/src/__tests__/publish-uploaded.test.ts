@@ -64,6 +64,7 @@ describe('signed-upload client calls', () => {
       uploadId: 'up-1',
       signedUrl: 'https://storage.test/upload?token=t',
       token: 'tok',
+      storagePath: 'user-1/direct-uploads/up-1.mp4',
       expiresAt: '2026-11-12T00:15:00.000Z',
       maxBytes: 2147483648,
     }));
@@ -134,7 +135,7 @@ describe('signed-upload client calls', () => {
   it('createVideoUpload rejects a mint body that is missing a signed-upload field', async () => {
     const request = vi.fn(async () => ({ uploadId: 'up-1' }));
     await expect(createVideoUpload(fakeClient(request), { contentType: 'video/quicktime', sizeBytes: 8 })).rejects.toThrow(
-      /Malformed signed-upload/,
+      /Malformed response from POST \/api\/videos\/upload-url/,
     );
   });
 
@@ -142,7 +143,7 @@ describe('signed-upload client calls', () => {
     const request = vi.fn(async () => ({ uploadId: 'up-1', status: 'pending', contentType: 'video/mp4', sizeBytes: 8 }));
     await expect(completeVideoUpload(fakeClient(request), '   ')).rejects.toThrow(/uploadId is required/);
     expect(request).not.toHaveBeenCalled();
-    await expect(completeVideoUpload(fakeClient(request), 'up-1')).rejects.toThrow(/Malformed complete-upload/);
+    await expect(completeVideoUpload(fakeClient(request), 'up-1')).rejects.toThrow(/Malformed response from POST \/api\/videos\/uploads\/:uploadId\/complete/);
   });
 
   it('publishUploadedVideo narrows optional account fields and defaults a sparse body', async () => {
@@ -164,7 +165,7 @@ describe('signed-upload client calls', () => {
         successCount: 1,
         logId: 'log-1',
       })
-      .mockResolvedValueOnce({ results: [{ accountId: 'ig-2', success: false }] });
+      .mockResolvedValueOnce({ success: false, results: [{ accountId: 'ig-2', success: false }] });
     const full = await publishUploadedVideo(fakeClient(request), {
       provider: 'instagram',
       uploadId: 'up-1',
@@ -187,11 +188,11 @@ describe('signed-upload client calls', () => {
     const request = vi.fn(async (): Promise<unknown> => ({ success: true }));
     await expect(
       publishUploadedVideo(fakeClient(request), { provider: 'instagram', uploadId: 'up-1', accountIds: ['ig-1'], caption: 'hi' }),
-    ).rejects.toThrow(/Malformed direct-publish response/);
+    ).rejects.toThrow(/Malformed response from POST \/api\/videos\/publish-by-id/);
     request.mockResolvedValueOnce({ results: [null] });
     await expect(
       publishUploadedVideo(fakeClient(request), { provider: 'instagram', uploadId: 'up-1', accountIds: ['ig-1'], caption: 'hi' }),
-    ).rejects.toThrow(/Malformed direct-publish account/);
+    ).rejects.toThrow(/Malformed response from POST \/api\/videos\/publish-by-id/);
     const idle = vi.fn(async () => ({}));
     await expect(
       publishUploadedVideo(fakeClient(idle), { provider: 'tiktok' as 'instagram', uploadId: 'up-1', accountIds: ['ig-1'], caption: 'hi' }),
@@ -266,12 +267,14 @@ describe('publish_uploaded_video tool handler', () => {
   it('create and complete handlers return the library text', async () => {
     const request = vi.fn(async (path: string) => {
       if (path.includes('/complete')) {
-        return { uploadId: 'up-1', status: 'ready', contentType: 'video/mp4', sizeBytes: 8 };
+        return { success: true, uploadId: 'up-1', status: 'ready', contentType: 'video/mp4', sizeBytes: 8 };
       }
       return {
+        success: true,
         uploadId: 'up-1',
         signedUrl: 'https://storage.test/upload?token=t',
         token: 'tok',
+        storagePath: 'user-1/direct-uploads/up-1.mp4',
         expiresAt: '2026-11-12T00:15:00.000Z',
         maxBytes: 8,
       };
@@ -391,7 +394,7 @@ describe('signed-upload tools on both transports', () => {
   it('invokes the three signed-upload actions', async () => {
     const request = vi.fn(async (path: string) => {
       if (path.includes('/complete')) {
-        return { uploadId: 'up-1', status: 'ready', contentType: 'video/mp4', sizeBytes: 8 };
+        return { success: true, uploadId: 'up-1', status: 'ready', contentType: 'video/mp4', sizeBytes: 8 };
       }
       if (path.includes('publish-by-id')) {
         return {
@@ -403,9 +406,11 @@ describe('signed-upload tools on both transports', () => {
         };
       }
       return {
+        success: true,
         uploadId: 'up-1',
         signedUrl: 'https://storage.test/upload?token=t',
         token: 'tok',
+        storagePath: 'user-1/direct-uploads/up-1.mp4',
         expiresAt: '2026-11-12T00:15:00.000Z',
         maxBytes: 8,
       };

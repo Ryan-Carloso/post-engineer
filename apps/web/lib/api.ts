@@ -15,6 +15,7 @@ import { isVoiceOption } from './voice-catalog';
 import { HttpStatusError } from '@/lib/errors';
 import { notifyIfSessionExpired } from '@/lib/session-expiry';
 import type { PublishLink } from '@/lib/publish-links';
+import type { VideoGenerationRow as VideoGeneration } from '@/lib/contracts/video-tasks';
 import type { PublishProviderFailure, PublishUserNotice } from '@/lib/publish-user-notice';
 import { narrowGeneration, narrowProgressHistory, narrowPublishLinks, type GenerationFacts, type ProgressHistoryEntry } from './slot-detail';
 import { narrowScriptAngle } from './script-angle';
@@ -635,21 +636,11 @@ export function useScheduleStatusQuery(limit?: number) {
 }
 
 //---------------
-// Video generation history (Posts > History). Mirrors the
-// VideoGenerationRow shape returned by GET /api/persona/video-generations.
+// Video generation history (Posts > History). The row is the shared
+// contract's VideoGenerationRow (GET /api/persona/video-generations);
+// the alias keeps the existing import sites working.
 //---------------
-export interface VideoGeneration {
-  id: string;
-  generationId: string;
-  engineTaskId: string | null;
-  personaName: string | null;
-  videoSubject: string | null;
-  status: string;
-  errorCode: string | null;
-  tokensRefunded: boolean;
-  createdAt: string;
-  completedAt: string | null;
-}
+export type { VideoGeneration };
 
 async function fetchVideoGenerations(limit?: number): Promise<VideoGeneration[]> {
   const url =

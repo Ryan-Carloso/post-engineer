@@ -5,7 +5,7 @@ import { fetchScheduleStatus, mapSlot, type ScheduledSlot, type SlotRow } from '
 // Range read of GET /api/schedule/status (?from=&to=) for the posts calendar:
 // every slot in [from, to), never cut by the list view's POSTS_LIMIT.
 
-// Mirrors RANGE_MAX_SLOTS in app/api/schedule/status/range.ts (pinned by a
+// Mirrors RANGE_MAX_SLOTS in shared/contracts/schedule.ts (pinned by a
 // file-parsing sync test).
 export const RANGE_MAX_SLOTS = 1000;
 

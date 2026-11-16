@@ -188,6 +188,6 @@ describe('generate_persona_video_batch', () => {
     const client = mockClient({ request: vi.fn(async () => ({ success: true })) });
     const response = await handleGeneratePersonaVideoBatch(client, batchArgs(2));
     expect(response.isError).toBe(true);
-    expect(text(response)).toContain('could not be read');
+    expect(text(response)).toContain('could not be applied');
   });
 });

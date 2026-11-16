@@ -8,6 +8,7 @@ import { apiErrorResponse } from '@/lib/api-error';
 import { ERROR_CODES } from '@/lib/error-codes';
 import { logger } from '@/lib/logger';
 import { firstDownloadUrl, rewriteVideoUrls, SAFE_TASK_ID } from '@/lib/video-urls';
+import { parsePersonaIdQuery } from '@/lib/contracts/personas';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
 //---------------
@@ -139,14 +140,15 @@ async function getHandler(request: Request): Promise<NextResponse> {
       ? createSupabaseServiceClient()
       : await createSupabaseServerClient();
 
-  const personaId = new URL(request.url).searchParams.get('personaId');
-  if (!personaId) {
-    return apiErrorResponse(400, 'personaId is required.', {
+  const parsedPersonaId = parsePersonaIdQuery(request.url);
+  if (!parsedPersonaId.ok) {
+    return apiErrorResponse(400, parsedPersonaId.error, {
       route: ROUTE,
       code: ERROR_CODES.VALIDATION_FAILED,
       field: 'personaId',
     });
   }
+  const personaId = parsedPersonaId.query.personaId;
   if (!isPersonaAllowed(auth.personaIds, personaId)) {
     return apiErrorResponse(403, 'This API key cannot access this persona.', {
       route: ROUTE,

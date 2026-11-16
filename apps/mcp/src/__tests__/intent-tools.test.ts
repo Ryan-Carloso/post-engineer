@@ -48,14 +48,14 @@ function setup(routes: Record<string, unknown>): { call: (name: string, args: Re
   };
 }
 
-const PERSONAS = { personas: [{ id: MARIA, name: 'Maria', niche: 'cooking' }] };
+const PERSONAS = { authenticated: true, personas: [{ id: MARIA, name: 'Maria', createdAt: '2026-01-01T00:00:00Z', boundAccounts: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [] }, niche: 'cooking' }] };
 
 describe('personas get', () => {
   it('joins the persona, its library size and its bound accounts in one call', async () => {
     const { call, seen } = setup({
       'GET /api/persona/list': PERSONAS,
-      'GET /api/persona/images': { images: [{ id: 'i1' }, { id: 'i2' }] },
-      'GET /api/persona/publishing-accounts': { success: true, defaults: { youtube: ['UC1'] } },
+      'GET /api/persona/images': { success: true, images: [{ id: 'i1', tag: 'casual', description: '', is_primary: false, created_at: '2026-01-01T00:00:00Z', image_url: null }, { id: 'i2', tag: 'formal', description: '', is_primary: false, created_at: '2026-01-01T00:00:00Z', image_url: null }] },
+      'GET /api/persona/publishing-accounts': { success: true, defaults: { youtube: ['UC1'], instagram: [], bluesky: ['did:plc:abc'], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [] } },
     });
     const result = await call('personas', { action: 'get', persona: 'maria' });
     expect(result.isError).toBe(false);
@@ -65,7 +65,7 @@ describe('personas get', () => {
   });
 
   it('says there is no persona with that id instead of returning an empty record', async () => {
-    const { call } = setup({ 'GET /api/persona/list': PERSONAS, 'GET /api/persona/images': { images: [] }, 'GET /api/persona/publishing-accounts': { defaults: {} } });
+    const { call } = setup({ 'GET /api/persona/list': PERSONAS, 'GET /api/persona/images': { success: true, images: [] }, 'GET /api/persona/publishing-accounts': { success: true, defaults: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [] } } });
     const result = await call('personas', { action: 'get', persona: '99999999-9999-4999-8999-999999999999' });
     expect(result.isError).toBe(true);
     expect(result.text).toContain('No persona with id');
@@ -74,7 +74,7 @@ describe('personas get', () => {
 
 describe('personas delete over the server', () => {
   it('previews first, deletes only with that preview’s token', async () => {
-    const { call, seen } = setup({ 'GET /api/persona/delete-preview': { persona: { id: MARIA, name: 'Maria' }, counts: { schedules: 1 }, videos: [] }, 'DELETE /api/persona': { success: true } });
+    const { call, seen } = setup({ 'GET /api/persona/delete-preview': { success: true, persona: { id: MARIA, name: 'Maria' }, counts: { schedules: 1, upcomingSlots: 0, publishedSlots: 0, failedSlots: 0, generatedVideos: 0, personaImages: 0 }, videos: [], videosTruncated: false, linksIncomplete: false }, 'DELETE /api/persona': { success: true } });
     const preview = await call('personas', { action: 'delete', persona: MARIA });
     expect(preview.isError).toBe(false);
     expect(seen.some((request) => request.method === 'DELETE')).toBe(false);
@@ -87,11 +87,13 @@ describe('personas delete over the server', () => {
 });
 
 const ACCOUNTS = {
+  authenticated: true,
   accounts: [
-    { provider: 'youtube', channelId: 'UC1', channelName: 'Maria' },
-    { provider: 'instagram', igUserId: '9', username: 'maria' },
-    { provider: 'pinterest', providerAccountId: 'PIN1', accountName: 'Maria Pins' },
+    { provider: 'youtube', recordId: 'rec-1', channelId: 'UC1', channelName: 'Maria', connectedAt: 1700000000000, lastUsed: 1700000000000 },
+    { provider: 'instagram', recordId: 'rec-2', igUserId: '9', username: 'maria', connectedAt: 1700000000000, lastUsed: 1700000000000 },
+    { provider: 'pinterest', recordId: 'rec-3', providerAccountId: 'PIN1', accountName: 'Maria Pins', connectedAt: 1700000000000, lastUsed: 1700000000000 },
   ],
+  message: 'Accounts retrieved from Supabase',
 };
 
 describe('accounts', () => {
@@ -119,7 +121,11 @@ describe('accounts', () => {
 
   it('resolves against the accounts as they are on each call, not as they were on the first one', async () => {
     const seen: string[] = [];
-    let accounts: unknown = { accounts: [{ provider: 'youtube', channelId: 'UC1', channelName: 'Maria' }] };
+    let accounts: unknown = {
+      authenticated: true,
+      accounts: [{ provider: 'youtube', recordId: 'rec-1', channelId: 'UC1', channelName: 'Maria', connectedAt: 1700000000000, lastUsed: 1700000000000 }],
+      message: 'Accounts retrieved from Supabase',
+    };
     vi.stubGlobal(
       'fetch',
       vi.fn(async (url: string, init: RequestInit) => {
@@ -135,7 +141,11 @@ describe('accounts', () => {
     try {
       expect((await client.callTool({ name: 'accounts', arguments: { action: 'disconnect', account: 'Maria' } })).isError).not.toBe(true);
       // The user reconnects another account; the same server must see it.
-      accounts = { accounts: [{ provider: 'instagram', igUserId: '9', username: 'new.account' }] };
+      accounts = {
+        authenticated: true,
+        accounts: [{ provider: 'instagram', recordId: 'rec-2', igUserId: '9', username: 'new.account', connectedAt: 1700000000000, lastUsed: 1700000000000 }],
+        message: 'Accounts retrieved from Supabase',
+      };
       expect((await client.callTool({ name: 'accounts', arguments: { action: 'disconnect', account: 'new.account' } })).isError).not.toBe(true);
     } finally {
       await client.close();
@@ -147,7 +157,7 @@ describe('accounts', () => {
   });
 
   it('lists the boards of a Pinterest account given by name, using its id', async () => {
-    const { call, seen } = setup({ 'GET /api/account': ACCOUNTS, 'GET /api/pinterest/boards': { boards: [{ id: 'b1', name: 'Board' }] } });
+    const { call, seen } = setup({ 'GET /api/account': ACCOUNTS, 'GET /api/pinterest/boards': { success: true, boards: [{ id: 'b1', name: 'Board' }] } });
     const result = await call('accounts', { action: 'list_boards', account: 'Maria Pins' });
     expect(result.isError).toBe(false);
     expect(seen.some((request) => request.path === '/api/pinterest/boards?accountId=PIN1')).toBe(true);
@@ -174,7 +184,7 @@ describe('accounts', () => {
 
 describe('experiments and check_script with a persona by name', () => {
   it('creates an experiment for a persona given by name', async () => {
-    const { call, seen } = setup({ 'GET /api/persona/list': PERSONAS, 'POST /api/experiments': { success: true } });
+    const { call, seen } = setup({ 'GET /api/persona/list': PERSONAS, 'POST /api/experiments': { success: true, experiment: { id: '22222222-2222-4222-8222-222222222222', name: 'Calm vs bold', variable: 'hook', personaId: MARIA, targetPairs: 6, variants: [{ variantId: 'hook-calm', name: 'Calm', description: 'calm' }, { variantId: 'hook-bold', name: 'Bold', description: 'bold' }] } } });
     const result = await call('experiments', {
       action: 'create',
       name: 'Calm vs bold',
@@ -186,7 +196,7 @@ describe('experiments and check_script with a persona by name', () => {
   });
 
   it('creates an experiment with no persona when none is given', async () => {
-    const { call, seen } = setup({ 'POST /api/experiments': { success: true } });
+    const { call, seen } = setup({ 'POST /api/experiments': { success: true, experiment: { id: '22222222-2222-4222-8222-222222222222', name: 'Faceless', variable: 'hook', personaId: null, targetPairs: 6, variants: [{ variantId: 'hook-a', name: 'A', description: 'a' }, { variantId: 'hook-b', name: 'B', description: 'b' }] } } });
     await call('experiments', {
       action: 'create',
       name: 'Faceless',
@@ -196,7 +206,12 @@ describe('experiments and check_script with a persona by name', () => {
   });
 
   it('scores a draft against the measured posts of a persona given by name', async () => {
-    const { call, seen } = setup({ 'GET /api/persona/list': PERSONAS, 'POST /api/videos/score-draft': { score: 80 } });
+    const { call, seen } = setup({ 'GET /api/persona/list': PERSONAS, 'POST /api/videos/score-draft': {
+        success: true, score: 80, reasons: [],
+        counts: { chars: 0, words: 0, hashtags: 0, links: 0, firstLineWords: 0, slopHits: [], topThemeMatch: null },
+        baseline: { postsMeasured: 0, topAngles: [], medianEngagement: null, bestEngagement: null, truncated: false },
+        publishCheck: null,
+      } });
     const result = await call('check_script', { action: 'score', draft: 'A short draft about training plans that is long enough.', network: 'youtube', persona: 'Maria' });
     expect(result.isError).toBe(false);
     expect(seen.find((request) => request.path === '/api/videos/score-draft')?.body).toMatchObject({ personaId: MARIA });
@@ -206,8 +221,8 @@ describe('experiments and check_script with a persona by name', () => {
 describe('video_tasks over the server', () => {
   it('takes a snapshot of several tasks by default and tags the request with the action', async () => {
     const { call, seen } = setup({
-      'GET /api/persona/video-status/t1': { body: { task_id: 't1', state: 4, progress: 30, stage: 'audio' } },
-      'GET /api/persona/video-status/t2': { body: { task_id: 't2', state: 1, progress: 100 } },
+      'GET /api/persona/video-status/t1': { status: 200, message: 'success', body: { task_id: 't1', state: 4, progress: 30, stage: 'audio' } },
+      'GET /api/persona/video-status/t2': { status: 200, message: 'success', body: { task_id: 't2', state: 1, progress: 100 } },
     });
     const result = await call('video_tasks', { action: 'status', taskIds: ['t1', 't2'] });
     expect(result.isError).toBe(false);
@@ -218,11 +233,11 @@ describe('video_tasks over the server', () => {
 });
 
 describe('malformed API payloads are reported, not turned into empty results', () => {
-  it('leaves a listing without an accounts array untouched when filtering by provider', async () => {
+  it('reports a listing without an accounts array as a malformed response', async () => {
     const { call } = setup({ 'GET /api/account': { message: 'odd' } });
     const result = await call('accounts', { action: 'list', provider: 'youtube' });
-    expect(result.isError).toBe(false);
-    expect(result.text).toContain('"message": "odd"');
+    expect(result.isError).toBe(true);
+    expect(result.text).toContain('Malformed response from GET /api/account');
   });
 
   it('passes an accounts failure through when filtering by provider', async () => {
@@ -247,10 +262,10 @@ describe('malformed API payloads are reported, not turned into empty results', (
     expect(JSON.parse(result.text.slice(result.text.indexOf('{')))).toMatchObject({ libraryImages: null, boundAccounts: null });
   });
 
-  it('personas get does not find a persona in a malformed listing', async () => {
-    const { call } = setup({ 'GET /api/persona/list': { personas: 'nope' }, 'GET /api/persona/images': { images: [] }, 'GET /api/persona/publishing-accounts': { defaults: {} } });
+  it('personas get reports a malformed listing as an error instead of "no persona"', async () => {
+    const { call } = setup({ 'GET /api/persona/list': { personas: 'nope' }, 'GET /api/persona/images': { success: true, images: [] }, 'GET /api/persona/publishing-accounts': { success: true, defaults: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [] } } });
     const result = await call('personas', { action: 'get', persona: MARIA });
     expect(result.isError).toBe(true);
-    expect(result.text).toContain('No persona with id');
+    expect(result.text).toContain('Malformed response from GET /api/persona/list');
   });
 });

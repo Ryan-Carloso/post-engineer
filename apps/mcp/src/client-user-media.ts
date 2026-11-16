@@ -1,7 +1,15 @@
 import { readFile, stat } from 'node:fs/promises';
 import { basename } from 'node:path';
 import type { PostEngineerClient } from './client.js';
+import { parseContractResponse } from './contract-response.js';
+import { checkMedia as checkMediaContract, uploadMedia as uploadMediaContract } from './contracts/media.js';
+import type { CheckMediaCode, VideoAspect } from './contracts/media.js';
 import { MAX_SEGMENT_MEDIA_BYTES, MAX_SEGMENT_MEDIA_MB } from './limits.js';
+
+// The check codes live in the shared media contract; re-exported so
+// existing import sites keep working.
+export { CHECK_MEDIA_CODES } from './contracts/media.js';
+export type { CheckMediaCode } from './contracts/media.js';
 
 //---------------
 // Segment media client calls (Phase 2, user media per segment).
@@ -14,19 +22,6 @@ import { MAX_SEGMENT_MEDIA_BYTES, MAX_SEGMENT_MEDIA_MB } from './limits.js';
 // mirrors UPLOAD_TIMEOUT_MS in client.ts (kept as a literal here so
 // client.ts stays untouched).
 const UPLOAD_TIMEOUT_MS = 120_000;
-
-export const CHECK_MEDIA_CODES = [
-  'ok',
-  'blocked_403',
-  'not_image',
-  'too_small',
-  'too_large',
-  'timeout',
-  'wrong_aspect',
-  'media_expired',
-] as const;
-
-export type CheckMediaCode = (typeof CHECK_MEDIA_CODES)[number];
 
 /**
  * Real image type from magic bytes — the extension is never trusted.
@@ -102,18 +97,8 @@ export async function uploadSegmentMedia(
     'upload segment media',
     UPLOAD_TIMEOUT_MS,
   );
-  return narrowUploadResult(result);
-}
-
-function narrowUploadResult(result: unknown): { mediaId: string } {
-  if (typeof result !== 'object' || result === null) {
-    throw new Error('The media upload endpoint returned an unexpected response.');
-  }
-  const record = result as Record<string, unknown>;
-  if (record.success !== true || typeof record.mediaId !== 'string' || record.mediaId.length === 0) {
-    throw new Error('The media upload endpoint returned an unexpected response.');
-  }
-  return { mediaId: record.mediaId };
+  const parsed = parseContractResponse(uploadMediaContract, result);
+  return { mediaId: parsed.mediaId };
 }
 
 /**
@@ -129,7 +114,7 @@ function narrowUploadResult(result: unknown): { mediaId: string } {
 export async function checkSegmentMedia(
   client: PostEngineerClient,
   url: string,
-  videoAspect?: '9:16' | '16:9' | '1:1',
+  videoAspect?: VideoAspect,
 ): Promise<{ code: CheckMediaCode; width?: number; height?: number; has_face?: boolean | null }> {
   let parsed: URL;
   try {
@@ -151,43 +136,14 @@ export async function checkSegmentMedia(
     },
     'check segment media',
   );
-  return narrowCheckResult(result);
-}
-
-function narrowCheckResult(result: unknown): {
-  code: CheckMediaCode;
-  width?: number;
-  height?: number;
-  has_face?: boolean | null;
-} {
-  if (typeof result !== 'object' || result === null) {
-    throw new Error('The media check endpoint returned an unexpected response.');
-  }
-  const record = result as Record<string, unknown>;
-  if (record.success !== true || typeof record.code !== 'string') {
-    throw new Error('The media check endpoint returned an unexpected response.');
-  }
-  if (!(CHECK_MEDIA_CODES as ReadonlyArray<string>).includes(record.code)) {
-    throw new Error('The media check endpoint returned an unknown code.');
-  }
-  const narrowed: {
-    code: CheckMediaCode;
-    width?: number;
-    height?: number;
-    has_face?: boolean | null;
-  } = {
-    code: record.code as CheckMediaCode,
-  };
-  if (typeof record.width === 'number' && Number.isFinite(record.width)) {
-    narrowed.width = record.width;
-  }
-  if (typeof record.height === 'number' && Number.isFinite(record.height)) {
-    narrowed.height = record.height;
-  }
-  // has_face is the engine's face verdict (issue #589): a non-boolean
-  // value is dropped (older engines omit the key entirely).
-  if (typeof record.has_face === 'boolean' || record.has_face === null) {
-    narrowed.has_face = record.has_face;
+  const checked = parseContractResponse(checkMediaContract, result);
+  const narrowed: { code: CheckMediaCode; width?: number; height?: number; has_face?: boolean | null } = { code: checked.code };
+  if (checked.width !== undefined) narrowed.width = checked.width;
+  if (checked.height !== undefined) narrowed.height = checked.height;
+  // has_face is lenient by design (issue #589): a non-boolean value is
+  // dropped (older engines omit the key entirely), never an error.
+  if (checked.has_face === true || checked.has_face === false || checked.has_face === null) {
+    narrowed.has_face = checked.has_face;
   }
   return narrowed;
 }
