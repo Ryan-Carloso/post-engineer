@@ -282,8 +282,10 @@ describe('fetchCimdDocument SSRF guards', () => {
       if (capturedLookup === undefined) {
         throw new Error('document fetch did not install a pinned lookup');
       }
+      // Copy into a const so the closure does not see the mutable binding.
+      const pinnedLookup = capturedLookup;
       const pinned = await new Promise<{ error: unknown; address: unknown }>((resolve) => {
-        capturedLookup('attacker.example', { all: true }, (error, address) => {
+        pinnedLookup('attacker.example', { all: true }, (error, address) => {
           resolve({ error, address });
         });
       });
