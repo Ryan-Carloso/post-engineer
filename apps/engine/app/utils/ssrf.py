@@ -210,8 +210,10 @@ class _PinnedAdapter(HTTPAdapter):
         pool = super().get_connection_with_tls_context(
             request, verify, proxies, cert
         )
-        # A proxy is the TCP peer, not the URL host. Nothing in the product
-        # passes proxies; refuse the pin-bypass rather than dial the proxy.
+        # A proxy is the TCP peer, not the URL host. download_public_file
+        # does not take a proxies argument, and the session ignores env
+        # proxies (trust_env = False). Refuse here too, or the dial would
+        # go to the proxy and the pin would never run.
         if proxies:
             raise UnsafeUrlError("A proxied fetch is not supported.")
         pool.ConnectionCls = _pinned_connection_class(pool.ConnectionCls, self._pinned_ip)
@@ -283,7 +285,6 @@ def download_public_file(
     tls_verify: bool = True,
     session=None,
     headers: Optional[dict] = None,
-    proxies: Optional[dict] = None,
 ) -> str:
     """Download *url* to *dest_path* with per-hop SSRF validation.
 
@@ -311,7 +312,6 @@ def download_public_file(
                 timeout=timeout,
                 verify=tls_verify,
                 headers=headers,
-                proxies=proxies,
             )
             location = _header(response.headers, "Location")
             if response.status_code in _REDIRECT_STATUSES and location:

@@ -590,3 +590,102 @@ def test_https_sni_is_the_url_host_while_the_dial_is_the_checked_ip():
             )
     assert dials == [((CHECKED_IP, 443), 10)]
     assert seen["server_hostname"] == "rebind.test"
+
+
+def test_a_response_with_no_headers_still_saves_the_body(tmp_path):
+    class Bare:
+        status_code = 200
+        headers = None
+
+        def iter_content(self, chunk_size):
+            yield b"PNG"
+
+        def close(self):
+            return None
+
+    class Session:
+        def get(self, url, **kwargs):
+            return Bare()
+
+    dest = tmp_path / "out.bin"
+    ssrf.download_public_file(
+        "http://93.184.215.14/a.bin", str(dest), session=Session()
+    )
+    assert dest.read_bytes() == b"PNG"
+
+
+def test_dial_treats_a_non_numeric_timeout_as_blocking():
+    seen = []
+
+    def create_connection(address, timeout=None, *args, **kwargs):
+        seen.append((address, timeout))
+        client, server = socket.socketpair()
+        server.close()
+        return client
+
+    with patch.object(
+        ssrf.socket, "getaddrinfo", side_effect=AssertionError("dns")
+    ), patch.object(ssrf.socket, "create_connection", side_effect=create_connection):
+        sock = ssrf._dial(CHECKED_IP, 443, object())
+    sock.close()
+    assert seen == [((CHECKED_IP, 443), None)]
+
+
+def test_open_refuses_an_empty_address_list_without_dialing():
+    def dial(*_args, **_kwargs):
+        raise AssertionError("dialed")
+
+    with patch.object(ssrf.socket, "create_connection", side_effect=dial), patch.object(
+        ssrf.socket, "getaddrinfo", side_effect=dial
+    ):
+        with pytest.raises(ssrf.UnsafeUrlError, match="no address"):
+            ssrf._open("get", "https://pinned.invalid/a", [])
+
+
+def test_a_non_streaming_request_returns_the_pinned_response():
+    """stream=False is the webhook path: the body comes back, then the session closes."""
+    seen = []
+    dials = []
+
+    def create_connection(address, timeout=None, *args, **kwargs):
+        dials.append((address, timeout))
+        response = _http_response(
+            200, "OK", {"Content-Type": "application/json"}, b'{"ok": true}'
+        )
+        return _scripted_socket(lambda _request: response, seen)
+
+    with patch.object(
+        ssrf.socket, "getaddrinfo", side_effect=AssertionError("dns")
+    ), patch.object(ssrf.socket, "create_connection", side_effect=create_connection):
+        response = ssrf._send_pinned(
+            "post",
+            "http://pinned.invalid/hook",
+            CHECKED_IP,
+            json={"ok": True},
+            timeout=10,
+            stream=False,
+        )
+    assert response.status_code == 200
+    assert response.json() == {"ok": True}
+    assert dials == [((CHECKED_IP, 80), 10)]
+    assert seen and b"Host: pinned.invalid" in seen[0]
+    response.close()
+
+
+def test_pinned_adapter_refuses_a_proxy_without_dialing():
+    session = requests.Session()
+    session.trust_env = False
+    session.mount("https://", ssrf._PinnedAdapter(CHECKED_IP))
+
+    def dial(*_args, **_kwargs):
+        raise AssertionError("dialed")
+
+    with patch.object(socket, "create_connection", side_effect=dial), patch.object(
+        socket, "getaddrinfo", side_effect=dial
+    ), patch.object(socket.socket, "connect", side_effect=dial):
+        with pytest.raises(ssrf.UnsafeUrlError, match="proxied"):
+            session.get(
+                "https://pinned.invalid/hook",
+                proxies={"https": "http://203.0.113.5:8080"},
+                timeout=1,
+            )

@@ -103,12 +103,8 @@ function httpsUrlField(fieldName: string) {
 
 /** https only. A loopback or private literal host is rejected; a name is left to the engine. */
 function isPublicHttpsWebhookUrl(url: string): boolean {
-  let parsed: URL;
-  try {
-    parsed = new URL(url);
-  } catch {
-    return false;
-  }
+  // `.url()` already required a string URL.canParse accepts, so this does not throw.
+  const parsed = new URL(url);
   if (parsed.protocol !== 'https:') return false;
   // Node keeps the brackets on an IPv6 hostname (`[::1]`).
   const host = parsed.hostname.replace(/^\[|\]$/g, '');

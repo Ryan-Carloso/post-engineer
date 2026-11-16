@@ -74,7 +74,14 @@ export function requestPinned(
         lookup: pinnedLookup(addresses),
       },
       (incoming) => {
-        const status = incoming.statusCode ?? 0;
+        const status = incoming.statusCode;
+        // A fresh IncomingMessage has statusCode null. Response rejects
+        // status 0, so a missing status is a failed request, not an HTTP code.
+        if (typeof status !== 'number') {
+          incoming.resume();
+          reject(new Error('response had no status'));
+          return;
+        }
         const headers = headersFrom(incoming);
         if (method === 'HEAD' || (status >= 300 && status < 400)) {
           incoming.resume();

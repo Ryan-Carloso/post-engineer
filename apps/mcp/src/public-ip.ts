@@ -58,23 +58,27 @@ function ipv6ToBigInt(ip: string): bigint | null {
   let addr = ip.toLowerCase();
   if (addr.includes('.')) {
     // Embedded IPv4 tail (e.g. ::ffff:8.8.8.8) becomes two hex groups.
+    // isIP reports family 6 only when that tail already has a colon and
+    // four octets, so those shape checks are not repeated here. A zone id
+    // on the last octet (`::ffff:8.8.8.8%eth0`) is still family 6, and
+    // Number of that octet is NaN. Fail closed: the shifts below would
+    // turn NaN into 0 and classify the mapped address as public.
     const lastColon = addr.lastIndexOf(':');
-    if (lastColon === -1) return null;
     const octets = addr.slice(lastColon + 1).split('.').map(Number);
-    if (octets.length !== 4 || octets.some((o) => Number.isNaN(o))) return null;
+    if (octets.some((octet) => Number.isNaN(octet))) return null;
     const hi = ((octets[0] << 8) | octets[1]).toString(16);
     const lo = ((octets[2] << 8) | octets[3]).toString(16);
     addr = `${addr.slice(0, lastColon)}:${hi}:${lo}`;
   }
+  // isIP accepts one `::` and a group count that fits in 128 bits.
   const halves = addr.split('::');
-  if (halves.length > 2) return null;
   const head = halves[0] === '' ? [] : halves[0].split(':');
   const tail = halves.length === 2 ? (halves[1] === '' ? [] : halves[1].split(':')) : [];
-  if (halves.length === 1 && head.length !== 8) return null;
-  if (head.length + tail.length > 8) return null;
   const groups = [...head, ...Array<string>(8 - head.length - tail.length).fill('0'), ...tail];
   let value = 0n;
   for (const group of groups) {
+    // A zone id (`2606:4700:4700::1111%eth0`) is family 6 to isIP.
+    // parseInt would stop at `%` and keep the public address.
     if (!/^[0-9a-f]{1,4}$/.test(group)) return null;
     value = (value << 16n) | BigInt(parseInt(group, 16));
   }
@@ -82,8 +86,9 @@ function ipv6ToBigInt(ip: string): bigint | null {
 }
 
 function inIpv6Network(addr: bigint, network: string, prefixLen: number): boolean {
-  const net = ipv6ToBigInt(network);
-  if (net === null) return false;
+  // The network literals below are well-formed. ipv6ToBigInt returns null
+  // only for a zone id, which those literals never carry.
+  const net = ipv6ToBigInt(network) as bigint;
   const shift = BigInt(128 - prefixLen);
   return (addr >> shift) === (net >> shift);
 }

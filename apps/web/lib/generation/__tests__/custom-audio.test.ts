@@ -353,6 +353,33 @@ describe('checkCustomAudioUrl — HEAD failures and content checks', () => {
     expect(metadata.url).not.toContain('secret');
   });
 
+  it('re-pins each redirect hop to the address that hop resolved to', async () => {
+    mockLookup.mockImplementation(async (hostname: string) => {
+      if (hostname === 'one.example') return [{ address: '93.184.215.14', family: 4 }];
+      if (hostname === 'two.example') return [{ address: '8.8.8.8', family: 4 }];
+      throw new Error(`unexpected host ${hostname}`);
+    });
+    const calls = stubHead([
+      headResponse(302, { location: 'https://two.example/b.mp3' }),
+      audioHead(),
+    ]);
+    const result = await checkCustomAudioUrl('https://one.example/a.mp3');
+    expect(result).toEqual({ ok: true });
+
+    async function pinnedTo(call: CapturedCall | undefined): Promise<unknown> {
+      const lookupFn = call?.lookup;
+      if (lookupFn === undefined) throw new Error('HEAD request did not install a pinned lookup');
+      return new Promise((resolve) => {
+        lookupFn('ignored.invalid', { all: true }, (_error, address) => {
+          resolve(address);
+        });
+      });
+    }
+
+    expect(await pinnedTo(calls[0])).toEqual([{ address: '93.184.215.14', family: 4 }]);
+    expect(await pinnedTo(calls[1])).toEqual([{ address: '8.8.8.8', family: 4 }]);
+  });
+
   it('follows a redirect chain, re-checking each hop', async () => {
     const calls = stubHead([
       headResponse(302, { location: 'http://93.184.216.35/b.mp3' }),
