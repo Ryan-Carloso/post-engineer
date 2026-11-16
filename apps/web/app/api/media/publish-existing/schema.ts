@@ -50,17 +50,20 @@ const MediaSchema = z.discriminatedUnion('kind', [
     .strict(),
 ]);
 
+/** One post at one moment: existing media is published once, so the
+ *  schedule is a single instant, never a list of daily times. */
 const PublishingScheduleSchema = z
   .object({
-    startAt: z.string(),
-    times: z.array(z.string()).min(1).max(10),
-    timezone: z.string(),
+    publishAt: z.string().min(1, 'publishing.schedule.publishAt is required.'),
+    timezone: z.string().min(1, 'publishing.schedule.timezone is required.'),
   })
   .strict();
 
 const PublishingSchema = z
   .object({
-    mode: z.enum(['scheduled', 'asap']).optional(),
+    // Required: a publish tool that silently defaults to "later" (or to
+    // "now") surprises one caller or the other.
+    mode: z.enum(['scheduled', 'asap']),
     providers: z.array(z.string()).min(1).max(10),
     accounts: z.record(z.string(), z.array(z.string())).optional(),
     schedule: PublishingScheduleSchema.optional(),
@@ -93,7 +96,7 @@ export interface PublishExistingRequest {
     mode: 'asap' | 'scheduled';
     providers: Provider[];
     accounts: Record<string, string[] | undefined> | undefined;
-    schedule: { startAt: string; times: string[]; timezone: string } | undefined;
+    schedule: { publishAt: string; timezone: string } | undefined;
     pinterestBoardId: string | null;
   };
   /** YouTube tags / privacy, required for ASAP (the handlers demand them);
@@ -164,7 +167,7 @@ export function checkPublishExistingSemantics(
   const board = validatePinterestBoard(input.publishing.providers, input.publishing.pinterestBoardId);
   if (!board.ok) issues.push(...board.issues);
 
-  const mode = input.publishing.mode ?? 'scheduled';
+  const mode = input.publishing.mode;
   if (mode === 'asap' && input.publishing.schedule !== undefined) {
     issues.push(invalid("publishing.schedule must not be set when publishing.mode is 'asap'.", 'publishing.schedule'));
   }

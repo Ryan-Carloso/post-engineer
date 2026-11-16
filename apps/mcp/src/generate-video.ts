@@ -24,8 +24,8 @@ import { generatePersonaVideoOutcome } from './tools-single-video.js';
 // back in the result.
 //---------------
 
-const PROVIDERS = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'pinterest', 'fanvue', '3speak', 'rumble'] as const;
-type Provider = (typeof PROVIDERS)[number];
+export const PROVIDERS = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'pinterest', 'fanvue', '3speak', 'rumble'] as const;
+export type Provider = (typeof PROVIDERS)[number];
 
 // Where each provider's account ids go in the web request (the per-provider arrays the route reads).
 const ACCOUNT_FIELD: Record<Provider, string> = {
@@ -110,7 +110,7 @@ export interface PreparedVideo {
 }
 
 /** The persona's bound accounts per provider, from GET /api/persona/publishing-accounts. */
-async function boundAccounts(client: PostEngineerClient, personaId: string): Promise<Map<Provider, string[]>> {
+export async function boundAccounts(client: PostEngineerClient, personaId: string): Promise<Map<Provider, string[]>> {
   let payload: unknown;
   try {
     payload = await getPersonaPublishingAccounts(client, personaId);

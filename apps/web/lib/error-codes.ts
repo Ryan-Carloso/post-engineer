@@ -42,6 +42,9 @@ export const ERROR_CODES = {
   // Issue #384: a ready video upload was already consumed (or expired) by
   // the time the scheduled publish tried to hold it.
   VIDEO_UPLOAD_CONSUMED: 'VIDEO_UPLOAD_CONSUMED',
+  // A signed upload is single-use: it already backs a live scheduled slot
+  // (migration 065), so a second call cannot schedule or publish it.
+  VIDEO_UPLOAD_SCHEDULED: 'VIDEO_UPLOAD_SCHEDULED',
   MCP_VERSION_MISMATCH: 'MCP_VERSION_MISMATCH',
 } as const;
 
@@ -76,6 +79,8 @@ const DEFAULT_MESSAGES: Record<ErrorCode, string> = {
   ENGINE_UNAVAILABLE: 'Video generation is temporarily unavailable. Please try again later.',
   IMAGE_PROVIDER_UNSUPPORTED: 'Images can only be published to Instagram for now.',
   VIDEO_UPLOAD_CONSUMED: 'This video upload was already used. Upload it again to publish.',
+  VIDEO_UPLOAD_SCHEDULED:
+    'This video upload is already scheduled. An upload publishes once: schedule it to every network in one call, or upload it again.',
   // The gate (mcp-version-gate.ts) always sends a specific message naming
   // both versions; this default only names the fix.
   MCP_VERSION_MISMATCH: 'This post-engineer-mcp version does not match the server. Restart the MCP with the version the server requires.',

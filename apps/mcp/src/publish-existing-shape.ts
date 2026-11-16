@@ -1,12 +1,19 @@
 // Shape for publish_video (action: publish_existing) (issue #384):
 // publish or schedule media that already exists — a finished engine
 // video by task id, a ready signed-upload video by upload id, or a plain
-// image as inline base64 bytes — with no generation and no token charge.
-// Single provider + accountIds per call, mirroring publish_upload; the
-// client builds the web route's providers/accounts publishing shape.
+// image — with no generation and no token charge.
+//
+// Accounts are names or ids, like generate_video: the network is read
+// from each account, so one call reaches every network (an upload is
+// single-use, so one call is the only way to cross-post it). A scheduled
+// post is one moment (publishAt), and mode is required: a publish tool
+// never guesses "now" or "later". The image comes from a local file on
+// the stdio server and as base64 on the remote one (intent-content.ts
+// offers one field per server).
 // Kept in a new module so intent-content.ts stays under the file-size
 // ratchet.
 import { z } from 'zod';
+import { MAX_SEGMENT_MEDIA_MB } from './limits.js';
 import { PublishVideoDirectShape } from './publish-direct-shape.js';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -14,71 +21,80 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 export const PublishExistingShape = {
   mediaKind: z
     .enum(['task', 'upload', 'image'])
-    .describe('task = finished video by taskId; upload = ready upload by uploadId; image = inline base64 bytes (instagram only).'),
+    .describe('task = a finished generated video (taskId); upload = a completed signed upload (uploadId); image = a JPEG or PNG (instagram only for now).'),
   taskId: z
     .string()
     .min(1, 'taskId is required')
     .optional()
-    .describe('mediaKind task: the engine task id of the finished video.'),
+    .describe('mediaKind task: the task id of the finished video.'),
   uploadId: z
     .string()
     .regex(UUID_PATTERN, 'uploadId must be a UUID')
     .optional()
-    .describe('mediaKind upload: the uploadId of a completed signed upload (create_upload + complete_upload). Single-use.'),
+    .describe('mediaKind upload: the uploadId from create_upload + complete_upload. Single-use: publish it to every network in this one call.'),
+  imagePath: z
+    .string()
+    .min(1, 'imagePath is required')
+    .optional()
+    .describe(`mediaKind image: local path of the JPEG or PNG (max ${MAX_SEGMENT_MEDIA_MB} MB).`),
   imageData: z
     .string()
     .min(1, 'imageData is required')
     .optional()
-    .describe('mediaKind image: the image bytes as base64 (JPEG or PNG, max 8 MB).'),
-  imageContentType: z
-    .enum(['image/jpeg', 'image/png'])
+    .describe(`mediaKind image: the JPEG or PNG bytes as base64 (max ${MAX_SEGMENT_MEDIA_MB} MB).`),
+  accounts: z
+    .array(z.string().min(1))
+    .min(1, 'Provide at least one account')
     .optional()
-    .describe('mediaKind image: the real image type.'),
-  provider: PublishVideoDirectShape.provider,
-  accountIds: PublishVideoDirectShape.accountIds,
+    .describe("Accounts to publish to, each an account name or id from accounts (action: list); the network is read from the account, so one call can reach several networks. Omit to use the persona's bound publishing accounts."),
   title: z
     .string()
     .min(1, 'title is required')
     .max(100, 'title must be at most 100 characters')
-    .describe('The title (required).'),
+    .describe('The title (YouTube, Rumble, Fanvue, Pinterest show it; required for every post).'),
   description: z
     .string()
     .min(1, 'description is required')
     .max(5000, 'description must be at most 5000 characters')
-    .describe('The publish copy (required).'),
+    .describe('The post text: the video description, and the caption on Instagram, Bluesky, LinkedIn, Threads, Facebook and 3Speak.'),
+  caption: z
+    .string()
+    .min(1)
+    .optional()
+    .describe('Optional: a different text for the caption networks. Omit to use description.'),
   personaId: z
     .string()
     .optional()
     .describe('The persona id. Omit for a faceless post.'),
   mode: z
-    .enum(['scheduled', 'asap'])
-    .default('scheduled')
-    .describe("'scheduled' (default) slots the post at startAt + times; 'asap' publishes right away — do not set startAt or times."),
-  startAt: z
+    .enum(['asap', 'scheduled'])
+    .describe("Required. 'asap' publishes now; 'scheduled' publishes once at publishAt."),
+  publishAt: z
     .string()
     .refine((value) => !Number.isNaN(Date.parse(value)), {
-      message: 'startAt must be a valid ISO datetime (e.g. "2026-10-02T20:00:00")',
+      message: 'publishAt must be an ISO datetime (e.g. "2026-12-01T20:00:00")',
     })
     .optional()
-    .describe('ISO datetime for the slot start. Required unless mode is \'asap\' (3h-30d ahead).'),
-  times: z
-    .array(z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Each time must be HH:MM in 24-hour format (e.g. "09:30", "20:00")'))
-    .min(1, 'Provide at least one publish time')
-    .optional()
-    .describe('Daily publish times (HH:MM). Required unless mode is \'asap\'.'),
-  timezone: z.string().min(1).default('UTC').describe('IANA timezone for startAt and times. Defaults to UTC.'),
-  tags: PublishVideoDirectShape.tags,
-  privacyStatus: PublishVideoDirectShape.privacyStatus,
-  caption: PublishVideoDirectShape.caption,
+    .describe("mode scheduled: when to publish, 3h-30d ahead. Wall-clock in timezone (e.g. \"2026-12-01T20:00:00\"), or with an offset."),
+  timezone: z.string().min(1).default('UTC').describe('IANA timezone for a publishAt without an offset. Defaults to UTC.'),
+  tags: PublishVideoDirectShape.tags.describe('YouTube only: required with mode asap (scheduled derives them from the title).'),
+  privacyStatus: PublishVideoDirectShape.privacyStatus.describe('YouTube only: required with mode asap.'),
   boardId: PublishVideoDirectShape.boardId,
   idempotencyKey: z
     .string()
     .min(1)
     .optional()
-    .describe(
-      'Idempotency key: for mode scheduled, retrying with the SAME key returns the original schedule. For mode asap the key is NOT replayed: task/image retries publish again, upload retries fail as consumed, check the account first. Omitted: a key is generated per call.',
-    ),
+    .describe('Retry a timed-out call with the SAME key: the server returns the original result (the schedule, or the posts already published per account) instead of publishing again. Omitted: a key is generated per call.'),
 };
+
+const { imagePath: _imagePath, ...remoteFields } = PublishExistingShape;
+const { imageData: _imageData, ...localFields } = PublishExistingShape;
+
+/** The remote server reads no local files: base64 bytes instead of a path. */
+export const PublishExistingRemoteShape = remoteFields;
+
+/** The stdio server reads the image from disk: an agent cannot type megabytes of base64. */
+export const PublishExistingLocalShape = localFields;
 
 export const PublishExistingSchema = z.object(PublishExistingShape).strict().superRefine((value, ctx) => {
   // One media reference per kind: the server 400s a missing one, so fail
@@ -89,22 +105,15 @@ export const PublishExistingSchema = z.object(PublishExistingShape).strict().sup
   if (value.mediaKind === 'upload' && value.uploadId === undefined) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['uploadId'], message: 'uploadId is required when mediaKind is upload.' });
   }
-  if (value.mediaKind === 'image') {
-    if (value.imageData === undefined) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['imageData'], message: 'imageData is required when mediaKind is image.' });
-    }
-    if (value.imageContentType === undefined) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['imageContentType'], message: 'imageContentType is required when mediaKind is image.' });
-    }
-    // Images post only where a handler accepts them: Instagram today.
-    if (value.provider !== 'instagram') {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['provider'], message: 'Images can only be published to instagram for now: its handler is the only one that accepts image files.' });
-    }
+  if (value.mediaKind === 'image' && (value.imagePath === undefined) === (value.imageData === undefined)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['imagePath'], message: 'mediaKind image needs the image: imagePath on a local server, imageData (base64) on a remote one.' });
   }
-  if (value.mode === 'scheduled' && (value.startAt === undefined || value.times === undefined)) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['startAt'], message: 'startAt and times are required when mode is scheduled.' });
+  if (value.mode === 'scheduled' && value.publishAt === undefined) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['publishAt'], message: 'publishAt is required when mode is scheduled.' });
   }
-  if (value.mode === 'asap' && (value.startAt !== undefined || value.times !== undefined)) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['startAt'], message: 'startAt and times must not be set when mode is asap.' });
+  if (value.mode === 'asap' && value.publishAt !== undefined) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['publishAt'], message: "publishAt must not be set when mode is asap: asap publishes now. Use mode 'scheduled' to publish later." });
   }
 });
+
+export type PublishExistingArgs = z.infer<typeof PublishExistingSchema>;

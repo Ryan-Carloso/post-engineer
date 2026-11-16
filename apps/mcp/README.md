@@ -197,7 +197,7 @@ The server offers **16 intent tools**, not one tool per API endpoint. A tool is 
 | `billing` | `balance`, `transactions` | Prepaid tokens. |
 | `prompts` | `list`, `get` | The recipe prompts. |
 | `check_script` | `validate`, `score` | Check a script before spending tokens. |
-| `publish_video` | `from_file`, `create_upload`, `complete_upload`, `publish_upload` | Publish a ready-made video directly. |
+| `publish_video` | `from_file`, `create_upload`, `complete_upload`, `publish_upload`, `publish_existing` | Publish media that already exists, with no generation and no charge. `publish_existing` takes a finished video (`taskId`), a completed upload (`uploadId`) or an image (`imagePath` on stdio, base64 `imageData` over HTTP; Instagram only), sends it to every network of its `accounts` (names or ids, or the persona's bound accounts) in one call, and needs `mode`: `asap`, or `scheduled` once at `publishAt`. A retry with the same `idempotencyKey` replays the original result in both modes. |
 
 Actions that read a file from the disk (`persona_media` `add_image`, `media` `upload`, `publish_video` `from_file`, and a local `audioPath`/`avatarPath`) exist only on the stdio server: a path served over HTTP would resolve on the server's host. Over HTTP use public URLs, or the signed upload of `publish_video`.
 
