@@ -79,10 +79,11 @@ def _segments(overlay):
 
 
 def _segments_with_cta_photo(overlay):
-    """_segments plus a plain photo on the CTA, so both segments produce a
-    panel (the density minimum itself is enforced earlier, at validation)."""
+    """_segments plus two plain photos on the CTA, so both segments produce
+    a panel and the three photos tile the 6 s audio at 2 s each (the
+    density minimum itself is enforced earlier, at validation)."""
     hook, cta = _segments(overlay)
-    return [hook, {**cta, "media": [{"url": "https://e.com/q.jpg"}]}]
+    return [hook, {**cta, "media": [{"url": "https://e.com/q.jpg"}, {"url": "https://e.com/r.jpg"}]}]
 
 
 def _panel_pixel(panel, offset_y):
@@ -207,7 +208,7 @@ def test_prepare_segment_panels_resolves_the_subtitle_font_only_when_a_card_is_w
     assert seen == ["BeVietnamPro-Medium.ttf"]
     assert warnings == []
     panels, stored_warnings = segment_panels._read_manifest("task-1")
-    assert [panel.index for panel in panels] == [0, 1]
+    assert [panel.index for panel in panels] == [0, 1, 1]
     assert stored_warnings == warnings
 
     seen.clear()
@@ -239,7 +240,7 @@ def test_prepare_segment_panels_warns_and_keeps_the_photo_when_the_font_is_missi
         "segment 0 image 0 media overlay skipped: overlay font unavailable",
     ]
     panels, stored = segment_panels._read_manifest("task-1")
-    assert len(panels) == 2 and stored == warnings
+    assert len(panels) == 3 and stored == warnings
 
 
 def test_prepare_segment_panels_without_segments_writes_nothing(tmp_path, monkeypatch):
@@ -387,10 +388,17 @@ def test_prepare_segment_panels_uses_the_video_type_to_pick_panel_or_full_frame(
 
     monkeypatch.setattr(segment_panels.utils, "task_dir", lambda task_id: str(tmp_path))
     monkeypatch.setattr(user_media.utils, "task_dir", lambda task_id: str(tmp_path))
+    # The CTA carries three photos so they tile the 6 s audio at 2 s each
+    # after the hook hands over.
+    hook, cta = _two_media_segments()
+    segments = [
+        hook,
+        {**cta, "media": [*cta["media"], {"url": "https://e.com/body2.jpg"}, {"url": "https://e.com/body3.jpg"}]},
+    ]
     params = SimpleNamespace(
         video_aspect="9:16",
         font_name="x.ttf",
-        segments=_two_media_segments(),
+        segments=segments,
         video_type="hook_lipsync",
         persona=PersonaParams(name="Ana", avatar_url="https://e.com/a.png", voice_id="calm"),
         video_layout="standard",
@@ -404,4 +412,6 @@ def test_prepare_segment_panels_uses_the_video_type_to_pick_panel_or_full_frame(
         warnings = user_media.prepare_segment_panels("task-1", params, _subtitle(tmp_path), 6.0)
     assert warnings == []
     panels, _ = segment_panels._read_manifest("task-1")
-    assert [(panel.index, _is_full_frame(panel)) for panel in panels] == [(0, False), (1, True)]
+    assert [(panel.index, _is_full_frame(panel)) for panel in panels] == [
+        (0, False), (1, True), (1, True), (1, True),
+    ]

@@ -56,13 +56,37 @@ def _run(task_dir, params, download=_download, words=WORDS):
 
 
 def test_images_material_photos_cover_the_whole_audio_and_zoom(task_dir):
-    warnings = _run(task_dir, _params())
+    # Three photos tile the 6 s audio at 2 s each, alternating zoom in/out.
+    words = [
+        ("Welcome", 0.0, 0.5), ("to", 0.5, 0.7), ("Porto", 0.7, 1.2),
+        ("Where", 2.0, 2.3), ("the", 2.3, 2.5), ("river", 2.5, 3.0),
+        ("Visit", 5.0, 5.4), ("Porto", 5.4, 5.9),
+    ]
+    segments = [
+        {"kind": "hook", "text": "Welcome to Porto.", "media": [{"url": "https://e.com/hook.jpg"}]},
+        {"kind": "content", "text": "Where the river.", "media": [{"url": "https://e.com/body.jpg"}]},
+        {"kind": "content", "text": "Visit Porto.", "media": [{"url": "https://e.com/cta.jpg"}]},
+    ]
+    warnings = _run(task_dir, _params(segments=segments), words=words)
     panels, stored = segment_panels._read_manifest("task-1")
-    assert [(p.index, p.start, p.end, p.motion) for p in panels] == [(0, 0.0, 5.0, "in"), (1, 5.0, 6.0, "out")]
-    # The hook photo runs on over the 3.8 s silence before the CTA: the
-    # neighbour covers it, with no warning — a gap is just a pause.
+    assert [(p.index, p.start, p.end, p.motion) for p in panels] == [
+        (0, 0.0, 2.0, "in"), (1, 2.0, 4.0, "out"), (2, 4.0, 6.0, "in"),
+    ]
     assert warnings == []
     assert stored == warnings
+
+
+def test_a_long_silence_between_photos_fails_instead_of_stretching(task_dir):
+    # The hook photo used to run on over the 3.8 s silence before the CTA.
+    # At 2 s per photo the two photos cover 4 s of 6 s, so the task fails
+    # naming the missing photo instead of holding one photo over the gap.
+    with pytest.raises(image_coverage.ImagesDoNotCoverAudio) as exc_info:
+        _run(task_dir, _params())
+    assert str(exc_info.value) == (
+        "images_do_not_cover_audio: 2 photos cover 4.0s of 6.0s at 2s each; "
+        "need 1 more photo"
+    )
+    assert segment_panels._read_manifest("task-1") == ([], [])
 
 
 def test_a_dropped_photo_fails_the_task_naming_the_photo(task_dir):
@@ -140,7 +164,18 @@ def test_blocked_photos_fail_with_the_counts_and_every_skip_reason(task_dir):
 
 
 def test_hook_persona_coverage_starts_where_the_face_hands_over(task_dir):
-    params = _params()
+    params = _params(segments=[
+        {"kind": "hook", "text": "Welcome to Porto.", "media": [{"url": "https://e.com/hook.jpg"}]},
+        {
+            "kind": "content",
+            "text": "Visit Porto.",
+            "media": [
+                {"url": "https://e.com/cta.jpg"},
+                {"url": "https://e.com/cta2.jpg"},
+                {"url": "https://e.com/cta3.jpg"},
+            ],
+        },
+    ])
     with patch.object(user_media, "_face_mode", return_value=segment_panels.FACE_HOOK), patch.object(
         user_media, "_hook_end", return_value=1.5
     ) as hook_end:
@@ -150,7 +185,7 @@ def test_hook_persona_coverage_starts_where_the_face_hands_over(task_dir):
     framed = [p for p in panels if p.caption_bottom is not None]
     full = [p for p in panels if p.caption_bottom is None]
     assert [(p.index, p.start, p.end, p.motion) for p in framed] == [(0, 0.0, 1.2, None)], "the hook panel never moves"
-    assert [(p.index, p.start, p.end) for p in full] == [(1, 1.5, 6.0)]
+    assert [(p.index, p.start, p.end) for p in full] == [(1, 1.5, 3.5), (1, 3.5, 5.5), (1, 5.5, 6.0)]
 
 
 def test_full_lipsync_has_nothing_to_cover_and_never_fails(task_dir):
@@ -215,7 +250,11 @@ def test_a_landscape_hook_photo_stays_a_panel_when_the_face_shows(task_dir):
     ]
     segments = [
         {"kind": "hook", "text": "Welcome to Porto.", "media": [{"url": "https://e.com/hook.jpg"}]},
-        {"kind": "content", "text": "Where the river.", "media": [{"url": "https://e.com/body.jpg"}]},
+        {
+            "kind": "content",
+            "text": "Where the river.",
+            "media": [{"url": "https://e.com/body.jpg"}, {"url": "https://e.com/body2.jpg"}],
+        },
         {"kind": "content", "text": "Visit Porto.", "media": [{"url": "https://e.com/cta.jpg"}]},
     ]
 
@@ -233,5 +272,5 @@ def test_a_landscape_hook_photo_stays_a_panel_when_the_face_shows(task_dir):
     framed = [p for p in panels if p.caption_bottom is not None]
     full = [p for p in panels if p.caption_bottom is None]
     assert [(p.index, p.start, p.end) for p in framed] == [(0, 0.0, 1.2)]
-    assert [(p.index, p.start, p.end) for p in full] == [(1, 1.5, 5.0), (2, 5.0, 6.0)]
+    assert [(p.index, p.start, p.end) for p in full] == [(1, 1.5, 2.5), (1, 2.5, 4.5), (2, 4.5, 6.0)]
     assert warnings == []
