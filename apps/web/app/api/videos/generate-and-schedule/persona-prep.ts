@@ -2,7 +2,11 @@
 //
 // Extracted from route.ts so the route module stays under the file-size
 // ratchet. PersonaPrep is the snapshot the engine reads at tick time.
+import { NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { apiErrorResponse } from '@/lib/api-error';
+import { trackApiEvent } from '@/lib/analytics';
+import { ERROR_CODES, formatErrorMessage } from '@/lib/error-codes';
 import {
   getPersonaDefaultAccounts,
   type PersonaDefaultAccounts,
@@ -87,12 +91,55 @@ export async function resolvePublishingAccounts(
   personaId: string | null,
   explicitAccounts: Record<string, string[] | undefined> | undefined,
   bound?: PersonaDefaultAccounts,
+  userId?: string,
 ): Promise<Record<string, string[] | undefined>> {
   const accounts = explicitAccounts ?? {};
   if (Object.keys(accounts).length === 0 && personaId !== null) {
-    return bound ?? (await getPersonaDefaultAccounts(supabase, personaId));
+    if (bound !== undefined) return bound;
+    if (userId === undefined) {
+      throw new Error('Failed to load persona: owner is required.');
+    }
+    return getPersonaDefaultAccounts(supabase, personaId, userId);
   }
   return accounts;
+}
+
+const GENERATE_ROUTE = 'POST /api/videos/generate-and-schedule';
+
+//---------------
+// loadBoundPublishingAccounts — the one binding read the route reuses.
+// A persona-less post has nothing to load. PERSONA_NOT_FOUND is the same
+// 404 preparePost already returns for the editorial lookup; a database
+// error is a logged 500. Both used to escape the handler, because
+// getPersonaDefaultAccounts throws and the route did not catch it.
+//---------------
+export async function loadBoundPublishingAccounts(
+  supabase: SupabaseClient,
+  personaId: string | null,
+  userId: string,
+): Promise<PersonaDefaultAccounts | null | NextResponse> {
+  if (personaId === null) return null;
+  try {
+    return await getPersonaDefaultAccounts(supabase, personaId, userId);
+  } catch (error) {
+    if ((error as { code?: string }).code === ERROR_CODES.PERSONA_NOT_FOUND) {
+      trackApiEvent('video_creation_validation_failed', {
+        errorCode: ERROR_CODES.PERSONA_NOT_FOUND,
+        field: 'personaId',
+      });
+      return apiErrorResponse(404, formatErrorMessage(ERROR_CODES.PERSONA_NOT_FOUND), {
+        route: GENERATE_ROUTE,
+        code: ERROR_CODES.PERSONA_NOT_FOUND,
+        field: 'personaId',
+      });
+    }
+    logger.error('[generate-and-schedule] persona binding lookup failed', error, { userId, personaId });
+    return apiErrorResponse(500, formatErrorMessage(ERROR_CODES.INTERNAL_ERROR), {
+      route: GENERATE_ROUTE,
+      code: ERROR_CODES.INTERNAL_ERROR,
+      cause: error,
+    });
+  }
 }
 
 export function resolvePostWithoutPersona(opts: {

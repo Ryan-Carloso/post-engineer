@@ -34,9 +34,8 @@ import { buildPairFacts, checkExperimentLink, verifyExperimentPairAfterInsert } 
 import { scheduleAccountColumns } from './account-columns';
 import { checkPreChargePreflights } from './aspect-preflight';
 import { resolvePreChargeFallbackPhotos } from './library-photo';
-import { resolvePublishingAccounts, signedUrl } from './persona-prep';
+import { loadBoundPublishingAccounts, resolvePublishingAccounts, signedUrl } from './persona-prep';
 import { validateAccounts } from './validate-accounts';
-import { getPersonaDefaultAccounts } from '@/lib/persona-publishing-accounts';
 import { GenerateAndScheduleBodySchema, type GenerateAndScheduleBody } from '@/lib/contracts/videos';
 import { rawKeyIssues } from './request-title';
 import { checkSemantics, rejectInvalidRequest, shapeIssues } from './request-validation';
@@ -265,12 +264,13 @@ async function postHandler(request: Request): Promise<NextResponse> {
   // The binding is loaded once here: resolvePublishingAccounts falls back
   // to it when accounts are omitted, and validateAccounts proves every
   // requested id is bound to the persona (issue #572).
-  const bound = personaId !== null ? await getPersonaDefaultAccounts(supabase, personaId) : null;
+  const bound = await loadBoundPublishingAccounts(supabase, personaId, userId);
+  if (bound instanceof NextResponse) return bound;
   const accountIds = await validateAccounts(
     supabase,
     userId,
     providers,
-    await resolvePublishingAccounts(supabase, personaId, publishing.accounts, bound ?? undefined),
+    await resolvePublishingAccounts(supabase, personaId, publishing.accounts, bound ?? undefined, userId),
     bound,
   );
   if (accountIds instanceof NextResponse) return accountIds;

@@ -80,7 +80,12 @@ export interface PersonaScopeContext {
   personaIds?: string[] | null;
 }
 
-export function isScopedApiKey(auth: PersonaScopeContext): boolean {
+// A type predicate so callers can use auth.personaIds directly. A scoped
+// key's personaIds is an array (possibly empty); null and undefined are
+// the unscoped cases and never enter the true branch.
+export function isScopedApiKey<T extends PersonaScopeContext>(
+  auth: T,
+): auth is T & { isApiKey: true; personaIds: string[] } {
   return (
     auth.isApiKey === true &&
     auth.personaIds !== null &&
