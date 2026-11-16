@@ -8,6 +8,7 @@
 //---------------
 
 import { ThreadsError } from '@/lib/errors';
+import { readMetaErrorCode } from '@/lib/meta-error-code';
 
 // The documented text ceiling; the scorer and the engine pin the same value.
 export const THREADS_TEXT_MAX_CHARS = 500;
@@ -52,7 +53,7 @@ async function threadsFetch(code: string, url: string, init?: RequestInit): Prom
   const response = await fetch(url, { ...init, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
   const body = await readBody(response);
   if (!response.ok) {
-    throw new ThreadsError(`${code}: ${describeFailure(body, response.status)}`, response.status);
+    throw new ThreadsError(`${code}: ${describeFailure(body, response.status)}`, response.status, readMetaErrorCode(body));
   }
   return body;
 }

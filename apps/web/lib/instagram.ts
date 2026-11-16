@@ -4,6 +4,7 @@ import axios, { AxiosError } from 'axios';
 import crypto from 'crypto';
 import { logger } from '@/lib/logger';
 import { InstagramApiError } from '@/lib/errors';
+import { readMetaErrorCode } from '@/lib/meta-error-code';
 import { INSTAGRAM_USERNAME_FALLBACK } from '@/lib/providers/registry';
 
 //---------------
@@ -118,7 +119,7 @@ export class InstagramService {
         }
       }
 
-      logger.error('[instagram] API ERROR', undefined, {
+      logger.error('[instagram] API ERROR', asError, {
         context,
         status: axiosError.response?.status,
         message,
@@ -128,9 +129,9 @@ export class InstagramService {
         status: axiosError.response?.status,
         data: responseData,
       });
-      throw new InstagramApiError(message, axiosError.response?.status ?? 500, asError);
+      throw new InstagramApiError(message, axiosError.response?.status ?? 500, asError, readMetaErrorCode(responseData));
     }
-    logger.error('[instagram] NON-AXIOS ERROR', undefined, { context, message: asError.message });
+    logger.error('[instagram] NON-AXIOS ERROR', asError, { context, message: asError.message });
     logger.error(`Instagram API error (${context})`, asError);
     throw new InstagramApiError(asError.message, 500, asError);
   }
@@ -424,7 +425,7 @@ export class InstagramService {
       const axiosData = error && typeof error === 'object' && 'response' in error
         ? (error as { response?: { status?: number; data?: unknown } })
         : undefined;
-      logger.error('[instagram] publishMedia failed', undefined, {
+      logger.error('[instagram] publishMedia failed', error, {
         igUserId,
         mediaType,
         mediaUrlHash: crypto.createHash('sha256').update(mediaUrl).digest('hex').slice(0, 12),
@@ -452,12 +453,12 @@ export class InstagramService {
         const status = (response.data as { status_code?: string }).status_code;
         if (status === 'FINISHED') return;
         if (status === 'ERROR') {
-          logger.error('[instagram] waitForContainer IG error', undefined, { creationId, attempt, status, data: response.data });
+          logger.error('[instagram] waitForContainer IG error', new Error('Instagram media processing failed'), { creationId, attempt, status, data: response.data });
           throw new InstagramApiError('Instagram media processing failed', 400);
         }
       } catch (error) {
         if (error instanceof InstagramApiError) throw error;
-        logger.error('[instagram] waitForContainer polling failed', error instanceof Error ? error.message : String(error), { creationId, attempt });
+        logger.error('[instagram] waitForContainer polling failed', error, { creationId, attempt });
         this.handleApiError(error, 'waitForContainer');
       }
       await new Promise((resolve) => setTimeout(resolve, 2000));
