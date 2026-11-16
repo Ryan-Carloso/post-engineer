@@ -1,67 +1,162 @@
-import type { z } from 'zod';
+import { randomUUID } from 'node:crypto';
 
 import type { PostEngineerClient } from './client.js';
+import type { PublishExistingInput, PublishExistingResult } from './client-types.js';
 import { publishExisting } from './client-publish-existing.js';
+import { readLocalImage } from './client-user-media.js';
 import { ApiError, getErrorMessage } from './errors.js';
-import { PublishExistingSchema } from './publish-existing-shape.js';
+import { SOCIAL_PROVIDERS, type SocialProvider as Provider } from './contracts/providers.js';
+import { boundAccounts } from './generate-video.js';
+import { PublishExistingSchema, type PublishExistingArgs } from './publish-existing-shape.js';
+import { createRefResolvers } from './refs.js';
 import { sanitizeEngineError } from './tools.js';
 import { type McpToolResponse } from './tools-call.js';
 
 //---------------
-// Publish-existing handler (issue #384): the JSON-only remote flow that
-// publishes or schedules media that already exists (a finished engine
-// video, a ready signed-upload video, or an inline image) with no
-// generation and no token charge. Kept in a new module so tools.ts stays
-// under the file-size ratchet; the publish_video tool registers it in
-// intent-content.ts. sanitizeEngineError is imported from tools.ts (an
-// import cycle through tools.js that is safe: handlers run after module
-// init).
+// Publish-existing handler (issue #384): publish or schedule media that
+// already exists (a finished generated video, a completed signed upload,
+// or an image) with no generation and no token charge. Every account
+// reference is resolved before the call (refs.ts: exact match, candidates
+// on ambiguity, never a guess) and echoed back; with no accounts, the
+// persona's bound accounts are used, like generate_video. Kept in a new
+// module so tools.ts stays under the file-size ratchet; the publish_video
+// tool registers it in intent-content.ts. sanitizeEngineError is imported
+// from tools.ts (an import cycle through tools.js that is safe: handlers
+// run after module init).
 //---------------
 
-export async function handlePublishExisting(
+type Resolved<T> = { kind: 'ok'; value: T } | { kind: 'response'; response: McpToolResponse };
+
+function failure(message: string): McpToolResponse {
+  return { content: [{ type: 'text', text: `Error publishing existing media: ${message}` }], isError: true };
+}
+
+async function resolveTargets(
   client: PostEngineerClient,
-  args: z.infer<typeof PublishExistingSchema>,
-): Promise<McpToolResponse> {
-  try {
-    const input = PublishExistingSchema.parse(args);
-    const result = await publishExisting(client, input);
-    if (result.mode === 'scheduled') {
-      const slots = result.slots.map((slot) => `- slot ${slot.id} at ${slot.slot_at} (${slot.status})`).join('\n');
-      return {
-        content: [
-          {
-            type: 'text',
-            text:
-              `Scheduled existing ${input.mediaKind} to ${input.provider}${result.replayed ? ' (replayed: the same request was already scheduled)' : ''}.\n` +
-              `Schedule ${result.scheduleId}.\n${slots}\n` +
-              JSON.stringify({ success: true, mode: 'scheduled', replayed: result.replayed, scheduleId: result.scheduleId, slots: result.slots }),
-          },
-        ],
-      };
+  args: PublishExistingArgs,
+): Promise<Resolved<{ accounts: Map<Provider, string[]>; note: string }>> {
+  const accounts = new Map<Provider, string[]>();
+  const notes: string[] = [];
+  if (args.accounts !== undefined) {
+    const resolvers = createRefResolvers(client);
+    for (const ref of args.accounts) {
+      const outcome = await resolvers.account(ref);
+      if (outcome.kind === 'response') return outcome;
+      const provider = outcome.value.provider as Provider;
+      const ids = accounts.get(provider) ?? [];
+      if (!ids.includes(outcome.value.id)) accounts.set(provider, [...ids, outcome.value.id]);
+      notes.push(`account "${ref}" → ${provider} ${outcome.value.id}`);
     }
-    const lines = result.publishes.map((publish) => {
-      const accounts = publish.results
-        .map((account) => {
-          if (account.success) {
-            const link = account.videoUrl ?? account.permalink ?? account.postId ?? account.videoId ?? '';
-            return `- ${account.accountId}: published${link ? ` (${link})` : ''}`;
-          }
-          return `- ${account.accountId}: FAILED — ${account.error ?? 'unknown error'}`;
-        })
-        .join('\n');
-      return `${publish.provider}: ${publish.success ? 'published' : 'FAILED'}\n${accounts}`;
+    return { kind: 'ok', value: { accounts, note: notes.join('; ') } };
+  }
+  if (args.personaId === undefined) {
+    return { kind: 'response', response: failure('say where to publish: pass accounts (names or ids from accounts (action: list)), or a persona with bound publishing accounts.') };
+  }
+  let bound: Map<Provider, string[]>;
+  try {
+    bound = await boundAccounts(client, args.personaId);
+  } catch (error) {
+    return { kind: 'response', response: failure(`could not read the persona's publishing accounts: ${getErrorMessage(error)}`) };
+  }
+  if (bound.size === 0) {
+    return { kind: 'response', response: failure('the persona has no bound publishing accounts. Pass accounts, or bind accounts with accounts (action: set_persona_publishing).') };
+  }
+  const note = `the persona's bound accounts: ${[...bound].map(([provider, ids]) => `${provider} (${ids.join(', ')})`).join('; ')}`;
+  return { kind: 'ok', value: { accounts: bound, note } };
+}
+
+async function resolveMedia(args: PublishExistingArgs): Promise<Resolved<PublishExistingInput['media']>> {
+  if (args.mediaKind === 'task' && args.taskId !== undefined) return { kind: 'ok', value: { kind: 'task', taskId: args.taskId } };
+  if (args.mediaKind === 'upload' && args.uploadId !== undefined) return { kind: 'ok', value: { kind: 'upload', uploadId: args.uploadId } };
+  if (args.imageData !== undefined) {
+    // Remote: the bytes arrive as base64; the server sniffs the real type.
+    const head = Buffer.from(args.imageData.slice(0, 16), 'base64');
+    const contentType = head[0] === 0x89 && head[1] === 0x50 ? 'image/png' : 'image/jpeg';
+    return { kind: 'ok', value: { kind: 'image', imageData: args.imageData, contentType } };
+  }
+  if (args.imagePath !== undefined) {
+    let image: { buffer: Buffer; mimeType: string };
+    try {
+      image = await readLocalImage(args.imagePath);
+    } catch (error) {
+      return { kind: 'response', response: failure(getErrorMessage(error)) };
+    }
+    if (image.mimeType !== 'image/jpeg' && image.mimeType !== 'image/png') {
+      return { kind: 'response', response: failure('Instagram image posts take a JPEG or PNG; convert the WebP first.') };
+    }
+    return { kind: 'ok', value: { kind: 'image', imageData: image.buffer.toString('base64'), contentType: image.mimeType } };
+  }
+  // The strict schema already demanded the reference for the kind.
+  return { kind: 'response', response: failure(`mediaKind ${args.mediaKind} needs its media reference.`) };
+}
+
+function summary(result: PublishExistingResult, mediaKind: string, resolvedNote: string): string {
+  const resolved = resolvedNote === '' ? '' : `Resolved: ${resolvedNote}.\n`;
+  if (result.mode === 'scheduled') {
+    const slots = result.slots.map((slot) => `- slot ${slot.id} at ${slot.slot_at} (${slot.status})`).join('\n');
+    return (
+      `${resolved}Scheduled existing ${mediaKind}${result.replayed ? ' (replayed: the same request was already scheduled)' : ''}.\n` +
+      `Schedule ${result.scheduleId}.\n${slots}\n` +
+      JSON.stringify({ success: true, mode: 'scheduled', replayed: result.replayed, scheduleId: result.scheduleId, slots: result.slots })
+    );
+  }
+  const lines = result.publishes.map((publish) => {
+    const accounts = publish.results
+      .map((account) => {
+        if (account.success) {
+          const link = account.videoUrl ?? account.permalink ?? account.postId ?? account.videoId ?? '';
+          return `- ${account.accountId}: published${link ? ` (${link})` : ''}`;
+        }
+        return `- ${account.accountId}: FAILED — ${account.error ?? 'unknown error'}`;
+      })
+      .join('\n');
+    return `${publish.provider}: ${publish.success ? 'published' : 'FAILED'}\n${accounts}`;
+  });
+  const outcome = result.replayed
+    ? 'replayed from the first call: nothing was posted again'
+    : result.success
+      ? 'all networks succeeded'
+      : 'some networks failed';
+  return (
+    `${resolved}Published existing ${mediaKind} (${outcome}).\n${lines.join('\n')}\n` +
+    JSON.stringify({ success: result.success, mode: 'asap', replayed: result.replayed, mediaKind: result.mediaKind, publishes: result.publishes, logId: result.logId })
+  );
+}
+
+export async function handlePublishExisting(client: PostEngineerClient, args: PublishExistingArgs): Promise<McpToolResponse> {
+  const parsed = PublishExistingSchema.safeParse(args);
+  if (!parsed.success) {
+    return failure(parsed.error.issues.map((issue) => `${issue.path.join('.') || '(input)'}: ${issue.message}`).join('; '));
+  }
+  const input = parsed.data;
+  try {
+    const targets = await resolveTargets(client, input);
+    if (targets.kind === 'response') return targets.response;
+    const providers = [...targets.value.accounts.keys()];
+    // Images post only where a handler accepts them: Instagram today.
+    if (input.mediaKind === 'image' && providers.some((provider) => provider !== 'instagram')) {
+      return failure(`images can only be published to instagram for now; drop the ${providers.filter((provider) => provider !== 'instagram').join(', ')} account(s).`);
+    }
+    const media = await resolveMedia(input);
+    if (media.kind === 'response') return media.response;
+    const result = await publishExisting(client, {
+      media: media.value,
+      accounts: Object.fromEntries(targets.value.accounts),
+      title: input.title,
+      description: input.description,
+      caption: input.caption,
+      personaId: input.personaId,
+      mode: input.mode,
+      publishAt: input.publishAt,
+      timezone: input.timezone,
+      tags: input.tags,
+      privacyStatus: input.privacyStatus,
+      boardId: input.boardId,
+      // A fresh key per call keeps a new publish a new one; the caller's
+      // key makes its retry replay instead of posting again.
+      idempotencyKey: input.idempotencyKey ?? randomUUID(),
     });
-    return {
-      content: [
-        {
-          type: 'text',
-          text:
-            `Published existing ${input.mediaKind} (${result.success ? 'all providers succeeded' : 'some providers failed'}).\n` +
-            lines.join('\n') +
-            `\n${JSON.stringify({ success: result.success, mode: 'asap', mediaKind: result.mediaKind, publishes: result.publishes, logId: result.logId })}`,
-        },
-      ],
-    };
+    return { content: [{ type: 'text', text: summary(result, input.mediaKind, targets.value.note) }] };
   } catch (error) {
     if (error instanceof ApiError && error.code !== null) {
       return {
@@ -78,9 +173,6 @@ export async function handlePublishExisting(
         isError: true,
       };
     }
-    return {
-      content: [{ type: 'text', text: `Error publishing existing media: ${getErrorMessage(error)}` }],
-      isError: true,
-    };
+    return failure(getErrorMessage(error));
   }
 }

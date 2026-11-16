@@ -110,7 +110,7 @@ export interface PreparedVideo {
 }
 
 /** The persona's bound accounts per provider, from GET /api/persona/publishing-accounts. */
-async function boundAccounts(client: PostEngineerClient, personaId: string): Promise<Map<Provider, string[]>> {
+export async function boundAccounts(client: PostEngineerClient, personaId: string): Promise<Map<Provider, string[]>> {
   let payload: unknown;
   try {
     payload = await getPersonaPublishingAccounts(client, personaId);

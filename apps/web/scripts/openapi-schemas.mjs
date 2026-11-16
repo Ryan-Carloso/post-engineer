@@ -426,17 +426,32 @@ export const operationSchemas = {
         title: str,
         description: str,
         personaId: str,
-        publishing: object({
-          mode: { type: 'string', enum: ['scheduled', 'asap'] },
-          providers: { type: 'array', items: str, minItems: 1 },
-          accounts: { type: 'object', additionalProperties: strArray },
-          schedule: object({ startAt: str, times: strArray, timezone: str }),
-          pinterestBoardId: str,
-        }),
+        publishing: object(
+          {
+            mode: { type: 'string', enum: ['scheduled', 'asap'] },
+            providers: { type: 'array', items: str, minItems: 1 },
+            accounts: { type: 'object', additionalProperties: strArray },
+            schedule: object(
+              {
+                publishAt: {
+                  type: 'string',
+                  description: 'The one moment to publish (3h-30d ahead): with an offset, or wall-clock in timezone.',
+                },
+                timezone: str,
+              },
+              ['publishAt', 'timezone'],
+            ),
+            pinterestBoardId: str,
+          },
+          ['mode', 'providers'],
+        ),
         tags: strArray,
         privacyStatus: str,
         caption: str,
-        idempotencyKey: str,
+        idempotencyKey: {
+          type: 'string',
+          description: 'Retry with the same key: scheduled replays the schedule, asap replays the recorded posts per account.',
+        },
       },
       ['media', 'title', 'description', 'publishing'],
     ),
@@ -456,7 +471,7 @@ export const operationSchemas = {
       logId: str,
     }),
     extraResponses: {
-      409: 'The video upload was already used to publish, or is not completed yet.',
+      409: 'The video upload was already used to publish, is already scheduled, or is not completed yet.',
       410: 'The video upload expired before publishing. Mint a new one.',
       413: 'The finished video is over the 2GB limit.',
       502: 'The video service is unavailable.',

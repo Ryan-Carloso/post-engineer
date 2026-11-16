@@ -16,6 +16,7 @@ import { ValidationError } from '@/lib/errors';
 import { logger } from '@/lib/logger';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { requireSupabaseSession } from '@/lib/request-auth';
+import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { buildUploadErrorResponse } from '@/lib/upload/handlers';
 import { parsePublishBody, publishUploadedVideo } from '@/lib/videos/publish-uploaded';
 import {
@@ -23,6 +24,7 @@ import {
   createSupabaseVideoUploadStorage,
   createSupabaseVideoUploadStore,
 } from '@/lib/videos/signed-upload';
+import { assertUploadNotScheduled } from '@/lib/videos/upload-slot-reference';
 
 const ROUTE = 'POST /api/videos/publish-by-id';
 
@@ -49,6 +51,9 @@ async function postHandler(request: Request): Promise<NextResponse> {
 
   try {
     const input = parsePublishBody(body);
+    // An upload a scheduled slot holds publishes from that slot: publishing
+    // it now would consume it and fail the slot later (migration 065).
+    await assertUploadNotScheduled(createSupabaseServiceClient(), auth.userId, input.uploadId);
     const response = await publishUploadedVideo(
       createSupabaseVideoUploadStore(),
       createSupabaseVideoUploadStorage(),

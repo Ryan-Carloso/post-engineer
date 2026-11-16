@@ -454,21 +454,30 @@
         "action": "publish_existing",
         "mediaKind": "task",
         "taskId": "task-1",
-        "provider": "instagram",
-        "accountIds": [
-          "ig-1"
+        "accounts": [
+          "UC1"
         ],
         "title": "T",
         "description": "D",
         "mode": "scheduled",
-        "startAt": "2026-11-15T20:00:00",
-        "times": [
-          "20:00"
-        ],
-        "timezone": "UTC",
-        "caption": "D"
+        "publishAt": "2026-11-15T20:00:00",
+        "timezone": "UTC"
       },
       "responses": {
+        "GET /api/account": {
+          "authenticated": true,
+          "accounts": [
+            {
+              "provider": "youtube",
+              "recordId": "rec-1",
+              "channelId": "UC1",
+              "channelName": "Maria Cooks",
+              "connectedAt": 1700000000000,
+              "lastUsed": 1700000000000
+            }
+          ],
+          "message": "Accounts retrieved from Supabase"
+        },
         "POST /api/media/publish-existing": {
           "success": true,
           "mode": "scheduled",
