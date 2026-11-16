@@ -25,7 +25,7 @@ import {
   neverGenerated,
   type ScheduleCancelSlot,
 } from './cancel-slots';
-import { cancelEngineTask, ENGINE_CANCEL_BUDGET_MS } from '@/lib/engine-tasks';
+import { cancelRemovedEngineTasks } from './cancel-engine-tasks';
 
 //---------------
 // /api/schedule — read and cancel the automatic fill-schedule timetables.
@@ -269,45 +269,9 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
   await removeCancelledMediaImages(createSupabaseServiceClient(), removed, user.id);
 
   // Issue #447: a removed slot whose generation already ran may still be
-  // consuming engine compute. Signal the engine to stop that worker at
-  // its next stage boundary — before the refunds below — so a cancelled
-  // slot never finishes (and never publishes). A `ready` task is already
-  // complete, so only slots that may still be running are signalled
-  // (`generating`, or `pending` that already carries a task id). This is
-  // best-effort: the refunds must still happen when the engine is
-  // unreachable (the user must not lose tokens), so a failure is logged
-  // loudly and the cancel continues — never a bare 500 after the slot
-  // deletion already committed. The cancels run concurrently under an
-  // aggregate budget: a hung engine must not delay the refunds below, so
-  // the race proceeds past the budget and the stragglers keep their own
-  // per-call timeout (ENGINE_CANCEL_TIMEOUT_MS) and still log on failure.
-  const cancellableTasks: { slotId: string; taskId: string }[] = [];
-  for (const slot of removed) {
-    if (slot.taskId === null || slot.status === 'ready') continue;
-    cancellableTasks.push({ slotId: slot.id, taskId: slot.taskId });
-  }
-  if (cancellableTasks.length > 0) {
-    const cancelPromises = cancellableTasks.map(({ slotId, taskId }) =>
-      cancelEngineTask(taskId, user.id).catch((error: unknown) => {
-        logger.error('[api/schedule] engine cancel failed', error, {
-          scheduleId,
-          slotId,
-          userId: user.id,
-        });
-      }),
-    );
-    let budgetTimer: ReturnType<typeof setTimeout> | undefined;
-    try {
-      await Promise.race([
-        Promise.allSettled(cancelPromises),
-        new Promise<void>((resolve) => {
-          budgetTimer = setTimeout(resolve, ENGINE_CANCEL_BUDGET_MS);
-        }),
-      ]);
-    } finally {
-      if (budgetTimer !== undefined) clearTimeout(budgetTimer);
-    }
-  }
+  // consuming engine compute — signal the engine to stop that worker
+  // before the refunds below (cancel-engine-tasks.ts).
+  await cancelRemovedEngineTasks(removed, scheduleId, user.id);
 
   // Only slots whose generation never ran go to the clawback: the
   // settlement refunds the slots it is given, so passing a generated slot
