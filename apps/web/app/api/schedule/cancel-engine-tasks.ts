@@ -49,6 +49,6 @@ export async function cancelRemovedEngineTasks(
       }),
     ]);
   } finally {
-    if (budgetTimer !== undefined) clearTimeout(budgetTimer);
+    clearTimeout(budgetTimer);
   }
 }
