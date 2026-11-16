@@ -4,7 +4,6 @@ import re
 from collections import deque
 from os import path
 from threading import Lock
-from typing import Sequence
 
 from loguru import logger
 
@@ -30,6 +29,7 @@ from app.services import image_coverage, task_webhook, user_media
 from app.services.lipsync_active import lip_sync_cap_seconds, persona_lipsync_active  # noqa: F401 - re-exported for existing callers
 from app.services import full_lipsync
 from app.services.music_mood import resolve_music_mood
+from app.services.task_cleanup import abort_if_cancelled
 from app.services.pipeline_stage import PhaseTracker
 from app.services.intro_cost import IntroCostReport, completion_cost_kwargs, cost_event_props, report_from_job_cost
 from app.services.longcat_cost import ModalJobCost
@@ -540,27 +540,10 @@ def resolve_custom_audio_file(task_id: str, custom_audio_file: str | None) -> st
     )
 
 
-def cleanup_task_intermediates(task_id: str, preserved_paths: Sequence[str]) -> None:
-    """Remove task-local files except paths still needed for recovery/publishing."""
-    task_directory = path.realpath(utils.task_dir(task_id))
-    preserved = {
-        path.realpath(file_path)
-        for file_path in preserved_paths
-        if file_path
-    }
-
-    if not path.isdir(task_directory):
-        return
-
-    for root, directories, files in os.walk(task_directory, topdown=False):
-        for file_name in files:
-            file_path = path.realpath(path.join(root, file_name))
-            if file_path not in preserved:
-                os.remove(file_path)
-        for directory_name in directories:
-            directory_path = path.join(root, directory_name)
-            if not os.listdir(directory_path):
-                os.rmdir(directory_path)
+# cleanup_task_intermediates lives in task_cleanup.py (extracted so this
+# file stays under the size ratchet) and is re-exported here for existing
+# callers and tests that import it as ``task.cleanup_task_intermediates``.
+from app.services.task_cleanup import cleanup_task_intermediates  # noqa: F401,E402
 
 
 def resolve_persona_audio(params: VideoParams) -> tuple[str, str | None]:
@@ -920,6 +903,9 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
         _update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=5)
         track_generation_started(task_id)
 
+        # Cancel (issue #447): stop before the first paid stage.
+        if abort_if_cancelled(task_id, "script"):
+            return
         # 1. Generate script
         phases.begin("script")
         video_script = generate_script(task_id, params)
@@ -939,6 +925,9 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
 
         _update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=20)
 
+        # Cancel (issue #447): stop before the next paid stage.
+        if abort_if_cancelled(task_id, "audio"):
+            return
         # 3. Generate audio
         phases.begin("audio")
         audio_file, audio_duration, sub_maker = generate_audio(
@@ -973,6 +962,9 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
             cleanup_task_intermediates(task_id, ())
             return
 
+        # Cancel (issue #447): stop before the next paid stage.
+        if abort_if_cancelled(task_id, "subtitle"):
+            return
         # 4. Generate subtitle
         phases.begin("subtitle")
         subtitle_path = generate_subtitle(
@@ -1015,6 +1007,9 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
 
         _update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=40)
 
+        # Cancel (issue #447): stop before the next paid stage.
+        if abort_if_cancelled(task_id, "materials"):
+            return
         # 5. Get video materials: local files, or the neutral canvas the
         # agent's segment photos cover (image_coverage).
         phases.begin("materials")
@@ -1054,6 +1049,9 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
         if type(params.video_concat_mode) is str:
             params.video_concat_mode = VideoConcatMode(params.video_concat_mode)
 
+        # Cancel (issue #447): stop before the next paid stage.
+        if abort_if_cancelled(task_id, "render"):
+            return
         # 6. Generate final videos (marked first: a crash reports stage=render)
         phases.begin("render")
         phases.complete("render")

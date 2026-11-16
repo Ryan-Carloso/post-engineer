@@ -260,3 +260,39 @@ export async function fetchEnginePostMetricsSource(
     scriptAngle: trimmed.length > 0 ? trimmed : null,
   };
 }
+
+//---------------
+// cancelEngineTask — DELETE {MONEYPRINT_API_URL}/api/v1/tasks/{taskId}
+// (issue #447). The engine's delete marks the task cancelled before
+// removing the row, so a running worker detaches at its next stage
+// boundary instead of finishing (and potentially publishing) after the
+// caller was refunded. A 404 is benign (the task is already gone) and
+// resolves; any other non-ok / network / unconfigured failure is a throw
+// so the caller can log it loudly and continue the cancel.
+//---------------
+export async function cancelEngineTask(taskId: string, userId: string): Promise<void> {
+  if (!SAFE_TASK_ID.test(taskId)) {
+    throw new Error(`Invalid taskId: ${taskId}`);
+  }
+  const baseUrl = process.env.MONEYPRINT_API_URL;
+  if (!baseUrl) {
+    throw new Error('MONEYPRINT_API_URL is not defined');
+  }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), ENGINE_TASK_PROGRESS_TIMEOUT_MS);
+  try {
+    const response = await fetch(
+      `${baseUrl.replace(/\/+$/, '')}/api/v1/tasks/${encodeURIComponent(taskId)}`,
+      {
+        method: 'DELETE',
+        headers: engineAuthHeaders(userId),
+        cache: 'no-store',
+        signal: controller.signal,
+      },
+    );
+    if (response.ok || response.status === 404) return;
+    throw new EngineTaskLookupError(response.status);
+  } finally {
+    clearTimeout(timeout);
+  }
+}

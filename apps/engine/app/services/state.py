@@ -11,6 +11,7 @@ from loguru import logger
 
 from app.config import config
 from app.models import const
+from app.services.task_cancellation import is_cancelled, request_cancel
 from app.utils.supabase_retry import build_retrying_session
 
 
@@ -59,6 +60,10 @@ class MemoryState(BaseState):
         progress: int | None = None,
         **kwargs,
     ):
+        # A cancelled task's row is gone on purpose: a late progress write
+        # from the doomed worker must not recreate it (issue #447).
+        if is_cancelled(task_id):
+            return
         update: dict[str, object] = {"task_id": task_id}
         if state is not None:
             update["state"] = state
@@ -83,6 +88,9 @@ class MemoryState(BaseState):
             return copy.deepcopy(task) if task is not None else None
 
     def delete_task(self, task_id: str):
+        # Deleting cancels first, so a running worker detaches instead of
+        # recreating the row on its next progress write (issue #447).
+        request_cancel(task_id)
         with self._lock:
             self._tasks.pop(task_id, None)
 
@@ -133,6 +141,9 @@ class RedisState(BaseState):
         progress: int | None = None,
         **kwargs,
     ):
+        # Same cancel guard as MemoryState (issue #447).
+        if is_cancelled(task_id):
+            return
         fields: dict[str, object] = {"task_id": task_id}
         if state is not None:
             fields["state"] = state
@@ -160,6 +171,7 @@ class RedisState(BaseState):
         return task
 
     def delete_task(self, task_id: str):
+        request_cancel(task_id)
         self._redis.delete(task_id)
 
     @staticmethod
@@ -381,6 +393,10 @@ class SupabaseTaskState(BaseState):
         progress: int | None = None,
         **kwargs: object,
     ) -> None:
+        # A cancelled task's row is gone on purpose: the merge-duplicates
+        # upsert below would otherwise recreate it (issue #447).
+        if is_cancelled(task_id):
+            return
         clamped_progress: int | None = None
         if progress is not None:
             clamped_progress = int(progress)
@@ -447,6 +463,7 @@ class SupabaseTaskState(BaseState):
         return tasks, total
 
     def delete_task(self, task_id: str) -> None:
+        request_cancel(task_id)
         self._request("DELETE", f"task_id=eq.{self._eq(task_id)}")
 
     def reconcile_orphaned_tasks(self) -> int:
@@ -592,32 +609,12 @@ class SupabaseTaskState(BaseState):
             json=patch,
         )
 
-def persist_state_update(backend: BaseState, task_id: str, **kwargs: object) -> bool:
-    """Write a task-state update that must not be silently lost, retrying once.
+# persist_state_update lives in state_persistence.py (extracted so this
+# file stays under the size ratchet) and is re-exported here: callers and
+# tests import it as ``state.persist_state_update``.
+from app.services.state_persistence import persist_state_update  # noqa: F401,E402
 
-    With the memory backend update_task() effectively cannot fail; with a
-    network backend (Supabase) every write is an HTTP request that can raise
-    (timeout, 5xx, rotated key). A lost terminal write leaves the row
-    PROCESSING forever — the web polls with no failure recorded and no
-    refund, which is exactly the failure mode persistence was added to
-    eliminate. Retry once, then log loudly and report the loss. Never
-    raises: a persistence failure must not mask the task outcome it was
-    recording.
-    """
-    try:
-        backend.update_task(task_id, **kwargs)
-        return True
-    except Exception as exc:  # noqa: BLE001 - one retry before giving up
-        logger.warning(f"task state write failed for {task_id}, retrying: {exc}")
-    try:
-        backend.update_task(task_id, **kwargs)
-        return True
-    except Exception as exc:  # noqa: BLE001 - loud, then report the loss
-        logger.error(
-            f"task state write permanently failed for {task_id}; "
-            f"the task row may be stale: {exc}"
-        )
-        return False
+__all__ = ["BaseState", "MemoryState", "RedisState", "SupabaseTaskState", "persist_state_update"]
 
 
 # Global state — memory by default; redis when enable_redis=true; supabase

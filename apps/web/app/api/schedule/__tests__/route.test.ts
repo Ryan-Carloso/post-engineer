@@ -952,4 +952,60 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
       userId: USER_ID,
     });
   });
+
+  // Issue #447: cancelling a generating slot must signal the engine to
+  // stop the pipeline; the refund still happens when the signal fails.
+  it('signals the engine to cancel generating slots', async () => {
+    vi.stubEnv('MONEYPRINT_API_URL', 'https://engine.test');
+    const fetchMock = vi.fn(async () => ({ ok: true, status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      mockSupabase({
+        scheduleSlots: MIXED_SLOTS,
+        remove: { error: null },
+      });
+      const res = await DELETE(new Request('http://localhost/api/schedule?id=s-1'));
+      expect(res.status).toBe(200);
+      const calls = fetchMock.mock.calls.map((call: unknown[]) => ({
+        url: String(call[0]),
+        method: (call[1] as RequestInit | undefined)?.method,
+      }));
+      expect(calls).toEqual([
+        { url: 'https://engine.test/api/v1/tasks/task-g', method: 'DELETE' },
+      ]);
+    } finally {
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('still refunds when the engine cancel call fails', async () => {
+    vi.stubEnv('MONEYPRINT_API_URL', 'https://engine.test');
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('engine down'); }));
+    try {
+      const db = mockSupabase({
+        scheduleSlots: [
+          { id: 'slot-g', status: 'generating', charged_tokens: 2, task_id: 'task-g' },
+          { id: 'slot-n', status: 'pending', charged_tokens: 3, task_id: null },
+        ],
+        remove: { error: null },
+      });
+      const res = await DELETE(new Request('http://localhost/api/schedule?id=s-1'));
+      expect(res.status).toBe(200);
+      // The generating slot keeps its charge (GPU sunk), the pending slot
+      // is refunded anyway, and the cancel failure is logged loudly
+      // without failing the cancel.
+      const body = (await res.json()) as { cancelledSlotIds: string[] };
+      expect(body.cancelledSlotIds).toEqual(['slot-g', 'slot-n']);
+      expect(refundCalls(db).map((params) => params.p_amount)).toEqual([3]);
+      expect(logger.error).toHaveBeenCalledWith(
+        '[api/schedule] engine cancel failed',
+        expect.anything(),
+        expect.objectContaining({ scheduleId: 's-1', slotId: 'slot-g', userId: USER_ID }),
+      );
+    } finally {
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+    }
+  });
 });
