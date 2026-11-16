@@ -25,6 +25,7 @@ import {
   neverGenerated,
   type ScheduleCancelSlot,
 } from './cancel-slots';
+import { cancelRemovedEngineTasks } from './cancel-engine-tasks';
 
 //---------------
 // /api/schedule — read and cancel the automatic fill-schedule timetables.
@@ -266,6 +267,11 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
   // bucket: the rows are gone, so remove the objects now (best-effort —
   // a failure is logged inside, never fails the cancel).
   await removeCancelledMediaImages(createSupabaseServiceClient(), removed, user.id);
+
+  // Issue #447: a removed slot whose generation already ran may still be
+  // consuming engine compute — signal the engine to stop that worker
+  // before the refunds below (cancel-engine-tasks.ts).
+  await cancelRemovedEngineTasks(removed, scheduleId, user.id);
 
   // Only slots whose generation never ran go to the clawback: the
   // settlement refunds the slots it is given, so passing a generated slot
