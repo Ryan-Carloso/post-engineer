@@ -4,6 +4,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('@/lib/supabase/server', () => ({
   createSupabaseServerClient: vi.fn(),
 }));
+// Persona row writes run on the service client after the ownership check
+// (migration 066 leaves the session client select-only on personas).
+vi.mock('@/lib/supabase/service', () => ({
+  createSupabaseServiceClient: vi.fn(),
+}));
 vi.mock('@/lib/request-auth', () => ({
   requireSupabaseSession: vi.fn(),
 }));
@@ -23,6 +28,7 @@ vi.mock('@/lib/voice-catalog-fetch', () => ({
 
 import { PATCH, POST } from '../route';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { restorePinnedHttp, stubPinnedHttp } from '@/test/stub-pinned-http';
@@ -164,6 +170,7 @@ describe('POST/PATCH personaWrite coverage', () => {
       },
     };
     vi.mocked(createSupabaseServerClient).mockResolvedValue(client as never);
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
     stubPinnedHttp(200, PNG_BYTES);
     const form = new FormData();
     form.append('name', 'Remote');
@@ -197,6 +204,7 @@ describe('POST/PATCH personaWrite coverage', () => {
       },
     };
     vi.mocked(createSupabaseServerClient).mockResolvedValue(client as never);
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
     stubPinnedHttp(200, PNG_BYTES);
     const form = new FormData();
     form.append('name', 'Remote');

@@ -4,6 +4,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('@/lib/supabase/server', () => ({
   createSupabaseServerClient: vi.fn(),
 }));
+// Persona row writes run on the service client after the ownership check
+// (migration 066 leaves the session client select-only on personas).
+vi.mock('@/lib/supabase/service', () => ({
+  createSupabaseServiceClient: vi.fn(),
+}));
 vi.mock('@/lib/request-auth', () => ({
   requireSupabaseSession: vi.fn(),
 }));
@@ -16,6 +21,7 @@ vi.mock('node:dns/promises', () => ({
 
 import { PATCH } from '../route';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { restorePinnedHttp, stubPinnedHttp } from '@/test/stub-pinned-http';
 
@@ -55,8 +61,12 @@ describe('PATCH remote ingest onto an existing photo object', () => {
             })),
           })),
         })),
+        // update(...).eq('id').eq('user_id'): the service-client write
+        // re-scopes to the owner.
         update: vi.fn(() => ({
-          eq: vi.fn(async () => ({ error: updateError })),
+          eq: vi.fn(() => ({
+            eq: vi.fn(async () => ({ error: updateError })),
+          })),
         })),
       })),
     };
@@ -79,6 +89,7 @@ describe('PATCH remote ingest onto an existing photo object', () => {
     };
     const { client, uploaded, removeMock } = patchClient(existing);
     vi.mocked(createSupabaseServerClient).mockResolvedValue(client as never);
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
     vi.mocked(requireSupabaseSession).mockResolvedValue({
       auth: { userId: USER_ID, accessToken: 'cookie-token' },
       error: null,
@@ -111,6 +122,7 @@ describe('PATCH remote ingest onto an existing photo object', () => {
     };
     const { client, uploaded, removeMock } = patchClient(existing, { message: 'constraint' });
     vi.mocked(createSupabaseServerClient).mockResolvedValue(client as never);
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
     vi.mocked(requireSupabaseSession).mockResolvedValue({
       auth: { userId: USER_ID, accessToken: 'cookie-token' },
       error: null,
@@ -142,6 +154,7 @@ describe('PATCH remote ingest onto an existing photo object', () => {
     };
     const { client, removeMock } = patchClient(existing);
     vi.mocked(createSupabaseServerClient).mockResolvedValue(client as never);
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
     vi.mocked(requireSupabaseSession).mockResolvedValue({
       auth: { userId: USER_ID, accessToken: 'cookie-token' },
       error: null,
