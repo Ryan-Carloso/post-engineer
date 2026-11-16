@@ -10,8 +10,8 @@ import { createSupabaseServiceClient } from '@/lib/supabase/service';
 //---------------
 // Social Accounts — OAuth account persistence in Supabase.
 // Tokens are always encrypted (AES-256-GCM) before going to the database.
-// The client is passed by the caller: session client (RLS) for routes
-// authenticated by cookie, or a service_role client for API key routes.
+// Reads use the caller client (session RLS, or the caller's user_id filter).
+// Writes use the service client: a cookie JWT cannot store ciphertext.
 // The provider list lives in lib/providers/registry.ts (single source).
 //---------------
 
@@ -108,11 +108,41 @@ export function isPlaceholderProviderAccountId(id: string): boolean {
 }
 
 //---------------
+// Service role bypasses RLS. Writes store ciphertext and identity columns
+// a cookie JWT must not set. Update, touch, and delete first prove the row
+// is visible to the caller client, then write with id and user_id. The
+// upsert's userId is the authenticated user the route already checked.
+//---------------
+function serviceSocial(): SupabaseClient<Database> {
+  return createSupabaseServiceClient();
+}
+
+async function ownedAccountId(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  provider: SocialProvider,
+  providerAccountId: string,
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('social_accounts')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('provider', provider)
+    .eq('provider_account_id', providerAccountId)
+    .maybeSingle();
+  if (error) {
+    throw new Error(`Failed to get social account: ${error.message}`);
+  }
+  if (typeof data?.id !== 'string') return null;
+  return data.id;
+}
+
+//---------------
 // upsertSocialAccount — encrypts the tokens and upserts
 // (unique: user_id + provider + provider_account_id)
 //---------------
 export async function upsertSocialAccount(
-  supabase: SupabaseClient<Database>,
+  _supabase: SupabaseClient<Database>,
   params: UpsertSocialAccountParams,
 ): Promise<SocialAccountRecord> {
   // A placeholder id poisons the row (every later publish targets a
@@ -141,7 +171,7 @@ export async function upsertSocialAccount(
     last_used_at: new Date().toISOString(),
   };
 
-  const { data, error } = await supabase
+  const { data, error } = await serviceSocial()
     .from('social_accounts')
     .upsert(payload, { onConflict: 'user_id,provider,provider_account_id' })
     .select(SOCIAL_ACCOUNT_PUBLIC_COLUMNS)
@@ -234,7 +264,7 @@ export async function getSocialAccountTokens(
 }
 
 //---------------
-// touchSocialAccount — atualiza last_used_at
+// touchSocialAccount — records last_used_at after a successful publish
 //---------------
 export async function touchSocialAccount(
   supabase: SupabaseClient<Database>,
@@ -242,12 +272,13 @@ export async function touchSocialAccount(
   provider: SocialProvider,
   providerAccountId: string,
 ): Promise<void> {
-  const { error } = await supabase
+  const accountId = await ownedAccountId(supabase, userId, provider, providerAccountId);
+  if (accountId === null) return;
+  const { error } = await serviceSocial()
     .from('social_accounts')
     .update({ last_used_at: new Date().toISOString() })
-    .eq('user_id', userId)
-    .eq('provider', provider)
-    .eq('provider_account_id', providerAccountId);
+    .eq('id', accountId)
+    .eq('user_id', userId);
 
   if (error) {
     throw new Error(`Failed to touch social account: ${error.message}`);
@@ -264,21 +295,26 @@ export async function updateSocialAccountTokens(
   providerAccountId: string,
   tokens: SocialTokenPayload,
 ): Promise<void> {
+  const accountId = await ownedAccountId(supabase, userId, provider, providerAccountId);
+  if (accountId === null) {
+    throw new AccountNotFoundError(
+      `Social account not found for ${provider}/${providerAccountId}`,
+    );
+  }
   const encrypted = encryptTokens(tokens);
   const expiresAt = tokens.expiry_date
     ? new Date(tokens.expiry_date).toISOString()
     : null;
 
-  const { error } = await supabase
+  const { error } = await serviceSocial()
     .from('social_accounts')
     .update({
       encrypted_tokens: encrypted,
       token_expires_at: expiresAt,
       updated_at: new Date().toISOString(),
     })
-    .eq('user_id', userId)
-    .eq('provider', provider)
-    .eq('provider_account_id', providerAccountId);
+    .eq('id', accountId)
+    .eq('user_id', userId);
 
   if (error) {
     throw new Error(`Failed to update social account tokens: ${error.message}`);
@@ -296,16 +332,21 @@ export async function updateSocialAccountMetadata(
   accountMetadata: Record<string, unknown>,
   accountName?: string,
 ): Promise<void> {
-  const { error } = await supabase
+  const accountId = await ownedAccountId(supabase, userId, provider, providerAccountId);
+  if (accountId === null) {
+    throw new AccountNotFoundError(
+      `Social account not found for ${provider}/${providerAccountId}`,
+    );
+  }
+  const { error } = await serviceSocial()
     .from('social_accounts')
     .update({
       account_metadata: accountMetadata,
       ...(accountName === undefined ? {} : { account_name: accountName }),
       updated_at: new Date().toISOString(),
     })
-    .eq('user_id', userId)
-    .eq('provider', provider)
-    .eq('provider_account_id', providerAccountId);
+    .eq('id', accountId)
+    .eq('user_id', userId);
 
   if (error) {
     throw new Error(`Failed to update social account metadata: ${error.message}`);
@@ -321,12 +362,13 @@ export async function deleteSocialAccount(
   provider: SocialProvider,
   providerAccountId: string,
 ): Promise<void> {
-  const { error } = await supabase
+  const accountId = await ownedAccountId(supabase, userId, provider, providerAccountId);
+  if (accountId === null) return;
+  const { error } = await serviceSocial()
     .from('social_accounts')
     .delete()
-    .eq('user_id', userId)
-    .eq('provider', provider)
-    .eq('provider_account_id', providerAccountId);
+    .eq('id', accountId)
+    .eq('user_id', userId);
 
   if (error) {
     throw new Error(`Failed to delete social account: ${error.message}`);

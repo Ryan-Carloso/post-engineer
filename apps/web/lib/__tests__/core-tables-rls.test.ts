@@ -29,20 +29,10 @@ const OWNER_TABLES = [
 const EXPECTED_POLICIES = [
   'user_profiles_select_own',
   'personas_select_own',
-  'personas_insert_own',
-  'personas_update_own',
-  'personas_delete_own',
   'schedules_select_own',
-  'schedules_delete_own',
   'scheduled_posts_select_own',
-  'scheduled_posts_update_own',
-  'scheduled_posts_delete_own',
   'social_accounts_select_own',
-  'social_accounts_insert_own',
-  'social_accounts_update_own',
-  'social_accounts_delete_own',
   'video_generations_select_own',
-  'video_generations_delete_own',
   'token_transactions_select_own',
 ] as const;
 
@@ -101,22 +91,17 @@ describe('066_core-tables-rls.sql least privilege', () => {
     expect(flat).toContain('create policy user_profiles_select_own on public.user_profiles for select to authenticated');
   });
 
-  it('lets authenticated update only scheduled_posts.title and slot_at', () => {
+  it('lets authenticated read scheduled_posts and never update or delete them', () => {
     expect(flat).toContain('revoke all on table public.scheduled_posts from anon, authenticated');
     expect(flat).toContain('grant select on table public.scheduled_posts to authenticated');
-    expect(flat).toContain('grant delete on table public.scheduled_posts to authenticated');
-    expect(flat).toContain(
-      'grant update (title, slot_at) on table public.scheduled_posts to authenticated',
-    );
     expect(flat).not.toMatch(
-      /grant\s+update\s*\([^)]*(charged_tokens|discount_tokens|status|task_id|batch_id)/,
+      /grant\s+(insert|update|delete|all)\b[^;]*\bon\s+(table\s+)?public\.scheduled_posts\s+to\s+authenticated/,
     );
-    expect(flat).not.toMatch(
-      /grant\s+(insert|all)\b[^;]*\bon\s+table\s+public\.scheduled_posts\s+to\s+authenticated/,
-    );
+    expect(flat).not.toContain('grant update (title, slot_at)');
+    expect(flat).not.toContain('grant delete on table public.scheduled_posts to authenticated');
   });
 
-  it('hides social_accounts.encrypted_tokens from authenticated selects', () => {
+  it('hides social_accounts.encrypted_tokens and grants no session writes', () => {
     const selectGrant = flat.match(
       /grant select \([^)]*\) on table public\.social_accounts to authenticated/,
     )?.[0];
@@ -124,8 +109,8 @@ describe('066_core-tables-rls.sql least privilege', () => {
     expect(selectGrant).not.toContain('encrypted_tokens');
     expect(selectGrant).toContain('account_metadata');
     expect(selectGrant).toContain('last_used_at');
-    expect(flat).toContain(
-      'grant insert, update, delete on table public.social_accounts to authenticated',
+    expect(flat).not.toMatch(
+      /grant\s+(insert|update|delete|all)\b[^;]*\bon\s+(table\s+)?public\.social_accounts\s+to\s+authenticated/,
     );
   });
 
@@ -140,17 +125,15 @@ describe('066_core-tables-rls.sql least privilege', () => {
     expect(ledgerPolicies[0].replace(/\s+/g, ' ').toLowerCase()).toContain('for select to authenticated');
   });
 
-  it('does not grant video_generations writes or schedule inserts to authenticated', () => {
-    expect(flat).toContain('grant select, delete on table public.video_generations to authenticated');
-    expect(flat).not.toMatch(
-      /grant\s+(insert|update|all)\b[^;]*\bon\s+table\s+public\.video_generations\s+to\s+authenticated/,
-    );
-    expect(flat).toContain('grant select, delete on table public.schedules to authenticated');
-    expect(flat).not.toMatch(
-      /grant\s+(insert|update|all)\b[^;]*\bon\s+table\s+public\.schedules\s+to\s+authenticated/,
-    );
-    expect(flat).toContain(
-      'grant select, insert, update, delete on table public.personas to authenticated',
-    );
+  it('keeps personas, schedules, and video_generations select-only for authenticated', () => {
+    for (const table of ['video_generations', 'schedules', 'personas'] as const) {
+      expect(flat).toContain(`revoke all on table public.${table} from anon, authenticated`);
+      expect(flat).toContain(`grant select on table public.${table} to authenticated`);
+      expect(flat).not.toMatch(
+        new RegExp(
+          `grant\\s+(insert|update|delete|all)\\b[^;]*\\bon\\s+table\\s+public\\.${table}\\s+to\\s+authenticated`,
+        ),
+      );
+    }
   });
 });

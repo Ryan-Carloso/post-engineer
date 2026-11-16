@@ -261,56 +261,62 @@ select pg_temp.expect_state(
   $$select encrypted_tokens from public.social_accounts where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa04'$$,
   '42501', 'encrypted_tokens select denied');
 
--- Session writes that the cookie routes really perform.
+-- Deletes and writes a cookie JWT must not be able to perform. A session
+-- delete of scheduled_posts plus video_generations makes
+-- find_zombie_schedule_candidates refund the batch. A direct slot_at
+-- write publishes a ready slot as soon as it is due, skipping the route's
+-- window. A direct encrypted_tokens write stores ciphertext the refresh
+-- path cannot decrypt. Persona columns (language, face_quality,
+-- recent_image_ids, voice_id, photo_path) are coerced in the route, so
+-- PostgREST must not write them either. The routes do these on the
+-- service client after their own checks.
+select pg_temp.expect_state(
+  $$delete from public.scheduled_posts where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa03'$$,
+  '42501', 'slot delete denied');
+select pg_temp.expect_state(
+  $$delete from public.video_generations where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa05'$$,
+  '42501', 'generation delete denied');
+select pg_temp.expect_state(
+  $$delete from public.schedules where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa02'$$,
+  '42501', 'schedule delete denied');
+select pg_temp.expect_state(
+  $$update public.social_accounts set encrypted_tokens = 'x' where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa04'$$,
+  '42501', 'encrypted_tokens update denied');
 select pg_temp.expect_state(
   $$update public.scheduled_posts set title = 'renamed' where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa03'$$,
-  'ok', 'slot title update');
+  '42501', 'slot title update denied');
 select pg_temp.expect_state(
   $$update public.scheduled_posts set slot_at = '2026-12-02T00:00:00Z' where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa03'$$,
-  'ok', 'slot time update');
+  '42501', 'slot time update denied');
 select pg_temp.expect_count(
-  $$select count(*) from public.scheduled_posts where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa03' and title = 'renamed' and charged_tokens = 10$$,
-  1, 'title changed and charge unchanged');
+  $$select count(*) from public.scheduled_posts where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa03' and title = 'mine' and charged_tokens = 10$$,
+  1, 'title and charge unchanged');
 
 select pg_temp.expect_state(
   $$insert into public.personas (user_id, name) values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Cara')$$,
-  'ok', 'persona insert');
+  '42501', 'persona insert denied');
 select pg_temp.expect_state(
   $$update public.personas set name = 'Ada 2' where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa01'$$,
-  'ok', 'persona update');
+  '42501', 'persona update denied');
 select pg_temp.expect_state(
-  $$insert into public.personas (user_id, name) values ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'stolen')$$,
-  '42501', 'persona insert for another user denied');
+  $$update public.personas set language = 'pt' where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa01'$$,
+  '42501', 'persona language update denied');
+select pg_temp.expect_state(
+  $$delete from public.personas where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa01'$$,
+  '42501', 'persona delete denied');
 
 select pg_temp.expect_state(
   $$insert into public.social_accounts (user_id, provider, provider_account_id, account_metadata, encrypted_tokens) values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'bluesky', 'bsky-a', '{}', 'cipher-new')$$,
-  'ok', 'social account insert');
+  '42501', 'social account insert denied');
 select pg_temp.expect_state(
   $$update public.social_accounts set account_name = 'Ada YT', updated_at = now() where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa04'$$,
-  'ok', 'social account metadata update');
-select pg_temp.expect_state(
-  $$update public.social_accounts set encrypted_tokens = 'cipher-rotated', updated_at = now() where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa04'$$,
-  'ok', 'social account token write');
-select pg_temp.expect_state(
-  $$select encrypted_tokens from public.social_accounts where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa04'$$,
-  '42501', 'encrypted_tokens still unreadable after write');
-
--- Deletes the session client performs (persona cascade, schedule cancel, disconnect).
-select pg_temp.expect_state(
-  $$delete from public.scheduled_posts where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa03'$$,
-  'ok', 'slot delete');
-select pg_temp.expect_state(
-  $$delete from public.schedules where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa02'$$,
-  'ok', 'schedule delete');
-select pg_temp.expect_state(
-  $$delete from public.video_generations where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa05'$$,
-  'ok', 'generation delete');
-select pg_temp.expect_state(
-  $$delete from public.personas where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa01'$$,
-  'ok', 'persona delete');
+  '42501', 'social account metadata update denied');
 select pg_temp.expect_state(
   $$delete from public.social_accounts where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa04'$$,
-  'ok', 'social account delete');
+  '42501', 'social account delete denied');
+select pg_temp.expect_state(
+  $$select encrypted_tokens from public.social_accounts where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa04'$$,
+  '42501', 'encrypted_tokens still unreadable');
 
 -- anon has no table privilege.
 reset role;
@@ -331,5 +337,20 @@ select pg_temp.expect_state(
 select pg_temp.expect_count(
   $$select count(*) from public.social_accounts where id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbb04' and encrypted_tokens = 'cipher-b'$$,
   1, 'service_role can read encrypted_tokens');
+select pg_temp.expect_state(
+  $$update public.social_accounts set encrypted_tokens = 'cipher-rotated' where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa04'$$,
+  'ok', 'service_role can write encrypted_tokens');
+select pg_temp.expect_state(
+  $$update public.scheduled_posts set title = 'renamed', slot_at = '2026-12-02T00:00:00Z' where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa03'$$,
+  'ok', 'service_role can update a slot');
+select pg_temp.expect_state(
+  $$delete from public.scheduled_posts where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa03'$$,
+  'ok', 'service_role can delete a slot');
+select pg_temp.expect_state(
+  $$delete from public.video_generations where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa05'$$,
+  'ok', 'service_role can delete a generation');
+select pg_temp.expect_state(
+  $$delete from public.schedules where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa02'$$,
+  'ok', 'service_role can delete a schedule');
 
 rollback;

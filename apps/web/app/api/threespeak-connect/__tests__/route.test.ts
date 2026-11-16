@@ -216,10 +216,10 @@ describe('POST /api/threespeak-connect', () => {
     });
     const body = (await res.json()) as { success: boolean; username: string };
     expect(body).toMatchObject({ success: true, username: 'alice' });
-    // A cookie session reads through the server client, not the
-    // service client (which bypasses RLS).
-    expect(vi.mocked(createSupabaseServerClient)).toHaveBeenCalled();
-    expect(vi.mocked(createSupabaseServiceClient)).not.toHaveBeenCalled();
+    // Ciphertext is written with the service client. A cookie JWT cannot
+    // insert encrypted_tokens.
+    expect(vi.mocked(createSupabaseServiceClient)).toHaveBeenCalled();
+    expect(vi.mocked(createSupabaseServerClient)).not.toHaveBeenCalled();
   });
 
   it('refreshes the existing row when the account reconnects', async () => {

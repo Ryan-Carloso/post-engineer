@@ -14,26 +14,25 @@
 --
 -- WHAT, from the session-client call sites in apps/web (service-role
 -- callers bypass RLS and are unchanged):
---   * user_profiles — SELECT own row only (checkout reads
---     stripe_customer_id; GET /api/billing/tokens reads the balances).
---     The stripe_customer_id upsert is the service client. No insert,
---     update, or delete.
---   * token_transactions — SELECT own ledger (GET /api/billing/transactions).
---     Writes stay on RPCs and the service client.
---   * personas — SELECT, INSERT, UPDATE, DELETE own rows (cookie /api/persona).
---     No billing columns.
---   * schedules — SELECT and DELETE own rows (GET/DELETE /api/schedule,
---     persona delete). Inserts are the service client. No session update.
---   * scheduled_posts — SELECT and DELETE own rows; UPDATE only title and
---     slot_at (PATCH /api/schedule/slots). charged_tokens, discount_tokens,
---     status, task_id, batch_id and the other server columns are not
---     granted. Inserts are the service client.
---   * social_accounts — SELECT, INSERT, UPDATE, DELETE own rows (connect,
---     list, metadata, disconnect). SELECT excludes encrypted_tokens.
---     Session code that needs the ciphertext reads it with the service
---     client after the caller client has proven ownership.
---   * video_generations — SELECT and DELETE own rows (list, get, persona
---     delete). Status and tokens_refunded writes are the service client.
+--   * user_profiles — SELECT own row only. No insert, update, or delete.
+--   * token_transactions — SELECT own ledger. Writes stay on RPCs and
+--     the service client.
+--   * personas — SELECT own rows. Insert, update, and delete run on the
+--     service client after the route coerces language, face quality,
+--     recent_image_ids, voice, and photo. A column grant of the columns
+--     the session used to write would still let PostgREST skip that
+--     coercion.
+--   * schedules — SELECT own rows. DELETE is the service client: a
+--     session delete of the schedule, its slots, and its generations
+--     makes find_zombie_schedule_candidates refund the batch.
+--   * scheduled_posts — SELECT own rows. No UPDATE and no DELETE.
+--     A direct slot_at write publishes a ready slot as soon as it is
+--     due, skipping PATCH /api/schedule/slots. Deletes are the service
+--     client for the same zombie-refund reason.
+--   * social_accounts — SELECT own rows, excluding encrypted_tokens.
+--     No insert, update, or delete. Ciphertext and metadata writes are
+--     the service client after the caller has authenticated.
+--   * video_generations — SELECT own rows. DELETE is the service client.
 --   * user_api_keys, stripe_webhook_events, mcp_oauth_clients, oauth_states,
 --     engine_heartbeat — RLS on, no policies, revoke from anon and
 --     authenticated. Service role only.
@@ -67,7 +66,7 @@ create policy user_profiles_select_own on public.user_profiles
 revoke all on table public.user_profiles from anon, authenticated;
 grant select on table public.user_profiles to authenticated;
 
--- personas: cookie routes create, edit, and delete the caller's rows.
+-- personas: session reads. Writes are the service client after coercion.
 alter table public.personas enable row level security;
 drop policy if exists personas_owner_all on public.personas;
 drop policy if exists personas_select_own on public.personas;
@@ -77,20 +76,10 @@ drop policy if exists personas_delete_own on public.personas;
 create policy personas_select_own on public.personas
   for select to authenticated
   using (auth.uid() = user_id);
-create policy personas_insert_own on public.personas
-  for insert to authenticated
-  with check (auth.uid() = user_id);
-create policy personas_update_own on public.personas
-  for update to authenticated
-  using (auth.uid() = user_id)
-  with check (auth.uid() = user_id);
-create policy personas_delete_own on public.personas
-  for delete to authenticated
-  using (auth.uid() = user_id);
 revoke all on table public.personas from anon, authenticated;
-grant select, insert, update, delete on table public.personas to authenticated;
+grant select on table public.personas to authenticated;
 
--- schedules: session reads and cancels. Inserts and edits are service-role.
+-- schedules: session reads. Deletes are the service client.
 alter table public.schedules enable row level security;
 drop policy if exists schedules_owner_all on public.schedules;
 drop policy if exists schedules_select_own on public.schedules;
@@ -98,14 +87,11 @@ drop policy if exists schedules_delete_own on public.schedules;
 create policy schedules_select_own on public.schedules
   for select to authenticated
   using (auth.uid() = user_id);
-create policy schedules_delete_own on public.schedules
-  for delete to authenticated
-  using (auth.uid() = user_id);
 revoke all on table public.schedules from anon, authenticated;
-grant select, delete on table public.schedules to authenticated;
+grant select on table public.schedules to authenticated;
 
--- scheduled_posts: session reads, deletes, and renames or moves a slot.
--- Billing and lifecycle columns stay on the service role.
+-- scheduled_posts: session reads only. Title, slot_at, and deletes are
+-- the service client. A direct slot_at write skips the schedule window.
 alter table public.scheduled_posts enable row level security;
 drop policy if exists scheduled_posts_owner_all on public.scheduled_posts;
 drop policy if exists scheduled_posts_select_own on public.scheduled_posts;
@@ -114,19 +100,11 @@ drop policy if exists scheduled_posts_delete_own on public.scheduled_posts;
 create policy scheduled_posts_select_own on public.scheduled_posts
   for select to authenticated
   using (auth.uid() = user_id);
-create policy scheduled_posts_update_own on public.scheduled_posts
-  for update to authenticated
-  using (auth.uid() = user_id)
-  with check (auth.uid() = user_id);
-create policy scheduled_posts_delete_own on public.scheduled_posts
-  for delete to authenticated
-  using (auth.uid() = user_id);
 revoke all on table public.scheduled_posts from anon, authenticated;
 grant select on table public.scheduled_posts to authenticated;
-grant update (title, slot_at) on table public.scheduled_posts to authenticated;
-grant delete on table public.scheduled_posts to authenticated;
 
--- social_accounts: connect, list, metadata, disconnect. Ciphertext is not readable.
+-- social_accounts: session reads the public columns. Ciphertext is neither
+-- readable nor writable with a user JWT.
 alter table public.social_accounts enable row level security;
 drop policy if exists social_accounts_owner_all on public.social_accounts;
 drop policy if exists social_accounts_select_own on public.social_accounts;
@@ -135,16 +113,6 @@ drop policy if exists social_accounts_update_own on public.social_accounts;
 drop policy if exists social_accounts_delete_own on public.social_accounts;
 create policy social_accounts_select_own on public.social_accounts
   for select to authenticated
-  using (auth.uid() = user_id);
-create policy social_accounts_insert_own on public.social_accounts
-  for insert to authenticated
-  with check (auth.uid() = user_id);
-create policy social_accounts_update_own on public.social_accounts
-  for update to authenticated
-  using (auth.uid() = user_id)
-  with check (auth.uid() = user_id);
-create policy social_accounts_delete_own on public.social_accounts
-  for delete to authenticated
   using (auth.uid() = user_id);
 revoke all on table public.social_accounts from anon, authenticated;
 grant select (
@@ -159,10 +127,8 @@ grant select (
   updated_at,
   last_used_at
 ) on table public.social_accounts to authenticated;
-grant insert, update, delete on table public.social_accounts to authenticated;
 
--- video_generations: session reads and persona-delete removes the rows.
--- status and tokens_refunded are written by the service client.
+-- video_generations: session reads. Deletes are the service client.
 alter table public.video_generations enable row level security;
 drop policy if exists video_generations_owner_all on public.video_generations;
 drop policy if exists video_generations_select_own on public.video_generations;
@@ -170,11 +136,8 @@ drop policy if exists video_generations_delete_own on public.video_generations;
 create policy video_generations_select_own on public.video_generations
   for select to authenticated
   using (auth.uid() = user_id);
-create policy video_generations_delete_own on public.video_generations
-  for delete to authenticated
-  using (auth.uid() = user_id);
 revoke all on table public.video_generations from anon, authenticated;
-grant select, delete on table public.video_generations to authenticated;
+grant select on table public.video_generations to authenticated;
 
 -- token_transactions: owner read of the ledger. No session writes.
 alter table public.token_transactions enable row level security;

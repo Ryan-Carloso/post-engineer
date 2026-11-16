@@ -29,6 +29,7 @@ import { CreatePersonaResponseSchema } from '@/lib/contracts/personas';
 import { logger } from '@/lib/logger';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createSupabaseServiceClient } from '@/lib/supabase/service';
 
 const USER_ID = 'user-uuid-1';
 const PERSONA_ID = 'persona-uuid-1';
@@ -150,6 +151,7 @@ function mockClient(options: { failPrimarySwap?: boolean } = {}) {
     },
   };
   vi.mocked(createSupabaseServerClient).mockResolvedValue(client as never);
+  vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
   vi.mocked(requireSupabaseSession).mockResolvedValue({
     auth: { userId: USER_ID, accessToken: 'cookie-token' },
     error: null,
@@ -624,6 +626,7 @@ describe('POST /api/persona with image library', () => {
       },
     };
     vi.mocked(createSupabaseServerClient).mockResolvedValue(client as never);
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
     vi.mocked(requireSupabaseSession).mockResolvedValue({
       auth: { userId: USER_ID, accessToken: 'cookie-token' },
       error: null,
@@ -703,6 +706,7 @@ describe('POST /api/persona with image library', () => {
       },
     };
     vi.mocked(createSupabaseServerClient).mockResolvedValue(client as never);
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
     vi.mocked(requireSupabaseSession).mockResolvedValue({
       auth: { userId: USER_ID, accessToken: 'cookie-token' },
       error: null,
@@ -779,6 +783,7 @@ describe('POST /api/persona with image library', () => {
       },
     };
     vi.mocked(createSupabaseServerClient).mockResolvedValue(client as never);
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
     vi.mocked(requireSupabaseSession).mockResolvedValue({
       auth: { userId: USER_ID, accessToken: 'cookie-token' },
       error: null,

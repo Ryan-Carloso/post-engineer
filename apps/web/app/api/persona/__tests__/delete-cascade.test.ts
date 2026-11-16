@@ -45,6 +45,7 @@ vi.mock('next/server', async (importOriginal) => {
 
 import { DELETE } from '../route';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { trackApiEvent } from '@/lib/analytics';
 import { logger } from '@/lib/logger';
@@ -173,6 +174,7 @@ function setup(
   const t = tables ?? baseTables();
   const { client, deletes, removed } = makeClient(t, deleteErrorOn, removeError);
   vi.mocked(createSupabaseServerClient).mockResolvedValue(client as never);
+  vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
   vi.mocked(requireSupabaseSession).mockResolvedValue({
     auth: { userId: USER_ID, personaIds, accessToken: 'cookie-token' },
     error: null,
@@ -210,6 +212,44 @@ const del = (personaId: string) =>
 const flushAfterCallbacks = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe('DELETE /api/persona cascade', () => {
+  it('deletes on the service client when the cookie session delete is denied', async () => {
+    const sessionTables = baseTables();
+    const serviceTables = baseTables();
+    const session = makeClient(sessionTables);
+    const service = makeClient(serviceTables);
+    const sessionFrom = session.client.from;
+    session.client.from = vi.fn((table: string) => {
+      const builder = sessionFrom(table);
+      builder.delete = vi.fn(() => {
+        const denied = {
+          eq: () => denied,
+          in: () => denied,
+          then: (resolve: (value: unknown) => void) => {
+            resolve({ data: null, error: { code: '42501', message: 'permission denied for table' }, count: null });
+          },
+        };
+        return denied;
+      }) as unknown as typeof builder.delete;
+      return builder;
+    });
+    vi.mocked(createSupabaseServerClient).mockResolvedValue(session.client as never);
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(service.client as never);
+    vi.mocked(requireSupabaseSession).mockResolvedValue({
+      auth: { userId: USER_ID, personaIds: null, accessToken: 'cookie-token', isApiKey: false },
+      error: null,
+    } as never);
+
+    const res = await del(PERSONA_ID);
+    expect(res.status).toBe(200);
+    expect(session.deletes).toEqual([]);
+    expect(service.deletes).toEqual([
+      'scheduled_posts',
+      'schedules',
+      'video_generations',
+      'personas',
+    ]);
+  });
+
   it('deletes slots, schedules, generations and the persona — in that order', async () => {
     const { deletes } = setup();
     const res = await del(PERSONA_ID);

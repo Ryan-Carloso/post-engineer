@@ -249,12 +249,12 @@ describe('POST /api/rumble-connect', () => {
     expect(vi.mocked(createSupabaseServerClient)).not.toHaveBeenCalled();
   });
 
-  it('session flow uses the server client, not the service client, and selects the row id', async () => {
+  it('session flow writes ciphertext with the service client and selects the row id', async () => {
     const { selectMock } = mockSupabase();
     const res = await POST(formRequest({ channelId: 'chan-1', accessToken: TOKEN }));
     expect(res.status).toBe(200);
-    expect(vi.mocked(createSupabaseServerClient)).toHaveBeenCalled();
-    expect(vi.mocked(createSupabaseServiceClient)).not.toHaveBeenCalled();
+    expect(vi.mocked(createSupabaseServiceClient)).toHaveBeenCalled();
+    expect(vi.mocked(createSupabaseServerClient)).not.toHaveBeenCalled();
     expect(selectMock).toHaveBeenCalledWith('id');
   });
 

@@ -212,7 +212,11 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
   // — that claim is already in flight.
   // One schedule is one generate-and-schedule batch (at most 10 slots), so
   // this select/delete is bounded by the creation route.
-  const { error: slotDeleteError } = await supabase
+  // Service role bypasses RLS. The select above is this user's rows. A cookie
+  // JWT must not delete slots: find_zombie_schedule_candidates refunds a batch
+  // whose slots and generations are gone.
+  const service = createSupabaseServiceClient();
+  const { error: slotDeleteError } = await service
     .from('scheduled_posts')
     .delete()
     .eq('schedule_id', scheduleId)
@@ -433,7 +437,7 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
     });
   }
 
-  const { error: deleteError } = await supabase
+  const { error: deleteError } = await service
     .from('schedules')
     .delete()
     .eq('id', scheduleId)
