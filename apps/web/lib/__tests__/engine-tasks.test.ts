@@ -7,6 +7,8 @@ import {
   fetchEnginePostMetricsSource,
   fetchEngineTaskProgress,
   ENGINE_TASK_PROGRESS_TIMEOUT_MS,
+  ENGINE_CANCEL_TIMEOUT_MS,
+  ENGINE_CANCEL_BUDGET_MS,
 } from '../engine-tasks';
 
 afterEach(() => {
@@ -317,5 +319,34 @@ describe('cancelEngineTask', () => {
     vi.stubGlobal('fetch', vi.fn());
     await expect(cancelEngineTask(TASK_ID, 'user-1')).rejects.toThrow(/MONEYPRINT_API_URL/);
     expect(vi.mocked(fetch)).not.toHaveBeenCalled();
+  });
+
+  it('aborts a hung engine cancel after the dedicated per-call timeout', async () => {
+    vi.stubEnv('MONEYPRINT_API_URL', 'https://engine.test');
+    vi.stubEnv('MONEYPRINT_API_SECRET', 'secret');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        (_url: unknown, init?: { signal?: AbortSignal }) =>
+          new Promise((_resolve, reject) => {
+            init?.signal?.addEventListener('abort', () =>
+              reject(new DOMException('The operation was aborted.', 'AbortError')),
+            );
+          }),
+      ),
+    );
+    vi.useFakeTimers();
+    try {
+      const pending = cancelEngineTask(TASK_ID, 'user-1');
+      pending.catch(() => {});
+      // The per-call budget is shorter than the aggregate budget and the
+      // progress-lookup timeout: a hung engine gives up fast.
+      expect(ENGINE_CANCEL_TIMEOUT_MS).toBeLessThan(ENGINE_CANCEL_BUDGET_MS);
+      expect(ENGINE_CANCEL_TIMEOUT_MS).toBeLessThan(ENGINE_TASK_PROGRESS_TIMEOUT_MS);
+      await vi.advanceTimersByTimeAsync(ENGINE_CANCEL_TIMEOUT_MS + 100);
+      await expect(pending).rejects.toThrow();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

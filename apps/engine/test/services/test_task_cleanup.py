@@ -31,6 +31,32 @@ def test_cleanup_missing_dir_is_noop(tmp_path, monkeypatch):
     cleanup_task_intermediates("missing", [])
 
 
+def test_cleanup_removes_emptied_subdirectory(tmp_path, monkeypatch):
+    monkeypatch.setenv("MPT_STORAGE_DIR", str(tmp_path))
+    task_directory = Path(utils.task_dir("task-subdir"))
+    subdir = task_directory / "nested"
+    subdir.mkdir()
+    (subdir / "tmp.wav").write_text("tmp", encoding="utf-8")
+    keep = task_directory / "final.mp4"
+    keep.write_text("final", encoding="utf-8")
+
+    cleanup_task_intermediates("task-subdir", [str(keep)])
+
+    assert keep.is_file()
+    assert not subdir.exists()
+
+
+def test_cleanup_vanished_dir_is_noop(tmp_path, monkeypatch):
+    monkeypatch.setenv("MPT_STORAGE_DIR", str(tmp_path))
+    # The guard's only reachable shape in production: task_dir creates the
+    # directory, so a missing dir means it vanished mid-cleanup.
+    monkeypatch.setattr(
+        "app.services.task_cleanup.utils.task_dir",
+        lambda task_id: str(tmp_path / "gone" / task_id),
+    )
+    cleanup_task_intermediates("gone", [])
+
+
 def test_abort_if_cancelled_true_only_when_cancelled(tmp_path, monkeypatch):
     monkeypatch.setenv("MPT_STORAGE_DIR", str(tmp_path))
     task_directory = Path(utils.task_dir("cancel-clean-1"))

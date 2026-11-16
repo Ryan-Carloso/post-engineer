@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from app.models import const
 from app.services import orphan_requeue
 from app.services import state as state_module
+from app.services.task_cancellation import is_cancelled, request_cancel
 
 ENV = {
     "SUPABASE_URL": "https://supabase.example",
@@ -160,6 +161,13 @@ class SupabaseStateUpdateTests(unittest.TestCase):
         # Pre-existing data is preserved.
         self.assertEqual(payload["data"]["stage"], "subtitle")
 
+    def test_cancelled_update_sends_no_request(self):
+        # A cancelled task's row is gone on purpose: the merge-duplicates
+        # upsert must not recreate it (issue #447).
+        request_cancel("t-1")
+        self.backend.update_task("t-1", state=const.TASK_STATE_COMPLETE, progress=100)
+        self.requests.request.assert_not_called()
+
     def test_explicit_state_without_progress_omits_only_progress(self):
         self.requests.request.side_effect = [
             _response(json_data=[]),
@@ -229,6 +237,11 @@ class SupabaseStateReadTests(unittest.TestCase):
         call = self.requests.request.call_args
         self.assertEqual(call[0][0], "DELETE")
         self.assertIn("task_id=eq.t-1", call[0][1])
+
+    def test_delete_task_marks_cancelled(self):
+        self.requests.request.return_value = _response(json_data=[])
+        self.backend.delete_task("t-1")
+        self.assertTrue(is_cancelled("t-1"))
 
 
 class SupabaseStateReconcileTests(unittest.TestCase):

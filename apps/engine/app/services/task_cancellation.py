@@ -15,9 +15,10 @@ overflow, schedule cancel) detaches the worker and its later progress
 writes. `update_task` in every backend no-ops for a cancelled task, so a
 deleted row can never be recreated by a late progress write.
 
-Bounded: the FIFO cap keeps cancelled ids from growing without limit; a
-worker is cancelled only until its own process exits, so evicting an id
-ten thousand cancels later cannot detach a still-running worker.
+Bounded: the FIFO cap keeps cancelled ids from growing without limit,
+but it bounds memory only: evicting an id ten thousand cancels later
+forgets the mark, so a still-running worker resumes and its update_task
+can recreate the row.
 """
 
 import threading
