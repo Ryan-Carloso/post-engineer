@@ -1,12 +1,12 @@
 import warnings
 from enum import Enum
 from typing import Any, List, Literal, Optional, Union
-from urllib.parse import urlparse
 
 import pydantic
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.config import config
+from app.utils.ssrf import UnsafeUrlError, assert_public_url
 from app.models import publish as publish_models
 from app.services.script_segments import (
     MAX_IMAGES_MODE_MEDIAS,
@@ -307,12 +307,13 @@ class BaseResponse(BaseModel):
 
 
 def _validate_webhook_url(value: Optional[str]) -> Optional[str]:
-    """Shared http(s) check for optional webhook callback URLs."""
+    """Reject a webhook that is not a public http(s) URL."""
     if value is None:
         return None
-    scheme = urlparse(value).scheme.lower()
-    if scheme not in {"http", "https"}:
-        raise ValueError("webhook_url must be an http(s) URL")
+    try:
+        assert_public_url(value, what="webhook_url")
+    except UnsafeUrlError as exc:
+        raise ValueError(str(exc)) from exc
     return value
 
 
@@ -359,7 +360,7 @@ class ScriptSegment(BaseModel):
 
 class TaskVideoRequest(VideoParams, BaseModel):
     # Optional callback fired once when the task reaches a terminal state
-    # (completed/failed). Must be http(s); delivery is fire-and-forget.
+    # (completed/failed). Must be a public http(s) URL; delivery is best-effort.
     webhook_url: Optional[str] = None
     # Segments contract (MCP first, Phase 1): one call = one video. When
     # present, segments are mechanically validated and joined into

@@ -1,5 +1,5 @@
 {
-  "description": "Representative IPs pinned to CPython ipaddress is_global semantics (the engine's SSRF rule, apps/engine/app/utils/ssrf.py). blocked = is_global is False, allowed = is_global is True. blockedBeyondPython lists multicast addresses Python reports as global but the web deliberately still blocks (stricter than the engine; never looser). Consumed by the web sync test in apps/web/lib/generation/__tests__/public-ip-ssrf-sync.test.ts; the blocked/allowed lists include every literal representative asserted in apps/engine/test/utils/test_ssrf.py.",
+  "description": "Representative IPs for the SSRF public-address rule. blocked must not be fetched: CPython is_global is false, plus the extra ranges the engine rejects in apps/engine/app/utils/ssrf.py (192.88.99.0/24, 100:0:0:1::/64, 5f00::/16, and 64:ff9b::/96 when the embedded IPv4 is not public). allowed is safe to fetch, including 192.0.0.9 and 192.0.0.10 (global anycast) and 64:ff9b::8.8.8.8. blockedBeyondPython lists multicast addresses Python reports as global but the web deliberately still blocks (stricter than the engine; never looser). The engine sync test reads this file. The web and MCP isPublicIp copies learn the new blocked rows on the sibling web branch; until that lands, their sync tests fail these rows. Consumed by apps/web/lib/generation/__tests__/public-ip-ssrf-sync.test.ts and apps/mcp/src/__tests__/clone-audio-ssrf.test.ts. The blocked/allowed lists include every literal representative asserted in apps/engine/test/utils/test_ssrf.py.",
   "blocked": [
     "0.0.0.0",
     "0.255.255.255",
@@ -30,7 +30,19 @@
     "3fff::1",
     "fc00::1",
     "fd00::1",
-    "fe80::1"
+    "fe80::1",
+    "192.88.99.0",
+    "192.88.99.255",
+    "64:ff9b::7f00:1",
+    "64:ff9b::a00:1",
+    "64:ff9b::a9fe:a9fe",
+    "64:ff9b::c058:6301",
+    "64:ff9b::",
+    "64:ff9b::ffff:ffff",
+    "100:0:0:1::",
+    "100:0:0:1:ffff:ffff:ffff:ffff",
+    "5f00::",
+    "5f00:ffff:ffff:ffff:ffff:ffff:ffff:ffff"
   ],
   "allowed": [
     "1.1.1.1",
@@ -53,7 +65,12 @@
     "2001:20::1",
     "2001:30::1",
     "64:ff9b::8.8.8.8",
-    "3fff:1000::1"
+    "3fff:1000::1",
+    "192.88.98.255",
+    "192.88.100.0",
+    "100:0:0:2::",
+    "5f01::",
+    "5eff:ffff:ffff:ffff:ffff:ffff:ffff:ffff"
   ],
   "blockedBeyondPython": ["224.0.0.1", "ff02::1"]
 }

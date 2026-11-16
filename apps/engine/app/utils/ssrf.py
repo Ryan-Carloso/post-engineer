@@ -1,13 +1,13 @@
-"""SSRF-safe download helpers.
+"""SSRF-safe download and webhook helpers.
 
 Every network fetch of a user-controlled URL must go through these helpers.
 They enforce an http(s) scheme allowlist, require the host to resolve to
-global (public) IP addresses on *every* redirect hop, stream the body with an
-explicit byte cap, and optionally require an expected Content-Type.
+public IP addresses, and open the TCP connection only to those addresses.
+The URL host is left in place for the Host header and for TLS SNI.
 
-DNS is validated before each request and again after every redirect, so a
-redirect chain can never smuggle the fetch onto a private/internal address
-(cloud metadata endpoints, intranet hosts, localhost).
+Downloads follow redirects manually. Every hop resolves again and pins
+again. http stays allowed: the product accepts http image URLs. Webhook
+delivery does not follow redirects (a 3xx response is a failed delivery).
 """
 
 import ipaddress
@@ -18,6 +18,8 @@ from typing import Optional
 from urllib.parse import urljoin, urlparse
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.exceptions import NewConnectionError
 from urllib3.util.url import parse_url
 
 # Redirect statuses that carry a Location header worth following manually.
@@ -30,6 +32,17 @@ MAX_REDIRECTS = 5
 DEFAULT_MAX_BYTES = 20 * 1024 * 1024
 
 _CHUNK_SIZE = 256 * 1024
+
+# CPython ipaddress.is_global still reports these as globally reachable.
+# They are not safe connect targets (issue #467). 192.0.0.9 and 192.0.0.10
+# are global anycast and stay allowed — they are not in these networks.
+_EXTRA_V4 = (ipaddress.ip_network("192.88.99.0/24"),)  # deprecated 6to4 anycast
+_EXTRA_V6 = (
+    ipaddress.ip_network("100:0:0:1::/64"),
+    ipaddress.ip_network("5f00::/16"),
+)
+# Well-known NAT64. The last 32 bits are an embedded IPv4 address.
+_NAT64 = ipaddress.ip_network("64:ff9b::/96")
 
 
 class UnsafeUrlError(ValueError):
@@ -61,18 +74,34 @@ def _resolve_global_ips(hostname: str) -> list:
     return ips
 
 
-def assert_public_url(url: str, *, what: str = "URL") -> None:
-    """Ensure *url* points at a public address (anti-SSRF).
+def is_public_ip(ip) -> bool:
+    """True when *ip* is safe to open a connection to.
 
-    Blocks non-http(s) schemes, missing hostnames, literal private IPs,
-    hostnames resolving to private IPs, and hosts that do not resolve at all
-    (fail closed). Raises :class:`UnsafeUrlError`.
+    Starts from :meth:`ipaddress.IPv4Address.is_global` /
+    :meth:`ipaddress.IPv6Address.is_global`, then rejects the ranges that
+    property still allows. A NAT64 address (``64:ff9b::/96``) is public
+    only when the embedded IPv4 address is public, so ``64:ff9b::8.8.8.8``
+    stays allowed and an embedded loopback or RFC1918 address does not.
+    """
+    if not ip.is_global:
+        return False
+    if isinstance(ip, ipaddress.IPv4Address):
+        return all(ip not in network for network in _EXTRA_V4)
+    if any(ip in network for network in _EXTRA_V6):
+        return False
+    if ip in _NAT64:
+        embedded = ipaddress.IPv4Address(int(ip) & 0xFFFFFFFF)
+        return is_public_ip(embedded)
+    return True
 
-    The host checked is the one the HTTP client dials: requests connects
-    where urllib3's parser says, and urllib3 ends the authority at a
-    backslash while ``urlparse`` takes the host after the last ``@``. A URL
-    the two parsers read differently (backslash, whitespace or control
-    characters, or any scheme/host/port mismatch) is rejected outright.
+
+def _public_ips(url: str, *, what: str) -> list:
+    """Validate *url* and return the addresses a later dial may use.
+
+    The host checked is the one the HTTP client would dial from the URL:
+    requests connects where urllib3's parser says, and urllib3 ends the
+    authority at a backslash while ``urlparse`` takes the host after the
+    last ``@``. A URL the two parsers read differently is rejected.
     """
     try:
         parsed = urlparse(url)
@@ -95,11 +124,147 @@ def assert_public_url(url: str, *, what: str = "URL") -> None:
     ):
         raise UnsafeUrlError(f"{what} must be a canonical http(s) URL.")
     ips = _resolve_global_ips(wire_host)
-    if not all(ip.is_global for ip in ips):
+    if not ips or not all(is_public_ip(ip) for ip in ips):
         raise UnsafeUrlError(
             f"{what} must use a public address — private/internal URLs "
             "are not allowed (e.g. 127.0.0.1, 10.x.x.x, 169.254.169.254)."
         )
+    return ips
+
+
+def assert_public_url(url: str, *, what: str = "URL") -> None:
+    """Ensure *url* points at a public address (anti-SSRF).
+
+    Blocks non-http(s) schemes, missing hostnames, literal private IPs,
+    hostnames resolving to private IPs, and hosts that do not resolve at all
+    (fail closed). Raises :class:`UnsafeUrlError`.
+
+    The host checked is the one the HTTP client dials: requests connects
+    where urllib3's parser says, and urllib3 ends the authority at a
+    backslash while ``urlparse`` takes the host after the last ``@``. A URL
+    the two parsers read differently (backslash, whitespace or control
+    characters, or any scheme/host/port mismatch) is rejected outright.
+    """
+    _public_ips(url, what=what)
+
+
+def _header(headers, name: str):
+    """Header lookup that accepts a real response or a plain-dict fake.
+
+    ``requests`` folds header names. A test double often stores the
+    lowercase name, so both casings are read.
+    """
+    if not headers:
+        return None
+    value = headers.get(name)
+    if value:
+        return value
+    return headers.get(name.lower())
+
+
+def _dial(ip: str, port: int, timeout):
+    """TCP connect to an address that was just validated. No DNS lookup."""
+    if not isinstance(timeout, (int, float)):
+        timeout = None
+    sock = socket.create_connection((ip, port), timeout)
+    try:
+        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+    except OSError:
+        pass
+    return sock
+
+
+def _pinned_connection_class(base, pinned_ip: str):
+    """Connection class that dials *pinned_ip* and keeps the URL host.
+
+    ``host`` stays the name from the URL, so the Host header and TLS SNI
+    name that host. ``_new_conn`` is the only place the socket is opened,
+    and it never calls ``getaddrinfo`` on the URL host.
+    """
+
+    class PinnedConnection(base):
+        def _new_conn(self):
+            try:
+                return _dial(pinned_ip, self.port, self.timeout)
+            except OSError as exc:
+                raise NewConnectionError(
+                    self, f"Failed to establish a new connection: {exc}"
+                ) from exc
+
+    return PinnedConnection
+
+
+class _PinnedAdapter(HTTPAdapter):
+    """Route every connection from this session to one validated address."""
+
+    def __init__(self, pinned_ip: str):
+        self._pinned_ip = pinned_ip
+        super().__init__()
+
+    def get_connection_with_tls_context(self, request, verify, proxies=None, cert=None):
+        pool = super().get_connection_with_tls_context(
+            request, verify, proxies, cert
+        )
+        # A proxy is the TCP peer, not the URL host. Nothing in the product
+        # passes proxies; refuse the pin-bypass rather than dial the proxy.
+        if proxies:
+            raise UnsafeUrlError("A proxied fetch is not supported.")
+        pool.ConnectionCls = _pinned_connection_class(pool.ConnectionCls, self._pinned_ip)
+        return pool
+
+
+def _send_pinned(method: str, url: str, ip: str, **kwargs):
+    """One request. Redirects are never followed by the HTTP client.
+
+    The caller re-checks and re-pins each redirect hop itself. Closing the
+    session before a streamed body is read would drop the socket, so a
+    streamed response closes the session when the body is closed.
+    """
+    session = requests.Session()
+    # Env proxies would be the TCP peer, not the validated address.
+    session.trust_env = False
+    adapter = _PinnedAdapter(ip)
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+    try:
+        # codeql[py/full-ssrf]: guarded — dials only the IP just validated
+        response = session.request(method, url, allow_redirects=False, **kwargs)
+    except Exception:
+        session.close()
+        raise
+    if kwargs.get("stream"):
+        original_close = response.close
+
+        def _close():
+            try:
+                original_close()
+            finally:
+                session.close()
+
+        response.close = _close
+        return response
+    session.close()
+    return response
+
+
+def _open(method: str, url: str, ips: list, *, session=None, **kwargs):
+    """Send *method* to *url*, dialing only *ips* unless *session* is injected.
+
+    An injected session is the test double used by the image fetcher. It
+    does not open a socket. Production callers leave *session* unset and
+    hit :func:`_send_pinned`.
+    """
+    if session is not None:
+        return getattr(session, method.lower())(url, allow_redirects=False, **kwargs)
+    last_error = None
+    for ip in ips:
+        try:
+            return _send_pinned(method, url, str(ip), **kwargs)
+        except requests.ConnectionError as exc:
+            last_error = exc
+    if last_error is None:
+        raise UnsafeUrlError("URL host had no address to connect to.")
+    raise last_error
 
 
 def download_public_file(
@@ -118,43 +283,36 @@ def download_public_file(
     """Download *url* to *dest_path* with per-hop SSRF validation.
 
     Redirects are followed manually (``allow_redirects=False``) so every hop
-    is re-validated with :func:`assert_public_url`. The body is streamed with
-    an explicit byte cap; oversized downloads are rejected and no partial
-    file is left behind. When *allowed_content_types* is given, the response
-    Content-Type must start with one of the prefixes (e.g. ``"image/"``).
+    is re-resolved and the connection is pinned to that hop's addresses.
+    The body is streamed with an explicit byte cap; oversized downloads are
+    rejected and no partial file is left behind. When *allowed_content_types*
+    is given, the response Content-Type must start with one of the prefixes
+    (e.g. ``"image/"``).
 
     Returns *dest_path*. Raises :class:`UnsafeUrlError` on any rejection and
     :class:`OSError` on local I/O failures.
     """
-    assert_public_url(url, what=what)
-    http = session if session is not None else requests
-
     current_url = url
     response = None
     try:
         for _ in range(MAX_REDIRECTS + 1):
-            # False positive note: every URL reaching this request passed
-            # assert_public_url (http(s) scheme, DNS resolution, all
-            # resolved IPs global, fail closed) on this hop, and redirects
-            # are followed manually with the same check per hop.
-            # codeql[py/full-ssrf]: guarded, see assert_public_url
-            response = http.get(
+            ips = _public_ips(current_url, what=what)
+            response = _open(
+                "get",
                 current_url,
+                ips,
+                session=session,
                 stream=True,
                 timeout=timeout,
                 verify=tls_verify,
-                allow_redirects=False,
                 headers=headers,
                 proxies=proxies,
             )
-            location = response.headers.get("Location") or response.headers.get(
-                "location"
-            )
+            location = _header(response.headers, "Location")
             if response.status_code in _REDIRECT_STATUSES and location:
                 response.close()
                 response = None
                 current_url = urljoin(current_url, location)
-                assert_public_url(current_url, what=what)
                 continue
             break
         else:  # pragma: no cover - loop always breaks or raises
@@ -167,9 +325,7 @@ def download_public_file(
                 f"{what} download failed: HTTP {response.status_code}."
             )
 
-        content_length = response.headers.get("Content-Length") or response.headers.get(
-            "content-length"
-        )
+        content_length = _header(response.headers, "Content-Length")
         if content_length:
             try:
                 content_length_value = int(content_length)
@@ -188,7 +344,7 @@ def download_public_file(
 
         if allowed_content_types:
             content_type = (
-                (response.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+                (_header(response.headers, "Content-Type") or "").split(";")[0].strip().lower()
             )
             if not any(
                 content_type.startswith(prefix) for prefix in allowed_content_types
@@ -247,3 +403,22 @@ def download_public_file(
             pass
         raise
     return dest_path
+
+
+def post_public_url(url: str, *, json: dict, timeout, session=None):
+    """POST *json* to a public *url*, pinned to the addresses just validated.
+
+    Redirects are not followed. The caller treats a 3xx status as delivery
+    failure. Raises :class:`UnsafeUrlError` before any dial when *url* is
+    not public.
+    """
+    ips = _public_ips(url, what="webhook_url")
+    return _open(
+        "post",
+        url,
+        ips,
+        session=session,
+        json=json,
+        timeout=timeout,
+        stream=False,
+    )

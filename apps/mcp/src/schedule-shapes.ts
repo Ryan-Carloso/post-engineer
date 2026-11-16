@@ -4,8 +4,10 @@
 // Extracted from tools.ts so the tools module stays under the file-size
 // ratchet. tools.ts re-exports every name here, so existing import sites
 // keep working.
+import { isIP } from 'node:net';
 import { z } from 'zod';
 import { isEnglishLanguage, ONLY_ENGLISH_VIDEOS_MESSAGE } from './language.js';
+import { isPublicIp } from './public-ip.js';
 import { VIDEO_LAYOUTS } from './limits.js';
 import { VIDEO_TYPES, VIDEO_TYPE_ERROR_SUFFIX, unknownVideoTypeMessage } from './video-type.js';
 import { personaVoiceField } from './voice-filters.js';
@@ -73,9 +75,9 @@ export const DeleteSlotShape = {
 
 export const DeleteSlotSchema = z.object(DeleteSlotShape);
 
-// Loopback hosts for which a plain http: media/webhook URL is tolerated
-// (local dev callbacks). Anything else must be https so the URL's content
-// never travels in cleartext.
+// Loopback hosts for which a plain http: media URL is tolerated (local
+// dev). Anything else must be https so the bytes never travel in cleartext.
+// webhookUrl does not use this list: a callback is https on a public host.
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
 
 function isHttpsOrLoopbackHttp(url: string): boolean {
@@ -89,13 +91,38 @@ function isHttpsOrLoopbackHttp(url: string): boolean {
   return parsed.protocol === 'http:' && LOOPBACK_HOSTS.has(parsed.hostname);
 }
 
-/** URL field for user-supplied media/webhook URLs: https, or http on loopback only. */
+/** URL field for user-supplied media URLs: https, or http on loopback only. */
 function httpsUrlField(fieldName: string) {
   return z
     .string()
     .url(`${fieldName} must be a valid URL`)
     .refine(isHttpsOrLoopbackHttp, {
       message: `${fieldName} must be an https URL (http is allowed only for loopback hosts like localhost)`,
+    });
+}
+
+/** https only. A loopback or private literal host is rejected; a name is left to the engine. */
+function isPublicHttpsWebhookUrl(url: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== 'https:') return false;
+  // Node keeps the brackets on an IPv6 hostname (`[::1]`).
+  const host = parsed.hostname.replace(/^\[|\]$/g, '');
+  if (host.toLowerCase() === 'localhost') return false;
+  if (isIP(host) !== 0 && !isPublicIp(host)) return false;
+  return true;
+}
+
+function webhookUrlField() {
+  return z
+    .string()
+    .url('webhookUrl must be a valid URL')
+    .refine(isPublicHttpsWebhookUrl, {
+      message: 'webhookUrl must be https on a public host',
     });
 }
 
@@ -117,7 +144,7 @@ export const GeneratePersonaVideoOptionsShape = {
   audioUrl: httpsUrlField('audioUrl').optional().describe('Public URL of custom audio for the videos (overrides the persona voice).'),
   imageId: z.string().min(1, 'imageId must be a non-empty string').optional().describe('Library image ID to use for every video (overrides the deterministic per-video selection; see persona_media (action: list_images)).'),
   voiceId: personaVoiceField().optional().describe('Voice ID override: id or label from voices (action: list). Never type a provider prefix.'),
-  webhookUrl: httpsUrlField('webhookUrl').optional().describe('Callback URL the server POSTs to when each video reaches a terminal state (completed/failed).'),
+  webhookUrl: webhookUrlField().optional().describe('Callback URL the server POSTs to when each video reaches a terminal state (completed/failed).'),
   videoAspect: z.enum(['9:16', '16:9', '1:1']).optional().describe('Frame shape. Overrides the persona when one is given; a post without a persona defaults to 9:16.'),
   videoLayout: z
     .enum(VIDEO_LAYOUTS)
