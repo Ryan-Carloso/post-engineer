@@ -172,7 +172,11 @@ export default function MetricsPage(): React.ReactElement {
 
       {rows.length > 0 && (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <StatTile label={t('metrics.statVideos')} value={formatNumber(summary.videos)} />
+          <StatTile
+            label={t('metrics.statMeasurements')}
+            value={formatNumber(summary.measurements)}
+            hint={t('metrics.statMeasurementsHint')}
+          />
           <StatTile label={t('metrics.statTotalViews')} value={formatNumber(summary.views)} />
           <StatTile
             label={t('metrics.statEngagement')}
