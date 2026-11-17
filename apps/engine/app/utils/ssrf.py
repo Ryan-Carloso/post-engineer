@@ -86,6 +86,10 @@ def is_public_ip(ip) -> bool:
     """
     if not ip.is_global:
         return False
+    # An IPv4-mapped address (::ffff:a.b.c.d) inherits is_global from the
+    # embedded IPv4, so the extra IPv4 ranges must be checked on it too.
+    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
+        return is_public_ip(ip.ipv4_mapped)
     if isinstance(ip, ipaddress.IPv4Address):
         return all(ip not in network for network in _EXTRA_V4)
     if any(ip in network for network in _EXTRA_V6):

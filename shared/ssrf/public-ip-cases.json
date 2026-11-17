@@ -50,7 +50,9 @@
     "100:0:0:1::",
     "100:0:0:1:ffff:ffff:ffff:ffff",
     "5f00::",
-    "5f00:ffff:ffff:ffff:ffff:ffff:ffff:ffff"
+    "5f00:ffff:ffff:ffff:ffff:ffff:ffff:ffff",
+    "::ffff:192.88.99.1",
+    "::ffff:c058:6301"
   ],
   "allowed": [
     "1.1.1.1",
