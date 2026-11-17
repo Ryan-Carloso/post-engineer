@@ -42,6 +42,7 @@ def analyze(path, status, base="", head="", exists=None):
 def test_grader_sources_do_not_trip_their_own_rules():
     paths = [
         ROOT / ".github/scripts/tests/test_verification_collect.py",
+        ROOT / ".github/scripts/tests/test_verification_honesty.py",
         ROOT / ".github/scripts/tests/test_verification_workflow.py",
         ROOT / ".github/workflows/verification.yml",
     ]
@@ -220,13 +221,18 @@ def test_coverage_ignore_on_an_added_line_fails():
     assert any(finding.code == "coverage-ignored" for finding in fails(findings))
 
 
-def test_deleted_test_file_fails_only_while_product_code_remains():
+def test_deleted_test_file_fails_while_product_code_remains_and_warns_when_it_is_gone():
     path = "apps/engine/test/services/test_voice.py"
     base = "def test_a():\n    assert 1 == 1\n"
     present = analyze(path, "D", base, exists=lambda item: item == "apps/engine/app/services/voice.py")
     assert any(finding.code == "tests-deleted-file" for finding in fails(present))
     gone = analyze(path, "D", base, exists=lambda _item: False)
     assert fails(gone) == []
+    assert any(finding.code == "tests-deleted-unmapped" for finding in gone)
+    # The mapper only guesses by name: test_asgi_health.py maps to a
+    # module that does not exist, so deleting it must still warn.
+    asgi = analyze("apps/engine/test/test_asgi_health.py", "D", base, exists=lambda _item: False)
+    assert any(finding.code == "tests-deleted-unmapped" for finding in asgi)
 
 
 def test_deleting_the_grader_fails_and_editing_it_warns():

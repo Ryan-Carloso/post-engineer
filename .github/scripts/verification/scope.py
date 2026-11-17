@@ -9,12 +9,25 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+# Test files the verification suite runs. local_suites() classifies only
+# these exact files as the verification suite: a new test_verification_*
+# file is not in the suite command, so it falls through to review-scripts,
+# which runs the whole .github/scripts/tests directory.
+_VERIFICATION_TEST_FILES = (
+    "test_verification_collect.py",
+    "test_verification_workflow.py",
+)
+_VERIFICATION_TEST_PATHS = frozenset(
+    f".github/scripts/tests/{name}" for name in _VERIFICATION_TEST_FILES
+)
+
 # Exact commands the workflow runs. report.py prints these, and
 # test_verification_workflow.py asserts the workflow contains each one.
 SUITE_COMMANDS: dict[str, str] = {
     "verification": (
-        "python3 -m pytest .github/scripts/tests/test_verification_collect.py "
-        ".github/scripts/tests/test_verification_workflow.py -q --tb=line"
+        "python3 -m pytest "
+        + " ".join(f".github/scripts/tests/{name}" for name in _VERIFICATION_TEST_FILES)
+        + " -q --tb=line"
     ),
     "review-scripts": "python3 -m pytest .github/scripts/tests -q --tb=line",
 }
@@ -118,7 +131,7 @@ def local_suites(paths: list[str]) -> list[str]:
         return []
     verifier_only = all(
         path.startswith(".github/scripts/verification/")
-        or path.startswith(".github/scripts/tests/test_verification_")
+        or path in _VERIFICATION_TEST_PATHS
         or path == ".github/workflows/verification.yml"
         for path in watched
     )

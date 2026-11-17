@@ -19,9 +19,11 @@ if _HERE not in sys.path:
 
 from scope import is_product_code, is_test_path, production_candidates, test_candidates
 
+_WORKFLOW_PATH = ".github/workflows/verification.yml"
+
 PROTECTED = (
     ".github/REVIEW_RUBRIC.md",
-    ".github/workflows/verification.yml",
+    _WORKFLOW_PATH,
     ".github/scripts/verification/collect.py",
     ".github/scripts/verification/honesty.py",
     ".github/scripts/verification/scope.py",
@@ -132,6 +134,16 @@ def analyze(changes: list[FileChange], exists) -> list[Finding]:
         if change.status == "D" and is_test_path(change.path):
             findings.extend(_deleted_test_file(change, exists))
         if (
+            change.status == "R"
+            and is_test_path(change.old_path or change.path)
+            and not _is_collectable_test_path(change.path)
+        ):
+            # Renaming a test file out of discovery keeps the test names
+            # but pytest/vitest never collects it again: grade the rename
+            # as the deletion it effectively is.
+            renamed = FileChange(change.old_path or change.path, "D", change.base_text, change.head_text)
+            findings.extend(_deleted_test_file(renamed, exists))
+        if (
             change.status in {"A", "M"}
             and is_product_code(change.path)
             and untested < 15
@@ -147,26 +159,32 @@ def analyze(changes: list[FileChange], exists) -> list[Finding]:
             ))
     if len(findings) > _MAX_FINDINGS:
         extra = len(findings) - _MAX_FINDINGS
+        omitted_fails = sum(1 for f in findings[_MAX_FINDINGS:] if f.severity == "fail")
         findings = findings[:_MAX_FINDINGS]
         findings.append(Finding(
-            "warn",
+            "fail" if omitted_fails else "warn",
             "findings-truncated",
             "",
-            f"{extra} additional findings omitted from the comment",
+            f"{extra} additional findings omitted ({omitted_fails} fail)",
             1,
         ))
     return findings
 
 
 def _protected(change: FileChange) -> list[Finding]:
-    if change.path not in PROTECTED:
+    old_protected = change.old_path in PROTECTED
+    new_protected = change.path in PROTECTED
+    if not old_protected and not new_protected:
         return []
-    if change.status == "D":
+    if change.status == "D" or (change.status == "R" and old_protected):
+        # A rename away from a protected path removes the file just as
+        # surely as a delete; the new path is outside the protected set,
+        # so keying only on it would let the gate be moved or dropped.
         return [Finding(
             "fail",
             "verifier-deleted",
-            change.path,
-            "deleting the grader, the rubric, or the review skill removes the check that judges this change",
+            change.old_path or change.path,
+            "deleting or renaming away the grader, the rubric, or the review skill removes the check that judges this change",
             1,
         )]
     if change.status in {"M", "R"}:
@@ -181,7 +199,9 @@ def _protected(change: FileChange) -> list[Finding]:
 
 
 def _workflow_safety(change: FileChange) -> list[Finding]:
-    if change.path != ".github/workflows/verification.yml" or change.status not in {"A", "M", "R"}:
+    if change.path != _WORKFLOW_PATH and change.old_path != _WORKFLOW_PATH:
+        return []
+    if change.status not in {"A", "M", "R"}:
         return []
     findings: list[Finding] = []
     for line_no, line in _added_lines(change.base_text, change.head_text):
@@ -244,15 +264,7 @@ def _test_edits(change: FileChange) -> list[Finding]:
 
 def _deleted_test_file(change: FileChange, exists) -> list[Finding]:
     candidates = production_candidates(change.path)
-    if not candidates:
-        return [Finding(
-            "warn",
-            "tests-deleted-unmapped",
-            change.path,
-            "test file deleted and no product file was mapped; confirm the whole path was removed",
-            1,
-        )]
-    if any(exists(candidate) for candidate in candidates):
+    if candidates and any(exists(candidate) for candidate in candidates):
         return [Finding(
             "fail",
             "tests-deleted-file",
@@ -260,7 +272,16 @@ def _deleted_test_file(change: FileChange, exists) -> list[Finding]:
             "test file deleted while a mapped product file is still in the tree",
             1,
         )]
-    return []
+    # A mapped product file that no longer exists is not a clean deletion:
+    # the mapper only guesses by name, so the whole path may still be live
+    # under a different module name. At least warn so a human confirms it.
+    return [Finding(
+        "warn",
+        "tests-deleted-unmapped",
+        change.path,
+        "test file deleted; no mapped product file was found, confirm the whole path was removed",
+        1,
+    )]
 
 
 def _added_patterns(path: str, base_text: str, head_text: str) -> list[Finding]:
@@ -384,6 +405,23 @@ def _test_names(path: str, text: str) -> list[str]:
     if path.endswith((".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs")):
         return _TS_TEST.findall(cleaned)
     return []
+
+
+def _is_collectable_test_path(path: str) -> bool:
+    """True when a test runner would still collect the file at this path.
+
+    pytest only collects test_*.py/*_test.py under its test paths and
+    vitest only *.test.*/*.spec.* (plus Cypress *.cy.*), so a rename that
+    keeps the test names but drops the discovery pattern silently deletes
+    the tests.
+    """
+    name = path.split("/")[-1]
+    if path.endswith(".py"):
+        under_test_dir = any(part in {"test", "tests", "__tests__"} for part in path.split("/"))
+        return under_test_dir and (name.startswith("test_") or name.endswith("_test.py"))
+    if path.endswith((".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs")):
+        return ".test." in name or ".spec." in name or name.endswith((".cy.ts", ".cy.tsx"))
+    return False
 
 
 def _assertion_count(text: str) -> int:
