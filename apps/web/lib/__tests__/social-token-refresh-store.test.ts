@@ -111,6 +111,15 @@ describe('createTokenRefreshStore.listExpiring', () => {
     expect(result).toEqual([]);
   });
 
+  it('returns no candidates when the query answers null data', async () => {
+    const { chain } = builder({ data: null, error: null });
+    const { supabase } = client(chain);
+
+    await expect(
+      createTokenRefreshStore(supabase).listExpiring(['instagram'], after, before, 51),
+    ).resolves.toEqual([]);
+  });
+
   it('throws on a query error instead of reporting nothing due', async () => {
     const { chain } = builder({ data: null, error: { message: 'boom' } });
     const { supabase } = client(chain);
@@ -157,6 +166,15 @@ describe('createTokenRefreshStore.saveRefreshed', () => {
 
   it('returns row_changed when the row was reconnected or deleted during the run', async () => {
     const { chain } = builder({ data: [], error: null });
+    const { supabase } = client(chain);
+
+    const result = await createTokenRefreshStore(supabase).saveRefreshed(candidate, { access_token: 'new' }, expiresAt);
+
+    expect(result).toBe('row_changed');
+  });
+
+  it('returns row_changed when the update answers null data', async () => {
+    const { chain } = builder({ data: null, error: null });
     const { supabase } = client(chain);
 
     const result = await createTokenRefreshStore(supabase).saveRefreshed(candidate, { access_token: 'new' }, expiresAt);

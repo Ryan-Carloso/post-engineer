@@ -312,4 +312,19 @@ describe('social-token-refresh tick', () => {
       userId: 'u1', provider: 'instagram', accountId: 'ig-1', socialAccountId: 'row-1', error,
     });
   });
+
+  it('logs a failed owner alert instead of dropping it', async () => {
+    const { refreshDeps } = await runTick();
+    const mailError = new Error('smtp down');
+    vi.mocked(notifyAccountBreak).mockRejectedValueOnce(mailError);
+    const candidate = {
+      id: 'row-1', userId: 'u1', provider: 'threads' as const, providerAccountId: 'th-1',
+      tokens: { access_token: 'x' }, updatedAt: 't',
+    };
+
+    refreshDeps.reportBroken(candidate, new Error('dead'));
+    await vi.waitFor(() => {
+      expect(logger.error).toHaveBeenCalledWith('[scheduler/social-token-refresh] owner alert failed', mailError);
+    });
+  });
 });
