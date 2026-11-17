@@ -124,13 +124,32 @@ jobs:
         run: npm test
 
   # Frontend gate. lint, typecheck, the production build, and the sharded
-  # unit tests run in parallel inside frontend-ci.yml. This job is the
-  # required `web` check: it fails when any of those jobs fail. The merged
+  # unit tests run in parallel inside frontend-ci.yml. The merged
   # vitest coverage is still uploaded as `coverage-vitest` for the UI gate.
-  web:
+  web-ci:
     permissions:
       contents: read
     uses: ./.github/workflows/frontend-ci.yml
+
+  # Required `web` check. A reusable-workflow caller job reports no check
+  # run of its own (only the `web-ci / ...` sub-jobs report), so without
+  # this aggregator the ruleset's required `web` context waits forever
+  # and the PR can never merge. It fails when the frontend gate failed.
+  web:
+    needs: [web-ci]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Fail if the frontend gate failed
+        run: |
+          if [ "${{ needs.web-ci.result }}" != "success" ]; then
+            echo "frontend-ci result: ${{ needs.web-ci.result }}" >&2
+            exit 1
+          fi
+          echo "frontend-ci passed"
 
   mcp:
     runs-on: ubuntu-latest
