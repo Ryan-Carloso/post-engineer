@@ -427,6 +427,8 @@ describe('/api/schedule', () => {
     const body = (await res.json()) as { error: string };
     expect(body.error).toBe('Schedule not found.');
     expect(db.deleteCalls).toEqual([]);
+    expect(db.selectArgs).toEqual([]);
+    expect(db.slotSelectArgs).toEqual([]);
   });
 
   it('GET returns 500 when the list query fails', async () => {

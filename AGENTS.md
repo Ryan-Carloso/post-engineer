@@ -130,6 +130,7 @@
 ## Testing gotchas
 
 - Tests must not pass vacuously: assert the path under test was actually taken; mutation-verify new pins (revert the fix, the test must fail). Test names match their assertions.
+- **A "without touching the database" test must assert every query channel, not just deletes (2026-11-17, PR #628 OpenCode MINOR).** The non-UUID DELETE test asserted only `deleteCalls` was empty, so moving the `isUuid` guard below the slots select (or the persona-scope lookup, which filters the same uuid column) would still pass while reintroducing the 22P02 → 500 regression. Assert `selectArgs` and `slotSelectArgs` are empty too — every channel the guard is supposed to precede.
 - **Test fixtures must use relative dates, never fixed future dates (2026-11-15, PR #599 CI).** `publish-existing/route.test.ts` hardcoded `expires_at: '2026-11-15T12:00:00Z'`; once the clock passed noon UTC, `loadReadyVideoUpload` threw 410 VIDEO_UPLOAD_EXPIRED and the three ready-upload tests failed in CI — while they had passed hours earlier when the date was still in the future. Derive fixture dates from `Date.now()`; a fixed future date is a time bomb, and a test that passes in the morning and fails in the afternoon is the symptom.
 - Mocks mirror production (real query chains, real envelopes, echoed payloads).
 - Env in tests: `vi.stubEnv(key, undefined)`, never `delete process.env.X`; stub/clear every related var (CI injects ambient ones like `BUILD`). Don't `mockReset()` a `vi.stubGlobal`'d fetch in `beforeEach`.
