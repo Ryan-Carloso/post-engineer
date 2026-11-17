@@ -46,9 +46,24 @@ jobs:
           python-version: "3.12"
 
       - name: Install grader test dependencies
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           set -euo pipefail
-          python3 -m pip install --quiet -r .github/scripts/requirements-validator.txt
+          # The grader runs from the base copy so a pull request cannot
+          # silence a finding by editing the script. Its interpreter must
+          # be built from the base requirements too: a pull-request
+          # requirements file could redirect the index or install a
+          # package whose install step poisons site-packages, and every
+          # later python3 in this job would run that code.
+          if git cat-file -e "${BASE_SHA}:.github/scripts/requirements-validator.txt" 2>/dev/null; then
+            git show "${BASE_SHA}:.github/scripts/requirements-validator.txt" > /tmp/requirements-validator.txt
+            python3 -m pip install --quiet -r /tmp/requirements-validator.txt
+          else
+            # The grader does not exist on the base yet; this pull request
+            # is the one introducing it, so its copy is the only source.
+            python3 -m pip install --quiet -r .github/scripts/requirements-validator.txt
+          fi
 
       - name: Grade the diff and run diff-scoped tests
         id: grade
@@ -77,6 +92,11 @@ jobs:
             --source "$source" \
             --json /tmp/honesty.json
           collect_code=$?
+          # Hash the payload now, in a shell variable no test process can
+          # rewrite: the suites below run pull-request test code on this
+          # filesystem, and the hash is the only record of what the grader
+          # actually found.
+          honesty_sha=$(sha256sum /tmp/honesty.json | awk '{print $1}')
           set -e
           if [ "$collect_code" -gt 1 ]; then
             echo "collect.py failed (${collect_code})"
@@ -85,6 +105,7 @@ jobs:
           python3 -c 'import json,pathlib,sys; data=json.loads(pathlib.Path("/tmp/honesty.json").read_text(encoding="utf-8")); suites=data.get("local_suites") or []; allowed={"verification","review-scripts"}; sys.exit("refusing local_suites") if (not isinstance(suites, list) or any(item not in allowed for item in suites)) else pathlib.Path("/tmp/suites.txt").write_text("".join(item + "\n" for item in suites), encoding="utf-8")'
           echo '{}' > /tmp/suite-results.json
           suite_fail=0
+          suite_codes=""
           while IFS= read -r suite; do
             [ -z "$suite" ] && continue
             log="/tmp/suite-${suite}.log"
@@ -101,18 +122,40 @@ jobs:
                 exit 1
                 ;;
             esac
+            suite_codes="${suite_codes} ${suite}:${code}"
             if [ "$code" -ne 0 ]; then
               suite_fail=1
               tail -n 40 "$log" || true
             fi
-            SUITE_NAME="$suite" SUITE_CODE="$code" SUITE_LOG="$log" python3 -c 'import json,os; from pathlib import Path; path=Path("/tmp/suite-results.json"); data=json.loads(path.read_text(encoding="utf-8") or "{}"); text=Path(os.environ["SUITE_LOG"]).read_text(encoding="utf-8", errors="replace"); data[os.environ["SUITE_NAME"]]={"exit_code": int(os.environ["SUITE_CODE"]), "excerpt": text[-2000:]}; path.write_text(json.dumps(data), encoding="utf-8")'
           done < /tmp/suites.txt
+          # Rebuild the suite results from the exit codes recorded above in
+          # shell variables and the pytest logs on disk. A test that ran in
+          # the loop shares this filesystem and could have rewritten the
+          # file, so nothing it contains is trusted here.
+          SUITE_CODES="$suite_codes" python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          data = {}
+          for item in os.environ["SUITE_CODES"].split():
+              name, code = item.split(":")
+              log = Path(f"/tmp/suite-{name}.log")
+              text = log.read_text(encoding="utf-8", errors="replace") if log.is_file() else ""
+              data[name] = {"exit_code": int(code), "excerpt": text[-2000:]}
+          Path("/tmp/suite-results.json").write_text(json.dumps(data), encoding="utf-8")
+          PY
           set +e
-          python3 "$grader_dir/report.py" \
-            --honesty /tmp/honesty.json \
-            --suites /tmp/suite-results.json \
-            --markdown /tmp/evidence.md
-          report_code=$?
+          if [ "$(sha256sum /tmp/honesty.json | awk '{print $1}')" != "$honesty_sha" ]; then
+            echo "::error::verification evidence payload was modified after grading; refusing to render"
+            rm -f /tmp/evidence.md
+            report_code=1
+          else
+            python3 "$grader_dir/report.py" \
+              --honesty /tmp/honesty.json \
+              --suites /tmp/suite-results.json \
+              --markdown /tmp/evidence.md
+            report_code=$?
+          fi
           set -e
           if [ "$report_code" -gt 1 ]; then
             exit "$report_code"

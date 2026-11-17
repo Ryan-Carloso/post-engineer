@@ -48,6 +48,43 @@ def test_truncated_findings_keep_their_fails():
     assert truncated_warn[0].message == "1 additional findings omitted (0 fail)"
 
 
+def test_weakened_assertion_is_not_hidden_by_a_strong_addition_in_the_same_block():
+    findings = analyze(
+        "apps/engine/test/test_sample.py",
+        "M",
+        "def test_a():\n    assert x == 1\n",
+        "def test_a():\n    assert y\n    assert other == 3\n",
+    )
+    assert any(finding.code == "assertion-weakened" for finding in fails(findings))
+
+
+def test_guarded_pytest_skip_warns_and_does_not_fail():
+    base = "def test_ok():\n    assert 1 == 1\n"
+    guarded = analyze(
+        "apps/engine/test/test_sample.py",
+        "M",
+        base,
+        base + "    if base.returncode != 0:\n" + glue("        pytest.", "skip('not in this clone')\n"),
+    )
+    assert fails(guarded) == []
+    assert any(finding.code == "test-skip-conditional" for finding in guarded)
+    single_line = analyze(
+        "apps/engine/test/test_sample.py",
+        "M",
+        base,
+        base + glue("    if True: pytest.", "skip('hidden')\n"),
+    )
+    assert fails(single_line) == []
+    assert any(finding.code == "test-skip-conditional" for finding in single_line)
+    unguarded = analyze(
+        "apps/engine/test/test_sample.py",
+        "M",
+        base,
+        base + glue("    pytest.", "skip('hidden')\n"),
+    )
+    assert any(finding.code == "test-skipped" for finding in fails(unguarded))
+
+
 def test_rename_out_of_test_collection_is_a_deletion():
     base = "def test_a():\n    assert 1 == 1\n"
     renamed = honesty.FileChange(

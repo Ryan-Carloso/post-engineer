@@ -69,6 +69,9 @@ _VITEST_FLOOR = re.compile(
 )
 _INFO_TRUE = re.compile(r"informational:\s*true")
 
+_BARE_SKIP = re.compile(r"(?<![\w.])pytest\.skip\s*\(")
+_GUARD = re.compile(r"^\s*(?:if|elif|else)\b.*:\s*$")
+
 # Unconditional skips and exclusive focus hide every other case. Conditional
 # skips (missing ffmpeg, an opt-in integration flag) are warnings: they are
 # visible, and they do not fail a job that still runs the rest of the suite.
@@ -77,7 +80,7 @@ _UNCONDITIONAL: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("test-skipped", re.compile(r"(?<![\w.])x(?:it|test|describe)\s*\(")),
     ("test-skipped", re.compile(r"@pytest\.mark\.skip\b(?!\s*if)")),
     ("test-skipped", re.compile(r"@unittest\.skip\s*\(")),
-    ("test-skipped", re.compile(r"(?<![\w.])pytest\.skip\s*\(")),
+    ("test-skipped", _BARE_SKIP),
     ("test-focused", re.compile(r"\b(?:it|test|describe)\.only\s*\(")),
     ("test-focused", re.compile(r"(?<![\w.])f(?:it|describe)\s*\(")),
 )
@@ -138,9 +141,7 @@ def analyze(changes: list[FileChange], exists) -> list[Finding]:
             and is_test_path(change.old_path or change.path)
             and not _is_collectable_test_path(change.path)
         ):
-            # Renaming a test file out of discovery keeps the test names
-            # but pytest/vitest never collects it again: grade the rename
-            # as the deletion it effectively is.
+            # Renaming a test file out of discovery keeps the test names but the runner never collects it again.
             renamed = FileChange(change.old_path or change.path, "D", change.base_text, change.head_text)
             findings.extend(_deleted_test_file(renamed, exists))
         if (
@@ -177,9 +178,7 @@ def _protected(change: FileChange) -> list[Finding]:
     if not old_protected and not new_protected:
         return []
     if change.status == "D" or (change.status == "R" and old_protected):
-        # A rename away from a protected path removes the file just as
-        # surely as a delete; the new path is outside the protected set,
-        # so keying only on it would let the gate be moved or dropped.
+        # A rename away from a protected path removes the file just as surely as a delete.
         return [Finding(
             "fail",
             "verifier-deleted",
@@ -272,9 +271,7 @@ def _deleted_test_file(change: FileChange, exists) -> list[Finding]:
             "test file deleted while a mapped product file is still in the tree",
             1,
         )]
-    # A mapped product file that no longer exists is not a clean deletion:
-    # the mapper only guesses by name, so the whole path may still be live
-    # under a different module name. At least warn so a human confirms it.
+    # A mapped product file that no longer exists is not a clean deletion: the mapper only guesses by name.
     return [Finding(
         "warn",
         "tests-deleted-unmapped",
@@ -286,18 +283,16 @@ def _deleted_test_file(change: FileChange, exists) -> list[Finding]:
 
 def _added_patterns(path: str, base_text: str, head_text: str) -> list[Finding]:
     findings: list[Finding] = []
+    head_lines = head_text.splitlines()
     for line_no, line in _added_lines(base_text, head_text):
         if _is_comment(line):
             continue
         for code, pattern in _UNCONDITIONAL:
             if pattern.search(line):
-                findings.append(Finding(
-                    "fail",
-                    code,
-                    path,
-                    "unconditional skip or exclusive focus added; it hides cases instead of fixing them",
-                    line_no,
-                ))
+                severity, message = "fail", "unconditional skip or exclusive focus added; it hides cases instead of fixing them"
+                if pattern is _BARE_SKIP and _is_guarded(head_lines, line_no):
+                    code, severity, message = "test-skip-conditional", "warn", "conditional skip added; say why the case cannot run in CI"
+                findings.append(Finding(severity, code, path, message, line_no))
                 break
         else:
             for code, pattern in _CONDITIONAL:
@@ -319,6 +314,19 @@ def _added_patterns(path: str, base_text: str, head_text: str) -> list[Finding]:
                 line_no,
             ))
     return findings
+
+
+def _is_guarded(lines: list[str], line_no: int) -> bool:
+    """True when the line sits under an if/elif/else guard in the head text."""
+    line = lines[line_no - 1]
+    indent = len(line) - len(line.lstrip())
+    if line.strip().startswith("if "):
+        return True
+    for prev in reversed(lines[: line_no - 1]):
+        stripped = prev.strip()
+        if stripped and len(prev) - len(prev.lstrip()) < indent:
+            return bool(_GUARD.match(prev))
+    return False
 
 
 def _coverage_config(change: FileChange) -> list[Finding]:
@@ -410,11 +418,7 @@ def _test_names(path: str, text: str) -> list[str]:
 def _is_collectable_test_path(path: str) -> bool:
     """True when a test runner would still collect the file at this path.
 
-    pytest only collects test_*.py/*_test.py under its test paths and
-    vitest only *.test.*/*.spec.* (plus Cypress *.cy.*), so a rename that
-    keeps the test names but drops the discovery pattern silently deletes
-    the tests.
-    """
+    pytest only collects test_*.py/*_test.py under its test paths; vitest only *.test.*/*.spec.* (plus Cypress *.cy.*)."""
     name = path.split("/")[-1]
     if path.endswith(".py"):
         under_test_dir = any(part in {"test", "tests", "__tests__"} for part in path.split("/"))
@@ -436,13 +440,13 @@ def _weakened_line_numbers(base: str, head: str) -> list[int]:
     for tag, i1, i2, j1, j2 in matcher.get_opcodes():
         if tag != "replace":
             continue
-        removed = base_lines[i1:i2]
-        added = head_lines[j1:j2]
-        removed_strong = any(_STRONG.search(line) for line in removed)
-        added_strong = any(_STRONG.search(line) for line in added)
-        added_weak = any(_WEAK.search(line) for line in added)
-        if removed_strong and added_weak and not added_strong:
-            hits.append(j1 + 1)
+        if not any(_STRONG.search(line) for line in base_lines[i1:i2]):
+            continue
+        # Check each added line on its own: a strong addition elsewhere in the block must not hide a weak swap.
+        for offset, line in enumerate(head_lines[j1:j2]):
+            if _WEAK.search(line) and not _STRONG.search(line):
+                hits.append(j1 + offset + 1)
+                break
     return hits
 
 

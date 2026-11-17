@@ -69,3 +69,18 @@ def test_workflow_runs_the_allowlisted_suite_commands():
     for command in scope.SUITE_COMMANDS.values():
         assert command in text
     assert "refusing local_suites" in text
+
+
+def test_install_uses_base_requirements():
+    text = _text()
+    assert 'git show "${BASE_SHA}:.github/scripts/requirements-validator.txt"' in text
+    assert "pip install --quiet -r /tmp/requirements-validator.txt" in text
+
+
+def test_grade_payload_is_verified_before_render():
+    text = _text()
+    assert "honesty_sha=$(sha256sum /tmp/honesty.json" in text
+    assert "modified after grading" in text
+    assert text.index("honesty_sha=") < text.index("python3 -m pytest")
+    assert text.index("python3 -m pytest") < text.index("modified after grading")
+    assert 'SUITE_CODES="$suite_codes"' in text
