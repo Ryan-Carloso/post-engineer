@@ -164,6 +164,24 @@ def test_edge_with_custom_audio_is_skipped(task_dir):
     whisper.assert_not_called()
 
 
+def test_edge_success_cleans_subtitle_punctuation(task_dir):
+    dirty_srt = (
+        "1\n00:00:00,000 --> 00:00:01,000\nHello, world - wait?\n\n"
+        "2\n00:00:01,000 --> 00:00:02,000\nEspera...\n\n"
+    )
+
+    def writer(**kwargs):
+        Path(kwargs["subtitle_file"]).write_text(dirty_srt, encoding="utf-8")
+
+    with patch.object(subtitle_provider.voice, "create_subtitle", side_effect=writer):
+        result = _build("edge", object())
+    assert result == str(task_dir / "subtitle.srt")
+    assert Path(result).read_text(encoding="utf-8") == (
+        "1\n00:00:00,000 --> 00:00:01,000\nHello world wait?\n\n"
+        "2\n00:00:01,000 --> 00:00:02,000\nEspera\n\n"
+    )
+
+
 def test_an_empty_provider_generates_nothing(task_dir):
     with (
         patch.object(subtitle_provider.voice, "create_subtitle") as edge,
