@@ -110,6 +110,14 @@ describe('Posts video detail', () => {
         personas: [{ id: DETAIL_PERSONA_ID, name: DETAIL_PERSONA_NAME }],
       },
     });
+    // The history page's join hooks read the connected accounts. Stub them
+    // so the spec never depends on the shared Supabase schema: a live
+    // /api/account fails on any database that has not applied the newest
+    // migration yet, which turns the whole history list into a load error.
+    cy.intercept('GET', '/api/account', {
+      statusCode: 200,
+      body: { authenticated: true, accounts: [] },
+    });
     cy.intercept('GET', '/api/persona/video-generations?*', {
       statusCode: 200,
       body: { success: true, generations: [] },
