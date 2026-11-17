@@ -20,7 +20,11 @@ describe('prompts hub data', () => {
       expect(prompt.titleKey).toMatch(/^recipes\./);
       expect(prompt.objectiveKey).toMatch(/^recipes\./);
       expect(prompt.kindKey).toMatch(/^recipes\./);
-      expect(prompt.stepKeys).toHaveLength(5);
+      // Story-first carries one extra step: every photo is AI-generated
+      // from one base photo (step 5); every other prompt has the uniform
+      // 5 steps.
+      const expectedStepCount = prompt.slug === 'story-first-reels' ? 6 : 5;
+      expect(prompt.stepKeys).toHaveLength(expectedStepCount);
       expect(prompt.deliverKeys).toHaveLength(3);
       expect(prompt.exampleInputKey).toMatch(/^recipes\./);
       expect(prompt.exampleOutputKey).toMatch(/^recipes\./);
@@ -610,6 +614,7 @@ describe('prompts hub data', () => {
       'recipes.storyFirstReelsStep3',
       'recipes.storyFirstReelsStep4',
       'recipes.storyFirstReelsStep5',
+      'recipes.storyFirstReelsStep6',
     ]);
     expect(entry.deliverKeys).toEqual([
       'recipes.storyFirstReelsDeliver1',
@@ -625,7 +630,7 @@ describe('prompts hub data', () => {
     expect(entry.prompt.startsWith(baseText)).toBe(true);
   });
 
-  it('orders the story-first flow: inputs, story, hook mechanisms, watch-through, voice, validate, generate', () => {
+  it('orders the story-first flow: inputs, story, hook mechanisms, watch-through, voice, images, validate, generate', () => {
     // The composed prompt starts with the shared base; the flow order below
     // is checked on the specific part only, after stripping that base prefix.
     const fullText = getPrompt('story-first-reels')?.prompt ?? '';
@@ -643,6 +648,15 @@ describe('prompts hub data', () => {
       'echo one word from the hook',
       'Voice: direct, plain spoken sentences',
       'If a line sounds written rather than spoken',
+      'Generate every photo with AI',
+      'never stock',
+      'do not search for images',
+      'about your own real photos',
+      'One consistent persona',
+      'the same person, the same look',
+      'one fixed group',
+      'from that same original photo',
+      'never chain',
       'check_script (action: validate)',
       'check_script (action: score)',
       'generate_video',
@@ -652,7 +666,21 @@ describe('prompts hub data', () => {
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);
     expect(text).toContain('one emotion only');
     expect(text).toContain('The viewer is the hero');
-    expect(text).toContain('Never fabricate a story or a testimonial');
+    // A real story, not an explanation: one concrete day, one event, first
+    // person, plausible in real life — never a generic explainer.
+    expect(text).toContain('one concrete day');
+    expect(text).toContain('first person');
+    expect(text).toContain('could really have happened');
+    expect(text).toContain('Never a generic explainer');
+    expect(text).toContain('Never present it as a real person');
+    expect(text).toContain('verified testimonial');
+    // Step 6 overrides the base's image-search lines for this prompt only:
+    // the agent must not search for images at all.
+    expect(text).toContain('do not search for images');
+    expect(text).toContain('the base lines about searching images');
+    // And the base's "own real photos" material rule: AI-generated photos
+    // from the base photo replace it for this prompt.
+    expect(text).toContain('about your own real photos');
     expect(text).toContain('who would DM this to whom, and why');
     expect(text).toContain('never a rote "like and subscribe"');
     expect(text).toContain('wait for my yes');

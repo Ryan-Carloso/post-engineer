@@ -1,4 +1,6 @@
-import { describe, it, expect, vi } from 'vitest';
+import { EventEmitter } from 'node:events';
+import https from 'node:https';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import type { LookupAddress } from 'node:dns';
 import {
   validateDcrMetadata,
@@ -78,22 +80,34 @@ describe('isBlockedIpAddress', () => {
     '224.0.0.1', // multicast
     '::1', // IPv6 loopback
     '::ffff:127.0.0.1', // IPv4-mapped loopback
+    '::ffff:7f00:1', // IPv4-mapped loopback written in hex
     'fc00::1', // IPv6 unique local
     'fe80::1', // IPv6 link-local
     'ff02::1', // IPv6 multicast
+    '198.18.0.1', // benchmarking
+    '192.0.0.8', // IETF protocol assignments, not the anycast exception
+    '[::1]', // bracketed loopback
   ])('blocks %s', (address) => {
     expect(isBlockedIpAddress(address)).toBe(true);
   });
 
-  it.each(['93.184.216.34', '8.8.8.8', '1.1.1.1', '2606:4700:4700::1111'])(
-    'allows public %s',
-    (address) => {
-      expect(isBlockedIpAddress(address)).toBe(false);
-    },
-  );
+  it.each([
+    '93.184.216.34',
+    '8.8.8.8',
+    '1.1.1.1',
+    '2606:4700:4700::1111',
+    '192.0.0.9',
+    '192.0.0.10',
+    '[2606:4700:4700::1111]',
+  ])('allows public %s', (address) => {
+    expect(isBlockedIpAddress(address)).toBe(false);
+  });
 });
 
 describe('fetchCimdDocument SSRF guards', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
   it('never follows redirects', async () => {
     const fetchImpl = okFetch({ redirect_uris: ['https://x/callback'] });
     await fetchCimdDocument(
@@ -202,6 +216,85 @@ describe('fetchCimdDocument SSRF guards', () => {
     expect(result).toEqual({ redirect_uris: ['https://x/callback'] });
     expect(fetchImpl).toHaveBeenCalledOnce();
     expect(fetchImpl.mock.calls[0]?.[0]).toBe('https://public.example/client.json');
+  });
+
+  it.each(['198.18.0.1', '192.0.0.8', '::ffff:7f00:1'])(
+    'refuses %s without fetching',
+    async (address) => {
+      const fetchImpl = okFetch({ redirect_uris: ['https://x/callback'] });
+      const result = await fetchCimdDocument(
+        'https://evil.example/client.json',
+        fetchImpl,
+        lookupReturning(address),
+      );
+      expect(result).toBeNull();
+      expect(fetchImpl).not.toHaveBeenCalled();
+    },
+  );
+
+  it('pins the document fetch to the validated address', async () => {
+    const lookup = lookupReturning('93.184.216.34');
+    let capturedLookup: ((
+      hostname: string,
+      options: { all?: boolean },
+      callback: (error: NodeJS.ErrnoException | null, address: unknown, family?: number) => void,
+    ) => void) | undefined;
+    vi.spyOn(https, 'request').mockImplementation(((
+      _url: URL,
+      options: { lookup?: typeof capturedLookup },
+      callback: (incoming: EventEmitter) => void,
+    ) => {
+      capturedLookup = options.lookup;
+      const req = new EventEmitter() as EventEmitter & { end: () => void; destroy: () => void };
+      req.destroy = () => undefined;
+      req.end = () => {
+        const incoming = new EventEmitter() as EventEmitter & {
+          statusCode: number;
+          headers: Record<string, string>;
+          resume: () => void;
+        };
+        incoming.statusCode = 200;
+        incoming.headers = { 'content-type': 'application/json' };
+        incoming.resume = () => undefined;
+        callback(incoming);
+        queueMicrotask(() => {
+          incoming.emit(
+            'data',
+            Buffer.from(JSON.stringify({ redirect_uris: ['https://x/callback'] })),
+          );
+          incoming.emit('end');
+          req.emit('close');
+        });
+      };
+      return req;
+    }) as never);
+    const fetchSpy = vi.fn();
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = fetchSpy as typeof fetch;
+    try {
+      const result = await fetchCimdDocument(
+        'https://public.example/client.json',
+        undefined,
+        lookup,
+      );
+      expect(result).toEqual({ redirect_uris: ['https://x/callback'] });
+      expect(fetchSpy).not.toHaveBeenCalled();
+      if (capturedLookup === undefined) {
+        throw new Error('document fetch did not install a pinned lookup');
+      }
+      // Copy into a const so the closure does not see the mutable binding.
+      const pinnedLookup = capturedLookup;
+      const pinned = await new Promise<{ error: unknown; address: unknown }>((resolve) => {
+        pinnedLookup('attacker.example', { all: true }, (error, address) => {
+          resolve({ error, address });
+        });
+      });
+      expect(pinned.error).toBeNull();
+      expect(pinned.address).toEqual([{ address: '93.184.216.34', family: 4 }]);
+      expect(JSON.stringify(pinned.address)).not.toContain('127.0.0.1');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 
   it('returns null when the response is not ok', async () => {

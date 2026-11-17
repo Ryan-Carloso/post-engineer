@@ -1,0 +1,101 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc", "react", "nextjs", "jsx-a11y", "import", "vitest", "promise", "node"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "error",
+    "perf": "error"
+  },
+  "env": {
+    "builtin": true,
+    "browser": true,
+    "node": true,
+    "es2024": true
+  },
+  "settings": {
+    "react": { "version": "19.0" }
+  },
+  "ignorePatterns": [".next", "node_modules", "dist", "coverage", "coverage-unit"],
+  "rules": {
+    // Same errors the previous ESLint config failed the build on.
+    "@typescript-eslint/no-explicit-any": "error",
+    "@typescript-eslint/no-unused-vars": ["error", {
+      "vars": "all",
+      "args": "after-used",
+      "argsIgnorePattern": "^_",
+      "varsIgnorePattern": "^_",
+      "ignoreRestSiblings": true
+    }],
+    "no-unused-expressions": "error",
+    // Was a warning under ESLint. Keep the signal, do not fail the build on it.
+    "@typescript-eslint/no-non-null-assertion": "warn",
+
+    // Next.js uses the automatic JSX runtime.
+    "react/react-in-jsx-scope": "off",
+
+    // The suite mocks with untyped vi.fn() and asserts inside branches on
+    // purpose. Turning these on would be a rewrite of the test style, not a
+    // lint fix.
+    "vitest/require-mock-type-parameters": "off",
+    "vitest/no-conditional-expect": "off",
+    "vitest/valid-expect": "off",
+    "vitest/require-to-throw-message": "off",
+    "vitest/expect-expect": "off",
+
+    // Provider calls, billing, and storage deletes are sequential on purpose.
+    "no-await-in-loop": "off",
+
+    // `server-only` and CSS are side-effect imports.
+    "import/no-unassigned-import": "off",
+    // posthog-js's documented entry is the default export, which is also a named export.
+    "import/no-named-as-default": "off",
+    "import/no-named-as-default-member": "off",
+
+    // Opinionated rewrites (toSorted, nested helpers, Set lookups) that would
+    // touch behavior-sensitive code for no product change.
+    "unicorn/no-array-sort": "off",
+    "unicorn/consistent-function-scoping": "off",
+    "unicorn/no-thenable": "off",
+    "unicorn/no-useless-fallback-in-spread": "off",
+    "unicorn/prefer-set-has": "off",
+    "unicorn/prefer-add-event-listener": "off",
+    "unicorn/no-instanceof-builtins": "off",
+    "unicorn/no-array-reverse": "off",
+    "unicorn/prefer-array-find": "off",
+    "unicorn/prefer-set-size": "off",
+    "oxc/no-map-spread": "off",
+
+    // Nested `error` bindings and the `__rateLimitStore` / `__coverage__` test seams.
+    "no-shadow": "off",
+    "no-underscore-dangle": "off",
+
+    // React Compiler rules. The existing effects set state from loaded data;
+    // rewriting them changes render behavior and is out of scope here.
+    "react/set-state-in-effect": "off",
+    "react/hooks": "off",
+    "react/purity": "off",
+    "react/refs": "off",
+    "react/no-array-index-key": "off",
+    "react/exhaustive-effect-dependencies": "off",
+    "react-hooks/exhaustive-deps": "off",
+    "react/capitalized-calls": "off",
+
+    // Existing ARIA roles (status, progressbar, combobox) are intentional.
+    // Swapping them for the suggested tags is a UI change.
+    "jsx-a11y/prefer-tag-over-role": "off",
+    "jsx-a11y/media-has-caption": "off",
+    "jsx-a11y/role-has-required-aria-props": "off",
+    "jsx-a11y/role-supports-aria-props": "off",
+
+    // then() used for a side effect, and optional chaining in test fixtures.
+    "promise/always-return": "off",
+    "promise/no-callback-in-promise": "off",
+    "no-unsafe-optional-chaining": "off",
+    "no-useless-escape": "off",
+
+    // `new Intl.DateTimeFormat` is how an unknown timezone is rejected, and the
+    // emoji detector's character class includes variation selectors on purpose.
+    "no-new": "off",
+    "no-misleading-character-class": "off"
+  }
+}
