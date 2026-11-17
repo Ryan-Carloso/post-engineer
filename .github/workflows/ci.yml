@@ -168,7 +168,9 @@ jobs:
           bun-version: 1.4.4
 
       - name: Lint
-        run: pnpm lint
+        # Same pinned oxlint as the web job. The MCP package.json stays on
+        # eslint so this diff does not touch a parity-guarded file.
+        run: pnpm dlx oxlint@1.94.0 -c .oxlintrc.json src
 
       - name: Typecheck
         run: bun check --no-script -p tsconfig.json --no-pretty && bun check --no-script -p tsconfig.spec.json --no-pretty

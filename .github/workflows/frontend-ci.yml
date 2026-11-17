@@ -12,7 +12,9 @@ name: Frontend CI
 # `bun check` typechecks. It matches TypeScript 7, which rejects `baseUrl`,
 # so prepare-bun-tsconfig.mjs writes a throwaway tsconfig with that option
 # removed. The committed tsconfig is unchanged for `tsc` and Next.
-# Oxlint is the primary linter; ESLint remains for indent and Tailwind.
+# Oxlint is the fast lint pass (invoked with a pinned pnpm dlx, so the
+# parity-guarded package.json files stay untouched). ESLint remains for
+# indent, Tailwind, and the Next.js plugins named by inline disable comments.
 
 on:
   workflow_call:
@@ -39,7 +41,9 @@ jobs:
 
       - name: Lint
         working-directory: apps/web
-        run: pnpm lint
+        # oxlint is not a package.json dependency: those files are on the
+        # parity-exclusion guard list. The version is pinned here.
+        run: pnpm dlx oxlint@1.94.0 -c .oxlintrc.json lib app && pnpm exec eslint lib app
 
   typecheck:
     runs-on: ubuntu-latest
@@ -82,18 +86,6 @@ jobs:
           echo "COMMIT=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
 
       - uses: ./.github/actions/setup-pnpm
-
-      # The primary key never matches (it includes the commit), so every run
-      # saves the cache it just produced. restore-keys reuse the newest
-      # cache for this lockfile, which is what makes the next build incremental.
-      - name: Restore Next.js build cache
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: apps/web/.next/cache
-          key: next-cache-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
-          restore-keys: |
-            next-cache-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
-            next-cache-${{ runner.os }}-
 
       - name: Production build
         working-directory: apps/web
@@ -157,11 +149,19 @@ jobs:
             --total 4 \
             --timings "$GITHUB_WORKSPACE/.github/frontend-ci/web-test-timings.json")"
           if [[ -z "$files_out" ]]; then
+            selected=0
+          else
+            mapfile -t files <<< "$files_out"
+            selected=${#files[@]}
+          fi
+          # Written even when this shard runs nothing, so the report job can
+          # tell "no tests selected" from "the coverage artifact was lost".
+          printf '{"shard":%s,"selected":%s}\n' "$SHARD" "$selected" > apps/web/.shard-marker.json
+          if [[ "$selected" -eq 0 ]]; then
             echo "shard ${SHARD}/4 has no tests"
             exit 0
           fi
-          mapfile -t files <<< "$files_out"
-          echo "shard ${SHARD}/4 running ${#files[@]} files"
+          echo "shard ${SHARD}/4 running ${selected} files"
           cd apps/web
           set +e
           pnpm exec vitest run \
@@ -200,6 +200,15 @@ jobs:
           if-no-files-found: ignore
           retention-days: 1
 
+      - name: Upload shard selection marker
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: web-shard-marker-${{ matrix.shard }}
+          path: apps/web/.shard-marker.json
+          if-no-files-found: error
+          retention-days: 1
+
   report:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -221,9 +230,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          mkdir -p /tmp/cov-shards /tmp/timing-shards
-          gh run download "${{ github.run_id }}" --pattern 'coverage-vitest-shard-*' --dir /tmp/cov-shards || echo "no coverage artifacts"
+          mkdir -p /tmp/cov-shards /tmp/timing-shards /tmp/markers
+          gh run download "${{ github.run_id }}" --pattern 'web-shard-marker-*' --dir /tmp/markers
+          gh run download "${{ github.run_id }}" --pattern 'coverage-vitest-shard-*' --dir /tmp/cov-shards || echo "coverage artifacts not all present"
           gh run download "${{ github.run_id }}" --pattern 'web-timings-shard-*' --dir /tmp/timing-shards || echo "no timing artifacts"
+          node .github/scripts/frontend-ci/check-shard-coverage.mjs --markers /tmp/markers --coverage /tmp/cov-shards
 
       - name: Merge coverage and timings
         id: merge

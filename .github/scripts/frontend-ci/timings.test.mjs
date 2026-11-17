@@ -79,7 +79,7 @@ describe('configForBunCheck', () => {
     assert.equal(Object.hasOwn(next.compilerOptions, 'baseUrl'), false);
     assert.deepEqual(next.compilerOptions.paths, { '@/*': ['./*'] });
     assert.equal(next.extends, '../../tsconfig.base.json');
-    assert.deepEqual(next.include, ['**/*.ts']);
+    assert.deepEqual(next.include, ['**/*.ts', '../../.github/scripts/frontend-ci/css-side-effect.d.ts']);
   });
 
   it('matches the committed web tsconfig once baseUrl is removed', () => {

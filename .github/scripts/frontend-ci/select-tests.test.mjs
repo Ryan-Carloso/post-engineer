@@ -36,6 +36,9 @@ describe('shouldRunAll', () => {
     assert.equal(shouldRunAll(['apps/web/cypress/e2e/login.cy.ts']), false);
     assert.equal(shouldRunAll(['apps/web/lib/timezone.ts']), false);
     assert.equal(shouldRunAll(['README.md']), false);
+    assert.equal(shouldRunAll(['supabase/migrations/048_scheduled-posts-music-mood.sql']), true);
+    assert.equal(shouldRunAll(['supabase/schema.snapshot.json']), true);
+    assert.equal(shouldRunAll(['apps/engine/app/models/schema.py']), true);
   });
 });
 

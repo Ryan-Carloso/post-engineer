@@ -29,8 +29,7 @@
   "include": [
     "**/*.ts",
     "**/*.tsx",
-    ".next/types/**/*.ts",
-    "types/css-side-effect.d.ts"
+    ".next/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",

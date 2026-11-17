@@ -8,6 +8,7 @@ node_modules/
 apps/web/tsconfig.bun.json
 apps/web/.vitest-report.json
 apps/web/.vitest-shard-timings.json
+apps/web/.shard-marker.json
 out/
 dist/
 

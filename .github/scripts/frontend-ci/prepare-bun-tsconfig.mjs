@@ -12,6 +12,11 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
+// TypeScript 7 checks side-effect CSS imports. The declaration lives outside
+// apps/web so the mutation workflow, which selects apps/web/**/*.ts, does
+// not try to mutate a file with no mutants and no tests.
+export const BUN_CSS_DECLARATION = '../../.github/scripts/frontend-ci/css-side-effect.d.ts';
+
 /**
  * @param {unknown} tsconfig
  */
@@ -19,12 +24,15 @@ export function configForBunCheck(tsconfig) {
   if (typeof tsconfig !== 'object' || tsconfig === null) {
     throw new Error('tsconfig must be an object');
   }
-  const clone = /** @type {{ compilerOptions?: Record<string, unknown> }} */ (
+  const clone = /** @type {{ compilerOptions?: Record<string, unknown>, include?: unknown }} */ (
     structuredClone(tsconfig)
   );
   if (typeof clone.compilerOptions === 'object' && clone.compilerOptions !== null) {
     delete clone.compilerOptions.baseUrl;
   }
+  const include = Array.isArray(clone.include) ? clone.include.filter((item) => typeof item === 'string') : [];
+  if (!include.includes(BUN_CSS_DECLARATION)) include.push(BUN_CSS_DECLARATION);
+  clone.include = include;
   return clone;
 }
 

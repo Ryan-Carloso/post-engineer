@@ -24,6 +24,10 @@ const RUN_ALL_PREFIXES = [
   '.github/scripts/frontend-ci/',
   '.github/workflows/',
   '.github/actions/',
+  // Web tests read these from disk. vitest --changed only follows imports,
+  // so a migration-only or engine-only diff would otherwise select nothing.
+  'supabase/',
+  'apps/engine/',
 ];
 
 const RUN_ALL_FILES = new Set([
