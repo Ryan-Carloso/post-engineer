@@ -208,7 +208,7 @@ export const recipesI18nEn = {
   storyFirstReelsStep4:
       'It writes for watch-through: open loop, payoff that cashes the promise, one CTA tied to value.',
   storyFirstReelsStep5:
-      'It generates every photo with AI from one base photo — one consistent persona, never stock.',
+      'It mixes AI photos with real photos and licensed stock video — one consistent persona, never unlicensed media.',
   storyFirstReelsStep6:
       'Validate, score, confirm, and generate once — same as every prompt.',
   storyFirstReelsDeliver1:

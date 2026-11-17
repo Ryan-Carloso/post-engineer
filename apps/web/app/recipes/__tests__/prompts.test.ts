@@ -20,8 +20,8 @@ describe('prompts hub data', () => {
       expect(prompt.titleKey).toMatch(/^recipes\./);
       expect(prompt.objectiveKey).toMatch(/^recipes\./);
       expect(prompt.kindKey).toMatch(/^recipes\./);
-      // Story-first carries one extra step: every photo is AI-generated
-      // from one base photo (step 5); every other prompt has the uniform
+      // Story-first carries one extra step: mixed media with one
+      // consistent persona (step 5); every other prompt has the uniform
       // 5 steps.
       const expectedStepCount = prompt.slug === 'story-first-reels' ? 6 : 5;
       expect(prompt.stepKeys).toHaveLength(expectedStepCount);
@@ -647,10 +647,13 @@ describe('prompts hub data', () => {
       'echo one word from the hook',
       'Voice: direct, plain spoken sentences',
       'If a line sounds written rather than spoken',
-      'Generate every photo with AI',
-      'never stock',
-      'do not search for images',
-      'about your own real photos',
+      'Mix the media',
+      'never AI photos only',
+      'identical static panels is monotonous',
+      'licensed',
+      'stock video (b-roll)',
+      'without a licence',
+      'the base lines about material do not apply here',
       'One consistent persona',
       'the same person, the same look',
       'one fixed group',
@@ -673,13 +676,19 @@ describe('prompts hub data', () => {
     expect(text).toContain('Never a generic explainer');
     expect(text).toContain('Never present it as a real person');
     expect(text).toContain('verified testimonial');
-    // Step 6 overrides the base's image-search lines for this prompt only:
-    // the agent must not search for images at all.
-    expect(text).toContain('do not search for images');
-    expect(text).toContain('the base lines about searching images');
-    // And the base's "own real photos" material rule: AI-generated photos
-    // from the base photo replace it for this prompt.
-    expect(text).toContain('about your own real photos');
+    // Step 6 overrides the base's material lines for this prompt only:
+    // licensed stock video is allowed here, and real photos are welcome
+    // — the base's "images only, your own real photos, no stock footage"
+    // rule does not apply to this prompt.
+    expect(text).toContain('the base lines about material do not apply here');
+    expect(text).toContain('licensed stock is allowed');
+    expect(text).toContain('real photos are welcome');
+    expect(text).toContain('without a licence');
+    // The old rule is gone: no more AI-only photos, no "never stock".
+    expect(text).not.toContain('Generate every photo with AI');
+    expect(text).not.toContain('never stock');
+    // The prompt never names a test persona: it talks about "the persona".
+    expect(text).not.toContain('Mara');
     expect(text).toContain('who would DM this to whom, and why');
     expect(text).toContain('never a rote "like and subscribe"');
     expect(text).toContain('wait for my yes');

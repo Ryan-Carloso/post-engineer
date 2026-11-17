@@ -20,9 +20,10 @@ reach the hub, the MCP, and this page from that one source, with no
 hand-maintained copy to drift.
 
 In short: one story per video — a real first-person story about one
-concrete day, never a generic explainer. Every photo is AI-generated from
-one base photo, with one consistent persona for the whole video, never
-stock. The agent finds the real story first (setup, turning point,
+concrete day, never a generic explainer. Media is mixed: AI photos,
+real photos, and licensed stock video, with one consistent persona for
+the whole video whenever the persona appears, never unlicensed media.
+The agent finds the real story first (setup, turning point,
 payoff), builds the hook from one mechanism that fits, writes for
 watch-through, and follows the base: validate, score, confirm, then
 generate once.
