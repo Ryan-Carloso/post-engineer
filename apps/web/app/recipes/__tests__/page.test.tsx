@@ -40,6 +40,7 @@ vi.mock('@/lib/i18n/provider', () => {
     'recipes.viralShortsObjective': 'Learn from the most-viewed video in your niche.',
     'recipes.fullSetupTitle': 'Full setup becomes videos',
     'recipes.abHookTestTitle': 'Test two hooks (A/B)',
+    'recipes.storyFirstReelsTitle': 'Story-first Reels',
     'recipes.kindRecipe': 'Recipe',
     'recipes.kindPrompt': 'Prompt',
     'recipes.openPrompt': 'Open prompt',
@@ -183,6 +184,7 @@ describe('/recipes prompts hub', () => {
       [/A viral video becomes your Short/, '/recipes/viral-shorts'],
       [/Full setup becomes videos/, '/recipes/full-setup'],
       [/Test two hooks \(A\/B\)/, '/recipes/ab-hook-test'],
+      [/Story-first Reels/, '/recipes/story-first-reels'],
     ] as const) {
       expect(screen.getByRole('link', { name })).toHaveAttribute('href', href);
     }
@@ -205,7 +207,7 @@ describe('/recipes prompts hub', () => {
   it('labels entries by kind, not by sequence number', () => {
     renderHub(true);
     expect(screen.getAllByText('Recipe')).toHaveLength(7);
-    expect(screen.getAllByText('Prompt')).toHaveLength(2);
+    expect(screen.getAllByText('Prompt')).toHaveLength(3);
     expect(screen.queryByText('01')).not.toBeInTheDocument();
   });
 
