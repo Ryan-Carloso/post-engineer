@@ -6,12 +6,16 @@ import {
 } from '@/lib/upload/handlers';
 import { ValidationError, AuthError, UploadError, InstagramApiError } from '@/lib/errors';
 import { trackApiEvent } from '@/lib/analytics';
+import { markAccountNeedsReconnect } from '@/lib/account-needs-reconnect';
+import { TokenDecryptError } from '@/lib/token-crypto';
+import { AccountNotFoundError } from '@/lib/errors';
 
 //---------------
 // Upload handlers — unit tests
 //---------------
 
 vi.mock('@/lib/analytics', () => ({ trackApiEvent: vi.fn() }));
+vi.mock('@/lib/account-needs-reconnect', () => ({ markAccountNeedsReconnect: vi.fn(async () => undefined) }));
 
 vi.mock('@/lib/logger', () => ({
   logger: {
@@ -505,6 +509,65 @@ describe('handleYoutubeUpload', () => {
       account_id: 'UC-real-channel',
       user_id: OWNER_USER_ID,
       status: 401,
+    });
+  });
+
+  // getAuthenticatedClient wraps token-load and refresh failures in an
+  // AuthError, which classifyAccountBreak does not recognise, so a dead
+  // YouTube login is flagged here, where the real cause is still known.
+  describe('dead login before the upload', () => {
+    async function upload() {
+      const file = new File([new Uint8Array(100)], 'video.mp4', { type: 'video/mp4' });
+      return handleYoutubeUpload(makeVideoFormData({ ...validFields, accountIds: 'UC-dead' }, file), OWNER_USER_ID, logId, startTime);
+    }
+
+    async function expiredTokenRefreshRejects(error: unknown) {
+      const { getSocialAccountTokens } = await import('@/lib/social-accounts');
+      const { createGoogleOAuth2Client } = await import('@/lib/youtube');
+      vi.mocked(getSocialAccountTokens).mockResolvedValueOnce({
+        tokens: { access_token: 'old', refresh_token: 'r', expiry_date: Date.now() - 1000 },
+        account: { id: 'acc1', userId: OWNER_USER_ID, provider: 'youtube' },
+      } as never);
+      vi.mocked(createGoogleOAuth2Client).mockResolvedValueOnce({
+        setCredentials: vi.fn(),
+        refreshAccessToken: vi.fn().mockRejectedValue(error),
+      } as never);
+    }
+
+    it('flags an undecryptable stored token', async () => {
+      vi.mocked(markAccountNeedsReconnect).mockClear();
+      const { getSocialAccountTokens } = await import('@/lib/social-accounts');
+      vi.mocked(getSocialAccountTokens).mockRejectedValueOnce(new TokenDecryptError('bad ciphertext'));
+      const response = await upload();
+      expect(response.success && response.results[0].success).toBe(false);
+      expect(markAccountNeedsReconnect).toHaveBeenCalledWith(OWNER_USER_ID, 'youtube', 'UC-dead');
+    });
+
+    it('does not flag an account row that is gone', async () => {
+      vi.mocked(markAccountNeedsReconnect).mockClear();
+      const { getSocialAccountTokens } = await import('@/lib/social-accounts');
+      vi.mocked(getSocialAccountTokens).mockRejectedValueOnce(new AccountNotFoundError('gone'));
+      await upload();
+      expect(markAccountNeedsReconnect).not.toHaveBeenCalled();
+    });
+
+    it('flags a refresh Google rejects with invalid_grant', async () => {
+      vi.mocked(markAccountNeedsReconnect).mockClear();
+      await expiredTokenRefreshRejects(
+        Object.assign(new Error('invalid_grant'), { response: { status: 400, data: { error: 'invalid_grant' } } }),
+      );
+      await upload();
+      expect(markAccountNeedsReconnect).toHaveBeenCalledWith(OWNER_USER_ID, 'youtube', 'UC-dead');
+    });
+
+    it.each([
+      ['a 503', Object.assign(new Error('backend error'), { response: { status: 503 } })],
+      ['a network error', new Error('socket hang up')],
+    ])('does not flag a refresh that failed with %s', async (_name, error) => {
+      vi.mocked(markAccountNeedsReconnect).mockClear();
+      await expiredTokenRefreshRejects(error);
+      await upload();
+      expect(markAccountNeedsReconnect).not.toHaveBeenCalled();
     });
   });
 
