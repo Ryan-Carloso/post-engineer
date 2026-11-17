@@ -89,9 +89,11 @@ export class InstagramService {
   }
 
   //---------------
-  // handleApiError — converts AxiosError into InstagramApiError
+  // handleApiError — converts AxiosError into InstagramApiError. `log:
+  // false` skips the two error logs for callers that log the typed error
+  // themselves (the metrics collector warns once per failed snapshot).
   //---------------
-  private handleApiError(error: unknown, context: string): never {
+  private handleApiError(error: unknown, context: string, { log }: { log: boolean } = { log: true }): never {
     const asError = error instanceof Error ? error : new Error(String(error));
     if (axios.isAxiosError(error)) {
       const axiosError = error as AxiosError<Record<string, unknown>>;
@@ -120,20 +122,24 @@ export class InstagramService {
         }
       }
 
-      logger.error('[instagram] API ERROR', asError, {
-        context,
-        status: axiosError.response?.status,
-        message,
-        responseData,
-      });
-      logger.error(`Instagram API error (${context})`, asError, {
-        status: axiosError.response?.status,
-        data: responseData,
-      });
+      if (log) {
+        logger.error('[instagram] API ERROR', asError, {
+          context,
+          status: axiosError.response?.status,
+          message,
+          responseData,
+        });
+        logger.error(`Instagram API error (${context})`, asError, {
+          status: axiosError.response?.status,
+          data: responseData,
+        });
+      }
       throw new InstagramApiError(message, axiosError.response?.status ?? 500, asError, readMetaErrorCode(responseData), readMetaErrorSubcode(responseData));
     }
-    logger.error('[instagram] NON-AXIOS ERROR', asError, { context, message: asError.message });
-    logger.error(`Instagram API error (${context})`, asError);
+    if (log) {
+      logger.error('[instagram] NON-AXIOS ERROR', asError, { context, message: asError.message });
+      logger.error(`Instagram API error (${context})`, asError);
+    }
     throw new InstagramApiError(asError.message, 500, asError);
   }
 
@@ -302,7 +308,8 @@ export class InstagramService {
       );
       return parseInstagramInsightsPayload(response.data);
     } catch (error) {
-      this.handleApiError(error, 'getMediaInsights');
+      // The collector logs one warning with status + Meta code per failure.
+      this.handleApiError(error, 'getMediaInsights', { log: false });
     }
   }
 

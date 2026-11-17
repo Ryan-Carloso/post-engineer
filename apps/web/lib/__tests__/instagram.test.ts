@@ -37,6 +37,7 @@ vi.mock('@/lib/logger', () => ({
 
 import { InstagramService } from '@/lib/instagram';
 import { InstagramApiError } from '@/lib/errors';
+import { logger } from '@/lib/logger';
 
 //---------------
 // InstagramService — unit tests
@@ -563,11 +564,15 @@ describe('InstagramService', () => {
         },
       });
       mockGet.mockRejectedValueOnce(axiosError);
+      vi.mocked(logger.error).mockClear();
       const error = await new InstagramService().getMediaInsights('m', 't').catch((caught: unknown) => caught);
       expect(error).toBeInstanceOf(InstagramApiError);
       expect((error as InstagramApiError).statusCode).toBe(400);
       expect((error as InstagramApiError).providerCode).toBe(190);
       expect((error as InstagramApiError).message).toContain('Error validating access token');
+      // The collector logs one warning per failed snapshot: the conversion
+      // itself must not add two error events on every hourly retry.
+      expect(logger.error).not.toHaveBeenCalled();
     });
   });
 });
