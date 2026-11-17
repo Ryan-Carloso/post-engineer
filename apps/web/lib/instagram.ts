@@ -4,7 +4,8 @@ import axios, { AxiosError } from 'axios';
 import crypto from 'crypto';
 import { logger } from '@/lib/logger';
 import { InstagramApiError } from '@/lib/errors';
-import { readMetaErrorCode } from '@/lib/meta-error-code';
+import { readMetaErrorCode, readMetaErrorSubcode } from '@/lib/meta-error-code';
+import { parseInstagramInsightsPayload } from '@/lib/instagram-insights';
 import { INSTAGRAM_USERNAME_FALLBACK } from '@/lib/providers/registry';
 
 //---------------
@@ -129,7 +130,7 @@ export class InstagramService {
         status: axiosError.response?.status,
         data: responseData,
       });
-      throw new InstagramApiError(message, axiosError.response?.status ?? 500, asError, readMetaErrorCode(responseData));
+      throw new InstagramApiError(message, axiosError.response?.status ?? 500, asError, readMetaErrorCode(responseData), readMetaErrorSubcode(responseData));
     }
     logger.error('[instagram] NON-AXIOS ERROR', asError, { context, message: asError.message });
     logger.error(`Instagram API error (${context})`, asError);
@@ -291,26 +292,18 @@ export class InstagramService {
   // HTTP errors so the caller can log and retry on the next run.
   //---------------
   async getMediaInsights(mediaId: string, accessToken: string): Promise<Record<string, number>> {
-    const response = await axios.get(
-      `https://graph.instagram.com/${this.apiVersion}/${encodeURIComponent(mediaId)}/insights`,
-      {
-        params: { metric: 'views,likes,comments,saved', access_token: accessToken },
-        timeout: 15_000,
-      },
-    );
-    const values: Record<string, number> = {};
-    const data = (response.data as { data?: unknown }).data;
-    if (!Array.isArray(data)) return values;
-    for (const item of data) {
-      if (typeof item !== 'object' || item === null) continue;
-      const record = item as { name?: unknown; values?: unknown; total_value?: unknown };
-      if (typeof record.name !== 'string') continue;
-      const first = Array.isArray(record.values) ? (record.values[0] as { value?: unknown } | undefined) : undefined;
-      const total = record.total_value as { value?: unknown } | undefined;
-      const value = first?.value ?? total?.value;
-      if (typeof value === 'number' && Number.isFinite(value)) values[record.name] = value;
+    try {
+      const response = await axios.get(
+        `https://graph.instagram.com/${this.apiVersion}/${encodeURIComponent(mediaId)}/insights`,
+        {
+          params: { metric: 'views,likes,comments,saved', access_token: accessToken },
+          timeout: 15_000,
+        },
+      );
+      return parseInstagramInsightsPayload(response.data);
+    } catch (error) {
+      this.handleApiError(error, 'getMediaInsights');
     }
-    return values;
   }
 
   //---------------

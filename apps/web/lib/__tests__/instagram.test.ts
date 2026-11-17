@@ -547,9 +547,27 @@ describe('InstagramService', () => {
       await expect(new InstagramService().getMediaInsights('m', 't')).resolves.toEqual({});
     });
 
-    it('propagates HTTP errors to the caller', async () => {
-      mockGet.mockRejectedValueOnce(new Error('400 Bad Request'));
-      await expect(new InstagramService().getMediaInsights('m', 't')).rejects.toThrow('400 Bad Request');
+    it('throws InstagramApiError carrying the HTTP status and Meta code', async () => {
+      const axiosError = Object.assign(new Error('Request failed with status code 400'), {
+        isAxiosError: true,
+        response: {
+          status: 400,
+          data: {
+            error: {
+              message: 'Error validating access token: The session has been invalidated',
+              type: 'OAuthException',
+              code: 190,
+              fbtrace_id: 'trace-190',
+            },
+          },
+        },
+      });
+      mockGet.mockRejectedValueOnce(axiosError);
+      const error = await new InstagramService().getMediaInsights('m', 't').catch((caught: unknown) => caught);
+      expect(error).toBeInstanceOf(InstagramApiError);
+      expect((error as InstagramApiError).statusCode).toBe(400);
+      expect((error as InstagramApiError).providerCode).toBe(190);
+      expect((error as InstagramApiError).message).toContain('Error validating access token');
     });
   });
 });

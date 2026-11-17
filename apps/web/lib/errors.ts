@@ -57,7 +57,10 @@ export class InstagramApiError extends Error {
     // isUnauthorizedError can tell it apart from any other HTTP 400. Named
     // `providerCode`, not `code`: httpStatusOf reads a numeric `code` as an
     // HTTP status, and 190 is not one.
-    public providerCode?: number
+    public providerCode?: number,
+    // Meta's `error_subcode` (e.g. 33 on code 100 for a deleted object).
+    // Named `providerSubcode`, not `code` or `subcode`: same rule.
+    public providerSubcode?: number
   ) {
     super(message);
     this.name = 'InstagramApiError';
@@ -80,7 +83,9 @@ export class ThreadsError extends Error {
     message: string,
     public statusCode: number,
     // Meta's numeric error code (e.g. 190 for a dead token). See InstagramApiError.
-    public providerCode?: number
+    public providerCode?: number,
+    // Meta's `error_subcode` (e.g. 33 on code 100). See InstagramApiError.
+    public providerSubcode?: number
   ) {
     super(message);
     this.name = 'ThreadsError';
@@ -92,7 +97,9 @@ export class FacebookError extends Error {
     message: string,
     public statusCode: number,
     // Meta's numeric error code (e.g. 190 for a dead token). See InstagramApiError.
-    public providerCode?: number
+    public providerCode?: number,
+    // Meta's `error_subcode` (e.g. 33 on code 100). See InstagramApiError.
+    public providerSubcode?: number
   ) {
     super(message);
     this.name = 'FacebookError';
