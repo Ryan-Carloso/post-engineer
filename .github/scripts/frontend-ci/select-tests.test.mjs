@@ -32,6 +32,27 @@ describe('shouldRunAll', () => {
     assert.equal(shouldRunAll(['apps/web/lib/fixtures/sample.json']), true);
   });
 
+  it('runs everything for an MCP-only diff, which web tests read from disk', () => {
+    // Web resolves the MCP package through gitignored apps/mcp/dist, and
+    // sync tests read apps/mcp/src via readFileSync, so vitest --changed
+    // cannot see these edits.
+    assert.equal(shouldRunAll(['apps/mcp/src/analytics.ts']), true);
+    assert.equal(shouldRunAll(['apps/mcp/src/http-auth.ts']), true);
+    assert.equal(shouldRunAll(['apps/mcp/src/__tests__/parity-endpoint-tools.json']), true);
+  });
+
+  it('runs everything for a disk-read non-module file under shared/', () => {
+    // apps/web/lib/generation/__tests__/public-ip-ssrf-sync.test.ts reads
+    // this fixture from disk; vitest --changed cannot see it.
+    assert.equal(shouldRunAll(['shared/ssrf/public-ip-cases.json']), true);
+  });
+
+  it('runs everything for a recipe doc pinned by a web test', () => {
+    // prompt-status-claims.test.ts reads docs/recipes/ from disk.
+    assert.equal(shouldRunAll(['docs/recipes/full-setup.md']), true);
+    assert.equal(shouldRunAll(['docs/other-guide.md']), false);
+  });
+
   it('does not force a full run for a cypress spec or a single source file', () => {
     assert.equal(shouldRunAll(['apps/web/cypress/e2e/login.cy.ts']), false);
     assert.equal(shouldRunAll(['apps/web/lib/timezone.ts']), false);
@@ -92,6 +113,19 @@ describe('selectTestFiles', () => {
     });
     assert.equal(selected.mode, 'none');
     assert.deepEqual(selected.files, []);
+  });
+
+  it('runs the full suite for an MCP-only diff that selects nothing', () => {
+    const selected = selectTestFiles({
+      event: 'pull_request',
+      changedPaths: ['apps/mcp/src/http-auth.ts'],
+      forceAll: false,
+      allFiles,
+      listedChanged: [],
+      listChangedFailed: false,
+    });
+    assert.equal(selected.mode, 'all');
+    assert.deepEqual(selected.files, allFiles);
   });
 
   it('runs the full suite when changed-test discovery fails', () => {

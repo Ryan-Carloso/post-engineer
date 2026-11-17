@@ -4,9 +4,9 @@
 // Push to main (and any non-PR event) runs the whole suite. A pull request
 // runs `vitest --changed` against the base commit, unless the diff touches
 // something that module graph cannot see (the vitest config, setup files,
-// the lockfile, a workflow, or a non-module file under apps/web). An empty
-// changed-list for a real source edit falls back to the full suite so a
-// missed graph edge cannot skip the tests for that edit.
+// the lockfile, a workflow, or a non-module file under apps/web or shared).
+// An empty changed-list for a real source edit falls back to the full suite
+// so a missed graph edge cannot skip the tests for that edit.
 //---------------
 
 import { readdir } from 'node:fs/promises';
@@ -25,9 +25,15 @@ const RUN_ALL_PREFIXES = [
   '.github/workflows/',
   '.github/actions/',
   // Web tests read these from disk. vitest --changed only follows imports,
-  // so a migration-only or engine-only diff would otherwise select nothing.
+  // so a migration-only, engine-only, or MCP-only diff would otherwise
+  // select nothing: the web app imports the MCP package through the
+  // gitignored apps/mcp/dist, and sync tests read apps/mcp/src via
+  // readFileSync. Recipe docs are pinned the same way by
+  // prompt-status-claims.test.ts.
   'supabase/',
   'apps/engine/',
+  'apps/mcp/',
+  'docs/recipes/',
 ];
 
 const RUN_ALL_FILES = new Set([
@@ -65,7 +71,7 @@ export function shouldRunAll(changedPaths) {
     if (file.startsWith('apps/web/cypress/')) continue;
     // JSON, CSS, SQL, and other files tests read from disk are invisible to
     // vitest --changed, which only follows the import graph.
-    if (file.startsWith('apps/web/') && !MODULE_FILE.test(file)) return true;
+    if ((file.startsWith('apps/web/') || file.startsWith('shared/')) && !MODULE_FILE.test(file)) return true;
   }
   return false;
 }
