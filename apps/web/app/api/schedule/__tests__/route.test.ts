@@ -421,7 +421,20 @@ describe('/api/schedule', () => {
     // Production: a truncated id (first 8 chars of a uuid, e.g. ca192c1b)
     // reached the uuid-typed schedule_id filter and raised Postgres 22P02,
     // turning into a 500. A non-uuid id can never match a row: 404.
+    // Run as a scoped API key: the persona-scope lookup only runs for
+    // scoped keys, so only then does selectArgs observe the schedules
+    // select the guard must precede.
     const db = mockSupabase({ remove: { error: null } });
+    vi.mocked(requireSupabaseSession).mockResolvedValue({
+      auth: {
+        userId: USER_ID,
+        accessToken: 'pe_live_scoped',
+        isApiKey: true,
+        keyId: 'key-scoped',
+        personaIds: ['p-allowed'],
+      },
+      error: null,
+    } as never);
     const res = await DELETE(new Request('http://localhost/api/schedule?id=ca192c1b'));
     expect(res.status).toBe(404);
     const body = (await res.json()) as { error: string };
