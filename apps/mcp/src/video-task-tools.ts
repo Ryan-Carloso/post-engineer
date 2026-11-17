@@ -3,6 +3,7 @@ import type { PostEngineerClient } from './client.js';
 import { cancelVideoTask } from './client-video-task.js';
 import { ApiError, getErrorMessage } from './errors.js';
 import { MAX_BATCH_VIDEOS } from './limits.js';
+import { nextPollInSeconds } from './progress-poll-hint.js';
 import { narrowTaskProgress } from './tools.js';
 import { handleLibraryCall, type McpToolResponse } from './tools-call.js';
 
@@ -32,14 +33,16 @@ export async function handleCancelVideoTask(
 }
 
 //---------------
-// video_tasks (action: status) — block until every listed video task finishes.
+// video_tasks (action: status) — one server-side wait, or a progress snapshot.
 //
-// The agent alternative to polling video_tasks (action: status): one call waits
+// waitSeconds above 0 is how an agent gets the final outcome: one call waits
 // for all taskIds (a single video, or every video of a batch) and only
 // returns when each is completed (state 1, or a 410 whose body says the
 // video was delivered before the engine lost it) or failed (state -1, gone
 // from the engine without delivery proof, or a task-scoped client error
-// such as a bad taskId), or when timeoutSeconds elapses. A call-wide error
+// such as a bad taskId), or when waitSeconds elapses. waitSeconds 0 is only
+// a progress snapshot. A still-running entry carries nextPollInSeconds
+// (progress-poll-hint.ts); a terminal entry omits it. A call-wide error
 // (bad key, wrong route) aborts the whole wait as a tool error instead of
 // failing any video. On timeout the results are partial — the still-running
 // entries keep their last known progress/stage — so the agent calls again
@@ -60,7 +63,7 @@ export const WaitForVideoTasksShape = {
     .min(0, 'waitSeconds must be at least 0')
     .max(600, 'waitSeconds must be at most 600')
     .default(0)
-    .describe('0 (default) = a snapshot of every task right now. More = block until every task finishes or this many seconds pass (max 600); on timeout the results are partial, so call again with the unfinished taskIds.'),
+    .describe('Above 0 is the final outcome: block until tasks finish (max 600). 0 is a snapshot: wait at least nextPollInSeconds. On timeout, retry unfinished taskIds.'),
 };
 
 export const WaitForVideoTasksSchema = z.object(WaitForVideoTasksShape);
@@ -76,6 +79,8 @@ export interface TaskWaitResult {
   // The post detail link, when the video belongs to a scheduled slot
   // (null for direct generations and for tasks with no slot yet).
   postUrl: string | null;
+  // Present only while the task is still running. Terminal states omit it.
+  nextPollInSeconds?: number;
 }
 
 /** Clock and sleep injection (options, never test-only fields on the input). */
@@ -90,12 +95,18 @@ const POLL_INTERVAL_MS = 10_000;
 // Same message the web video-status route answers with on 410 Gone.
 const ENGINE_TASK_GONE_MESSAGE = 'The video task no longer exists on the generation engine.';
 
+function attachPollHint(result: TaskWaitResult): TaskWaitResult {
+  const seconds = nextPollInSeconds(result.state, result.progress);
+  if (seconds === undefined) return result;
+  return { ...result, nextPollInSeconds: seconds };
+}
+
 function toWaitResult(
   taskId: string,
   narrowed: { task_id: string | null; state: number | null; progress: number | null; stage: string | null; error: string | null; postUrl: string | null },
 ): TaskWaitResult {
   const outcome = narrowed.state === 1 ? 'completed' : narrowed.state === -1 ? 'failed' : 'running';
-  return {
+  return attachPollHint({
     task_id: narrowed.task_id ?? taskId,
     state: narrowed.state,
     outcome,
@@ -103,7 +114,7 @@ function toWaitResult(
     stage: narrowed.stage,
     error: narrowed.error,
     postUrl: narrowed.postUrl,
-  };
+  });
 }
 
 /** One poll round's outcome per task: a verdict, a call-wide error, or retry-later. */
@@ -236,7 +247,8 @@ export async function handleWaitForVideoTasks(
     }
     const results = taskIds.map(
       (taskId): TaskWaitResult =>
-        last.get(taskId) ?? {
+        last.get(taskId) ??
+        attachPollHint({
           task_id: taskId,
           state: null,
           outcome: 'running',
@@ -244,7 +256,7 @@ export async function handleWaitForVideoTasks(
           stage: null,
           error: null,
           postUrl: null,
-        },
+        }),
     );
     const allTerminal = results.every((entry) => entry.outcome !== 'running');
     if (allTerminal) {

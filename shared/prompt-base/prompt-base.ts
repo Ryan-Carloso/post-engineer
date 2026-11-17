@@ -57,6 +57,7 @@ export const SHARED_PROMPT_BASE: string[] = [
   'Generation is always tied to publishing:',
   'One generate_video call generates and publishes the video; there is no orphan video and no separate schedule step.',
   'mode "scheduled" needs startAt (ISO datetime, 3h-30d ahead), times (HH:MM), and timezone; mode "asap" needs no startAt or times.',
+  'After generate_video, take the final outcome from one video_tasks (action: status) call that sets waitSeconds (up to 600) and blocks until the videos finish. waitSeconds 0 is only a progress snapshot: wait at least the returned nextPollInSeconds before another snapshot.',
 ];
 
 export const FULL_SETUP_PROMPT = [
@@ -86,7 +87,7 @@ export const FULL_SETUP_PROMPT = [
   '6. Call generate_video once with that persona, the validated',
   '   segments unchanged, the confirmed title and description, language "en", the confirmed',
   '   accounts (each a name or id from accounts (action: list)), and the',
-  '   confirmed mode. Then call video_tasks (action: status) with the taskId and share the',
+  '   confirmed mode. Then call video_tasks (action: status) with the taskId and waitSeconds, and share the',
   '   post URL.',
 ].join('\n');
 
@@ -112,7 +113,7 @@ export const DAILY_NEWS_PROMPT = [
   '   segments unchanged, the confirmed title and description, language "en", the confirmed',
   '   accounts (each a name or id from accounts (action: list)), and the confirmed',
   '   mode.',
-  '5. Call video_tasks (action: status) with the taskId, then share the',
+  '5. Call video_tasks (action: status) with the taskId and waitSeconds, then share the',
   '   post URL from video_tasks (action: status).',
 ].join('\n');
 
@@ -151,7 +152,7 @@ export const PLACE_SPOTLIGHT_PROMPT = [
   '5. Call generate_video with the validated segments unchanged,',
   '   the confirmed title and description, language "en", the confirmed accounts',
   '   (each a name or id from accounts (action: list)), and the confirmed mode. Call',
-  '   video_tasks (action: status) with the taskId and share the post',
+  '   video_tasks (action: status) with the taskId and waitSeconds, and share the post',
   '   URL.',
 ].join('\n');
 
@@ -196,7 +197,7 @@ export const SUBJECT_SPOTLIGHT_PROMPT = [
   '5. Call generate_video with the validated segments unchanged,',
   '   the confirmed title and description, language "en", the confirmed accounts',
   '   (each a name or id from accounts (action: list)), and the confirmed mode. Call',
-  '   video_tasks (action: status) with the taskId and share the post',
+  '   video_tasks (action: status) with the taskId and waitSeconds, and share the post',
   '   URL.',
 ].join('\n');
 
@@ -245,7 +246,7 @@ export const LAST_30_DAYS_PROMPT = [
   '   validated segments unchanged, the confirmed title and description, language "en",',
   '   the confirmed accounts (each a name or id from',
   '   accounts (action: list)), and the confirmed mode. Call',
-  '   video_tasks (action: status) with the taskId and share the post',
+  '   video_tasks (action: status) with the taskId and waitSeconds, and share the post',
   '   URL.',
 ].join('\n');
 
@@ -280,7 +281,7 @@ export const MULTI_REDE_PROMPT = [
   '   persona, the validated segments unchanged, the confirmed title and description,',
   '   language "en", the confirmed accounts (each a name or id from',
   '   accounts (action: list)), and the confirmed mode. Call',
-  '   video_tasks (action: status) with the taskId and share the post',
+  '   video_tasks (action: status) with the taskId and waitSeconds, and share the post',
   '   URL for each video.',
 ].join('\n');
 
@@ -327,7 +328,7 @@ export const VIRAL_SHORTS_PROMPT = [
   '   beyond a short quoted hook for analysis.',
   '6. Then follow the base: check_script (action: validate), check_script (action: score), show me persona,',
   '   accounts, title, description, and time, wait for my yes, and call',
-  '   generate_video once. Call video_tasks (action: status) with the taskId',
+  '   generate_video once. Call video_tasks (action: status) with the taskId and waitSeconds,',
   '   and share the post URL.',
 ].join('\n');
 
@@ -360,7 +361,7 @@ export const AB_HOOK_TEST_PROMPT = [
   '   targetPairs. Do not retry the failed number, and do not call',
   '   generate_video for either variant.',
   '5. Wait for publication and metrics. Call video_tasks (action: status)',
-  '   while a video generates. When both videos are published and metrics',
+  '   with waitSeconds so that one call blocks until the videos finish. When both videos are published and metrics',
   '   exist, call experiments (action: list) to find the experiment, then',
   '   experiments (action: results). Never call a variant the winner',
   '   unless the label is clear.',

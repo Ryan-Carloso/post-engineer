@@ -22,7 +22,7 @@ const VIDEO_TASKS_SPECS = {
 };
 
 export const VideoTasksDescription = actionDescription(
-  'Follow your videos. status: the state, progress, stage, error and post link of up to 12 tasks at once; waitSeconds 0 is a snapshot, more blocks until every task finishes (partial results on timeout, call again with the unfinished taskIds). list_generations / get_generation: the history of generated videos.',
+  'For the final outcome, call status with waitSeconds above 0 (one server-side wait). A snapshot (waitSeconds 0) is only progress: wait at least nextPollInSeconds. On timeout, call again with unfinished taskIds. list_generations / get_generation: generation history.',
   VIDEO_TASKS_SPECS,
 );
 

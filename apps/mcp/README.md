@@ -183,7 +183,7 @@ The server offers **16 intent tools**, not one tool per API endpoint. A tool is 
 | Tool | Actions | What it is for |
 |---|---|---|
 | `generate_video` | — | Generate and schedule one video, or a batch of 2-12 (every 6 face videos, the cheapest is free). `persona` and `accounts` by name or id; the result echoes what was resolved. |
-| `video_tasks` | `status`, `list_generations`, `get_generation` | Follow videos: `status` takes up to 12 `taskIds`; `waitSeconds` 0 is a snapshot, more blocks until they finish. |
+| `video_tasks` | `status`, `list_generations`, `get_generation` | Follow videos: for the final outcome, `status` sets `waitSeconds` above 0 and blocks (up to 12 `taskIds`). `waitSeconds` 0 is only a progress snapshot: wait at least `nextPollInSeconds`. |
 | `cancel_video` | — | Cancel a video that is still generating. Separate so a client can allow status without cancel. |
 | `personas` | `list`, `get`, `create`, `update`, `delete` | Personas. `delete` previews first and needs the `confirmToken` of that preview to delete. |
 | `persona_media` | `list_faces`, `list_images`, `add_image`, `update_image`, `remove_image` | Stock faces and a persona's image library. |
