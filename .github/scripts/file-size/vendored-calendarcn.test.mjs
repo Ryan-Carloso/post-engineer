@@ -49,3 +49,21 @@ describe('vendored CalendarCN list', () => {
     assert.equal(isVendoredCalendarCN('apps/web/components/ui/button.tsx'), false);
   });
 });
+
+describe('codecov ignore list', () => {
+  it('matches the vendored list exactly', () => {
+    const yml = fs.readFileSync(path.join(REPO_ROOT, 'codecov.yml'), 'utf8');
+    const lines = yml.split('\n');
+    const coverageIdx = lines.findIndex((l) => l === 'coverage:');
+    assert.ok(coverageIdx >= 0, 'codecov.yml has no coverage: section');
+    const ignoreIdx = lines.findIndex((l, i) => i > coverageIdx && l === '  ignore:');
+    assert.ok(ignoreIdx >= 0, 'codecov.yml coverage has no ignore list');
+    const ignored = new Set();
+    for (let i = ignoreIdx + 1; i < lines.length; i++) {
+      const m = lines[i].match(/^    - "([^"]+)"$/);
+      if (!m) break;
+      ignored.add(m[1]);
+    }
+    assert.deepEqual([...ignored].sort(), [...VENDORED_CALENDARCN_FILES].sort());
+  });
+});

@@ -10,6 +10,10 @@
 //   survivors and timeouts;
 // - the UI coverage gates skip them (ui-gates/ui-files.mjs): their
 //   coverage is upstream’s, not ours.
+// - Codecov ignores them (codecov.yml coverage.ignore): their lines
+//   would fail the patch gate with zero coverage, since no test in this
+//   repo targets lib internals. The ignore list is pinned to this module
+//   by vendored-calendarcn.test.mjs.
 // Our own files in the same directories (posts/calendar-provider.tsx,
 // calendar-adapter.ts, page.tsx, the posts i18n module) are NOT on this
 // list and stay gated.
