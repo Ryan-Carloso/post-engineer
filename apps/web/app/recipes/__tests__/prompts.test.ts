@@ -650,6 +650,7 @@ describe('prompts hub data', () => {
       'Generate every photo with AI',
       'never stock',
       'do not search for images',
+      'about your own real photos',
       'One consistent persona',
       'the same person, the same look',
       'one fixed group',
@@ -676,6 +677,9 @@ describe('prompts hub data', () => {
     // the agent must not search for images at all.
     expect(text).toContain('do not search for images');
     expect(text).toContain('the base lines about searching images');
+    // And the base's "own real photos" material rule: AI-generated photos
+    // from the base photo replace it for this prompt.
+    expect(text).toContain('about your own real photos');
     expect(text).toContain('who would DM this to whom, and why');
     expect(text).toContain('never a rote "like and subscribe"');
     expect(text).toContain('wait for my yes');
