@@ -31,8 +31,8 @@ export type {
   MetricsRowView,
   RetentionCurveResponse,
   RetentionPoint,
-  SocialProvider,
 } from '@/lib/contracts/metrics';
+export type { SocialProvider } from '@/lib/contracts/providers';
 
 export const METRICS_ROW_LIMIT = 500;
 

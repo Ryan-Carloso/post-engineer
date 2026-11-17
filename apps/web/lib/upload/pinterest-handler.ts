@@ -4,6 +4,7 @@ import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { touchSocialAccount } from '@/lib/social-accounts';
 import { getValidPinterestAccessToken } from '@/lib/pinterest-tokens';
 import {
+  publishPinterestImage,
   publishPinterestVideo,
   PINTEREST_TITLE_MAX_CHARS,
   PINTEREST_DESCRIPTION_MAX_CHARS,
@@ -12,14 +13,16 @@ import {
 import { reportAccountUnauthorized } from '@/lib/upload/account-unauthorized';
 import { accountFailure } from '@/lib/upload/account-error';
 import { getAccountIdsFromFormData } from '@/lib/upload/account-utils';
+import { MAX_IMAGE_UPLOAD_BYTES, sniffPublishMedia } from '@/lib/upload/publish-media-file';
 
 //---------------
-// handlePinterestUpload — publishes the video as a Pin to the user's
-// Pinterest boards. Pinterest takes the file bytes (register -> S3
-// presigned upload -> poll -> create Pin), so the handler passes the
-// buffer straight through, never through Supabase Storage.
+// handlePinterestUpload — publishes the video or image as a Pin to the
+// user's Pinterest boards. Pinterest takes the file bytes: a video goes
+// register -> S3 presigned upload -> poll -> create Pin; a JPEG/PNG image
+// rides in the Pin body (image_base64). The handler passes the buffer
+// straight through, never through Supabase Storage.
 // FormData (multipart, coming from the engine or the UI):
-//   provider=pinterest, video (File), title, description (or caption as
+//   provider=pinterest, video (File: a video, or a JPEG/PNG image), title, description (or caption as
 //   a description fallback, the shape the direct-publish MCP tool sends),
 //   boardId (one board for the whole batch — a schedule carries exactly
 //   one pinterest_board_id), pinterestAccountIds (repeated),
@@ -80,17 +83,17 @@ export async function handlePinterestUpload(
   if (description.length > PINTEREST_DESCRIPTION_MAX_CHARS) {
     return rejected(`Description exceeds the Pinterest ${PINTEREST_DESCRIPTION_MAX_CHARS}-character limit`);
   }
-  if (!(rawFile instanceof File)) return rejected('Video file is required');
+  if (!(rawFile instanceof File)) return rejected('A video or image file is required');
   if (rawFile.size > PINTEREST_VIDEO_MAX_BYTES) return rejected('Video exceeds the Pinterest 2GB limit');
 
-  // The stored file is checked by its bytes rather than the client-declared
-  // type: MP4 and MOV both carry `ftyp` at offset 4.
-  const buffer = Buffer.from(await rawFile.arrayBuffer());
-  if (buffer.subarray(4, 8).toString('latin1') !== 'ftyp') return rejected('Video must be an MP4 or MOV file');
-
-  const contentType = rawFile.type === 'video/quicktime' ? 'video/quicktime' : 'video/mp4';
-  const extension = contentType === 'video/quicktime' ? 'mov' : 'mp4';
-  const filename = `pinterest_${Date.now()}_${crypto.randomBytes(4).toString('hex')}.${extension}`;
+  // The file is checked by its bytes rather than the client-declared type:
+  // MP4 and MOV both carry `ftyp` at offset 4; JPEG and PNG their signature.
+  const media = sniffPublishMedia(Buffer.from(await rawFile.arrayBuffer()), rawFile.type);
+  if (media === null) return rejected('File must be an MP4 or MOV video, or a JPEG or PNG image');
+  if (media.kind === 'image' && media.buffer.length > MAX_IMAGE_UPLOAD_BYTES) {
+    return rejected('Image exceeds the 8 MB limit');
+  }
+  const filename = `pinterest_${Date.now()}_${crypto.randomBytes(4).toString('hex')}.${media.extension}`;
   const coverImageUrl =
     typeof coverImageUrlRaw === 'string' && coverImageUrlRaw.trim() !== '' ? coverImageUrlRaw.trim() : undefined;
 
@@ -103,16 +106,18 @@ export async function handlePinterestUpload(
       // token is refreshed from the stored refresh token first.
       const accessToken = await getValidPinterestAccessToken(supabase, ownerUserId, accountId);
 
-      const published = await publishPinterestVideo({
-        accessToken,
-        boardId,
-        video: buffer,
-        filename,
-        contentType,
-        ...(title === '' ? {} : { title }),
-        ...(description === '' ? {} : { description }),
-        ...(coverImageUrl === undefined ? {} : { coverImageUrl }),
-      });
+      const text = { ...(title === '' ? {} : { title }), ...(description === '' ? {} : { description }) };
+      const published = media.kind === 'image'
+        ? await publishPinterestImage({ accessToken, boardId, image: media.buffer, contentType: media.contentType, ...text })
+        : await publishPinterestVideo({
+          accessToken,
+          boardId,
+          video: media.buffer,
+          filename,
+          contentType: media.contentType,
+          ...text,
+          ...(coverImageUrl === undefined ? {} : { coverImageUrl }),
+        });
 
       await touchSocialAccount(supabase, ownerUserId, 'pinterest', accountId);
       results.push({

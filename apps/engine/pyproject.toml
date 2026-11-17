@@ -160,7 +160,6 @@ only_mutate = []
 #   test/scripts/test_audit_secrets.py imports it.
 also_copy = [
     "config.example.toml",
-    "cli.py",
     "main.py",
     "modal_longcat.py",
     "modal_longcat_gpu.py",
@@ -181,12 +180,8 @@ also_copy = [
 # - test_mypy_config.py pins the CI workflow file layout (.github/workflows/),
 #   which does not exist inside mutmut's mutants/ working copy. It exercises
 #   no app code, so it carries zero mutation signal.
-# - test/services/test_cli.py has a pre-existing order-dependent isolation flaw
-#   (loguru file sink closed by earlier tests; passes under pytest-randomly in
-#   normal CI, fails under mutmut's deterministic subset ordering).
 pytest_add_cli_args = [
     "--ignore=test/test_mypy_config.py",
-    "--ignore=test/services/test_cli.py",
 ]
 pytest_add_cli_args_test_selection = [
     "test/",

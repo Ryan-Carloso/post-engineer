@@ -14,6 +14,7 @@ import { useOAuthFlow } from '@/lib/oauth/oauth-flow';
 import {
   isOAuthProvider,
   isSocialProvider,
+  SOCIAL_PROVIDERS,
   type OAuthProvider,
   type SocialProvider,
 } from '@/lib/providers/registry';
@@ -22,6 +23,7 @@ import { useOnboardingWizardStore } from '@/lib/onboarding-wizard';
 import { notifyIfSessionExpired } from '@/lib/session-expiry';
 import { useSocialAccountsQuery } from '@/lib/social-accounts-queries';
 import { INPUT_CLASS } from '@/lib/ui';
+import { PROVIDER_LABELS } from '@/lib/account-options';
 
 //---------------
 // Onboarding wizard step 2 — inline connect (issue #578, refs #573).
@@ -35,34 +37,13 @@ import { INPUT_CLASS } from '@/lib/ui';
 // the safety net for a detour; dismiss-on-close is unchanged.
 //---------------
 
-// Display order is the approved mockup order, not SOCIAL_PROVIDERS
-// order (Fanvue before 3Speak/Rumble). Brand names are literals: the
+// Display order is the approved mockup order: SOCIAL_PROVIDERS order with
+// Fanvue moved up before 3Speak/Rumble. Brand names are literals: the
 // same in both locales.
-const STEP2_PROVIDERS = [
-  'youtube',
-  'instagram',
-  'bluesky',
-  'linkedin',
-  'threads',
-  'facebook',
-  'pinterest',
-  'fanvue',
-  '3speak',
-  'rumble',
-] as const satisfies readonly SocialProvider[];
-
-const PROVIDER_LABELS: Record<SocialProvider, string> = {
-  youtube: 'YouTube',
-  instagram: 'Instagram',
-  bluesky: 'Bluesky',
-  linkedin: 'LinkedIn',
-  threads: 'Threads',
-  facebook: 'Facebook',
-  pinterest: 'Pinterest',
-  fanvue: 'Fanvue',
-  '3speak': '3Speak',
-  rumble: 'Rumble',
-};
+const STEP2_PROVIDERS: readonly SocialProvider[] = SOCIAL_PROVIDERS.flatMap((provider): SocialProvider[] => {
+  if (provider === 'fanvue') return [];
+  return provider === '3speak' ? ['fanvue', provider] : [provider];
+});
 
 const PROVIDER_DESCRIPTIONS: Record<SocialProvider, TranslationKey> = {
   youtube: 'accounts.youtubeDescription',

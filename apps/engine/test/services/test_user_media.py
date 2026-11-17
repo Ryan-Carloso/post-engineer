@@ -292,7 +292,7 @@ def test_two_photos_split_the_segment_and_a_dropped_one_fails_the_task(tmp_path)
         if "drop" in url:
             raise ssrf.UnsafeUrlError("photo download failed: HTTP 403.")
         with open(dest_path, "wb") as handle:
-            handle.write(_jpeg())
+            handle.write(_jpeg(color=(200, 80, 40) if "a.jpg" in url else (40, 80, 200)))
         return dest_path
 
     words = [("Welcome", 0.0, 2.0), ("to", 2.0, 3.0), ("Porto", 3.0, 4.0)]

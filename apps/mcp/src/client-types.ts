@@ -6,6 +6,7 @@
 import { VIDEO_LAYOUTS } from './limits.js';
 import type { FaceQuality, VideoAspect } from './contracts/personas.js';
 import type { VideoType } from './video-type.js';
+import type { SocialProvider } from './contracts/providers.js';
 
 export type { VideoType } from './video-type.js';
 
@@ -80,7 +81,7 @@ export interface GeneratePersonaVideoInput {
   description: string;
   /** Paired A/B experiment link (issue #476); checked server-side before the charge. */
   experiment?: { experimentId: string; variantId: string; pair: number };
-  providers: ('youtube' | 'instagram' | 'linkedin' | 'bluesky' | 'threads' | 'facebook' | 'pinterest' | 'fanvue' | '3speak' | 'rumble')[];
+  providers: SocialProvider[];
   youtubeAccountIds?: string[];
   instagramAccountIds?: string[];
   linkedinAccountIds?: string[];
@@ -147,7 +148,7 @@ export interface UpdatePersonaInput {
 
 /** Input for publishing a user-provided video directly, without generation. */
 export interface PublishVideoDirectInput {
-  provider: 'youtube' | 'instagram' | 'linkedin' | 'bluesky' | 'threads' | 'facebook' | 'pinterest' | 'fanvue' | '3speak' | 'rumble';
+  provider: SocialProvider;
   /** Local path to the video file (.mp4 or .mov, max 2GB). */
   videoPath: string;
   /** Target accounts (channel IDs / IG user IDs / DIDs / LinkedIn member IDs or org URNs / Threads user IDs / Facebook Page IDs / Pinterest user IDs / Fanvue account IDs / Hive usernames / Rumble Channel IDs). */
@@ -176,7 +177,7 @@ export interface PublishVideoDirectInput {
 
 /** Input for publishing a signed-upload video by id, without generation. */
 export interface PublishUploadedVideoInput {
-  provider: 'youtube' | 'instagram' | 'linkedin' | 'bluesky' | 'threads' | 'facebook' | 'pinterest' | 'fanvue' | '3speak' | 'rumble';
+  provider: SocialProvider;
   /** The uploadId of a completed signed upload (create + complete). Single-use. */
   uploadId: string;
   /** Target accounts (same IDs as PublishVideoDirectInput). */
@@ -212,53 +213,28 @@ export interface CompletedVideoUpload {
   sizeBytes: number;
 }
 
-/** Input for publishing/scheduling existing media by id or inline image bytes, without generation. */
+/** POST /api/media/publish-existing body fields, built by the publish_existing handler once every reference is resolved. */
 export interface PublishExistingInput {
-  mediaKind: 'task' | 'upload' | 'image';
-  /** mediaKind task: the engine task id of the finished video. */
-  taskId?: string;
-  /** mediaKind upload: the uploadId of a completed signed upload. Single-use. */
-  uploadId?: string;
-  /** mediaKind image: the image bytes as base64 (JPEG or PNG, max 8 MB). */
-  imageData?: string;
-  /** mediaKind image: the real image type; the server verifies the bytes match it. */
-  imageContentType?: 'image/jpeg' | 'image/png';
-  provider: 'youtube' | 'instagram' | 'linkedin' | 'bluesky' | 'threads' | 'facebook' | 'pinterest' | 'fanvue' | '3speak' | 'rumble';
-  /** Target accounts (same IDs as PublishVideoDirectInput). */
-  accountIds: string[];
-  /** Required: the video/image title, at most 100 characters. */
+  media:
+    | { kind: 'task'; taskId: string }
+    | { kind: 'upload'; uploadId: string }
+    | { kind: 'image'; imageData: string; contentType: 'image/jpeg' | 'image/png' };
+  /** Resolved account ids per network; the networks are its keys. */
+  accounts: Partial<Record<SocialProvider, string[]>>;
   title: string;
-  /** Required: the publish copy, at most 5000 characters. */
   description: string;
-  /** The persona to publish as, by id. Omit for a faceless post. */
-  personaId?: string;
-  /** 'scheduled' (default) slots the post at startAt + times; 'asap' publishes it right away. */
-  mode?: 'scheduled' | 'asap';
-  /** ISO datetime when the publish slot may start. Required unless mode is 'asap'. */
-  startAt?: string;
-  /** Daily publish times (HH:MM, 24h). Required unless mode is 'asap'. */
-  times?: string[];
-  /** IANA timezone for a naive startAt and the times. Defaults to UTC. */
-  timezone?: string;
-  /** YouTube only: required for ASAP, optional when scheduled (derived from the title). */
-  tags?: string[];
-  /** YouTube only: required for ASAP, optional when scheduled. */
-  privacyStatus?: 'public' | 'private' | 'unlisted';
-  /** Instagram/Bluesky/LinkedIn/Threads/Facebook/3Speak: required. Pinterest: pin description when description is omitted. */
+  /** Caption-network text override; the server falls back to description. */
   caption?: string;
-  /** Pinterest only: required. The board the pin goes to (the id from accounts (action: list_boards)). */
+  personaId?: string;
+  mode: 'asap' | 'scheduled';
+  /** mode scheduled: the one publish moment (wall-clock in timezone, or with an offset). */
+  publishAt?: string;
+  timezone: string;
+  tags?: string[];
+  privacyStatus?: 'public' | 'private' | 'unlisted';
   boardId?: string;
-  /**
-   * Omitted: a UUID is generated per call. Reuse the same key when retrying
-   * a timed-out SCHEDULED call so the server replays the original result
-   * instead of scheduling the media again. ASAP calls are NOT replayed:
-   * retrying one publishes the media again (task/image) or fails as
-   * already consumed (upload) — check the provider account before
-   * retrying. Exception: a result with errorCode publish_unknown means
-   * the post may already be live but its record was lost — do not retry
-   * it, check the provider account first.
-   */
-  idempotencyKey?: string;
+  /** Sent on every call: a retry with the same key replays the original result (schedule or recorded posts). */
+  idempotencyKey: string;
 }
 
 /** One scheduled slot from POST /api/media/publish-existing. */
@@ -281,6 +257,8 @@ export type PublishExistingResult =
   | {
       mode: 'asap';
       success: boolean;
+      /** True when every account answered from the publish ledger: nothing was posted again. */
+      replayed: boolean;
       mediaKind: 'task' | 'upload' | 'image';
       publishes: Array<{ provider: string; success: boolean; results: DirectPublishAccountResult[] }>;
       logId: string;

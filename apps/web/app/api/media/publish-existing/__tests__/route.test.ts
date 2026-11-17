@@ -40,6 +40,7 @@ vi.mock('@/lib/videos/signed-upload', () => {
   }
   return {
     VideoUploadError,
+    assertUploadFitsProviders: vi.fn(),
     claimUploadForPublish: vi.fn(),
     createSupabaseVideoUploadStore: vi.fn(),
     createSupabaseVideoUploadStorage: vi.fn(),
@@ -67,6 +68,7 @@ import { applyRateLimit } from '@/lib/rate-limit';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import {
   VideoUploadError,
+  assertUploadFitsProviders,
   claimUploadForPublish,
   createSupabaseVideoUploadStore,
   createSupabaseVideoUploadStorage,
@@ -90,15 +92,12 @@ function jsonRequest(body: unknown): Request {
   });
 }
 
-function futureStartAt(hoursAhead: number): { startAt: string; times: string[] } {
+function futurePublishAt(hoursAhead: number): string {
+  // Whole minutes: the slot lands on publishAt's minute, so a test can
+  // compare the slot time with the instant it sent.
   const at = new Date(Date.now() + hoursAhead * 60 * 60 * 1000);
-  // Aim the time two minutes past startAt: distributeSlots drops a
-  // candidate that falls before startAt (the HH:MM truncation), which
-  // would roll the slot to the next day and hide a window violation.
-  const slot = new Date(at.getTime() + 2 * 60 * 1000);
-  const hh = String(slot.getUTCHours()).padStart(2, '0');
-  const mm = String(slot.getUTCMinutes()).padStart(2, '0');
-  return { startAt: at.toISOString(), times: [`${hh}:${mm}`] };
+  at.setUTCSeconds(0, 0);
+  return at.toISOString();
 }
 
 function taskEnvelope(overrides: Record<string, unknown> = {}): Record<string, unknown> {
@@ -131,6 +130,12 @@ interface FakeConfig {
   slotInsertRows?: Record<string, unknown>[];
   storageUpload?: { data: { path: string } | null; error: { message: string } | null };
   uploadRow?: Record<string, unknown> | null;
+  /** Live slots already holding the upload (the migration 067 guard read). */
+  liveUploadSlots?: Record<string, unknown>[];
+  liveUploadSlotsError?: unknown;
+  /** claim_publish_ledger outcome per account id (default: claimed). */
+  ledgerClaims?: Record<string, Record<string, unknown>>;
+  ledgerClaimError?: unknown;
 }
 
 function fakeSupabase(config: FakeConfig = {}) {
@@ -139,6 +144,16 @@ function fakeSupabase(config: FakeConfig = {}) {
   const updatedUploads: Array<{ id: string; patch: Record<string, unknown> }> = [];
   const removedPaths: string[] = [];
   const uploadedPaths: string[] = [];
+  const rpcCalls: Array<{ fn: string; args: Record<string, unknown> }> = [];
+  const rpc = vi.fn(async (fn: string, args: Record<string, unknown>) => {
+    rpcCalls.push({ fn, args });
+    if (fn === 'claim_publish_ledger') {
+      if (config.ledgerClaimError !== undefined) return { data: null, error: config.ledgerClaimError };
+      const accountId = String(args.p_account_id);
+      return { data: config.ledgerClaims?.[accountId] ?? { outcome: 'claimed' }, error: null };
+    }
+    return { data: true, error: null };
+  });
   const storageUpload = vi.fn(async (path: string) => {
     uploadedPaths.push(path);
     return config.storageUpload ?? { data: { path }, error: null };
@@ -152,6 +167,7 @@ function fakeSupabase(config: FakeConfig = {}) {
     private table: string;
     private op: 'select' | 'insert' | 'delete' | 'update' = 'select';
     private values: unknown = null;
+    private liveUploadRead = false;
 
     constructor(table: string) {
       this.table = table;
@@ -166,6 +182,11 @@ function fakeSupabase(config: FakeConfig = {}) {
     }
 
     in(): this {
+      return this;
+    }
+
+    neq(): this {
+      this.liveUploadRead = true;
       return this;
     }
 
@@ -226,6 +247,8 @@ function fakeSupabase(config: FakeConfig = {}) {
         };
       } else if (this.op === 'insert') {
         result = { data: null, error: config.scheduleInsertError ?? null };
+      } else if (this.table === 'scheduled_posts' && this.liveUploadRead) {
+        result = { data: config.liveUploadSlots ?? [], error: config.liveUploadSlotsError ?? null };
       } else if (this.table === 'scheduled_posts') {
         result = { data: config.existingSlots ?? [], error: null };
       } else if (this.table === 'social_accounts') {
@@ -241,6 +264,8 @@ function fakeSupabase(config: FakeConfig = {}) {
 
   const client = {
     from: vi.fn((table: string) => new Query(table)),
+    rpc,
+    __rpcCalls: rpcCalls,
     storage: { from: vi.fn(() => ({ upload: storageUpload, remove: storageRemove })) },
     __insertedSchedules: insertedSchedules,
     __insertedSlots: insertedSlots,
@@ -313,6 +338,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.stubEnv('MONEYPRINT_API_URL', 'https://engine.example.com');
   vi.stubEnv('MONEYPRINT_API_SECRET', 'secret-1');
+  // clearAllMocks keeps implementations: undo the 429 test's limiter.
+  vi.mocked(applyRateLimit).mockResolvedValue(null);
   authAs();
 });
 
@@ -384,7 +411,35 @@ describe('POST /api/media/publish-existing', () => {
     expect(vi.mocked(dispatchPublish)).toHaveBeenCalledTimes(2);
     // Claimed exactly once for all providers, then the bytes are removed.
     expect(vi.mocked(claimUploadForPublish)).toHaveBeenCalledTimes(1);
+    // The claim re-checks the networks (an image upload never reaches a video-only one).
+    expect(vi.mocked(claimUploadForPublish).mock.calls[0]?.[5]).toEqual(['youtube', 'instagram']);
     expect(storage.remove).toHaveBeenCalledWith([`${USER_ID}/direct-uploads/${UPLOAD_ID}.mp4`]);
+  });
+
+  it('refuses an image upload for a video-only network before claiming it (400 IMAGE_PROVIDER_UNSUPPORTED)', async () => {
+    const client = fakeSupabase({ socialRows: [{ provider: 'youtube', provider_account_id: 'UC1' }] });
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+    const imageRow = uploadRow({ declared_content_type: 'image/jpeg', detected_content_type: 'image/jpeg' });
+    mockUploadStore({ uploadRow: imageRow });
+    vi.mocked(assertUploadFitsProviders).mockImplementationOnce(() => {
+      throw new VideoUploadError('This upload is an image: youtube publishes video only.', 400, 'IMAGE_PROVIDER_UNSUPPORTED');
+    });
+
+    const response = await POST(
+      jsonRequest({
+        media: { kind: 'upload', uploadId: UPLOAD_ID },
+        title: 'Photo',
+        description: 'A photo.',
+        publishing: { mode: 'asap', providers: ['youtube'], accounts: { youtube: ['UC1'] } },
+        tags: ['photo'],
+        privacyStatus: 'public',
+      }),
+    );
+    expect(response.status).toBe(400);
+    expect((await response.json()).code).toBe('IMAGE_PROVIDER_UNSUPPORTED');
+    expect(vi.mocked(assertUploadFitsProviders)).toHaveBeenCalledWith(imageRow, ['youtube']);
+    expect(vi.mocked(claimUploadForPublish)).not.toHaveBeenCalled();
+    expect(vi.mocked(dispatchPublish)).not.toHaveBeenCalled();
   });
 
   it('keeps the first provider result when a later provider dispatch throws', async () => {
@@ -465,6 +520,39 @@ describe('POST /api/media/publish-existing', () => {
     expect(provider).toBe('instagram');
     expect(form?.get('file')).toBeInstanceOf(File);
     expect(form?.get('caption')).toBe('Edited photo.');
+  });
+
+  it('publishes an image ASAP to several image networks: the image rides in each form', async () => {
+    const client = fakeSupabase({
+      socialRows: [
+        { provider: 'instagram', provider_account_id: 'ig-1' },
+        { provider: 'bluesky', provider_account_id: 'did:plc:a' },
+        { provider: 'threads', provider_account_id: 'th-1' },
+      ],
+    });
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+    const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01]);
+
+    const response = await POST(
+      jsonRequest({
+        media: { kind: 'image', imageData: jpeg.toString('base64'), contentType: 'image/jpeg' },
+        title: 'Sunset photo',
+        description: 'Edited photo.',
+        publishing: {
+          mode: 'asap',
+          providers: ['instagram', 'bluesky', 'threads'],
+          accounts: { instagram: ['ig-1'], bluesky: ['did:plc:a'], threads: ['th-1'] },
+        },
+      }),
+    );
+    expect(response.status).toBe(200);
+    const calls = vi.mocked(dispatchPublish).mock.calls;
+    expect(calls.map(([provider]) => provider)).toEqual(['instagram', 'bluesky', 'threads']);
+    for (const [provider, form] of calls) {
+      const file = form.get(provider === 'instagram' ? 'file' : 'video');
+      expect(file).toBeInstanceOf(File);
+      expect((file as File).type).toBe('image/jpeg');
+    }
   });
 
   it('reports a throwing image dispatch as a per-account failure instead of a 500', async () => {
@@ -549,7 +637,7 @@ describe('POST /api/media/publish-existing', () => {
   it('schedules a finished task video as a ready slot with no charge', async () => {
     const fetchFn = vi.fn(async () => new Response(JSON.stringify(taskEnvelope()), { status: 200 }));
     vi.stubGlobal('fetch', fetchFn);
-    const { startAt, times } = futureStartAt(48);
+    const publishAt = futurePublishAt(48);
     const client = fakeSupabase({
       socialRows: [{ provider: 'youtube', provider_account_id: 'UC1' }],
     });
@@ -564,7 +652,7 @@ describe('POST /api/media/publish-existing', () => {
           mode: 'scheduled',
           providers: ['youtube'],
           accounts: { youtube: ['UC1'] },
-          schedule: { startAt, times, timezone: 'UTC' },
+          schedule: { publishAt, timezone: 'UTC' },
         },
         idempotencyKey: 'key-1',
       }),
@@ -582,11 +670,14 @@ describe('POST /api/media/publish-existing', () => {
     expect(slot.task_id).toBe(TASK_ID);
     expect(slot.charged_tokens).toBe(0);
     expect(slot.media_kind).toBeNull();
+    // One post at publishAt itself, and the schedule row names its time.
+    expect(slot.slot_at).toBe(publishAt);
+    expect(client.__insertedSchedules[0]?.times).toEqual([publishAt.slice(11, 16)]);
     expect(vi.mocked(dispatchPublish)).not.toHaveBeenCalled();
   });
 
   it('schedules a ready upload, holding the row until the slot time', async () => {
-    const { startAt, times } = futureStartAt(48);
+    const publishAt = futurePublishAt(48);
     const client = fakeSupabase({
       socialRows: [{ provider: 'youtube', provider_account_id: 'UC1' }],
     });
@@ -602,7 +693,7 @@ describe('POST /api/media/publish-existing', () => {
           mode: 'scheduled',
           providers: ['youtube'],
           accounts: { youtube: ['UC1'] },
-          schedule: { startAt, times, timezone: 'UTC' },
+          schedule: { publishAt, timezone: 'UTC' },
         },
         tags: ['ready'],
         privacyStatus: 'public',
@@ -626,7 +717,7 @@ describe('POST /api/media/publish-existing', () => {
   });
 
   it('schedules an image, storing the bytes and pointing the slot at them', async () => {
-    const { startAt, times } = futureStartAt(48);
+    const publishAt = futurePublishAt(48);
     const client = fakeSupabase({
       socialRows: [{ provider: 'instagram', provider_account_id: 'ig-1' }],
     });
@@ -642,7 +733,7 @@ describe('POST /api/media/publish-existing', () => {
           mode: 'scheduled',
           providers: ['instagram'],
           accounts: { instagram: ['ig-1'] },
-          schedule: { startAt, times, timezone: 'UTC' },
+          schedule: { publishAt, timezone: 'UTC' },
         },
         idempotencyKey: 'key-3',
       }),
@@ -660,13 +751,13 @@ describe('POST /api/media/publish-existing', () => {
   });
 
   it('replays a scheduled request with the same idempotency key', async () => {
-    const { startAt, times } = futureStartAt(48);
+    const publishAt = futurePublishAt(48);
     const scheduleId = deterministicUuid('publish-existing/v1', `${USER_ID}:key-1`);
     const client = fakeSupabase({
       socialRows: [{ provider: 'youtube', provider_account_id: 'UC1' }],
       existingSchedule: { id: scheduleId },
       existingSlots: [
-        { id: 'slot-1', slot_at: startAt, title: 'Porto walk', task_id: TASK_ID, status: 'ready' },
+        { id: 'slot-1', slot_at: publishAt, title: 'Porto walk', task_id: TASK_ID, status: 'ready' },
       ],
     });
     vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
@@ -682,7 +773,7 @@ describe('POST /api/media/publish-existing', () => {
           mode: 'scheduled',
           providers: ['youtube'],
           accounts: { youtube: ['UC1'] },
-          schedule: { startAt, times, timezone: 'UTC' },
+          schedule: { publishAt, timezone: 'UTC' },
         },
         idempotencyKey: 'key-1',
       }),
@@ -1093,7 +1184,7 @@ describe('POST /api/media/publish-existing', () => {
   it('answers 400 for a schedule inside the 3h lead time', async () => {
     const fetchFn = vi.fn(async () => new Response(JSON.stringify(taskEnvelope()), { status: 200 }));
     vi.stubGlobal('fetch', fetchFn);
-    const { startAt, times } = futureStartAt(1);
+    const publishAt = futurePublishAt(1);
     const client = fakeSupabase({
       socialRows: [{ provider: 'youtube', provider_account_id: 'UC1' }],
     });
@@ -1108,7 +1199,7 @@ describe('POST /api/media/publish-existing', () => {
           mode: 'scheduled',
           providers: ['youtube'],
           accounts: { youtube: ['UC1'] },
-          schedule: { startAt, times, timezone: 'UTC' },
+          schedule: { publishAt, timezone: 'UTC' },
         },
       }),
     );
@@ -1129,5 +1220,264 @@ describe('POST /api/media/publish-existing', () => {
     );
     const limited = await POST(jsonRequest({ media: { kind: 'task', taskId: TASK_ID }, title: 'T', description: 'D', publishing: { mode: 'asap', providers: ['youtube'], accounts: { youtube: ['UC1'] } }, tags: ['t'], privacyStatus: 'public' }));
     expect(limited.status).toBe(429);
+  });
+
+  describe('publishAt', () => {
+    function scheduledTaskBody(schedule: Record<string, unknown>): Record<string, unknown> {
+      return {
+        media: { kind: 'task', taskId: TASK_ID },
+        title: 'Porto walk',
+        description: 'Walking the riverside.',
+        publishing: { mode: 'scheduled', providers: ['youtube'], accounts: { youtube: ['UC1'] }, schedule },
+      };
+    }
+
+    beforeEach(() => {
+      vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(taskEnvelope()), { status: 200 })));
+    });
+
+    it('places the slot on publishAt\'s minute, wall-clock in the timezone', async () => {
+      const client = fakeSupabase({ socialRows: [{ provider: 'youtube', provider_account_id: 'UC1' }] });
+      vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+      const at = new Date(Date.now() + 48 * 60 * 60 * 1000);
+      // A naive local time in Sao Paulo (UTC-3, no DST) with seconds: the
+      // seconds are dropped, never rolled to the next day.
+      const local = new Date(at.getTime() - 3 * 60 * 60 * 1000).toISOString().slice(0, 16);
+      const response = await POST(jsonRequest(scheduledTaskBody({ publishAt: `${local}:42`, timezone: 'America/Sao_Paulo' })));
+      expect(response.status).toBe(200);
+      const slot = client.__insertedSlots[0] as Record<string, unknown>;
+      expect(slot.slot_at).toBe(new Date(`${local}:00-03:00`).toISOString());
+      expect(client.__insertedSchedules[0]?.times).toEqual([local.slice(11, 16)]);
+      expect(client.__insertedSchedules[0]?.timezone).toBe('America/Sao_Paulo');
+    });
+
+    it('answers 400 for an unknown timezone and for a publishAt that is not a datetime', async () => {
+      const client = fakeSupabase({ socialRows: [{ provider: 'youtube', provider_account_id: 'UC1' }] });
+      vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+      const badZone = await POST(jsonRequest(scheduledTaskBody({ publishAt: futurePublishAt(48), timezone: 'Mars/Olympus' })));
+      expect(badZone.status).toBe(400);
+      expect((await badZone.json()).field).toBe('publishing.schedule.timezone');
+      const badAt = await POST(jsonRequest(scheduledTaskBody({ publishAt: 'next friday', timezone: 'UTC' })));
+      expect(badAt.status).toBe(400);
+      expect((await badAt.json()).field).toBe('publishing.schedule.publishAt');
+      expect(client.__insertedSchedules).toHaveLength(0);
+    });
+
+    it('rejects the old start + times shape', async () => {
+      const client = fakeSupabase({ socialRows: [{ provider: 'youtube', provider_account_id: 'UC1' }] });
+      vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+      const response = await POST(
+        jsonRequest(scheduledTaskBody({ startAt: futurePublishAt(48), times: ['09:00', '20:00'], timezone: 'UTC' })),
+      );
+      expect(response.status).toBe(400);
+      expect(client.__insertedSchedules).toHaveLength(0);
+    });
+  });
+
+  describe('one live slot per upload', () => {
+    function uploadBody(mode: 'asap' | 'scheduled'): Record<string, unknown> {
+      return {
+        media: { kind: 'upload', uploadId: UPLOAD_ID },
+        title: 'Ready video',
+        description: 'Edited outside.',
+        publishing:
+          mode === 'asap'
+            ? { mode, providers: ['youtube'], accounts: { youtube: ['UC1'] } }
+            : { mode, providers: ['youtube'], accounts: { youtube: ['UC1'] }, schedule: { publishAt: futurePublishAt(48), timezone: 'UTC' } },
+        tags: ['ready'],
+        privacyStatus: 'public',
+      };
+    }
+
+    it.each(['scheduled', 'asap'] as const)('answers 409 VIDEO_UPLOAD_SCHEDULED in %s mode when a live slot holds the upload', async (mode) => {
+      const client = fakeSupabase({
+        socialRows: [{ provider: 'youtube', provider_account_id: 'UC1' }],
+        liveUploadSlots: [{ id: 'slot-held' }],
+      });
+      vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+      const { store } = mockUploadStore({ uploadRow: uploadRow() });
+
+      const response = await POST(jsonRequest(uploadBody(mode)));
+      expect(response.status).toBe(409);
+      expect((await response.json()).code).toBe('VIDEO_UPLOAD_SCHEDULED');
+      expect(store.updateUpload).not.toHaveBeenCalled();
+      expect(vi.mocked(claimUploadForPublish)).not.toHaveBeenCalled();
+      expect(client.__insertedSchedules).toHaveLength(0);
+    });
+
+    it('answers 409 and removes the schedule row when a concurrent call wins the slot index', async () => {
+      const client = fakeSupabase({
+        socialRows: [{ provider: 'youtube', provider_account_id: 'UC1' }],
+        slotInsertError: {
+          code: '23505',
+          message: 'duplicate key value violates unique constraint "scheduled_posts_upload_media_ref_key"',
+        },
+      });
+      vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+      mockUploadStore({ uploadRow: uploadRow() });
+      const deletes: string[] = [];
+      const from = client.from;
+      client.from = vi.fn((table: string) => {
+        const query = from(table);
+        const del = query.delete.bind(query);
+        query.delete = () => {
+          deletes.push(table);
+          return del();
+        };
+        return query;
+      });
+
+      const response = await POST(jsonRequest(uploadBody('scheduled')));
+      expect(response.status).toBe(409);
+      expect((await response.json()).code).toBe('VIDEO_UPLOAD_SCHEDULED');
+      expect(deletes).toEqual(['schedules']);
+    });
+
+    it('answers 500 when the live-slot read fails, instead of scheduling blind', async () => {
+      const client = fakeSupabase({
+        socialRows: [{ provider: 'youtube', provider_account_id: 'UC1' }],
+        liveUploadSlotsError: { message: 'connection reset' },
+      });
+      vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+      mockUploadStore({ uploadRow: uploadRow() });
+
+      const response = await POST(jsonRequest(uploadBody('scheduled')));
+      expect(response.status).toBe(500);
+      expect(client.__insertedSchedules).toHaveLength(0);
+    });
+  });
+
+  describe('ASAP idempotency (publish ledger)', () => {
+    function asapUploadBody(): Record<string, unknown> {
+      return {
+        media: { kind: 'upload', uploadId: UPLOAD_ID },
+        title: 'Ready video',
+        description: 'Edited outside.',
+        publishing: { mode: 'asap', providers: ['youtube', 'instagram'], accounts: { youtube: ['UC1'], instagram: ['ig-1'] } },
+        tags: ['ready'],
+        privacyStatus: 'public',
+        idempotencyKey: 'asap-key-1',
+      };
+    }
+
+    const recordedYoutube = { accountId: 'UC1', success: true, videoId: 'vid-1' };
+    const recordedInstagram = { accountId: 'ig-1', success: true, mediaId: 'm-1' };
+
+    function socialRows(): Record<string, unknown>[] {
+      return [
+        { provider: 'youtube', provider_account_id: 'UC1' },
+        { provider: 'instagram', provider_account_id: 'ig-1' },
+      ];
+    }
+
+    it('replays a retry whose accounts all published, without loading or claiming the upload', async () => {
+      const client = fakeSupabase({
+        socialRows: socialRows(),
+        // The first call consumed the upload: loading it now would 409.
+        uploadRow: uploadRow({ status: 'consumed' }),
+        ledgerClaims: {
+          UC1: { outcome: 'published', result: recordedYoutube },
+          'ig-1': { outcome: 'published', result: recordedInstagram },
+        },
+      });
+      vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+      mockUploadStore({ uploadRow: uploadRow({ status: 'consumed' }) });
+
+      const response = await POST(jsonRequest(asapUploadBody()));
+      const body = await response.json();
+      expect(response.status).toBe(200);
+      expect(body).toMatchObject({ success: true, mode: 'asap', replayed: true });
+      expect(body.publishes).toEqual([
+        { provider: 'youtube', success: true, results: [recordedYoutube] },
+        { provider: 'instagram', success: true, results: [recordedInstagram] },
+      ]);
+      expect(vi.mocked(claimUploadForPublish)).not.toHaveBeenCalled();
+      expect(vi.mocked(dispatchPublish)).not.toHaveBeenCalled();
+      // The scope key is user-bound through the deterministic id.
+      const scopeId = deterministicUuid('publish-existing/v1', `${USER_ID}:asap-key-1`);
+      expect(client.__rpcCalls[0]?.args.p_key).toBe(`publish:direct:existing:${scopeId}:youtube:UC1`);
+    });
+
+    it('publishes only the accounts with no recorded success and records their outcome', async () => {
+      const client = fakeSupabase({
+        socialRows: socialRows(),
+        ledgerClaims: { UC1: { outcome: 'published', result: recordedYoutube } },
+      });
+      vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+      mockUploadStore({ uploadRow: uploadRow() });
+      vi.mocked(dispatchPublish).mockResolvedValueOnce({
+        success: true,
+        provider: 'instagram',
+        results: [recordedInstagram],
+        logId: 'log-1',
+      });
+
+      const response = await POST(jsonRequest(asapUploadBody()));
+      const body = await response.json();
+      expect(response.status).toBe(200);
+      expect(body).toMatchObject({ success: true, replayed: false });
+      expect(vi.mocked(dispatchPublish)).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(dispatchPublish).mock.calls[0]?.[0]).toBe('instagram');
+      expect(body.publishes[0]).toEqual({ provider: 'youtube', success: true, results: [recordedYoutube] });
+      const records = client.__rpcCalls.filter((call) => call.fn === 'record_publish_ledger');
+      expect(records).toHaveLength(1);
+      expect(records[0]?.args).toMatchObject({ p_status: 'published' });
+    });
+
+    it('answers 500 and publishes nothing when the ledger claim fails', async () => {
+      const client = fakeSupabase({ socialRows: socialRows(), ledgerClaimError: { message: 'rpc down' } });
+      vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+      mockUploadStore({ uploadRow: uploadRow() });
+
+      const response = await POST(jsonRequest(asapUploadBody()));
+      expect(response.status).toBe(500);
+      expect(vi.mocked(claimUploadForPublish)).not.toHaveBeenCalled();
+      expect(vi.mocked(dispatchPublish)).not.toHaveBeenCalled();
+    });
+
+    it('releases the claims as failed when the media cannot be verified', async () => {
+      const client = fakeSupabase({ socialRows: socialRows() });
+      vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+      mockUploadStore({ uploadRow: null });
+
+      const response = await POST(jsonRequest(asapUploadBody()));
+      expect(response.status).toBe(404);
+      const records = client.__rpcCalls.filter((call) => call.fn === 'record_publish_ledger');
+      expect(records).toHaveLength(2);
+      expect(records.every((call) => call.args.p_status === 'failed')).toBe(true);
+    });
+
+    it('releases a provider\'s claims as failed when its handler throws', async () => {
+      const client = fakeSupabase({ socialRows: socialRows() });
+      vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+      mockUploadStore({ uploadRow: uploadRow() });
+      vi.mocked(dispatchPublish)
+        .mockResolvedValueOnce({ success: true, provider: 'youtube', results: [recordedYoutube], logId: 'log-1' })
+        .mockRejectedValueOnce(new Error('instagram down'));
+
+      const response = await POST(jsonRequest(asapUploadBody()));
+      const body = await response.json();
+      expect(response.status).toBe(200);
+      expect(body.success).toBe(false);
+      expect(body.publishes[1]).toEqual({
+        provider: 'instagram',
+        success: false,
+        results: [{ accountId: 'ig-1', success: false, error: 'instagram down', errorCode: 'transient' }],
+      });
+      const records = client.__rpcCalls.filter((call) => call.fn === 'record_publish_ledger');
+      expect(records.map((call) => call.args.p_status)).toEqual(['published', 'failed']);
+    });
+
+    it('publishes without the ledger when the caller sends no key', async () => {
+      const client = fakeSupabase({ socialRows: socialRows() });
+      vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+      mockUploadStore({ uploadRow: uploadRow() });
+      const { idempotencyKey: _omitted, ...body } = asapUploadBody();
+
+      const response = await POST(jsonRequest(body));
+      expect(response.status).toBe(200);
+      expect(client.__rpcCalls).toHaveLength(0);
+      expect(vi.mocked(dispatchPublish)).toHaveBeenCalledTimes(2);
+    });
   });
 });

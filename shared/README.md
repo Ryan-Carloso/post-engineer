@@ -101,6 +101,14 @@ reappears.
 
 ## contracts
 
+`contracts/providers.ts` is THE list of social networks (`SOCIAL_PROVIDERS`)
+plus its named subsets (`DIRECT_CONNECT_PROVIDERS`, `OAUTH_CONNECT_PROVIDERS`).
+The web, the MCP and the OpenAPI generator all import it; the generator
+imports the shared file directly (it has no imports, and Node strips the
+types; `contracts/package.json` marks the folder as ES modules). Never type
+the list again anywhere: `apps/web/lib/__tests__/provider-list-single-source.test.ts`
+fails on any array or union that lists every network outside this file.
+
 `contracts/*.ts` are the shared endpoint contracts: one `defineEndpoint`
 per web API exchange (`method`, `path`, optional `body`/`query`, `response`
 schemas) plus the `BodyOf`/`QueryOf`/`ResponseOf`/`ParamsOf` types derived

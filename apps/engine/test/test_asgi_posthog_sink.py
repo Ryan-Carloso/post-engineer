@@ -421,7 +421,7 @@ class StartupWarmClientTests(unittest.TestCase):
     def test_startup_event_warms_posthog_client(self):
         # The PostHog client must be warmed by the server startup hook —
         # not at controller import time (which also runs under pytest,
-        # CLI/webui entry points, and anything else that imports the
+        # webui entry points, and anything else that imports the
         # controller module).
         # Patch the heartbeat thread: startup_event starts a daemon that
         # calls nvidia-smi through subprocess.run every 45s and never

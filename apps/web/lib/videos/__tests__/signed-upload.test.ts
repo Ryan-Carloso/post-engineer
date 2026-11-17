@@ -99,8 +99,21 @@ describe('parseMintBody', () => {
     });
   });
 
-  it('rejects a non-video content type', () => {
-    expect(() => parseMintBody({ contentType: 'image/png', sizeBytes: 10 })).toThrow(VideoUploadError);
+  it('accepts a JPEG or PNG image up to 8 MB', () => {
+    expect(parseMintBody({ contentType: 'image/png', sizeBytes: 10 })).toEqual({ contentType: 'image/png', sizeBytes: 10 });
+    expect(parseMintBody({ contentType: 'image/jpeg', sizeBytes: 8 * 1024 * 1024 })).toEqual({ contentType: 'image/jpeg', sizeBytes: 8 * 1024 * 1024 });
+  });
+
+  it('rejects an image declared over 8 MB with 413', () => {
+    expect(() => parseMintBody({ contentType: 'image/jpeg', sizeBytes: 8 * 1024 * 1024 + 1 })).toThrow(
+      expect.objectContaining({ status: 413, code: 'VIDEO_UPLOAD_TOO_LARGE', message: 'Image is too large. Maximum is 8 MB.' }),
+    );
+  });
+
+  it('rejects any other content type', () => {
+    expect(() => parseMintBody({ contentType: 'image/webp', sizeBytes: 10 })).toThrow(
+      expect.objectContaining({ status: 400, code: 'VIDEO_UPLOAD_INVALID_CONTENT_TYPE' }),
+    );
   });
 
   it('rejects a size over the 2GB limit', () => {
@@ -316,39 +329,82 @@ describe('completeVideoUpload', () => {
   });
 });
 
+describe('image uploads', () => {
+  const JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0x10, 0x4a, 0x46, 0x49, 0x46, 0, 1, 2, 3]);
+
+  it('mints an image upload with a .jpg path and the 8 MB ceiling', async () => {
+    const result = await mintVideoUpload(makeStore(), makeStorage(), USER, { contentType: 'image/jpeg', sizeBytes: 14 }, NOW);
+    expect(result.storagePath.endsWith('.jpg')).toBe(true);
+    expect(result.maxBytes).toBe(8 * 1024 * 1024);
+  });
+
+  it('completes an image upload by its magic bytes', async () => {
+    const store = makeStore([row({ declared_content_type: 'image/jpeg', storage_path: `${USER}/direct-uploads/upload-1.jpg` })]);
+    const done = await completeVideoUpload(store, makeStorage(JPEG), USER, 'upload-1', NOW);
+    expect(done).toEqual({ uploadId: 'upload-1', status: 'ready', contentType: 'image/jpeg', sizeBytes: JPEG.length });
+  });
+
+  it('refuses an image object over 8 MB at completion, whatever was declared', async () => {
+    const big = Buffer.alloc(8 * 1024 * 1024 + 1);
+    JPEG.copy(big);
+    const store = makeStore([row({ declared_content_type: 'image/jpeg' })]);
+    await expect(completeVideoUpload(store, makeStorage(big), USER, 'upload-1', NOW)).rejects.toMatchObject({ status: 413 });
+    expect(store.rows.get('upload-1')?.status).toBe('pending');
+  });
+
+  it('refuses to claim an image upload for a video-only network and leaves it ready', async () => {
+    const store = makeStore([row({ status: 'ready', declared_content_type: 'image/jpeg', detected_content_type: 'image/jpeg' })]);
+    const storage = makeStorage(JPEG);
+    await expect(claimUploadForPublish(store, storage, USER, 'upload-1', NOW, ['instagram', 'youtube'])).rejects.toMatchObject({
+      status: 400,
+      code: 'IMAGE_PROVIDER_UNSUPPORTED',
+      message: 'This upload is an image: youtube publishes video only. Images go to instagram, bluesky, linkedin, threads, facebook, pinterest.',
+    });
+    expect(store.rows.get('upload-1')?.status).toBe('ready');
+    expect(storage.removed).toEqual([]);
+  });
+
+  it('claims an image upload for image networks', async () => {
+    const store = makeStore([row({ status: 'ready', declared_content_type: 'image/jpeg', detected_content_type: 'image/jpeg' })]);
+    const claimed = await claimUploadForPublish(store, makeStorage(JPEG), USER, 'upload-1', NOW, ['bluesky', 'pinterest']);
+    expect(claimed.contentType).toBe('image/jpeg');
+    expect(store.rows.get('upload-1')?.status).toBe('consumed');
+  });
+});
+
 describe('claimUploadForPublish', () => {
   it('claims a ready upload exactly once and returns its bytes', async () => {
     const store = makeStore([row({ status: 'ready', detected_content_type: 'video/mp4', size_bytes: MP4.length })]);
-    const first = await claimUploadForPublish(store, makeStorage(MP4), USER, 'upload-1', NOW);
+    const first = await claimUploadForPublish(store, makeStorage(MP4), USER, 'upload-1', NOW, ['instagram']);
     expect(first.buffer.equals(MP4)).toBe(true);
     expect(first.contentType).toBe('video/mp4');
     expect(store.rows.get('upload-1')?.status).toBe('consumed');
-    await expect(claimUploadForPublish(store, makeStorage(MP4), USER, 'upload-1', NOW)).rejects.toMatchObject({
+    await expect(claimUploadForPublish(store, makeStorage(MP4), USER, 'upload-1', NOW, ['instagram'])).rejects.toMatchObject({
       status: 409,
     });
   });
 
   it('rejects pending, expired and foreign uploads without consuming them', async () => {
     const pending = makeStore([row()]);
-    await expect(claimUploadForPublish(pending, makeStorage(), USER, 'upload-1', NOW)).rejects.toMatchObject({ status: 409 });
+    await expect(claimUploadForPublish(pending, makeStorage(), USER, 'upload-1', NOW, ['instagram'])).rejects.toMatchObject({ status: 409 });
     expect(pending.rows.get('upload-1')?.status).toBe('pending');
 
     const expired = makeStore([
       row({ status: 'ready', expires_at: new Date(NOW.getTime() - 1).toISOString(), detected_content_type: 'video/mp4' }),
     ]);
     const expiredStorage = makeStorage();
-    await expect(claimUploadForPublish(expired, expiredStorage, USER, 'upload-1', NOW)).rejects.toMatchObject({ status: 410 });
+    await expect(claimUploadForPublish(expired, expiredStorage, USER, 'upload-1', NOW, ['instagram'])).rejects.toMatchObject({ status: 410 });
     expect(expired.rows.get('upload-1')?.status).toBe('ready');
     expect(expiredStorage.removed).toEqual([[`${USER}/direct-uploads/upload-1.mp4`]]);
 
     const ready = makeStore([row({ status: 'ready', detected_content_type: 'video/mp4' })]);
-    await expect(claimUploadForPublish(ready, makeStorage(), OTHER, 'upload-1', NOW)).rejects.toMatchObject({ status: 404 });
+    await expect(claimUploadForPublish(ready, makeStorage(), OTHER, 'upload-1', NOW, ['instagram'])).rejects.toMatchObject({ status: 404 });
   });
 
   it('rejects a claim that lost the ready-to-consumed race', async () => {
     const store = makeStore([row({ status: 'ready', detected_content_type: 'video/mp4', size_bytes: MP4.length })]);
     store.updateUpload = async () => false;
-    await expect(claimUploadForPublish(store, makeStorage(MP4), USER, 'upload-1', NOW)).rejects.toMatchObject({
+    await expect(claimUploadForPublish(store, makeStorage(MP4), USER, 'upload-1', NOW, ['instagram'])).rejects.toMatchObject({
       status: 409,
       code: 'VIDEO_UPLOAD_CONSUMED',
     });

@@ -1,24 +1,25 @@
 // Shapes for the signed-upload publish flow (issue #561): the remote
 // (HTTP) replacement for publish_video (action: from_file). JSON only — no field
 // names a file on disk. The caller first mints a signed upload with
-// publish_video (action: create_upload), PUTs the video bytes to the returned signedUrl,
+// publish_video (action: create_upload), PUTs the video (or image) bytes to the returned signedUrl,
 // completes it with publish_video (action: complete_upload), and finally publishes by id
 // with publish_video (action: publish_upload). Kept in a new module so tools.ts stays
 // under the file-size ratchet.
 import { z } from 'zod';
 import { MAX_UPLOAD_VIDEO_BYTES, MAX_UPLOAD_VIDEO_GB } from './limits.js';
 import { PublishVideoDirectShape } from './publish-direct-shape.js';
+import { MAX_IMAGE_UPLOAD_BYTES, UPLOAD_CONTENT_TYPES } from './contracts/videos.js';
 
 export const CreateVideoUploadShape = {
   contentType: z
-    .enum(['video/mp4', 'video/quicktime'])
-    .describe('The real video type: video/mp4 for .mp4, video/quicktime for .mov. The server verifies the actual bytes at completion.'),
+    .enum(UPLOAD_CONTENT_TYPES)
+    .describe('The real type: video/mp4 (.mp4), video/quicktime (.mov), image/jpeg or image/png. The server verifies the bytes at completion.'),
   sizeBytes: z
     .number()
     .int()
     .min(1)
     .max(MAX_UPLOAD_VIDEO_BYTES)
-    .describe(`Exact size of the video in bytes (max ${MAX_UPLOAD_VIDEO_GB}GB).`),
+    .describe(`Exact size in bytes (max ${MAX_UPLOAD_VIDEO_GB}GB video, ${MAX_IMAGE_UPLOAD_BYTES / (1024 * 1024)} MB image).`),
 };
 
 export const CreateVideoUploadSchema = z.object(CreateVideoUploadShape).strict();

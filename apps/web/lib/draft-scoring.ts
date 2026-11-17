@@ -15,12 +15,13 @@
 //---------------
 
 import { BLUESKY_CAPTION_MAX_GRAPHEMES, countBlueskyGraphemes } from './bluesky';
+import type { PublishNetwork } from '@/lib/contracts/videos';
 
 // The networks Post Engineer publishes to (post_metrics.provider
 // check constraint, re-created with the full list by the latest provider
 // migration, 053). The scorer buckets are universal;
 // only the publish check varies by network.
-export type PublishNetwork = 'linkedin' | 'youtube' | 'instagram' | 'bluesky' | 'threads' | 'facebook' | 'pinterest' | '3speak' | 'rumble' | 'fanvue';
+export type { PublishNetwork };
 
 // What the text is: a post body, or a video script (segments joined by
 // newlines, hook first, then content takes). A script is spoken, so hashtags do not

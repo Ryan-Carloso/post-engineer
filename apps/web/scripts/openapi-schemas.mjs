@@ -1,7 +1,7 @@
 // Hand-written request/response schemas for generate-openapi.mjs, keyed by
 // "METHOD /api/path". Each entry mirrors the route's own validation (cited in
 // the comment); endpoints without an entry keep the generic responses.
-import { experimentLinkSchema, metricsOperationSchemas } from './openapi-metrics-schemas.mjs'; import { videoOperationSchemas } from './openapi-videos-schemas.mjs';
+import { experimentLinkSchema, metricsOperationSchemas } from './openapi-metrics-schemas.mjs'; import { videoOperationSchemas } from './openapi-videos-schemas.mjs'; import { OAUTH_CONNECT_PROVIDERS, SOCIAL_PROVIDERS as providers } from '../../../shared/contracts/providers.ts';
 
 const object = (properties, required = []) => ({
   type: 'object',
@@ -158,7 +158,6 @@ const scheduleSummary = object({
 });
 
 const anyObject = { type: 'object', additionalProperties: true };
-const providers = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'pinterest', '3speak', 'rumble', 'fanvue'];
 // Engine-backed routes proxy the engine response, wrapped as BaseResponse.
 const engineEnvelope = object({
   status: { type: 'integer' },
@@ -214,7 +213,7 @@ export const operationSchemas = {
     request: object(
       {
         draft: { type: 'string', minLength: 1, maxLength: 10000 },
-        network: { type: 'string', enum: ['linkedin', 'youtube', 'instagram', 'bluesky', 'threads', 'facebook'] },
+        network: { type: 'string', enum: [...providers] },
         personaId: { type: 'string', format: 'uuid' },
         kind: { type: 'string', enum: ['post', 'script'] },
       },
@@ -331,7 +330,7 @@ export const operationSchemas = {
   },
   // apps/web/app/api/account/connect-url/route.ts
   'POST /api/account/connect-url': {
-    request: object({ provider: { type: 'string', enum: ['youtube', 'instagram', 'linkedin', 'threads', 'facebook', 'pinterest', 'fanvue'] } }, ['provider']),
+    request: object({ provider: { type: 'string', enum: [...OAUTH_CONNECT_PROVIDERS] } }, ['provider']),
     response: success({ auth_url: { type: 'string', format: 'uri', description: 'https URL to open in a browser.' } }),
   },
   // apps/web/app/api/bluesky-connect/route.ts (JSON or form body)
@@ -427,17 +426,32 @@ export const operationSchemas = {
         title: str,
         description: str,
         personaId: str,
-        publishing: object({
-          mode: { type: 'string', enum: ['scheduled', 'asap'] },
-          providers: { type: 'array', items: str, minItems: 1 },
-          accounts: { type: 'object', additionalProperties: strArray },
-          schedule: object({ startAt: str, times: strArray, timezone: str }),
-          pinterestBoardId: str,
-        }),
+        publishing: object(
+          {
+            mode: { type: 'string', enum: ['scheduled', 'asap'] },
+            providers: { type: 'array', items: str, minItems: 1 },
+            accounts: { type: 'object', additionalProperties: strArray },
+            schedule: object(
+              {
+                publishAt: {
+                  type: 'string',
+                  description: 'The one moment to publish (3h-30d ahead): with an offset, or wall-clock in timezone.',
+                },
+                timezone: str,
+              },
+              ['publishAt', 'timezone'],
+            ),
+            pinterestBoardId: str,
+          },
+          ['mode', 'providers'],
+        ),
         tags: strArray,
         privacyStatus: str,
         caption: str,
-        idempotencyKey: str,
+        idempotencyKey: {
+          type: 'string',
+          description: 'Retry with the same key: scheduled replays the schedule, asap replays the recorded posts per account.',
+        },
       },
       ['media', 'title', 'description', 'publishing'],
     ),
@@ -457,7 +471,7 @@ export const operationSchemas = {
       logId: str,
     }),
     extraResponses: {
-      409: 'The video upload was already used to publish, or is not completed yet.',
+      409: 'The video upload was already used to publish, is already scheduled, or is not completed yet.',
       410: 'The video upload expired before publishing. Mint a new one.',
       413: 'The finished video is over the 2GB limit.',
       502: 'The video service is unavailable.',

@@ -165,6 +165,7 @@ describe('prompt status claims', () => {
       ['subject-spotlight.md', 'https://post-engineer.com/recipes/subject-spotlight'],
       ['github-prs.md', 'https://post-engineer.com/recipes/github-prs'],
       ['ab-hook-test.md', 'https://post-engineer.com/recipes/ab-hook-test'],
+      ['story-first-reels.md', 'https://post-engineer.com/recipes/story-first-reels'],
     ];
     for (const [file, href] of docs) {
       const doc = readFileSync(join(root, 'docs', 'recipes', file), 'utf8');
