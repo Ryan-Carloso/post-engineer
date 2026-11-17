@@ -373,7 +373,7 @@ class TaskVideoRequest(VideoParams, BaseModel):
     @model_validator(mode="after")
     def _validate_segments_into_script(self) -> "TaskVideoRequest":
         if self.segments is None:
-            # Script-only direct/CLI calls keep working: the script is used
+            # Script-only direct API calls keep working: the script is used
             # as-is, with no segment panels. Web, MCP and the batch pipeline
             # always send segments, and validate media there before charging.
             return self

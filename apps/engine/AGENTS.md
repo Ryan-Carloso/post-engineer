@@ -2,7 +2,7 @@
 
 These rules apply to every agent (human or AI) making changes in this repository.
 They exist so that video-generation behaviour stays consistent across every
-entry point (CLI, HTTP API, WebUI, batch runner, tests) and is controlled from
+entry point (HTTP API, WebUI, batch runner, tests) and is controlled from
 one place.
 
 ---
