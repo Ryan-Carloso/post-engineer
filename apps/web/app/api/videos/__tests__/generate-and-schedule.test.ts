@@ -1181,6 +1181,30 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(inserts['schedules']).toBeUndefined();
     });
 
+    it('carries the dead-account warning on an idempotent replay', async () => {
+      const key = 'idem-key-dead-account';
+      const first = await post(baseBody({ idempotencyKey: key }));
+      expect((await first.json()).replayed).toBe(false);
+      const scheduleId = deterministicUuid(IDEMPOTENCY_NAMESPACE, `${USER_ID}:${key}`);
+
+      setup({
+        ...DEFAULT_CFG,
+        existingScheduleId: scheduleId,
+        socialAccounts: [{ provider: 'youtube', provider_account_id: 'acct-1', needs_reconnect: true }],
+        replaySlots: [
+          { id: 'slot-0', slot_at: futureISO(48), title: 'Porto trip', task_id: 'task-Porto trip', status: 'generating' },
+        ],
+      });
+      const second = await post(baseBody({ idempotencyKey: key }));
+      const json = await second.json();
+      expect(second.status).toBe(200);
+      expect(json.replayed).toBe(true);
+      expect(json.warnings).toEqual([
+        { code: 'account_needs_reconnect', accounts: [{ provider: 'youtube', accountId: 'acct-1' }] },
+      ]);
+      expect(GenerateAndScheduleResponseSchema.safeParse(json).success).toBe(true);
+    });
+
     it('re-charges when the prior spend was fully refunded', async () => {
       // Attempt 1 charged, then the slot-insert rollback (or the
       // experiment-pair recheck) refunded under the same generation_id.
