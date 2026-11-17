@@ -23,6 +23,8 @@ from requests.adapters import HTTPAdapter
 from urllib3.exceptions import NewConnectionError
 from urllib3.util.url import parse_url
 
+from app.utils.ssrf_retry import failed_before_anything_was_sent
+
 # Redirect statuses that carry a Location header worth following manually.
 _REDIRECT_STATUSES = {301, 302, 303, 307, 308}
 
@@ -291,6 +293,12 @@ def _open(method: str, url: str, ips: list, *, session=None, **kwargs):
     An injected session is the test double used by the image fetcher. It
     does not open a socket. Production callers leave *session* unset and
     hit :func:`_send_pinned`.
+
+    A GET retries every address: downloads are idempotent and a partial
+    body is discarded. A POST retries only a connect-phase failure — once
+    the request may have reached the server, a second attempt would
+    deliver the webhook twice, breaking the caller's at-most-once
+    contract (see ``task_webhook``).
     """
     if session is not None:
         return getattr(session, method.lower())(url, allow_redirects=False, **kwargs)
@@ -300,6 +308,8 @@ def _open(method: str, url: str, ips: list, *, session=None, **kwargs):
             return _send_pinned(method, url, str(ip), **kwargs)
         except requests.ConnectionError as exc:
             last_error = exc
+            if method.lower() != "get" and not failed_before_anything_was_sent(exc):
+                raise
     if last_error is None:
         raise UnsafeUrlError("URL host had no address to connect to.")
     raise last_error

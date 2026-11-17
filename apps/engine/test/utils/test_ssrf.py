@@ -18,7 +18,12 @@ from unittest.mock import patch
 
 import pytest
 import requests
-from urllib3.exceptions import LocationParseError
+from urllib3.exceptions import (
+    LocationParseError,
+    MaxRetryError,
+    NewConnectionError,
+    ProtocolError,
+)
 from urllib3.util.url import Url
 
 from app.utils import ssrf
@@ -711,6 +716,52 @@ def test_open_refuses_an_empty_address_list_without_dialing():
     ):
         with pytest.raises(ssrf.UnsafeUrlError, match="no address"):
             ssrf._open("get", "https://pinned.invalid/a", [])
+
+
+def _connect_phase_error():
+    """ConnectionError shaped like requests raises for a refused TCP connect:
+    the wrapped urllib3 chain ends in NewConnectionError, so nothing was sent."""
+    return requests.exceptions.ConnectionError(
+        MaxRetryError(
+            None,
+            "https://pinned.invalid/hook",
+            reason=NewConnectionError(None, "Failed to establish a new connection"),
+        )
+    )
+
+
+def _read_phase_error():
+    """ConnectionError shaped like requests raises when the response read
+    aborts after the request was transmitted: the server may already have it."""
+    return requests.exceptions.ConnectionError(
+        ProtocolError("Connection aborted.")
+    )
+
+
+def test_open_retries_a_post_only_after_a_connect_phase_failure():
+    ips = [ipaddress.ip_address("93.184.215.14"), ipaddress.ip_address("93.184.215.15")]
+    with patch.object(
+        ssrf, "_send_pinned", side_effect=[_connect_phase_error(), _Response()]
+    ) as send:
+        response = ssrf._open("post", "https://pinned.invalid/hook", ips)
+    assert response.status_code == 200
+    assert [call.args[2] for call in send.call_args_list] == ["93.184.215.14", "93.184.215.15"]
+
+
+def test_open_does_not_resend_a_post_after_a_read_phase_failure():
+    ips = [ipaddress.ip_address("93.184.215.14"), ipaddress.ip_address("93.184.215.15")]
+    with patch.object(ssrf, "_send_pinned", side_effect=[_read_phase_error(), _Response()]) as send:
+        with pytest.raises(requests.exceptions.ConnectionError):
+            ssrf._open("post", "https://pinned.invalid/hook", ips)
+    assert send.call_count == 1
+
+
+def test_open_still_retries_a_get_after_a_read_phase_failure():
+    ips = [ipaddress.ip_address("93.184.215.14"), ipaddress.ip_address("93.184.215.15")]
+    with patch.object(ssrf, "_send_pinned", side_effect=[_read_phase_error(), _Response()]) as send:
+        response = ssrf._open("get", "https://pinned.invalid/a", ips)
+    assert response.status_code == 200
+    assert send.call_count == 2
 
 
 def test_a_non_streaming_request_returns_the_pinned_response():
