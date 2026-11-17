@@ -84,3 +84,18 @@ def test_grade_payload_is_verified_before_render():
     assert text.index("honesty_sha=") < text.index("python3 -m pytest")
     assert text.index("python3 -m pytest") < text.index("modified after grading")
     assert 'SUITE_CODES="$suite_codes"' in text
+
+
+def test_render_uses_a_fresh_base_grader_copy():
+    text = _text()
+    assert "verifier-render" in text
+    assert text.index("python3 -m pytest") < text.index("verifier-render")
+    assert text.index("verifier-render") < text.index('python3 "$grader_dir/report.py"')
+
+
+def test_grade_step_fails_in_itself_and_blanks_poisonable_env():
+    text = _text()
+    assert 'if [ "$final" -ne 0 ]; then' in text
+    assert 'BASH_ENV: ""' in text
+    assert 'GITHUB_ENV: ""' in text
+    assert 'GITHUB_PATH: ""' in text

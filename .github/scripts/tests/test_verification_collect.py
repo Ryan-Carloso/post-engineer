@@ -355,7 +355,7 @@ def test_parse_rename_and_payload_hides_file_bodies():
     assert "Grader source: `head`" in markdown
 
 
-def test_oversized_file_is_warned_and_still_listed(tmp_path, monkeypatch):
+def test_oversized_file_fails_and_is_still_listed(tmp_path, monkeypatch):
     monkeypatch.setattr(collect, "_MAX_BYTES", 40)
     repo = tmp_path / "repo"
     _git(repo, ["init", "-b", "main"])
@@ -381,9 +381,12 @@ def test_oversized_file_is_warned_and_still_listed(tmp_path, monkeypatch):
         "--json", str(out),
     ])
     payload = json.loads(out.read_text(encoding="utf-8"))
-    assert code == 0
-    assert payload["ok"] is True
-    assert any(finding["code"] == "file-too-large" for finding in payload["findings"])
+    assert code == 1
+    assert payload["ok"] is False
+    assert any(
+        finding["code"] == "file-too-large" and finding["severity"] == "fail"
+        for finding in payload["findings"]
+    )
     assert "apps/engine/test/test_sample.py" in payload["changed_paths"]
 
 

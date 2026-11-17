@@ -74,8 +74,30 @@ def test_guarded_pytest_skip_warns_and_does_not_fail():
         base,
         base + glue("    if True: pytest.", "skip('hidden')\n"),
     )
-    assert fails(single_line) == []
-    assert any(finding.code == "test-skip-conditional" for finding in single_line)
+    assert any(finding.code == "test-skipped" for finding in fails(single_line))
+    for guard in ("if 1:", "if not False:"):
+        constant = analyze(
+            "apps/engine/test/test_sample.py",
+            "M",
+            base,
+            base + glue(f"    {guard} pytest.", "skip('hidden')\n"),
+        )
+        assert any(finding.code == "test-skipped" for finding in fails(constant)), guard
+    block_true = analyze(
+        "apps/engine/test/test_sample.py",
+        "M",
+        base,
+        base + "    if True:\n" + glue("        pytest.", "skip('hidden')\n"),
+    )
+    assert any(finding.code == "test-skipped" for finding in fails(block_true))
+    conditional_line = analyze(
+        "apps/engine/test/test_sample.py",
+        "M",
+        base,
+        base + glue("    if cond: pytest.", "skip('hidden')\n"),
+    )
+    assert fails(conditional_line) == []
+    assert any(finding.code == "test-skip-conditional" for finding in conditional_line)
     unguarded = analyze(
         "apps/engine/test/test_sample.py",
         "M",
@@ -83,6 +105,18 @@ def test_guarded_pytest_skip_warns_and_does_not_fail():
         base + glue("    pytest.", "skip('hidden')\n"),
     )
     assert any(finding.code == "test-skipped" for finding in fails(unguarded))
+
+
+def test_deleted_test_names_do_not_republish_titles():
+    base = "it('works with free text title', () => {})\nit('kept', () => {})\n"
+    findings = analyze(
+        "apps/web/lib/__tests__/sample.test.ts",
+        "M",
+        base,
+        "it('kept', () => {})\n",
+    )
+    assert any(finding.code == "tests-deleted" for finding in fails(findings))
+    assert all("free text title" not in finding.message for finding in findings)
 
 
 def test_rename_out_of_test_collection_is_a_deletion():

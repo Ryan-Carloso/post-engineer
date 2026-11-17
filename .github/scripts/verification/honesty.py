@@ -141,7 +141,6 @@ def analyze(changes: list[FileChange], exists) -> list[Finding]:
             and is_test_path(change.old_path or change.path)
             and not _is_collectable_test_path(change.path)
         ):
-            # Renaming a test file out of discovery keeps the test names but the runner never collects it again.
             renamed = FileChange(change.old_path or change.path, "D", change.base_text, change.head_text)
             findings.extend(_deleted_test_file(renamed, exists))
         if (
@@ -231,12 +230,12 @@ def _test_edits(change: FileChange) -> list[Finding]:
     head_names = _test_names(change.path, change.head_text)
     if len(head_names) < len(base_names):
         missing = _missing(base_names, head_names)
-        shown = ", ".join(missing[:5])
         findings.append(Finding(
             "fail",
             "tests-deleted",
             change.path,
-            f"test count fell from {len(base_names)} to {len(head_names)} ({shown})",
+            f"test count fell from {len(base_names)} to {len(head_names)} "
+            f"({len(missing)} test(s) removed)",
             1,
         ))
     elif _assertion_count(change.head_text) < _assertion_count(change.base_text):
@@ -317,16 +316,21 @@ def _added_patterns(path: str, base_text: str, head_text: str) -> list[Finding]:
 
 
 def _is_guarded(lines: list[str], line_no: int) -> bool:
-    """True when the line sits under an if/elif/else guard in the head text."""
     line = lines[line_no - 1]
-    indent = len(line) - len(line.lstrip())
     if line.strip().startswith("if "):
-        return True
+        return not _is_always_true(line)
+    indent = len(line) - len(line.lstrip())
     for prev in reversed(lines[: line_no - 1]):
         stripped = prev.strip()
         if stripped and len(prev) - len(prev.lstrip()) < indent:
-            return bool(_GUARD.match(prev))
+            return bool(_GUARD.match(prev)) and not _is_always_true(prev)
     return False
+
+
+def _is_always_true(line: str) -> bool:
+    stripped = line.strip()
+    condition = stripped.split(" ", 1)[1].split(":")[0].strip() if stripped.startswith(("if ", "elif ")) else ""
+    return condition in {"True", "1", "not False", "not 0"}
 
 
 def _coverage_config(change: FileChange) -> list[Finding]:
@@ -416,13 +420,10 @@ def _test_names(path: str, text: str) -> list[str]:
 
 
 def _is_collectable_test_path(path: str) -> bool:
-    """True when a test runner would still collect the file at this path.
-
-    pytest only collects test_*.py/*_test.py under its test paths; vitest only *.test.*/*.spec.* (plus Cypress *.cy.*)."""
+    """True when a test runner would still collect the file at this path."""
     name = path.split("/")[-1]
     if path.endswith(".py"):
-        under_test_dir = any(part in {"test", "tests", "__tests__"} for part in path.split("/"))
-        return under_test_dir and (name.startswith("test_") or name.endswith("_test.py"))
+        return any(part in {"test", "tests", "__tests__"} for part in path.split("/")) and (name.startswith("test_") or name.endswith("_test.py"))
     if path.endswith((".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs")):
         return ".test." in name or ".spec." in name or name.endswith((".cy.ts", ".cy.tsx"))
     return False

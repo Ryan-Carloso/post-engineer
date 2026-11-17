@@ -71,6 +71,12 @@ jobs:
           GITHUB_TOKEN: ""
           GH_TOKEN: ""
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          # The suites below run pull-request test code. It must not be able
+          # to poison the runner for later steps by writing BASH_ENV into
+          # GITHUB_ENV, or to append to the runner PATH.
+          BASH_ENV: ""
+          GITHUB_ENV: ""
+          GITHUB_PATH: ""
         run: |
           set -euo pipefail
           base="$BASE_SHA"
@@ -150,6 +156,15 @@ jobs:
             rm -f /tmp/evidence.md
             report_code=1
           else
+            if [ "$source" = "base" ]; then
+              # The suites above run pull-request test code on this
+              # filesystem, so re-extract the base grader before rendering:
+              # the copy it ran from may have been rewritten.
+              rm -rf /tmp/verifier-render
+              mkdir -p /tmp/verifier-render
+              git archive "$base" .github/scripts/verification | tar -x -C /tmp/verifier-render
+              grader_dir="/tmp/verifier-render/.github/scripts/verification"
+            fi
             python3 "$grader_dir/report.py" \
               --honesty /tmp/honesty.json \
               --suites /tmp/suite-results.json \
@@ -165,6 +180,12 @@ jobs:
             final=1
           fi
           echo "exit_code=${final}" >> "$GITHUB_OUTPUT"
+          # Fail here, in the step that graded: a later step cannot be
+          # trusted to do it, since pull-request test code ran above and
+          # could have poisoned the runner environment for later steps.
+          if [ "$final" -ne 0 ]; then
+            exit 1
+          fi
 
       - name: Write job summary
         if: always()
