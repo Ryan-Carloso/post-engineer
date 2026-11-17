@@ -87,7 +87,7 @@ export function registerLibraryTools(server: McpServer, client: PostEngineerClie
 
   server.tool(
     'insights',
-    actionDescription('How your posts performed. post_metrics: per-network metrics of published posts (views, likes, comments, average view duration), filterable by persona, network, account and window. retention_curve: the YouTube audience retention curve of one post.', INSIGHTS_SPECS),
+    actionDescription('How your posts performed. post_metrics: per-network metrics of published posts (views, likes, comments, average view duration, published date), filterable by persona, network, account and window. retention_curve: the YouTube audience retention curve of one post.', INSIGHTS_SPECS),
     actionShape(INSIGHTS_SPECS),
     READ_ONLY,
     byAction(
