@@ -85,10 +85,20 @@ export const PublishExistingShape = {
     .describe('Retry a timed-out call with the SAME key: the server returns the original result (the schedule, or the posts already published per account) instead of publishing again. Omitted: a key is generated per call.'),
 };
 
-const { imagePath: _imagePath, ...remoteFields } = PublishExistingShape;
+const { imagePath: _imagePath, mediaKind: _mediaKind, ...remoteFields } = PublishExistingShape;
 
-/** The remote server reads no local files: an image arrives as a signed upload (mediaKind upload). */
-export const PublishExistingRemoteShape = remoteFields;
+/**
+ * The remote server reads no local files: an image arrives as a signed
+ * upload (mediaKind upload). The advertised kind says so, because the stdio
+ * description's "image = a local JPEG/PNG (imagePath)" would send a remote
+ * agent at a field this transport does not have.
+ */
+export const PublishExistingRemoteShape = {
+  mediaKind: PublishExistingShape.mediaKind.describe(
+    'task = a finished generated video (taskId); upload = a completed signed upload, video or image (uploadId); image is not offered on a remote server — send the image through create_upload → PUT → complete_upload and publish it as mediaKind upload.',
+  ),
+  ...remoteFields,
+};
 
 /** The stdio server reads the image from disk. */
 export const PublishExistingLocalShape = PublishExistingShape;

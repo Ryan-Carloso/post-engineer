@@ -376,6 +376,20 @@ describe('publish_existing tool on both transports', () => {
     }
   });
 
+  it('describes the remote mediaKind with the signed upload, not a local path', async () => {
+    const descriptionOf = (properties: Record<string, unknown>): string =>
+      (properties.mediaKind as { description?: string } | undefined)?.description ?? '';
+    const stdio = descriptionOf(await publishProperties('stdio'));
+    const http = descriptionOf(await publishProperties('http'));
+    // The stdio shape reads the image from disk, so its description names the field.
+    expect(stdio).toContain('imagePath');
+    // The remote shape has no imagePath: advertising it sends an agent at a
+    // field the transport never accepts, so the description names the upload path.
+    expect(http).not.toContain('imagePath');
+    expect(http).toContain('create_upload');
+    expect(http).toContain('mediaKind upload');
+  });
+
   it('rejects a local image path on the http server', async () => {
     const { client, request } = fakeClient(async () => ASAP_REPLY);
     const mcp = await connect(client, 'http');
