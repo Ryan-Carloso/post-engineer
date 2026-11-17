@@ -58,6 +58,39 @@ export interface AccountProfileSyncOptions {
 }
 
 //---------------
+// failureCooldownActive — true while the row's last failed fetch is younger
+// than ACCOUNT_PROFILE_SYNC_FAILURE_COOLDOWN_MS. An unparseable marker is
+// ignored and never blocks a sync.
+//---------------
+function failureCooldownActive(record: SocialAccountRecord, now: Date): boolean {
+  const failedAt = record.accountMetadata.profileSyncFailedAt;
+  if (typeof failedAt !== 'string') return false;
+  const failedAtMs = Date.parse(failedAt);
+  return Number.isFinite(failedAtMs) && now.getTime() - failedAtMs < ACCOUNT_PROFILE_SYNC_FAILURE_COOLDOWN_MS;
+}
+
+// Marker reasons that mean a dead credential: the same failures the
+// accounts route flags as 'error' (isUnauthorizedError -> 'unauthorized',
+// TokenDecryptError -> 'token_undecryptable', or its name when the break
+// classifier skips a key misconfiguration).
+const CREDENTIAL_FAILURE_REASONS: ReadonlySet<string> = new Set([
+  'unauthorized',
+  'token_undecryptable',
+  'TokenDecryptError',
+]);
+
+//---------------
+// credentialFailureHeld — true while a row sits in the failure cooldown
+// because its last fetch hit a dead credential. Inside the cooldown no
+// fetch runs and nothing throws, so without this the accounts route would
+// show a dead account as healthy until the cooldown expires.
+//---------------
+export function credentialFailureHeld(record: SocialAccountRecord, now: Date): boolean {
+  const reason = record.accountMetadata.profileSyncFailedReason;
+  return failureCooldownActive(record, now) && typeof reason === 'string' && CREDENTIAL_FAILURE_REASONS.has(reason);
+}
+
+//---------------
 // profileNeedsSync — pure decision. A row that was synced recently is left
 // alone even if it has no picture (the account may simply have none), so a
 // picture-less account costs one provider read per day, not one per list.
@@ -67,13 +100,7 @@ export interface AccountProfileSyncOptions {
 // marker is ignored and never blocks a sync.
 //---------------
 export function profileNeedsSync(record: SocialAccountRecord, pictureKey: string, now: Date): boolean {
-  const failedAt = record.accountMetadata.profileSyncFailedAt;
-  if (typeof failedAt === 'string') {
-    const failedAtMs = Date.parse(failedAt);
-    if (Number.isFinite(failedAtMs) && now.getTime() - failedAtMs < ACCOUNT_PROFILE_SYNC_FAILURE_COOLDOWN_MS) {
-      return false;
-    }
-  }
+  if (failureCooldownActive(record, now)) return false;
   const syncedAt = record.accountMetadata.profileSyncedAt;
   if (typeof syncedAt !== 'string') return true;
   const syncedAtMs = Date.parse(syncedAt);

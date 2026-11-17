@@ -16,6 +16,7 @@ vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), error: vi.fn() } }));
 vi.mock('@/lib/owner-alert-mail', () => ({ notifyAccountBreak: vi.fn(() => Promise.resolve()) }));
 
 import {
+  credentialFailureHeld,
   ACCOUNT_PROFILE_SYNC_MAX_AGE_MS,
   ACCOUNT_PROFILE_SYNC_FAILURE_COOLDOWN_MS,
   mergeProfileMetadata,
@@ -409,5 +410,26 @@ describe('syncAccountProfile', () => {
     const rec = record({ provider: 'bluesky', providerAccountId: 'did:plc:x' }, { profileSyncedAt: STALE });
     await syncAccountProfile(supabase, 'u1', rec, { now: () => NOW });
     expect(vi.mocked(getSocialAccountTokens)).toHaveBeenCalledWith(supabase, 'u1', 'bluesky', 'did:plc:x');
+  });
+});
+
+describe('credentialFailureHeld', () => {
+  const now = new Date('2030-01-01T12:00:00.000Z');
+  const minutesAgo = (minutes: number) => new Date(now.getTime() - minutes * 60 * 1000).toISOString();
+  const held = (metadata: Record<string, unknown>) =>
+    credentialFailureHeld({ accountMetadata: metadata } as unknown as SocialAccountRecord, now);
+
+  it('holds a dead-credential reason inside the cooldown', () => {
+    expect(held({ profileSyncFailedAt: minutesAgo(10), profileSyncFailedReason: 'unauthorized' })).toBe(true);
+    expect(held({ profileSyncFailedAt: minutesAgo(10), profileSyncFailedReason: 'token_undecryptable' })).toBe(true);
+    expect(held({ profileSyncFailedAt: minutesAgo(10), profileSyncFailedReason: 'TokenDecryptError' })).toBe(true);
+  });
+
+  it('does not hold a transient reason, an expired marker, or an unparseable one', () => {
+    expect(held({ profileSyncFailedAt: minutesAgo(10), profileSyncFailedReason: 'Error' })).toBe(false);
+    expect(held({ profileSyncFailedAt: minutesAgo(10), profileSyncFailedReason: 'email_not_verified' })).toBe(false);
+    expect(held({ profileSyncFailedAt: minutesAgo(61), profileSyncFailedReason: 'unauthorized' })).toBe(false);
+    expect(held({ profileSyncFailedAt: 'not-a-date', profileSyncFailedReason: 'unauthorized' })).toBe(false);
+    expect(held({ profileSyncFailedReason: 'unauthorized' })).toBe(false);
   });
 });
