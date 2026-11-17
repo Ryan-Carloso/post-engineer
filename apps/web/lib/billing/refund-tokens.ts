@@ -23,11 +23,12 @@
 //   the audit value of the event.
 // - These events intentionally bypass scrubSecrets (the call goes to
 //   captureAs directly) — but the id fields are fragment-scrubbed inside
-//   emitRefundIssued, because callers may pass request-derived ids: the
-//   cancel route's scheduleId comes straight off the query string with
-//   no format check. UUIDs pass through unchanged; only credential-shaped
-//   fragments are redacted. The remaining properties are a fixed reason
-//   literal and counts, so they cannot carry secrets.
+//   emitRefundIssued as defense-in-depth: the cancel route validates the
+//   schedule uuid before this point, but the helper's id inputs are plain
+//   strings and other callers may still hand over request-derived values.
+//   UUIDs pass through unchanged; only credential-shaped fragments are
+//   redacted. The remaining properties are a fixed reason literal and
+//   counts, so they cannot carry secrets.
 // - Telemetry must never break the request path: emitRefundIssued never
 //   throws, and refundSlotTokens reports RPC failures in its result
 //   instead of throwing, so the caller can log them and keep going.

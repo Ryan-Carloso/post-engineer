@@ -1,4 +1,4 @@
-"""Response envelopes for local media endpoints (BGM, video materials).
+"""Response envelopes for local media endpoints (BGM).
 
 These classes used to live in app/models/schema.py. They were moved here so
 schema.py stays under the 500-line file-size ratchet while the segments
@@ -44,37 +44,5 @@ class BgmUploadResponse(MediaBaseResponse):
                 "status": 200,
                 "message": "success",
                 "body": {"file": "/post-engineer/resource/songs/example.mp3"},
-            },
-        }
-
-
-class VideoMaterialRetrieveResponse(MediaBaseResponse):
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "status": 200,
-                "message": "success",
-                "body": {
-                    "files": [
-                        {
-                            "name": "example.mp4",
-                            "size": 12345678,
-                            "file": "/post-engineer/resource/videos/example.mp4",
-                        }
-                    ]
-                },
-            },
-        }
-
-
-class VideoMaterialUploadResponse(MediaBaseResponse):
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "status": 200,
-                "message": "success",
-                "body": {
-                    "file": "/post-engineer/resource/videos/example.mp4",
-                },
             },
         }

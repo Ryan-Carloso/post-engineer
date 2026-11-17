@@ -111,7 +111,7 @@ def test_images_request_with_a_segment_missing_media_is_rejected():
 
 
 def test_request_without_segments_is_accepted_for_script_only_calls():
-    # Script-only direct/CLI calls carry no segments: the script is used
+    # Script-only direct API calls carry no segments: the script is used
     # as-is. Web, MCP and the batch pipeline always send segments.
     from app.models.schema import TaskVideoRequest
 

@@ -55,6 +55,15 @@ export default defineConfig({
     setupNodeEvents(on, config) {
       registerCodeCoverageTasks(on, config);
       on('task', {
+        // One line per real password grant. Cached cy.session restores do
+        // not call this, so a run log's count is the token-request count.
+        logE2EPasswordGrant(attempt: unknown): null {
+          if (typeof attempt !== 'number' || !Number.isInteger(attempt) || attempt < 1) {
+            throw new Error('logE2EPasswordGrant expected a positive attempt number');
+          }
+          process.stdout.write(`[e2e] supabase password grant attempt ${attempt}\n`);
+          return null;
+        },
         //---------------
         // saveDownloadedVideo — persists the MP4 downloaded through the
         // app's authenticated route and validates: video content-type,
