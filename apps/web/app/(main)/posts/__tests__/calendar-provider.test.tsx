@@ -60,7 +60,7 @@ function renderCalendar(props: Record<string, unknown> = {}) {
     onViewChange: vi.fn(),
     onGoToToday: vi.fn(),
   };
-  render(
+  const result = render(
     <PostsCalendar
       events={[]}
       date={new Date(2030, 5, 1)}
@@ -76,7 +76,7 @@ function renderCalendar(props: Record<string, unknown> = {}) {
       {...props}
     />,
   );
-  return handlers;
+  return { ...handlers, unmount: result.unmount };
 }
 
 beforeEach(() => {
@@ -206,6 +206,239 @@ describe('PostsCalendar', () => {
     const prevented = fireEvent.keyDown(screen.getByText('Morning post'), { altKey: true, key: 'ArrowLeft' });
     expect(prevented).toBe(false);
     expect(onDateChange).not.toHaveBeenCalled();
+  });
+
+  // The Alt+Arrow guard is one condition over four keys: every key must
+  // prevent, and a non-arrow key or a missing Alt must not.
+  it.each([['ArrowUp'], ['ArrowDown'], ['ArrowRight']])(
+    'prevents the browser default on Alt+%s over a focused event chip',
+    (key) => {
+      renderCalendar({ events: [calendarEvent()] });
+      const prevented = fireEvent.keyDown(screen.getByText('Morning post'), { altKey: true, key });
+      expect(prevented).toBe(false);
+    },
+  );
+
+  it('does not prevent the browser default on Alt+letter over a focused event chip', () => {
+    renderCalendar({ events: [calendarEvent()] });
+    // A letter is not an arrow: neither the capture guard nor the lib's
+    // keyboard handler prevents it. (Alt+Enter is prevented by the lib's
+    // popover handling, so it cannot pin this guard.)
+    const prevented = fireEvent.keyDown(screen.getByText('Morning post'), { altKey: true, key: 'a' });
+    expect(prevented).toBe(true);
+  });
+
+  it('does not prevent the browser default on ArrowLeft without Alt over a focused event chip', () => {
+    renderCalendar({ events: [calendarEvent()] });
+    const prevented = fireEvent.keyDown(screen.getByText('Morning post'), { key: 'ArrowLeft' });
+    expect(prevented).toBe(true);
+  });
+
+  it('does not prevent the browser default on Alt+Arrow over a day with no event', () => {
+    renderCalendar({ events: [calendarEvent()] });
+    const prevented = fireEvent.keyDown(screen.getByRole('button', { name: 'Sunday, June 2' }), {
+      altKey: true,
+      key: 'ArrowLeft',
+    });
+    expect(prevented).toBe(true);
+  });
+
+  // The wheel guard is a native capture listener on the month wrapper: a
+  // wheel over a day must never reach the grid cells below it, so the
+  // page scrolls instead of the lib stepping a week.
+  it('stops wheel scroll at the month wrapper before it reaches the grid cells', () => {
+    renderCalendar({ events: [calendarEvent()] });
+    const cell = document.querySelector('[data-date="2030-06-02"]') as HTMLElement;
+    const cellWheel = vi.fn();
+    cell.addEventListener('wheel', cellWheel);
+    const event = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: 120 });
+    screen.getByRole('button', { name: 'Sunday, June 2' }).dispatchEvent(event);
+    expect(cellWheel).not.toHaveBeenCalled();
+    cell.removeEventListener('wheel', cellWheel);
+  });
+
+  it('removes the wheel listener when the calendar unmounts', () => {
+    const { unmount } = renderCalendar();
+    const el = document.querySelector('[data-posts-calendar-month]') as HTMLElement;
+    const removeSpy = vi.spyOn(el, 'removeEventListener');
+    unmount();
+    expect(removeSpy).toHaveBeenCalledWith('wheel', expect.any(Function), { capture: true });
+    removeSpy.mockRestore();
+  });
+
+  // The drag guard reads the press and the trailing click: only a press
+  // that wandered past the threshold counts as a drag.
+  it('treats a press that moved only horizontally as a drag', () => {
+    renderCalendar({ events: [calendarEvent()] });
+    const chip = screen.getByText('Morning post');
+    fireEvent.pointerDown(chip, { pointerId: 1, clientX: 100, clientY: 100, button: 0, isPrimary: true });
+    fireEvent.click(chip, { clientX: 200, clientY: 100 });
+    expect(pushMock).not.toHaveBeenCalled();
+  });
+
+  it('treats a press that moved only vertically as a drag', () => {
+    renderCalendar({ events: [calendarEvent()] });
+    const chip = screen.getByText('Morning post');
+    fireEvent.pointerDown(chip, { pointerId: 1, clientX: 100, clientY: 100, button: 0, isPrimary: true });
+    fireEvent.click(chip, { clientX: 100, clientY: 200 });
+    expect(pushMock).not.toHaveBeenCalled();
+  });
+
+  it('treats a press that moved exactly the threshold as a click', () => {
+    renderCalendar({ events: [calendarEvent()] });
+    const chip = screen.getByText('Morning post');
+    fireEvent.pointerDown(chip, { pointerId: 1, clientX: 100, clientY: 100, button: 0, isPrimary: true });
+    fireEvent.click(chip, { clientX: 104, clientY: 100 });
+    expect(pushMock).toHaveBeenCalledWith('/posts/e1');
+  });
+
+  it('treats a press that moved the threshold backwards as a click', () => {
+    renderCalendar({ events: [calendarEvent()] });
+    const chip = screen.getByText('Morning post');
+    fireEvent.pointerDown(chip, { pointerId: 1, clientX: 100, clientY: 100, button: 0, isPrimary: true });
+    fireEvent.click(chip, { clientX: 96, clientY: 100 });
+    expect(pushMock).toHaveBeenCalledWith('/posts/e1');
+  });
+
+  it('navigates when a dragged press lands on a different event', () => {
+    renderCalendar({
+      events: [
+        calendarEvent(),
+        calendarEvent({ id: 'e2', title: 'Evening post', start: new Date('2030-06-01T18:00:00.000Z'), end: new Date('2030-06-01T18:00:00.000Z') }),
+      ],
+    });
+    fireEvent.pointerDown(screen.getByText('Morning post'), { pointerId: 1, clientX: 100, clientY: 100, button: 0, isPrimary: true });
+    fireEvent.click(screen.getByText('Evening post'), { clientX: 200, clientY: 200 });
+    expect(pushMock).toHaveBeenCalledWith('/posts/e2');
+  });
+
+  it('selects the day when a dragged press lands on a day with no event', () => {
+    const { onSelectDay } = renderCalendar({ events: [calendarEvent()] });
+    fireEvent.pointerDown(screen.getByText('Morning post'), { pointerId: 1, clientX: 100, clientY: 100, button: 0, isPrimary: true });
+    fireEvent.click(screen.getByRole('button', { name: 'Sunday, June 2' }), { clientX: 200, clientY: 200 });
+    expect(onSelectDay).toHaveBeenCalledWith('2030-06-02');
+  });
+
+  // The context-menu guard stops the menu only on an event: a day's menu
+  // must still reach the page.
+  it('lets a context menu opened on a day with no event reach the page', () => {
+    const onContextMenu = vi.fn();
+    render(
+      <div onContextMenu={onContextMenu}>
+        <PostsCalendar
+          events={[calendarEvent()]}
+          date={new Date(2030, 5, 1)}
+          weekStartsOn={0}
+          locale="en"
+          loading={false}
+          todayPressed={false}
+          onSelectDay={vi.fn()}
+          onDateChange={vi.fn()}
+          onMonthNavigate={vi.fn()}
+          onGoToToday={vi.fn()}
+        />
+      </div>,
+    );
+    fireEvent.contextMenu(screen.getByRole('button', { name: 'Sunday, June 2' }));
+    expect(onContextMenu).toHaveBeenCalled();
+  });
+
+  it('stops a context menu opened on an event from reaching the page', () => {
+    const onContextMenu = vi.fn();
+    render(
+      <div onContextMenu={onContextMenu}>
+        <PostsCalendar
+          events={[calendarEvent()]}
+          date={new Date(2030, 5, 1)}
+          weekStartsOn={0}
+          locale="en"
+          loading={false}
+          todayPressed={false}
+          onSelectDay={vi.fn()}
+          onDateChange={vi.fn()}
+          onMonthNavigate={vi.fn()}
+          onGoToToday={vi.fn()}
+        />
+      </div>,
+    );
+    fireEvent.contextMenu(screen.getByText('Morning post'));
+    expect(onContextMenu).not.toHaveBeenCalled();
+  });
+
+  // The read-only chrome: muted grids are inert, chevrons are 40px
+  // targets, the Today control reads its pressed state, and the clock
+  // follows the locale.
+  it('marks the grid non-interactive when muted', () => {
+    renderCalendar({ muted: true });
+    expect(document.querySelector('[data-calendar-card]')?.className.split(/\s+/)).toContain('pointer-events-none');
+  });
+
+  it('keeps the grid interactive when not muted', () => {
+    renderCalendar();
+    expect(document.querySelector('[data-calendar-card]')?.className.split(/\s+/)).not.toContain('pointer-events-none');
+  });
+
+  it('sizes the month chevrons as 40px touch targets', () => {
+    renderCalendar();
+    const prev = screen.getByRole('button', { name: 'posts.calendarPrevMonth' });
+    expect(prev.className.split(/\s+/)).toContain('size-10');
+  });
+
+  it('marks the Today control pressed with the brand fill when today is selected', () => {
+    renderCalendar({ todayPressed: true });
+    const today = screen.getByRole('button', { name: 'posts.calendarGoToToday' });
+    expect(today.getAttribute('aria-pressed')).toBe('true');
+    expect(today.className.split(/\s+/)).toContain('h-10');
+    expect(today.className.split(/\s+/)).toContain('bg-brand');
+  });
+
+  it('marks the Today control unpressed with the outline style when another day is selected', () => {
+    renderCalendar({ todayPressed: false });
+    const today = screen.getByRole('button', { name: 'posts.calendarGoToToday' });
+    expect(today.getAttribute('aria-pressed')).toBe('false');
+    expect(today.className.split(/\s+/)).toContain('border');
+  });
+
+  it('shows 24-hour times in Portuguese', () => {
+    renderCalendar({
+      locale: 'pt',
+      events: [calendarEvent({ start: new Date('2030-06-01T20:00:00.000Z'), end: new Date('2030-06-01T20:00:00.000Z') })],
+    });
+    expect(screen.getByText('20:00')).toBeInTheDocument();
+  });
+
+  it('shows 12-hour times in English', () => {
+    renderCalendar({
+      events: [calendarEvent({ start: new Date('2030-06-01T20:00:00.000Z'), end: new Date('2030-06-01T20:00:00.000Z') })],
+    });
+    expect(screen.getByText('8 PM')).toBeInTheDocument();
+  });
+
+  it('shows no event popover when an event chip is clicked', () => {
+    renderCalendar({ events: [calendarEvent()] });
+    fireEvent.click(screen.getByText('Morning post'));
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('selects the day when its cell, not just its number, is clicked', () => {
+    const { onSelectDay } = renderCalendar();
+    const cell = document.querySelector('[data-date="2030-06-02"]') as HTMLElement;
+    fireEvent.click(cell);
+    expect(onSelectDay).toHaveBeenCalledWith('2030-06-02');
+  });
+
+  it('selects nothing when the calendar card background is clicked', () => {
+    const { onSelectDay } = renderCalendar();
+    const card = document.querySelector('[data-calendar-card]') as HTMLElement;
+    fireEvent.click(card);
+    expect(onSelectDay).not.toHaveBeenCalled();
+  });
+
+  it('ignores cell clicks when muted', () => {
+    const { onSelectDay } = renderCalendar({ muted: true });
+    const cell = document.querySelector('[data-date="2030-06-02"]') as HTMLElement;
+    fireEvent.click(cell);
+    expect(onSelectDay).not.toHaveBeenCalled();
   });
 });
 
