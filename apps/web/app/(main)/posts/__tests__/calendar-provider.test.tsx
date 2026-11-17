@@ -56,6 +56,8 @@ function renderCalendar(props: Record<string, unknown> = {}) {
     onSelectDay: vi.fn(),
     onDateChange: vi.fn(),
     onMonthNavigate: vi.fn(),
+    onWeekNavigate: vi.fn(),
+    onViewChange: vi.fn(),
     onGoToToday: vi.fn(),
   };
   render(

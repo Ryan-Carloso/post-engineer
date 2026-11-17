@@ -1234,9 +1234,9 @@ describe('PostsPage week view', () => {
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'posts.calendarPrevWeek' })).toBeInTheDocument(),
     );
-    const columns = document
-      .querySelector('[data-posts-calendar-week]')
-      ?.querySelectorAll('[role="group"][aria-label]:not([inert])');
+    const grid = document.querySelector('[data-posts-calendar-week]');
+    if (grid === null) throw new Error('week grid not rendered');
+    const columns = grid.querySelectorAll('[role="group"][aria-label]:not([inert])');
     expect(columns).toHaveLength(7);
     fireEvent.click(columns[0]);
     expect(screen.getByText('posts.calendarDayNone')).toBeInTheDocument();
