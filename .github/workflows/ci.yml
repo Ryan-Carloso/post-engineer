@@ -305,16 +305,16 @@ jobs:
         run: uv sync --frozen
 
       - name: Lint
-        run: uv run ruff check app cli.py test
+        run: uv run ruff check app test
 
       - name: Typecheck
-        run: uv run python -m compileall -q app cli.py main.py
+        run: uv run python -m compileall -q app main.py
 
       - name: Mypy (import-not-found fatal, selected codes disabled)
-        run: uv run mypy app cli.py main.py
+        run: uv run mypy app main.py
 
       - name: Import smoke test (catches ModuleNotFoundError from removed deps)
-        run: uv run python -c "import cli, main; from app import asgi; print('imports OK')"
+        run: uv run python -c "import main; from app import asgi; print('imports OK')"
 
       - name: Tests
         run: uv run coverage run -m pytest -q && uv run coverage xml -o coverage.xml
@@ -696,9 +696,37 @@ jobs:
           # storage.buckets and creates policies on storage.objects, which
           # only exist on a real Supabase project.
           psql "postgresql://postgres:postgres@localhost:5432/postgres?sslmode=disable" -v ON_ERROR_STOP=1 <<'SQL'
+          -- Supabase roles and the default GRANT ALL they receive on every
+          -- new table. 066 revokes that grant down to the session columns;
+          -- without the default grant, a forgotten revoke would not show up.
+          do $$
+          begin
+            if not exists (select 1 from pg_roles where rolname = 'anon') then
+              create role anon nologin noinherit;
+            end if;
+            if not exists (select 1 from pg_roles where rolname = 'authenticated') then
+              create role authenticated nologin noinherit;
+            end if;
+            if not exists (select 1 from pg_roles where rolname = 'service_role') then
+              create role service_role nologin noinherit bypassrls;
+            end if;
+          end $$;
+          grant usage on schema public to anon, authenticated, service_role;
+          alter default privileges in schema public
+            grant all on tables to anon, authenticated, service_role;
+          alter default privileges in schema public
+            grant all on sequences to anon, authenticated, service_role;
+          alter default privileges in schema public
+            grant all on functions to anon, authenticated, service_role;
           create schema if not exists auth;
+          grant usage on schema auth to anon, authenticated, service_role;
+          -- Missing setting returns null, matching an anonymous request.
+          -- scripts/db/check-core-tables-rls.sql sets the claim to act as a user.
           create or replace function auth.uid() returns uuid
-            language sql stable as $$ select null::uuid $$;
+            language sql stable as $$
+              select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid
+            $$;
+          grant execute on function auth.uid() to anon, authenticated, service_role;
           create schema if not exists storage;
           create table if not exists storage.buckets (
             id text primary key,
@@ -720,6 +748,14 @@ jobs:
           # uses `supabase link` + `db push --linked`, which negotiates TLS.)
           supabase db push --yes --db-url "postgresql://postgres:postgres@localhost:5432/postgres?sslmode=disable"
           echo "migrations applied cleanly"
+
+      - name: Check core-table RLS privileges
+        run: |
+          set -euo pipefail
+          # authenticated must not write billing columns, must not read
+          # another user's rows, and must still be able to do each session
+          # operation. See scripts/db/check-core-tables-rls.sql.
+          psql "postgresql://postgres:postgres@localhost:5432/postgres?sslmode=disable" -v ON_ERROR_STOP=1 -f scripts/db/check-core-tables-rls.sql
 
       - name: Check the schema snapshot is up to date
         run: |

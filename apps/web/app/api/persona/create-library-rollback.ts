@@ -13,6 +13,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
+import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import {
   IMAGE_BUCKET,
   removeOrphanedUploadPaths,
@@ -23,6 +24,7 @@ import { forwardLibraryImagesError } from './validation-error';
 
 export async function rollbackLibraryCreation(
   supabase: SupabaseClient,
+  userId: string,
   personaId: string,
   photoPathToRollback: string | null,
   added: LibraryImagesError,
@@ -40,10 +42,13 @@ export async function rollbackLibraryCreation(
       route: 'api/persona',
     });
   }
-  const { error: rollbackError } = await supabase
+  // Service role bypasses RLS. userId is the authenticated owner. A cookie
+  // JWT cannot delete the persona row this rollback removes.
+  const { error: rollbackError } = await createSupabaseServiceClient()
     .from('personas')
     .delete()
-    .eq('id', personaId);
+    .eq('id', personaId)
+    .eq('user_id', userId);
   if (rollbackError) {
     logger.error('[api/persona] creation rollback failed', rollbackError);
     if (rowBackedPaths.length > 0) {

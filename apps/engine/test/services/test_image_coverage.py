@@ -2,10 +2,14 @@
 
 The render rule is all-must-survive: any photo skipped at render fails
 the task with images_do_not_cover_audio naming the skip reasons, so the
-agent fixes the photo instead of guessing. Surviving panels stretch
-unconditionally over the coverage window (no thresholds, no warnings).
-Full lip sync stays lenient: the face is on screen the whole time, so a
-skipped photo is a warning there, never a failure.
+agent fixes the photo instead of guessing. Surviving full-frame photos
+are laid out back to back from the coverage start, at most 2s each: a
+photo may start early into the pause before its segment, but it never
+runs past 2s. When the photos run out before the end of the audio the
+task fails with images_do_not_cover_audio naming how many more 2s photos
+the window needs, instead of stretching one photo over the gap. Full lip
+sync stays lenient: the face is on screen the whole time, so a skipped
+photo is a warning there, never a failure.
 """
 
 import pytest
@@ -39,55 +43,76 @@ def test_full_lipsync_has_nothing_to_cover():
     assert image_coverage.coverage_start(segment_panels.FACE_FULL, 7.5) is None
 
 
-def test_photos_stretch_over_the_pauses_from_zero_to_the_end_of_the_audio():
+def test_photos_beyond_two_seconds_fail_naming_how_many_more_are_needed():
     panels = [_full(0, 0.2, 3.9), _full(1, 4.1, 8.0), _full(2, 8.3, 11.5)]
-    covered = image_coverage.extend_over_gaps(panels, 0.0, 12.0)
-    assert [(p.index, p.start, p.end) for p in covered] == [(0, 0.0, 4.1), (1, 4.1, 8.3), (2, 8.3, 12.0)]
+    with pytest.raises(ImagesDoNotCoverAudio) as exc_info:
+        image_coverage.extend_over_gaps(panels, 0.0, 12.0)
+    assert str(exc_info.value) == (
+        "images_do_not_cover_audio: 3 photos cover 6.0s of 12.0s at 2s each; "
+        "need 3 more photos"
+    )
 
 
-def test_a_dropped_photo_is_covered_by_its_neighbour_without_a_warning():
-    # Segment 1 (4.0-8.0) lost its photo: segment 0 runs on until segment 2 starts.
+def test_a_dropped_photo_is_not_covered_by_its_neighbour():
+    # Segment 1 (4.0-8.0) lost its photo: the neighbour stops at 2s and the
+    # task fails instead of holding one photo over the gap.
     panels = [_full(0, 0.0, 4.0), _full(2, 8.0, 12.0)]
-    covered = image_coverage.extend_over_gaps(panels, 0.0, 12.0)
-    assert [(p.index, p.start, p.end) for p in covered] == [(0, 0.0, 8.0), (2, 8.0, 12.0)]
+    with pytest.raises(ImagesDoNotCoverAudio) as exc_info:
+        image_coverage.extend_over_gaps(panels, 0.0, 12.0)
+    assert str(exc_info.value) == (
+        "images_do_not_cover_audio: 2 photos cover 4.0s of 12.0s at 2s each; "
+        "need 4 more photos"
+    )
 
 
-def test_a_dropped_first_photo_is_covered_by_the_next_one_reaching_back_to_the_start():
-    covered = image_coverage.extend_over_gaps([_full(1, 4.0, 12.0)], 0.0, 12.0)
-    assert [(p.start, p.end) for p in covered] == [(0.0, 12.0)]
+def test_a_dropped_first_photo_fails_instead_of_stretching_the_next_one():
+    with pytest.raises(ImagesDoNotCoverAudio) as exc_info:
+        image_coverage.extend_over_gaps([_full(1, 4.0, 12.0)], 0.0, 12.0)
+    assert str(exc_info.value) == (
+        "images_do_not_cover_audio: 1 photo covers 2.0s of 12.0s at 2s each; "
+        "need 5 more photos"
+    )
 
 
-def test_a_dropped_last_photo_is_covered_by_the_previous_one_reaching_to_the_end():
-    covered = image_coverage.extend_over_gaps([_full(0, 0.0, 6.0)], 0.0, 12.0)
-    assert [(p.start, p.end) for p in covered] == [(0.0, 12.0)]
+def test_a_dropped_last_photo_fails_instead_of_stretching_the_previous_one():
+    with pytest.raises(ImagesDoNotCoverAudio) as exc_info:
+        image_coverage.extend_over_gaps([_full(0, 0.0, 6.0)], 0.0, 12.0)
+    assert str(exc_info.value) == (
+        "images_do_not_cover_audio: 1 photo covers 2.0s of 12.0s at 2s each; "
+        "need 5 more photos"
+    )
 
 
-def test_photos_are_sorted_by_time_before_they_are_extended():
-    covered = image_coverage.extend_over_gaps([_full(1, 5.0, 9.0), _full(0, 0.0, 5.0)], 0.0, 9.0)
-    assert [(p.index, p.start, p.end) for p in covered] == [(0, 0.0, 5.0), (1, 5.0, 9.0)]
+def test_photos_are_sorted_by_time_before_they_are_laid_out():
+    covered = image_coverage.extend_over_gaps([_full(1, 2.0, 4.0), _full(0, 0.0, 2.0)], 0.0, 4.0)
+    assert [(p.index, p.start, p.end) for p in covered] == [(0, 0.0, 2.0), (1, 2.0, 4.0)]
 
 
 def test_full_frame_photos_alternate_zooming_in_and_out():
-    panels = [_full(0, 0.0, 3.0), _full(1, 3.0, 6.0), _full(2, 6.0, 9.0)]
-    covered = image_coverage.extend_over_gaps(panels, 0.0, 9.0)
+    panels = [_full(0, 0.0, 2.0), _full(1, 2.0, 4.0), _full(2, 4.0, 6.0)]
+    covered = image_coverage.extend_over_gaps(panels, 0.0, 6.0)
     assert [p.motion for p in covered] == ["in", "out", "in"]
 
 
 def test_framed_hook_panels_keep_their_times_and_never_move():
     hook = _framed(0, 0.5, 6.5)
-    covered = image_coverage.extend_over_gaps([hook, _full(1, 8.0, 12.0)], 7.0, 12.0)
+    covered = image_coverage.extend_over_gaps([hook, _full(1, 8.0, 9.0)], 7.0, 9.0)
     assert covered[0] == hook, "a panel over the face keeps its seconds and gets no zoom"
-    assert (covered[1].start, covered[1].end) == (7.0, 12.0), "coverage starts at the hand-over"
+    assert (covered[1].start, covered[1].end) == (7.0, 9.0), "coverage starts at the hand-over"
 
 
-def test_a_photo_already_starting_before_the_window_keeps_its_earlier_start():
+def test_a_photo_starting_before_the_window_starts_at_the_window():
     covered = image_coverage.extend_over_gaps([_full(0, 1.0, 5.0)], 3.0, 5.0)
-    assert covered[0].start == 1.0
+    assert (covered[0].start, covered[0].end) == (3.0, 5.0)
 
 
-def test_a_photo_spoken_past_the_next_start_keeps_its_own_end():
-    covered = image_coverage.extend_over_gaps([_full(0, 0.0, 5.0), _full(1, 4.5, 9.0)], 0.0, 9.0)
-    assert covered[0].end == 5.0
+def test_overlapping_long_panels_fail_when_they_cannot_cover_the_audio():
+    with pytest.raises(ImagesDoNotCoverAudio) as exc_info:
+        image_coverage.extend_over_gaps([_full(0, 0.0, 5.0), _full(1, 4.5, 9.0)], 0.0, 9.0)
+    assert str(exc_info.value) == (
+        "images_do_not_cover_audio: 2 photos cover 4.0s of 9.0s at 2s each; "
+        "need 3 more photos"
+    )
 
 
 def test_no_surviving_photo_fails_with_the_stable_code():
@@ -111,17 +136,17 @@ def test_the_bare_code_is_unchanged_when_no_detail_is_given():
     assert str(ImagesDoNotCoverAudio()) == "images_do_not_cover_audio"
 
 
-def test_all_surviving_photos_stretch_over_small_gaps():
-    panels = [_full(0, 0.2, 3.9), _full(1, 4.1, 8.0)]
+def test_photos_cover_small_pauses_without_exceeding_two_seconds():
+    panels = [_full(0, 0.2, 1.9), _full(1, 2.1, 4.0)]
     covered = image_coverage.ensure_coverage(
         panels,
         face=segment_panels.FACE_NONE,
         hook_end=0.0,
-        audio_duration=8.0,
+        audio_duration=4.0,
         sent=2,
         skipped=[],
     )
-    assert [(p.start, p.end) for p in covered] == [(0.0, 4.1), (4.1, 8.0)]
+    assert [(p.start, p.end) for p in covered] == [(0.0, 2.0), (2.0, 4.0)]
 
 
 def test_one_skipped_photo_fails_naming_the_counts_and_the_photo():
@@ -200,29 +225,30 @@ def test_zero_sent_photos_report_no_skips():
 
 
 def test_overlay_skips_are_not_lost_photos():
-    panels = [_full(0, 0.0, 4.0)]
+    panels = [_full(0, 0.0, 2.0)]
     covered = image_coverage.ensure_coverage(
         panels,
         face=segment_panels.FACE_NONE,
         hook_end=0.0,
-        audio_duration=4.0,
+        audio_duration=2.0,
         sent=1,
         skipped=["segment 0 image 0 media overlay skipped: overlay font unavailable"],
     )
-    assert [(p.start, p.end) for p in covered] == [(0.0, 4.0)]
+    assert [(p.start, p.end) for p in covered] == [(0.0, 2.0)]
 
 
 def test_framed_hook_panels_pass_through():
     hook = _framed(0, 0.5, 6.5)
     covered = image_coverage.ensure_coverage(
-        [hook, _full(1, 8.0, 12.0)],
+        [hook, _full(1, 8.0, 9.0)],
         face=segment_panels.FACE_HOOK,
         hook_end=7.0,
-        audio_duration=12.0,
+        audio_duration=9.0,
         sent=2,
         skipped=[],
     )
     assert covered[0] == hook, "a panel over the face counts for the hook segment"
+    assert (covered[1].start, covered[1].end) == (7.0, 9.0)
 
 
 def test_full_lipsync_never_fails_even_when_photos_are_skipped():
@@ -251,3 +277,42 @@ def test_full_lipsync_returns_surviving_panels_untouched():
         skipped=[],
     )
     assert covered == [hook]
+
+
+def test_no_full_frame_photo_stays_on_screen_longer_than_two_seconds():
+    panels = [_full(0, 0.0, 1.0), _full(1, 1.2, 2.0), _full(2, 2.1, 3.5), _full(3, 3.6, 4.0)]
+    covered = image_coverage.extend_over_gaps(panels, 0.0, 4.0)
+    assert [(p.start, p.end) for p in covered] == [(0.0, 1.2), (1.2, 2.1), (2.1, 3.6), (3.6, 4.0)]
+    assert all(p.end - p.start <= 2.0 for p in covered)
+
+
+def test_running_out_of_photos_fails_naming_the_missing_count():
+    panels = [_full(0, 0.0, 3.0), _full(1, 3.0, 6.0)]
+    with pytest.raises(ImagesDoNotCoverAudio) as exc_info:
+        image_coverage.ensure_coverage(
+            panels,
+            face=segment_panels.FACE_NONE,
+            hook_end=0.0,
+            audio_duration=6.0,
+            sent=2,
+            skipped=[],
+        )
+    assert str(exc_info.value) == (
+        "images_do_not_cover_audio: 2 photos cover 4.0s of 6.0s at 2s each; "
+        "need 1 more photo"
+    )
+
+
+def test_the_reported_short_fails_with_twelve_photos_for_thirty_five_seconds():
+    # Regression test for the HabitLoom short sJiYU0JVjRo: 12 photos over
+    # 35s of audio held one photo for 6s. At 2s each they cover 24s, so the
+    # task must fail naming the 6 missing photos instead of stretching.
+    starts = [0, 3, 5, 7, 11, 13, 19, 21, 24, 27, 29, 32]
+    ends = [3, 5, 7, 11, 13, 19, 21, 24, 27, 29, 32, 35]
+    panels = [_full(index, start, end) for index, (start, end) in enumerate(zip(starts, ends))]
+    with pytest.raises(ImagesDoNotCoverAudio) as exc_info:
+        image_coverage.extend_over_gaps(panels, 0.0, 35.0)
+    assert str(exc_info.value) == (
+        "images_do_not_cover_audio: 12 photos cover 24.0s of 35.0s at 2s each; "
+        "need 6 more photos"
+    )

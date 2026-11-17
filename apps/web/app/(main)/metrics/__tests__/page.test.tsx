@@ -205,10 +205,10 @@ describe('MetricsPage', () => {
 
     // The list heading renders while loading; wait for the tiles, which
     // only exist once the rows arrive.
-    await waitFor(() => expect(screen.getByText('metrics.statVideos')).toBeInTheDocument());
-    // Totals, not averages: 3 videos, 100 + 300 views, engagement
+    await waitFor(() => expect(screen.getByText('metrics.statMeasurements')).toBeInTheDocument());
+    // Totals, not averages: 3 measurements, 100 + 300 views, engagement
     // 10 + 3 + 1 + 5 + 0 + 0 = 19 (nulls skipped, never counted as 0).
-    expect(screen.getByText('metrics.statVideos')).toBeInTheDocument();
+    expect(screen.getByText('metrics.statMeasurements')).toBeInTheDocument();
     expect(screen.getByText('3')).toBeInTheDocument();
     expect(screen.getByText('400')).toBeInTheDocument();
     expect(screen.getByText('19')).toBeInTheDocument();
@@ -347,9 +347,10 @@ describe('MetricsPage', () => {
   it('labels the three total tiles and dates the data only when an as-of time exists', async () => {
     stubMetricsFetch({ success: true, rows: [row()], truncated: false });
     renderPage();
-    await waitFor(() => expect(screen.getByText('metrics.statVideos')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('metrics.statMeasurements')).toBeInTheDocument());
     expect(screen.getByText('metrics.statTotalViews')).toBeInTheDocument();
     expect(screen.getByText('metrics.statEngagement')).toBeInTheDocument();
+    expect(screen.getByText('metrics.statMeasurementsHint')).toBeInTheDocument();
     expect(screen.getByText('metrics.statEngagementHint')).toBeInTheDocument();
     expect(screen.getByText('metrics.windowCaption')).toBeInTheDocument();
     // No as-of time in this payload: the as-of line stays hidden.
@@ -360,7 +361,7 @@ describe('MetricsPage', () => {
     stubMetricsFetch({ success: true, rows: [], truncated: false });
     renderPage();
     await waitFor(() => expect(screen.getByText('metrics.empty')).toBeInTheDocument());
-    expect(screen.queryByText('metrics.statVideos')).toBeNull();
+    expect(screen.queryByText('metrics.statMeasurements')).toBeNull();
   });
 
   it('shows the applied provider as a chip with the active-count badge, and removes it from the chip', async () => {

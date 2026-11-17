@@ -179,6 +179,44 @@ export const recipesI18nEn = {
   fullSetupExampleInput: 'Starting with zero accounts and no persona.',
   fullSetupExampleOutput:
       'Accounts connected, persona created, script validated, one video published.',
+  abHookTestTitle: 'Test two hooks (A/B)',
+  abHookTestObjective:
+      'Compare two hook styles on the same videos. Faceless is the cheapest test. A variant is the winner only when the label is clear.',
+  abHookTestStep1: 'For creators comparing two hook styles on the same video.',
+  abHookTestStep2:
+      'Faceless is the cheapest test: 1 token per video, created with no persona.',
+  abHookTestStep3:
+      'Create the experiment with 6 pairs. 6 is the smallest target that can ever be clear. A moderate effect needs about 10-12.',
+  abHookTestStep4:
+      "Write both hooks per pair in each variant's style. Only the hook differs inside a pair.",
+  abHookTestStep5:
+      'Wait for publication and metrics, then read the result. Never call a variant the winner unless the label is clear.',
+  abHookTestDeliver1: 'One faceless experiment with two hook variants.',
+  abHookTestDeliver2: 'Pairs of videos at 1 token each, with the same voice on every pair.',
+  abHookTestDeliver3: 'A result that names a winner only when the label is clear.',
+  abHookTestExampleInput: 'A calm hook against a direct hook, faceless, on my niche.',
+  abHookTestExampleOutput:
+      'Experiment with 6 pairs. No winner named unless the label is clear.',
+  storyFirstReelsTitle: 'Story-first Reels',
+  storyFirstReelsObjective:
+      'Write every script as a story first: one tight micro-arc, built to hold watch-through.',
+  storyFirstReelsStep1: 'For any persona, topic, and video type — one story per video.',
+  storyFirstReelsStep2:
+      'It finds the real story first: setup, turning point, payoff.',
+  storyFirstReelsStep3:
+      'It builds the hook from one mechanism that fits, and drafts three to keep the strongest.',
+  storyFirstReelsStep4:
+      'It writes for watch-through: open loop, payoff that cashes the promise, one CTA tied to value.',
+  storyFirstReelsStep5:
+      'Validate, score, confirm, and generate once — same as every prompt.',
+  storyFirstReelsDeliver1:
+      'A story-first script: hook first, then content takes, inside the contract.',
+  storyFirstReelsDeliver2:
+      'A validated, scored script, with the score and every reason shown.',
+  storyFirstReelsDeliver3: 'One video generated and published where you asked.',
+  storyFirstReelsExampleInput: 'HabitLoom, faceless, why the weight comes back after a diet.',
+  storyFirstReelsExampleOutput:
+      'Hook on the regain, content on the hidden cause, CTA to save it — 88 words, 3 segments.',
   stepKeyTitle: 'Create your API key',
   stepKeyHint:
       'It connects your agent to your account. You can create several, one per agent.',

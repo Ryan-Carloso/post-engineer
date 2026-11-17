@@ -17,6 +17,7 @@ import { emitRefundIssued, refundSlotTokens } from '@/lib/billing/refund-tokens'
 import { scrubSecrets } from '@/lib/scrub';
 import { CANCEL_REFUND_REASON, refundsAfterClawback } from './batch-clawback';
 import { parseCancelScheduleQuery } from '@/lib/contracts/schedule';
+import { isUuid } from '@/lib/schedule-slot-id';
 import { removeCancelledMediaImages } from './cancel-media-cleanup';
 import {
   CANCELLABLE_SLOT_STATUSES,
@@ -165,6 +166,15 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
   if (!cancelQuery.ok) return errorResponse(400, cancelQuery.error, 'DELETE /api/schedule');
   const scheduleId = cancelQuery.query.id;
 
+  // A schedule id is a uuid. Anything else (a truncated id, a batch key)
+  // can never match a row, and feeding it to a uuid-typed filter raises
+  // Postgres 22P02 and turns into a 500 — the same class resolveSlotUuid
+  // guards on the slot routes. Treat it as unknown before the scope
+  // lookup, which filters on the same uuid column.
+  if (!isUuid(scheduleId)) {
+    return errorResponse(404, 'Schedule not found.', 'DELETE /api/schedule');
+  }
+
   // A persona-scoped API key may only delete schedules of its own personas.
   // Sessions and unrestricted keys keep the previous behavior (no lookup).
   if (auth.isApiKey === true && Array.isArray(auth.personaIds)) {
@@ -210,7 +220,11 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
   // — that claim is already in flight.
   // One schedule is one generate-and-schedule batch (at most 10 slots), so
   // this select/delete is bounded by the creation route.
-  const { error: slotDeleteError } = await supabase
+  // Service role bypasses RLS. The select above is this user's rows. A cookie
+  // JWT must not delete slots: find_zombie_schedule_candidates refunds a batch
+  // whose slots and generations are gone.
+  const service = createSupabaseServiceClient();
+  const { error: slotDeleteError } = await service
     .from('scheduled_posts')
     .delete()
     .eq('schedule_id', scheduleId)
@@ -431,7 +445,7 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
     });
   }
 
-  const { error: deleteError } = await supabase
+  const { error: deleteError } = await service
     .from('schedules')
     .delete()
     .eq('id', scheduleId)

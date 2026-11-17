@@ -194,7 +194,7 @@ class ResolvePersonaImageFirstPhotoTests(unittest.TestCase):
     """Issue #589: the hook opens with the first photo of the video.
 
     When the job carries segments, their first photo is the lip-sync
-    image — not the persona avatar. Segment-less direct/CLI jobs and
+    image — not the persona avatar. Segment-less direct jobs and
     text-only segments keep the persona photo.
     """
 

@@ -195,8 +195,8 @@ async function getHandler(request: NextRequest) {
 
   // Step 7: persist in Supabase.
   // Both flows resolve to the signed-in session user (the connect-url
-  // fallback only accepts the state owner), so persistence always runs
-  // with the session client (RLS as the user), never the service role.
+  // fallback only accepts the state owner); upsertSocialAccount then writes
+  // with the service client (066 leaves the session client select-only).
   const tokenExpiresAt = new Date(Date.now() + token.expiresIn * 1000);
 
   try {

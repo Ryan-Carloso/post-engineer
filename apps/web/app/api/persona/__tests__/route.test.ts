@@ -123,7 +123,9 @@ function mockSupabase(overrides: {
     })),
     // Creation rollbacks (binding save / library save) delete the persona.
     delete: vi.fn(() => ({
-      eq: vi.fn(async () => ({ error: null })),
+      eq: vi.fn(() => ({
+        eq: vi.fn(async () => ({ error: null })),
+      })),
     })),
   };
 
@@ -1078,6 +1080,7 @@ function mockSupabaseForDelete(deleteError: { code?: string; message: string } |
     })),
   };
   vi.mocked(createSupabaseServerClient).mockResolvedValue(client as never);
+  vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
   vi.mocked(requireSupabaseSession).mockResolvedValue({
     auth: { userId: USER_ID, accessToken: 'cookie-token' },
     error: null,
@@ -1123,7 +1126,9 @@ function mockSupabaseForPatch(overrides: PatchOverrides = {}) {
     update: vi.fn((values: Record<string, unknown>) => {
       updated.push(values);
       return {
-        eq: vi.fn(async () => ({ error: overrides.updateError ?? null })),
+        eq: vi.fn(() => ({
+          eq: vi.fn(async () => ({ error: overrides.updateError ?? null })),
+        })),
       };
     }),
   };
@@ -1140,6 +1145,7 @@ function mockSupabaseForPatch(overrides: PatchOverrides = {}) {
   };
 
   vi.mocked(createSupabaseServerClient).mockResolvedValue(client as never);
+  vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
   vi.mocked(requireSupabaseSession).mockResolvedValue({
     auth: { userId: USER_ID, accessToken: 'cookie-token' },
     error: null,
@@ -1781,6 +1787,7 @@ describe('DELETE /api/persona', () => {
       }),
     };
     vi.mocked(createSupabaseServerClient).mockResolvedValue(client as never);
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
     vi.mocked(requireSupabaseSession).mockResolvedValue({
       auth: { userId: USER_ID, accessToken: 'cookie-token' },
       error: null,
@@ -1840,6 +1847,7 @@ describe('DELETE /api/persona', () => {
       }),
     };
     vi.mocked(createSupabaseServerClient).mockResolvedValue(client as never);
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
     vi.mocked(requireSupabaseSession).mockResolvedValue({
       auth: { userId: USER_ID, accessToken: 'cookie-token' },
       error: null,

@@ -1,8 +1,11 @@
-import { describe, it, expect, vi } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 vi.mock('@/lib/logger', () => ({ logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn() } }));
+vi.mock('@/lib/analytics', () => ({ trackApiEvent: vi.fn(), trackApiEventAs: vi.fn() }));
 
+import { trackApiEvent, trackApiEventAs } from '@/lib/analytics';
+import { EXPERIMENT_VIDEO_LINKED_EVENT } from '../experiment-link-telemetry';
 import { buildPairFacts, checkExperimentLink, ExperimentLinkSchema, pairMismatch, verifyExperimentPairAfterInsert, type PairFacts } from '../experiment-link';
 import type { PersonaPrep } from '../persona-prep';
 
@@ -349,6 +352,79 @@ describe('verifyExperimentPairAfterInsert', () => {
     await expect(
       verify({ slots: { data: [OWN_SLOT, PARTNER_SLOT], error: null }, schedule: { data: null, error: null } }).promise,
     ).resolves.toMatchObject({ ok: false, status: 500 });
+  });
+
+  describe('experiment_video_linked', () => {
+    beforeEach(() => {
+      vi.mocked(trackApiEvent).mockClear();
+      vi.mocked(trackApiEventAs).mockClear();
+    });
+
+    function linkedCall(): Record<string, unknown> | undefined {
+      const call = vi.mocked(trackApiEventAs).mock.calls.find((entry) => entry[1] === EXPERIMENT_VIDEO_LINKED_EVENT);
+      // Attributed to the caller, so the experiments funnel joins it to
+      // the same person as experiments (action: create) and results.
+      expect(call?.[0]).toBe(USER_ID);
+      return call?.[2];
+    }
+
+    it('emits after a passing re-check, with pair_complete false when the partner slot is absent', async () => {
+      await expect(verify({ slots: { data: [OWN_SLOT], error: null } }).promise).resolves.toEqual({ ok: true });
+      expect(vi.mocked(trackApiEventAs)).toHaveBeenCalledTimes(1);
+      expect(trackApiEvent).not.toHaveBeenCalled();
+      expect(linkedCall()).toEqual({
+        experiment_id: EXPERIMENT_ID,
+        variant_id: 'hook-aggressive',
+        pair: 1,
+        faceless: false,
+        pair_complete: false,
+        source: 'generate',
+      });
+    });
+
+    it('sets pair_complete when both variants have a slot, and faceless from the video type', async () => {
+      const facelessPartner = { ...PARTNER_SLOT, video_type: 'faceless' };
+      const facelessOwn = { ...OWN_SLOT, video_type: 'faceless' };
+      await expect(
+        verify(
+          { slots: { data: [facelessOwn, facelessPartner], error: null }, schedule: PARTNER_SCHEDULE },
+          { facts: facts({ videoType: 'faceless' }) },
+        ).promise,
+      ).resolves.toEqual({ ok: true });
+      expect(linkedCall()).toEqual({
+        experiment_id: EXPERIMENT_ID,
+        variant_id: 'hook-aggressive',
+        pair: 1,
+        faceless: true,
+        pair_complete: true,
+        source: 'generate',
+      });
+      const serialized = JSON.stringify(linkedCall());
+      expect(serialized).not.toContain('Squat form');
+      expect(serialized).not.toContain('Stop doing squats');
+      expect(serialized).not.toContain('Calm');
+    });
+
+    it('does not emit when the re-check fails or when only the pre-charge check ran', async () => {
+      const mismatch = { data: { ...PARTNER_SCHEDULE.data, post_niche: 'cooking' }, error: null };
+      await expect(
+        verify({ slots: { data: [OWN_SLOT, PARTNER_SLOT], error: null }, schedule: mismatch }).promise,
+      ).resolves.toMatchObject({ ok: false, status: 400 });
+      await expect(verify({ slots: { data: null, error: { message: 'boom' } } }).promise).resolves.toMatchObject({ ok: false });
+      const checked = supabaseMock({
+        experiment: OK_EXPERIMENT,
+        variants: OK_VARIANTS,
+        slots: { data: [], error: null },
+      });
+      await checkExperimentLink(checked.client, {
+        link: { experimentId: EXPERIMENT_ID, variantId: 'hook-aggressive', pair: 1 },
+        userId: USER_ID,
+        personaId: 'persona-1',
+        replayScheduleId: SCHEDULE_ID,
+        facts: facts(),
+      });
+      expect(trackApiEventAs).not.toHaveBeenCalled();
+    });
   });
 });
 

@@ -183,7 +183,7 @@ The server offers **16 intent tools**, not one tool per API endpoint. A tool is 
 | Tool | Actions | What it is for |
 |---|---|---|
 | `generate_video` | — | Generate and schedule one video, or a batch of 2-12 (every 6 face videos, the cheapest is free). `persona` and `accounts` by name or id; the result echoes what was resolved. |
-| `video_tasks` | `status`, `list_generations`, `get_generation` | Follow videos: `status` takes up to 12 `taskIds`; `waitSeconds` 0 is a snapshot, more blocks until they finish. |
+| `video_tasks` | `status`, `list_generations`, `get_generation` | Follow videos: for the final outcome, `status` sets `waitSeconds` above 0 and blocks (up to 12 `taskIds`). `waitSeconds` 0 is only a progress snapshot: wait at least `nextPollInSeconds`. |
 | `cancel_video` | — | Cancel a video that is still generating. Separate so a client can allow status without cancel. |
 | `personas` | `list`, `get`, `create`, `update`, `delete` | Personas. `delete` previews first and needs the `confirmToken` of that preview to delete. |
 | `persona_media` | `list_faces`, `list_images`, `add_image`, `update_image`, `remove_image` | Stock faces and a persona's image library. |
@@ -281,4 +281,4 @@ objective). The MCP needs no change: it serves whatever the web hub lists.
 
 - Platform: https://post-engineer.com/
 - API keys: https://post-engineer.com/recipes
-- Recipes: [docs/recipes/daily-news.md](../../docs/recipes/daily-news.md) (daily news becomes a video), [docs/recipes/place-spotlight.md](../../docs/recipes/place-spotlight.md) (place spotlight becomes a video), [docs/recipes/subject-spotlight.md](../../docs/recipes/subject-spotlight.md) (subject spotlight becomes a video), [docs/recipes/last-30-days.md](../../docs/recipes/last-30-days.md) (last 30 days become a video), [docs/recipes/multi-rede.md](../../docs/recipes/multi-rede.md) (one week, one video per network) and [docs/recipes/viral-shorts.md](../../docs/recipes/viral-shorts.md) (a viral video becomes your Short)
+- Recipes: [docs/recipes/daily-news.md](../../docs/recipes/daily-news.md) (daily news becomes a video), [docs/recipes/place-spotlight.md](../../docs/recipes/place-spotlight.md) (place spotlight becomes a video), [docs/recipes/subject-spotlight.md](../../docs/recipes/subject-spotlight.md) (subject spotlight becomes a video), [docs/recipes/last-30-days.md](../../docs/recipes/last-30-days.md) (last 30 days become a video), [docs/recipes/multi-rede.md](../../docs/recipes/multi-rede.md) (one week, one video per network), [docs/recipes/viral-shorts.md](../../docs/recipes/viral-shorts.md) (a viral video becomes your Short), [docs/recipes/ab-hook-test.md](../../docs/recipes/ab-hook-test.md) (test two hooks) and [docs/recipes/story-first-reels.md](../../docs/recipes/story-first-reels.md) (write scripts story-first)

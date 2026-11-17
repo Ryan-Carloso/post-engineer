@@ -35,8 +35,8 @@ Docker (CPU): `docker compose up -d --build` (service `engine`,
 
 ```bash
 uv run pytest -q                          # test suite
-uv run ruff check app cli.py test # lint
-uv run python -m compileall -q app cli.py main.py  # typecheck (compile check)
+uv run ruff check app test # lint
+uv run python -m compileall -q app main.py  # typecheck (compile check)
 ```
 
 From the repo root these run via Nx: `pnpm test`, `pnpm lint`, `pnpm typecheck`.

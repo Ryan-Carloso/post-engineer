@@ -29,8 +29,6 @@ from app.models.schema import (
     TaskQueryResponse,
     TaskResponse,
     TaskVideoRequest,
-    VideoMaterialUploadResponse,
-    VideoMaterialRetrieveResponse
 )
 from app.services import state as sm, task as tm
 from app.services import video_storage
@@ -55,7 +53,6 @@ def _public_task_view(task: dict[str, object]) -> dict[str, object]:
 # Upload size caps: the handlers stream uploads in chunks instead of
 # buffering the whole body in RAM.
 _BGM_MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
-_VIDEO_MATERIAL_MAX_UPLOAD_BYTES = 500 * 1024 * 1024  # 500 MB
 
 # Auth dependency
 # router = new_router(dependencies=[Depends(base.verify_token)])
@@ -609,67 +606,6 @@ def upload_bgm_file(request: Request, file: UploadFile = File(...)):
         "", status_code=400, message=f"{request_id}: Only *.mp3 files can be uploaded"
     )
 
-@router.get(
-    "/video_materials", response_model=VideoMaterialRetrieveResponse, summary="Retrieve local video materials"
-)
-def get_video_materials_list(request: Request):
-    allowed_suffixes = ("mp4", "mov", "avi", "flv", "mkv", "jpg", "jpeg", "png")
-    local_videos_dir = utils.storage_dir("local_videos", create=True)
-    files = []
-    for suffix in allowed_suffixes:
-        files.extend(glob.glob(os.path.join(local_videos_dir, f"*.{suffix}")))
-    # Filesystem enumeration order is unstable; returning it directly would
-    # make "sequential concat" behave differently across machines and runs.
-    # Sort by filename so the server-side order is at least predictable.
-    files.sort(key=lambda file_path: os.path.basename(file_path).lower())
-    video_materials_list = []
-    for file in files:
-        filename = os.path.basename(file)
-        video_materials_list.append(
-            {
-                "name": filename,
-                "size": os.path.getsize(file),
-                # Like BGM, return only the filename; it is resolved inside the
-                # local_videos allowlist directory at task creation, so the
-                # API never leaks host absolute paths.
-                "file": filename,
-            }
-        )
-    response = {"files": video_materials_list}
-    return utils.get_response(200, response)
-
-
-@router.post(
-    "/video_materials",
-    response_model=VideoMaterialUploadResponse,
-    summary="Upload the video material file to the local videos directory",
-)
-def upload_video_material_file(request: Request, file: UploadFile = File(...)):
-    request_id = base.get_task_id(request)
-    safe_filename = _sanitize_upload_filename(file.filename, request_id)
-    # check file ext
-    allowed_suffixes = ("mp4", "mov", "avi", "flv", "mkv", "jpg", "jpeg", "png")
-    normalized_filename = safe_filename.lower()
-    # Validate by lowercase extension, so uppercase suffixes like .MOV work.
-    if normalized_filename.endswith(allowed_suffixes):
-        local_videos_dir = utils.storage_dir("local_videos", create=True)
-        save_path = os.path.join(local_videos_dir, safe_filename)
-        # Stream the upload with a 500 MB cap instead of buffering the whole
-        # body in RAM; over-limit uploads get 413 and leave no partial file.
-        try:
-            upload_limits.save_upload_stream(
-                file, save_path, max_bytes=_VIDEO_MATERIAL_MAX_UPLOAD_BYTES
-            )
-        except upload_limits.UploadTooLargeError as exc:
-            raise HttpException(
-                request_id, status_code=413, message=f"{request_id}: {exc}"
-            ) from exc
-        response = {"file": safe_filename}
-        return utils.get_response(200, response)
-
-    raise HttpException(
-        "", status_code=400, message=f"{request_id}: Only files with extensions {', '.join(allowed_suffixes)} can be uploaded"
-    )
 
 @router.get("/stream/{file_path:path}")
 async def stream_video(request: Request, file_path: str):

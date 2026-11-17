@@ -13,6 +13,8 @@ describe('prompts hub data', () => {
       'multi-rede',
       'viral-shorts',
       'full-setup',
+      'ab-hook-test',
+      'story-first-reels',
     ]);
     for (const prompt of PROMPTS) {
       expect(prompt.titleKey).toMatch(/^recipes\./);
@@ -175,7 +177,7 @@ describe('prompts hub data', () => {
     expect(text).toContain('lives one hour');
   });
 
-  it('adds full-setup as the last recipe entry with the compose icon', () => {
+  it('keeps full-setup with the compose icon and recipe kind', () => {
     expect(PROMPTS.map((prompt) => prompt.slug)).toEqual([
       'daily-news',
       'place-spotlight',
@@ -185,6 +187,8 @@ describe('prompts hub data', () => {
       'multi-rede',
       'viral-shorts',
       'full-setup',
+      'ab-hook-test',
+      'story-first-reels',
     ]);
     const fullSetup = getPrompt('full-setup');
     if (fullSetup === undefined) {
@@ -530,5 +534,132 @@ describe('prompts hub data', () => {
     ].map((needle) => text.indexOf(needle));
     expect(order.every((i) => i >= 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
+  });
+
+  it('adds ab-hook-test before story-first-reels and describes only the experiment actions that exist', () => {
+    expect(PROMPTS.map((prompt) => prompt.slug).at(-2)).toBe('ab-hook-test');
+    const entry = getPrompt('ab-hook-test');
+    if (entry === undefined) {
+      throw new Error('ab-hook-test prompt entry is missing');
+    }
+    expect(entry.icon).toBe('compose');
+    expect(entry.kindKey).toBe('recipes.kindRecipe');
+    expect(entry.titleKey).toBe('recipes.abHookTestTitle');
+    expect(entry.objectiveKey).toBe('recipes.abHookTestObjective');
+    expect(entry.stepKeys).toEqual([
+      'recipes.abHookTestStep1',
+      'recipes.abHookTestStep2',
+      'recipes.abHookTestStep3',
+      'recipes.abHookTestStep4',
+      'recipes.abHookTestStep5',
+    ]);
+    expect(entry.deliverKeys).toEqual([
+      'recipes.abHookTestDeliver1',
+      'recipes.abHookTestDeliver2',
+      'recipes.abHookTestDeliver3',
+    ]);
+    expect(entry.exampleInputKey).toBe('recipes.abHookTestExampleInput');
+    expect(entry.exampleOutputKey).toBe('recipes.abHookTestExampleOutput');
+    expect(entry.docHref).toEqual(
+      'https://github.com/Ryan-Carloso/post-engineer/blob/main/docs/recipes/ab-hook-test.md',
+    );
+    const baseText = SHARED_PROMPT_BASE.join('\n');
+    expect(entry.prompt.startsWith(baseText)).toBe(true);
+    const text = entry.prompt.slice(baseText.length + 2);
+    const positions = [
+      'experiments (action: create)',
+      'targetPairs 6',
+      'experiments (action: add_pair)',
+      'next free pair number',
+      'experiments (action: list)',
+      'experiments (action: results)',
+    ].map((needle) => text.indexOf(needle));
+    expect(positions.every((index) => index >= 0)).toBe(true);
+    expect([...positions].sort((a, b) => a - b)).toEqual(positions);
+    expect(text).toContain('no persona');
+    expect(text).toContain('1 token per video');
+    expect(text).toContain("options.videoType 'faceless'");
+    expect(text).toContain('same voiceId');
+    expect(text).toContain('smallest target that can ever be clear');
+    expect(text).toContain('10-12');
+    expect(text).toContain("each variant's style");
+    expect(text).toContain('Only the hook differs inside a pair');
+    expect(text).toContain('Wait for publication and metrics');
+    expect(text).toContain('unless the label is clear');
+    expect(text).toContain('never generate the variants by hand');
+    expect(text).not.toContain('add_pairs');
+    expect(text).not.toContain('attach');
+    expect(text).not.toContain('nextStep');
+    expect(text).not.toContain('CTA variable');
+  });
+
+  it('adds story-first-reels last with the compose icon and prompt kind', () => {
+    expect(PROMPTS.map((prompt) => prompt.slug).at(-1)).toBe('story-first-reels');
+    const entry = getPrompt('story-first-reels');
+    if (entry === undefined) {
+      throw new Error('story-first-reels prompt entry is missing');
+    }
+    expect(entry.icon).toBe('compose');
+    expect(entry.kindKey).toBe('recipes.kindPrompt');
+    expect(entry.titleKey).toBe('recipes.storyFirstReelsTitle');
+    expect(entry.objectiveKey).toBe('recipes.storyFirstReelsObjective');
+    expect(entry.stepKeys).toEqual([
+      'recipes.storyFirstReelsStep1',
+      'recipes.storyFirstReelsStep2',
+      'recipes.storyFirstReelsStep3',
+      'recipes.storyFirstReelsStep4',
+      'recipes.storyFirstReelsStep5',
+    ]);
+    expect(entry.deliverKeys).toEqual([
+      'recipes.storyFirstReelsDeliver1',
+      'recipes.storyFirstReelsDeliver2',
+      'recipes.storyFirstReelsDeliver3',
+    ]);
+    expect(entry.exampleInputKey).toBe('recipes.storyFirstReelsExampleInput');
+    expect(entry.exampleOutputKey).toBe('recipes.storyFirstReelsExampleOutput');
+    expect(entry.docHref).toEqual(
+      'https://github.com/Ryan-Carloso/post-engineer/blob/main/docs/recipes/story-first-reels.md',
+    );
+    const baseText = SHARED_PROMPT_BASE.join('\n');
+    expect(entry.prompt.startsWith(baseText)).toBe(true);
+  });
+
+  it('orders the story-first flow: inputs, story, hook mechanisms, watch-through, voice, validate, generate', () => {
+    // The composed prompt starts with the shared base; the flow order below
+    // is checked on the specific part only, after stripping that base prefix.
+    const fullText = getPrompt('story-first-reels')?.prompt ?? '';
+    const baseText = SHARED_PROMPT_BASE.join('\n');
+    expect(fullText.startsWith(baseText)).toBe(true);
+    const text = fullText.slice(baseText.length + 2);
+    const positions = [
+      'Ask me the persona, the topic, and the video type',
+      'Find the real story first',
+      'setup, turning point, payoff',
+      'Build the hook from one mechanism',
+      'Draft three hooks',
+      'Write for watch-through',
+      'Open a loop early',
+      'echo one word from the hook',
+      'Voice: direct, plain spoken sentences',
+      'If a line sounds written rather than spoken',
+      'check_script (action: validate)',
+      'check_script (action: score)',
+      'generate_video',
+      'video_tasks (action: status)',
+    ].map((needle) => text.indexOf(needle));
+    expect(positions.every((i) => i >= 0)).toBe(true);
+    expect([...positions].sort((a, b) => a - b)).toEqual(positions);
+    expect(text).toContain('one emotion only');
+    expect(text).toContain('The viewer is the hero');
+    expect(text).toContain('Never fabricate a story or a testimonial');
+    expect(text).toContain('who would DM this to whom, and why');
+    expect(text).toContain('never a rote "like and subscribe"');
+    expect(text).toContain('wait for my yes');
+    // Generalized: the winning test brief (HabitLoom, the diet topic) must
+    // not leak into the prompt — it takes persona, topic, and video type
+    // as inputs instead.
+    expect(text).not.toContain('HabitLoom');
+    expect(text).not.toContain('why you regain weight after a diet');
+    expect(text).not.toContain('issue #');
   });
 });

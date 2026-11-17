@@ -4,6 +4,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('@/lib/supabase/server', () => ({
   createSupabaseServerClient: vi.fn(),
 }));
+// Persona row writes run on the service client after the ownership check
+// (migration 066 leaves the session client select-only on personas).
+vi.mock('@/lib/supabase/service', () => ({
+  createSupabaseServiceClient: vi.fn(),
+}));
 vi.mock('@/lib/request-auth', () => ({
   requireSupabaseSession: vi.fn(),
 }));
@@ -23,6 +28,7 @@ vi.mock('@/lib/voice-catalog-fetch', () => ({
 
 import { PATCH, POST } from '../route';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { restorePinnedHttp, stubPinnedHttp } from '@/test/stub-pinned-http';
@@ -84,6 +90,7 @@ describe('POST/PATCH personaWrite coverage', () => {
 
   it('rolls back the ingested photo when library add fails after insert', async () => {
     const removed: string[][] = [];
+    const rollbackEq: Array<[string, string]> = [];
     const chain = (result: unknown) => {
       const node: Record<string, ReturnType<typeof vi.fn>> = {
         select: vi.fn(),
@@ -116,7 +123,19 @@ describe('POST/PATCH personaWrite coverage', () => {
                 single: vi.fn(async () => ({ data: { id: 'persona-uuid-1' }, error: null })),
               })),
             })),
-            delete: vi.fn(() => chain({ error: null })),
+            delete: vi.fn(() => ({
+              eq: vi.fn((col: string, val: string) => {
+                rollbackEq.push([col, val]);
+                return {
+                  eq: vi.fn((col2: string, val2: string) => {
+                    rollbackEq.push([col2, val2]);
+                    return Promise.resolve({ error: null });
+                  }),
+                  then: (resolve: (v: unknown) => void) => resolve({ error: null }),
+                };
+              }),
+              then: (resolve: (v: unknown) => void) => resolve({ error: null }),
+            })),
             // Issue #572: the binding save checks persona ownership.
             select: vi.fn(() => ({
               eq: vi.fn(() => ({
@@ -164,6 +183,7 @@ describe('POST/PATCH personaWrite coverage', () => {
       },
     };
     vi.mocked(createSupabaseServerClient).mockResolvedValue(client as never);
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
     stubPinnedHttp(200, PNG_BYTES);
     const form = new FormData();
     form.append('name', 'Remote');
@@ -174,6 +194,10 @@ describe('POST/PATCH personaWrite coverage', () => {
     const res = await POST(new Request('http://localhost/api/persona', { method: 'POST', body: form }));
     expect(res.status).toBe(500);
     expect(removed.some((paths) => paths.some((path) => path.endsWith('/photo.png')))).toBe(true);
+    expect(client.from).toHaveBeenCalledWith('personas');
+    expect(rollbackEq).toContainEqual(['id', 'persona-uuid-1']);
+    expect(rollbackEq).toContainEqual(['user_id', USER_ID]);
+    expect(createSupabaseServiceClient).toHaveBeenCalled();
   });
 
   it('removes photoPathToRollback when the persona insert fails', async () => {
@@ -197,6 +221,7 @@ describe('POST/PATCH personaWrite coverage', () => {
       },
     };
     vi.mocked(createSupabaseServerClient).mockResolvedValue(client as never);
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
     stubPinnedHttp(200, PNG_BYTES);
     const form = new FormData();
     form.append('name', 'Remote');

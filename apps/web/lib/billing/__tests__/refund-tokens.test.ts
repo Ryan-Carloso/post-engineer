@@ -64,9 +64,11 @@ describe('emitRefundIssued', () => {
   });
 
   it('scrubs credential-shaped fragments out of the ids before emitting', () => {
-    // The cancel route's scheduleId comes straight off the query string,
-    // so the funnel must scrub it — including inside batch_generation_id,
-    // which carries the same id after `batch:`.
+    // The helper's id inputs are plain strings, so the funnel must scrub
+    // them — including inside batch_generation_id, which carries the same
+    // id after `batch:`. The cancel route validates the schedule uuid
+    // before this point, but the scrub is defense-in-depth for any caller
+    // handing over a request-derived value.
     emitRefundIssued('user-1', {
       kind: 'schedule_cancelled',
       amount: 2,

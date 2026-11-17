@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ApiError } from '../errors.js';
 import type { PostEngineerClient } from '../client.js';
 import type { McpToolResponse } from '../tools-call.js';
+import { nextPollInSeconds } from '../progress-poll-hint.js';
 import { WaitForVideoTasksSchema, handleWaitForVideoTasks } from '../video-task-tools.js';
 import type { ResponseOf } from '../contracts/endpoint.js';
 import { getVideoStatus } from '../contracts/video-tasks.js';
@@ -171,6 +172,7 @@ describe('wait_for_video_tasks', () => {
       stage: 'audio',
       error: null,
       postUrl: null,
+      nextPollInSeconds: nextPollInSeconds(4, 42),
     });
   });
 

@@ -4,7 +4,7 @@ const captureAs = vi.hoisted(() => vi.fn());
 const getPostHogServer = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/posthog-server', () => ({ getPostHogServer }));
 
-import { trackMcpToolCall } from '../mcp-tool-telemetry';
+import { noteMcpToolCaller, recordMcpToolCall } from '../mcp-tool-telemetry';
 import { PROMPTS } from '@/app/recipes/prompts';
 
 const CALL_ID = '0b9f6a52-2f43-4c8e-9a51-6f0d1c2e3a4b';
@@ -13,7 +13,12 @@ function mcpRequest(headers: Record<string, string>, url = 'https://post-enginee
   return new Request(url, { method: 'GET', headers });
 }
 
-describe('trackMcpToolCall', () => {
+function record(request: Request, auth: 'api_key' | 'oauth' = 'api_key', status = 200): void {
+  noteMcpToolCaller(request, 'user-1', auth);
+  recordMcpToolCall(request, status);
+}
+
+describe('mcp_tool_called', () => {
   beforeEach(() => {
     captureAs.mockReset();
     getPostHogServer.mockReset();
@@ -26,7 +31,7 @@ describe('trackMcpToolCall', () => {
       'x-mcp-call-id': CALL_ID,
       'x-mcp-version': '1.42.0',
     });
-    trackMcpToolCall(request, 'user-1', 'api_key');
+    record(request);
     expect(captureAs).toHaveBeenCalledTimes(1);
     expect(captureAs).toHaveBeenCalledWith('user-1', 'mcp_tool_called', {
       tool: 'personas',
@@ -36,19 +41,21 @@ describe('trackMcpToolCall', () => {
       method: 'GET',
       // The query string never reaches telemetry.
       path: '/api/persona/list',
+      status: 200,
+      ok: true,
     });
   });
 
   it('records the action of an action tool next to the tool name, and ignores a malformed one', () => {
-    trackMcpToolCall(mcpRequest({ 'x-mcp-tool': 'personas', 'x-mcp-action': 'create' }), 'user-1', 'api_key');
+    record(mcpRequest({ 'x-mcp-tool': 'personas', 'x-mcp-action': 'create' }));
     expect(captureAs.mock.calls[0]?.[2]).toMatchObject({ tool: 'personas', action: 'create' });
     captureAs.mockReset();
-    trackMcpToolCall(mcpRequest({ 'x-mcp-tool': 'personas', 'x-mcp-action': 'Create; DROP' }), 'user-1', 'api_key');
+    record(mcpRequest({ 'x-mcp-tool': 'personas', 'x-mcp-action': 'Create; DROP' }));
     expect(captureAs.mock.calls[0]?.[2]).not.toHaveProperty('action');
   });
 
   it('records no action for a tool without actions', () => {
-    trackMcpToolCall(mcpRequest({ 'x-mcp-tool': 'generate_video' }), 'user-1', 'api_key');
+    record(mcpRequest({ 'x-mcp-tool': 'generate_video' }));
     expect(captureAs.mock.calls[0]?.[2]).not.toHaveProperty('action');
   });
 
@@ -59,7 +66,7 @@ describe('trackMcpToolCall', () => {
     ['a letter-initial uuid', '/api/persona/video-status/a1b2c3d4-2f43-4c8e-9a51-6f0d1c2e3a4b'],
     ['a malformed percent-encoding', '/api/prompts/%E0%A4%A'],
   ])('replaces a dynamic path segment carrying %s with :param', (_label, path) => {
-    trackMcpToolCall(mcpRequest({ 'x-mcp-tool': 'prompts' }, `https://post-engineer.test${path}`), 'user-1', 'api_key');
+    record(mcpRequest({ 'x-mcp-tool': 'prompts' }, `https://post-engineer.test${path}`));
     const properties = captureAs.mock.calls[0]?.[2] as Record<string, unknown>;
     const expected = path.slice(0, path.lastIndexOf('/') + 1) + ':param';
     expect(properties.path).toBe(expected);
@@ -67,25 +74,21 @@ describe('trackMcpToolCall', () => {
   });
 
   it('redacts a credential that looks like a static segment (scrubber layer)', () => {
-    trackMcpToolCall(
-      mcpRequest({ 'x-mcp-tool': 'prompts' }, 'https://post-engineer.test/api/prompts/sk-abcdefghijklmnopqrstuvwxyz'),
-      'user-1',
-      'api_key',
+    record(
+      mcpRequest({ 'x-mcp-tool': 'prompts' }, 'https://post-engineer.test/api/prompts/sk-abcdefghijklmnopqrstuvwxyz')
     );
     expect(captureAs.mock.calls[0]?.[2]).toMatchObject({ path: '/api/prompts/[redacted]' });
   });
 
   it('keeps a static slug segment readable', () => {
-    trackMcpToolCall(
-      mcpRequest({ 'x-mcp-tool': 'prompts' }, 'https://post-engineer.test/api/prompts/daily-news'),
-      'user-1',
-      'api_key',
+    record(
+      mcpRequest({ 'x-mcp-tool': 'prompts' }, 'https://post-engineer.test/api/prompts/daily-news')
     );
     expect(captureAs.mock.calls[0]?.[2]).toMatchObject({ path: '/api/prompts/daily-news' });
   });
 
   it('records nothing without the tool header', () => {
-    trackMcpToolCall(mcpRequest({ 'x-mcp-version': '1.42.0' }), 'user-1', 'oauth');
+    record(mcpRequest({ 'x-mcp-version': '1.42.0' }), 'oauth');
     expect(captureAs).not.toHaveBeenCalled();
   });
 
@@ -96,14 +99,13 @@ describe('trackMcpToolCall', () => {
     ['over 64 chars', `a${'b'.repeat(64)}`],
     ['an empty value', ''],
   ])('records nothing for a tool header with %s', (_label, tool) => {
-    trackMcpToolCall(mcpRequest({ 'x-mcp-tool': tool }), 'user-1', 'api_key');
+    record(mcpRequest({ 'x-mcp-tool': tool }));
     expect(captureAs).not.toHaveBeenCalled();
   });
 
   it('drops a malformed call id or version but still records the tool', () => {
-    trackMcpToolCall(
+    record(
       mcpRequest({ 'x-mcp-tool': 'prompts', 'x-mcp-call-id': 'not-a-uuid', 'x-mcp-version': 'latest' }),
-      'user-1',
       'oauth',
     );
     expect(captureAs).toHaveBeenCalledWith('user-1', 'mcp_tool_called', {
@@ -111,21 +113,44 @@ describe('trackMcpToolCall', () => {
       auth_method: 'oauth',
       method: 'GET',
       path: '/api/persona/list',
+      status: 200,
+      ok: true,
     });
+  });
+
+  it('records status and ok false on a 4xx and on a 500', () => {
+    record(mcpRequest({ 'x-mcp-tool': 'personas' }), 'api_key', 409);
+    expect(captureAs.mock.calls[0]?.[2]).toMatchObject({ status: 409, ok: false, tool: 'personas' });
+    captureAs.mockReset();
+    record(mcpRequest({ 'x-mcp-tool': 'personas' }), 'api_key', 500);
+    expect(captureAs.mock.calls[0]?.[2]).toMatchObject({ status: 500, ok: false });
+  });
+
+  it('records nothing when the caller was never noted', () => {
+    recordMcpToolCall(mcpRequest({ 'x-mcp-tool': 'personas' }), 200);
+    recordMcpToolCall(undefined, 500);
+    expect(captureAs).not.toHaveBeenCalled();
   });
 
   it('records one event per request even when auth runs twice for it', () => {
     const request = mcpRequest({ 'x-mcp-tool': 'personas' });
-    trackMcpToolCall(request, 'user-1', 'api_key');
-    trackMcpToolCall(request, 'user-1', 'api_key');
+    noteMcpToolCaller(request, 'user-1', 'api_key');
+    noteMcpToolCaller(request, 'other-user', 'oauth');
+    recordMcpToolCall(request, 200);
+    recordMcpToolCall(request, 500);
     expect(captureAs).toHaveBeenCalledTimes(1);
-    trackMcpToolCall(mcpRequest({ 'x-mcp-tool': 'personas' }), 'user-1', 'api_key');
+    expect(captureAs).toHaveBeenCalledWith('user-1', 'mcp_tool_called', expect.objectContaining({
+      auth_method: 'api_key',
+      status: 200,
+      ok: true,
+    }));
+    record(mcpRequest({ 'x-mcp-tool': 'personas' }));
     expect(captureAs).toHaveBeenCalledTimes(2);
   });
 
   it('is a no-op when PostHog is not configured', () => {
     getPostHogServer.mockReturnValue(null);
-    expect(() => trackMcpToolCall(mcpRequest({ 'x-mcp-tool': 'personas' }), 'user-1', 'api_key')).not.toThrow();
+    expect(() => record(mcpRequest({ 'x-mcp-tool': 'personas' }))).not.toThrow();
     expect(captureAs).not.toHaveBeenCalled();
   });
 
@@ -133,7 +158,7 @@ describe('trackMcpToolCall', () => {
     captureAs.mockImplementation(() => {
       throw new Error('posthog down');
     });
-    expect(() => trackMcpToolCall(mcpRequest({ 'x-mcp-tool': 'personas' }), 'user-1', 'api_key')).not.toThrow();
+    expect(() => record(mcpRequest({ 'x-mcp-tool': 'personas' }))).not.toThrow();
     expect(captureAs).toHaveBeenCalledTimes(1);
   });
 
@@ -142,7 +167,7 @@ describe('trackMcpToolCall', () => {
     const hubSlug = PROMPTS[0]?.slug ?? '';
 
     function recordedProperties(headers: Record<string, string>): Record<string, unknown> {
-      trackMcpToolCall(mcpRequest({ 'x-mcp-tool': 'generate_video', ...headers }), 'user-1', 'api_key');
+      record(mcpRequest({ 'x-mcp-tool': 'generate_video', ...headers }));
       return captureAs.mock.calls[0]?.[2] as Record<string, unknown>;
     }
 

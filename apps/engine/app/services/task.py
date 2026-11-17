@@ -673,15 +673,6 @@ def generate_subtitle(task_id, params, video_script, sub_maker, audio_file):
 
 
 def get_video_materials(task_id, params, audio_duration):
-    if params.video_materials:
-        logger.info("\n\n## preprocess local materials")
-        materials = video.preprocess_video(materials=params.video_materials,
-            clip_duration=params.video_clip_duration, video_aspect=params.video_aspect)
-        if not materials:
-            fail_or_stop(task_id, "no valid materials found", params, stage="materials")
-            logger.error("no valid materials found, please check the materials and try again.")
-            return None
-        return [material_info.url for material_info in materials]
     # Images mode: only a neutral canvas. The agent's segment photos cover
     # it full frame (image_coverage); it never ships on its own.
     return faceless_material.images_canvas(utils.task_dir(task_id), audio_duration, params.video_aspect) or None
@@ -1011,8 +1002,8 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
         # Cancel (issue #447): stop before the next paid stage.
         if abort_if_cancelled(task_id, "materials", _forget_milestone):
             return
-        # 5. Get video materials: local files, or the neutral canvas the
-        # agent's segment photos cover (image_coverage).
+        # 5. Get video materials: the neutral canvas the agent's segment
+        # photos cover (image_coverage).
         phases.begin("materials")
         downloaded_videos = get_video_materials(task_id, params, audio_duration)
         phases.complete("materials")
@@ -1021,10 +1012,10 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
             cleanup_task_intermediates(task_id, ())
             return
 
-        # Segment photos become panels over the final video; in the images modes a skipped photo fails the task (full lip sync only warns).
+        # Segment photos become panels over the final video; in the images modes the task fails when a photo is skipped, none survive, or the photos run out (full lip sync only warns).
         try:
             media_warnings = user_media.prepare_segment_panels(task_id, params, subtitle_path, audio_duration)
-        except image_coverage.ImagesDoNotCoverAudio as exc:  # images material: a photo was skipped or none survived
+        except image_coverage.ImagesDoNotCoverAudio as exc:  # images material: a photo was skipped, none survived, or the photos ran out
             fail_or_stop(task_id, str(exc), params, stage="materials", exc=exc)
             cleanup_task_intermediates(task_id, ())
             return

@@ -11,6 +11,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
 import { ERROR_CODES } from '@/lib/error-codes';
 import { rollbackStoragePath } from '@/lib/persona-remote-face';
+import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import {
   setPersonaDefaultAccounts,
   type PersonaDefaultAccounts,
@@ -39,7 +40,13 @@ export async function savePersonaBinding(
     // lib's message, exactly like the PUT route maps it — only a genuine
     // DB failure (uncoded) is a 500 with the generic message.
     logger.error('[api/persona] persona binding save failed; rolling back creation', error, { personaId });
-    const { error: rollbackError } = await supabase.from('personas').delete().eq('id', personaId);
+    // Service role bypasses RLS. userId is the authenticated owner. A cookie
+    // JWT cannot delete the persona row this rollback removes.
+    const { error: rollbackError } = await createSupabaseServiceClient()
+      .from('personas')
+      .delete()
+      .eq('id', personaId)
+      .eq('user_id', userId);
     if (rollbackError) {
       logger.error('[api/persona] creation rollback failed after binding save', rollbackError);
     }

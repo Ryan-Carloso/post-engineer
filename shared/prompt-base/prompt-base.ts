@@ -57,6 +57,7 @@ export const SHARED_PROMPT_BASE: string[] = [
   'Generation is always tied to publishing:',
   'One generate_video call generates and publishes the video; there is no orphan video and no separate schedule step.',
   'mode "scheduled" needs startAt (ISO datetime, 3h-30d ahead), times (HH:MM), and timezone; mode "asap" needs no startAt or times.',
+  'After generate_video, take the final outcome from one video_tasks (action: status) call that sets waitSeconds (up to 600) and blocks until the videos finish. waitSeconds 0 is only a progress snapshot: wait at least the returned nextPollInSeconds before another snapshot.',
 ];
 
 export const FULL_SETUP_PROMPT = [
@@ -86,7 +87,7 @@ export const FULL_SETUP_PROMPT = [
   '6. Call generate_video once with that persona, the validated',
   '   segments unchanged, the confirmed title and description, language "en", the confirmed',
   '   accounts (each a name or id from accounts (action: list)), and the',
-  '   confirmed mode. Then call video_tasks (action: status) with the taskId and share the',
+  '   confirmed mode. Then call video_tasks (action: status) with the taskId and waitSeconds, and share the',
   '   post URL.',
 ].join('\n');
 
@@ -112,7 +113,7 @@ export const DAILY_NEWS_PROMPT = [
   '   segments unchanged, the confirmed title and description, language "en", the confirmed',
   '   accounts (each a name or id from accounts (action: list)), and the confirmed',
   '   mode.',
-  '5. Call video_tasks (action: status) with the taskId, then share the',
+  '5. Call video_tasks (action: status) with the taskId and waitSeconds, then share the',
   '   post URL from video_tasks (action: status).',
 ].join('\n');
 
@@ -151,7 +152,7 @@ export const PLACE_SPOTLIGHT_PROMPT = [
   '5. Call generate_video with the validated segments unchanged,',
   '   the confirmed title and description, language "en", the confirmed accounts',
   '   (each a name or id from accounts (action: list)), and the confirmed mode. Call',
-  '   video_tasks (action: status) with the taskId and share the post',
+  '   video_tasks (action: status) with the taskId and waitSeconds, and share the post',
   '   URL.',
 ].join('\n');
 
@@ -196,7 +197,7 @@ export const SUBJECT_SPOTLIGHT_PROMPT = [
   '5. Call generate_video with the validated segments unchanged,',
   '   the confirmed title and description, language "en", the confirmed accounts',
   '   (each a name or id from accounts (action: list)), and the confirmed mode. Call',
-  '   video_tasks (action: status) with the taskId and share the post',
+  '   video_tasks (action: status) with the taskId and waitSeconds, and share the post',
   '   URL.',
 ].join('\n');
 
@@ -245,7 +246,7 @@ export const LAST_30_DAYS_PROMPT = [
   '   validated segments unchanged, the confirmed title and description, language "en",',
   '   the confirmed accounts (each a name or id from',
   '   accounts (action: list)), and the confirmed mode. Call',
-  '   video_tasks (action: status) with the taskId and share the post',
+  '   video_tasks (action: status) with the taskId and waitSeconds, and share the post',
   '   URL.',
 ].join('\n');
 
@@ -280,7 +281,7 @@ export const MULTI_REDE_PROMPT = [
   '   persona, the validated segments unchanged, the confirmed title and description,',
   '   language "en", the confirmed accounts (each a name or id from',
   '   accounts (action: list)), and the confirmed mode. Call',
-  '   video_tasks (action: status) with the taskId and share the post',
+  '   video_tasks (action: status) with the taskId and waitSeconds, and share the post',
   '   URL for each video.',
 ].join('\n');
 
@@ -327,6 +328,83 @@ export const VIRAL_SHORTS_PROMPT = [
   '   beyond a short quoted hook for analysis.',
   '6. Then follow the base: check_script (action: validate), check_script (action: score), show me persona,',
   '   accounts, title, description, and time, wait for my yes, and call',
-  '   generate_video once. Call video_tasks (action: status) with the taskId',
+  '   generate_video once. Call video_tasks (action: status) with the taskId and waitSeconds,',
   '   and share the post URL.',
+].join('\n');
+
+export const AB_HOOK_TEST_PROMPT = [
+  ...SHARED_PROMPT_BASE,
+  '',
+  'Test two hooks (A/B). One experiment, two variants. Faceless is supported',
+  'and is the cheapest test: 1 token per video. To compare two hooks, use',
+  'experiments; never generate the variants by hand.',
+  '',
+  '1. Call voices (action: list) and ask which voice to keep. Remember that',
+  '   voiceId. Call experiments (action: create) with no persona and exactly',
+  '   two variants. Each variant has a variantId slug, a name, and the style',
+  '   you will follow when writing its hooks. Pass targetPairs 6. 6 is the',
+  '   smallest target that can ever be clear. A moderate effect needs about',
+  '   10-12 pairs: ask me before you raise targetPairs above 6.',
+  '2. Ask me the topic of each pair, one pair at a time. Write both hooks',
+  "   following each variant's style. Only the hook differs inside a pair:",
+  '   same title, same content takes, same accounts, same mode, and the',
+  "   same voiceId. Pass options.videoType 'faceless' on every call to",
+  '   experiments (action: add_pair).',
+  "3. Build each full script (that variant's hook, then the shared content)",
+  '   and call check_script (action: validate) until it passes, then',
+  '   check_script (action: score). Show me both hooks and wait for my yes:',
+  '   each video spends 1 token. Then call experiments (action: add_pair)',
+  '   for pair 1, then 2, then 3, up to targetPairs. Put the shared content',
+  '   in segments and each hook in hooks.',
+  '4. On a failed pair, that pair number stays taken. Call',
+  '   experiments (action: add_pair) with the next free pair number, up to',
+  '   targetPairs. Do not retry the failed number, and do not call',
+  '   generate_video for either variant.',
+  '5. Wait for publication and metrics. Call video_tasks (action: status)',
+  '   with waitSeconds so that one call blocks until the videos finish. When both videos are published and metrics',
+  '   exist, call experiments (action: list) to find the experiment, then',
+  '   experiments (action: results). Never call a variant the winner',
+  '   unless the label is clear.',
+].join('\n');
+
+export const STORY_FIRST_REELS_PROMPT = [
+  ...SHARED_PROMPT_BASE,
+  '',
+  'Write every script story-first: one tight micro-arc across the segments,',
+  'built to hold watch-through. Use this prompt for any persona, topic, and',
+  'video type; the script contract above still applies.',
+  '',
+  '1. Ask me the persona, the topic, and the video type (full_lipsync,',
+  '   hook_lipsync, or faceless), one short question at a time. Nothing',
+  '   costs tokens before I answer.',
+  '2. Find the real story first (BEATS): setup, turning point, payoff. One',
+  '   human tension in the topic, one emotion only. The viewer is the hero;',
+  '   the persona is the guide. Anchor the arc in one concrete, sensory',
+  '   detail: the real moment, not an abstract word like "struggle" or',
+  '   "journey". Never fabricate a story or a testimonial.',
+  '3. Build the hook from one mechanism that genuinely fits the topic:',
+  '   curiosity gap, contrarian, stakes, specificity, identity callout,',
+  '   in-media-res, mistake, transformation, question, or authority.',
+  '   Draft three hooks on different mechanisms and keep the strongest. The',
+  '   hook must be true to what follows: a bait-and-switch creates a',
+  '   retention cliff. Never use a dead template that names a mechanism',
+  '   without earning it.',
+  '4. Write for watch-through (WATCH): win the first 3 seconds, no intro,',
+  '   no logo, no "hey guys". Open a loop early and close it in the payoff.',
+  '   Cut any line that does not grab, teach, or set up the payoff. Make',
+  '   the last line echo one word from the hook so the ending flows back',
+  '   to the start. One CTA tied to value, never a rote "like and subscribe".',
+  '   Ask the sends test: who would DM this to whom, and why?',
+  '5. Voice: direct, plain spoken sentences. Contractions. Short sentences',
+  '   with one longer one for contrast. Open with a one-line provocation.',
+  '   End on the payoff or the ask, never on a summary.',
+  '   If a line sounds written rather than spoken, rewrite it until it sounds said.',
+  '6. Then follow the base: check_script (action: validate) until it',
+  '   passes, then check_script (action: score) with kind "script", the',
+  '   segments joined by newlines, the persona, and the network. Show me',
+  '   the score and every reason, fix what it names, re-validate, and score',
+  '   again. Show me the persona, accounts, title, description, and time,',
+  '   wait for my yes, and call generate_video once with the validated',
+  '   segments unchanged. Call video_tasks (action: status) with the taskId',
+  '   and waitSeconds, and share the post URL.',
 ].join('\n');

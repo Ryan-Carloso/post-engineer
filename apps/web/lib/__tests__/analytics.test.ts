@@ -3,7 +3,7 @@
 //---------------
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { trackApiEvent } from '@/lib/analytics';
+import { trackApiEvent, trackApiEventAs } from '@/lib/analytics';
 
 vi.mock('@/lib/posthog-server', () => ({
   getPostHogServer: vi.fn(),
@@ -59,5 +59,45 @@ describe('trackApiEvent', () => {
       capture: () => { throw new Error('boom'); },
     });
     expect(() => trackApiEvent('x', {})).not.toThrow();
+  });
+});
+
+describe('trackApiEventAs', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('captures the event against the given user', () => {
+    const capture = vi.fn();
+    const captureAs = vi.fn();
+    (getPostHogServer as ReturnType<typeof vi.fn>).mockReturnValue({ capture, captureAs });
+    trackApiEventAs('user-1', 'experiment_video_linked', { experiment_id: 'exp-1' });
+    expect(capture).not.toHaveBeenCalled();
+    expect(captureAs).toHaveBeenCalledTimes(1);
+    const [distinctId, event, props] = captureAs.mock.calls[0] as [string, string, Record<string, unknown>];
+    expect(distinctId).toBe('user-1');
+    expect(event).toBe('experiment_video_linked');
+    expect(props).toMatchObject({ experiment_id: 'exp-1', $lib: 'posthog-server' });
+  });
+
+  it('redacts secret-bearing keys like trackApiEvent', () => {
+    const captureAs = vi.fn();
+    (getPostHogServer as ReturnType<typeof vi.fn>).mockReturnValue({ captureAs });
+    trackApiEventAs('user-1', 'test', { apiKey: 'sk-123', safe: 'ok' });
+    const props = captureAs.mock.calls[0][2] as Record<string, unknown>;
+    expect(props.apiKey).not.toBe('sk-123');
+    expect(props.safe).toBe('ok');
+  });
+
+  it('captures only the library tag when no properties are given', () => {
+    const captureAs = vi.fn();
+    (getPostHogServer as ReturnType<typeof vi.fn>).mockReturnValue({ captureAs });
+    trackApiEventAs('user-1', 'experiment_concluded');
+    expect(captureAs).toHaveBeenCalledWith('user-1', 'experiment_concluded', { $lib: 'posthog-server' });
+  });
+
+  it('never throws when PostHog is not configured', () => {
+    (getPostHogServer as ReturnType<typeof vi.fn>).mockReturnValue(null);
+    expect(() => trackApiEventAs('user-1', 'x', {})).not.toThrow();
   });
 });

@@ -12,8 +12,8 @@ vi.mock('@/lib/supabase/service', () => ({
   createSupabaseServiceClient: vi.fn(),
 }));
 
-const trackMcpToolCall = vi.hoisted(() => vi.fn());
-vi.mock('@/lib/mcp-tool-telemetry', () => ({ trackMcpToolCall }));
+const noteMcpToolCaller = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/mcp-tool-telemetry', () => ({ noteMcpToolCaller }));
 
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
@@ -21,7 +21,7 @@ import { createSupabaseServiceClient } from '@/lib/supabase/service';
 describe('requireSupabaseSession', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    trackMcpToolCall.mockClear();
+    noteMcpToolCaller.mockClear();
   });
 
   it('authenticates via valid Bearer API key in request header', async () => {
@@ -44,8 +44,8 @@ describe('requireSupabaseSession', () => {
     expect(result.auth?.userId).toBe('user-api-key-123');
     expect(result.auth?.isApiKey).toBe(true);
     expect(result.auth?.personaIds).toBeNull();
-    // MCP tool telemetry is recorded against the key's user.
-    expect(trackMcpToolCall).toHaveBeenCalledWith(request, 'user-api-key-123', 'api_key');
+    // The key's user is noted for the later mcp_tool_called capture.
+    expect(noteMcpToolCaller).toHaveBeenCalledWith(request, 'user-api-key-123', 'api_key');
   });
 
   it('propagates the persona scope of restricted keys', async () => {
@@ -83,7 +83,7 @@ describe('requireSupabaseSession', () => {
     const result = await requireSupabaseSession(request);
     expect(result.auth).toBeNull();
     expect(result.error?.status).toBe(401);
-    expect(trackMcpToolCall).not.toHaveBeenCalled();
+    expect(noteMcpToolCaller).not.toHaveBeenCalled();
   });
 
   it('authenticates via cookie session when no API key header is present', async () => {
@@ -124,7 +124,7 @@ describe('requireSupabaseSession', () => {
     });
     const result = await requireSupabaseSession(request);
     expect(result.auth?.userId).toBe('user-cookie-456');
-    expect(trackMcpToolCall).not.toHaveBeenCalled();
+    expect(noteMcpToolCaller).not.toHaveBeenCalled();
   });
 
   it('carries the display name from user_metadata on cookie sessions', async () => {
@@ -233,7 +233,7 @@ describe('requireSupabaseSession with OAuth access tokens', () => {
     // The flag is what routes use to pick the service client for OAuth
     // callers (no cookie session); pin the producer-side contract.
     expect(result.auth?.isOAuth).toBe(true);
-    expect(trackMcpToolCall).toHaveBeenCalledWith(request, 'user-oauth-789', 'oauth');
+    expect(noteMcpToolCaller).toHaveBeenCalledWith(request, 'user-oauth-789', 'oauth');
   });
 
   it('falls through to session auth when the OAuth token is invalid', async () => {
@@ -259,7 +259,7 @@ describe('requireSupabaseSession with OAuth access tokens', () => {
 describe('requireSupabaseSession MCP version gate', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    trackMcpToolCall.mockClear();
+    noteMcpToolCaller.mockClear();
     vi.stubEnv('REQUIRED_MCP_VERSION', '1.52.560');
   });
 
@@ -283,7 +283,7 @@ describe('requireSupabaseSession MCP version gate', () => {
     expect(json.code).toBe('MCP_VERSION_MISMATCH');
     expect(json.requiredVersion).toBe('1.52.560');
     expect(resolveApiKey).not.toHaveBeenCalled();
-    expect(trackMcpToolCall).not.toHaveBeenCalled();
+    expect(noteMcpToolCaller).not.toHaveBeenCalled();
   });
 
   it('authenticates an MCP whose version matches', async () => {

@@ -1,34 +1,37 @@
 """Coverage for the "images" material: the agent's photos are the whole picture.
 
 Every segment carries an image (validated before charging), and each photo
-is on screen for its segment's spoken interval (user_media). Two things can
-still leave a gap after TTS: the short pauses between segments, and a photo
-that is dropped (download failed, too small, could not be drawn). A dropped
-photo is never covered: in the images modes it fails the task (see below).
-Only the pauses between surviving photos are stretched over:
+is on screen for at most MAX_PHOTO_SECONDS. The surviving photos are laid
+out back to back from the coverage window start: a photo may start early
+into the pause before its segment, but it never runs past the next photo's
+start or past start + MAX_PHOTO_SECONDS. When the photos run out before
+the end of the audio the task fails with IMAGES_DO_NOT_COVER_AUDIO naming
+how many more photos the window needs, so the caller sends more photos
+instead of one photo being stretched over the gap. A dropped photo is
+never covered either: in the images modes it fails the task (see below).
 
 - the first full-frame photo starts where the face hands over (0 on a
   faceless video, the hook's end on a hook-only persona video);
-- every surviving photo runs until the next one starts;
-- the last photo runs to the end of the audio.
-
-A gap is just a pause: stretching a panel over it needs no warning.
+- every surviving photo runs at most MAX_PHOTO_SECONDS, back to back;
+- the last photo runs to the end of the audio, or the task fails.
 
 Every sent photo must survive. If any photo is skipped at render, the
 task fails with IMAGES_DO_NOT_COVER_AUDIO (the charger refunds a failed
 task), naming how many photos were sent, how many survived, the counts
 per reason, and every skipped photo by segment and image index — so the
 caller fixes the photo instead of guessing. The pre-charge density
-minimum (one photo per ~3s per segment) already guarantees enough photos
-are sent; this rule guarantees none of them die on the way. Together
-they guarantee coverage. On a full lip-sync video the face is on screen
-the whole time, so photos are optional panels there: a skipped photo is
-a warning, never a failure.
+minimum (one photo per ~3s per segment) catches grossly under-covered
+requests before charging; the layout below is the exact guarantee at
+render, because the density estimate counts words while the render counts
+spoken seconds. On a full lip-sync video the face is on screen the whole
+time, so photos are optional panels there: a skipped photo is a warning,
+never a failure.
 
 Full-frame photos also get a slow zoom (Ken Burns, panel_motion), alternating
-in and out, so a photo held for several seconds never looks frozen.
+in and out, so a still photo never looks frozen.
 """
 
+import math
 from collections import Counter
 from dataclasses import replace
 from typing import Optional, Sequence
@@ -39,6 +42,12 @@ from app.services.segment_panels import Panel
 IMAGES_DO_NOT_COVER_AUDIO = "images_do_not_cover_audio"
 MOTION_IN = "in"
 MOTION_OUT = "out"
+# A full-frame photo never stays on screen longer than this. A longer
+# segment needs more photos; a photo is never stretched past it.
+MAX_PHOTO_SECONDS = 2.0
+# A layout that ends this far short of the audio is a float rounding
+# artifact, not a missing photo.
+_COVERAGE_EPSILON_SECONDS = 0.01
 # A skip line records a photo that never became a panel; an overlay line
 # records only a dropped info card on a photo that survived.
 _SKIP_MARKER = " media skipped: "
@@ -97,14 +106,15 @@ def ensure_coverage(
     sent: int,
     skipped: Sequence[str],
 ) -> list[Panel]:
-    """Extend surviving panels over the coverage window, or fail naming why.
+    """Lay surviving panels over the coverage window, or fail naming why.
 
     In the images modes (faceless and hook-only lip sync) every sent
     photo must survive: any skipped photo fails the task with the
     aggregated skip reasons. Full lip sync shows the face the whole
     time, so media is optional there and a skipped photo never fails.
     Raises ImagesDoNotCoverAudio with the aggregated skip reasons when
-    a photo was skipped or no full-frame photo survived.
+    a photo was skipped or no full-frame photo survived, and when the
+    surviving photos run out before the end of the audio at 2s each.
     """
     window_start = coverage_start(face, hook_end)
     _summary, fatal = _skip_summary(sent, len(panels), skipped)
@@ -133,20 +143,39 @@ def extend_over_gaps(
     """Panels whose full-frame photos cover [window_start, audio_duration].
 
     Framed panels (shown over the face, caption_bottom set) keep their own
-    times. Raises ImagesDoNotCoverAudio when there is a window to cover and
-    no full-frame photo survived.
+    times. Full-frame photos are laid out back to back from window_start,
+    at most MAX_PHOTO_SECONDS each: a photo may start early into the pause
+    before its segment, but it never runs past the next photo's start or
+    past start + MAX_PHOTO_SECONDS. Raises ImagesDoNotCoverAudio when
+    there is a window to cover and no full-frame photo survived, and when
+    the surviving photos run out before the end of the audio, naming how
+    many more photos the window needs.
     """
     if window_start is None or window_start >= audio_duration:
         return list(panels)
     framed = [panel for panel in panels if panel.caption_bottom is not None]
-    full = sorted((panel for panel in panels if panel.caption_bottom is None), key=lambda panel: panel.start)
+    full = sorted(
+        (panel for panel in panels if panel.caption_bottom is None), key=lambda panel: panel.start
+    )
     if not full:
         raise ImagesDoNotCoverAudio()
     covered: list[Panel] = []
+    cursor = window_start
     for position, panel in enumerate(full):
-        start = min(panel.start, window_start) if position == 0 else panel.start
+        start = cursor
         end = full[position + 1].start if position + 1 < len(full) else audio_duration
-        end = max(end, panel.end)
+        end = min(end, start + MAX_PHOTO_SECONDS)
         motion = MOTION_IN if position % 2 == 0 else MOTION_OUT
         covered.append(replace(panel, start=start, end=end, motion=motion))
+        cursor = end
+    if cursor < audio_duration - _COVERAGE_EPSILON_SECONDS:
+        missing = math.ceil((audio_duration - cursor) / MAX_PHOTO_SECONDS)
+        photo_word = "photo" if len(full) == 1 else "photos"
+        cover_verb = "covers" if len(full) == 1 else "cover"
+        missing_word = "photo" if missing == 1 else "photos"
+        raise ImagesDoNotCoverAudio(
+            f"{len(full)} {photo_word} {cover_verb} {cursor - window_start:.1f}s of "
+            f"{audio_duration - window_start:.1f}s at {MAX_PHOTO_SECONDS:.0f}s each; "
+            f"need {missing} more {missing_word}"
+        )
     return sorted([*framed, *covered], key=lambda panel: panel.start)

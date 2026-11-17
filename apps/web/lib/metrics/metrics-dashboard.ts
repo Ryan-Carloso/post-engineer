@@ -17,8 +17,10 @@ import { notifyIfSessionExpired } from '@/lib/session-expiry';
 //---------------
 
 export interface MetricsSummary {
-  // Rows in the list, whatever they reported.
-  videos: number;
+  // Rows in the list, whatever they reported. A row is one video on one
+  // network (a measurement), not one video: rows carry no source-video id,
+  // so unique videos cannot be counted honestly.
+  measurements: number;
   // Sum of reported views; null values are skipped, never counted as 0.
   views: number;
   // Sum of reported likes + comments + saves; null values are skipped.
@@ -136,7 +138,7 @@ export function summarize(rows: MetricsRowView[]): MetricsSummary {
     if (row.comments !== null) engagement += row.comments;
     if (row.saves !== null) engagement += row.saves;
   }
-  return { videos: rows.length, views, engagement };
+  return { measurements: rows.length, views, engagement };
 }
 
 //---------------

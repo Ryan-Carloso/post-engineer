@@ -340,7 +340,10 @@ async function patchHandler(
     patch.slot_at = slotAt;
   }
 
-  const { error: updateError } = await supabase
+  // Service role bypasses RLS. loadOwnedSlot proved ownership and the window
+  // check above ran. A direct slot_at write would publish a ready slot as
+  // soon as it is due, so the session JWT cannot update this table.
+  const { error: updateError } = await createSupabaseServiceClient()
     .from('scheduled_posts')
     .update(patch)
     .eq('id', slot.id)

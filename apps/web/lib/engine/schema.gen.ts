@@ -375,24 +375,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/video_materials": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Retrieve local video materials */
-        get: operations["get_video_materials_list_api_v1_video_materials_get"];
-        put?: never;
-        /** Upload the video material file to the local videos directory */
-        post: operations["upload_video_material_file_api_v1_video_materials_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/videos": {
         parameters: {
             query?: never;
@@ -596,11 +578,6 @@ export interface components {
             /** File */
             file: string;
         };
-        /** Body_upload_video_material_file_api_v1_video_materials_post */
-        Body_upload_video_material_file_api_v1_video_materials_post: {
-            /** File */
-            file: string;
-        };
         /**
          * ClonedVoicePreviewRequest
          * @description Optional JSON body of the preview endpoint: ``{"text": "..."}``.
@@ -637,24 +614,6 @@ export interface components {
          * @enum {string}
          */
         LipSyncQuality: "ok" | "very-good";
-        /** MaterialInfo */
-        MaterialInfo: {
-            /**
-             * Duration
-             * @default 0
-             */
-            duration?: number;
-            /**
-             * Provider
-             * @default local
-             */
-            provider?: string;
-            /**
-             * Url
-             * @default
-             */
-            url?: string;
-        };
         /** MediaCheckRequest */
         MediaCheckRequest: {
             /** Media Id */
@@ -1027,8 +986,6 @@ export interface components {
             video_language?: string | null;
             /** @default standard */
             video_layout?: components["schemas"]["VideoLayout"];
-            /** Video Materials */
-            video_materials?: components["schemas"]["MaterialInfo"][] | null;
             /** @default ok */
             video_quality?: components["schemas"]["LipSyncQuality"];
             /**
@@ -1087,60 +1044,6 @@ export interface components {
          * @enum {string}
          */
         VideoLayout: "standard" | "react";
-        /**
-         * VideoMaterialRetrieveResponse
-         * @example {
-         *       "body": {
-         *         "files": [
-         *           {
-         *             "file": "/post-engineer/resource/videos/example.mp4",
-         *             "name": "example.mp4",
-         *             "size": 12345678
-         *           }
-         *         ]
-         *       },
-         *       "message": "success",
-         *       "status": 200
-         *     }
-         */
-        VideoMaterialRetrieveResponse: {
-            /** Body */
-            body?: unknown;
-            /**
-             * Message
-             * @default success
-             */
-            message?: string | null;
-            /**
-             * Status
-             * @default 200
-             */
-            status?: number;
-        };
-        /**
-         * VideoMaterialUploadResponse
-         * @example {
-         *       "body": {
-         *         "file": "/post-engineer/resource/videos/example.mp4"
-         *       },
-         *       "message": "success",
-         *       "status": 200
-         *     }
-         */
-        VideoMaterialUploadResponse: {
-            /** Body */
-            body?: unknown;
-            /**
-             * Message
-             * @default success
-             */
-            message?: string | null;
-            /**
-             * Status
-             * @default 200
-             */
-            status?: number;
-        };
         /**
          * VideoTransitionMode
          * @enum {string}
@@ -1950,59 +1853,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_video_materials_list_api_v1_video_materials_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["VideoMaterialRetrieveResponse"];
-                };
-            };
-        };
-    };
-    upload_video_material_file_api_v1_video_materials_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "multipart/form-data": components["schemas"]["Body_upload_video_material_file_api_v1_video_materials_post"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["VideoMaterialUploadResponse"];
                 };
             };
             /** @description Validation Error */
