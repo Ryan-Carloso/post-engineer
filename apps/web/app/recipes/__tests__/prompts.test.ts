@@ -649,6 +649,7 @@ describe('prompts hub data', () => {
       'If a line sounds written rather than spoken',
       'Generate every photo with AI',
       'never stock',
+      'do not search for images',
       'One consistent persona',
       'the same person, the same look',
       'one fixed group',
@@ -671,6 +672,10 @@ describe('prompts hub data', () => {
     expect(text).toContain('Never a generic explainer');
     expect(text).toContain('Never present it as a real person');
     expect(text).toContain('verified testimonial');
+    // Step 6 overrides the base's image-search lines for this prompt only:
+    // the agent must not search for images at all.
+    expect(text).toContain('do not search for images');
+    expect(text).toContain('the base lines about searching images');
     expect(text).toContain('who would DM this to whom, and why');
     expect(text).toContain('never a rote "like and subscribe"');
     expect(text).toContain('wait for my yes');
