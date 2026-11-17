@@ -1,6 +1,6 @@
 """Ken Burns motion for full-frame segment photos (images material).
 
-A photo held for several seconds looks frozen, so each one zooms slowly in
+A still photo looks frozen, so each one zooms slowly in
 or out over the seconds it is on screen. The zoom rate matches the still
 material clips (image_material: 3% per second) and is capped, so a long
 segment never zooms into a blurry crop. The photo is scaled up first:

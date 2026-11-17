@@ -13,6 +13,7 @@ import io
 import json
 from unittest.mock import patch
 
+import pytest
 from PIL import Image
 
 from app.models.schema import VideoAspect, VideoParams
@@ -286,7 +287,7 @@ def test_check_media_ok_for_a_photo_with_people(tmp_path):
     assert _check("https://e.com/porto.jpg", tmp_path, download) == "ok"
 
 
-def test_two_photos_split_the_segment_and_a_dropped_one_is_covered(tmp_path):
+def test_two_photos_split_the_segment_and_a_dropped_one_fails_the_task(tmp_path):
     def fake_download(url, dest_path, session=None):
         if "drop" in url:
             raise ssrf.UnsafeUrlError("photo download failed: HTTP 403.")
@@ -320,8 +321,12 @@ def test_two_photos_split_the_segment_and_a_dropped_one_is_covered(tmp_path):
         )
     assert skipped == ["segment 0 image 0 media skipped: download blocked"]
     assert [(panel.start, panel.end) for panel in prepared] == [(2.0, 4.0)]
-    covered = image_coverage.extend_over_gaps(prepared, 0.0, 4.0)
-    assert [(panel.start, panel.end) for panel in covered] == [(0.0, 4.0)]
+    with pytest.raises(image_coverage.ImagesDoNotCoverAudio) as exc_info:
+        image_coverage.extend_over_gaps(prepared, 0.0, 4.0)
+    assert str(exc_info.value) == (
+        "images_do_not_cover_audio: 1 photo covers 2.0s of 4.0s at 2s each; "
+        "need 1 more photo"
+    )
 
 
 # ---- aspect ratio (issue #538): a photo that fills the frame must match it
