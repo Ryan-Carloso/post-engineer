@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useRef, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react';
+import { useCallback, useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { enUS, ptBR } from 'date-fns/locale';
@@ -25,6 +25,12 @@ import { cn } from '@/lib/utils';
 //   navigates either (a plain click still does);
 // - the event context menu and Alt+Arrow keyboard moves are stopped the
 //   same way; the details popover is off (showEventPopover={false}).
+// - the lib's week-step wheel nav is stopped before it starts: the page
+//   anchors the grid on the 1st, so wheel-down lands in the same month and
+//   is dropped while the lib's preventDefault kills the page scroll. A
+//   native capture listener stops the wheel before the lib's native
+//   listener on the grid container runs — a React onWheelCapture would
+//   be too late, React dispatches it after the native target listener.
 // Remove these guards when a later slice wires drag to reschedule.
 //---------------
 
@@ -76,6 +82,16 @@ export function PostsCalendar({
   const router = useRouter();
   // Where the last press on an event started, to tell a drag from a click.
   const dragStartRef = useRef<{ x: number; y: number; eventId: string } | null>(null);
+  // The month grid wrapper: its native capture listener stops the wheel
+  // before the lib's native listener on the grid container can swallow it.
+  const monthRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = monthRef.current;
+    if (el === null) return;
+    const blockWheelNav = (event: WheelEvent) => event.stopPropagation();
+    el.addEventListener('wheel', blockWheelNav, { capture: true });
+    return () => el.removeEventListener('wheel', blockWheelNav, { capture: true });
+  }, []);
 
   const handleEventSelect = useCallback(
     (eventId: string) => {
@@ -123,8 +139,13 @@ export function PostsCalendar({
   const handleEventKeyDownCapture = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
     // Read-only: Alt+Arrow moves (or with Shift, resizes) the focused event.
     // Enter/Space pass through: they click the chip and navigate.
+    // preventDefault is required here, not just stopPropagation: stopping
+    // the event in capture keeps the lib's keyboard handler from running,
+    // so its own preventDefault never fires — and without one, Alt+Left /
+    // Alt+Right navigates the browser history on Windows/Linux.
     if (event.altKey && (event.target as HTMLElement).closest('[data-event-id]')) {
       if (event.key === 'ArrowUp' || event.key === 'ArrowDown' || event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+        event.preventDefault();
         event.stopPropagation();
       }
     }
@@ -195,6 +216,7 @@ export function PostsCalendar({
       >
         <div
           data-posts-calendar-month
+          ref={monthRef}
           className="h-150"
           onClick={handleGridClick}
           onPointerDownCapture={handleEventPointerDownCapture}
