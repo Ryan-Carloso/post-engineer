@@ -560,9 +560,18 @@ describe('handleYoutubeUpload', () => {
       expect(markAccountNeedsReconnect).toHaveBeenCalledWith(OWNER_USER_ID, 'youtube', 'UC-dead');
     });
 
+    it('flags a refresh Google answers with 401', async () => {
+      vi.mocked(markAccountNeedsReconnect).mockClear();
+      await expiredTokenRefreshRejects(Object.assign(new Error('unauthorized'), { response: { status: 401 } }));
+      await upload();
+      expect(markAccountNeedsReconnect).toHaveBeenCalledWith(OWNER_USER_ID, 'youtube', 'UC-dead');
+    });
+
     it.each([
       ['a 503', Object.assign(new Error('backend error'), { response: { status: 503 } })],
       ['a network error', new Error('socket hang up')],
+      ['a 400 with another error code', Object.assign(new Error('bad request'), { response: { status: 400, data: { error: 'invalid_request' } } })],
+      ['a 400 with no response body', Object.assign(new Error('bad request'), { response: { status: 400 } })],
     ])('does not flag a refresh that failed with %s', async (_name, error) => {
       vi.mocked(markAccountNeedsReconnect).mockClear();
       await expiredTokenRefreshRejects(error);
