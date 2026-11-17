@@ -1,5 +1,5 @@
 -- ============================================================================
--- 067 — Signed uploads carry images too.
+-- 068 — Signed uploads carry images too.
 --
 -- A signed upload (video_uploads, migration 060) was video-only. The image
 -- networks (Instagram, Bluesky, LinkedIn, Threads, Facebook, Pinterest) now

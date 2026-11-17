@@ -1,5 +1,5 @@
 -- ============================================================================
--- 066 — One live slot per signed upload (issue #384 follow-up).
+-- 067 — One live slot per signed upload (issue #384 follow-up).
 --
 -- A signed video upload is single-use: the engine claims it ready →
 -- consumed when its slot publishes. Nothing stopped a second
@@ -12,8 +12,50 @@
 -- A failed slot releases the reference (status <> 'failed'), so an upload
 -- whose slot failed before its claim can be scheduled again. Cancelled
 -- slots are deleted rows, so they release it too.
--- Idempotent (create ... if not exists).
+--
+-- Production already holds slots from those double calls, and CREATE UNIQUE
+-- INDEX aborts (23505) on them. Only one of a duplicate group can ever claim
+-- the upload, so the rest are unreachable: no tokens were charged for an
+-- existing-media slot (charged_tokens = 0), so nothing is refunded and the
+-- rows go. A schedule whose every slot was such a duplicate is left empty,
+-- so it goes with them.
+-- Idempotent (the delete finds nothing on a second run, create ... if not
+-- exists).
 -- ============================================================================
+
+with ranked as (
+  -- Keep the earliest slot of each upload: the upload publishes as early as
+  -- the caller first asked. Ties fall back to creation order, then id.
+  select
+    id,
+    schedule_id,
+    row_number() over (
+      partition by media_ref
+      order by slot_at, created_at, id
+    ) as rank
+  from public.scheduled_posts
+  where media_kind = 'upload' and status <> 'failed'
+),
+doomed as (
+  select id, schedule_id from ranked where rank > 1
+),
+removed as (
+  delete from public.scheduled_posts slot
+  using doomed
+  where slot.id = doomed.id
+  returning slot.schedule_id
+)
+delete from public.schedules schedule
+using removed
+where schedule.id = removed.schedule_id
+  and not exists (
+    -- Sibling CTEs share the pre-delete snapshot, so a surviving slot is
+    -- one that is not being deleted by this statement.
+    select 1
+    from public.scheduled_posts survivor
+    where survivor.schedule_id = schedule.id
+      and survivor.id not in (select id from doomed)
+  );
 
 create unique index if not exists scheduled_posts_upload_media_ref_key
   on public.scheduled_posts (media_ref)
