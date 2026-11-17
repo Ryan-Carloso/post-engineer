@@ -1,9 +1,8 @@
 import warnings
 from enum import Enum
-from typing import Any, List, Literal, Optional, Union
+from typing import Any, Literal, Optional, Union
 from urllib.parse import urlparse
 
-import pydantic
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.config import config
@@ -100,19 +99,6 @@ def unknown_video_type_message(value: object) -> str:
     """Short invalid-video_type error, costs included, under 200 chars."""
     shown = str(value)[:32] if value is not None else ""
     return f"unknown video_type '{shown}'; {VIDEO_TYPE_ERROR_SUFFIX}"
-
-
-class _Config:
-    arbitrary_types_allowed = True
-
-
-@pydantic.dataclasses.dataclass(config=_Config)
-class MaterialInfo:
-    # Local files only (CLI --video-materials, local_videos/): the provider
-    # is a leftover label, never read by the pipeline.
-    provider: str = "local"
-    url: str = ""
-    duration: int = 0
 
 
 class PersonaParams(BaseModel):
@@ -215,10 +201,7 @@ class VideoParams(BaseModel):
     video_layout: VideoLayout = VideoLayout.standard
     video_transition_mode: Optional[VideoTransitionMode] = None
     video_clip_duration: Optional[int] = Field(default=2, ge=1, le=60)
-    video_materials: Optional[List[MaterialInfo]] = (
-        None  # Materials used to generate the video
-    )
-    
+
     custom_audio_file: Optional[str] = None  # Custom audio file path, will ignore TTS and can still use Whisper subtitles
     video_language: Optional[str] = ""  # auto detect
 
@@ -492,6 +475,4 @@ class TaskDeletionResponse(BaseResponse):
 from app.models.media_responses import (  # noqa: E402,F401
     BgmRetrieveResponse,
     BgmUploadResponse,
-    VideoMaterialRetrieveResponse,
-    VideoMaterialUploadResponse,
 )

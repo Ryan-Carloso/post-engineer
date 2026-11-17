@@ -12,10 +12,6 @@ from io import StringIO
 from pathlib import Path
 from unittest.mock import patch, Mock
 from loguru import logger
-from moviepy import (
-    VideoFileClip,
-)
-from PIL import Image
 # add project root to python path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from app.config import config
@@ -23,7 +19,6 @@ from app.controllers.manager.base_manager import TaskQueueFullError
 from app.controllers.manager.memory_manager import InMemoryTaskManager
 from app.controllers.v1 import video as video_controller
 from app.models import const
-from app.models.schema import MaterialInfo
 from app.services import music_mood as mm
 from app.services import state as sm
 from app.services import video as vd
@@ -469,97 +464,6 @@ class TestVideoService(unittest.TestCase):
         vd._runtime_disabled_video_codecs.clear()
         vd._ffmpeg_encoder_exists.cache_clear()
     
-    def test_preprocess_video(self):
-        if not os.path.exists(self.test_img_path):
-            self.fail(f"test image not found: {self.test_img_path}")
-
-        local_videos_dir = utils.storage_dir("local_videos", create=True)
-        safe_img_path = os.path.join(local_videos_dir, "test-preprocess-1.png")
-        shutil.copy2(self.test_img_path, safe_img_path)
-
-        # test preprocess_video function
-        m = MaterialInfo()
-        m.url = os.path.basename(safe_img_path)
-        m.provider = "local"
-        print(m)
-
-        try:
-            materials = vd.preprocess_video([m], clip_duration=4)
-            print(materials)
-
-            # verify result
-            self.assertIsNotNone(materials)
-            self.assertEqual(len(materials), 1)
-            self.assertTrue(materials[0].url.endswith(".mp4"))
-
-            # moviepy get video info
-            clip = VideoFileClip(materials[0].url)
-            try:
-                print(clip)
-            finally:
-                clip.close()
-
-            # clean generated test video file
-            if os.path.exists(materials[0].url):
-                os.remove(materials[0].url)
-        finally:
-            if os.path.exists(safe_img_path):
-                os.remove(safe_img_path)
-
-    def test_preprocess_video_rejects_material_outside_local_videos(self):
-        """
-        local material paths come from API params; arbitrary absolute paths
-        must never reach MoviePy. This verifies paths outside the
-        local_videos allowlist are skipped, preventing arbitrary file reads.
-        """
-        m = MaterialInfo(provider="local", url=self.test_img_path)
-
-        materials = vd.preprocess_video([m], clip_duration=4)
-
-        self.assertEqual(materials, [])
-
-    def _preprocess_image(self, name, width, height, video_aspect):
-        local_videos_dir = utils.storage_dir("local_videos", create=True)
-        source_path = os.path.join(local_videos_dir, name)
-        Image.new("RGB", (width, height), (200, 80, 40)).save(source_path, "JPEG")
-        material = MaterialInfo(provider="local", url=name)
-        try:
-            materials = vd.preprocess_video(
-                [material], clip_duration=4, video_aspect=video_aspect
-            )
-            return materials
-        finally:
-            for path in (source_path, f"{source_path}.mp4"):
-                if os.path.exists(path):
-                    os.remove(path)
-
-    def test_preprocess_video_skips_a_landscape_image_for_a_portrait_video(self):
-        materials = self._preprocess_image(
-            "test-preprocess-aspect-landscape.jpg", 1920, 1080, "9:16"
-        )
-        self.assertEqual(materials, [])
-
-    def test_preprocess_video_keeps_a_portrait_image_for_a_portrait_video(self):
-        materials = self._preprocess_image(
-            "test-preprocess-aspect-portrait.jpg", 1080, 1920, "9:16"
-        )
-        self.assertEqual(len(materials), 1)
-        self.assertTrue(materials[0].url.endswith(".mp4"))
-
-    def test_preprocess_video_keeps_a_landscape_image_for_a_landscape_video(self):
-        materials = self._preprocess_image(
-            "test-preprocess-aspect-landscape-16x9.jpg", 1920, 1080, "16:9"
-        )
-        self.assertEqual(len(materials), 1)
-        self.assertTrue(materials[0].url.endswith(".mp4"))
-
-    def test_preprocess_video_without_an_aspect_keeps_the_old_size_only_check(self):
-        materials = self._preprocess_image(
-            "test-preprocess-aspect-no-aspect.jpg", 1920, 1080, None
-        )
-        self.assertEqual(len(materials), 1)
-        self.assertTrue(materials[0].url.endswith(".mp4"))
-
     def test_get_ffmpeg_binary_uses_configured_env_path(self):
         """When ffmpeg is explicitly configured, that path takes precedence."""
         with patch.dict(os.environ, {"IMAGEIO_FFMPEG_EXE": "/tmp/custom-ffmpeg"}, clear=True):

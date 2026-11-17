@@ -28,7 +28,7 @@
       "executor": "nx:run-commands",
       "options": {
         "cwd": "apps/engine",
-        "command": "uv run ruff check app cli.py test"
+        "command": "uv run ruff check app test"
       },
       "cache": true
     },
@@ -36,7 +36,7 @@
       "executor": "nx:run-commands",
       "options": {
         "cwd": "apps/engine",
-        "command": "uv run python -m compileall -q app cli.py main.py"
+        "command": "uv run python -m compileall -q app main.py"
       },
       "cache": true
     },

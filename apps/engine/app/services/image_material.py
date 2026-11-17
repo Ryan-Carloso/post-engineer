@@ -1,8 +1,7 @@
 """Still images as video material.
 
-Turns a still image into an mp4 clip with a Ken Burns zoom. Shared by the
-uploaded-material path (video.preprocess_video) and the segment-photo path,
-so both produce the same clip from the same still.
+Turns a still image into an mp4 clip with a Ken Burns zoom, for the
+neutral-background canvas (neutral_background.render_neutral_clip).
 Lives in its own module because video.py is grandfathered over the file-size
 cap and may not grow by a single line.
 """
@@ -21,8 +20,8 @@ def render_image_file_to_mp4(image_path: str, clip_duration: int = 4) -> str:
     """Turn a still image into an mp4 clip with a Ken Burns zoom.
 
     Returns the mp4 path, or "" when the image is unreadable or below the
-    minimum size. Shared by the uploaded-material path and the segment-photo
-    path so both produce the same clip from the same still.
+    minimum size. Used by the neutral-background canvas to turn its still
+    into a clip.
     """
     # Imported lazily: video.py imports this module at top level, so a
     # top-level import back would be circular.

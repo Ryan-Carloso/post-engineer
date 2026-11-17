@@ -46,35 +46,3 @@ class BgmUploadResponse(MediaBaseResponse):
                 "body": {"file": "/post-engineer/resource/songs/example.mp3"},
             },
         }
-
-
-class VideoMaterialRetrieveResponse(MediaBaseResponse):
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "status": 200,
-                "message": "success",
-                "body": {
-                    "files": [
-                        {
-                            "name": "example.mp4",
-                            "size": 12345678,
-                            "file": "/post-engineer/resource/videos/example.mp4",
-                        }
-                    ]
-                },
-            },
-        }
-
-
-class VideoMaterialUploadResponse(MediaBaseResponse):
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "status": 200,
-                "message": "success",
-                "body": {
-                    "file": "/post-engineer/resource/videos/example.mp4",
-                },
-            },
-        }
