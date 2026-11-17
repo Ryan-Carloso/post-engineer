@@ -179,13 +179,19 @@ export function PostsCalendar({
     (event: ReactMouseEvent<HTMLDivElement>) => {
       const start = dragStartRef.current;
       dragStartRef.current = null;
-      if (start !== null) {
-        const moved =
-          Math.abs(event.clientX - start.x) > DRAG_THRESHOLD_PX || Math.abs(event.clientY - start.y) > DRAG_THRESHOLD_PX;
-        if (moved) {
-          // A drag's trailing click selects nothing and navigates nowhere.
-          event.stopPropagation();
-          return;
+      if (start !== null && start.eventId !== null) {
+        // A drag's trailing click is swallowed only when it lands on the
+        // same event the press started on. A press that lands on a different
+        // event or a day is a new click, not the drag's: it navigates or
+        // selects that day.
+        const eventId = (event.target as HTMLElement).closest('[data-event-id]')?.getAttribute('data-event-id');
+        if (eventId === start.eventId) {
+          const moved =
+            Math.abs(event.clientX - start.x) > DRAG_THRESHOLD_PX || Math.abs(event.clientY - start.y) > DRAG_THRESHOLD_PX;
+          if (moved) {
+            event.stopPropagation();
+            return;
+          }
         }
       }
       if (view !== 'week') return;
