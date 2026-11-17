@@ -44,7 +44,8 @@ def build_subtitle(task_id, params, video_script, sub_maker, audio_file) -> str:
     """Write `subtitle.srt` for the task; return its path, or "" when none.
 
     Returns "" when subtitles are off, when the provider needs a TTS timeline
-    that custom audio does not have, or when no provider produced cues.
+    that custom audio does not have, when no provider produced cues, or when
+    subtitle cleanup could not produce a cleaned file.
     """
     logger.info("\n\n## generating subtitle")
     if not params.subtitle_enabled:

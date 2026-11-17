@@ -182,6 +182,19 @@ def test_edge_success_cleans_subtitle_punctuation(task_dir):
     )
 
 
+def test_cleanup_failure_ships_no_subtitles(task_dir):
+    with (
+        patch.object(
+            subtitle_provider.voice, "create_subtitle", side_effect=_write("subtitle_file")
+        ),
+        patch.object(subtitle_provider.subtitle_cleanup, "clean_subtitle_file", return_value=False),
+        patch.object(subtitle_provider.logger, "error") as log_error,
+    ):
+        result = _build("edge", object())
+    assert result == ""
+    assert log_error.called
+
+
 def test_an_empty_provider_generates_nothing(task_dir):
     with (
         patch.object(subtitle_provider.voice, "create_subtitle") as edge,
