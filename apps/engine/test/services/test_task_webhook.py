@@ -312,10 +312,6 @@ class FailTaskWebhookTests(unittest.TestCase):
         from app.services import task as task_service
 
         with (
-            patch(
-                "app.utils.ssrf._resolve_global_ips",
-                return_value=[ipaddress.ip_address("93.184.215.14")],
-            ),
             patch("app.services.task_webhook.ssrf.post_public_url") as mock_post,
             patch.object(task_service, "send_discord", return_value=True),
         ):
@@ -355,10 +351,6 @@ class FailTaskWebhookTests(unittest.TestCase):
         task_id = "wc-1"
         task_service.sm.state.update_task(task_id, user_id="u-1")
         with (
-            patch(
-                "app.utils.ssrf._resolve_global_ips",
-                return_value=[ipaddress.ip_address("93.184.215.14")],
-            ),
             patch("app.services.task_webhook.ssrf.post_public_url") as mock_post,
             patch.object(task_service, "generate_script", return_value="ok script"),
             patch.object(task_service, "send_discord", return_value=True),
