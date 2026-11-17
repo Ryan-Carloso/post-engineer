@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 
@@ -62,6 +62,7 @@ vi.mock('@/lib/i18n/provider', () => {
 });
 
 import PostsPage from '../page';
+import { buildMonthGrid, gridRange, unionRange, weekRange } from '../calendar-days';
 import { postsCalendarStrings } from '@/lib/i18n/posts-calendar-i18n';
 import { useHasAnyPostQuery, useScheduleRangeQuery } from '@/lib/schedule-range';
 import {
@@ -1134,6 +1135,111 @@ describe('PostsPage day pick on a phone', () => {
     render(<PostsPage />);
 
     await pickDay5();
+    expect(scrollIntoView).not.toHaveBeenCalled();
+  });
+});
+
+describe('PostsPage week view', () => {
+  const mobileMatchMedia = (query: string) => ({
+    matches: query === '(max-width: 767px)',
+    media: query,
+    onchange: null,
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+    addListener: () => undefined,
+    removeListener: () => undefined,
+    dispatchEvent: () => false,
+  });
+
+  let scrollIntoView: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    scrollIntoView = vi.fn();
+    Object.defineProperty(Element.prototype, 'scrollIntoView', { configurable: true, value: scrollIntoView });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('opens the month view on a wide screen, with the view switcher', () => {
+    render(<PostsPage />);
+
+    expect(screen.getByRole('button', { name: 'posts.calendarPrevMonth' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'posts.calendarPrevWeek' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'posts.calendarViewMonth' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'posts.calendarViewWeek' })).toBeInTheDocument();
+  });
+
+  it('opens the week view on a narrow screen, with no switcher', async () => {
+    vi.stubGlobal('matchMedia', vi.fn(mobileMatchMedia));
+    render(<PostsPage />);
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'posts.calendarPrevWeek' })).toBeInTheDocument(),
+    );
+    expect(screen.queryByRole('button', { name: 'posts.calendarViewMonth' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'posts.calendarViewWeek' })).not.toBeInTheDocument();
+  });
+
+  it('puts the day panel above the week grid on a narrow screen', async () => {
+    vi.stubGlobal('matchMedia', vi.fn(mobileMatchMedia));
+    render(<PostsPage />);
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'posts.calendarPrevWeek' })).toBeInTheDocument(),
+    );
+    // Flex `order` is visual, not DOM order: the panel carries order-1 and
+    // the calendar wrapper order-2, so the panel renders above the grid.
+    const panel = document.querySelector('section[aria-live="polite"]') as HTMLElement;
+    const card = document.querySelector('[data-calendar-card]') as HTMLElement;
+    const calendarWrap = card.parentElement as HTMLElement;
+    expect(panel.className).toContain('order-1');
+    expect(calendarWrap.className).toContain('order-2');
+  });
+
+  it('switches to the week view from the desktop switcher', async () => {
+    render(<PostsPage />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'posts.calendarViewWeek' }));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'posts.calendarPrevWeek' })).toBeInTheDocument(),
+    );
+  });
+
+  it('extends the range read past the month grid when the week leaves it', async () => {
+    vi.stubGlobal('matchMedia', vi.fn(mobileMatchMedia));
+    render(<PostsPage />);
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'posts.calendarNextWeek' })).toBeInTheDocument(),
+    );
+    for (let i = 0; i < 6; i++) {
+      fireEvent.click(screen.getByRole('button', { name: 'posts.calendarNextWeek' }));
+    }
+    const calls = vi.mocked(useScheduleRangeQuery).mock.calls;
+    const last = calls[calls.length - 1];
+    // Six weeks forward from the week of 2030-06-01: the week of 2030-07-07
+    // leaves the June grid (which ends 2030-07-07), so the read extends to
+    // the end of that week while still starting at the grid's start.
+    const expected = unionRange(gridRange(buildMonthGrid(2030, 5, 0)), weekRange(new Date(2030, 6, 7), 0));
+    expect(last).toEqual(['2030-06', expected.from, expected.to, true]);
+  });
+
+  it('does not scroll on a narrow screen: the day panel is already on top', async () => {
+    vi.stubGlobal('matchMedia', vi.fn(mobileMatchMedia));
+    render(<PostsPage />);
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'posts.calendarPrevWeek' })).toBeInTheDocument(),
+    );
+    const columns = document
+      .querySelector('[data-posts-calendar-week]')
+      ?.querySelectorAll('[role="group"][aria-label]:not([inert])');
+    expect(columns).toHaveLength(7);
+    fireEvent.click(columns[0]);
+    expect(screen.getByText('posts.calendarDayNone')).toBeInTheDocument();
     expect(scrollIntoView).not.toHaveBeenCalled();
   });
 });

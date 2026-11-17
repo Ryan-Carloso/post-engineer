@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { RefreshCw, TriangleAlert } from 'lucide-react';
 import { useI18n } from '@/lib/i18n/provider';
 import type { TranslationKey } from '@/lib/i18n';
@@ -20,6 +20,9 @@ import {
   defaultDayForMonth,
   gridRange,
   monthKey,
+  unionRange,
+  weekRange,
+  weekStart,
 } from './calendar-days';
 import { AccountEmptyState, DayEmptyState, NewPostButton } from './day-section';
 import { CALENDAR_LAYOUT_CLASS, CalendarLoadingSkeleton } from './loading-skeleton';
@@ -41,6 +44,23 @@ import { OnboardingWizard, OnboardingWizardButton } from './onboarding-wizard';
 // picking a day scrolls it into view there.
 const NARROW_SCREEN_QUERY = '(max-width: 639px)';
 
+// Below Tailwind's `md` breakpoint the calendar is the week view only:
+// seven columns fit a phone, a month grid does not.
+const MOBILE_QUERY = '(max-width: 767px)';
+
+function useIsMobile(): boolean {
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return;
+    const media = window.matchMedia(MOBILE_QUERY);
+    const update = () => setIsMobile(media.matches);
+    update();
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
+  return isMobile;
+}
+
 export default function PostsPage() {
   const { t, locale } = useI18n();
   // "Today" is the viewer's local day (see calendar-days.ts), computed on
@@ -54,13 +74,29 @@ export default function PostsPage() {
   // the loaded posts on every render: month navigation sets it, so the
   // pick follows the month's data instead of a stale day number.
   const [pickedKey, setPickedKey] = useState<string | null>(todayKey);
+  const isMobile = useIsMobile();
+  // Desktop-only override from the view switcher; mobile is always week.
+  const [viewOverride, setViewOverride] = useState<'month' | 'week' | null>(null);
+  const view = isMobile ? 'week' : (viewOverride ?? 'month');
+  // Anchor of the shown week (any day in it); the provider draws from the
+  // week start, the page keeps the anchor so switching views keeps context.
+  const [weekDate, setWeekDate] = useState(() => new Date());
+  // On mobile the day panel sits above the week grid (the mockup's layout),
+  // so a day pick never needs to scroll.
+  const panelOnTop = isMobile && view === 'week';
   const daySectionRef = useRef<HTMLElement>(null);
   const joins = usePostJoins();
   const filters = usePostFilters(joins);
 
   const firstWeekday = FIRST_WEEKDAY[locale];
   const gridDays = useMemo(() => buildMonthGrid(cursor.year, cursor.month, firstWeekday), [cursor, firstWeekday]);
-  const range = useMemo(() => gridRange(gridDays), [gridDays]);
+  const monthRange = useMemo(() => gridRange(gridDays), [gridDays]);
+  // The week can leave the month grid (a week straddling two months): the
+  // read covers both, so the week's days never render empty.
+  const range = useMemo(
+    () => (view === 'week' ? unionRange(monthRange, weekRange(weekDate, firstWeekday)) : monthRange),
+    [view, monthRange, weekDate, firstWeekday],
+  );
   const rangeQuery = useScheduleRangeQuery(monthKey(cursor.year, cursor.month), range.from, range.to, true);
   const slotsByDay = useMemo(
     () => bucketByDay((rangeQuery.data?.slots ?? []).filter(filters.passes)),
@@ -102,30 +138,66 @@ export default function PostsPage() {
   // an outside day from the neighbouring month) shows that day's month,
   // and the month buttons move the selection to the new month's default
   // day instead of leaving the detail below on a day from the month left.
-  const handleSelect = useCallback((key: string) => {
-    setPickedKey(key);
-    const date = dateFromKey(key);
-    setCursor({ year: date.getFullYear(), month: date.getMonth() });
-    const section = daySectionRef.current;
-    if (section === null || typeof window.matchMedia !== 'function' || !window.matchMedia(NARROW_SCREEN_QUERY).matches) return;
-    requestAnimationFrame(() => {
-      section.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    });
-  }, []);
+  // In week view the pick only moves the panel: the week stays put, and
+  // the month cursor is untouched (switching back to month resyncs it).
+  const handleSelect = useCallback(
+    (key: string) => {
+      setPickedKey(key);
+      if (view === 'week') return;
+      const date = dateFromKey(key);
+      setCursor({ year: date.getFullYear(), month: date.getMonth() });
+      const section = daySectionRef.current;
+      if (section === null || typeof window.matchMedia !== 'function' || !window.matchMedia(NARROW_SCREEN_QUERY).matches) return;
+      requestAnimationFrame(() => {
+        section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    },
+    [view],
+  );
   const handleMonthNavigate = useCallback((year: number, month: number) => {
     setCursor({ year, month });
     setPickedKey(null);
   }, []);
+  const handleWeekNavigate = useCallback((date: Date) => {
+    setWeekDate(date);
+  }, []);
+  // Switching views keeps context: the week opens on the selected day, the
+  // month on the shown week's month.
+  const handleViewChange = useCallback(
+    (nextView: 'month' | 'week') => {
+      if (nextView === 'week') {
+        setWeekDate(selectedKey === null ? new Date() : dateFromKey(selectedKey));
+        setViewOverride('week');
+      } else {
+        setCursor({ year: weekDate.getFullYear(), month: weekDate.getMonth() });
+        setPickedKey(null);
+        setViewOverride('month');
+      }
+    },
+    [selectedKey, weekDate],
+  );
+  const handleGoToToday = useCallback(() => {
+    if (view === 'week') setWeekDate(new Date());
+    handleSelect(todayKey);
+  }, [handleSelect, todayKey, view]);
   // The grid's date hints (a day click, grid scroll): a hint inside the
   // shown month is just the page's own cursor; one outside it moves the
-  // month and clears the pick, like the toolbar buttons above.
+  // month and clears the pick, like the toolbar buttons above. In week
+  // view the same rule holds per week: the lib navigates weeks on its own
+  // (grid scroll, keyboard), and a hint in another week moves the anchor.
   const handleCalendarDateChange = useCallback(
     (date: Date) => {
+      if (view === 'week') {
+        if (dayKey(weekStart(date, firstWeekday)) !== dayKey(weekStart(weekDate, firstWeekday))) {
+          setWeekDate(weekStart(date, firstWeekday));
+        }
+        return;
+      }
       if (date.getFullYear() === cursor.year && date.getMonth() === cursor.month) return;
       setCursor({ year: date.getFullYear(), month: date.getMonth() });
       setPickedKey(null);
     },
-    [cursor],
+    [cursor, firstWeekday, view, weekDate],
   );
   const calendarEvents = useMemo(
     () =>
@@ -192,6 +264,7 @@ export default function PostsPage() {
             <div
               className={cn(
                 'min-w-0 xl:col-start-1 xl:row-start-1',
+                panelOnTop && 'order-2 max-xl:pb-24',
                 isError && loadErrorKey === 'posts.loadErrorCalendar' && 'xl:col-span-2',
               )}
             >
@@ -210,7 +283,9 @@ export default function PostsPage() {
               ) : (
                 <PostsCalendar
                   events={calendarEvents}
-                  date={new Date(cursor.year, cursor.month, 1)}
+                  date={view === 'week' ? weekStart(weekDate, firstWeekday) : new Date(cursor.year, cursor.month, 1)}
+                  view={view}
+                  showViewSwitcher={!isMobile}
                   weekStartsOn={firstWeekday}
                   locale={locale}
                   loading={rangeQuery.isFetching}
@@ -219,7 +294,9 @@ export default function PostsPage() {
                   onDateChange={handleCalendarDateChange}
                   onSelectDay={handleSelect}
                   onMonthNavigate={handleMonthNavigate}
-                  onGoToToday={() => handleSelect(todayKey)}
+                  onWeekNavigate={handleWeekNavigate}
+                  onViewChange={handleViewChange}
+                  onGoToToday={handleGoToToday}
                 />
               )}
             </div>
@@ -238,7 +315,10 @@ export default function PostsPage() {
               <section
                 ref={daySectionRef}
                 aria-live="polite"
-                className="order-2 mt-4 min-w-0 scroll-mt-4 max-xl:pb-24 xl:col-start-2 xl:row-start-1 xl:mt-0 xl:pt-4"
+                className={cn(
+                  'min-w-0 scroll-mt-4 xl:col-start-2 xl:row-start-1 xl:mt-0 xl:pt-4',
+                  panelOnTop ? 'order-1 mt-0' : 'order-2 mt-4 max-xl:pb-24',
+                )}
               >
                 {isAccountEmpty ? (
                   <>

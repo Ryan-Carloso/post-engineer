@@ -76,6 +76,26 @@ export function gridRange(grid: CalendarDay[][]): { from: string; to: string } {
   return { from: first.toISOString(), to: addDays(last, 1).toISOString() };
 }
 
+// First day of the week holding `date`, starting on `weekStartsOn` — the
+// week view draws its seven columns from here, and the range query starts
+// here too.
+export function weekStart(date: Date, weekStartsOn: 0 | 1): Date {
+  const offset = (date.getDay() - weekStartsOn + 7) % 7;
+  return addDays(date, -offset);
+}
+
+// [from, to) of one week as UTC ISO instants for the range query.
+export function weekRange(date: Date, weekStartsOn: 0 | 1): { from: string; to: string } {
+  const start = weekStart(date, weekStartsOn);
+  return { from: start.toISOString(), to: addDays(start, 7).toISOString() };
+}
+
+// Widest of two [from, to) ranges: one read covering both, so the week view
+// never needs a second range query for days outside the month grid.
+export function unionRange(a: { from: string; to: string }, b: { from: string; to: string }): { from: string; to: string } {
+  return { from: a.from < b.from ? a.from : b.from, to: a.to > b.to ? a.to : b.to };
+}
+
 export function bucketByDay<T extends Pick<ScheduledSlot, 'slotAt'>>(slots: T[], timeZone?: string): Map<string, T[]> {
   const buckets = new Map<string, T[]>();
   for (const slot of slots) {
