@@ -197,6 +197,7 @@ jobs:
         with:
           name: web-timings-shard-${{ matrix.shard }}
           path: apps/web/.vitest-shard-timings.json
+          include-hidden-files: true
           if-no-files-found: ignore
           retention-days: 1
 
@@ -206,6 +207,7 @@ jobs:
         with:
           name: web-shard-marker-${{ matrix.shard }}
           path: apps/web/.shard-marker.json
+          include-hidden-files: true
           if-no-files-found: error
           retention-days: 1
 
