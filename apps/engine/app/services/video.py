@@ -27,11 +27,9 @@ from moviepy.video.tools.subtitles import SubtitlesClip
 from PIL import Image, ImageDraw, ImageFont
 
 from app.config import config
-from app.models import const
-from app.services import caption_layout, image_material, media_aspect, subtitle_sizing, video_loop
+from app.services import caption_layout, subtitle_sizing, video_loop
 from app.services.letterbox import MAX_LETTERBOX_BARS
 from app.models.schema import (
-    MaterialInfo,
     VideoAspect,
     VideoConcatMode,
     VideoParams,
@@ -1754,99 +1752,3 @@ def generate_video(
     )
     video_clip.close()
     del video_clip
-
-
-def preprocess_video(materials: List[MaterialInfo], clip_duration=4, video_aspect=None):
-    # The WebUI may pass an empty material list in some re-generation flows;
-    # return an empty result directly instead of raising a NoneType error.
-    if not materials:
-        return []
-
-    # With an aspect, a photo that cannot fill the frame is skipped here.
-    aspect = media_aspect.coerce_aspect(video_aspect)
-    # Only materials that pass preprocessing validation are returned, so
-    # low-resolution images can't proceed into the video compositing flow.
-    valid_materials = []
-    local_videos_dir = utils.storage_dir("local_videos", create=True)
-
-    for material in materials:
-        if not material.url:
-            continue
-
-        try:
-            material_source_path = file_security.resolve_path_within_directory(
-                local_videos_dir, material.url
-            )
-        except ValueError as exc:
-            # local video_materials paths come from API params and must stay
-            # inside the dedicated material directory. Bare filenames are
-            # allowed (and historical absolute return values are tolerated),
-            # but nothing may escape to other system directories — no
-            # arbitrary file reads or MoviePy probing of local sensitive
-            # files.
-            logger.warning(
-                f"skip unsafe local material: {material.url}, "
-                f"local_videos_dir: {local_videos_dir}, error: {str(exc)}"
-            )
-            continue
-
-        ext = utils.parse_extension(material_source_path)
-        try:
-            # Read image material as an image directly, so a VideoFileClip
-            # mis-detection can't trigger the unstable fallback branch.
-            if ext in const.FILE_TYPE_IMAGES:
-                clip, material_source_path = _open_image_clip_with_fallback(
-                    material_source_path
-                )
-            else:
-                clip = _open_video_clip_quietly(material_source_path)
-        except Exception:
-            # Fall back to image mode only on non-standard extensions or probe
-            # failure, for back-compat with direct local image paths.
-            try:
-                clip, material_source_path = _open_image_clip_with_fallback(
-                    material_source_path
-                )
-            except Exception as exc:
-                logger.warning(
-                    f"skip unreadable local material: {material.url}, error: {str(exc)}"
-                )
-                continue
-        try:
-            width = clip.size[0]
-            height = clip.size[1]
-            reason = media_aspect.rejection_reason(width, height, aspect)
-            if reason is not None:
-                logger.warning(f"skip material {material.url}: {reason}")
-                # Release the probe handle right after the rejection,
-                # and don't pass the material on.
-                close_clip(clip)
-                continue
-
-            if ext in const.FILE_TYPE_IMAGES:
-                logger.info(f"processing image: {material_source_path}")
-                # The material was already opened once for the size probe;
-                # release that handle before re-creating the image clip used
-                # for export.
-                close_clip(clip)
-                video_file = image_material.render_image_file_to_mp4(
-                    material_source_path, clip_duration
-                )
-                if not video_file:
-                    continue
-                material.url = video_file
-                logger.success(f"image processed: {video_file}")
-            else:
-                # Plain video material only needs its size read for validation;
-                # release the handle right after the check.
-                close_clip(clip)
-                # Update url to the resolved absolute path so that downstream
-                # stages (combine_videos) can open the file without re-resolving.
-                material.url = material_source_path
-        except Exception:
-            close_clip(clip)
-            raise
-
-        valid_materials.append(material)
-
-    return valid_materials

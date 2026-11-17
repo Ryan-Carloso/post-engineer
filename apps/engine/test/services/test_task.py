@@ -13,7 +13,7 @@ from app.services import task as tm
 from app.services import voice as vs
 from app.services.intro_cost import IntroCostReport, completion_cost_kwargs
 from app.services import intro_cost as intro_cost_module
-from app.models.schema import MaterialInfo, PersonaParams, VideoParams
+from app.models.schema import PersonaParams, VideoParams
 from app.utils import utils
 
 resources_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "resources")
@@ -258,76 +258,12 @@ class TestTaskService(unittest.TestCase):
         create_subtitle.assert_not_called()
         whisper_create.assert_not_called()
 
-    @unittest.skipUnless(
-        RUN_INTEGRATION_TESTS,
-        "MPT_RUN_INTEGRATION_TESTS not set",
-    )
-    def test_task_local_materials(self):
-        task_id = "00000000-0000-0000-0000-000000000000"
-        video_materials = []
-        for i in range(1, 4):
-            video_materials.append(
-                MaterialInfo(
-                    provider="local", url=os.path.join(resources_dir, f"{i}.png"), duration=0
-                )
-            )
-
-        params = VideoParams(
-            video_title="金钱的作用",
-            video_description="Test description.",
-            video_type="faceless",
-            video_script="金钱不仅是交换媒介，更是社会资源的分配工具。它能满足基本生存需求，如食物和住房，也能提供教育、医疗等提升生活品质的机会。拥有足够的金钱意味着更多选择权，比如职业自由或创业可能。但金钱的作用也有边界，它无法直接购买幸福、健康或真诚的人际关系。过度追逐财富可能导致价值观扭曲，忽视精神层面的需求。理想的状态是理性看待金钱，将其作为实现目标的工具而非终极目的。",
-            video_aspect="9:16",
-            video_concat_mode="random",
-            video_transition_mode="None",
-            video_clip_duration=3,
-            video_materials=video_materials,
-            video_language="",
-            voice_name="zh-CN-XiaoxiaoNeural-Female",
-            voice_volume=1.0,
-            voice_rate=1.0,
-            bgm_volume=0.2,
-            subtitle_enabled=True,
-            subtitle_position="bottom",
-            custom_position=70.0,
-            font_name="MicrosoftYaHeiBold.ttc",
-            text_fore_color="#FFFFFF",
-            text_background_color=True,
-            font_size=60,
-            stroke_color="#000000",
-            stroke_width=1.5,
-            n_threads=2,
-            paragraph_number=1,
-        )
-        result = tm.start(task_id=task_id, params=params)
-        print(result)
-
 
 class TestGetVideoMaterials(unittest.TestCase):
     """
-    Local materials replace the download; otherwise the images mode renders
-    only the neutral canvas the agent's segment photos cover. There is no
-    remote download anymore (issue #542).
+    The images mode renders only the neutral canvas the agent's segment
+    photos cover. There is no remote download anymore (issue #542).
     """
-
-    def test_provided_materials_skip_download(self):
-        material_info = MaterialInfo(provider="local", url="/tmp/a.mp4", duration=0)
-        params = VideoParams(
-            video_title="x",
-            video_description="Test description.",
-            video_type="faceless",
-            video_materials=[material_info],
-        )
-
-        with patch.object(tm.video, "preprocess_video", return_value=[material_info]) as preprocess:
-            result = tm.get_video_materials(
-                task_id="local-materials",
-                params=params,
-                audio_duration=10,
-            )
-
-        self.assertEqual(result, ["/tmp/a.mp4"])
-        preprocess.assert_called_once()
 
     def test_images_mode_returns_the_neutral_canvas(self):
         params = VideoParams(

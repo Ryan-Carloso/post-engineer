@@ -23,7 +23,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from pydantic import ValidationError
 
-from app.models.schema import MaterialInfo, VideoParams
+from app.models.schema import VideoParams
 from app.services import music_mood as mm
 from app.services import task as tm
 from app.services.intro_cost import IntroCostReport
@@ -35,7 +35,6 @@ def _params(subject="Lisbon trams", music_mood=None):
         video_description="Test description.",
         video_type="faceless",
         voice_name="chatterbox:kokoro_af_heart",
-        video_materials=[MaterialInfo(provider="local", url="/tmp/a.mp4", duration=0)],
         music_mood=music_mood,
     )
 
