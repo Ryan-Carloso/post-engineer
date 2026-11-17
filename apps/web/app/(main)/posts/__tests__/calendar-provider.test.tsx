@@ -62,6 +62,10 @@ function renderCalendar(props: Record<string, unknown> = {}) {
     <PostsCalendar
       events={[]}
       date={new Date(2030, 5, 1)}
+      // The lib defaults an undefined view to "week", so the month suite
+      // passes it explicitly — the month grid is what this suite tests.
+      view="month"
+      showViewSwitcher={false}
       weekStartsOn={0}
       locale="en"
       loading={false}
