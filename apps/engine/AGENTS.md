@@ -111,7 +111,7 @@ unavailable, so this is safe on any host.
   **production defaults** produce a valid video — not for redefining those
   defaults.
 - The engine test suite must maintain at least **60% line coverage**. Run
-  `uv run coverage run --source=app,cli -m pytest -q && uv run coverage report -m`
+  `uv run coverage run --source=app -m pytest -q && uv run coverage report -m`
   and treat any result below 60% as a failure.
 
 ### Structural source-scan tests must be mutmut-aware

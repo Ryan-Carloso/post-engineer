@@ -1,4 +1,4 @@
-"""Response envelopes for local media endpoints (BGM, video materials).
+"""Response envelopes for local media endpoints (BGM).
 
 These classes used to live in app/models/schema.py. They were moved here so
 schema.py stays under the 500-line file-size ratchet while the segments

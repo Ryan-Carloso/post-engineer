@@ -23,8 +23,9 @@ def render_image_file_to_mp4(image_path: str, clip_duration: int = 4) -> str:
     minimum size. Used by the neutral-background canvas to turn its still
     into a clip.
     """
-    # Imported lazily: video.py imports this module at top level, so a
-    # top-level import back would be circular.
+    # Imported lazily: keeps video.py importable without moviepy clip
+    # construction at import time (and avoids any import cycle if a
+    # top-level video.py -> image_material edge ever returns).
     from app.services import video as video_service
 
     try:
