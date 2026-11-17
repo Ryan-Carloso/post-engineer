@@ -17,6 +17,7 @@ vi.mock('@/lib/owner-alert-mail', () => ({ notifyAccountBreak: vi.fn(() => Promi
 
 import {
   ACCOUNT_PROFILE_SYNC_MAX_AGE_MS,
+  ACCOUNT_PROFILE_SYNC_FAILURE_COOLDOWN_MS,
   mergeProfileMetadata,
   profileNeedsSync,
   syncAccountProfile,
@@ -34,7 +35,8 @@ const FRESH_PIC = `https://scontent.cdninstagram.com/p.jpg?oe=${hexSeconds(NOW.g
 const EXPIRED_PIC = `https://scontent.cdninstagram.com/p.jpg?oe=${hexSeconds(NOW.getTime() - 1000)}`;
 const RECENT = new Date(NOW.getTime() - 60_000).toISOString();
 const STALE = new Date(NOW.getTime() - ACCOUNT_PROFILE_SYNC_MAX_AGE_MS - 1).toISOString();
-const LEFTOVER_FAILURE_MARKER = new Date(NOW.getTime() - 60_000).toISOString();
+const TEN_MINUTES_AGO = new Date(NOW.getTime() - 10 * 60_000).toISOString();
+const TWO_HOURS_AGO = new Date(NOW.getTime() - 2 * ACCOUNT_PROFILE_SYNC_FAILURE_COOLDOWN_MS).toISOString();
 
 function record(overrides: Partial<SocialAccountRecord> = {}, metadata: Record<string, unknown> = {}): SocialAccountRecord {
   return {
@@ -92,11 +94,37 @@ describe('profileNeedsSync', () => {
     expect(profileNeedsSync(record({}, { avatar: EXPIRED_PIC }), 'profilePictureUrl', NOW)).toBe(false);
   });
 
-  it('ignores a leftover failure marker from before the guard was removed', () => {
-    // Rows synced before the removal may still carry profileSyncFailedAt;
-    // it is inert data now and must not suppress a sync.
+  it('is false inside the failure cooldown, even when the row was never synced', () => {
     expect(
-      profileNeedsSync(record({}, { profileSyncedAt: undefined, profileSyncFailedAt: LEFTOVER_FAILURE_MARKER }), 'profilePictureUrl', NOW),
+      profileNeedsSync(record({}, { profileSyncedAt: undefined, profileSyncFailedAt: TEN_MINUTES_AGO }), 'profilePictureUrl', NOW),
+    ).toBe(false);
+  });
+
+  it('is false inside the failure cooldown, even when the picture expired', () => {
+    expect(
+      profileNeedsSync(record({}, { profilePictureUrl: EXPIRED_PIC, profileSyncFailedAt: TEN_MINUTES_AGO }), 'profilePictureUrl', NOW),
+    ).toBe(false);
+  });
+
+  it('is true once the failure cooldown has passed', () => {
+    expect(
+      profileNeedsSync(record({}, { profileSyncedAt: undefined, profileSyncFailedAt: TWO_HOURS_AGO }), 'profilePictureUrl', NOW),
+    ).toBe(true);
+  });
+
+  it('is true exactly at the cooldown boundary', () => {
+    const boundary = new Date(NOW.getTime() - ACCOUNT_PROFILE_SYNC_FAILURE_COOLDOWN_MS).toISOString();
+    expect(
+      profileNeedsSync(record({}, { profileSyncedAt: undefined, profileSyncFailedAt: boundary }), 'profilePictureUrl', NOW),
+    ).toBe(true);
+  });
+
+  it('ignores an unparseable or non-string failure marker', () => {
+    expect(
+      profileNeedsSync(record({}, { profileSyncedAt: undefined, profileSyncFailedAt: 'garbage' }), 'profilePictureUrl', NOW),
+    ).toBe(true);
+    expect(
+      profileNeedsSync(record({}, { profileSyncedAt: undefined, profileSyncFailedAt: 42 }), 'profilePictureUrl', NOW),
     ).toBe(true);
   });
 });
@@ -109,6 +137,15 @@ describe('mergeProfileMetadata', () => {
       NOW,
     );
     expect(merged).toEqual({ name: 'Kept', profilePictureUrl: 'new', other: 1, profileSyncedAt: NOW.toISOString() });
+  });
+
+  it('removes the failure marker keys on success', () => {
+    const merged = mergeProfileMetadata(
+      { profilePictureUrl: 'old', profileSyncFailedAt: TEN_MINUTES_AGO, profileSyncFailedReason: 'Error' },
+      { accountName: null, pictureUrl: null, metadata: {} },
+      NOW,
+    );
+    expect(merged).toEqual({ profilePictureUrl: 'old', profileSyncedAt: NOW.toISOString() });
   });
 });
 
@@ -181,7 +218,7 @@ describe('syncAccountProfile', () => {
     expect(result.accountName).toBe('old_handle');
   });
 
-  it('reports and rethrows a provider failure without writing', async () => {
+  it('reports, writes the failure marker, and rethrows a provider failure', async () => {
     const failure = new Error('token revoked');
     sources.instagram.fetch.mockRejectedValue(failure);
     const rec = record({}, { profileSyncedAt: STALE });
@@ -189,8 +226,93 @@ describe('syncAccountProfile', () => {
       syncAccountProfile(supabase, 'u1', rec, { now: () => NOW }),
     ).rejects.toBe(failure);
     expect(reportProfileFetchFailed).toHaveBeenCalledWith('instagram', 'sync', failure);
-    expect(updateSocialAccountMetadata).not.toHaveBeenCalled();
+    expect(updateSocialAccountMetadata).toHaveBeenCalledTimes(1);
+    expect(updateSocialAccountMetadata).toHaveBeenCalledWith(
+      supabase,
+      'u1',
+      'instagram',
+      'ig-1',
+      { profilePictureUrl: FRESH_PIC, profileSyncedAt: STALE, profileSyncFailedAt: NOW.toISOString(), profileSyncFailedReason: 'Error' },
+    );
+    // No account name argument: the marker write leaves the name untouched.
+    expect(vi.mocked(updateSocialAccountMetadata).mock.calls[0]).toHaveLength(5);
     expect(notifyAccountBreak).not.toHaveBeenCalled();
+  });
+
+  it('stores the account break class as the failure reason', async () => {
+    const failure = { response: { status: 401 }, message: 'Unauthorized' };
+    sources.instagram.fetch.mockRejectedValue(failure);
+    const rec = record({}, { profileSyncedAt: STALE });
+    await expect(
+      syncAccountProfile(supabase, 'u1', rec, { now: () => NOW }),
+    ).rejects.toBe(failure);
+    expect(updateSocialAccountMetadata).toHaveBeenCalledWith(
+      supabase,
+      'u1',
+      'instagram',
+      'ig-1',
+      expect.objectContaining({ profileSyncFailedReason: 'unauthorized' }),
+    );
+  });
+
+  it('logs a failed marker write and still rethrows the original error', async () => {
+    const failure = new Error('token revoked');
+    sources.instagram.fetch.mockRejectedValue(failure);
+    const markerError = new Error('database down');
+    vi.mocked(updateSocialAccountMetadata).mockRejectedValueOnce(markerError);
+    const rec = record({}, { profileSyncedAt: STALE });
+    await expect(
+      syncAccountProfile(supabase, 'u1', rec, { now: () => NOW }),
+    ).rejects.toBe(failure);
+    expect(logger.error).toHaveBeenCalledWith(
+      '[ACCOUNT] Profile sync failure marker write failed',
+      markerError,
+      { recordId: 'rec-1', provider: 'instagram' },
+    );
+  });
+
+  it('does not re-fetch a row that failed 10 minutes ago and still probes the credential', async () => {
+    const rec = record({}, { profileSyncedAt: STALE, profileSyncFailedAt: TEN_MINUTES_AGO, profileSyncFailedReason: 'Error' });
+    expect(await syncAccountProfile(supabase, 'u1', rec, { now: () => NOW })).toBe(rec);
+    expect(sources.instagram.fetch).not.toHaveBeenCalled();
+    expect(vi.mocked(getSocialAccountTokens)).toHaveBeenCalledWith(supabase, 'u1', 'instagram', 'ig-1');
+    expect(updateSocialAccountMetadata).not.toHaveBeenCalled();
+  });
+
+  it('flags a cooldown row whose stored token is undecryptable', async () => {
+    const failure = new Error('Invalid authentication tag length: 2');
+    vi.mocked(getSocialAccountTokens).mockRejectedValueOnce(failure);
+    const rec = record({}, { profileSyncedAt: STALE, profileSyncFailedAt: TEN_MINUTES_AGO, profileSyncFailedReason: 'Error' });
+    await expect(
+      syncAccountProfile(supabase, 'u1', rec, { now: () => NOW }),
+    ).rejects.toBe(failure);
+    expect(sources.instagram.fetch).not.toHaveBeenCalled();
+    expect(reportProfileFetchFailed).toHaveBeenCalledWith('instagram', 'sync', failure);
+  });
+
+  it('re-fetches a row that failed 2 hours ago and clears the marker', async () => {
+    sources.instagram.fetch.mockResolvedValue({ accountName: null, pictureUrl: null, metadata: {} });
+    const rec = record({}, { profileSyncedAt: STALE, profileSyncFailedAt: TWO_HOURS_AGO, profileSyncFailedReason: 'Error' });
+    const result = await syncAccountProfile(supabase, 'u1', rec, { now: () => NOW });
+    expect(sources.instagram.fetch).toHaveBeenCalledTimes(1);
+    const written = vi.mocked(updateSocialAccountMetadata).mock.calls[0][4];
+    expect(written).not.toHaveProperty('profileSyncFailedAt');
+    expect(written).not.toHaveProperty('profileSyncFailedReason');
+    expect(result.accountMetadata).not.toHaveProperty('profileSyncFailedAt');
+  });
+
+  it('reports the failure telemetry once across two list calls inside the cooldown', async () => {
+    const failure = new Error('token revoked');
+    sources.instagram.fetch.mockRejectedValue(failure);
+    const rec = record({}, { profileSyncedAt: STALE });
+    await expect(syncAccountProfile(supabase, 'u1', rec, { now: () => NOW })).rejects.toBe(failure);
+    // The next list load re-reads the row with the persisted marker.
+    const written = vi.mocked(updateSocialAccountMetadata).mock.calls[0][4] as Record<string, unknown>;
+    const later = new Date(NOW.getTime() + 10 * 60_000);
+    const second = record({}, written);
+    expect(await syncAccountProfile(supabase, 'u1', second, { now: () => later })).toBe(second);
+    expect(sources.instagram.fetch).toHaveBeenCalledTimes(1);
+    expect(reportProfileFetchFailed).toHaveBeenCalledTimes(1);
   });
 
   it('emails the owner when a profile fetch is unauthorized', async () => {

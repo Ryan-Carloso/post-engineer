@@ -55,8 +55,9 @@ async function getHandler(request?: Request) {
     // response, so the accounts page flags that card instead of showing it
     // as healthy. A transient failure does not: the row keeps the stored
     // profile and stays 'ok', so the card keeps its disconnect action and
-    // the next list retries the row. The failure never drops the row: one
-    // broken account must not block the others.
+    // the next list retries the row once its failure cooldown expires. The
+    // failure never drops the row: one broken account must not block the
+    // others.
     const failedRecordIds = new Set<string>();
     const effectiveRecords = await Promise.all(records.map(async (record) => {
       try {
