@@ -17,6 +17,7 @@ import { emitRefundIssued, refundSlotTokens } from '@/lib/billing/refund-tokens'
 import { scrubSecrets } from '@/lib/scrub';
 import { CANCEL_REFUND_REASON, refundsAfterClawback } from './batch-clawback';
 import { parseCancelScheduleQuery } from '@/lib/contracts/schedule';
+import { isUuid } from '@/lib/schedule-slot-id';
 import { removeCancelledMediaImages } from './cancel-media-cleanup';
 import {
   CANCELLABLE_SLOT_STATUSES,
@@ -166,6 +167,15 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
   const cancelQuery = parseCancelScheduleQuery(new URL(request.url).searchParams);
   if (!cancelQuery.ok) return errorResponse(400, cancelQuery.error, 'DELETE /api/schedule');
   const scheduleId = cancelQuery.query.id;
+
+  // A schedule id is a uuid. Anything else (a truncated id, a batch key)
+  // can never match a row, and feeding it to a uuid-typed filter raises
+  // Postgres 22P02 and turns into a 500 — the same class resolveSlotUuid
+  // guards on the slot routes. Treat it as unknown before the scope
+  // lookup, which filters on the same uuid column.
+  if (!isUuid(scheduleId)) {
+    return errorResponse(404, 'Schedule not found.', 'DELETE /api/schedule');
+  }
 
   // A persona-scoped API key may only delete schedules of its own personas.
   // Sessions and unrestricted keys keep the previous behavior (no lookup).

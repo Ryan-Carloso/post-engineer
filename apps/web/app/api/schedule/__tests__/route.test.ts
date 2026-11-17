@@ -403,7 +403,7 @@ describe('/api/schedule', () => {
 
   it('DELETE removes by id', async () => {
     const db = mockSupabase({ remove: { error: null } });
-    const res = await DELETE(new Request('http://localhost/api/schedule?id=s-1'));
+    const res = await DELETE(new Request('http://localhost/api/schedule?id=11111111-1111-4111-8111-111111111111'));
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(CancelScheduleResponseSchema.safeParse(body).success).toBe(true);
@@ -415,6 +415,18 @@ describe('/api/schedule', () => {
     mockSupabase({});
     const res = await DELETE(new Request('http://localhost/api/schedule'));
     expect(res.status).toBe(400);
+  });
+
+  it('DELETE returns 404 for a non-UUID schedule id without touching the database', async () => {
+    // Production: a truncated id (first 8 chars of a uuid, e.g. ca192c1b)
+    // reached the uuid-typed schedule_id filter and raised Postgres 22P02,
+    // turning into a 500. A non-uuid id can never match a row: 404.
+    const db = mockSupabase({ remove: { error: null } });
+    const res = await DELETE(new Request('http://localhost/api/schedule?id=ca192c1b'));
+    expect(res.status).toBe(404);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe('Schedule not found.');
+    expect(db.deleteCalls).toEqual([]);
   });
 
   it('GET returns 500 when the list query fails', async () => {
@@ -431,7 +443,7 @@ describe('/api/schedule', () => {
       auth: null,
       error: NextResponse.json({ success: false }, { status: 401 }),
     });
-    const res = await DELETE(new Request('http://localhost/api/schedule?id=s-1'));
+    const res = await DELETE(new Request('http://localhost/api/schedule?id=11111111-1111-4111-8111-111111111111'));
     expect(res.status).toBe(401);
     expect(db.deleteCalls).toEqual([]);
   });
@@ -504,7 +516,7 @@ describe('/api/schedule persona scoping (scoped API keys)', () => {
       current: { data: { persona_id: null } },
       remove: { error: null },
     });
-    const res = await DELETE(new Request('http://localhost/api/schedule?id=s-3', { method: 'DELETE' }));
+    const res = await DELETE(new Request('http://localhost/api/schedule?id=33333333-3333-4333-8333-333333333333', { method: 'DELETE' }));
     expect(res.status).toBe(200);
   });
 
@@ -513,7 +525,7 @@ describe('/api/schedule persona scoping (scoped API keys)', () => {
       current: { data: { persona_id: 'p-other' } },
       remove: { error: null },
     });
-    const res = await DELETE(new Request('http://localhost/api/schedule?id=s-2', { method: 'DELETE' }));
+    const res = await DELETE(new Request('http://localhost/api/schedule?id=22222222-2222-4222-8222-222222222222', { method: 'DELETE' }));
     expect(res.status).toBe(403);
   });
 
@@ -522,7 +534,7 @@ describe('/api/schedule persona scoping (scoped API keys)', () => {
       current: { data: { persona_id: 'p-allowed' } },
       remove: { error: null },
     });
-    const res = await DELETE(new Request('http://localhost/api/schedule?id=s-1', { method: 'DELETE' }));
+    const res = await DELETE(new Request('http://localhost/api/schedule?id=11111111-1111-4111-8111-111111111111', { method: 'DELETE' }));
     expect(res.status).toBe(200);
   });
 
@@ -531,7 +543,7 @@ describe('/api/schedule persona scoping (scoped API keys)', () => {
       current: { data: null },
       remove: { error: null },
     });
-    const res = await DELETE(new Request('http://localhost/api/schedule?id=s-missing', { method: 'DELETE' }));
+    const res = await DELETE(new Request('http://localhost/api/schedule?id=99999999-9999-4999-8999-999999999999', { method: 'DELETE' }));
     expect(res.status).toBe(404);
   });
 
@@ -540,7 +552,7 @@ describe('/api/schedule persona scoping (scoped API keys)', () => {
       current: { data: null, error: { code: '57014', message: 'timeout' } },
     });
     vi.mocked(requireSupabaseSession).mockResolvedValue(SCOPED_AUTH as never);
-    const res = await DELETE(new Request('http://localhost/api/schedule?id=s-1', { method: 'DELETE' }));
+    const res = await DELETE(new Request('http://localhost/api/schedule?id=11111111-1111-4111-8111-111111111111', { method: 'DELETE' }));
     expect(res.status).toBe(500);
     const body = (await res.json()) as { error: string };
     expect(body.error).toBe('Failed to fetch schedule.');
@@ -573,7 +585,7 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
       scheduleSlots: MIXED_SLOTS,
       remove: { error: null },
     });
-    const res = await DELETE(new Request('http://localhost/api/schedule?id=s-1'));
+    const res = await DELETE(new Request('http://localhost/api/schedule?id=11111111-1111-4111-8111-111111111111'));
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
       success: boolean;
@@ -592,17 +604,17 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
     ]);
     expect(db.slotDeleteFilters).toEqual([
       {
-        schedule_id: 's-1',
+        schedule_id: '11111111-1111-4111-8111-111111111111',
         user_id: USER_ID,
         status: ['pending', 'generating', 'ready'],
       },
     ]);
     expect(db.deleteCalls.map((call) => call.table)).toEqual(['scheduled_posts', 'schedules']);
     const refunds = refundCalls(db);
-    expect(refunds.map((params) => params.p_refund_key)).toEqual(['batch:s-1:slot:slot-pending']);
+    expect(refunds.map((params) => params.p_refund_key)).toEqual(['batch:11111111-1111-4111-8111-111111111111:slot:slot-pending']);
     expect(refunds.map((params) => params.p_amount)).toEqual([2]);
     expect(refunds.map((params) => params.p_engine_task_id)).toEqual([null]);
-    expect(refunds.every((params) => params.p_batch_generation_id === 'batch:s-1')).toBe(true);
+    expect(refunds.every((params) => params.p_batch_generation_id === 'batch:11111111-1111-4111-8111-111111111111')).toBe(true);
     expect(refunds.every((params) => params.p_user_id === USER_ID)).toBe(true);
     expect(refunds.every((params) => params.p_reason === 'Schedule cancelled before publish; video refunded')).toBe(true);
     expect(logger.error).not.toHaveBeenCalledWith(
@@ -620,7 +632,7 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
       ],
       remove: { error: null },
     });
-    const res = await DELETE(new Request('http://localhost/api/schedule?id=s-1'));
+    const res = await DELETE(new Request('http://localhost/api/schedule?id=11111111-1111-4111-8111-111111111111'));
     expect(res.status).toBe(200);
     expect(refundCalls(db).map((params) => params.p_amount)).toEqual([7]);
     // The mock returns full fixture rows regardless of the requested
@@ -638,7 +650,7 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
       ],
       remove: { error: null },
     });
-    const res = await DELETE(new Request('http://localhost/api/schedule?id=s-1'));
+    const res = await DELETE(new Request('http://localhost/api/schedule?id=11111111-1111-4111-8111-111111111111'));
     expect(res.status).toBe(200);
     // The ready image slot is cancelled, so its bytes go with it; the
     // ready video slot has no stored image, and the published image slot
@@ -656,7 +668,7 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
         { id: 'slot-paid', status: 'pending', charged_tokens: 3, task_id: null },
       ],
     });
-    const res = await DELETE(new Request('http://localhost/api/schedule?id=s-1'));
+    const res = await DELETE(new Request('http://localhost/api/schedule?id=11111111-1111-4111-8111-111111111111'));
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
       cancelledSlotIds: string[];
@@ -667,7 +679,7 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
       { slotId: 'slot-free', refunded: false, alreadyRefunded: false, reason: 'not_charged' },
       { slotId: 'slot-paid', refunded: true, alreadyRefunded: false, reason: 'not_generated' },
     ]);
-    expect(refundCalls(db).map((params) => params.p_refund_key)).toEqual(['batch:s-1:slot:slot-paid']);
+    expect(refundCalls(db).map((params) => params.p_refund_key)).toEqual(['batch:11111111-1111-4111-8111-111111111111:slot:slot-paid']);
   });
 
   it('treats an already-refunded slot as success', async () => {
@@ -675,7 +687,7 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
       scheduleSlots: [{ id: 'slot-g', status: 'pending', charged_tokens: 2, task_id: null }],
       rpc: { refundBatch: { data: { refunded: false, already_refunded: true }, error: null } },
     });
-    const res = await DELETE(new Request('http://localhost/api/schedule?id=s-1'));
+    const res = await DELETE(new Request('http://localhost/api/schedule?id=11111111-1111-4111-8111-111111111111'));
     expect(res.status).toBe(200);
     const body = (await res.json()) as { refunds: { refunded: boolean; alreadyRefunded: boolean; reason: string }[] };
     expect(body.refunds).toEqual([{ slotId: 'slot-g', refunded: false, alreadyRefunded: true, reason: 'already_refunded' }]);
@@ -691,14 +703,14 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
       scheduleSlots: [{ id: 'slot-g', status: 'pending', charged_tokens: 2, task_id: null }],
       rpc: { refundBatch: { data: { refunded: false, already_refunded: false }, error: null } },
     });
-    const res = await DELETE(new Request('http://localhost/api/schedule?id=s-1'));
+    const res = await DELETE(new Request('http://localhost/api/schedule?id=11111111-1111-4111-8111-111111111111'));
     expect(res.status).toBe(200);
     const body = (await res.json()) as { refunds: { refunded: boolean; alreadyRefunded: boolean; reason: string }[] };
     expect(body.refunds).toEqual([{ slotId: 'slot-g', refunded: false, alreadyRefunded: false, reason: 'refund_failed' }]);
     expect(logger.error).toHaveBeenCalledWith(
       '[api/schedule] cancel refund failed',
       { refunded: false, already_refunded: false },
-      expect.objectContaining({ scheduleId: 's-1', slotId: 'slot-g', userId: USER_ID }),
+      expect.objectContaining({ scheduleId: '11111111-1111-4111-8111-111111111111', slotId: 'slot-g', userId: USER_ID }),
     );
     expect(db.deleteCalls.map((call) => call.table)).toContain('schedules');
   });
@@ -708,7 +720,7 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
       scheduleSlots: [{ id: 'slot-g', status: 'generating', charged_tokens: 2, task_id: 'task-g' }],
       slotDeleteError: { message: 'slot delete down' },
     });
-    const res = await DELETE(new Request('http://localhost/api/schedule?id=s-1'));
+    const res = await DELETE(new Request('http://localhost/api/schedule?id=11111111-1111-4111-8111-111111111111'));
     expect(res.status).toBe(500);
     const body = (await res.json()) as { error: string };
     expect(body.error).toBe('Failed to cancel unpublished slots.');
@@ -721,7 +733,7 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
       scheduleSlots: [{ id: 'slot-g', status: 'generating', charged_tokens: 2, task_id: 'task-g' }],
       slotsError: { message: 'select down' },
     });
-    const res = await DELETE(new Request('http://localhost/api/schedule?id=s-1'));
+    const res = await DELETE(new Request('http://localhost/api/schedule?id=11111111-1111-4111-8111-111111111111'));
     expect(res.status).toBe(500);
     const body = (await res.json()) as { error: string };
     expect(body.error).toBe('Failed to list schedule slots.');
@@ -734,7 +746,7 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
       scheduleSlots: [{ id: 'slot-g', status: 'generating', charged_tokens: 2, task_id: 'task-g' }],
       remainingSlotsError: { message: 'reread down' },
     });
-    const res = await DELETE(new Request('http://localhost/api/schedule?id=s-1'));
+    const res = await DELETE(new Request('http://localhost/api/schedule?id=11111111-1111-4111-8111-111111111111'));
     expect(res.status).toBe(500);
     const body = (await res.json()) as { error: string };
     expect(body.error).toBe(
@@ -745,7 +757,7 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
     expect(logger.error).toHaveBeenCalledWith(
       '[api/schedule] cancel could not re-read slots after delete; refunds skipped',
       { message: 'reread down' },
-      expect.objectContaining({ scheduleId: 's-1', userId: USER_ID }),
+      expect.objectContaining({ scheduleId: '11111111-1111-4111-8111-111111111111', userId: USER_ID }),
     );
   });
 
@@ -753,7 +765,7 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
     const db = mockSupabase({
       scheduleSlots: [{ id: 'slot-g', status: 'generating', charged_tokens: 2, task_id: 'task-g' }],
     });
-    const res = await DELETE(new Request('http://localhost/api/schedule?id=s-1'));
+    const res = await DELETE(new Request('http://localhost/api/schedule?id=11111111-1111-4111-8111-111111111111'));
     expect(res.status).toBe(200);
     expect(db.selectArgs).toEqual([]);
   });
@@ -762,10 +774,10 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
     const db = mockSupabase({
       scheduleSlots: [{ id: 'slot-g', status: 'pending', charged_tokens: 2, task_id: null }],
     });
-    const res = await DELETE(new Request('http://localhost/api/schedule?id=s-orphan'));
+    const res = await DELETE(new Request('http://localhost/api/schedule?id=88888888-8888-4888-8888-888888888888'));
     expect(res.status).toBe(200);
     expect(refundCalls(db).map((params) => params.p_amount)).toEqual([2]);
-    expect(refundCalls(db).map((params) => params.p_batch_generation_id)).toEqual(['batch:s-orphan']);
+    expect(refundCalls(db).map((params) => params.p_batch_generation_id)).toEqual(['batch:88888888-8888-4888-8888-888888888888']);
   });
 
   it('skips slot rows that cannot be read and still refunds the readable ones', async () => {
@@ -782,14 +794,14 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
         { id: 'slot-good', status: 'pending', charged_tokens: 2, task_id: null },
       ],
     });
-    const res = await DELETE(new Request('http://localhost/api/schedule?id=s-1'));
+    const res = await DELETE(new Request('http://localhost/api/schedule?id=11111111-1111-4111-8111-111111111111'));
     expect(res.status).toBe(200);
     const body = (await res.json()) as { cancelledSlotIds: string[] };
     expect(body.cancelledSlotIds).toEqual(['slot-good']);
     expect(refundCalls(db).map((params) => params.p_amount)).toEqual([2]);
     expect(logger.error).toHaveBeenCalledWith(
       '[api/schedule] cancel skipped a slot row that could not be read',
-      expect.objectContaining({ scheduleId: 's-1', userId: USER_ID }),
+      expect.objectContaining({ scheduleId: '11111111-1111-4111-8111-111111111111', userId: USER_ID }),
     );
   });
 
@@ -798,12 +810,12 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
       scheduleSlots: [{ id: 'slot-g', status: 'pending', charged_tokens: 2, task_id: null }],
       rpc: { refundBatch: { data: null, error: { message: 'rpc down' } } },
     });
-    const res = await DELETE(new Request('http://localhost/api/schedule?id=s-1'));
+    const res = await DELETE(new Request('http://localhost/api/schedule?id=11111111-1111-4111-8111-111111111111'));
     expect(res.status).toBe(200);
     expect(logger.error).toHaveBeenCalledWith(
       '[api/schedule] cancel refund failed',
       { message: 'rpc down' },
-      expect.objectContaining({ scheduleId: 's-1', slotId: 'slot-g', userId: USER_ID }),
+      expect.objectContaining({ scheduleId: '11111111-1111-4111-8111-111111111111', slotId: 'slot-g', userId: USER_ID }),
     );
     expect(db.deleteCalls.map((call) => call.table)).toContain('schedules');
   });
@@ -813,7 +825,7 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
       scheduleSlots: [{ id: 'slot-g', status: 'pending', charged_tokens: 2, task_id: null }],
       remove: { error: { message: 'schedule delete down' } },
     });
-    const res = await DELETE(new Request('http://localhost/api/schedule?id=s-1'));
+    const res = await DELETE(new Request('http://localhost/api/schedule?id=11111111-1111-4111-8111-111111111111'));
     expect(res.status).toBe(500);
     const body = (await res.json()) as { error: string };
     expect(body.error).toBe('Unpublished slots were removed but the schedule could not be deleted.');
@@ -827,7 +839,7 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
       scheduleSlots: MIXED_SLOTS,
       remove: { error: null },
     });
-    const res = await DELETE(new Request('http://localhost/api/schedule?id=s-1'));
+    const res = await DELETE(new Request('http://localhost/api/schedule?id=11111111-1111-4111-8111-111111111111'));
     expect(res.status).toBe(200);
     // The generating and ready slots already spent their GPU cost, so only
     // the pending slot gets a refund event.
@@ -838,8 +850,8 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
         kind: 'schedule_cancelled',
         amount: 2,
         reason: 'Schedule cancelled before publish; video refunded',
-        batch_generation_id: 'batch:s-1',
-        schedule_id: 's-1',
+        batch_generation_id: 'batch:11111111-1111-4111-8111-111111111111',
+        schedule_id: '11111111-1111-4111-8111-111111111111',
       });
     }
     expect(refundIssuedCalls(client).map(([, , props]) => props.engine_task_id)).toEqual([null]);
@@ -851,7 +863,7 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
       scheduleSlots: [{ id: 'slot-p', status: 'pending', charged_tokens: 2, task_id: 'task-p' }],
       remove: { error: null },
     });
-    const res = await DELETE(new Request('http://localhost/api/schedule?id=s-1'));
+    const res = await DELETE(new Request('http://localhost/api/schedule?id=11111111-1111-4111-8111-111111111111'));
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
       refunds: { slotId: string; refunded: boolean; alreadyRefunded: boolean; reason: string }[];
@@ -873,7 +885,7 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
       scheduleSlots: [{ id: 'slot-g', status: 'pending', charged_tokens: 2, task_id: null }],
       rpc: { refundBatch: { data: { refunded: false, already_refunded: true }, error: null } },
     });
-    const res = await DELETE(new Request('http://localhost/api/schedule?id=s-1'));
+    const res = await DELETE(new Request('http://localhost/api/schedule?id=11111111-1111-4111-8111-111111111111'));
     expect(res.status).toBe(200);
     // Give the fire-and-forget wrapper a chance to (incorrectly) emit.
     await new Promise((resolve) => setTimeout(resolve, 10));
@@ -886,7 +898,7 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
       scheduleSlots: [{ id: 'slot-g', status: 'pending', charged_tokens: 2, task_id: null }],
       rpc: { refundBatch: { data: { refunded: false, already_refunded: false }, error: null } },
     });
-    const res = await DELETE(new Request('http://localhost/api/schedule?id=s-1'));
+    const res = await DELETE(new Request('http://localhost/api/schedule?id=11111111-1111-4111-8111-111111111111'));
     expect(res.status).toBe(200);
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(refundIssuedCalls(client)).toEqual([]);
@@ -898,46 +910,36 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
       scheduleSlots: MIXED_SLOTS,
       remove: { error: null },
     });
-    const res = await DELETE(new Request('http://localhost/api/schedule?id=s-1'));
+    const res = await DELETE(new Request('http://localhost/api/schedule?id=11111111-1111-4111-8111-111111111111'));
     expect(res.status).toBe(200);
     await vi.waitFor(() =>
       expect(client.captureAs).toHaveBeenCalledWith(
         USER_ID,
         'schedule_deleted',
-        expect.objectContaining({ scheduleId: 's-1', refunded: 2 }),
+        expect.objectContaining({ scheduleId: '11111111-1111-4111-8111-111111111111', refunded: 2 }),
       ),
     );
   });
 
-  it('schedule_deleted scrubs a credential-shaped schedule id before PostHog sees it', async () => {
+  it('a credential-shaped schedule id never reaches PostHog', async () => {
     const client = mockPostHog();
-    mockSupabase({
+    const db = mockSupabase({
       scheduleSlots: MIXED_SLOTS,
       remove: { error: null },
     });
-    // The id comes straight off the query string with no format check, and
-    // the success path never scrubs — attachApiErrorProperties requires
-    // pre-scrubbed values, so the route scrubs at the call site. The same
-    // raw id must not leak through the refund_issued the pending slot's
-    // refund emits either (the helper fragment-scrubs the ids).
+    // A non-uuid id 404s before any database call or PostHog event, so
+    // the raw value can never leak through schedule_deleted or a
+    // refund_issued — the scrub call sites stay as defense-in-depth for
+    // the uuid ids that do reach the success path.
     const res = await DELETE(
       new Request('http://localhost/api/schedule?id=Bearer%20not-a-real-token'),
     );
-    expect(res.status).toBe(200);
-    await vi.waitFor(() =>
-      expect(client.captureAs).toHaveBeenCalledWith(
-        USER_ID,
-        'schedule_deleted',
-        expect.objectContaining({ scheduleId: 'Bearer [redacted]', refunded: 2 }),
-      ),
-    );
-    await vi.waitFor(() => expect(refundIssuedCalls(client)).toHaveLength(1));
-    const issued = refundIssuedCalls(client);
-    expect(issued[0][2]).toMatchObject({
-      schedule_id: 'Bearer [redacted]',
-      batch_generation_id: 'batch:Bearer [redacted]',
-    });
-    expect(JSON.stringify(issued)).not.toContain('not-a-real-token');
+    expect(res.status).toBe(404);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe('Schedule not found.');
+    expect(db.deleteCalls).toEqual([]);
+    expect(refundIssuedCalls(client)).toEqual([]);
+    expect(JSON.stringify(client.captureAs.mock.calls)).not.toContain('not-a-real-token');
   });
 
   it('emits cancel_refund_skipped when the post-delete re-read fails', async () => {
@@ -945,10 +947,10 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
       scheduleSlots: [{ id: 'slot-g', status: 'generating', charged_tokens: 2, task_id: 'task-g' }],
       remainingSlotsError: { message: 'reread down' },
     });
-    const res = await DELETE(new Request('http://localhost/api/schedule?id=s-1'));
+    const res = await DELETE(new Request('http://localhost/api/schedule?id=11111111-1111-4111-8111-111111111111'));
     expect(res.status).toBe(500);
     expect(vi.mocked(trackApiEvent)).toHaveBeenCalledWith('cancel_refund_skipped', {
-      scheduleId: 's-1',
+      scheduleId: '11111111-1111-4111-8111-111111111111',
       reason: 'slots_reread_failed',
       userId: USER_ID,
     });
@@ -965,7 +967,7 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
         scheduleSlots: MIXED_SLOTS,
         remove: { error: null },
       });
-      const res = await DELETE(new Request('http://localhost/api/schedule?id=s-1'));
+      const res = await DELETE(new Request('http://localhost/api/schedule?id=11111111-1111-4111-8111-111111111111'));
       expect(res.status).toBe(200);
       const calls = fetchMock.mock.calls.map((call: unknown[]) => ({
         url: String(call[0]),
@@ -991,7 +993,7 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
         ],
         remove: { error: null },
       });
-      const res = await DELETE(new Request('http://localhost/api/schedule?id=s-1'));
+      const res = await DELETE(new Request('http://localhost/api/schedule?id=11111111-1111-4111-8111-111111111111'));
       expect(res.status).toBe(200);
       // The generating slot keeps its charge (GPU sunk), the pending slot
       // is refunded anyway, and the cancel failure is logged loudly
@@ -1002,7 +1004,7 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
       expect(logger.error).toHaveBeenCalledWith(
         '[api/schedule] engine cancel failed',
         expect.anything(),
-        expect.objectContaining({ scheduleId: 's-1', slotId: 'slot-g', userId: USER_ID }),
+        expect.objectContaining({ scheduleId: '11111111-1111-4111-8111-111111111111', slotId: 'slot-g', userId: USER_ID }),
       );
     } finally {
       vi.unstubAllGlobals();
@@ -1035,7 +1037,7 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
         remove: { error: null },
       });
       let settled = false;
-      const pending = DELETE(new Request('http://localhost/api/schedule?id=s-1')).then((res) => {
+      const pending = DELETE(new Request('http://localhost/api/schedule?id=11111111-1111-4111-8111-111111111111')).then((res) => {
         settled = true;
         return res;
       });
@@ -1076,7 +1078,7 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
         ],
         remove: { error: null },
       });
-      const pending = DELETE(new Request('http://localhost/api/schedule?id=s-1'));
+      const pending = DELETE(new Request('http://localhost/api/schedule?id=11111111-1111-4111-8111-111111111111'));
       // Let the handler run up to the engine-cancel step: every cancel must
       // have started before any of them is allowed to finish.
       await new Promise((resolve) => setTimeout(resolve, 0));
