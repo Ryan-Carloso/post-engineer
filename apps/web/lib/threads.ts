@@ -1,3 +1,5 @@
+import 'server-only';
+
 //---------------
 // Threads — API client to connect accounts (OAuth 2.0) and publish videos.
 //

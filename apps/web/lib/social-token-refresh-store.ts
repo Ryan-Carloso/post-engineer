@@ -24,7 +24,7 @@ function isRefreshProvider(
   value: string,
   providers: readonly TokenRefreshProvider[],
 ): value is TokenRefreshProvider {
-  return (providers as readonly string[]).includes(value);
+  return providers.some((provider) => provider === value);
 }
 
 export function createTokenRefreshStore(supabase: SupabaseClient<Database>): TokenRefreshStore {
