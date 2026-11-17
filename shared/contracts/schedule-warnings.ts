@@ -3,7 +3,7 @@
 // the accounts whose stored login is already dead.
 import { z } from 'zod';
 
-import { SOCIAL_PROVIDERS } from './metrics.js';
+import { SOCIAL_PROVIDERS } from './providers.js';
 
 export const VOICE_FALLBACK_WARNING_CODE = 'voice_fallback_applied';
 export const ACCOUNT_NEEDS_RECONNECT_WARNING_CODE = 'account_needs_reconnect';

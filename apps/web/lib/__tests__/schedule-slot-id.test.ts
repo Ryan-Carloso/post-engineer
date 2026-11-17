@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveSlotUuid } from '../schedule-slot-id';
+import { isUuid, resolveSlotUuid } from '../schedule-slot-id';
 
 const SLOT_ID = '872827cb-6345-45b8-8153-60924092a648';
 const SCHEDULE_ID = 'aad196b2-380d-560d-a506-d6ee93c980ae';
@@ -54,5 +54,24 @@ describe('resolveSlotUuid', () => {
   it('does not match a uuid with trailing junk', () => {
     expect(resolveSlotUuid(`${SLOT_ID}-extra`)).toBeNull();
     expect(resolveSlotUuid(`${SLOT_ID}x`)).toBeNull();
+  });
+});
+
+describe('isUuid', () => {
+  it('accepts a plain uuid, either case', () => {
+    expect(isUuid(SLOT_ID)).toBe(true);
+    expect(isUuid(SLOT_ID.toUpperCase())).toBe(true);
+  });
+
+  it('rejects a truncated uuid prefix', () => {
+    // Production: DELETE /api/schedule?id=ca192c1b — the first 8 chars
+    // of a uuid — raised Postgres 22P02 on the uuid-typed filter.
+    expect(isUuid('ca192c1b')).toBe(false);
+  });
+
+  it('rejects batch keys and garbage', () => {
+    expect(isUuid(`batch:${SCHEDULE_ID}:slot:${SLOT_ID}`)).toBe(false);
+    expect(isUuid('not-a-uuid')).toBe(false);
+    expect(isUuid('')).toBe(false);
   });
 });

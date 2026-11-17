@@ -36,12 +36,15 @@ export const ERROR_CODES = {
   UNKNOWN_VOICE: 'UNKNOWN_VOICE',
   INTERNAL_ERROR: 'INTERNAL_ERROR',
   ENGINE_UNAVAILABLE: 'ENGINE_UNAVAILABLE',
-  // Issue #384: an image can only go to providers whose handler accepts
-  // images — Instagram first, the rest are a follow-up.
+  // An image (an image signed upload) can only go to the networks whose
+  // handler posts images (IMAGE_PROVIDERS in shared/contracts/providers.ts).
   IMAGE_PROVIDER_UNSUPPORTED: 'IMAGE_PROVIDER_UNSUPPORTED',
   // Issue #384: a ready video upload was already consumed (or expired) by
   // the time the scheduled publish tried to hold it.
   VIDEO_UPLOAD_CONSUMED: 'VIDEO_UPLOAD_CONSUMED',
+  // A signed upload is single-use: it already backs a live scheduled slot
+  // (migration 067), so a second call cannot schedule or publish it.
+  VIDEO_UPLOAD_SCHEDULED: 'VIDEO_UPLOAD_SCHEDULED',
   MCP_VERSION_MISMATCH: 'MCP_VERSION_MISMATCH',
 } as const;
 
@@ -74,8 +77,10 @@ const DEFAULT_MESSAGES: Record<ErrorCode, string> = {
   // technical detail goes to server logs (and errorId) only.
   INTERNAL_ERROR: 'Something went wrong. Please try again later.',
   ENGINE_UNAVAILABLE: 'Video generation is temporarily unavailable. Please try again later.',
-  IMAGE_PROVIDER_UNSUPPORTED: 'Images can only be published to Instagram for now.',
+  IMAGE_PROVIDER_UNSUPPORTED: 'Images can only be published to Instagram, Bluesky, LinkedIn, Threads, Facebook and Pinterest.',
   VIDEO_UPLOAD_CONSUMED: 'This video upload was already used. Upload it again to publish.',
+  VIDEO_UPLOAD_SCHEDULED:
+    'This video upload is already scheduled. An upload publishes once: schedule it to every network in one call, or upload it again.',
   // The gate (mcp-version-gate.ts) always sends a specific message naming
   // both versions; this default only names the fix.
   MCP_VERSION_MISMATCH: 'This post-engineer-mcp version does not match the server. Restart the MCP with the version the server requires.',

@@ -12,7 +12,7 @@ vi.mock('@/lib/upload/publish-media', () => ({
 vi.mock('@/lib/analytics', () => ({ trackApiEvent: vi.fn() }));
 vi.mock('@/lib/threads', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/threads')>()),
-  publishThreadsVideo: vi.fn(),
+  publishThreadsMedia: vi.fn(),
 }));
 
 import { trackApiEvent } from '@/lib/analytics';
@@ -20,7 +20,7 @@ import { ThreadsError } from '@/lib/errors';
 import { handleThreadsUpload } from '@/lib/upload/threads-handler';
 import { getSocialAccountTokens, touchSocialAccount } from '@/lib/social-accounts';
 import { cleanupPublishMedia, presignPublishMedia, uploadPublishMedia } from '@/lib/upload/publish-media';
-import { publishThreadsVideo } from '@/lib/threads';
+import { publishThreadsMedia } from '@/lib/threads';
 import { markAccountNeedsReconnect } from '@/lib/account-needs-reconnect';
 
 const MP4_BYTES = new Uint8Array([0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d]);
@@ -40,10 +40,34 @@ function tokens(value: Record<string, unknown>): never {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(getSocialAccountTokens).mockResolvedValue(tokens({ access_token: 'tok' }));
-  vi.mocked(publishThreadsVideo).mockResolvedValue({ postId: 'p1', permalink: 'https://www.threads.net/@a/post/x' });
+  vi.mocked(publishThreadsMedia).mockResolvedValue({ postId: 'p1', permalink: 'https://www.threads.net/@a/post/x' });
 });
 
 describe('handleThreadsUpload', () => {
+  it.each([
+    ['JPEG', new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0x10]), 'image/jpeg', 'jpg'],
+    ['PNG', new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0]), 'image/png', 'png'],
+  ])('publishes a %s image: stored on R2 by its sniffed type, posted as an image', async (_name, bytes, contentType, extension) => {
+    // The declared type lies on purpose: the bytes decide.
+    const image = new File([bytes], 'photo.bin', { type: 'application/octet-stream' });
+    const result = await handleThreadsUpload(formData({ video: image }), 'user-1');
+    expect(result.success).toBe(true);
+    const key = String(vi.mocked(uploadPublishMedia).mock.calls[0][1]);
+    expect(key.startsWith('threads/')).toBe(true);
+    expect(key.endsWith(`.${extension}`)).toBe(true);
+    expect(vi.mocked(uploadPublishMedia).mock.calls[0][2]).toBe(contentType);
+    expect(vi.mocked(publishThreadsMedia).mock.calls[0][0].media.kind).toBe('image');
+  });
+
+  it('rejects an image over 8 MB before storing it', async () => {
+    const big = new Uint8Array(8 * 1024 * 1024 + 1);
+    big.set([0xff, 0xd8, 0xff]);
+    const result = await handleThreadsUpload(formData({ video: new File([big], 'big.jpg', { type: 'image/jpeg' }) }), 'user-1');
+    expect(result.success).toBe(false);
+    expect(result.results[0].error).toContain('Image exceeds the 8 MB limit');
+    expect(uploadPublishMedia).not.toHaveBeenCalled();
+  });
+
   it('publishes the stored video to the owner\'s account and records use', async () => {
     const result = await handleThreadsUpload(formData(), 'user-1');
     expect(result).toEqual({
@@ -51,8 +75,8 @@ describe('handleThreadsUpload', () => {
       results: [{ accountId: '42', success: true, postId: 'p1', permalink: 'https://www.threads.net/@a/post/x' }],
     });
     expect(getSocialAccountTokens).toHaveBeenCalledWith(expect.anything(), 'user-1', 'threads', '42');
-    expect(vi.mocked(publishThreadsVideo).mock.calls[0][0]).toMatchObject({
-      accessToken: 'tok', userId: '42', videoUrl: 'https://s.example/signed.mp4', text: 'my post',
+    expect(vi.mocked(publishThreadsMedia).mock.calls[0][0]).toMatchObject({
+      accessToken: 'tok', userId: '42', media: { kind: 'video', url: 'https://s.example/signed.mp4' }, text: 'my post',
     });
     expect(touchSocialAccount).toHaveBeenCalledWith(expect.anything(), 'user-1', 'threads', '42');
     expect(cleanupPublishMedia).toHaveBeenCalledWith('threads');
@@ -74,11 +98,11 @@ describe('handleThreadsUpload', () => {
     vi.mocked(getSocialAccountTokens).mockResolvedValue(tokens({ access_token: 'tok', expiry_date: Date.now() - 1 }));
     const result = await handleThreadsUpload(formData(), 'user-1');
     expect(result.results[0].error).toContain('reconnect');
-    expect(publishThreadsVideo).not.toHaveBeenCalled();
+    expect(publishThreadsMedia).not.toHaveBeenCalled();
   });
 
   it('emits publish_account_unauthorized when Threads rejects the token with 401', async () => {
-    vi.mocked(publishThreadsVideo).mockRejectedValueOnce(
+    vi.mocked(publishThreadsMedia).mockRejectedValueOnce(
       new ThreadsError('THREADS_PUBLISH_FAILED: Invalid OAuth access token', 401),
     );
     const result = await handleThreadsUpload(formData(), 'user-1');
@@ -92,7 +116,7 @@ describe('handleThreadsUpload', () => {
   });
 
   it('does not emit publish_account_unauthorized when the Threads failure is not a 401', async () => {
-    vi.mocked(publishThreadsVideo).mockRejectedValueOnce(new ThreadsError('THREADS_PUBLISH_FAILED: boom', 500));
+    vi.mocked(publishThreadsMedia).mockRejectedValueOnce(new ThreadsError('THREADS_PUBLISH_FAILED: boom', 500));
     await handleThreadsUpload(formData(), 'user-1');
     expect(trackApiEvent).not.toHaveBeenCalled();
   });
@@ -107,7 +131,7 @@ describe('handleThreadsUpload', () => {
     expect(presignPublishMedia).toHaveBeenCalledWith('user-1/faceless/task-7/final-1.mp4');
     expect(uploadPublishMedia).not.toHaveBeenCalled();
     expect(cleanupPublishMedia).not.toHaveBeenCalled();
-    expect(vi.mocked(publishThreadsVideo).mock.calls[0][0].videoUrl).toBe('https://s.example/archive.mp4');
+    expect(vi.mocked(publishThreadsMedia).mock.calls[0][0].media).toEqual({ kind: 'video', url: 'https://s.example/archive.mp4' });
   });
 
   it('rejects an archive key that belongs to another user', async () => {
@@ -119,7 +143,7 @@ describe('handleThreadsUpload', () => {
     expect(result.success).toBe(false);
     expect(result.results[0].error).toContain('belong to this user');
     expect(presignPublishMedia).not.toHaveBeenCalled();
-    expect(publishThreadsVideo).not.toHaveBeenCalled();
+    expect(publishThreadsMedia).not.toHaveBeenCalled();
   });
 
   it('rejects a request that sends both a file and an archive key', async () => {
@@ -132,7 +156,7 @@ describe('handleThreadsUpload', () => {
   });
 
   it('keeps going after one account fails and is a success if any landed', async () => {
-    vi.mocked(publishThreadsVideo).mockRejectedValueOnce(new Error('boom'));
+    vi.mocked(publishThreadsMedia).mockRejectedValueOnce(new Error('boom'));
     const result = await handleThreadsUpload(formData({ ids: ['1', '2'] }), 'user-1');
     expect(result.success).toBe(true);
     expect(result.results.map((entry) => entry.success)).toEqual([false, true]);
@@ -144,6 +168,6 @@ describe('handleThreadsUpload', () => {
     const result = await handleThreadsUpload(formData(), 'user-1');
     expect(result.results[0]).toMatchObject({ success: false, errorCode: 'token_missing' });
     expect(markAccountNeedsReconnect).toHaveBeenCalledWith('user-1', 'threads', '42');
-    expect(publishThreadsVideo).not.toHaveBeenCalled();
+    expect(publishThreadsMedia).not.toHaveBeenCalled();
   });
 });

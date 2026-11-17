@@ -5,10 +5,10 @@ import { describe, expect, it } from 'vitest';
 import { findRepoRoot } from '@/test/repo-root';
 
 const repoRoot = findRepoRoot(import.meta.url);
-const sql = readFileSync(join(repoRoot, 'supabase', 'migrations', '067_social-accounts-needs-reconnect.sql'), 'utf8');
+const sql = readFileSync(join(repoRoot, 'supabase', 'migrations', '069_social-accounts-needs-reconnect.sql'), 'utf8');
 const readme = readFileSync(join(repoRoot, 'supabase', 'README.md'), 'utf8');
 
-describe('067_social-accounts-needs-reconnect.sql', () => {
+describe('069_social-accounts-needs-reconnect.sql', () => {
   const flat = sql.replace(/--[^\n]*/g, ' ').replace(/\s+/g, ' ').toLowerCase();
 
   it('adds needs_reconnect idempotently and grants the session read', () => {
@@ -18,6 +18,6 @@ describe('067_social-accounts-needs-reconnect.sql', () => {
   });
 
   it('is listed in supabase/README.md', () => {
-    expect(readme).toContain('067_social-accounts-needs-reconnect.sql');
+    expect(readme).toContain('069_social-accounts-needs-reconnect.sql');
   });
 });

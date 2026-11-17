@@ -183,7 +183,7 @@ The server offers **16 intent tools**, not one tool per API endpoint. A tool is 
 | Tool | Actions | What it is for |
 |---|---|---|
 | `generate_video` | — | Generate and schedule one video, or a batch of 2-12 (every 6 face videos, the cheapest is free). `persona` and `accounts` by name or id; the result echoes what was resolved. |
-| `video_tasks` | `status`, `list_generations`, `get_generation` | Follow videos: `status` takes up to 12 `taskIds`; `waitSeconds` 0 is a snapshot, more blocks until they finish. |
+| `video_tasks` | `status`, `list_generations`, `get_generation` | Follow videos: for the final outcome, `status` sets `waitSeconds` above 0 and blocks (up to 12 `taskIds`). `waitSeconds` 0 is only a progress snapshot: wait at least `nextPollInSeconds`. |
 | `cancel_video` | — | Cancel a video that is still generating. Separate so a client can allow status without cancel. |
 | `personas` | `list`, `get`, `create`, `update`, `delete` | Personas. `delete` previews first and needs the `confirmToken` of that preview to delete. |
 | `persona_media` | `list_faces`, `list_images`, `add_image`, `update_image`, `remove_image` | Stock faces and a persona's image library. |
@@ -197,7 +197,7 @@ The server offers **16 intent tools**, not one tool per API endpoint. A tool is 
 | `billing` | `balance`, `transactions` | Prepaid tokens. |
 | `prompts` | `list`, `get` | The recipe prompts. |
 | `check_script` | `validate`, `score` | Check a script before spending tokens. |
-| `publish_video` | `from_file`, `create_upload`, `complete_upload`, `publish_upload` | Publish a ready-made video directly. |
+| `publish_video` | `from_file`, `create_upload`, `complete_upload`, `publish_upload`, `publish_existing` | Publish media that already exists, with no generation and no charge. `publish_existing` takes a finished video (`taskId`), a completed upload (`uploadId`) or a local image (`imagePath`, stdio only; over HTTP an image goes through `create_upload` like a video, never as base64), sends it to every network of its `accounts` (names or ids, or the persona's bound accounts) in one call, and needs `mode`: `asap`, or `scheduled` once at `publishAt`. A retry with the same `idempotencyKey` replays the original result in both modes. Images (JPEG/PNG, 8 MB) post to Instagram, Bluesky (1 MB), LinkedIn, Threads, Facebook and Pinterest. |
 
 Actions that read a file from the disk (`persona_media` `add_image`, `media` `upload`, `publish_video` `from_file`, and a local `audioPath`/`avatarPath`) exist only on the stdio server: a path served over HTTP would resolve on the server's host. Over HTTP use public URLs, or the signed upload of `publish_video`.
 
@@ -281,4 +281,4 @@ objective). The MCP needs no change: it serves whatever the web hub lists.
 
 - Platform: https://post-engineer.com/
 - API keys: https://post-engineer.com/recipes
-- Recipes: [docs/recipes/daily-news.md](../../docs/recipes/daily-news.md) (daily news becomes a video), [docs/recipes/place-spotlight.md](../../docs/recipes/place-spotlight.md) (place spotlight becomes a video), [docs/recipes/subject-spotlight.md](../../docs/recipes/subject-spotlight.md) (subject spotlight becomes a video), [docs/recipes/last-30-days.md](../../docs/recipes/last-30-days.md) (last 30 days become a video), [docs/recipes/multi-rede.md](../../docs/recipes/multi-rede.md) (one week, one video per network), [docs/recipes/viral-shorts.md](../../docs/recipes/viral-shorts.md) (a viral video becomes your Short) and [docs/recipes/ab-hook-test.md](../../docs/recipes/ab-hook-test.md) (test two hooks)
+- Recipes: [docs/recipes/daily-news.md](../../docs/recipes/daily-news.md) (daily news becomes a video), [docs/recipes/place-spotlight.md](../../docs/recipes/place-spotlight.md) (place spotlight becomes a video), [docs/recipes/subject-spotlight.md](../../docs/recipes/subject-spotlight.md) (subject spotlight becomes a video), [docs/recipes/last-30-days.md](../../docs/recipes/last-30-days.md) (last 30 days become a video), [docs/recipes/multi-rede.md](../../docs/recipes/multi-rede.md) (one week, one video per network), [docs/recipes/viral-shorts.md](../../docs/recipes/viral-shorts.md) (a viral video becomes your Short), [docs/recipes/ab-hook-test.md](../../docs/recipes/ab-hook-test.md) (test two hooks) and [docs/recipes/story-first-reels.md](../../docs/recipes/story-first-reels.md) (write scripts story-first)

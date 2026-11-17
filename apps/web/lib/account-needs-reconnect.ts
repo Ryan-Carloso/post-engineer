@@ -9,7 +9,7 @@ import { createSupabaseServiceClient } from '@/lib/supabase/service';
 // Publish classification already fails the account once. This write is
 // what makes the next list and the next schedule see that login as dead
 // before another publish is attempted. The service client writes it;
-// a session JWT can only read the column (migration 067).
+// a session JWT can only read the column (migration 069).
 //---------------
 
 export const ACCOUNT_NEEDS_RECONNECT_WARNING_CODE = 'account_needs_reconnect' as const;

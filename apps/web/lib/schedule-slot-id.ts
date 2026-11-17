@@ -57,3 +57,11 @@ export function resolveSlotUuid(rawSlotId: string): string | null {
   }
   return null;
 }
+
+// isUuid — the plain uuid-shape check the schedule cancel shares with
+// the slot resolver: a schedule id is a uuid, and anything else (a
+// truncated id, a batch key) can never match a row, so it must never
+// reach a uuid-typed filter (Postgres 22P02 → 500).
+export function isUuid(value: string): boolean {
+  return UUID_PATTERN.test(value);
+}

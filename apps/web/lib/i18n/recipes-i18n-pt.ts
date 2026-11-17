@@ -196,6 +196,26 @@ export const recipesI18nPt = {
   abHookTestExampleInput: 'Um hook calmo contra um hook direto, sem rosto, no meu nicho.',
   abHookTestExampleOutput:
       'Experimento com 6 pares. Nenhum vencedor enquanto o rótulo não for clear.',
+  storyFirstReelsTitle: 'Story-first Reels',
+  storyFirstReelsObjective:
+      'Escreva cada roteiro como uma história primeiro: um micro-arco fechado, feito para segurar a atenção.',
+  storyFirstReelsStep1: 'Para qualquer persona, tema e tipo de vídeo — uma história por vídeo.',
+  storyFirstReelsStep2:
+      'Ele encontra a história real primeiro: início, virada, desfecho.',
+  storyFirstReelsStep3:
+      'Ele constrói o hook a partir de um mecanismo que cabe, e rascunha três para ficar com o mais forte.',
+  storyFirstReelsStep4:
+      'Ele escreve para segurar a atenção: abre um gancho, entrega o desfecho prometido, um CTA com valor.',
+  storyFirstReelsStep5:
+      'Valide, pontue, confirme e gere uma vez — igual a todos os prompts.',
+  storyFirstReelsDeliver1:
+      'Um roteiro com história primeiro: gancho primeiro, depois conteúdo, dentro do contrato.',
+  storyFirstReelsDeliver2:
+      'Um roteiro validado e pontuado, com a nota e cada motivo mostrados.',
+  storyFirstReelsDeliver3: 'Um vídeo gerado e publicado onde você pediu.',
+  storyFirstReelsExampleInput: 'HabitLoom, sem rosto, por que o peso volta depois da dieta.',
+  storyFirstReelsExampleOutput:
+      'Gancho sobre o peso que voltou, conteúdo sobre a causa escondida, CTA para salvar — 88 palavras, 3 segmentos.',
   stepKeyTitle: 'Crie sua API key',
   stepKeyHint:
       'Ela conecta seu agente à sua conta. Você pode criar várias, uma por agente.',

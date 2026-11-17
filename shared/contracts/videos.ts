@@ -24,8 +24,10 @@ import { z } from 'zod';
 import { defineEndpoint } from './endpoint.js';
 import { EXPERIMENT_TARGET_PAIRS_MAX, EXPERIMENT_VARIANT_ID_PATTERN } from './experiments.js';
 import { UploadContentResponseSchema } from './media.js';
-import { SOCIAL_PROVIDERS, UUID } from './metrics.js';
+import { UUID } from './metrics.js';
+import { SOCIAL_PROVIDERS } from './providers.js';
 import { ScheduleWarningSchema } from './schedule-warnings.js';
+import { MAX_IMAGE_UPLOAD_BYTES, MAX_VIDEO_UPLOAD_BYTES, UPLOAD_CONTENT_TYPES, UPLOAD_CONTENT_TYPE_MESSAGE, isImageUploadContentType } from './upload-types.js';
 
 /** The one video mode (issue #542): it decides render path + price. */
 export const VIDEO_TYPES = ['full_lipsync', 'hook_lipsync', 'faceless'] as const;
@@ -76,28 +78,15 @@ export const BATCH_KEY_PATTERN = /^[A-Za-z0-9_-]+$/;
 export const DRAFT_KINDS = ['post', 'script'] as const;
 export type DraftKind = (typeof DRAFT_KINDS)[number];
 
-/** The networks score-draft can publish-check. Same 10 as SOCIAL_PROVIDERS. */
-export const PUBLISH_NETWORKS = [
-  'linkedin',
-  'youtube',
-  'instagram',
-  'bluesky',
-  'threads',
-  'facebook',
-  'pinterest',
-  '3speak',
-  'rumble',
-  'fanvue',
-] as const;
+/** The networks score-draft can publish-check: every network. */
+export const PUBLISH_NETWORKS = SOCIAL_PROVIDERS;
 export type PublishNetwork = (typeof PUBLISH_NETWORKS)[number];
 
 /** Drafts over this input cap are a 400, never silently truncated. */
 export const DRAFT_MAX_INPUT_CHARS = 10000;
 
-/** Signed video uploads (issue #561): the 2GB ceiling, same as upload-content. */
-export const VIDEO_UPLOAD_CONTENT_TYPES = ['video/mp4', 'video/quicktime'] as const;
-export type VideoUploadContentType = (typeof VIDEO_UPLOAD_CONTENT_TYPES)[number];
-export const MAX_VIDEO_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024;
+// Signed-upload media types and ceilings: upload-types.ts (import-free, read by the OpenAPI generator).
+export * from './upload-types.js';
 
 //---------------
 // Segments script (moved verbatim from
@@ -375,10 +364,13 @@ export const BatchDiscountResponseSchema = z.object({
 // declaration); this schema mirrors its accept/reject boundary.
 //---------------
 export const MintVideoUploadBodySchema = z.object({
-  contentType: z.enum(VIDEO_UPLOAD_CONTENT_TYPES, {
-    error: () => 'contentType must be video/mp4 or video/quicktime.',
+  contentType: z.enum(UPLOAD_CONTENT_TYPES, {
+    error: () => UPLOAD_CONTENT_TYPE_MESSAGE,
   }),
   sizeBytes: z.number({ error: (issue) => (issue.code === 'invalid_type' ? 'sizeBytes must be a positive integer.' : undefined) }).int('sizeBytes must be a positive integer.').positive('sizeBytes must be a positive integer.').max(MAX_VIDEO_UPLOAD_BYTES, 'Video is too large. Maximum is 2GB.'),
+}).refine((body) => !isImageUploadContentType(body.contentType) || body.sizeBytes <= MAX_IMAGE_UPLOAD_BYTES, {
+  message: 'Image is too large. Maximum is 8 MB.',
+  path: ['sizeBytes'],
 });
 
 export const MintVideoUploadResponseSchema = z.object({
@@ -391,7 +383,7 @@ export const MintVideoUploadResponseSchema = z.object({
   maxBytes: z.number(),
 });
 
-export const CompleteVideoUploadResponseSchema = z.object({ success: z.literal(true), uploadId: z.string(), status: z.literal('ready'), contentType: z.enum(VIDEO_UPLOAD_CONTENT_TYPES), sizeBytes: z.number() });
+export const CompleteVideoUploadResponseSchema = z.object({ success: z.literal(true), uploadId: z.string(), status: z.literal('ready'), contentType: z.enum(UPLOAD_CONTENT_TYPES), sizeBytes: z.number() });
 
 //---------------
 // POST /api/videos/publish-by-id — publish a signed-upload video by id

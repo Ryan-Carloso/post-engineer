@@ -37,6 +37,8 @@ vi.mock('@/lib/videos/signed-upload', () => {
     createSupabaseVideoUploadStorage: vi.fn(() => ({})),
   };
 });
+vi.mock('@/lib/supabase/service', () => ({ createSupabaseServiceClient: vi.fn(() => ({})) }));
+vi.mock('@/lib/videos/upload-slot-reference', () => ({ assertUploadNotScheduled: vi.fn(async () => undefined) }));
 vi.mock('@/lib/videos/publish-uploaded', async () => {
   const { ValidationError } = await import('@/lib/errors');
   const { VideoUploadError } = await import('@/lib/videos/signed-upload');
@@ -64,6 +66,8 @@ import { POST } from '../route';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { applyRateLimit } from '@/lib/rate-limit';
 import { publishUploadedVideo } from '@/lib/videos/publish-uploaded';
+import { VideoUploadError } from '@/lib/videos/signed-upload';
+import { assertUploadNotScheduled } from '@/lib/videos/upload-slot-reference';
 
 const UPLOAD_ID = '11111111-1111-4111-8111-111111111111';
 
@@ -107,6 +111,19 @@ describe('POST /api/videos/publish-by-id', () => {
     );
     expect(response.status).toBe(409);
     expect(((await response.json()) as Record<string, unknown>).code).toBe('VIDEO_UPLOAD_CONSUMED');
+  });
+
+  it('answers 409 and publishes nothing for an upload a scheduled slot holds', async () => {
+    vi.mocked(assertUploadNotScheduled).mockRejectedValueOnce(
+      new VideoUploadError('This video upload is already scheduled.', 409, 'VIDEO_UPLOAD_SCHEDULED'),
+    );
+    const response = await POST(
+      jsonRequest({ uploadId: UPLOAD_ID, provider: 'instagram', accountIds: ['ig-1'], caption: 'hi' }),
+    );
+    expect(response.status).toBe(409);
+    expect(((await response.json()) as Record<string, unknown>).code).toBe('VIDEO_UPLOAD_SCHEDULED');
+    expect(vi.mocked(assertUploadNotScheduled).mock.calls[0]?.slice(1)).toEqual(['user-uuid-1', UPLOAD_ID]);
+    expect(vi.mocked(publishUploadedVideo)).not.toHaveBeenCalled();
   });
 
   it('rejects a malformed publish body with 400 before publishing', async () => {

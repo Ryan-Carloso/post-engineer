@@ -1,19 +1,19 @@
-import crypto from 'crypto';
 import { logger } from '@/lib/logger';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { getSocialAccountTokens, touchSocialAccount } from '@/lib/social-accounts';
-import { publishThreadsVideo, THREADS_TEXT_MAX_CHARS, THREADS_VIDEO_MAX_BYTES } from '@/lib/threads';
+import { publishThreadsMedia, THREADS_TEXT_MAX_CHARS, THREADS_VIDEO_MAX_BYTES } from '@/lib/threads';
 import { accountFailure } from '@/lib/upload/account-error';
 import { rememberDeadCredential, reportAccountUnauthorized } from '@/lib/upload/account-unauthorized';
 import { getAccountIdsFromFormData } from '@/lib/upload/account-utils';
-import { cleanupPublishMedia, presignPublishMedia, uploadPublishMedia } from '@/lib/upload/publish-media';
+import { cleanupPublishMedia } from '@/lib/upload/publish-media';
+import { stagePublishMedia } from '@/lib/upload/publish-media-file';
 
 //---------------
-// handleThreadsUpload — publishes the video to the user's Threads accounts.
-// Threads fetches the video from a URL, so the file is stored
+// handleThreadsUpload — publishes the video or image to the user's Threads accounts.
+// Threads fetches the media from a URL, so the file is stored
 // on R2 first (presigned URL, lib/upload/publish-media.ts, same path as Instagram).
 // FormData (multipart, coming from the engine or the UI):
-//   provider=threads, video (File), caption, threadsAccountIds (repeated),
+//   provider=threads, video (File: MP4/MOV video or JPEG/PNG image), caption, threadsAccountIds (repeated),
 //   userId (internal engine call only).
 //---------------
 
@@ -49,32 +49,17 @@ export async function handleThreadsUpload(
   if (caption.length > THREADS_TEXT_MAX_CHARS) {
     return rejected(`Caption exceeds the Threads ${THREADS_TEXT_MAX_CHARS}-character limit`);
   }
-  const storagePathRaw = formData.get('videoStoragePath');
-  let videoUrl: string;
-  let usedArchive = false;
-  if (storagePathRaw !== null) {
-    // Engine-generated final: already verified in R2, presign it directly.
-    // A caller sends either the file or this key, never both.
-    if (typeof storagePathRaw !== 'string' || storagePathRaw.trim() === '') {
-      return rejected('videoStoragePath must be a string');
-    }
-    if (rawFile instanceof File) return rejected('Send either a file or videoStoragePath, not both');
-    const objectKey = storagePathRaw.trim();
-    if (!objectKey.startsWith(`${ownerUserId}/`)) return rejected('videoStoragePath must belong to this user');
-    videoUrl = await presignPublishMedia(objectKey);
-    usedArchive = true;
-  } else {
-    if (!(rawFile instanceof File)) return rejected('Video file is required');
-    if (rawFile.size > THREADS_VIDEO_MAX_BYTES) return rejected('Video exceeds the Threads 1GB limit');
-    // The stored file is served from a signed URL, so the bytes are checked
-    // rather than the client-declared type: MP4 and MOV both carry `ftyp` at offset 4.
-    const buffer = Buffer.from(await rawFile.arrayBuffer());
-    if (buffer.subarray(4, 8).toString('latin1') !== 'ftyp') return rejected('Video must be an MP4 or MOV file');
-    const contentType = rawFile.type === 'video/quicktime' ? 'video/quicktime' : 'video/mp4';
-    const extension = contentType === 'video/quicktime' ? 'mov' : 'mp4';
-    const storagePath = `threads/${Date.now()}_${crypto.randomBytes(4).toString('hex')}.${extension}`;
-    videoUrl = await uploadPublishMedia(buffer, storagePath, contentType);
-  }
+  const staged = await stagePublishMedia({
+    provider: 'threads',
+    label: 'Threads',
+    rawFile,
+    storagePathRaw: formData.get('videoStoragePath'),
+    ownerUserId,
+    maxVideoBytes: THREADS_VIDEO_MAX_BYTES,
+    maxVideoLabel: '1GB',
+  });
+  if (!staged.ok) return rejected(staged.error);
+  const media = { kind: staged.kind, url: staged.url };
 
   const supabase = createSupabaseServiceClient();
   const results: ThreadsAccountResult[] = [];
@@ -96,10 +81,10 @@ export async function handleThreadsUpload(
         continue;
       }
 
-      const published = await publishThreadsVideo({
+      const published = await publishThreadsMedia({
         accessToken,
         userId: accountId,
-        videoUrl,
+        media,
         text: caption,
         onPermalinkError: (error) => logger.warn('upload-content/threads: permalink read failed', { accountId, error: String(error) }),
       });
@@ -118,7 +103,7 @@ export async function handleThreadsUpload(
   }
 
   // Archive presign created no temp copy, so there is nothing to clean.
-  if (!usedArchive) {
+  if (!staged.usedArchive) {
     void cleanupPublishMedia('threads');
   }
 

@@ -909,8 +909,8 @@
                 "video_uploads_status_check": "CHECK ((status = ANY (ARRAY['pending'::text, 'ready'::text, 'consumed'::text])))",
                 "video_uploads_size_bytes_check": "CHECK (((size_bytes IS NULL) OR (size_bytes > 0)))",
                 "video_uploads_storage_path_key": "UNIQUE (storage_path)",
-                "video_uploads_declared_content_type_check": "CHECK (((declared_content_type IS NULL) OR (declared_content_type = ANY (ARRAY['video/mp4'::text, 'video/quicktime'::text]))))",
-                "video_uploads_detected_content_type_check": "CHECK (((detected_content_type IS NULL) OR (detected_content_type = ANY (ARRAY['video/mp4'::text, 'video/quicktime'::text]))))"
+                "video_uploads_declared_content_type_check": "CHECK (((declared_content_type IS NULL) OR (declared_content_type = ANY (ARRAY['video/mp4'::text, 'video/quicktime'::text, 'image/jpeg'::text, 'image/png'::text]))))",
+                "video_uploads_detected_content_type_check": "CHECK (((detected_content_type IS NULL) OR (detected_content_type = ANY (ARRAY['video/mp4'::text, 'video/quicktime'::text, 'image/jpeg'::text, 'image/png'::text]))))"
             }
         },
         "persona_images": {

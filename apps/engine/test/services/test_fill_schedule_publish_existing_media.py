@@ -24,6 +24,7 @@ from app.services.fill_schedule.publish_existing_media import (
     claimed_upload_cleanup,
     cleanup_existing_media,
     image_cleanup,
+    UPLOAD_EXTENSIONS,
     resolve_existing_media,
 )
 from app.services.fill_schedule.store import ScheduleStore
@@ -554,6 +555,30 @@ class ResolveExistingMediaDirectTests(unittest.TestCase):
         fail.assert_not_called()
         calls = [call[0] for call in store.method_calls]
         self.assertLess(calls.index("download_storage_object"), calls.index("claim_video_upload"))
+
+    def test_image_upload_resolves_with_its_image_type_and_extension(self):
+        store = MagicMock()
+        row = _upload_row(
+            storage_path=f"{USER_ID}/direct-uploads/{UPLOAD_ID}.png",
+            declared_content_type="image/png",
+            detected_content_type="image/png",
+        )
+        store.get_video_upload.return_value = row
+        store.claim_video_upload.return_value = {**row, "status": "consumed"}
+        store.download_storage_object.return_value = b"png-bytes"
+        resolved = resolve_existing_media(store, MagicMock(), _media_slot(), NOW)
+        assert resolved is not None
+        videos, reader, content_type, cleanup = resolved
+        self.assertEqual(videos, [f"{UPLOAD_ID}.png"])
+        self.assertEqual(content_type, "image/png")
+        self.assertEqual(reader(), b"png-bytes")
+        self.assertEqual(cleanup, ("videos", f"{USER_ID}/direct-uploads/{UPLOAD_ID}.png"))
+
+    def test_upload_extensions_cover_every_web_upload_type(self):
+        self.assertEqual(
+            UPLOAD_EXTENSIONS,
+            {"video/mp4": "mp4", "video/quicktime": "mov", "image/jpeg": "jpg", "image/png": "png"},
+        )
 
     def test_upload_download_failure_retries_without_fail_or_claim(self):
         store = MagicMock()

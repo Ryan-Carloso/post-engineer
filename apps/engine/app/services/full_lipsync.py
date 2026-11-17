@@ -249,7 +249,7 @@ def resolve_persona_image(
 
     The hook image is the first photo of the video (issue #589): when the
     job carries segments, their first photo opens the video, not the
-    persona avatar. Segment-less direct/CLI jobs and text-only segments
+    persona avatar. Segment-less direct jobs and text-only segments
     keep the persona photo. The resolved image must show a detectable
     face (Haar cascade): a faceless first photo fails here, before any
     lip-sync spend, with a per-photo error naming the segment and image.

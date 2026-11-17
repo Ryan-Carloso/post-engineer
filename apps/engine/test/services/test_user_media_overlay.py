@@ -4,6 +4,7 @@ The card is painted after the photo's checks, inside the panel; any refusal
 keeps the plain photo and records a task warning.
 """
 
+import hashlib
 import io
 import json
 import os
@@ -31,9 +32,9 @@ SEGMENTS_TEXT = [
 RED = (200, 30, 30)
 
 
-def _jpeg():
+def _jpeg(color=RED):
     buffer = io.BytesIO()
-    Image.new("RGB", (1080, 1920), RED).save(buffer, "JPEG")
+    Image.new("RGB", (1080, 1920), color).save(buffer, "JPEG")
     return buffer.getvalue()
 
 
@@ -46,9 +47,16 @@ def _subtitle(tmp_path):
     return path
 
 
+def _photo_color(url):
+    """The fake download's color for a URL: distinct URLs, distinct photos."""
+    return tuple(hashlib.sha256(url.encode()).digest()[:3])
+
+
 def _download(url, dest_path, session=None):
+    # Distinct URLs are distinct photos: identical bytes under two URLs
+    # is a duplicate photo, skipped by prepare_segment_media.
     with open(dest_path, "wb") as handle:
-        handle.write(_jpeg())
+        handle.write(_jpeg(color=_photo_color(url)))
     return dest_path
 
 
@@ -79,10 +87,11 @@ def _segments(overlay):
 
 
 def _segments_with_cta_photo(overlay):
-    """_segments plus a plain photo on the CTA, so both segments produce a
-    panel (the density minimum itself is enforced earlier, at validation)."""
+    """_segments plus two plain photos on the CTA, so both segments produce
+    a panel and the three photos tile the 6 s audio at 2 s each (the
+    density minimum itself is enforced earlier, at validation)."""
     hook, cta = _segments(overlay)
-    return [hook, {**cta, "media": [{"url": "https://e.com/q.jpg"}]}]
+    return [hook, {**cta, "media": [{"url": "https://e.com/q.jpg"}, {"url": "https://e.com/r.jpg"}]}]
 
 
 def _panel_pixel(panel, offset_y):
@@ -104,16 +113,17 @@ def test_panel_carries_the_segment_interval_and_the_bottom_position(tmp_path):
 
 
 def test_card_is_painted_inside_the_panel(tmp_path):
+    photo_color = _photo_color("https://e.com/p.jpg")
     panels, skipped = _prepare(
         tmp_path, _segments({"title": "Sushi Kinoshita", "subtitle": "Rua das Flores 12"})
     )
     assert skipped == []
     pixel = _panel_pixel(panels[0], 30)
-    assert max(abs(a - b) for a, b in zip(pixel[:3], RED)) > 60, (
+    assert max(abs(a - b) for a, b in zip(pixel[:3], photo_color)) > 60, (
         "the card darkens the top of the panel"
     )
     plain, _ = _prepare(tmp_path, _segments(None))
-    assert max(abs(a - b) for a, b in zip(_panel_pixel(plain[0], 30)[:3], RED)) < 40
+    assert max(abs(a - b) for a, b in zip(_panel_pixel(plain[0], 30)[:3], photo_color)) < 40
 
 
 def test_downloaded_photo_is_removed_once_the_panel_is_drawn(tmp_path):
@@ -160,13 +170,16 @@ def test_panel_that_fails_to_draw_is_skipped_with_a_reason(tmp_path):
     assert skipped == ["segment 0 image 0 media skipped: photo panel failed to render"]
 
 
-def test_two_segments_sharing_one_media_id_each_get_their_own_panel_and_card(tmp_path, monkeypatch):
+def test_two_segments_with_their_own_photo_each_get_their_own_panel_and_card(tmp_path, monkeypatch):
     monkeypatch.setattr(user_media, "_temp_assets_dir", lambda: str(tmp_path))
-    asset = tmp_path / "aabbccddeeff00112233445566778899.jpg"
-    asset.write_bytes(_jpeg())
+    first = tmp_path / "aabbccddeeff00112233445566778899.jpg"
+    second = tmp_path / "00112233445566778899aabbccddeeff.jpg"
+    first.write_bytes(_jpeg())
+    # A second copy of the same bytes would be a duplicate photo, skipped.
+    second.write_bytes(_jpeg(color=(30, 30, 200)))
     segments = [
-        {**SEGMENTS_TEXT[0], "media": [{"mediaId": asset.name, "overlay": {"title": "First"}}]},
-        {**SEGMENTS_TEXT[1], "media": [{"mediaId": asset.name, "overlay": {"title": "Second"}}]},
+        {**SEGMENTS_TEXT[0], "media": [{"mediaId": first.name, "overlay": {"title": "First"}}]},
+        {**SEGMENTS_TEXT[1], "media": [{"mediaId": second.name, "overlay": {"title": "Second"}}]},
     ]
     panels, skipped = user_media.prepare_segment_media(
         "task-1",
@@ -179,7 +192,9 @@ def test_two_segments_sharing_one_media_id_each_get_their_own_panel_and_card(tmp
     )
     assert skipped == []
     assert len({panel.path for panel in panels}) == 2
-    assert asset.exists(), "the temp asset is the caller's upload and must not be deleted"
+    assert first.exists() and second.exists(), (
+        "the temp assets are the caller's uploads and must not be deleted"
+    )
 
 
 def test_prepare_segment_panels_resolves_the_subtitle_font_only_when_a_card_is_wanted(
@@ -207,7 +222,7 @@ def test_prepare_segment_panels_resolves_the_subtitle_font_only_when_a_card_is_w
     assert seen == ["BeVietnamPro-Medium.ttf"]
     assert warnings == []
     panels, stored_warnings = segment_panels._read_manifest("task-1")
-    assert [panel.index for panel in panels] == [0, 1]
+    assert [panel.index for panel in panels] == [0, 1, 1]
     assert stored_warnings == warnings
 
     seen.clear()
@@ -239,7 +254,7 @@ def test_prepare_segment_panels_warns_and_keeps_the_photo_when_the_font_is_missi
         "segment 0 image 0 media overlay skipped: overlay font unavailable",
     ]
     panels, stored = segment_panels._read_manifest("task-1")
-    assert len(panels) == 2 and stored == warnings
+    assert len(panels) == 3 and stored == warnings
 
 
 def test_prepare_segment_panels_without_segments_writes_nothing(tmp_path, monkeypatch):
@@ -387,10 +402,17 @@ def test_prepare_segment_panels_uses_the_video_type_to_pick_panel_or_full_frame(
 
     monkeypatch.setattr(segment_panels.utils, "task_dir", lambda task_id: str(tmp_path))
     monkeypatch.setattr(user_media.utils, "task_dir", lambda task_id: str(tmp_path))
+    # The CTA carries three photos so they tile the 6 s audio at 2 s each
+    # after the hook hands over.
+    hook, cta = _two_media_segments()
+    segments = [
+        hook,
+        {**cta, "media": [*cta["media"], {"url": "https://e.com/body2.jpg"}, {"url": "https://e.com/body3.jpg"}]},
+    ]
     params = SimpleNamespace(
         video_aspect="9:16",
         font_name="x.ttf",
-        segments=_two_media_segments(),
+        segments=segments,
         video_type="hook_lipsync",
         persona=PersonaParams(name="Ana", avatar_url="https://e.com/a.png", voice_id="calm"),
         video_layout="standard",
@@ -404,4 +426,6 @@ def test_prepare_segment_panels_uses_the_video_type_to_pick_panel_or_full_frame(
         warnings = user_media.prepare_segment_panels("task-1", params, _subtitle(tmp_path), 6.0)
     assert warnings == []
     panels, _ = segment_panels._read_manifest("task-1")
-    assert [(panel.index, _is_full_frame(panel)) for panel in panels] == [(0, False), (1, True)]
+    assert [(panel.index, _is_full_frame(panel)) for panel in panels] == [
+        (0, False), (1, True), (1, True), (1, True),
+    ]

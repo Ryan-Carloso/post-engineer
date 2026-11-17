@@ -165,6 +165,7 @@ describe('prompt status claims', () => {
       ['subject-spotlight.md', 'https://post-engineer.com/recipes/subject-spotlight'],
       ['github-prs.md', 'https://post-engineer.com/recipes/github-prs'],
       ['ab-hook-test.md', 'https://post-engineer.com/recipes/ab-hook-test'],
+      ['story-first-reels.md', 'https://post-engineer.com/recipes/story-first-reels'],
     ];
     for (const [file, href] of docs) {
       const doc = readFileSync(join(root, 'docs', 'recipes', file), 'utf8');
@@ -205,6 +206,17 @@ describe('prompt tool names match registered MCP tools', () => {
     const registered = registeredTools();
     const missing = mentionedToolNames().filter((name) => !registered.has(name));
     expect(missing).toEqual([]);
+  });
+
+  it('tells the agent to wait for the final outcome instead of polling', () => {
+    const base = promptBase.SHARED_PROMPT_BASE.join('\n');
+    expect(base).toContain('waitSeconds');
+    expect(base).toContain('nextPollInSeconds');
+    expect(promptBase.AB_HOOK_TEST_PROMPT).toContain('waitSeconds');
+    expect(promptBase.AB_HOOK_TEST_PROMPT).not.toContain('while a video generates');
+    for (const { text } of servedPromptTexts()) {
+      expect(text).not.toContain('until it finishes');
+    }
   });
 
   it('only names an action that the tool really has', () => {

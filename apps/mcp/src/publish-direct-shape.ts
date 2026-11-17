@@ -4,10 +4,11 @@
 // (`./tools.js`) keep working.
 import { z } from 'zod';
 import { MAX_UPLOAD_VIDEO_GB } from './limits.js';
+import { SOCIAL_PROVIDERS } from './contracts/providers.js';
 
 export const PublishVideoDirectShape = {
   provider: z
-    .enum(['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'pinterest', 'fanvue', '3speak', 'rumble'])
+    .enum(SOCIAL_PROVIDERS)
     .describe('The social platform to publish the video to.'),
   videoPath: z
     .string()

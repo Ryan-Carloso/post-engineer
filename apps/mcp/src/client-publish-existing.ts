@@ -6,8 +6,7 @@ import type {
   PublishExistingResult,
 } from './client-types.js';
 import { isRecord, narrowDirectPublishAccountResult } from './direct-publish-narrowing.js';
-import { MAX_SEGMENT_MEDIA_BYTES, MAX_SEGMENT_MEDIA_MB } from './limits.js';
-import { SOCIAL_PROVIDERS, isSocialProvider } from './contracts/metrics.js';
+import { isSocialProvider } from './contracts/providers.js';
 
 //---------------
 // Publish-existing client call (issue #384). Standalone function (not a
@@ -16,18 +15,12 @@ import { SOCIAL_PROVIDERS, isSocialProvider } from './contracts/metrics.js';
 // call publishes or schedules media that already exists (a finished engine
 // video, a ready signed-upload video, or an inline image) with no
 // generation and no token charge. JSON only: no local path ever crosses
-// this surface.
+// this surface. The input arrives validated and resolved (the handler's
+// strict schema, then the account references), so this module only
+// builds the body and narrows the answer: the server re-checks every rule.
 //---------------
 
 const PUBLISH_EXISTING_TIMEOUT_MS = 120_000;
-
-/** Base64 strictness is a length + round-trip check, never a regex: the alphabet pattern backtracks on multi-megabyte input. */
-function decodedImageBytes(imageData: string): Buffer | null {
-  const compact = imageData.replace(/\s/g, '');
-  if (compact.length === 0 || compact.length % 4 !== 0) return null;
-  const buffer = Buffer.from(compact, 'base64');
-  return buffer.toString('base64') === compact ? buffer : null;
-}
 
 function narrowReconnectWarnings(value: unknown): PublishExistingReconnectWarning[] | undefined {
   if (!Array.isArray(value)) return undefined;
@@ -108,6 +101,7 @@ function narrowPublishExistingResult(value: unknown): PublishExistingResult {
   return {
     mode: 'asap',
     success: value.success === true,
+    replayed: value.replayed === true,
     mediaKind: value.mediaKind as 'task' | 'upload' | 'image',
     publishes,
     logId: value.logId,
@@ -118,75 +112,23 @@ export async function publishExisting(
   client: PostEngineerClient,
   input: PublishExistingInput,
 ): Promise<PublishExistingResult> {
-  // Mirrors the server-side 400s before any fetch: the media reference for
-  // the kind, the single-provider shape, and the schedule fields fail fast
-  // here, exactly like publishUploadedVideo.
-  if (!isSocialProvider(input.provider)) {
-    throw new Error(`provider must be one of: ${SOCIAL_PROVIDERS.join(', ')}.`);
-  }
-  if (input.accountIds.length === 0) {
-    throw new Error('At least one account ID is required.');
-  }
-  if (input.title.trim().length === 0) {
-    throw new Error('title is required.');
-  }
-  if (input.description.trim().length === 0) {
-    throw new Error('description is required.');
-  }
-  if (input.mediaKind === 'task' && (input.taskId === undefined || input.taskId.trim().length === 0)) {
-    throw new Error('taskId is required when mediaKind is task.');
-  }
-  if (input.mediaKind === 'upload' && (input.uploadId === undefined || input.uploadId.trim().length === 0)) {
-    throw new Error('uploadId is required when mediaKind is upload.');
-  }
-  let media: Record<string, unknown>;
-  if (input.mediaKind === 'task') {
-    media = { kind: 'task', taskId: input.taskId };
-  } else if (input.mediaKind === 'upload') {
-    media = { kind: 'upload', uploadId: input.uploadId };
-  } else {
-    if (input.provider !== 'instagram') {
-      throw new Error('Images can only be published to instagram for now.');
-    }
-    if (input.imageData === undefined || input.imageContentType === undefined) {
-      throw new Error('imageData and imageContentType are required when mediaKind is image.');
-    }
-    const bytes = decodedImageBytes(input.imageData);
-    if (bytes === null) {
-      throw new Error('imageData must be base64-encoded bytes.');
-    }
-    if (bytes.length > MAX_SEGMENT_MEDIA_BYTES) {
-      throw new Error(`Image is too large. Maximum is ${MAX_SEGMENT_MEDIA_MB} MB.`);
-    }
-    media = { kind: 'image', imageData: input.imageData, contentType: input.imageContentType };
-  }
-  const mode = input.mode ?? 'scheduled';
-  if (mode === 'scheduled' && (input.startAt === undefined || input.times === undefined)) {
-    throw new Error('startAt and times are required when mode is scheduled.');
-  }
-  if (mode === 'asap' && (input.startAt !== undefined || input.times !== undefined)) {
-    throw new Error('startAt and times must not be set when mode is asap.');
-  }
-  const publishing: Record<string, unknown> = {
-    mode,
-    providers: [input.provider],
-    accounts: { [input.provider]: input.accountIds },
-  };
-  if (mode === 'scheduled') {
-    publishing.schedule = { startAt: input.startAt, times: input.times, timezone: input.timezone ?? 'UTC' };
+  const providers = Object.keys(input.accounts);
+  const publishing: Record<string, unknown> = { mode: input.mode, providers, accounts: input.accounts };
+  if (input.mode === 'scheduled') {
+    publishing.schedule = { publishAt: input.publishAt, timezone: input.timezone };
   }
   if (input.boardId !== undefined) publishing.pinterestBoardId = input.boardId;
   const body: Record<string, unknown> = {
-    media,
+    media: input.media,
     title: input.title,
     description: input.description,
     publishing,
+    idempotencyKey: input.idempotencyKey,
   };
   if (input.personaId !== undefined) body.personaId = input.personaId;
   if (input.tags !== undefined) body.tags = input.tags;
   if (input.privacyStatus !== undefined) body.privacyStatus = input.privacyStatus;
   if (input.caption !== undefined) body.caption = input.caption;
-  if (input.idempotencyKey !== undefined) body.idempotencyKey = input.idempotencyKey;
 
   const result: unknown = await client.request(
     '/api/media/publish-existing',

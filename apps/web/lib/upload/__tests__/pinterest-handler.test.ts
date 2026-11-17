@@ -9,6 +9,7 @@ vi.mock('@/lib/pinterest-tokens', () => ({ getValidPinterestAccessToken: vi.fn(a
 vi.mock('@/lib/pinterest', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/pinterest')>()),
   publishPinterestVideo: vi.fn(),
+  publishPinterestImage: vi.fn(),
 }));
 
 import { trackApiEvent } from '@/lib/analytics';
@@ -17,6 +18,7 @@ import { handlePinterestUpload } from '@/lib/upload/pinterest-handler';
 import { getValidPinterestAccessToken } from '@/lib/pinterest-tokens';
 import { touchSocialAccount } from '@/lib/social-accounts';
 import {
+  publishPinterestImage,
   publishPinterestVideo,
   PINTEREST_TITLE_MAX_CHARS,
   PINTEREST_DESCRIPTION_MAX_CHARS,
@@ -62,6 +64,27 @@ beforeEach(() => {
 });
 
 describe('handlePinterestUpload', () => {
+  it('publishes a JPEG as an image Pin with its title and description, never the video flow', async () => {
+    vi.mocked(publishPinterestImage).mockResolvedValue({ pinId: '42', permalink: 'https://www.pinterest.com/pin/42/' });
+    const jpeg = new File([new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 7])], 'p.bin', { type: 'application/octet-stream' });
+    const result = await handlePinterestUpload(formData({ video: jpeg }), 'user-1');
+    expect(result.success).toBe(true);
+    expect(result.results[0]).toMatchObject({ accountId: 'user-9', success: true, postId: '42' });
+    expect(publishPinterestVideo).not.toHaveBeenCalled();
+    expect(vi.mocked(publishPinterestImage).mock.calls[0][0]).toMatchObject({
+      accessToken: 'at-1', boardId: 'board-1', contentType: 'image/jpeg', title: 'My pin', description: 'The description',
+    });
+  });
+
+  it('rejects an image over 8 MB before publishing anything', async () => {
+    const big = new Uint8Array(8 * 1024 * 1024 + 1);
+    big.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    const result = await handlePinterestUpload(formData({ video: new File([big], 'big.png', { type: 'image/png' }) }), 'user-1');
+    expect(result.success).toBe(false);
+    expect(result.results[0].error).toContain('8 MB');
+    expect(publishPinterestImage).not.toHaveBeenCalled();
+  });
+
   it("publishes the video as a Pin on the board with the account's token and records use", async () => {
     const result = await handlePinterestUpload(formData(), 'user-1');
     expect(result).toEqual({
@@ -106,7 +129,7 @@ describe('handlePinterestUpload', () => {
     ['over-long title', { title: 'a'.repeat(PINTEREST_TITLE_MAX_CHARS + 1) }, '100-character'],
     ['over-long description', { description: 'a'.repeat(PINTEREST_DESCRIPTION_MAX_CHARS + 1) }, '800-character'],
     ['over-long caption', { description: null, caption: 'a'.repeat(PINTEREST_DESCRIPTION_MAX_CHARS + 1) }, '800-character'],
-    ['missing video', { video: null }, 'Video file is required'],
+    ['missing video', { video: null }, 'A video or image file is required'],
     ['non-video bytes', { video: new File(['not a video!'], 'x.mp4', { type: 'video/mp4' }) }, 'MP4 or MOV'],
   ])('rejects %s before publishing anything', async (_name, overrides, message) => {
     const result = await handlePinterestUpload(formData(overrides), 'user-1');

@@ -105,6 +105,9 @@ function responseFor(url: string): Response {
       { status: 200 },
     );
   }
+  if (url.includes('uploadBlob')) {
+    return new Response(JSON.stringify({ blob: { $type: 'blob', ref: { $link: 'bafk-image' }, mimeType: 'image/png', size: 9 } }), { status: 200 });
+  }
   if (url.includes('createRecord')) {
     return new Response(JSON.stringify({ uri: `at://${DID}/app.bsky.feed.post/post-1` }), { status: 200 });
   }
@@ -193,6 +196,44 @@ describe('handleBlueskyUpload', () => {
     const headers = posted!.headers as Record<string, string>;
     expect(headers['Content-Type']).toBe('application/json');
     expect(headers.Authorization).toBe('Bearer jwt-1');
+  });
+
+  it('publishes an image: one uploadBlob call and an images embed, no video service', async () => {
+    mockHappyFetch();
+    const png = new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0])], 'photo.png', { type: 'image/png' });
+    const res = await handleBlueskyUpload(formData({ video: png }), USER_ID);
+
+    expect(res.success).toBe(true);
+    const upload = savedCalls.find((call) => call.url.includes('uploadBlob'));
+    expect(upload?.url).toBe('https://bsky.social/xrpc/com.atproto.repo.uploadBlob');
+    expect((upload?.headers as Record<string, string>)['Content-Type']).toBe('image/png');
+    expect(savedCalls.some((call) => call.url.includes('uploadVideo') || call.url.includes('getServiceAuth'))).toBe(false);
+    const posted = savedCalls.find((call) => call.url.includes('createRecord'));
+    const record = (JSON.parse(String(posted!.body)) as { record: { embed: unknown } }).record;
+    expect(record.embed).toEqual({
+      $type: 'app.bsky.embed.images',
+      images: [{ alt: '', image: { $type: 'blob', ref: { $link: 'bafk-image' }, mimeType: 'image/png', size: 9 } }],
+    });
+  });
+
+  it('rejects an image over 1 MB before touching any network', async () => {
+    mockHappyFetch();
+    const big = new Uint8Array(1_000_001);
+    big.set([0xff, 0xd8, 0xff]);
+    const res = await handleBlueskyUpload(formData({ video: new File([big], 'big.jpg', { type: 'image/jpeg' }) }), USER_ID);
+    expect(res.success).toBe(false);
+    expect(res.results[0].error).toContain('Bluesky 1 MB limit');
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('fails the account when uploadBlob answers an error', async () => {
+    mockSession();
+    mockFetch.mockImplementation(async (input: RequestInfo | URL) =>
+      String(input).includes('uploadBlob') ? new Response('{}', { status: 413 }) : responseFor(String(input)));
+    const jpeg = new File([new Uint8Array([0xff, 0xd8, 0xff, 0xe0])], 'p.jpg', { type: 'image/jpeg' });
+    const res = await handleBlueskyUpload(formData({ video: jpeg }), USER_ID);
+    expect(res.success).toBe(false);
+    expect(res.results[0].error).toContain('Bluesky image upload failed (413)');
   });
 
   it('getServiceAuth uses the PDS host as aud, never video.bsky.app', async () => {

@@ -68,7 +68,8 @@ describe('metrics dashboard', () => {
     cy.wait('@getMetrics');
 
     cy.contains('h1', 'Métricas').should('be.visible');
-    cy.contains('Vídeos medidos').should('be.visible');
+    cy.contains('Medições').should('be.visible');
+    cy.contains('Uma por vídeo por rede').should('be.visible');
     // Totals, not averages: 1200 + 300 views, engagement 90 + 12 + 4
     // + 10 + 1 + 0 = 117 (nulls skipped).
     cy.contains('1.500').should('be.visible');
@@ -80,7 +81,7 @@ describe('metrics dashboard', () => {
     cy.contains('YouTube · 21 de out. de 2026').scrollIntoView().should('be.visible');
     cy.contains('Sem ângulo').should('not.exist');
     // The truncated note and the not-reported counters render too.
-    cy.contains('Mostrando só os').scrollIntoView().should('be.visible');
+    cy.contains('Mostrando só as').scrollIntoView().should('be.visible');
     cy.contains('n/d').scrollIntoView().should('be.visible');
 
     // Window Tabs re-fetch (24h is the default window, so switch to 7
@@ -190,7 +191,7 @@ describe('metrics dashboard', () => {
     });
     cy.contains('button', 'Tentar de novo').click();
     cy.wait('@getMetricsFlaky');
-    cy.contains('Vídeos medidos').scrollIntoView().should('be.visible');
+    cy.contains('Medições').scrollIntoView().should('be.visible');
     cy.contains('myth-busting').scrollIntoView().should('be.visible');
   });
 });

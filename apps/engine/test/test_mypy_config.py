@@ -51,7 +51,7 @@ def _load_ci_smoke_test_imports() -> set:
     """Extract the module names imported by the CI smoke test.
 
     Parses the `run: uv run python -c "import ..."` line and returns the
-    top-level module names (e.g. {"cli", "main", "app"}).
+    top-level module names (e.g. {"main", "app"}).
 
     Constraint: the CI payload must not contain escaped double quotes —
     the parser splits on the first/last quote character. Keep the
@@ -61,7 +61,7 @@ def _load_ci_smoke_test_imports() -> set:
     for line in ci_yml.read_text().splitlines():
         stripped = line.strip()
         if 'run: uv run python -c "import ' in stripped:
-            # Extract between the quotes: import cli, main; from app import asgi; ...
+            # Extract between the quotes: import main; from app import asgi; ...
             start = stripped.index('"') + 1
             end = stripped.rindex('"')
             code = stripped[start:end]
@@ -84,7 +84,7 @@ def _load_ci_mypy_targets() -> tuple:
     test reads .github/workflows/ci.yml instead of hardcoding it.
     """
     args = _load_ci_mypy_command()
-    # Map file targets to module names: "cli.py" -> "cli".
+    # Map file targets to module names: "main.py" -> "main".
     # Skip flags (e.g. --strict) — only bare targets count.
     return tuple(
         a[:-3] if a.endswith(".py") else a for a in args if not a.startswith("-")
@@ -118,7 +118,7 @@ class MypyConfigPinTests(unittest.TestCase):
             f"CI mypy step must not add flags (would silently weaken the gate): {args}",
         )
         # And the targets must match the derived first-party set (compare as
-        # module names: "cli.py" -> "cli", so a future file target like
+        # module names: "main.py" -> "main", so a future file target like
         # "scripts.py" round-trips without hardcoding).
         arg_modules = tuple(a[:-3] if a.endswith(".py") else a for a in args)
         self.assertEqual(

@@ -97,7 +97,7 @@ export {
   METRICS_WINDOWS,
   YOUTUBE_VIDEO_ID,
 } from './contracts/metrics.js';
-export { SOCIAL_PROVIDERS as METRICS_PROVIDERS } from './contracts/metrics.js';
+export { SOCIAL_PROVIDERS as METRICS_PROVIDERS } from './contracts/providers.js';
 
 /**
  * Paired A/B experiment limits (issue #476), re-exported from the shared

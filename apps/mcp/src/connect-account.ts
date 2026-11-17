@@ -6,6 +6,7 @@
 import { z } from 'zod';
 
 import type { PostEngineerClient } from './client.js';
+import { SOCIAL_PROVIDERS } from './contracts/providers.js';
 import { getErrorMessage } from './errors.js';
 import { handleLibraryCall, type McpToolResponse } from './tools-call.js';
 
@@ -19,7 +20,7 @@ function nonBlank(message: string) {
 }
 
 export const ConnectAccountShape = {
-  provider: z.enum(['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'fanvue', '3speak', 'rumble']).describe('The social platform to connect'),
+  provider: z.enum(SOCIAL_PROVIDERS).describe('The social platform to connect'),
   handle: nonBlank('Bluesky handle is required.').optional().describe('Bluesky handle (e.g. user.bsky.social). Required only for bluesky.'),
   appPassword: nonBlank('Bluesky app password is required.').optional().describe('Bluesky app password (Settings > App passwords). Required only for bluesky. Never shared or logged.'),
   username: nonBlank('Hive username is required.').optional().describe('Hive username (e.g. alice). Required only for 3speak.'),

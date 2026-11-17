@@ -1049,8 +1049,8 @@ export interface Database {
         id: string;
         user_id: string;
         storage_path: string;
-        declared_content_type: 'video/mp4' | 'video/quicktime' | null;
-        detected_content_type: 'video/mp4' | 'video/quicktime' | null;
+        declared_content_type: 'video/mp4' | 'video/quicktime' | 'image/jpeg' | 'image/png' | null;
+        detected_content_type: 'video/mp4' | 'video/quicktime' | 'image/jpeg' | 'image/png' | null;
         size_bytes: number | null;
         status: 'pending' | 'ready' | 'consumed';
         expires_at: string;
@@ -1061,8 +1061,8 @@ export interface Database {
         id?: string;
         user_id: string;
         storage_path: string;
-        declared_content_type?: 'video/mp4' | 'video/quicktime' | null;
-        detected_content_type?: 'video/mp4' | 'video/quicktime' | null;
+        declared_content_type?: 'video/mp4' | 'video/quicktime' | 'image/jpeg' | 'image/png' | null;
+        detected_content_type?: 'video/mp4' | 'video/quicktime' | 'image/jpeg' | 'image/png' | null;
         size_bytes?: number | null;
         status?: 'pending' | 'ready' | 'consumed';
         expires_at: string;
@@ -1073,8 +1073,8 @@ export interface Database {
         id?: string;
         user_id?: string;
         storage_path?: string;
-        declared_content_type?: 'video/mp4' | 'video/quicktime' | null;
-        detected_content_type?: 'video/mp4' | 'video/quicktime' | null;
+        declared_content_type?: 'video/mp4' | 'video/quicktime' | 'image/jpeg' | 'image/png' | null;
+        detected_content_type?: 'video/mp4' | 'video/quicktime' | 'image/jpeg' | 'image/png' | null;
         size_bytes?: number | null;
         status?: 'pending' | 'ready' | 'consumed';
         expires_at?: string;
