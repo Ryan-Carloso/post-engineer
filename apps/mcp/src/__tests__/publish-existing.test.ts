@@ -315,6 +315,21 @@ describe('publish_existing client call', () => {
     expect(result.warnings).toBeUndefined();
   });
 
+  it('drops a reconnect warning with no accounts, an empty account id, or a non-list accounts field', async () => {
+    const request = vi.fn(async () => ({
+      ...SCHEDULED_REPLY,
+      warnings: [
+        { code: 'account_needs_reconnect', accounts: [] },
+        { code: 'account_needs_reconnect', accounts: [{ provider: 'youtube', accountId: '' }] },
+        { code: 'account_needs_reconnect', accounts: 'youtube' },
+      ],
+    }));
+    const result = await publishExisting(fakeClient(request), SCHEDULED_TASK);
+    expect(result.mode).toBe('scheduled');
+    if (result.mode !== 'scheduled') return;
+    expect(result.warnings).toBeUndefined();
+  });
+
   it('defaults mode to scheduled with UTC timezone and passes optional fields through', async () => {
     const request = vi.fn(async (_path: string, _init?: unknown) => SCHEDULED_REPLY);
     await publishExisting(fakeClient(request), {
