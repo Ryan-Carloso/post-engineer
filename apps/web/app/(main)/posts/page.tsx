@@ -6,7 +6,9 @@ import { useI18n } from '@/lib/i18n/provider';
 import type { TranslationKey } from '@/lib/i18n';
 import { RANGE_MAX_SLOTS, useHasAnyPostQuery, useScheduleRangeQuery } from '@/lib/schedule-range';
 import { cn } from '@/lib/utils';
-import { CalendarView } from './calendar-view';
+import { PostsCalendar } from './calendar-provider';
+import { slotToCalendarEvent } from './calendar-adapter';
+import { CalendarUnavailableFrame, CalendarLoadErrorEmptyState } from './calendar-load-error-frame';
 import {
   FIRST_WEEKDAY,
   INTL_TAG,
@@ -114,6 +116,22 @@ export default function PostsPage() {
     setCursor({ year, month });
     setPickedKey(null);
   }, []);
+  // The grid's date hints (a day click, grid scroll): a hint inside the
+  // shown month is just the page's own cursor; one outside it moves the
+  // month and clears the pick, like the toolbar buttons above.
+  const handleCalendarDateChange = useCallback(
+    (date: Date) => {
+      if (date.getFullYear() === cursor.year && date.getMonth() === cursor.month) return;
+      setCursor({ year: date.getFullYear(), month: date.getMonth() });
+      setPickedKey(null);
+    },
+    [cursor],
+  );
+  const calendarEvents = useMemo(
+    () =>
+      [...slotsByDay.values()].flatMap((slots) => slots.map((slot) => slotToCalendarEvent(slot, t('posts.unknownTitle')))),
+    [slotsByDay, t],
+  );
   // The one Refresh control covers every query, so it refetches all of them.
   const handleRefresh = () => {
     void rangeQuery.refetch();
@@ -180,29 +198,30 @@ export default function PostsPage() {
               {rangeQuery.data?.truncated === true && (
                 <p className="mb-3 text-xs text-muted-foreground">{t('posts.calendarTruncated', { count: RANGE_MAX_SLOTS })}</p>
               )}
-              {/* On error the calendar card becomes a recovery frame: alert + in-card retry, no grid. */}
-              <CalendarView
-                year={cursor.year}
-                month={cursor.month}
-                firstWeekday={firstWeekday}
-                slotsByDay={slotsByDay}
-                scheduleById={joins.scheduleById}
-                personaPhotoById={joins.personaPhotoById}
-                selectedKey={selectedKey}
-                todayKey={todayKey}
-                onSelect={handleSelect}
-                onMonthChange={(year, month) => setCursor({ year, month })}
-                onMonthNavigate={handleMonthNavigate}
-                onGoToToday={() => handleSelect(todayKey)}
-                unavailable={isError}
-                muted={isAccountEmpty}
-                filtered={filters.hasActiveFilter}
-                showLegend={!isAccountEmpty && monthPostCount > 0}
-                loadErrorMessageKey={isError ? loadErrorKey : undefined}
-                onLoadErrorRetry={isError ? handleRefresh : undefined}
-                onRefresh={!isError ? handleRefresh : undefined}
-                refreshing={rangeQuery.isFetching}
-              />
+              {/* On error the calendar card becomes a recovery frame: alert + in-card retry, no grid.
+                  The frame keeps the card chrome (same classes as PostsCalendar) so the
+                  recovery state reads as the calendar, not a bare page error. */}
+              {isError ? (
+                <div data-calendar-card className="relative max-w-full min-w-0 rounded-xl border border-line bg-card p-2 sm:p-3">
+                  <CalendarUnavailableFrame>
+                    <CalendarLoadErrorEmptyState messageKey={loadErrorKey} onRetry={handleRefresh} />
+                  </CalendarUnavailableFrame>
+                </div>
+              ) : (
+                <PostsCalendar
+                  events={calendarEvents}
+                  date={new Date(cursor.year, cursor.month, 1)}
+                  weekStartsOn={firstWeekday}
+                  locale={locale}
+                  loading={rangeQuery.isFetching}
+                  muted={isAccountEmpty}
+                  todayPressed={!isAccountEmpty && selectedKey === todayKey}
+                  onDateChange={handleCalendarDateChange}
+                  onSelectDay={handleSelect}
+                  onMonthNavigate={handleMonthNavigate}
+                  onGoToToday={() => handleSelect(todayKey)}
+                />
+              )}
             </div>
             {isError && loadErrorKey !== 'posts.loadErrorCalendar' ? (
               <section

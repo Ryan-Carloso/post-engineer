@@ -326,3 +326,39 @@ input {
     width: 33.333%;
     animation: calendar-loading-slide 1.2s cubic-bezier(0.65, 0, 0.35, 1) infinite;
 }
+/* Posts month grid (CalendarCN): today keeps the old gold numeral instead of
+ * the lib's filled primary chip. Unlayered CSS beats Tailwind v4's layered
+ * utilities; the only button.bg-primary inside the grid is today's day
+ * number. Re-check after any CalendarCN upgrade. */
+[data-posts-calendar-month] [data-date] button.bg-primary {
+  background-color: transparent;
+  color: var(--warning);
+}
+
+[data-posts-calendar-month] [data-date] button.bg-primary:hover {
+  background-color: var(--accent);
+}
+
+/* Narrow screens: the lib's weekday names are full words in PT
+ * ("domingo" — date-fns "EEE" is the full name there) and the ~50px
+ * columns cannot hold them at 13px. The first-of-month label
+ * ("novembro 1") spills the same way, and the "+N more" button wraps
+ * mid-phrase. Shrink the header, drop the month word, keep "N more"
+ * on one line. Re-check after any CalendarCN upgrade. */
+@media (max-width: 639px) {
+  [data-posts-calendar-month] div.relative.border-b > div {
+    font-size: 11px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  [data-posts-calendar-month] [data-date] button span {
+    display: none;
+  }
+
+  [data-posts-calendar-month] [data-date] button.font-bold {
+    font-size: 11px;
+    white-space: nowrap;
+  }
+}
