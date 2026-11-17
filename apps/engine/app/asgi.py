@@ -6,6 +6,7 @@ from types import TracebackType
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -265,10 +266,17 @@ def exception_handler(request: Request, e: HttpException):
 
 
 def validation_exception_handler(request: Request, e: RequestValidationError):
+    # Pydantic v2 puts the raised exception object in the error dict's ctx
+    # (e.g. SegmentValidationError carrying field/rule/fix, or any ValueError
+    # from a model validator), which plain json.dumps cannot serialize — the
+    # handler itself threw and the caller got a 500 instead of the 400.
+    # jsonable_encoder is what FastAPI's own default handler uses: it renders
+    # the exception as its attributes, so the 4xx still names the field,
+    # the rule, and the fix.
     return JSONResponse(
         status_code=400,
         content=utils.get_response(
-            status=400, body=e.errors(), message="field required"
+            status=400, body=jsonable_encoder(e.errors()), message="field required"
         ),
     )
 
