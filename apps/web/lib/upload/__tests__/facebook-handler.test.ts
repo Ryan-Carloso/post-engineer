@@ -12,7 +12,7 @@ vi.mock('@/lib/logger', () => ({ logger: { warn: vi.fn(), info: vi.fn(), error: 
 vi.mock('@/lib/analytics', () => ({ trackApiEvent: vi.fn() }));
 vi.mock('@/lib/facebook', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/facebook')>()),
-  publishFacebookVideo: vi.fn(),
+  publishFacebookMedia: vi.fn(),
 }));
 
 import { trackApiEvent } from '@/lib/analytics';
@@ -20,7 +20,7 @@ import { FacebookError } from '@/lib/errors';
 import { handleFacebookUpload } from '@/lib/upload/facebook-handler';
 import { getSocialAccountTokens, touchSocialAccount } from '@/lib/social-accounts';
 import { cleanupPublishMedia, presignPublishMedia, uploadPublishMedia } from '@/lib/upload/publish-media';
-import { publishFacebookVideo, FACEBOOK_TEXT_MAX_CHARS } from '@/lib/facebook';
+import { publishFacebookMedia, FACEBOOK_TEXT_MAX_CHARS } from '@/lib/facebook';
 import { logger } from '@/lib/logger';
 
 const MP4_BYTES = new Uint8Array([0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d]);
@@ -42,10 +42,34 @@ function tokens(value: Record<string, unknown>): never {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(getSocialAccountTokens).mockResolvedValue(tokens({ access_token: 'page-tok' }));
-  vi.mocked(publishFacebookVideo).mockResolvedValue({ postId: 'vid-1', permalink: 'https://www.facebook.com/111/videos/vid-1/' });
+  vi.mocked(publishFacebookMedia).mockResolvedValue({ postId: 'vid-1', permalink: 'https://www.facebook.com/111/videos/vid-1/' });
 });
 
 describe('handleFacebookUpload', () => {
+  it.each([
+    ['JPEG', new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0x10]), 'image/jpeg', 'jpg'],
+    ['PNG', new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0]), 'image/png', 'png'],
+  ])('publishes a %s image: stored on R2 by its sniffed type, posted as an image', async (_name, bytes, contentType, extension) => {
+    // The declared type lies on purpose: the bytes decide.
+    const image = new File([bytes], 'photo.bin', { type: 'application/octet-stream' });
+    const result = await handleFacebookUpload(formData({ video: image }), 'user-1');
+    expect(result.success).toBe(true);
+    const key = String(vi.mocked(uploadPublishMedia).mock.calls[0][1]);
+    expect(key.startsWith('facebook/')).toBe(true);
+    expect(key.endsWith(`.${extension}`)).toBe(true);
+    expect(vi.mocked(uploadPublishMedia).mock.calls[0][2]).toBe(contentType);
+    expect(vi.mocked(publishFacebookMedia).mock.calls[0][0].media.kind).toBe('image');
+  });
+
+  it('rejects an image over 8 MB before storing it', async () => {
+    const big = new Uint8Array(8 * 1024 * 1024 + 1);
+    big.set([0xff, 0xd8, 0xff]);
+    const result = await handleFacebookUpload(formData({ video: new File([big], 'big.jpg', { type: 'image/jpeg' }) }), 'user-1');
+    expect(result.success).toBe(false);
+    expect(result.results[0].error).toContain('Image exceeds the 8 MB limit');
+    expect(uploadPublishMedia).not.toHaveBeenCalled();
+  });
+
   it("publishes the stored video to the owner's Page with its Page token and records use", async () => {
     const result = await handleFacebookUpload(formData({ caption: '  my post  ' }), 'user-1');
     expect(result).toEqual({
@@ -53,10 +77,10 @@ describe('handleFacebookUpload', () => {
       results: [{ accountId: '111', success: true, postId: 'vid-1', permalink: 'https://www.facebook.com/111/videos/vid-1/' }],
     });
     expect(getSocialAccountTokens).toHaveBeenCalledWith(expect.anything(), 'user-1', 'facebook', '111');
-    expect(vi.mocked(publishFacebookVideo).mock.calls[0][0]).toMatchObject({
+    expect(vi.mocked(publishFacebookMedia).mock.calls[0][0]).toMatchObject({
       pageAccessToken: 'page-tok',
       pageId: '111',
-      videoUrl: 'https://s.example/signed.mp4',
+      media: { kind: 'video', url: 'https://s.example/signed.mp4' },
       description: 'my post',
     });
     expect(vi.mocked(uploadPublishMedia).mock.calls[0][1]).toMatch(/^facebook\/\d+_[0-9a-f]{8}\.mp4$/);
@@ -72,14 +96,14 @@ describe('handleFacebookUpload', () => {
   });
 
   it('omits the permalink when Facebook returned none', async () => {
-    vi.mocked(publishFacebookVideo).mockResolvedValue({ postId: 'vid-1', permalink: null });
+    vi.mocked(publishFacebookMedia).mockResolvedValue({ postId: 'vid-1', permalink: null });
     const result = await handleFacebookUpload(formData(), 'user-1');
     expect(result.results[0]).toEqual({ accountId: '111', success: true, postId: 'vid-1' });
   });
 
   it('logs a failed permalink read without failing the publish', async () => {
     await handleFacebookUpload(formData(), 'user-1');
-    const { onPermalinkError } = vi.mocked(publishFacebookVideo).mock.calls[0][0];
+    const { onPermalinkError } = vi.mocked(publishFacebookMedia).mock.calls[0][0];
     onPermalinkError(new Error('FACEBOOK_PERMALINK_FAILED: nope'));
     expect(logger.warn).toHaveBeenCalledWith('upload-content/facebook: permalink read failed', {
       accountId: '111',
@@ -92,14 +116,14 @@ describe('handleFacebookUpload', () => {
     ['missing caption', { caption: null }, 'Caption is required'],
     ['blank caption', { caption: '   ' }, 'Caption is required'],
     ['over-long caption', { caption: 'a'.repeat(FACEBOOK_TEXT_MAX_CHARS + 1) }, '63206-character'],
-    ['missing video', { video: null }, 'Video file is required'],
+    ['missing video', { video: null }, 'A video or image file is required'],
     ['non-video bytes', { video: new File(['not a video!'], 'x.mp4', { type: 'video/mp4' }) }, 'MP4 or MOV'],
   ])('rejects %s before storing anything', async (_name, overrides, message) => {
     const result = await handleFacebookUpload(formData(overrides), 'user-1');
     expect(result.success).toBe(false);
     expect(result.results[0].error).toContain(message);
     expect(uploadPublishMedia).not.toHaveBeenCalled();
-    expect(publishFacebookVideo).not.toHaveBeenCalled();
+    expect(publishFacebookMedia).not.toHaveBeenCalled();
   });
 
   it('accepts a caption exactly at the limit', async () => {
@@ -111,11 +135,11 @@ describe('handleFacebookUpload', () => {
     vi.mocked(getSocialAccountTokens).mockResolvedValue(tokens({}));
     const result = await handleFacebookUpload(formData(), 'user-1');
     expect(result).toEqual({ success: false, results: [{ accountId: '111', success: false, error: 'Facebook Page token not found', errorCode: 'token_missing' }] });
-    expect(publishFacebookVideo).not.toHaveBeenCalled();
+    expect(publishFacebookMedia).not.toHaveBeenCalled();
   });
 
   it('emits publish_account_unauthorized when Facebook rejects the Page token with 401', async () => {
-    vi.mocked(publishFacebookVideo).mockRejectedValueOnce(
+    vi.mocked(publishFacebookMedia).mockRejectedValueOnce(
       new FacebookError('FACEBOOK_PUBLISH_FAILED: Invalid OAuth access token', 401),
     );
     const result = await handleFacebookUpload(formData(), 'user-1');
@@ -129,13 +153,13 @@ describe('handleFacebookUpload', () => {
   });
 
   it('does not emit publish_account_unauthorized when the Facebook failure is not a 401', async () => {
-    vi.mocked(publishFacebookVideo).mockRejectedValueOnce(new FacebookError('FACEBOOK_PUBLISH_FAILED: boom', 500));
+    vi.mocked(publishFacebookMedia).mockRejectedValueOnce(new FacebookError('FACEBOOK_PUBLISH_FAILED: boom', 500));
     await handleFacebookUpload(formData(), 'user-1');
     expect(trackApiEvent).not.toHaveBeenCalled();
   });
 
   it('keeps going after one Page fails and is a success if any landed', async () => {
-    vi.mocked(publishFacebookVideo).mockRejectedValueOnce(new Error('FACEBOOK_PUBLISH_FAILED: boom'));
+    vi.mocked(publishFacebookMedia).mockRejectedValueOnce(new Error('FACEBOOK_PUBLISH_FAILED: boom'));
     const result = await handleFacebookUpload(formData({ ids: ['1', '2'] }), 'user-1');
     expect(result.success).toBe(true);
     expect(result.results.map((entry) => entry.success)).toEqual([false, true]);
@@ -153,7 +177,7 @@ describe('handleFacebookUpload', () => {
     expect(presignPublishMedia).toHaveBeenCalledWith('user-1/persona-9/task-7/final-1.mp4');
     expect(uploadPublishMedia).not.toHaveBeenCalled();
     expect(cleanupPublishMedia).not.toHaveBeenCalled();
-    expect(vi.mocked(publishFacebookVideo).mock.calls[0][0].videoUrl).toBe('https://s.example/archive.mp4');
+    expect(vi.mocked(publishFacebookMedia).mock.calls[0][0].media).toEqual({ kind: 'video', url: 'https://s.example/archive.mp4' });
   });
 
   it('rejects an archive key that belongs to another user', async () => {

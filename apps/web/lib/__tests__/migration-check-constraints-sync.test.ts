@@ -8,7 +8,8 @@ import { PUBLISH_LEDGER_STATUSES } from '@/lib/upload/publish-ledger';
 import { ANALYTICS_STATUSES, METRICS_WINDOWS } from '@/lib/metrics/metrics-query';
 import { VIDEO_LAYOUTS } from '@/lib/persona-schema';
 import { VIDEO_TYPES } from '@/lib/tokens';
-import { VIDEO_UPLOAD_CONTENT_TYPES, VIDEO_UPLOAD_STATUSES } from '@/lib/videos/signed-upload';
+import { VIDEO_UPLOAD_STATUSES } from '@/lib/videos/signed-upload';
+import { UPLOAD_CONTENT_TYPES } from '@/lib/contracts/videos';
 import { SCHEDULED_MEDIA_KINDS } from '@/app/api/media/publish-existing/schema';
 
 //---------------
@@ -105,8 +106,8 @@ const EXPECTED: Record<string, readonly string[]> = {
   // migration 060. The nullable content-type checks also allow NULL; the
   // parser keeps only the ANY (ARRAY[...]) arm, which is this list.
   video_uploads_status_check: VIDEO_UPLOAD_STATUSES,
-  video_uploads_declared_content_type_check: VIDEO_UPLOAD_CONTENT_TYPES,
-  video_uploads_detected_content_type_check: VIDEO_UPLOAD_CONTENT_TYPES,
+  video_uploads_declared_content_type_check: UPLOAD_CONTENT_TYPES,
+  video_uploads_detected_content_type_check: UPLOAD_CONTENT_TYPES,
   // migration 063. 'task' writes no media columns (the slot keeps its
   // task_id), so only the stored-media kinds appear in the check.
   scheduled_posts_media_kind_check: SCHEDULED_MEDIA_KINDS,

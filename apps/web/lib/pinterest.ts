@@ -379,16 +379,43 @@ export async function publishPinterestVideo(
   } else {
     pinBody.cover_image_key_frame_time = input.coverImageKeyFrameTime ?? 0;
   }
+  return createPin(input.accessToken, pinBody);
+}
+
+async function createPin(accessToken: string, pinBody: Record<string, unknown>): Promise<PinterestPublishResult> {
   const created = await pinterestFetch(
     'PINTEREST_PUBLISH_FAILED',
     `${PINTEREST_API}/pins`,
     {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${input.accessToken}` },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
       body: JSON.stringify(pinBody),
     },
   );
   const pinId = readOptionalString(created, 'id');
   if (pinId === null) throw new PinterestError('PINTEREST_PUBLISH_FAILED: missing id', 502);
   return { pinId, permalink: `https://www.pinterest.com/pin/${pinId}/` };
+}
+
+//---------------
+// publishPinterestImage — an image Pin is one call: the bytes ride in the
+// pin body as image_base64 (no media upload, no processing poll).
+//---------------
+export interface PublishPinterestImageInput {
+  accessToken: string;
+  boardId: string;
+  image: Buffer;
+  contentType: 'image/jpeg' | 'image/png';
+  title?: string;
+  description?: string;
+}
+
+export async function publishPinterestImage(input: PublishPinterestImageInput): Promise<PinterestPublishResult> {
+  const pinBody: Record<string, unknown> = {
+    board_id: input.boardId,
+    media_source: { source_type: 'image_base64', content_type: input.contentType, data: input.image.toString('base64') },
+  };
+  if (typeof input.title === 'string' && input.title !== '') pinBody.title = input.title;
+  if (typeof input.description === 'string' && input.description !== '') pinBody.description = input.description;
+  return createPin(input.accessToken, pinBody);
 }

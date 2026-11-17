@@ -1012,7 +1012,7 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
             cleanup_task_intermediates(task_id, ())
             return
 
-        # Segment photos become panels over the final video; in the images modes a skipped photo fails the task (full lip sync only warns).
+        # Segment photos become panels over the final video; in the images modes the task fails when a photo is skipped, none survive, or the photos run out (full lip sync only warns).
         try:
             media_warnings = user_media.prepare_segment_panels(task_id, params, subtitle_path, audio_duration)
         except image_coverage.ImagesDoNotCoverAudio as exc:  # images material: a photo was skipped, none survived, or the photos ran out

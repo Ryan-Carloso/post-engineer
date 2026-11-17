@@ -8,7 +8,7 @@ import {
   fetchFacebookPageProfile,
   fetchFacebookPages,
   getFacebookVideoInsights,
-  publishFacebookVideo,
+  publishFacebookMedia,
 } from '@/lib/facebook';
 import { FacebookError } from '@/lib/errors';
 
@@ -219,11 +219,26 @@ describe('fetchFacebookPageProfile', () => {
   });
 });
 
-describe('publishFacebookVideo', () => {
-  const input = { pageAccessToken: 'ptok', pageId: '111', videoUrl: 'https://s.example/v.mp4', description: 'hello', onPermalinkError: vi.fn() };
+describe('publishFacebookMedia', () => {
+  const input = { pageAccessToken: 'ptok', pageId: '111', media: { kind: 'video' as const, url: 'https://s.example/v.mp4' }, description: 'hello', onPermalinkError: vi.fn() };
 
   beforeEach(() => {
     input.onPermalinkError.mockClear();
+  });
+
+  it('posts an image to /photos on the Graph host with url and message', async () => {
+    mockFetch
+      .mockResolvedValueOnce(jsonResponse({ id: 'photo-1', post_id: '111_9' }))
+      .mockResolvedValueOnce(jsonResponse({ permalink_url: 'https://www.facebook.com/photo/?fbid=1' }));
+    const image = { ...input, media: { kind: 'image' as const, url: 'https://s.example/i.png' } };
+    await expect(publishFacebookMedia(image)).resolves.toEqual({ postId: 'photo-1', permalink: 'https://www.facebook.com/photo/?fbid=1' });
+    const publish = call(0);
+    expect(publish.url.toString()).toBe('https://graph.facebook.com/v23.0/111/photos');
+    expect(authHeader(publish.init)).toBe('Bearer ptok');
+    const body = new URLSearchParams(String(publish.init.body));
+    expect(body.get('url')).toBe('https://s.example/i.png');
+    expect(body.get('message')).toBe('hello');
+    expect(body.has('file_url')).toBe(false);
   });
 
   it('posts the video by URL to the Page and returns the id and permalink', async () => {
@@ -231,7 +246,7 @@ describe('publishFacebookVideo', () => {
       .mockResolvedValueOnce(jsonResponse({ id: 'vid-1' }))
       .mockResolvedValueOnce(jsonResponse({ permalink_url: '/111/videos/vid-1/' }));
 
-    await expect(publishFacebookVideo(input)).resolves.toEqual({
+    await expect(publishFacebookMedia(input)).resolves.toEqual({
       postId: 'vid-1',
       permalink: 'https://www.facebook.com/111/videos/vid-1/',
     });
@@ -249,27 +264,27 @@ describe('publishFacebookVideo', () => {
 
   it('keeps an absolute permalink and prefixes a relative one without a slash', async () => {
     mockFetch.mockResolvedValueOnce(jsonResponse({ id: 'v' })).mockResolvedValueOnce(jsonResponse({ permalink_url: 'https://www.facebook.com/reel/1' }));
-    expect((await publishFacebookVideo(input)).permalink).toBe('https://www.facebook.com/reel/1');
+    expect((await publishFacebookMedia(input)).permalink).toBe('https://www.facebook.com/reel/1');
     mockFetch.mockResolvedValueOnce(jsonResponse({ id: 'v' })).mockResolvedValueOnce(jsonResponse({ permalink_url: 'watch/?v=1' }));
-    expect((await publishFacebookVideo(input)).permalink).toBe('https://www.facebook.com/watch/?v=1');
+    expect((await publishFacebookMedia(input)).permalink).toBe('https://www.facebook.com/watch/?v=1');
   });
 
   it('keeps a published video successful when the permalink read fails', async () => {
     mockFetch.mockResolvedValueOnce(jsonResponse({ id: 'vid-1' })).mockResolvedValueOnce(jsonResponse({ error: { message: 'nope' } }, 500));
-    await expect(publishFacebookVideo(input)).resolves.toEqual({ postId: 'vid-1', permalink: null });
+    await expect(publishFacebookMedia(input)).resolves.toEqual({ postId: 'vid-1', permalink: null });
     expect(input.onPermalinkError).toHaveBeenCalledWith(expect.objectContaining({ message: 'FACEBOOK_PERMALINK_FAILED: nope' }));
   });
 
   it('returns a null permalink when Graph has none', async () => {
     mockFetch.mockResolvedValueOnce(jsonResponse({ id: 'vid-1' })).mockResolvedValueOnce(jsonResponse({}));
-    await expect(publishFacebookVideo(input)).resolves.toEqual({ postId: 'vid-1', permalink: null });
+    await expect(publishFacebookMedia(input)).resolves.toEqual({ postId: 'vid-1', permalink: null });
   });
 
   it('throws when the publish is rejected or returns no id', async () => {
     mockFetch.mockResolvedValueOnce(jsonResponse({ error: { message: 'no permission' } }, 403));
-    await expect(publishFacebookVideo(input)).rejects.toThrow('FACEBOOK_PUBLISH_FAILED: no permission');
+    await expect(publishFacebookMedia(input)).rejects.toThrow('FACEBOOK_PUBLISH_FAILED: no permission');
     mockFetch.mockResolvedValueOnce(jsonResponse({ success: true }));
-    await expect(publishFacebookVideo(input)).rejects.toThrow('FACEBOOK_PUBLISH_FAILED: missing id');
+    await expect(publishFacebookMedia(input)).rejects.toThrow('FACEBOOK_PUBLISH_FAILED: missing id');
     expect(mockFetch).toHaveBeenCalledTimes(2);
   });
 
@@ -286,7 +301,7 @@ describe('publishFacebookVideo', () => {
         400,
       ),
     );
-    const error = await publishFacebookVideo(input).catch((caught: unknown) => caught);
+    const error = await publishFacebookMedia(input).catch((caught: unknown) => caught);
     expect(error).toBeInstanceOf(FacebookError);
     expect((error as FacebookError).statusCode).toBe(400);
     expect((error as FacebookError).providerCode).toBe(190);

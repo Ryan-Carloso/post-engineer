@@ -31,6 +31,7 @@ import {
   SUBJECT_SPOTLIGHT_PROMPT,
   VIRAL_SHORTS_PROMPT,
   AB_HOOK_TEST_PROMPT,
+  STORY_FIRST_REELS_PROMPT,
 } from '@/lib/generation/prompt-base';
 
 export {
@@ -43,6 +44,7 @@ export {
   SUBJECT_SPOTLIGHT_PROMPT,
   VIRAL_SHORTS_PROMPT,
   AB_HOOK_TEST_PROMPT,
+  STORY_FIRST_REELS_PROMPT,
 };
 
 export type PromptIcon = 'globe' | 'compose';
@@ -277,6 +279,31 @@ export const PROMPTS: PromptEntry[] = [
     docHref:
       'https://github.com/Ryan-Carloso/post-engineer/blob/main/docs/recipes/ab-hook-test.md',
     prompt: AB_HOOK_TEST_PROMPT,
+  },
+  {
+    slug: 'story-first-reels',
+    icon: 'compose',
+    titleKey: 'recipes.storyFirstReelsTitle',
+    objectiveKey: 'recipes.storyFirstReelsObjective',
+    kindKey: 'recipes.kindPrompt',
+    stepKeys: [
+      'recipes.storyFirstReelsStep1',
+      'recipes.storyFirstReelsStep2',
+      'recipes.storyFirstReelsStep3',
+      'recipes.storyFirstReelsStep4',
+      'recipes.storyFirstReelsStep5',
+      'recipes.storyFirstReelsStep6',
+    ],
+    deliverKeys: [
+      'recipes.storyFirstReelsDeliver1',
+      'recipes.storyFirstReelsDeliver2',
+      'recipes.storyFirstReelsDeliver3',
+    ],
+    exampleInputKey: 'recipes.storyFirstReelsExampleInput',
+    exampleOutputKey: 'recipes.storyFirstReelsExampleOutput',
+    docHref:
+      'https://github.com/Ryan-Carloso/post-engineer/blob/main/docs/recipes/story-first-reels.md',
+    prompt: STORY_FIRST_REELS_PROMPT,
   },
 ];
 

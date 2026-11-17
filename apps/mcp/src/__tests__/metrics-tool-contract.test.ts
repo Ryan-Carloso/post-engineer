@@ -3,8 +3,8 @@ import {
   metricsSearchParams,
   parseMetricsQuery,
   parseRetentionCurveQuery,
-  type SocialProvider,
 } from '../contracts/metrics.js';
+import type { SocialProvider } from '../contracts/providers.js';
 import { METRICS_NONE } from '../limits.js';
 import { GetPostMetricsSchema, GetYouTubeRetentionCurveSchema } from '../tools-posts.js';
 

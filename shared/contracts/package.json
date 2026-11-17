@@ -1,0 +1,4 @@
+{
+  "//": "ES modules: the OpenAPI generator (plain Node) imports providers.ts directly.",
+  "type": "module"
+}
