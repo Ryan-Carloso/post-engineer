@@ -1,0 +1,171 @@
+name: verification
+
+# Mechanical verification evidence for every pull request.
+#
+# Fork-safe on purpose:
+# - trigger is pull_request (the merge commit), never the target-event
+#   variant that checks out pull-request code with this repository's secrets
+# - no `secrets` context is read
+# - checkout uses persist-credentials: false
+# - steps that execute pull-request Python blank GITHUB_TOKEN
+# - a fork token cannot write, so the comment step is skipped and the job
+#   summary still holds the evidence table
+#
+# The grader script is taken from the base commit when that commit has one,
+# so a pull request cannot silence a finding by editing the script. The pull
+# request that introduces the script is graded by its own copy and says so.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+concurrency:
+  group: verification-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout merge commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 pinned 2026-09-25
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5 pinned 2026-09-25
+        with:
+          python-version: "3.12"
+
+      - name: Install grader test dependencies
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet -r .github/scripts/requirements-validator.txt
+
+      - name: Grade the diff and run diff-scoped tests
+        id: grade
+        env:
+          GITHUB_TOKEN: ""
+          GH_TOKEN: ""
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          base="$BASE_SHA"
+          grader_dir="$GITHUB_WORKSPACE/.github/scripts/verification"
+          source="head"
+          if git cat-file -e "${base}:.github/scripts/verification/collect.py" 2>/dev/null; then
+            rm -rf /tmp/verifier
+            mkdir -p /tmp/verifier
+            git archive "$base" .github/scripts/verification | tar -x -C /tmp/verifier
+            grader_dir="/tmp/verifier/.github/scripts/verification"
+            source="base"
+          fi
+          echo "Grader source: ${source}"
+          set +e
+          python3 "$grader_dir/collect.py" \
+            --repo "$GITHUB_WORKSPACE" \
+            --base "$base" \
+            --head HEAD \
+            --source "$source" \
+            --json /tmp/honesty.json
+          collect_code=$?
+          set -e
+          if [ "$collect_code" -gt 1 ]; then
+            echo "collect.py failed (${collect_code})"
+            exit "$collect_code"
+          fi
+          python3 -c 'import json,pathlib,sys; data=json.loads(pathlib.Path("/tmp/honesty.json").read_text(encoding="utf-8")); suites=data.get("local_suites") or []; allowed={"verification","review-scripts"}; sys.exit("refusing local_suites") if (not isinstance(suites, list) or any(item not in allowed for item in suites)) else pathlib.Path("/tmp/suites.txt").write_text("".join(item + "\n" for item in suites), encoding="utf-8")'
+          echo '{}' > /tmp/suite-results.json
+          suite_fail=0
+          while IFS= read -r suite; do
+            [ -z "$suite" ] && continue
+            log="/tmp/suite-${suite}.log"
+            code=0
+            case "$suite" in
+              verification)
+                python3 -m pytest .github/scripts/tests/test_verification_collect.py .github/scripts/tests/test_verification_workflow.py -q --tb=line >"$log" 2>&1 || code=$?
+                ;;
+              review-scripts)
+                python3 -m pytest .github/scripts/tests -q --tb=line >"$log" 2>&1 || code=$?
+                ;;
+              *)
+                echo "unknown suite" >&2
+                exit 1
+                ;;
+            esac
+            if [ "$code" -ne 0 ]; then
+              suite_fail=1
+              tail -n 40 "$log" || true
+            fi
+            SUITE_NAME="$suite" SUITE_CODE="$code" SUITE_LOG="$log" python3 -c 'import json,os; from pathlib import Path; path=Path("/tmp/suite-results.json"); data=json.loads(path.read_text(encoding="utf-8") or "{}"); text=Path(os.environ["SUITE_LOG"]).read_text(encoding="utf-8", errors="replace"); data[os.environ["SUITE_NAME"]]={"exit_code": int(os.environ["SUITE_CODE"]), "excerpt": text[-2000:]}; path.write_text(json.dumps(data), encoding="utf-8")'
+          done < /tmp/suites.txt
+          set +e
+          python3 "$grader_dir/report.py" \
+            --honesty /tmp/honesty.json \
+            --suites /tmp/suite-results.json \
+            --markdown /tmp/evidence.md
+          report_code=$?
+          set -e
+          if [ "$report_code" -gt 1 ]; then
+            exit "$report_code"
+          fi
+          final=0
+          if [ "$collect_code" -ne 0 ] || [ "$suite_fail" -ne 0 ] || [ "$report_code" -ne 0 ]; then
+            final=1
+          fi
+          echo "exit_code=${final}" >> "$GITHUB_OUTPUT"
+
+      - name: Write job summary
+        if: always()
+        run: |
+          set -euo pipefail
+          if [ -f /tmp/evidence.md ]; then
+            cat /tmp/evidence.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Verification evidence was not produced." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Post or update the evidence comment
+        if: always() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          BASE_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          if [ ! -f /tmp/evidence.md ]; then
+            echo "no evidence file; skipping comment"
+            exit 0
+          fi
+          if [ -z "${HEAD_REPO}" ] || [ "${HEAD_REPO}" != "${BASE_REPO}" ]; then
+            echo "Fork pull request: comment skipped. Evidence is in the job summary. This workflow has no repository secret context."
+            exit 0
+          fi
+          existing_id=$(gh api "repos/${BASE_REPO}/issues/${PR_NUMBER}/comments" --paginate --jq '.[] | select(.body | contains("<!-- verification-evidence -->")) | .id' | head -n 1 || true)
+          if [ -n "$existing_id" ]; then
+            gh api -X PATCH "repos/${BASE_REPO}/issues/comments/${existing_id}" -F body=@"/tmp/evidence.md" > /dev/null
+            echo "updated comment ${existing_id}"
+          else
+            gh pr comment "$PR_NUMBER" --repo "$BASE_REPO" --body-file /tmp/evidence.md > /dev/null
+            echo "posted comment"
+          fi
+
+      - name: Fail when evidence has a failure
+        if: always()
+        run: |
+          set -euo pipefail
+          code="${{ steps.grade.outputs.exit_code }}"
+          if [ "$code" != "0" ]; then
+            echo "::error::Verification evidence failed. See the job summary and the pull request comment."
+            exit 1
+          fi
+          echo "Verification evidence passed."
