@@ -2,16 +2,17 @@ import type { SocialAccountRecord } from '@/lib/social-accounts';
 import type { AccountData, AccountSyncStatus, InstagramAccountData } from '@/lib/types';
 
 //---------------
-// Provider Registry — SINGLE SOURCE of the supported social networks list.
-// Adding a new provider = adding the member to SOCIAL_PROVIDERS and the
-// corresponding entry to PROVIDER_REGISTRY (the `satisfies` breaks the
-// typecheck/CI if either becomes incomplete). The /api/account mappers,
-// client guards and the OAuth union all derive from here.
+// Provider Registry — the per-provider web facts (account mappers,
+// display, OAuth callback support). The list of networks itself is
+// shared/contracts/providers.ts (SOCIAL_PROVIDERS), the one list the web,
+// the MCP and the OpenAPI generator all read. Adding a provider = adding
+// it there and the matching entry to PROVIDER_REGISTRY (the `satisfies`
+// breaks the typecheck if the registry misses one).
 //---------------
 
-export const SOCIAL_PROVIDERS = ['youtube', 'instagram', 'bluesky', 'linkedin', 'threads', 'facebook', 'pinterest', '3speak', 'rumble', 'fanvue'] as const;
+import { SOCIAL_PROVIDERS, isSocialProvider, type SocialProvider } from '@/lib/contracts/providers';
 
-export type SocialProvider = (typeof SOCIAL_PROVIDERS)[number];
+export { SOCIAL_PROVIDERS, isSocialProvider, type SocialProvider };
 
 // Stored/shown when Instagram returned no username for the account.
 export const INSTAGRAM_USERNAME_FALLBACK = 'instagram_user';
@@ -387,10 +388,6 @@ export type OAuthProvider = {
 //---------------
 // Type guards
 //---------------
-
-export function isSocialProvider(value: unknown): value is SocialProvider {
-  return typeof value === 'string' && (SOCIAL_PROVIDERS as readonly string[]).includes(value);
-}
 
 export function isOAuthProvider(value: unknown): value is OAuthProvider {
   return isSocialProvider(value) && PROVIDER_REGISTRY[value].supportsOAuthCallback;

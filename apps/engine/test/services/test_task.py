@@ -465,7 +465,11 @@ class TestDownloadPersonaVoice(unittest.TestCase):
     ):
         import socket
 
-        get_patcher = patch("requests.get", return_value=response or _FakeStreamResponse())
+        # The download dials through the pinned helper, not requests.get.
+        get_patcher = patch(
+            "app.utils.ssrf._send_pinned",
+            return_value=response or _FakeStreamResponse(),
+        )
         self.get_mock = get_patcher.start()
         self.addCleanup(get_patcher.stop)
         getaddrinfo_patch = (

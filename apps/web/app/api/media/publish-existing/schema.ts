@@ -10,6 +10,8 @@
 import { z } from 'zod';
 
 import { detectMagicMimeType } from '@/lib/media/magic-bytes';
+import { IMAGE_PROVIDERS, isImageProvider } from '@/lib/contracts/providers';
+import { MAX_IMAGE_UPLOAD_BYTES } from '@/lib/contracts/videos';
 import { resolveTitle } from '@/app/api/videos/generate-and-schedule/request-title';
 import {
   validatePinterestBoard,
@@ -23,7 +25,7 @@ import {
 } from '@/app/api/videos/generate-and-schedule/validation-issues';
 
 /** Inline image bytes ride in the JSON body, like the MCP media tool. */
-export const IMAGE_MAX_BYTES = 8 * 1024 * 1024;
+export const IMAGE_MAX_BYTES = MAX_IMAGE_UPLOAD_BYTES;
 
 /** The `scheduled_posts.media_kind` values this flow writes (migration 063):
  *  'upload' for a ready signed video upload, 'image' for stored image bytes.
@@ -50,17 +52,20 @@ const MediaSchema = z.discriminatedUnion('kind', [
     .strict(),
 ]);
 
+/** One post at one moment: existing media is published once, so the
+ *  schedule is a single instant, never a list of daily times. */
 const PublishingScheduleSchema = z
   .object({
-    startAt: z.string(),
-    times: z.array(z.string()).min(1).max(10),
-    timezone: z.string(),
+    publishAt: z.string().min(1, 'publishing.schedule.publishAt is required.'),
+    timezone: z.string().min(1, 'publishing.schedule.timezone is required.'),
   })
   .strict();
 
 const PublishingSchema = z
   .object({
-    mode: z.enum(['scheduled', 'asap']).optional(),
+    // Required: a publish tool that silently defaults to "later" (or to
+    // "now") surprises one caller or the other.
+    mode: z.enum(['scheduled', 'asap']),
     providers: z.array(z.string()).min(1).max(10),
     accounts: z.record(z.string(), z.array(z.string())).optional(),
     schedule: PublishingScheduleSchema.optional(),
@@ -93,7 +98,7 @@ export interface PublishExistingRequest {
     mode: 'asap' | 'scheduled';
     providers: Provider[];
     accounts: Record<string, string[] | undefined> | undefined;
-    schedule: { startAt: string; times: string[]; timezone: string } | undefined;
+    schedule: { publishAt: string; timezone: string } | undefined;
     pinterestBoardId: string | null;
   };
   /** YouTube tags / privacy, required for ASAP (the handlers demand them);
@@ -164,7 +169,7 @@ export function checkPublishExistingSemantics(
   const board = validatePinterestBoard(input.publishing.providers, input.publishing.pinterestBoardId);
   if (!board.ok) issues.push(...board.issues);
 
-  const mode = input.publishing.mode ?? 'scheduled';
+  const mode = input.publishing.mode;
   if (mode === 'asap' && input.publishing.schedule !== undefined) {
     issues.push(invalid("publishing.schedule must not be set when publishing.mode is 'asap'.", 'publishing.schedule'));
   }
@@ -172,16 +177,12 @@ export function checkPublishExistingSemantics(
     issues.push(invalid("publishing.schedule is required when publishing.mode is 'scheduled'.", 'publishing.schedule'));
   }
 
-  // Images post only where a handler accepts them: Instagram today (its
-  // handler already takes JPEG/PNG). The other providers are video-only
-  // until their handlers grow an image branch (issue #384 follow-up).
+  // Images post only where a handler accepts them (IMAGE_PROVIDERS):
+  // YouTube, Rumble and 3Speak are video-only, Fanvue's upload is wired
+  // for video only.
   if (input.media.kind === 'image' && providers.ok) {
-    const onlyInstagram = providers.value.length === 1 && providers.value[0] === 'instagram';
-    if (!onlyInstagram) {
-      issues.push(
-        invalid('Images can only be published to instagram for now: its handler is the only one that accepts image files.', 'publishing.providers'),
-      );
-    }
+    const issue = imageProvidersIssue(providers.value);
+    if (issue !== null) issues.push(issue);
   }
 
   // ASAP dispatches straight to the provider handlers, which require
@@ -255,4 +256,14 @@ export function decodeImageMedia(media: {
     };
   }
   return { ok: true, value: { buffer, contentType } };
+}
+
+/** The 400 for an image sent to a network that posts no image, or null. */
+export function imageProvidersIssue(providers: readonly string[]): ValidationIssue | null {
+  const videoOnly = providers.filter((provider) => !isImageProvider(provider));
+  if (videoOnly.length === 0) return null;
+  return invalid(
+    `Images can be published to ${IMAGE_PROVIDERS.join(', ')} only; ${videoOnly.join(', ')} take${videoOnly.length === 1 ? 's' : ''} video.`,
+    'publishing.providers',
+  );
 }

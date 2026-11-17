@@ -197,6 +197,7 @@ describe('isEngineUsablePersonaImageUrl', () => {
     'http://images.example.org/a.jpg?size=large',
     // A literal public IP is a global address, like the engine's check.
     'https://8.8.8.8/avatar.png',
+    'http://[2606:4700:4700::1111]/avatar.png',
   ])('accepts %s', (url) => {
     expect(isEngineUsablePersonaImageUrl(url)).toBe(true);
   });

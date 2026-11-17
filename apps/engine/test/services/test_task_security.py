@@ -60,7 +60,10 @@ class TestPersonaImageDownloadSecurity(unittest.TestCase):
         patches = [
             patch.object(tm.utils, "task_dir", return_value=self.tmp),
             patch("socket.getaddrinfo", return_value=_addrinfo(*resolved_ips)),
-            patch("requests.get", return_value=response or _FakeImageResponse()),
+            patch(
+                "app.utils.ssrf._send_pinned",
+                return_value=response or _FakeImageResponse(),
+            ),
             patch.object(tm.subtitle, "file_to_subtitles", return_value=[]),
             patch.object(tm.persona_hook, "_find_hook_end_seconds", return_value=1.0),
             patch.object(
@@ -121,9 +124,9 @@ class TestPersonaImageDownloadSecurity(unittest.TestCase):
         with patch.dict(os.environ, {"MPT_UPLOAD_API_BASE_URL": "https://web.example.com/"}):
             result, _, _, _ = self._run("/caracter-samples/file-3.png")
         self.assertEqual(result, "final.mp4")
-        requests_get = self.started[2]
+        pinned = self.started[2]
         self.assertEqual(
-            requests_get.call_args.args[0],
+            pinned.call_args.args[1],
             "https://web.example.com/caracter-samples/file-3.png",
         )
 

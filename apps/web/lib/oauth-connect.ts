@@ -19,15 +19,12 @@ import {
 // not exist — only for a browser signed in as that same owner.
 //---------------
 
-export const OAUTH_CONNECT_PROVIDERS = ['youtube', 'instagram', 'linkedin', 'threads', 'facebook', 'pinterest', 'fanvue'] as const;
-export type OAuthConnectProvider = (typeof OAUTH_CONNECT_PROVIDERS)[number];
+// The OAuth networks derive from the one provider list
+// (shared/contracts/providers.ts): every network that does not connect
+// directly with a typed credential.
+import { OAUTH_CONNECT_PROVIDERS, isOAuthConnectProvider, type OAuthConnectProvider } from '@/lib/contracts/providers';
 
-export function isOAuthConnectProvider(value: unknown): value is OAuthConnectProvider {
-  return (
-    typeof value === 'string' &&
-    (OAUTH_CONNECT_PROVIDERS as readonly string[]).includes(value)
-  );
-}
+export { OAUTH_CONNECT_PROVIDERS, isOAuthConnectProvider, type OAuthConnectProvider };
 
 export interface StoredOAuthState {
   userId: string;

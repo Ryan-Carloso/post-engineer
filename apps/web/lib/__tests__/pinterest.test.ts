@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
+  publishPinterestImage,
   PINTEREST_DESCRIPTION_MAX_CHARS,
   PINTEREST_SCOPES,
   PINTEREST_TITLE_MAX_CHARS,
@@ -143,6 +144,31 @@ describe('fetchPinterestBoards', () => {
     expect(call(0).url.searchParams.get('bookmark')).toBeNull();
     expect(call(1).url.searchParams.get('bookmark')).toBe('bm-1');
     expect(MAX_BOARD_LIST_PAGES).toBe(5);
+  });
+});
+
+describe('publishPinterestImage', () => {
+  it('creates the Pin in one call with the image as image_base64', async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse({ id: '77' }));
+    const image = Buffer.from([0xff, 0xd8, 0xff, 0xe0]);
+    await expect(publishPinterestImage({ accessToken: 'at-1', boardId: 'b1', image, contentType: 'image/jpeg', title: 'T', description: 'D' }))
+      .resolves.toEqual({ pinId: '77', permalink: 'https://www.pinterest.com/pin/77/' });
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    const pin = call(0);
+    expect(pin.url.toString()).toBe('https://api.pinterest.com/v5/pins');
+    expect(authHeader(pin.init)).toBe('Bearer at-1');
+    expect(JSON.parse(String(pin.init.body))).toEqual({
+      board_id: 'b1',
+      media_source: { source_type: 'image_base64', content_type: 'image/jpeg', data: image.toString('base64') },
+      title: 'T',
+      description: 'D',
+    });
+  });
+
+  it('throws PINTEREST_PUBLISH_FAILED when the Pin has no id', async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse({}));
+    await expect(publishPinterestImage({ accessToken: 'at-1', boardId: 'b1', image: Buffer.from([1]), contentType: 'image/png' }))
+      .rejects.toThrow('PINTEREST_PUBLISH_FAILED: missing id');
   });
 });
 

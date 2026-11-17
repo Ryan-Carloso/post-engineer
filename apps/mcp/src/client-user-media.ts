@@ -51,16 +51,12 @@ function assertSegmentMediaSize(sizeBytes: number, path: string): void {
 }
 
 /**
- * Upload one local image for a segment and return its mediaId.
- * Reads run the same stat-before-read, size-guard-before-and-after-read
- * pattern as the persona library uploads, with the 8MB engine photo
- * limit instead of the 10MB library limit. Only the mediaId reaches
- * tool output: the local path and the temp asset URL never do.
+ * Read one local image with the stat-before-read, size-guard-before-and-
+ * after-read pattern of the persona library uploads (8MB engine photo
+ * limit) and sniff its real type. Shared by the segment upload and the
+ * publish_existing image path, so both read local files the same way.
  */
-export async function uploadSegmentMedia(
-  client: PostEngineerClient,
-  path: string,
-): Promise<{ mediaId: string }> {
+export async function readLocalImage(path: string): Promise<{ buffer: Buffer; mimeType: string }> {
   let fileStat;
   try {
     fileStat = await stat(path);
@@ -84,6 +80,19 @@ export async function uploadSegmentMedia(
       `Image "${basename(path)}" is not a JPG, PNG, or WebP image (real content, not extension).`,
     );
   }
+  return { buffer, mimeType };
+}
+
+/**
+ * Upload one local image for a segment and return its mediaId.
+ * Only the mediaId reaches tool output: the local path and the temp
+ * asset URL never do.
+ */
+export async function uploadSegmentMedia(
+  client: PostEngineerClient,
+  path: string,
+): Promise<{ mediaId: string }> {
+  const { buffer, mimeType } = await readLocalImage(path);
   const formData = new FormData();
   formData.append('file', new Blob([buffer], { type: mimeType }), basename(path));
   const result = await client.request(

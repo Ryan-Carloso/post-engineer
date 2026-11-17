@@ -18,7 +18,7 @@
 import { isIP } from 'node:net';
 
 import { SIGNED_URL_TTL_SECONDS } from '@/app/api/videos/generate-and-schedule/persona-prep';
-import { isHttpUrl, isPublicIp } from '@/lib/generation/custom-audio';
+import { isHttpUrl, isPublicIp, unbracketIpLiteral } from '@/lib/generation/custom-audio';
 import { isPublicAssetPath } from '@/lib/image-source';
 
 const IMAGE_BUCKET = 'personas';
@@ -83,7 +83,7 @@ export function isEngineUsablePersonaImageUrl(value: string): boolean {
     return false;
   }
   if (!hostname) return false;
-  const literalIp = hostname.replace(/^\[|\]$/g, '');
+  const literalIp = unbracketIpLiteral(hostname);
   if (isIP(literalIp) !== 0 && !isPublicIp(literalIp)) return false;
   return true;
 }

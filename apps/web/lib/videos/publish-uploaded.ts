@@ -267,7 +267,7 @@ export async function publishUploadedVideo(
   startTime: number,
   now: Date,
 ): Promise<PublishUploadedResult> {
-  const claimed = await claimUploadForPublish(store, storage, userId, input.uploadId, now);
+  const claimed = await claimUploadForPublish(store, storage, userId, input.uploadId, now, [input.provider]);
   const formData = buildPublishForm(input, claimed.buffer, claimed.contentType);
   try {
     return await dispatchPublish(input.provider, formData, userId, logId, startTime);

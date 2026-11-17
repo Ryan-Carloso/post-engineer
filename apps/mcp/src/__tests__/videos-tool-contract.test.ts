@@ -304,11 +304,15 @@ describe('batch discount contract boundary', () => {
 });
 
 describe('signed-upload mint contract boundary', () => {
-  it('accepts both video types within 2GB and rejects the rest with the route messages', () => {
+  it('accepts both video types within 2GB and JPEG/PNG within 8 MB, and rejects the rest with the route messages', () => {
     expect(accepts(MintVideoUploadBodySchema, { contentType: 'video/mp4', sizeBytes: 2 * 1024 * 1024 * 1024 })).toBe(true);
     expect(accepts(MintVideoUploadBodySchema, { contentType: 'video/quicktime', sizeBytes: 42 })).toBe(true);
-    expect(firstIssue(MintVideoUploadBodySchema, { contentType: 'image/png', sizeBytes: 42 })).toBe(
-      'contentType must be video/mp4 or video/quicktime.',
+    expect(accepts(MintVideoUploadBodySchema, { contentType: 'image/png', sizeBytes: 8 * 1024 * 1024 })).toBe(true);
+    expect(firstIssue(MintVideoUploadBodySchema, { contentType: 'image/jpeg', sizeBytes: 8 * 1024 * 1024 + 1 })).toBe(
+      'Image is too large. Maximum is 8 MB.',
+    );
+    expect(firstIssue(MintVideoUploadBodySchema, { contentType: 'image/webp', sizeBytes: 42 })).toBe(
+      'contentType must be video/mp4, video/quicktime, image/jpeg or image/png.',
     );
     expect(firstIssue(MintVideoUploadBodySchema, { contentType: 'video/mp4', sizeBytes: 0 })).toBe(
       'sizeBytes must be a positive integer.',

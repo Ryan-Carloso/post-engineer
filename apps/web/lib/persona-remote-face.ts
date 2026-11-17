@@ -7,13 +7,12 @@
 
 import { randomUUID } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
-import http from 'node:http';
-import https from 'node:https';
-import { isIP } from 'node:net';
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { isHttpUrl, isPublicIp } from '@/lib/generation/custom-audio';
+import { requestPinned } from '@/lib/ssrf/pinned-request';
+import { resolvePublicHost } from '@/lib/ssrf/resolve-public-host';
 import { isPublicAssetPath, toSameOriginAssetPath } from '@/lib/image-source';
 import { logger } from '@/lib/logger';
 import { detectMagicMimeType } from '@/lib/media/magic-bytes';
@@ -84,79 +83,10 @@ async function assertPublicHttpUrl(
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
     return { ok: false, error: REMOTE_FACE_ERROR };
   }
-  try {
-    const records = isIP(parsed.hostname)
-      ? [{ address: parsed.hostname }]
-      : await lookupImpl(parsed.hostname, { all: true });
-    const addresses = records.map((record) => record.address);
-    const allPublic = addresses.length > 0 && addresses.every((address) => isPublicIp(address));
-    if (!allPublic) {
-      return { ok: false, error: REMOTE_FACE_ERROR };
-    }
-    return { ok: true, addresses };
-  } catch {
-    return { ok: false, error: REMOTE_FACE_ERROR };
-  }
-}
-
-function requestPinned(url: string, addresses: string[]): Promise<Response> {
-  const parsed = new URL(url);
-  const transport = parsed.protocol === 'https:' ? https : http;
-  return new Promise((resolve, reject) => {
-    const req = transport.request(
-      parsed,
-      {
-        // Node 20+ connects with autoSelectFamily, which calls lookup with
-        // { all: true } and expects an address array; the single-address
-        // form then fails every hostname URL with ERR_INVALID_IP_ADDRESS.
-        lookup(_hostname, options, callback) {
-          const pinned = addresses.map((address) => ({
-            address,
-            family: address.includes(':') ? 6 : 4,
-          }));
-          if (options.all === true) {
-            callback(null, pinned);
-            return;
-          }
-          callback(null, pinned[0].address, pinned[0].family);
-        },
-      },
-      (incoming) => {
-        const status = incoming.statusCode ?? 0;
-        if (status >= 300 && status < 400) {
-          incoming.resume();
-          resolve(new Response(null, { status }));
-          return;
-        }
-        const chunks: Buffer[] = [];
-        let size = 0;
-        incoming.on('data', (chunk: Buffer) => {
-          size += chunk.length;
-          if (size > MAX_IMAGE_BYTES) {
-            req.destroy();
-            resolve(new Response(null, { status: 413 }));
-            return;
-          }
-          chunks.push(chunk);
-        });
-        incoming.on('end', () => {
-          resolve(
-            new Response(Buffer.concat(chunks, size), {
-              status,
-              headers: { 'content-type': String(incoming.headers['content-type'] ?? '') },
-            }),
-          );
-        });
-        incoming.on('error', reject);
-      },
-    );
-    const deadline = setTimeout(() => {
-      req.destroy(new Error('timeout'));
-    }, REMOTE_FACE_TIMEOUT_MS);
-    req.on('close', () => clearTimeout(deadline));
-    req.on('error', reject);
-    req.end();
-  });
+  // isPublicIp is the binding tests replace on the custom-audio re-export.
+  const safety = await resolvePublicHost(parsed.hostname, lookupImpl, isPublicIp);
+  if (!safety.ok) return { ok: false, error: REMOTE_FACE_ERROR };
+  return { ok: true, addresses: safety.addresses };
 }
 
 async function readCappedBody(response: Response): Promise<Buffer | null> {
@@ -196,12 +126,17 @@ export async function downloadPublicImage(
 
   let response: Response;
   try {
-    response = deps.fetchImpl
-      ? await deps.fetchImpl(url, {
+    if (deps.fetchImpl) {
+      response = await deps.fetchImpl(url, {
         redirect: 'error',
         signal: AbortSignal.timeout(REMOTE_FACE_TIMEOUT_MS),
-      })
-      : await requestPinned(url, safety.addresses);
+      });
+    } else {
+      response = await requestPinned(url, safety.addresses, {
+        timeoutMs: REMOTE_FACE_TIMEOUT_MS,
+        maxBytes: MAX_IMAGE_BYTES,
+      });
+    }
   } catch (error) {
     // Hostname only: the full URL can carry signed-link tokens.
     logger.error('[persona-remote-face] image request failed', error, {

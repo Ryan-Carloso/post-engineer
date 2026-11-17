@@ -24,28 +24,21 @@
 // An entry whose status is "failed" is omitted even when it also carries
 // a URL: that publish did not happen.
 //
-// Dependency-free on purpose: the detail page and the card both read this,
-// and it must stay safe to import from a client component.
+// Dependency-free on purpose (the one import is the dependency-free
+// provider list): the detail page and the card both read this, and it
+// must stay safe to import from a client component.
 //---------------
 
-export type PublishProvider = 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook' | 'pinterest' | '3speak' | 'rumble' | 'fanvue';
+import { SOCIAL_PROVIDERS, type SocialProvider } from '@/lib/contracts/providers';
+
+export type PublishProvider = SocialProvider;
 
 export interface PublishLink {
   provider: PublishProvider;
   url: string;
 }
 
-const PROVIDERS: ReadonlySet<string> = new Set<PublishProvider>([
-  'youtube',
-  'instagram',
-  'bluesky',
-  'linkedin',
-  'threads',
-  'facebook',
-  'pinterest',
-  '3speak', 'rumble',
-  'fanvue',
-]);
+const PROVIDERS: ReadonlySet<string> = new Set<PublishProvider>(SOCIAL_PROVIDERS);
 
 //---------------
 // isPublishProvider — type guard for the known provider set. Unknown
