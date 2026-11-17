@@ -1,0 +1,278 @@
+name: Frontend CI
+
+# apps/web lint, typecheck, production build, and unit tests.
+#
+# These used to be one job (about 5.5 minutes on a warm main run, about 7
+# minutes on a pull request): unit tests ~2.5–3.5 minutes and `next build`
+# ~1.5–2 minutes, run one after the other. They now run together. Pull
+# requests run only the vitest files affected by the diff; main runs the
+# full suite, split into duration-balanced shards. Coverage from the shards
+# is merged before Codecov and the UI coverage gate see it.
+#
+# `bun check` typechecks. It matches TypeScript 7, which rejects `baseUrl`,
+# so prepare-bun-tsconfig.mjs writes a throwaway tsconfig with that option
+# removed. The committed tsconfig is unchanged for `tsc` and Next.
+# Oxlint is the primary linter; ESLint remains for indent and Tailwind.
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Test frontend CI scripts
+        run: node --test .github/scripts/frontend-ci/*.test.mjs
+
+      - uses: ./.github/actions/setup-pnpm
+
+      # vitest, tsc, and the hosted /mcp route resolve the workspace package
+      # through apps/mcp/dist. Oxlint does not, but ESLint's parser can.
+      - name: Build MCP package
+        run: pnpm --filter post-engineer-mcp build
+
+      - name: Lint
+        working-directory: apps/web
+        run: pnpm lint
+
+  typecheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: ./.github/actions/setup-pnpm
+
+      - name: Build MCP package
+        run: pnpm --filter post-engineer-mcp build
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.4
+
+      - name: Generate Next.js route types
+        working-directory: apps/web
+        run: pnpm exec next typegen
+
+      - name: Write the bun check tsconfig
+        run: node .github/scripts/frontend-ci/prepare-bun-tsconfig.mjs --in apps/web/tsconfig.json --out apps/web/tsconfig.bun.json
+
+      - name: Typecheck
+        working-directory: apps/web
+        # --no-script: a future package.json "check" script must not replace
+        # the type checker. bun check never writes files.
+        run: bun check --no-script -p tsconfig.bun.json --no-pretty
+
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set build metadata
+        run: |
+          echo "VERSION=$(tr -d '[:space:]' < "$GITHUB_WORKSPACE/VERSION")" >> "$GITHUB_ENV"
+          echo "BUILD=${{ github.run_number }}" >> "$GITHUB_ENV"
+          echo "COMMIT=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
+
+      - uses: ./.github/actions/setup-pnpm
+
+      # The primary key never matches (it includes the commit), so every run
+      # saves the cache it just produced. restore-keys reuse the newest
+      # cache for this lockfile, which is what makes the next build incremental.
+      - name: Restore Next.js build cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: apps/web/.next/cache
+          key: next-cache-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: |
+            next-cache-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
+            next-cache-${{ runner.os }}-
+
+      - name: Production build
+        working-directory: apps/web
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
+          NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: dummy-anon-key
+          NEXT_PUBLIC_APP_URL: http://localhost:3000
+          NEXT_PUBLIC_POSTHOG_HOST: https://example.posthog.com
+          NEXT_PUBLIC_POSTHOG_KEY: dummy-posthog-key
+          NEXT_PUBLIC_WHATSAPP_NUMBER: "000000000000"
+        run: pnpm build
+
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # vitest --changed and the run-all diff need the base commit.
+          fetch-depth: 0
+
+      - name: Set build metadata
+        run: |
+          echo "VERSION=$(tr -d '[:space:]' < "$GITHUB_WORKSPACE/VERSION")" >> "$GITHUB_ENV"
+          echo "BUILD=${{ github.run_number }}" >> "$GITHUB_ENV"
+          echo "COMMIT=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
+
+      - uses: ./.github/actions/setup-pnpm
+
+      - name: Build MCP package
+        run: pnpm --filter post-engineer-mcp build
+
+      # Read the previous run's durations. Do not save from this job: four
+      # shards would race, and a partial run must not replace the cache.
+      - name: Restore vitest timings
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: .github/frontend-ci/web-test-timings.json
+          key: web-vitest-timings-${{ github.run_id }}
+          restore-keys: |
+            web-vitest-timings-
+
+      - name: Run vitest shard
+        env:
+          CI_EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
+          SHARD: ${{ matrix.shard }}
+        run: |
+          set -euo pipefail
+          files_out="$(node .github/scripts/frontend-ci/run-shard.mjs \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --app apps/web \
+            --event "$CI_EVENT" \
+            --base "$BASE_SHA" \
+            --shard "$SHARD" \
+            --total 4 \
+            --timings "$GITHUB_WORKSPACE/.github/frontend-ci/web-test-timings.json")"
+          if [[ -z "$files_out" ]]; then
+            echo "shard ${SHARD}/4 has no tests"
+            exit 0
+          fi
+          mapfile -t files <<< "$files_out"
+          echo "shard ${SHARD}/4 running ${#files[@]} files"
+          cd apps/web
+          set +e
+          pnpm exec vitest run \
+            --coverage \
+            --coverage.reporter=text \
+            --coverage.reporter=cobertura \
+            --reporter=default \
+            --reporter=json \
+            --outputFile.json=.vitest-report.json \
+            "${files[@]}"
+          code=$?
+          set -e
+          if [[ -f .vitest-report.json ]]; then
+            node "$GITHUB_WORKSPACE/.github/scripts/frontend-ci/record-timings.mjs" \
+              --report .vitest-report.json \
+              --root "$PWD" \
+              --out .vitest-shard-timings.json
+          fi
+          exit "$code"
+
+      - name: Upload shard coverage
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: coverage-vitest-shard-${{ matrix.shard }}
+          path: apps/web/coverage-unit/cobertura-coverage.xml
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Upload shard timings
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: web-timings-shard-${{ matrix.shard }}
+          path: apps/web/.vitest-shard-timings.json
+          if-no-files-found: ignore
+          retention-days: 1
+
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: test
+    if: always() && !cancelled()
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Restore previous vitest timings
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: .github/frontend-ci/web-test-timings.json
+          key: web-vitest-timings-${{ github.run_id }}-incoming
+          restore-keys: |
+            web-vitest-timings-
+
+      - name: Download shard outputs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/cov-shards /tmp/timing-shards
+          gh run download "${{ github.run_id }}" --pattern 'coverage-vitest-shard-*' --dir /tmp/cov-shards || echo "no coverage artifacts"
+          gh run download "${{ github.run_id }}" --pattern 'web-timings-shard-*' --dir /tmp/timing-shards || echo "no timing artifacts"
+
+      - name: Merge coverage and timings
+        id: merge
+        run: |
+          set -euo pipefail
+          node .github/scripts/frontend-ci/merge-cobertura.mjs \
+            --dir /tmp/cov-shards \
+            --out apps/web/coverage-unit/cobertura-coverage.xml
+          mkdir -p .github/frontend-ci
+          node .github/scripts/frontend-ci/merge-timings.mjs \
+            --dir /tmp/timing-shards \
+            --base .github/frontend-ci/web-test-timings.json \
+            --out .github/frontend-ci/web-test-timings.json
+
+      - name: Upload vitest coverage for UI gates
+        id: coverage-artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: coverage-vitest
+          path: apps/web/coverage-unit/cobertura-coverage.xml
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload coverage to Codecov
+        id: codecov
+        uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5
+        with:
+          files: apps/web/coverage-unit/cobertura-coverage.xml
+          flags: web
+          fail_ci_if_error: true
+          verbose: true
+
+      - name: Save vitest timings
+        if: always()
+        continue-on-error: true
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: .github/frontend-ci/web-test-timings.json
+          key: web-vitest-timings-${{ github.run_id }}
+
+      - name: Fail unless the shards and the coverage upload succeeded
+        if: always()
+        run: |
+          set -euo pipefail
+          if [[ "${{ needs.test.result }}" != "success" ]]; then
+            echo "::error::One or more vitest shards failed (${{ needs.test.result }})."
+            exit 1
+          fi
+          if [[ "${{ steps.merge.outcome }}" != "success" || "${{ steps.coverage-artifact.outcome }}" != "success" || "${{ steps.codecov.outcome }}" != "success" ]]; then
+            echo "::error::Coverage merge or upload did not succeed."
+            exit 1
+          fi

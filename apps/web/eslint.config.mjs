@@ -6,6 +6,13 @@ import tailwind from 'eslint-plugin-tailwindcss'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
+// Oxlint (.oxlintrc.json) is the fast pass: correctness, suspicious, and perf.
+// This config stays because oxlint has no Tailwind plugin and no indent rule,
+// and because inline eslint-disable comments name @next/next, jsx-a11y, and
+// typescript-eslint rules. Dropping those plugins turns the comments into
+// "rule definition not found" errors. eslint-plugin-react-hooks and
+// @next/eslint-plugin-next are direct dependencies so pnpm can resolve the
+// shareable config's plugin: names (they are not in Next's resolver patch).
 const compat = new FlatCompat({
   baseDirectory: __dirname,
 })

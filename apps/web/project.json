@@ -28,7 +28,7 @@
       "executor": "nx:run-commands",
       "options": {
         "cwd": "apps/web",
-        "command": "pnpm exec eslint lib/ app/"
+        "command": "pnpm lint"
       },
       "cache": true
     },
@@ -36,7 +36,7 @@
       "executor": "nx:run-commands",
       "options": {
         "cwd": "apps/web",
-        "command": "pnpm exec eslint --fix lib/ app/"
+        "command": "pnpm run lint:fix"
       },
       "cache": false
     },

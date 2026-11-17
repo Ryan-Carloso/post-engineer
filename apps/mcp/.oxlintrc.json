@@ -1,0 +1,46 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc", "import", "vitest", "promise", "node"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "error",
+    "perf": "error"
+  },
+  "env": {
+    "builtin": true,
+    "node": true,
+    "es2024": true
+  },
+  "ignorePatterns": ["dist", "node_modules", "coverage"],
+  "rules": {
+    // Same errors the previous ESLint config failed the build on.
+    "@typescript-eslint/no-explicit-any": "error",
+    "@typescript-eslint/no-unused-vars": ["error", {
+      "argsIgnorePattern": "^_",
+      "varsIgnorePattern": "^_"
+    }],
+
+    // The suite mocks with untyped vi.fn() and asserts inside branches.
+    "vitest/require-mock-type-parameters": "off",
+    "vitest/no-conditional-expect": "off",
+    "vitest/require-to-throw-message": "off",
+    "vitest/valid-expect": "off",
+
+    // Sequential network calls, and the same opinionated rewrites the web
+    // config turns off. See apps/web/.oxlintrc.json.
+    "no-await-in-loop": "off",
+    "unicorn/consistent-function-scoping": "off",
+    "unicorn/no-array-sort": "off",
+    "unicorn/prefer-set-has": "off",
+    "unicorn/prefer-array-flat-map": "off",
+    "unicorn/no-array-fill-with-reference-type": "off",
+    "oxc/no-map-spread": "off",
+    "no-shadow": "off",
+    "no-unsafe-optional-chaining": "off",
+    "no-misleading-character-class": "off",
+    "no-new": "off",
+    // Catch bindings rethrow a new error and attach the original as `cause`
+    // where it matters; the remaining sites are logged, not swallowed.
+    "preserve-caught-error": "off"
+  }
+}
