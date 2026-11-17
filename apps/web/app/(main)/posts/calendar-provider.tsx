@@ -214,9 +214,16 @@ export function PostsCalendar({
         createEvent={() => null}
         onEventSelect={handleEventSelect}
       >
+        {/* The click is delegated from the focusable day buttons and event
+            chips inside, which keyboard users activate natively; the
+            wrapper itself takes no keyboard action, and its handlers only
+            block the lib's edits in this read-only slice. */}
+        {/* oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions */}
         <div
           data-posts-calendar-month
           ref={monthRef}
+          role="group"
+          aria-label={captionLabel}
           className="h-150"
           onClick={handleGridClick}
           onPointerDownCapture={handleEventPointerDownCapture}
