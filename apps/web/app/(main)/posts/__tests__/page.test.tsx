@@ -1137,3 +1137,28 @@ describe('PostsPage day pick on a phone', () => {
     expect(scrollIntoView).not.toHaveBeenCalled();
   });
 });
+
+describe('PostsPage calendar date hints', () => {
+  it('marks the Today control pressed while today is the selected day', () => {
+    render(<PostsPage />);
+    const today = screen.getByRole('button', { name: 'posts.calendarGoToToday' });
+    expect(today.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('marks the Today control unpressed after another day is picked', async () => {
+    const user = userEvent.setup();
+    render(<PostsPage />);
+    await user.click(screen.getByRole('button', { name: 'Sunday, June 2' }));
+    const today = screen.getByRole('button', { name: 'posts.calendarGoToToday' });
+    expect(today.getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('shows the unknown-title fallback on a slot chip with no title', () => {
+    mockQueries({ range: [{ ...UPCOMING_SLOT, title: undefined }] });
+    render(<PostsPage />);
+    // The chip lives in the calendar card; the day panel card below shows
+    // the same slot, so scope the assertion to the grid.
+    const card = document.querySelector('[data-calendar-card]') as HTMLElement;
+    expect(within(card).getByText('posts.unknownTitle')).toBeInTheDocument();
+  });
+});
