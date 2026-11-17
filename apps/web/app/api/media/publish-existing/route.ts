@@ -20,7 +20,7 @@
 // >= 1 bound account; publish only to bound accounts), and a scheduled
 // post is one instant (publishAt) inside the same 3h–30d window as
 // generate-and-schedule. A signed upload backs at most one live slot
-// (migration 066). An ASAP call with an idempotency key publishes once per
+// (migration 067). An ASAP call with an idempotency key publishes once per
 // account across retries (asap.ts).
 //---------------
 
@@ -218,7 +218,7 @@ async function scheduleExistingMedia(ctx: PublishExistingContext): Promise<NextR
     .insert(rows)
     .select('id, slot_at, title');
   if (slotsError || inserted === null) {
-    // A concurrent call scheduled the same upload first (migration 066):
+    // A concurrent call scheduled the same upload first (migration 067):
     // a caller error, not a server one.
     const uploadTaken = violatedConstraint(slotsError) === UPLOAD_SLOT_REFERENCE_INDEX;
     if (!uploadTaken) logger.error('[publish-existing] slot insert failed', slotsError, { scheduleId, userId });

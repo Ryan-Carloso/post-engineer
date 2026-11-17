@@ -130,7 +130,7 @@ interface FakeConfig {
   slotInsertRows?: Record<string, unknown>[];
   storageUpload?: { data: { path: string } | null; error: { message: string } | null };
   uploadRow?: Record<string, unknown> | null;
-  /** Live slots already holding the upload (the migration 066 guard read). */
+  /** Live slots already holding the upload (the migration 067 guard read). */
   liveUploadSlots?: Record<string, unknown>[];
   liveUploadSlotsError?: unknown;
   /** claim_publish_ledger outcome per account id (default: claimed). */
