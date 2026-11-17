@@ -14,6 +14,10 @@
 // Conservative rules (never fewer mutants than the PR's changes):
 // - a NEW file mutates whole (wholeFile — every line is added anyway);
 // - deleted and binary files are excluded (nothing to mutate);
+// - vendored CalendarCN files are excluded (third-party code pinned to an
+//   upstream commit in file-size/vendored-calendarcn.mjs — no test in this
+//   repo targets lib internals, so mutating them can only produce
+//   survivors and timeouts);
 // - a renamed file with no content edits is excluded;
 // - when a file's changed lines explode past maxRanges, the whole file
 //   mutates (a sprawling diff likely touches everything);
@@ -32,6 +36,7 @@
 //---------------
 
 import { execFileSync } from 'node:child_process';
+import { isVendoredCalendarCN } from '../file-size/vendored-calendarcn.mjs';
 
 const DEFAULT_MERGE_GAP = 3;
 const DEFAULT_MAX_RANGES = 50;
@@ -168,7 +173,9 @@ export function parseChangedRanges(
   }
   flushFile();
 
-  return [...files.values()].filter((entry) => !filterTestish || !isTestishPath(entry.path));
+  return [...files.values()].filter(
+    (entry) => (!filterTestish || !isTestishPath(entry.path)) && !isVendoredCalendarCN(entry.path),
+  );
 }
 
 function mergeLines(lines, mergeGap) {
@@ -258,11 +265,15 @@ export function changedMutateArgument(baseRef, headRef, runGit = defaultRunGit, 
 //---------------
 export function runGitFromRepoRoot(args) {
   const root = execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' }).trim();
-  return execFileSync('git', args, { encoding: 'utf8', cwd: root });
+  // See defaultRunGit: the PR diff can exceed the 1MB default buffer.
+  return execFileSync('git', args, { encoding: 'utf8', cwd: root, maxBuffer: 64 * 1024 * 1024 });
 }
 
 function defaultRunGit(args) {
-  return execFileSync('git', args, { encoding: 'utf8' });
+  // The PR diff can exceed Node's 1MB execFileSync default (a vendor commit
+  // is megabytes of added lines) — a too-small buffer fails the extractor
+  // and the caller falls back to whole-file mutation, which times out.
+  return execFileSync('git', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
 }
 
 if (process.argv[1] && process.argv[1].endsWith('changed-ranges.mjs')) {

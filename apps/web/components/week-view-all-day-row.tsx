@@ -53,9 +53,9 @@ export function WeekViewAllDayRow({
   const eventRows =
     visibleStartIndex != null
       ? allEventRows.filter(
-          ({ startColumn, endColumn }) =>
-            endColumn >= visibleStartIndex && startColumn <= visibleEnd,
-        )
+        ({ startColumn, endColumn }) =>
+          endColumn >= visibleStartIndex && startColumn <= visibleEnd,
+      )
       : allEventRows;
   const maxRow =
     eventRows.length > 0 ? Math.max(...eventRows.map((r) => r.row)) + 1 : 0;
@@ -68,13 +68,13 @@ export function WeekViewAllDayRow({
   return (
     <div
       className={cn(
-        "border-border flex border-t border-b bg-background",
+        "flex border-y border-border bg-background",
         className,
       )}
     >
       {/* All-day label, as wide as the time axis below it */}
       <div
-        className="border-border text-muted-foreground flex w-16 flex-shrink-0 items-start justify-end border-r px-2 py-2 text-xxs"
+        className="flex w-16 shrink-0 items-start justify-end border-r border-border p-2 text-xxs text-muted-foreground"
         style={
           timeAxisWidth === undefined ? undefined : { width: timeAxisWidth }
         }
@@ -99,7 +99,7 @@ export function WeekViewAllDayRow({
                   <div
                     key={day.date.toISOString()}
                     className={cn(
-                      "border-border border-l first:border-l-0 h-full",
+                      "h-full border-l border-border first:border-l-0",
                       isWeekend && "bg-calendar-weekend",
                       highlightedDate &&
                         isSameDay(day.date, highlightedDate) &&
@@ -111,7 +111,7 @@ export function WeekViewAllDayRow({
             </div>
 
             {/* Events */}
-            <div className="relative py-1 px-0.5">
+            <div className="relative px-0.5 py-1">
               {eventRows.map(({ event, startColumn, endColumn, row }) => {
                 const isBeingResized =
                   allDayResizeState?.eventId === event.id &&
@@ -384,7 +384,7 @@ function AllDayPlaceholderRow({
   return (
     <div
       aria-hidden
-      className="absolute pointer-events-none"
+      className="pointer-events-none absolute"
       style={{
         left: `${left}%`,
         width: `${width}%`,

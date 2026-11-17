@@ -742,17 +742,17 @@ export function CalendarProvider<TEvent extends CalendarEvent = CalendarEvent>(
   );
   const todayPeriodStart = today
     ? getPeriodStart(
-        today,
-        props.view ?? props.defaultView ?? "week",
-        props.weekStartsOn ??
+      today,
+      props.view ?? props.defaultView ?? "week",
+      props.weekStartsOn ??
           props.defaultWeekStartsOn ??
           DEFAULT_WEEK_STARTS_ON,
-        props.numberOfDays ??
+      props.numberOfDays ??
           props.defaultNumberOfDays ??
           DEFAULT_NUMBER_OF_DAYS,
-        props.defaultViewSettings?.showWeekends ??
+      props.defaultViewSettings?.showWeekends ??
           DEFAULT_VIEW_SETTINGS.showWeekends,
-      )
+    )
     : null;
   const initialDate = props.defaultDate ?? todayPeriodStart ?? props.date;
 
@@ -931,11 +931,11 @@ function CalendarStateProvider({
     hasNoVisibleDays(view)
       ? []
       : getVisibleDays(
-          currentDate,
-          view,
-          numberOfDays,
-          viewSettings.showWeekends,
-        ),
+        currentDate,
+        view,
+        numberOfDays,
+        viewSettings.showWeekends,
+      ),
   );
   /** ID of a just-created event whose title input should be focused once */
   const [titleFocusEventId, setTitleFocusEventId] = React.useState<
@@ -1208,14 +1208,14 @@ function CalendarStateProvider({
       selectionPressRef.current =
         eventId && (modifier || inGroup)
           ? {
-              eventId,
-              modifier,
-              inGroup,
-              handled: false,
-              startX: e.clientX,
-              startY: e.clientY,
-              dragged: false,
-            }
+            eventId,
+            modifier,
+            inGroup,
+            handled: false,
+            startX: e.clientX,
+            startY: e.clientY,
+            dragged: false,
+          }
           : null;
     };
     const handlePointerMove = (e: PointerEvent) => {
@@ -2174,10 +2174,10 @@ function CalendarStateProvider({
     () =>
       storedSelectedEvent
         ? toDisplayOccurrence(
-            findSeriesOccurrence(events, storedSelectedEvent, "previous"),
-            isSelectedAllDay,
-            displayTimeZone,
-          )
+          findSeriesOccurrence(events, storedSelectedEvent, "previous"),
+          isSelectedAllDay,
+          displayTimeZone,
+        )
         : null,
     [events, storedSelectedEvent, isSelectedAllDay, displayTimeZone],
   );
@@ -2185,10 +2185,10 @@ function CalendarStateProvider({
     () =>
       storedSelectedEvent
         ? toDisplayOccurrence(
-            findSeriesOccurrence(events, storedSelectedEvent, "next"),
-            isSelectedAllDay,
-            displayTimeZone,
-          )
+          findSeriesOccurrence(events, storedSelectedEvent, "next"),
+          isSelectedAllDay,
+          displayTimeZone,
+        )
         : null,
     [events, storedSelectedEvent, isSelectedAllDay, displayTimeZone],
   );

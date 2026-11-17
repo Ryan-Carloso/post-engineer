@@ -142,8 +142,8 @@ export function MonthViewGrid({
             const visibleDays = showWeekends
               ? weekRow.days
               : weekRow.days.filter(
-                  (d) => d.date.getDay() !== 0 && d.date.getDay() !== 6,
-                );
+                (d) => d.date.getDay() !== 0 && d.date.getDay() !== 6,
+              );
 
             const weekNumberCol = showWeekNumbers ? "2rem " : "";
             const dayCols = `repeat(${columnCount}, minmax(0, 1fr))`;
@@ -157,7 +157,7 @@ export function MonthViewGrid({
                 style={{ gridTemplateColumns }}
               >
                 {showWeekNumbers && (
-                  <div className="flex items-start justify-center pt-1.5 text-[10px] text-muted-foreground border-b border-r border-border">
+                  <div className="flex items-start justify-center border-r border-b border-border pt-1.5 text-[10px] text-muted-foreground">
                     {weekRow.weekNumber}
                   </div>
                 )}

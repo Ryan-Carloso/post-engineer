@@ -36,7 +36,7 @@ import type { TimeZoneAxisLabelProps } from "./week-view-types";
 
 /** The dark menu surface the labels' menus share with the details' menus */
 const MENU_CLASS = cn(
-  "rounded-lg p-0 shadow-lg text-[#CCCCCC]",
+  "rounded-lg p-0 text-[#CCCCCC] shadow-lg",
   EVENT_DETAIL_MENU_CLASS,
 );
 
@@ -99,7 +99,7 @@ function TimeZoneMenuList({
         onChange={(e) => setQuery(e.target.value)}
         className={SEARCH_INPUT_CLASS}
       />
-      <div className="max-h-[300px] overflow-y-auto" role="presentation">
+      <div className="max-h-75 overflow-y-auto" role="presentation">
         <TimeZoneList query={query} onSelect={onSelect} variant="menu" />
       </div>
     </Command>
@@ -132,7 +132,7 @@ export function AddTimeZoneButton() {
       </PopoverTrigger>
       <PopoverContent
         align="start"
-        className={cn("w-[360px] max-w-[calc(100vw-16px)]", MENU_CLASS)}
+        className={cn("w-90 max-w-[calc(100vw-16px)]", MENU_CLASS)}
         onClick={stopClick}
         onKeyDown={(e) => {
           if (e.key !== "Escape") return;
@@ -187,72 +187,72 @@ export function TimeZoneAxisLabel({
 
   const items: LabelMenuItem[] = isTravel
     ? [
-        {
-          label: "Add as primary time zone",
-          icon: Plus,
-          onSelect: run(() => {
-            changeTimeZones((zones) => makeTimeZonePrimary(zones, timeZone));
-            travelToTimeZone(null);
-          }),
-        },
-        {
-          label: "Add as secondary time zone",
-          icon: Plus,
-          onSelect: run(() => {
-            changeTimeZones((zones) => addTimeZone(zones, timeZone));
-            travelToTimeZone(null);
-          }),
-        },
-        {
-          label: "Travel back home",
-          icon: X,
-          shortcut: "esc",
-          destructive: true,
-          onSelect: run(() => travelToTimeZone(null)),
-        },
-      ]
+      {
+        label: "Add as primary time zone",
+        icon: Plus,
+        onSelect: run(() => {
+          changeTimeZones((zones) => makeTimeZonePrimary(zones, timeZone));
+          travelToTimeZone(null);
+        }),
+      },
+      {
+        label: "Add as secondary time zone",
+        icon: Plus,
+        onSelect: run(() => {
+          changeTimeZones((zones) => addTimeZone(zones, timeZone));
+          travelToTimeZone(null);
+        }),
+      },
+      {
+        label: "Travel back home",
+        icon: X,
+        shortcut: "esc",
+        destructive: true,
+        onSelect: run(() => travelToTimeZone(null)),
+      },
+    ]
     : [
-        {
-          label: "Change time zone",
-          icon: Globe,
-          detail: city,
-          onSelect: () => setIsChanging(true),
-        },
-        ...(isPrimary
-          ? hasOtherZones
-            ? [
-                {
-                  label: "Make time zone secondary",
-                  icon: ArrowLeft,
-                  onSelect: run(() => changeTimeZones(makeTimeZoneSecondary)),
-                },
-              ]
-            : []
-          : [
-              {
-                label: "Make time zone primary",
-                icon: ArrowRight,
-                onSelect: run(() =>
-                  changeTimeZones((zones) =>
-                    makeTimeZonePrimary(zones, timeZone),
-                  ),
-                ),
-              },
-            ]),
-        // The only zone left stays
-        ...(isPrimary && !hasOtherZones
-          ? []
-          : [
-              {
-                label: "Remove time zone from list",
-                icon: X,
-                destructive: true,
-                onSelect: run(() =>
-                  changeTimeZones((zones) => removeTimeZone(zones, timeZone)),
-                ),
-              },
-            ]),
-      ];
+      {
+        label: "Change time zone",
+        icon: Globe,
+        detail: city,
+        onSelect: () => setIsChanging(true),
+      },
+      ...(isPrimary
+        ? hasOtherZones
+          ? [
+            {
+              label: "Make time zone secondary",
+              icon: ArrowLeft,
+              onSelect: run(() => changeTimeZones(makeTimeZoneSecondary)),
+            },
+          ]
+          : []
+        : [
+          {
+            label: "Make time zone primary",
+            icon: ArrowRight,
+            onSelect: run(() =>
+              changeTimeZones((zones) =>
+                makeTimeZonePrimary(zones, timeZone),
+              ),
+            ),
+          },
+        ]),
+      // The only zone left stays
+      ...(isPrimary && !hasOtherZones
+        ? []
+        : [
+          {
+            label: "Remove time zone from list",
+            icon: X,
+            destructive: true,
+            onSelect: run(() =>
+              changeTimeZones((zones) => removeTimeZone(zones, timeZone)),
+            ),
+          },
+        ]),
+    ];
   const actions = items.filter((item) => !item.destructive);
   const destructive = items.filter((item) => item.destructive);
 
@@ -287,7 +287,7 @@ export function TimeZoneAxisLabel({
   return (
     <div
       className={cn(
-        "relative flex w-16 flex-shrink-0 items-center justify-end pr-1",
+        "relative flex w-16 shrink-0 items-center justify-end pr-1",
         isTravel
           ? "bg-primary text-primary-foreground"
           : "text-muted-foreground",
@@ -319,7 +319,7 @@ export function TimeZoneAxisLabel({
           <PopoverContent
             align="start"
             className={cn(
-              isChanging ? "w-[360px] max-w-[calc(100vw-16px)]" : "w-[240px]",
+              isChanging ? "w-90 max-w-[calc(100vw-16px)]" : "w-60",
               MENU_CLASS,
             )}
             onClick={stopClick}

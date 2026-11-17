@@ -5,6 +5,8 @@
 // host, or an Instagram display name that never reaches the card.
 //---------------
 
+import type { SocialProvider } from '@/lib/contracts/providers';
+
 export const ACCOUNT_CARD_DISPLAY_EVENT = 'account_card_displayed';
 export const ACCOUNT_DISCONNECT_FAILED_EVENT = 'account_disconnect_failed';
 export const ACCOUNT_LIST_FAILED_EVENT = 'account_list_failed';
@@ -36,7 +38,7 @@ export const THUMBNAIL_HOST_SUFFIXES = ['.cdninstagram.com', '.fbcdn.net'] as co
 
 const LABEL_CAP = 200;
 
-export type AccountProvider = 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook' | 'pinterest' | '3speak' | 'rumble' | 'fanvue';
+export type AccountProvider = SocialProvider;
 
 export type AccountLabelOrigin = 'stored' | 'provider_id';
 

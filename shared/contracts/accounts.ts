@@ -22,13 +22,7 @@
 
 import { z } from 'zod';
 import { defineEndpoint } from './endpoint.js';
-import { SOCIAL_PROVIDERS } from './metrics.js';
-
-/** OAuth providers served by POST /api/account/connect-url. Mirrors
- * apps/web/lib/oauth-connect.ts (OAUTH_CONNECT_PROVIDERS): Bluesky,
- * 3Speak and Rumble connect directly and are rejected here. */
-export const OAUTH_CONNECT_PROVIDERS = ['youtube', 'instagram', 'linkedin', 'threads', 'facebook', 'pinterest', 'fanvue'] as const;
-export type OAuthConnectProvider = (typeof OAUTH_CONNECT_PROVIDERS)[number];
+import { OAUTH_CONNECT_PROVIDERS, SOCIAL_PROVIDERS } from './providers.js';
 
 export const ACCOUNT_SYNC_STATUSES = ['ok', 'error'] as const;
 

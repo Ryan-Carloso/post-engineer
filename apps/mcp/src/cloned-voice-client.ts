@@ -8,7 +8,7 @@ import type { IncomingMessage } from 'node:http';
 
 import { readApiFailure } from './errors.js';
 import { MAX_CLONE_AUDIO_BYTES, MAX_CLONE_AUDIO_MB } from './limits.js';
-import { isPublicIp } from './public-ip.js';
+import { isPublicIp, unbracketIpLiteral } from './public-ip.js';
 import { parseContractResponse } from './contract-response.js';
 import type { ResponseOf } from './contracts/endpoint.js';
 import {
@@ -84,7 +84,7 @@ async function assertPublicHost(
   hostname: string,
   resolve: HostLookup,
 ): Promise<ReadonlyArray<{ address: string }>> {
-  const bare = hostname.startsWith('[') && hostname.endsWith(']') ? hostname.slice(1, -1) : hostname;
+  const bare = unbracketIpLiteral(hostname);
   let addresses: ReadonlyArray<{ address: string }>;
   try {
     addresses = isIP(bare) ? [{ address: bare }] : await resolve(bare);

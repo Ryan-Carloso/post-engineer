@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { enUS, ptBR } from 'date-fns/locale';
@@ -28,6 +28,12 @@ import { readSecondaryTimeZone } from './secondary-timezone';
 //   navigates or selects a day either (a plain click still does);
 // - the event context menu and Alt+Arrow keyboard moves are stopped the
 //   same way; the details popover is off (showEventPopover={false}).
+// - the lib's week-step wheel nav is stopped before it starts: the page
+//   anchors the grid on the 1st, so wheel-down lands in the same month and
+//   is dropped while the lib's preventDefault kills the page scroll. A
+//   native capture listener stops the wheel before the lib's native
+//   listener on the grid container runs — a React onWheelCapture would
+//   be too late, React dispatches it after the native target listener.
 // Remove these guards when a later slice wires drag to reschedule.
 //
 // Views: month is the desktop view, week the mobile one (the page forces
@@ -128,6 +134,18 @@ export function PostsCalendar({
   // The week view draws its columns from the week start, never from a
   // mid-week date: the page passes the start, this normalizes defensively.
   const weekStartDate = view === 'week' ? weekStart(date, weekStartsOn) : date;
+  // The month grid wrapper: its native capture listener stops the wheel
+  // before the lib's native listener on the grid container can swallow it.
+  // The week wrapper has no such listener: its time grid scrolls its hours
+  // natively, and a capture stop would kill that scroll.
+  const monthRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = monthRef.current;
+    if (el === null) return;
+    const blockWheelNav = (event: WheelEvent) => event.stopPropagation();
+    el.addEventListener('wheel', blockWheelNav, { capture: true });
+    return () => el.removeEventListener('wheel', blockWheelNav, { capture: true });
+  }, []);
 
   const handleEventSelect = useCallback(
     (eventId: string) => {
@@ -206,8 +224,13 @@ export function PostsCalendar({
   const handleEventKeyDownCapture = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
     // Read-only: Alt+Arrow moves (or with Shift, resizes) the focused event.
     // Enter/Space pass through: they click the chip and navigate.
+    // preventDefault is required here, not just stopPropagation: stopping
+    // the event in capture keeps the lib's keyboard handler from running,
+    // so its own preventDefault never fires — and without one, Alt+Left /
+    // Alt+Right navigates the browser history on Windows/Linux.
     if (event.altKey && (event.target as HTMLElement).closest('[data-event-id]')) {
       if (event.key === 'ArrowUp' || event.key === 'ArrowDown' || event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+        event.preventDefault();
         event.stopPropagation();
       }
     }
@@ -321,30 +344,45 @@ export function PostsCalendar({
         createEvent={() => null}
         onEventSelect={handleEventSelect}
       >
+        {/* The clicks are delegated from the focusable day buttons, columns
+            and event chips inside, which keyboard users activate natively;
+            the wrappers themselves take no keyboard action, and their
+            handlers only block the lib's edits in this read-only slice. */}
         {view === 'week' ? (
-          <div
-            ref={weekWrapRef}
-            data-posts-calendar-week
-            className="h-150"
-            onPointerDownCapture={handleEventPointerDownCapture}
-            onClickCapture={handleGridClickCapture}
-            onContextMenuCapture={handleEventContextMenuCapture}
-            onKeyDownCapture={handleEventKeyDownCapture}
-          >
-            <WeekView showEventPopover={false} />
-          </div>
+          <>
+            {/* oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions */}
+            <div
+              ref={weekWrapRef}
+              data-posts-calendar-week
+              role="group"
+              aria-label={captionLabel}
+              className="h-150"
+              onPointerDownCapture={handleEventPointerDownCapture}
+              onClickCapture={handleGridClickCapture}
+              onContextMenuCapture={handleEventContextMenuCapture}
+              onKeyDownCapture={handleEventKeyDownCapture}
+            >
+              <WeekView showEventPopover={false} />
+            </div>
+          </>
         ) : (
-          <div
-            data-posts-calendar-month
-            className="h-150"
-            onClick={handleGridClick}
-            onPointerDownCapture={handleEventPointerDownCapture}
-            onClickCapture={handleGridClickCapture}
-            onContextMenuCapture={handleEventContextMenuCapture}
-            onKeyDownCapture={handleEventKeyDownCapture}
-          >
-            <MonthView showEventPopover={false} />
-          </div>
+          <>
+            {/* oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions */}
+            <div
+              ref={monthRef}
+              data-posts-calendar-month
+              role="group"
+              aria-label={captionLabel}
+              className="h-150"
+              onClick={handleGridClick}
+              onPointerDownCapture={handleEventPointerDownCapture}
+              onClickCapture={handleGridClickCapture}
+              onContextMenuCapture={handleEventContextMenuCapture}
+              onKeyDownCapture={handleEventKeyDownCapture}
+            >
+              <MonthView showEventPopover={false} />
+            </div>
+          </>
         )}
       </CalendarProvider>
     </div>

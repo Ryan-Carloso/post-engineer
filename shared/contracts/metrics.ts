@@ -13,6 +13,7 @@
 
 import { z } from 'zod';
 import { defineEndpoint } from './endpoint.js';
+import { SOCIAL_PROVIDERS, isSocialProvider, type SocialProvider } from './providers.js';
 import { METRICS_WINDOWS, type MetricsWindow } from './experiments.js';
 
 // The window values live in the experiments contract (its results read
@@ -28,25 +29,6 @@ export const METRICS_NONE = '^@none';
 
 export const METRICS_FILTER_MAX_LENGTH = 200;
 
-/** The networks a metrics row can belong to. Mirrors
- * apps/web/lib/providers/registry.ts (SOCIAL_PROVIDERS). */
-export const SOCIAL_PROVIDERS = [
-  'youtube',
-  'instagram',
-  'bluesky',
-  'linkedin',
-  'threads',
-  'facebook',
-  'pinterest',
-  '3speak',
-  'rumble',
-  'fanvue',
-] as const;
-export type SocialProvider = (typeof SOCIAL_PROVIDERS)[number];
-
-export function isSocialProvider(value: unknown): value is SocialProvider {
-  return typeof value === 'string' && (SOCIAL_PROVIDERS as readonly string[]).includes(value);
-}
 
 /** YouTube video id (11 chars, base64url). Mirrors
  * apps/web/lib/youtube-analytics.ts (VIDEO_ID). */

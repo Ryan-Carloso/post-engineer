@@ -197,11 +197,11 @@ export function useAllDayResize({
         isResizing: true,
         ...(resize.edge === "move"
           ? {
-              clientX: e.clientX,
-              clientY: e.clientY,
-              cursorOffsetX: resize.cursorOffsetX,
-              cursorOffsetY: resize.cursorOffsetY,
-            }
+            clientX: e.clientX,
+            clientY: e.clientY,
+            cursorOffsetX: resize.cursorOffsetX,
+            cursorOffsetY: resize.cursorOffsetY,
+          }
           : {}),
       });
     };

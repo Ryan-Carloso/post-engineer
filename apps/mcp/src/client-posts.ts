@@ -5,7 +5,7 @@ import {
   listMetrics as listMetricsContract,
   metricsSearchParams,
 } from './contracts/metrics.js';
-import type { SocialProvider } from './contracts/metrics.js';
+import type { SocialProvider } from './contracts/providers.js';
 import { getPost as getPostContract } from './contracts/posts.js';
 import { listPostsInRange as listPostsInRangeContract } from './contracts/schedule.js';
 import { scoreDraft as scoreDraftContract } from './contracts/videos.js';

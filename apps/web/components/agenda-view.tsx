@@ -580,10 +580,10 @@ function AgendaEventRow({
   const secondaryTextClass = isSelected
     ? "text-white/85"
     : cn(
-        styles.text,
-        "opacity-80 dark:text-white/70 dark:opacity-100",
-        showsDeclined && DECLINED_EVENT_TEXT_CLASS,
-      );
+      styles.text,
+      "opacity-80 dark:text-white/70 dark:opacity-100",
+      showsDeclined && DECLINED_EVENT_TEXT_CLASS,
+    );
 
   return (
     // The row stays first, so opening the details keeps this element (and

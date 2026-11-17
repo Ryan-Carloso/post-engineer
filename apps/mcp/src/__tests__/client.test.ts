@@ -973,7 +973,7 @@ describe('PostEngineerClient', () => {
     // before any fetch goes out.
     global.fetch = vi.fn();
     await expect(client.disconnectAccount('myspace', 'acc-1')).rejects.toThrow(
-      /provider must be one of: youtube, instagram, linkedin, bluesky/
+      /provider must be one of: youtube, instagram, bluesky, linkedin/
     );
     await expect(client.disconnectAccount('youtube', '   ')).rejects.toThrow(
       /providerAccountId must be a non-empty string/

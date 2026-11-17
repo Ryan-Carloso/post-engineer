@@ -26,6 +26,7 @@ import {
 } from './script-segments.js';
 import { GeneratePersonaVideoSchema, ValidateScriptSchema } from './single-video-shape.js';
 import { resolvePersonaVoiceId } from './voice-filters.js';
+import { PUBLISH_NETWORKS } from './contracts/videos.js';
 
 export { GeneratePersonaVideoShape, ValidateScriptShape } from './single-video-shape.js';
 
@@ -226,7 +227,7 @@ export const ScoreDraftShape = {
     .max(10000, 'draft must be at most 10000 characters')
     .describe('The text to score: a post body, or with kind "script" the video segments joined by newlines, hook first, then content takes.'),
   network: z
-    .enum(['linkedin', 'youtube', 'instagram', 'bluesky', 'threads', 'facebook', 'pinterest', '3speak', 'rumble', 'fanvue'])
+    .enum(PUBLISH_NETWORKS)
     .optional()
     .describe('Network the draft is for; the publish check uses that network\'s rules. Defaults to linkedin.'),
   personaId: z

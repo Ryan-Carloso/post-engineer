@@ -6,7 +6,7 @@ import type { ReactNode } from 'react';
 //---------------
 // Tests for the posts month calendar (CalendarCN month view, read-only):
 // chips navigate, days select, drag/resize/context menu stay off.
-// "Today" is pinned to 2030-06-01, a Monday, so the grid opens on June 2030.
+// "Today" is pinned to 2030-06-01, a Saturday, so the grid opens on June 2030.
 //---------------
 
 vi.mock('@/lib/i18n/provider', () => {
@@ -176,6 +176,30 @@ describe('PostsCalendar', () => {
     const { onSelectDay } = renderCalendar({ muted: true });
     fireEvent.click(screen.getByRole('button', { name: 'Sunday, June 2' }));
     expect(onSelectDay).not.toHaveBeenCalled();
+  });
+
+  it('does not swallow wheel scroll over the grid: the page keeps the event and the month stays', async () => {
+    const { onDateChange } = renderCalendar({ events: [calendarEvent()] });
+    // The lib's wheel nav is a week step from the 1st, so wheel-down lands
+    // in the same month and the page would drop it — while the lib's
+    // preventDefault kills the page scroll. The wrapper must stop the
+    // wheel before it reaches the lib, so the page scrolls instead.
+    const event = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: 120 });
+    screen.getByRole('button', { name: 'Sunday, June 2' }).dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(false);
+    // Past the lib's 150ms scroll-end debounce: no month change either.
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(onDateChange).not.toHaveBeenCalled();
+  });
+
+  it('prevents the browser default on Alt+Arrow over a focused event chip', () => {
+    const { onDateChange } = renderCalendar({ events: [calendarEvent()] });
+    // The capture handler stops the event before the lib's keyboard
+    // handler runs, so the lib's preventDefault never fires — without one
+    // here, Alt+Left/Right navigates the browser history on Windows/Linux.
+    const prevented = fireEvent.keyDown(screen.getByText('Morning post'), { altKey: true, key: 'ArrowLeft' });
+    expect(prevented).toBe(false);
+    expect(onDateChange).not.toHaveBeenCalled();
   });
 });
 

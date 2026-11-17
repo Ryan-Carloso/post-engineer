@@ -203,7 +203,7 @@ export function WeekViewGrid({
               <div
                 key={`${day.date.toISOString()}-${hourSlot.hour}`}
                 className={cn(
-                  "border-border border-b border-l",
+                  "border-b border-l border-border",
                   isWeekend && "bg-calendar-weekend",
                 )}
               />
@@ -216,7 +216,7 @@ export function WeekViewGrid({
       {highlightedDate && (
         <div
           aria-hidden
-          className="absolute inset-0 grid pointer-events-none"
+          className="pointer-events-none absolute inset-0 grid"
           style={{ gridTemplateColumns: `repeat(${days.length}, 1fr)` }}
         >
           {days.map((day) => (
@@ -232,7 +232,7 @@ export function WeekViewGrid({
 
       {/* Events layer */}
       <div
-        className="absolute inset-0 grid pointer-events-none"
+        className="pointer-events-none absolute inset-0 grid"
         style={{ gridTemplateColumns: `repeat(${days.length}, 1fr)` }}
       >
         {days.map((day, index) => {
@@ -296,12 +296,12 @@ export function WeekViewGrid({
           resizeState.currentStartDate,
           resizeState.currentEndDate,
         ) && (
-          <ResizePlaceholderOverlay
-            days={days}
-            hourHeight={hourHeight}
-            resizeState={resizeState}
-          />
-        )}
+        <ResizePlaceholderOverlay
+          days={days}
+          hourHeight={hourHeight}
+          resizeState={resizeState}
+        />
+      )}
 
       {/* Drag placeholder overlay — rendered at grid level for cross-column support */}
       {dragState?.isDragging && (
@@ -357,7 +357,7 @@ function DragPlaceholderOverlay({
   return (
     <div
       aria-hidden
-      className="absolute inset-0 grid pointer-events-none"
+      className="pointer-events-none absolute inset-0 grid"
       style={{ gridTemplateColumns: `repeat(${days.length}, 1fr)` }}
     >
       {days.map((day, i) => {
@@ -430,7 +430,7 @@ function BottomEdgeOverlay({
   return (
     <div
       aria-hidden
-      className="absolute inset-0 grid pointer-events-none"
+      className="pointer-events-none absolute inset-0 grid"
       style={{ gridTemplateColumns: `repeat(${days.length}, 1fr)` }}
     >
       {days.map((day, i) => {
@@ -496,7 +496,7 @@ function TopEdgeOverlay({
   return (
     <div
       aria-hidden
-      className="absolute inset-0 grid pointer-events-none"
+      className="pointer-events-none absolute inset-0 grid"
       style={{ gridTemplateColumns: `repeat(${days.length}, 1fr)` }}
     >
       {days.map((day, i) => {
@@ -684,7 +684,7 @@ function DayEventsColumn({
       role="group"
       aria-label={label}
       inert={!isOnScreen}
-      className="relative h-full pointer-events-auto"
+      className="pointer-events-auto relative h-full"
       onPointerDownCapture={onColumnPointerDownCapture}
       onPointerDown={(e) => onColumnPointerDown?.(e, columnDate)}
       onPointerMove={(e) => onColumnPointerMove?.(e, columnDate)}
