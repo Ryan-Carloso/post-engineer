@@ -11,6 +11,14 @@ comment:
   layout: "header, diff, flags"
   behavior: default
 
+# Pull requests upload coverage for the vitest files affected by the diff.
+# Carry the rest forward from the base report so the project check does not
+# treat unexecuted files as a coverage drop. main uploads a full report, which
+# replaces every file that suite still loads.
+flags:
+  web:
+    carryforward: true
+
 coverage:
   status:
     project:
