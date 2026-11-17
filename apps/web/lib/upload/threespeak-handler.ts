@@ -1,7 +1,7 @@
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { getSocialAccountTokens, touchSocialAccount } from '@/lib/social-accounts';
 import { publishThreespeakVideo, THREESPEAK_VIDEO_MAX_BYTES } from '@/lib/threespeak';
-import { reportAccountUnauthorized } from '@/lib/upload/account-unauthorized';
+import { rememberDeadCredential, reportAccountUnauthorized } from '@/lib/upload/account-unauthorized';
 import { getAccountIdsFromFormData } from '@/lib/upload/account-utils';
 
 //---------------
@@ -64,6 +64,7 @@ export async function handleThreespeakUpload(
       const username = typeof tokens.handle === 'string' ? tokens.handle : null;
 
       if (typeof postingKey !== 'string' || postingKey === '') {
+        rememberDeadCredential('3speak', accountId, ownerUserId);
         results.push({ accountId, success: false, error: '3Speak posting key not found' });
         continue;
       }
