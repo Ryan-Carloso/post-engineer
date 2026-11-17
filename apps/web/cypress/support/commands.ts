@@ -8,6 +8,7 @@ import {
   isPasswordGrantSession,
   passwordGrantErrorCode,
   passwordGrantStep,
+  retryWaitTimeoutMs,
   sessionStillValid,
   singleHeader,
   supabaseAuthCookieName,
@@ -85,7 +86,7 @@ function obtainPasswordGrant(input: {
             errorCode: passwordGrantErrorCode(response.body),
           });
           if (step.action === 'retry') {
-            return cy.then(() => sleepMs(step.delayMs)).then(() => attempt(n + 1));
+            return cy.then({ timeout: retryWaitTimeoutMs(step.delayMs) }, () => sleepMs(step.delayMs)).then(() => attempt(n + 1));
           }
           if (step.action === 'fail') {
             throw new Error(step.message);

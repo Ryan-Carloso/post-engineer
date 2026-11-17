@@ -63,6 +63,15 @@ export function passwordGrantDelayMs(attempt: number, retryAfter: string | null,
   return Math.min(PASSWORD_GRANT_BACKOFF_CAP_MS, exponential);
 }
 
+// cy.then waits on a returned promise only up to defaultCommandTimeout
+// unless given a timeout, and a capped Retry-After can be 30s. The retry
+// sleep gets its own delay plus this margin.
+const RETRY_WAIT_MARGIN_MS = 5_000;
+
+export function retryWaitTimeoutMs(delayMs: number): number {
+  return delayMs + RETRY_WAIT_MARGIN_MS;
+}
+
 export function passwordGrantStep(input: {
   status: number;
   attempt: number;

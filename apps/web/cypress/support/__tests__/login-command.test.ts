@@ -48,6 +48,12 @@ describe('loginE2EUser cookie order', () => {
     expect(source).not.toContain('cy.clock(');
   });
 
+  it('gives the retry sleep a timeout longer than its delay', () => {
+    // Without it, cy.then gives up on the sleep after defaultCommandTimeout
+    // and a Retry-After above 4s fails the login instead of retrying.
+    expect(source).toContain('cy.then({ timeout: retryWaitTimeoutMs(step.delayMs) }, () => sleepMs(step.delayMs))');
+  });
+
   it('counts each password grant on stdout through the registered task', () => {
     const config = readFileSync(join(findRepoRoot(import.meta.url), 'apps/web/cypress.config.ts'), 'utf8');
     expect(source).toContain("cy.task('logE2EPasswordGrant'");
