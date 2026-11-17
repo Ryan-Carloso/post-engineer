@@ -20,10 +20,10 @@ describe('prompts hub data', () => {
       expect(prompt.titleKey).toMatch(/^recipes\./);
       expect(prompt.objectiveKey).toMatch(/^recipes\./);
       expect(prompt.kindKey).toMatch(/^recipes\./);
-      // Story-first carries one extra step: every photo is AI-generated
-      // from one base photo (step 5); every other prompt has the uniform
-      // 5 steps.
-      const expectedStepCount = prompt.slug === 'story-first-reels' ? 6 : 5;
+      // Story-first carries two extra steps: every photo is AI-generated
+      // from one base photo (step 6) and one archetype carries the value
+      // (step 3); every other prompt has the uniform 5 steps.
+      const expectedStepCount = prompt.slug === 'story-first-reels' ? 7 : 5;
       expect(prompt.stepKeys).toHaveLength(expectedStepCount);
       expect(prompt.deliverKeys).toHaveLength(3);
       expect(prompt.exampleInputKey).toMatch(/^recipes\./);
@@ -614,6 +614,7 @@ describe('prompts hub data', () => {
       'recipes.storyFirstReelsStep4',
       'recipes.storyFirstReelsStep5',
       'recipes.storyFirstReelsStep6',
+      'recipes.storyFirstReelsStep7',
     ]);
     expect(entry.deliverKeys).toEqual([
       'recipes.storyFirstReelsDeliver1',
@@ -629,7 +630,7 @@ describe('prompts hub data', () => {
     expect(entry.prompt.startsWith(baseText)).toBe(true);
   });
 
-  it('orders the story-first flow: inputs, story, hook mechanisms, watch-through, voice, images, validate, generate', () => {
+  it('orders the story-first flow: inputs, story, archetype, hook mechanisms, watch-through, voice, images, validate, generate', () => {
     // The composed prompt starts with the shared base; the flow order below
     // is checked on the specific part only, after stripping that base prefix.
     const fullText = getPrompt('story-first-reels')?.prompt ?? '';
@@ -640,6 +641,9 @@ describe('prompts hub data', () => {
       'Ask me the persona, the topic, and the video type',
       'Find the real story first',
       'setup, turning point, payoff',
+      'Pick one archetype',
+      'One archetype only',
+      'never basic content',
       'Build the hook from one mechanism',
       'Draft three hooks',
       'Write for watch-through',
@@ -673,7 +677,18 @@ describe('prompts hub data', () => {
     expect(text).toContain('Never a generic explainer');
     expect(text).toContain('Never present it as a real person');
     expect(text).toContain('verified testimonial');
-    // Step 6 overrides the base's image-search lines for this prompt only:
+    // Step 3 picks one archetype for the value the video delivers:
+    // informative, funny, inspirational, relatable, or provocative —
+    // never basic content with no value.
+    expect(text).toContain('Pick one archetype');
+    expect(text).toContain('informative');
+    expect(text).toContain('funny');
+    expect(text).toContain('inspirational');
+    expect(text).toContain('relatable');
+    expect(text).toContain('provocative');
+    expect(text).toContain('One archetype only');
+    expect(text).toContain('adds nothing to the viewer');
+    // Step 7 overrides the base's image-search lines for this prompt only:
     // the agent must not search for images at all.
     expect(text).toContain('do not search for images');
     expect(text).toContain('the base lines about searching images');

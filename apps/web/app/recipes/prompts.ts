@@ -293,6 +293,7 @@ export const PROMPTS: PromptEntry[] = [
       'recipes.storyFirstReelsStep4',
       'recipes.storyFirstReelsStep5',
       'recipes.storyFirstReelsStep6',
+      'recipes.storyFirstReelsStep7',
     ],
     deliverKeys: [
       'recipes.storyFirstReelsDeliver1',

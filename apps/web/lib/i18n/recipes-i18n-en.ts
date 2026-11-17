@@ -204,12 +204,14 @@ export const recipesI18nEn = {
   storyFirstReelsStep2:
       'It finds one real story first: one concrete day, one event, first person — setup, turning point, payoff.',
   storyFirstReelsStep3:
-      'It builds the hook from one mechanism that fits, and drafts three to keep the strongest.',
+      'It picks one archetype for the value — informative, funny, inspirational, relatable, or provocative — never basic content.',
   storyFirstReelsStep4:
-      'It writes for watch-through: open loop, payoff that cashes the promise, one CTA tied to value.',
+      'It builds the hook from one mechanism that fits, and drafts three to keep the strongest.',
   storyFirstReelsStep5:
-      'It generates every photo with AI from one base photo — one consistent persona, never stock.',
+      'It writes for watch-through: open loop, payoff that cashes the promise, one CTA tied to value.',
   storyFirstReelsStep6:
+      'It generates every photo with AI from one base photo — one consistent persona, never stock.',
+  storyFirstReelsStep7:
       'Validate, score, confirm, and generate once — same as every prompt.',
   storyFirstReelsDeliver1:
       'A story-first script: hook first, then content takes, inside the contract.',
