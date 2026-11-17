@@ -201,12 +201,14 @@ export const recipesI18nPt = {
       'Escreva cada roteiro como uma história primeiro: um micro-arco fechado, feito para segurar a atenção.',
   storyFirstReelsStep1: 'Para qualquer persona, tema e tipo de vídeo — uma história por vídeo.',
   storyFirstReelsStep2:
-      'Ele encontra a história real primeiro: início, virada, desfecho.',
+      'Ele encontra uma história real primeiro: um dia concreto, um evento, primeira pessoa — início, virada, desfecho.',
   storyFirstReelsStep3:
       'Ele constrói o hook a partir de um mecanismo que cabe, e rascunha três para ficar com o mais forte.',
   storyFirstReelsStep4:
       'Ele escreve para segurar a atenção: abre um gancho, entrega o desfecho prometido, um CTA com valor.',
   storyFirstReelsStep5:
+      'Ele gera todas as fotos com IA a partir de uma foto-base — uma só persona consistente, nunca stock.',
+  storyFirstReelsStep6:
       'Valide, pontue, confirme e gere uma vez — igual a todos os prompts.',
   storyFirstReelsDeliver1:
       'Um roteiro com história primeiro: gancho primeiro, depois conteúdo, dentro do contrato.',

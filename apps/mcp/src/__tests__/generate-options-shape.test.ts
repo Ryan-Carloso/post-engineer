@@ -56,3 +56,67 @@ describe('generate_persona_video options (Phase 5-4)', () => {
     }
   });
 });
+
+const VIDEO = {
+  title: 'Porto trip',
+  description: 'Agent description.',
+  providers: ['youtube'],
+  mode: 'asap' as const,
+  segments: [{ kind: 'hook' as const, text: 'Stop scrolling, this Porto kitchen changes everything.' }],
+};
+
+function parseOptions(options: Record<string, unknown>) {
+  return GeneratePersonaVideoSchema.safeParse({
+    ...VIDEO,
+    options: { videoType: 'faceless', ...options },
+  });
+}
+
+describe('webhookUrl rejects loopback and private literals', () => {
+  it.each([
+    'http://127.0.0.1/hook',
+    'http://example.com/hook',
+    'https://127.0.0.1/hook',
+    'https://10.0.0.5/hook',
+    'https://169.254.169.254/latest',
+    'https://[::1]/hook',
+    'http://localhost/hook',
+    'https://localhost/hook',
+    'https://192.168.1.1/hook',
+  ])('rejects %s', (webhookUrl) => {
+    const parsed = parseOptions({ webhookUrl });
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) {
+      expect(JSON.stringify(parsed.error.issues)).toContain('webhookUrl');
+    }
+  });
+
+  // Zod runs .refine even after .url() fails, so the refine must not throw
+  // on a string URL cannot parse: a malformed webhookUrl is a validation
+  // issue, never an exception out of the schema.
+  it.each(['not a url', 'https://', '://missing-scheme'])('reports %s as an issue instead of throwing', (webhookUrl) => {
+    const parsed = parseOptions({ webhookUrl });
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) {
+      expect(JSON.stringify(parsed.error.issues)).toContain('webhookUrl');
+    }
+  });
+
+  it('accepts a public https webhook and still allows a loopback audioUrl', () => {
+    const parsed = parseOptions({
+      webhookUrl: 'https://example.com/hook',
+      audioUrl: 'http://127.0.0.1/voice.mp3',
+    });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.options?.webhookUrl).toBe('https://example.com/hook');
+      expect(parsed.data.options?.audioUrl).toBe('http://127.0.0.1/voice.mp3');
+    }
+  });
+
+  it('accepts a public IPv6 literal webhook', () => {
+    const webhookUrl = 'https://[2606:4700:4700::1111]/hook';
+    const parsed = parseOptions({ webhookUrl });
+    expect(parsed.success).toBe(true);
+  });
+});

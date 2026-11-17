@@ -761,6 +761,9 @@ describe('POST /api/videos/generate-and-schedule', () => {
         baseBody({ options: { webhookUrl: 'https://example.com/hook' } }),
       );
       expect(res.status).toBe(200);
+      // A public https webhook passes the pre-charge check and is then
+      // charged like any other request.
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(1);
       const calls = vi.mocked(startEngineVideoTask).mock.calls;
       expect(calls).toHaveLength(1);
       expect((calls[0][1] as Record<string, unknown>).webhook_url).toBe('https://example.com/hook');
@@ -1700,8 +1703,24 @@ describe('POST /api/videos/generate-and-schedule', () => {
       const json = await res.json();
       expect(res.status).toBe(400);
       expect(json.code).toBe('VALIDATION_FAILED');
-      expect(json.error).toBe('options.webhookUrl must be a valid http(s) URL.');
+      expect(json.error).toBe('options.webhookUrl must be a public https URL.');
       expect(json.field).toBe('options.webhookUrl');
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
+    });
+
+    it.each([
+      ['cleartext http', 'http://example.com/hook'],
+      ['a private literal IP', 'https://10.0.0.5/hook'],
+      ['localhost', 'https://localhost/hook'],
+      ['a malformed value', 'not a url'],
+    ])('rejects a webhookUrl with %s before any charge', async (_label, webhookUrl) => {
+      const res = await post(baseBody({ options: { webhookUrl } }));
+      const json = await res.json();
+      expect(res.status).toBe(400);
+      expect(json.code).toBe('VALIDATION_FAILED');
+      expect(json.error).toBe('options.webhookUrl must be a public https URL.');
+      expect(json.field).toBe('options.webhookUrl');
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
     });
 
     it('rejects an empty voiceId', async () => {

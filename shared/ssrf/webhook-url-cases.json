@@ -1,0 +1,33 @@
+{
+  "description": "Webhook-URL shape cases pinned by apps/web/lib/ssrf/webhook-url.ts (isPublicHttpsWebhookUrl), the MCP schema in apps/mcp/src/schedule-shapes.ts, and the engine schema validator (apps/engine/app/models/schema.py via apps/engine/app/utils/ssrf.py). accepted must validate and rejected must not. The check is https-only and shape-only: no DNS. A host name is accepted without resolution (resolution and pinning happen later, on the delivery path); only localhost names and non-public literal IP addresses are rejected here. Multicast literals are deliberately left out: Python still reports them global (blockedBeyondPython in public-ip-cases.json), so the engine accepts them while the web and MCP block them; that divergence is asserted in the web and MCP tests only. Any drift between the three implementations on the rows above fails the matching sync test.",
+  "accepted": [
+    "https://example.com/hook",
+    "https://EXAMPLE.COM/hook",
+    "https://hooks.example.com/path?x=1",
+    "https://8.8.8.8/hook",
+    "https://[2606:4700:4700::1111]/hook",
+    "https://[2606:4700:4700::1111]:8443/hook"
+  ],
+  "rejected": [
+    "http://example.com/hook",
+    "https://127.0.0.1/hook",
+    "https://10.0.0.5/hook",
+    "https://172.16.0.1/hook",
+    "https://192.168.1.1/hook",
+    "https://100.64.0.1/hook",
+    "https://169.254.169.254/latest",
+    "https://0.0.0.0/hook",
+    "https://[::1]/hook",
+    "https://[::ffff:7f00:1]/hook",
+    "https://[fe80::1]/hook",
+    "https://localhost/hook",
+    "http://localhost/hook",
+    "ftp://example.com/hook",
+    "file:///etc/passwd",
+    "https://example.com:99999/hook",
+    "not a url",
+    "https://",
+    "://missing-scheme",
+    ""
+  ]
+}

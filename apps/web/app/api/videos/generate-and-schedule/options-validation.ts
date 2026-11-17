@@ -4,6 +4,7 @@
 //---------------
 
 import { isEnglishLanguage, ONLY_ENGLISH_VIDEOS_MESSAGE } from '@/lib/language-gate';
+import { isPublicHttpsWebhookUrl } from '@/lib/ssrf/webhook-url';
 import { isHttpUrl } from '@/lib/generation/custom-audio';
 import { isMusicMood, MUSIC_MOOD_NONE, unknownMusicMoodMessage } from '@/lib/generation/music-moods';
 import {
@@ -101,8 +102,12 @@ export function validateOptions(options: OptionsInput): Checked<ValidatedOptions
       invalid('options.imageId cannot be used with faceless videos: there is no face to render.', 'options.imageId'),
     );
   }
-  if (webhookUrl !== undefined && !isHttpUrl(webhookUrl)) {
-    issues.push(invalid('options.webhookUrl must be a valid http(s) URL.', 'options.webhookUrl'));
+  // Mirrors the engine schema (apps/engine/app/models/schema.py) and the
+  // MCP schema: https on a public host, shape-only (no DNS — the delivery
+  // path resolves and pins). A bad value is a pre-charge 400 here, not a
+  // charged slot that dies with engine_rejected.
+  if (webhookUrl !== undefined && !isPublicHttpsWebhookUrl(webhookUrl)) {
+    issues.push(invalid('options.webhookUrl must be a public https URL.', 'options.webhookUrl'));
   }
   if (voiceId !== undefined && voiceId.trim().length === 0) {
     issues.push(invalid('options.voiceId must be a non-empty string.', 'options.voiceId'));
