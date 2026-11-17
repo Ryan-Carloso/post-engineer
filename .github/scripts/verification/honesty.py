@@ -32,16 +32,21 @@ PROTECTED = (
 # Strong assertions name an expected value. Weak ones only check truthiness,
 # so a rewrite that swaps the first for the second can stay green while the
 # test stops pinning the behavior.
+# Plain `assert x == 1` is the engine suite's value check. A bare `assert x`
+# is only truthiness. Both have to be classified or the swap stays green.
+_PY_COMPARE = r"(?:==|!=|<=|>=|<|>|\bis\s+not\b|\bis\b|\bnot\s+in\b|\bin\b)"
 _STRONG = re.compile(
     r"\.toEqual\s*\(|\.toStrictEqual\s*\(|\.toBe\s*\(|\.toThrow\s*\(|"
     r"\.toHaveBeenCalled|\.toContain\s*\(|\.toMatch(?:Object|Snapshot)?\s*\(|"
     r"\bassert(?:Equal|Equals|DictEqual|ListEqual|SetEqual|In|Raises|AlmostEqual)\b|"
+    r"\bassert\s+.+" + _PY_COMPARE + r"|"
     r"pytest\.raises\s*\("
 )
 _WEAK = re.compile(
     r"\.toBeTruthy\s*\(|\.toBeFalsy\s*\(|\.toBeDefined\s*\(|"
     r"\bassert(?:True|False|IsNotNone)\b|"
-    r"\bassert\s+(?:True|False)\b"
+    r"\bassert\s+(?:True|False)\b|"
+    r"\bassert\s+(?:not\s+)?(?:\()?[A-Za-z_][\w.\[\]()'\"]*(?:\))?\s*(?:,.*)?$"
 )
 _ASSERTION = re.compile(
     r"\bexpect\s*\(|"
@@ -67,12 +72,12 @@ _INFO_TRUE = re.compile(r"informational:\s*true")
 # visible, and they do not fail a job that still runs the rest of the suite.
 _UNCONDITIONAL: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("test-skipped", re.compile(r"\b(?:it|test|describe)\.(?:skip|todo)\s*\(")),
-    ("test-skipped", re.compile(r"\bx(?:it|test|describe)\s*\(")),
+    ("test-skipped", re.compile(r"(?<![\w.])x(?:it|test|describe)\s*\(")),
     ("test-skipped", re.compile(r"@pytest\.mark\.skip\b(?!\s*if)")),
     ("test-skipped", re.compile(r"@unittest\.skip\s*\(")),
     ("test-skipped", re.compile(r"(?<![\w.])pytest\.skip\s*\(")),
     ("test-focused", re.compile(r"\b(?:it|test|describe)\.only\s*\(")),
-    ("test-focused", re.compile(r"\bf(?:it|describe)\s*\(")),
+    ("test-focused", re.compile(r"(?<![\w.])f(?:it|describe)\s*\(")),
 )
 _CONDITIONAL: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("test-skip-conditional", re.compile(r"@pytest\.mark\.skipif\b")),

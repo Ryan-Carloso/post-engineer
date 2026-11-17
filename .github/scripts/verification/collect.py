@@ -18,7 +18,7 @@ _HERE = str(Path(__file__).resolve().parent)
 if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
-from honesty import FileChange, analyze
+from honesty import FileChange, Finding, analyze
 from scope import delegated_suites, local_suites
 
 _SKIP_NAMES = {"pnpm-lock.yaml", "uv.lock", "package-lock.json", "schema.snapshot.json"}
@@ -36,13 +36,14 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     repo = str(Path(args.repo).resolve())
-    changes = load_changes(repo, args.base, args.head)
+    changes, oversized = load_changes(repo, args.base, args.head)
     payload = build_payload(
         changes,
         exists=lambda path: (Path(repo) / path).is_file(),
         grader_source=args.source,
         base=args.base,
         head=args.head,
+        oversized=oversized,
     )
     destination = Path(args.json_path)
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -53,9 +54,27 @@ def main(argv: list[str] | None = None) -> int:
     return 1 if not payload["ok"] else 0
 
 
-def build_payload(changes: list[FileChange], exists, grader_source: str, base: str, head: str) -> dict:
-    findings = analyze(changes, exists)
+def build_payload(
+    changes: list[FileChange],
+    exists,
+    grader_source: str,
+    base: str,
+    head: str,
+    oversized: list[str] | None = None,
+) -> dict:
+    findings = list(analyze(changes, exists))
+    for path in oversized or []:
+        findings.append(Finding(
+            "warn",
+            "file-too-large",
+            path,
+            "file exceeds the grader size limit and was not analyzed",
+            1,
+        ))
     paths = [change.path for change in changes]
+    for path in oversized or []:
+        if path not in paths:
+            paths.append(path)
     return {
         "ok": not any(finding.severity == "fail" for finding in findings),
         "grader_source": grader_source,
@@ -69,9 +88,10 @@ def build_payload(changes: list[FileChange], exists, grader_source: str, base: s
     }
 
 
-def load_changes(repo: str, base: str, head: str) -> list[FileChange]:
+def load_changes(repo: str, base: str, head: str) -> tuple[list[FileChange], list[str]]:
     raw = _git(repo, ["diff", "--name-status", "--find-renames", base, head], allow_fail=False)
     changes: list[FileChange] = []
+    oversized: list[str] = []
     for status, path, old_path in _parse_name_status(raw):
         if _skip(path):
             continue
@@ -79,6 +99,7 @@ def load_changes(repo: str, base: str, head: str) -> list[FileChange]:
         base_text = "" if status == "A" else _show(repo, base, base_path)
         head_text = "" if status == "D" else _show(repo, head, path)
         if len(base_text) > _MAX_BYTES or len(head_text) > _MAX_BYTES:
+            oversized.append(path)
             continue
         changes.append(FileChange(
             path=path,
@@ -87,7 +108,7 @@ def load_changes(repo: str, base: str, head: str) -> list[FileChange]:
             head_text=head_text,
             old_path=old_path,
         ))
-    return changes
+    return changes, oversized
 
 
 def _parse_name_status(text: str) -> list[tuple[str, str, str]]:

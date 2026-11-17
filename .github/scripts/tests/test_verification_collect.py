@@ -149,6 +149,48 @@ def test_precise_null_check_is_not_treated_as_weakened():
     assert fails(findings) == []
 
 
+def test_plain_pytest_comparison_weakened_to_truthiness_fails():
+    status = analyze(
+        "apps/engine/test/test_sample.py",
+        "M",
+        "def test_a():\n    assert response['status'] == 200\n",
+        "def test_a():\n    assert response\n",
+    )
+    assert any(finding.code == "assertion-weakened" for finding in fails(status))
+    urls = analyze(
+        "apps/engine/test/test_sample.py",
+        "M",
+        "def test_a():\n    assert session.urls == []\n",
+        "def test_a():\n    assert session.urls\n",
+    )
+    assert any(finding.code == "assertion-weakened" for finding in fails(urls))
+    compared = analyze(
+        "apps/engine/test/test_sample.py",
+        "M",
+        "def test_a():\n    assert n > 0\n",
+        "def test_a():\n    assert n == 1\n",
+    )
+    assert fails(compared) == []
+
+
+def test_method_named_fit_is_not_a_focused_test():
+    base = "def test_ok():\n    assert 1 == 1\n"
+    method = analyze(
+        "apps/engine/test/test_sample.py",
+        "M",
+        base,
+        base + "    image = ImageOps.fit(image, size)\n",
+    )
+    assert fails(method) == []
+    focused = analyze(
+        "apps/web/lib/__tests__/sample.test.ts",
+        "M",
+        "it('works', () => {\n  expect(value).toEqual(1)\n})\n",
+        "it('works', () => {\n  expect(value).toEqual(1)\n})\n" + glue("  ", "f", "it('only this')\n"),
+    )
+    assert any(finding.code == "test-focused" for finding in fails(focused))
+
+
 def test_truthiness_swap_fails_and_toBe_does_not():
     base = "it('works', () => {\n  expect(value).toEqual(1)\n})\n"
     weakened = analyze(
@@ -305,6 +347,38 @@ def test_parse_rename_and_payload_hides_file_bodies():
     assert secret not in markdown
     assert report.MARKER in markdown
     assert "Grader source: `head`" in markdown
+
+
+def test_oversized_file_is_warned_and_still_listed(tmp_path, monkeypatch):
+    monkeypatch.setattr(collect, "_MAX_BYTES", 40)
+    repo = tmp_path / "repo"
+    _git(repo, ["init", "-b", "main"])
+    _git(repo, ["config", "user.email", "test@example.com"])
+    _git(repo, ["config", "user.name", "test"])
+    _git(repo, ["config", "commit.gpgsign", "false"])
+    test_file = repo / "apps" / "engine" / "test" / "test_sample.py"
+    test_file.parent.mkdir(parents=True)
+    test_file.write_text("def test_ok():\n    assert 1 == 1\n", encoding="utf-8")
+    _git(repo, ["add", "."])
+    _git(repo, ["commit", "-m", "base"])
+    base = _git(repo, ["rev-parse", "HEAD"]).strip()
+    test_file.write_text("def test_ok():\n    assert 1 == 1\n" + ("# " + ("x" * 80) + "\n"), encoding="utf-8")
+    _git(repo, ["add", "."])
+    _git(repo, ["commit", "-m", "grow"])
+    head = _git(repo, ["rev-parse", "HEAD"]).strip()
+    out = tmp_path / "honesty.json"
+    code = collect.main([
+        "--repo", str(repo),
+        "--base", base,
+        "--head", head,
+        "--source", "head",
+        "--json", str(out),
+    ])
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert code == 0
+    assert payload["ok"] is True
+    assert any(finding["code"] == "file-too-large" for finding in payload["findings"])
+    assert "apps/engine/test/test_sample.py" in payload["changed_paths"]
 
 
 def test_cli_flags_a_skip_and_a_rename_passes(tmp_path):
