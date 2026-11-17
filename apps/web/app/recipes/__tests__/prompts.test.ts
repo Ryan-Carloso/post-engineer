@@ -673,6 +673,24 @@ describe('prompts hub data', () => {
     expect(text).toContain('Never a generic explainer');
     expect(text).toContain('Never present it as a real person');
     expect(text).toContain('verified testimonial');
+    // The story is real, concrete, and lived, first person, plausible in
+    // real life. "The day it happened to me" is one valid form, not the
+    // only one: a first time, a week, a realization, a repeating ritual,
+    // or a before/after arc all count — as long as one concrete moment
+    // is lived, not described. A documentary, study, or fact is
+    // transformed into a lived story; the fact goes inside the story,
+    // never as exposition.
+    expect(text).toContain('the day it happened to me');
+    expect(text).toContain('one valid form, not the only one');
+    expect(text).toContain('the first time I');
+    expect(text).toContain('the day I realized');
+    expect(text).toContain('every Tuesday');
+    expect(text).toContain('before/after arc');
+    expect(text).toContain('lived, not described');
+    expect(text).toContain('never random');
+    expect(text).toContain('documentary');
+    expect(text).toContain('transform it into a concrete story');
+    expect(text).toContain('never as exposition');
     // Step 6 overrides the base's image-search lines for this prompt only:
     // the agent must not search for images at all.
     expect(text).toContain('do not search for images');

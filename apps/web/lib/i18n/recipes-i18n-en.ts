@@ -202,7 +202,7 @@ export const recipesI18nEn = {
       'Write every script as a story first: one tight micro-arc, built to hold watch-through.',
   storyFirstReelsStep1: 'For any persona, topic, and video type — one story per video.',
   storyFirstReelsStep2:
-      'It finds one real story first: one concrete day, one event, first person — setup, turning point, payoff.',
+      'It finds one real story first — concrete, lived, first person: "the day it happened to me" is one form, not the only one. A documentary or study becomes a lived story, never exposition.',
   storyFirstReelsStep3:
       'It builds the hook from one mechanism that fits, and drafts three to keep the strongest.',
   storyFirstReelsStep4:
