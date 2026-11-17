@@ -121,21 +121,21 @@ export function MonthViewDayCell({
   const selectedCellEvent =
     selectedEventId && showEventPopover && !dragEventId && !resizeEventId
       ? (() => {
-          for (const slot of barSlots) {
-            if (
-              slot.type === "event-bar" &&
+        for (const slot of barSlots) {
+          if (
+            slot.type === "event-bar" &&
               slot.isStart &&
               slot.event.id === selectedEventId &&
               isSameDay(startOfDay(slot.event.start), date)
-            )
-              return slot.event;
-          }
-          for (const slot of eventSlots) {
-            if (slot.type === "event-item" && slot.event.id === selectedEventId)
-              return slot.event;
-          }
-          return null;
-        })()
+          )
+            return slot.event;
+        }
+        for (const slot of eventSlots) {
+          if (slot.type === "event-item" && slot.event.id === selectedEventId)
+            return slot.event;
+        }
+        return null;
+      })()
       : null;
 
   /** ARIA for an event in this cell: the selected one controls the popover */
@@ -162,11 +162,11 @@ export function MonthViewDayCell({
   const placeholderSpan = dragEvent
     ? isMultiDay
       ? differenceInCalendarDays(
-          dragEvent.isAllDay
-            ? addDays(startOfDay(dragEvent.end), 1)
-            : dragEvent.end,
-          dragEvent.start,
-        )
+        dragEvent.isAllDay
+          ? addDays(startOfDay(dragEvent.end), 1)
+          : dragEvent.end,
+        dragEvent.start,
+      )
       : 1
     : 1;
 
@@ -190,25 +190,25 @@ export function MonthViewDayCell({
       aria-label={fullDate}
       onClick={handleBackgroundClick}
       className={cn(
-        "flex flex-col border-b border-r border-border min-w-0",
+        "flex min-w-0 flex-col border-r border-b border-border",
         isWeekend && "bg-calendar-weekend",
         className,
       )}
     >
       {/* Day number — right-aligned like Notion Calendar */}
-      <div className="flex justify-end items-center px-2 pt-0.5 pb-0.5">
+      <div className="flex items-center justify-end px-2 py-0.5">
         <button
           type="button"
           aria-label={fullDate}
           onClick={() => onDayNumberClick?.(date)}
           className={cn(
-            "flex h-6 min-w-6 items-center justify-center rounded-sm px-1 text-[13px] font-medium leading-none cursor-pointer select-none gap-1",
+            "flex h-6 min-w-6 cursor-pointer items-center justify-center gap-1 rounded-sm px-1 text-[13px] leading-none font-medium select-none",
             todayDate
               ? "bg-primary text-primary-foreground hover:bg-primary/80"
               : cn(
-                  "hover:bg-accent",
-                  isAdjacentMonth ? "text-muted-foreground" : "text-foreground",
-                ),
+                "hover:bg-accent",
+                isAdjacentMonth ? "text-muted-foreground" : "text-foreground",
+              ),
           )}
         >
           {isFirstOfMonth && (
@@ -226,7 +226,7 @@ export function MonthViewDayCell({
             <div
               aria-hidden
               className={cn(
-                "absolute top-0 left-0.5 right-0.5 h-5 rounded-sm border-2 pointer-events-none",
+                "pointer-events-none absolute inset-x-0.5 top-0 h-5 rounded-sm border-2",
                 placeholderBorder,
               )}
               style={{
@@ -242,7 +242,7 @@ export function MonthViewDayCell({
                   const barEl = (
                     <div
                       key={`${slot.event.id}-${index}`}
-                      className="relative pl-0.5 pr-0.5"
+                      className="relative px-0.5"
                       style={{ width: `${slot.colSpan * 100}%`, zIndex: 1 }}
                     >
                       <MonthViewEventBar
@@ -300,13 +300,13 @@ export function MonthViewDayCell({
       )}
 
       {/* Timed events — overflow-hidden to clip excess */}
-      <div className="relative flex flex-col gap-px px-0.5 pb-0.5 overflow-hidden min-h-0 flex-1">
+      <div className="relative flex min-h-0 flex-1 flex-col gap-px overflow-hidden px-0.5 pb-0.5">
         {/* Timed event drag placeholder — absolute overlay, doesn't push events */}
         {showPlaceholder && !isMultiDay && (
           <div
             aria-hidden
             className={cn(
-              "absolute inset-x-0.5 top-0 h-5 rounded-sm border-2 pointer-events-none z-30",
+              "pointer-events-none absolute inset-x-0.5 top-0 z-30 h-5 rounded-sm border-2",
               placeholderBorder,
             )}
           />
@@ -335,7 +335,7 @@ export function MonthViewDayCell({
                 type="button"
                 aria-label={`Show ${slot.count} more ${slot.count === 1 ? "event" : "events"} on ${fullDate}`}
                 onClick={() => onMoreClick?.(date)}
-                className="px-1 py-0.5 text-xs font-bold text-foreground rounded-sm text-left cursor-default select-none"
+                className="cursor-default rounded-sm px-1 py-0.5 text-left text-xs font-bold text-foreground select-none"
               >
                 {slot.count} more
               </button>

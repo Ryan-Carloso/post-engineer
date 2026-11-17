@@ -268,10 +268,10 @@ export function TimeGrid({
     () =>
       travelTimeZone
         ? [
-            // The zone travelled to has its own column
-            ...secondaryTimeZones.filter((zone) => zone !== travelTimeZone),
-            timeZones.primary ?? null,
-          ]
+          // The zone travelled to has its own column
+          ...secondaryTimeZones.filter((zone) => zone !== travelTimeZone),
+          timeZones.primary ?? null,
+        ]
         : secondaryTimeZones,
     [secondaryTimeZones, travelTimeZone, timeZones.primary],
   );
@@ -739,7 +739,7 @@ export function TimeGrid({
         }}
       >
         {/* Header - day columns and all-day row with synchronized scroll */}
-        <div className="relative flex-shrink-0">
+        <div className="relative shrink-0">
           <div
             ref={(el) => {
               (
@@ -809,7 +809,7 @@ export function TimeGrid({
         {/* Scrollable grid area \u2014 also serves as the collision boundary for popovers */}
         <div
           ref={scrollContainerRef}
-          className="flex-1 overflow-auto scrollbar-hide"
+          className="scrollbar-hide flex-1 overflow-auto"
         >
           <div
             className="relative flex"

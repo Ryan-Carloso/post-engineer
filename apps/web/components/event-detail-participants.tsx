@@ -177,7 +177,7 @@ function ParticipantAvatar({ participant }: ParticipantAvatarProps) {
   return (
     <span className="relative flex size-5 shrink-0">
       <Avatar className="size-5">
-        <AvatarFallback className="bg-gradient-to-b from-[#C7C7C7] to-[#B1B1B1] text-[10px] font-semibold text-white">
+        <AvatarFallback className="bg-linear-to-b from-[#C7C7C7] to-[#B1B1B1] text-[10px] font-semibold text-white">
           {getInitial(participant)}
         </AvatarFallback>
       </Avatar>
@@ -186,7 +186,7 @@ function ParticipantAvatar({ participant }: ParticipantAvatarProps) {
           role="img"
           aria-label={badge.label}
           className={cn(
-            "absolute -right-[3px] -bottom-[3px] flex size-[11px] items-center justify-center rounded-full text-white ring-[1.5px] ring-white dark:ring-[#191919]",
+            "absolute right-[-3px] bottom-[-3px] flex size-[11px] items-center justify-center rounded-full text-white ring-[1.5px] ring-white dark:ring-[#191919]",
             badge.className,
           )}
         >
@@ -250,7 +250,7 @@ function ParticipantActions({
           <DropdownMenuContent
             align="start"
             side="left"
-            className={cn("min-w-[180px] text-sm", EVENT_DETAIL_MENU_CLASS)}
+            className={cn("min-w-45 text-sm", EVENT_DETAIL_MENU_CLASS)}
             onKeyDown={closeMenuOnEscape(() => setMenuOpen(false))}
           >
             <DropdownMenuItem
@@ -276,7 +276,7 @@ function ParticipantActions({
             )}
             {onRemove && (
               <DropdownMenuItem
-                className="text-sm text-[#E56458] focus:!bg-[#DE5551] focus:!text-white focus:[&>svg]:!text-white"
+                className="text-sm text-[#E56458] focus:bg-[#DE5551]! focus:text-white! focus:[&>svg]:text-white!"
                 onClick={onRemove}
               >
                 <X className="size-4 text-[#E56458]" />
@@ -353,7 +353,7 @@ function RoomRow({ room, onRemove }: RoomRowProps) {
         description ? "min-h-[51px] py-1.5" : EVENT_DETAIL_ROW_HEIGHT_CLASS,
       )}
     >
-      <span className="flex size-5 shrink-0 items-center justify-center rounded-sm bg-gradient-to-b from-[#C7C7C7] to-[#B1B1B1] text-white">
+      <span className="flex size-5 shrink-0 items-center justify-center rounded-sm bg-linear-to-b from-[#C7C7C7] to-[#B1B1B1] text-white">
         <DoorOpen className="size-3" />
       </span>
       <div className="flex min-w-0 flex-1 flex-col leading-5">
@@ -509,11 +509,11 @@ export function EventDetailParticipants<
         const guest: EventParticipant =
           owner && isSameEmail(email, owner)
             ? {
-                email,
-                name,
-                organizer: !participants.some((p) => p.organizer),
-                response: "accepted",
-              }
+              email,
+              name,
+              organizer: !participants.some((p) => p.organizer),
+              response: "accepted",
+            }
             : { email, name, response: "needs-action" };
         onEventChange?.({
           ...event,
@@ -583,14 +583,14 @@ export function EventDetailParticipants<
     <div
       className={cn(
         "flex min-h-[35px] items-center",
-        hasPeople ? "pr-2 pl-[36px]" : "px-2",
+        hasPeople ? "pr-2 pl-9" : "px-2",
       )}
     >
       <div
         ref={boxRef}
         className={cn(
           "flex h-8 min-w-0 flex-1 items-center gap-[11px] pr-2",
-          hasPeople ? "pl-[8px]" : "pl-[9px]",
+          hasPeople ? "pl-2" : "pl-[9px]",
           EVENT_DETAIL_INPUT_GROUP_CLASS,
         )}
         onClick={() => inputRef.current?.focus()}

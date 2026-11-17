@@ -349,11 +349,11 @@ export function MonthView({
     return expandedEvents.map((ev) =>
       ev.id === resizeState.eventId
         ? {
-            ...ev,
-            start: resizeState.currentStart,
-            end: resizeState.currentEnd,
-            isAllDay: true,
-          }
+          ...ev,
+          start: resizeState.currentStart,
+          end: resizeState.currentEnd,
+          isAllDay: true,
+        }
         : ev,
     );
   }, [expandedEvents, isResizing, resizeState]);
@@ -476,7 +476,7 @@ export function MonthView({
           createPortal(
             <div
               aria-hidden
-              className="pointer-events-none fixed z-[9999] w-48 opacity-80 shadow-lg"
+              className="pointer-events-none fixed z-9999 w-48 opacity-80 shadow-lg"
               style={{
                 left: dragState.clientX - 96,
                 top: dragState.clientY - 10,

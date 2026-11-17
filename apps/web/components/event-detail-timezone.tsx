@@ -366,8 +366,8 @@ export function EventDetailTimezone<
   React.useEffect(() => {
     const item = listOpen
       ? Array.from(
-          listRef.current?.querySelectorAll<HTMLElement>("[cmdk-item]") ?? [],
-        ).find((element) => element.dataset.value === activeValue)
+        listRef.current?.querySelectorAll<HTMLElement>("[cmdk-item]") ?? [],
+      ).find((element) => element.dataset.value === activeValue)
       : undefined;
     setActiveOptionId(item?.id || undefined);
   }, [activeValue, sections, listOpen, listElement]);

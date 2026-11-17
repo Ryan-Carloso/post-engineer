@@ -149,7 +149,7 @@ function EventKindHelpIcon({ tooltip }: { tooltip?: string }) {
 
   return (
     <span
-      className="ml-auto shrink-0 opacity-0 group-hover/item:opacity-100 transition-opacity"
+      className="ml-auto shrink-0 opacity-0 transition-opacity group-hover/item:opacity-100"
       onClick={(e) => e.stopPropagation()}
       onPointerDown={(e) => e.stopPropagation()}
       onMouseEnter={handleMouseEnter}
@@ -159,7 +159,7 @@ function EventKindHelpIcon({ tooltip }: { tooltip?: string }) {
       {tooltipPos &&
         ReactDOM.createPortal(
           <div
-            className="pointer-events-none fixed z-[100] max-w-[240px] rounded-sm bg-[#252525] border border-[#303030] px-2 py-1 text-xs text-white shadow-md"
+            className="pointer-events-none fixed z-100 max-w-60 rounded-sm border border-[#303030] bg-[#252525] px-2 py-1 text-xs text-white shadow-md"
             style={{
               top: tooltipPos.top,
               left: tooltipPos.left - 8,
@@ -211,9 +211,9 @@ function fromOwnClock<TEvent extends DetailedCalendarEvent>(
     edited[field].getTime() === shown[field].getTime()
       ? event[field]
       : toZonedWallClock(
-          fromZonedWallClock(edited[field], ownTimeZone),
-          calendarTimeZone,
-        );
+        fromZonedWallClock(edited[field], ownTimeZone),
+        calendarTimeZone,
+      );
   return { ...edited, start: back("start"), end: back("end") };
 }
 
@@ -226,7 +226,7 @@ function EventDetailOptionsRow({ onExpand }: { onExpand: () => void }) {
   return (
     <div
       className={cn(
-        "flex items-center pl-[36px]",
+        "flex items-center pl-9",
         EVENT_DETAIL_ROW_HEIGHT_CLASS,
       )}
     >
@@ -282,10 +282,10 @@ export function EventDetailPanel<
   const clock: EventDetailClock | undefined =
     calendarTimeZone && ownTimeZone && ownTimeZone !== calendarTimeZone
       ? {
-          showing: showsOwnClock ? "event" : "calendar",
-          calendarTimeZone,
-          onSwitch: () => setShowsOwnClock((prev) => !prev),
-        }
+        showing: showsOwnClock ? "event" : "calendar",
+        calendarTimeZone,
+        onSwitch: () => setShowsOwnClock((prev) => !prev),
+      }
       : undefined;
   const isOnOwnClock = clock?.showing === "event";
   /** The event the time rows show: on its own clock after the switch */
@@ -299,15 +299,15 @@ export function EventDetailPanel<
   const handleClockEventChange =
     isOnOwnClock && calendarTimeZone && ownTimeZone && onEventChange
       ? (edited: TEvent) =>
-          onEventChange(
-            fromOwnClock(
-              edited,
-              clockEvent,
-              event,
-              calendarTimeZone,
-              ownTimeZone,
-            ),
-          )
+        onEventChange(
+          fromOwnClock(
+            edited,
+            clockEvent,
+            event,
+            calendarTimeZone,
+            ownTimeZone,
+          ),
+        )
       : onEventChange;
 
   const titleRef = React.useRef<HTMLInputElement>(null);
@@ -424,7 +424,7 @@ export function EventDetailPanel<
             side="left"
             sideOffset={12}
             alignOffset={-4}
-            className={cn("min-w-[180px]", EVENT_DETAIL_MENU_CLASS)}
+            className={cn("min-w-45", EVENT_DETAIL_MENU_CLASS)}
             onMouseLeave={() => setHoveredOther(false)}
             onKeyDown={closeMenuOnEscape(() => setKindMenuOpen(false))}
           >
@@ -444,7 +444,7 @@ export function EventDetailPanel<
             {otherKinds.map((other) => (
               <DropdownMenuItem
                 key={other}
-                className="group/item text-xs text-white focus:bg-[#303030] focus:text-white pl-8"
+                className="group/item pl-8 text-xs text-white focus:bg-[#303030] focus:text-white"
                 onClick={() => selectKind(other)}
                 onMouseEnter={() => setHoveredOther(true)}
               >
@@ -473,7 +473,7 @@ export function EventDetailPanel<
             <DropdownMenuContent
               align="start"
               side="left"
-              className={cn("min-w-[180px]", EVENT_DETAIL_MENU_CLASS)}
+              className={cn("min-w-45", EVENT_DETAIL_MENU_CLASS)}
               onKeyDown={stopEscapePropagation}
             >
               <DropdownMenuItem
@@ -516,14 +516,14 @@ export function EventDetailPanel<
               <DropdownMenuItem
                 disabled={!onDelete}
                 aria-keyshortcuts={EVENT_ACTION_KEYS.delete.aria}
-                className="text-xs text-[#E56458] focus:!bg-[#DE5551] focus:!text-white focus:[&>svg]:!text-white focus:[&>[data-slot=dropdown-menu-shortcut]]:!text-white"
+                className="text-xs text-[#E56458] focus:bg-[#DE5551]! focus:text-white! focus:*:data-[slot=dropdown-menu-shortcut]:text-white! focus:[&>svg]:text-white!"
                 onClick={onDelete}
               >
                 <Trash2 className="size-3.5 text-[#E56458]" />
                 Delete
                 <DropdownMenuShortcut
                   aria-hidden
-                  className="text-white/40 tracking-normal"
+                  className="tracking-normal text-white/40"
                 >
                   {EVENT_ACTION_KEYS.delete.label}
                 </DropdownMenuShortcut>

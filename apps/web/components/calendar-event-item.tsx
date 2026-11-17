@@ -360,13 +360,13 @@ export function CalendarEventItem({
   const posStyle =
     overrideStart && overrideEnd
       ? computeOverrideStyle(
-          positionedEvent,
-          hourHeight,
-          overrideStart,
-          overrideEnd,
-          dayStartHour,
-          dayEndHour,
-        )
+        positionedEvent,
+        hourHeight,
+        overrideStart,
+        overrideEnd,
+        dayStartHour,
+        dayEndHour,
+      )
       : defaultStyle;
 
   const heightInPixels =
@@ -405,7 +405,7 @@ export function CalendarEventItem({
       <div
         aria-hidden
         className={cn(
-          "absolute rounded-sm px-2 py-1 pointer-events-none opacity-30 overflow-hidden",
+          "pointer-events-none absolute overflow-hidden rounded-sm px-2 py-1 opacity-30",
           className,
         )}
         style={{
@@ -421,7 +421,7 @@ export function CalendarEventItem({
         <div className={cn("absolute inset-0 rounded-sm", styles.bg)} />
         <div
           className={cn(
-            "absolute left-0 top-0 bottom-0 w-[4px] rounded-l-md dark:bg-white dark:mix-blend-overlay",
+            "absolute inset-y-0 left-0 w-1 rounded-l-md dark:bg-white dark:mix-blend-overlay",
             styles.border,
           )}
         />
@@ -431,13 +431,13 @@ export function CalendarEventItem({
           fallback={
             <div
               className={cn(
-                "relative flex flex-col h-full pl-1 overflow-hidden",
+                "relative flex h-full flex-col overflow-hidden pl-1",
                 isCompact && "flex-row items-center gap-1",
               )}
             >
               <span
                 className={cn(
-                  "font-medium text-[0.625rem] leading-tight break-words",
+                  "text-xxs leading-tight font-medium wrap-break-word",
                   styles.text,
                   "dark:text-white/80",
                 )}
@@ -448,7 +448,7 @@ export function CalendarEventItem({
               {!isCompact && (
                 <span
                   className={cn(
-                    "text-[0.625rem] whitespace-nowrap",
+                    "text-xxs whitespace-nowrap",
                     styles.text,
                     "dark:text-white dark:mix-blend-overlay",
                   )}
@@ -468,7 +468,7 @@ export function CalendarEventItem({
       <div
         aria-hidden
         className={cn(
-          "absolute rounded-sm pointer-events-none border-2",
+          "pointer-events-none absolute rounded-sm border-2",
           styles.borderLine,
           className,
         )}
@@ -493,22 +493,22 @@ export function CalendarEventItem({
 
     const draggingStyle: React.CSSProperties = useFixed
       ? {
-          position: "fixed",
-          top: `${cursorY}px`,
-          left: `${cursorX}px`,
-          height: `${heightPx}px`,
-          width: fixedWidth != null ? `${fixedWidth}px` : "200px",
-          minHeight: "20px",
-          zIndex: 30,
-        }
+        position: "fixed",
+        top: `${cursorY}px`,
+        left: `${cursorX}px`,
+        height: `${heightPx}px`,
+        width: fixedWidth != null ? `${fixedWidth}px` : "200px",
+        minHeight: "20px",
+        zIndex: 30,
+      }
       : {
-          top: posStyle.top,
-          height: `${heightPx}px`,
-          left: `${positionedEvent.left}%`,
-          width: `${positionedEvent.width}%`,
-          minHeight: "20px",
-          zIndex: 30,
-        };
+        top: posStyle.top,
+        height: `${heightPx}px`,
+        left: `${positionedEvent.left}%`,
+        width: `${positionedEvent.width}%`,
+        minHeight: "20px",
+        zIndex: 30,
+      };
 
     return (
       <div
@@ -517,7 +517,7 @@ export function CalendarEventItem({
         className={cn(
           "absolute rounded-sm px-2 py-1",
           "pointer-events-none cursor-grabbing",
-          "overflow-hidden select-none opacity-80 shadow-lg",
+          "overflow-hidden opacity-80 shadow-lg select-none",
           className,
         )}
         style={draggingStyle}
@@ -526,7 +526,7 @@ export function CalendarEventItem({
         <div className={cn("absolute inset-0 rounded-sm", styles.bg)} />
         <div
           className={cn(
-            "absolute left-0 top-0 bottom-0 w-[4px] rounded-l-md dark:bg-white dark:mix-blend-overlay",
+            "absolute inset-y-0 left-0 w-1 rounded-l-md dark:bg-white dark:mix-blend-overlay",
             styles.border,
           )}
         />
@@ -537,16 +537,16 @@ export function CalendarEventItem({
           fallback={
             <div
               className={cn(
-                "relative flex flex-col h-full pl-1 overflow-hidden",
+                "relative flex h-full flex-col overflow-hidden pl-1",
                 heightPx < 40 && "flex-row items-center gap-1",
               )}
             >
-              <span className="font-medium text-[0.625rem] leading-tight break-words text-white dark:text-white flex items-center gap-0.5">
+              <span className="flex items-center gap-0.5 text-xxs leading-tight font-medium wrap-break-word text-white dark:text-white">
                 <SeriesChangeDot eventId={event.id} />
                 {event.title}
               </span>
               {heightPx >= 40 && (
-                <span className="text-[0.625rem] whitespace-nowrap text-white dark:text-white">
+                <span className="text-xxs whitespace-nowrap text-white dark:text-white">
                   {timeRangeLabel}
                 </span>
               )}
@@ -684,7 +684,7 @@ export function CalendarEventItem({
       {!isSelected && !isDeclined && (
         <div
           className={cn(
-            "absolute left-0 top-0 bottom-0 w-[4px] dark:bg-white dark:mix-blend-overlay",
+            "absolute inset-y-0 left-0 w-1 dark:bg-white dark:mix-blend-overlay",
             hasTopRounding && "rounded-tl-md",
             hasBottomRounding && "rounded-bl-md",
             styles.border,
@@ -698,20 +698,20 @@ export function CalendarEventItem({
         fallback={
           <div
             className={cn(
-              "relative flex flex-col h-full pl-1 overflow-hidden",
+              "relative flex h-full flex-col overflow-hidden pl-1",
               isCompact && "flex-row items-center gap-1",
             )}
           >
             <span
               className={cn(
-                "font-medium text-[0.625rem] leading-tight break-words flex items-center gap-0.5",
+                "flex items-center gap-0.5 text-xxs leading-tight font-medium wrap-break-word",
                 isSelected
                   ? "text-white dark:text-white"
                   : cn(
-                      styles.text,
-                      "dark:text-white/80",
-                      eventIsPast && "opacity-60",
-                    ),
+                    styles.text,
+                    "dark:text-white/80",
+                    eventIsPast && "opacity-60",
+                  ),
                 isDeclined && "line-through",
                 showsDeclined && DECLINED_EVENT_TEXT_CLASS,
               )}
@@ -722,14 +722,14 @@ export function CalendarEventItem({
             {!isCompact && (
               <span
                 className={cn(
-                  "text-[0.625rem] whitespace-nowrap",
+                  "text-xxs whitespace-nowrap",
                   isSelected
                     ? "text-white dark:text-white"
                     : cn(
-                        styles.text,
-                        "dark:text-white dark:mix-blend-overlay",
-                        eventIsPast && "opacity-60 dark:opacity-100",
-                      ),
+                      styles.text,
+                      "dark:text-white dark:mix-blend-overlay",
+                      eventIsPast && "opacity-60 dark:opacity-100",
+                    ),
                   isDeclined && "line-through",
                   showsDeclined &&
                     cn(DECLINED_EVENT_TEXT_CLASS, "dark:mix-blend-normal"),
@@ -910,8 +910,8 @@ export function AllDayEventItem({
       <div
         aria-hidden
         className={cn(
-          "relative h-6 px-2 py-0.5 pointer-events-none opacity-30",
-          "overflow-hidden select-none flex items-center gap-1",
+          "pointer-events-none relative h-6 px-2 py-0.5 opacity-30",
+          "flex items-center gap-1 overflow-hidden select-none",
           spanStart && "rounded-l-md",
           spanEnd && "rounded-r-md",
           className,
@@ -935,7 +935,7 @@ export function AllDayEventItem({
         {spanStart && (
           <div
             className={cn(
-              "absolute left-0 top-0 bottom-0 w-[4px] dark:bg-white dark:mix-blend-overlay",
+              "absolute inset-y-0 left-0 w-1 dark:bg-white dark:mix-blend-overlay",
               spanStart && "rounded-l-md",
               styles.border,
             )}
@@ -947,7 +947,7 @@ export function AllDayEventItem({
           fallback={
             <span
               className={cn(
-                "relative font-medium text-[0.625rem] leading-tight whitespace-nowrap",
+                "relative text-xxs leading-tight font-medium whitespace-nowrap",
                 spanStart && "pl-1",
                 styles.text,
                 "dark:text-white/80",
@@ -968,7 +968,7 @@ export function AllDayEventItem({
       <div
         aria-hidden
         className={cn(
-          "relative h-6 pointer-events-none border-2 rounded-sm",
+          "pointer-events-none relative h-6 rounded-sm border-2",
           styles.borderLine,
           className,
         )}
@@ -982,8 +982,8 @@ export function AllDayEventItem({
       <div
         aria-hidden
         className={cn(
-          "h-6 px-2 py-0.5 pointer-events-none cursor-grabbing",
-          "overflow-hidden select-none flex items-center gap-1",
+          "pointer-events-none h-6 cursor-grabbing px-2 py-0.5",
+          "flex items-center gap-1 overflow-hidden select-none",
           "rounded-sm opacity-80 shadow-lg",
           className,
         )}
@@ -992,7 +992,7 @@ export function AllDayEventItem({
         <div className={cn("absolute inset-0 rounded-sm", styles.bg)} />
         <div
           className={cn(
-            "absolute left-0 top-0 bottom-0 w-[4px] rounded-l-md dark:bg-white dark:mix-blend-overlay",
+            "absolute inset-y-0 left-0 w-1 rounded-l-md dark:bg-white dark:mix-blend-overlay",
             styles.border,
           )}
         />
@@ -1002,7 +1002,7 @@ export function AllDayEventItem({
           fallback={
             <span
               className={cn(
-                "relative font-medium text-[0.625rem] leading-tight whitespace-nowrap pl-1",
+                "relative pl-1 text-xxs leading-tight font-medium whitespace-nowrap",
                 styles.text,
                 "dark:text-white/80",
               )}
@@ -1096,10 +1096,10 @@ export function AllDayEventItem({
       onMouseMove={handleAllDayMouseMove}
       onPointerDown={handleAllDayPointerDown}
       className={cn(
-        "relative h-6 px-2 py-0.5 cursor-default",
+        "relative h-6 cursor-default px-2 py-0.5",
         "hover:z-10 focus:outline-none",
         EVENT_FOCUS_RING_CLASS,
-        "overflow-hidden select-none flex items-center gap-1",
+        "flex items-center gap-1 overflow-hidden select-none",
         spanStart && "rounded-l-md",
         spanEnd && "rounded-r-md",
         showsDeclined && DECLINED_EVENT_OUTLINE_CLASS,
@@ -1140,7 +1140,7 @@ export function AllDayEventItem({
       {spanStart && !isSelected && !isDeclined && (
         <div
           className={cn(
-            "absolute left-0 top-0 bottom-0 w-[4px] dark:bg-white dark:mix-blend-overlay",
+            "absolute inset-y-0 left-0 w-1 dark:bg-white dark:mix-blend-overlay",
             spanStart && "rounded-l-md",
             styles.border,
             eventIsPast && "opacity-60",
@@ -1154,15 +1154,15 @@ export function AllDayEventItem({
           <>
             <span
               className={cn(
-                "relative font-medium text-[0.625rem] leading-tight whitespace-nowrap",
+                "relative text-xxs leading-tight font-medium whitespace-nowrap",
                 spanStart && "pl-1",
                 isSelected
                   ? "text-white dark:text-white"
                   : cn(
-                      styles.text,
-                      "dark:text-white/80",
-                      eventIsPast && "opacity-60",
-                    ),
+                    styles.text,
+                    "dark:text-white/80",
+                    eventIsPast && "opacity-60",
+                  ),
                 isDeclined && "line-through",
                 showsDeclined && DECLINED_EVENT_TEXT_CLASS,
               )}
@@ -1173,14 +1173,14 @@ export function AllDayEventItem({
             {hasStartTime && (
               <span
                 className={cn(
-                  "relative text-[0.625rem] leading-tight whitespace-nowrap shrink-0",
+                  "relative shrink-0 text-xxs leading-tight whitespace-nowrap",
                   isSelected
                     ? "text-white dark:text-white"
                     : cn(
-                        styles.text,
-                        "dark:text-white dark:mix-blend-overlay",
-                        eventIsPast && "opacity-60",
-                      ),
+                      styles.text,
+                      "dark:text-white dark:mix-blend-overlay",
+                      eventIsPast && "opacity-60",
+                    ),
                   isDeclined && "line-through",
                   showsDeclined &&
                     cn(DECLINED_EVENT_TEXT_CLASS, "dark:mix-blend-normal"),

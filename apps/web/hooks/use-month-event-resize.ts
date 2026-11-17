@@ -153,9 +153,9 @@ export function useMonthEventResize({
         const candidate = event.isAllDay
           ? targetDay
           : new Date(
-              targetDay.getTime() +
+            targetDay.getTime() +
                 (event.end.getTime() - startOfDay(event.end).getTime()),
-            );
+          );
         // All-day: the last day can't come before the first. Timed: the end
         // must stay after the start.
         const isValid = event.isAllDay

@@ -159,7 +159,7 @@ function ColorSwatchItem({
         )}
       />
       {checked && (
-        <Check className="relative size-3 !text-black/55" strokeWidth={2.5} />
+        <Check className="relative size-3 text-black/55!" strokeWidth={2.5} />
       )}
       <EventDetailTooltip rect={rect}>{COLOR_NAMES[color]}</EventDetailTooltip>
     </DropdownMenuItem>
@@ -202,9 +202,9 @@ export function EventDetailCalendar<
     previewColor ??
     (previewCalendar
       ? resolveEventColor(
-          moveEventToCalendar(event, previewCalendar, calendars),
-          calendars,
-        )
+        moveEventToCalendar(event, previewCalendar, calendars),
+        calendars,
+      )
       : eventColor);
   const name =
     calendar?.name ?? event.calendarEmail ?? event.calendarId ?? "Calendar";
@@ -330,7 +330,7 @@ export function EventDetailCalendar<
                     onBlur={() => setPreviewCalendar(null)}
                   >
                     <span className="flex w-3.5 shrink-0 items-center justify-center">
-                      {selected && <Check className="size-3.5 !text-current" />}
+                      {selected && <Check className="size-3.5 text-current!" />}
                     </span>
                     <span
                       className={cn(
