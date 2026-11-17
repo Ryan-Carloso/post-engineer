@@ -412,7 +412,6 @@ describe('GET /api/metrics', () => {
   });
 
   it('exposes no out-of-scope publish date to a persona-scoped API key', async () => {
-    const OTHER_PERSONA = '22222222-3333-4444-8555-666666666666';
     const ownPublishedAt = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
     const otherPublishedAt = new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString();
     vi.mocked(requireSupabaseSession).mockResolvedValue({
@@ -439,7 +438,6 @@ describe('GET /api/metrics', () => {
     expect(body.rows[0]).toMatchObject({ postId: 'post-own', publishedAt: ownPublishedAt });
     expect(body.rows.map((r: { postId: string }) => r.postId)).not.toContain('post-other');
     expect(body.rows.map((r: { publishedAt: string }) => r.publishedAt)).not.toContain(otherPublishedAt);
-    expect(OTHER_PERSONA).not.toBe(PERSONA);
     // The publish-date read asks for exactly the in-scope ids, for the
     // caller only: no out-of-scope id is ever requested.
     const publishDateRead = invocations.find(
