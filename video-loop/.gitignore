@@ -1,0 +1,12 @@
+# Regenerable intermediates — the mp4 stays local, never committed.
+__pycache__/
+frames-*/
+frames-judge-*/
+probe*/
+probes-*/
+logs/
+*.log
+audio-*.wav
+.DS_Store
+# Test videos stay local — never committed to this branch.
+*.mp4
