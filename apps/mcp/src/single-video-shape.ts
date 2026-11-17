@@ -14,6 +14,7 @@ import {
   MAX_OVERLAY_SUBTITLE_CHARS,
   MAX_OVERLAY_TITLE_CHARS,
 } from './script-segments.js';
+import { SOCIAL_PROVIDERS } from './contracts/providers.js';
 
 export const SegmentOverlayShape = z
   .object({
@@ -72,7 +73,7 @@ export const GeneratePersonaVideoShape = {
     .optional()
     .describe('Spoken language code — English only for now, e.g. en-US.'),
   providers: z
-    .array(z.enum(['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'pinterest', 'fanvue', '3speak', 'rumble']))
+    .array(z.enum(SOCIAL_PROVIDERS))
     .min(1, 'Provide at least one provider')
     .describe('Where to publish the video.'),
   youtubeAccountIds: z.array(z.string().min(1)).optional().describe('YouTube channel IDs (the channelId field from accounts (action: list)).'),

@@ -44,8 +44,8 @@ describe('get_post_metrics contract sync with GET /api/metrics', () => {
     expect(youtubeAnalytics).toContain(`export const VIDEO_ID = /${YOUTUBE_VIDEO_ID.source}/;`);
   });
 
-  it('accepts the same providers', () => {
-    const list = METRICS_PROVIDERS.map((p) => `'${p}'`).join(', ');
-    expect(registry).toContain(`export const SOCIAL_PROVIDERS = [${list}] as const;`);
+  it('accepts the same providers: both read the one shared list', () => {
+    expect(METRICS_PROVIDERS).toContain('fanvue');
+    expect(registry).toContain("import { SOCIAL_PROVIDERS, isSocialProvider, type SocialProvider } from '@/lib/contracts/providers';");
   });
 });

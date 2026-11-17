@@ -19,25 +19,21 @@ import {
 } from '@/lib/upload/handlers';
 import { SOCIAL_PROVIDERS, isSocialProvider } from '@/lib/providers/registry';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
-import { classifyUploadAccountError } from '@/lib/upload/account-error';
 import type { ContentUploadAccountResult } from '@/lib/upload/content-upload-result';
 import {
   createPublishLedgerClient,
   isValidPublishScopeKey,
-  markPublishUnknown,
   mergePartitionResults,
   partitionPublishAccounts,
-  recordPublishAttempt,
-  recordPartitionResults,
-  releaseClaimsForRequestRejection,
   type PublishLedgerPartition,
 } from '@/lib/upload/publish-ledger';
+import { releaseGrantedClaims, settlePartition } from '@/lib/upload/publish-ledger-settle';
 import { startLedgerHeartbeat } from '@/lib/upload/publish-ledger-heartbeat';
 
 //---------------
 // Unified content upload — POST /api/upload-content
 // FormData:
-//   provider = 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook' | 'pinterest' | 'fanvue' | '3speak' | 'rumble'
+//   provider = one of SOCIAL_PROVIDERS (shared/contracts/providers.ts)
 //   youtube:    video, title, description, tags, privacyStatus, accountIds (repeatable)
 //   instagram:  file xor videoStoragePath, caption, igAccountIds (repeatable)
 //   bluesky:    video, caption, did (repeatable)
@@ -220,51 +216,17 @@ async function postHandler(request: NextRequest) {
           // The handler failed before publishing (validation): release the
           // claims as failed so the next retry proceeds at once instead of
           // waiting out the lease.
-            const held = partition;
-            const failure = classifyUploadAccountError(error);
-            await Promise.all(
-              held.granted.map((granted) =>
-                recordPublishAttempt(ledgerClient, {
-                  scopeKey: held.scopeKey,
-                  provider,
-                  accountId: granted.accountId,
-                  claimToken: granted.claimToken,
-                  accountResult: {
-                    accountId: granted.accountId,
-                    success: false,
-                    error: failure.error,
-                    errorCode: failure.errorCode,
-                  },
-                }),
-              ),
-            );
+            await releaseGrantedClaims(ledgerClient, partition, error);
           }
           throw error;
         }
         if (partition !== null && ledgerClient !== null) {
-          const results = response.results;
-          const unrecorded = await recordPartitionResults(ledgerClient, partition, results);
-          // A success the ledger could not record may already be live: park
-          // its claim as unknown so no later retry can claim a fresh
-          // publish for it. The response still carries the handler's
+          // A success the ledger could not record may already be live: the
+          // settle parks its claim as unknown so no later retry can claim a
+          // fresh publish for it. The response still carries the handler's
           // success — when the caller receives it, its own recorded
           // success keeps the account from retrying at all.
-          await Promise.all(
-            unrecorded.map((accountId) => {
-              const granted = partition.granted.find((item) => item.accountId === accountId);
-              if (granted === undefined) return Promise.resolve(false);
-              // One const per field: v8 emits no line entries for properties
-              // inside an object literal, so an inline argument object reads
-              // as uncovered lines to Codecov even when the test runs it.
-              const scopeKey = partition.scopeKey;
-              const claimToken = granted.claimToken;
-              const error = 'publish record lost after a successful post';
-              const args = { scopeKey, provider, accountId, claimToken, error };
-              return markPublishUnknown(ledgerClient, args);
-            }),
-          );
-          await releaseClaimsForRequestRejection(ledgerClient, partition, results);
-          const merged = mergePartitionResults(partition, results);
+          const merged = await settlePartition(ledgerClient, partition, response.results);
           response = {
             ...response,
             success: merged.some((result) => result.success),

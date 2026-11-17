@@ -1,19 +1,19 @@
-import crypto from 'crypto';
 import { logger } from '@/lib/logger';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { getSocialAccountTokens, touchSocialAccount } from '@/lib/social-accounts';
-import { publishFacebookVideo, FACEBOOK_TEXT_MAX_CHARS, FACEBOOK_VIDEO_MAX_BYTES } from '@/lib/facebook';
+import { publishFacebookMedia, FACEBOOK_TEXT_MAX_CHARS, FACEBOOK_VIDEO_MAX_BYTES } from '@/lib/facebook';
 import { accountFailure } from '@/lib/upload/account-error';
 import { reportAccountUnauthorized } from '@/lib/upload/account-unauthorized';
 import { getAccountIdsFromFormData } from '@/lib/upload/account-utils';
-import { cleanupPublishMedia, presignPublishMedia, uploadPublishMedia } from '@/lib/upload/publish-media';
+import { cleanupPublishMedia } from '@/lib/upload/publish-media';
+import { stagePublishMedia } from '@/lib/upload/publish-media-file';
 
 //---------------
-// handleFacebookUpload — publishes the video to the user's Facebook Pages.
-// Facebook fetches the video from a URL, so the file is stored
+// handleFacebookUpload — publishes the video or image to the user's Facebook Pages.
+// Facebook fetches the media from a URL, so the file is stored
 // on R2 first (presigned URL, lib/upload/publish-media.ts, same path as Threads).
 // FormData (multipart, coming from the engine or the UI):
-//   provider=facebook, video (File), caption, facebookAccountIds (repeated),
+//   provider=facebook, video (File: MP4/MOV video or JPEG/PNG image), caption, facebookAccountIds (repeated),
 //   userId (internal engine call only).
 // The stored token is the Page access token (see lib/facebook.ts): Page
 // tokens derived from a long-lived user token carry no expiry of their
@@ -52,32 +52,17 @@ export async function handleFacebookUpload(
   if (caption.length > FACEBOOK_TEXT_MAX_CHARS) {
     return rejected(`Caption exceeds the Facebook ${FACEBOOK_TEXT_MAX_CHARS}-character limit`);
   }
-  const storagePathRaw = formData.get('videoStoragePath');
-  let videoUrl: string;
-  let usedArchive = false;
-  if (storagePathRaw !== null) {
-    // Engine-generated final: already verified in R2, presign it directly.
-    // A caller sends either the file or this key, never both.
-    if (typeof storagePathRaw !== 'string' || storagePathRaw.trim() === '') {
-      return rejected('videoStoragePath must be a string');
-    }
-    if (rawFile instanceof File) return rejected('Send either a file or videoStoragePath, not both');
-    const objectKey = storagePathRaw.trim();
-    if (!objectKey.startsWith(`${ownerUserId}/`)) return rejected('videoStoragePath must belong to this user');
-    videoUrl = await presignPublishMedia(objectKey);
-    usedArchive = true;
-  } else {
-    if (!(rawFile instanceof File)) return rejected('Video file is required');
-    if (rawFile.size > FACEBOOK_VIDEO_MAX_BYTES) return rejected('Video exceeds the Facebook 4GB limit');
-    // The stored file is served from a signed URL, so the bytes are checked
-    // rather than the client-declared type: MP4 and MOV both carry `ftyp` at offset 4.
-    const buffer = Buffer.from(await rawFile.arrayBuffer());
-    if (buffer.subarray(4, 8).toString('latin1') !== 'ftyp') return rejected('Video must be an MP4 or MOV file');
-    const contentType = rawFile.type === 'video/quicktime' ? 'video/quicktime' : 'video/mp4';
-    const extension = contentType === 'video/quicktime' ? 'mov' : 'mp4';
-    const storagePath = `facebook/${Date.now()}_${crypto.randomBytes(4).toString('hex')}.${extension}`;
-    videoUrl = await uploadPublishMedia(buffer, storagePath, contentType);
-  }
+  const staged = await stagePublishMedia({
+    provider: 'facebook',
+    label: 'Facebook',
+    rawFile,
+    storagePathRaw: formData.get('videoStoragePath'),
+    ownerUserId,
+    maxVideoBytes: FACEBOOK_VIDEO_MAX_BYTES,
+    maxVideoLabel: '4GB',
+  });
+  if (!staged.ok) return rejected(staged.error);
+  const media = { kind: staged.kind, url: staged.url };
 
   const supabase = createSupabaseServiceClient();
   const results: FacebookAccountResult[] = [];
@@ -93,10 +78,10 @@ export async function handleFacebookUpload(
         continue;
       }
 
-      const published = await publishFacebookVideo({
+      const published = await publishFacebookMedia({
         pageAccessToken,
         pageId: accountId,
-        videoUrl,
+        media,
         description: caption,
         onPermalinkError: (error) => logger.warn('upload-content/facebook: permalink read failed', { accountId, error: String(error) }),
       });
@@ -117,7 +102,7 @@ export async function handleFacebookUpload(
   }
 
   // Archive presign created no temp copy, so there is nothing to clean.
-  if (!usedArchive) {
+  if (!staged.usedArchive) {
     void cleanupPublishMedia('facebook');
   }
 

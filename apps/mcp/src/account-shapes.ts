@@ -2,10 +2,11 @@
 // under the file-size ratchet; tools.ts re-exports them so existing import
 // sites (`./tools.js`) keep working.
 import { z } from 'zod';
+import { SOCIAL_PROVIDERS } from './contracts/providers.js';
 
 export const DisconnectAccountShape = {
   provider: z
-    .enum(['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'pinterest', 'fanvue', '3speak', 'rumble'])
+    .enum(SOCIAL_PROVIDERS)
     .describe('The social platform of the account to disconnect.'),
   providerAccountId: z
     .string()

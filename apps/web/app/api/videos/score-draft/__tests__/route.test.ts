@@ -187,7 +187,9 @@ describe('POST /api/videos/score-draft', () => {
     );
     expect(mcpSource).toContain(`.max(${DRAFT_MAX_INPUT_CHARS}, 'draft must be at most ${DRAFT_MAX_INPUT_CHARS} characters')`);
     expect(mcpSource).toContain(`.enum([${DRAFT_KINDS.map((kind) => `'${kind}'`).join(', ')}])`);
-    expect(mcpSource).toContain(`.enum([${PUBLISH_NETWORKS.map((network) => `'${network}'`).join(', ')}])`);
+    // Both sides read the one network list (shared/contracts/providers.ts).
+    expect(mcpSource).toContain('.enum(PUBLISH_NETWORKS)');
+    expect(PUBLISH_NETWORKS).toContain('fanvue');
   });
 
   it('filters the baseline by network when network is given, and not otherwise', async () => {

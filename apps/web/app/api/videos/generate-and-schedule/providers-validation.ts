@@ -4,10 +4,10 @@
 // the first one.
 //---------------
 
-import { VALID_SCHEDULE_PROVIDERS } from '@/app/api/schedule/route';
+import { SOCIAL_PROVIDERS, type SocialProvider } from '@/lib/contracts/providers';
 import { invalid, MAX_REPORTED_ISSUES, type Checked } from './validation-issues';
 
-export type Provider = (typeof VALID_SCHEDULE_PROVIDERS)[number];
+export type Provider = SocialProvider;
 
 // A provider value is caller-controlled and is echoed in the 400 message.
 // Keep the "use one of" hint by shortening the name, not the whole sentence.
@@ -31,12 +31,12 @@ export function validateProviders(rawProviders: string[]): Checked<Provider[]> {
   if (providers.length === 0) {
     return { ok: false, issues: [invalid('Select at least one provider.', 'publishing.providers')] };
   }
-  const known = VALID_SCHEDULE_PROVIDERS as ReadonlyArray<string>;
+  const known = SOCIAL_PROVIDERS as ReadonlyArray<string>;
   const issues = providers
     .filter((provider) => !known.includes(provider))
     .map((provider) =>
       invalid(
-        `Invalid provider: "${shownProvider(provider)}". Use one of ${VALID_SCHEDULE_PROVIDERS.join(', ')}.`,
+        `Invalid provider: "${shownProvider(provider)}". Use one of ${SOCIAL_PROVIDERS.join(', ')}.`,
         'publishing.providers',
       ),
     );
