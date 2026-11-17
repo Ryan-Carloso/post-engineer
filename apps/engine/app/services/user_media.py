@@ -43,6 +43,7 @@ from PIL import Image
 from app.models.schema import VideoAspect
 from app.services import (
     face_detect, image_coverage, media_aspect, media_overlay, persona_hook, image_fetch, segment_panels, subtitle, video,
+    photo_content,
 )
 from app.services.image_density import split_interval
 from app.services.lipsync_active import persona_lipsync_active
@@ -151,18 +152,9 @@ def resolve_first_segment_photo(
     return photo, segment_index, image_index, None
 
 
-def _probe_size(source_path: str) -> Optional[tuple[int, int]]:
-    """Decoded dimensions of an image file, or None when it is not an image."""
-    try:
-        with Image.open(source_path) as opened:
-            return opened.size
-    except (OSError, ValueError, Image.DecompressionBombError):
-        return None
-
-
 def _wrong_aspect_reason(source_path: str, aspect: VideoAspect) -> str:
     """The skip reason for a wrong-ratio photo, naming both sides."""
-    size = _probe_size(source_path)
+    size = photo_content.probe_size(source_path)
     if size is None:
         return "wrong aspect ratio"
     detail = media_aspect.mismatch_detail(size[0], size[1], aspect)
@@ -269,7 +261,7 @@ def check_media_detail(
         source, reason = _media_id_path(media_id)
         if reason is not None:
             return {"code": "media_expired", "width": None, "height": None, "has_face": None}
-        size = _probe_size(source)
+        size = photo_content.probe_size(source)
         code = _validate_photo(source, aspect)
         return {
             "code": code if code is not None else "ok",
@@ -283,7 +275,7 @@ def check_media_detail(
     except Exception as exc:  # noqa: BLE001 - every download failure maps to a code
         return {"code": _download_failure_code(exc), "width": None, "height": None, "has_face": None}
     try:
-        size = _probe_size(raw_path)
+        size = photo_content.probe_size(raw_path)
         failure = _validate_photo(raw_path, aspect)
         return {
             "code": failure if failure is not None else "ok",
@@ -402,6 +394,7 @@ def prepare_segment_media(
     """
     panels: list[Panel] = []
     skipped: list[str] = []
+    seen_hashes: dict[str, str] = {}
     dicts = [_segment_dict(segment) for segment in segments]
     intervals, fallback = segment_intervals_from_subtitle(dicts, subtitle_path, audio_duration)
     if fallback and dicts:
@@ -439,6 +432,12 @@ def prepare_segment_media(
                 continue
             if reason is not None:
                 skipped.append(f"segment {index} image {image_index} media skipped: {reason}")
+                continue
+            # Same bytes, different reference: the same file uploaded twice
+            # (two mediaIds) or the same photo behind two signed URLs.
+            skip = photo_content.duplicate_skip(seen_hashes, photo, index, image_index, downloaded)
+            if skip is not None:
+                skipped.append(skip)
                 continue
             overlay = media.get("overlay")
             overlay = overlay if isinstance(overlay, dict) else None

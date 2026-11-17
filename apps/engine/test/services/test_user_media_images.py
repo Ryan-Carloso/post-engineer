@@ -1,5 +1,6 @@
 """user_media with the images material: photos cover the whole audio, none left fails."""
 
+import hashlib
 import io
 import json
 from types import SimpleNamespace
@@ -28,8 +29,11 @@ def _subtitle(tmp_path, words=WORDS):
 
 
 def _download(url, dest_path, session=None, width=1080, height=1920):
+    # Distinct URLs are distinct photos: identical bytes under two URLs
+    # is a duplicate photo, skipped by prepare_segment_media.
+    digest = hashlib.sha256(url.encode()).digest()
     buffer = io.BytesIO()
-    Image.new("RGB", (width, height), (200, 30, 30)).save(buffer, "JPEG")
+    Image.new("RGB", (width, height), tuple(digest[:3])).save(buffer, "JPEG")
     with open(dest_path, "wb") as handle:
         handle.write(buffer.getvalue())
     return dest_path
