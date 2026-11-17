@@ -433,9 +433,10 @@ def prepare_segment_media(
             if reason is not None:
                 skipped.append(f"segment {index} image {image_index} media skipped: {reason}")
                 continue
-            # Same bytes, different reference: the same file uploaded twice
-            # (two mediaIds) or the same photo behind two signed URLs.
-            skip = photo_content.duplicate_skip(seen_hashes, photo, index, image_index, downloaded)
+            # Same bytes, different reference — see photo_content.
+            skip, photo_hash = photo_content.duplicate_skip(
+                seen_hashes, photo, index, image_index, downloaded
+            )
             if skip is not None:
                 skipped.append(skip)
                 continue
@@ -454,6 +455,8 @@ def prepare_segment_media(
             if built is None:
                 skipped.append(f"segment {index} image {image_index} media skipped: {REASON_PANEL_FAILED}")
                 continue
+            # The panel exists: only now does this photo block a repeat.
+            photo_content.claim(seen_hashes, photo_hash, f"segment {index} image {image_index}")
             if built.card_reason is not None:
                 skipped.append(f"segment {index} image {image_index} media overlay skipped: {built.card_reason}")
             panels.append(Panel(

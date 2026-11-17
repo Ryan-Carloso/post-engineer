@@ -15,7 +15,7 @@ from unittest.mock import patch
 from PIL import Image
 
 from app.models.schema import VideoAspect
-from app.services import image_fetch, user_media
+from app.services import image_fetch, segment_panels, user_media
 
 WORDS = [
     ("Welcome", 0.0, 0.5),
@@ -141,3 +141,43 @@ def test_same_bytes_across_segments_second_is_skipped(tmp_path, monkeypatch):
     assert len(prepared) == 1
     assert prepared[0].index == 0
     assert skipped == ["segment 1 image 0 media skipped: duplicate photo"]
+
+
+def test_first_copy_that_fails_to_render_does_not_block_its_repeat(tmp_path, monkeypatch):
+    # The hash is claimed only once the panel actually exists: a first
+    # copy whose panel fails to render placed nothing, so its identical
+    # repeat must render instead of being skipped as a duplicate.
+    monkeypatch.setattr(user_media, "_temp_assets_dir", lambda: str(tmp_path))
+
+    def fake_download(url, dest_path, session=None):
+        with open(dest_path, "wb") as handle:
+            handle.write(_jpeg())
+        return dest_path
+
+    real_build_full = segment_panels.build_full
+    calls = []
+
+    def flaky_build_full(*args, **kwargs):
+        calls.append(1)
+        if len(calls) == 1:
+            return None
+        return real_build_full(*args, **kwargs)
+
+    with (
+        patch.object(image_fetch, "download_image", side_effect=fake_download),
+        patch.object(segment_panels, "build_full", side_effect=flaky_build_full),
+    ):
+        prepared, skipped = user_media.prepare_segment_media(
+            "task-1",
+            _one_segment([
+                {"url": "https://e.com/photo.jpg?sig=aaa"},
+                {"url": "https://e.com/photo.jpg?sig=bbb"},
+            ]),
+            _write_words(tmp_path, WORDS[:3]),
+            1.2,
+            str(tmp_path),
+            VideoAspect.portrait,
+        )
+    assert len(prepared) == 1
+    assert (prepared[0].start, prepared[0].end) == (0.6, 1.2)
+    assert skipped == ["segment 0 image 0 media skipped: photo panel failed to render"]

@@ -46,19 +46,21 @@ def content_hash(path: str) -> Optional[str]:
 
 def duplicate_skip(
     seen: dict[str, str], photo: str, index: int, image_index: int, downloaded: str
-) -> Optional[str]:
-    """Skip line for a photo whose bytes were already placed, else None.
+) -> tuple[Optional[str], Optional[str]]:
+    """Skip line plus hash to claim, for a photo whose bytes were already placed.
 
-    The first copy is recorded by its "segment X image Y" label; a repeat
-    returns the skip line and the downloaded file is removed with the
-    skip. The hook-first photo resolves on a separate path, never
+    Returns (skip, None) when a repeat is skipped, (None, hash) on first
+    sight, (None, None) when the file cannot be read. The hash is NOT
+    recorded here: the caller claims it only once the panel actually
+    exists, so a first copy whose panel fails to render does not block
+    its repeat. The hook-first photo resolves on a separate path, never
     through here, so it cannot false-positive against segment 0 image 0.
     Hash the photo file itself, before any overlay/panel work — overlays
     differ per item, the photo is what must not repeat.
     """
     photo_hash = content_hash(photo)
     if photo_hash is None:
-        return None
+        return None, None
     label = f"segment {index} image {image_index}"
     first_seen = seen.get(photo_hash)
     if first_seen is not None:
@@ -66,6 +68,11 @@ def duplicate_skip(
         if downloaded:
             with contextlib.suppress(OSError):
                 os.remove(downloaded)
-        return f"{label} media skipped: {REASON_DUPLICATE_PHOTO}"
-    seen[photo_hash] = label
-    return None
+        return f"{label} media skipped: {REASON_DUPLICATE_PHOTO}", None
+    return None, photo_hash
+
+
+def claim(seen: dict[str, str], photo_hash: Optional[str], label: str) -> None:
+    """Record a placed photo's hash, so its repeat is a duplicate."""
+    if photo_hash is not None:
+        seen[photo_hash] = label
