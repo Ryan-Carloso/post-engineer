@@ -49,4 +49,15 @@ describe('isUiFile', () => {
   it('rejects __tests__ directories', () => {
     assert.equal(isUiFile('apps/web/app/(main)/__tests__/helper.ts'), false);
   });
+
+  it('rejects vendored CalendarCN components', () => {
+    assert.equal(isUiFile('apps/web/components/calendar-provider.tsx'), false);
+    assert.equal(isUiFile('apps/web/components/month-view.tsx'), false);
+  });
+
+  it('still matches our own posts calendar files', () => {
+    assert.equal(isUiFile('apps/web/app/(main)/posts/calendar-provider.tsx'), true);
+    assert.equal(isUiFile('apps/web/app/(main)/posts/calendar-adapter.ts'), true);
+    assert.equal(isUiFile('apps/web/app/(main)/posts/page.tsx'), true);
+  });
 });
