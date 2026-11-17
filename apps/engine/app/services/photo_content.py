@@ -3,9 +3,9 @@
 Validation only sees reference strings, so the same image bytes under
 two different mediaIds or URLs pass validation. What catches the second
 copy is the bytes themselves: content_hash SHA-256-hashes the resolved
-photo file, and duplicate_skip records the first label per hash and
-returns the skip line for a repeat. Warnings carry labels only, never
-a URL, path or mediaId.
+photo file, duplicate_skip returns the skip line for a repeat, and
+claim records the first label per hash once the panel exists. Warnings
+carry labels only, never a URL, path or mediaId.
 """
 
 import contextlib
