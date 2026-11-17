@@ -21,6 +21,7 @@ import { useI18n } from '@/lib/i18n/provider';
 import { PersonaTokensSection } from './persona-tokens';
 import { PersonaImageLibrarySection, mapPersonaImageWarnings } from './persona-image-library';
 import { PersonaPreferencesSection } from './persona-preferences-section';
+import { PersonaCtaSection } from './persona-cta-section';
 import { PersonaPublishingAccountsSection } from './persona-publishing-accounts-section';
 import { PersonaPageSkeleton } from './persona-page-skeleton';
 import { PersonaFormSync } from './persona-form-sync';
@@ -159,6 +160,9 @@ const PersonaPageContent = () => {
           </section>
           <section className="rounded-2xl border border-line bg-card p-5 shadow-sm sm:p-6">
             <PersonaPreferencesSection />
+          </section>
+          <section className="rounded-2xl border border-line bg-card p-5 shadow-sm sm:p-6">
+            <PersonaCtaSection />
           </section>
           {/* The binding picker renders in both modes: while creating, the
               selection lives in the store (draft mode, no personaId yet);

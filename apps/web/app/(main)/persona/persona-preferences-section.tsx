@@ -2,7 +2,7 @@
 
 import { useFormContext } from 'react-hook-form';
 import { INPUT_CLASS } from '@/lib/ui';
-import { PERSONA_CTA_MAX_LENGTH, VIDEO_LAYOUTS } from '@/lib/persona-schema';
+import { VIDEO_LAYOUTS } from '@/lib/persona-schema';
 import { usePersonaStore } from '@/lib/store';
 import { useI18n } from '@/lib/i18n/provider';
 import { InlineFieldError, SectionDivider } from './persona-section-parts';
@@ -102,20 +102,6 @@ export function PersonaPreferencesSection() {
           <textarea className={`${INPUT_CLASS} min-h-28 resize-y`} placeholder={t('personas.scriptPlaceholder')} {...register('scriptPrompt')} />
           {errors.scriptPrompt ? (
             <span role="alert" className="mt-1 block text-sm font-normal text-destructive">{t('personas.scriptMaxError')}</span>
-          ) : null}
-        </label>
-        <label className="block text-sm font-semibold text-ink">
-          {t('personas.ctaLabel')}
-          <input
-            type="text"
-            className={INPUT_CLASS}
-            placeholder={t('personas.ctaPlaceholder')}
-            data-testid="persona-cta"
-            {...register('ctaText')}
-          />
-          <span className="mt-1 block text-xs font-normal text-muted-foreground">{t('personas.ctaHint')}</span>
-          {errors.ctaText ? (
-            <span role="alert" className="mt-1 block text-sm font-normal text-destructive">{t('personas.ctaMaxError', { max: PERSONA_CTA_MAX_LENGTH })}</span>
           ) : null}
         </label>
         {result && !result.success && result.error === 'prompt_rejected' ? (
