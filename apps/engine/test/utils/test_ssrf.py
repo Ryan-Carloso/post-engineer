@@ -540,13 +540,84 @@ def _repo_root():
 
 def test_engine_public_ip_matches_the_shared_cases():
     raw = json.loads((_repo_root() / "shared/ssrf/public-ip-cases.json").read_text())
+    # URL-host literals keep their brackets ("[::1]"); ipaddress cannot parse
+    # that form, so drop the brackets before classifying.
+    def unbracket(given):
+        return given[1:-1] if given.startswith("[") and given.endswith("]") else given
+
     for ip in raw["blocked"]:
-        assert ssrf.is_public_ip(ipaddress.ip_address(ip)) is False, ip
+        assert ssrf.is_public_ip(ipaddress.ip_address(unbracket(ip))) is False, ip
     for ip in raw["allowed"]:
-        assert ssrf.is_public_ip(ipaddress.ip_address(ip)) is True, ip
+        assert ssrf.is_public_ip(ipaddress.ip_address(unbracket(ip))) is True, ip
     # Multicast stays reachable on the engine. The web blocks it.
     for ip in raw["blockedBeyondPython"]:
-        assert ssrf.is_public_ip(ipaddress.ip_address(ip)) is True, ip
+        assert ssrf.is_public_ip(ipaddress.ip_address(unbracket(ip))) is True, ip
+
+
+def _dns_down():
+    raise OSError("dns down")
+
+
+def test_shape_only_validation_accepts_a_hostname_without_dns():
+    # Schedule-time webhook validation must not block on DNS: the name is
+    # resolved and pinned on the delivery path instead.
+    with patch.object(ssrf.socket, "getaddrinfo", side_effect=_dns_down):
+        ssrf.assert_public_url("https://example.com/hook", what="webhook_url", https_only=True, resolve_host=False)
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://localhost/hook",
+        "https://127.0.0.1/hook",
+        "https://10.0.0.5/hook",
+        "https://[::1]/hook",
+        "https://[::ffff:7f00:1]/hook",
+    ],
+)
+def test_shape_only_validation_rejects_localhost_and_private_literals(url):
+    with patch.object(ssrf.socket, "getaddrinfo", side_effect=_dns_down):
+        with pytest.raises(ssrf.UnsafeUrlError, match="public address"):
+            ssrf.assert_public_url(url, what="webhook_url", https_only=True, resolve_host=False)
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://8.8.8.8/hook",
+        "https://[2606:4700:4700::1111]/hook",
+    ],
+)
+def test_shape_only_validation_accepts_a_public_literal(url):
+    with patch.object(ssrf.socket, "getaddrinfo", side_effect=_dns_down):
+        ssrf.assert_public_url(url, what="webhook_url", https_only=True, resolve_host=False)
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://example.com/hook",
+        "ftp://example.com/hook",
+        "not a url",
+        "https://",
+    ],
+)
+def test_shape_only_validation_still_rejects_http_and_malformed(url):
+    with patch.object(ssrf.socket, "getaddrinfo", side_effect=_dns_down):
+        with pytest.raises(ssrf.UnsafeUrlError):
+            ssrf.assert_public_url(url, what="webhook_url", https_only=True, resolve_host=False)
+
+
+def test_engine_webhook_url_matches_the_shared_cases():
+    # The engine schema validator (shape-only, no DNS) must agree with the
+    # shared webhook-URL table the web and MCP validators pin.
+    raw = json.loads((_repo_root() / "shared/ssrf/webhook-url-cases.json").read_text())
+    with patch.object(ssrf.socket, "getaddrinfo", side_effect=_dns_down):
+        for url in raw["accepted"]:
+            ssrf.assert_public_url(url, what="webhook_url", https_only=True, resolve_host=False)
+        for url in raw["rejected"]:
+            with pytest.raises(ssrf.UnsafeUrlError):
+                ssrf.assert_public_url(url, what="webhook_url", https_only=True, resolve_host=False)
 
 
 def test_post_public_url_rejects_cleartext_http_before_a_dial():

@@ -307,11 +307,12 @@ class BaseResponse(BaseModel):
 
 
 def _validate_webhook_url(value: Optional[str]) -> Optional[str]:
-    """Reject a webhook that is not a public https URL."""
+    """Reject a webhook that is not a public https URL (shape-only: no DNS;
+    assert_public_url documents why, and delivery resolves and pins)."""
     if value is None:
         return None
     try:
-        assert_public_url(value, what="webhook_url", https_only=True)
+        assert_public_url(value, what="webhook_url", https_only=True, resolve_host=False)
     except UnsafeUrlError as exc:
         raise ValueError(str(exc)) from exc
     return value

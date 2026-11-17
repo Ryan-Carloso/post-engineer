@@ -96,13 +96,18 @@ def is_public_ip(ip) -> bool:
     return True
 
 
-def _public_ips(url: str, *, what: str, https_only: bool = False) -> list:
+def _public_ips(url: str, *, what: str, https_only: bool = False, resolve_host: bool = True) -> list:
     """Validate *url* and return the addresses a later dial may use.
 
     The host checked is the one the HTTP client would dial from the URL:
     requests connects where urllib3's parser says, and urllib3 ends the
     authority at a backslash while ``urlparse`` takes the host after the
     last ``@``. A URL the two parsers read differently is rejected.
+
+    ``resolve_host=False`` skips DNS: a host *name* is accepted unchecked
+    (resolution and pinning happen on the delivery path); ``localhost`` and
+    a literal non-public address are still rejected. The returned list is
+    empty then — never dial it, there is nothing validated to dial.
     """
     try:
         parsed = urlparse(url)
@@ -127,6 +132,22 @@ def _public_ips(url: str, *, what: str, https_only: bool = False) -> list:
         or wire.port != parsed_port
     ):
         raise UnsafeUrlError(f"{what} must be a canonical http(s) URL.")
+    if not resolve_host:
+        if wire_host == "localhost":
+            raise UnsafeUrlError(
+                f"{what} must use a public address — private/internal URLs "
+                "are not allowed (e.g. 127.0.0.1, 10.x.x.x, 169.254.169.254)."
+            )
+        try:
+            literal = ipaddress.ip_address(wire_host)
+        except ValueError:
+            return []
+        if not is_public_ip(literal):
+            raise UnsafeUrlError(
+                f"{what} must use a public address — private/internal URLs "
+                "are not allowed (e.g. 127.0.0.1, 10.x.x.x, 169.254.169.254)."
+            )
+        return []
     ips = _resolve_global_ips(wire_host)
     if not ips or not all(is_public_ip(ip) for ip in ips):
         raise UnsafeUrlError(
@@ -136,7 +157,7 @@ def _public_ips(url: str, *, what: str, https_only: bool = False) -> list:
     return ips
 
 
-def assert_public_url(url: str, *, what: str = "URL", https_only: bool = False) -> None:
+def assert_public_url(url: str, *, what: str = "URL", https_only: bool = False, resolve_host: bool = True) -> None:
     """Ensure *url* points at a public address (anti-SSRF).
 
     Blocks non-http(s) schemes, missing hostnames, literal private IPs,
@@ -144,13 +165,19 @@ def assert_public_url(url: str, *, what: str = "URL", https_only: bool = False) 
     (fail closed). ``https_only`` also rejects cleartext http (webhooks).
     Raises :class:`UnsafeUrlError`.
 
+    ``resolve_host=False`` validates the URL shape only — https, a hostname
+    present, not ``localhost``, and a literal address public — without
+    resolving names. Request-time checks (the task schema) use it so a DNS
+    blip cannot reject a valid request; the delivery path still resolves
+    and pins before it dials.
+
     The host checked is the one the HTTP client dials: requests connects
     where urllib3's parser says, and urllib3 ends the authority at a
     backslash while ``urlparse`` takes the host after the last ``@``. A URL
     the two parsers read differently (backslash, whitespace or control
     characters, or any scheme/host/port mismatch) is rejected outright.
     """
-    _public_ips(url, what=what, https_only=https_only)
+    _public_ips(url, what=what, https_only=https_only, resolve_host=resolve_host)
 
 
 def _header(headers, name: str):

@@ -207,6 +207,26 @@ class TriageRedispatchDirectTests(unittest.TestCase):
         spawned = {thread.name for thread in threading.enumerate()} - before
         self.assertEqual(spawned, set())
 
+    def test_persisted_unresolvable_webhook_is_redispatched_not_failed_refunded(self):
+        # A DNS blip during a restart must not kill a recoverable prepaid
+        # orphan: schema validation never resolves the webhook host, so a
+        # persisted payload whose webhook host does not resolve still
+        # rebuilds. The resolver is armed to explode to prove no DNS is used.
+        params = {
+            "video_title": "myth busting",
+            "video_description": "Agent description.",
+            "video_type": "faceless",
+            "generation_id": "g1",
+            "webhook_url": "https://hooks.invalid.example/hook",
+        }
+        state = _state_with_rows([_row(params=params)])
+        with patch("socket.getaddrinfo", side_effect=OSError("dns down")):
+            claimed = self._claimed(state, "t-1", _direct_data())
+        self.assertTrue(claimed)
+        state.update_task.assert_called_once()
+        job = direct_redispatch._pending_direct_redispatches[0]
+        self.assertEqual(job.request.webhook_url, "https://hooks.invalid.example/hook")
+
     def test_claims_and_records_redispatch_for_startup(self):
         state = _state_with_rows([_row()])
         with patch.object(direct_redispatch, "track_event") as track:

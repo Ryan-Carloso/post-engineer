@@ -46,9 +46,14 @@ class WebhookUrlValidationTests(unittest.TestCase):
                 webhook_url="not-a-url",
             )
 
-    def test_rejects_http_and_accepts_https(self):
-        public = [ipaddress.ip_address("93.184.215.14")]
-        with patch("app.utils.ssrf._resolve_global_ips", return_value=public):
+    def test_rejects_http_and_accepts_https_without_dns(self):
+        # Schema validation is shape-only: it never resolves the host, so a
+        # DNS outage at request time cannot reject a valid webhook. The
+        # resolver is armed to explode; validation must not reach it.
+        with patch(
+            "app.utils.ssrf.socket.getaddrinfo",
+            side_effect=OSError("dns down"),
+        ):
             with self.assertRaises(ValidationError) as caught:
                 TaskVideoRequest(
                     video_title="x",
@@ -64,6 +69,42 @@ class WebhookUrlValidationTests(unittest.TestCase):
                 webhook_url="https://example.com/hook",
             )
             self.assertEqual(request.webhook_url, "https://example.com/hook")
+
+    def test_unresolvable_host_still_validates(self):
+        # A webhook whose host does not resolve still validates: resolution
+        # happens on the delivery path, where a failed delivery must not
+        # fail the task.
+        with patch(
+            "app.utils.ssrf.socket.getaddrinfo",
+            side_effect=OSError("dns down"),
+        ):
+            request = TaskVideoRequest(
+                video_title="x",
+                video_description="Test description.",
+                video_type="faceless",
+                webhook_url="https://nonexistent.invalid/hook",
+            )
+            self.assertEqual(request.webhook_url, "https://nonexistent.invalid/hook")
+
+    def test_rejects_localhost_and_private_literals_without_dns(self):
+        with patch(
+            "app.utils.ssrf.socket.getaddrinfo",
+            side_effect=OSError("dns down"),
+        ):
+            for webhook_url in (
+                "https://localhost/hook",
+                "https://127.0.0.1/hook",
+                "https://10.0.0.5/hook",
+                "https://[::1]/hook",
+            ):
+                with self.subTest(webhook_url=webhook_url):
+                    with self.assertRaises(ValidationError):
+                        TaskVideoRequest(
+                            video_title="x",
+                            video_description="Test description.",
+                            video_type="faceless",
+                            webhook_url=webhook_url,
+                        )
 
     def test_webhook_url_defaults_to_none(self):
         self.assertIsNone(
@@ -406,11 +447,17 @@ class PinnedWebhookTests(unittest.TestCase):
             with self.assertRaises(ValidationError):
                 self._request(url)
 
-    def test_request_rejects_a_name_that_resolves_private(self):
-        private = [ipaddress.ip_address("10.0.0.5")]
-        with patch("app.utils.ssrf._resolve_global_ips", return_value=private):
-            with self.assertRaises(ValidationError):
-                self._request("https://rebind.test/hook")
+    def test_request_accepts_a_name_that_would_resolve_private(self):
+        # Shape-only validation: the request accepts any hostname and never
+        # resolves it. Whether the name resolves private is judged on the
+        # delivery path instead (see test_post_never_dials_a_private_target),
+        # where the failed delivery must not fail the task.
+        with patch(
+            "app.utils.ssrf.socket.getaddrinfo",
+            side_effect=OSError("dns down"),
+        ):
+            request = self._request("https://rebind.test/hook")
+            self.assertEqual(request.webhook_url, "https://rebind.test/hook")
 
     def test_post_never_dials_a_private_target(self):
         dials = []
