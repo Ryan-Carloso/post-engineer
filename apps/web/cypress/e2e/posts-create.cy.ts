@@ -20,12 +20,12 @@ function visitPosts() {
 }
 
 // Day 15 is always in the shown month, so the same test works on any
-// day; the button's aria-label is the full pt-BR date react-day-picker
-// renders (pt is the default locale).
+// day; the button's aria-label is the CalendarCN full date (weekday,
+// month, day — no year) in the pt-BR locale the app defaults to.
 function day15FullDate(): string {
   const target = new Date();
   target.setDate(15);
-  return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'full' }).format(target);
+  return new Intl.DateTimeFormat('pt-BR', { weekday: 'long', month: 'long', day: 'numeric' }).format(target);
 }
 
 function day15ShortDate(): string {
