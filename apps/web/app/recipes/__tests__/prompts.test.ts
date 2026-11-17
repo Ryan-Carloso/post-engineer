@@ -691,6 +691,15 @@ describe('prompts hub data', () => {
     expect(text).toContain('documentary');
     expect(text).toContain('transform it into a concrete story');
     expect(text).toContain('never as exposition');
+    // Research, never invent: every fact is verified before it is
+    // asserted — mechanisms, hormones, numbers, deadlines. A fact that
+    // cannot be confirmed is cut from the script, never asserted anyway.
+    expect(text).toContain('Research every fact before you assert it');
+    expect(text).toContain('Never invent a fact');
+    expect(text).toContain('Tavily');
+    expect(text).toContain('Exa');
+    expect(text).toContain('cut it from the script');
+    expect(text).toContain('unconfirmed fact never enters');
     // Step 6 overrides the base's image-search lines for this prompt only:
     // the agent must not search for images at all.
     expect(text).toContain('do not search for images');
@@ -703,9 +712,11 @@ describe('prompts hub data', () => {
     expect(text).toContain('wait for my yes');
     // Generalized: the winning test brief (HabitLoom, the diet topic) must
     // not leak into the prompt — it takes persona, topic, and video type
-    // as inputs instead.
+    // as inputs instead. Same for Mara, the local test-video persona:
+    // product copy always says "the persona", never a test persona name.
     expect(text).not.toContain('HabitLoom');
     expect(text).not.toContain('why you regain weight after a diet');
+    expect(text).not.toContain('Mara');
     expect(text).not.toContain('issue #');
   });
 });

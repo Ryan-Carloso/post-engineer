@@ -201,7 +201,7 @@ export const recipesI18nPt = {
       'Escreva cada roteiro como uma história primeiro: um micro-arco fechado, feito para segurar a atenção.',
   storyFirstReelsStep1: 'Para qualquer persona, tema e tipo de vídeo — uma história por vídeo.',
   storyFirstReelsStep2:
-      'Ele encontra uma história real primeiro — concreta, vivida, primeira pessoa: "o dia que me aconteceu" é uma forma, não a única. Um documentário ou estudo vira história vivida, nunca exposição.',
+      'Ele encontra uma história real primeiro — concreta, vivida, primeira pessoa: "o dia que me aconteceu" é uma forma, não a única. Um documentário ou estudo vira história vivida, nunca exposição. Cada facto é pesquisado, nunca inventado; factos por confirmar são cortados.',
   storyFirstReelsStep3:
       'Ele constrói o hook a partir de um mecanismo que cabe, e rascunha três para ficar com o mais forte.',
   storyFirstReelsStep4:
