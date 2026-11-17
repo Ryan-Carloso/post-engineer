@@ -269,6 +269,8 @@ describe('GET /api/persona/video-download', () => {
 
     expect(response.status).toBe(404);
     expectSingleMissWarning(404, 'unknown');
+    // The transient cause is not swallowed: it rides on the single warning.
+    expect(vi.mocked(logger.warn).mock.calls[0][1]).toMatchObject({ lookupError: 'Error: lookup down' });
   });
 
   it('returns 502 (not a redirect) when the engine itself is unreachable', async () => {

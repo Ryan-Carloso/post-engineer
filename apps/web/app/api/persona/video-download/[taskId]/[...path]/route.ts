@@ -6,7 +6,12 @@ import { logger } from '@/lib/logger';
 import { SAFE_TASK_ID } from '@/lib/video-urls';
 import { enforceScopedTaskRead } from '@/lib/video-task-scope';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
-import { taskPayload, taskState, extractTaskError } from '@/lib/engine-task-state';
+import {
+  extractTaskError,
+  isCompletedVideoStatus,
+  isFailedVideoStatus,
+  isPendingVideoStatus,
+} from '@/lib/engine-task-state';
 
 type DownloadContext = {
   params: Promise<{ taskId: string; path: string[] }>;
@@ -20,7 +25,7 @@ type VideoPathResolution =
   | { kind: 'gone' }
   | { kind: 'failed'; reason: string | null }
   | { kind: 'pending' }
-  | { kind: 'unknown' };
+  | { kind: 'unknown'; lookupError?: string };
 
 const FORWARDED_RESPONSE_HEADERS = ['content-type', 'content-length', 'content-range', 'accept-ranges'] as const;
 
@@ -109,7 +114,14 @@ async function getHandler(request: Request, context: DownloadContext): Promise<N
     const message = status === 410 ? 'The video is no longer available.' : 'Video file not found.';
     return apiErrorResponse(status, message, {
       route: 'GET /api/persona/video-download',
-      metadata: { taskId, requested: path.join('/'), reason },
+      metadata: {
+        taskId,
+        requested: path.join('/'),
+        reason,
+        ...(resolution.kind === 'unknown' && resolution.lookupError !== undefined
+          ? { lookupError: resolution.lookupError }
+          : {}),
+      },
     });
   }
 
@@ -157,8 +169,9 @@ async function resolveEngineVideoPath(taskId: string, userId: string): Promise<V
       headers: engineAuthHeaders(userId),
       cache: 'no-store',
     });
-  } catch {
-    return { kind: 'unknown' };
+  } catch (error) {
+    // Transient: the miss warning carries the cause (name + message only).
+    return { kind: 'unknown', lookupError: error instanceof Error ? `${error.name}: ${error.message}` : String(error) };
   }
   if (response.status === 404) return { kind: 'gone' };
   if (!response.ok) return { kind: 'unknown' };
@@ -166,32 +179,11 @@ async function resolveEngineVideoPath(taskId: string, userId: string): Promise<V
   if (body === null) return { kind: 'unknown' };
   const segments = findVideoSegments(body, prefix);
   if (segments !== null) return { kind: 'path', segments };
-  const task = taskPayload(body);
-  if (task === null) return { kind: 'unknown' };
-  const state = taskState(task);
-  if (state !== null) {
-    if (state === -1) return { kind: 'failed', reason: extractTaskError(body) };
-    if (state === 1) return { kind: 'gone' };
-    if (state === 3 || state === 4) return { kind: 'pending' };
-    return { kind: 'unknown' };
-  }
-  if (hasStringState(task, ['failed', 'failure', 'error'])) {
-    return { kind: 'failed', reason: extractTaskError(body) };
-  }
-  if (hasStringState(task, ['completed', 'complete', 'done', 'success'])) {
-    return { kind: 'gone' };
-  }
-  if (hasStringState(task, ['queued', 'processing', 'pending', 'running', 'started'])) {
-    return { kind: 'pending' };
-  }
+  if (isFailedVideoStatus(body)) return { kind: 'failed', reason: extractTaskError(body) };
+  // Complete with no video URL: the file will never appear.
+  if (isCompletedVideoStatus(body)) return { kind: 'gone' };
+  if (isPendingVideoStatus(body)) return { kind: 'pending' };
   return { kind: 'unknown' };
-}
-
-function hasStringState(task: Record<string, unknown>, values: string[]): boolean {
-  return [task.status, task.task_status].some(
-    (candidate) =>
-      typeof candidate === 'string' && values.includes(candidate.toLowerCase()),
-  );
 }
 
 function findVideoSegments(value: unknown, prefix: string): string[] | null {
