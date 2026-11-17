@@ -40,12 +40,14 @@ describe('migration 067 releases duplicate live upload slots', () => {
     expect(migrationSql).toContain('where rank > 1');
   });
 
-  it('leaves failed slots and non-upload media out of the release', () => {
-    // The same predicate as the index: a failed slot releases the reference,
-    // so it must survive the dedupe and a failed row must never be deleted.
+  it('only ever releases schedulable rows', () => {
+    // The same predicate as the index. A published slot is the post's record
+    // (post_metrics cascades from it), and an in-flight publishing slot must
+    // finish, so neither may be deleted to make the index build.
     expect(
-      migrationSql.split("where media_kind = 'upload' and status <> 'failed'"),
-    ).toHaveLength(3);
+      migrationSql.split("status in ('pending', 'ready')"),
+    ).toHaveLength(4);
+    expect(migrationSql).not.toContain("status <> 'failed'");
   });
 
   it('deletes the schedules the release empties, keeping mixed ones', () => {

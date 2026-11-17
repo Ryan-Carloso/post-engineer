@@ -1,11 +1,13 @@
 //---------------
-// One live slot per signed upload (migration 067). A signed upload is
-// single-use: the engine claims it when its slot publishes. A second
+// One schedulable slot per signed upload (migration 067). A signed upload
+// is single-use: the engine claims it when its slot publishes. A second
 // schedule of the same upload id would answer "scheduled" and then fail
 // at publish time, and an immediate publish of an upload a slot already
-// holds would steal it from that slot. Both callers check here first; the
-// partial unique index `scheduled_posts_upload_media_ref_key` is the
-// race-proof backstop for two concurrent schedules.
+// holds would steal it from that slot. Both callers check here first,
+// against any slot that is not failed; the partial unique index
+// `scheduled_posts_upload_media_ref_key` is the race-proof backstop, and it
+// covers the rows a new call can insert (pending, ready) so it never has to
+// touch a publishing or published row.
 //---------------
 
 import type { SupabaseClient } from '@supabase/supabase-js';
