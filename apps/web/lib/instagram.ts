@@ -467,7 +467,7 @@ export class InstagramService {
   }
 
   //---------------
-  // refreshLongLivedToken — renews the long-lived token (~60 days, with a 24h margin)
+  // refreshLongLivedToken — renews a valid long-lived token (>= 24h old) for ~60 days
   //---------------
   async refreshLongLivedToken(accessToken: string): Promise<InstagramLongLivedToken> {
     try {
@@ -478,6 +478,7 @@ export class InstagramService {
             grant_type: 'ig_refresh_token',
             access_token: accessToken,
           },
+          timeout: 15_000,
         }
       );
 

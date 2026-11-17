@@ -285,6 +285,36 @@ describe('InstagramService', () => {
     });
   });
 
+  describe('refreshLongLivedToken', () => {
+    it('refreshes with ig_refresh_token, a timeout, and returns the new token', async () => {
+      mockGet.mockResolvedValueOnce({ data: { access_token: 'fresh', token_type: 'bearer', expires_in: 5184000 } });
+
+      const result = await new InstagramService().refreshLongLivedToken('old-tok');
+
+      expect(result).toEqual({ accessToken: 'fresh', tokenType: 'bearer', expiresIn: 5184000 });
+      expect(mockGet).toHaveBeenCalledWith('https://graph.instagram.com/refresh_access_token', {
+        params: { grant_type: 'ig_refresh_token', access_token: 'old-tok' },
+        timeout: 15_000,
+      });
+    });
+
+    it('keeps Meta code 190 on an invalidated token', async () => {
+      mockGet.mockRejectedValueOnce({
+        isAxiosError: true,
+        message: 'Request failed with status code 400',
+        response: {
+          status: 400,
+          data: { error: { message: 'Error validating access token', type: 'OAuthException', code: 190 } },
+        },
+      });
+
+      const error = await new InstagramService().refreshLongLivedToken('old-tok').catch((caught: unknown) => caught);
+
+      expect(error).toBeInstanceOf(InstagramApiError);
+      expect((error as InstagramApiError).providerCode).toBe(190);
+    });
+  });
+
   describe('getProfile', () => {
     it('returns profile data', async () => {
       mockGet.mockResolvedValueOnce({
