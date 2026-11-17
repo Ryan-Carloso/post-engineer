@@ -258,7 +258,7 @@ describe('GET /api/persona/video-download', () => {
         return new Response('not found', { status: 404 });
       }
       if (url.includes('/api/v1/tasks/')) {
-        throw new Error('lookup down');
+        throw new Error('lookup down api_key=sk-live-secret-value-123456');
       }
       return new Response('unexpected', { status: 500 });
     }));
@@ -269,8 +269,11 @@ describe('GET /api/persona/video-download', () => {
 
     expect(response.status).toBe(404);
     expectSingleMissWarning(404, 'unknown');
-    // The transient cause is not swallowed: it rides on the single warning.
-    expect(vi.mocked(logger.warn).mock.calls[0][1]).toMatchObject({ lookupError: 'Error: lookup down' });
+    // The transient cause is not swallowed: it rides on the single warning,
+    // scrubbed by apiErrorResponse (no credential fragment survives).
+    const cause = (vi.mocked(logger.warn).mock.calls[0][1] as { cause?: unknown }).cause;
+    expect(cause).toEqual(expect.stringContaining('lookup down'));
+    expect(cause).not.toEqual(expect.stringContaining('sk-live-secret-value-123456'));
   });
 
   it('returns 502 (not a redirect) when the engine itself is unreachable', async () => {

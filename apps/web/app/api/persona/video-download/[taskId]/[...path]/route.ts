@@ -7,7 +7,6 @@ import { SAFE_TASK_ID } from '@/lib/video-urls';
 import { enforceScopedTaskRead } from '@/lib/video-task-scope';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 import {
-  extractTaskError,
   isCompletedVideoStatus,
   isFailedVideoStatus,
   isPendingVideoStatus,
@@ -23,9 +22,9 @@ type DownloadContext = {
 type VideoPathResolution =
   | { kind: 'path'; segments: string[] }
   | { kind: 'gone' }
-  | { kind: 'failed'; reason: string | null }
+  | { kind: 'failed' }
   | { kind: 'pending' }
-  | { kind: 'unknown'; lookupError?: string };
+  | { kind: 'unknown'; lookupError?: unknown };
 
 const FORWARDED_RESPONSE_HEADERS = ['content-type', 'content-length', 'content-range', 'accept-ranges'] as const;
 
@@ -106,22 +105,19 @@ async function getHandler(request: Request, context: DownloadContext): Promise<N
     }
     // One warning per miss via apiErrorResponse, carrying taskId, requested
     // and reason. Terminal states answer 410 Gone so the caller stops
-    // polling; pending/unknown stay 404. The engine error text never
-    // reaches the response (it only lives in the resolver's `failed`
-    // reason, which is neither returned nor logged here).
+    // polling; pending/unknown stay 404. The engine's failure text is not
+    // read at all: the status route owns recording why a task failed.
+    // A transient lookup error rides as the cause, which apiErrorResponse
+    // scrubs and caps before it reaches the log.
     const reason = resolution.kind === 'path' ? 'unknown' : resolution.kind;
     const status = reason === 'gone' || reason === 'failed' ? 410 : 404;
     const message = status === 410 ? 'The video is no longer available.' : 'Video file not found.';
     return apiErrorResponse(status, message, {
       route: 'GET /api/persona/video-download',
-      metadata: {
-        taskId,
-        requested: path.join('/'),
-        reason,
-        ...(resolution.kind === 'unknown' && resolution.lookupError !== undefined
-          ? { lookupError: resolution.lookupError }
-          : {}),
-      },
+      metadata: { taskId, requested: path.join('/'), reason },
+      ...(resolution.kind === 'unknown' && resolution.lookupError !== undefined
+        ? { cause: resolution.lookupError }
+        : {}),
     });
   }
 
@@ -170,8 +166,8 @@ async function resolveEngineVideoPath(taskId: string, userId: string): Promise<V
       cache: 'no-store',
     });
   } catch (error) {
-    // Transient: the miss warning carries the cause (name + message only).
-    return { kind: 'unknown', lookupError: error instanceof Error ? `${error.name}: ${error.message}` : String(error) };
+    // Transient: the miss warning carries the cause (scrubbed by apiErrorResponse).
+    return { kind: 'unknown', lookupError: error };
   }
   if (response.status === 404) return { kind: 'gone' };
   if (!response.ok) return { kind: 'unknown' };
@@ -179,7 +175,7 @@ async function resolveEngineVideoPath(taskId: string, userId: string): Promise<V
   if (body === null) return { kind: 'unknown' };
   const segments = findVideoSegments(body, prefix);
   if (segments !== null) return { kind: 'path', segments };
-  if (isFailedVideoStatus(body)) return { kind: 'failed', reason: extractTaskError(body) };
+  if (isFailedVideoStatus(body)) return { kind: 'failed' };
   // Complete with no video URL: the file will never appear.
   if (isCompletedVideoStatus(body)) return { kind: 'gone' };
   if (isPendingVideoStatus(body)) return { kind: 'pending' };
