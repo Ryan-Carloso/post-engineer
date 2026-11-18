@@ -51,7 +51,8 @@ never a blocker.
   videos in this conversation. The search tool for facts is asked once
   in the base prompt and reused the same way. If a stock source fails —
   timeout, no results, or error — the agent tries the next configured
-  source, best match first, and never stops at the first failure.
+  source, best match first, and never stops at the first failure. If every
+  configured source fails, photos only.
   There is no saved tool or source configuration: for a later conversation
   the agent uses only the sources whose key is present in its own
   environment. The keys live in the agent's own environment as

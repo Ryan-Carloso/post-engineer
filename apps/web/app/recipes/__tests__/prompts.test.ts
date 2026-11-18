@@ -291,19 +291,14 @@ describe('prompts hub data', () => {
     const baseText = SHARED_PROMPT_BASE.join('\n');
     expect(fullText.startsWith(baseText)).toBe(true);
     const text = fullText.slice(baseText.length + 2);
-    // The phrase spans a line break, so pin it with a regex — a bare
-    // toContain('video') would pass even with the clause removed.
-    expect(text).toMatch(/later videos in this\s+conversation/);
-    // This phrase spans a line break too.
-    expect(text).toMatch(/the first video in this\s+setup follows the base and/);
+    expect(text).toContain('later videos in this conversation');
+    expect(text).toContain('the first video in this setup follows the base and');
     expect(text).toContain('uses images only');
-    // "There is no saved tool or source configuration" spans a line break.
-    expect(text).toContain('There is no saved');
-    expect(text).toContain('tool or source configuration');
+    expect(text).toContain('There is no saved tool or source configuration');
     expect(text).toContain('never claim the answers were saved');
     expect(text).toContain('If a key is missing, tell');
-    // Both phrases span a line break, so pin them with regexes.
-    expect(text).toMatch(/me to set it and keep going with the\s+sources that are configured/);
+    expect(text).toContain('me to set it and keep going with the sources that are configured');
+    // This phrase really spans a line break.
     expect(text).toMatch(/never print them,\s+never paste them anywhere else, never log them/);
     expect(text).not.toContain('standing configuration for this account');
     expect(text).not.toContain('save the answers as the');
@@ -319,6 +314,9 @@ describe('prompts hub data', () => {
     expect(text).toMatch(/If a source fails - timeout, no results, or\s+error - use the next configured source/);
     expect(text).toContain('try the best-matching');
     expect(text).toContain('source first and never stop at the first failure');
+    // Terminal case: if every configured source fails, nothing is left
+    // to try — photos only.
+    expect(text).toMatch(/If every configured\s+source fails, use photos only/);
     // Step 4 asks stock sources only; the search tool lives in the base.
     expect(text).not.toContain('which search tool');
   });
@@ -857,6 +855,9 @@ describe('prompts hub data', () => {
     expect(text).toContain('error - use the next configured source');
     expect(text).toContain('try the best-matching');
     expect(text).toContain('source first and never stop at the first failure');
+    // Terminal case: if every configured source fails, nothing is left
+    // to try — photos only.
+    expect(text).toMatch(/If every configured\s+source fails, use photos only/);
     expect(text).toContain('extract frames');
     expect(text).toContain('same subject,');
     expect(text).toContain('same action, same mood');

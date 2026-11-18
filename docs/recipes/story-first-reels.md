@@ -41,7 +41,8 @@ never unlicensed media. A clip is
 full-frame segment media (mp4); the agent proves it fits by extracting
 frames and comparing them to the segment sentence. If a source fails —
 timeout, no results, or error — the agent tries the next configured
-source, best match first, and never stops at the first failure. If no stock source
+source, best match first, and never stops at the first failure. If every
+configured source fails, photos only. If no stock source
 is configured, photos only.
 The agent finds the real story first (setup, turning point,
 payoff), picks the archetype, builds the hook from one mechanism that fits, writes for
