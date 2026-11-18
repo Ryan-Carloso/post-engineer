@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
@@ -20,6 +20,16 @@ vi.mock('@/lib/i18n/provider', () => {
   return { useI18n, I18nProvider };
 });
 
+vi.mock('@/hooks/use-now', () => ({
+  // The clock is unknown by default: the server-rendering and hydration
+  // state the sidebar must survive without rendering a time.
+  useNow: vi.fn(() => null),
+  // A fixed "today" outside the shown June grid, so no day starts selected
+  // and picking one selects it (picking an already-selected day deselects).
+  useToday: vi.fn(() => new Date(2030, 4, 17)),
+}));
+
+import { useNow } from '@/hooks/use-now';
 import { PostsSidebar } from '../posts-sidebar';
 import type { PersonaCalendar } from '../persona-filter';
 
@@ -46,6 +56,10 @@ function renderSidebar(overrides: Partial<Parameters<typeof PostsSidebar>[0]> = 
   );
   return { ...utils, onSelectDay, onTogglePersona };
 }
+
+beforeEach(() => {
+  vi.mocked(useNow).mockReturnValue(null);
+});
 
 describe('PostsSidebar', () => {
   it('renders the mini calendar, the persona rows, the month view row and the second-timezone box', () => {
@@ -108,5 +122,23 @@ describe('PostsSidebar', () => {
     renderSidebar({ calendars: [] });
     expect(screen.queryByText('posts.sidebarCalendars')).toBeNull();
     expect(document.querySelector('[data-slot="mini-calendar"]')).not.toBeNull();
+  });
+
+  it('shows dashes, never a clock time, while the clock is not known yet', () => {
+    // The shared clock is null during server rendering and hydration: a
+    // live `new Date()` here renders a different minute whenever hydration
+    // straddles the boundary, and React fails the page with error #418.
+    const { container } = renderSidebar();
+    const sidebar = container.querySelector('[data-testid="posts-sidebar"]') as HTMLElement;
+    expect(within(sidebar).getAllByText('—')).toHaveLength(2);
+    expect(within(sidebar).queryByText(/\d{1,2}:\d{2}/)).toBeNull();
+  });
+
+  it('shows the zone times once the clock is known', () => {
+    // 12:34 UTC is 13:34 in Lisbon (WEST in June); the mocked locale is
+    // en, so en-US renders it 12-hour.
+    vi.mocked(useNow).mockReturnValue(new Date('2030-06-01T12:34:00.000Z'));
+    renderSidebar();
+    expect(screen.getByText('01:34 PM')).toBeInTheDocument();
   });
 });
