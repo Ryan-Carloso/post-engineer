@@ -128,7 +128,7 @@ describe('metrics dashboard', () => {
     cy.contains('Vídeos mais vistos').scrollIntoView().should('be.visible');
     // The charts say they cover truncated data and skip the null row.
     cy.contains('Os gráficos cobrem só as').scrollIntoView().should('be.visible');
-    cy.contains('1 vídeos sem dados de views').should('be.visible');
+    cy.contains('1 vídeo sem dados de views').should('be.visible');
     // The views-by-day area and the top bars render (one provider only,
     // so the breakdown is a donut, not bars).
     cy.get('.recharts-wrapper').should('have.length', 3);
