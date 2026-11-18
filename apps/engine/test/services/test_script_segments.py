@@ -797,3 +797,41 @@ def test_segments_to_script_forwards_full_lipsync_to_validation():
     assert script_segments.segments_to_script(sparse, video_type="full_lipsync") == "\n\n".join(
         [_hook(), _content(), _cta_take()]
     )
+
+
+def _with_duration(duration):
+    return [
+        {"kind": "hook", "text": _hook()},
+        {
+            "kind": "content",
+            "text": _content(),
+            "media": [{"url": "https://example.com/x.jpg", "duration": duration}],
+        },
+        {"kind": "content", "text": _cta_take()},
+    ]
+
+
+@pytest.mark.parametrize("duration", [0.5, 1, 2.0, 3, 6.0])
+def test_media_duration_in_range_passes(duration):
+    result = script_segments.validate_segments(_with_duration(duration), video_type="full_lipsync")
+    assert result["media_count"] == 1
+
+
+@pytest.mark.parametrize("duration", [None])
+def test_media_duration_may_be_omitted(duration):
+    # Explicit null is the same as absent: the photo ticks at the
+    # default 2s pace.
+    assert (
+        script_segments.validate_segments(_with_duration(duration), video_type="full_lipsync")[
+            "media_count"
+        ]
+        == 1
+    )
+
+
+@pytest.mark.parametrize("duration", [0, -1, 0.49, 6.01, 60, "3", True, float("nan"), float("inf")])
+def test_media_duration_out_of_range_or_not_a_number_is_400(duration):
+    with pytest.raises(SegmentValidationError) as exc_info:
+        script_segments.validate_segments(_with_duration(duration), video_type="full_lipsync")
+    assert exc_info.value.field == "segments.1.media.0.duration"
+    assert exc_info.value.fix

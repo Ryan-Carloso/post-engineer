@@ -76,6 +76,30 @@ describe('persona-remote-face classify', () => {
 });
 
 describe('downloadPublicImage', () => {
+  it('refuses a bracketed IPv6 loopback literal without lookup or fetch', async () => {
+    const fetchImpl = vi.fn();
+    const lookupImpl = vi.fn();
+    const result = await downloadPublicImage('http://[::1]/secret.png', {
+      fetchImpl: fetchImpl as never,
+      lookupImpl,
+    });
+    expect(result).toEqual({ error: REMOTE_FACE_ERROR });
+    expect(lookupImpl).not.toHaveBeenCalled();
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('fetches a bracketed public IPv6 literal without DNS', async () => {
+    const fetchImpl = vi.fn(async () => pngResponse());
+    const lookupImpl = vi.fn();
+    const result = await downloadPublicImage('http://[2606:4700:4700::1111]/face.png', {
+      fetchImpl: fetchImpl as never,
+      lookupImpl,
+    });
+    expect(lookupImpl).not.toHaveBeenCalled();
+    expect(fetchImpl).toHaveBeenCalledOnce();
+    expect(result).toMatchObject({ mime: 'image/png' });
+  });
+
   it('refuses a private IP without fetching', async () => {
     const fetchImpl = vi.fn();
     const result = await downloadPublicImage('http://127.0.0.1/secret.png', {

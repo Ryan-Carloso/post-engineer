@@ -150,6 +150,10 @@ describe('/api/instagram-auth/callback', () => {
       'instagram-oauth-error',
       expect.objectContaining({ error: 'Missing authorization code' }),
     );
+    expect(logger.warn).not.toHaveBeenCalledWith(
+      expect.stringContaining('missing authorization code'),
+      expect.anything(),
+    );
   });
 
   it('returns error popup when not logged in', async () => {

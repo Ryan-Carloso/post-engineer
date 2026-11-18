@@ -573,6 +573,19 @@
         "additionalProperties": false,
         "description": "Media reference shape for a segment's photo (media (action: upload) uploads it, media (action: check) verifies it).",
         "properties": {
+          "duration": {
+            "anyOf": [
+              {
+                "maximum": 6.0,
+                "minimum": 0.5,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration"
+          },
           "mediaId": {
             "anyOf": [
               {

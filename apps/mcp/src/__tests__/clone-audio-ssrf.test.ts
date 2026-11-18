@@ -72,6 +72,36 @@ describe('isPublicIp matches the shared SSRF cases', () => {
       expect(isPublicIp(ip), ip).toBe(true);
     }
   });
+
+  it('rejects a value that is not an IP address', () => {
+    expect(isPublicIp('not-an-ip')).toBe(false);
+    expect(isPublicIp('')).toBe(false);
+  });
+
+  it.each([
+    ['100.63.255.255', true],
+    ['100.64.0.0', false],
+    ['100.127.255.255', false],
+    ['100.128.0.0', true],
+    ['64:ff9b::8.8.8.8', true],
+    ['64:ff9b::7f00:1', false],
+    ['64:ff9b::a00:1', false],
+    ['::ffff:8.8.8.8', true],
+    ['::ffff:10.0.0.1', false],
+    ['2002::1', false],
+    ['2003::1', true],
+    ['100::1', false],
+    ['100:0:0:2::1', true],
+  ])('range boundary %s is public=%s', (ip, allowed) => {
+    expect(isPublicIp(ip)).toBe(allowed);
+  });
+
+  it('rejects a zone id even when the address without it is public', () => {
+    expect(isPublicIp('2606:4700:4700::1111%eth0')).toBe(false);
+    expect(isPublicIp('::ffff:8.8.8.8%eth0')).toBe(false);
+    expect(isPublicIp('fe80::1%eth0')).toBe(false);
+    expect(isPublicIp('64:ff9b::8.8.8.8%eth0')).toBe(false);
+  });
 });
 
 const realFetch = global.fetch;

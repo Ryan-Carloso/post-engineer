@@ -4,6 +4,11 @@ node_modules/
 
 # Next.js
 .next/
+# Throwaway tsconfig written for `bun check` (TypeScript 7 rejects baseUrl).
+apps/web/tsconfig.bun.json
+apps/web/.vitest-report.json
+apps/web/.vitest-shard-timings.json
+apps/web/.shard-marker.json
 out/
 dist/
 

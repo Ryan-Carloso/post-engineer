@@ -1,17 +1,22 @@
 import warnings
 from enum import Enum
 from typing import Any, Literal, Optional, Union
-from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.config import config
+from app.utils.ssrf import UnsafeUrlError, assert_public_url
 from app.models import publish as publish_models
 from app.services.script_segments import (
     MAX_IMAGES_MODE_MEDIAS,
     MAX_OVERLAY_BADGE_CHARS,
     MAX_OVERLAY_SUBTITLE_CHARS,
     MAX_OVERLAY_TITLE_CHARS,
+)
+from app.services.segment_photo_duration import (
+    MAX_REQUESTED_PHOTO_SECONDS,
+    MIN_REQUESTED_PHOTO_SECONDS,
+    duration_error,
 )
 
 # Ignore specific Pydantic warnings
@@ -290,12 +295,14 @@ class BaseResponse(BaseModel):
 
 
 def _validate_webhook_url(value: Optional[str]) -> Optional[str]:
-    """Shared http(s) check for optional webhook callback URLs."""
+    """Reject a webhook that is not a public https URL (shape-only: no DNS;
+    assert_public_url documents why, and delivery resolves and pins)."""
     if value is None:
         return None
-    scheme = urlparse(value).scheme.lower()
-    if scheme not in {"http", "https"}:
-        raise ValueError("webhook_url must be an http(s) URL")
+    try:
+        assert_public_url(value, what="webhook_url", https_only=True, resolve_host=False)
+    except UnsafeUrlError as exc:
+        raise ValueError(str(exc)) from exc
     return value
 
 
@@ -327,6 +334,20 @@ class SegmentMedia(BaseModel):
     mediaId: Optional[str] = None
     url: Optional[str] = None
     overlay: Optional["SegmentOverlay"] = None
+    # Requested on-screen seconds for a full-frame photo: hold the
+    # turning point longer, flash one briefly. Absent = default 2s pace.
+    duration: Optional[float] = Field(
+        default=None, ge=MIN_REQUESTED_PHOTO_SECONDS, le=MAX_REQUESTED_PHOTO_SECONDS
+    )
+
+    @field_validator("duration", mode="before")
+    @classmethod
+    def _validate_duration(cls, value: Any) -> Any:
+        # Reject coerced values (strings, bools, NaN, inf) with the shared rule.
+        error = duration_error(value)
+        if error is not None:
+            raise ValueError(error[0])
+        return value
 
 
 class ScriptSegment(BaseModel):
@@ -342,7 +363,7 @@ class ScriptSegment(BaseModel):
 
 class TaskVideoRequest(VideoParams, BaseModel):
     # Optional callback fired once when the task reaches a terminal state
-    # (completed/failed). Must be http(s); delivery is fire-and-forget.
+    # (completed/failed). Must be a public https URL; delivery is best-effort.
     webhook_url: Optional[str] = None
     # Segments contract (MCP first, Phase 1): one call = one video. When
     # present, segments are mechanically validated and joined into

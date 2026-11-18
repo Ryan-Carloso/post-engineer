@@ -40,12 +40,12 @@ const cases = loadCases();
 const ENGINE_BLOCKED = ['127.0.0.1', '169.254.169.254', '::1', '10.0.0.5'];
 const ENGINE_ALLOWED = ['1.1.1.1', '2606:4700:4700::1111', '93.184.215.14'];
 
-describe('isPublicIp — shared SSRF fixture (Python is_global parity)', () => {
-  it.each(cases.blocked)('blocks %s (engine is_global is false)', (ip) => {
+describe('isPublicIp — shared SSRF fixture', () => {
+  it.each(cases.blocked)('blocks %s', (ip) => {
     expect(isPublicIp(ip)).toBe(false);
   });
 
-  it.each(cases.allowed)('allows %s (engine is_global is true)', (ip) => {
+  it.each(cases.allowed)('allows %s', (ip) => {
     expect(isPublicIp(ip)).toBe(true);
   });
 
@@ -56,6 +56,50 @@ describe('isPublicIp — shared SSRF fixture (Python is_global parity)', () => {
   it('rejects a value that is not an IP address', () => {
     expect(isPublicIp('not-an-ip')).toBe(false);
     expect(isPublicIp('')).toBe(false);
+  });
+
+  // Each pair is the last allowed address and the first rejected address of
+  // one special range (and the reverse edge). Dropping a range check, or
+  // treating NAT64 as public without looking at the embedded IPv4, fails
+  // the matching row.
+  it.each([
+    ['100.63.255.255', true],
+    ['100.64.0.0', false],
+    ['100.127.255.255', false],
+    ['100.128.0.0', true],
+    ['198.17.255.255', true],
+    ['198.18.0.0', false],
+    ['198.19.255.255', false],
+    ['198.20.0.0', true],
+    ['192.0.0.0', false],
+    ['192.0.0.8', false],
+    ['192.0.0.9', true],
+    ['192.0.0.10', true],
+    ['192.0.0.11', false],
+    ['192.0.1.0', true],
+    ['192.88.98.255', true],
+    ['192.88.99.0', false],
+    ['192.88.99.255', false],
+    ['192.88.100.0', true],
+    ['::ffff:8.8.8.8', true],
+    ['::ffff:10.0.0.1', false],
+    ['::ffff:100.64.0.1', false],
+    ['64:ff9b::8.8.8.8', true],
+    ['64:ff9b::7f00:1', false],
+    ['64:ff9b::a00:1', false],
+    ['2002::1', false],
+    ['2003::1', true],
+    ['100::1', false],
+    ['100:0:0:2::1', true],
+  ])('range boundary %s is public=%s', (ip, allowed) => {
+    expect(isPublicIp(ip)).toBe(allowed);
+  });
+
+  it('rejects a zone id even when the address without it is public', () => {
+    expect(isPublicIp('2606:4700:4700::1111%eth0')).toBe(false);
+    expect(isPublicIp('::ffff:8.8.8.8%eth0')).toBe(false);
+    expect(isPublicIp('fe80::1%eth0')).toBe(false);
+    expect(isPublicIp('64:ff9b::8.8.8.8%eth0')).toBe(false);
   });
 
   it('classifies an uncompressed IPv6 address', () => {

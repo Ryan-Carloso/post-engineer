@@ -65,11 +65,11 @@
       "reason": "Same nx 21 to 24 blocker as GHSA-vp3h-ghgh-jr7g. The permissive CORS policy belongs to the local `nx graph` dev server, which is not exposed outside the developer machine."
     },
     {
-      "ghsa": "GHSA-gcqx-w48m-w2h4",
-      "package": "deepmerge",
-      "severity": "low",
+      "ghsa": "GHSA-fc5q-39xc-vjpf",
+      "package": "picomatch",
+      "severity": "high",
       "scope": "dev",
-      "reason": "No fixed release exists; jest 30 still pins ^4.3.1. Reached only from jest-config in the unit-test toolchain, never from product code or user input."
+      "reason": "ReDoS needs an attacker-controlled glob with repeated single-branch extglobs. picomatch 2.3.2 arrives only through micromatch 4.0.8 and anymatch 3.1.3 (chokidar/fast-glob file watching in dev/build tooling), whose patterns come from our own configs and file paths, never from user input. Unblocks when micromatch ships a picomatch 4 build."
     },
     {
       "ghsa": "GHSA-3g3m-2fjr-6pw4",

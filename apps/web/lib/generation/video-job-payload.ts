@@ -50,9 +50,9 @@ const REQUEST_FORWARD_FIELDS: ReadonlyArray<EngineVideoRequestField> = [
   'video_script',
   'video_quality',
   'paragraph_number',
-  // webhook_url is a first-class engine field (TaskVideoRequest validates it
-  // as http(s)); it must survive the allowlist so per-request callbacks
-  // (MCP webhookUrl) reach the engine's terminal dispatch.
+  // webhook_url is a first-class engine field (TaskVideoRequest validates
+  // it as a public https URL); it must survive the allowlist so per-request
+  // callbacks (MCP webhookUrl) reach the engine's terminal dispatch.
   'webhook_url',
   // generation_id is a first-class engine field (TaskVideoRequest carries
   // it as the web-side correlation id); it must survive the allowlist so
