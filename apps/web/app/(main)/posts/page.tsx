@@ -171,13 +171,20 @@ export default function PostsPage() {
     // The month cursor follows the shown week: the read is the union of the
     // month grid and the week, and the API rejects spans over 62 days.
     setCursor({ year: date.getFullYear(), month: date.getMonth() });
+    // The pick follows the shown week, like the month buttons do: a day
+    // left behind is outside the read, so its panel would be a false empty.
+    setPickedKey(null);
   }, []);
   // Switching views keeps context: the week opens on the selected day, the
   // month on the shown week's month.
   const handleViewChange = useCallback(
     (nextView: 'month' | 'week') => {
       if (nextView === 'week') {
-        setWeekDate(selectedKey === null ? new Date() : dateFromKey(selectedKey));
+        const anchor = selectedKey === null ? new Date() : dateFromKey(selectedKey);
+        setWeekDate(anchor);
+        // The month cursor follows the shown week: otherwise the union read
+        // spans from the old month grid to the new week and the API rejects it.
+        setCursor({ year: anchor.getFullYear(), month: anchor.getMonth() });
         setViewOverride('week');
       } else {
         setCursor({ year: weekDate.getFullYear(), month: weekDate.getMonth() });
@@ -207,6 +214,8 @@ export default function PostsPage() {
           setWeekDate(weekStart(date, firstWeekday));
           // The month cursor follows the shown week, as in handleWeekNavigate.
           setCursor({ year: date.getFullYear(), month: date.getMonth() });
+          // The pick follows the shown week, as in handleWeekNavigate.
+          setPickedKey(null);
         }
         return;
       }

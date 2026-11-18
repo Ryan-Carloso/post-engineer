@@ -1243,6 +1243,45 @@ describe('PostsPage week view', () => {
     expect(spanDays).toBeLessThanOrEqual(62);
   });
 
+  it('clears the pick when the shown week moves on, so the panel never names an abandoned day', async () => {
+    // June 1 picked, July 8 waiting: after six weeks forward the panel
+    // must follow the shown week (July 8's card), not claim June 1 — whose
+    // slots the July read never loaded — has no posts.
+    const julySlot = { ...UPCOMING_SLOT, id: 'u2', slotAt: '2030-07-08T10:00:00.000Z', title: 'July topic' };
+    mockQueries({ range: [UPCOMING_SLOT, julySlot] });
+    vi.stubGlobal('matchMedia', vi.fn(mobileMatchMedia));
+    render(<PostsPage />);
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'posts.calendarPrevWeek' })).toBeInTheDocument(),
+    );
+    const grid = document.querySelector('[data-posts-calendar-week]');
+    if (grid === null) throw new Error('week grid not rendered');
+    const columns = grid.querySelectorAll('[role="group"][aria-label]:not([inert])');
+    expect(columns).toHaveLength(7);
+    // June 1 is the Saturday column (index 6) of the week starting Sunday May 26.
+    fireEvent.click(columns[6]);
+    expect(dayPanelCardTitle('Upcoming topic')).toBeInTheDocument();
+    for (let i = 0; i < 6; i++) {
+      fireEvent.click(screen.getByRole('button', { name: 'posts.calendarNextWeek' }));
+    }
+    expect(dayPanelCardTitle('July topic')).toBeInTheDocument();
+  });
+
+  it('keeps the range read within the API span when switching to week from an empty month', async () => {
+    // Desktop: move the month cursor to July (no posts), then switch to the
+    // week view, which anchors on today — the cursor must follow the anchor
+    // back to June, or the read spans July's grid plus June's week (77 days).
+    render(<PostsPage />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'posts.calendarNextMonth' }));
+    fireEvent.click(screen.getByRole('button', { name: 'posts.calendarViewWeek' }));
+    const calls = vi.mocked(useScheduleRangeQuery).mock.calls;
+    const last = calls[calls.length - 1];
+    const spanDays = (Date.parse(last[2] as string) - Date.parse(last[1] as string)) / 86400000;
+    expect(spanDays).toBeLessThanOrEqual(62);
+  });
+
   it('shows a picked day in another month even when the cursor month has no posts', async () => {
     // May slot only: June (the cursor month) has no posts, but the shown
     // week (May 26 – Jun 1) does — the pick must not be discarded for the
