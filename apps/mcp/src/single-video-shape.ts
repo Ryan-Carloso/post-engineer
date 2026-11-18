@@ -13,6 +13,8 @@ import {
   MAX_OVERLAY_BADGE_CHARS,
   MAX_OVERLAY_SUBTITLE_CHARS,
   MAX_OVERLAY_TITLE_CHARS,
+  MAX_REQUESTED_PHOTO_SECONDS,
+  MIN_REQUESTED_PHOTO_SECONDS,
 } from './script-segments.js';
 import { SOCIAL_PROVIDERS } from './contracts/providers.js';
 
@@ -28,10 +30,10 @@ export const ScriptSegmentShape = {
   kind: z.enum(['hook', 'content']).describe('Segment role: hook first, content after. Exactly one hook; a CTA is just a content take, placed anywhere.'),
   text: z.string().min(1, 'Each segment text must be non-empty').describe('Spoken text only: no placeholders, links, markdown, emoji or stage directions.'),
   media: z
-    .array(z.object({ mediaId: z.string().min(1).optional(), url: z.string().min(1).optional(), overlay: SegmentOverlayShape.optional() }).strict())
+    .array(z.object({ mediaId: z.string().min(1).optional(), url: z.string().min(1).optional(), duration: z.number().min(MIN_REQUESTED_PHOTO_SECONDS).max(MAX_REQUESTED_PHOTO_SECONDS).optional(), overlay: SegmentOverlayShape.optional() }).strict())
     .max(MAX_IMAGES_MODE_MEDIAS)
     .optional()
-    .describe('Photos for this segment, as a list. Each item is exactly one of mediaId (from media (action: upload)) or url (a public image URL). One image per ~3s of speech (about 8 words), e.g. a 60s video needs about 20 images; split them across segments (at most 30). Full lip sync allows at most 6 images in total. Each photo is shown while its share of the segment is spoken: full frame on faceless videos, or a framed panel (about 38% of the frame) at the bottom where the persona face is on screen, so the face still shows. Optional overlay on an item: an info card (title, subtitle, badge), e.g. a place name, address and price; a caption spoken while a panel shows is placed above it, never on the photo.'),
+    .describe('Photos for this segment, as a list. Each item is exactly one of mediaId (from media (action: upload)) or url (a public image URL). One image per ~3s of speech (about 8 words), e.g. a 60s video needs about 20 images; split them across segments (at most 30). Full lip sync allows at most 6 images in total. Each photo is shown while its share of the segment is spoken: full frame on faceless videos, or a framed panel (about 38% of the frame) at the bottom where the persona face is on screen, so the face still shows. Optional duration on an item: requested on-screen seconds for a full-frame photo (0.5-6), so you can hold the turning-point photo longer or flash one briefly; omit it for the default 2s pace. Framed panels over the face ignore it. Optional overlay on an item: an info card (title, subtitle, badge), e.g. a place name, address and price; a caption spoken while a panel shows is placed above it, never on the photo.'),
 };
 
 /** Paired A/B experiment link (issue #476): one variant of one pair. */

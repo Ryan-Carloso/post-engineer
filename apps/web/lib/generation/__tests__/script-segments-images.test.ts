@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   MAX_IMAGES_MODE_MEDIAS,
   MAX_MEDIAS,
+  MAX_REQUESTED_PHOTO_SECONDS,
+  MIN_REQUESTED_PHOTO_SECONDS,
   MIN_WORDS_PER_IMAGE,
   WORDS_PER_IMAGE,
   joinSegments,
@@ -194,4 +196,34 @@ describe('validateSegments with the images material', () => {
     expect(() => joinSegments(segments)).toThrow('segments.0.media');
     expect(joinSegments(segments, 'full_lipsync')).toBe(`${hook}\n\n${content}\n\n${cta}`);
   });
+});
+
+describe('validateSegments with a requested photo duration', () => {
+  it('pins the requested-duration bounds to half a second and six seconds', () => {
+    expect(MIN_REQUESTED_PHOTO_SECONDS).toBe(0.5);
+    expect(MAX_REQUESTED_PHOTO_SECONDS).toBe(6);
+  });
+
+  it('accepts a requested duration in range on a photo', () => {
+    const segments = withMedia();
+    const media = (segments[1] as Record<string, unknown>).media as Array<Record<string, unknown>>;
+    media[0] = { ...media[0], duration: 3 };
+    media[1] = { ...media[1], duration: 0.5 };
+    expect(validateSegments(segments).ok).toBe(true);
+  });
+
+  it.each([0, -1, 0.49, 6.01, 60, '3', true, Number.NaN, Number.POSITIVE_INFINITY])(
+    'rejects a duration of %s before charging',
+    (duration) => {
+      const segments = withMedia();
+      const media = (segments[1] as Record<string, unknown>).media as Array<Record<string, unknown>>;
+      media[0] = { ...media[0], duration };
+      const result = validateSegments(segments);
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.field).toBe('segments.1.media.0.duration');
+        expect(result.error.fix).toBeTruthy();
+      }
+    },
+  );
 });

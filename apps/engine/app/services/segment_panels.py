@@ -81,6 +81,9 @@ class Panel:
     caption_bottom: Optional[int] = None
     # "in"/"out": a full-frame photo that zooms slowly (images material, panel_motion).
     motion: Optional[str] = None
+    # Requested on-screen seconds for a full-frame photo (segment pacing):
+    # None means the default 2s pace. Framed panels over the face ignore it.
+    requested_duration: Optional[float] = None
 
 
 def _scale(width: int, height: int) -> float:
