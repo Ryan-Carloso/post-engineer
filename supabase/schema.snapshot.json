@@ -350,7 +350,7 @@
                 {
                     "name": "post_cta_type",
                     "type": "text",
-                    "default": "'follow'::text",
+                    "default": null,
                     "notNull": false
                 },
                 {

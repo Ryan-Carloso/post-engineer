@@ -89,10 +89,11 @@ export async function parsePatchBody(request: Request): Promise<ParsePatchResult
     };
   }
   // ctaUrl / ctaInstruction are the fields the user can clear: a present
-  // but blank value means "remove it" (''), not "leave unchanged" — the
-  // generic optionalString blank-to-null mapping would silently drop the
-  // clear. Merged-row coherence (type vs facts) is not enforced on PATCH:
-  // the edit form always sends all three fields together.
+  // but blank value means "remove it" (stored as NULL), not "leave
+  // unchanged" — the generic optionalString blank-to-null mapping would
+  // silently drop the clear. The merged row (patched fields + stored
+  // columns) is validated by resolveMergedCta in patch-updates.ts; a type
+  // change clears the stored facts the new type cannot carry.
   const rawCtaUrl = formData.get('ctaUrl');
   const ctaUrl =
     typeof rawCtaUrl === 'string' ? (rawCtaUrl.trim().length === 0 ? '' : rawCtaUrl) : null;

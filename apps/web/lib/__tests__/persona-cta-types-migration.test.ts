@@ -114,6 +114,26 @@ describe('supabase/migrations/071_schedules-post-cta-type-nullable.sql', () => {
   });
 });
 
+// 072 drops the default 'follow' on schedules.post_cta_type only (a
+// writer omitting the column inherited 'follow' by omission); the persona
+// column keeps its NOT NULL DEFAULT 'follow'.
+const migration072Path = join(
+  repoRoot,
+  'supabase',
+  'migrations',
+  '072_schedules-post-cta-type-no-default.sql',
+);
+
+describe('supabase/migrations/072_schedules-post-cta-type-no-default.sql', () => {
+  it('drops the default on schedules.post_cta_type only', () => {
+    const sql = readFileSync(migration072Path, 'utf8');
+    expect(sql).toContain('alter column post_cta_type drop default');
+    expect(sql).not.toMatch(/alter column cta_type drop default/i);
+    expect(sql).not.toMatch(/drop not null/i);
+    expect(sql).not.toMatch(/drop column/i);
+  });
+});
+
 describe('cta_type literal sync across the three surfaces', () => {
   it('the persona and schedule CHECK constraints agree', () => {
     expect(sqlAllowedCtaTypes('post_cta_type')).toEqual(sqlAllowedCtaTypes('cta_type'));

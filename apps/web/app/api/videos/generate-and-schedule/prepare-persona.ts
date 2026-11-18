@@ -245,8 +245,12 @@ export async function preparePersona(
     niche: opts.niche ?? niche,
     cta: {
       type: parsePersonaCtaType(persona.cta_type as string | null),
-      url: (persona.cta_url as string | null) ?? null,
-      instruction: (persona.cta_instruction as string | null) ?? null,
+      // `|| null`, not `?? null`: a fact cleared before the write-side
+      // fix is stored as '' (empty string), and '' must not reach the
+      // snapshot — the experiment pair check compares facts strictly,
+      // so '' != null would false-reject a valid pair.
+      url: (persona.cta_url as string | null) || null,
+      instruction: (persona.cta_instruction as string | null) || null,
     },
     language: effectiveLanguage,
     videoAspect: opts.videoAspect ?? ((persona.video_aspect as string | null) ?? null),

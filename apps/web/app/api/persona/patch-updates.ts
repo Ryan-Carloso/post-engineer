@@ -28,8 +28,11 @@ export function applyPersonaPatchFields(
   if (patch.videoLayout !== null) updates.video_layout = patch.videoLayout;
   if (patch.scriptPrompt !== null) updates.script_prompt = patch.scriptPrompt;
   if (patch.ctaType !== null) updates.cta_type = patch.ctaType;
-  if (patch.ctaUrl !== null) updates.cta_url = patch.ctaUrl;
-  if (patch.ctaInstruction !== null) updates.cta_instruction = patch.ctaInstruction;
+  // A blank fact means "remove it": the stored value is NULL, never ''.
+  // '' would leak into the snapshot (prepare-persona) and false-reject a
+  // valid experiment pair, whose check compares facts strictly ('' != null).
+  if (patch.ctaUrl !== null) updates.cta_url = patch.ctaUrl === '' ? null : patch.ctaUrl;
+  if (patch.ctaInstruction !== null) updates.cta_instruction = patch.ctaInstruction === '' ? null : patch.ctaInstruction;
   if (patch.paragraphNumber !== null) updates.paragraph_number = patch.paragraphNumber;
   if (patch.niche !== null) updates.niche = patch.niche;
   // Face quality is a plain scalar like the rest: changing it only rewrites
@@ -70,10 +73,10 @@ function resolveMergedCta(
     : (instructionSurvives ? (stored.cta_instruction ?? null) : null);
   if (typeChanged) {
     if (!urlSurvives && patch.ctaUrl === null && typeof stored.cta_url === 'string' && stored.cta_url.length > 0) {
-      updates.cta_url = '';
+      updates.cta_url = null;
     }
     if (!instructionSurvives && patch.ctaInstruction === null && typeof stored.cta_instruction === 'string' && stored.cta_instruction.length > 0) {
-      updates.cta_instruction = '';
+      updates.cta_instruction = null;
     }
   }
   return validateCtaCoherence(mergedType, mergedUrl, mergedInstruction);

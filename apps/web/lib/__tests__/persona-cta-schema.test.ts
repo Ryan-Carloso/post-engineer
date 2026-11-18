@@ -6,8 +6,8 @@ import { parsePersonaCtaType, validateCtaCoherence } from '@/lib/persona-schema'
 // CTA intent coherence (issue #639): the persona stores a type plus
 // facts — a URL for link/buy, an instruction for other, nothing extra
 // for the rest. The combination is checked at create time (parsePersonaForm
-// calls validateCtaCoherence); PATCH checks each field alone, so the
-// merged row can be incoherent — a known limitation, not a bug here.
+// calls validateCtaCoherence) and on PATCH against the merged row
+// (resolveMergedCta in the persona patch route).
 //---------------
 
 describe('validateCtaCoherence', () => {

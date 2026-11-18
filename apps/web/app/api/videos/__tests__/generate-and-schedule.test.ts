@@ -3196,6 +3196,19 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(payload).not.toHaveProperty('video_cta');
     });
 
+    it('a stored empty URL fact snapshots as null, never an empty string', async () => {
+      // A fact cleared before the write-side fix is stored as '' (empty
+      // string); the snapshot must normalize it to null, or the experiment
+      // pair check (strict !==) false-rejects a valid pair ('' != null).
+      setup({ ...DEFAULT_CFG, persona: { ...PERSONA, cta_type: 'link', cta_url: '', cta_instruction: '' } });
+      const res = await post(baseBody());
+      expect(res.status).toBe(200);
+      const scheduleRows = inserts['schedules'] as Array<Record<string, unknown>>;
+      expect(scheduleRows[0].post_cta_type).toBe('link');
+      expect(scheduleRows[0].post_cta_url).toBeNull();
+      expect(scheduleRows[0].post_cta_instruction).toBeNull();
+    });
+
     it('a per-video override wins over the persona CTA', async () => {
       setup({ ...DEFAULT_CFG, persona: { ...PERSONA, cta_type: 'follow', cta_url: null, cta_instruction: null } });
       const res = await post(baseBody({ cta: { type: 'comment' }, options: { segments: DEFAULT_SEGMENTS.map((segment) => (segment.cta ? { ...segment, text: 'What did your first trip to Porto taste like?' } : segment)) } }));

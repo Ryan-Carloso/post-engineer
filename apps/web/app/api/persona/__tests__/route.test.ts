@@ -1649,7 +1649,7 @@ describe('PATCH /api/persona', () => {
       const res = await PATCH(patchRequest('persona-uuid-1', { ctaType: 'comment' }));
 
       expect(res.status).toBe(200);
-      expect(updated[0]).toEqual({ cta_type: 'comment', cta_url: '' });
+      expect(updated[0]).toEqual({ cta_type: 'comment', cta_url: null });
     });
 
     it('ctaType: switching an other persona to follow clears the stored instruction', async () => {
@@ -1660,7 +1660,7 @@ describe('PATCH /api/persona', () => {
       const res = await PATCH(patchRequest('persona-uuid-1', { ctaType: 'follow' }));
 
       expect(res.status).toBe(200);
-      expect(updated[0]).toEqual({ cta_type: 'follow', cta_instruction: '' });
+      expect(updated[0]).toEqual({ cta_type: 'follow', cta_instruction: null });
     });
 
     it('ctaType: switching to link without a URL returns 400 and stores nothing', async () => {
@@ -1740,7 +1740,7 @@ describe('PATCH /api/persona', () => {
       const res = await PATCH(patchRequest('persona-uuid-1', { ctaUrl: '' }));
 
       expect(res.status).toBe(200);
-      expect(updated[0]).toEqual({ cta_url: '' });
+      expect(updated[0]).toEqual({ cta_url: null });
     });
 
     it('ctaInstruction: a blank value clears the stored instruction', async () => {
@@ -1749,7 +1749,7 @@ describe('PATCH /api/persona', () => {
       const res = await PATCH(patchRequest('persona-uuid-1', { ctaInstruction: '' }));
 
       expect(res.status).toBe(200);
-      expect(updated[0]).toEqual({ cta_instruction: '' });
+      expect(updated[0]).toEqual({ cta_instruction: null });
     });
 
     it('ctaType: an absent field leaves the stored call to action untouched', async () => {
