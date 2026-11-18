@@ -1,0 +1,322 @@
+{
+ "planned_total_s": 58.26,
+ "measured_cuts": [
+  2.0,
+  4.0,
+  6.0,
+  8.0,
+  10.0,
+  12.5,
+  14.466667,
+  16.466667,
+  20.966667,
+  22.066667,
+  24.033333,
+  26.5,
+  28.0,
+  29.5,
+  31.0,
+  33.6,
+  35.966667,
+  37.433333,
+  40.433333,
+  41.8,
+  43.4,
+  45.4,
+  47.533333,
+  53.066667,
+  54.766667
+ ],
+ "photos": [
+  {
+   "photo": "v10-bed-dress.jpg",
+   "segment": "hook",
+   "planned_start": 0.0,
+   "planned_end": 2.0,
+   "duration": 2.0,
+   "nearest_cut": null,
+   "cut_delta_s": null,
+   "cut_detected": false
+  },
+  {
+   "photo": "v7-dress-hanger.jpg",
+   "segment": "hook",
+   "planned_start": 2.0,
+   "planned_end": 4.0,
+   "duration": 2.0,
+   "nearest_cut": 2.0,
+   "cut_delta_s": 0.0,
+   "cut_detected": true
+  },
+  {
+   "photo": "v9-zipper.jpg",
+   "segment": "hook",
+   "planned_start": 4.0,
+   "planned_end": 6.0,
+   "duration": 2.0,
+   "nearest_cut": 4.0,
+   "cut_delta_s": 0.0,
+   "cut_detected": true
+  },
+  {
+   "photo": "v9-mirror-defeated.jpg",
+   "segment": "hook",
+   "planned_start": 6.0,
+   "planned_end": 8.0,
+   "duration": 2.0,
+   "nearest_cut": 6.0,
+   "cut_delta_s": 0.0,
+   "cut_detected": true
+  },
+  {
+   "photo": "v10-mirror-full.jpg",
+   "segment": "hook",
+   "planned_start": 8.0,
+   "planned_end": 10.0,
+   "duration": 2.0,
+   "nearest_cut": 8.0,
+   "cut_delta_s": 0.0,
+   "cut_detected": true
+  },
+  {
+   "photo": "v10-mirror-face.jpg",
+   "segment": "hook",
+   "planned_start": 10.0,
+   "planned_end": 12.48,
+   "duration": 2.48,
+   "nearest_cut": 10.0,
+   "cut_delta_s": 0.0,
+   "cut_detected": true
+  },
+  {
+   "photo": "v9-floor-wide.jpg",
+   "segment": "c1c2",
+   "planned_start": 12.48,
+   "planned_end": 14.48,
+   "duration": 2.0,
+   "nearest_cut": 12.5,
+   "cut_delta_s": 0.02,
+   "cut_detected": true
+  },
+  {
+   "photo": "v9-floor.jpg",
+   "segment": "c1c2",
+   "planned_start": 14.48,
+   "planned_end": 16.48,
+   "duration": 2.0,
+   "nearest_cut": 14.466667,
+   "cut_delta_s": -0.013,
+   "cut_detected": true
+  },
+  {
+   "photo": "v9-floor-face.jpg",
+   "segment": "c1c2",
+   "planned_start": 16.48,
+   "planned_end": 19.48,
+   "duration": 3.0,
+   "nearest_cut": 16.466667,
+   "cut_delta_s": -0.013,
+   "cut_detected": true
+  },
+  {
+   "photo": "media-generation-v12-bed-no-phone-0-fc243be0-d745-44c6-9c67-fd8e90d03a7b.webp",
+   "segment": "c1c2",
+   "planned_start": 19.48,
+   "planned_end": 20.98,
+   "duration": 1.5,
+   "nearest_cut": 20.966667,
+   "cut_delta_s": 1.487,
+   "cut_detected": false
+  },
+  {
+   "photo": "v10-dress-floor.jpg",
+   "segment": "c1c2",
+   "planned_start": 20.98,
+   "planned_end": 22.06,
+   "duration": 1.08,
+   "nearest_cut": 20.966667,
+   "cut_delta_s": -0.013,
+   "cut_detected": true
+  },
+  {
+   "photo": "media-generation-v12-phone-heavy-0-d41c97c1-f241-4893-bb1a-a5ef219b57ef.webp",
+   "segment": "c3",
+   "planned_start": 22.06,
+   "planned_end": 24.06,
+   "duration": 2.0,
+   "nearest_cut": 22.066667,
+   "cut_delta_s": 0.007,
+   "cut_detected": true
+  },
+  {
+   "photo": "v9-reading-relief.jpg",
+   "segment": "c3",
+   "planned_start": 24.06,
+   "planned_end": 26.5,
+   "duration": 2.44,
+   "nearest_cut": 24.033333,
+   "cut_delta_s": -0.027,
+   "cut_detected": true
+  },
+  {
+   "photo": "v8-study-chart.jpg",
+   "segment": "c4",
+   "planned_start": 26.5,
+   "planned_end": 28.0,
+   "duration": 1.5,
+   "nearest_cut": 26.5,
+   "cut_delta_s": 0.0,
+   "cut_detected": true
+  },
+  {
+   "photo": "v10-chart-laptop.jpg",
+   "segment": "c4",
+   "planned_start": 28.0,
+   "planned_end": 29.5,
+   "duration": 1.5,
+   "nearest_cut": 28.0,
+   "cut_delta_s": 0.0,
+   "cut_detected": true
+  },
+  {
+   "photo": "v12-chart-labeled.jpg",
+   "segment": "c4",
+   "planned_start": 29.5,
+   "planned_end": 31.0,
+   "duration": 1.5,
+   "nearest_cut": 29.5,
+   "cut_delta_s": 0.0,
+   "cut_detected": true
+  },
+  {
+   "photo": "real-small-plate.jpg",
+   "segment": "c4",
+   "planned_start": 31.0,
+   "planned_end": 33.58,
+   "duration": 2.58,
+   "nearest_cut": 31.0,
+   "cut_delta_s": 0.0,
+   "cut_detected": true
+  },
+  {
+   "photo": "v9-notebook-writing.jpg",
+   "segment": "c5a",
+   "planned_start": 33.58,
+   "planned_end": 35.98,
+   "duration": 2.4,
+   "nearest_cut": 33.6,
+   "cut_delta_s": 0.02,
+   "cut_detected": true
+  },
+  {
+   "photo": "v10-face-realization.jpg",
+   "segment": "c5b",
+   "planned_start": 35.98,
+   "planned_end": 37.44,
+   "duration": 1.46,
+   "nearest_cut": 35.966667,
+   "cut_delta_s": -0.013,
+   "cut_detected": true
+  },
+  {
+   "photo": "media-generation-v12-mirror-resolve-0-edf97cf7-56c3-4b43-9596-c697668d8a57.webp",
+   "segment": "c6",
+   "planned_start": 37.44,
+   "planned_end": 40.44,
+   "duration": 3.0,
+   "nearest_cut": 37.433333,
+   "cut_delta_s": -0.007,
+   "cut_detected": true
+  },
+  {
+   "photo": "v9-eggs.jpg",
+   "segment": "c7a",
+   "planned_start": 40.44,
+   "planned_end": 41.8,
+   "duration": 1.36,
+   "nearest_cut": 40.433333,
+   "cut_delta_s": -0.007,
+   "cut_detected": true
+  },
+  {
+   "photo": "v9-water-coffee.jpg",
+   "segment": "c7b",
+   "planned_start": 41.8,
+   "planned_end": 43.4,
+   "duration": 1.6,
+   "nearest_cut": 41.8,
+   "cut_delta_s": 0.0,
+   "cut_detected": true
+  },
+  {
+   "photo": "v10-walk-day-heavy.jpg",
+   "segment": "c9",
+   "planned_start": 43.4,
+   "planned_end": 45.4,
+   "duration": 2.0,
+   "nearest_cut": 43.4,
+   "cut_delta_s": 0.0,
+   "cut_detected": true
+  },
+  {
+   "photo": "v10-walk-night-heavy.jpg",
+   "segment": "c9",
+   "planned_start": 45.4,
+   "planned_end": 47.52,
+   "duration": 2.12,
+   "nearest_cut": 45.4,
+   "cut_delta_s": 0.0,
+   "cut_detected": true
+  },
+  {
+   "photo": "v9-dance.jpg",
+   "segment": "c10",
+   "planned_start": 47.52,
+   "planned_end": 49.52,
+   "duration": 2.0,
+   "nearest_cut": 47.533333,
+   "cut_delta_s": 0.013,
+   "cut_detected": true
+  },
+  {
+   "photo": "v9-dance-wide-shoes.jpg",
+   "segment": "c10",
+   "planned_start": 49.52,
+   "planned_end": 51.52,
+   "duration": 2.0,
+   "nearest_cut": 47.533333,
+   "cut_delta_s": -1.987,
+   "cut_detected": false
+  },
+  {
+   "photo": "v9-sisters-hug.jpg",
+   "segment": "c10",
+   "planned_start": 51.52,
+   "planned_end": 53.06,
+   "duration": 1.54,
+   "nearest_cut": 53.066667,
+   "cut_delta_s": 1.547,
+   "cut_detected": false
+  },
+  {
+   "photo": "v11-cta-dance.jpg",
+   "segment": "cta",
+   "planned_start": 53.06,
+   "planned_end": 54.76,
+   "duration": 1.7,
+   "nearest_cut": 53.066667,
+   "cut_delta_s": 0.007,
+   "cut_detected": true
+  },
+  {
+   "photo": "media-generation-v12-cta-zipper-sleeves-0-b3344bcd-4550-4eef-8919-fc37108e073a.webp",
+   "segment": "cta",
+   "planned_start": 54.76,
+   "planned_end": 58.26,
+   "duration": 3.5,
+   "nearest_cut": 54.766667,
+   "cut_delta_s": 0.007,
+   "cut_detected": true
+  }
+ ]
+}
