@@ -5,6 +5,7 @@ const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);
 
 vi.mock('@/lib/analytics', () => ({ trackApiEvent: vi.fn() }));
+vi.mock('@/lib/account-needs-reconnect', () => ({ markAccountNeedsReconnect: vi.fn(async () => undefined) }));
 
 vi.mock('@/lib/social-accounts', () => ({
   getSocialAccountTokens: vi.fn(),
@@ -18,6 +19,7 @@ vi.mock('@/lib/supabase/service', () => ({
 import { trackApiEvent } from '@/lib/analytics';
 import { handleLinkedinUpload } from '@/lib/upload/linkedin-handler';
 import { getSocialAccountTokens, touchSocialAccount } from '@/lib/social-accounts';
+import { markAccountNeedsReconnect } from '@/lib/account-needs-reconnect';
 
 const USER_ID = 'user-uuid-1';
 const MEMBER_ID = 'member-123';
@@ -243,5 +245,18 @@ describe('handleLinkedinUpload', () => {
     const results = (res as { results: Array<{ success: boolean }> }).results;
     expect(results[0]?.success).toBe(false);
     expect(results[1]?.success).toBe(true);
+  });
+
+  it('flags a LinkedIn account whose stored token is empty, with no network call', async () => {
+    mockHappyFetch();
+    vi.mocked(getSocialAccountTokens).mockResolvedValue({
+      tokens: { access_token: '' },
+      account: {} as never,
+    });
+    const res = await handleLinkedinUpload(formData(), USER_ID);
+    const results = (res as { results: Array<{ success: boolean; errorCode?: string }> }).results;
+    expect(results[0]).toMatchObject({ success: false, errorCode: 'token_missing' });
+    expect(markAccountNeedsReconnect).toHaveBeenCalledWith(USER_ID, 'linkedin', MEMBER_ID);
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 });

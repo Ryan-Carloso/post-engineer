@@ -213,6 +213,9 @@ select pg_temp.expect_count(
 select pg_temp.expect_count(
   $$select count(*) from public.social_accounts where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa04' and account_name is null$$,
   1, 'own account public columns readable');
+select pg_temp.expect_count(
+  $$select count(*) from public.social_accounts where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa04' and needs_reconnect = false$$,
+  1, 'own account needs_reconnect readable');
 
 -- Billing and server columns are not writable with the user JWT.
 select pg_temp.expect_state(
@@ -331,6 +334,9 @@ select pg_temp.expect_state(
 select pg_temp.expect_state(
   $$update public.social_accounts set account_name = 'Ada YT', updated_at = now() where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa04'$$,
   '42501', 'social account metadata update denied');
+select pg_temp.expect_state(
+  $$update public.social_accounts set needs_reconnect = true where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa04'$$,
+  '42501', 'needs_reconnect update denied');
 select pg_temp.expect_state(
   $$delete from public.social_accounts where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa04'$$,
   '42501', 'social account delete denied');

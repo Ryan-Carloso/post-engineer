@@ -6,6 +6,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+import type { AccountNeedsReconnectWarning } from '@/lib/account-needs-reconnect';
 import type { VideoUploadRow } from '@/lib/videos/signed-upload';
 import type { Provider } from '../../videos/generate-and-schedule/providers-validation';
 import type { EngineTaskRecord } from './media-resolve';
@@ -20,6 +21,8 @@ export interface PublishExistingContext {
   request: Request;
   input: PublishExistingRequest;
   accountIds: Record<Provider, string[]>;
+  /** Null unless one of the accounts' stored logins is already dead: the slot still schedules, and the response warns. */
+  reconnectWarning: AccountNeedsReconnectWarning | null;
   taskRecord: EngineTaskRecord | null;
   uploadRow: VideoUploadRow | null;
   image: { buffer: Buffer; contentType: ImageContentType } | null;

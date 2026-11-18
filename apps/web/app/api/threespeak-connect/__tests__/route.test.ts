@@ -213,6 +213,7 @@ describe('POST /api/threespeak-connect', () => {
       provider_account_id: 'alice',
       account_name: 'alice',
       account_metadata: {},
+      needs_reconnect: false,
     });
     const body = (await res.json()) as { success: boolean; username: string };
     expect(body).toMatchObject({ success: true, username: 'alice' });

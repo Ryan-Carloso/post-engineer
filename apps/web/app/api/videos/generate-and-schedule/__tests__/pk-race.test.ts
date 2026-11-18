@@ -29,7 +29,7 @@ function input(alreadySpent: boolean): Parameters<typeof answerSchedulePkRace>[1
     alreadySpent,
     scheduleError: { code: '23505' },
     constraint: 'schedules_pkey',
-    voiceFallbackWarning: null,
+    warnings: [],
   };
 }
 

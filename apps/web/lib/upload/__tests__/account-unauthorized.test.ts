@@ -1,8 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+const markAccountNeedsReconnect = vi.hoisted(() => vi.fn(() => Promise.resolve()));
+
 vi.mock('@/lib/analytics', () => ({ trackApiEvent: vi.fn() }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), error: vi.fn() } }));
 vi.mock('@/lib/owner-alert-mail', () => ({ notifyAccountBreak: vi.fn(() => Promise.resolve()) }));
+vi.mock('@/lib/account-needs-reconnect', () => ({ markAccountNeedsReconnect }));
 
 import { trackApiEvent } from '@/lib/analytics';
 import { FacebookError, InstagramApiError, ThreadsError } from '@/lib/errors';
@@ -12,6 +15,7 @@ import {
   httpStatusOf,
   isUnauthorizedError,
   PUBLISH_ACCOUNT_UNAUTHORIZED_EVENT,
+  rememberDeadCredential,
   reportAccountUnauthorized,
 } from '../account-unauthorized';
 
@@ -19,6 +23,7 @@ beforeEach(() => {
   vi.mocked(trackApiEvent).mockClear();
   vi.mocked(logger.error).mockClear();
   vi.mocked(notifyAccountBreak).mockClear();
+  markAccountNeedsReconnect.mockClear();
 });
 
 describe('httpStatusOf', () => {
@@ -166,5 +171,26 @@ describe('reportAccountUnauthorized', () => {
     await vi.waitFor(() => {
       expect(logger.error).toHaveBeenCalledWith('[ACCOUNT] Owner alert failed', expect.any(Error));
     });
+  });
+
+  it('marks the account once for a dead login and not for a transient failure', () => {
+    reportAccountUnauthorized('youtube', 'UC123', 'user-1', new Error('Unauthorized'));
+    reportAccountUnauthorized('instagram', 'ig-1', 'user-1', new InstagramApiError('Error validating access token', 400, undefined, 190));
+    reportAccountUnauthorized('bluesky', 'did:plc:1', 'user-1', { name: 'BlueskyError', code: 'invalid_credentials' });
+    reportAccountUnauthorized('youtube', 'UC123', 'user-1', { name: 'TokenDecryptError', message: 'Failed to decrypt stored tokens' });
+    expect(markAccountNeedsReconnect).toHaveBeenCalledTimes(4);
+    expect(markAccountNeedsReconnect).toHaveBeenCalledWith('user-1', 'youtube', 'UC123');
+    expect(markAccountNeedsReconnect).toHaveBeenCalledWith('user-1', 'instagram', 'ig-1');
+    expect(markAccountNeedsReconnect).toHaveBeenCalledWith('user-1', 'bluesky', 'did:plc:1');
+
+    markAccountNeedsReconnect.mockClear();
+    reportAccountUnauthorized('instagram', 'ig-1', 'user-1', { response: { status: 500 } });
+    reportAccountUnauthorized('bluesky', 'did:plc:1', 'user-1', { name: 'BlueskyError', code: 'email_not_verified' });
+    expect(markAccountNeedsReconnect).not.toHaveBeenCalled();
+  });
+
+  it('marks a locally missing or expired credential that never reached the provider', () => {
+    rememberDeadCredential('bluesky', 'did:plc:1', 'user-1');
+    expect(markAccountNeedsReconnect).toHaveBeenCalledWith('user-1', 'bluesky', 'did:plc:1');
   });
 });

@@ -52,6 +52,7 @@ describe('Fanvue across the shared surfaces', () => {
       createdAt: '2026-11-01T00:00:00.000Z',
       updatedAt: '2026-11-01T00:00:00.000Z',
       lastUsedAt: null,
+      needsReconnect: false,
     };
     const account = PROVIDER_REGISTRY.fanvue.toPublicAccount(record);
     expect(account).toMatchObject({

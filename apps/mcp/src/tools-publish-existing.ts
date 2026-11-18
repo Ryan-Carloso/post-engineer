@@ -25,6 +25,13 @@ import { type McpToolResponse } from './tools-call.js';
 // run after module init).
 //---------------
 
+function reconnectSentence(result: Extract<PublishExistingResult, { mode: 'scheduled' }>): string {
+  const warning = result.warnings?.find((item) => item.code === 'account_needs_reconnect');
+  if (warning === undefined) return '';
+  const named = warning.accounts.map((account) => `${account.provider} ${account.accountId}`).join(', ');
+  return `Warning account_needs_reconnect: reconnect ${named} before the slot publishes.\n`;
+}
+
 type Resolved<T> = { kind: 'ok'; value: T } | { kind: 'response'; response: McpToolResponse };
 
 function failure(message: string): McpToolResponse {
@@ -91,7 +98,15 @@ function summary(result: PublishExistingResult, mediaKind: string, resolvedNote:
     return (
       `${resolved}Scheduled existing ${mediaKind}${result.replayed ? ' (replayed: the same request was already scheduled)' : ''}.\n` +
       `Schedule ${result.scheduleId}.\n${slots}\n` +
-      JSON.stringify({ success: true, mode: 'scheduled', replayed: result.replayed, scheduleId: result.scheduleId, slots: result.slots })
+      reconnectSentence(result) +
+      JSON.stringify({
+        success: true,
+        mode: 'scheduled',
+        replayed: result.replayed,
+        scheduleId: result.scheduleId,
+        slots: result.slots,
+        ...(result.warnings === undefined ? {} : { warnings: result.warnings }),
+      })
     );
   }
   const lines = result.publishes.map((publish) => {

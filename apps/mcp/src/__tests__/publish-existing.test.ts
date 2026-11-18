@@ -176,6 +176,42 @@ describe('publish_existing client call', () => {
     for (const field of ['personaId', 'tags', 'privacyStatus', 'caption']) expect(body).not.toHaveProperty(field);
   });
 
+  it('keeps a dead-account warning and drops a malformed one', async () => {
+    const warning = { code: 'account_needs_reconnect', accounts: [{ provider: 'youtube', accountId: 'UC1' }] };
+    const { client } = fakeClient(async () => ({
+      ...SCHEDULED_REPLY,
+      warnings: [warning, { code: 'account_needs_reconnect', accounts: [{ provider: 'not-a-provider', accountId: 'x' }] }, 'invalid_credentials'],
+    }));
+    const result = await publishExisting(client, BASE);
+    expect(result.mode).toBe('scheduled');
+    if (result.mode !== 'scheduled') return;
+    expect(result.warnings).toEqual([warning]);
+    expect(JSON.stringify(result)).not.toContain('invalid_credentials');
+  });
+
+  it('schedules when the warning list is malformed', async () => {
+    const { client } = fakeClient(async () => ({ ...SCHEDULED_REPLY, warnings: 'invalid_credentials' }));
+    const result = await publishExisting(client, BASE);
+    expect(result.mode).toBe('scheduled');
+    if (result.mode !== 'scheduled') return;
+    expect(result.warnings).toBeUndefined();
+  });
+
+  it('drops a reconnect warning with no accounts, an empty account id, or a non-list accounts field', async () => {
+    const { client } = fakeClient(async () => ({
+      ...SCHEDULED_REPLY,
+      warnings: [
+        { code: 'account_needs_reconnect', accounts: [] },
+        { code: 'account_needs_reconnect', accounts: [{ provider: 'youtube', accountId: '' }] },
+        { code: 'account_needs_reconnect', accounts: 'youtube' },
+      ],
+    }));
+    const result = await publishExisting(client, BASE);
+    expect(result.mode).toBe('scheduled');
+    if (result.mode !== 'scheduled') return;
+    expect(result.warnings).toBeUndefined();
+  });
+
   it('narrows an asap reply, replayed flag included', async () => {
     const { client } = fakeClient(async () => ({ ...ASAP_REPLY, replayed: true }));
     const result = await publishExisting(client, { ...BASE, mode: 'asap', publishAt: undefined });
@@ -222,6 +258,18 @@ describe('publish_existing tool handler', () => {
     expect(text).toContain('Resolved: account "Maria Cooks" → youtube UC1; account "maria.cooks" → instagram ig-1.');
     expect(text).toContain('youtube: published\n- UC1: published (https://youtu.be/v1)');
     expect(text).toContain('(all networks succeeded)');
+  });
+
+  it('names account_needs_reconnect in the tool text without a provider error', async () => {
+    const { client } = fakeClient(async () => ({
+      ...SCHEDULED_REPLY,
+      warnings: [{ code: 'account_needs_reconnect', accounts: [{ provider: 'youtube', accountId: 'UC1' }] }],
+    }));
+    const response = await handlePublishExisting(client, args());
+    const text = textOf(response);
+    expect(text).toContain('Warning account_needs_reconnect: reconnect youtube UC1');
+    expect(text).toContain('"code":"account_needs_reconnect"');
+    expect(text).not.toMatch(/invalid_credentials|OAuthException|Unauthorized/);
   });
 
   it('stops before publishing when an account reference matches nothing', async () => {

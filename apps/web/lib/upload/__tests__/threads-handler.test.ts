@@ -2,6 +2,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('@/lib/social-accounts', () => ({ getSocialAccountTokens: vi.fn(), touchSocialAccount: vi.fn() }));
+vi.mock('@/lib/account-needs-reconnect', () => ({ markAccountNeedsReconnect: vi.fn(async () => undefined) }));
 vi.mock('@/lib/supabase/service', () => ({ createSupabaseServiceClient: vi.fn(() => ({ __mock: 'service-client' })) }));
 vi.mock('@/lib/upload/publish-media', () => ({
   uploadPublishMedia: vi.fn(async () => 'https://s.example/signed.mp4'),
@@ -20,6 +21,7 @@ import { handleThreadsUpload } from '@/lib/upload/threads-handler';
 import { getSocialAccountTokens, touchSocialAccount } from '@/lib/social-accounts';
 import { cleanupPublishMedia, presignPublishMedia, uploadPublishMedia } from '@/lib/upload/publish-media';
 import { publishThreadsMedia } from '@/lib/threads';
+import { markAccountNeedsReconnect } from '@/lib/account-needs-reconnect';
 
 const MP4_BYTES = new Uint8Array([0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d]);
 
@@ -159,5 +161,13 @@ describe('handleThreadsUpload', () => {
     expect(result.success).toBe(true);
     expect(result.results.map((entry) => entry.success)).toEqual([false, true]);
     expect(result.results[0].error).toBe('boom');
+  });
+
+  it('flags an account whose stored token is empty and never calls Threads', async () => {
+    vi.mocked(getSocialAccountTokens).mockResolvedValue(tokens({ access_token: '' }));
+    const result = await handleThreadsUpload(formData(), 'user-1');
+    expect(result.results[0]).toMatchObject({ success: false, errorCode: 'token_missing' });
+    expect(markAccountNeedsReconnect).toHaveBeenCalledWith('user-1', 'threads', '42');
+    expect(publishThreadsMedia).not.toHaveBeenCalled();
   });
 });

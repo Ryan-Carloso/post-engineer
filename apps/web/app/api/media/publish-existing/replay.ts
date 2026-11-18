@@ -16,6 +16,7 @@ import { NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { apiErrorResponse } from '@/lib/api-error';
+import type { AccountNeedsReconnectWarning } from '@/lib/account-needs-reconnect';
 import { ERROR_CODES, formatErrorMessage } from '@/lib/error-codes';
 import { logger } from '@/lib/logger';
 
@@ -42,11 +43,18 @@ export function toSlotSummaries(rows: unknown): SlotSummary[] {
     }));
 }
 
+function warningFields(
+  warning: AccountNeedsReconnectWarning | null,
+): { warnings?: AccountNeedsReconnectWarning[] } {
+  return warning === null ? {} : { warnings: [warning] };
+}
+
 export async function replaySchedule(
   supabase: SupabaseClient,
   scheduleId: string,
   userId: string,
   route: string,
+  reconnectWarning: AccountNeedsReconnectWarning | null = null,
 ): Promise<NextResponse | null> {
   const { data: existing, error: existingError } = await supabase
     .from('schedules')
@@ -103,5 +111,6 @@ export async function replaySchedule(
     replayed: true,
     schedule: { id: scheduleId },
     slots: summaries,
+    ...warningFields(reconnectWarning),
   });
 }

@@ -1,5 +1,6 @@
 import { trackApiEvent } from '../analytics';
 import { classifyAccountBreak, httpStatusOf, isUnauthorizedError } from '../account-break';
+import { markAccountNeedsReconnect } from '../account-needs-reconnect';
 import { logger } from '../logger';
 import { notifyAccountBreak } from '../owner-alert-mail';
 import type { SocialProvider } from '../providers/registry';
@@ -24,6 +25,19 @@ function errorName(error: unknown): string {
   return error instanceof Error ? error.name : 'Error';
 }
 
+//---------------
+// rememberDeadCredential — a credential that never reached the provider
+// (missing blob, or a local expiry check) still leaves the account
+// looking healthy unless the flag is written here.
+//---------------
+export function rememberDeadCredential(
+  provider: SocialProvider,
+  accountId: string,
+  ownerUserId: string,
+): void {
+  void markAccountNeedsReconnect(ownerUserId, provider, accountId);
+}
+
 export function reportAccountUnauthorized(
   provider: SocialProvider,
   accountId: string,
@@ -38,7 +52,11 @@ export function reportAccountUnauthorized(
       status: httpStatusOf(error) ?? 401,
     });
   }
-  if (classifyAccountBreak(error) === null) return;
+  const breakClass = classifyAccountBreak(error);
+  if (breakClass === 'unauthorized' || breakClass === 'token_undecryptable') {
+    rememberDeadCredential(provider, accountId, ownerUserId);
+  }
+  if (breakClass === null) return;
   const pending = notifyAccountBreak({
     userId: ownerUserId,
     provider,

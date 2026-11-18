@@ -143,6 +143,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
           account_name: resolvedHandle,
           account_metadata: accountMetadata,
           encrypted_tokens: encrypted,
+          needs_reconnect: false,
         },
         { onConflict: 'user_id,provider,provider_account_id' },
       )

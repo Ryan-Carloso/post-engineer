@@ -52,6 +52,7 @@ function record(overrides: Partial<SocialAccountRecord> = {}, metadata: Record<s
     updatedAt: '2026-01-01T00:00:00.000Z',
     lastUsedAt: null,
     ...overrides,
+    needsReconnect: overrides.needsReconnect ?? false,
   };
 }
 

@@ -180,6 +180,13 @@ describe('AccountCard', () => {
       expect(screen.queryByTestId('youtube-disconnect-button')).toBeNull();
     });
 
+    it('shows the reconnect badge for a dead login and never a raw provider error', () => {
+      render(<AccountCard {...baseProps} error onReconnect={() => {}} />);
+      expect(screen.getByText('accounts.tokenInvalid')).toBeTruthy();
+      expect(screen.getByTestId('youtube-reconnect-button').textContent).toBe('accounts.reconnect');
+      expect(screen.queryByText(/invalid_credentials|401|OAuthException/)).toBeNull();
+    });
+
     it('labels the reconnect button with the reconnect copy', () => {
       render(<AccountCard {...baseProps} error onReconnect={() => {}} />);
       const button = screen.getByTestId('youtube-reconnect-button');

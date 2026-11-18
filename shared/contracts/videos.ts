@@ -27,6 +27,7 @@ import { EXPERIMENT_TARGET_PAIRS_MAX, EXPERIMENT_VARIANT_ID_PATTERN } from './ex
 import { UploadContentResponseSchema } from './media.js';
 import { UUID } from './metrics.js';
 import { SOCIAL_PROVIDERS } from './providers.js';
+import { ScheduleWarningSchema } from './schedule-warnings.js';
 import { MAX_IMAGE_UPLOAD_BYTES, MAX_VIDEO_UPLOAD_BYTES, UPLOAD_CONTENT_TYPES, UPLOAD_CONTENT_TYPE_MESSAGE, isImageUploadContentType } from './upload-types.js';
 
 /** The one video mode (issue #542): it decides render path + price. */
@@ -232,10 +233,8 @@ export const GenerateSlotResultSchema = z.object({
   tokensRefunded: z.boolean().optional(),
 });
 
-// Voice-fallback warning object (never a bare string): the persona's stored
-// voice was missing or unroutable, so the route dispatched with the house
-// default. Only one code exists today (`voice_fallback_applied`).
-export const GenerateAndScheduleWarningSchema = z.object({ code: z.string(), fromVoice: z.string(), toVoice: z.string() });
+// Warning objects, never a bare string. See schedule-warnings.ts.
+export const GenerateAndScheduleWarningSchema = ScheduleWarningSchema;
 
 // The all-failed 502 envelope ({ success: false, error, code, ... }) is
 // not modelled: the MCP throws on non-2xx before parsing, so only the
