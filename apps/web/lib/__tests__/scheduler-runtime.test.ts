@@ -48,7 +48,32 @@ vi.mock('../videos/signed-upload', () => ({
   createSupabaseVideoUploadStorage: vi.fn(() => ({ storage: true })),
 }));
 
+vi.mock('../social-token-refresh', () => ({
+  refreshExpiringSocialTokens: vi.fn().mockResolvedValue({
+    refreshed: 1, failed: 0, unauthorized: 0, skipped: 0, truncated: false,
+  }),
+}));
+vi.mock('../social-token-refresh-store', () => ({
+  createTokenRefreshStore: vi.fn(() => ({ tokenStore: true })),
+}));
+vi.mock('../instagram', () => ({
+  InstagramService: vi.fn(function InstagramService() {
+    return {
+      refreshLongLivedToken: vi.fn().mockResolvedValue({ accessToken: 'ig-new', tokenType: 'bearer', expiresIn: 100 }),
+    };
+  }),
+}));
+vi.mock('../threads', () => ({
+  refreshThreadsToken: vi.fn().mockResolvedValue({ access_token: 'th-new', expires_in: 200 }),
+}));
+vi.mock('../owner-alert-mail', () => ({ notifyAccountBreak: vi.fn().mockResolvedValue(undefined) }));
+
 import { flushPostHog } from '../posthog-server';
+import { refreshExpiringSocialTokens } from '../social-token-refresh';
+import { createTokenRefreshStore } from '../social-token-refresh-store';
+import { refreshThreadsToken } from '../threads';
+import { notifyAccountBreak } from '../owner-alert-mail';
+import { isUnauthorizedError } from '../account-break';
 import { collectPostMetrics, createPostMetricsStore } from '../metrics/post-metrics';
 import { runBillingReconciliation, createReconcileStore } from '../billing/reconcile';
 import { logger } from '../logger';
@@ -237,5 +262,69 @@ describe('startInternalScheduler', () => {
     const deps = createdDeps[0] as { now: () => number; holder: string };
     expect(deps.now()).toBeTypeOf('number');
     expect(deps.holder).toContain(':');
+  });
+});
+
+describe('social-token-refresh tick', () => {
+  async function runTick() {
+    process.env.SCHEDULER_ENABLED = 'true';
+    startInternalScheduler();
+    const deps = createdDeps[0] as {
+      jobs: Array<{ name: string; dueAfterMs: number; run: () => Promise<void> }>;
+    };
+    const job = deps.jobs.find((j) => j.name === 'social-token-refresh')!;
+    await job.run();
+    return { job, refreshDeps: vi.mocked(refreshExpiringSocialTokens).mock.calls.at(-1)![0] };
+  }
+
+  it('runs daily with the Supabase store, the real break check, and logs the report', async () => {
+    const { job, refreshDeps } = await runTick();
+
+    expect(job.dueAfterMs).toBe(24 * 60 * 60 * 1000);
+    expect(createTokenRefreshStore).toHaveBeenCalledWith({});
+    expect(refreshDeps.store).toEqual({ tokenStore: true });
+    expect(refreshDeps.isUnauthorized).toBe(isUnauthorizedError);
+    expect(logger.info).toHaveBeenCalledWith('[scheduler/social-token-refresh] completed', {
+      refreshed: 1, failed: 0, unauthorized: 0, skipped: 0, truncated: false,
+    });
+    expect(flushPostHog).toHaveBeenCalled();
+  });
+
+  it('maps both provider refresh answers to the shared shape', async () => {
+    const { refreshDeps } = await runTick();
+
+    await expect(refreshDeps.refreshers.instagram('ig-old')).resolves.toEqual({ accessToken: 'ig-new', expiresInSeconds: 100 });
+    await expect(refreshDeps.refreshers.threads('th-old')).resolves.toEqual({ accessToken: 'th-new', expiresInSeconds: 200 });
+    expect(refreshThreadsToken).toHaveBeenCalledWith('th-old');
+  });
+
+  it('emails the owner about a dead account through the deduped account-break alert', async () => {
+    const { refreshDeps } = await runTick();
+    const error = new Error('dead');
+    const candidate = {
+      id: 'row-1', userId: 'u1', provider: 'instagram' as const, providerAccountId: 'ig-1',
+      tokens: { access_token: 'x' }, updatedAt: 't',
+    };
+
+    refreshDeps.reportBroken(candidate, error);
+
+    expect(notifyAccountBreak).toHaveBeenCalledWith({
+      userId: 'u1', provider: 'instagram', accountId: 'ig-1', socialAccountId: 'row-1', error,
+    });
+  });
+
+  it('logs a failed owner alert instead of dropping it', async () => {
+    const { refreshDeps } = await runTick();
+    const mailError = new Error('smtp down');
+    vi.mocked(notifyAccountBreak).mockRejectedValueOnce(mailError);
+    const candidate = {
+      id: 'row-1', userId: 'u1', provider: 'threads' as const, providerAccountId: 'th-1',
+      tokens: { access_token: 'x' }, updatedAt: 't',
+    };
+
+    refreshDeps.reportBroken(candidate, new Error('dead'));
+    await vi.waitFor(() => {
+      expect(logger.error).toHaveBeenCalledWith('[scheduler/social-token-refresh] owner alert failed', mailError);
+    });
   });
 });

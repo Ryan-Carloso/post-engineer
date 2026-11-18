@@ -180,6 +180,40 @@ describe('generate tool shape vs the videos contract', () => {
     ).toBe(true);
   });
 
+  it('accepts a requested photo duration in range and rejects one outside it on both sides', () => {
+    const withDuration = (duration: unknown) => ({
+      ...TOOL_GENERATE,
+      segments: [
+        {
+          kind: 'hook',
+          text: 'Hook text here today now.',
+          media: [{ url: 'https://example.com/a.jpg', duration }],
+        },
+      ],
+    });
+    const withContractDuration = (duration: unknown) => ({
+      ...CONTRACT_GENERATE,
+      options: {
+        ...CONTRACT_GENERATE.options,
+        segments: [
+          {
+            kind: 'hook',
+            text: 'Hook text here today now.',
+            media: [{ url: 'https://example.com/a.jpg', duration }],
+          },
+        ],
+      },
+    });
+    for (const duration of [0.5, 3, 6]) {
+      expect(accepts(GeneratePersonaVideoSchema, withDuration(duration))).toBe(true);
+      expect(accepts(GenerateAndScheduleBodySchema, withContractDuration(duration))).toBe(true);
+    }
+    for (const duration of [0, 6.01, '3', true]) {
+      expect(accepts(GeneratePersonaVideoSchema, withDuration(duration))).toBe(false);
+      expect(accepts(GenerateAndScheduleBodySchema, withContractDuration(duration))).toBe(false);
+    }
+  });
+
   it('rejects an unknown experiment pair and variant on both sides', () => {
     const badPairTool = { ...TOOL_GENERATE, experiment: { experimentId: '11111111-2222-4333-8444-555555555555', variantId: 'hook-a', pair: 21 } };
     const badPairContract = { ...CONTRACT_GENERATE, experiment: { experimentId: '11111111-2222-4333-8444-555555555555', variantId: 'hook-a', pair: 21 } };
@@ -370,6 +404,8 @@ describe('videos contract duplicated literals stay pinned', () => {
       'export const MAX_IMAGES_MODE_MEDIAS = 30;',
       'export const HOOK_MIN_SECONDS = 8;',
       'export const HOOK_MAX_SECONDS = 12;',
+      'export const MIN_REQUESTED_PHOTO_SECONDS = 0.5;',
+      'export const MAX_REQUESTED_PHOTO_SECONDS = 6;',
     ]) {
       expect(contract).toContain(line);
       expect(shared).toContain(line);

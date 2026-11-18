@@ -19,7 +19,8 @@ import 'server-only';
 // timers. Every tick checks the job's last SUCCESSFUL run persisted in
 // the database (scheduler_leases.last_success_at, migration 027):
 // post-metrics is due after >= 1h, billing-reconcile after >= 24h, the
-// expired-upload sweep after >= 1h, and a job that never ran (fresh
+// expired-upload sweep after >= 1h, the social token refresh after >= 24h,
+// and a job that never ran (fresh
 // deploy or after downtime) runs on the first tick at startup. A
 // deploy-restart therefore cannot postpone the daily billing run forever.
 //
@@ -44,6 +45,12 @@ import {
   createSupabaseVideoUploadStore,
   sweepExpiredVideoUploads,
 } from '@/lib/videos/signed-upload';
+import { InstagramService } from '@/lib/instagram';
+import { refreshThreadsToken } from '@/lib/threads';
+import { isUnauthorizedError } from '@/lib/account-break';
+import { notifyAccountBreak } from '@/lib/owner-alert-mail';
+import { refreshExpiringSocialTokens } from '@/lib/social-token-refresh';
+import { createTokenRefreshStore } from '@/lib/social-token-refresh-store';
 import {
   getSchedulerLastSuccess,
   recordSchedulerSuccess,
@@ -107,6 +114,41 @@ async function runVideoUploadSweepTick(): Promise<void> {
   }
 }
 
+// Long-lived Instagram/Threads tokens die ~60 days after connect unless
+// renewed; this renews the ones close to expiry (social-token-refresh.ts).
+async function runSocialTokenRefreshTick(): Promise<void> {
+  const report = await refreshExpiringSocialTokens({
+    store: createTokenRefreshStore(createSupabaseServiceClient()),
+    refreshers: {
+      instagram: async (accessToken) => {
+        const token = await new InstagramService().refreshLongLivedToken(accessToken);
+        return { accessToken: token.accessToken, expiresInSeconds: token.expiresIn };
+      },
+      threads: async (accessToken) => {
+        const token = await refreshThreadsToken(accessToken);
+        return { accessToken: token.access_token, expiresInSeconds: token.expires_in };
+      },
+    },
+    isUnauthorized: isUnauthorizedError,
+    reportBroken: (candidate, error) => {
+      void notifyAccountBreak({
+        userId: candidate.userId,
+        provider: candidate.provider,
+        accountId: candidate.providerAccountId,
+        socialAccountId: candidate.id,
+        error,
+      }).catch((notifyError: unknown) => {
+        logger.error('[scheduler/social-token-refresh] owner alert failed', notifyError);
+      });
+    },
+    track: trackApiEvent,
+    logger,
+    now: () => new Date(),
+  });
+  logger.info('[scheduler/social-token-refresh] completed', { ...report });
+  await flushPostHog();
+}
+
 export const SCHEDULER_TICK_MS = 60 * 60 * 1000; // hourly due-check tick
 
 export const SCHEDULER_JOBS: SchedulerJob[] = [
@@ -135,6 +177,15 @@ export const SCHEDULER_JOBS: SchedulerJob[] = [
     successEvent: 'video_upload_sweep',
     routeLabel: 'internal:video-upload-sweep',
     run: runVideoUploadSweepTick,
+  },
+  {
+    name: 'social-token-refresh',
+    dueAfterMs: 24 * 60 * 60 * 1000,
+    // TTL >> worst case (TOKEN_REFRESH_BATCH_LIMIT × 15s timeout = 12.5 min).
+    leaseTtlSeconds: 30 * 60,
+    successEvent: 'social_token_refresh_run',
+    routeLabel: 'internal:social-token-refresh',
+    run: runSocialTokenRefreshTick,
   },
 ];
 

@@ -43,10 +43,13 @@ function post(overrides: Partial<CoveragePostInput> = {}): CoveragePostInput {
   };
 }
 
+// One module-level relative publish date (computed once, stable per run).
+const PUBLISHED_AT = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
+
 function row(overrides: Partial<MetricsRowView> = {}): MetricsRowView {
   return {
     postId: 'post-1', personaId: PERSONA, provider: 'youtube', accountId: 'yt', externalId: 'abc123',
-    scriptAngle: 'myth', views: 100, likes: null, comments: null, saves: null, collectedAt: '2026-10-21T12:00:00.000Z',
+    scriptAngle: 'myth', publishedAt: PUBLISHED_AT, views: 100, likes: null, comments: null, saves: null, collectedAt: '2026-10-21T12:00:00.000Z',
     analyticsViews: null, engagedViews: null, stayedToWatchPct: null, averageViewDurationSeconds: null,
     averageViewPercentage: null, contentType: null, analyticsStatus: null, provisional: false,
     ...overrides,

@@ -202,13 +202,13 @@ export const recipesI18nEn = {
       'Write every script as a story first: one tight micro-arc, built to hold watch-through.',
   storyFirstReelsStep1: 'For any persona, topic, and video type — one story per video.',
   storyFirstReelsStep2:
-      'It finds one real story first: one concrete day, one event, first person — setup, turning point, payoff.',
+      'It finds one real story first — concrete, lived, first person: "the day it happened to me" is one form, not the only one. A documentary or study becomes a lived story, never exposition. Every fact is researched, never invented; unconfirmed facts are cut.',
   storyFirstReelsStep3:
       'It builds the hook from one mechanism that fits, and drafts three to keep the strongest.',
   storyFirstReelsStep4:
       'It writes for watch-through: open loop, payoff that cashes the promise, one CTA tied to value.',
   storyFirstReelsStep5:
-      'It generates every photo with AI from one base photo — one consistent persona, never stock.',
+      'It mixes AI photos with real photos and licensed stock photos — one consistent persona, never unlicensed media.',
   storyFirstReelsStep6:
       'Validate, score, confirm, and generate once — same as every prompt.',
   storyFirstReelsDeliver1:

@@ -7,6 +7,9 @@ import {
   dayKey,
   defaultDayForMonth,
   gridRange,
+  unionRange,
+  weekRange,
+  weekStart,
 } from '../calendar-days';
 import {
   CALENDAR_GROUP_ICON,
@@ -74,6 +77,36 @@ describe('buildMonthGrid', () => {
     const { from, to } = gridRange(grid);
     expect(new Date(from).getTime()).toBeLessThanOrEqual(new Date(2030, 11, 1).getTime());
     expect(new Date(to).getTime()).toBeGreaterThan(new Date(2030, 11, 31, 23, 59).getTime());
+  });
+});
+
+describe('week helpers', () => {
+  // 2030-06-01 is a Saturday; the week holding it starts Sunday 2030-05-26
+  // (weekStartsOn 0) or Monday 2030-05-27 (weekStartsOn 1).
+  it('starts the week on the locale first weekday', () => {
+    expect(dayKey(weekStart(new Date(2030, 5, 1), 0))).toBe('2030-05-26');
+    expect(dayKey(weekStart(new Date(2030, 5, 1), 1))).toBe('2030-05-27');
+  });
+
+  it('keeps a week-start day on itself', () => {
+    expect(dayKey(weekStart(new Date(2030, 4, 26), 0))).toBe('2030-05-26');
+    expect(dayKey(weekStart(new Date(2030, 4, 27), 1))).toBe('2030-05-27');
+  });
+
+  it('covers exactly seven days, [from, to)', () => {
+    const { from, to } = weekRange(new Date(2030, 5, 1), 0);
+    expect(dayKey(new Date(from))).toBe('2030-05-26');
+    expect(dayKey(new Date(to))).toBe('2030-06-02');
+    expect(new Date(to).getTime() - new Date(from).getTime()).toBe(7 * 86_400_000);
+  });
+
+  it('takes the widest bounds of two ranges', () => {
+    const month = gridRange(buildMonthGrid(2030, 5, 0));
+    const week = weekRange(new Date(2030, 6, 7), 0);
+    const union = unionRange(month, week);
+    expect(union.from).toBe(month.from);
+    expect(union.to).toBe(week.to);
+    expect(unionRange(month, month)).toEqual(month);
   });
 });
 

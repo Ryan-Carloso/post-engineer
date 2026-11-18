@@ -16,6 +16,7 @@
 // VIDEO_TYPE_ERROR_SUFFIX / unknownVideoTypeMessage mirror lib/tokens.ts,
 // apps/mcp/src/video-type.ts and the engine's VIDEO_TYPE_ERROR_SUFFIX;
 // MAX_SEGMENTS / MAX_IMAGES_MODE_MEDIAS / HOOK_MIN_SECONDS / HOOK_MAX_SECONDS
+// / MIN_REQUESTED_PHOTO_SECONDS / MAX_REQUESTED_PHOTO_SECONDS
 // mirror shared/script-segments/script-segments.ts, the source of the
 // generated copies in both apps (a relative import from a synced contract
 // cannot reach it: the two apps keep it at different depths).
@@ -58,6 +59,9 @@ export const MAX_IMAGES_MODE_MEDIAS = 30;
 /** Spoken hook window, seconds: reported by validate-script. */
 export const HOOK_MIN_SECONDS = 8;
 export const HOOK_MAX_SECONDS = 12;
+/** Requested on-screen seconds for one full-frame photo (segment pacing). */
+export const MIN_REQUESTED_PHOTO_SECONDS = 0.5;
+export const MAX_REQUESTED_PHOTO_SECONDS = 6;
 
 /**
  * How many problems a pre-auth 400 will echo. The route runs before session
@@ -115,6 +119,11 @@ export const segmentsRequestSchema = z.array(
               mediaId: z.string().optional(),
               url: z.string().optional(),
               overlay: segmentOverlaySchema.optional(),
+              duration: z
+                .number()
+                .min(MIN_REQUESTED_PHOTO_SECONDS)
+                .max(MAX_REQUESTED_PHOTO_SECONDS)
+                .optional(),
             })
             .strict(),
         )

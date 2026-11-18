@@ -4,7 +4,8 @@ import axios, { AxiosError } from 'axios';
 import crypto from 'crypto';
 import { logger } from '@/lib/logger';
 import { InstagramApiError } from '@/lib/errors';
-import { readMetaErrorCode } from '@/lib/meta-error-code';
+import { readMetaErrorCode, readMetaErrorSubcode } from '@/lib/meta-error-code';
+import { parseInstagramInsightsPayload } from '@/lib/instagram-insights';
 import { INSTAGRAM_USERNAME_FALLBACK } from '@/lib/providers/registry';
 
 //---------------
@@ -88,9 +89,11 @@ export class InstagramService {
   }
 
   //---------------
-  // handleApiError — converts AxiosError into InstagramApiError
+  // handleApiError — converts AxiosError into InstagramApiError. `log:
+  // false` skips the two error logs for callers that log the typed error
+  // themselves (the metrics collector warns once per failed snapshot).
   //---------------
-  private handleApiError(error: unknown, context: string): never {
+  private handleApiError(error: unknown, context: string, { log }: { log: boolean } = { log: true }): never {
     const asError = error instanceof Error ? error : new Error(String(error));
     if (axios.isAxiosError(error)) {
       const axiosError = error as AxiosError<Record<string, unknown>>;
@@ -119,20 +122,24 @@ export class InstagramService {
         }
       }
 
-      logger.error('[instagram] API ERROR', asError, {
-        context,
-        status: axiosError.response?.status,
-        message,
-        responseData,
-      });
-      logger.error(`Instagram API error (${context})`, asError, {
-        status: axiosError.response?.status,
-        data: responseData,
-      });
-      throw new InstagramApiError(message, axiosError.response?.status ?? 500, asError, readMetaErrorCode(responseData));
+      if (log) {
+        logger.error('[instagram] API ERROR', asError, {
+          context,
+          status: axiosError.response?.status,
+          message,
+          responseData,
+        });
+        logger.error(`Instagram API error (${context})`, asError, {
+          status: axiosError.response?.status,
+          data: responseData,
+        });
+      }
+      throw new InstagramApiError(message, axiosError.response?.status ?? 500, asError, readMetaErrorCode(responseData), readMetaErrorSubcode(responseData));
     }
-    logger.error('[instagram] NON-AXIOS ERROR', asError, { context, message: asError.message });
-    logger.error(`Instagram API error (${context})`, asError);
+    if (log) {
+      logger.error('[instagram] NON-AXIOS ERROR', asError, { context, message: asError.message });
+      logger.error(`Instagram API error (${context})`, asError);
+    }
     throw new InstagramApiError(asError.message, 500, asError);
   }
 
@@ -291,26 +298,19 @@ export class InstagramService {
   // HTTP errors so the caller can log and retry on the next run.
   //---------------
   async getMediaInsights(mediaId: string, accessToken: string): Promise<Record<string, number>> {
-    const response = await axios.get(
-      `https://graph.instagram.com/${this.apiVersion}/${encodeURIComponent(mediaId)}/insights`,
-      {
-        params: { metric: 'views,likes,comments,saved', access_token: accessToken },
-        timeout: 15_000,
-      },
-    );
-    const values: Record<string, number> = {};
-    const data = (response.data as { data?: unknown }).data;
-    if (!Array.isArray(data)) return values;
-    for (const item of data) {
-      if (typeof item !== 'object' || item === null) continue;
-      const record = item as { name?: unknown; values?: unknown; total_value?: unknown };
-      if (typeof record.name !== 'string') continue;
-      const first = Array.isArray(record.values) ? (record.values[0] as { value?: unknown } | undefined) : undefined;
-      const total = record.total_value as { value?: unknown } | undefined;
-      const value = first?.value ?? total?.value;
-      if (typeof value === 'number' && Number.isFinite(value)) values[record.name] = value;
+    try {
+      const response = await axios.get(
+        `https://graph.instagram.com/${this.apiVersion}/${encodeURIComponent(mediaId)}/insights`,
+        {
+          params: { metric: 'views,likes,comments,saved', access_token: accessToken },
+          timeout: 15_000,
+        },
+      );
+      return parseInstagramInsightsPayload(response.data);
+    } catch (error) {
+      // The collector logs one warning with status + Meta code per failure.
+      this.handleApiError(error, 'getMediaInsights', { log: false });
     }
-    return values;
   }
 
   //---------------
@@ -467,7 +467,7 @@ export class InstagramService {
   }
 
   //---------------
-  // refreshLongLivedToken — renews the long-lived token (~60 days, with a 24h margin)
+  // refreshLongLivedToken — renews a valid long-lived token (>= 24h old) for ~60 days
   //---------------
   async refreshLongLivedToken(accessToken: string): Promise<InstagramLongLivedToken> {
     try {
@@ -478,21 +478,22 @@ export class InstagramService {
             grant_type: 'ig_refresh_token',
             access_token: accessToken,
           },
+          timeout: 15_000,
         }
       );
 
-      const data = response.data as {
-        access_token: string;
-        token_type?: string;
-        expires_in: number;
-      };
-
-      return {
-        accessToken: data.access_token,
-        tokenType: data.token_type || 'bearer',
-        expiresIn: data.expires_in,
-      };
+      const data = response.data as { access_token?: unknown; token_type?: unknown; expires_in?: unknown };
+      // A malformed 200 is a failure, never a stored blank token.
+      if (typeof data.access_token !== 'string' || data.access_token === '') {
+        throw new InstagramApiError('Instagram token refresh returned no access token', 502);
+      }
+      if (typeof data.expires_in !== 'number' || !(data.expires_in > 0)) {
+        throw new InstagramApiError('Instagram token refresh returned an invalid expires_in', 502);
+      }
+      const tokenType = typeof data.token_type === 'string' && data.token_type !== '' ? data.token_type : 'bearer';
+      return { accessToken: data.access_token, tokenType, expiresIn: data.expires_in };
     } catch (error) {
+      if (error instanceof InstagramApiError) throw error;
       this.handleApiError(error, 'refreshLongLivedToken');
     }
   }

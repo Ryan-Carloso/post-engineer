@@ -278,3 +278,46 @@ def test_a_landscape_hook_photo_stays_a_panel_when_the_face_shows(task_dir):
     assert [(p.index, p.start, p.end) for p in framed] == [(0, 0.0, 1.2)]
     assert [(p.index, p.start, p.end) for p in full] == [(1, 1.5, 2.5), (1, 2.5, 4.5), (2, 4.5, 6.0)]
     assert warnings == []
+
+
+def test_a_requested_duration_rides_to_the_panel_and_sets_its_seconds(task_dir):
+    # The agent asked the hook photo to hold 3s and the CTA to flash 1s:
+    # the manifest panels carry the requests and the layout honors them.
+    words = [
+        ("Welcome", 0.0, 0.5), ("to", 0.5, 0.7), ("Porto", 0.7, 1.2),
+        ("Where", 2.0, 2.3), ("the", 2.3, 2.5), ("river", 2.5, 3.0),
+        ("Visit", 5.0, 5.4), ("Porto", 5.4, 5.9),
+    ]
+    segments = [
+        {"kind": "hook", "text": "Welcome to Porto.", "media": [{"url": "https://e.com/hook.jpg", "duration": 3.0}]},
+        {"kind": "content", "text": "Where the river.", "media": [{"url": "https://e.com/body.jpg", "duration": 2.0}]},
+        {"kind": "content", "text": "Visit Porto.", "media": [{"url": "https://e.com/cta.jpg", "duration": 1.0}]},
+    ]
+    warnings = _run(task_dir, _params(segments=segments), words=words)
+    panels, stored = segment_panels._read_manifest("task-1")
+    assert [(p.index, p.start, p.end, p.motion) for p in panels] == [
+        (0, 0.0, 3.0, "in"), (1, 3.0, 5.0, "out"), (2, 5.0, 6.0, "in"),
+    ]
+    assert [p.requested_duration for p in panels] == [3.0, 2.0, 1.0]
+    assert warnings == []
+    assert stored == warnings
+
+
+def test_photos_without_a_request_carry_no_duration(task_dir):
+    # Backward compatible: a photo with no duration behaves exactly as
+    # before and the manifest carries no request for it.
+    words = [
+        ("Welcome", 0.0, 0.5), ("to", 0.5, 0.7), ("Porto", 0.7, 1.2),
+        ("Where", 2.0, 2.3), ("the", 2.3, 2.5), ("river", 2.5, 3.0),
+        ("Visit", 5.0, 5.4), ("Porto", 5.4, 5.9),
+    ]
+    segments = [
+        {"kind": "hook", "text": "Welcome to Porto.", "media": [{"url": "https://e.com/hook.jpg"}]},
+        {"kind": "content", "text": "Where the river.", "media": [{"url": "https://e.com/body.jpg"}]},
+        {"kind": "content", "text": "Visit Porto.", "media": [{"url": "https://e.com/cta.jpg"}]},
+    ]
+    warnings = _run(task_dir, _params(segments=segments), words=words)
+    assert warnings == []
+    panels, _stored = segment_panels._read_manifest("task-1")
+    assert [(p.start, p.end) for p in panels] == [(0.0, 2.0), (2.0, 4.0), (4.0, 6.0)]
+    assert [p.requested_duration for p in panels] == [None, None, None]
