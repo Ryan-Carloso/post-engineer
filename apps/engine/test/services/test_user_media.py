@@ -332,7 +332,7 @@ def test_two_photos_split_the_segment_and_a_dropped_one_fails_the_task(tmp_path)
 # ---- aspect ratio (issue #538): a photo that fills the frame must match it
 
 
-def test_validate_photo_rejects_a_landscape_photo_for_a_portrait_video(tmp_path):
+def test_photo_validation_rejects_a_landscape_photo_for_a_portrait_video(tmp_path):
     path = str(tmp_path / "landscape.jpg")
     with open(path, "wb") as handle:
         handle.write(_jpeg(1920, 1080))
