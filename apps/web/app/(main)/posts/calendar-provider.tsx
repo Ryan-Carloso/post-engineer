@@ -125,7 +125,9 @@ export function PostsCalendar({
   const { t } = useI18n();
   const router = useRouter();
   // Where the last press started, to tell a drag from a click. The event id
-  // is null for a press on empty space: its trailing click is a drag's too.
+  // is null for a press on empty space: such a press never swallows a click
+  // — a drag's trailing click is swallowed only when it lands back on the
+  // same event it started on.
   const dragStartRef = useRef<{ x: number; y: number; eventId: string | null } | null>(null);
   const weekWrapRef = useRef<HTMLDivElement | null>(null);
   // The secondary zone (Lisbon by default) is read once: the week view's

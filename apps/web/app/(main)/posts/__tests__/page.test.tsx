@@ -62,7 +62,7 @@ vi.mock('@/lib/i18n/provider', () => {
 });
 
 import PostsPage from '../page';
-import { buildMonthGrid, gridRange, unionRange, weekRange } from '../calendar-days';
+import { buildMonthGrid, gridRange } from '../calendar-days';
 import { postsCalendarStrings } from '@/lib/i18n/posts-calendar-i18n';
 import { useHasAnyPostQuery, useScheduleRangeQuery } from '@/lib/schedule-range';
 import {
@@ -1208,7 +1208,7 @@ describe('PostsPage week view', () => {
     );
   });
 
-  it('extends the range read past the month grid when the week leaves it', async () => {
+  it('moves the month cursor with the shown week so the range read stays within the API span', async () => {
     vi.stubGlobal('matchMedia', vi.fn(mobileMatchMedia));
     render(<PostsPage />);
 
@@ -1220,11 +1220,48 @@ describe('PostsPage week view', () => {
     }
     const calls = vi.mocked(useScheduleRangeQuery).mock.calls;
     const last = calls[calls.length - 1];
-    // Six weeks forward from the week of 2030-06-01: the week of 2030-07-07
-    // leaves the June grid (which ends 2030-07-07), so the read extends to
-    // the end of that week while still starting at the grid's start.
-    const expected = unionRange(gridRange(buildMonthGrid(2030, 5, 0)), weekRange(new Date(2030, 6, 7), 0));
-    expect(last).toEqual(['2030-06', expected.from, expected.to, true]);
+    // Six weeks forward from the week of 2030-06-01: the week of 2030-07-07,
+    // so the cursor follows to July and the read is July's grid (42 days),
+    // never the June grid plus a runaway week.
+    const expected = gridRange(buildMonthGrid(2030, 6, 0));
+    expect(last).toEqual(['2030-07', expected.from, expected.to, true]);
+  });
+
+  it('keeps the range read within the API span when browsing many weeks ahead', async () => {
+    vi.stubGlobal('matchMedia', vi.fn(mobileMatchMedia));
+    render(<PostsPage />);
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'posts.calendarNextWeek' })).toBeInTheDocument(),
+    );
+    for (let i = 0; i < 10; i++) {
+      fireEvent.click(screen.getByRole('button', { name: 'posts.calendarNextWeek' }));
+    }
+    const calls = vi.mocked(useScheduleRangeQuery).mock.calls;
+    const last = calls[calls.length - 1];
+    const spanDays = (Date.parse(last[2] as string) - Date.parse(last[1] as string)) / 86400000;
+    expect(spanDays).toBeLessThanOrEqual(62);
+  });
+
+  it('shows a picked day in another month even when the cursor month has no posts', async () => {
+    // May slot only: June (the cursor month) has no posts, but the shown
+    // week (May 26 – Jun 1) does — the pick must not be discarded for the
+    // cursor month's emptiness.
+    const maySlot = { ...UPCOMING_SLOT, id: 'u2', slotAt: '2030-05-28T10:00:00.000Z', title: 'May topic' };
+    mockQueries({ range: [maySlot] });
+    vi.stubGlobal('matchMedia', vi.fn(mobileMatchMedia));
+    render(<PostsPage />);
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'posts.calendarPrevWeek' })).toBeInTheDocument(),
+    );
+    const grid = document.querySelector('[data-posts-calendar-week]');
+    if (grid === null) throw new Error('week grid not rendered');
+    const columns = grid.querySelectorAll('[role="group"][aria-label]:not([inert])');
+    expect(columns).toHaveLength(7);
+    // May 28 is the Tuesday column (index 2) of the week starting Sunday May 26.
+    fireEvent.click(columns[2]);
+    expect(dayPanelCardTitle('May topic')).toBeInTheDocument();
   });
 
   it('scrolls the day panel into view after a column pick on a narrow screen', async () => {

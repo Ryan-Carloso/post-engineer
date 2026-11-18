@@ -32,11 +32,13 @@ import { Button } from '@/components/ui/button';
 import { OnboardingWizard, OnboardingWizardButton } from './onboarding-wizard';
 
 //---------------
-// PostsPage — month calendar of every post (past and upcoming) across all
-// connected accounts. Read-only: the visible month grid is one from/to
-// range read of GET /api/schedule/status. Selecting a day lists its posts
+// PostsPage — calendar of every post (past and upcoming) across all
+// connected accounts: the month grid on wide screens, the week view below
+// the `md` breakpoint (day panel above the grid). Read-only: the visible
+// days are one from/to range read of GET /api/schedule/status (the union of
+// the month grid and the shown week). Selecting a day lists its posts
 // beside the calendar on wide screens (so they show without scrolling) and
-// below it otherwise; today is selected on open. Past posts and video
+// above it on mobile; today is selected on open. Past posts and video
 // generations as a list live on /posts/history.
 //---------------
 
@@ -81,8 +83,8 @@ export default function PostsPage() {
   // Anchor of the shown week (any day in it); the provider draws from the
   // week start, the page keeps the anchor so switching views keeps context.
   const [weekDate, setWeekDate] = useState(() => new Date());
-  // On mobile the day panel sits above the week grid (the mockup's layout),
-  // so a day pick never needs to scroll.
+  // On mobile the day panel sits above the week grid (the mockup's layout);
+  // a pick scrolls it into view.
   const panelOnTop = isMobile && view === 'week';
   const daySectionRef = useRef<HTMLElement>(null);
   const joins = usePostJoins();
@@ -104,8 +106,10 @@ export default function PostsPage() {
   );
   const monthPostCount = countMonthPosts(slotsByDay, cursor.year, cursor.month);
   // A month with no posts is a month-level empty state: no day stays
-  // highlighted while the panel talks about the whole month.
-  const monthIsEmpty = monthPostCount === 0;
+  // highlighted while the panel talks about the whole month. In week view
+  // the panel is day-scoped, so the cursor month's emptiness must not
+  // override the picked day (the shown week can sit in another month).
+  const monthIsEmpty = view === 'month' && monthPostCount === 0;
   const selectedKey = monthIsEmpty
     ? null
     : (pickedKey ?? defaultDayForMonth(cursor.year, cursor.month, todayKey, slotsByDay.keys()));
@@ -164,6 +168,9 @@ export default function PostsPage() {
   }, []);
   const handleWeekNavigate = useCallback((date: Date) => {
     setWeekDate(date);
+    // The month cursor follows the shown week: the read is the union of the
+    // month grid and the week, and the API rejects spans over 62 days.
+    setCursor({ year: date.getFullYear(), month: date.getMonth() });
   }, []);
   // Switching views keeps context: the week opens on the selected day, the
   // month on the shown week's month.
@@ -181,7 +188,11 @@ export default function PostsPage() {
     [selectedKey, weekDate],
   );
   const handleGoToToday = useCallback(() => {
-    if (view === 'week') setWeekDate(new Date());
+    if (view === 'week') {
+      const now = new Date();
+      setWeekDate(now);
+      setCursor({ year: now.getFullYear(), month: now.getMonth() });
+    }
     handleSelect(todayKey);
   }, [handleSelect, todayKey, view]);
   // The grid's date hints (a day click, grid scroll): a hint inside the
@@ -194,6 +205,8 @@ export default function PostsPage() {
       if (view === 'week') {
         if (dayKey(weekStart(date, firstWeekday)) !== dayKey(weekStart(weekDate, firstWeekday))) {
           setWeekDate(weekStart(date, firstWeekday));
+          // The month cursor follows the shown week, as in handleWeekNavigate.
+          setCursor({ year: date.getFullYear(), month: date.getMonth() });
         }
         return;
       }
