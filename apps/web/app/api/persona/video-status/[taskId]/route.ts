@@ -11,7 +11,7 @@ import {
 import { apiErrorResponse } from '@/lib/api-error';
 import { rewriteVideoUrls, SAFE_TASK_ID } from '@/lib/video-urls';
 import { enforceScopedTaskRead } from '@/lib/video-task-scope';
-import { taskPayload, taskState, extractTaskError } from '@/lib/engine-task-state';
+import { extractTaskError, isFailedVideoStatus, isCompletedVideoStatus } from '@/lib/engine-task-state';
 import { hasPublishedSlotForTask, readDurableTaskState } from '@/lib/generation/gone-settle';
 import { lookupSlotIdForTask } from '@/lib/slot-by-task';
 import { postUrlFor } from '@/lib/post-url';
@@ -237,34 +237,6 @@ function attachPostUrl(envelope: unknown, postUrl: string | null): unknown {
     ...(envelope as Record<string, unknown>),
     body: { ...(inner as Record<string, unknown>), postUrl },
   };
-}
-
-//---------------
-// Terminal-state detection — shared parsing lives in
-// lib/engine-task-state; the string-status fallback below stays here
-// because only this proxy honors non-numeric shapes.
-//---------------
-function hasStringState(task: Record<string, unknown>, values: string[]): boolean {
-  return [task.status, task.task_status].some(
-    (candidate) =>
-      typeof candidate === 'string' && values.includes(candidate.toLowerCase()),
-  );
-}
-
-function isFailedVideoStatus(value: unknown): boolean {
-  const task = taskPayload(value);
-  if (!task) return false;
-  const state = taskState(task);
-  if (state !== null) return state === -1;
-  return hasStringState(task, ['failed', 'failure', 'error']);
-}
-
-function isCompletedVideoStatus(value: unknown): boolean {
-  const task = taskPayload(value);
-  if (!task) return false;
-  const state = taskState(task);
-  if (state !== null) return state === 1;
-  return hasStringState(task, ['completed', 'complete', 'done', 'success']);
 }
 
 //---------------
