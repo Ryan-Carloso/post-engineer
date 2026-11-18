@@ -334,34 +334,34 @@ function PairTable({ pairsCreated, comparisons, firstName, secondName, firstId, 
   const { t } = useI18n();
   return (
     <div className="overflow-x-auto">
-    <table className="mt-4 w-full min-w-80 text-sm">
-      <thead>
-        <tr className="border-b border-hairline text-left text-xs font-semibold text-muted-text">
-          <th scope="col" className="py-2 pr-2">{t('experiments.pairHeader')}</th>
-          <th scope="col" className="py-2 pr-2 text-right">{firstName}</th>
-          <th scope="col" className="py-2 pr-2 text-right">{secondName}</th>
-          <th scope="col" className="py-2 text-right">{t('experiments.winnerHeader')}</th>
-        </tr>
-      </thead>
-      <tbody>
-        {Array.from({ length: pairsCreated }, (_, index) => index + 1).map((pair) => {
-          const comparison = comparisons.find((entry) => entry.pair === pair);
-          const viewsFirst = comparison?.values[firstId]?.views ?? null;
-          const viewsSecond = comparison?.values[secondId]?.views ?? null;
-          const winner = comparison?.winner ?? null;
-          return (
-            <tr key={pair} className="border-b border-hairline last:border-b-0">
-              <td className="py-2 pr-2 text-muted-text tabular-nums">{pair}</td>
-              <td className="py-2 pr-2 text-right text-ink tabular-nums">{viewsFirst === null ? '—' : formatNumber(viewsFirst)}</td>
-              <td className="py-2 pr-2 text-right text-ink tabular-nums">{viewsSecond === null ? '—' : formatNumber(viewsSecond)}</td>
-              <td className="py-2 text-right font-medium text-ink">
-                {winner === null ? (comparison === undefined ? t('experiments.noData') : t('experiments.tie')) : variantName(winner)}
-              </td>
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
+      <table className="mt-4 w-full min-w-80 text-sm">
+        <thead>
+          <tr className="border-b border-hairline text-left text-xs font-semibold text-muted-text">
+            <th scope="col" className="py-2 pr-2">{t('experiments.pairHeader')}</th>
+            <th scope="col" className="py-2 pr-2 text-right">{firstName}</th>
+            <th scope="col" className="py-2 pr-2 text-right">{secondName}</th>
+            <th scope="col" className="py-2 text-right">{t('experiments.winnerHeader')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {Array.from({ length: pairsCreated }, (_, index) => index + 1).map((pair) => {
+            const comparison = comparisons.find((entry) => entry.pair === pair);
+            const viewsFirst = comparison?.values[firstId]?.views ?? null;
+            const viewsSecond = comparison?.values[secondId]?.views ?? null;
+            const winner = comparison?.winner ?? null;
+            return (
+              <tr key={pair} className="border-b border-hairline last:border-b-0">
+                <td className="py-2 pr-2 text-muted-text tabular-nums">{pair}</td>
+                <td className="py-2 pr-2 text-right text-ink tabular-nums">{viewsFirst === null ? '—' : formatNumber(viewsFirst)}</td>
+                <td className="py-2 pr-2 text-right text-ink tabular-nums">{viewsSecond === null ? '—' : formatNumber(viewsSecond)}</td>
+                <td className="py-2 text-right font-medium text-ink">
+                  {winner === null ? (comparison === undefined ? t('experiments.noData') : t('experiments.tie')) : variantName(winner)}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }
