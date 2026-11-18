@@ -1,7 +1,7 @@
 // Hand-written request/response schemas for generate-openapi.mjs, keyed by
 // "METHOD /api/path". Each entry mirrors the route's own validation (cited in
 // the comment); endpoints without an entry keep the generic responses.
-import { experimentLinkSchema, metricsOperationSchemas } from './openapi-metrics-schemas.mjs'; import { videoOperationSchemas } from './openapi-videos-schemas.mjs'; import { OAUTH_CONNECT_PROVIDERS, SOCIAL_PROVIDERS as providers } from '../../../shared/contracts/providers.ts';
+import { experimentLinkSchema, metricsOperationSchemas } from './openapi-metrics-schemas.mjs'; import { videoOperationSchemas } from './openapi-videos-schemas.mjs'; import { OAUTH_CONNECT_PROVIDERS, SCHEDULE_ACCOUNT_COLUMNS, SOCIAL_PROVIDERS as providers } from '../../../shared/contracts/providers.ts';
 
 const object = (properties, required = []) => ({
   type: 'object',
@@ -148,7 +148,7 @@ const scheduleSummary = object({
   id: str,
   persona_id: { type: 'string', nullable: true },
   providers: strArray,
-  ...fields(strArray, ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook'].map((p) => `${p}_account_ids`)),
+  ...fields(strArray, Object.values(SCHEDULE_ACCOUNT_COLUMNS)),
   days_of_week: { type: 'array', items: int },
   ...fields(int, ['start_hour', 'end_hour', 'posts_per_day']),
   timezone: str,

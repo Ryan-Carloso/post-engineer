@@ -2,19 +2,9 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import { FilterX } from 'lucide-react';
-import {
-  useSchedulesQuery,
-  usePersonaListQuery,
-  useYouTubeAccountsQuery,
-  useInstagramAccountsQuery,
-  useLinkedinAccountsQuery,
-  useThreadsAccountsQuery,
-  useFacebookAccountsQuery,
-  useBlueskyAccountsQuery,
-  type ScheduleConfig,
-  type ScheduledSlot,
-} from '@/lib/api';
-import { useRumbleAccountsQuery } from '@/lib/social-accounts-queries';
+import { useSchedulesQuery, usePersonaListQuery, type ScheduleConfig, type ScheduledSlot } from '@/lib/api';
+import { SOCIAL_PROVIDERS, type SocialProvider } from '@/lib/contracts/providers';
+import { useSocialAccountsQuery } from '@/lib/social-accounts-queries';
 import { useI18n } from '@/lib/i18n/provider';
 import { PROVIDER_LABELS, accountOption, type AccountOption, scheduleAccountIds } from '@/lib/account-options';
 import { Button } from '@/components/ui/button';
@@ -29,9 +19,7 @@ import type { PersonaPhoto } from './calendar-days';
 // publishing accounts), the network/account filters and the card itself.
 //---------------
 
-export type ProviderFilter = 'all' | 'youtube' | 'instagram' | 'linkedin' | 'bluesky' | 'threads' | 'facebook' | 'rumble';
-
-const PROVIDERS: Exclude<ProviderFilter, 'all'>[] = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'rumble'];
+export type ProviderFilter = 'all' | SocialProvider;
 
 //---------------
 // resolveAccountFilter — a selected account only stays applied when it
@@ -62,13 +50,8 @@ export interface PostJoins {
 export function usePostJoins(): PostJoins {
   const schedulesQuery = useSchedulesQuery();
   const personasQuery = usePersonaListQuery();
-  const youtubeQuery = useYouTubeAccountsQuery();
-  const instagramQuery = useInstagramAccountsQuery();
-  const linkedinQuery = useLinkedinAccountsQuery();
-  const blueskyQuery = useBlueskyAccountsQuery();
-  const threadsQuery = useThreadsAccountsQuery();
-  const facebookQuery = useFacebookAccountsQuery();
-  const rumbleQuery = useRumbleAccountsQuery();
+  // Every network's accounts, from the one shared social-accounts query.
+  const accountsQuery = useSocialAccountsQuery();
 
   const scheduleById = useMemo(
     () => new Map((schedulesQuery.data ?? []).map((schedule) => [schedule.id, schedule])),
@@ -89,37 +72,17 @@ export function usePostJoins(): PostJoins {
     [personasQuery.data],
   );
   const accountOptions: AccountOption[] = useMemo(
-    () => [
-      ...(youtubeQuery.data?.accounts ?? []).map(accountOption),
-      ...(instagramQuery.data?.accounts ?? []).map(accountOption),
-      ...(linkedinQuery.data?.accounts ?? []).map(accountOption),
-      ...(blueskyQuery.data?.accounts ?? []).map(accountOption),
-      ...(threadsQuery.data?.accounts ?? []).map(accountOption),
-      ...(facebookQuery.data?.accounts ?? []).map(accountOption),
-      ...(rumbleQuery.data?.accounts ?? []).map(accountOption),
-    ],
-    [youtubeQuery.data, instagramQuery.data, linkedinQuery.data, blueskyQuery.data, threadsQuery.data, facebookQuery.data, rumbleQuery.data],
+    () => (accountsQuery.data?.accounts ?? []).map(accountOption),
+    [accountsQuery.data],
   );
   const { refetch: refetchSchedules } = schedulesQuery;
   const { refetch: refetchPersonas } = personasQuery;
-  const { refetch: refetchYoutube } = youtubeQuery;
-  const { refetch: refetchInstagram } = instagramQuery;
-  const { refetch: refetchLinkedin } = linkedinQuery;
-  const { refetch: refetchBluesky } = blueskyQuery;
-  const { refetch: refetchThreads } = threadsQuery;
-  const { refetch: refetchFacebook } = facebookQuery;
-  const { refetch: refetchRumble } = rumbleQuery;
+  const { refetch: refetchAccounts } = accountsQuery;
   const refetch = useCallback(() => {
     void refetchSchedules();
     void refetchPersonas();
-    void refetchYoutube();
-    void refetchInstagram();
-    void refetchLinkedin();
-    void refetchBluesky();
-    void refetchThreads();
-    void refetchFacebook();
-    void refetchRumble();
-  }, [refetchSchedules, refetchPersonas, refetchYoutube, refetchInstagram, refetchLinkedin, refetchBluesky, refetchThreads, refetchFacebook, refetchRumble]);
+    void refetchAccounts();
+  }, [refetchSchedules, refetchPersonas, refetchAccounts]);
 
   return {
     scheduleById,
@@ -135,23 +98,11 @@ export function usePostJoins(): PostJoins {
     isLoading:
       schedulesQuery.isLoading ||
       personasQuery.isLoading ||
-      youtubeQuery.isLoading ||
-      instagramQuery.isLoading ||
-      linkedinQuery.isLoading ||
-      blueskyQuery.isLoading ||
-      threadsQuery.isLoading ||
-      facebookQuery.isLoading ||
-      rumbleQuery.isLoading,
+      accountsQuery.isLoading,
     isError:
       schedulesQuery.isError ||
       personasQuery.isError ||
-      youtubeQuery.isError ||
-      instagramQuery.isError ||
-      linkedinQuery.isError ||
-      blueskyQuery.isError ||
-      threadsQuery.isError ||
-      facebookQuery.isError ||
-      rumbleQuery.isError,
+      accountsQuery.isError,
     refetch,
   };
 }
@@ -248,7 +199,7 @@ export function PostFiltersBar({
           value={filters.provider}
           disabled={inert}
           onChange={(event) => {
-            const next = PROVIDERS.find((item) => item === event.target.value) ?? 'all';
+            const next = SOCIAL_PROVIDERS.find((item) => item === event.target.value) ?? 'all';
             filters.setProvider(next);
           }}
           className={cn(
@@ -259,7 +210,7 @@ export function PostFiltersBar({
           )}
         >
           <option value="all">{t('posts.allProviders')}</option>
-          {PROVIDERS.map((item) => (
+          {SOCIAL_PROVIDERS.map((item) => (
             <option key={item} value={item}>
               {PROVIDER_LABELS[item]}
             </option>
