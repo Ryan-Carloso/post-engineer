@@ -11,22 +11,30 @@ copies only the app root (see prompt-base below).
 ## script-segments
 
 `script-segments/script-segments.ts` is the mechanical segments-script
-validation (limits, `normalize`, `validateSegments`, `joinSegments`),
-mirroring `apps/engine/app/services/script_segments.py` with the one
-documented exception (Python `casefold` vs JS `toLowerCase`, e.g. `ß`).
+validation entry point (limits, `validateSegments`, `joinSegments`).
+Its helpers live in siblings: `normalize`/`hasForbiddenContent` in
+`segment-text.ts`, mirroring `_normalized`/`_check_text_content` in
+`apps/engine/app/services/script_segments.py` (with the one documented
+exception: Python `casefold` vs JS `toLowerCase`, e.g. `ß`), and
+`CLIP_DENSITY_ITEMS`/`isVideoRef`/`clipDensityMinCount` in
+`segment-media.ts`, mirroring
+`apps/engine/app/services/segment_video.py`.
 The engine Python copy stays duplicated on purpose: Python and
 TypeScript cannot share code.
 
-The consumers use byte-identical generated copies, committed to git:
+The consumers use generated copies of all three modules, committed to git:
 
-- `apps/web/lib/generation/script-segments.ts`
-- `apps/mcp/src/script-segments.ts`
+- `apps/web/lib/generation/{script-segments,segment-media,segment-text}.ts`
+- `apps/mcp/src/{script-segments,segment-media,segment-text}.ts`
 
-The shared file has no imports, so the same bytes compile under the
-web's bundler resolution and the MCP's NodeNext resolution, and both
-apps keep their existing import paths unchanged.
+The MCP copy is byte-identical to the shared source. The web copy has
+the `.js` suffix stripped from its relative sibling imports
+(`./segment-media.js` -> `./segment-media`) so webpack can resolve
+them; the sibling helper modules have no imports and are byte-identical
+in both apps.
 
-To change the validation, edit only the shared file, then regenerate:
+To change the validation, edit the relevant module under
+`shared/script-segments/`, then regenerate:
 
 ```sh
 node scripts/sync-script-segments.mjs
