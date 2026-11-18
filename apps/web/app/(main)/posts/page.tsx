@@ -156,16 +156,24 @@ export default function PostsPage() {
   // an outside day from the neighbouring month) shows that day's month,
   // and the month buttons move the selection to the new month's default
   // day instead of leaving the detail below on a day from the month left.
-  // In week view the pick only moves the panel: the week stays put, and
-  // the month cursor is untouched (switching back to month resyncs it).
+  // In week view a pick inside the shown week only moves the panel, but a
+  // pick from outside it — the sidebar mini calendar can name any day —
+  // moves the anchor (and the month cursor with it), so the read covers the
+  // picked day and the panel never names a day outside the read.
   // On a narrow screen the pick scrolls the day panel into view in both
   // views: the panel sits above the grid, but the grid can be scrolled
   // into view when the pick happens.
   const handleSelect = useCallback(
     (key: string) => {
       setPickedKey(key);
+      const date = dateFromKey(key);
       if (view === 'month') {
-        const date = dateFromKey(key);
+        setCursor({ year: date.getFullYear(), month: date.getMonth() });
+      } else if (dayKey(weekStart(date, firstWeekday)) !== dayKey(weekStart(weekDate, firstWeekday))) {
+        // The pick left the shown week (mini calendar, back-to-today): the
+        // anchor follows it, so the read covers the picked day and the
+        // panel never names a day outside the read.
+        setWeekDate(date);
         setCursor({ year: date.getFullYear(), month: date.getMonth() });
       }
       const section = daySectionRef.current;
@@ -174,7 +182,7 @@ export default function PostsPage() {
         section.scrollIntoView({ behavior: 'smooth', block: 'start' });
       });
     },
-    [view],
+    [view, firstWeekday, weekDate],
   );
   const handleMonthNavigate = useCallback((year: number, month: number) => {
     setCursor({ year, month });
