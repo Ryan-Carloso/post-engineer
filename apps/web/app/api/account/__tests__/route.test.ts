@@ -9,9 +9,10 @@ vi.mock('@/lib/social-accounts', () => ({
   deleteSocialAccount: vi.fn(),
 }));
 
-vi.mock('@/lib/account-profile-sync', () => ({
-  syncAccountProfile: vi.fn(),
-}));
+vi.mock('@/lib/account-profile-sync', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/account-profile-sync')>();
+  return { syncAccountProfile: vi.fn(), credentialFailureHeld: actual.credentialFailureHeld };
+});
 
 vi.mock('@/lib/supabase/service', () => ({
   createSupabaseServiceClient: vi.fn(),
@@ -239,6 +240,30 @@ describe('GET /api/account', () => {
     const body = (await res.json()) as { accounts: Array<{ recordId: string; status?: string }> };
     expect(body.accounts.find((account) => account.recordId === 'rec-401')?.status).toBe('error');
     expect(body.accounts.find((account) => account.recordId === 'rec-bsky')?.status).toBe('error');
+  });
+
+  it('keeps a row flagged while the failure cooldown holds a dead credential, and only then', async () => {
+    mockSession();
+    const recent = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+    const old = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+    const row = (id: string, metadata: Record<string, unknown>) => ({
+      id, provider: 'youtube', providerAccountId: `ch-${id}`, accountName: id,
+      createdAt: '2024-01-01T00:00:00.000Z', lastUsedAt: null, accountMetadata: metadata,
+    });
+    vi.mocked(listSocialAccounts).mockResolvedValue([
+      row('rec-held-401', { profileSyncFailedAt: recent, profileSyncFailedReason: 'unauthorized' }),
+      row('rec-held-decrypt', { profileSyncFailedAt: recent, profileSyncFailedReason: 'TokenDecryptError' }),
+      row('rec-held-transient', { profileSyncFailedAt: recent, profileSyncFailedReason: 'Error' }),
+      row('rec-expired-401', { profileSyncFailedAt: old, profileSyncFailedReason: 'unauthorized' }),
+    ] as never);
+
+    const res = await GET();
+    const body = (await res.json()) as { accounts: Array<{ recordId: string; status: string }> };
+    const status = (id: string) => body.accounts.find((account) => account.recordId === id)?.status;
+    expect(status('rec-held-401')).toBe('error');
+    expect(status('rec-held-decrypt')).toBe('error');
+    expect(status('rec-held-transient')).toBe('ok');
+    expect(status('rec-expired-401')).toBe('ok');
   });
 
   it('leaves transient sync failures unflagged so the card keeps its disconnect action', async () => {

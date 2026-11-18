@@ -24,15 +24,54 @@ import { NextResponse } from 'next/server';
 // 404s, the proxy consults the engine's task record and redirects to the
 // actual video file, so consumers (card thumbnails, detail player) don't
 // need to know the engine's naming.
+//
+// A miss is terminal-aware (issue #553): the engine no longer knowing the
+// task, or a failed/complete task with no file, answers 410 Gone with the
+// short "no longer available" message. Only a task that is still queued or
+// processing (or a lookup that could not decide) answers 404 Not Found.
+// Every miss logs exactly once with taskId, requested and reason.
 //---------------
 
 const USER_ID = 'user-1';
+const GONE_MESSAGE = 'The video is no longer available.';
 
 function mockAuth() {
   vi.mocked(requireSupabaseSession).mockResolvedValue({
     auth: { userId: USER_ID, accessToken: 'pe_test_key', isApiKey: true },
     error: null,
   } as never);
+}
+
+// Real engine task envelope: { status, message, body }.
+function taskEnvelope(body: unknown) {
+  return Response.json({ status: 200, message: 'success', body });
+}
+
+function taskNotFoundResponse() {
+  return new Response(JSON.stringify({ status: 404, message: 'req-1: task not found' }), { status: 404 });
+}
+
+function downloadMissFetchMock(taskResponse: () => Response | Promise<Response>) {
+  return vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.includes('/api/v1/download/') || url.includes('/api/v1/stream/')) {
+      return new Response('not found', { status: 404 });
+    }
+    if (url.includes('/api/v1/tasks/')) {
+      return taskResponse();
+    }
+    return new Response('unexpected', { status: 500 });
+  });
+}
+
+// The single miss warning comes from apiErrorResponse: one logger.warn, no
+// logger.error. Returns the warn call's metadata for the branch assertion.
+function expectSingleMissWarning(status: number, reason: 'gone' | 'failed' | 'pending' | 'unknown') {
+  expect(logger.warn).toHaveBeenCalledTimes(1);
+  expect(logger.error).not.toHaveBeenCalled();
+  const call = vi.mocked(logger.warn).mock.calls[0];
+  expect(call[0]).toBe(`[GET /api/persona/video-download] ${status} ${status === 410 ? GONE_MESSAGE : 'Video file not found.'}`);
+  expect(call[1]).toMatchObject({ taskId: 'task-1', requested: 'final-1.mp4', reason });
 }
 
 describe('GET /api/persona/video-download', () => {
@@ -95,9 +134,7 @@ describe('GET /api/persona/video-download', () => {
         return new Response('not found', { status: 404 });
       }
       if (url.includes('/api/v1/tasks/task-1')) {
-        return Response.json({
-          data: { files: ['/api/v1/download/task-1/outputs/final-9.mp4'] },
-        });
+        return taskEnvelope({ files: ['/api/v1/download/task-1/outputs/final-9.mp4'] });
       }
       return new Response('unexpected', { status: 500 });
     });
@@ -111,31 +148,132 @@ describe('GET /api/persona/video-download', () => {
     expect(new URL(response.headers.get('location') ?? '', 'https://app.test').pathname).toBe(
       '/api/persona/video-download/task-1/outputs/final-9.mp4',
     );
-    // The miss is loud and diagnosable.
+    // The miss is loud and diagnosable, exactly once.
+    expect(logger.warn).toHaveBeenCalledTimes(1);
     expect(logger.warn).toHaveBeenCalledWith(
       '[video-download] requested file missing; redirecting',
       expect.objectContaining({ taskId: 'task-1', resolved: 'outputs/final-9.mp4' }),
     );
   });
 
-  it('returns a logged 404 when the task has no video file at all', async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      const url = String(input);
-      if (url.includes('/api/v1/download/')) return new Response('not found', { status: 404 });
-      if (url.includes('/api/v1/tasks/')) return Response.json({ data: { files: [] } });
-      return new Response('unexpected', { status: 500 });
+  it('returns 410 Gone when the engine no longer knows the task', async () => {
+    vi.stubGlobal('fetch', downloadMissFetchMock(async () => taskNotFoundResponse()));
+
+    const response = await GET(new Request('https://app.test/api/persona/video-download/task-1/final-1.mp4'), {
+      params: Promise.resolve({ taskId: 'task-1', path: ['final-1.mp4'] }),
     });
-    vi.stubGlobal('fetch', fetchMock);
+
+    expect(response.status).toBe(410);
+    const body = (await response.json()) as { success: boolean; error: string };
+    expect(body.success).toBe(false);
+    expect(body.error).toBe(GONE_MESSAGE);
+    expectSingleMissWarning(410, 'gone');
+  });
+
+  it('returns 410 Gone when the task failed, without leaking the engine error', async () => {
+    vi.stubGlobal('fetch', downloadMissFetchMock(async () => taskEnvelope({
+      task_id: 'task-1',
+      state: -1,
+      error: 'custom audio file is invalid: boom with secret',
+    })));
+
+    const response = await GET(new Request('https://app.test/api/persona/video-download/task-1/final-1.mp4'), {
+      params: Promise.resolve({ taskId: 'task-1', path: ['final-1.mp4'] }),
+    });
+
+    expect(response.status).toBe(410);
+    const body = (await response.json()) as { success: boolean; error: string };
+    expect(body.success).toBe(false);
+    expect(body.error).toBe(GONE_MESSAGE);
+    expect(body.error).not.toContain('boom');
+    expect(body.error).not.toContain('custom audio');
+    expectSingleMissWarning(410, 'failed');
+  });
+
+  it('returns 410 Gone when a failed task only carries a failed string status', async () => {
+    vi.stubGlobal('fetch', downloadMissFetchMock(async () => taskEnvelope({
+      task_id: 'task-1',
+      status: 'failed',
+      error: 'boom string status',
+    })));
+
+    const response = await GET(new Request('https://app.test/api/persona/video-download/task-1/final-1.mp4'), {
+      params: Promise.resolve({ taskId: 'task-1', path: ['final-1.mp4'] }),
+    });
+
+    expect(response.status).toBe(410);
+    const body = (await response.json()) as { error: string };
+    expect(body.error).toBe(GONE_MESSAGE);
+    expect(body.error).not.toContain('boom');
+    expectSingleMissWarning(410, 'failed');
+  });
+
+  it('returns 410 Gone when a complete task has no file and none will appear', async () => {
+    vi.stubGlobal('fetch', downloadMissFetchMock(async () => taskEnvelope({
+      task_id: 'task-1',
+      state: 1,
+      progress: 100,
+    })));
+
+    const response = await GET(new Request('https://app.test/api/persona/video-download/task-1/final-1.mp4'), {
+      params: Promise.resolve({ taskId: 'task-1', path: ['final-1.mp4'] }),
+    });
+
+    expect(response.status).toBe(410);
+    const body = (await response.json()) as { error: string };
+    expect(body.error).toBe(GONE_MESSAGE);
+    expectSingleMissWarning(410, 'gone');
+  });
+
+  it('returns a logged 404 when the task is still processing', async () => {
+    vi.stubGlobal('fetch', downloadMissFetchMock(async () => taskEnvelope({
+      task_id: 'task-1',
+      state: 4,
+      progress: 42,
+    })));
 
     const response = await GET(new Request('https://app.test/api/persona/video-download/task-1/final-1.mp4'), {
       params: Promise.resolve({ taskId: 'task-1', path: ['final-1.mp4'] }),
     });
 
     expect(response.status).toBe(404);
-    expect(logger.warn).toHaveBeenCalledWith(
-      '[video-download] no video file found for task',
-      expect.objectContaining({ taskId: 'task-1' }),
-    );
+    expectSingleMissWarning(404, 'pending');
+  });
+
+  it('returns a logged 404 when the task has no video file and no terminal state', async () => {
+    vi.stubGlobal('fetch', downloadMissFetchMock(async () => taskEnvelope({ files: [] })));
+
+    const response = await GET(new Request('https://app.test/api/persona/video-download/task-1/final-1.mp4'), {
+      params: Promise.resolve({ taskId: 'task-1', path: ['final-1.mp4'] }),
+    });
+
+    expect(response.status).toBe(404);
+    expectSingleMissWarning(404, 'unknown');
+  });
+
+  it('returns a logged 404 when the task lookup fails transiently', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/v1/download/') || url.includes('/api/v1/stream/')) {
+        return new Response('not found', { status: 404 });
+      }
+      if (url.includes('/api/v1/tasks/')) {
+        throw new Error('lookup down api_key=sk-live-secret-value-123456');
+      }
+      return new Response('unexpected', { status: 500 });
+    }));
+
+    const response = await GET(new Request('https://app.test/api/persona/video-download/task-1/final-1.mp4'), {
+      params: Promise.resolve({ taskId: 'task-1', path: ['final-1.mp4'] }),
+    });
+
+    expect(response.status).toBe(404);
+    expectSingleMissWarning(404, 'unknown');
+    // The transient cause is not swallowed: it rides on the single warning,
+    // scrubbed by apiErrorResponse (no credential fragment survives).
+    const cause = (vi.mocked(logger.warn).mock.calls[0][1] as { cause?: unknown }).cause;
+    expect(cause).toEqual(expect.stringContaining('lookup down'));
+    expect(cause).not.toEqual(expect.stringContaining('sk-live-secret-value-123456'));
   });
 
   it('returns 502 (not a redirect) when the engine itself is unreachable', async () => {
@@ -186,9 +324,7 @@ describe('GET /api/persona/video-download', () => {
         return new Response('not found', { status: 404 });
       }
       if (url.includes('/api/v1/tasks/task-1')) {
-        return Response.json({
-          data: { files: ['/api/v1/download/task-1/final-1.mp4'] },
-        });
+        return taskEnvelope({ files: ['/api/v1/download/task-1/final-1.mp4'] });
       }
       return new Response('unexpected', { status: 500 });
     });
@@ -200,10 +336,7 @@ describe('GET /api/persona/video-download', () => {
 
     expect(response.status).toBe(404);
     expect(response.headers.get('location')).toBeNull();
-    expect(logger.warn).toHaveBeenCalledWith(
-      '[video-download] no video file found for task',
-      expect.objectContaining({ taskId: 'task-1' }),
-    );
+    expectSingleMissWarning(404, 'unknown');
   });
 
   it('returns 401 without a session, before any engine call', async () => {
@@ -222,15 +355,16 @@ describe('GET /api/persona/video-download', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('returns 404 for another owner’s task and forwards the caller’s user id', async () => {
+  it('returns 410 Gone for another owner’s task and forwards the caller’s user id', async () => {
     // The engine looks the task up scoped by the x-user-id the proxy
     // forwards: another owner's task 404s exactly like a missing one, so
-    // the download never leaks across accounts.
+    // the download never leaks across accounts. Both are terminal for this
+    // caller, so the answer is 410 Gone, not a retryable 404.
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       void init;
       const url = String(input);
       if (url.includes('/api/v1/download/')) return new Response('not found', { status: 404 });
-      if (url.includes('/api/v1/tasks/')) return new Response('not found', { status: 404 });
+      if (url.includes('/api/v1/tasks/')) return taskNotFoundResponse();
       return new Response('unexpected', { status: 500 });
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -239,7 +373,8 @@ describe('GET /api/persona/video-download', () => {
       params: Promise.resolve({ taskId: 'task-1', path: ['final-1.mp4'] }),
     });
 
-    expect(response.status).toBe(404);
+    expect(response.status).toBe(410);
     expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ headers: { 'x-user-id': USER_ID } });
+    expectSingleMissWarning(410, 'gone');
   });
 });

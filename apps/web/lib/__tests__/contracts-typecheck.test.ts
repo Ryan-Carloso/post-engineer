@@ -179,6 +179,7 @@ describe('contracts typecheck', () => {
           accountId: 'UC-1',
           externalId: 'vid_1',
           scriptAngle: null,
+          publishedAt: '2026-11-12T10:00:00.000Z',
           views: 10,
           likes: 2,
           comments: 1,

@@ -5,6 +5,7 @@ import { logger } from '@/lib/logger';
 import type { SocialProvider } from '@/lib/providers/registry';
 import { isMetricsWindow, type AnalyticsStatus, type MetricsWindow } from './metrics-query';
 import { findReopenedPosts } from './post-metrics-reopen';
+import { classifySnapshotFailure, snapshotFailureDetails } from './snapshot-failure';
 
 //---------------
 // post-metrics — per-video performance snapshots for A/B content tests.
@@ -306,13 +307,42 @@ export async function collectPostMetrics(deps: PostMetricsDeps): Promise<PostMet
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        logger.warn('[post-metrics] snapshot failed', {
-          postId: post.id,
-          provider: target.provider,
-          error: message,
-        });
-        report.errors.push(`${post.id}/${target.provider}: snapshot failed`);
-        failed = true;
+        const kind = classifySnapshotFailure(error);
+        const { status, metaCode } = snapshotFailureDetails(error);
+        if (kind === 'token_dead') {
+          // Dead token: keep the window open so a later run measures
+          // the video after the user reconnects the account.
+          logger.warn('[post-metrics] snapshot failed: token dead', {
+            postId: post.id,
+            provider: target.provider,
+            error: message,
+            status,
+            metaCode,
+          });
+          report.errors.push(`${post.id}/${target.provider}: snapshot failed`);
+          failed = true;
+        } else if (kind === 'media_gone') {
+          // Deleted media: terminal skip, reusing the "snapshot skipped"
+          // pattern — report once and let the window close.
+          logger.warn('[post-metrics] snapshot skipped', {
+            postId: post.id,
+            provider: target.provider,
+            externalId: target.externalId,
+            accountId: target.accountId,
+            status,
+            metaCode,
+          });
+        } else {
+          logger.warn('[post-metrics] snapshot failed', {
+            postId: post.id,
+            provider: target.provider,
+            error: message,
+            status,
+            metaCode,
+          });
+          report.errors.push(`${post.id}/${target.provider}: snapshot failed`);
+          failed = true;
+        }
       }
     }
     // Every video is in (or there is none to measure): stop re-reading this

@@ -7,24 +7,26 @@
 
 const PERSONA_ID = '11111111-2222-4333-8444-555555555555';
 
+const PUBLISHED_AT = '2026-10-20T12:00:00Z';
+
 const ROWS = [
   {
     postId: 'post-1', personaId: PERSONA_ID, provider: 'youtube', accountId: 'UC1',
-    externalId: 'video-1', scriptAngle: 'myth-busting', views: 1200, likes: 90,
+    externalId: 'video-1', scriptAngle: 'myth-busting', publishedAt: PUBLISHED_AT, views: 1200, likes: 90,
     comments: 12, saves: 4, collectedAt: '2026-10-21T12:00:00Z',
     analyticsViews: 1000, engagedViews: 641, stayedToWatchPct: 64.1, averageViewDurationSeconds: 21.4,
     averageViewPercentage: 78.2, contentType: 'SHORTS', analyticsStatus: 'ok', provisional: true,
   },
   {
     postId: 'post-2', personaId: null, provider: 'youtube', accountId: 'UC1',
-    externalId: 'video-2', scriptAngle: null, views: 300, likes: 10,
+    externalId: 'video-2', scriptAngle: null, publishedAt: PUBLISHED_AT, views: 300, likes: 10,
     comments: 1, saves: 0, collectedAt: '2026-10-21T12:00:00Z',
     analyticsViews: null, engagedViews: null, stayedToWatchPct: null, averageViewDurationSeconds: null,
     averageViewPercentage: null, contentType: null, analyticsStatus: null, provisional: false,
   },
   {
     postId: 'post-3', personaId: PERSONA_ID, provider: 'youtube', accountId: 'UC1',
-    externalId: 'video-3', scriptAngle: 'tutorial', views: null, likes: null,
+    externalId: 'video-3', scriptAngle: 'tutorial', publishedAt: PUBLISHED_AT, views: null, likes: null,
     comments: null, saves: null, collectedAt: '2026-10-21T12:00:00Z',
     analyticsViews: null, engagedViews: null, stayedToWatchPct: null, averageViewDurationSeconds: null,
     averageViewPercentage: null, contentType: null, analyticsStatus: null, provisional: false,

@@ -6,10 +6,25 @@ import { logger } from '@/lib/logger';
 import { SAFE_TASK_ID } from '@/lib/video-urls';
 import { enforceScopedTaskRead } from '@/lib/video-task-scope';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
+import {
+  isCompletedVideoStatus,
+  isFailedVideoStatus,
+  isPendingVideoStatus,
+} from '@/lib/engine-task-state';
 
 type DownloadContext = {
   params: Promise<{ taskId: string; path: string[] }>;
 };
+
+// resolveEngineVideoPath outcome: the video path to redirect to, or the
+// reason no video will (or may yet) exist. `gone` and `failed` are terminal
+// and answer 410 Gone; `pending` and `unknown` stay 404 Not Found.
+type VideoPathResolution =
+  | { kind: 'path'; segments: string[] }
+  | { kind: 'gone' }
+  | { kind: 'failed' }
+  | { kind: 'pending' }
+  | { kind: 'unknown'; lookupError?: unknown };
 
 const FORWARDED_RESPONSE_HEADERS = ['content-type', 'content-length', 'content-range', 'accept-ranges'] as const;
 
@@ -71,31 +86,38 @@ async function getHandler(request: Request, context: DownloadContext): Promise<N
   if (upstream.status === 404) {
     // The guessed file name (final-1.mp4) is not what every engine task
     // stores. Consult the task record and redirect to the actual video
-    // file so consumers never need to know the engine's naming. A miss is
-    // always logged with both paths.
-    const resolved = await resolveEngineVideoPath(taskId, auth.userId);
+    // file so consumers never need to know the engine's naming.
+    const resolution = await resolveEngineVideoPath(taskId, auth.userId);
     // Self-redirect guard: the engine keeps 404ing this exact file (a task
     // that has not finished, or a file that is simply gone). Redirecting to
     // the resolved path would loop 302 -> 404 -> 302 until the browser gives
     // up, so a self-match is treated as missing instead of redirecting.
-    if (resolved && !isSamePath(resolved, path)) {
+    if (resolution.kind === 'path' && !isSamePath(resolution.segments, path)) {
       logger.warn('[video-download] requested file missing; redirecting', {
         taskId,
         requested: path.join('/'),
-        resolved: resolved.join('/'),
+        resolved: resolution.segments.join('/'),
       });
-      const target = `/api/persona/video-download/${encodeURIComponent(taskId)}/${resolved
+      const target = `/api/persona/video-download/${encodeURIComponent(taskId)}/${resolution.segments
         .map(encodeURIComponent)
         .join('/')}${source === 'stream' ? '?source=stream' : ''}`;
       return NextResponse.redirect(new URL(target, request.url), 302);
     }
-    logger.warn('[video-download] no video file found for task', {
-      taskId,
-      requested: path.join('/'),
-    });
-    return apiErrorResponse(404, 'Video file not found.', {
+    // One warning per miss via apiErrorResponse, carrying taskId, requested
+    // and reason. Terminal states answer 410 Gone so the caller stops
+    // polling; pending/unknown stay 404. The engine's failure text is not
+    // read at all: the status route owns recording why a task failed.
+    // A transient lookup error rides as the cause, which apiErrorResponse
+    // scrubs and caps before it reaches the log.
+    const reason = resolution.kind === 'path' ? 'unknown' : resolution.kind;
+    const status = reason === 'gone' || reason === 'failed' ? 410 : 404;
+    const message = status === 410 ? 'The video is no longer available.' : 'Video file not found.';
+    return apiErrorResponse(status, message, {
       route: 'GET /api/persona/video-download',
-      metadata: { taskId },
+      metadata: { taskId, requested: path.join('/'), reason },
+      ...(resolution.kind === 'unknown' && resolution.lookupError !== undefined
+        ? { cause: resolution.lookupError }
+        : {}),
     });
   }
 
@@ -122,30 +144,42 @@ async function getHandler(request: Request, context: DownloadContext): Promise<N
 }
 
 //---------------
-// resolveEngineVideoPath — read-only lookup of the engine task record;
-// deep-walks the payload for the first internal video URL
-// (/api/v1/download|stream/{taskId}/file) and returns the file segments
-// (without the taskId). Null when the task exposes no video file.
+// resolveEngineVideoPath — read-only lookup of the engine task record.
+// Deep-walks the BaseResponse envelope ({ status, message, body }) for the
+// first internal video URL (/api/v1/download|stream/{taskId}/file) and
+// returns its file segments (without the taskId). A lookup HTTP 404 means
+// the engine no longer knows the task (gone); numeric state -1 (or a failed
+// string status) is failed; state 1 with no file is gone because the file
+// will not appear; states 3/4 are pending. Every lookup failure that cannot
+// prove a verdict (network error, non-404 non-OK, unparseable body, missing
+// env) is unknown and stays a transient 404. Never logs: the caller emits
+// the single miss warning.
 //---------------
-async function resolveEngineVideoPath(taskId: string, userId: string): Promise<string[] | null> {
+async function resolveEngineVideoPath(taskId: string, userId: string): Promise<VideoPathResolution> {
   const baseUrl = process.env.MONEYPRINT_API_URL?.replace(/\/+$/, '');
-  if (!baseUrl) return null;
+  if (!baseUrl) return { kind: 'unknown' };
   const prefix = `${taskId}/`;
+  let response: Response;
   try {
-    const response = await fetch(`${baseUrl}/api/v1/tasks/${encodeURIComponent(taskId)}`, {
+    response = await fetch(`${baseUrl}/api/v1/tasks/${encodeURIComponent(taskId)}`, {
       headers: engineAuthHeaders(userId),
       cache: 'no-store',
     });
-    if (!response.ok) return null;
-    const body: unknown = await response.json().catch(() => null);
-    return findVideoSegments(body, prefix);
   } catch (error) {
-    logger.warn('[video-download] task lookup failed during fallback', {
-      taskId,
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return null;
+    // Transient: the miss warning carries the cause (scrubbed by apiErrorResponse).
+    return { kind: 'unknown', lookupError: error };
   }
+  if (response.status === 404) return { kind: 'gone' };
+  if (!response.ok) return { kind: 'unknown' };
+  const body: unknown = await response.json().catch(() => null);
+  if (body === null) return { kind: 'unknown' };
+  const segments = findVideoSegments(body, prefix);
+  if (segments !== null) return { kind: 'path', segments };
+  if (isFailedVideoStatus(body)) return { kind: 'failed' };
+  // Complete with no video URL: the file will never appear.
+  if (isCompletedVideoStatus(body)) return { kind: 'gone' };
+  if (isPendingVideoStatus(body)) return { kind: 'pending' };
+  return { kind: 'unknown' };
 }
 
 function findVideoSegments(value: unknown, prefix: string): string[] | null {
