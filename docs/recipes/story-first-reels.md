@@ -28,13 +28,16 @@ a fact is transformed into a concrete story lived by someone: the fact
 goes inside the story, never as exposition. Every fact is researched
 before it is asserted — mechanisms, hormones, numbers, deadlines —
 never invented; a fact that cannot be confirmed is cut from the script.
+Every story picks one archetype for the value it delivers —
+informative, funny, inspirational, relatable, or provocative — never
+basic content.
 Media is mixed: AI photos, real photos, and licensed stock photos,
 with one consistent persona for the whole video whenever the persona
 appears, never unlicensed media. Photos only: the engine renders
 segment media as photos and cannot use video (b-roll) as segment
 media yet.
 The agent finds the real story first (setup, turning point,
-payoff), builds the hook from one mechanism that fits, writes for
+payoff), picks the archetype, builds the hook from one mechanism that fits, writes for
 watch-through, and follows the base: validate, score, confirm, then
 generate once. Every emotional beat is visible in the image, the
 rhythm varies take by take, every sentence gets its own image, and

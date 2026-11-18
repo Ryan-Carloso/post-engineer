@@ -203,12 +203,14 @@ export const recipesI18nPt = {
   storyFirstReelsStep2:
       'Ele encontra uma história real primeiro — concreta, vivida, primeira pessoa: "o dia que me aconteceu" é uma forma, não a única. Um documentário ou estudo vira história vivida, nunca exposição. Cada facto é pesquisado, nunca inventado; factos por confirmar são cortados.',
   storyFirstReelsStep3:
-      'Ele constrói o hook a partir de um mecanismo que cabe, e rascunha três para ficar com o mais forte.',
+      'Ele escolhe um arquétipo para o valor — informativo, engraçado, inspirador, identificação ou provocativo — nunca conteúdo básico.',
   storyFirstReelsStep4:
-      'Ele escreve para segurar a atenção: abre um gancho, entrega o desfecho prometido, um CTA com valor.',
+      'Ele constrói o hook a partir de um mecanismo que cabe, e rascunha três para ficar com o mais forte.',
   storyFirstReelsStep5:
-      'Ele mistura fotos de IA com fotos reais e fotos de banco de imagem com licença — uma só persona consistente, nunca mídia sem licença.',
+      'Ele escreve para segurar a atenção: abre um gancho, entrega o desfecho prometido, um CTA com valor.',
   storyFirstReelsStep6:
+      'Ele mistura fotos de IA com fotos reais e fotos de banco de imagem com licença — uma só persona consistente, nunca mídia sem licença.',
+  storyFirstReelsStep7:
       'Valide, pontue, confirme e gere uma vez — igual a todos os prompts.',
   storyFirstReelsDeliver1:
       'Um roteiro com história primeiro: gancho primeiro, depois conteúdo, dentro do contrato.',
