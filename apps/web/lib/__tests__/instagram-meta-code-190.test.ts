@@ -170,4 +170,42 @@ describe('InstagramService Meta code 190', () => {
       expect.objectContaining({ creationId: 'c1' }),
     );
   });
+
+  it('keeps the Meta provider code and subcode when getMediaInsights answers 400 + code 100 subcode 33 (deleted media)', async () => {
+    const goneBody = {
+      error: {
+        message: 'Unsupported get request. Object with ID \'media-9\' does not exist',
+        type: 'RestException',
+        code: 100,
+        error_subcode: 33,
+        fbtrace_id: 'trace-gone',
+      },
+    };
+    const axiosError = Object.assign(new Error('Request failed with status code 400'), {
+      isAxiosError: true,
+      response: { status: 400, data: goneBody },
+    });
+    mockGet.mockRejectedValueOnce(axiosError);
+
+    const service = new InstagramService();
+    const error = await service.getMediaInsights('media-9', 'tok').catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(InstagramApiError);
+    expect((error as InstagramApiError).statusCode).toBe(400);
+    expect((error as InstagramApiError).providerCode).toBe(100);
+    expect((error as InstagramApiError).providerSubcode).toBe(33);
+    expect((error as InstagramApiError).message).toContain('Unsupported get request');
+  });
+
+  it('keeps the Meta provider code when getMediaInsights answers 400 + code 190 (dead token)', async () => {
+    mockGet.mockRejectedValueOnce(meta190AxiosError());
+
+    const service = new InstagramService();
+    const error = await service.getMediaInsights('media-9', 'tok').catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(InstagramApiError);
+    expect((error as InstagramApiError).statusCode).toBe(400);
+    expect((error as InstagramApiError).providerCode).toBe(190);
+    expect((error as InstagramApiError).message).toContain('Error validating access token');
+  });
 });

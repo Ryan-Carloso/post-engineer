@@ -23,6 +23,7 @@ import { REOPEN_ROWS_LIMIT } from '../post-metrics-reopen';
 import { logger } from '@/lib/logger';
 import { SOCIAL_PROVIDERS } from '@/lib/providers/registry';
 import { ANALYTICS_STATUSES } from '../metrics-query';
+import { InstagramApiError } from '@/lib/errors';
 
 const COUNTERS = { views: 1200, likes: 80, comments: 9, saves: null };
 const NO_EXPERIMENT = { experimentId: null, variantId: null, experimentPair: null };
@@ -373,8 +374,84 @@ describe('collectPostMetrics', () => {
       postId: 'post-1',
       provider: 'youtube',
       error: 'token expired',
+      status: undefined,
+      metaCode: undefined,
     });
     expect(d.track).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the post open when the Instagram token is dead and logs it as token dead', async () => {
+    const deadToken = new InstagramApiError(
+      'Error validating access token: The session has been invalidated',
+      400,
+      undefined,
+      190,
+    );
+    const d = deps({
+      fetchTaskSource: vi.fn(async () => ({ publishResults: [IG_ENTRY], scriptAngle: null })),
+      fetchCounters: vi.fn(async () => { throw deadToken; }),
+    });
+    const report = await collectPostMetrics(d);
+
+    expect(report.recorded).toBe(0);
+    expect(report.errors).toEqual(['post-1/instagram: snapshot failed']);
+    expect(logger.warn).toHaveBeenCalledWith('[post-metrics] snapshot failed: token dead', {
+      postId: 'post-1',
+      provider: 'instagram',
+      error: 'Error validating access token: The session has been invalidated',
+      status: 400,
+      metaCode: 190,
+    });
+    expect(d.markDone).not.toHaveBeenCalled();
+  });
+
+  it('skips a deleted Instagram media once and closes the window', async () => {
+    const gone = new InstagramApiError(
+      'Unsupported get request. Object with ID \'media-9\' does not exist',
+      400,
+      undefined,
+      100,
+      33,
+    );
+    const d = deps({
+      fetchTaskSource: vi.fn(async () => ({ publishResults: [IG_ENTRY], scriptAngle: null })),
+      fetchCounters: vi.fn(async () => { throw gone; }),
+    });
+    const report = await collectPostMetrics(d);
+
+    expect(report.recorded).toBe(0);
+    expect(report.errors).toEqual([]);
+    expect(logger.warn).toHaveBeenCalledWith('[post-metrics] snapshot skipped', {
+      postId: 'post-1',
+      provider: 'instagram',
+      externalId: 'media-9',
+      accountId: 'ig-acct',
+      status: 400,
+      metaCode: 100,
+    });
+    expect(d.markDone).toHaveBeenCalledWith('post-1', '24h');
+  });
+
+  it('retries a transient Instagram failure and logs status with meta code', async () => {
+    // Code 100 without subcode 33 is a generic invalid-parameter
+    // failure, not a deleted media: it must retry, not skip.
+    const invalidParam = new InstagramApiError('Invalid parameter', 400, undefined, 100);
+    const d = deps({
+      fetchTaskSource: vi.fn(async () => ({ publishResults: [IG_ENTRY], scriptAngle: null })),
+      fetchCounters: vi.fn(async () => { throw invalidParam; }),
+    });
+    const report = await collectPostMetrics(d);
+
+    expect(report.recorded).toBe(0);
+    expect(report.errors).toEqual(['post-1/instagram: snapshot failed']);
+    expect(logger.warn).toHaveBeenCalledWith('[post-metrics] snapshot failed', {
+      postId: 'post-1',
+      provider: 'instagram',
+      error: 'Invalid parameter',
+      status: 400,
+      metaCode: 100,
+    });
+    expect(d.markDone).not.toHaveBeenCalled();
   });
 
   it('reports an unreachable engine per post without stopping the run', async () => {
