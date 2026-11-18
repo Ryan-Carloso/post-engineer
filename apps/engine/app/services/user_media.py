@@ -459,10 +459,9 @@ def prepare_segment_media(
             photo_content.claim(seen_hashes, photo_hash, f"segment {index} image {image_index}")
             if built.card_reason is not None:
                 skipped.append(f"segment {index} image {image_index} media overlay skipped: {built.card_reason}")
-            panels.append(Panel(
-                index=index, path=built.path, x=built.x, y=built.y,
+            panels.append(Panel(index=index, path=built.path, x=built.x, y=built.y,
                 start=slice_start, end=slice_end, caption_bottom=built.caption_bottom,
-            ))
+                requested_duration=media.get("duration")))
     return panels, skipped
 
 

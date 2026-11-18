@@ -124,3 +124,32 @@ def test_request_without_segments_is_accepted_for_script_only_calls():
         ).segments
         is None
     )
+
+
+def test_segment_media_duration_bounds_come_from_the_photo_duration_module():
+    from app.services import segment_photo_duration
+
+    fields = SegmentMedia.model_fields
+    ge = [m.ge for m in fields["duration"].metadata if hasattr(m, "ge")]
+    le = [m.le for m in fields["duration"].metadata if hasattr(m, "le")]
+    assert ge == [segment_photo_duration.MIN_REQUESTED_PHOTO_SECONDS]
+    assert le == [segment_photo_duration.MAX_REQUESTED_PHOTO_SECONDS]
+
+
+@pytest.mark.parametrize("duration", [0.5, 3, 6.0])
+def test_segment_media_duration_in_range_is_kept(duration):
+    media = SegmentMedia(url="https://example.com/x.jpg", duration=duration)
+    assert media.model_dump(exclude_none=True)["duration"] == duration
+
+
+@pytest.mark.parametrize("duration", [0, -1, 0.49, 6.01, "3", True, float("nan"), float("inf")])
+def test_segment_media_duration_out_of_range_or_not_a_number_is_rejected(duration):
+    with pytest.raises(ValidationError):
+        SegmentMedia(url="https://example.com/x.jpg", duration=duration)
+
+
+def test_segment_media_without_duration_dumps_without_it():
+    # Old clients send no duration: the dump is unchanged, so nothing
+    # downstream sees a new key.
+    media = SegmentMedia(url="https://example.com/x.jpg")
+    assert "duration" not in media.model_dump(exclude_none=True)
