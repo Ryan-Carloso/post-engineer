@@ -4,7 +4,7 @@ import { toPublicAccountSafe, type PublicAccountItem, type SocialProvider } from
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
-import { syncAccountProfile } from '@/lib/account-profile-sync';
+import { syncAccountProfile, credentialFailureHeld } from '@/lib/account-profile-sync';
 import { TokenDecryptError } from '@/lib/token-crypto';
 import { isUnauthorizedError } from '@/lib/upload/account-unauthorized';
 import { logger } from '@/lib/logger';
@@ -55,8 +55,9 @@ async function getHandler(request?: Request) {
     // response, so the accounts page flags that card instead of showing it
     // as healthy. A transient failure does not: the row keeps the stored
     // profile and stays 'ok', so the card keeps its disconnect action and
-    // the next list retries the row. The failure never drops the row: one
-    // broken account must not block the others.
+    // the next list retries the row once its failure cooldown expires. The
+    // failure never drops the row: one broken account must not block the
+    // others.
     const failedRecordIds = new Set<string>();
     const effectiveRecords = await Promise.all(records.map(async (record) => {
       try {
@@ -72,9 +73,13 @@ async function getHandler(request?: Request) {
         return record;
       }
     }));
+    // A row held in the failure cooldown by a dead credential skipped its
+    // fetch and threw nothing, but it is still broken: keep it flagged.
+    const now = new Date();
     const accounts: PublicAccountItem[] = [];
     for (const effectiveRecord of effectiveRecords) {
-      const mapped = toPublicAccountSafe(effectiveRecord, failedRecordIds.has(effectiveRecord.id) ? 'error' : 'ok');
+      const broken = failedRecordIds.has(effectiveRecord.id) || credentialFailureHeld(effectiveRecord, now);
+      const mapped = toPublicAccountSafe(effectiveRecord, broken ? 'error' : 'ok');
       if (mapped) {
         accounts.push(mapped);
       } else {
