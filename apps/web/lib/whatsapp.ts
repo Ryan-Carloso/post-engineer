@@ -1,9 +1,3 @@
-//---------------
-// WhatsApp support — the number comes from NEXT_PUBLIC_WHATSAPP_NUMBER.
-// There is no hardcoded fallback: when the env var is unset, support
-// links/buttons do not render at all (callers check for null).
-//---------------
-
 function readWhatsAppNumber(): string | null {
   const raw = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER;
   if (!raw) return null;

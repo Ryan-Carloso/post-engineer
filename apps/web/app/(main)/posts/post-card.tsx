@@ -17,16 +17,6 @@ import {
   type CalendarGroup,
 } from './status';
 
-//---------------
-// Shared pieces of the posts list: the status badge (icon + label, so status
-// never relies on color alone; a post uses the calendar's group words, so
-// the row, the legend and the day summary name a post the same way), the
-// time formatters and the account resolution a row needs, plus the
-// standalone video generations row. A scheduled post renders through
-// post-row.tsx, which the day list and the history list share.
-//---------------
-
-// Rows open the post detail: hovering one outlines it.
 const CARD_BORDER = 'border-line shadow-[0_1px_2px_rgba(13,43,69,0.05)] hover:border-primary/40';
 
 const GENERATION_STATUS_KEY: Record<string, TranslationKey> = {
@@ -44,14 +34,12 @@ export function formatTime(value: string, locale: Locale): string {
   return new Date(value).toLocaleTimeString(locale === 'pt' ? 'pt-BR' : 'en-US', { timeStyle: 'short' });
 }
 
-// Account labels of the accounts a slot's schedule targets.
 export function resolveSlotAccounts(schedule: ScheduleConfig | undefined, accounts: AccountOption[]): AccountOption[] {
   if (!schedule) return [];
   const ids = new Set(scheduleAccountIds(schedule));
   return accounts.filter((account) => ids.has(account.id));
 }
 
-// The engine download proxy serves a task's final render.
 export function videoUrlFor(taskId: string | null | undefined): string | null {
   return taskId ? `/api/persona/video-download/${encodeURIComponent(taskId)}/final-1.mp4` : null;
 }
@@ -82,19 +70,12 @@ export const StatusBadge = ({
   );
 };
 
-// Standalone video generations as one dense row: the list is scanned, not
-// read, so the status, the subject and the time sit on a single line and the
-// whole row is the link (no repeated "open" button). A failure keeps the
-// translated message for its error_code, never the raw engine text.
 export const GenerationCard = ({ generation, locale }: { generation: VideoGeneration; locale: Locale }) => {
   const { t } = useI18n();
   const videoUrl = videoUrlFor(generation.engineTaskId);
   const thumbSrc = generation.status === 'completed' ? videoUrl : null;
   const isFailed = generation.status === 'failed';
   const statusLabel = t(GENERATION_STATUS_KEY[generation.status] ?? 'posts.statusPending');
-  // Render inputs live in plain statements: v8 emits no line entries for
-  // expressions inside JSX, so Codecov counts those lines as missed patch
-  // lines. Keep the branches here, never inline them back into the markup.
   const ariaLabel = `${statusLabel}: ${generation.videoSubject ?? t('posts.unknownTitle')}`;
   const failureBorderClass = isFailed && 'border-destructive/35 hover:border-destructive/55';
   const thumbIconClass = cn('size-4', isFailed ? 'text-destructive' : 'text-muted-text');

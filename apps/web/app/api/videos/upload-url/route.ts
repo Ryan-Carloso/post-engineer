@@ -1,17 +1,3 @@
-//---------------
-// POST /api/videos/upload-url — mint a signed video upload (issue #561).
-//
-// The remote replacement for a local video path: the authenticated
-// caller declares the video type and size, and gets back one short-lived
-// signed upload URL bound to their own row in `video_uploads` (owner,
-// expiry and the 2GB ceiling are recorded server-side). The caller PUTs
-// the bytes straight to storage, then completes the upload
-// (POST /api/videos/uploads/[uploadId]/complete) and publishes it by id
-// (POST /api/videos/publish-by-id). The signed URL is a capability for
-// this caller's own upload only — it is minted for the authenticated
-// owner and recorded against their id.
-//---------------
-
 import { NextResponse } from 'next/server';
 
 import { apiErrorResponse } from '@/lib/api-error';

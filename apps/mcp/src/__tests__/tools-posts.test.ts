@@ -15,9 +15,6 @@ import type { McpToolResponse } from '../tools-call.js';
 
 vi.mock('../analytics.js', () => ({
   mcpTelemetryHeaders: () => ({}),
-  // Passthrough stand-in for the real withTracking, which only opens the
-  // per-call context: mcp_tool_called is recorded by the web API from the
-  // request headers, not by the MCP (see analytics.test.ts).
   withTelemetryHeaders: (_headers: unknown, run: () => Promise<unknown>) => run(),
   withToolCall: (_tool: string, _action: string, run: () => Promise<unknown>) => run(),
   withTracking: (_toolName: string, handler: (args: unknown) => Promise<unknown>) => async (args: unknown) => {
@@ -42,8 +39,6 @@ function textOf(response: unknown): string {
   return block.text;
 }
 
-// A production-shaped generation detail: the contract requires every
-// field, so a partial payload is a malformed 200.
 const GENERATION_DETAIL = {
   id: 'g-1',
   generationId: 'g-1',
@@ -60,8 +55,6 @@ const GENERATION_DETAIL = {
   scriptAngle: null,
 };
 
-// A production-shaped metrics row and the two response envelopes: the
-// contract requires every field, so a partial payload is a malformed 200.
 const METRICS_ROW = {
   postId: 'p-1',
   personaId: PERSONA,
@@ -150,7 +143,6 @@ describe('getPostMetrics', () => {
   });
 
   it('rejects a malformed 200 body', async () => {
-    // The pre-contract shape (no coverage/asOf) is now a loud error.
     const request = vi.fn().mockResolvedValue({ success: true, rows: [], truncated: false });
     await expect(getPostMetrics(fakeClient(request), { window: '7d' })).rejects.toThrow(
       'Malformed response from GET /api/metrics',
@@ -232,7 +224,6 @@ describe('get_youtube_retention_curve', () => {
   });
 
   it('rejects a malformed 200 body', async () => {
-    // The pre-contract shape (no dates/provisional) is now a loud error.
     const request = vi.fn().mockResolvedValue({ success: true, points: [] });
     await expect(getYouTubeRetentionCurve(fakeClient(request), { account: 'UC1', video: 'v1' })).rejects.toThrow(
       'Malformed response from GET /api/metrics/retention-curve',

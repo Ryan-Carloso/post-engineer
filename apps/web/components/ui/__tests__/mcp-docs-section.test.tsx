@@ -4,7 +4,6 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import McpDocsSection from '@/components/ui/mcp-docs-section';
 import { buildInstallPrompt } from '@/lib/mcp-install-prompt';
 
-// Mutable locale so tests can render the component in either language.
 let mockLocale: 'en' | 'pt' = 'en';
 
 vi.mock('@/lib/i18n/provider', () => {
@@ -21,7 +20,6 @@ vi.mock('@/lib/i18n/provider', () => {
   return {
     useI18n: () => ({
       t: (key: string) => translations[key] ?? key,
-      // Getter so tests can flip mockLocale between renders.
       get locale() {
         return mockLocale;
       },
@@ -51,8 +49,6 @@ describe('McpDocsSection', () => {
   it('renders the install prompt, tools, security note, and help link', () => {
     render(<McpDocsSection apiKey={null} />);
 
-    // Every user-facing string is asserted: the i18n keys are part of the
-    // rendered contract, so blanking a key must fail the suite.
     expect(screen.getByText('Install prompt')).toBeInTheDocument();
     expect(screen.getByText('Available tools')).toBeInTheDocument();
     expect(screen.getByText('Tools your agent gets.')).toBeInTheDocument();
@@ -60,7 +56,6 @@ describe('McpDocsSection', () => {
     expect(screen.getByTestId('copy-mcp-prompt-btn')).toHaveTextContent('Copy');
     const help = screen.getByRole('link', { name: 'Need help?' });
     expect(help).toHaveAttribute('href', expect.stringContaining('https://wa.me/15551234567'));
-    // The help link carries the localized support message.
     expect(help).toHaveAttribute('href', expect.stringContaining('text=I%20need%20help'));
   });
 
@@ -86,9 +81,6 @@ describe('McpDocsSection', () => {
 
     const grid = screen.getByTestId('mcp-tools-grid');
     expect(grid).toBeInTheDocument();
-    // Each card renders its tool id in the bold mono paragraph, in registry
-    // order — asserting the id itself (not just grid text) so a blanked id
-    // fails. The 16 tools are the MCP server's surface (issue #566).
     const ids = [...grid.querySelectorAll('p.font-bold')].map((p) => p.textContent);
     expect(ids).toEqual([
       'generate_video',
@@ -108,8 +100,6 @@ describe('McpDocsSection', () => {
       'check_script',
       'publish_video',
     ]);
-    // The actions of every tool sit under its name, in order, so a blanked or
-    // reordered action fails; generate_video and cancel_video have none.
     const ACTIONS: Record<string, string> = {
       generate_video: '',
       video_tasks: 'status · list_generations · get_generation',
@@ -133,7 +123,6 @@ describe('McpDocsSection', () => {
       const actionLine = card?.querySelector('p.font-mono:not(.font-bold)')?.textContent ?? '';
       expect(actionLine, `${tool} actions`).toBe(actions);
     }
-    // The actions of an action tool sit under its name; generate_video and cancel_video have none.
     const personas = [...grid.querySelectorAll('p.font-bold')].find((p) => p.textContent === 'personas')?.parentElement;
     expect(personas?.textContent).toContain('list · get · create · update · delete');
     const cancel = [...grid.querySelectorAll('p.font-bold')].find((p) => p.textContent === 'cancel_video')?.parentElement;

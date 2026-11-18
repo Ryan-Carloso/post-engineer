@@ -89,7 +89,6 @@ describe('GET /api/posts/[id]', () => {
     expect(body.success).toBe(true);
     expect(body.kind).toBe('generation');
     expect(body.generation.progress).toBe(67);
-    // The 200 body parses against the shared contract the MCP reads.
     expect(GetPostResponseSchema.safeParse(body).success).toBe(true);
     expect(getSlotPost).not.toHaveBeenCalled();
   });
@@ -155,7 +154,6 @@ describe('GET /api/posts/[id]', () => {
     expect(body.success).toBe(true);
     expect(body.kind).toBe('slot');
     expect(body.slot.id).toBe('slot-1');
-    // The 200 body parses against the shared contract the MCP reads.
     expect(GetPostResponseSchema.safeParse(body).success).toBe(true);
     expect(getSlotPost).toHaveBeenCalledWith(expect.anything(), SLOT_ID, USER_ID, null);
   });
@@ -176,9 +174,6 @@ describe('GET /api/posts/[id]', () => {
   });
 
   it('returns 404 for another user’s slot id without leaking the row', async () => {
-    // getSlotPost scopes its query by user_id, so another user's slot
-    // resolves to null exactly like an unknown id — the route must answer
-    // the same 404, never the row.
     vi.mocked(getGenerationPost).mockResolvedValue(null);
     vi.mocked(getSlotPost).mockResolvedValue(null);
     const response = await get(SLOT_ID);

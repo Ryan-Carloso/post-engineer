@@ -7,12 +7,6 @@ import type { Provider } from '../../videos/generate-and-schedule/providers-vali
 import { validateAccounts } from '../../videos/generate-and-schedule/validate-accounts';
 import { loadPublishBinding } from './bound-accounts';
 
-//---------------
-// resolvePublishAccounts — persona binding plus ownership checks for
-// publish-existing. A dead login is a warning, not a refusal: the slot
-// still schedules, and the caller surfaces account_needs_reconnect.
-//---------------
-
 export async function resolvePublishAccounts(
   supabase: SupabaseClient,
   userId: string,

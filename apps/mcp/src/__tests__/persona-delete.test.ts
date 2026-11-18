@@ -4,10 +4,6 @@ import { ApiError } from '../errors.js';
 import { handlePersonaDelete } from '../persona-delete.js';
 import type { McpToolResponse } from '../tools-call.js';
 
-// personas · delete is preview then confirm in one action: the first call
-// never deletes, the token proves the agent saw this exact preview, and a
-// persona that changed since then needs a fresh preview.
-
 function client(preview: { counts: Record<string, number>; videos?: Array<{ taskId: string; downloadUrl: string }> }) {
   const getPersonaDeletePreview = vi.fn(async () => ({
     success: true,
@@ -106,9 +102,6 @@ describe('personas · delete', () => {
   });
 
   it('reports a malformed preview 200 as an error instead of previewing with nulls', async () => {
-    // The client parses the preview against the contract: a malformed 200
-    // throws before the handler ever sees it, so there is no null-coerced
-    // preview to show.
     const { MalformedContractResponseError } = await import('../contract-response.js');
     const c = {
       getPersonaDeletePreview: vi.fn(async () => {

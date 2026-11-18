@@ -16,9 +16,6 @@ const loadGenerator = async (): Promise<Generator> =>
   import(join(root, 'apps/web/scripts/generate-engine-types.mjs'));
 
 describe('lib/engine/schema.gen.ts', () => {
-  // An engine contract change regenerates apps/engine/openapi.json (the
-  // engine's own drift test enforces that); this pins the second hop: the
-  // committed web types must be exactly the generator output for it.
   it('matches the generator output for the committed engine snapshot (run node apps/web/scripts/generate-engine-types.mjs)', async () => {
     const { generateEngineTypes } = await loadGenerator();
     const spec: unknown = JSON.parse(readFileSync(snapshotPath, 'utf8'));

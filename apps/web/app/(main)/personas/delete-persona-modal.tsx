@@ -8,16 +8,6 @@ import {
   type DeletePreview,
 } from '@/lib/api';
 
-//---------------
-// DeletePersonaModal — two-step persona deletion.
-//
-// Step 1 (preview): GET /api/persona/delete-preview lists exactly what will
-// be deleted (counts) plus per-video download links, so the user can save
-// their videos first. Step 2 (confirm): the user types the persona name to
-// arm the Delete button. Tokens are never refunded — the dialog says so
-// explicitly, matching the API's deliberate product decision.
-//---------------
-
 interface DeletePersonaModalProps {
   persona: { id: string; name: string } | null;
   onClose: () => void;
@@ -36,13 +26,8 @@ export function DeletePersonaModal({ persona, onClose, onDeleted }: DeletePerson
   const dialogRef = useRef<HTMLDivElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
 
-  // Depend on the id, not the object: a background list refetch replaces
-  // `persona` with a new object, which must not reset the dialog
-  // mid-confirmation.
   const personaId = persona?.id ?? null;
 
-  // Focus the name input when the preview is ready; Escape closes the
-  // dialog unless a delete is in flight.
   useEffect(() => {
     if (phase === 'ready') {
       nameInputRef.current?.focus();
@@ -50,14 +35,12 @@ export function DeletePersonaModal({ persona, onClose, onDeleted }: DeletePerson
   }, [phase]);
 
   useEffect(() => {
-    // The modal stays mounted while closed; only listen while open.
     if (!personaId) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && phase !== 'deleting') {
         onClose();
         return;
       }
-      // Focus trap: cycle Tab within the dialog while it claims exclusivity.
       if (event.key === 'Tab' && dialogRef.current) {
         const focusables = dialogRef.current.querySelectorAll<HTMLElement>(
           'button:not([disabled]), input:not([disabled]), a[href]',
@@ -80,21 +63,15 @@ export function DeletePersonaModal({ persona, onClose, onDeleted }: DeletePerson
 
   useEffect(() => {
     if (!personaId) {
-      // The modal stays mounted while closed (persona flips to null); clear
-      // the ref so reopening always re-arms the type-to-confirm gate.
       loadedPersonaId.current = null;
       return;
     }
-    // A new persona resets everything; a retry (attempt bump, e.g. from the
-    // links-incomplete note) keeps the typed confirmation name.
     const isNewPersona = loadedPersonaId.current !== personaId;
     loadedPersonaId.current = personaId;
     setPhase('loading');
     setPreview(null);
     if (isNewPersona) setTypedName('');
     let cancelled = false;
-    // Rejections (network failure, non-JSON body) surface as loadError —
-    // the dialog must never wedge in 'loading' with no retry.
     void fetchDeletePreview(personaId)
       .then((result) => {
         if (cancelled) return;
@@ -102,8 +79,6 @@ export function DeletePersonaModal({ persona, onClose, onDeleted }: DeletePerson
           setPreview(result);
           setPhase('ready');
         } else if (result.code === 'PERSONA_NOT_FOUND') {
-          // The persona is already gone (deleted elsewhere): no retry can
-          // fix this. Close and let the list refetch.
           onDeleted();
           onClose();
         } else {
@@ -127,10 +102,6 @@ export function DeletePersonaModal({ persona, onClose, onDeleted }: DeletePerson
   const handleDelete = (): void => {
     if (!nameMatches || phase === 'deleting') return;
     setPhase('deleting');
-    // A rejection after 'deleting' would disable Delete, Cancel and the
-    // input at once — surface it as deleteError so the user can retry.
-    // PERSONA_NOT_FOUND means the persona is already gone: close and
-    // refetch instead of offering a retry that can never succeed.
     void deletePersona(persona.id)
       .then((result) => {
         if (result.success) {

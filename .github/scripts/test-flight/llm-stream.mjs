@@ -1,21 +1,5 @@
-// Streaming reader for an OpenAI-compatible chat completions SSE stream.
-// A thinking model sends nothing until it finishes thinking, so a single
-// total timeout cannot tell thinking from dead: it kills a live model
-// mid-thought. This reader therefore aborts only on silence (no chunk
-// for silenceMs) and keeps a total cap so a job can never hang forever.
-// Reasoning is accumulated as a LENGTH only: it is internal thinking,
-// never logged as text and never used as the script.
-
 export class StreamError extends Error {}
 
-// One OpenAI-compatible chat completions call over SSE, shared by the
-// script writer and the topic proposer so there is exactly one LLM
-// client. The caller supplies the messages; this function sends
-// stream:true, accumulates delta.content, counts reasoning length only,
-// and returns the parsed JSON. Reasoning text is never logged, never
-// parsed, and never returned. A non-2xx response, an empty completion,
-// or non-JSON content throws, so the caller can move to the next model
-// in the chain instead of publishing anything the LLM did not write.
 export async function streamLlmJson({
   baseUrl,
   apiKey,

@@ -1,7 +1,3 @@
-// Temporary screenshot spec for PR #635 (sidebar). Not part of the suite:
-// delete after capturing. Logs in via the E2E user, visits /posts, waits
-// for the calendar to load, and screenshots the desktop sidebar and the
-// unchanged mobile stack. No data is mutated.
 describe('posts sidebar shots', () => {
   it('captures the sidebar on desktop and the unchanged mobile stack', () => {
     cy.loginE2EUser();

@@ -61,9 +61,6 @@ class TestGpuCostAccounting(unittest.TestCase):
         )
 
     def test_cost_usd_is_derived_from_the_per_job_span(self):
-        # Mutation guard: reverting cost_usd to the container-uptime span
-        # (_CONTAINER_START) makes cost_usd reference the container clock
-        # instead of the handler clock, and this fails.
         cost_names, _ = self._names_in_cost_fields(self._handler_source())
         self.assertTrue(cost_names, "no cost_usd keyword found in generate_bytes")
         self.assertNotIn(
@@ -79,9 +76,6 @@ class TestGpuCostAccounting(unittest.TestCase):
         )
 
     def test_container_amortised_spend_is_still_reported(self):
-        # The cold-start weight load and idle hold are real money; dropping the
-        # container view entirely would hide them. It is reported under its own
-        # key so the two numbers are never confused.
         _, container_names = self._names_in_cost_fields(self._handler_source())
         self.assertTrue(
             container_names,
@@ -105,9 +99,6 @@ class TestGpuCostAccounting(unittest.TestCase):
 class TestImageWiring(unittest.TestCase):
     """The patch must be applied in the image, not merely present on disk."""
 
-    # The deployed app is two modules (HTTP surface + GPU/renderer); the image
-    # build lives in the GPU half, but search both so a future move of the
-    # image definition does not silently un-pin the wiring.
     MODAL_MODULES = (
         "modal_longcat.py",
         "modal_longcat_gpu.py",
@@ -122,31 +113,20 @@ class TestImageWiring(unittest.TestCase):
         )
 
     def test_modal_image_ships_the_resident_renderer(self):
-        # The enter hook imports modal_longcat_resident inside the GPU
-        # container; without the add_local_file the class crashes on boot.
         source = self._modal_source()
         self.assertIn('"/root/modal_longcat_resident.py"', source)
 
     def test_gpu_image_ships_the_cost_module(self):
-        # modal_longcat.py imports modal_longcat_cost at scope, and the
-        # GPU image is what the renderer container boots from: the cost
-        # module must be mounted by LONGCAT_IMAGE itself, not merely by
-        # the slim API image (which never runs the renderer).
         engine_dir = Path(__file__).resolve().parents[2]
         gpu_source = (engine_dir / "modal_longcat_gpu.py").read_text()
         self.assertIn('"/root/modal_longcat_cost.py"', gpu_source)
 
     def test_scaledown_window_matches_the_production_app(self):
-        # 300s of idle H200 hold costs ~$0.38 per invocation against ~$0.08 at
-        # 60s, so the production app must stay at 60s.
         source = self._modal_source()
         self.assertIn("scaledown_window=60", source)
         self.assertNotIn("scaledown_window=300", source)
 
     def test_gpu_module_stays_under_the_file_size_cap(self):
-        # modal_longcat.py was split to satisfy the 500-line file-size ratchet.
-        # A future edit that grows the GPU half back over the cap fails CI, so
-        # the split cannot quietly undo itself.
         engine_dir = Path(__file__).resolve().parents[2]
         for name in self.MODAL_MODULES:
             with self.subTest(module=name):
@@ -158,9 +138,6 @@ class TestImageWiring(unittest.TestCase):
                 )
 
     def test_modal_entry_module_keeps_every_decorated_function(self):
-        # `modal deploy modal_longcat.py` and
-        # `modal run modal_longcat.py::download_weights` resolve against THIS
-        # module, so no @app.function / @app.cls may live only in the GPU half.
         engine_dir = Path(__file__).resolve().parents[2]
         gpu_source = (engine_dir / "modal_longcat_gpu.py").read_text()
         for decorator in ("@app.function", "@app.cls", "@modal.fastapi_endpoint"):

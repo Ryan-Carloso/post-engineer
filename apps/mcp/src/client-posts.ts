@@ -11,15 +11,6 @@ import { listPostsInRange as listPostsInRangeContract } from './contracts/schedu
 import { scoreDraft as scoreDraftContract } from './contracts/videos.js';
 import type { ResponseOf } from './contracts/endpoint.js';
 
-//---------------
-// Unified post detail (GET /api/posts/[id], issue #208), per-video
-// metrics (GET /api/metrics) and the YouTube retention curve
-// (GET /api/metrics/retention-curve) — HTTP calls.
-//
-// Standalone functions (not client methods) because client.ts is
-// grandfathered over the 500-line cap and may not grow.
-//---------------
-
 export interface PostMetricsQuery {
   window: '24h' | '7d' | '28d';
   persona?: string;
@@ -41,8 +32,6 @@ export async function getPostMetrics(
   client: PostEngineerClient,
   query: PostMetricsQuery,
 ): Promise<ResponseOf<typeof listMetricsContract>> {
-  // Same parameter names as the route's parseMetricsQuery; omitted filters
-  // are not sent (the route rejects empty parameters).
   const params = metricsSearchParams({
     window: query.window,
     personaId: query.persona ?? null,
@@ -82,8 +71,6 @@ export async function scoreDraft(
   client: PostEngineerClient,
   input: ScoreDraftInput,
 ): Promise<ResponseOf<typeof scoreDraftContract>> {
-  // Same parameter names as the route's body; omitted optionals are not
-  // sent (the route rejects empty parameters).
   const body: Record<string, unknown> = { draft: input.draft };
   if (input.network !== undefined) body.network = input.network;
   if (input.personaId !== undefined) body.personaId = input.personaId;
@@ -96,9 +83,6 @@ export async function scoreDraft(
   return parseContractResponse(scoreDraftContract, raw);
 }
 
-// GET /api/schedule/status in range mode (?from=&to=): every post, any status,
-// with slot_at in [from, to). limit is never sent: the route rejects it
-// together with a range.
 export async function listPostsInRange(
   client: PostEngineerClient,
   range: { from: string; to: string },

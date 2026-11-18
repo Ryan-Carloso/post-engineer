@@ -2,13 +2,6 @@ import '@testing-library/jest-dom/vitest';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 
-//---------------
-// /experiments page tests (issue #532). The data hooks are mocked; the
-// assertions cover what the API cannot: human variant names only (never
-// A/B letters), the winner only on a clear label, and the live badge
-// with a real formatted timestamp.
-//---------------
-
 vi.mock('next/link', () => ({
   default: ({ href, children, ...rest }: React.ComponentProps<'a'> & { href: string }) => (
     <a href={href} {...rest}>{children}</a>
@@ -32,9 +25,6 @@ vi.mock('@/lib/providers/registry', () => ({
 vi.mock('@/lib/i18n/provider', () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const react = require('react') as typeof import('react');
-  // Interpolating mock: the real t() substitutes {params} into the
-  // translated string, so the test can assert the formatted date instead
-  // of the key (PR #528 lesson). Params are appended after the key.
   const t = (key: string, params?: Record<string, unknown>) => {
     if (params === undefined) return key;
     return `${key} [${Object.values(params).join(', ')}]`;
@@ -139,8 +129,6 @@ describe('/experiments page', () => {
     mockQueries(detailFixture());
     render(<ExperimentsPage />);
     expect(screen.getByText('experiments.title')).toBeInTheDocument();
-    // Human names appear (table headers + wins tally); A/B variant
-    // labels never do.
     expect(screen.getAllByText('Calm question').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Direct hook').length).toBeGreaterThan(0);
     expect(screen.queryByText(/variante a/i)).toBeNull();
@@ -269,7 +257,6 @@ describe('/experiments page', () => {
     render(<ExperimentsPage />);
     expect(screen.getAllByText('experiments.tie')).toHaveLength(2);
     expect(screen.getByText('experiments.noData')).toBeInTheDocument();
-    // Pair 3 has no comparison: both view cells are a dash.
     expect(screen.getAllByText('—')).toHaveLength(2);
   });
 

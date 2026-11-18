@@ -6,21 +6,10 @@ import type { McpToolResponse } from './tools-call.js';
 import { parseContractResponse } from './contract-response.js';
 import { listPinterestBoards as listPinterestBoardsContract } from './contracts/accounts.js';
 
-//---------------
-// accounts (action: list_boards) — the board picker for Pinterest publishing.
-//
-// Pinterest pins cannot exist without a board, so generate_video
-// and publish_video (action: from_file) take the board id separately from the account
-// ids. The web route lists the boards of one connected Pinterest account
-// (the account id is the v5 user_account id stored at OAuth time); an
-// expired access token is refreshed server-side before listing.
-//---------------
-
 export const ListPinterestBoardsShape = {
   accountId: z
     .string()
     .min(1, 'accountId is required')
-    // The route trims and rejects a blank id, so the tool does too.
     .refine((value) => value.trim().length > 0, { message: 'accountId is required.' })
     .describe('The Pinterest account ID (the providerAccountId field from accounts (action: list)).'),
 };

@@ -30,8 +30,6 @@ def _params():
 
 class RequestedTests(unittest.TestCase):
     def setUp(self):
-        # The requested-event guard is process-local: clear it so each
-        # test starts from a fresh emission state.
         tm._requested_event_emitted_tasks.clear()
 
     def test_track_generation_requested_emits_event_with_context(self):
@@ -75,10 +73,6 @@ class RequestedTests(unittest.TestCase):
         self.assertEqual(props["flow"], "batch")
 
     def test_requested_emits_only_once_per_task_id(self):
-        # Batch task ids are deterministic (uuid5 per slot): a crash between
-        # dispatch and update_slot(generating) re-dispatches the SAME id on
-        # the next tick. The re-dispatch must not double-fire requested —
-        # it would inflate the failure-% denominator.
         tm._requested_event_emitted_tasks.clear()
         with patch.object(tm, "track_event") as track:
             tm.track_generation_requested(
@@ -91,9 +85,6 @@ class RequestedTests(unittest.TestCase):
         tm._requested_event_emitted_tasks.clear()
 
     def test_tracking_context_degrades_to_unknown_sentinels(self):
-        # An unreadable/missing row degrades every identity prop to the
-        # "unknown" sentinel — never a fabricated value that looks real
-        # in PostHog breakdowns.
         context = tm._task_tracking_context("ghost-task-xyz")
         self.assertEqual(context["task_id"], "ghost-task-xyz")
         self.assertEqual(context["user_id"], "unknown")
@@ -101,10 +92,6 @@ class RequestedTests(unittest.TestCase):
         self.assertEqual(context["pipeline"], "unknown")
 
     def test_tracking_context_maps_explicit_none_to_unknown_sentinels(self):
-        # dict.get's default only fires on a MISSING key — a row that
-        # stored an explicit None would otherwise slip a null prop into
-        # PostHog, breaking the "degraded identity props use the unknown
-        # sentinel" invariant.
         with patch.object(
             tm.sm.state,
             "get_task",
@@ -174,23 +161,15 @@ class ProgressMilestoneTests(unittest.TestCase):
         self.assertEqual(self._milestones(), [50, 70])
 
     def test_no_progress_event_at_hundred_percent(self):
-        # Completion is covered by video_generated / video_generation_failed,
-        # never by a 100% progress event.
         tm._update_task(self.task_id, progress=100)
         self.assertEqual(self._milestones(), [50, 70])
 
     def test_no_refire_after_multi_milestone_jump(self):
-        # The pipeline's real write pair in generate_final_videos:
-        # progress=75 crosses both milestones, then progress=100 must not
-        # fire anything again (pins the guard storing the HIGHEST crossed
-        # milestone — storing the lowest would re-fire 70 at 100).
         tm._update_task(self.task_id, progress=75)
         tm._update_task(self.task_id, progress=100)
         self.assertEqual(self._milestones(), [50, 70])
 
     def test_out_of_order_progress_does_not_refire_milestone(self):
-        # The jump to 70 crosses both milestones; a later, lower progress
-        # update must not fire anything again.
         tm._update_task(self.task_id, progress=70)
         tm._update_task(self.task_id, progress=50)
         tm._update_task(self.task_id, progress=60)
@@ -242,8 +221,6 @@ class CompleteTaskTests(unittest.TestCase):
                 "user_id": "user-1",
                 "flow": "direct",
                 "pipeline": "video",
-                # No music phase ran for this completion: the mood is
-                # unknown, never absent (degraded identity convention).
                 "music_mood": "unknown",
             },
         )
@@ -367,10 +344,6 @@ class FailTaskTests(unittest.TestCase):
         self.assertTrue(props["reason"])
 
     def test_failed_reason_scrubs_full_message_before_truncation(self):
-        # Regression: truncate-then-scrub lets a secret fragmented by the
-        # 200-char cut slip past the key-anchored pattern. The scrubber must
-        # see the full message; truncation happens after. scrub_error_text
-        # keeps that contract while also keeping the diagnostic tail.
         from app.services import analytics as analytics_module
 
         error = "E" * 150 + " api_key=TOPSECRET123 " + "F" * 150
@@ -385,7 +358,6 @@ class FailTaskTests(unittest.TestCase):
             ) as scrub,
         ):
             tm._fail_task(self.task_id, error, _params(), stage="audio")
-        # The scrubber received the whole message, not the truncated slice.
         scrub.assert_any_call(str(error), max_chars=200)
         _, props = track.call_args[0]
         self.assertIn("[redacted]", props["reason"])
@@ -432,8 +404,6 @@ class CreateTaskControllerTests(unittest.TestCase):
         ):
 
             def fake_add_task(func, *args, **kwargs):
-                # Mirror TaskManager: the on_accepted callback fires on
-                # acceptance, strictly before the worker could start.
                 on_accepted = kwargs.get("on_accepted")
                 assert on_accepted is not None
                 on_accepted()
@@ -441,9 +411,6 @@ class CreateTaskControllerTests(unittest.TestCase):
             add_task.side_effect = fake_add_task
             resp = video_controller.create_task(MagicMock(), body, stop_at="video")
             task_id = resp["body"]["task_id"]
-            # Requested fires from the on_accepted callback: after the task
-            # is accepted, strictly before the worker thread starts, and
-            # never on a 429 queue-full rejection.
             requested.assert_called_once_with(
                 task_id, user_id="user-1", flow="direct", pipeline="video"
             )
@@ -485,8 +452,6 @@ class CreateTaskControllerTests(unittest.TestCase):
         ):
             with self.assertRaises(HttpException) as ctx:
                 video_controller.create_task(MagicMock(), body, stop_at="video")
-        # Admission refused: 429, the task row is rolled back, and the
-        # refused request never enters the requested -> failed funnel.
         self.assertEqual(ctx.exception.status_code, 429)
         requested.assert_not_called()
         self.assertIsNone(sm.state.get_task("task-429-1"))
@@ -563,9 +528,6 @@ class BatchRequestedTests(unittest.TestCase):
             patch("app.controllers.v1.video.task_manager") as manager,
             patch.object(gen_module.tm, "track_generation_requested") as requested,
         ):
-            # Pin the order, not just the calls: the funnel entry must be
-            # recorded before the worker starts, or PostHog timestamps
-            # video_generation_started first and drops the conversion.
             order: list[str] = []
             requested.side_effect = lambda *a, **k: order.append("requested")
             manager.try_reserve_running.return_value.start.side_effect = (
@@ -573,8 +535,6 @@ class BatchRequestedTests(unittest.TestCase):
             )
             self.assertIsNotNone(generator._generate_slot(self._slot()))
         self.assertEqual(order, ["requested", "start"])
-        # Acceptance is a running reservation, not add_task. on_accepted
-        # fires after the task row and before the worker.
         manager.try_reserve_running.assert_called_once_with()
         manager.add_task.assert_not_called()
         reservation = manager.try_reserve_running.return_value
@@ -655,9 +615,6 @@ class BatchFailedTests(unittest.TestCase):
         }
 
     def setUp(self):
-        # The emission guards are process-local: a task id recorded by an
-        # earlier test would silently suppress emissions here. Clear all
-        # three deques so every test starts from a clean slate.
         from app.services.fill_schedule import generate as gen_module
 
         gen_module.tm._failed_event_emitted_tasks.clear()
@@ -692,9 +649,6 @@ class BatchFailedTests(unittest.TestCase):
         self.assertNotIn("TOPSECRET123", props["reason"])
 
     def test_dispatch_failure_scrubs_full_message_before_truncation(self):
-        # The batch call site must pin the scrub-then-truncate order too:
-        # a short message makes [:200] a no-op, so only a >200-char
-        # secret-bearing message guards against a truncate-first revert.
         from app.services import analytics as analytics_module
         from app.services.fill_schedule import generate as gen_module
 
@@ -716,8 +670,6 @@ class BatchFailedTests(unittest.TestCase):
         ):
             label = generator._generate_slot(self._slot())
         self.assertIsNone(label)
-        # The scrubber received the whole message, not the truncated slice —
-        # for both the stored slot error and the telemetry reason.
         self.assertIn(call(str(error)), scrub.call_args_list)
         failed_calls = [c for c in track.call_args_list if c[0][0] == "video_generation_failed"]
         self.assertEqual(len(failed_calls), 1)
@@ -727,10 +679,6 @@ class BatchFailedTests(unittest.TestCase):
         self.assertLessEqual(len(str(props["reason"])), 200)
 
     def test_failed_slot_error_is_scrubbed_before_storage(self):
-        # The slot error column is client-visible (/api/schedule/status
-        # spreads the row into the response), so it gets the same
-        # scrub-then-truncate treatment as the telemetry reason — a raw
-        # str(exc) here would leak bearer tokens/DSNs to clients.
         from app.services import analytics as analytics_module
         from app.services.fill_schedule import generate as gen_module
 
@@ -751,11 +699,6 @@ class BatchFailedTests(unittest.TestCase):
             ) as scrub,
         ):
             self.assertIsNone(generator._generate_slot(self._slot()))
-        # The stored-error site truncates at 500: only a longer probe pins
-        # the scrub-then-truncate order — with a shorter message [:500] is
-        # a no-op and a truncate-first revert would stay green. Both the
-        # stored-error site and the telemetry-reason site must scrub the
-        # whole message, truncating only after.
         self.assertTrue(scrub.call_args_list)
         for c in scrub.call_args_list:
             self.assertEqual(c, call(str(boom)))
@@ -765,12 +708,6 @@ class BatchFailedTests(unittest.TestCase):
         self.assertLessEqual(len(fields["error"]), 500)
 
     def test_repeat_dispatch_failure_emits_failed_event_once(self):
-        # Deterministic batch ids can be re-dispatched after a crash
-        # (dispatch fails -> update_slot(generating) lost -> slot stays
-        # pending -> same uuid5 id dispatched again). The failure event
-        # must not double-count: the second notice for the same task id
-        # is suppressed by the dedicated dispatch-failure guard (separate
-        # from the pipeline terminal guard _fail_task uses).
         from app.services.fill_schedule import generate as gen_module
 
         store = MagicMock()
@@ -790,12 +727,6 @@ class BatchFailedTests(unittest.TestCase):
         self.assertEqual(len(failed_calls), 1)
 
     def test_pipeline_failure_after_redispatch_emits_terminal_event(self):
-        # Fail -> succeed -> fail: a transient dispatch failure records the
-        # deterministic id in the dispatch-failure guard; the re-dispatch
-        # then succeeds and the task genuinely fails in the pipeline. The
-        # dispatch guard is separate from the pipeline terminal guard, so
-        # the earlier dispatch incident can neither suppress nor re-arm the
-        # real terminal event — both incidents reach the funnel.
         from app.services.fill_schedule import generate as gen_module
 
         store = MagicMock()
@@ -816,14 +747,8 @@ class BatchFailedTests(unittest.TestCase):
             patch.object(tm, "send_discord", return_value=True),
             patch.object(generator, "_dispatch_generation", side_effect=[boom, None]),
         ):
-            # Tick 1: transient dispatch failure -> failed event emitted,
-            # dispatch guard records the id.
             self.assertIsNone(generator._generate_slot(slot))
-            # Tick 2: re-dispatch succeeds -> slot marked generating. The
-            # dispatch guard is separate from the pipeline terminal guard,
-            # so no release is needed for the next step to emit.
             self.assertIsNotNone(generator._generate_slot(slot))
-            # Tick 3: the re-dispatched task genuinely fails in the pipeline.
             tm._fail_task(task_id, "gpu exploded", _params(), stage="render")
         dispatch_failed = [
             c for c in gen_track.call_args_list if c[0][0] == "video_generation_failed"
@@ -838,10 +763,6 @@ class BatchFailedTests(unittest.TestCase):
         self.assertEqual(props["stage"], "render")
 
     def test_dispatch_failure_does_not_consume_pipeline_guard(self):
-        # The dispatch-failure emission must record only the dedicated
-        # dispatch guard — never the pipeline terminal guard _fail_task
-        # uses. After a dispatch failure, the first genuine pipeline
-        # failure notice for the same id still emits its terminal event.
         from app.services.fill_schedule import generate as gen_module
 
         store = MagicMock()
@@ -874,8 +795,6 @@ class BatchFailedTests(unittest.TestCase):
         self.assertEqual(len(terminal_failed), 1)
 
     def test_slot_failure_log_line_is_scrubbed(self):
-        # The slot-failure ERROR line feeds the loguru ERROR+ sink: scrub
-        # the exception like every other free-text surface in this handler.
         from app.services.fill_schedule import generate as gen_module
 
         store = MagicMock()
@@ -959,7 +878,6 @@ class TrackingContextIdentityTests(unittest.TestCase):
         self.assertEqual(context["persona_id"], "persona-9")
         self.assertEqual(context["slot_id"], "slot-7")
         self.assertEqual(context["schedule_id"], "sched-3")
-        # The base identity props are untouched.
         self.assertEqual(context["user_id"], "user-1")
         self.assertEqual(context["flow"], "batch")
 

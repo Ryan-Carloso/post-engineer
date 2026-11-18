@@ -16,11 +16,8 @@ from typing import Optional
 
 from loguru import logger
 
-# Quieter than this, for at least SILENCE_MIN_SECONDS, counts as silence.
 SILENCE_THRESHOLD_DB = -40
 SILENCE_MIN_SECONDS = 0.5
-# Breath kept after the trailing silence / after the last spoken word, and the
-# shortest tail worth cutting.
 KEEP_SECONDS = 0.4
 KEEP_AFTER_WORD_SECONDS = 0.6
 MIN_CUT_SECONDS = 1.0
@@ -117,8 +114,6 @@ def task_local_copy(audio_file: str, task_dir: str) -> Optional[str]:
     dest = os.path.join(task_dir, os.path.basename(audio_file) or "audio")
     try:
         os.makedirs(task_dir, exist_ok=True)
-        # A task-dir symlink pointing at the shared file must be replaced,
-        # not written through: copying onto it would cut the shared original.
         if os.path.islink(dest):
             os.unlink(dest)
         shutil.copyfile(audio_real, dest)
@@ -158,10 +153,6 @@ def trim_after_last_word(
     if script is not None:
         expected = _normalized_word(script.split()[-1]) if script.split() else ""
         if not expected:
-            # A last word with no ASCII letters/digits (CJK, Cyrillic,
-            # Arabic, or a trailing symbol) cannot be compared: skipping
-            # the cut is the safe side — the guard must never silently
-            # disable itself and cut unverified speech (#534 review).
             logger.warning(
                 "voiceover tail: script's last word has no comparable "
                 "letters/digits; keeping the full audio"

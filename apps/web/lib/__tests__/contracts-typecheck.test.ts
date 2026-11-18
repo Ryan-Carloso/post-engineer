@@ -14,12 +14,7 @@ import { addPersonaImage, createPersona, deletePersona, deletePersonaImage, getP
 import { applyBatchDiscount, completeVideoUpload, generateAndSchedule, mintVideoUpload, publishUploadedVideo, scoreDraft, validateScript } from '@/lib/contracts/videos';
 import type { BodyOf, ResponseOf } from '@/lib/contracts/endpoint';
 
-//---------------
-// Type-level pins for the shared contracts (web side, mirroring
-// apps/mcp/src/__tests__/contracts-typecheck.test.ts): renaming a
 // contract field makes this file fail typecheck. The @ts-expect-error
-// pins must stay errors.
-//---------------
 
 type CreateBody = BodyOf<typeof createExperiment>;
 type CreateResponse = ResponseOf<typeof createExperiment>;

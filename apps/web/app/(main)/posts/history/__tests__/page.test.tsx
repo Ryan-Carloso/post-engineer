@@ -4,11 +4,6 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 
-//---------------
-// Tests for the post history page (/posts/history): past posts and video
-// generations as a list. Network (lib/api) mocked; everything else real.
-//---------------
-
 vi.mock('@/lib/api', () => ({
   useScheduleStatusQuery: vi.fn(),
   useSchedulesQuery: vi.fn(),
@@ -152,7 +147,6 @@ describe('PostHistoryPage', () => {
     expect(screen.getByText('posts.groupPublished')).toBeInTheDocument();
     expect(screen.getByText('Failed topic')).toBeInTheDocument();
     expect(screen.getByText('posts.groupFailed')).toBeInTheDocument();
-    // The failure is localized inline; the raw engine/upstream text is never rendered.
     expect(screen.getByText('posts.cardFailedPermanent')).toBeInTheDocument();
     expect(screen.queryByText('Upload failed')).not.toBeInTheDocument();
   });
@@ -219,10 +213,6 @@ describe('PostHistoryPage', () => {
     mockQueries({ generations: [FAILED_GENERATION] });
     render(<PostHistoryPage />);
 
-    // Dense rows truncate the failure reason to one line; the full reason
-    // stays readable on the detail page — the raw slot error in the
-    // PostFailureNotice disclosure (post-failure-notice.test.tsx), and the
-    // translated generation message unclamped on the generation detail.
     const message = screen.getByText('posts.errorCustomAudio');
     expect(message.className.split(/\s+/)).toContain('truncate');
     const slotMessage = screen.getByText('posts.cardFailedPermanent');
@@ -232,11 +222,9 @@ describe('PostHistoryPage', () => {
   it('draws no thumbnail tile on a card without video, and keeps the full date on history cards', () => {
     render(<PostHistoryPage />);
 
-    // The failed slot has no video: no tile at all, no placeholder.
     const card = screen.getByText('Failed topic').closest('a');
     expect(card).not.toBeNull();
     expect(card?.querySelector('video')).toBeNull();
-    // History is not grouped by day: its cards keep the date with the time.
     expect(card?.textContent).toContain('·');
   });
 
@@ -282,8 +270,6 @@ describe('PostHistoryPage', () => {
     const user = userEvent.setup();
     render(<PostHistoryPage />);
 
-    // A failed schedules query must be retryable too — refetching only the
-    // status query would leave the error state stuck.
     const errorPanel = screen.getByText('posts.loadErrorHistory').closest('div');
     if (!errorPanel) throw new Error('error panel not rendered');
     await user.click(within(errorPanel).getByRole('button', { name: 'posts.refresh' }));
@@ -292,8 +278,6 @@ describe('PostHistoryPage', () => {
   });
 
   it('shows a capped-list hint when the list hits the fetch limit', () => {
-    // The fetch silently truncates at POSTS_LIMIT rows, so the page must
-    // say so instead of implying the list is complete.
     const recent = Array.from({ length: POSTS_LIMIT }, (_, i) => ({ ...PUBLISHED_SLOT, id: `r${i}` }));
     mockQueries({ recent });
     render(<PostHistoryPage />);
@@ -307,9 +291,6 @@ describe('PostHistoryPage', () => {
   });
 
   it('keeps the capped-list hint when a filter shrinks the visible rows', async () => {
-    // The dataset is still truncated at POSTS_LIMIT even when a network
-    // filter narrows the visible rows below it — the hint must not
-    // disappear.
     const recent = Array.from({ length: POSTS_LIMIT }, (_, i) => ({ ...PUBLISHED_SLOT, id: `r${i}` }));
     mockQueries({ recent });
     const user = userEvent.setup();
@@ -325,7 +306,6 @@ describe('PostHistoryPage', () => {
     render(<PostHistoryPage />);
 
     expect(screen.getByText('posts.generationsTitle')).toBeInTheDocument();
-    // Friendly, translated error — never the raw engine text.
     expect(screen.getByText('posts.errorCustomAudio')).toBeInTheDocument();
     expect(screen.queryByText('custom audio file is invalid: boom')).not.toBeInTheDocument();
     expect(screen.getByText('posts.refundedBadge')).toBeInTheDocument();
@@ -344,23 +324,16 @@ describe('PostHistoryPage', () => {
     mockQueries({ generations: [COMPLETED_GENERATION] });
     render(<PostHistoryPage />);
 
-    // The card link's accessible name is its aria-label ("Open post:
-    // <title>"), not the title text, so find the card by its visible
-    // title and check the enclosing link.
     const pastCard = screen.getByText('Past topic').closest('a');
     expect(pastCard).not.toBeNull();
     expect(pastCard).toHaveAttribute('href', '/posts/r1');
     const failedCard = screen.getByText('Failed topic').closest('a');
     expect(failedCard).not.toBeNull();
     expect(failedCard).toHaveAttribute('href', '/posts/r2');
-    // Generation cards link by generationId (the business id the detail
-    // endpoint resolves via .eq('generation_id', ...)), NOT the DB row PK.
     expect(screen.getByRole('link', { name: /Launch recap/ })).toHaveAttribute('href', '/posts/gen-3');
   });
 
   it('links generation cards to the id the detail lookup resolves by', () => {
-    // Fixture has DISTINCT id/generationId: the href must be the value the
-    // detail endpoint filters on, otherwise the card 404s on click.
     const generation = { ...COMPLETED_GENERATION, id: 'row-uuid-9', generationId: 'gen-9' };
     mockQueries({ generations: [generation] });
     render(<PostHistoryPage />);
@@ -401,8 +374,6 @@ describe('PostHistoryPage', () => {
     } as never);
     render(<PostHistoryPage />);
 
-    // The generations query feeds the history list — dropping its
-    // refetch would leave a failed generations fetch stuck forever.
     const errorPanel = screen.getByText('posts.loadErrorHistory').closest('div');
     if (!errorPanel) throw new Error('error panel not rendered');
     await user.click(within(errorPanel).getByRole('button', { name: 'posts.refresh' }));

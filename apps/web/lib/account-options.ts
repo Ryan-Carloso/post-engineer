@@ -1,13 +1,5 @@
 import type { PublicAccountItem, SocialProvider } from '@/lib/providers/registry';
 
-//---------------
-// account-options — the account filter shared by the posts list and the
-// metrics dashboard: one id per connected account (the id publish_results
-// and post_metrics store) plus a display label, and the network names.
-//---------------
-
-// A record (not a ternary chain) so every network gets its own label, and
-// a new provider fails the typecheck until it has one.
 export const PROVIDER_LABELS: Record<SocialProvider, string> = {
   youtube: 'YouTube',
   instagram: 'Instagram',
@@ -21,7 +13,6 @@ export const PROVIDER_LABELS: Record<SocialProvider, string> = {
   fanvue: 'Fanvue',
 };
 
-// Every account a schedule targets, across all networks.
 export function scheduleAccountIds(schedule: {
   youtubeAccountIds?: string[];
   instagramAccountIds?: string[];

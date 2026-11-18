@@ -1,12 +1,3 @@
-//---------------
-// experiments-i18n — copy for the /experiments A/B results page
-// (issue #532). Merged into `nav` and `experiments` in ./index.ts
-// (en.ts/pt.ts are over the file-size cap and may not grow).
-//
-// Variant names are user data, never translated; the page never shows
-// A/B letters — only the human variant names.
-//---------------
-
 export const experimentsStrings = {
   en: {
     nav: {

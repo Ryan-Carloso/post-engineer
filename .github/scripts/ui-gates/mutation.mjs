@@ -1,14 +1,5 @@
 import { normalizeWebPath } from './coverage.mjs';
 
-//---------------
-// Stryker mutation score over a target file set.
-//
-// Reads a Stryker mutation.json report ({files: {name: {mutants: [...]}}}
-// with names relative to the Stryker working directory, apps/web) and
-// scores only mutants in the given repo-relative target files.
-// Score counts Killed + Timeout as killed, floored like the CI summary.
-// Returns null when no target file has mutants.
-//---------------
 export function mutationScore(report, targetFiles) {
   if (!report || typeof report !== 'object' || !report.files) return null;
   const targets = new Set(targetFiles.map(normalizeWebPath));
@@ -24,8 +15,6 @@ export function mutationScore(report, targetFiles) {
     if (!targets.has(normalizeWebPath(name))) continue;
     if (!Array.isArray(mutants)) continue;
     for (const mutant of mutants) {
-      // Total counts every mutant (like the CI summary's jq); only
-      // Killed and Timeout count as killed.
       total += 1;
       if (mutant.status === 'Killed') killed += 1;
       else if (mutant.status === 'Timeout') timeout += 1;

@@ -1,9 +1,3 @@
-// Request/response schemas of the paired A/B experiment endpoints (issue
-// #476) for generate-openapi.mjs. Reached through openapi-metrics-schemas.mjs
-// because openapi-schemas.mjs is over the file-size cap. The helpers come in
-// as arguments so this module has no import cycle with openapi-schemas.mjs.
-
-// generate-and-schedule `experiment` (app/api/videos/generate-and-schedule/experiment-link.ts).
 export const experimentLinkSchema = {
   type: 'object',
   additionalProperties: false,
@@ -26,7 +20,6 @@ export function experimentOperationSchemas({ success, object, anyObject, str }) 
     ['variantId', 'name', 'description'],
   );
   return {
-    // apps/web/lib/experiments/requests.ts (CreateExperimentSchema)
     'POST /api/experiments': {
       request: object(
         {
@@ -40,11 +33,9 @@ export function experimentOperationSchemas({ success, object, anyObject, str }) 
       ),
       response: success({ experiment: anyObject }),
     },
-    // apps/web/app/api/experiments/route.ts
     'GET /api/experiments': {
       response: success({ experiments: { type: 'array', items: anyObject }, truncated: { type: 'boolean' } }),
     },
-    // apps/web/app/api/experiments/[id]/route.ts (parseResultsWindow)
     'GET /api/experiments/[id]': {
       query: [{ name: 'window', required: false, enum: ['24h', '7d', '28d'] }],
       response: success({

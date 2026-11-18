@@ -11,8 +11,6 @@ from loguru import logger
 from moviepy import CompositeVideoClip, ImageClip
 
 
-# Minimum short edge, in px, for a still used as video material. Below this the
-# zoom would upscale visible softness instead of adding motion.
 MIN_MATERIAL_EDGE = 480
 
 
@@ -23,9 +21,6 @@ def render_image_file_to_mp4(image_path: str, clip_duration: int = 4) -> str:
     minimum size. Used by the neutral-background canvas to turn its still
     into a clip.
     """
-    # Imported lazily: keeps video.py importable without moviepy clip
-    # construction at import time (and avoids any import cycle if a
-    # top-level video.py -> image_material edge ever returns).
     from app.services import video as video_service
 
     try:
@@ -43,7 +38,6 @@ def render_image_file_to_mp4(image_path: str, clip_duration: int = 4) -> str:
         video_service.close_clip(probe)
         return ""
 
-    # Release the size-probe handle before building the export clip.
     video_service.close_clip(probe)
     clip = None
     final_clip = None
@@ -51,7 +45,6 @@ def render_image_file_to_mp4(image_path: str, clip_duration: int = 4) -> str:
         clip = (
             ImageClip(image_path).with_duration(clip_duration).with_position("center")
         )
-        # Gradual zoom from the original size up by 3% per second.
         zoom_clip = clip.resized(
             lambda t: 1 + (clip_duration * 0.03) * (t / clip.duration)
         )

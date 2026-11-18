@@ -15,17 +15,6 @@ import {
 } from '@/lib/experiments/experiments-dashboard';
 import type { ExperimentResultLabel } from '@/lib/experiments/results';
 
-//---------------
-// ExperimentsPage — A/B experiment results (issue #532), separate from
-// /metrics: metrics answers "how did videos do at the same age",
-// experiments answer "which hook won". Live from publish until 7d after
-// publish, then frozen; window toggle 24h / 7d, no 28d.
-//
-// Variants are shown by human name only — never A/B letters. Comparisons
-// are per provider, never across providers, and a winner is only called
-// when the label is clear.
-//---------------
-
 const CARD_CLASS = 'rounded-2xl border border-hairline bg-card shadow-[0_8px_24px_rgba(20,32,51,0.04)]';
 const SELECT_CLASS =
   "w-full appearance-none rounded-xl border border-line bg-card bg-[url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%23718096'%3E%3Cpath d='M5.5 7.5 10 12l4.5-4.5'/%3E%3C/svg%3E\")] bg-[length:16px] bg-[right_10px_center] bg-no-repeat py-2.5 pr-9 pl-3 text-sm font-medium text-ink transition-colors hover:border-line focus:border-ink focus:ring-2 focus:ring-ink/10 focus:outline-none";
@@ -47,7 +36,6 @@ export default function ExperimentsPage(): React.ReactElement {
     () => (listQuery.data !== undefined && listQuery.data.success ? listQuery.data.experiments : []),
     [listQuery.data],
   );
-  // Default to the newest experiment once the list loads.
   useEffect(() => {
     if (selectedId === null && experiments.length > 0) setSelectedId(experiments[0].id);
   }, [selectedId, experiments]);

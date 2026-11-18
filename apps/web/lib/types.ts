@@ -1,15 +1,3 @@
-//---------------
-// Account sync status — what GET /api/account reports per account.
-// 'ok' = the profile sync succeeded (or was not due) and the row is not
-// flagged dead; 'error' = the last sync attempt failed with a dead
-// credential (undecryptable token, revoked credentials) OR the row carries
-// the persisted needs_reconnect flag, so the accounts page asks for a
-// reconnect instead of showing the card as healthy. Transient provider/DB failures are not flagged: the card
-// stays 'ok' and the next list retries the row.
-// The field is optional: older payloads and fixtures without it read as
-// healthy (status !== 'error').
-//---------------
-
 export type AccountSyncStatus = 'ok' | 'error';
 
 export interface AccountData {
@@ -31,10 +19,6 @@ export interface AccountData {
   };
 }
 
-//---------------
-// Instagram Types — public format (NO OAuth tokens).
-//---------------
-
 export interface InstagramAccountData {
   provider: 'instagram';
   recordId: string;
@@ -48,10 +32,6 @@ export interface InstagramAccountData {
   lastUsed: number;
   status?: AccountSyncStatus;
 }
-
-//---------------
-// UI / Client Types
-//---------------
 
 export type PrivacyStatus = 'public' | 'private' | 'unlisted';
 
@@ -80,10 +60,6 @@ export interface MediaUploadIssue {
   code: MediaUploadErrorCode;
 }
 
-//---------------
-// Unified upload — POST /api/upload-content (multiple accounts per network)
-//---------------
-
 interface UploadContentAccountResult {
   accountId: string;
   success: boolean;
@@ -105,17 +81,10 @@ export interface UploadContentResult {
   suggestions?: string[];
 }
 
-//---------------
-// Persona — persona creation flow types
-//---------------
-
 export interface CreatePersonaResult {
   success: boolean;
   personaId?: string;
   error?: string;
-  // Present when images[] were uploaded at creation: the inserted image
-  // rows, plus any partial-success warning codes (stable codes like
-  // 'primary_swap_failed', mapped through i18n by the UI).
   imageIds?: string[];
   warnings?: string[];
 }
@@ -127,11 +96,6 @@ export interface GeneratePersonaAvatarResult {
 }
 
 export type { VoiceOption } from './voice-catalog';
-
-//---------------
-// SocialProvider — single source in lib/providers/registry.ts.
-// Re-exported here for convenience; do NOT duplicate the list.
-//---------------
 
 import { SOCIAL_PROVIDERS, type SocialProvider } from '@/lib/providers/registry';
 

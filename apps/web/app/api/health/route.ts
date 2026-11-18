@@ -4,11 +4,6 @@ import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { logger } from '@/lib/logger';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
-//---------------
-// Health Check — only verifies that Supabase is reachable.
-// Internal API: requires a Supabase session (user logged into the app).
-//---------------
-
 const START_TIME = Date.now();
 
 async function getHandler() {
@@ -31,7 +26,4 @@ async function getHandler() {
   }
 }
 
-//---------------
-// 5xx reporting: handled server errors reach PostHog error tracking.
-//---------------
 export const GET = withApiErrorReporting('GET /api/health', getHandler, { getUserId: resolveReportingUserId });

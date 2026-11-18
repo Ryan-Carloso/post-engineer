@@ -215,8 +215,6 @@ def expand_paid_model(spec: dict[str, Any], env: dict[str, str]) -> str | None:
 def provider_key_ok(model_id: str, key_kind: str, env: dict[str, str]) -> bool:
     provider = model_id.split("/", 1)[0]
     if key_kind == "opencode":
-        # Paid OpenCode Zen models bill behind OPENCODE_ZEN_API_KEY; free
-        # opencode/*-free models need no secret at all.
         if provider == "opencode" and (
             model_id.endswith("-free") or env.get("HAS_OPENCODE_KEY") == "true"
         ):
@@ -400,7 +398,6 @@ def collect_available(
             log(f"OpenRouter discovery failed: {exc}")
             discovery_failed = True
     elif env.get("OPENROUTER_API_KEY"):
-        # When running locally with a key but HAS_OPENROUTER_KEY unset, still try.
         try:
             available.update(discover_openrouter_free(fetch_url=fetch_url))
         except (urllib.error.URLError, json.JSONDecodeError, OSError) as exc:

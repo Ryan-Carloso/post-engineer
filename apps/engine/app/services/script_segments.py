@@ -30,20 +30,12 @@ from app.services.segment_media_repeat import check_repeat
 from app.services.segment_photo_duration import duration_error
 
 MAX_SEGMENTS = 12
-# Full lip-sync videos show the talking head, so segment photos are
-# optional panels: at most 6 per video. Every other video is built only
-# from the agent's segment images — the photos are the whole picture,
-# so the cap and the per-segment rhythm (one photo per ~3s) live in
-# image_density.
 MAX_MEDIAS = 6
 MIN_TOTAL_WORDS = 60
 MAX_TOTAL_WORDS = 200
 MIN_CONTENT_WORDS = 30
 MIN_HOOK_WORDS = 25
 MAX_HOOK_WORDS = 40
-# The info card painted inside a segment photo's panel (media_overlay). The limits are
-# what the card can show at a readable size; the TS validators and the
-# MCP schema pin the same numbers (see shared/script-segments).
 MAX_OVERLAY_TITLE_CHARS = 60
 MAX_OVERLAY_SUBTITLE_CHARS = 80
 MAX_OVERLAY_BADGE_CHARS = 30
@@ -54,13 +46,6 @@ _OVERLAY_LIMITS = {
 }
 
 _TERMINAL_PUNCTUATION = (".", "!", "?", "。", "！", "？")
-# Emoji code points, checked by ordinal, not by a regex character class.
-# CodeQL py/overly-large-range flags astral ranges inside a regex class,
-# and a suppression comment only covers the line it precedes, so a class
-# with three flagged ranges cannot be suppressed with one comment. This
-# tuple is exactly the old class's set (1F300-1FAFF, 2600-27BF,
-# 1F000-1F2FF, plus FE0F), so nothing previously rejected becomes
-# accepted and nothing previously accepted becomes rejected.
 _EMOJI_RANGES = (
     (0x1F300, 0x1FAFF),
     (0x2600, 0x27BF),
@@ -143,10 +128,6 @@ def _check_media_item(media: Any, field: str) -> None:
         raise SegmentValidationError(
             field, "Media must be an object.", "Send each image as { mediaId } or { url }."
         )
-    # Unknown media keys are rejected, not stripped, matching the
-    # SegmentMedia extra="forbid" shape on the request path and the TS
-    # validators: otherwise validate_segments accepts what the request
-    # parsers reject.
     unknown = sorted(set(media) - {"mediaId", "url", "overlay", "duration"})
     if unknown:
         raise SegmentValidationError(
@@ -277,7 +258,6 @@ def validate_segments(segments: Any, video_type: str = "hook_lipsync") -> dict[s
     video is the exception: it shows the talking head, so segment photos
     are optional panels capped at 6 per video.
     """
-    # Lazy: schema.py imports this module; a top-level import would cycle via media_aspect.
     from app.services import segment_video
 
     if not isinstance(segments, list) or not segments:
@@ -401,9 +381,6 @@ def validate_segments(segments: Any, video_type: str = "hook_lipsync") -> dict[s
             if problem is not None:
                 rule, fix = problem
                 raise SegmentValidationError(f"segments.{index}.media", rule, fix)
-            # Punctuation-only text has no spoken words (same token
-            # test the render path uses, user_media._tokens), so its
-            # photo gets no seconds at render and would fail the task.
             if not re.search(r"[^\W_]", texts[index]):
                 raise SegmentValidationError(
                     f"segments.{index}.text",

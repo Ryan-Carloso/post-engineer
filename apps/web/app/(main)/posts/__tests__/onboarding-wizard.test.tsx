@@ -4,14 +4,6 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import userEvent from '@testing-library/user-event';
 
-//---------------
-// Tests for the first-visit onboarding wizard (issue #573). The i18n mock
-// carries the real English copy, so assertions pin the words, not the keys.
-// The store is reset and localStorage cleared before every test, because
-// both survive across tests in one file. Tests past the first visit open
-// the store at their step with the visit already seen.
-//---------------
-
 vi.mock('@/lib/i18n/provider', () => ({
   useI18n: () => ({
     t: (key: string, vars?: Record<string, string | number>) => {
@@ -93,8 +85,6 @@ vi.mock('@/lib/i18n/provider', () => ({
   }),
 }));
 
-// The wizard reads and writes the account's seen flag through the Supabase
-// browser client; each first-visit test sets what the account holds.
 const { mockGetUser, mockUpdateUser } = vi.hoisted(() => ({
   mockGetUser: vi.fn(),
   mockUpdateUser: vi.fn(),
@@ -108,15 +98,11 @@ function accountMetadata(metadata: Record<string, unknown>) {
   mockUpdateUser.mockResolvedValue({ error: null });
 }
 
-// Opens the wizard at a given step the way the reopen button and Continue
-// get there, with the visit already seen so it never auto-opens.
 function openAtStep(step: number) {
   window.localStorage.setItem(ONBOARDING_WIZARD_SEEN_KEY, '1');
   useOnboardingWizardStore.setState({ isOpen: true, step });
 }
 
-// The inline credential connect calls notifyIfSessionExpired on a failed
-// POST; the redirect itself is pinned in lib/__tests__/session-expiry.test.tsx.
 vi.mock('@/lib/session-expiry', () => ({
   notifyIfSessionExpired: vi.fn(),
 }));
@@ -133,9 +119,6 @@ const TEST_NUMBER = '15551234567';
 const PROVIDERS = ['YouTube', 'Instagram', 'Bluesky', 'LinkedIn', 'Threads', 'Facebook', 'Pinterest', 'Fanvue', '3Speak', 'Rumble'];
 
 function renderWizard() {
-  // Step 2 reads the shared ['social-accounts'] query, so every render
-  // needs a client; the stub answers the accounts read with an empty
-  // list (the step-2 describe installs its own fetch mock instead).
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   vi.stubGlobal(
     'fetch',
@@ -242,13 +225,6 @@ describe('OnboardingWizard first visit', () => {
   });
 });
 
-//---------------
-// Step-2 harness: a real QueryClient and a fetch mock, so the inline
-// connect exercises the real query invalidation after a connect. The
-// /api/account mock serves one queued response per call, in order: the
-// first call is the list render, the next is the refetch after a connect.
-//---------------
-
 const YOUTUBE_ACCOUNT = {
   provider: 'youtube',
   recordId: 'rec-youtube-1',
@@ -269,8 +245,6 @@ const BLUESKY_ACCOUNT = {
   lastUsed: 1,
 } as const;
 
-// Same YouTube account with a dead token: /api/account reports it with
-// status 'error', so the wizard must not show it as Connected.
 const YOUTUBE_ERROR_ACCOUNT = {
   ...YOUTUBE_ACCOUNT,
   status: 'error',
@@ -391,9 +365,6 @@ describe('OnboardingWizard step 2', () => {
   it('does not show Connected for an account whose sync status is error', async () => {
     accountResponseQueue = [[YOUTUBE_ERROR_ACCOUNT as unknown as Record<string, unknown>], []];
     await openStep2List();
-    // Wait until the queued accounts read has been consumed before
-    // asserting the badge is absent, so the guard is actually exercised:
-    // the row renders before the query resolves.
     await waitFor(() => {
       expect(accountResponseQueue).toHaveLength(1);
     });
@@ -405,8 +376,6 @@ describe('OnboardingWizard step 2', () => {
     const user = userEvent.setup();
     accountResponseQueue = [[YOUTUBE_ERROR_ACCOUNT as unknown as Record<string, unknown>], []];
     const dialog = await openStep2List();
-    // Same synchronization as the list test: the connect view reads the
-    // same query, so wait for the accounts read before opening it.
     await waitFor(() => {
       expect(accountResponseQueue).toHaveLength(1);
     });
@@ -526,8 +495,6 @@ describe('OnboardingWizard step 2', () => {
     expect(passwordInput).toHaveValue('');
     expect(screen.getByTestId('bluesky-handle-input')).toHaveValue('alice.bsky.social');
     expect(within(dialog).getByText('Step 2 of 4')).toBeInTheDocument();
-    // The failed POST delegates to the session-expiry latch: deleting the
-    // notifyIfSessionExpired call must fail this test.
     expect(notifyIfSessionExpired).toHaveBeenCalledTimes(1);
     expect(notifyIfSessionExpired).toHaveBeenCalledWith(expect.objectContaining({ ok: false }));
   });

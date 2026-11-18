@@ -42,8 +42,6 @@ class HttpExceptionLoggingTests(unittest.TestCase):
         with patch("app.models.exception.logger") as mock_logger:
             HttpException(task_id="task-1", status_code=404, message="nope")
         bound = mock_logger.bind.return_value
-        # depth=1 attributes the record to the raise site, not __init__,
-        # so the PostHog sink groups flat logs by where they were raised.
         bound.opt.assert_called_once_with(depth=1)
         bound.opt.return_value.warning.assert_called_once()
         bound.opt.return_value.error.assert_not_called()

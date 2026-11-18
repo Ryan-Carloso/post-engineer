@@ -3,46 +3,15 @@ import 'server-only';
 import { AwsClient } from 'aws4fetch';
 import { logger } from '@/lib/logger';
 
-//---------------
-// Publish media on Cloudflare R2.
-//
-// Instagram, Threads and Facebook do not take the file in the request: they
-// fetch it from a URL. The handlers store the file here and pass a presigned
-// GET URL. R2 has no egress fees, so the provider's download costs nothing.
-// The file used to live in the Supabase `uploads` bucket, and every provider
-// fetch (about 40 MB per video, repeated on each retry) counted against the
-// Supabase egress quota.
-//
-// Objects live in the engine's private R2 bucket under PUBLISH_MEDIA_PREFIX.
-// The engine never writes under that prefix, and the cleanup deletes only
-// keys with the exact shape this module writes.
-//
-// Engine-generated finals already live in the same bucket at
-// `{userId}/{persona|faceless}/{taskId}/final-1.mp4` (see
-// apps/engine/app/services/video_storage.py:storage_object_path). When the
-// caller names that key via `videoStoragePath`, the handlers presign it
-// directly (presignPublishMedia) instead of uploading a publish-media copy:
-// no duplicate bytes, no 24h cleanup for that publish. A file upload still
-// gets a publish-media copy, because UI/MCP videos start outside R2.
-//---------------
-
-// Same literal as the engine's STORAGE_BUCKET (apps/engine/app/services/video_storage.py),
-// pinned by publish-media.test.ts.
 export const PUBLISH_MEDIA_BUCKET = 'videos';
 export const PUBLISH_MEDIA_PREFIX = 'publish-media';
-// The provider fetches the file within minutes; one hour covers slow processing.
 export const PUBLISH_MEDIA_URL_TTL_SECONDS = 3600;
-// Objects older than this are deleted by the cleanup that runs after each publish.
 export const PUBLISH_MEDIA_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 const PUT_TIMEOUT_MS = 120_000;
 const LIST_DELETE_TIMEOUT_MS = 15_000;
 
-// `<provider>/<epoch ms>_<8 hex>.<ext>`: the shape every handler builds.
 const MEDIA_PATH = /^[a-z]+\/\d+_[0-9a-f]{8}\.[a-z0-9]+$/;
-// Engine archive shape: {userId}/{persona|faceless}/{taskId}/final-1.mp4.
-// Exactly four segments so an arbitrary R2 key can never be presigned; the
-// `publish-media/` temp prefix is deliberately excluded.
 const ARCHIVE_PATH = /^[A-Za-z0-9_-]+\/[A-Za-z0-9_-]+\/[A-Za-z0-9_-]+\/final-1\.mp4$/;
 const PROVIDER = /^[a-z]+$/;
 const CONTENTS_BLOCK = /<Contents>([\s\S]*?)<\/Contents>/g;
@@ -63,7 +32,6 @@ interface R2Config {
 
 const R2_ENV = ['R2_ACCOUNT_ID', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY'] as const;
 
-/** The same R2 credentials the engine uses. No fallback: a missing one fails loudly. */
 function r2Config(): R2Config {
   const values = new Map<string, string>();
   const missing: string[] = [];
@@ -79,7 +47,6 @@ function r2Config(): R2Config {
     throw new Error(`R2 publish media storage is not configured; missing ${missing.join(', ')}`);
   }
   return {
-    // R2 ignores the region, but SigV4 needs one; "auto" is the documented value.
     client: new AwsClient({ accessKeyId, secretAccessKey, service: 's3', region: 'auto', retries: 0 }),
     bucketUrl: `https://${accountId}.r2.cloudflarestorage.com/${PUBLISH_MEDIA_BUCKET}`,
   };
@@ -89,7 +56,6 @@ function objectUrl(bucketUrl: string, key: string): string {
   return `${bucketUrl}/${key.split('/').map(encodeURIComponent).join('/')}`;
 }
 
-/** Store the media on R2 and return a presigned GET URL for the provider. */
 export async function uploadPublishMedia(
   buffer: Buffer,
   path: string,
@@ -102,12 +68,6 @@ export async function uploadPublishMedia(
   const { client, bucketUrl } = r2Config();
   const url = objectUrl(bucketUrl, `${PUBLISH_MEDIA_PREFIX}/${path}`);
 
-  // Content-Length is set explicitly: Next's patched fetch rebuilds a
-  // Request-input fetch with a stream body, which undici sends chunked with
-  // no Content-Length, and R2 rejects the SigV4 PUT with 411 Length
-  // Required. The header survives the rebuild, so the length always reaches
-  // R2. aws4fetch leaves content-length out of the signature, so this does
-  // not change the signed headers.
   const put = await client.sign(url, {
     method: 'PUT',
     body: new Uint8Array(buffer),
@@ -125,14 +85,6 @@ export async function uploadPublishMedia(
   return get.url;
 }
 
-/**
- * Presign an engine-archived final video without copying it.
- *
- * The object is already durable in R2 (verified at generation time), so
- * this only signs: no PUT, no publish-media copy, no cleanup delete. The
- * caller must prove ownership (the key starts with the caller's userId);
- * this function only proves the key has the exact archive shape.
- */
 export async function presignPublishMedia(objectKey: string): Promise<string> {
   if (!ARCHIVE_PATH.test(objectKey)) {
     throw new Error(`Invalid video storage path: ${objectKey}`);
@@ -162,11 +114,6 @@ function parseListing(xml: string): ListedObject[] {
   return objects;
 }
 
-/**
- * Delete this provider's publish media older than PUBLISH_MEDIA_MAX_AGE_MS.
- * Returns how many objects were deleted. Errors are logged, never thrown:
- * a failed cleanup must not fail a publish, and the next publish retries it.
- */
 export async function cleanupPublishMedia(provider: string, deps: PublishMediaDeps = defaultDeps): Promise<number> {
   try {
     if (!PROVIDER.test(provider)) {

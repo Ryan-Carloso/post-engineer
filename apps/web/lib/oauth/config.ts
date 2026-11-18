@@ -1,11 +1,5 @@
 import 'server-only';
 
-//---------------
-// Authorization server config. No fallbacks: missing env means failure
-// explicitly (repo convention). MCP_OAUTH_PRIVATE_KEY_PEM never goes into a
-// tracked .env — it is a deploy secret (Vercel env vars).
-//---------------
-
 export const OAUTH_SCOPES = ['mcp:tools', 'offline_access'] as const;
 export type OAuthScope = (typeof OAUTH_SCOPES)[number];
 

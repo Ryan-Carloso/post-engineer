@@ -1,10 +1,3 @@
-// House voices copy guard: the MCP copy of the house voice catalog must be
-// a generated copy of the engine's voice_catalog.json (name + label, same
-// order). This test fails loudly (instead of silently routing unknown
-// voices) whenever the copy drifts. The MCP published tarball cannot read
-// apps/engine at runtime (self-contained; same reason as
-// script-segments-shared), so paths resolve with
-// findRepoRoot like those precedents.
 import { describe, expect, it } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';

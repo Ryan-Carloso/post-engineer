@@ -1,20 +1,3 @@
-// Shape for publish_video (action: publish_existing) (issue #384):
-// publish or schedule media that already exists — a finished engine
-// video by task id, a ready signed-upload video by upload id, or a plain
-// image — with no generation and no token charge.
-//
-// Accounts are names or ids, like generate_video: the network is read
-// from each account, so one call reaches every network (an upload is
-// single-use, so one call is the only way to cross-post it). A scheduled
-// post is one moment (publishAt), and mode is required: a publish tool
-// never guesses "now" or "later". An image goes to the image networks
-// (IMAGE_PROVIDERS). On the stdio server it comes from a local file
-// (imagePath); the remote server never takes image bytes in a tool
-// argument: the image goes through create_upload → PUT → complete_upload
-// and is published as mediaKind upload (intent-content.ts offers
-// imagePath on stdio only).
-// Kept in a new module so intent-content.ts stays under the file-size
-// ratchet.
 import { z } from 'zod';
 import { MAX_SEGMENT_MEDIA_MB } from './limits.js';
 import { PublishVideoDirectShape } from './publish-direct-shape.js';
@@ -87,12 +70,6 @@ export const PublishExistingShape = {
 
 const { imagePath: _imagePath, mediaKind: _mediaKind, ...remoteFields } = PublishExistingShape;
 
-/**
- * The remote server reads no local files: an image arrives as a signed
- * upload (mediaKind upload). The advertised kind says so, because the stdio
- * description's "image = a local JPEG/PNG (imagePath)" would send a remote
- * agent at a field this transport does not have.
- */
 export const PublishExistingRemoteShape = {
   mediaKind: PublishExistingShape.mediaKind.describe(
     'task = a finished generated video (taskId); upload = a completed signed upload, video or image (uploadId); image is not offered on a remote server — send the image through create_upload → PUT → complete_upload and publish it as mediaKind upload.',
@@ -100,12 +77,9 @@ export const PublishExistingRemoteShape = {
   ...remoteFields,
 };
 
-/** The stdio server reads the image from disk. */
 export const PublishExistingLocalShape = PublishExistingShape;
 
 export const PublishExistingSchema = z.object(PublishExistingShape).strict().superRefine((value, ctx) => {
-  // One media reference per kind: the server 400s a missing one, so fail
-  // here, locally, before any fetch.
   if (value.mediaKind === 'task' && value.taskId === undefined) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['taskId'], message: 'taskId is required when mediaKind is task.' });
   }

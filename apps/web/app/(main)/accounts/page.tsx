@@ -51,10 +51,6 @@ export default function AccountsPage(): React.ReactElement {
   );
 }
 
-//---------------
-// Accounts page header.
-//---------------
-
 function AccountsHeader(): React.ReactElement {
   const { t } = useI18n();
   return (
@@ -69,10 +65,6 @@ function AccountsHeader(): React.ReactElement {
     </header>
   );
 }
-
-//---------------
-// YouTube accounts: one query and one OAuth flow.
-//---------------
 
 function YoutubeAccountsSection(): ReactNode {
   const { t } = useI18n();
@@ -106,10 +98,6 @@ function YoutubeAccountsSection(): ReactNode {
     />
   );
 }
-
-//---------------
-// Instagram accounts: one query and one OAuth flow.
-//---------------
 
 function InstagramAccountsSection(): ReactNode {
   const { t } = useI18n();
@@ -146,10 +134,6 @@ function InstagramAccountsSection(): ReactNode {
 
 
 
-//---------------
-// LinkedIn accounts: one query and one OAuth flow.
-//---------------
-
 function LinkedinAccountsSection(): ReactNode {
   const { t } = useI18n();
   const query = useLinkedinAccountsQuery();
@@ -182,10 +166,6 @@ function LinkedinAccountsSection(): ReactNode {
 }
 
 
-//---------------
-// Threads accounts: one query and one OAuth flow.
-//---------------
-
 function ThreadsAccountsSection(): ReactNode {
   const { t } = useI18n();
   const query = useThreadsAccountsQuery();
@@ -216,11 +196,6 @@ function ThreadsAccountsSection(): ReactNode {
     />
   );
 }
-
-//---------------
-// Facebook Pages: one query and one OAuth flow. Each managed Page is its
-// own account (connecting once adds every Page the user manages).
-//---------------
 
 function FacebookAccountsSection(): ReactNode {
   const { t } = useI18n();
@@ -253,12 +228,6 @@ function FacebookAccountsSection(): ReactNode {
   );
 }
 
-//---------------
-// Pinterest: one query and one OAuth flow. Connecting once adds the
-// Pinterest account; the boards its pins go to come from
-// GET /api/pinterest/boards at schedule time.
-//---------------
-
 function PinterestAccountsSection(): ReactNode {
   const { t } = useI18n();
   const query = usePinterestAccountsQuery();
@@ -290,11 +259,6 @@ function PinterestAccountsSection(): ReactNode {
   );
 }
 
-//---------------
-// Fanvue: one query and one OAuth flow. Connecting once adds the
-// Fanvue account; videos publish to the account, no board involved.
-//---------------
-
 function FanvueAccountsSection(): ReactNode {
   const { t } = useI18n();
   const query = useFanvueAccountsQuery();
@@ -325,10 +289,6 @@ function FanvueAccountsSection(): ReactNode {
     />
   );
 }
-
-//---------------
-// LinkedIn card that distinguishes a member profile from a company page.
-//---------------
 
 function LinkedinAccountCard({ name, thumbnail, storedDisplayName, labelOrigin, isOrganization, showDisconnect, onDisconnect, error, onReconnect }: { name: string; thumbnail?: string; storedDisplayName?: string; labelOrigin?: 'stored' | 'provider_id'; isOrganization: boolean; showDisconnect?: boolean; onDisconnect?: () => void; error?: boolean; onReconnect?: () => void }): ReactNode {
   const { t } = useI18n();

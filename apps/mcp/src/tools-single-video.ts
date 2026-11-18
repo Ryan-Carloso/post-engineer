@@ -1,16 +1,3 @@
-// Singular MCP-first tools: generate_video and check_script (action: validate).
-// One call is one video, with a title and a complete segments script.
-// generate_video (tools-batch.ts) creates several videos by
-// running generatePersonaVideoOutcome once per video.
-// Validation runs mechanically before the client call, so a rejected script
-// never reaches the web route and never debits tokens. check_script (action: validate)
-// then calls POST /api/videos/validate-script, which re-runs the same
-// mechanical validation server-side without debiting tokens, scheduling,
-// or calling the engine or Modal. Measured hook duration is a documented
-// Phase 1 gap: no hook-only TTS endpoint exists yet, so check_script (action: validate)
-// reports the 8-12s window and the hook word count and states that the
-// measured duration is pending that endpoint — it does not invent a
-// duration and does not call Modal.
 import { z } from 'zod';
 import type { PostEngineerClient } from './client.js';
 import { scoreDraft } from './client-posts.js';
@@ -48,8 +35,6 @@ export async function handleValidateScript(
   client: PostEngineerClient,
   args: ValidateScriptArgs,
 ): Promise<McpToolResponse> {
-  // Mechanical pre-check first: a rejected script never reaches the web
-  // route and never debits tokens.
   const result = validateSegments(args.segments, args.videoType ?? 'hook_lipsync');
   if (!result.ok) {
     return errorResponse(
@@ -89,10 +74,6 @@ export async function handleGeneratePersonaVideo(
   return (await generatePersonaVideoOutcome(client, args)).response;
 }
 
-/**
- * The tool response, the ids of slots the route reported as `failed` (a 2xx
- * replay of a failed dispatch) and the created schedule id (null on error).
- */
 export async function generatePersonaVideoOutcome(
   client: PostEngineerClient,
   args: GeneratePersonaVideoArgs,
@@ -105,18 +86,11 @@ export async function generatePersonaVideoOutcome(
     if (mode === 'scheduled' && (args.startAt === undefined || args.times === undefined)) {
       throw new Error("startAt and times are required when mode is 'scheduled'.");
     }
-    // Mechanical validation before the client call: a rejected script
-    // never debits tokens and never reaches Modal.
     const videoType = args.options?.videoType ?? 'hook_lipsync';
     const result = validateSegments(args.segments, videoType);
     if (!result.ok) {
       throw new Error(`${result.error.field}: ${result.error.rule} Fix: ${result.error.fix}`);
     }
-    // The video-type guards mirror the web route's validation, here,
-    // before any client call: a rejected combination never debits tokens.
-    // The web route re-validates server-side; these checks are the
-    // MCP-side guard so an agent gets the failure without spending
-    // anything.
     if (args.personaId === undefined && videoType !== 'faceless') {
       throw new Error('A post without a persona must be faceless: set options.videoType to \'faceless\'.');
     }
@@ -124,23 +98,13 @@ export async function generatePersonaVideoOutcome(
       throw new Error('A post without a persona must have a voice: set options.voiceId (or options.audioUrl).');
     }
     const script = joinSegments(args.segments, videoType);
-    // Pinterest needs exactly one board for the batch (a pin cannot exist
-    // without one); the web route 400s without it, so fail fast here.
     if (args.providers.includes('pinterest') && (args.pinterestBoardId === undefined || args.pinterestBoardId.trim() === '')) {
       throw new Error('pinterestBoardId is required when pinterest is selected (list the boards with accounts (action: list_boards)).');
     }
-    // Voice resolution is an explicit pre-step after mechanical validation
-    // and before the generating call: an unknown voice fails without
-    // debiting tokens. A bare name/label resolves here (issue #353); with
-    // no voiceId (or options with only audioUrl) there is nothing to
-    // resolve — the persona's stored voice is used.
     let voiceId = args.options?.voiceId;
     if (voiceId !== undefined) {
       voiceId = await resolvePersonaVoiceId(client, voiceId);
     }
-    // The shape advertises a top-level language, but the web route only
-    // reads options.language: forward it there unless options already
-    // sets one, or the top-level value is silently dropped.
     const language = args.options?.language ?? args.language;
     const narrowed = await client.generatePersonaVideo({
         personaId: args.personaId,
@@ -164,9 +128,6 @@ export async function generatePersonaVideoOutcome(
         timezone: args.timezone,
         options: {
           ...args.options,
-          // The shape requires videoType, but the field is optional on the
-          // inferred args (options itself is optional): pin it here so the
-          // web always receives a mode, never an absent one.
           videoType,
           voiceId,
           segments: args.segments,
@@ -205,19 +166,6 @@ export async function generatePersonaVideoOutcome(
   }
 }
 
-// NOTE: check_script (action: validate) is registered by intent-content.ts and
-// maps to POST /api/videos/validate-script, which it really calls through the
-// client after the local mechanical pre-check. generate_video is registered by
-// intent-video.ts and maps to POST /api/videos/generate-and-schedule.
-//---------------
-// check_script (action: score) — mechanical draft scoring, no tokens spent.
-//
-// The shape mirrors the web route's body (same names, same caps); the
-// handler does no local pre-check beyond the schema because every signal
-// needs the server-side baseline (the caller's own stored post metrics).
-// The route really is called through the client, so the parity graph
-// maps check_script (action: score) to POST /api/videos/score-draft.
-//---------------
 const SCORE_DRAFT_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export const ScoreDraftShape = {
@@ -253,9 +201,6 @@ export async function handleScoreDraft(
     });
     return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
   } catch (error) {
-    // Same sanitizing error path as handleValidateScript: a thrown
-    // endpoint error must never carry credential-shaped material to the
-    // agent.
     return errorResponse(`Error scoring draft: ${sanitizeEngineError(getErrorMessage(error))}`);
   }
 }

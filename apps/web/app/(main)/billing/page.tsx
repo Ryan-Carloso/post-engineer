@@ -19,9 +19,6 @@ export default function BillingPage() {
   );
 }
 
-//---------------
-// BillingContent — composes the complete token storefront.
-//---------------
 const BillingContent = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -56,9 +53,6 @@ const BillingContent = () => {
   );
 };
 
-//---------------
-// BillingHero — explains the value of tokens and shows the current balance.
-//---------------
 const BillingHero = () => {
   const { t } = useI18n();
   const billingQuery = useQuery<TokenBalance>({
@@ -87,9 +81,6 @@ const BillingHero = () => {
   );
 };
 
-//---------------
-// BillingIllustration — editorial CSS illustration for the create-to-publish flow.
-//---------------
 const BillingIllustration = () => {
   const { t } = useI18n();
   return (
@@ -117,9 +108,6 @@ const BillingIllustration = () => {
   );
 };
 
-//---------------
-// BillingBenefits — makes the product promise scannable before pricing.
-//---------------
 const BillingBenefits = () => {
   const { t } = useI18n();
   const benefits: Array<{ title: string; text: string; icon: React.ReactNode }> = [
@@ -130,18 +118,12 @@ const BillingBenefits = () => {
   return <section className="my-2 grid grid-cols-1 gap-x-5 gap-y-8 border-y border-line py-9 sm:grid-cols-2 lg:my-4 lg:grid-cols-3 lg:gap-8 lg:py-10">{benefits.map((benefit) => <div key={benefit.title} className="flex items-start gap-3"><span className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-brand-soft text-brand">{benefit.icon}</span><span><strong className="block text-sm font-bold text-ink sm:text-base">{benefit.title}</strong><span className="mt-1 block text-xs leading-relaxed text-muted-text sm:text-sm">{benefit.text}</span></span></div>)}</section>;
 };
 
-//---------------
-// BillingNotices — communicates checkout completion or cancellation.
-//---------------
 const BillingNotices = () => {
   const { t } = useI18n();
   const checkoutState = useSearchParams().get('checkout');
   return <>{checkoutState === 'success' && <div role="status" className="mb-6 rounded-2xl border border-success/30 bg-success-soft px-5 py-4 text-sm text-success">{t('pricing.successDesc')}</div>}{checkoutState === 'canceled' && <div role="status" className="mb-6 rounded-2xl border border-line bg-surface px-5 py-4 text-sm text-ink-soft">{t('pricing.cancelDesc')}</div>}</>;
 };
 
-//---------------
-// BillingPacks — renders the server-known packs and checkout actions.
-//---------------
 const BillingPacks = () => {
   const { t } = useI18n();
   const router = useRouter();
@@ -151,7 +133,6 @@ const BillingPacks = () => {
     setLoading(packId); setError(null);
     try {
       const response = await fetch('/api/billing/checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ packId }) });
-      // Notify before parsing: a non-JSON 401 body must still redirect.
       if (!response.ok) notifyIfSessionExpired(response);
       const data: unknown = await response.json().catch(() => null);
       const result = typeof data === 'object' && data !== null ? data as { url?: unknown; error?: unknown } : {};
@@ -182,7 +163,4 @@ const SparkIcon = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColo
 const SendIcon = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="size-5" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="m21 3-7.5 18-3.7-7.8L2 9.5 21 3Z" /><path strokeLinecap="round" d="M9.8 13.2 21 3" /></svg>;
 const PlayIcon = () => <svg viewBox="0 0 24 24" fill="currentColor" className="size-6" aria-hidden="true"><path d="m9 6 9 6-9 6V6Z" /></svg>;
 
-//---------------
-// BillingSkeleton — placeholder shown while the wallet query loads.
-//---------------
 const BillingSkeleton = () => <div className="space-y-8" aria-hidden="true"><div className="grid gap-8 lg:grid-cols-2"><div className="h-72 animate-pulse rounded-3xl bg-sunken" /><div className="h-72 animate-pulse rounded-3xl bg-sunken" /></div><div className="h-24 animate-pulse rounded-3xl bg-sunken" /><div className="grid grid-cols-1 gap-6 md:grid-cols-3"><div className="h-80 animate-pulse rounded-3xl bg-sunken" /><div className="h-80 animate-pulse rounded-3xl bg-sunken" /><div className="h-80 animate-pulse rounded-3xl bg-sunken" /></div></div>;

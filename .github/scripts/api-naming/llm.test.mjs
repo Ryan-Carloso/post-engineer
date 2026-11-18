@@ -25,7 +25,6 @@ function candidate(name, context) {
   };
 }
 
-/** Build a mock fetch that answers from a name -> verdict map. */
 function mockFetch(verdicts, { status = 200, raw = null, calls = null } = {}) {
   return async (url, init) => {
     if (calls) calls.push({ url, init });
@@ -34,7 +33,6 @@ function mockFetch(verdicts, { status = 200, raw = null, calls = null } = {}) {
     }
     const body = JSON.parse(init.body);
     const promptText = JSON.stringify(body.messages);
-    // Names appear JSON-escaped in the serialized body: named \"retry\".
     const name = Object.keys(verdicts).find((n) => promptText.includes(`\\"${n}\\"`)) ?? 'unknown';
     const verdict = verdicts[name] ?? { verdict: 'pass', reason: 'Clear.', alternatives: [] };
     return {
@@ -77,7 +75,6 @@ describe('reviewNames', () => {
     assert.deepEqual(f.alternatives, ['retryCount', 'attemptCount']);
     assert.match(f.reason, /Ambiguous/);
     assert.equal(calls.length, 2);
-    // The request targets the configured OpenAI-compatible endpoint.
     assert.equal(calls[0].url, 'https://llm.example.test/v1/chat/completions');
   });
 

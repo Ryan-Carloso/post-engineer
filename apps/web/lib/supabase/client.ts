@@ -1,9 +1,5 @@
 import { createBrowserClient } from '@supabase/ssr'
 
-//---------------
-// getSupabaseEnv — validates env vars with no fallback
-//---------------
-
 function getSupabaseEnv() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -17,10 +13,6 @@ function getSupabaseEnv() {
 
   return { url, key }
 }
-
-//---------------
-// createSupabaseClient — browser client (client-side)
-//---------------
 
 export function createSupabaseClient() {
   const { url, key } = getSupabaseEnv()

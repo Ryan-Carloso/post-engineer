@@ -8,17 +8,7 @@ import { useCopyText } from '@/lib/use-copy-text';
 import { Button } from '@/components/ui/button';
 import { KeyIcon, SpinnerIcon } from '@/lib/ui';
 
-// Show at most this many keys at once; a toggle reveals the rest.
 const MAX_VISIBLE_KEYS = 4;
-
-//---------------
-// ApiKeysSection — step 1 of the prompts hub: list, create, and revoke
-// API keys. Keys are created with access to every persona (creating with
-// a scoped subset was removed from the UI; the API still accepts it, and
-// legacy scoped keys keep their server-side restriction). A freshly
-// created key is shown once; onKeyCreated hands it to the hub so the
-// install prompt in step 2 carries it already filled in.
-//---------------
 
 export default function ApiKeysSection({
   onKeyCreated,
@@ -37,8 +27,6 @@ export default function ApiKeysSection({
   const { copied, copy } = useCopyText();
 
   const keys = query.data ?? [];
-  // The API orders keys newest first, so a freshly created key always sits
-  // inside the visible slice; the list collapses purely by user choice.
   const visibleKeys = showAllKeys ? keys : keys.slice(0, MAX_VISIBLE_KEYS);
   const hasHiddenKeys = keys.length > MAX_VISIBLE_KEYS;
 
@@ -58,7 +46,6 @@ export default function ApiKeysSection({
       setKeyName('');
       setIsCreating(false);
     } catch {
-      // Error handled by mutation
     }
   };
 

@@ -1,17 +1,3 @@
-//---------------
-// Idempotent replay for publish-existing (issue #384): a retried
-// scheduled request addresses the same deterministic schedule id, so the
-// second attempt answers with the rows the first attempt created instead
-// of scheduling a duplicate. A schedule with zero slots is a zombie from
-// a crashed first attempt (the slot insert failed after the schedule
-// insert) — delete it so the retry can proceed instead of replaying an
-// empty schedule. Only a schedule old enough that no live first attempt
-// can still be between its two inserts may be deleted: a concurrent
-// duplicate with the same idempotency key reads zero slots in that
-// window, and deleting the winner's schedule would duplicate the slots
-// under one schedule id.
-//---------------
-
 import { NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
@@ -20,8 +6,6 @@ import type { AccountNeedsReconnectWarning } from '@/lib/account-needs-reconnect
 import { ERROR_CODES, formatErrorMessage } from '@/lib/error-codes';
 import { logger } from '@/lib/logger';
 
-// A first attempt inserts its schedule, then its slots, in two awaits;
-// five minutes is far longer than that window can ever be.
 const ZOMBIE_SCHEDULE_MIN_AGE_MS = 5 * 60_000;
 
 export interface SlotSummary {
@@ -89,12 +73,6 @@ export async function replaySchedule(
         ? (existing as { created_at?: unknown }).created_at
         : undefined;
     const createdAtMs = typeof createdAt === 'string' ? Date.parse(createdAt) : Number.NaN;
-    // A fresh zero-slot schedule may be a live first attempt between its
-    // schedule and slot inserts: only a zombie old enough to rule that
-    // out is deleted (the delete itself carries the same age predicate,
-    // so a row that is fresh at delete time survives). A fresh one is
-    // left alone; the retry then hits the schedule insert conflict and
-    // retries until the winner's slots exist and replay.
     if (!Number.isNaN(createdAtMs) && Date.now() - createdAtMs >= ZOMBIE_SCHEDULE_MIN_AGE_MS) {
       await supabase
         .from('schedules')

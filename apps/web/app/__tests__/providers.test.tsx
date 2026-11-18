@@ -8,8 +8,6 @@ import { shouldRetryQuery } from '@/lib/query-retry';
 import { HttpStatusError } from '@/lib/errors';
 import { useScheduleStatusQuery, useUpdateSlotMutation } from '@/lib/api';
 
-// Only the redirect handler is doubled: the assertions check that Providers
-// wires every query error into lib/session-expiry, not the redirect itself.
 vi.mock('@/lib/session-expiry', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/session-expiry')>();
   return {
@@ -18,7 +16,6 @@ vi.mock('@/lib/session-expiry', async (importOriginal) => {
   };
 });
 
-// lib/api imports the browser supabase client; no test here exercises auth.
 vi.mock('@/lib/supabase/client', () => ({
   createSupabaseClient: () => ({ auth: { getSession: vi.fn() } }),
 }));
@@ -105,8 +102,6 @@ describe('app/providers — Providers', () => {
 
     function Posts(): null {
       const updateSlot = useUpdateSlotMutation();
-      // The mutation object is part of the deps per exhaustive-deps; the ref
-      // guard keeps the test asserting an exactly-once dispatch.
       const started = useRef(false);
       useEffect(() => {
         if (started.current) return;

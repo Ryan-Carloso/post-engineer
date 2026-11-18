@@ -53,8 +53,6 @@ def test_cleanup_removes_emptied_subdirectory(tmp_path, monkeypatch):
 
 def test_cleanup_vanished_dir_is_noop(tmp_path, monkeypatch):
     monkeypatch.setenv("MPT_STORAGE_DIR", str(tmp_path))
-    # The guard's only reachable shape in production: task_dir creates the
-    # directory, so a missing dir means it vanished mid-cleanup.
     monkeypatch.setattr(
         "app.services.task_cleanup.utils.task_dir",
         lambda task_id: str(tmp_path / "gone" / task_id),

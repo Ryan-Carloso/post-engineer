@@ -2,11 +2,6 @@ import { NextResponse } from 'next/server';
 import { getIssuer } from '@/lib/oauth/config';
 import { logger } from '@/lib/logger';
 
-//---------------
-// GET /.well-known/oauth-authorization-server — authorization server
-// metadata (RFC 8414). Public route, no session.
-//---------------
-
 export function authorizationServerMetadata() {
   const issuer = getIssuer();
   return {

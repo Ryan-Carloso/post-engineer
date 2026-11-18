@@ -4,8 +4,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('@/lib/supabase/server', () => ({
   createSupabaseServerClient: vi.fn(),
 }));
-// Persona row writes run on the service client after the ownership check
-// (migration 066 leaves the session client select-only on personas).
 vi.mock('@/lib/supabase/service', () => ({
   createSupabaseServiceClient: vi.fn(),
 }));
@@ -136,7 +134,6 @@ describe('POST/PATCH personaWrite coverage', () => {
               }),
               then: (resolve: (v: unknown) => void) => resolve({ error: null }),
             })),
-            // Issue #572: the binding save checks persona ownership.
             select: vi.fn(() => ({
               eq: vi.fn(() => ({
                 eq: vi.fn(() => ({
@@ -147,8 +144,6 @@ describe('POST/PATCH personaWrite coverage', () => {
           };
         }
         if (table === 'social_accounts') {
-          // Issue #572: the binding save only accepts connected accounts;
-          // the fixture's youtube account is connected.
           return {
             select: vi.fn(() => ({
               eq: vi.fn(async () => ({
@@ -159,8 +154,6 @@ describe('POST/PATCH personaWrite coverage', () => {
           };
         }
         if (table === 'persona_default_accounts') {
-          // Issue #572: the binding replace-all must succeed so the test
-          // reaches the library failure it pins.
           return {
             delete: vi.fn(() => ({ eq: vi.fn(async () => ({ error: null })) })),
             insert: vi.fn(async () => ({ error: null })),

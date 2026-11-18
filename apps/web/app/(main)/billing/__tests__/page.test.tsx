@@ -16,8 +16,6 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => ({ get: (key: string) => (key === 'checkout' ? checkoutParam.value : null) }),
 }));
 
-// Only notifyIfSessionExpired is doubled; the module's redirect behavior is
-// pinned in lib/__tests__/session-expiry.test.tsx.
 vi.mock('@/lib/session-expiry', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/session-expiry')>();
   return {
@@ -122,7 +120,6 @@ describe('BillingPage', () => {
     fireEvent.click(screen.getAllByRole('button', { name: 'Buy tokens' })[1]);
 
     await waitFor(() => expect(notify).toHaveBeenCalledTimes(1));
-    // The failure object still drives the ordinary error state in the UI.
     expect(routerPush).not.toHaveBeenCalled();
   });
 

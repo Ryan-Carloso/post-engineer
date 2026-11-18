@@ -51,9 +51,6 @@ from app.services.segment_panels import Panel
 from app.utils import file_security, utils
 from app.utils.ssrf import UnsafeUrlError
 
-# The segment-media bottleneck is the engine photo path, not the persona
-# library: image_fetch refuses downloads over this size, so a larger
-# segment upload could never render. Pinned by test against both limits.
 MAX_SEGMENT_MEDIA_BYTES = image_fetch.MAX_PHOTO_BYTES
 MIN_PHOTO_LONG_EDGE = image_fetch.MIN_PHOTO_LONG_EDGE
 MIN_PHOTO_SHORT_EDGE = image_fetch.MIN_PHOTO_SHORT_EDGE
@@ -63,9 +60,6 @@ _MEDIA_ID_PATTERN = re.compile(r"^[0-9a-f]{32}\.(jpg|jpeg|png|webp|mp4)$")
 
 CHECK_CODES = ("ok", "blocked_403", "not_image", "too_small", "too_large", "timeout", "wrong_aspect", "media_expired")
 
-# check_media_code failure -> the warning reason prepare_segment_media records.
-# wrong_aspect is composed with dimensions at the call site instead: the
-# bare code alone cannot tell the agent which ratio it sent.
 _CODE_TO_REASON = {
     "blocked_403": "download blocked",
     "not_image": "not an image",
@@ -166,8 +160,6 @@ def _download_failure_code(exc: Exception) -> str:
             return "too_large"
         if "unexpected content-type" in message:
             return "not_image"
-        # SSRF-guard refusals (private address, unresolvable host, other
-        # HTTP failures): the host blocked or refused the download.
         return "blocked_403"
     if isinstance(exc, requests.exceptions.RequestException):
         return "blocked_403"
@@ -183,8 +175,6 @@ def _media_id_path(media_id: str) -> tuple[str, Optional[str]]:
             _temp_assets_dir(), os.path.join(_temp_assets_dir(), media_id)
         )
     except ValueError as exc:
-        # A well-formed id whose temp asset the 1 hour TTL already purged
-        # is expired, not invalid; anything else (an escaping path) is invalid.
         if str(exc) == "file does not exist":
             return "", "media expired or missing"
         return "", "invalid media id"
@@ -394,8 +384,6 @@ def prepare_segment_media(
                 continue
             on_face = face == segment_panels.FACE_FULL or (face == segment_panels.FACE_HOOK and slice_start < hook_end)
             if segment_video.is_video_ref(media):
-                # A clip plays full-frame, never as a panel: it is
-                # resolved, validated and copied by segment_video.
                 panel, lines = segment_video.clip_panel(
                     media, index, image_index, slice_start, slice_end, task_dir,
                     aspect, on_face=on_face, seen=seen_hashes,
@@ -404,8 +392,6 @@ def prepare_segment_media(
                 if panel is not None:
                     panels.append(panel)
                 continue
-            # A photo that fills the frame must match its ratio; a photo
-            # shown as a panel is contained by the panel, so no gate.
             resolve_aspect = None if on_face else aspect
             media_id = media.get("mediaId")
             url = media.get("url")
@@ -422,7 +408,6 @@ def prepare_segment_media(
             if reason is not None:
                 skipped.append(f"segment {index} image {image_index} media skipped: {reason}")
                 continue
-            # Same bytes, different reference — see photo_content.
             skip, photo_hash = photo_content.duplicate_skip(
                 seen_hashes, photo, index, image_index, downloaded
             )
@@ -444,7 +429,6 @@ def prepare_segment_media(
             if built is None:
                 skipped.append(f"segment {index} image {image_index} media skipped: {REASON_PANEL_FAILED}")
                 continue
-            # The panel exists: only now does this photo block a repeat.
             photo_content.claim(seen_hashes, photo_hash, f"segment {index} image {image_index}")
             if built.card_reason is not None:
                 skipped.append(f"segment {index} image {image_index} media overlay skipped: {built.card_reason}")
@@ -476,8 +460,6 @@ def prepare_segment_panels(task_id: str, params: Any, subtitle_path: str, audio_
         face=face, video_script=video_script,
         font_for=_overlay_font(params, segments),
     )
-    # The photos are the whole picture: every sent photo must survive;
-    # a skipped one fails the task with the skip reasons, never silently.
     hook_end = _hook_end(video_script, subtitle_path, audio_duration) if face == segment_panels.FACE_HOOK else 0.0
     sent = sum(len(_media_list(_segment_dict(s).get("media"))) for s in segments)
     panels = image_coverage.ensure_coverage(

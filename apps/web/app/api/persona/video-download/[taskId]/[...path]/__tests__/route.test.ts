@@ -18,20 +18,6 @@ import { requireSupabaseSession } from '@/lib/request-auth';
 import { logger } from '@/lib/logger';
 import { NextResponse } from 'next/server';
 
-//---------------
-// GET /api/persona/video-download/:taskId/*path — the guessable file name
-// (`final-1.mp4`) is not what every engine task stores. When the upstream
-// 404s, the proxy consults the engine's task record and redirects to the
-// actual video file, so consumers (card thumbnails, detail player) don't
-// need to know the engine's naming.
-//
-// A miss is terminal-aware (issue #553): the engine no longer knowing the
-// task, or a failed/complete task with no file, answers 410 Gone with the
-// short "no longer available" message. Only a task that is still queued or
-// processing (or a lookup that could not decide) answers 404 Not Found.
-// Every miss logs exactly once with taskId, requested and reason.
-//---------------
-
 const USER_ID = 'user-1';
 const GONE_MESSAGE = 'The video is no longer available.';
 
@@ -42,7 +28,6 @@ function mockAuth() {
   } as never);
 }
 
-// Real engine task envelope: { status, message, body }.
 function taskEnvelope(body: unknown) {
   return Response.json({ status: 200, message: 'success', body });
 }
@@ -64,8 +49,6 @@ function downloadMissFetchMock(taskResponse: () => Response | Promise<Response>)
   });
 }
 
-// The single miss warning comes from apiErrorResponse: one logger.warn, no
-// logger.error. Returns the warn call's metadata for the branch assertion.
 function expectSingleMissWarning(status: number, reason: 'gone' | 'failed' | 'pending' | 'unknown') {
   expect(logger.warn).toHaveBeenCalledTimes(1);
   expect(logger.error).not.toHaveBeenCalled();
@@ -148,7 +131,6 @@ describe('GET /api/persona/video-download', () => {
     expect(new URL(response.headers.get('location') ?? '', 'https://app.test').pathname).toBe(
       '/api/persona/video-download/task-1/outputs/final-9.mp4',
     );
-    // The miss is loud and diagnosable, exactly once.
     expect(logger.warn).toHaveBeenCalledTimes(1);
     expect(logger.warn).toHaveBeenCalledWith(
       '[video-download] requested file missing; redirecting',
@@ -269,8 +251,6 @@ describe('GET /api/persona/video-download', () => {
 
     expect(response.status).toBe(404);
     expectSingleMissWarning(404, 'unknown');
-    // The transient cause is not swallowed: it rides on the single warning,
-    // scrubbed by apiErrorResponse (no credential fragment survives).
     const cause = (vi.mocked(logger.warn).mock.calls[0][1] as { cause?: unknown }).cause;
     expect(cause).toEqual(expect.stringContaining('lookup down'));
     expect(cause).not.toEqual(expect.stringContaining('sk-live-secret-value-123456'));
@@ -290,9 +270,6 @@ describe('GET /api/persona/video-download', () => {
   });
 
   it('passes through the engine storage-fallback redirect instead of following it', async () => {
-    // The engine 302s to a signed Supabase Storage URL when the local file
-    // is gone (restart wiped the disk). The proxy must hand the browser the
-    // signed URL directly — never fetch the video bytes itself.
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
       new Response(null, {
         status: 302,
@@ -314,10 +291,6 @@ describe('GET /api/persona/video-download', () => {
   });
 
   it('returns 404 instead of looping when the resolved path is the requested path', async () => {
-    // The engine keeps 404ing this exact file (e.g. the task has not
-    // finished, so the terminal-state gate rejects it). Redirecting to the
-    // resolved path would loop 302 -> 404 -> 302 until the browser gives up,
-    // so a self-match is treated as missing instead.
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.includes('/api/v1/download/task-1/final-1.mp4')) {
@@ -356,10 +329,6 @@ describe('GET /api/persona/video-download', () => {
   });
 
   it('returns 410 Gone for another owner’s task and forwards the caller’s user id', async () => {
-    // The engine looks the task up scoped by the x-user-id the proxy
-    // forwards: another owner's task 404s exactly like a missing one, so
-    // the download never leaks across accounts. Both are terminal for this
-    // caller, so the answer is 410 Gone, not a retryable 404.
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       void init;
       const url = String(input);

@@ -2,9 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { slotToCalendarEvent, slotsToCalendarEvents } from '../calendar-adapter';
 import type { ScheduledSlot } from '@/lib/api';
 
-// The adapter takes the slot fields it reads, with a plain string status:
-// stored slots also carry legacy statuses (pending, completed, running)
-// the API type does not list, and the calendar group handles them.
 type AdapterSlot = Pick<ScheduledSlot, 'id' | 'scheduleId' | 'slotAt' | 'title'> & { status: string };
 
 function slot(overrides: Partial<AdapterSlot> = {}): AdapterSlot {

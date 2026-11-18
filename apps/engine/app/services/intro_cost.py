@@ -78,24 +78,13 @@ class IntroCostReport(NamedTuple):
     container_overhead_usd: float | None = None
 
 
-# Why a completed video's video_generated event carries no cost_usd.
 COST_MISSING_NO_INTRO = "no_intro"
 COST_MISSING_NO_COST_REPORTED = "intro_no_cost_reported"
 COST_MISSING_REASONS = frozenset({COST_MISSING_NO_INTRO, COST_MISSING_NO_COST_REPORTED})
 
-# Label for every total_cost_usd this module emits. "running" means the
-# container may still serve more videos, so the amortised share may fall.
-# No other label is emitted today; a container-exit final event would
-# introduce "final", and must not reuse this label for a different meaning.
 TOTAL_COST_LABEL_RUNNING = "running"
 TOTAL_COST_LABELS = frozenset({TOTAL_COST_LABEL_RUNNING})
 
-# Distinct videos (tasks) seen per container id, in this engine process.
-# A set, not a counter: a video rendering several clips in one container
-# counts once, and a task completing twice (retry) must not double-count.
-# Process-local by design — an engine restart resets the registry, so the
-# first video after a restart amortises over fewer videos than the
-# container really served, and its total is conservatively high.
 _CONTAINER_VIDEOS: dict[str, set[str]] = {}
 
 

@@ -9,12 +9,6 @@ import { GetVideoGenerationShape, ListVideoGenerationsShape, handleGetVideoGener
 import { withScriptOutcome } from './tools-prompts.js';
 import { CancelVideoTaskShape, WaitForVideoTasksShape, handleCancelVideoTask, handleWaitForVideoTasks } from './video-task-tools.js';
 
-//---------------
-// The video tools of issue #566: generate_video (one or a batch),
-// video_tasks (status/wait, generation history) and cancel_video. Registered
-// here; index.ts only wires the intent modules.
-//---------------
-
 const VIDEO_TASKS_SPECS = {
   status: WaitForVideoTasksShape,
   list_generations: ListVideoGenerationsShape,

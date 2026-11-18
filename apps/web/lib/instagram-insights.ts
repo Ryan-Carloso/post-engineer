@@ -1,10 +1,3 @@
-//---------------
-// parseInstagramInsightsPayload — the raw metric name -> value map of one
-// GET /{media-id}/insights response. A metric the API omits is simply
-// absent (never a fake 0); a body without a `data` array parses to an
-// empty map. Pure, so the dead-token vs deleted-media classification
-// (metrics/snapshot-failure.ts) can be tested without axios.
-//---------------
 export function parseInstagramInsightsPayload(body: unknown): Record<string, number> {
   const values: Record<string, number> = {};
   if (typeof body !== 'object' || body === null) return values;

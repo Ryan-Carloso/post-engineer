@@ -4,28 +4,14 @@ import { describe, expect, it } from 'vitest';
 import { SOCIAL_PROVIDERS } from '@/lib/contracts/providers';
 import { findRepoRoot } from '@/test/repo-root';
 
-//---------------
-// The list of social networks exists once: shared/contracts/providers.ts.
-// Every web, MCP and script source imports it. This guard fails when a
-// source types the whole list again, as an array literal or as a string
-// union, in any order: each of fanvue, 3speak and rumble once needed edits
-// in about 25 such copies, and a missed copy rejected the new network in
-// one tool only (the MCP connect action never accepted pinterest).
-// A subset of the networks (a fact of its own, such as which networks
-// connect directly) is not a copy and is not flagged.
-//---------------
-
 const root = findRepoRoot(import.meta.url);
 
 const SCANNED_DIRS = ['apps/web', 'apps/mcp/src', 'scripts', 'shared'];
 const SKIPPED_DIRS = new Set(['node_modules', '.next', '.stryker-tmp', '__tests__', 'coverage', 'coverage-unit', 'reports', 'dist', 'public', 'cypress']);
 const SKIPPED_FILES = new Set([
   'shared/contracts/providers.ts',
-  // Generated from the database schema, whose check constraints carry the
-  // list in SQL (pinned by migration-check-constraints-sync.test.ts).
   'apps/web/lib/supabase/database.gen.ts',
 ]);
-// Generated copies of shared/contracts (gitignored, synced before tests).
 const GENERATED_DIRS = ['apps/web/lib/contracts/', 'apps/mcp/src/contracts/'];
 const SOURCE_FILE = /\.(ts|tsx|mts|mjs|js)$/;
 const TEST_FILE = /\.(test|spec|cy)\.(ts|tsx)$/;
@@ -48,7 +34,6 @@ const ARRAY_LITERAL = /\[([^[\]]*)\]/g;
 const STRING_UNION = /'[a-z0-9]+'(?:\s*\|\s*'[a-z0-9]+')+/g;
 const QUOTED = /'([a-z0-9]+)'/g;
 
-/** Every array literal or string union in `text` that lists exactly the providers. */
 function providerListCopies(text: string): string[] {
   const expected = [...SOCIAL_PROVIDERS].sort().join(',');
   const candidates = [...text.matchAll(ARRAY_LITERAL)].map((match) => match[1]).concat([...text.matchAll(STRING_UNION)].map((match) => match[0]));
@@ -78,8 +63,6 @@ describe('one provider list (shared/contracts/providers.ts)', () => {
   });
 
   it('still finds the list in its one home', () => {
-    // Pins the scanner itself: if it stopped matching, the guard above
-    // would pass vacuously.
     expect(providerListCopies(readFileSync(join(root, 'shared/contracts/providers.ts'), 'utf8'))).toHaveLength(1);
   });
 });

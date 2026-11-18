@@ -10,18 +10,12 @@ vi.mock('../analytics.js', async (importOriginal) => {
   return {
     ...original,
     mcpTelemetryHeaders: () => ({}),
-    // Passthrough stand-ins for the per-call context: mcp_tool_called is
-    // recorded by the web API from the request headers, not by the MCP
-    // (see analytics.test.ts).
     withTelemetryHeaders: (_headers: unknown, run: () => Promise<unknown>) => run(),
     withToolCall: (_tool: string, _action: string, run: () => Promise<unknown>) => run(),
     withTracking: (_toolName: string, handler: (args: unknown) => Promise<unknown>) => async (args: unknown) => handler(args),
   };
 });
 
-// Issue #566: 16 intent tools instead of one tool per endpoint. Each action
-// tool advertises ONE flat object (a required `action` enum plus every field
-// of every action, optional); tools without actions keep their own shape.
 const ACTIONS: Record<string, string[]> = {
   video_tasks: ['status', 'list_generations', 'get_generation'],
   personas: ['list', 'get', 'create', 'update', 'delete'],
@@ -41,7 +35,6 @@ const ACTIONS: Record<string, string[]> = {
 const SINGLE_TOOLS: Record<string, string[]> = { generate_video: ['videos'], cancel_video: ['taskId'] };
 const EXPECTED_TOOLS = [...Object.keys(ACTIONS), ...Object.keys(SINGLE_TOOLS)].sort();
 
-// Actions that read a file from the disk exist only on the stdio server.
 const LOCAL_ONLY: Record<string, string[]> = { persona_media: ['add_image'], media: ['upload'], publish_video: ['from_file'] };
 
 async function listTools(transport: 'stdio' | 'http'): Promise<Map<string, Tool>> {
@@ -83,7 +76,6 @@ describe('action tools advertise one flat schema', () => {
     const tool = (await listTools('stdio')).get(name);
     expect(actionsOf(tool)).toEqual(actions);
     expect(tool?.inputSchema.required).toEqual(['action']);
-    // The flat shape carries the fields of the actions, not an empty object.
     expect(Object.keys(tool?.inputSchema.properties ?? {}).length).toBeGreaterThan(1 + (actions.length === 0 ? 0 : 0));
   });
 
@@ -176,8 +168,6 @@ describe('createPostEngineerMcpServer without injected client', () => {
 });
 
 describe('every action runs its handler against the client', () => {
-  // The action handlers only execute when the action is called: drive each
-  // one that goes through a client method over the in-memory transport.
   const PERSONA = '11111111-1111-4111-8111-111111111111';
   const mockClient = {
     listVoices: vi.fn(),

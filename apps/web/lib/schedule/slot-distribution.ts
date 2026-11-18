@@ -1,46 +1,18 @@
-//---------------
-// slot-distribution — pure slot distribution for generate-and-schedule.
-//
-// The API route and the UI slot preview import this SAME function, so the
-// preview always matches what the backend will create. No server imports:
-// this module must stay importable from client components.
-//
-// Rules:
-// - Slot order is preserved: slots fill in (day, time) order.
-// - Slots iterate over (day, time): day = startAt's calendar date in
-//   `timezone` + floor(k / times.length), time = sortedTimes[k % times.length].
-// - Slots strictly before `startAt` are skipped; iteration keeps moving
-//   forward (a single global cursor, so two slots never share a time).
-// - No recurrence: the times only distribute this operation's videos.
-//---------------
-
 import { datePartsInTimezone, isValidTimezone, parseZonedDateTime, zonedTimeToUtc } from '../timezone';
 
 export interface DistributeSlotsInput {
-  /**
-   * When the publishing window opens. An explicit offset (Z or +/-hh:mm)
-   * is respected as-is; a naive "2026-10-07T20:00:00" is wall-clock in
-   * `timezone` (the MCP contract). Anything else is rejected.
-   */
   startAtISO: string;
-  /** Daily publish times as "HH:MM". Sorted ascending internally. */
   times: string[];
-  /** IANA timezone the times are wall-clock in. */
   timezone: string;
-  /** Number of slots to produce. */
   count: number;
 }
 
 export interface DistributedSlot {
-  /** UTC instant of the slot, ISO string. */
   slotAtISO: string;
-  /** Calendar days after startAt's date (in `timezone`). */
   dayIndex: number;
-  /** Index into the sorted/deduped times array. */
   timeIndex: number;
 }
 
-/** Which request field a distribution failure maps to. */
 export type SlotDistributionField = 'times' | 'timezone' | 'startAt' | 'count';
 
 export class SlotDistributionError extends Error {
@@ -78,7 +50,6 @@ function parseTimes(times: string[]): ParsedTime[] {
     }
     return { hour, minute, label: `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}` };
   });
-  // Sort ascending and drop exact duplicates so two slots never share a time.
   const seen = new Set<string>();
   return parsed
     .sort((a, b) => a.hour * 60 + a.minute - (b.hour * 60 + b.minute))
@@ -109,15 +80,11 @@ export function distributeSlots(input: DistributeSlotsInput): DistributedSlot[] 
   const startMs = startAt.getTime();
 
   const slots: DistributedSlot[] = [];
-  // Global cursor over (day, time) pairs: skip anything before startAt,
-  // keep iterating forward until `count` slots are placed.
   let k = 0;
   while (slots.length < count) {
     const dayIndex = Math.floor(k / perDay);
     const timeIndex = k % perDay;
     const t = sorted[timeIndex];
-    // Date.UTC normalizes day overflow, so month/year boundaries just work;
-    // zonedTimeToUtc re-resolves the zone offset per candidate (DST-safe).
     const candidate = zonedTimeToUtc(base.year, base.month, base.day + dayIndex, t.hour, t.minute, timezone);
     if (candidate.getTime() >= startMs) {
       slots.push({ slotAtISO: candidate.toISOString(), dayIndex, timeIndex });

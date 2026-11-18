@@ -17,9 +17,6 @@ def test_a_cue_inside_a_panel_band_is_capped_at_the_panel_top():
 
 
 def test_a_cue_straddling_the_panel_start_is_lifted_so_it_never_covers_the_photo():
-    # The panel interval (spoken time) and the cue interval (subtitle provider)
-    # do not have to start together: the cue is already on screen when the
-    # photo appears, so it must clear it too.
     bands = [(1.0, 3.0, _panel_bottom())]
     assert caption_layout.cue_bottom(bands, (0.6, 1.4)) == _panel_bottom()
     assert caption_layout.cue_bottom(bands, (2.9, 3.4)) == _panel_bottom()

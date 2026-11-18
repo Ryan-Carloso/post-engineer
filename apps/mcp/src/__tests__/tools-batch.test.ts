@@ -3,12 +3,6 @@ import type { PostEngineerClient } from '../client.js';
 import { ApiError } from '../errors.js';
 import { GeneratePersonaVideoBatchSchema, handleGeneratePersonaVideoBatch } from '../tools-batch.js';
 
-//---------------
-// generate_persona_video_batch (issue #487). The client is mocked at its
-// boundary: generatePersonaVideo() for each video and request() for
-// POST /api/videos/batch-discount.
-//---------------
-
 function photos(count: number, prefix: string): Array<{ url: string }> {
   return Array.from({ length: count }, (_, i) => ({ url: `https://example.com/${prefix}-${i + 1}.jpg` }));
 }

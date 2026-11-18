@@ -1,5 +1,4 @@
 // @vitest-environment node
-// The API lib runs on the Node runtime (native fetch/undici).
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const mockAgentInstance = {
@@ -66,8 +65,6 @@ describe('countBlueskyGraphemes / truncateBlueskyCaption', () => {
   });
 
   it('a composed emoji counts as 1 grapheme', () => {
-    // ZWJ family: assembled from codepoints because the ZWJ is invisible
-    // and disappears in editor copy/paste.
     const zwj = String.fromCodePoint(0x200d);
     const family = [0x1f468, 0x1f469, 0x1f467, 0x1f466]
       .map((cp) => String.fromCodePoint(cp))

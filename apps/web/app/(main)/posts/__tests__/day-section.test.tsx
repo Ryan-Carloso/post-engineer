@@ -5,12 +5,6 @@ import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { CalendarPlus } from 'lucide-react';
 
-//---------------
-// Tests for the posts calendar's day-panel states (EmptyState,
-// AccountEmptyState, DayEmptyState). The i18n mock returns keys, so
-// assertions pin the key and the rendered classes, not copy.
-//---------------
-
 vi.mock('@/lib/i18n/provider', () => {
   function I18nProvider({ children }: { children: ReactNode }) {
     return <>{children}</>;

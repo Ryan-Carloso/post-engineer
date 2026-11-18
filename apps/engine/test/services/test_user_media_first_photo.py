@@ -24,8 +24,6 @@ def _jpeg(width=1080, height=1920, color=(200, 80, 40)):
     return buffer.getvalue()
 
 
-# ---- selection: the first media item across segments, in order
-
 
 def test_selects_the_hook_segments_first_photo():
     segments = [
@@ -61,9 +59,6 @@ def test_skips_non_dict_media_entries():
 
 
 def test_skips_media_items_without_a_usable_ref():
-    # Mirrors the web selector (apps/web/lib/hook-photo.ts): an item with
-    # neither a mediaId nor a url is not a photo — the next usable one is
-    # the first photo, so the pre-charge face check and the engine agree.
     segments = [
         {
             "kind": "hook",
@@ -90,8 +85,6 @@ def test_selects_from_pydantic_segments():
     ]
     assert user_media.first_segment_media(segments) == (0, 0, {"url": "https://e.com/a.jpg"})
 
-
-# ---- resolution: download the first photo to the task dir
 
 
 def test_media_id_resolves_from_the_temp_assets_directory(tmp_path, monkeypatch):
@@ -147,10 +140,6 @@ def test_expired_media_id_reports_the_per_photo_reason(tmp_path, monkeypatch):
 
 
 def test_media_without_id_or_url_falls_back_to_no_segment_media(tmp_path):
-    # Ref-less items are skipped by selection (see
-    # test_skips_media_items_without_a_usable_ref), so a segment with
-    # only ref-less media carries no usable first photo: the caller falls
-    # back to the persona photo, exactly like the web preflight does.
     segments = [{"kind": "hook", "text": "Hi.", "media": [{}]}]
     photo, segment_index, image_index, reason = user_media.resolve_first_segment_photo(
         str(tmp_path), segments

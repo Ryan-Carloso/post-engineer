@@ -92,9 +92,6 @@ class PersonaFolderTests(unittest.TestCase):
         )
 
     def test_persona_with_only_avatar_url_uses_persona_id(self):
-        # has_visuals must come from avatar_url alone: guards the getattr
-        # attribute names (a typo'd "XXavatar_urlXX" would silently flip a
-        # visual persona into the faceless folder).
         persona = PersonaParams(
             id="persona-3", name="A", avatar_url="https://x/a.jpg", voice_id="v1"
         )
@@ -130,8 +127,6 @@ class R2ConfigurationTests(unittest.TestCase):
         )
 
     def test_each_missing_credential_is_named_exactly(self):
-        # The message names the missing variable: a typo'd name in the
-        # (name, value) pairs would silently misreport which key to set.
         full = {
             "R2_ACCOUNT_ID": "acct",
             "R2_ACCESS_KEY_ID": "k",
@@ -163,8 +158,6 @@ class R2ConfigurationTests(unittest.TestCase):
         )
 
     def test_unset_account_id_resolves_to_empty_string(self):
-        # Guards the "" fallback: a truthy fallback would make the endpoint
-        # builder produce a bogus host instead of failing explicitly.
         with _isolated_environ({}):
             self.assertEqual(vs._r2_account_id(), "")
 
@@ -180,9 +173,6 @@ class R2UploadTests(unittest.TestCase):
                 }
             )
         )
-        # The archive is a precondition of a servable video, so the upload path
-        # now stats the local file and HEADs the object back. Both are mocked:
-        # a size that matches is what makes the upload count as verified.
         self.stat = patch("app.services.video_storage.os.path.getsize", return_value=1024)
         self.stat.start()
         self.addCleanup(self.stat.stop)
@@ -201,8 +191,6 @@ class R2UploadTests(unittest.TestCase):
                     "u1/faceless/task-7/final-1.mp4", "/tmp/final-1.mp4"
                 )
         self.assertEqual(result, "u1/faceless/task-7/final-1.mp4")
-        # The local file must be opened in binary mode; the exact handle is
-        # what gets uploaded (a Body=None or dropped kwarg must fail).
         open_mock.assert_called_once_with("/tmp/final-1.mp4", "rb")
         handle = open_mock.return_value.__enter__.return_value
         client.put_object.assert_called_once()
@@ -211,7 +199,6 @@ class R2UploadTests(unittest.TestCase):
         self.assertEqual(kwargs["Key"], "u1/faceless/task-7/final-1.mp4")
         self.assertIs(kwargs["Body"], handle)
         self.assertEqual(kwargs["ContentType"], "video/mp4")
-        # Verification is not optional: a successful PUT alone is not proof.
         client.head_object.assert_called_once_with(
             Bucket=vs.STORAGE_BUCKET, Key="u1/faceless/task-7/final-1.mp4"
         )
@@ -239,9 +226,6 @@ class R2UploadTests(unittest.TestCase):
                 )
 
     def test_missing_content_length_counts_as_zero_bytes(self):
-        # A HEAD without ContentLength means "nothing stored": the fallback
-        # must be 0, so a zero-byte expectation verifies and anything else
-        # does not (guards the `or 0` against `or 1`-style mutants).
         client = MagicMock()
         client.head_object.return_value = {}
         self.assertTrue(vs._verify_r2_object(client, "p", 0))
@@ -275,8 +259,6 @@ class R2UploadTests(unittest.TestCase):
                 factory.assert_not_called()
 
     def test_wrapper_delegates_to_r2_upload_with_both_paths(self):
-        # upload_final_video is a thin wrapper; the object path must reach
-        # the R2 upload unchanged (a None-swapped argument must fail).
         with patch.object(vs, "upload_final_video_r2", return_value="u1/f/t/final-1.mp4") as upload:
             self.assertEqual(
                 vs.upload_final_video("u1/f/t/final-1.mp4", "/tmp/final-1.mp4"),
@@ -305,8 +287,6 @@ class R2SignedUrlTests(unittest.TestCase):
         with patch("app.services.video_storage._r2_client", return_value=client):
             url = vs.create_signed_url_r2("u1/faceless/t/final-1.mp4", expires_in=600)
         self.assertIn("X-Amz-Signature", url)
-        # The S3 operation name is positional: signing anything but
-        # "get_object" would mint an unusable URL.
         self.assertEqual(client.generate_presigned_url.call_args[0][0], "get_object")
         kwargs = client.generate_presigned_url.call_args.kwargs
         self.assertEqual(kwargs["Params"]["Bucket"], vs.STORAGE_BUCKET)
@@ -327,16 +307,12 @@ class R2SignedUrlTests(unittest.TestCase):
                 factory.assert_not_called()
 
     def test_serving_wrapper_returns_none_when_unconfigured(self):
-        # The serving-facing wrapper degrades to None (callers 404); only
-        # create_signed_url_r2 fails fast.
         with _isolated_environ({}):
             with patch("app.services.video_storage._r2_client") as factory:
                 self.assertIsNone(vs.create_signed_url("u1/faceless/t/final-1.mp4"))
                 factory.assert_not_called()
 
     def test_serving_wrapper_delegates_with_path_and_ttl(self):
-        # The wrapper must forward both arguments unchanged; a dropped or
-        # None-swapped argument would sign the wrong object (or TTL).
         with patch.object(vs, "create_signed_url_r2", return_value="https://signed") as sign:
             self.assertEqual(
                 vs.create_signed_url("u1/f/t/final-1.mp4", expires_in=123),
@@ -425,8 +401,6 @@ class ReadFinalVideoR2Tests(unittest.TestCase):
                 vs.read_final_video_r2("u/f/task/final-1.mp4")
 
     def test_r2_read_failure_raises_explicitly(self):
-        # A failed GET must surface as an explicit RuntimeError naming the
-        # object — never a swallowed None or an empty message.
         client = MagicMock()
         client.get_object.side_effect = RuntimeError("boom")
         with patch.object(vs, "_r2_client", return_value=client):

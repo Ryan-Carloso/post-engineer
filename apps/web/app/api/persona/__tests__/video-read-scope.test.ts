@@ -1,13 +1,6 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-//---------------
-// Persona scope on the engine proxies (issue #449). A scoped key must
-// get the same 404 as an unknown task, and the engine must not be
-// contacted, when the task belongs to another persona or to a
-// non-faceless orphan. video-status must stop before refunds too.
-//---------------
-
 vi.mock('@/lib/request-auth', () => ({
   requireSupabaseSession: vi.fn(),
   engineAuthHeaders: vi.fn((userId: string) => ({

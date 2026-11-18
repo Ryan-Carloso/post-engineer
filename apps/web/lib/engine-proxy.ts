@@ -1,6 +1,5 @@
 import 'server-only';
 
-/** Shared engine base URL (throws when MONEYPRINT_API_URL is unset). */
 export function engineBaseUrl(): string {
   const url = process.env.MONEYPRINT_API_URL;
   if (!url) {

@@ -21,8 +21,6 @@ describe('ImageTooLargeError', () => {
     expect(error.name).toBe('ImageTooLargeError');
     expect(error.path).toBe('/tmp/photos/a.jpg');
     expect(error.sizeBytes).toBe(11 * 1024 * 1024);
-    // The max in the message comes from the shared derived constant, never
-    // a literal or a locally recomputed divisor.
     expect(error.message).toBe(
       'Image "/tmp/photos/a.jpg" is too large (11534336 bytes; max 10MB).'
     );

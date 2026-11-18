@@ -125,7 +125,5 @@ def test_combine_videos_loops_through_video_loop():
 
 
 def test_a_still_clip_is_named_after_its_still():
-    # image_material names the rendered clip after its still: the clip
-    # rendered from photo-0.jpg must stay photo-0.jpg.mp4.
     source = Path(image_material.__file__).read_text(encoding="utf-8")
     assert 'video_file = f"{image_path}.mp4"' in source

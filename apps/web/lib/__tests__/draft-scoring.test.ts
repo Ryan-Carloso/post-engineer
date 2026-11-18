@@ -1,9 +1,3 @@
-//---------------
-// Tests for lib/draft-scoring: mechanical signals only, no LLM, no DB.
-// Every score assertion pins the full bucket arithmetic, and one test
-// pins that the reasons always sum to the returned score.
-//---------------
-
 import { describe, it, expect } from 'vitest';
 import {
   INSTAGRAM_CAPTION_MAX_CHARS,

@@ -14,8 +14,6 @@ from loguru import logger
 from app.services.task_cancellation import is_cancelled
 from app.services.task_cleanup import abort_if_cancelled, cleanup_task_intermediates
 
-# Callers that used to call `_fail_task` without `exc` assert that exact
-# signature. Pass the argument only when the caller supplied one.
 _OMIT = object()
 
 
@@ -30,9 +28,6 @@ def crash_or_stop(task_id, exc, params, stage, music_mood, preserved) -> None:
     from app.services import task as task_mod
     from app.services.notify import safe_reason
 
-    # The cancel check has to be this branch's own. Routing through
-    # abort_if_cancelled only after the check means dropping the check
-    # falls through to _fail_task (terminal webhook, Discord, failed event).
     if is_cancelled(task_id):
         abort_if_cancelled(
             task_id, stage or "pipeline", task_mod._forget_milestone, stopped=True

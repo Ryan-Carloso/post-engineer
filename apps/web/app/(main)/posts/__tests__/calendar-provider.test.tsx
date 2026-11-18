@@ -3,12 +3,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import type { ReactNode } from 'react';
 
-//---------------
-// Tests for the posts month calendar (CalendarCN month view, read-only):
-// chips navigate, days select, drag/resize/context menu stay off.
-// "Today" is pinned to 2030-06-01, a Saturday, so the grid opens on June 2030.
-//---------------
-
 vi.mock('@/lib/i18n/provider', () => {
   function I18nProvider({ children }: { children: ReactNode }) {
     return <>{children}</>;
@@ -26,8 +20,6 @@ import type { DetailedCalendarEvent } from '@/components/calendar-types';
 import { useI18n } from '@/lib/i18n/provider';
 import { postsCalendarStrings } from '@/lib/i18n/posts-calendar-i18n';
 
-// Resolves a posts key against the real dictionary (the module mock's `t`
-// returns the key verbatim, so the range text would never appear).
 function realT(locale: 'en' | 'pt') {
   return (key: string, vars?: Record<string, string | number>) => {
     const parts = key.split('.');
@@ -64,8 +56,6 @@ function renderCalendar(props: Record<string, unknown> = {}) {
     <PostsCalendar
       events={[]}
       date={new Date(2030, 5, 1)}
-      // The lib defaults an undefined view to "week", so the month suite
-      // passes it explicitly — the month grid is what this suite tests.
       view="month"
       showViewSwitcher={false}
       weekStartsOn={0}
@@ -144,8 +134,6 @@ describe('PostsCalendar', () => {
         }),
       ),
     });
-    // In jsdom the cells measure 0px tall, so fewer slots fit than in a real
-    // browser: only the day matters here, not the exact overflow count.
     fireEvent.click(screen.getByRole('button', { name: /Show \d+ more events/ }));
     expect(onSelectDay).toHaveBeenCalledWith('2030-06-03');
   });
@@ -162,12 +150,9 @@ describe('PostsCalendar', () => {
     fireEvent.pointerDown(chip, { pointerId: 1, clientX: 100, clientY: 100, button: 0, isPrimary: true });
     window.dispatchEvent(new PointerEvent('pointermove', { pointerId: 1, clientX: 200, clientY: 200 }));
     window.dispatchEvent(new PointerEvent('pointerup', { pointerId: 1, clientX: 200, clientY: 200 }));
-    // No floating drag copy follows the pointer.
     expect(document.querySelector('.pointer-events-none.fixed')).toBeNull();
-    // The trailing click is a drag, not a click: it must not navigate either.
     fireEvent.click(chip, { clientX: 200, clientY: 200 });
     expect(pushMock).not.toHaveBeenCalled();
-    // The chip never left its day.
     expect(screen.getByText('Morning post')).toBeInTheDocument();
   });
 
@@ -186,30 +171,20 @@ describe('PostsCalendar', () => {
 
   it('does not swallow wheel scroll over the grid: the page keeps the event and the month stays', async () => {
     const { onDateChange } = renderCalendar({ events: [calendarEvent()] });
-    // The lib's wheel nav is a week step from the 1st, so wheel-down lands
-    // in the same month and the page would drop it — while the lib's
-    // preventDefault kills the page scroll. The wrapper must stop the
-    // wheel before it reaches the lib, so the page scrolls instead.
     const event = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: 120 });
     screen.getByRole('button', { name: 'Sunday, June 2' }).dispatchEvent(event);
     expect(event.defaultPrevented).toBe(false);
-    // Past the lib's 150ms scroll-end debounce: no month change either.
     await new Promise((resolve) => setTimeout(resolve, 200));
     expect(onDateChange).not.toHaveBeenCalled();
   });
 
   it('prevents the browser default on Alt+Arrow over a focused event chip', () => {
     const { onDateChange } = renderCalendar({ events: [calendarEvent()] });
-    // The capture handler stops the event before the lib's keyboard
-    // handler runs, so the lib's preventDefault never fires — without one
-    // here, Alt+Left/Right navigates the browser history on Windows/Linux.
     const prevented = fireEvent.keyDown(screen.getByText('Morning post'), { altKey: true, key: 'ArrowLeft' });
     expect(prevented).toBe(false);
     expect(onDateChange).not.toHaveBeenCalled();
   });
 
-  // The Alt+Arrow guard is one condition over four keys: every key must
-  // prevent, and a non-arrow key or a missing Alt must not.
   it.each([['ArrowUp'], ['ArrowDown'], ['ArrowRight']])(
     'prevents the browser default on Alt+%s over a focused event chip',
     (key) => {
@@ -221,9 +196,6 @@ describe('PostsCalendar', () => {
 
   it('does not prevent the browser default on Alt+letter over a focused event chip', () => {
     renderCalendar({ events: [calendarEvent()] });
-    // A letter is not an arrow: neither the capture guard nor the lib's
-    // keyboard handler prevents it. (Alt+Enter is prevented by the lib's
-    // popover handling, so it cannot pin this guard.)
     const prevented = fireEvent.keyDown(screen.getByText('Morning post'), { altKey: true, key: 'a' });
     expect(prevented).toBe(true);
   });
@@ -243,9 +215,6 @@ describe('PostsCalendar', () => {
     expect(prevented).toBe(true);
   });
 
-  // The wheel guard is a native capture listener on the month wrapper: a
-  // wheel over a day must never reach the grid cells below it, so the
-  // page scrolls instead of the lib stepping a week.
   it('stops wheel scroll at the month wrapper before it reaches the grid cells', () => {
     renderCalendar({ events: [calendarEvent()] });
     const cell = document.querySelector('[data-date="2030-06-02"]') as HTMLElement;
@@ -266,8 +235,6 @@ describe('PostsCalendar', () => {
     removeSpy.mockRestore();
   });
 
-  // The drag guard reads the press and the trailing click: only a press
-  // that wandered past the threshold counts as a drag.
   it('treats a press that moved only horizontally as a drag', () => {
     renderCalendar({ events: [calendarEvent()] });
     const chip = screen.getByText('Morning post');
@@ -319,8 +286,6 @@ describe('PostsCalendar', () => {
     expect(onSelectDay).toHaveBeenCalledWith('2030-06-02');
   });
 
-  // The context-menu guard stops the menu only on an event: a day's menu
-  // must still reach the page.
   it('lets a context menu opened on a day with no event reach the page', () => {
     const onContextMenu = vi.fn();
     render(
@@ -373,9 +338,6 @@ describe('PostsCalendar', () => {
     expect(onContextMenu).not.toHaveBeenCalled();
   });
 
-  // The read-only chrome: muted grids are inert, chevrons are 40px
-  // targets, the Today control reads its pressed state, and the clock
-  // follows the locale.
   it('marks the grid non-interactive when muted', () => {
     renderCalendar({ muted: true });
     expect(document.querySelector('[data-calendar-card]')?.className.split(/\s+/)).toContain('pointer-events-none');
@@ -482,7 +444,6 @@ describe('dayColumnIndexForPoint', () => {
 });
 
 describe('PostsCalendar week view', () => {
-  // The week of Sunday 2030-06-02 (weekStartsOn 0): 2–8 June 2030.
   function renderWeek(props: Record<string, unknown> = {}) {
     const handlers = {
       onSelectDay: vi.fn(),
@@ -517,8 +478,6 @@ describe('PostsCalendar week view', () => {
     });
   }
 
-  // Day columns only, scoped to the week grid: the toolbar's view switcher
-  // is a role="group" too, and it must never count as a day.
   function visibleColumns(): Element[] {
     const grid = document.querySelector('[data-posts-calendar-week]');
     if (grid === null) return [];
@@ -570,9 +529,6 @@ describe('PostsCalendar week view', () => {
     expect(screen.queryByRole('button', { name: 'Week' })).not.toBeInTheDocument();
   });
 
-  // A zero-duration event renders title-only (the lib shows the time range
-  // only on chips at least 40px tall); the hour is visible on the time axis
-  // the chip sits on.
   it('shows an event chip with its title on its day', () => {
     renderWeek({ events: [weekEvent()] });
     const chip = screen.getByText('Morning post').closest('[data-event-id]');

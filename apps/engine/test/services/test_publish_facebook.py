@@ -41,7 +41,6 @@ class PublishFacebookModuleTest(unittest.TestCase):
             validate(publish_facebook.FacebookMetadata(caption="post", account_ids=()))
         with self.assertRaisesRegex(ValueError, "facebook caption exceeds 63206 characters"):
             validate(publish_facebook.FacebookMetadata(caption="a" * 63207, account_ids=("1",)))
-        # At the limit is valid.
         validate(publish_facebook.FacebookMetadata(caption="a" * 63206, account_ids=("1",)))
 
     def test_account_ids_are_normalized_to_a_tuple(self) -> None:

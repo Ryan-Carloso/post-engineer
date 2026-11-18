@@ -6,7 +6,6 @@ import tempfile
 from pathlib import Path
 from unittest.mock import ANY, patch
 
-# add project root to python path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from app.services import task as tm
@@ -80,9 +79,6 @@ class TestTaskService(unittest.TestCase):
         tts.assert_not_called()
 
     def test_generate_audio_rejects_absolute_custom_file_outside_allowed_dirs(self):
-        # Absolute server-side paths outside the task dir / local_videos are
-        # rejected (path containment): the old behavior accepted any existing
-        # absolute path, which let callers read arbitrary server files.
         task_id = "test-custom-audio-absolute-rejected"
         task_dir = utils.task_dir(task_id)
 
@@ -102,9 +98,6 @@ class TestTaskService(unittest.TestCase):
                 with (
                     patch.object(tm.voice, "tts") as tts,
                     patch.object(tm.sm.state, "update_task") as update_task,
-                    # Simulate the full-suite condition: importing app.asgi during
-                    # collection loads the tracked .env with the real
-                    # DISCORD_WEBHOOK_URL. The failure path must not ping Discord.
                     patch.dict(os.environ, {"DISCORD_WEBHOOK_URL": "https://discord/hook"}),
                     patch("app.services.notify._default_post") as default_post,
                 ):
@@ -143,9 +136,6 @@ class TestTaskService(unittest.TestCase):
             with (
                 patch.object(tm.voice, "tts") as tts,
                 patch.object(tm.sm.state, "update_task") as update_task,
-                # Simulate the full-suite condition: importing app.asgi during
-                # collection loads the tracked .env with the real
-                # DISCORD_WEBHOOK_URL. The failure path must not ping Discord.
                 patch.dict(os.environ, {"DISCORD_WEBHOOK_URL": "https://discord/hook"}),
                 patch("app.services.notify._default_post") as default_post,
             ):
@@ -353,9 +343,6 @@ class TestGenerateFinalVideosSingleOutput(unittest.TestCase):
         )
 
     def test_hook_lipsync_with_a_photo_less_persona_fails_before_any_render(self):
-        # A hook video needs a face, like full lip-sync: without a photo
-        # there is nothing to lip-sync, so fail loudly instead of
-        # silently rendering images-only for a face mode.
         with self.assertRaises(ValueError) as caught:
             self._run(
                 video_type="hook_lipsync",
@@ -406,7 +393,6 @@ class TestGenerateFinalVideosCaptionWiring(unittest.TestCase):
         moved = generate.call_args.kwargs["params"]
         self.assertEqual(moved.subtitle_position, "custom")
         self.assertEqual(moved.custom_position, 70.0)
-        # The caller's params are untouched: caption_params copies.
         self.assertEqual(params.subtitle_position, "center")
 
 
@@ -465,7 +451,6 @@ class TestDownloadPersonaVoice(unittest.TestCase):
     ):
         import socket
 
-        # The download dials through the pinned helper, not requests.get.
         get_patcher = patch(
             "app.utils.ssrf._send_pinned",
             return_value=response or _FakeStreamResponse(),
@@ -537,12 +522,6 @@ class TestDownloadPersonaVoice(unittest.TestCase):
         self.assertIsNone(result)
         self.assertEqual(os.listdir(self.tmp), [])
 
-    # ---------------
-    # SSRF: the URL must resolve to a public address. Literal private IP,
-    # hostname resolving to a private IP, unresolvable host, and redirect
-    # to a private destination are rejected without any fetch.
-    # ---------------
-
     def test_rejects_private_ip_literal(self):
         result = self._download(url="http://127.0.0.1/voz.mp3")
 
@@ -580,7 +559,6 @@ class TestDownloadPersonaVoice(unittest.TestCase):
         result = self._download(response=redirect)
 
         self.assertIsNone(result)
-        # only the initial GET happened; the redirect target was never fetched
         self.assertEqual(self.get_mock.call_count, 1)
         self.assertEqual(os.listdir(self.tmp), [])
 
@@ -641,7 +619,6 @@ class TestGenerateAudioMissingVoice(unittest.TestCase):
         self.assertIsNone(audio_file)
         self.assertIsNone(audio_duration)
         self.assertIsNone(sub_maker)
-        # TTS was never attempted: no wasted edge-tts retries on ''.
         tts.assert_not_called()
         update_task.assert_called_once()
         kwargs = update_task.call_args.kwargs
@@ -649,10 +626,6 @@ class TestGenerateAudioMissingVoice(unittest.TestCase):
         self.assertIn("no voice", str(kwargs.get("error", "")).lower())
 
     def test_fails_fast_when_persona_voice_id_is_empty_string(self):
-        # PersonaParams counts '' as "exactly one voice" (it checks
-        # is not None), but resolve_persona_audio treats '' as absent and
-        # falls back to the empty voice_name default — the same TTS crash
-        # as having no voice at all.
         params = VideoParams(
             video_title="empty voice id",
             video_description="Test description.",
@@ -857,7 +830,6 @@ class TestCompleteTaskCostReason(unittest.TestCase):
         self.assertNotIn("cost_missing_reason", props)
 
     def test_reason_is_persisted_on_the_task_row(self):
-        # The batch reconciler reads the row, so the reason must be stored.
         params = VideoParams(
             video_title="t", video_description="Test description.", video_type="faceless"
         )
@@ -882,9 +854,6 @@ class TestFailTaskDiscordRetry(unittest.TestCase):
         tm._discord_notified_failed_tasks.clear()
 
     def test_fail_task_alerts_again_after_real_eviction(self):
-        # Review MINOR: fill the bounded cache past its limit with other
-        # task ids — the first id is genuinely evicted (not via a manual
-        # .remove()) and a later failure for it re-alerts.
         with (
             patch.object(tm.sm.state, "update_task"),
             patch.object(tm, "send_discord", return_value=True) as send_discord,
@@ -942,9 +911,6 @@ class TestFailTaskConcurrentDedupe(unittest.TestCase):
         self.assertEqual(send_discord.call_count, 1)
 
     def test_failed_send_releases_alert_reservation(self):
-        # Review MINOR: a transient Discord outage must not permanently
-        # suppress the alert — when the send fails, the dedupe reservation
-        # is released so the next failure notice re-alerts.
         with (
             patch.object(tm.sm.state, "update_task"),
             patch.object(tm, "send_discord") as send_discord,
@@ -956,8 +922,6 @@ class TestFailTaskConcurrentDedupe(unittest.TestCase):
         self.assertEqual(send_discord.call_count, 2)
 
     def test_successful_send_keeps_dedupe(self):
-        # The release only happens on send failure — a delivered alert still
-        # dedupes repeat notices for the same task.
         with (
             patch.object(tm.sm.state, "update_task"),
             patch.object(tm, "send_discord", return_value=True) as send_discord,
@@ -967,8 +931,6 @@ class TestFailTaskConcurrentDedupe(unittest.TestCase):
         self.assertEqual(send_discord.call_count, 1)
 
     def test_fail_task_keeps_first_specific_error(self):
-        # Review MINOR: a later generic notice must not clobber the first,
-        # most specific stored error.
         from app.services.state import MemoryState
 
         memory = MemoryState()
@@ -983,9 +945,6 @@ class TestFailTaskConcurrentDedupe(unittest.TestCase):
         self.assertEqual(task["error"], "custom audio file is invalid: too short")
 
     def test_fail_task_preserves_error_recorded_by_other_path(self):
-        # task_publish.py records the detailed publish error + FAILED
-        # itself, then start()'s handler calls _fail_task — the detailed
-        # error must survive, and the alert still goes out once.
         from app.services.state import MemoryState
 
         memory = MemoryState()
@@ -1008,17 +967,12 @@ class TestStartR2Requirement(unittest.TestCase):
     """start() fails fast when video generation needs R2 but it is unconfigured."""
 
     def _no_r2_env(self):
-        # Unset only the R2 vars; keep MUTANT_UNDER_TEST for mutmut runs.
         env = os.environ.copy()
         for var in ("R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY"):
             env.pop(var, None)
         return patch.dict(os.environ, env, clear=True)
 
     def test_video_run_fails_fast_without_r2(self):
-        # With stop_at="video" (full pipeline) and no R2 credentials, the
-        # require_r2_configuration guard must fire before any generation
-        # work starts. A mutant removing the guard would let the pipeline
-        # proceed to generate_script.
         params = VideoParams(
             video_title="s", video_description="Test description.", video_type="faceless"
         )
@@ -1036,9 +990,6 @@ class TestStartR2Requirement(unittest.TestCase):
         self.assertIn("R2", str(fail_task.call_args))
 
     def test_partial_run_skips_r2_check(self):
-        # stop_at != "video" means no video will be generated, so the R2
-        # guard must not fire. A mutant flipping the condition would fail
-        # partial runs that never touch R2.
         params = VideoParams(
             video_title="s", video_description="Test description.", video_type="faceless"
         )
@@ -1083,9 +1034,6 @@ class TestReleaseFailureAlertLockBusy(unittest.TestCase):
         tm._discord_notified_failed_tasks.clear()
 
     def test_lock_busy_keeps_reservation_and_warns(self):
-        # Review MINOR: with the bounded acquire, a busy lock must warn and
-        # leave the reservation in place — dropping the id would silently
-        # suppress the re-alert this function exists to protect.
         tm._discord_notified_failed_tasks.append("task-lock-busy")
         tm._discord_notified_failed_tasks_lock.acquire()
         try:
@@ -1181,13 +1129,11 @@ class TestArchiveFinalVideos(unittest.TestCase):
                 task_id, params, ["clip.mp4"], "voice.mp3", "sub.srt", "script", "none"
             )
 
-        # The task completes: the normal (non-lipsync) video ships.
         self.assertEqual(len(final_paths), 1)
         self.assertEqual(len(combined_paths), 1)
         self.assertFalse(intro_report.ran)
         generate_video.assert_called_once()
         self.assertEqual(generate_video.call_args.kwargs["video_path"], combined_paths[0])
-        # The skip was already reported inside the intro step.
         track.assert_not_called()
 
 

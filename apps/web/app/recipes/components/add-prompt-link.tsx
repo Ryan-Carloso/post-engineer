@@ -2,14 +2,6 @@
 
 import { useI18n } from '@/lib/i18n/provider';
 
-//---------------
-// Secondary call to action for the prompts hub: link out to the
-// prompt_request issue template so users can submit a prompt of
-// their own. Rendered once, below the card grid (and below the
-// empty state), never inside it — cards themselves stay internal
-// links to the detail pages.
-//---------------
-
 export const ADD_PROMPT_URL =
   'https://github.com/Ryan-Carloso/post-engineer/issues/new?template=prompt_request.md';
 

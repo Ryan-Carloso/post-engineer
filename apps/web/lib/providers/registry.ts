@@ -1,29 +1,13 @@
 import type { SocialAccountRecord } from '@/lib/social-accounts';
 import type { AccountData, AccountSyncStatus, InstagramAccountData } from '@/lib/types';
 
-//---------------
-// Provider Registry — the per-provider web facts (account mappers,
-// display, OAuth callback support). The list of networks itself is
-// shared/contracts/providers.ts (SOCIAL_PROVIDERS), the one list the web,
-// the MCP and the OpenAPI generator all read. Adding a provider = adding
-// it there and the matching entry to PROVIDER_REGISTRY (the `satisfies`
-// breaks the typecheck if the registry misses one).
-//---------------
-
 import { SOCIAL_PROVIDERS, isSocialProvider, type SocialProvider } from '@/lib/contracts/providers';
 
 export { SOCIAL_PROVIDERS, isSocialProvider, type SocialProvider };
 
-// Stored/shown when Instagram returned no username for the account.
 export const INSTAGRAM_USERNAME_FALLBACK = 'instagram_user';
 export const YOUTUBE_CHANNEL_NAME_FALLBACK = 'YouTube Account';
-// Channel id stored by the old callback when the channel read failed. No
-// connect writes it anymore; legacy rows are repaired through the grant.
 export const YOUTUBE_PLACEHOLDER_ACCOUNT_ID = 'unknown';
-
-//---------------
-// Public shapes (no tokens) per provider — what /api/account returns
-//---------------
 
 export interface BlueskyAccountData {
   provider: 'bluesky';
@@ -127,20 +111,10 @@ export type PublicAccountItem =
   | RumbleAccountData
   | FanvueAccountData;
 
-//---------------
-// ProviderDef — contract every provider must implement.
-// supportsOAuthCallback marks who has an OAuth flow (bluesky uses app
-// password and rumble a manual access token, not OAuth).
-//---------------
-
 interface ProviderDef<OAuth extends boolean = boolean> {
   supportsOAuthCallback: OAuth;
   toPublicAccount(record: SocialAccountRecord): PublicAccountItem;
 }
-
-//---------------
-// Narrowing helpers for metadata (jsonb = unknown)
-//---------------
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -176,10 +150,6 @@ function lastUsedTimestamp(record: SocialAccountRecord): number {
     ? new Date(record.lastUsedAt).getTime()
     : createdAtTimestamp(record);
 }
-
-//---------------
-// Per-provider definitions
-//---------------
 
 const youtubeDef: ProviderDef<true> = {
   supportsOAuthCallback: true,
@@ -307,8 +277,6 @@ const pinterestDef: ProviderDef<true> = {
   },
 };
 
-// 3Speak has no OAuth: the Hive posting key connects the account (like the
-// Bluesky app password), and the provider_account_id is the Hive username.
 const threespeakDef: ProviderDef<false> = {
   supportsOAuthCallback: false,
   toPublicAccount(record) {
@@ -323,8 +291,6 @@ const threespeakDef: ProviderDef<false> = {
   },
 };
 
-// Rumble has no OAuth and no profile API: the account is the channel id
-// the user typed at connect, and the card shows that id.
 const rumbleDef: ProviderDef<false> = {
   supportsOAuthCallback: false,
   toPublicAccount(record) {
@@ -339,10 +305,6 @@ const rumbleDef: ProviderDef<false> = {
   },
 };
 
-// Fanvue connects via OAuth 2.0 + PKCE; the uuid from GET /users/me is
-// the provider account id. Avatar/cover/bio are not managed (no
-// endpoints), so the card shows only the name and the avatar Fanvue
-// returned at connect time.
 const fanvueDef: ProviderDef<true> = {
   supportsOAuthCallback: true,
   toPublicAccount(record) {
@@ -358,11 +320,6 @@ const fanvueDef: ProviderDef<true> = {
   },
 };
 
-//---------------
-// PROVIDER_REGISTRY — exhaustive by construction: a provider in the union without
-// an entry here (or vice versa) = compile error.
-//---------------
-
 export const PROVIDER_REGISTRY = {
   youtube: youtubeDef,
   instagram: instagramDef,
@@ -376,27 +333,15 @@ export const PROVIDER_REGISTRY = {
   fanvue: fanvueDef,
 } satisfies Record<SocialProvider, ProviderDef>;
 
-// OAuthProvider — derived from the registry: whoever has supportsOAuthCallback: true.
-// A new OAuth provider automatically joins this union.
-
 export type OAuthProvider = {
   [K in SocialProvider]: (typeof PROVIDER_REGISTRY)[K]['supportsOAuthCallback'] extends true
     ? K
     : never;
 }[SocialProvider];
 
-//---------------
-// Type guards
-//---------------
-
 export function isOAuthProvider(value: unknown): value is OAuthProvider {
   return isSocialProvider(value) && PROVIDER_REGISTRY[value].supportsOAuthCallback;
 }
-
-//---------------
-// toPublicAccount — the single mapper used by /api/account. Fails loudly on
-// an unknown provider (never falls back silently).
-//---------------
 
 export function toPublicAccount(record: SocialAccountRecord, status: AccountSyncStatus = 'ok'): PublicAccountItem {
   if (!isSocialProvider(record.provider)) {
@@ -404,11 +349,6 @@ export function toPublicAccount(record: SocialAccountRecord, status: AccountSync
   }
   return { ...PROVIDER_REGISTRY[record.provider].toPublicAccount(record), status };
 }
-
-//---------------
-// toPublicAccountSafe — listing variant: an unknown provider
-// returns null (the route filters and logs) instead of dropping the whole list.
-//---------------
 
 export function toPublicAccountSafe(record: SocialAccountRecord, status: AccountSyncStatus = 'ok'): PublicAccountItem | null {
   if (!isSocialProvider(record.provider)) return null;

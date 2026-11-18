@@ -8,8 +8,6 @@ import type { ReactNode } from 'react';
 
 const navigation = vi.hoisted(() => ({ back: vi.fn(), push: vi.fn() }));
 const searchParams = vi.hoisted(() => ({ value: new URLSearchParams() }));
-// The current route: '/persona' by default; legacy-path tests point it at
-// /personas/<id>/edit to exercise resolveEditingPersonaId.
 const pathname = vi.hoisted(() => ({ value: '/persona' }));
 const emblaOptions = vi.hoisted(() => ({ value: undefined as unknown }));
 const emblaPlugins = vi.hoisted(() => ({ value: undefined as unknown }));
@@ -29,12 +27,6 @@ vi.mock('embla-carousel-react', () => ({
     return [vi.fn(), undefined];
   }),
 }));
-
-//---------------
-// Tests for the persona creation screen via its public interface.
-// Uses the REAL store (zustand is an internal collaborator, not a boundary);
-// only the network (lib/api) is mocked.
-//---------------
 
 vi.mock('next/image', () => ({
   // eslint-disable-next-line jsx-a11y/alt-text, @next/next/no-img-element
@@ -118,15 +110,8 @@ import { I18nProvider, useI18n } from '@/lib/i18n/provider';
 import { usePersonaStore } from '@/lib/store';
 import { scrollToErrorField } from '@/lib/scroll-to-error';
 
-// The QueryClient of the most recent render: spying on its
-// invalidateQueries pins the exact query key the submit path invalidates.
 let lastQueryClient: QueryClient | null = null;
 
-//---------------
-// Voice picker helpers: house voices live in a dialog opened from the
-// "choose/change voice" button. pickVoice selects a row; voiceRowPlayButton
-// is the round play button on that row.
-//---------------
 async function openVoicePicker(user: ReturnType<typeof userEvent.setup>) {
   const trigger =
     screen.queryByRole('button', { name: 'persona.voicePickerChoose' }) ??
@@ -158,9 +143,6 @@ function createWrapper() {
   return Wrapper;
 }
 
-// The engine's Chatterbox catalog, provider-qualified. The picker shows the
-// bare name (the `chatterbox:` prefix and underscores stripped), which is what
-// the assertions below click on.
 const voice = (id: string): VoiceOption => ({
   id,
   label: null,
@@ -229,8 +211,6 @@ function mockNoAccounts() {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  // PersonaPublishingAccountsSection loads its defaults via fetch on mount;
-  // stub it to empty defaults so edit-mode renders stay network-free.
   vi.stubGlobal(
     'fetch',
     vi.fn().mockResolvedValue({
@@ -243,9 +223,6 @@ beforeEach(() => {
         }),
     }),
   );
-  // The photo preview calls URL.createObjectURL on the picked file; the
-  // jsdom/vitest Blob shim cannot serialize a test File, so the preview
-  // URL is stubbed (the tests assert on the picked file, not the URL).
   vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:fake-photo');
   URL.revokeObjectURL = vi.fn();
   vi.mocked(useUploadPersonaImageMutation).mockImplementation(
@@ -289,8 +266,6 @@ describe('app/(main)/persona/page — PersonaPage', () => {
     render(<PersonaPage />, { wrapper: createWrapper() });
 
     expect(screen.getByText('persona.title')).toBeTruthy();
-    // Loading the persona form must not depend on connected accounts, and
-    // no scheduling UI may render while it does.
     expect(document.querySelector('input[type="time"]')).toBeNull();
     expect(screen.queryByText('publishing.mustSelectAccount')).toBeNull();
   });
@@ -312,7 +287,6 @@ describe('app/(main)/persona/page — PersonaPage', () => {
     expect(screen.getByRole('heading', { name: 'persona.loadError' })).toBeTruthy();
     expect(screen.getByText('persona.loadErrorHint')).toBeTruthy();
     expect(screen.queryByLabelText('persona.name')).toBeNull();
-    // Not fetching: no spinner next to the retry button.
     expect(screen.queryByTestId('icon-spinner')).toBeNull();
 
     await user.click(screen.getByRole('button', { name: 'persona.tryAgain' }));
@@ -426,10 +400,6 @@ describe('app/(main)/persona/page — PersonaPage', () => {
     expect(screen.getByText('persona.errName')).toBeTruthy();
   });
 
-  //---------------
-  // preencherFormularioValido — fluxo completo: personagem + nome + voz
-  //---------------
-
   it('submit válido envia a persona e mostra sucesso', async () => {
     const user = userEvent.setup();
     render(<PersonaPage />, { wrapper: createWrapper() });
@@ -445,8 +415,6 @@ describe('app/(main)/persona/page — PersonaPage', () => {
     expect(formData.get('voiceId')).toBe('chatterbox:en_us_male_01');
     expect(formData.get('videoAspect')).toBe('9:16');
     expect(await screen.findByText('persona.created')).toBeTruthy();
-    // Creating a persona lands on the personas list, where the user sees
-    // the persona that was just created.
     expect(navigation.push).toHaveBeenCalledWith('/personas');
   });
 
@@ -463,7 +431,6 @@ describe('app/(main)/persona/page — PersonaPage', () => {
     await preencherFormularioValido(user);
     await user.click(screen.getByText('persona.submit'));
 
-    // The warning code is mapped through i18n (t returns the key in tests).
     expect(await screen.findByText('persona.libraryWarningPrimarySwap')).toBeTruthy();
   });
 
@@ -559,16 +526,6 @@ describe('app/(main)/persona/page — PersonaPage', () => {
   });
 });
 
-//---------------
-// fillValidForm — full flow: character + name + voice
-// (lives at file level for reuse across describes)
-//---------------
-//---------------
-// bindFirstAccount — issue #572: a persona is born bound to at least one
-// publishing account. Binds the first connected account through the
-// draft section's picker (edit mode toggles the section's local selection
-// instead, which the edit submit never reads).
-//---------------
 async function bindFirstAccount(user: ReturnType<typeof userEvent.setup>) {
   const firstAccount = (await screen.findAllByTestId('account-card-select'))[0];
   await user.click(firstAccount);
@@ -586,9 +543,6 @@ describe('app/(main)/persona/page — persona enxuta (sem schedule)', () => {
     mockConnectedAccounts();
     render(<PersonaPage />, { wrapper: createWrapper() });
 
-    // Scheduling has no screen of its own, so the persona form must not
-    // carry weekday toggles or time inputs. The account picker it DOES
-    // render is the persona's binding (issue #572), not a schedule.
     expect(screen.getByText('persona.publishingAccountsLabel')).toBeInTheDocument();
     expect(screen.getByTitle('Meu canal')).toBeInTheDocument();
     expect(document.querySelector('input[type="time"]')).toBeNull();
@@ -600,7 +554,6 @@ describe('app/(main)/persona/page — persona enxuta (sem schedule)', () => {
     const user = userEvent.setup();
     render(<PersonaPage />, { wrapper: createWrapper() });
 
-    // Fill name + character + voice, but bind no account.
     await user.click(screen.getByRole('button', { name: 'persona.characterLabel 1', hidden: true }));
     await user.type(screen.getByLabelText('persona.name'), 'Zé Persona');
     await pickVoice(user, 'en us male 01');
@@ -689,11 +642,6 @@ describe('app/(main)/persona/page — modo edição (mesma página do create)', 
     expect(screen.queryByText('persona.title')).toBeNull();
   });
 
-  //---------------
-  // Opening layout round-trip. The column is nullable (migration 018), so an
-  // older persona has no layout at all — the editor must show the default and
-  // send it, never drop the field on an unrelated save.
-  //---------------
   it('in edit mode the saved layout shows selected and is sent back on save', async () => {
     const mutateAsync = vi.fn().mockResolvedValue({ success: true });
     vi.mocked(useUpdatePersonaMutation).mockReturnValue({ mutateAsync, isPending: false } as never);
@@ -752,13 +700,6 @@ describe('app/(main)/persona/page — modo edição (mesma página do create)', 
     expect(createPersona).not.toHaveBeenCalled();
   });
 
-  //---------------
-  // Persona with a user-uploaded PHOTO (photo_path): no chosen character. The
-  // editor used `avatarUrl ?? photoUrl`, which put the signed URL (expires in
-  // 1h) where a character belongs and re-sent it as avatarUrl on every save —
-  // breaking the photo_path+avatar_url check and, without it, swapping the
-  // user's face for one they never picked.
-  //---------------
   it('em edição, persona com foto não ganha avatarUrl a partir da photoUrl assinada', async () => {
     const mutateAsync = vi.fn().mockResolvedValue({ success: true });
     vi.mocked(useUpdatePersonaMutation).mockReturnValue({ mutateAsync, isPending: false } as never);
@@ -776,18 +717,15 @@ describe('app/(main)/persona/page — modo edição (mesma página do create)', 
     const user = userEvent.setup();
     render(<PersonaPage />, { wrapper: createWrapper() });
 
-    // The stored photo is shown in the upload tab instead of an empty uploader.
     await user.click(screen.getByRole('tab', { name: 'persona.uploadTab' }));
     expect(screen.getByText('persona.photoCurrent')).toBeTruthy();
 
-    // No character is selected in the carousel...
     expect(usePersonaStore.getState().avatarUrl).toBeNull();
 
     await user.click(screen.getByRole('button', { name: 'personas.save' }));
 
     await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
     const formData = vi.mocked(mutateAsync).mock.calls[0][0].formData as FormData;
-    // ...and the save never sends a signed storage URL as avatarUrl.
     expect(formData.has('avatarUrl')).toBe(false);
   });
 
@@ -800,7 +738,6 @@ describe('app/(main)/persona/page — modo edição (mesma página do create)', 
 
     render(<PersonaPage />, { wrapper: createWrapper() });
 
-    // No house character is highlighted (the persona has its own photo).
     expect(screen.getByRole('button', { name: 'persona.characterLabel 1', hidden: true })).toHaveAttribute(
       'aria-pressed',
       'false',
@@ -884,10 +821,6 @@ describe('app/(main)/persona/page — sample language', () => {
   });
 
   it('shows the image library for every edited persona, including a legacy one with no face', async () => {
-    // Every persona is faced now, so there is no faceless gate left: the
-    // library is exactly how a legacy persona (created without a photo or a
-    // character) gets the face it needs. It only needs the loaded data — see
-    // the loading test below.
     searchParams.value = new URLSearchParams('edit=p-1');
     vi.mocked(usePersonaListQuery).mockReturnValue({
       data: [{ id: 'p-1', name: 'Legacy editor' }],
@@ -902,9 +835,6 @@ describe('app/(main)/persona/page — sample language', () => {
   });
 
   it('hides the image library while the persona list is still loading', async () => {
-    // While editingPersona is undefined the gate must not flash the library:
-    // the section is edit-only, and rendering it for a persona that may not
-    // exist would offer an upload the server cannot accept.
     searchParams.value = new URLSearchParams('edit=p-1');
     vi.mocked(usePersonaListQuery).mockReturnValue({
       data: undefined,
@@ -925,16 +855,10 @@ describe('app/(main)/persona/page — sample language', () => {
       expect(screen.queryByRole('radiogroup', { name: 'persona.modeLabel' })).not.toBeInTheDocument();
     });
     expect(screen.queryByTestId('face-mix-slider')).not.toBeInTheDocument();
-    // The face choice always exists: the avatar section is always rendered.
     expect(screen.getByText('persona.photoLabel')).toBeInTheDocument();
   });
 });
 
-//---------------
-// Helpers for the coverage suites below: a deferred promise for the
-// pending-button tests, a stubbed Audio for the sample tests, and the
-// hidden file input for the photo-picker tests.
-//---------------
 function deferred<T>() {
   let resolve!: (value: T) => void;
   let reject!: (reason?: unknown) => void;
@@ -994,9 +918,6 @@ describe('app/(main)/persona/page — validação do submit (guards do store)', 
     await user.type(screen.getByLabelText('persona.name'), 'Zé Persona');
     await user.click(screen.getByRole('button', { name: 'persona.characterLabel 1', hidden: true }));
     await pickVoice(user, 'en us male 01');
-    // The store name diverges from the field behind the form's back (the
-    // form field still holds a valid name, so RHF passes and the
-    // store-level trim guard is the one that must fire).
     usePersonaStore.getState().setName('   ');
     await user.click(screen.getByText('persona.submit'));
 
@@ -1068,8 +989,6 @@ describe('app/(main)/persona/page — validação do submit (guards do store)', 
 
     expect(await screen.findByText('persona.errPromptRejected')).toBeTruthy();
     expect(vi.mocked(scrollToErrorField)).toHaveBeenCalledWith('script');
-    // prompt_rejected renders BOTH the inline field error and the error
-    // dialog (PersonaFeedback only suppresses the dialog for field errors).
     expect(screen.getByRole('alertdialog')).toBeTruthy();
     expect(navigation.push).not.toHaveBeenCalled();
   });
@@ -1264,11 +1183,9 @@ describe('app/(main)/persona/page — abas, carrossel e seletor de voz', () => {
 
     expect(emblaOptions.value).toMatchObject({ align: 'start', loop: true, startIndex: 0 });
     expect(autoplayOptions.value).toMatchObject({ delay: 5000, stopOnInteraction: true });
-    // No character selected: the carousel autoplays.
     expect(emblaPlugins.value).toHaveLength(1);
 
     await user.click(screen.getByRole('button', { name: 'persona.characterLabel 1', hidden: true }));
-    // A selected character stops the autoplay plugin entirely.
     expect(emblaPlugins.value).toEqual([]);
   });
 
@@ -1310,7 +1227,6 @@ describe('app/(main)/persona/page — abas, carrossel e seletor de voz', () => {
     expect(screen.getByTestId('selected-voice')).toHaveTextContent('persona.voicePickerNone');
     await pickVoice(user, 'en us male 01');
 
-    // Picking closes the dialog and the card shows the chosen voice.
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(screen.getByTestId('selected-voice')).toHaveTextContent('en us male 01');
 
@@ -1331,16 +1247,12 @@ describe('app/(main)/persona/page — abas, carrossel e seletor de voz', () => {
     render(<PersonaPage />, { wrapper: createWrapper() });
     await openVoicePicker(user);
 
-    // voiceLabel only strips a LEADING chatterbox: — the anchored ^ matters.
     expect(screen.getByText('xxchatterbox:foo')).toBeTruthy();
     expect(screen.queryByText('xxfoo')).toBeNull();
   });
 
   it('voz do OpenRouter mostra o nome e o modelo em linhas separadas', async () => {
     const user = userEvent.setup();
-    // The model must be visible or two entries sharing a voice name render as
-    // identical rows — but appending it to the name overflows the card and
-    // truncates mid-slug, so it gets its own line.
     vi.mocked(useVoicesQuery).mockReturnValue({
       data: [
         voice('chatterbox:en_us_male_01'),
@@ -1354,18 +1266,14 @@ describe('app/(main)/persona/page — abas, carrossel e seletor de voz', () => {
 
     expect(screen.getByText('eve')).toBeTruthy();
     expect(screen.getByText('x-ai/grok-voice-tts-1.0')).toBeTruthy();
-    // The Azure voice keeps its own colons — split on the FIRST colon, so the
-    // voice half is `en-US-Harper:MAI-Voice-2.1`, not just `en-US-Harper`.
     expect(screen.getByText('en-US-Harper:MAI-Voice-2.1')).toBeTruthy();
     expect(screen.getByText('microsoft/mai-voice-2.1')).toBeTruthy();
-    // Chatterbox is unaffected: no model line, underscores still spaced.
     expect(screen.getByText('en us male 01')).toBeTruthy();
     expect(screen.queryByText('chatterbox:en_us_male_01')).toBeNull();
   });
 
   it('cada voz do OpenRouter carrega o id bruto no title', async () => {
     const user = userEvent.setup();
-    // The visible lines are display; the raw id is what gets submitted.
     vi.mocked(useVoicesQuery).mockReturnValue({
       data: [voice('openrouter:x-ai/grok-voice-tts-1.0:eve')],
       isLoading: false,
@@ -1387,8 +1295,6 @@ describe('app/(main)/persona/page — abas, carrossel e seletor de voz', () => {
     render(<PersonaPage />, { wrapper: createWrapper() });
     await openVoicePicker(user);
 
-    // The strip is anchored to the start, so an id merely containing the
-    // provider name is left alone.
     expect(screen.getByText('xxopenrouter:foo')).toBeTruthy();
   });
 
@@ -1541,9 +1447,6 @@ describe('app/(main)/persona/page — seletor de foto', () => {
 
     await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
     expect(mutateAsync).toHaveBeenCalledWith({ file: expect.objectContaining({ name: 'ok.png' }) });
-    // The page carries a second alert in edit mode: the binding section
-    // reports the stubbed empty binding (issue #572). Assert on the
-    // library alert's text, not on the page having exactly one alert.
     const alerts = screen.getAllByRole('alert');
     expect(alerts.some((alert) => alert.textContent?.includes('persona.libraryFilesRejected'))).toBe(true);
   });
@@ -1612,8 +1515,6 @@ describe('app/(main)/persona/page — seletor de foto', () => {
 
     await user.upload(fileInput(container), new File(['a'], 'a.png', { type: 'image/png' }));
 
-    // Same second-alert caveat as the test above: the binding section
-    // reports the stubbed empty binding in edit mode.
     await waitFor(() => {
       expect(screen.getAllByRole('alert').map((alert) => alert.textContent)).toContain(
         'persona.libraryUploadError',
@@ -1652,7 +1553,6 @@ describe('app/(main)/persona/page — seletor de foto', () => {
 
 describe('app/(main)/persona/page — modo edição e sincronização', () => {
   it('caminho legado /personas/<id>/edit abre o modo edição', () => {
-    // No ?edit= param: the legacy path alone must resolve the edit id.
     pathname.value = '/personas/p-9/edit';
     vi.mocked(usePersonaListQuery).mockReturnValue({
       data: [EDIT_PERSONA_FULL],

@@ -12,7 +12,6 @@ from io import StringIO
 from pathlib import Path
 from unittest.mock import patch, Mock
 from loguru import logger
-# add project root to python path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from app.config import config
 from app.controllers.manager.base_manager import TaskQueueFullError
@@ -244,8 +243,6 @@ class TestGetBgmFile(unittest.TestCase):
         )
 
     def test_unreadable_catalog_logs_warning_without_the_absolute_path(self):
-        # A missing catalog warns locally: the absolute path must not reach
-        # the log line (the OSError text carries the path too).
         records = []
         handler_id = logger.add(
             lambda message: records.append(message.record), level="WARNING"
@@ -361,8 +358,6 @@ class TestStorageFallback(unittest.TestCase):
             sm.state.delete_task(task_id)
 
     def test_storage_copy_of_another_user_is_not_leaked(self):
-        # The fallback resolves the task through the caller's own user_id:
-        # a storage path recorded under a different user must not redirect.
         task_id = "other-user-task"
         sm.state.update_task(
             task_id,
@@ -731,8 +726,6 @@ class TestVideoService(unittest.TestCase):
             audio_file = os.path.join(temp_dir, "audio.mp3")
 
             with patch.object(vd, "AudioFileClip", return_value=_FakeAudioClip()):
-                # Use empty video_paths to avoid heavy video processing while
-                # still exercising transition mode normalization logic.
                 result = vd.combine_videos(
                     combined_video_path=combined_video_path,
                     video_paths=[],
@@ -862,8 +855,6 @@ class TestVideoService(unittest.TestCase):
                                         max_clip_duration=9,
                                     )
 
-        # 10s audio + 0.1 margin: the first 9s clip passes whole, the second
-        # is trimmed to the remaining 1.1s — and no third clip is pulled.
         self.assertEqual(ffmpeg_reencode_mock.call_count, 2)
         first = ffmpeg_reencode_mock.call_args_list[0].kwargs
         second = ffmpeg_reencode_mock.call_args_list[1].kwargs
@@ -963,7 +954,6 @@ class TestVideoService(unittest.TestCase):
             with patch.object(
                 vd.ImageFont, "truetype", return_value=_FakeFont()
             ):
-                # test english text wrapping
                 test_text_en = "This is a test text for wrapping long sentences in english language"
 
                 wrapped_text_en, text_height_en = vd.wrap_text(
@@ -973,10 +963,8 @@ class TestVideoService(unittest.TestCase):
                     fontsize=30
                 )
                 print(wrapped_text_en, text_height_en)
-                # verify text is wrapped
                 self.assertIn("\n", wrapped_text_en)
 
-                # test chinese text wrapping
                 test_text_zh = "这是一段用来测试中文长句换行的文本内容，应该会根据宽度限制进行换行处理"
                 wrapped_text_zh, text_height_zh = vd.wrap_text(
                     text=test_text_zh,
@@ -985,7 +973,6 @@ class TestVideoService(unittest.TestCase):
                     fontsize=30
                 )
                 print(wrapped_text_zh, text_height_zh)
-                # verify chinese text is wrapped
                 self.assertIn("\n", wrapped_text_zh)
         except Exception as e:
             self.fail(f"test wrap_text failed: {str(e)}")
@@ -1152,7 +1139,6 @@ class TestFfmpegReencode(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             src = os.path.join(temp_dir, "input.mp4")
             out = os.path.join(temp_dir, "output.mp4")
-            # Create a 2-second 320x240 test video using ffmpeg
             subprocess.run(
                 [
                     vd.get_ffmpeg_binary(),
@@ -1173,7 +1159,6 @@ class TestFfmpegReencode(unittest.TestCase):
             )
 
             self.assertTrue(os.path.exists(out))
-            # Verify output dimensions via ffprobe when available
             if shutil.which("ffprobe"):
                 probe = subprocess.run(
                     [
@@ -1205,8 +1190,6 @@ class TestFfmpegReencode(unittest.TestCase):
                 )
         self.assertIn("ffmpeg stderr:", str(ctx.exception))
         self.assertIn("Invalid data found", str(ctx.exception))
-        # str(CalledProcessError) echoes the full command line; the raised
-        # message must not leak the absolute source/output paths.
         self.assertNotIn(temp_dir, str(ctx.exception))
 
     def test_reencode_clip_with_ffmpeg_returns_after_successful_codec_fallback(self):
@@ -1227,9 +1210,6 @@ class TestFfmpegReencode(unittest.TestCase):
                         patch.object(
                             vd.subprocess,
                             "run",
-                            # subprocess.run(check=True) returns a
-                            # CompletedProcess on success: the mock mirrors
-                            # the real interface instead of returning None.
                             side_effect=[hw_failure, types.SimpleNamespace(returncode=0, stdout="", stderr="")],
                         ) as run_mock, \
                         patch.object(vd, "_disable_runtime_video_codec") as disable_mock:
@@ -1246,16 +1226,11 @@ class TestFfmpegReencode(unittest.TestCase):
         self.assertEqual(retry_cmd[retry_cmd.index("-c:v") + 1], "libx264")
         disable_mock.assert_called_once()
         self.assertEqual(disable_mock.call_args.args[0], "h264_nvenc")
-        # The retry warning and the disable reason carry str(exc), whose
-        # command line holds absolute paths; both must be scrubbed.
         warnings = [r["message"] for r in records if r["level"].name == "WARNING"]
         self.assertTrue(any("retrying with libx264" in m for m in warnings))
         for message in warnings:
             self.assertNotIn("/cache/", message)
         self.assertNotIn("/cache/", disable_mock.call_args.args[1])
-        # The hardware attempt's own ffmpeg stderr must survive in the
-        # warning: if the libx264 retry also fails, only the retry's
-        # stderr reaches the raised error.
         self.assertTrue(
             any("ffmpeg stderr: No NVENC capable devices found" in m for m in warnings)
         )
@@ -1316,10 +1291,6 @@ class TestFfmpegReencode(unittest.TestCase):
         )
 
     def test_combine_videos_terminal_message_names_both_skip_causes(self):
-        # The all-clips-failed ValueError is the reason stored on the task
-        # (task.py scrubs and stores str(error)): a run whose clips all died
-        # to the re-encode must not be misattributed to the letterbox bars
-        # limit alone.
         self._combine_with_reencode_failure(
             vd.FfmpegReencodeError("ffmpeg re-encode failed for clip1.mp4: exit 1")
         )
@@ -1364,9 +1335,6 @@ class TestFfmpegReencode(unittest.TestCase):
                                         )
 
             self.assertEqual(result, combined_video_path)
-            # The clip is 6s for a 10.1s voice: one re-encode for the clip, then
-            # the looped copy is TRIMMED to the 4.1s left (a whole second copy
-            # would overshoot the voice by 1.9s of picture over silence).
             self.assertEqual(ffmpeg_mock.call_count, 2)
             trim = ffmpeg_mock.call_args_list[1].kwargs
             self.assertTrue(trim["out"].endswith("loop-trim.mp4"))
@@ -1413,8 +1381,6 @@ class TestFfmpegReencode(unittest.TestCase):
 
             self.assertEqual(result, combined_video_path)
             write_mock.assert_called()
-            # Under a transition the first pass is MoviePy, never the ffmpeg fast
-            # path: the only ffmpeg call allowed is the final loop trim.
             outs = [call.kwargs["out"] for call in ffmpeg_mock.call_args_list]
             self.assertTrue(all(out.endswith("loop-trim.mp4") for out in outs), outs)
 
@@ -1428,8 +1394,6 @@ class TestFontContainment(unittest.TestCase):
     """
 
     def test_valid_basename_resolves_inside_fonts_dir(self):
-        # No font is bundled with the repo (resource/fonts/ is gitignored),
-        # so the test stages its own font file in an isolated directory.
         with tempfile.TemporaryDirectory() as tmpdir:
             staged = os.path.join(tmpdir, "TestFont-Regular.ttf")
             Path(staged).write_bytes(b"not-a-real-font")
@@ -1456,10 +1420,6 @@ class TestFontContainment(unittest.TestCase):
             vd._resolve_font_path("no-such-font.ttf")
 
     def test_windows_style_separators_are_rejected(self):
-        # On POSIX a backslash is a legal filename character, so the plain
-        # basename check would pass these through. Reject them explicitly:
-        # the font name is always a bare basename, never a path in any
-        # platform's syntax.
         for name in (
             "subdir\\SomeFont.ttf",
             "..\\SomeFont.ttf",
@@ -1558,8 +1518,6 @@ class TestLipSyncConcat(unittest.TestCase):
     """
 
     def setUp(self):
-        # Isolate from whatever the ambient config declares, so these tests
-        # pin the shipped DEFAULT rather than this machine's config.toml.
         self._original_config = dict(config.app)
         config.app.pop("video_preset", None)
         config.app.pop("video_codec", None)
@@ -1583,8 +1541,6 @@ class TestLipSyncConcat(unittest.TestCase):
                 return run_side_effect(command, run_kwargs)
             return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
-        # The concat list is written to disk; keep it in a temp dir so the
-        # test never pollutes /tmp with a real file list.
         with tempfile.TemporaryDirectory() as tmpdir:
             out_path = os.path.join(tmpdir, "out.mp4")
             clip = types.SimpleNamespace(w=1080, h=1920)
@@ -1629,7 +1585,6 @@ class TestLipSyncConcat(unittest.TestCase):
         dominant cost of the splice.
         """
         _, captured = self._run_with_capture()
-        # Only the intro encode carries a preset; the copied steps must not.
         intro = self._command_containing(captured, "-vf")
         self.assertIn("-preset", intro["command"])
         self.assertEqual(intro["command"][intro["command"].index("-preset") + 1], "veryfast")
@@ -1761,9 +1716,6 @@ class TestTerminalStateGate(unittest.TestCase):
             self._cleanup(task_id, task_dir)
 
     def test_processing_task_does_not_fall_back_to_storage(self):
-        # The gate runs BEFORE the storage fallback: a PROCESSING task must
-        # never 302 to an archived copy, even when video_storage_path is
-        # already recorded.
         task_id = "gate-processing-fallback"
         self._seed_task(
             task_id,
@@ -1854,7 +1806,6 @@ class TestFinalVideoUri(unittest.TestCase):
             shutil.rmtree(task_dir, ignore_errors=True)
 
     def test_task_query_omits_final_video_when_absent(self):
-        # The key is absent (not null) when the task has no videos.
         task_id = "no-final-video-task"
         sm.state.update_task(
             task_id, state=const.TASK_STATE_COMPLETE, user_id="internal"
@@ -1866,7 +1817,6 @@ class TestFinalVideoUri(unittest.TestCase):
             sm.state.delete_task(task_id)
 
     def test_task_query_does_not_mutate_state(self):
-        # final_video is derived on the response; the stored task is untouched.
         task_id = "final-video-no-mutate"
         task_dir = utils.task_dir(task_id)
         video_path = os.path.join(task_dir, "final-1.mp4")
@@ -1901,8 +1851,6 @@ class TestFinalVideoUri(unittest.TestCase):
         finally:
             sm.state.delete_task(task_id)
 
-        # A deleted task id is terminal (cancelled): reuse a fresh id
-        # for the no-archive case instead of resurrecting the deleted row.
         task_id = "has-archive-task-2"
         sm.state.update_task(
             task_id, state=const.TASK_STATE_COMPLETE, user_id="internal"
@@ -1958,10 +1906,6 @@ class TestSubprocessErrorScrubbing(unittest.TestCase):
         self.assertNotIn("/var/cache/material", warnings[0])
 
     def test_codec_fallback_reason_is_scrubbed(self):
-        # _write_videofile_with_codec_fallback stores str(exc) as the
-        # disable reason; _disable_runtime_video_codec logs it at WARNING.
-        # (write_videofile really returns None, so None in the side_effect
-        # list mirrors the production interface.)
         hw_failure = subprocess.CalledProcessError(
             1, ["/usr/local/bin/ffmpeg", "-i", "/var/cache/material/clip.mp4"], stderr=b"no device"
         )
@@ -1980,8 +1924,6 @@ class TestSubprocessErrorScrubbing(unittest.TestCase):
         self.assertIn("<path>", warnings[0])
 
     def test_concat_fallback_reason_is_scrubbed(self):
-        # run_concat raises RuntimeError carrying ffmpeg's stderr, which
-        # echoes the input path; the disable reason must be scrubbed.
         outputs = iter(
             [
                 types.SimpleNamespace(returncode=1, stdout="", stderr="in /var/cache/material/clip.mp4: Invalid data"),

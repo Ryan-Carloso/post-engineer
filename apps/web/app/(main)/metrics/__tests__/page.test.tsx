@@ -5,13 +5,6 @@ import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 
-//---------------
-// Tests for the Metrics page: totals tiles, the sorted per-video list
-// and the Filters Sheet over GET /api/metrics. The React Query hook
-// stays real; the network (fetch), the personas/accounts hooks and i18n
-// are mocked. t() returns the key, with {vars} appended when interpolated.
-//---------------
-
 vi.mock('@/lib/api', () => ({
   usePersonasQuery: vi.fn(),
   useSocialAccountsQuery: vi.fn(),
@@ -49,8 +42,6 @@ import { usePersonasQuery, useSocialAccountsQuery } from '@/lib/api';
 import { useI18n } from '@/lib/i18n/provider';
 import type { CoverageItem, MetricsRowView } from '@/lib/metrics/metrics-query';
 
-// The i18n mock defaults to 'en'; a test that needs the pt-BR date branch
-// flips it and the beforeEach below flips it back.
 function setLocale(locale: 'en' | 'pt'): void {
   vi.mocked(useI18n).mockReturnValue({
     t: (key: string, vars?: Record<string, unknown>) => (vars === undefined ? key : `${key} ${JSON.stringify(vars)}`),
@@ -59,11 +50,7 @@ function setLocale(locale: 'en' | 'pt'): void {
   } as never);
 }
 
-// cmdk scrolls the active item into view when the list opens; jsdom
-// has no Element.scrollIntoView, so stub it for the Combobox tests.
 window.HTMLElement.prototype.scrollIntoView = vi.fn();
-// Radix Select calls hasPointerCapture on pointerdown; jsdom has none,
-// so the trigger never opens without these stubs.
 window.HTMLElement.prototype.hasPointerCapture = () => false;
 window.HTMLElement.prototype.setPointerCapture = () => {};
 window.HTMLElement.prototype.releasePointerCapture = () => {};
@@ -71,7 +58,6 @@ window.HTMLElement.prototype.releasePointerCapture = () => {};
 const PERSONA_A = '11111111-2222-4333-8444-555555555555';
 const PERSONA_B = '22222222-3333-4444-8555-666666666666';
 
-// One module-level relative publish date so row() is stable per run.
 const PUBLISHED_AT = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
 
 function row(overrides: Partial<MetricsRowView> = {}): MetricsRowView {
@@ -114,15 +100,12 @@ function lastFetchUrl(fetchMock: ReturnType<typeof vi.fn>): string {
   return calls[calls.length - 1][0];
 }
 
-// Radix Tabs activates on mousedown, not on click alone in jsdom.
 function activateTab(label: string): void {
   const trigger = screen.getByText(label);
   fireEvent.mouseDown(trigger);
   fireEvent.click(trigger);
 }
 
-// The Filters Sheet (Radix Dialog) renders its content in a portal;
-// the persona Combobox and the provider Select live inside it.
 async function openFiltersSheet(): Promise<void> {
   fireEvent.click(screen.getByText('metrics.filtersButton'));
   await waitFor(() => expect(screen.getByText('metrics.filtersTitle')).toBeInTheDocument());
@@ -140,8 +123,6 @@ async function applyPersonaFilter(label: string): Promise<void> {
 
 async function applyProviderFilter(label: string): Promise<void> {
   await openFiltersSheet();
-  // Radix Select opens on pointerdown; fireEvent alone does not open it
-  // in jsdom, so drive it with user-event.
   const user = userEvent.setup();
   await user.click(screen.getByLabelText('metrics.filterProvider'));
   const options = await screen.findAllByRole('option');
@@ -206,31 +187,22 @@ describe('MetricsPage', () => {
     stubMetricsFetch({ success: true, rows, truncated: false });
     renderPage();
 
-    // The list heading renders while loading; wait for the tiles, which
-    // only exist once the rows arrive.
     await waitFor(() => expect(screen.getByText('metrics.statMeasurements')).toBeInTheDocument());
-    // Totals, not averages: 3 measurements, 100 + 300 views, engagement
-    // 10 + 3 + 1 + 5 + 0 + 0 = 19 (nulls skipped, never counted as 0).
     expect(screen.getByText('metrics.statMeasurements')).toBeInTheDocument();
     expect(screen.getByText('3')).toBeInTheDocument();
     expect(screen.getByText('400')).toBeInTheDocument();
     expect(screen.getByText('19')).toBeInTheDocument();
-    // Sorted by views: 300 first, then 100, then the null-views row.
     const items = screen.getAllByRole('listitem');
     expect(items[0]).toHaveTextContent('300');
     expect(items[1]).toHaveTextContent('100');
     expect(items[2]).toHaveTextContent('metrics.notReported');
-    // Fallback title is "{Network} · {date}", never "No angle".
     expect(screen.getByText('Instagram · Oct 21, 2026')).toBeInTheDocument();
     expect(screen.queryByText('metrics.noAngle')).toBeNull();
-    // Angle text, fallbacks for null persona, account labels (known id
-    // resolves to its label, unknown id falls back to the raw id).
     expect(screen.getAllByText('myth').length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Alpha/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/metrics.noPersona/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Chan One/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/did:plc:x/).length).toBeGreaterThan(0);
-    // Engagement inline as small numbers on the rows that reported it.
     expect(screen.getAllByText(/metrics\.likesValue/).length).toBe(2);
   });
 
@@ -270,7 +242,6 @@ describe('MetricsPage', () => {
     stubMetricsFetch({ success: true, rows: [row()], truncated: false });
     renderPage();
     await waitFor(() => expect(screen.getByText('metrics.tableTitle')).toBeInTheDocument());
-    // The toolbar holds no filter fields: they live in the Sheet.
     expect(screen.queryByText('metrics.filterPersona')).toBeNull();
     await openFiltersSheet();
     expect(screen.getByText('metrics.filterPersona')).toBeInTheDocument();
@@ -288,7 +259,6 @@ describe('MetricsPage', () => {
           postId: 'post-10', provider: 'instagram', accountId: 'ig1', externalId: null,
           reason: 'publish-failed', scriptAngle: null,
         }),
-        // Unknown account id: the card falls back to the raw id.
         coverageItem({ postId: 'post-11', accountId: 'unknown-acct', reason: 'pending' }),
       ],
       coverageTruncated: true, asOf: '2026-10-21T12:00:00Z',
@@ -304,14 +274,10 @@ describe('MetricsPage', () => {
     expect(screen.getByText('metrics.coverageReasonPending')).toBeInTheDocument();
     expect(screen.getByText(/unknown-acct/)).toBeInTheDocument();
     expect(screen.getByText(/metrics\.truncated/)).toBeInTheDocument();
-    // The YouTube retrying item links the gap to the Analytics connection.
     expect(screen.getByText('metrics.coverageYoutubeHint')).toBeInTheDocument();
-    // The failed publish warns the video may be live anyway.
     expect(screen.getByText('metrics.coveragePublishFailedHint')).toBeInTheDocument();
-    // As-of line above the table, and the collected date on each row.
     expect(screen.getByText(/metrics\.asOf/)).toBeInTheDocument();
     expect(screen.getAllByText(/metrics\.tableCollected/).length).toBeGreaterThan(0);
-    // The coverage card renders after the video list in the document.
     const table = screen.getByText('metrics.tableTitle');
     const coverage = screen.getByText('metrics.coverageTitle');
     expect(table.compareDocumentPosition(coverage) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -326,11 +292,6 @@ describe('MetricsPage', () => {
     });
     renderPage();
     await waitFor(() => expect(screen.getByText('metrics.coverageTitle')).toBeInTheDocument());
-    // The as-of line (formatDateTime) and the per-row collected date
-    // (formatDate) both go through the pt-BR branch: the mocked t()
-    // interpolates the formatted date as JSON, so the pt-BR date string
-    // itself must appear — once per line. With the en-US branch the same
-    // lines read "Oct 21, 2026", so this fails if the branch flips.
     expect(screen.getAllByText(/21 de out\. de 2026/).length).toBe(2);
   });
 
@@ -356,7 +317,6 @@ describe('MetricsPage', () => {
     expect(screen.getByText('metrics.statMeasurementsHint')).toBeInTheDocument();
     expect(screen.getByText('metrics.statEngagementHint')).toBeInTheDocument();
     expect(screen.getByText('metrics.windowCaption')).toBeInTheDocument();
-    // No as-of time in this payload: the as-of line stays hidden.
     expect(screen.queryByText(/metrics\.asOf/)).toBeNull();
   });
 
@@ -419,8 +379,6 @@ describe('MetricsPage', () => {
     await waitFor(() => expect(screen.getByText('metrics.tableTitle')).toBeInTheDocument());
     activateTab('metrics.window7d');
     await waitFor(() => expect(lastFetchUrl(fetchMock)).toBe('/api/metrics?window=7d'));
-    // Back to 24h: the 24h query is still cache-fresh (staleTime 60s), so
-    // no new fetch fires — assert the switch through the Tabs state.
     activateTab('metrics.window24h');
     await waitFor(() => expect(screen.getByText('metrics.window24h')).toHaveAttribute('data-state', 'active'));
     expect(screen.getByText('metrics.window7d')).toHaveAttribute('data-state', 'inactive');
@@ -459,24 +417,17 @@ describe('MetricsPage', () => {
     await waitFor(() => expect(screen.getByText('metrics.tableTitle')).toBeInTheDocument());
     expect(lastFetchUrl(fetchMock)).toBe('/api/metrics?window=24h');
 
-    // Window switch refetches with window=7d.
     activateTab('metrics.window7d');
     await waitFor(() => expect(lastFetchUrl(fetchMock)).toBe('/api/metrics?window=7d'));
 
-    // Persona filter through the Sheet (a real persona).
     await applyPersonaFilter('Beta');
     await waitFor(() => expect(lastFetchUrl(fetchMock)).toContain(`persona=${PERSONA_B}`));
-    // The applied filter shows as a removable chip.
     expect(screen.getByText('Beta')).toBeInTheDocument();
     expect(screen.getByText('metrics.clearFilters')).toBeInTheDocument();
 
-    // Provider filter through the Sheet.
     await applyProviderFilter('Instagram');
     await waitFor(() => expect(lastFetchUrl(fetchMock)).toContain('provider=instagram'));
 
-    // Clear filters resets every filter (window kept). The unfiltered 7d
-    // query is still cache-fresh (staleTime 60s), so no new fetch fires:
-    // assert the reset through the controls instead of the network.
     fireEvent.click(screen.getByText('metrics.clearFilters'));
     await waitFor(() => expect(screen.queryByText('metrics.clearFilters')).toBeNull());
   });

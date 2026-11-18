@@ -126,14 +126,10 @@ def test_measure_tts_uses_video_task_duration_computation():
             voice_audio_url=None,
             user_id="user-1",
         )
-    # Ceil of the subtitle-maker duration, after the trim — the video
-    # task's audio_duration, not a fresh estimate.
     assert measured == 62.0
     assert tts.call_args.kwargs["text"] == "Hello Lisbon."
     assert tts.call_args.kwargs["voice_name"] == "chatterbox:kokoro_af_heart"
     assert tts.call_args.kwargs["voice_rate"] == 1.0
-    # Preflight only measures duration: the narration check (and its
-    # Whisper transcription) belongs in generate_audio, not here.
     assert tts.call_args.kwargs["validate"] is False
     trim.assert_called_once()
     duration.assert_called_once_with(result.sub_maker)

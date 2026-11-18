@@ -14,7 +14,6 @@ vi.mock('@/lib/request-auth', () => ({
 }));
 
 vi.mock('@/lib/token-crypto', () => ({
-  // non-reversible mock: hides the content like the real cipher would
   encryptTokens: vi.fn(
     (payload: Record<string, unknown>) => `v1.mockcipher.${Buffer.from(JSON.stringify(payload)).toString('base64')}`,
   ),
@@ -30,7 +29,6 @@ vi.mock('@/lib/bluesky', async (importOriginal) => {
 });
 
 vi.mock('@/lib/bluesky-profile', () => ({ fetchBlueskyPublicProfile: vi.fn() }));
-// The limiter has its own suite (rate-limit.test.ts); here it never throttles.
 vi.mock('@/lib/rate-limit', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/rate-limit')>();
   return { ...actual, applyRateLimit: vi.fn().mockResolvedValue(null) };
@@ -190,7 +188,6 @@ describe('POST /api/bluesky-connect', () => {
 
     expect(loginToBluesky).toHaveBeenCalledWith('eu.bsky.social', 'app-pass-1');
 
-    // encrypted password, never in plaintext
     expect(encryptTokens).toHaveBeenCalledWith(
       expect.objectContaining({ access_token: 'app-pass-1', token_type: 'bluesky_app_password' }),
     );
@@ -203,8 +200,6 @@ describe('POST /api/bluesky-connect', () => {
       provider: 'bluesky',
       provider_account_id: 'did:plc:abc',
     });
-    // Ciphertext is written with the service client. A cookie JWT cannot
-    // insert encrypted_tokens.
     expect(vi.mocked(createSupabaseServiceClient)).toHaveBeenCalled();
     expect(vi.mocked(createSupabaseServerClient)).not.toHaveBeenCalled();
   });
@@ -216,9 +211,6 @@ describe('POST /api/bluesky-connect', () => {
     const res = await POST(formRequest({ handle: 'eu.bsky.social', appPassword: 'app-pass-2' }));
 
     expect(res.status).toBe(200);
-    // A reconnect overwrites the stored token on the same row: the upsert
-    // targets the unique (user_id, provider, provider_account_id) key, so
-    // it cannot fail with a constraint violation like the plain insert did.
     expect(upserted).toHaveLength(1);
     expect(upsertOptions[0]).toEqual({ onConflict: 'user_id,provider,provider_account_id' });
     expect(upserted[0]).toMatchObject({
@@ -260,7 +252,6 @@ describe('POST /api/bluesky-connect', () => {
       provider: 'bluesky',
       provider_account_id: 'did:plc:mcp',
     });
-    // via API key uses the service client
     expect(vi.mocked(createSupabaseServiceClient)).toHaveBeenCalled();
   });
 
@@ -284,8 +275,6 @@ describe('POST /api/bluesky-connect', () => {
       provider: 'bluesky',
       provider_account_id: 'did:plc:oauth',
     });
-    // An OAuth caller (remote MCP) has no cookie session, so the cookie
-    // client would see no user and RLS would hide the row.
     expect(vi.mocked(createSupabaseServiceClient)).toHaveBeenCalled();
     expect(vi.mocked(createSupabaseServerClient)).not.toHaveBeenCalled();
   });

@@ -2,13 +2,6 @@ import 'server-only';
 
 import crypto from 'crypto';
 
-//---------------
-// Token Crypto — AES-256-GCM encryption of OAuth tokens
-// Ciphertext format: v1.<iv_b64>.<auth_tag_b64>.<payload_b64>
-// The key comes from TOKEN_ENCRYPTION_KEY (base64, 32 bytes = 256 bits).
-// There is never a fallback: if the env var is missing, fail explicitly.
-//---------------
-
 const VERSION = 'v1';
 const ALGORITHM = 'aes-256-gcm';
 
@@ -20,9 +13,6 @@ export interface EncryptedTokenPayload {
   [key: string]: unknown;
 }
 
-//---------------
-// getEncryptionKey — validates and returns the encryption key
-//---------------
 function getEncryptionKey(): Buffer {
   const raw = process.env.TOKEN_ENCRYPTION_KEY;
 
@@ -38,9 +28,6 @@ function getEncryptionKey(): Buffer {
   return key;
 }
 
-//---------------
-// encryptTokens — encrypts a tokens object
-//---------------
 export function encryptTokens(payload: EncryptedTokenPayload): string {
   const key = getEncryptionKey();
   const iv = crypto.randomBytes(12);
@@ -61,13 +48,6 @@ export function encryptTokens(payload: EncryptedTokenPayload): string {
   ].join('.');
 }
 
-//---------------
-// TokenDecryptError — the stored blob cannot be decrypted (tampered,
-// truncated, or encrypted under a different key). Callers use it to tell
-// an undecryptable stored token — reconnecting fixes it — from a transient
-// failure. Key-config errors are NOT this: a missing TOKEN_ENCRYPTION_KEY
-// is a server misconfiguration, not a dead token.
-//---------------
 export class TokenDecryptError extends Error {
   constructor(message: string, options?: { cause?: unknown }) {
     super(message);
@@ -78,10 +58,6 @@ export class TokenDecryptError extends Error {
   }
 }
 
-//---------------
-// decryptTokens — decrypts and validates format/version/tag
-// Throws TokenDecryptError on tampering or invalid format.
-//---------------
 export function decryptTokens(encrypted: string): EncryptedTokenPayload {
   const key = getEncryptionKey();
   try {
@@ -98,7 +74,7 @@ export function decryptTokens(encrypted: string): EncryptedTokenPayload {
 
     const decrypted = Buffer.concat([
       decipher.update(Buffer.from(payloadB64, 'base64url')),
-      decipher.final(), // throws if the auth tag does not match
+      decipher.final(),
     ]);
 
     const parsed: unknown = JSON.parse(decrypted.toString('utf-8'));

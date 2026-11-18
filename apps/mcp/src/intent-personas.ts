@@ -29,11 +29,6 @@ import {
 } from './tools.js';
 import type { McpToolResponse } from './tools-call.js';
 
-//---------------
-// personas and persona_media (issue #566). A persona is given by name or id
-// (refs.ts); delete is preview-then-confirm (persona-delete.ts).
-//---------------
-
 const DeleteFields = {
   persona: PERSONA_REF.describe('The persona to delete, by name or id. DESTRUCTIVE and irreversible.'),
   confirmToken: z.string().min(1).optional().describe('Omit it first: the call only previews what would be removed and returns a token. Send that token to delete.'),
@@ -47,7 +42,6 @@ const PERSONAS_SPECS = {
   delete: DeleteFields,
 };
 
-// The remote server takes avatarUrl only: no field names a file on disk.
 function personasOptions(remote: boolean): ActionOptions<typeof PERSONAS_SPECS> {
   return remote ? { variants: { create: CreatePersonaRemoteShape, update: personaRefShape(UpdatePersonaRemoteShape) } } : {};
 }
@@ -64,14 +58,10 @@ async function getPersona(client: PostEngineerClient, args: { personaId: string 
   return handleLibraryCall(async () => {
     const [listing, images, publishing] = await Promise.all([
       client.listPersonas(),
-      // A malformed library listing degrades to a null size (same as a
-      // missing one); a transport failure still fails the read.
       client.listPersonaImages(args.personaId).catch((error) => {
         if (error instanceof MalformedContractResponseError) return undefined;
         throw error;
       }),
-      // A malformed binding degrades to null bindings (same as a missing
-      // one); a transport failure still fails the read.
       getPersonaPublishingAccounts(client, args.personaId).catch((error) => {
         if (error instanceof MalformedContractResponseError) return undefined;
         throw error;
@@ -114,7 +104,6 @@ const MEDIA_SPECS = {
 };
 
 export function registerPersonaMediaTools(server: McpServer, client: PostEngineerClient, remote: boolean): void {
-  // add_image reads a local file: only the stdio server offers it.
   const options: ActionOptions<typeof MEDIA_SPECS> = remote ? { unavailable: ['add_image'] } : {};
   const offered = offeredSpecs(MEDIA_SPECS, options);
   server.tool(

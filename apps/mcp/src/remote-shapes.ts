@@ -1,20 +1,9 @@
-// Remote (HTTP) persona shapes: the same tools the stdio server offers,
-// minus every field that names a file on disk.
-//
-// A path served over HTTP would resolve on the MCP server's filesystem,
-// not on the agent's machine, so the remote surface cannot carry one:
-// personas (action: create) keeps only avatarUrl (no avatarPath, no library images),
-// and personas (action: update) keeps only avatarUrl. The SDK parses tool args with
-// the registered raw shape, which strips unknown keys before the handler
-// runs — so a smuggled path is dropped (never read), not loudly rejected.
-// The strict re-parse is defense-in-depth for direct handler callers only.
 import { z } from 'zod';
 
 import { UpdatePersonaAvatarFields, refinePersonaAvatar } from './persona-avatar.js';
 import { UpdatePersonaShape } from './persona-update.js';
 import { CreatePersonaShape } from './tools.js';
 
-/** personas (action: create) over HTTP: avatarUrl only, no library image files. */
 export const CreatePersonaRemoteShape = {
   name: CreatePersonaShape.name,
   avatarUrl: z
@@ -32,10 +21,6 @@ export const CreatePersonaRemoteShape = {
   paragraphNumber: CreatePersonaShape.paragraphNumber,
   niche: CreatePersonaShape.niche,
   faceQuality: CreatePersonaShape.faceQuality,
-  // Issue #572: same binding rule as the local shape — a persona is born
-  // bound to at least one publishing account. Without this field the
-  // handler's re-parse against CreatePersonaSchema (which requires
-  // accounts) would reject every remote personas (action: create) call.
   accounts: CreatePersonaShape.accounts,
 };
 
@@ -44,7 +29,6 @@ export const CreatePersonaRemoteSchema = z
   .strict()
   .superRefine(refinePersonaAvatar(true));
 
-/** personas (action: update) over HTTP: avatarUrl only. */
 export const UpdatePersonaRemoteShape = {
   personaId: UpdatePersonaShape.personaId,
   name: UpdatePersonaShape.name,

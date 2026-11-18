@@ -1,26 +1,3 @@
-// Schedule contract: the single source of truth for the schedule reads and
-// slot mutations (GET/DELETE /api/schedule, GET /api/schedule/status,
-// GET/PATCH/DELETE /api/schedule/slots/[slotId]). Both apps generate a copy
-// of this file (see scripts/sync-contracts.mjs); never edit a generated
-// copy by hand.
-//
-// Shapes mirror the routes, not a cleaned-up ideal:
-// - GET /api/schedule returns the raw Supabase rows, so the schedule row
-//   keeps its snake_case keys and DB nullability (persona_id is nullable
-//   for faceless schedules, migration 012; publish_mode is pinned to the
-//   'scheduled'/'asap' CHECK of migration 015).
-// - GET /api/schedule/status returns the presented slots: the snake_case
-//   row fields (RESULT_SELECT) plus the camelCase enrichment
-//   (apps/web/lib/schedule-slot-presentation.ts) and the publish rows
-//   (apps/web/lib/publish-user-notice.ts). `status` is the PRESENTED
-//   status: pending shows as 'awaiting', a failed slot with published
-//   outcomes shows as 'completed'.
-// - PATCH /api/schedule/slots/[slotId] does not use readBody (its coded
-//   error envelope would change), so the body schema below mirrors the
-//   route's messages and the equivalence test pins them; the 3h/30d
-//   window rule stays server-side (apps/web/lib/schedule-window.ts).
-// `success` is a literal `true`: the routes never return success:false
-// with a 200.
 import { z } from 'zod';
 
 import { defineEndpoint } from './endpoint.js';
@@ -30,7 +7,6 @@ import {
   SlotDetailSchema,
 } from './posts.js';
 
-/** A row of the schedules table, as GET /api/schedule returns it. */
 export const ScheduleRowSchema = z.object({
   id: z.string(),
   persona_id: z.string().nullable(),
@@ -60,10 +36,6 @@ export const ListSchedulesResponseSchema = z.object({
   schedules: z.array(ScheduleRowSchema),
 });
 
-//---------------
-// DELETE /api/schedule?id= — the id check, as a parser so the MCP side
-// can pin it. The route returns the same 400 message as before.
-//---------------
 export function parseCancelScheduleQuery(params: URLSearchParams):
   | { ok: true; query: { id: string } }
   | { ok: false; error: string } {
@@ -95,10 +67,6 @@ export const CancelScheduleResponseSchema = z.object({
   batchDiscountWithheld: z.number(),
 });
 
-//---------------
-// GET /api/schedule/status — the limit and range parsers, moved verbatim
-// from apps/web/app/api/schedule/status/route.ts and range.ts.
-//---------------
 export const STATUS_LIMIT_DEFAULT = 10;
 export const STATUS_LIMIT_MAX = 500;
 
@@ -161,12 +129,10 @@ export function parseStatusRange(params: URLSearchParams): RangeParseResult {
   return { kind: 'range', from: fromDate.toISOString(), to: toDate.toISOString() };
 }
 
-/** Mirrors apps/web/lib/timezone.ts hasExplicitOffset (Z or ±hh:mm / ±hhmm). */
 export function hasExplicitOffset(value: string): boolean {
   return /(?:Z|[+-]\d{2}:?\d{2})$/.test(value.trim());
 }
 
-/** A presented slot: the row fields plus the enrichment spread over them. */
 export const StatusSlotSchema = z.object({
   id: z.string(),
   slot_at: z.string(),
@@ -207,18 +173,10 @@ export const ListPostsInRangeResponseSchema = z.object({
   truncated: z.boolean(),
 });
 
-//---------------
-// GET /api/schedule/slots/[slotId] — the same detail as GET /api/posts/[id]
-// returns for a slot, without the `kind` wrapper the posts route adds.
-//---------------
 export const GetSlotResponseSchema = SlotDetailSchema.extend({
   success: z.literal(true),
 });
 
-//---------------
-// PATCH /api/schedule/slots/[slotId] — mirrors the route's validation
-// messages; the 3h/30d window rule stays server-side.
-//---------------
 function nonBlank(message: string) {
   return z.string().min(1, message).refine((value) => value.trim().length > 0, message);
 }

@@ -9,9 +9,6 @@ import { handleMcpWebRequest, MAX_MCP_HTTP_BODY_BYTES } from '../http-web.js';
 
 vi.mock('../analytics.js', () => ({
   mcpTelemetryHeaders: () => ({}),
-  // Passthrough stand-in for the real withTracking, which only opens the
-  // per-call context: mcp_tool_called is recorded by the web API from the
-  // request headers, not by the MCP (see analytics.test.ts).
   withTelemetryHeaders: (_headers: unknown, run: () => Promise<unknown>) => run(),
   withToolCall: (_tool: string, _action: string, run: () => Promise<unknown>) => run(),
   withTracking: (_toolName: string, handler: (args: unknown) => Promise<unknown>) => async (args: unknown) => {
@@ -19,7 +16,6 @@ vi.mock('../analytics.js', () => ({
   },
 }));
 
-// Actions that read a file from the disk: offered on the stdio server only.
 const FILE_ONLY_ACTIONS: Array<[string, string]> = [['media', 'upload'], ['persona_media', 'add_image'], ['publish_video', 'from_file']];
 
 const hook =
@@ -67,8 +63,6 @@ async function listedNames(client: PostEngineerClient, transport: 'stdio' | 'htt
   }
 }
 
-// The SDK client talks to the handler through a custom fetch: no socket,
-// no port — the request is a plain Web Standard Request.
 type FetchLike = (input: string | URL, init?: RequestInit) => Promise<Response>;
 
 function testFetch(serverFactory: () => McpServer): FetchLike {
@@ -98,8 +92,6 @@ describe('handleMcpWebRequest', () => {
       const memoryNames = await listedNames(client, 'http');
       const stdioNames = await listedNames(client, 'stdio');
 
-      // The hosted endpoint must serve the same tools as the http factory,
-      // and the stdio server has the same 16 tools with extra file actions.
       expect(httpNames).toEqual(memoryNames);
       expect(stdioNames).toEqual(httpNames);
       expect(httpNames).toHaveLength(16);
@@ -134,10 +126,6 @@ describe('handleMcpWebRequest', () => {
     };
     const mcpClient = await connectClient(factory);
     try {
-      // connect() sends initialize + the initialized notification (2
-      // builds) and opens the standalone GET stream for server messages
-      // (1 build); listTools sends a fourth request (1 more build). A
-      // shared or reused server would build once.
       await mcpClient.listTools();
       expect(builds).toBe(4);
     } finally {

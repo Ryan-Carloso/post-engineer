@@ -1,11 +1,5 @@
-//---------------
-// LinkedIn connect — accounts page LinkedIn section (OAuth popup flow).
-// Validates the panel and start endpoint; full OAuth needs a real app (unit tests).
-//---------------
-
 describe('LinkedIn — accounts page section', () => {
   beforeEach(() => {
-    // Real Supabase session (test user): middleware validates the cookie server-side.
     cy.loginE2EUser();
 
     cy.intercept('GET', '/api/account', {
@@ -16,8 +10,6 @@ describe('LinkedIn — accounts page section', () => {
 
   function visitAccountsLinkedInSection(): void {
     cy.visit('/accounts');
-    // Do not cy.wait('@getAccounts'): React Query may serve a warm cache on the
-    // second test and never hit the network (cypress-coverage flake).
     cy.contains('section', 'LinkedIn', { timeout: 10_000 })
       .scrollIntoView()
       .should('be.visible');

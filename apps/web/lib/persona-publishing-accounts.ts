@@ -1,27 +1,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { SOCIAL_PROVIDERS, type SocialProvider } from './providers/registry';
 
-//---------------
-// persona-publishing-accounts — per-persona bound publishing accounts
-// (issue #212, migration 022; made mandatory by issue #572).
-//
-// Social accounts belong to the USER (social_accounts.user_id); this table
-// records which of them each persona publishes to. A persona with zero
-// bound accounts must not exist: creation requires at least one, the
-// binding can never be emptied, and generate-and-schedule publishes only
-// to bound accounts (explicit accounts must be a subset; omitted accounts
-// fall back to the binding). All functions re-check ownership explicitly:
-// the service-role client bypasses RLS, so trust lives in code, not in
-// the policy.
-//---------------
-
 export type PersonaDefaultAccounts = Record<SocialProvider, string[]>;
 
 export function emptyPersonaDefaultAccounts(): PersonaDefaultAccounts {
   return { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [] };
 }
 
-/** Total bound accounts across providers. */
 export function totalBoundAccounts(accounts: PersonaDefaultAccounts): number {
   let total = 0;
   for (const ids of Object.values(accounts)) total += ids.length;
@@ -38,12 +23,6 @@ function isSocialProvider(value: unknown): value is SocialProvider {
   );
 }
 
-//---------------
-// normalizePublishingAccountsInput — shape-check + normalize a raw
-// provider→ids map (from a JSON body or a multipart field). Unknown
-// providers are rejected, never stored; ids are trimmed, deduped, and
-// empties dropped. Throws with a stable code on the first problem.
-//---------------
 export function normalizePublishingAccountsInput(
   accounts: unknown,
 ): PersonaDefaultAccounts {
@@ -69,12 +48,6 @@ export function normalizePublishingAccountsInput(
   return wanted;
 }
 
-//---------------
-// parsePublishingAccountsField — the create-persona multipart field
-// (`publishingAccounts`, a JSON string). A missing field, malformed JSON,
-// or a map with zero accounts is a 400: a persona is born with at least
-// one bound account, never with none.
-//---------------
 export function parsePublishingAccountsField(
   raw: unknown,
 ): { ok: true; accounts: PersonaDefaultAccounts } | { ok: false; error: string } {
@@ -99,12 +72,6 @@ export function parsePublishingAccountsField(
   return { ok: true, accounts };
 }
 
-//---------------
-// validateOwnedAccounts — every requested id must be one of the user's
-// connected accounts for that provider; a binding can never point at
-// someone else's account. Throws INVALID_PROVIDER_ACCOUNT on the first
-// id that fails.
-//---------------
 export async function validateOwnedAccounts(
   supabase: SupabaseClient,
   userId: string,
@@ -141,18 +108,11 @@ export async function validateOwnedAccounts(
   }
 }
 
-//---------------
-// getPersonaDefaultAccounts — the persona's defaults grouped per provider.
-// Unknown providers are dropped; every known provider is always present
-// (possibly empty), so callers never have to null-check.
-//---------------
 export async function getPersonaDefaultAccounts(
   supabase: SupabaseClient,
   personaId: string,
   userId: string,
 ): Promise<PersonaDefaultAccounts> {
-  // Service role bypasses RLS. The persona row is the ownership proof:
-  // a foreign persona id must not return that persona's account ids.
   const { data: persona, error: personaError } = await supabase
     .from('personas')
     .select('id')
@@ -185,14 +145,6 @@ export async function getPersonaDefaultAccounts(
   return defaults;
 }
 
-//---------------
-// getPersonaDefaultAccountsForPersonas — bulk form of
-// getPersonaDefaultAccounts for list views (issue #572): one query for
-// many personas. Every requested id is pre-seeded with an empty map, so
-// a persona with no bound accounts reads as all-empty (never absent);
-// rows for unrequested personas, unknown providers, and empty ids are
-// dropped.
-//---------------
 export async function getPersonaDefaultAccountsForPersonas(
   supabase: SupabaseClient,
   personaIds: string[],
@@ -224,27 +176,15 @@ export interface SetPersonaDefaultAccountsParams {
   supabase: SupabaseClient;
   userId: string;
   personaId: string;
-  // PUT semantics: the whole map is replaced. A provider mapped to [] (or
-  // omitted) keeps no defaults. Unknown providers are rejected, never stored.
-  // The map as a whole must bind at least one account (issue #572): an
-  // empty map is rejected and the previous binding survives.
   accounts: Partial<Record<string, string[]>>;
 }
 
-//---------------
-// setPersonaDefaultAccounts — replace-all write of a persona's defaults.
-// Fails when the persona does not belong to the user, when a provider is
-// unknown, or when an account id is not one of the user's connected
-// accounts for that provider. Returns the new state.
-//---------------
 export async function setPersonaDefaultAccounts({
   supabase,
   userId,
   personaId,
   accounts,
 }: SetPersonaDefaultAccountsParams): Promise<PersonaDefaultAccounts> {
-  // 1. The persona must belong to the caller — a forged persona_id can never
-  //    attach defaults to someone else's persona.
   const { data: persona, error: personaError } = await supabase
     .from('personas')
     .select('id')
@@ -260,10 +200,6 @@ export async function setPersonaDefaultAccounts({
     throw notFound;
   }
 
-  // 2. Normalize + validate the requested map before touching the table.
-  // A persona must keep at least one bound account (issue #572): an empty
-  // map would unbind the persona entirely, so it is rejected before the
-  // replace-all delete runs and the previous binding survives.
   const wanted = normalizePublishingAccountsInput(accounts);
   if (totalBoundAccounts(wanted) === 0) {
     const invalid = new Error(AT_LEAST_ONE_BOUND_ACCOUNT_ERROR);
@@ -271,13 +207,8 @@ export async function setPersonaDefaultAccounts({
     throw invalid;
   }
 
-  // 3. Every requested id must be one of the user's connected accounts for
-  //    that provider — defaults can never point at someone else's account.
   await validateOwnedAccounts(supabase, userId, wanted);
 
-  // 4. Replace-all: delete the persona's rows, then insert the new set.
-  //    (The table is tiny per persona; a single round-trip pair beats an
-  //    upsert-diff here, and the PK makes the write idempotent.)
   const { error: deleteError } = await supabase
     .from('persona_default_accounts')
     .delete()

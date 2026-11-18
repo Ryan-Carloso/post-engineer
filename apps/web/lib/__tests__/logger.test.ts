@@ -6,10 +6,6 @@ vi.mock('@/lib/posthog-server', () => ({
   getPostHogServer: vi.fn(),
 }));
 
-//---------------
-// logger — core and specialized methods
-//---------------
-
 describe('logger', () => {
   beforeEach(() => {
     vi.spyOn(console, 'log').mockImplementation(() => {});
@@ -83,7 +79,6 @@ describe('logger', () => {
     logger.info('message only');
     const [message, meta] = (console.log as ReturnType<typeof vi.fn>).mock.calls[0] as [string, unknown];
     expect(message).toBe('message only');
-    // logId is always present for correlation, even without caller metadata.
     expect(meta).toMatchObject({ logId: expect.any(String) });
   });
 
@@ -100,14 +95,6 @@ describe('logger', () => {
     expect(typeof id).toBe('string');
   });
 });
-
-//---------------
-// logger — environment routing: every environment reports to PostHog now.
-// The old isProduction() gate is gone (tag-and-send): dev/test events flow
-// with environment: 'development' so the telemetry pipeline is validated
-// daily, and dashboards filter prod by the tag. Console output is unchanged
-// in every environment.
-//---------------
 
 describe('logger production routing', () => {
   const capture = vi.fn();
@@ -132,8 +119,6 @@ describe('logger production routing', () => {
 
     expect(captureException).toHaveBeenCalledTimes(1);
     const [, props] = captureException.mock.calls[0] as [Error, Record<string, unknown>];
-    // The errorId returned to API clients must match the logId in the
-    // PostHog event — otherwise users cannot correlate their report.
     expect(props['logId']).toBe(logId);
     expect(typeof logId).toBe('string');
     expect(logId.length).toBeGreaterThan(0);
@@ -157,10 +142,6 @@ describe('logger production routing', () => {
   });
 
   it('non-production error() reports too, tagged environment: development (tag-and-send, no gating)', () => {
-    // Regression guard for the old isProduction() cut: dev events must flow
-    // so a dead telemetry pipeline cannot go unnoticed for days. The
-    // origin tags themselves are injected by posthog-server's client, not
-    // the mocked one here — this test pins the reporting behavior only.
     vi.stubEnv('NODE_ENV', 'test');
     logger.error('insert failed', new Error('x'));
     expect(captureException).toHaveBeenCalledTimes(1);
@@ -178,8 +159,6 @@ describe('logger production routing', () => {
     const [captured, props] = captureException.mock.calls[0] as [Error, Record<string, unknown>];
     expect(captured).toBeInstanceOf(Error);
     expect(props['$exception_message']).toContain('schedules_providers_check');
-    // Object causes are serialized to sanitized JSON (never raw objects to
-    // a third-party cloud). The failure stays visible in the PostHog issue.
     const cause = props['cause'] as string;
     expect(typeof cause).toBe('string');
     expect(cause).toContain('schedules_providers_check');

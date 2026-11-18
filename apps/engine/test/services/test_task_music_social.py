@@ -188,22 +188,15 @@ class StartMusicSocialTests(unittest.TestCase):
         )
 
     def test_blank_title_is_rejected_without_fallback(self):
-        # The agent-supplied title is required: a blank title fails
-        # validation loudly instead of falling back to a generic title.
         with self.assertRaises(ValidationError):
             _params("   ")
 
     def test_cross_post_without_youtube_gets_no_youtube_extra(self):
-        # The agent-supplied YouTube metadata applies only to the
-        # YouTube cross-post path; other platforms get no youtube_extra.
         _, _, cross_post, _ = self._run_start(["tiktok"])
         cross_post.assert_called_once()
         self.assertIsNone(cross_post.call_args.kwargs["youtube_extra"])
 
 
-# The behavioural tests above prove the runtime path. This structural pin
-# guards the call sites directly: no llm music/social call may reappear
-# inside start(), even if a refactor re-routes the mocks.
 _START_RE = re.compile(r"^(start|x__start__mutmut_(?:orig|\d+))$")
 
 
@@ -241,6 +234,5 @@ class StartNoLlmMusicSocialScanTests(unittest.TestCase):
         self.assertIn("generate_music_mood", offenders[0])
 
     def test_scan_ignores_llm_calls_outside_start(self):
-        # The pin's scope stays start() only.
         src = "def generate_audio(task_id):\n    return llm.generate_social_metadata(subject='x')\n"
         self.assertEqual(_llm_music_social_calls_in_start(src), [])

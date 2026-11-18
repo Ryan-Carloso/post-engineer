@@ -1,17 +1,6 @@
-//---------------
-// Password-grant policy for the Cypress e2e user.
-//
-// Supabase rate-limits POST /auth/v1/token?grant_type=password. The suite
-// used to send that request from every test, so CI died in whichever
-// beforeEach happened to be the one that received 429. The command retries
-// only that status, with a bounded wait, and never another status.
-//---------------
-
 export const PASSWORD_GRANT_MAX_ATTEMPTS = 3;
 export const PASSWORD_GRANT_BACKOFF_BASE_MS = 1000;
 export const PASSWORD_GRANT_BACKOFF_CAP_MS = 8000;
-// A Retry-After of many minutes would stall the Cypress job. Honour the
-// header up to this cap; the exponential path has its own, lower cap.
 export const PASSWORD_GRANT_RETRY_AFTER_CAP_MS = 30_000;
 export const SESSION_EXPIRY_SKEW_MS = 30_000;
 
@@ -53,7 +42,6 @@ export function passwordGrantErrorCode(body: unknown): string | null {
   return null;
 }
 
-// attempt is 1-based: the wait after the first 429 uses attempt 1.
 export function passwordGrantDelayMs(attempt: number, retryAfter: string | null, nowMs: number): number {
   const headerDelay = retryAfterDelayMs(retryAfter, nowMs);
   if (headerDelay !== null) {
@@ -63,9 +51,6 @@ export function passwordGrantDelayMs(attempt: number, retryAfter: string | null,
   return Math.min(PASSWORD_GRANT_BACKOFF_CAP_MS, exponential);
 }
 
-// cy.then waits on a returned promise only up to defaultCommandTimeout
-// unless given a timeout, and a capped Retry-After can be 30s. The retry
-// sleep gets its own delay plus this margin.
 const RETRY_WAIT_MARGIN_MS = 5_000;
 
 export function retryWaitTimeoutMs(delayMs: number): number {
@@ -110,8 +95,6 @@ export function supabaseAuthCookieName(supabaseUrl: string): string {
   return `sb-${ref}-auth-token`;
 }
 
-// Same bytes the previous command wrote, which is what @supabase/ssr reads:
-// the `base64-` prefix plus unpadded base64url of the session JSON.
 export function encodeSupabaseSessionCookie(session: unknown): string {
   const encoded = btoa(JSON.stringify(session))
     .replace(/\+/g, '-')
@@ -132,9 +115,6 @@ export function isPasswordGrantSession(body: unknown): body is Record<string, un
   return isRecord(body) && typeof body.access_token === 'string' && body.access_token.length > 0;
 }
 
-// True when the cached cookie still carries an access token that will not
-// expire within the skew window. No network call: a password grant here
-// would recreate the rate-limit failure this cache exists to avoid.
 export function sessionStillValid(session: unknown, nowMs: number): boolean {
   if (!isPasswordGrantSession(session)) {
     return false;

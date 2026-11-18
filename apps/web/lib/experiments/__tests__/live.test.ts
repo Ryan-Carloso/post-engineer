@@ -4,11 +4,6 @@ import { clearLiveExperimentCache, loadLiveExperimentResults, type LiveExperimen
 import type { ExperimentFacts } from '../read';
 import type { ExperimentMetricFact } from '../results';
 
-//---------------
-// Live experiment results (issue #532). The deps are injected so no
-// test reaches Supabase, the engine or a provider API.
-//---------------
-
 const NOW = new Date('2026-11-10T12:00:00Z');
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -62,7 +57,6 @@ function depsFixture(overrides: Partial<LiveExperimentDeps> = {}, facts: Experim
       },
     ],
   }));
-  // Live views flip the snapshot winner: calm 500 beats aggressive 250.
   const fetchCounters = vi.fn(async (_userId: string, target: { externalId: string }) => ({
     views: target.externalId.includes('calm') ? 500 : 250,
     likes: 2,
@@ -112,11 +106,9 @@ describe('loadLiveExperimentResults', () => {
     if (!result.ok) return;
     expect(result.value.source).toBe('partial');
     expect(result.value.liveFailures).toEqual([{ postId: 'calm-1', provider: 'youtube' }]);
-    // The failed video keeps its snapshot views (100); the rest go live.
     const youtube = result.value.results.providers[0];
     expect(youtube.comparisons[0].values['hook-calm'].views).toBe(100);
     expect(youtube.comparisons[0].values['hook-aggressive'].views).toBe(250);
-    // Pair 1 goes to the live aggressive video; pairs 2 and 3 go live calm.
     expect(youtube.wins).toEqual({ 'hook-calm': 2, 'hook-aggressive': 1 });
   });
 
@@ -188,7 +180,6 @@ describe('loadLiveExperimentResults', () => {
     if (!result.ok) return;
     expect(result.value.source).toBe('partial');
     expect(result.value.liveFailures).toEqual([{ postId: 'aggr-1', provider: 'unknown' }]);
-    // 4 live reads: the generating video is skipped, the task-less one fails.
     expect(fetchCounters).toHaveBeenCalledTimes(4);
   });
 

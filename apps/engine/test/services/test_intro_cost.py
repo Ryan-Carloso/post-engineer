@@ -46,7 +46,6 @@ class CostEventPropsTests(unittest.TestCase):
         self.assertEqual(cost_event_props({"cost_missing_reason": "bogus"}), {})
 
     def test_boolean_cost_is_not_a_cost(self):
-        # bool is an int subclass; True must not become $1.
         self.assertEqual(cost_event_props({"cost_usd": True}), {})
 
     def test_non_numeric_cost_falls_back_to_reason(self):

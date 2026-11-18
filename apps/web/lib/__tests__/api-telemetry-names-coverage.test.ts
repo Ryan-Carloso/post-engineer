@@ -1,16 +1,3 @@
-//---------------
-// api-telemetry-names coverage — every API route label must have a
-// semantic PostHog event name.
-//
-// withApiErrorReporting('METHOD /api/...') labels are the keys of
-// API_TELEMETRY_NAMES. This test walks every route.ts under
-// apps/web/app/api, extracts the labels (the same extraction the
-// web->MCP parity test uses, including const-identifier indirection),
-// and fails when a label has no table entry — so a new route without a
-// semantic name breaks CI instead of silently falling back to the
-// generic server_success / server_warning.
-//---------------
-
 import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -33,8 +20,6 @@ function collectRouteFiles(dir: string): string[] {
   return out.sort();
 }
 
-// Mirror of the web->MCP parity test's label discovery: inline literals
-// plus `const NAME = 'label'` indirection.
 function discoverLabels(): string[] {
   const labels: string[] = [];
   for (const file of collectRouteFiles(apiDir)) {

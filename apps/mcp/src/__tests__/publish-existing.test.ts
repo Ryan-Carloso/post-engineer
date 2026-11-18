@@ -53,7 +53,6 @@ const ASAP_REPLY = {
   logId: 'log-1',
 };
 
-/** A client whose request answers per path; the publish reply is configurable. */
 function fakeClient(publishReply: () => Promise<unknown>, bound: Record<string, string[]> = {}) {
   const request = vi.fn(async (path: string, _init?: unknown): Promise<unknown> => {
     if (path.startsWith('/api/persona/publishing-accounts')) {
@@ -314,7 +313,6 @@ describe('publish_existing tool handler', () => {
     const response = await handlePublishExisting(client, args({ mediaKind: 'image', taskId: undefined, imagePath: path, accounts: ['ig-1'], mode: 'asap', publishAt: undefined }));
     expect(response.isError).toBeUndefined();
     expect(publishBody(request).media).toEqual({ kind: 'image', imageData: png.toString('base64'), contentType: 'image/png' });
-    // The local path never reaches the output.
     expect(textOf(response)).not.toContain(dir);
   });
 
@@ -429,10 +427,7 @@ describe('publish_existing tool on both transports', () => {
       (properties.mediaKind as { description?: string } | undefined)?.description ?? '';
     const stdio = descriptionOf(await publishProperties('stdio'));
     const http = descriptionOf(await publishProperties('http'));
-    // The stdio shape reads the image from disk, so its description names the field.
     expect(stdio).toContain('imagePath');
-    // The remote shape has no imagePath: advertising it sends an agent at a
-    // field the transport never accepts, so the description names the upload path.
     expect(http).not.toContain('imagePath');
     expect(http).toContain('create_upload');
     expect(http).toContain('mediaKind upload');

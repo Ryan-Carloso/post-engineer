@@ -1,8 +1,3 @@
-// accounts (action: connect): shape, schema and handler.
-//
-// Extracted from tools.ts so tools.ts stays under the file-size ratchet.
-// Re-exported from tools.ts, so existing import sites (`./tools.js`) keep
-// working, including the personas and accounts registration (intent-*.ts).
 import { z } from 'zod';
 
 import type { PostEngineerClient } from './client.js';
@@ -10,8 +5,6 @@ import { SOCIAL_PROVIDERS } from './contracts/providers.js';
 import { getErrorMessage } from './errors.js';
 import { handleLibraryCall, type McpToolResponse } from './tools-call.js';
 
-// A credential present but blank is rejected with the same message the
-// route uses — the route trims and rejects blanks, so the tool does too.
 function nonBlank(message: string) {
   return z
     .string()
@@ -35,10 +28,6 @@ export async function handleConnectAccount(
   client: PostEngineerClient,
   args: z.infer<typeof ConnectAccountSchema>
 ): Promise<McpToolResponse> {
-  // Bluesky and Rumble connect directly (app password / access token),
-  // no OAuth URL. Bluesky projects the upstream response to named fields
-  // (the 3Speak branch does the same); Rumble shares handleLibraryCall,
-  // which renders the same success/error text the hand-built block used to.
   if (args.provider === 'bluesky') {
     if (!args.handle || !args.appPassword) {
       return {
@@ -53,8 +42,6 @@ export async function handleConnectAccount(
     }
     try {
       const result = await client.connectBlueskyAccount(args.handle, args.appPassword);
-      // Project the upstream response to named fields: stringifying the
-      // whole body would surface any field the route adds later.
       const { accountId, did } = result;
       return {
         content: [
@@ -90,8 +77,6 @@ export async function handleConnectAccount(
     }
     try {
       const result = await client.connectThreespeakAccount(args.username, args.postingKey);
-      // Project the upstream response to named fields: stringifying the
-      // whole body would surface any field the route adds later.
       const { accountId, username } = result;
       return {
         content: [
@@ -149,8 +134,6 @@ export async function handleConnectAccount(
       };
     }
     const result = parsed.data;
-    // Never echo a non-https URL as a "open in your browser" authorization
-    // link: z.string().url() accepts any scheme, including javascript:.
     if (new URL(result.auth_url).protocol !== 'https:') {
       return {
         content: [

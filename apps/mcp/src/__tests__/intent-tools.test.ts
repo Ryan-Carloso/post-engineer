@@ -4,10 +4,6 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { createPostEngineerMcpServer } from '../index.js';
 import { PostEngineerClient } from '../client.js';
 
-// The intent tools end to end through a real MCP client, with a stubbed
-// `fetch` standing in for the web API: names resolve to ids, an ambiguous
-// reference does nothing, and each action sends the request its mapping says.
-
 const MARIA = '11111111-1111-4111-8111-111111111111';
 const BASE = 'https://api.example.test';
 
@@ -140,7 +136,6 @@ describe('accounts', () => {
     await Promise.all([server.connect(b), client.connect(a)]);
     try {
       expect((await client.callTool({ name: 'accounts', arguments: { action: 'disconnect', account: 'Maria' } })).isError).not.toBe(true);
-      // The user reconnects another account; the same server must see it.
       accounts = {
         authenticated: true,
         accounts: [{ provider: 'instagram', recordId: 'rec-2', igUserId: '9', username: 'new.account', connectedAt: 1700000000000, lastUsed: 1700000000000 }],
@@ -173,7 +168,6 @@ describe('accounts', () => {
 
   it('keeps the whole listing when the provider filter is not given', async () => {
     const { call } = setup({ 'GET /api/account': ACCOUNTS });
-    // The first block is the listing; a recipe nudge may follow it as its own block.
     const first = (text: string): unknown => JSON.parse(text.slice(0, text.indexOf('\nNext step') === -1 ? undefined : text.indexOf('\nNext step')));
     const all = first((await call('accounts', { action: 'list' })).text) as { accounts: unknown[] };
     expect(all.accounts).toHaveLength(3);

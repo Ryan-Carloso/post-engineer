@@ -76,9 +76,6 @@ describe('GET /api/pinterest-auth/start', () => {
     expect(res.status).toBe(500);
     const body = (await res.json()) as { error: string };
     expect(body.error).toContain('PINTEREST_CLIENT_ID');
-    // The missing-credentials cause is logged so PostHog shows the reason
-    // instead of only the wrapper's generic "[route] 500", and the response
-    // is marked so the wrapper does not report a second synthetic exception.
     expect(logger.logOAuthError).toHaveBeenCalledWith(
       'log-1',
       expect.objectContaining({ message: expect.stringContaining('PINTEREST_CLIENT_ID') }),
@@ -99,8 +96,6 @@ describe('GET /api/pinterest-auth/start', () => {
       'log-1',
       expect.objectContaining({ message: expect.stringContaining('pin secret misconfigured') }),
     );
-    // The logged cause is already reported to PostHog, so the response is
-    // marked so the wrapper does not report a second synthetic exception.
     expect(markApiErrorReported).toHaveBeenCalledWith(res);
   });
 });

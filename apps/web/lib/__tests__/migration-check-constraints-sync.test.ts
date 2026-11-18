@@ -12,35 +12,6 @@ import { VIDEO_UPLOAD_STATUSES } from '@/lib/videos/signed-upload';
 import { UPLOAD_CONTENT_TYPES } from '@/lib/contracts/videos';
 import { SCHEDULED_MEDIA_KINDS } from '@/app/api/media/publish-existing/schema';
 
-//---------------
-// Every enum-like CHECK constraint the database really has must match the
-// TypeScript list the code accepts for that column.
-//
-// Why: Threads shipped with a provider list in SOCIAL_PROVIDERS, but the
-// `social_accounts_provider_check` constraint (created by hand in
-// production, absent from the migrations) never listed it, so every
-// connect failed at the upsert. Typecheck cannot see the database and unit
-// tests mock Supabase.
-//
-// The source of truth is supabase/schema.snapshot.json: Postgres's own
-// report of the schema after the whole migration chain is applied (CI
-// regenerates it on an ephemeral Postgres and fails when it is stale, see
-// scripts/db/dump-schema.mjs). Reading what the database reports, instead
-// of parsing SQL, honors every drop/add and every `do $$ ... if not exists`
-// guard exactly as Postgres does. This test then pins:
-//
-//   1. every enum check (`col = ANY (ARRAY[...])`, or the single-value
-//      form `col = 'value'` Postgres rewrites a one-element `IN (...)`
-//      into) found in the snapshot is registered below, so a new
-//      constraint cannot land without a pinned expected list;
-//   2. every registered constraint exists in the snapshot;
-//   3. the database list equals the code's list.
-//
-// Limit: a constraint created by hand in production and never written as a
-// migration is invisible to CI. The fix is always a migration that drops
-// and recreates it (see 037_social-accounts-threads-provider.sql).
-//---------------
-
 interface SnapshotTable {
   constraints: Record<string, string>;
 }
@@ -69,7 +40,6 @@ function parseEnumChecks(): Map<string, EnumCheck> {
         checks.set(name, { table, column: list[1], values });
         continue;
       }
-      // Postgres rewrites a one-element `IN ('x')` as `col = 'x'::text`.
       const single = /(\w+) = '([^']*)'::text/.exec(text);
       if (single !== null) {
         checks.set(name, { table, column: single[1], values: [single[2]] });
@@ -79,37 +49,23 @@ function parseEnumChecks(): Map<string, EnumCheck> {
   return checks;
 }
 
-// constraint name -> what the code accepts. A literal list needs a comment
-// naming the TS source it mirrors.
 const EXPECTED: Record<string, readonly string[]> = {
   social_accounts_provider_check: SOCIAL_PROVIDERS,
   post_metrics_provider_check: SOCIAL_PROVIDERS,
   schedules_publish_mode_check: GENERATION_PUBLISH_MODES,
   video_generations_publish_mode_check: GENERATION_PUBLISH_MODES,
   personas_video_layout_check: VIDEO_LAYOUTS,
-  // No TypeScript list exists anymore: the material is not a user choice
-  // since issue #542 (migration 054 narrowed the check to 'images' and
-  // the route stopped writing the column, relying on its default), so
-  // this literal is the pinned contract.
   scheduled_posts_faceless_material_check: ['images'],
   scheduled_posts_video_type_check: VIDEO_TYPES,
   post_metrics_metrics_window_check: METRICS_WINDOWS,
   post_metrics_done_metrics_window_check: METRICS_WINDOWS,
   post_metrics_analytics_status_check: ANALYTICS_STATUSES,
-  // No TypeScript list exists: the status is written by the engine voice
-  // registration, so this literal is the pinned contract.
   cloned_voices_status_check: ['pending', 'ready', 'failed'],
-  // No TypeScript list exists: the experiment variable is always 'hook'
-  // (migration 041, issue #476), so this literal is the pinned contract.
   experiments_variable_check: ['hook'],
   publish_ledger_status_check: PUBLISH_LEDGER_STATUSES,
-  // migration 060. The nullable content-type checks also allow NULL; the
-  // parser keeps only the ANY (ARRAY[...]) arm, which is this list.
   video_uploads_status_check: VIDEO_UPLOAD_STATUSES,
   video_uploads_declared_content_type_check: UPLOAD_CONTENT_TYPES,
   video_uploads_detected_content_type_check: UPLOAD_CONTENT_TYPES,
-  // migration 063. 'task' writes no media columns (the slot keeps its
-  // task_id), so only the stored-media kinds appear in the check.
   scheduled_posts_media_kind_check: SCHEDULED_MEDIA_KINDS,
 };
 
@@ -141,9 +97,6 @@ describe('database enum checks match the code', () => {
 });
 
 describe('upsert targets have their unique key', () => {
-  // upsertSocialAccount plans ON CONFLICT (user_id, provider,
-  // provider_account_id): without this key Postgres refuses the
-  // statement (42P10) on any database built from the migration chain.
   it('social_accounts has the unique key the upsert targets', () => {
     expect(snapshot.tables.social_accounts.constraints['social_accounts_user_provider_account_key']).toBe(
       'UNIQUE (user_id, provider, provider_account_id)',

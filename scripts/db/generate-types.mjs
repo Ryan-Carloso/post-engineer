@@ -1,17 +1,4 @@
 #!/usr/bin/env node
-//---------------
-// generate-types — TypeScript row types for supabase-js, generated from
-// supabase/schema.snapshot.json (never hand-written):
-//
-//   node scripts/db/generate-types.mjs --write   regenerate
-//   node scripts/db/generate-types.mjs --check   fail when the file is stale
-//
-// Output: apps/web/lib/supabase/database.gen.ts. `createClient<Database>`
-// then makes tsc reject a column that does not exist, a NOT NULL column
-// missing from an insert, a wrong value type, and — because enum CHECK
-// constraints become literal unions — a provider/mode value the database
-// would refuse.
-//---------------
 
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -45,8 +32,6 @@ function scalarType(pgType, enums) {
   throw new Error(`generate-types: unmapped Postgres type "${pgType}"; add it to SCALAR_TYPES`);
 }
 
-// `col = ANY (ARRAY['a'::text, 'b'::text])` inside a CHECK narrows the
-// column to the literal union, including the `col IS NULL OR` form.
 function enumChecks(constraints) {
   const narrowed = new Map();
   for (const definition of Object.values(constraints)) {

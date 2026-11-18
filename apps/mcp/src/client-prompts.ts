@@ -7,21 +7,9 @@ import {
 } from './contracts/prompts.js';
 import type { ResponseOf } from './contracts/endpoint.js';
 
-//---------------
-// Recipe prompts (GET /api/prompts and GET /api/prompts/[slug]) — HTTP
-// calls plus response parsing against the shared contract
-// (shared/contracts/prompts.ts). The web hub is the single source of the
-// recipes, so a recipe edit reaches every install without a package
-// release. Standalone functions because client.ts is grandfathered over
-// the 500-line cap and may not grow. The request sites stay literal for
-// the parity gate.
-//---------------
-
 export type PromptSummary = ResponseOf<typeof listPromptsContract>['prompts'][number];
 export type PromptDetail = ResponseOf<typeof getPromptContract>['prompt'];
 
-// Thrown by getPrompt on a 404: fetches the valid slugs with a follow-up
-// listPrompts request so the agent can recover.
 export class UnknownPromptSlugError extends Error {
   constructor(readonly slug: string, readonly validSlugs: string[]) {
     super(`unknown prompt slug ${JSON.stringify(slug)}. Valid slugs: ${validSlugs.join(', ')}.`);

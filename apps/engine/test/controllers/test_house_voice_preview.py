@@ -71,7 +71,6 @@ class HouseVoicePreviewControllerTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json()["message"], PREVIEW_TEXT_INVALID_MESSAGE)
-        # The rejection never echoes the submitted text.
         self.assertNotIn("x" * 10, response.text)
 
     @patch("app.services.persona.preview_house_voice_mp3")
@@ -105,11 +104,6 @@ class HouseVoicePreviewControllerTests(unittest.TestCase):
         mock_preview.assert_not_called()
 
     def test_openapi_documents_mpeg_success_and_error_responses(self):
-        # The endpoint streams MP3, not JSON: the committed spec must say
-        # audio/mpeg for 200 and document the 400/404/502 the handler
-        # returns. The spec's 422 is FastAPI's auto-documented default for
-        # body params; the app's handler (app/asgi.py) maps actual
-        # validation failures to 400, so no 422 is ever returned.
         responses = app.openapi()["paths"][
             "/api/v1/personas/voices/{voice_id}/preview"
         ]["post"]["responses"]

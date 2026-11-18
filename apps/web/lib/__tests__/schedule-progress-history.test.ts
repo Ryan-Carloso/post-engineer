@@ -7,11 +7,6 @@ vi.mock('@/lib/logger', () => ({
 import { recordProgressHistory } from '../schedule-progress-history';
 import { logger } from '@/lib/logger';
 
-//---------------
-// recordProgressHistory — change-only, best-effort recording of observed
-// (progress, stage) transitions into scheduled_post_progress_history.
-//---------------
-
 function mockClient(latestRows: unknown[], insertError: unknown = null) {
   const order = vi.fn(async () => ({ data: latestRows, error: null }));
   const insert = vi.fn(async () => ({ data: [], error: insertError }));

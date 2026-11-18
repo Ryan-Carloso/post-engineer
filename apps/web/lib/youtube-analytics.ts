@@ -5,28 +5,11 @@ import type { OAuth2Client } from 'google-auth-library';
 import { logger } from '@/lib/logger';
 import { httpStatusOf } from '@/lib/upload/account-unauthorized';
 
-//---------------
-// YouTube Analytics API v2 for the owner's own videos. Every query uses
-// ids=channel==MINE with the account's own OAuth token, so YouTube itself
-// only answers for the authorizing user's channel; callers also check the
-// video belongs to that channel before querying (provider-counters,
-// retention-curve route).
-//
-// Errors:
-//   403 insufficient scopes  -> { kind: 'scope_missing' } (token predates
-//                               yt-analytics.readonly: the user reconnects)
-//   any other 401/403        -> AnalyticsAuthError (config error, logged at
-//                               error, never retried as transient)
-//   everything else          -> rethrown (5xx/429/abort: the caller retries)
-//---------------
-
 export interface VideoAnalyticsStats {
   views: number;
   engagedViews: number;
   averageViewDurationSeconds: number | null;
   averageViewPercentage: number | null;
-  // Raw creatorContentType of the row with the most views (SHORTS,
-  // VIDEO_ON_DEMAND, LIVE_STREAM, STORY, UNSPECIFIED).
   contentType: string | null;
 }
 
@@ -36,7 +19,6 @@ export type VideoStatsResult =
   | { kind: 'scope_missing' };
 
 export interface RetentionPoint {
-  // elapsedVideoTimeRatio: exclusive end of the interval, 0.01..1.0.
   ratio: number;
   audienceWatchRatio: number;
   relativeRetentionPerformance: number | null;
@@ -46,7 +28,6 @@ export type RetentionCurveResult = { kind: 'ok'; points: RetentionPoint[] } | { 
 
 export interface AnalyticsRange {
   videoId: string;
-  // YYYY-MM-DD, inclusive.
   startDate: string;
   endDate: string;
 }
@@ -62,11 +43,8 @@ export function analyticsDate(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
-// Video ids are [A-Za-z0-9_-]; anything else must never reach the filter string.
 export const VIDEO_ID = /^[A-Za-z0-9_-]{1,64}$/;
 
-// The snippet of a Data API videos.list item ({} when absent): channelId
-// (ownership) and publishedAt (report start date).
 export function videoSnippet(videoInfo: unknown): Record<string, unknown> {
   const snippet = readRecord(videoInfo, 'snippet');
   return typeof snippet === 'object' && snippet !== null ? (snippet as Record<string, unknown>) : {};
@@ -97,8 +75,6 @@ export function isInsufficientScopeError(error: unknown): boolean {
 }
 
 async function runQuery(client: OAuth2Client, params: Record<string, string>): Promise<unknown> {
-  // googleapis bundles its own google-auth-library type, hence the cast on
-  // auth only (same as getYouTubeClient); `version: 'v2'` picks the v2 types.
   const analytics = google.youtubeAnalytics({ version: 'v2', auth: client as never });
   const response = await analytics.reports.query({ ids: 'channel==MINE', ...params });
   return response.data;
@@ -106,7 +82,6 @@ async function runQuery(client: OAuth2Client, params: Record<string, string>): P
 
 type Table = Array<Record<string, unknown>>;
 
-// The report as one object per row, keyed by column name.
 export function reportTable(data: unknown): Table {
   const headers = readRecord(data, 'columnHeaders');
   const rows = readRecord(data, 'rows');
@@ -128,8 +103,6 @@ function num(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
-// Rows split by creatorContentType: counts are summed, averages weighted by
-// views, and the content type is the one with the most views.
 export function aggregateVideoStats(table: Table): VideoAnalyticsStats | null {
   let views = 0;
   let engagedViews = 0;
@@ -174,10 +147,6 @@ function classify(error: unknown, label: string): { kind: 'scope_missing' } {
   if (isInsufficientScopeError(error)) return { kind: 'scope_missing' };
   const status = httpStatusOf(error);
   if (status === 401 || status === 403) {
-    // Log the original error as the cause: its message carries the YouTube
-    // rejection reason. Logging only { status } made the logger synthesize
-    // "Non-error value reported: {\"status\":403}" as the PostHog exception
-    // and hid the reason. The status rides as metadata, as elsewhere.
     logger.error(`[youtube-analytics] ${label} rejected`, error, { status });
     throw new AnalyticsAuthError(status);
   }

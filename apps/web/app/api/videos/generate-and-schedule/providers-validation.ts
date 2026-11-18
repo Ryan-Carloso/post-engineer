@@ -1,16 +1,8 @@
-//---------------
-// Provider validation for POST /api/videos/generate-and-schedule. Runs
-// BEFORE any token is charged. Every unknown provider is reported, not just
-// the first one.
-//---------------
-
 import { SOCIAL_PROVIDERS, type SocialProvider } from '@/lib/contracts/providers';
 import { invalid, MAX_REPORTED_ISSUES, type Checked } from './validation-issues';
 
 export type Provider = SocialProvider;
 
-// A provider value is caller-controlled and is echoed in the 400 message.
-// Keep the "use one of" hint by shortening the name, not the whole sentence.
 const MAX_PROVIDER_CHARS = 100;
 
 function shownProvider(provider: string): string {
@@ -18,9 +10,6 @@ function shownProvider(provider: string): string {
 }
 
 export function validateProviders(rawProviders: string[]): Checked<Provider[]> {
-  // Stop before building one issue per entry. The route also rejects this
-  // length at the schema, so a normal request never reaches the map below
-  // with more than MAX_REPORTED_ISSUES values.
   if (rawProviders.length > MAX_REPORTED_ISSUES) {
     return {
       ok: false,
@@ -44,10 +33,6 @@ export function validateProviders(rawProviders: string[]): Checked<Provider[]> {
   return { ok: true, value: providers as Provider[] };
 }
 
-// A Pinterest publish needs exactly one board for the batch (a pin
-// cannot exist without one, and the schedule carries one board id).
-// The board id is a numeric Pinterest id; anything longer than the
-// column the route writes is a caller bug, not a board.
 export function validatePinterestBoard(
   providers: string[],
   boardId: string | undefined,

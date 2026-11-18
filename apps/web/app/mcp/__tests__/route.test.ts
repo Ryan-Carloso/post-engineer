@@ -53,8 +53,6 @@ async function mintToken(input: { sub: string; scope: string; resource: string }
   return mintAccessToken(keys, { ...input, clientId: 'chatgpt-test-client' });
 }
 
-// A token signed by a key the server does not trust: the signature fails
-// offline verification even though the claims look right.
 async function mintForeignToken(input: { sub: string; scope: string; resource: string }): Promise<string> {
   const { privateKey } = await generateKeyPair('ES256', { extractable: true });
   return new SignJWT({ token_use: 'access', scope: input.scope, client_id: 'chatgpt-test-client' })
@@ -96,8 +94,6 @@ function toolsListBody(id: number): Record<string, unknown> {
   return { jsonrpc: '2.0', id, method: 'tools/list', params: {} };
 }
 
-// A POST answer in SSE mode carries one data event with the JSON-RPC
-// response. Parse the last data line; the event line carries no payload.
 async function readSseJson(response: Response): Promise<Record<string, unknown>> {
   const text = await response.text();
   const dataLines = text.split('\n').filter((line) => line.startsWith('data: '));
@@ -130,7 +126,6 @@ describe('POST /mcp', () => {
       `resource_metadata="${new URL(getMcpResource()).origin}/.well-known/oauth-protected-resource"`,
     );
     expect(challenge).toContain('error_description="A valid OAuth access token is required."');
-    // RFC 6750: no error code when no credentials were presented at all.
     expect(challenge).not.toContain('error="invalid_token"');
   });
 
@@ -202,7 +197,6 @@ describe('POST /mcp', () => {
       }),
     );
     await response.arrayBuffer().catch(() => undefined);
-    // Same origin passes the guard, then auth rejects the missing token.
     expect(response.status).toBe(401);
   });
 
@@ -222,13 +216,11 @@ describe('POST /mcp', () => {
     expect(list.status).toBe(200);
     const listResult = (await readSseJson(list)) as { result?: Record<string, unknown> };
     const names = toolNames(listResult.result ?? {});
-    // The 16 intent tools (issue #566): the same tools as stdio, minus the actions below.
     expect(names).toHaveLength(16);
     expect(names).toContain('personas');
     expect(names).toContain('check_script');
     expect(names).toContain('publish_video');
     expect(toolActions(listResult.result ?? {}, 'publish_video')).toEqual(['create_upload', 'complete_upload', 'publish_upload', 'publish_existing']);
-    // #451: the hosted server must never read a path on its host.
     expect(toolActions(listResult.result ?? {}, 'media')).not.toContain('upload');
     expect(toolActions(listResult.result ?? {}, 'persona_media')).not.toContain('add_image');
     expect(toolActions(listResult.result ?? {}, 'publish_video')).not.toContain('from_file');
@@ -259,7 +251,6 @@ describe('POST /mcp', () => {
       await response.arrayBuffer().catch(() => undefined);
       lastStatus = response.status;
     }
-    // The first 300 unauthenticated requests answer 401; the 301st is 429.
     expect(lastStatus).toBe(429);
   });
 

@@ -1,13 +1,3 @@
-/**
- * Reporting: GitHub Actions annotations and the PR comment body.
- *
- * Annotation format (https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-commands):
- *   ::error file={path},line={n}::{message}
- *   ::warning file={path},line={n}::{message}
- * The PR comment carries the marker <!-- api-naming-lint --> so the
- * workflow can update it idempotently instead of spamming new comments.
- */
-
 export const COMMENT_MARKER = '<!-- api-naming-lint -->';
 
 function escapeAnnotation(text) {

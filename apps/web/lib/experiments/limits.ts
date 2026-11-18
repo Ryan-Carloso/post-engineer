@@ -1,7 +1,3 @@
-// Thin re-export of the shared experiments contract (issue #476). The
-// single source of truth is shared/contracts/experiments.ts (synced to
-// apps/web/lib/contracts/experiments.ts by scripts/sync-contracts.mjs).
-// Existing importers keep importing from this path.
 export {
   EXPERIMENT_NAME_MAX_LENGTH,
   EXPERIMENT_TARGET_PAIRS_MAX,

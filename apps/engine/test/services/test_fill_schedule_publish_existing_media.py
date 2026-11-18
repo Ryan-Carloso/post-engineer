@@ -233,8 +233,6 @@ class PublishExistingMediaTests(unittest.TestCase):
             "videos", f"{USER_ID}/direct-uploads/{UPLOAD_ID}.mp4"
         )
         store.claim_video_upload.assert_called_once_with(UPLOAD_ID)
-        # The claim is recorded on the slot: a resume trusts a `consumed`
-        # row only when it is this claim.
         self.assertTrue(
             any(
                 call.kwargs.get("media_claimed_at") == CLAIMED_AT
@@ -292,11 +290,6 @@ class PublishExistingMediaTests(unittest.TestCase):
         store.refund_batch_tokens.assert_not_called()
 
     def test_resumed_upload_slot_retries_and_cleans_up(self):
-        # First attempt claims the upload, then the provider asks for a
-        # retry: the slot stays `publishing` with the object still stored.
-        # The resume must re-dispatch from the consumed claim instead of
-        # failing permanently, and remove the object at the terminal
-        # outcome.
         store = MagicMock()
         store.claim_ready_slot.return_value = True
         store.claim_resumable_slot.return_value = True
@@ -324,14 +317,12 @@ class PublishExistingMediaTests(unittest.TestCase):
             published = publisher._publish_one(_media_slot(), NOW, resumed=False)
         self.assertEqual(published, 0)
         store.claim_video_upload.assert_called_once_with(UPLOAD_ID)
-        # The first attempt recorded its claim on the slot.
         self.assertTrue(
             any(
                 call.kwargs.get("media_claimed_at") == CLAIMED_AT
                 for call in store.update_slot.call_args_list
             )
         )
-        # The object is still needed: no cleanup while retrying.
         store.remove_storage_object.assert_not_called()
         self.assertTrue(
             any(
@@ -339,8 +330,6 @@ class PublishExistingMediaTests(unittest.TestCase):
                 for call in store.update_slot.call_args_list
             )
         )
-        # Resume: the row is `consumed` by our own first attempt (the
-        # tick re-read the slot with the recorded claim).
         store.get_video_upload.return_value = _upload_row(status="consumed", consumed_at=CLAIMED_AT)
         with patch(
             "app.services.fill_schedule.publish.publish_slot_accounts",
@@ -348,7 +337,6 @@ class PublishExistingMediaTests(unittest.TestCase):
         ) as publish_accounts:
             published = publisher._publish_one(_media_slot(media_claimed_at=CLAIMED_AT), NOW, resumed=True)
         self.assertEqual(published, 1)
-        # The provider was retried; the claim was not taken a second time.
         publish_accounts.assert_called_once()
         store.claim_video_upload.assert_called_once_with(UPLOAD_ID)
         self.assertTrue(
@@ -362,8 +350,6 @@ class PublishExistingMediaTests(unittest.TestCase):
         )
 
     def _bound_upload_slot(self, media_claimed_at):
-        # A resumed upload slot whose persona unbound the account between
-        # attempts: the binding check (before the resolver) fails the slot.
         return _media_slot(
             media_claimed_at=media_claimed_at,
             schedules={
@@ -376,9 +362,6 @@ class PublishExistingMediaTests(unittest.TestCase):
         )
 
     def test_resumed_upload_slot_failing_binding_removes_its_claimed_bytes(self):
-        # The binding check runs before the resolver, so no upload cleanup
-        # exists yet — the resumed slot's own claimed bytes must still be
-        # removed, or they leak (no sweeper covers consumed rows).
         store = MagicMock()
         store.claim_resumable_slot.return_value = True
         store.persona_bound_accounts.return_value = {"youtube": ["yt-other"]}
@@ -400,8 +383,6 @@ class PublishExistingMediaTests(unittest.TestCase):
         )
 
     def test_resumed_upload_slot_failing_binding_keeps_a_foreign_claim(self):
-        # The row was consumed by another consumer: the bytes are theirs
-        # (already live, or already gone) and must not be removed.
         store = MagicMock()
         store.claim_resumable_slot.return_value = True
         store.persona_bound_accounts.return_value = {"youtube": ["yt-other"]}
@@ -415,8 +396,6 @@ class PublishExistingMediaTests(unittest.TestCase):
         store.remove_storage_object.assert_not_called()
 
     def test_first_attempt_upload_slot_failing_binding_removes_nothing(self):
-        # No claim exists yet on a first attempt: there is nothing of this
-        # slot's to remove, and the still-ready row stays for the sweeper.
         store = MagicMock()
         store.claim_ready_slot.return_value = True
         store.persona_bound_accounts.return_value = {"youtube": ["yt-other"]}
@@ -445,7 +424,6 @@ class PublishExistingMediaTests(unittest.TestCase):
             published = publisher._publish_one(_media_slot(), NOW, resumed=False)
         self.assertEqual(published, 0)
         publish_accounts.assert_not_called()
-        # The media path ran: bytes downloaded, then the claim lost.
         store.download_storage_object.assert_called_once_with(
             "videos", f"{USER_ID}/direct-uploads/{UPLOAD_ID}.mp4"
         )
@@ -453,8 +431,6 @@ class PublishExistingMediaTests(unittest.TestCase):
         self.assertTrue(
             any(call.kwargs.get("status") == "failed" for call in store.update_slot.call_args_list)
         )
-        # The bytes were downloaded but the claim lost: the winner publishes,
-        # so this slot must not remove the object out from under it.
         store.remove_storage_object.assert_not_called()
         store.refund_batch_tokens.assert_not_called()
 
@@ -484,8 +460,6 @@ class PublishExistingMediaTests(unittest.TestCase):
             if call.kwargs.get("status") == "failed"
         ]
         self.assertEqual(len(failed), 1)
-        # The media path rejected the path itself — not the generic
-        # "task has no finished videos" of a task-less generation slot.
         self.assertIn("scheduled image", str(failed[0].kwargs.get("error") or ""))
 
     def test_download_failure_leaves_the_slot_publishing_for_retry(self):
@@ -500,8 +474,6 @@ class PublishExistingMediaTests(unittest.TestCase):
         ) as publish_accounts:
             published = publisher._publish_one(_media_slot(), NOW, resumed=False)
         self.assertEqual(published, 0)
-        # Download runs before the claim: a storage outage never burns the
-        # single-use row, and the slot waits out its lease for the next tick.
         store.claim_video_upload.assert_not_called()
         publish_accounts.assert_not_called()
         self.assertFalse(
@@ -617,15 +589,10 @@ class ResolveExistingMediaDirectTests(unittest.TestCase):
         self.assertEqual(fail.call_args[0][0], "scheduled video upload is no longer ready")
 
     def test_upload_consumed_row_resolves_on_resume(self):
-        # The resume re-uses the claim its own first attempt won: the row
-        # is `consumed` by then, so a fresh `ready` check would fail the
-        # slot permanently and leak the claimed object.
         store = MagicMock()
         store.get_video_upload.return_value = _upload_row(status="consumed", consumed_at=CLAIMED_AT)
         store.download_storage_object.return_value = b"video-bytes"
         fail = MagicMock()
-        # Same instant, different spelling: the comparison is on instants,
-        # not strings (PostgREST re-serializes timestamptz).
         slot = _media_slot(media_claimed_at="2026-11-14T11:30:00.000000+00:00")
         resolved = resolve_existing_media(store, fail, slot, NOW, resumed=True)
         self.assertIsNotNone(resolved)
@@ -639,10 +606,6 @@ class ResolveExistingMediaDirectTests(unittest.TestCase):
         store.claim_video_upload.assert_not_called()
 
     def test_upload_consumed_row_with_foreign_claim_fails_permanently_on_resume(self):
-        # Another consumer (a second slot with the same upload id, or an
-        # ASAP publish) claimed the row: trusting it would double-publish
-        # media that is already live, or re-download an object that is
-        # already gone.
         store = MagicMock()
         store.get_video_upload.return_value = _upload_row(status="consumed", consumed_at=CLAIMED_AT)
         fail = MagicMock()
@@ -654,9 +617,6 @@ class ResolveExistingMediaDirectTests(unittest.TestCase):
         store.claim_video_upload.assert_not_called()
 
     def test_upload_consumed_row_without_recorded_claim_fails_permanently_on_resume(self):
-        # No recorded claim on the slot (a pre-migration row, or a crash
-        # between the claim and the record): ownership cannot be proven,
-        # so the resume fails closed instead of trusting the row.
         store = MagicMock()
         store.get_video_upload.return_value = _upload_row(status="consumed", consumed_at=CLAIMED_AT)
         fail = MagicMock()
@@ -666,8 +626,6 @@ class ResolveExistingMediaDirectTests(unittest.TestCase):
         store.download_storage_object.assert_not_called()
 
     def test_upload_gone_object_fails_permanently_on_resume(self):
-        # The object is gone (another consumer published and cleaned it
-        # up): parking would retry it on every tick forever.
         store = MagicMock()
         store.get_video_upload.return_value = _upload_row(status="consumed", consumed_at=CLAIMED_AT)
         store.download_storage_object.side_effect = _not_found_error()
@@ -681,8 +639,6 @@ class ResolveExistingMediaDirectTests(unittest.TestCase):
         )
 
     def test_upload_gone_object_fails_permanently_on_first_attempt(self):
-        # A missing object never comes back, so the first attempt fails
-        # permanently instead of parking; the single-use row is not burned.
         store = MagicMock()
         store.get_video_upload.return_value = _upload_row()
         store.download_storage_object.side_effect = _not_found_error()
@@ -724,8 +680,6 @@ class ResolveExistingMediaDirectTests(unittest.TestCase):
         self.assertIsNone(image_cleanup(other_user))
         self.assertIsNone(image_cleanup(_media_slot(media_kind="image", media_ref="other/a.jpg")))
         self.assertIsNone(image_cleanup(_media_slot(media_kind="upload", media_ref=UPLOAD_ID)))
-        # Dot segments escape the owner prefix when the storage gateway
-        # normalizes them, so they are rejected even under the prefix.
         self.assertIsNone(
             image_cleanup(
                 _media_slot(media_kind="image", media_ref="scheduled-media/user-1/../../user-2/x.jpg")
@@ -906,7 +860,6 @@ class ClaimedUploadCleanupTests(unittest.TestCase):
         self.assertIsNone(claimed_upload_cleanup(store, slot, resumed=True))
 
     def test_returns_none_when_the_store_read_fails(self):
-        # Best-effort cleanup: a transient read failure never fails the tick.
         store = MagicMock()
         store.get_video_upload.side_effect = RuntimeError("supabase down")
         slot = _media_slot(media_claimed_at=CLAIMED_AT)

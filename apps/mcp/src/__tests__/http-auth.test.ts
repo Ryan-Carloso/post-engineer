@@ -12,11 +12,6 @@ import {
   type HttpAuthConfig,
 } from '../http-auth.js';
 
-// The authorization server in these tests is a loopback JWKS endpoint:
-// a real ES256 keypair mints the tokens and the verifier fetches the
-// public JWK over HTTP, exactly like production fetches the published
-// JWKS. No token is ever a fixture string: every token below is minted
-// in-test, so a verification bug cannot hide behind a stale fixture.
 const ISSUER = 'https://auth.example.test';
 const RESOURCE = 'https://api.example.test/mcp';
 

@@ -1,9 +1,3 @@
-//---------------
-// scheduler runtime tests — startInternalScheduler wiring and the real
-// tick runners (runPostMetricsTick / runBillingReconcileTick), mocked at
-// the module boundary so no real timers, database or network are used.
-//---------------
-
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const { createSchedulerMock, schedulerHandle, createdDeps } = vi.hoisted(() => {
@@ -149,7 +143,6 @@ describe('startInternalScheduler', () => {
     expect(collectPostMetrics).toHaveBeenCalledTimes(1);
     const args = vi.mocked(collectPostMetrics).mock.calls[0][0];
     expect(args).toMatchObject({ store: true, fetchTaskSource: expect.anything() });
-    // The injected clock is the real Date.
     expect((args as { now: () => Date }).now()).toBeInstanceOf(Date);
     expect(flushPostHog).toHaveBeenCalledTimes(1);
     expect(logger.error).not.toHaveBeenCalled();
@@ -173,7 +166,6 @@ describe('startInternalScheduler', () => {
       null,
       { errors: ['boom'] },
     );
-    // Still flushed (the queued events must not be lost).
     expect(flushPostHog).toHaveBeenCalledTimes(1);
   });
 
@@ -252,7 +244,6 @@ describe('startInternalScheduler', () => {
       acquireLease: (job: string, ttl: number, holder: string) => Promise<{ acquired: boolean; lastSuccessAt: Date | null }>;
     };
     const result = await deps.acquireLease('post-metrics', 1800, 'h1');
-    // scheduler-lease is mocked: acquire -> true, last success -> null.
     expect(result).toEqual({ acquired: true, lastSuccessAt: null });
   });
 

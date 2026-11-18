@@ -47,7 +47,6 @@ function formData(overrides: Record<string, string | File | string[]> = {}): For
   return fd;
 }
 
-// member tokens (no org URN) — personal account
 function mockMemberTokens() {
   vi.mocked(getSocialAccountTokens).mockResolvedValue({
     tokens: {
@@ -59,7 +58,6 @@ function mockMemberTokens() {
   });
 }
 
-// organization tokens (provider_account_id is already the org URN)
 function mockOrgTokens() {
   vi.mocked(getSocialAccountTokens).mockResolvedValue({
     tokens: {

@@ -1,18 +1,6 @@
-// direct-publish-form — provider-specific fields and the multipart form
-// for publish_video (action: from_file).
-//
-// Extracted from client.ts so client.ts stays under the file-size ratchet.
-// Rumble and Fanvue take title + description (like YouTube, minus tags and
-// privacyStatus) — the Fanvue web handler rejects a request without a title;
-// Pinterest takes a boardId plus a description that falls
-// back to the caption; Instagram takes a file + caption; the rest take a
-// video + caption.
 import { randomUUID } from 'node:crypto';
 import type { PublishUploadedVideoInput, PublishVideoDirectInput } from './client-types.js';
 
-// The provider-field rules are shared by the local-path publish
-// (PublishVideoDirectInput) and the signed-upload publish by id
-// (PublishUploadedVideoInput): they differ only in how the bytes arrive.
 export type DirectPublishFieldInput = PublishVideoDirectInput | PublishUploadedVideoInput;
 
 export interface DirectPublishFields {
@@ -34,8 +22,6 @@ function requireTitleAndDescription(input: DirectPublishFieldInput): { title: st
   return { title: input.title.trim(), description: input.description.trim() };
 }
 
-// Provider-specific required fields, validated before any fetch so the
-// agent gets a named failure instead of a server 400 after uploading.
 export function requireDirectPublishFields(input: DirectPublishFieldInput): DirectPublishFields {
   let title = '';
   let description = '';
@@ -103,13 +89,11 @@ export function buildDirectPublishForm(
   } else {
     const accountField = { bluesky: 'did', linkedin: 'linkedinAccountIds', threads: 'threadsAccountIds', facebook: 'facebookAccountIds', pinterest: 'pinterestAccountIds', fanvue: 'fanvueAccountIds', '3speak': 'threespeakAccountIds', rumble: 'rumbleAccountIds' }[input.provider];
     formData.append('video', videoBlob, filename);
-    // Rumble and Fanvue take title + description, not a caption.
     if (input.provider === 'rumble' || input.provider === 'fanvue') {
       formData.append('title', fields.title);
       formData.append('description', fields.description);
     } else {
       formData.append('caption', fields.caption);
-      // Pinterest also carries the pin title, description and board.
       if (input.provider === 'pinterest') {
         formData.append('title', fields.title);
         formData.append('description', fields.description);
@@ -120,8 +104,6 @@ export function buildDirectPublishForm(
       formData.append(accountField, accountId);
     }
   }
-  // The web route replays the recorded publish for a retried key instead of
-  // posting again; a fresh key per call keeps a new publish a new one.
   const key = input.idempotencyKey !== undefined && input.idempotencyKey.trim().length > 0
     ? input.idempotencyKey.trim()
     : randomUUID();

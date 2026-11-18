@@ -39,9 +39,6 @@ describe('isPublicHttpsWebhookUrl — shared webhook fixture', () => {
     expect(isPublicHttpsWebhookUrl(url)).toBe(false);
   });
 
-  // Multicast literals are not in the shared table: Python still reports
-  // them global (blockedBeyondPython), so the engine accepts them. The web
-  // rule is stricter and blocks them.
   it('rejects a multicast literal (stricter than the engine)', () => {
     expect(isPublicHttpsWebhookUrl('https://224.0.0.1/hook')).toBe(false);
     expect(isPublicHttpsWebhookUrl('https://[ff02::1]/hook')).toBe(false);

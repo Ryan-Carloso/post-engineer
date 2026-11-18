@@ -3,11 +3,6 @@ import type { PostEngineerClient } from '../client.js';
 import { createRefResolvers, resolveAccountRef, resolvePersonaRef } from '../refs.js';
 import type { McpToolResponse } from '../tools-call.js';
 
-// Issue #566 §7: a persona or account is given as an id or as a display
-// name. An id wins; otherwise the name must match exactly (case-insensitive,
-// trimmed). Zero matches is an actionable error, several matches is a
-// candidates result and never a guess.
-
 const PERSONA_ID = '11111111-1111-4111-8111-111111111111';
 const OTHER_ID = '22222222-2222-4222-8222-222222222222';
 

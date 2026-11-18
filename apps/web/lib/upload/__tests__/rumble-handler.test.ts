@@ -90,7 +90,6 @@ describe('handleRumbleUpload', () => {
 
   it('rejects a video over the 4GB cap without buffering it', async () => {
     const oversized = new File([MP4_BYTES], 'clip.mp4', { type: 'video/mp4' });
-    // A real 4GB file cannot be built in a test: shadow the size getter.
     Object.defineProperty(oversized, 'size', { value: RUMBLE_VIDEO_MAX_BYTES + 1 });
     const result = await handleRumbleUpload(formData({ video: oversized }), 'user-1');
     expect(result.success).toBe(false);

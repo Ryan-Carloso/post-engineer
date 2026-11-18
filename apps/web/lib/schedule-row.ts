@@ -1,12 +1,7 @@
 import type { ScheduleConfig } from '@/lib/api';
 
-//---------------
-// schedule-row — the /api/schedule row shape and its client mapping.
-//---------------
-
 export interface ScheduleRow {
   id: string;
-  /** Null for a schedule created without a persona (migration 012). */
   persona_id: string | null;
   providers: string[];
   youtube_account_ids: string[];
@@ -16,7 +11,6 @@ export interface ScheduleRow {
   threads_account_ids: string[];
   facebook_account_ids: string[];
   pinterest_account_ids: string[];
-  /** The board a schedule's Pinterest pins go to (migration 050). */
   pinterest_board_id: string | null;
   threespeak_account_ids: string[];
   rumble_account_ids: string[];
@@ -27,14 +21,9 @@ export interface ScheduleRow {
   posts_per_day: number;
   timezone: string;
   active: boolean;
-  /** Migration 015. Read defensively: only the literal 'asap' counts. */
   publish_mode: string | null;
 }
 
-// The fanvue ids ride an intersection, not ScheduleConfig itself:
-// lib/api.ts is grandfathered over the 500-line cap and may not grow, so
-// its ScheduleConfig cannot gain the field here — the extraction that
-// moves the schedule shapes out of lib/api.ts adds it there.
 export function mapSchedule(row: ScheduleRow): ScheduleConfig & { fanvueAccountIds: string[] } {
   return {
     id: row.id,

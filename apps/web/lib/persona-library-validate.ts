@@ -1,8 +1,3 @@
-//---------------
-// Library-image validation used by POST /api/persona at creation.
-// Extracted so route.ts can stay under the file-size ratchet.
-//---------------
-
 import {
   MAX_PERSONA_IMAGES,
   readValidatedImage,

@@ -6,15 +6,6 @@ vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), debug: vi.fn(), warn: 
 import { POST } from '../route';
 import { checkSemantics } from '../request-validation';
 
-//---------------
-// options.musicMood — the route's zod boundary (issue #489) plus the
-// pre-charge catalog check (issue #542 follow-up). The shape parse runs
-// before auth, so a bad mood is a 400 with no charge and no DB touch.
-// Both bounds are pinned: the 64-char cap mirrors the engine's
-// VideoParams.music_mood max_length, and the 1-char floor rejects an
-// empty mood. An unknown mood is rejected the same way, with the valid
-// list — before the charge, not at engine dispatch after it.
-//---------------
 function post(body: unknown) {
   return POST(
     new Request('http://localhost/api/videos/generate-and-schedule', {

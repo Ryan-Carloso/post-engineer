@@ -1,6 +1,3 @@
-// User-account notices on posts (action: list) / schedules (action: get_slot) (issue #500). The sentences
-// are already safe to show. The agent must relay them and must not retry.
-
 export function readNoticeList(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
 }

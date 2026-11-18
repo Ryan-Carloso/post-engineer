@@ -23,18 +23,17 @@ def test_matching_ratio_has_no_mismatch():
     assert media_aspect.mismatch_detail(1920, 1080, VideoAspect.landscape) is None
     assert media_aspect.mismatch_detail(1080, 1920, VideoAspect.portrait) is None
     assert media_aspect.mismatch_detail(1080, 1080, VideoAspect.square) is None
-    # Slightly wider than the canvas, bars inside the 35% ceiling.
     assert media_aspect.mismatch_detail(1200, 1600, VideoAspect.portrait) is None
 
 
 @pytest.mark.parametrize(
     "width,height,aspect",
     [
-        (1080, 1920, VideoAspect.landscape),  # pillarbox: narrower than the canvas
-        (1920, 1080, VideoAspect.portrait),  # 68% bars, over the 35% ceiling
-        (1080, 1080, VideoAspect.portrait),  # square in a 9:16 frame: 44% bars
-        (1080, 1080, VideoAspect.landscape),  # square in a 16:9 frame: pillarbox
-        (1920, 1080, VideoAspect.square),  # 44% bars in a 1:1 frame
+        (1080, 1920, VideoAspect.landscape),
+        (1920, 1080, VideoAspect.portrait),
+        (1080, 1080, VideoAspect.portrait),
+        (1080, 1080, VideoAspect.landscape),
+        (1920, 1080, VideoAspect.square),
     ],
 )
 def test_mismatched_ratio_names_both_sides(width, height, aspect):
@@ -63,7 +62,6 @@ def test_rejection_reason_names_the_wrong_aspect():
 
 def test_rejection_reason_is_none_when_everything_fits():
     assert media_aspect.rejection_reason(1080, 1920, VideoAspect.portrait) is None
-    # No aspect to check against: only the size floor applies.
     assert media_aspect.rejection_reason(1920, 1080, None) is None
     assert media_aspect.rejection_reason(1920, 1080) is None
 

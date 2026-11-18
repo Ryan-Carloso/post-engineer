@@ -43,10 +43,6 @@ class _DirectRedispatch:
     requeue_count: int
 
 
-# Filled by the boot reconcile and drained later in the same ASGI startup
-# hook. Process local. Review already wrote stage=None and the requeue
-# counter, so a crash before the drain is not retried: the next boot sees
-# no generation stage and fail+refunds.
 _pending_direct_redispatches: list[_DirectRedispatch] = []
 
 
@@ -75,12 +71,8 @@ def _direct_generation_row(state: Any, task_id: str) -> dict[str, Any] | None:
     if not isinstance(row, dict):
         return None
     if row.get("status") in ("failed", "completed"):
-        # Already settled (failed+refunded, or proof of delivery marked it
-        # complete): re-dispatching would double-run a finished generation.
         return None
     if not isinstance(row.get("params"), dict):
-        # Snapshot-only row (written before issue #205): the real params
-        # died with the old process, so there is nothing to rebuild from.
         return None
     return row
 
@@ -115,8 +107,6 @@ def triage_redispatch_direct(state: Any, task_id: str, data: dict[str, Any]) -> 
     if data.get("stage") not in GENERATION_STAGES:
         return False
     if (data.get("pipeline") or "video") != "video":
-        # Only full video pipelines are rebuildable: the persisted row
-        # carries a TaskVideoRequest payload.
         return False
     row = _direct_generation_row(state, task_id)
     if row is None:
@@ -130,36 +120,18 @@ def triage_redispatch_direct(state: Any, task_id: str, data: dict[str, Any]) -> 
         return False
     try:
         params = row["params"]
-        # A payload persisted before the media-list contract carries one
-        # object per segment; normalize it so the prepaid orphan is
-        # claimed instead of dropped as unvalidatable.
         if isinstance(params.get("segments"), list):
             params = {**params, "segments": legacy_media_list(params["segments"])}
         request = TaskVideoRequest.model_validate(params)
     except ValidationError as exc:
-        # Deterministic: the persisted payload can never validate (schema
-        # drift or a corrupt row). Fail+refund instead of retrying it on
-        # every boot forever.
         logger.error(f"orphan {task_id}: persisted params invalid: {exc}")
         return False
     publish_mode = str(row.get("publish_mode") or "unknown")
     stage = str(data.get("stage") or "unknown")
-    # Persist the attempt BEFORE anything that can fail to start the
-    # pipeline. Importing app.services.task here used to run inside
-    # SupabaseTaskState.__init__; an import error skipped this write, so
-    # the same task retried on every boot without counting. The worker
-    # starts later, from startup_event, once state is bound.
     state.update_task(
         task_id,
         state=const.TASK_STATE_PROCESSING,
         progress=0,
-        # Clear the stale pre-crash phase (a poll would keep reporting
-        # e.g. "audio" at 0% until the pipeline re-marks). stage=None is
-        # not a generation stage: a restart that dies before the pipeline
-        # writes one (crash inside tm.start before phases.begin) is
-        # failed+refunded on the next boot instead of redispatched again.
-        # An early crash is treated as deterministic; attempts that do
-        # reach a stage still count against MAX_AUTO_REQUEUES.
         stage=None,
         auto_requeued=True,
         requeue_count=requeue_count,
@@ -229,9 +201,6 @@ def start_pending_direct_redispatches(manager: Any | None = None) -> int:
         )
         return 0
     if manager is None:
-        # Imported here, not at review time: the controller module builds
-        # the process-wide manager at import, which must not run while
-        # app.services.state is still initializing.
         from app.controllers.v1.video import task_manager
 
         manager = task_manager

@@ -15,15 +15,10 @@ describe('resolveSlotUuid', () => {
   });
 
   it('extracts the slot uuid from the engine batch generation key', () => {
-    // Callers (MCP agents, UI) sometimes hand over the engine-side
-    // generation key instead of the slot row id.
     expect(resolveSlotUuid(`batch:${SCHEDULE_ID}:slot:${SLOT_ID}`)).toBe(SLOT_ID);
   });
 
   it('decodes a percent-encoded batch key before extracting the slot uuid', () => {
-    // The web UI builds the request path with encodeURIComponent, and the
-    // value can arrive still-encoded (double-encoded upstream) — production
-    // showed the key reaching the handler as batch%3A…%3Aslot%3A….
     expect(resolveSlotUuid(`batch%3A${SCHEDULE_ID}%3Aslot%3A${SLOT_ID}`)).toBe(SLOT_ID);
     expect(resolveSlotUuid(`batch%253A${SCHEDULE_ID}%253Aslot%253A${SLOT_ID}`)).toBe(SLOT_ID);
   });
@@ -64,8 +59,6 @@ describe('isUuid', () => {
   });
 
   it('rejects a truncated uuid prefix', () => {
-    // Production: DELETE /api/schedule?id=ca192c1b — the first 8 chars
-    // of a uuid — raised Postgres 22P02 on the uuid-typed filter.
     expect(isUuid('ca192c1b')).toBe(false);
   });
 

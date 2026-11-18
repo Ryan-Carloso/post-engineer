@@ -1,6 +1,3 @@
-// posts-calendar-i18n — copy for the /posts calendar, the /posts/history page, the month
-// calendar and the refreshed post cards. Merged into `posts` in ./index.ts
-// (en.ts/pt.ts are over the file-size cap and may not grow).
 export const postsCalendarStrings = {
   pt: {
     posts: {

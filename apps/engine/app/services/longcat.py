@@ -43,61 +43,25 @@ class LongCatError(RuntimeError):
         self, message: str, response_body: str | None = None
     ) -> None:
         super().__init__(message)
-        # Upstream HTTP error body, for PostHog only. Kept OUT of the
-        # message: the message reaches Discord alerts via safe_reason
-        # and the client-visible task error, and the body is
-        # remote-controlled text that could echo sensitive data
-        # (e.g. an auth page). Same split as PublishError.response_body.
         self.response_body = response_body
 
 
 Request = Callable[..., requests.Response]
 
-# --------------------------------------------------------------------------
-# Upstream clip arithmetic
-# --------------------------------------------------------------------------
-# run_demo_avatar_single_audio_to_video.py hardcodes the per-segment frame
-# budget and never exposes it on the CLI:
-#   num_frames      = 93   (frames in the FIRST segment)
-#   num_cond_frames = 13   (frames conditioned on the reference image)
-#   save_fps        = 25   for avatar-v1.5 (16 for v1.0)
-# Each extra segment appends (93 - 13) = 80 NEW frames on top of the first
-# segment's 93 ("Video Continuation" mode). These three literals are the whole
-# contract with upstream; the test suite pins them.
 UPSTREAM_NUM_FRAMES: Final[int] = 93
 UPSTREAM_NUM_COND_FRAMES: Final[int] = 13
 AVATAR_V15_SAVE_FPS: Final[int] = 25
 
-# Rendered length per segment count: 3.72s, 6.92s, 10.12s, 13.32s, 16.52s.
-# MAX_SEGMENTS is the ceiling the Modal endpoint accepts; it must render at
-# least PERSONA_LIPSYNC_MAX_SECONDS (the hard hook ceiling in task.py) so no
-# production narration can ever ask for a clip longer than the pipeline allows.
-# Pinned by a test that reads the task constant directly.
 MAX_SEGMENTS: Final[int] = 5
 
-# Silence appended after the narration so a clip that starts mid-phrase still
-# has audio to render. It is NOT speech: it must not count toward the clip
-# length, or a narration landing within one padding-width of a segment boundary
-# buys a whole extra segment (~80 more frames of H200) it does not need.
 INTRO_PADDING_SECONDS: Final[float] = 0.2
 
-# Modal published GPU rates (https://modal.com/pricing, per-second billing).
-# Only the GPU the production app requests is listed: a rate for hardware
-# nothing can run on would be a second thing to keep honest for no benefit.
-#
-# NOTE: nothing in production reads this table — cost_usd always comes from the
-# `cost_usd` field Modal reports on the completed job. It is the client-side
-# anchor the sync tests compare against the deployed app's own literal (see
-# TestGpuRateSync), which is why it is not dead code. Do not "clean it up".
 GPU_RATES_USD_S: Final[dict[str, float]] = {
     "H200": 0.001261,
     "H100": 0.001097,
     "A100-80GB": 0.000694,
 }
 
-# LipSyncQuality -> the resolution the Modal endpoint renders. "ok" is the
-# benchmarked 480p path; "very_good" renders 720p. Anything else is a caller
-# bug and fails loudly rather than silently falling back to 480p.
 QUALITY_RESOLUTIONS: Final[dict[LipSyncQuality, str]] = {
     LipSyncQuality.ok: "480p",
     LipSyncQuality.very_good: "720p",
@@ -146,8 +110,6 @@ def segments_for_duration(seconds: float) -> int:
     extra = math.ceil((needed_frames - UPSTREAM_NUM_FRAMES) / per_extra)
     segments = max(1, 1 + int(extra))
     if segments > MAX_SEGMENTS:
-        # Fail here, with the offending duration in the message, rather than
-        # letting the Modal endpoint reject the request after a paid round trip.
         raise LongCatError(
             f"{seconds:g}s exceeds the {MAX_SEGMENTS}-segment LongCat ceiling "
             f"({clip_seconds(MAX_SEGMENTS):g}s)"
@@ -255,8 +217,6 @@ def trim_audio(
     """
     input_args = ["-i", audio_path]
     if start_seconds > 0:
-        # -ss before -i seeks on the demuxer; accurate enough for narration
-        # segment cuts and fast on long files.
         input_args = ["-ss", str(start_seconds)] + input_args
     result = subprocess.run(
         [
@@ -297,14 +257,8 @@ def _generate_intro_tracked(
     captured even when the job fails after submit, so post-submit
     failures stay correlatable in PostHog.
     """
-    # Validate the quality up front so an unsupported preset fails before the
-    # audio is trimmed, rather than after a paid submit. The resolution itself
-    # is resolved by the Modal endpoint from the same quality string, so the
-    # return value is deliberately unused here.
     resolution_for_quality(quality)  # noqa: B018 — called for the raise
     start = time.monotonic()
-    # Populated by _generate_intro_impl once the job is submitted, so a
-    # failure during polling/download still reports the job_id.
     job_ids: list[str] = []
     try:
         output_path, job_id, cost_usd, job_cost = _generate_intro_impl(
@@ -325,9 +279,6 @@ def _generate_intro_tracked(
             "success": False,
             "error": scrub_error_text(str(e)),
         }
-        # The upstream body is PostHog-only: scrubbed here, never in the
-        # exception message, so it never reaches Discord or the task
-        # error. Without it a 404 submit is only a status code.
         body = getattr(e, "response_body", None)
         if body:
             failure_props["response_body"] = scrub_error_text(body)
@@ -342,9 +293,6 @@ def _generate_intro_tracked(
         "error": "",
     }
     if cost_usd is not None:
-        # Private unit-economics metric: PostHog only, never in API
-        # responses. Attached here so cost visibility does not depend on
-        # the full pipeline finishing.
         success_props["cost_usd"] = cost_usd
     track_ai_request(success_props)
     return output_path, cost_usd, job_id, job_cost
@@ -426,16 +374,6 @@ def _generate_intro_impl(
             else int(config.longcat.get("intro_duration_seconds", 5)),
             padding_seconds=INTRO_PADDING_SECONDS,
         )
-        # The trimmed audio is what sets the clip length: LongCat's only length
-        # knob is the segment count, so it is derived from the REAL trimmed
-        # duration (not the requested one) and rounded up to cover it.
-        #
-        # The trailing padding is subtracted first. Measuring the padded file
-        # directly inflates the count for any narration sitting within one
-        # padding-width below a segment boundary -- a 6.75s hook measures 6.95s
-        # and would be billed a third segment (10.12s) instead of the second
-        # (6.92s). Clamped so audio shorter than the padding still renders one
-        # segment instead of raising.
         measured_seconds = audio_duration_seconds(short_audio)
         speech_seconds = measured_seconds - INTRO_PADDING_SECONDS
         if speech_seconds <= 0:
@@ -491,9 +429,6 @@ def _generate_intro_impl(
     _raise_for_status(response, "download")
     if not response.content:
         raise LongCatError("LongCat returned an empty video")
-    # The task storage dir can vanish between utils.task_dir() creating it
-    # and the Modal job finishing its (multi-minute) poll, e.g. a cleanup
-    # between stage retries. Recreate it instead of crashing the task.
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
     Path(output_path).write_bytes(response.content)
     return output_path, job_id, cost_usd, job_cost

@@ -7,57 +7,19 @@ import { accountFailure } from '@/lib/upload/account-error';
 import { getAccountIdsFromFormData } from '@/lib/upload/account-utils';
 import type { ContentUploadAccountResult } from '@/lib/upload/content-upload-result';
 
-//---------------
-// publish-ledger — one recorded publish per (scope key, provider, account).
-//
-// The engine's 600s upload timeout can fire while this route is still
-// publishing: the scheduler marks the account transient and retries 30s
-// later, and the retry would post a second identical video. The ledger
-// makes the retry answer from recorded state instead of posting again.
-// The first request claims the key (in_progress, 30-min lease, fenced by
-// a random token) and records its result when it finishes; a retry replays
-// the recorded post, waits for the in-flight attempt, or — after a failed
-// attempt or an expired lease — claims a fresh attempt. A post whose
-// record is lost after retries parks its claim as unknown instead: the
-// post may already be live, so no retry may ever claim it again — the
-// account waits for a human to verify it on the provider first. Only the
-// request that holds the lease can record, so a first attempt whose lease
-// was taken over cannot overwrite the winner's post.
-//
-// The key comes from the caller: the engine sends
-// `slot:<slotId>:video:<name>` (deterministic across retries of the same
-// slot/video); a direct caller sends `direct:<key>`. A request without a
-// scope key publishes exactly as before, with no ledger.
-//---------------
-
-// The lease bounds how long a retry waits before taking over a claim.
-// The holder renews it while it publishes (startLedgerHeartbeat in
-// publish-ledger-heartbeat.ts), so a takeover only happens when the
-// holder is gone — no heartbeat for a full lease. A publish that runs longer than the lease (Fanvue is
-// unbounded: up to 256 parts at 10 min each) is never taken over while
-// it is still alive. The 30 minutes matches the engine's slot park
-// (ATTEMPT_LEASE_SECONDS in fill_schedule/account_outcomes.py): a retry
-// inside the lease waits instead of posting again.
 export const PUBLISH_LEDGER_LEASE_SECONDS = 30 * 60;
 
-/** The web route is still publishing this account under an earlier request. */
 export const PUBLISH_IN_PROGRESS_CODE = 'publish_in_progress';
 
-/** The post may already be live, but its record was lost: never re-post it. */
 export const PUBLISH_UNKNOWN_CODE = 'publish_unknown';
 
-// The ledger rows' status values, mirroring the
-// publish_ledger_status_check constraint in migration 061 (extended with
-// 'unknown' by migration 062).
 export const PUBLISH_LEDGER_STATUSES = ['in_progress', 'published', 'failed', 'unknown'] as const;
 
 export type PublishLedgerOutcome = 'claimed' | 'published' | 'in_progress' | 'unknown';
 
 export interface PublishLedgerClaim {
   outcome: PublishLedgerOutcome;
-  /** Fencing token for the claim; null unless this request holds the lease. */
   claimToken: string | null;
-  /** The recorded post, when a retry replays an already-published account. */
   result: ContentUploadAccountResult | null;
 }
 
@@ -65,17 +27,11 @@ export function publishLedgerKey(scopeKey: string, provider: string, accountId: 
   return `publish:${scopeKey}:${provider}:${accountId}`;
 }
 
-// Scope keys come from the engine (`slot:<slotId>:video:<name>`) or a
-// direct caller (`direct:<key>`). Anything else is not a key the ledger
-// can trust: the caller publishes without dedup, exactly as before.
 const SCOPE_KEY_PATTERN = /^(slot:[^:\s]+:video:.+|direct:.+)$/;
 export function isValidPublishScopeKey(value: unknown): value is string {
   return typeof value === 'string' && value.length <= 200 && SCOPE_KEY_PATTERN.test(value);
 }
 
-// The multipart field each provider's accounts arrive under. Pinned to the
-// handlers by publish-ledger.test.ts — a rename in a handler without a
-// rename here would silently skip the ledger for that provider.
 export const PUBLISH_ACCOUNT_FIELDS: Record<SocialProvider, string> = {
   youtube: 'accountIds',
   instagram: 'igAccountIds',
@@ -120,7 +76,6 @@ export async function claimPublishAttempt(
     p_lease_seconds: PUBLISH_LEDGER_LEASE_SECONDS,
     p_token: token,
   });
-  // supabase-js rpc() never throws — always check the error.
   if (error) throw new Error(`claim_publish_ledger failed: ${error.message}`);
   if (!isRecord(data)) throw new Error('claim_publish_ledger returned no result');
   const outcome = data.outcome;
@@ -144,15 +99,10 @@ export interface RecordPublishAttemptInput {
   accountResult: ContentUploadAccountResult;
 }
 
-// Delays between record attempts: a single transient RPC error must not
-// park a publish as unknown. The budget stays under a second: the record
-// is a local Postgres RPC, and the caller is already a long publish.
 export const PUBLISH_LEDGER_RECORD_RETRY_DELAYS_MS = [100, 400];
 
 export interface RecordAttemptOptions {
-  /** Total attempts including the first (default: delays + 1). */
   maxAttempts?: number;
-  /** Injectable for tests; defaults to a real setTimeout. */
   sleep?: (milliseconds: number) => Promise<void>;
 }
 
@@ -170,10 +120,6 @@ function recordOptions(options: RecordAttemptOptions): {
   };
 }
 
-// Calls a ledger RPC with bounded retries. Only a transient RPC error is
-// retried: a fencing rejection (data !== true — the claim is no longer
-// held) is final at once, because no retry can re-win a lost claim.
-// Returns true only when the RPC applied.
 async function callLedgerRpcWithRetries(
   supabase: SupabaseClient,
   fn: string,
@@ -202,11 +148,6 @@ async function callLedgerRpcWithRetries(
   return false;
 }
 
-// Records the outcome of a claimed attempt. Returns false instead of
-// throwing when the record is lost: the publish already happened, so the
-// result still goes back to the caller — and the engine's own recorded
-// success (issue #500) keeps that account from retrying. A lost record
-// only matters if the caller also times out, so it is logged loudly.
 export async function recordPublishAttempt(
   supabase: SupabaseClient,
   input: RecordPublishAttemptInput,
@@ -233,16 +174,9 @@ export interface MarkPublishUnknownInput {
   provider: string;
   accountId: string;
   claimToken: string;
-  /** Why the outcome is unknown; stored on the row for the human check. */
   error: string;
 }
 
-// Parks a claim whose post succeeded but whose record is lost, even after
-// retries: the post may already be live, so no later retry may claim a
-// fresh publish for this key. Only the token holder can park, and only
-// from in_progress — a row the winner already recorded is untouched.
-// Returns false instead of throwing when the park itself is lost: the row
-// stays in_progress, and the lease expiry remains the (unsafe) recovery.
 export async function markPublishUnknown(
   supabase: SupabaseClient,
   input: MarkPublishUnknownInput,
@@ -261,7 +195,6 @@ export async function markPublishUnknown(
   );
 }
 
-/** The per-account answer while an earlier request is still publishing it. */
 export function publishInProgressResult(accountId: string): ContentUploadAccountResult {
   return accountFailure(
     accountId,
@@ -270,7 +203,6 @@ export function publishInProgressResult(accountId: string): ContentUploadAccount
   );
 }
 
-/** The per-account answer when the post may already be live but its record was lost. */
 export function publishUnknownResult(accountId: string): ContentUploadAccountResult {
   return accountFailure(
     accountId,
@@ -289,23 +221,13 @@ export function createPublishLedgerClient(): SupabaseClient {
 export interface PublishLedgerPartition {
   scopeKey: string;
   provider: SocialProvider;
-  /** Accounts this request may publish (claim held, fenced by the token). */
   granted: Array<{ accountId: string; claimToken: string }>;
-  /** Already-published accounts with their recorded results. */
   replayed: ContentUploadAccountResult[];
-  /** Accounts still publishing under an earlier request. */
   waiting: ContentUploadAccountResult[];
-  /** Accounts parked as unknown: possibly published, never re-posted. */
   unknown: ContentUploadAccountResult[];
-  /** FormData carrying only the granted accounts, for the handler. */
   formData: FormData;
 }
 
-// Splits one upload-content call into the accounts this request may
-// publish, the ones already published (replayed from the ledger), the
-// ones still in flight, and the ones parked as unknown. The handler only
-// ever sees granted accounts: a replayed, waiting, or unknown account
-// never reaches the provider again.
 export async function partitionPublishAccounts(
   supabase: SupabaseClient,
   scopeKey: string,
@@ -333,11 +255,6 @@ export async function partitionPublishAccounts(
       }
     }
   } catch (error) {
-    // Nothing was published yet: release what this request already
-    // granted so the next retry proceeds at once instead of waiting out
-    // the 30-minute lease with no heartbeat. The release never throws
-    // (recordPublishAttempt returns false on a lost record), so the
-    // original claim error still surfaces.
     await Promise.all(
       granted.map((item) =>
         recordPublishAttempt(supabase, {
@@ -370,14 +287,6 @@ function isAccountResult(value: unknown): value is ContentUploadAccountResult {
   );
 }
 
-// Records the handler's outcome for every account this request claimed.
-// Returns the accounts whose SUCCESS result could not be recorded, even
-// after retries: the post may already be live, so the caller parks them
-// as unknown instead of letting a later retry claim a fresh publish.
-// A failed result that could not be recorded is not returned: nothing
-// was published, so the lease expiry stays the safe recovery.
-// An account the handler never reported keeps its claim: the outcome is
-// unknown, so the lease expiry — not a recorded failure — is the recovery.
 export async function recordPartitionResults(
   supabase: SupabaseClient,
   partition: PublishLedgerPartition,
@@ -404,16 +313,6 @@ export async function recordPartitionResults(
   return unrecorded;
 }
 
-// A request-level rejection (a failure carrying no accountId) means the
-// handler validated the request before publishing anything: every
-// `accountFailure('', ...)` / `rejected(...)` site is a pre-publish check
-// (missing account ids, caption, title, video file, overlong text, non-MP4).
-// Nothing was published, so release the granted claims as failed — like the
-// handler-throw path — instead of parking them for the full lease: a
-// same-key retry after fixing the request proceeds at once.
-// An account the handler never reported keeps its claim (see above): its
-// outcome is unknown, so only the explicit empty-accountId rejection
-// releases claims here.
 export async function releaseClaimsForRequestRejection(
   supabase: SupabaseClient,
   partition: PublishLedgerPartition,
@@ -446,9 +345,6 @@ export async function releaseClaimsForRequestRejection(
   );
 }
 
-// One results list for the caller: replayed posts first, then accounts
-// still in flight, then accounts parked as unknown, then what the handler
-// just published.
 export function mergePartitionResults(
   partition: PublishLedgerPartition,
   results: unknown,

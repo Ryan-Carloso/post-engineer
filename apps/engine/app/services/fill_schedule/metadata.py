@@ -34,9 +34,6 @@ def metadata_for(provider: str, title: str, schedule: dict[str, Any], descriptio
         return upload_publisher.YouTubeMetadata(
             title=title[:100],
             description=copy,
-            # Tags come from the title text itself, so they are always in
-            # the video's own language. Never empty for a real title; the
-            # pre-flight rejects degenerate titles before GPU is spent.
             tags=derive_tags_from_title(title),
             privacy_status="public",
             account_ids=tuple(str(value) for value in schedule.get("youtube_account_ids", [])),
@@ -71,8 +68,6 @@ def metadata_for(provider: str, title: str, schedule: dict[str, Any], descriptio
         )
     if provider == upload_publisher.THREESPEAK_PROVIDER:
         return upload_publisher.ThreespeakMetadata(
-            # No documented caption cap on 3Speak: the whole copy is the
-            # caption, and the web route takes the title from its first line.
             caption=copy,
             account_ids=tuple(str(value) for value in schedule.get("threespeak_account_ids", [])),
         )
@@ -148,20 +143,12 @@ def validate_publish_plan(
         elif isinstance(metadata, upload_publisher.FacebookMetadata):
             facebook = metadata
         elif isinstance(metadata, upload_publisher.PinterestMetadata):
-            # Pinterest is validated here, not in validate_publish_metadata:
-            # upload_publisher.py is at the 500-line file-size cap, so
-            # its validator takes no new provider parameter. The pre-flight
-            # is the only production caller, so this is the whole gate.
             validate_pinterest_metadata(metadata)
         elif isinstance(metadata, upload_publisher.ThreespeakMetadata):
             threespeak = metadata
         elif isinstance(metadata, upload_publisher.RumbleMetadata):
             rumble = metadata
         elif isinstance(metadata, upload_publisher.FanvueMetadata):
-            # Fanvue is validated here, not in validate_publish_metadata:
-            # upload_publisher.py is at the 500-line file-size cap, so
-            # its validator takes no new provider parameter. The pre-flight
-            # is the only production caller, so this is the whole gate.
             validate_fanvue_metadata(metadata)
     upload_publisher.validate_publish_metadata(
         providers,

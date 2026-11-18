@@ -1,10 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { resolveScriptLanguage, useUploadStore } from '@/lib/store';
 
-//---------------
-// UploadStore — unit tests for the multi-account toggle
-//---------------
-
 describe('useUploadStore', () => {
   beforeEach(() => {
     useUploadStore.setState({
@@ -323,10 +319,6 @@ describe('useUploadStore', () => {
 });
 
 describe('resolveScriptLanguage', () => {
-  // English-only launch: the locale derivation is suspended — every new
-  // persona starts in English whatever the UI locale is. These cases pin
-  // the lock; when the other languages launch, the pt/es/fr locales map
-  // to their own script language again.
   it('resolves every locale to English during the English-only launch', () => {
     expect(resolveScriptLanguage('pt')).toBe('en');
     expect(resolveScriptLanguage('pt-BR')).toBe('en');

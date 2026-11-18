@@ -1,9 +1,3 @@
-//---------------
-// `accounts` namespace of the en-US dictionary. Extracted from en.ts to
-// keep the dictionary file at its ratchet size; merged back with a spread,
-// so the keys and their parity with pt stay pinned in place.
-//---------------
-
 export const accountsI18nEn = {
   title: 'Accounts',
   subtitle: 'Connect and manage your publishing accounts.',

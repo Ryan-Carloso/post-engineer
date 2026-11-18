@@ -17,8 +17,6 @@ function validSegments() {
 
 describe('validateSegments', () => {
   it('accepts a valid hook and content takes and joins them with blank lines', () => {
-    // Full lip sync leaves media optional: these fixtures carry no media
-    // on purpose, so the content rules are what this pins.
     const result = validateSegments(validSegments(), 'full_lipsync');
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -55,9 +53,6 @@ describe('validateSegments', () => {
   });
 
   it('accepts a CTA take in the middle of the video', () => {
-    // Issue #577 acceptance: a CTA is just a content take, so it may
-    // sit anywhere after the hook — here in the middle — and the video
-    // still renders in take order.
     const segments = [
       { kind: 'hook', text: hook },
       { kind: 'content', text: cta },
@@ -117,8 +112,6 @@ describe('validateSegments', () => {
   });
 
   it('accepts short and long content takes: there is no CTA word range', () => {
-    // Issue #577: a two-word content take and a 21-word content take
-    // both pass — the old 5-20 CTA range does not apply to content takes.
     expect(
       validateSegments(
         [
@@ -148,7 +141,6 @@ describe('validateSegments', () => {
       { kind: 'content', text: 'Save this video now please.' },
     ]);
     expect(short.ok).toBe(false);
-    // Above-maximum case: every component is in range, only the total exceeds 200.
     const long = validateSegments([
       { kind: 'hook', text: Array.from({ length: 30 }, () => 'word').join(' ') + '.' },
       { kind: 'content', text: Array.from({ length: 160 }, () => 'word').join(' ') + '.' },
@@ -159,8 +151,6 @@ describe('validateSegments', () => {
   });
 
   it('rejects more than 12 segments inside the word total, via the cap rule', () => {
-    // 25 + 11*14 + 5 = 184 words: inside the 60-200 total, so the segment
-    // cap rule is what fires, not the total rule.
     const hook25 = Array.from({ length: 25 }, () => 'word').join(' ') + '.';
     const segments: Array<{ kind: string; text: string }> = [{ kind: 'hook', text: hook25 }];
     for (let i = 0; i < 11; i += 1) {
@@ -182,9 +172,6 @@ describe('validateSegments', () => {
         { kind: 'content', text: cta },
       ]).ok,
     ).toBe(false);
-    // Issue #563: at the fastest measured pace (0.330s/word, 182 wpm) a
-    // 24-word hook lasts 7.9s, under the 8s floor, so 24 words cannot
-    // always fill the 8-12s window; 25 is the smallest count that does.
     expect(
       validateSegments([
         { kind: 'hook', text: Array.from({ length: 24 }, () => 'word').join(' ') + '.' },
@@ -202,8 +189,6 @@ describe('validateSegments', () => {
   });
 
   it('rejects media with both mediaId and url', () => {
-    // Full lip sync leaves the hook media optional, so the both-fields
-    // error on the content is what fires.
     const both = validateSegments(
       [
         { kind: 'hook', text: hook },
@@ -217,8 +202,6 @@ describe('validateSegments', () => {
   });
 
   it('rejects more than 6 medias inside the word total, via the cap rule', () => {
-    // 25 + 7*14 + 5 = 128 words and 9 segments: inside the total and the
-    // segment cap, so the media cap rule is what fires.
     const hook25 = Array.from({ length: 25 }, () => 'word').join(' ') + '.';
     const segments: Array<{ kind: string; text: string; media?: Array<{ url: string }> }> = [{ kind: 'hook', text: hook25 }];
     for (let i = 0; i < 7; i += 1) {
@@ -237,8 +220,6 @@ describe('validateSegments', () => {
   });
 
   it('mirrors the engine media shape: blank values count as present, null is skipped', () => {
-    // Full lip sync leaves media optional: the shape errors are what this
-    // pins, and the null-media case reads as absent there too.
     const blankUrl = validateSegments([
       { kind: 'hook', text: hook },
       { kind: 'content', text: content, media: [{ mediaId: 'abc', url: '' }] },
@@ -289,8 +270,6 @@ describe('validateSegments', () => {
   });
 
   it('accepts a valid media shape and counts medias', () => {
-    // Full lip sync leaves media optional: the shape and the count are
-    // what this pins.
     const result = validateSegments(
       [
         { kind: 'hook', text: hook },
@@ -317,8 +296,6 @@ describe('validateSegments', () => {
   });
 
   it('rejects media with an unknown key, like the generation route does', () => {
-    // Full lip sync leaves the hook media optional, so the unknown key on
-    // the content is the error that fires.
     const result = validateSegments(
       [
         { kind: 'hook', text: hook },
@@ -333,8 +310,6 @@ describe('validateSegments', () => {
   });
 
   it('does not treat double-space or underscore differences as repeats, like the engine does', () => {
-    // The engine normalisation keeps whitespace runs and underscores, so
-    // these pairs are distinct there and must be distinct here too.
     const baseContent =
       'The hello_world kitchen in Porto serves fresh fish with local bread and sweet dessert after lunch today while guests enjoy stories music and warm light before they walk home happy tonight.';
     const doubleSpaced = validateSegments(

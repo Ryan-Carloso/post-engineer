@@ -5,15 +5,10 @@ const KEY = 'pe_live_abcdef1234567890abcdef1234567890';
 
 describe('buildInstallPrompt', () => {
   it('pins the full install prompt in each locale (agent-facing contract)', () => {
-    // The install prompt is the agent's source of truth for the MCP server:
-    // every line is asserted so prompt copy can only change deliberately.
     expect(buildInstallPrompt('en', null).split('\n')).toEqual(EXPECTED_EN_PROMPT);
     expect(buildInstallPrompt('pt', null).split('\n')).toEqual(EXPECTED_PT_PROMPT);
   });
 
-  // Issue #566: 16 intent tools. The prompt documents every tool with one
-  // bullet and names each of its actions, in both locales, or the agent
-  // silently never learns what the server offers.
   const TOOL_ACTIONS: Record<string, string[]> = {
     generate_video: [],
     video_tasks: ['status', 'list_generations', 'get_generation'],
@@ -51,8 +46,6 @@ describe('buildInstallPrompt', () => {
     expect(prompt).toContain('POST_ENGINEER_API_KEY');
     expect(prompt).toContain('"command": ["npx", "-y", "post-engineer-mcp@latest"]');
     expect(prompt).toContain('persona and account fields accept a name or an id');
-    // Recipe self-serve must be discoverable in the copied prompt: the
-    // agent learns prompts (action: list) before any improvised script.
     expect(prompt).toContain('prompts: list');
     expect(prompt).toContain('segments');
     expect(prompt).toContain('How to work with me');
@@ -63,16 +56,12 @@ describe('buildInstallPrompt', () => {
     expect(prompt).not.toContain('Clone');
     expect(prompt).not.toContain('apps/mcp/dist/index.js');
     expect(prompt).not.toContain('POST_ENGINEER_API_URL');
-    // None of the 56 removed tool names may be left in the copy agents paste.
     for (const old of ['generate_persona_video', 'list_personas', 'get_video_status', 'wait_for_video_tasks', 'list_social_accounts', 'validate_script', 'get_persona_delete_preview', 'cancel_video_task']) {
       expect(prompt, old).not.toContain(old);
     }
   });
 
   it('documents the hosted remote MCP endpoint beside the npx snippet', () => {
-    // Step 5 of issue #561: a hosted agent (ChatGPT) connects by URL, so
-    // the prompt must name the remote endpoint and the local-file actions
-    // it drops, with the signed-upload actions that replace them.
     for (const locale of ['en', 'pt'] as const) {
       const prompt = buildInstallPrompt(locale, null);
       expect(prompt, locale).toContain('https://post-engineer.com/mcp');
@@ -133,14 +122,7 @@ describe('buildInstallPrompt', () => {
       en: buildInstallPrompt('en', null),
       pt: buildInstallPrompt('pt', null),
     };
-    // The generate_video doc line is the agent's source of truth
-    // for the schedule window; EN and PT must agree on the minimum advance
-    // (regression: the PT line still advertised the old 24h window).
-    // Step 5 of the prompt carries the same window and is pinned too, plus
-    // a prompt-wide guard so no 24h copy can slip back in anywhere.
     for (const locale of ['en', 'pt'] as const) {
-      // Scoped to the window phrase: a bare '24h' token would false-fail if
-      // clock-format copy like "times (HH:MM, 24h)" is ever added to the prompt.
       expect(prompts[locale], `${locale} prompt`).not.toMatch(
         /24h\s*[-–]\s*30d|between 24h and 30|de 24h a 30/,
       );
@@ -154,9 +136,6 @@ describe('buildInstallPrompt', () => {
         .find((line) => line.startsWith('5. '));
       expect(step5Line, `${locale} prompt step 5`).toBeDefined();
       expect(step5Line, `${locale} prompt step 5`).toContain('3h');
-      // The npx install command must pin @latest in both locales: npx
-      // reuses its cached copy without checking for updates, so an
-      // unpinned command silently serves a stale server version.
       const commandLine = prompts[locale]
         .split('\n')
         .find((line) => line.includes('"command":') && line.includes('npx'));

@@ -1,9 +1,6 @@
 import { PROVIDER_LABELS } from '@/lib/account-options';
 import { isUserAccountErrorCode, type UserAccountErrorCode } from '@/lib/upload/account-error-codes';
 
-// Per-account publish notices (issue #500). The slot row keeps the raw
-// outcomes; callers show userNotices and providerFailures and drop the rest.
-
 export type PublishUserNoticeCode = UserAccountErrorCode | TerminalUserActionCode;
 
 export interface PublishUserNotice {
@@ -14,10 +11,6 @@ export interface PublishUserNotice {
   notice: string;
 }
 
-// 'publish_unknown' is terminal and needs the user to check the provider
-// before posting again, so it surfaces like a user notice even though it is
-// not a user-account code: the sync test pins USER_ACCOUNT_ERROR_CODES to
-// the engine USER_CODES, which deliberately excludes it.
 const TERMINAL_USER_ACTION_CODES = ['publish_unknown'] as const;
 type TerminalUserActionCode = (typeof TERMINAL_USER_ACTION_CODES)[number];
 
@@ -27,9 +20,6 @@ function isUserActionCode(code: string): code is PublishUserNoticeCode {
   );
 }
 
-// Every terminal account failure. requiresUser mirrors the stored outcome:
-// true for a user-account code or a terminal user-action code (the same
-// failure is in userNotices).
 export interface PublishProviderFailure {
   provider: string;
   accountId: string;
@@ -61,8 +51,6 @@ export function noticesFromOutcomes(raw: unknown): {
   const userNotices: PublishUserNotice[] = [];
   const providerFailures: PublishProviderFailure[] = [];
   if (!Array.isArray(raw)) return { userNotices, providerFailures };
-  // One outcome per (provider, account, video): a multi-video slot repeats
-  // the same account failure, which is one notice for the user.
   const seen = new Set<string>();
   for (const item of raw) {
     if (typeof item !== 'object' || item === null) continue;
@@ -93,16 +81,12 @@ export function presentPublishRow(row: Record<string, unknown>): Record<string, 
   return rest;
 }
 
-// jsonb @> filter: the outcomes array holds at least one user-account
-// failure. A string so postgrest-js sends it as JSON, not a {} array literal.
 export const USER_NOTICE_OUTCOME_FILTER = JSON.stringify([{ requiresUser: true }]);
 
 function slotAtOf(row: Record<string, unknown>): string {
   return textOf(row.slot_at);
 }
 
-// Two slot_at-ascending lists as one, still ascending and capped at limit.
-// ISO-8601 UTC timestamps sort correctly as strings.
 export function mergeBySlotAt(
   first: Record<string, unknown>[],
   second: Record<string, unknown>[],

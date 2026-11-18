@@ -22,18 +22,7 @@ import {
 import { StatusBadge, formatDate, formatTime, videoUrlFor } from './post-card';
 import { PublishAccountNotices } from './publish-user-notice';
 
-//---------------
-// PostRow — a scheduled post as ONE dense row, shared by the calendar's day
-// list and the history list: the same post reads the same way in both, and
-// a full day fits on screen. The whole row opens the post detail (no
-// repeated "open" button); the failure reason is the translated message for
-// the slot's error, never the raw engine text. The tall card stays on the
-// detail page, where there is room for the next action.
-//---------------
-
 const SLOT_VIDEO_STATUSES = new Set<ScheduledSlot['status']>(['ready', 'publishing', 'published']);
-// Progress is live data only while work runs: an awaiting post at 0% looks
-// stuck, and a ready video has nothing left to fill.
 const SLOT_PROGRESS_STATUSES = new Set<ScheduledSlot['status']>(['generating', 'publishing']);
 const MAX_STATUS_ICONS = 3;
 

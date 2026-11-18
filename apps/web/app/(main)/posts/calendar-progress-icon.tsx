@@ -1,8 +1,6 @@
 import { forwardRef } from 'react';
 import type { LucideProps } from 'lucide-react';
 
-// Partial-ring progress glyph for calendar markers and legend (not a
-// letter-like loader).
 export const CalendarProgressIcon = forwardRef<SVGSVGElement, LucideProps>(function CalendarProgressIcon(
   { className, strokeWidth: _strokeWidth, ...rest },
   ref,

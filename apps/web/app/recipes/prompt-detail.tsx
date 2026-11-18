@@ -5,20 +5,6 @@ import { useI18n } from '@/lib/i18n/provider';
 import type { PromptEntry } from './prompts';
 import CopyPromptBlock from './copy-prompt-block';
 
-//---------------
-// PromptDetail — one prompt's detail page content, rendered from
-// a PromptEntry. Order is fixed: baby steps first (what the prompt
-// does, why it serves, who it is for — short numbered steps, no
-// preamble), then what you get, then an example, then the full
-// prompt with the big copy button. Nothing is hidden: the steps
-// lead for quick understanding, the full text follows for whoever
-// wants to read everything. GitHub is only a small secondary link
-// at the bottom, never the main action. The steps use short
-// sentences and state first; no internal style-skill name appears
-// in user-facing copy here — MCP tool names are public and
-// expected inside the copy-ready prompt.
-//---------------
-
 export default function PromptDetail({ prompt }: { prompt: PromptEntry }) {
   const { t } = useI18n();
 

@@ -95,9 +95,6 @@ class TestMemoryState(unittest.TestCase):
         self.assertEqual(state.get_task("task-1")["videos"], ["first.mp4"])
 
     def test_kwargs_only_update_preserves_state_and_progress(self):
-        # Regression: a kwargs-only update_task() call (e.g. setting
-        # music_mood mid-pipeline) must not reset progress to 0 — the web
-        # once showed 40% (subtitle) dropping to 0% (music_mood) because of it.
         state = MemoryState()
         state.update_task(
             "task-1", state=const.TASK_STATE_PROCESSING, progress=40
@@ -198,8 +195,6 @@ class TestRedisState(unittest.TestCase):
         )
 
     def test_kwargs_only_update_preserves_state_and_progress(self):
-        # Same regression as the MemoryState case: setting music_mood must
-        # not reset progress to 0.
         state = self._build_state([1])
         state.update_task("task:0", state=const.TASK_STATE_PROCESSING, progress=40)
         state.update_task("task:0", music_mood="chill")
@@ -210,8 +205,6 @@ class TestRedisState(unittest.TestCase):
         self.assertEqual(task["music_mood"], "chill")
 
     def test_cancelled_update_writes_nothing_to_redis(self):
-        # A cancelled task's row is gone on purpose: a late progress write
-        # from the doomed worker must not resurrect it (issue #447).
         state = self._build_state([1])
         request_cancel("task:0")
         state.update_task("task:0", state=const.TASK_STATE_COMPLETE, progress=100)

@@ -29,11 +29,6 @@ import {
   handleListPosts,
 } from './tools-posts.js';
 
-//---------------
-// schedules, posts, insights and billing (issue #566): what you have
-// scheduled, what was published, how it performed, and what it cost.
-//---------------
-
 const SCHEDULES_SPECS = {
   list: ListSchedulesShape,
   cancel: CancelScheduleShape,

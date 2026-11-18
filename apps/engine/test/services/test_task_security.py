@@ -72,9 +72,6 @@ class TestPersonaImageDownloadSecurity(unittest.TestCase):
                 return_value=("intro.mp4", 0.05, "job-1", None),
             ),
             patch.object(tm.video, "replace_video_intro_with_lipsync", return_value="final.mp4"),
-            # The face gate is orthogonal to the download security pinned
-            # here (and the fake image bytes are not a decodable photo):
-            # the gate has its own tests in test_persona_preflight.py.
             patch("app.services.face_detect.image_contains_face", return_value=True),
         ]
         self.started = [p.start() for p in patches]
@@ -119,8 +116,6 @@ class TestPersonaImageDownloadSecurity(unittest.TestCase):
         self.assertGreater(os.path.getsize(os.path.join(self.tmp, files[0])), 0)
 
     def test_resolves_house_face_path_against_the_web_base_url(self):
-        # The web persona picker stores house faces as a path relative to the
-        # web app; the engine fetches them from the web's public URL.
         with patch.dict(os.environ, {"MPT_UPLOAD_API_BASE_URL": "https://web.example.com/"}):
             result, _, _, _ = self._run("/caracter-samples/file-3.png")
         self.assertEqual(result, "final.mp4")
@@ -188,16 +183,12 @@ class TestResolveCustomAudioFile(unittest.TestCase):
             self._resolve("/etc/hostname")
 
     def test_rejects_absolute_path_inside_allowed_dir(self):
-        # Even an absolute path that lands inside an allowed directory is
-        # rejected: callers must pass a basename, never a host path.
         inside = self._touch(self.tmp, "custom.mp3")
         self.assertTrue(os.path.isabs(inside))
         with self.assertRaises(ValueError):
             self._resolve(inside)
 
     def test_rejects_symlink_escape(self):
-        # A symlink inside the task dir pointing to a file outside it must
-        # be rejected.
         outside = os.path.join(os.path.dirname(self.tmp), "secret-audio.mp3")
         with open(outside, "wb") as f:
             f.write(b"\x00" * 16)
@@ -212,7 +203,6 @@ class TestResolveCustomAudioFile(unittest.TestCase):
             self._resolve("../escape.mp3")
 
     def test_rejects_unrelated_project_file(self):
-        # An existing file outside both allowed directories must be rejected.
         sibling = os.path.join(os.path.dirname(self.tmp), "sibling.txt")
         with open(sibling, "w") as f:
             f.write("x")

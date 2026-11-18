@@ -27,8 +27,6 @@ class ThreespeakPublishParamsTest(unittest.TestCase):
             PublishParams(providers=["3speak"])
 
     def test_accepts_a_long_caption_and_rejects_an_empty_one(self) -> None:
-        # 3Speak has no documented caption cap: a 70k-character caption is
-        # accepted whole, while an empty one is rejected.
         ThreespeakPublish(caption="a" * 70000, account_ids=["alice"])
         with self.assertRaises(ValidationError):
             ThreespeakPublish(caption="", account_ids=["alice"])
@@ -43,7 +41,6 @@ class PublishThreespeakModuleTest(unittest.TestCase):
             validate(publish_threespeak.ThreespeakMetadata(caption="post", account_ids=()))
         with self.assertRaisesRegex(ValueError, "3speak publish requires a non-empty caption"):
             validate(publish_threespeak.ThreespeakMetadata(caption="   ", account_ids=("alice",)))
-        # A long caption is valid: no cap to enforce.
         validate(publish_threespeak.ThreespeakMetadata(caption="a" * 70000, account_ids=("alice",)))
 
     def test_account_ids_are_normalized_to_a_tuple(self) -> None:

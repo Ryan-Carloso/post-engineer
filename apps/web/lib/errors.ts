@@ -19,7 +19,6 @@ export class AuthError extends Error {
   }
 }
 
-// The user's social account row is gone (disconnected or never connected).
 export class AccountNotFoundError extends Error {
   constructor(message: string) {
     super(message);
@@ -53,13 +52,7 @@ export class InstagramApiError extends Error {
     message: string,
     public statusCode: number,
     public instagramError?: Error,
-    // Meta's numeric error code (e.g. 190 for a dead token), preserved so
-    // isUnauthorizedError can tell it apart from any other HTTP 400. Named
-    // `providerCode`, not `code`: httpStatusOf reads a numeric `code` as an
-    // HTTP status, and 190 is not one.
     public providerCode?: number,
-    // Meta's `error_subcode` (e.g. 33 on code 100 for a deleted object).
-    // Named `providerSubcode`, not `code` or `subcode`: same rule.
     public providerSubcode?: number
   ) {
     super(message);
@@ -82,9 +75,7 @@ export class ThreadsError extends Error {
   constructor(
     message: string,
     public statusCode: number,
-    // Meta's numeric error code (e.g. 190 for a dead token). See InstagramApiError.
     public providerCode?: number,
-    // Meta's `error_subcode` (e.g. 33 on code 100). See InstagramApiError.
     public providerSubcode?: number
   ) {
     super(message);
@@ -96,9 +87,7 @@ export class FacebookError extends Error {
   constructor(
     message: string,
     public statusCode: number,
-    // Meta's numeric error code (e.g. 190 for a dead token). See InstagramApiError.
     public providerCode?: number,
-    // Meta's `error_subcode` (e.g. 33 on code 100). See InstagramApiError.
     public providerSubcode?: number
   ) {
     super(message);
@@ -136,10 +125,6 @@ export class NetworkError extends Error {
     this.name = 'NetworkError';
   }
 }
-
-//---------------
-// Enhanced error types for debugging and logging
-//---------------
 
 interface DebuggableError extends Error {
   cause?: unknown;
@@ -273,10 +258,6 @@ export function getErrorSuggestions(error: Error): string[] {
 
   return suggestions;
 }
-// A fetch whose response failed, carrying the HTTP status so a retry policy
-// (lib/query-retry) can tell a permanent client error (4xx) from a
-// transient one (5xx). A 2xx answer with an unsuccessful body keeps its 2xx
-// status and is treated as transient.
 export class HttpStatusError extends Error {
   constructor(message: string, public status: number) {
     super(message);

@@ -6,17 +6,6 @@ import {
 } from './client-publishing-accounts.js';
 import { handleLibraryCall, type McpToolResponse } from './tools.js';
 
-//---------------
-// Per-persona bound publishing accounts (issue #212; made mandatory by
-// issue #572) — MCP tools.
-//
-// Since issue #212, omitting all four provider account-id fields in
-// generate_video falls back to the persona's bound publishing
-// accounts (set via accounts (action: set_persona_publishing)); explicit ids must
-// be a subset of the binding. The binding as a whole must keep at least
-// one account: it can never be emptied.
-//---------------
-
 export const GetPersonaPublishingAccountsShape = {
   personaId: z
     .string()

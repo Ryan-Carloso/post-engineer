@@ -4,8 +4,6 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import * as React from 'react';
 import type { ReactNode } from 'react';
 
-// Recharts' ResponsiveContainer never gets a size in jsdom: stub it with a
-// fixed-size clone (same as chart.test.tsx); the chart itself is real.
 vi.mock('recharts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('recharts')>();
   function ResponsiveContainerStub({ children }: { children: ReactNode }): React.ReactElement {

@@ -2,13 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { readBody } from '@/lib/contracts-server';
 import { createExperiment } from '@/lib/contracts/experiments';
 
-//---------------
-// readBody: the shared-contract body reader. The route (POST
-// /api/experiments) now goes through it, so its 400 behavior is pinned
-// here directly: invalid JSON, the first-issue message, the field
-// extra and the VALIDATION_FAILED code must stay exact.
-//---------------
-
 const VARIANTS = [
   { variantId: 'hook-calm', name: 'Calm', description: 'calm' },
   { variantId: 'hook-aggressive', name: 'Aggressive', description: 'direct' },

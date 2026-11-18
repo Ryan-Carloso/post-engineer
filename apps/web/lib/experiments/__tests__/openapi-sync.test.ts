@@ -10,13 +10,6 @@ import {
 } from '@/lib/experiments/limits';
 import { experimentLinkSchema, experimentOperationSchemas } from '../../../scripts/openapi-experiments-schemas.mjs';
 
-//---------------
-// The OpenAPI schemas repeat the experiment limits as literals (the
-// generator is plain .mjs and cannot import TypeScript). Pin them to
-// limits.ts so the published contract never drifts from what the routes
-// accept.
-//---------------
-
 interface Schema {
   properties: Record<string, Record<string, unknown> & { items?: Schema }>;
 }

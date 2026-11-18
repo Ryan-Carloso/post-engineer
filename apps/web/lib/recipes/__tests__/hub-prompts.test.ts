@@ -3,12 +3,6 @@ import { PROMPTS } from '@/app/recipes/prompts';
 import { recipesI18nEn } from '@/lib/i18n/recipes-i18n-en';
 import { findHubPrompt, listHubPrompts } from '../hub-prompts';
 
-//---------------
-// The MCP-facing recipe catalog is derived from the web hub: every PROMPTS
-// entry is served, in order, with its English title (titleKey) and
-// description (objectiveKey) and the exact prompt text.
-//---------------
-
 const english = new Map<string, string>(Object.entries(recipesI18nEn));
 
 function englishCopy(key: string): string | undefined {

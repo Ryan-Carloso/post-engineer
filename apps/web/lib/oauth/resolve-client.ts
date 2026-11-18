@@ -3,11 +3,6 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { isCimdClientId, fetchCimdDocument } from './clients';
 
-//---------------
-// resolveClient — DCR first (database), CIMD second (fetch, stateless).
-// Returns null when the client is unknown or the document is invalid.
-//---------------
-
 export interface ResolvedOAuthClient {
   clientName: string;
   redirectUris: string[];

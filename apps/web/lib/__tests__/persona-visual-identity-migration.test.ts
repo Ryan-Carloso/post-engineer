@@ -3,20 +3,6 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { findRepoRoot } from '@/test/repo-root';
 
-//---------------
-// supabase/migrations/005_persona-visual-identity.sql — the invariant the app
-// depends on when PATCH swaps a persona's face.
-//
-// The production database got this constraint by hand, so it was invisible to
-// the migration chain (what self-hosters run) AND to CI. These assertions pin
-// the two halves of the contract:
-//
-//   1. the SQL file declares the constraint, and
-//   2. PATCH /api/persona swaps both columns in ONE update (setting only the
-//      new one is what violated the check and 500'd every save of a photo
-//      persona).
-//---------------
-
 const migrationPath = join(
   findRepoRoot(import.meta.url),
   'supabase',
@@ -39,12 +25,8 @@ describe('supabase/migrations/005_persona-visual-identity.sql', () => {
     const sql = readFileSync(migrationPath, 'utf8');
 
     expect(sql).toContain('personas_visual_identity_check');
-    // Guarded on pg_constraint: re-running the file must not fail with
-    // "constraint already exists" (self-hosters re-run migrations).
     expect(sql).toContain('pg_constraint');
     expect(sql).toContain('if not exists');
-    // "Never both", NOT "exactly one": a faceless persona (mix 0, no photo,
-    // no character) is legitimate and creatable via API/MCP.
     expect(sql).toContain('check (photo_path is null or avatar_url is null)');
     expect(sql).not.toContain('= 1) not valid');
   });
@@ -52,7 +34,6 @@ describe('supabase/migrations/005_persona-visual-identity.sql', () => {
   it('repairs rows that already carry two faces before enforcing', () => {
     const sql = readFileSync(migrationPath, 'utf8');
 
-    // The repair must run before ADD CONSTRAINT or the add fails.
     const repairIndex = sql.indexOf('set avatar_url = null');
     const constraintIndex = sql.indexOf('add constraint personas_visual_identity_check');
     expect(repairIndex).toBeGreaterThan(-1);
@@ -64,18 +45,11 @@ describe('PATCH /api/persona — the identity swap the constraint requires', () 
   it('sets avatar_url and clears photo_path in the same update', async () => {
     const route = readFileSync(routePath, 'utf8');
 
-    // Find the avatar branch and require the clear next to the set: two
-    // separate statements would race (and the second one alone is what left
-    // the row with both columns set).
     const branch = route.slice(route.indexOf('} else if (patch.avatarUrl !== null) {'));
-    // Remote ingest may store a photo_path; samples keep avatar_url. Both
-    // columns are written in this one update so the XOR check cannot fire.
     const setAvatar = branch.indexOf('updates.avatar_url = resolved.avatarUrl;');
     const setPhoto = branch.indexOf('updates.photo_path = resolved.photoPath;');
     expect(setAvatar).toBeGreaterThan(-1);
     expect(setPhoto).toBeGreaterThan(setAvatar);
-    // The stale photo is removed only after the swap succeeded (the cleanup
-    // list is applied post-update), never before.
     expect(branch.indexOf('stalePaths.push(persona.photo_path)')).toBeGreaterThan(setPhoto);
   });
 

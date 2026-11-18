@@ -4,11 +4,6 @@ vi.mock('@/lib/supabase/server', () => ({
   createSupabaseServerClient: vi.fn(),
 }));
 
-//---------------
-// DELETE /api/persona/video-task/:taskId — cancels/removes the task on the
-// engine. Auth: Supabase cookie session.
-//---------------
-
 import { DELETE } from '../video-task/[taskId]/route';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 

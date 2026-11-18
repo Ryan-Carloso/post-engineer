@@ -2,12 +2,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { HttpStatusError } from './errors';
 
-//---------------
-// API keys — typed fetch clients + React Query hooks for /api/api-keys.
-// Extracted from lib/api.ts (issue #385 work); consumers keep importing
-// through the '@/lib/api' re-export.
-//---------------
-
 export interface ApiKeyItem {
   id: string;
   name: string;

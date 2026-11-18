@@ -13,13 +13,6 @@ import { PostEngineerClient } from '../client.js';
 import { GeneratePersonaVideoSchema } from '../single-video-shape.js';
 import { handleGeneratePersonaVideo } from '../tools-single-video.js';
 
-//---------------
-// options.musicMood — background-music mood for the video. The web route
-// already accepts options.musicMood; the MCP options object is a zod
-// object, which strips unknown keys, so before this field existed an MCP
-// caller's request was dropped silently and the video rendered with the
-// engine's default mood instead of the requested one.
-//---------------
 const hook =
   'Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is still waiting nearby for you today.';
 const content =
@@ -133,9 +126,6 @@ describe('generate_persona_video options.musicMood', () => {
   });
 
   it('relays a web 400 for an unknown mood to the agent with the valid moods listed', async () => {
-    // The web rejects an unknown mood pre-charge with the list of valid
-    // moods; the MCP relays it through errors.ts (200-char cap), so the
-    // agent sees the reason, not a generic failure.
     const webBody = JSON.stringify({
       success: false,
       code: 'validation_failed',
@@ -156,8 +146,6 @@ describe('generate_persona_video options.musicMood', () => {
   });
 
   it('relays a web 400 for an unknown video_type to the agent with the modes and costs listed', async () => {
-    // Same relay path as the mood: the short video_type message must
-    // arrive whole, costs included, under the 200-char cap.
     const webBody = JSON.stringify({
       success: false,
       code: 'validation_failed',

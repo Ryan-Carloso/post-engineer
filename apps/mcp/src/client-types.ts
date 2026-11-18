@@ -1,8 +1,3 @@
-// Input/output shapes for the Post Engineer API client.
-//
-// Extracted from client.ts so the client module stays under the file-size
-// ratchet. client.ts re-exports every name here, so existing import sites
-// (`./client.js`) keep working.
 import { VIDEO_LAYOUTS } from './limits.js';
 import type { FaceQuality, VideoAspect } from './contracts/personas.js';
 import type { VideoType } from './video-type.js';
@@ -13,39 +8,21 @@ export type { VideoType } from './video-type.js';
 export interface PostEngineerClientOptions {
   apiKey?: string;
   baseUrl?: string;
-  /** Clock override used by schedule validation (tests); defaults to the real clock. */
   now?: () => Date;
-  /**
-   * Suppress the X-MCP-Version header. Only the remote (HTTP) factory sets
-   * this: the package version (MAJOR.MINOR.PATCH) never equals the web
-   * gate's generated MAJOR.MINOR.PR requirement, so sending it would 426
-   * the remote's own calls. Stdio keeps sending it (the default).
-   */
   suppressVersionHeader?: boolean;
 }
 
-/** One image for a persona's image library, read from a local file. */
 export interface PersonaLibraryImageInput {
-  /** Local file path (JPG/JPEG, PNG, or WebP, max 10MB). */
   path: string;
-  /** Short tag for deterministic per-video matching (e.g. casual, formal). */
   tag?: string;
-  /** Description of the photo for keyword matching. */
   description?: string;
 }
 
-/**
- * How the persona hook is composed with the video material. Mirrors the server's
- * accepted values so an unknown layout is a compile error here rather than
- * a 400 from the API.
- */
 export type VideoLayout = (typeof VIDEO_LAYOUTS)[number];
 
 export interface CreatePersonaInput {
   name: string;
-  /** Every persona has a face: exactly one of avatarUrl or avatarPath. */
   avatarUrl?: string;
-  /** Local face photo, uploaded as the multipart `photo` file. */
   avatarPath?: string;
   voiceId: string;
   language?: string;
@@ -55,31 +32,15 @@ export interface CreatePersonaInput {
   paragraphNumber?: number;
   niche?: string;
   faceQuality?: FaceQuality;
-  /**
-   * Bound publishing accounts per provider (issue #572, required): at
-   * least one account, e.g. { youtube: ['UC...'] }. The persona publishes
-   * only to bound accounts; a persona with no bound account cannot exist.
-   */
   accounts: Record<string, string[]>;
-  /** Up to 10 local images of the same person for the image library. */
   images?: PersonaLibraryImageInput[];
-  /** Index into images[] marking the primary library image. */
   imagePrimaryIndex?: number;
 }
 
 export interface GeneratePersonaVideoInput {
-  /**
-   * Optional. Omit it for a faceless post defined entirely by `options` —
-   * the persona is then not just a face: it is where the voice, the
-   * aspect ratio and the niche come from. A post without one
-   * MUST set options.videoType to 'faceless' and one of options.voiceId / options.audioUrl.
-   */
   personaId?: string;
-  /** The slot label for the single video. */
   title: string;
-  /** Agent-supplied video description (issue #542 follow-up): the publish copy. Required — there is no fallback to the title. */
   description: string;
-  /** Paired A/B experiment link (issue #476); checked server-side before the charge. */
   experiment?: { experimentId: string; variantId: string; pair: number };
   providers: SocialProvider[];
   youtubeAccountIds?: string[];
@@ -89,27 +50,16 @@ export interface GeneratePersonaVideoInput {
   threadsAccountIds?: string[];
   facebookAccountIds?: string[];
   pinterestAccountIds?: string[];
-  /** Pinterest only: the board the pin goes to (the id from accounts (action: list_boards)). Required when pinterest is selected. */
   pinterestBoardId?: string;
   fanvueAccountIds?: string[];
   threespeakAccountIds?: string[];
   rumbleAccountIds?: string[];
-  /**
-   * Publish mode. 'scheduled' (default) slots the video at startAt + times;
-   * 'asap' publishes it the moment generation finishes, with no scheduled
-   * time. In 'asap' mode startAt/times must not be set.
-   */
   mode?: 'scheduled' | 'asap';
-  /** ISO datetime when the publish slot may start; naive values are wall-clock in timezone. Required unless mode is 'asap'. */
   startAt?: string;
-  /** Daily publish times (HH:MM, 24h). Required unless mode is 'asap'. */
   times?: string[];
-  /** IANA timezone for a naive startAt and the times (display-only in 'asap' mode). Defaults to UTC. */
   timezone?: string;
   options?: {
-    /** The one video mode: full_lipsync, hook_lipsync or faceless. Required — it decides the render path and the price. */
     videoType: VideoType;
-    /** Background-music mood: a mood from the engine BGM catalog, or "none" for explicit no music. Omitted lets the engine pick the first catalogued mood. */
     musicMood?: string;
     audioUrl?: string;
     imageId?: string;
@@ -120,14 +70,12 @@ export interface GeneratePersonaVideoInput {
     paragraphNumber?: number;
     language?: string;
     niche?: string;
-    /** Segments script (MCP first, Phase 1): first hook, then content takes in order. Validated by the web route before any token debit. */
     segments?: Array<{
       kind: 'hook' | 'content';
       text: string;
       media?: Array<{ mediaId?: string; url?: string; overlay?: { title: string; subtitle?: string; badge?: string } }>;
     }>;
   };
-  /** Omitted: a UUID is generated per call, so a retry cannot double-generate. */
   idempotencyKey?: string;
 }
 
@@ -146,57 +94,31 @@ export interface UpdatePersonaInput {
   faceQuality?: FaceQuality;
 }
 
-/** Input for publishing a user-provided video directly, without generation. */
 export interface PublishVideoDirectInput {
   provider: SocialProvider;
-  /** Local path to the video file (.mp4 or .mov, max 2GB). */
   videoPath: string;
-  /** Target accounts (channel IDs / IG user IDs / DIDs / LinkedIn member IDs or org URNs / Threads user IDs / Facebook Page IDs / Pinterest user IDs / Fanvue account IDs / Hive usernames / Rumble Channel IDs). */
   accountIds: string[];
-  /** YouTube, Rumble and Fanvue: required. Pinterest: pin title (optional). */
   title?: string;
-  /** YouTube, Rumble and Fanvue: required. Pinterest: pin description (optional; caption is used when omitted). */
   description?: string;
-  /** YouTube only: required, at least one tag. */
   tags?: string[];
-  /** YouTube only: required. */
   privacyStatus?: 'public' | 'private' | 'unlisted';
-  /** Instagram/Bluesky/LinkedIn/Threads/Facebook/3Speak: required. Pinterest: pin description when description is omitted. */
   caption?: string;
-  /** Pinterest only: required. The board the pin goes to (the id from accounts (action: list_boards)). */
   boardId?: string;
-  /**
-   * Omitted: a UUID is generated per call. Reuse the same key when retrying
-   * a timed-out call so the server replays the original result instead of
-   * publishing the video again. Exception: a result with errorCode
-   * publish_unknown means the post may already be live but its record was
-   * lost — do not retry it, check the provider account first.
-   */
   idempotencyKey?: string;
 }
 
-/** Input for publishing a signed-upload video by id, without generation. */
 export interface PublishUploadedVideoInput {
   provider: SocialProvider;
-  /** The uploadId of a completed signed upload (create + complete). Single-use. */
   uploadId: string;
-  /** Target accounts (same IDs as PublishVideoDirectInput). */
   accountIds: string[];
-  /** YouTube, Rumble and Fanvue: required. Pinterest: pin title (optional). */
   title?: string;
-  /** YouTube, Rumble and Fanvue: required. Pinterest: pin description (optional; caption is used when omitted). */
   description?: string;
-  /** YouTube only: required, at least one tag. */
   tags?: string[];
-  /** YouTube only: required. */
   privacyStatus?: 'public' | 'private' | 'unlisted';
-  /** Instagram/Bluesky/LinkedIn/Threads/Facebook/3Speak: required. Pinterest: pin description when description is omitted. */
   caption?: string;
-  /** Pinterest only: required. The board the pin goes to (the id from accounts (action: list_boards)). */
   boardId?: string;
 }
 
-/** A minted signed video upload: PUT the bytes to signedUrl, then complete. */
 export interface MintedVideoUpload {
   uploadId: string;
   signedUrl: string;
@@ -205,7 +127,6 @@ export interface MintedVideoUpload {
   maxBytes: number;
 }
 
-/** A completed (verified) signed video upload, ready to publish by id. */
 export interface CompletedVideoUpload {
   uploadId: string;
   status: 'ready';
@@ -213,31 +134,25 @@ export interface CompletedVideoUpload {
   sizeBytes: number;
 }
 
-/** POST /api/media/publish-existing body fields, built by the publish_existing handler once every reference is resolved. */
 export interface PublishExistingInput {
   media:
     | { kind: 'task'; taskId: string }
     | { kind: 'upload'; uploadId: string }
     | { kind: 'image'; imageData: string; contentType: 'image/jpeg' | 'image/png' };
-  /** Resolved account ids per network; the networks are its keys. */
   accounts: Partial<Record<SocialProvider, string[]>>;
   title: string;
   description: string;
-  /** Caption-network text override; the server falls back to description. */
   caption?: string;
   personaId?: string;
   mode: 'asap' | 'scheduled';
-  /** mode scheduled: the one publish moment (wall-clock in timezone, or with an offset). */
   publishAt?: string;
   timezone: string;
   tags?: string[];
   privacyStatus?: 'public' | 'private' | 'unlisted';
   boardId?: string;
-  /** Sent on every call: a retry with the same key replays the original result (schedule or recorded posts). */
   idempotencyKey: string;
 }
 
-/** One scheduled slot from POST /api/media/publish-existing. */
 export interface PublishExistingSlot {
   id: string;
   slot_at: string;
@@ -245,13 +160,11 @@ export interface PublishExistingSlot {
   status: string;
 }
 
-/** A stored login is already dead. The slot was still scheduled. */
 export interface PublishExistingReconnectWarning {
   code: 'account_needs_reconnect';
   accounts: Array<{ provider: string; accountId: string }>;
 }
 
-/** Narrowed POST /api/media/publish-existing response. */
 export type PublishExistingResult =
   | {
       mode: 'scheduled';
@@ -264,28 +177,23 @@ export type PublishExistingResult =
   | {
       mode: 'asap';
       success: boolean;
-      /** True when every account answered from the publish ledger: nothing was posted again. */
       replayed: boolean;
       mediaKind: 'task' | 'upload' | 'image';
       publishes: Array<{ provider: string; success: boolean; results: DirectPublishAccountResult[] }>;
       logId: string;
     };
 
-/** One per-account outcome from a direct-publish upload. */
 export interface DirectPublishAccountResult {
   accountId: string;
   success: boolean;
   videoId?: string;
   videoUrl?: string;
   postId?: string;
-  /** Ready-made post URL (Pinterest pin URL, Instagram/Threads/Facebook permalink). */
   permalink?: string;
   error?: string;
-  /** Stable failure code (e.g. publish_unknown: the post may already be live but its record was lost — do not retry). */
   errorCode?: string;
 }
 
-/** Narrowed POST /api/upload-content response. */
 export interface DirectPublishResult {
   success: boolean;
   provider: string;

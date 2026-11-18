@@ -1,8 +1,4 @@
 // @vitest-environment node
-//---------------
-// posthog-server — node-environment proof that the server client
-// initializes over posthog-node (the server SDK), not posthog-js.
-//---------------
 
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -46,22 +42,13 @@ describe('getPostHogServer (node runtime)', () => {
 
   it('is built on posthog-node, never posthog-js', () => {
     const source = readFileSync(path.resolve(process.cwd(), 'lib/posthog-server.ts'), 'utf8');
-    // posthog-node is lazy-loaded via a webpackIgnore-marked dynamic import
-    // (see the test below); posthog-js must never appear — the server SDK
-    // is the only client used here.
     expect(source).not.toContain("from 'posthog-js'");
     expect(source).not.toContain('from "posthog-js"');
     expect(source).not.toMatch(/^\s*import .* from ['"]posthog-node['"]/m);
   });
 
   it('marks the posthog-node dynamic import with webpackIgnore: true', () => {
-    // Regression: a plain dynamic import() is still statically analyzed by
-    // webpack, which resolves 'posthog-node' at build time and bundles the
-    // Node-only SDK (no browser export condition) into the client chunk —
-    // the build then fails on node:fs / node:os / node:path
     // (UnhandledSchemeError). webpackIgnore: true keeps the import() native
-    // so Node resolves it at runtime on the server; the browser never
-    // reaches it (typeof window guard in getPostHogServer/flushPostHog).
     const source = readFileSync(path.resolve(process.cwd(), 'lib/posthog-server.ts'), 'utf8');
     const dynamicImports = [...source.matchAll(/import\(([\s\S]*?)\)/g)];
     const posthogImports = dynamicImports.filter((m) => m[1].includes('posthog-node'));
@@ -117,12 +104,6 @@ describe('isPostHogServerConfigured', () => {
 });
 
 describe('capture delivery (posthog-node v5 has no automatic flush)', () => {
-  // Regression: posthog-node v5 removed the v3/v4 `flushAt` option and runs
-  // no background flush timer — `flushInterval` is accepted but never used,
-  // and the debounced flush requires the serverless `waitUntil` option.
-  // Captured events sat in the in-memory queue forever (zero server_success
-  // events ever reached PostHog), so the client must flush explicitly after
-  // every capture.
   const originalEnv = { ...process.env };
 
   beforeEach(() => {
@@ -142,8 +123,6 @@ describe('capture delivery (posthog-node v5 has no automatic flush)', () => {
 
   it('flushes the SDK after capture so the event is delivered', async () => {
     const { PostHog } = await import('posthog-node');
-    // Mock the network-touching flush; the assertion is that flush is
-    // *called*, which is what moves the event out of the queue.
     const flushSpy = vi.spyOn(PostHog.prototype, 'flush').mockResolvedValue(undefined);
     const client = getPostHogServer();
     expect(client).not.toBeNull();
@@ -165,19 +144,12 @@ describe('capture delivery (posthog-node v5 has no automatic flush)', () => {
   });
 
   it('does not pass the stale flushAt option (ignored by posthog-node v5)', () => {
-    // `flushAt` was a v3/v4 option ("flush after N captures"). v5 ignores it
-    // silently — the old code passed it believing it flushed on every capture
-    // while events were never delivered. Fail if the option comes back
-    // (mentions in comments are fine).
     const source = readFileSync(path.resolve(process.cwd(), 'lib/posthog-server.ts'), 'utf8');
     expect(source).not.toMatch(/flushAt\s*:/);
   });
 });
 
 describe('telemetry origin tags (source + environment)', () => {
-  // Every server-side capture must carry where it came from (source) and
-  // which deployment produced it (environment) so PostHog dashboards can
-  // split MCP / web-server / web-client / engine traffic and prod / dev.
   const originalEnv = { ...process.env };
 
   beforeEach(() => {
@@ -211,7 +183,6 @@ describe('telemetry origin tags (source + environment)', () => {
       source: 'web-server',
       environment: 'development',
     });
-    // Caller properties survive alongside the tags.
     expect(args.properties).toMatchObject({ route: 'GET /api/version', status: 200 });
   });
 
@@ -239,7 +210,6 @@ describe('telemetry origin tags (source + environment)', () => {
     client?.captureException(new Error('boom'), { route: 'GET /api/test' });
 
     await vi.waitFor(() => expect(captureSpy).toHaveBeenCalled());
-    // posthog-node captureException(error, distinctId, properties).
     const args = captureSpy.mock.calls[0] as unknown as [
       unknown,
       string,
@@ -259,7 +229,6 @@ describe('telemetry origin tags (source + environment)', () => {
     client?.captureExceptionAs('user-123', new Error('boom'), { route: 'GET /api/test' });
 
     await vi.waitFor(() => expect(captureSpy).toHaveBeenCalled());
-    // posthog-node captureException(error, distinctId, properties).
     const args = captureSpy.mock.calls[0] as unknown as [
       unknown,
       string,

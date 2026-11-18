@@ -23,8 +23,6 @@ import { CheckIcon, MicIcon, SpinnerIcon, TrashIcon } from '@/lib/ui';
 import { useDenoisePreview } from './use-denoise-preview';
 
 const POLL_MS = 2500;
-// English-only launch: clones are always registered in English — the
-// form has no clone-language picker.
 const CLONE_LANGUAGE = 'en';
 const RECORD_SOFT_LIMIT_SECONDS = 45;
 
@@ -58,7 +56,6 @@ function formatTimer(seconds: number): string {
 
 export { VoiceTabButton };
 
-/** Clone-my-voice tab panel (house grid is rendered by the parent). */
 export const PersonaVoiceClonePanel = () => {
   const { t } = useI18n();
   const queryClient = useQueryClient();
@@ -70,9 +67,6 @@ export const PersonaVoiceClonePanel = () => {
   const [previewBlobUrl, setPreviewBlobUrl] = useState<string | null>(null);
   const [pendingBlob, setPendingBlob] = useState<Blob | null>(null);
   const [activeCloneId, setActiveCloneId] = useState<string | null>(null);
-  // Clean (denoise) is on by default: phone recordings carry noise the clone
-  // would copy. The cleaned take is fetched for an A/B listen; the engine
-  // applies the same filter when the clone is created with denoise on.
   const [denoise, setDenoise] = useState(true);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordChunksRef = useRef<Blob[]>([]);
@@ -134,8 +128,6 @@ export const PersonaVoiceClonePanel = () => {
       }
       const deletedClone = listQuery.data?.find((clone) => clone.id === deletedCloneId);
       const deletedVoiceId = deletedClone?.voice_id;
-      // Compare keys, not full ids: a persona stored before the
-      // chatterbox_nano: rename holds chatterbox:<key> for the same clone.
       if (
         deletedVoiceId !== null &&
         deletedVoiceId !== undefined &&
@@ -215,8 +207,6 @@ export const PersonaVoiceClonePanel = () => {
     }
     const validation = validateCloneReferenceBuffer(new Uint8Array(await file.arrayBuffer()));
     if (!validation.ok) {
-      // A failed pick must not leave a previous recording/pick submittable
-      // behind the error message.
       setPendingBlob(null);
       if (previewBlobUrl) {
         URL.revokeObjectURL(previewBlobUrl);
@@ -247,9 +237,6 @@ export const PersonaVoiceClonePanel = () => {
 
   const playServerPreview = (clone: ClonedVoicePublicRow) => {
     previewAudioRef.current?.pause();
-    // No language override: the engine previews in the clone's registered
-    // language, and an override from a legacy non-English clone would be
-    // rejected by the English-only gate.
     const audio = new Audio(clonedVoicePreviewUrl(clone.id, null));
     previewAudioRef.current = audio;
     void audio.play().catch(() => {

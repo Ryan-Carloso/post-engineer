@@ -1,10 +1,3 @@
-//---------------
-// fetchBlueskyPublicProfile — display name and avatar of a Bluesky account.
-// Profiles are public on the AppView, so no session or app password is
-// needed: connect and the 24h profile resync both read it by DID. The host
-// is fixed (never user input), https only, with a timeout.
-//---------------
-
 export const BLUESKY_PUBLIC_APPVIEW = 'https://public.api.bsky.app';
 export const BLUESKY_PROFILE_TIMEOUT_MS = 8000;
 

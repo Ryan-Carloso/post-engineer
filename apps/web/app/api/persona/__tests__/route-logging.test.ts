@@ -1,6 +1,4 @@
 // @vitest-environment node
-// API routes use native Request/FormData (undici); jsdom mixes
-// implementations and locks up `request.formData()`.
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('@/lib/supabase/server', () => ({
@@ -66,9 +64,6 @@ describe('POST /api/persona insert failure', () => {
   });
 
   it('logs the database error to PostHog and returns a sanitized 500', async () => {
-    // An avatarUrl (no upload) keeps the mock minimal while satisfying the
-    // "exactly one visual identity" rule, so the request reaches the personas
-    // insert.
     const dbError = { message: 'duplicate key value violates unique constraint', code: '23505' };
     mockSupabase({ data: null, error: dbError });
 
@@ -77,8 +72,6 @@ describe('POST /api/persona insert failure', () => {
         name: 'Canal Teste',
         avatarUrl: 'data:image/png;base64,IA',
         voiceId: 'chatterbox:kokoro_af_heart',
-        // Issue #572: creation requires at least one bound account; the
-        // fixture carries one so the request reaches the personas insert.
         publishingAccounts: JSON.stringify({ youtube: ['acct-1'] }),
       }),
     );
@@ -88,8 +81,6 @@ describe('POST /api/persona insert failure', () => {
     expect(body.error).toMatch(/failed to create persona/i);
     expect(JSON.stringify(body)).not.toContain('23505');
 
-    // The cause is threaded through apiErrorResponse: a single logger.error
-    // with the real DB error, and the errorId points at that event.
     expect(logger.error).toHaveBeenCalledTimes(1);
     expect(logger.error).toHaveBeenCalledWith(
       '[POST /api/persona] 500 Failed to create persona.',

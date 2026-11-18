@@ -9,17 +9,11 @@ vi.mock('@/lib/account-card-telemetry', () => ({
 import AccountCard, { ACCOUNT_LABEL_MIN_WIDTH_PX } from '@/components/account-card';
 import { reportAccountCardDisplay } from '@/lib/account-card-telemetry';
 
-//---------------
-// AccountCard — unit tests
-//---------------
-
-// Mock next/image (não renderiza em testes unitários)
 vi.mock('next/image', () => ({
   default: (props: Record<string, unknown>) =>
     React.createElement('img', { alt: props.alt, src: props.src, ...props }),
 }));
 
-// Mock lib/ui icons
 vi.mock('@/lib/ui', () => ({
   GoogleIcon: () => React.createElement('span', { 'data-testid': 'google-icon' }, 'YT'),
   InstagramIcon: () => React.createElement('span', { 'data-testid': 'instagram-icon' }, 'IG'),
@@ -172,9 +166,6 @@ describe('AccountCard', () => {
     });
 
     it('shows neither action on a broken card without a reconnect handler', () => {
-      // A broken card never shows the trash button even when the reconnect
-      // handler is missing: with error=true the disconnect branch is
-      // unreachable, so the card renders no action at all.
       render(<AccountCard {...baseProps} error showDisconnect onDisconnect={() => {}} />);
       expect(screen.queryByTestId('youtube-reconnect-button')).toBeNull();
       expect(screen.queryByTestId('youtube-disconnect-button')).toBeNull();

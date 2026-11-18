@@ -13,19 +13,6 @@ import { UnknownPromptSlugError, getPrompt, listPrompts } from './client-prompts
 import { getErrorMessage } from './errors.js';
 import { recipeRunText } from './recipe-session.js';
 
-//---------------
-// MCP prompts hub: slash commands for the recipe prompts, served from the
-// web hub over the API (GET /api/prompts, GET /api/prompts/[slug]).
-//
-// The handlers are registered on the low-level server and fetch on
-// demand: startup never depends on the API, a recipe edit on the web
-// reaches every install on the next prompts/list, and nothing is cached
-// stale. Prompts are zero-arg: the agent asks the user for values.
-// A failed fetch surfaces as an MCP error to the client, never as an
-// empty list. Both requests are tagged like tool calls (slash_list_prompts,
-// slash_get_prompt) so the web API records slash-command usage too.
-//---------------
-
 const trackedList = withTracking('slash_list_prompts', async (client: { client: PostEngineerClient }) => listPrompts(client.client));
 const trackedGet = withTracking(
   'slash_get_prompt',

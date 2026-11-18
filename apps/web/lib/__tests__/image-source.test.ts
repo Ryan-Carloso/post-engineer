@@ -5,15 +5,6 @@ import {
   toSameOriginAssetPath,
 } from '@/lib/image-source';
 
-//---------------
-// image-source — the redaction helper behind the avatar diagnostics.
-//
-// It exists because the logs must never print the raw value: a Supabase
-// storage URL carries its signature token in the query string, and an
-// absolute URL may carry userinfo. The shape (origin + path) is enough to
-// answer "which host, which file" without leaking anything.
-//---------------
-
 describe('describeImageSource', () => {
   it('returns null for a missing source', () => {
     expect(describeImageSource(null)).toBeNull();
@@ -64,9 +55,6 @@ describe('isPublicAssetPath', () => {
     expect(isPublicAssetPath(null)).toBe(false);
   });
 
-  // Issue #448: the asset-path check gates a server-side fetch against the
-  // app origin, so any form that changes the host or escapes the asset
-  // directory once resolved by `new URL(value, origin)` must be refused.
   it.each([
     '//169.254.169.254/latest/meta-data/',
     '/\\169.254.169.254/x',

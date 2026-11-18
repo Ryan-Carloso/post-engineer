@@ -1,9 +1,3 @@
-//---------------
-// TokenTransaction — public shape of one token_transactions ledger row
-// as served by GET /api/billing/transactions. Shared by the API route
-// and the billing page so the wire contract lives in exactly one place.
-//---------------
-
 export interface TokenTransaction {
   id: string;
   amount: number;

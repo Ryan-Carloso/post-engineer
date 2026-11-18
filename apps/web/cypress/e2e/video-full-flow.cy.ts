@@ -1,19 +1,3 @@
-//---------------
-// Video full flow — the complete journey the product owner described:
-//  1. the user creates a persona (real /persona UI),
-//  2. the user connects a social network (mocked Bluesky form, no OAuth),
-//  3. the generation progress screen appears and the user waits,
-//  4. the "video generated" screen shows the video to the user.
-//  (Creation itself is API/MCP-only since Phase 4 removed /posts/new,
-//  so the flow starts from an already-created slot's detail screens.)
-//
-// Only what cannot run in CI is mocked: the social connection, the
-// generate-and-schedule call (it would spend tokens and hit the real
-// engine), and the engine task progress. Everything else drives the real
-// UI. Like the other specs, cy.loginE2EUser() opens a real Supabase
-// session — intercepts alone are not enough for the middleware.
-//---------------
-
 const PERSONA = {
   id: 'persona-e2e-1',
   name: 'Maya E2E',
@@ -38,20 +22,12 @@ const SLOT_ID = 'slot-e2e-1';
 const E2E_TASK_ID = 'task-e2e-1';
 const TOPIC = 'Hábitos matinais que mudam o dia';
 
-//---------------
-// tomorrowDateInput — "YYYY-MM-DD" for tomorrow in the browser timezone,
-// the value format a datetime-local input expects.
-//---------------
 function tomorrowDateInput(): string {
   const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
   const pad = (value: number): string => String(value).padStart(2, '0');
   return `${tomorrow.getFullYear()}-${pad(tomorrow.getMonth() + 1)}-${pad(tomorrow.getDate())}`;
 }
 
-//---------------
-// scheduleRow — the snake_case row GET /api/schedule returns, mapped by
-// mapSchedule into the ScheduleConfig the /posts page joins against.
-//---------------
 function scheduleRow() {
   return {
     id: SCHEDULE_ID,
@@ -70,10 +46,6 @@ function scheduleRow() {
   };
 }
 
-//---------------
-// slotRow — the snake_case row GET /api/schedule/status returns, mapped by
-// mapSlot into the ScheduledSlot the /posts page renders.
-//---------------
 function slotRow(overrides: Record<string, unknown> = {}) {
   return {
     id: SLOT_ID,
@@ -93,11 +65,6 @@ function slotRow(overrides: Record<string, unknown> = {}) {
   };
 }
 
-//---------------
-// slotDetail — the camelCase slot payload the unified GET /api/posts/[id]
-// returns for a slot id (kind: 'slot')
-// (SlotDetailPayload), read by the /posts/[id] detail page.
-//---------------
 function slotDetail(status: 'generating' | 'ready', progress: number, stage: string | null) {
   return {
     success: true,
@@ -131,15 +98,12 @@ function slotDetail(status: 'generating' | 'ready', progress: number, stage: str
 }
 
 describe('Fluxo completo de vídeo — persona → rede social → agendar → gerar → assistir', () => {
-  // Toggled by the Bluesky connect test: the account list is empty until
-  // the mocked connect succeeds, then the refetch picks the account up.
   let blueskyConnected = false;
 
   beforeEach(() => {
     blueskyConnected = false;
     cy.loginE2EUser();
 
-    // Persona page dependencies.
     cy.intercept('GET', '/api/persona/voices', {
       statusCode: 200,
       body: {
@@ -159,8 +123,6 @@ describe('Fluxo completo de vídeo — persona → rede social → agendar → g
       body: { authenticated: true, personas: [PERSONA] },
     }).as('personaList');
 
-    // Social accounts for /accounts (filtered per provider
-    // by fetchProviderAccounts from this single response).
     cy.intercept('GET', '/api/account', (req) => {
       req.reply({
         statusCode: 200,
@@ -172,8 +134,6 @@ describe('Fluxo completo de vídeo — persona → rede social → agendar → g
       });
     }).as('getAccounts');
 
-    // /posts list dependencies: the schedule must exist or the status
-    // query's slots are dropped (the posts pages filter by schedule id).
     cy.intercept('GET', '/api/schedule', {
       statusCode: 200,
       body: { success: true, schedules: [scheduleRow()] },
@@ -189,9 +149,6 @@ describe('Fluxo completo de vídeo — persona → rede social → agendar → g
   });
 
   it('1 — cria a persona pela UI real', () => {
-    // Issue #572: create requires at least one bound publishing account,
-    // so the Bluesky account is already connected when the persona is
-    // created (test 2 covers the connect flow itself).
     blueskyConnected = true;
     cy.intercept('POST', '/api/persona', (req) => {
       console.log('[DEBUG] Create persona request body:', req.body);
@@ -200,7 +157,6 @@ describe('Fluxo completo de vídeo — persona → rede social → agendar → g
 
     cy.visit('/persona');
 
-    // Real UI: name, a character from the carousel, a house voice.
     cy.get('#persona-name').type(PERSONA.name);
     cy.contains('[role="tab"]', 'Escolha um personagem').click();
     cy.get('button[aria-label="Escolha um personagem 1"]').click();
@@ -210,8 +166,6 @@ describe('Fluxo completo de vídeo — persona → rede social → agendar → g
     cy.contains('button', 'Criar persona').click();
     cy.wait('@createPersona');
 
-    // Success lands on the personas list, where the user sees the persona
-    // they just created.
     cy.url().should('match', /\/personas$/);
   });
 
@@ -225,8 +179,6 @@ describe('Fluxo completo de vídeo — persona → rede social → agendar → g
     cy.visit('/accounts');
     cy.wait('@getAccounts');
 
-    // The connect control is a dialog now (not the old inline panel): the
-    // Bluesky section's connect button opens it.
     cy.contains('section', 'Bluesky').within(() => {
       cy.contains('button', 'Conectar uma conta').click();
     });
@@ -237,15 +189,12 @@ describe('Fluxo completo de vídeo — persona → rede social → agendar → g
     cy.get('[data-testid="bluesky-connect-button"]').click();
     cy.wait('@blueskyConnect');
 
-    // The dialog closes and the refetch renders the connected account card.
     cy.get('[role="dialog"]').should('not.exist');
     cy.wait('@getAccounts');
     cy.contains(BLUESKY_ACCOUNT.handle).should('be.visible');
   });
 
   it('3 — mostra a tela de progresso enquanto o vídeo está sendo gerado', () => {
-    // First poll: still generating. The detail endpoint 404s on the
-    // generations route, so the slot view is the one rendered.
     cy.intercept('GET', `/api/posts/${SLOT_ID}`, {
       statusCode: 200,
       body: { ...slotDetail('generating', 35, 'render'), kind: 'slot' },
@@ -254,15 +203,12 @@ describe('Fluxo completo de vídeo — persona → rede social → agendar → g
     cy.visit(`/posts/${SLOT_ID}`);
     cy.wait('@slotDetail');
 
-    // The user waits on the progress screen: status badge, live progress
-    // bar with the polled percentage, and the "being generated" copy.
     cy.contains('Gerando vídeo').should('be.visible');
     cy.get('[role="progressbar"]').should('have.attr', 'aria-valuenow', '35');
     cy.contains('O vídeo está sendo gerado agora.').should('be.visible');
   });
 
   it('4 — mostra o vídeo quando a geração completa', () => {
-    // Later poll: ready with a task id — the mocked engine progress.
     cy.intercept('GET', `/api/posts/${SLOT_ID}`, {
       statusCode: 200,
       body: { ...slotDetail('ready', 100, 'done'), kind: 'slot' },
@@ -271,13 +217,6 @@ describe('Fluxo completo de vídeo — persona → rede social → agendar → g
       statusCode: 404,
       body: { success: false },
     });
-    // The finished render, served through the download proxy path. The
-    // ',null' encoding suffix is load-bearing: .mp4 is not in Cypress's
-    // binary fixture extension list, so without it the file is read as
-    // UTF-8 and the bytes are corrupted — the player then fails with
-    // MEDIA_ERR_SRC_NOT_SUPPORTED even though the file is valid. 'null'
-    // makes the server return a Buffer, which streams byte-identical
-    // (the same path .png/.jpg/.zip fixtures take).
     cy.intercept(
       'GET',
       `/api/persona/video-download/${E2E_TASK_ID}/final-1.mp4`,
@@ -287,13 +226,9 @@ describe('Fluxo completo de vídeo — persona → rede social → agendar → g
     cy.visit(`/posts/${SLOT_ID}`);
     cy.wait('@slotDetail');
 
-    // The "video generated" screen shows the video to the user: a real
-    // <video> element pointed at the download proxy.
     cy.get('video')
       .should('have.attr', 'src', `/api/persona/video-download/${E2E_TASK_ID}/final-1.mp4`);
 
-    // The video bytes actually decode: the debug line switches from
-    // "loading…" to the resolved dimensions once loadedmetadata fires.
     cy.get('[data-testid="video-debug"]', { timeout: 30_000 })
       .invoke('text')
       .should('match', /\d+×\d+/);

@@ -100,10 +100,8 @@ class ContinueOnProviderFailureTests(unittest.TestCase):
                 datetime(2026, 9, 7, 12, 0, tzinfo=UTC)
             )
 
-        # Slot published (partial success), not failed.
         self.assertEqual(published, 1)
         self.assertEqual(store.updates[-1][1]["status"], "published")
-        # Per-provider failure event fired for youtube.
         failed_calls = [
             c for c in track.call_args_list
             if c[0][0] == "publish_provider_failed"
@@ -111,7 +109,6 @@ class ContinueOnProviderFailureTests(unittest.TestCase):
         self.assertEqual(len(failed_calls), 1)
         self.assertEqual(failed_calls[0][0][1]["provider"], "youtube")
         self.assertEqual(failed_calls[0][0][1]["status_code"], 401)
-        # Partial failure event fired.
         partial_calls = [
             c for c in track.call_args_list
             if c[0][0] == "video_publish_partial_failure"
@@ -137,7 +134,6 @@ class ContinueOnProviderFailureTests(unittest.TestCase):
             )
 
         self.assertEqual(published, 0)
-        # Still publishing (attempt 1 of 3). The lease write has no status.
         self.assertEqual(store.updates[-1][1]["status"], "publishing")
         self.assertEqual(store.updates[-1][1]["publish_attempts"], 1)
         self.assertEqual(store.updates[-1][1]["publish_not_before"], "2026-09-07T12:00:30+00:00")
@@ -155,7 +151,6 @@ class ContinueOnProviderFailureTests(unittest.TestCase):
         scheduler = self._scheduler(store, self._task_state(), fake_publish)
         scheduler.publish_due(datetime(2026, 9, 7, 12, 0, tzinfo=UTC))
 
-        # Published, not back to ready — no retry scheduled.
         statuses = [u[1]["status"] for u in store.updates if "status" in u[1]]
         self.assertIn("published", statuses)
         self.assertNotIn("ready", statuses)

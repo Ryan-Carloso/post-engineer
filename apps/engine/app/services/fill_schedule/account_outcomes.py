@@ -17,13 +17,6 @@ from app.services.fill_schedule.metadata import metadata_for
 
 ATTEMPT_LEASE_SECONDS = 30 * 60
 
-# Upper bound on waiting for an in-flight publish: the web route answers
-# publish_in_progress while an earlier request still holds the ledger
-# claim, and the heartbeat renews that claim indefinitely while the
-# handler lives — so without a cap the engine would re-ask (re-uploading
-# the full video) every 60s forever. Past this long the account fails
-# terminally as publish_unknown, without refund: the first post may
-# still go live, so only a human who checked the provider may post again.
 MAX_IN_PROGRESS_WAIT_SECONDS = ATTEMPT_LEASE_SECONDS
 
 USER_CODES = frozenset({
@@ -131,22 +124,14 @@ def classify_failure(
     if code in USER_CODES:
         return code, True
     if code == "publish_unknown":
-        # The web route parked the claim: the post may already be live, but
-        # its ledger record was lost. The account must never be retried by
-        # the scheduler — only a human who checked the provider may post
-        # again — so it fails terminally as a user action, like a
-        # disconnected account.
         return code, True
     if code in ("transient", "publish_rejected", "publish_in_progress"):
         return code, False
-    # No code: an older handler, a network error, or an engine-side
-    # synthetic result. Decide from the status only.
     if status_code is None or status_code in RETRYABLE_STATUS_CODES:
         return "transient", False
     if status_code in (401, 403):
         return "disconnected", True
     if 200 <= status_code < 300:
-        # A 2xx that published nothing with no code. Bounded by 3 tries.
         return "transient", False
     return "publish_rejected", False
 
@@ -155,8 +140,6 @@ def _account_ids(provider: str, schedule: dict[str, Any]) -> list[str]:
     column = _ACCOUNT_COLUMNS.get(provider)
     raw = schedule.get(column, []) if column else []
     ids = [str(value) for value in raw or [] if str(value)]
-    # No account list on the schedule: one synthetic target so a provider
-    # with no ids (the common test fixture) is still one retry unit.
     return ids or [""]
 
 
@@ -212,7 +195,6 @@ def _due(outcome: dict[str, Any] | None, now: datetime) -> bool:
         return True
     if outcome.get("status") != "retrying":
         return not _is_terminal(outcome)
-    # The last try was started and never recorded. Close it; do not call again.
     if int(outcome.get("attempts") or 0) >= MAX_PUBLISH_ATTEMPTS:
         return True
     retry_at = outcome.get("retryAt")
@@ -241,21 +223,6 @@ def _fail_outcome(
     now: datetime,
 ) -> None:
     if error_code == "publish_in_progress":
-        # The web route is still publishing this account under an earlier
-        # request that outlived the engine's 600s timeout. The retry only
-        # re-asks for that attempt's recorded result: it must not start a
-        # second publish, and it must not spend one of the 3 tries, or a
-        # slow upload would exhaust the budget (and refund the slot) while
-        # the original post is about to go live. The attempt this call
-        # recorded is handed back, and the account wakes in 60s.
-        #
-        # The wait is bounded, though: the ledger heartbeat renews the
-        # claim indefinitely while the first handler lives, so an
-        # in-progress answer that never resolves would re-ask (and
-        # re-upload the full video) forever. Past the cap the account
-        # fails terminally as publish_unknown, without refund — the first
-        # post may still go live, so only a human who checked the
-        # provider may post again.
         waited = int(outcome.get("inProgressWaitSeconds") or 0) + PUBLISH_IN_PROGRESS_DELAY_SECONDS
         if waited >= MAX_IN_PROGRESS_WAIT_SECONDS:
             outcome["error"] = scrub_error_text(message, max_chars=200)
@@ -389,10 +356,6 @@ def _targets_from_body(
     if len(pending) == 1 and len(results) == 1 and pending[0] not in by_id:
         only = results[0] if isinstance(results[0], dict) else {}
         return {pending[0]: _interpret_result(only)}
-    # One unlabeled failure (a request-level rejection such as "Caption is
-    # required") applies to every pending account, with its own code. An
-    # unlabeled success is only trusted for a single pending account: it
-    # cannot say which of several accounts went live.
     shared = unlabeled[0] if len(unlabeled) == 1 else None
     if shared is not None and len(pending) > 1 and _interpret_result(shared)[0] != "failed":
         shared = None

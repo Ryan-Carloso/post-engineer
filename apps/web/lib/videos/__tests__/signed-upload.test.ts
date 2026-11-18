@@ -18,7 +18,6 @@ const NOW = new Date('2026-11-12T00:00:00.000Z');
 const USER = 'user-uuid-1';
 const OTHER = 'user-uuid-2';
 
-// MP4: ftyp box at bytes 4-7, brand isom. MOV: brand 'qt  '.
 const MP4 = Buffer.from([0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d, 1, 2, 3, 4]);
 const MOV = Buffer.from([0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70, 0x71, 0x74, 0x20, 0x20, 1, 2, 3, 4]);
 
@@ -296,8 +295,6 @@ describe('completeVideoUpload', () => {
   });
 
   it('rejects an upload over 2GB and deletes the object', async () => {
-    // The guard compares buffer.length with 2GB. Patch the length on a
-    // one-byte object so the branch runs without allocating 2GB.
     const storage = makeStorage(Buffer.from([0xab]));
     const realFrom = Buffer.from.bind(Buffer);
     const fromSpy = vi.spyOn(Buffer, 'from').mockImplementation(((input: unknown) => {

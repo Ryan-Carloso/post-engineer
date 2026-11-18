@@ -20,9 +20,6 @@ describe('prompts hub data', () => {
       expect(prompt.titleKey).toMatch(/^recipes\./);
       expect(prompt.objectiveKey).toMatch(/^recipes\./);
       expect(prompt.kindKey).toMatch(/^recipes\./);
-      // Story-first carries two extra steps: one archetype carries
-      // the value (step 3) and mixed media with one consistent
-      // persona (step 6); every other prompt has the uniform 5 steps.
       const expectedStepCount = prompt.slug === 'story-first-reels' ? 7 : 5;
       expect(prompt.stepKeys).toHaveLength(expectedStepCount);
       expect(prompt.deliverKeys).toHaveLength(3);
@@ -68,10 +65,6 @@ describe('prompts hub data', () => {
   });
 
   it('orders the place-spotlight flow: place, facts search, photos with checks and cards, validate, generate', () => {
-    // The composed prompt starts with the shared base, which already
-    // mentions check_script (action: validate) and the 3h-30d window; the flow order
-    // below is checked on the specific part only, after stripping that
-    // base prefix.
     const fullText = getPrompt('place-spotlight')?.prompt ?? '';
     const baseText = SHARED_PROMPT_BASE.join('\n');
     expect(fullText.startsWith(baseText)).toBe(true);
@@ -99,8 +92,6 @@ describe('prompts hub data', () => {
     expect(text).toContain('30');
     expect(text).toContain('Never send a fake User-Agent or');
     expect(text).toContain('never attach a photo of a different');
-    // The sentence spans two source lines: assert it whole (whitespace
-    // flattened), so dropping the "Referer to bypass a block," line fails.
     const flatText = text
       .split('\n')
       .map((line) => line.trim())
@@ -169,8 +160,6 @@ describe('prompts hub data', () => {
     expect(text).toContain('drop the badge: a');
     expect(text).toContain('Never send a fake User-Agent or');
     expect(text).toContain('never attach a photo of a different');
-    // The sentence spans two source lines: assert it whole (whitespace
-    // flattened), so dropping the "Referer to bypass a block," line fails.
     const flatText = text
       .split('\n')
       .map((line) => line.trim())
@@ -220,10 +209,6 @@ describe('prompts hub data', () => {
   });
 
   it('orders the full-setup flow: accounts, app password, persona, tools config, balance/validate, confirm publish, generate', () => {
-    // The composed prompt starts with the shared base, which already
-    // mentions check_script (action: validate) and the 3h-30d window; the flow order
-    // below is checked on the specific part only, after stripping that
-    // base prefix. The 3h-30d window itself lives in the base.
     const fullText = getPrompt('full-setup')?.prompt ?? '';
     const baseText = SHARED_PROMPT_BASE.join('\n');
     expect(fullText.startsWith(baseText)).toBe(true);
@@ -281,15 +266,12 @@ describe('prompts hub data', () => {
     const baseText = SHARED_PROMPT_BASE.join('\n');
     expect(fullText.startsWith(baseText)).toBe(true);
     const text = fullText.slice(baseText.length + 2);
-    // The phrase spans a line break, so pin it with a regex — a bare
-    // toContain('video') would pass even with the clause removed.
     expect(text).toMatch(/later videos in this\s+conversation/);
     expect(text).toContain('the first video in this setup follows the base and');
     expect(text).toContain('uses images only');
     expect(text).toContain('There is no saved account configuration');
     expect(text).toContain('never claim the answers were saved');
     expect(text).toContain('If a key is missing, tell');
-    // Both phrases span a line break, so pin them with regexes.
     expect(text).toMatch(/me to set it and keep going with the\s+sources that are configured/);
     expect(text).toMatch(/never print them, never paste them anywhere\s+else, never log them/);
     expect(text).not.toContain('standing configuration for this account');
@@ -552,25 +534,17 @@ describe('prompts hub data', () => {
   it('guards the viral-shorts breakdown: views are popularity, retention conclusions are hypotheses', () => {
     const fullText = getPrompt('viral-shorts')?.prompt ?? '';
     const text = fullText.slice(SHARED_PROMPT_BASE.join('\n').length + 2);
-    // (a) view count is popularity, not retention, since views count at play start.
     expect(text).toContain('measures popularity, not retention');
     expect(text).toContain('since 2026-08-24');
-    // (b) hook conclusions from public data are hypotheses, never measured causes.
     expect(text).toContain('HYPOTHESES, never measured causes');
-    // (c) never compare Short and long-form view counts.
     expect(text).toContain("Never compare a Short's view count with a long-form video's view count");
-    // (d) Stayed to watch is not a per-second curve.
     expect(text).toContain('never treat "Stayed to watch" as a per-second retention curve');
-    // (e) every breakdown carries the missing-evidence fields.
     expect(text).toContain("retention_evidence: 'unavailable'");
     expect(text).toContain('source video URL');
     expect(text).toContain('fetch date (YYYY-MM-DD)');
-    // Metadata + subtitles only, and an explicit refusal to fetch video bytes.
     expect(text).toContain('--write-subs --write-auto-subs --skip-download');
     expect(text).toContain('Never download the video bytes');
     expect(text).toContain('refuse');
-    // The guard sits between the study step and the script, and the
-    // missing-evidence block comes before validation.
     const order = [
       '--skip-download',
       'HYPOTHESES, never measured causes',
@@ -673,8 +647,6 @@ describe('prompts hub data', () => {
   });
 
   it('orders the story-first flow: inputs, story, archetype, hook mechanisms, watch-through, voice, images, validate, generate', () => {
-    // The composed prompt starts with the shared base; the flow order below
-    // is checked on the specific part only, after stripping that base prefix.
     const fullText = getPrompt('story-first-reels')?.prompt ?? '';
     const baseText = SHARED_PROMPT_BASE.join('\n');
     expect(fullText.startsWith(baseText)).toBe(true);
@@ -741,17 +713,12 @@ describe('prompts hub data', () => {
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);
     expect(text).toContain('one emotion only');
     expect(text).toContain('The viewer is the hero');
-    // A real story, not an explanation: one concrete day, one event, first
-    // person, plausible in real life — never a generic explainer.
     expect(text).toContain('one concrete day');
     expect(text).toContain('first person');
     expect(text).toContain('could really have happened');
     expect(text).toContain('Never a generic explainer');
     expect(text).toContain('Never present it as a real person');
     expect(text).toContain('verified testimonial');
-    // Step 3 picks one archetype for the value the video delivers:
-    // informative, funny, inspirational, relatable, or provocative —
-    // never basic content with no value.
     expect(text).toContain('Pick one archetype');
     expect(text).toContain('informative');
     expect(text).toContain('funny');
@@ -760,13 +727,6 @@ describe('prompts hub data', () => {
     expect(text).toContain('provocative');
     expect(text).toContain('One archetype only');
     expect(text).toContain('adds nothing to the viewer');
-    // The story is real, concrete, and lived, first person, plausible in
-    // real life. "The day it happened to me" is one valid form, not the
-    // only one: a first time, a week, a realization, a repeating ritual,
-    // or a before/after arc all count — as long as one concrete moment
-    // is lived, not described. A documentary, study, or fact is
-    // transformed into a lived story; the fact goes inside the story,
-    // never as exposition.
     expect(text).toContain('the day it happened to me');
     expect(text).toContain('one valid form, not the only one');
     expect(text).toContain('the first time I');
@@ -778,28 +738,12 @@ describe('prompts hub data', () => {
     expect(text).toContain('documentary');
     expect(text).toContain('transform it into a concrete story');
     expect(text).toContain('never as exposition');
-    // Research, never invent: every fact is verified before it is
-    // asserted — mechanisms, hormones, numbers, deadlines. A fact that
-    // cannot be confirmed is cut from the script, never asserted anyway.
     expect(text).toContain('Research every fact before you assert it');
     expect(text).toContain('Never invent a fact');
     expect(text).toContain('Tavily');
     expect(text).toContain('Exa');
     expect(text).toContain('cut it from the script');
     expect(text).toContain('unconfirmed fact never enters');
-    // Step 7 overrides the base's material lines for this prompt only:
-    // licensed stock photos and licensed stock video are allowed here,
-    // and real photos are welcome — the base's "images only, your own
-    // real photos, no stock footage" rule does not apply to this prompt.
-    // Clips come only from the stock sources configured for this video,
-    // and only after a frame check proves they fit the segment sentence.
-    // Clips are scoped to where the engine can play them: faceless and
-    // the non-hook takes of hook_lipsync — never full_lipsync, never
-    // in the hook window, where a skipped clip fails the render.
-    // (The story-rule PR's step-6 assertions — "do not search for images",
-    // "the base lines about searching images", "about your own real photos"
-    // — pinned the AI-only step 6 this PR replaces, so they do not carry
-    // over: this prompt searches licensed libraries for real photos.)
     expect(text).toContain('the base lines about material do not apply here');
     expect(text).toContain('licensed stock photos and licensed stock video are allowed');
     expect(text).toContain('real photos are welcome');
@@ -812,10 +756,7 @@ describe('prompts hub data', () => {
     expect(text).toContain('Never put a clip in the hook window');
     expect(text).toContain('a skipped clip fails the render');
     expect(text).toContain('If no stock source is configured,');
-    // "never AI photos only" appears earlier in step 7, so pin the
-    // fallback occurrence with its following words, not the bare phrase.
     expect(text).toContain('photos only. A clip is full-frame');
-    // "clip audio is discarded" spans a line break, so pin it with a regex.
     expect(text).toMatch(/clip\s+audio is discarded/);
     expect(text).toContain('extract frames');
     expect(text).toContain('same subject,');
@@ -824,9 +765,6 @@ describe('prompts hub data', () => {
     expect(text).not.toContain('it cannot use');
     expect(text).not.toContain('never attach a video URL');
     expect(text).not.toContain('saved at setup');
-    // v3/v4 lessons, for a 10/10 video: every emotional beat is visible
-    // in the image, the rhythm varies take by take, every sentence gets
-    // its own image, and every image is sharp, well-lit, and on-topic.
     expect(text).toContain('Every emotional beat must be VISIBLE in the image');
     expect(text).toContain('visibly triumphant');
     expect(text).toContain('An invisible beat is a failure');
@@ -837,18 +775,12 @@ describe('prompts hub data', () => {
     expect(text).toContain('Image quality, no exceptions');
     expect(text).toContain('No neutral filler photo');
     expect(text).toContain('no repeated compositions');
-    // The old rule is gone: no more AI-only photos, no "never stock".
     expect(text).not.toContain('Generate every photo with AI');
     expect(text).not.toContain('never stock');
-    // The prompt never names a test persona: it talks about "the persona".
     expect(text).not.toContain('Mara');
     expect(text).toContain('who would DM this to whom, and why');
     expect(text).toContain('never a rote "like and subscribe"');
     expect(text).toContain('wait for my yes');
-    // Generalized: the winning test brief (HabitLoom, the diet topic) must
-    // not leak into the prompt — it takes persona, topic, and video type
-    // as inputs instead. Same for Mara, the local test-video persona:
-    // product copy always says "the persona", never a test persona name.
     expect(text).not.toContain('HabitLoom');
     expect(text).not.toContain('why you regain weight after a diet');
     expect(text).not.toContain('Mara');

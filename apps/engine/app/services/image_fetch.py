@@ -17,9 +17,7 @@ from app.services import media_aspect, photo_content
 from app.utils import ssrf
 
 MAX_PHOTO_BYTES = 8 * 1024 * 1024
-# Header-declared size above which a photo is refused before it is decoded.
 MAX_PHOTO_PIXELS = 50_000_000
-# Smaller than this is a thumbnail: blown up to a portrait frame it is mush.
 MIN_PHOTO_LONG_EDGE = 600
 MIN_PHOTO_SHORT_EDGE = 300
 DOWNLOAD_TIMEOUT_SECONDS = 10

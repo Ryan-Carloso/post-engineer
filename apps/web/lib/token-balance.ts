@@ -1,9 +1,3 @@
-//---------------
-// Token Balance — fetches the real balance from the /api/billing/tokens API.
-// Replaces the useTokenStore mock for the UI.
-// Keeps computeVideoTokens (pure math) in lib/tokens.ts.
-//---------------
-
 import { toFiniteNumber } from '@/lib/tokens';
 import { logger } from '@/lib/logger';
 import { notifyIfSessionExpired } from '@/lib/session-expiry';
@@ -18,16 +12,10 @@ const EMPTY_BALANCE: TokenBalance = {
   free: 0,
 };
 
-//---------------
-// fetchTokenBalance — fetches the user's real balance from the API.
-// On error, returns a zero balance (fail-safe so the UI does not break).
-//---------------
 export async function fetchTokenBalance(): Promise<TokenBalance> {
   try {
     const res = await fetch('/api/billing/tokens');
     if (!res.ok) {
-      // Fail-safe contract kept (zero balance, never throws), but a dead
-      // session must still trigger the host-wide redirect.
       notifyIfSessionExpired(res);
       return EMPTY_BALANCE;
     }

@@ -100,7 +100,6 @@ def _text_rows(path, tmp_path):
 def _render(tmp_path, caption_bands, name):
     base, audio, subtitle = _media(tmp_path)
     output = str(tmp_path / name)
-    # The same params the final encode gets for a persona video.
     params = full_lipsync.caption_params(
         VideoParams(
             video_title="x",
@@ -143,9 +142,6 @@ def test_a_panel_band_lifts_the_caption_above_the_photo(tmp_path, monkeypatch):
 
 
 def test_a_cue_that_starts_before_the_panel_is_still_lifted(tmp_path, monkeypatch):
-    # The cue (0.2-1.8s) begins before the panel's interval (1.0-2.0s) but is on
-    # screen when the photo appears: matching on the cue start alone would let
-    # it cover the photo.
     _stub_bundled_font(tmp_path, monkeypatch)
     panel_top = segment_panels.panel_rect(1080, 1920)[1]
     bands = [(1.0, 2.0, panel_top - segment_panels.CAPTION_GAP)]

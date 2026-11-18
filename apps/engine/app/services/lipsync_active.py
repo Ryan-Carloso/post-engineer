@@ -30,8 +30,6 @@ def lip_sync_cap_seconds(params: VideoParams) -> float:
     exceeding the hook cap (#534 review).
     """
     if params.video_type == "full_lipsync":
-        # Deferred: full_lipsync imports this module for
-        # persona_lipsync_active, so a top-level import would be circular.
         from app.services import full_lipsync
 
         return float(full_lipsync.MAX_FULL_LIPSYNC_SECONDS)

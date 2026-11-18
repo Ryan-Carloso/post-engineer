@@ -12,14 +12,6 @@ import { TokenBalance } from '@/app/(main)/token-balance';
 import VersionBadge from '@/components/ui/version-badge';
 import { CoinsIcon, KeyIcon, ProfileIcon } from '@/lib/ui';
 
-//---------------
-// AccountPanel — shared account area content ("Perfil"/"Profile").
-// Rendered in the desktop sidebar footer and on the /account page,
-// which is the mobile entry point (header avatar).
-// Composes the existing TokenBalance component and session query;
-// the user block links to /account and sign-out routes to /login.
-//---------------
-
 interface UserDisplay {
   avatarUrl?: string;
   userName?: string;
@@ -42,10 +34,6 @@ function getUserDisplay(metadata: unknown): UserDisplay {
   return { avatarUrl, userName };
 }
 
-//---------------
-// AvatarCircle — avatar image or initial-letter fallback, same style
-// as the former SidebarUser block.
-//---------------
 function AvatarCircle({
   avatarUrl,
   userName,
@@ -77,9 +65,6 @@ function AvatarCircle({
   );
 }
 
-//---------------
-// LocaleSwitcher — PT/EN language switcher (moved from app-shell).
-//---------------
 export function LocaleSwitcher() {
   const { locale, setLocale } = useI18n();
   return (
@@ -106,9 +91,6 @@ export function LocaleSwitcher() {
   );
 }
 
-//---------------
-// SignOutButton — signs out via Supabase and routes to /login.
-//---------------
 export function SignOutButton({ compact = false }: { compact?: boolean }) {
   const router = useRouter();
   const { t } = useI18n();
@@ -116,8 +98,6 @@ export function SignOutButton({ compact = false }: { compact?: boolean }) {
   const handleSignOut = async () => {
     const { createSupabaseClient } = await import('@/lib/supabase/client');
     const supabase = createSupabaseClient();
-    // scope: 'local' — sign out only THIS session (the default 'global'
-    // would also end the user's sessions on every other device).
     await supabase.auth.signOut({ scope: 'local' });
     router.push('/login');
   };
@@ -139,13 +119,6 @@ export function SignOutButton({ compact = false }: { compact?: boolean }) {
   );
 }
 
-//---------------
-// SignOutAllButton — ends the user's sessions on EVERY device
-// (scope 'global'), so it asks for confirmation first. The dialog
-// follows the destructive-dialog rules: initial focus on the safe
-// action, Escape closes (not while signing out), Tab stays trapped,
-// and every control is disabled while the sign-out is in flight.
-//---------------
 export function SignOutAllButton() {
   const router = useRouter();
   const { t } = useI18n();
@@ -156,8 +129,6 @@ export function SignOutAllButton() {
   const cancelButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
-    // The dialog is mounted only while open: focus the safe action and
-    // listen for keys while it is up.
     if (!confirming) return;
     cancelButtonRef.current?.focus();
     const onKeyDown = (event: KeyboardEvent) => {
@@ -170,16 +141,11 @@ export function SignOutAllButton() {
           'button:not([disabled])',
         );
         if (focusables.length === 0) {
-          // While pending every control is disabled: Tab must not escape
-          // the dialog (keep focus where it is).
           event.preventDefault();
           return;
         }
         const first = focusables[0];
         const last = focusables[focusables.length - 1];
-        // Focus landed OUTSIDE the dialog (e.g. on document.body — some
-        // browsers/reset paths leave it there): Tab must not escape the
-        // modal, pull focus back inside.
         if (!dialogRef.current.contains(document.activeElement)) {
           event.preventDefault();
           (event.shiftKey ? last : first)?.focus();
@@ -204,9 +170,6 @@ export function SignOutAllButton() {
     try {
       const { createSupabaseClient } = await import('@/lib/supabase/client');
       const supabase = createSupabaseClient();
-      // supabase-js resolves with { error } instead of throwing: a failed
-      // revocation must keep the dialog open so the user can retry —
-      // other devices are still signed in.
       const { error } = await supabase.auth.signOut({ scope: 'global' });
       if (error) {
         setFailed(true);
@@ -215,8 +178,6 @@ export function SignOutAllButton() {
       setConfirming(false);
       router.push('/login');
     } catch {
-      // Unexpected failure (client construction, network crash): same
-      // retryable error state.
       setFailed(true);
     } finally {
       setPending(false);
@@ -293,10 +254,6 @@ export function SignOutAllButton() {
   );
 }
 
-//---------------
-// MobileProfileLink — avatar button in the mobile header, links to
-// /account. Falls back to the initial letter, then a person icon.
-//---------------
 export function MobileProfileLink() {
   const { t } = useI18n();
   const sessionQuery = useSessionQuery();
@@ -326,11 +283,6 @@ export function MobileProfileLink() {
   );
 }
 
-//---------------
-// AccountPanel — locale switcher, token balance, optional version row,
-// user block (linking to /account) and sign-out. The user block and
-// sign-out only render when a session user exists.
-//---------------
 export function AccountPanel({
   showVersionBadge = false,
   hideSidebarApiKeysRow = false,
@@ -338,8 +290,6 @@ export function AccountPanel({
 }: {
   showVersionBadge?: boolean;
   hideSidebarApiKeysRow?: boolean;
-  // compact: the sidebar footer form. Same rows, tighter padding and a
-  // one-line token balance, so every nav item stays visible at 900px.
   compact?: boolean;
 }) {
   const { t } = useI18n();
@@ -382,9 +332,6 @@ export function AccountPanel({
           {!hideSidebarApiKeysRow && <ApiKeysRow compact={compact} />}
           <BillingRow compact={compact} />
           <SignOutButton compact={compact} />
-          {/* "Sign out everywhere" is a security action, not a daily one: it
-              lives on /account (the user row links there) so the sidebar
-              footer stays short enough for every nav item. */}
           {!compact && <SignOutAllButton />}
         </div>
       )}
@@ -392,11 +339,6 @@ export function AccountPanel({
   );
 }
 
-//---------------
-// ApiKeysRow — link to the API key manager inside the profile area. The
-// key manager lives in step 1 of the prompts hub (/recipes), next to the
-// setup prompt that uses the key.
-//---------------
 export function ApiKeysRow({ compact = false }: { compact?: boolean }) {
   const { t } = useI18n();
   return (
@@ -415,12 +357,6 @@ export function ApiKeysRow({ compact = false }: { compact?: boolean }) {
   );
 }
 
-//---------------
-// BillingRow — link to /billing inside the profile area. The Billing
-// tab was removed from the navs to curb tab sprawl; the route itself
-// is unchanged, and buying tokens plus viewing history stay one tap
-// away from the account panel, exactly like API Keys above.
-//---------------
 export function BillingRow({ compact = false }: { compact?: boolean }) {
   const { t } = useI18n();
   return (

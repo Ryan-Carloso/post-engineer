@@ -1,10 +1,3 @@
-//---------------
-// Namespace `accounts` do dicionário pt-BR. Extraído de pt.ts para manter
-// o arquivo do dicionário no tamanho do ratchet; mesclado de volta com um
-// spread, então as chaves e a paridade com en continuam presas no lugar.
-//---------------
-// NOTE: comments in this module are Portuguese because lib/i18n/pt.ts
-// holds user-facing PT strings; check with the maintainer before moving.
 export const accountsI18nPt = {
   title: 'Contas',
   subtitle: 'Conecte e gerencie suas contas de publicação.',

@@ -67,7 +67,6 @@ describe('useCopyText', () => {
     await act(async () => {
       result.current.copy('x');
     });
-    // The first timer would have cleared it 500ms after the second copy.
     act(() => {
       vi.advanceTimersByTime(COPY_CONFIRM_MS - 1);
     });

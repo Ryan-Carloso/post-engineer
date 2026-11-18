@@ -4,25 +4,6 @@ import { join } from 'node:path';
 import { findRepoRoot } from '@/test/repo-root';
 import { SOCIAL_PROVIDERS } from '@/lib/providers/registry';
 
-//---------------
-// supabase/migrations/049_facebook-provider.sql — the schema the Facebook
-// Pages connect and publish paths depend on. Each provider check is
-// dropped and re-created with the full list (the lesson of 037: a live
-// constraint the chain no longer defines can linger in production, so a
-// plain add would leave the old list in force).
-//
-// This migration re-created the constraint with the six providers of
-// its time. A shipped migration is never edited, so this test pins that
-// historical list; the migration file is frozen, so it must NOT track
-// SOCIAL_PROVIDERS as new providers land. The current list is pinned by
-// the latest migration that re-creates the check (053,
-// rumble-provider-migration.test.ts) and by the schema snapshot
-// (migration-check-constraints-sync.test.ts).
-// The provider list is FROZEN at the six providers 049 shipped with.
-// A migration file is append-only history — its list never grows.
-//---------------
-
-// The six providers 049 shipped with, in the order the migration lists them.
 const PROVIDERS_AT_049 = ['youtube', 'instagram', 'bluesky', 'linkedin', 'threads', 'facebook'];
 
 const sql = readFileSync(

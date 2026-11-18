@@ -2,11 +2,6 @@ import '@testing-library/jest-dom/vitest';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 
-//---------------
-// Tests for the vendored shadcn Command (cmdk): the root/input/list/
-// group/item classes, live filtering, and the empty state.
-//---------------
-
 import {
   Command,
   CommandEmpty,
@@ -16,8 +11,6 @@ import {
   CommandList,
 } from '../command';
 
-// cmdk scrolls the selected item into view; jsdom has no
-// Element.scrollIntoView, so stub it.
 window.HTMLElement.prototype.scrollIntoView = vi.fn();
 
 function renderCommand(onSelect: (value: string) => void = vi.fn()): void {

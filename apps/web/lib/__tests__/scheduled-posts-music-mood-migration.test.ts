@@ -3,14 +3,6 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { findRepoRoot } from '@/test/repo-root';
 
-//---------------
-// scheduled_posts.music_mood — written by generate-and-schedule at slot
-// creation and read by the engine batch pipeline (fill_schedule
-// .slot_music_mood) when a tick-dispatched or requeued slot is rebuilt.
-// The insert key must exist in the schema or a valid post fails its slot
-// insert; the engine reader must forward it or the slot silently renders
-// the engine's default mood instead of the requested one.
-//---------------
 const root = findRepoRoot(import.meta.url);
 const migration = readFileSync(join(root, 'supabase/migrations/048_scheduled-posts-music-mood.sql'), 'utf8');
 const slotRows = readFileSync(join(root, 'apps/web/app/api/videos/generate-and-schedule/slot-rows.ts'), 'utf8');

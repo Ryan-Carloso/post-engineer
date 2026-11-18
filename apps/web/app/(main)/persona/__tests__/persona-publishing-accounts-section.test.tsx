@@ -2,12 +2,6 @@ import '@testing-library/jest-dom/vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-//---------------
-// Tests for PersonaPublishingAccountsSection (issue #212): per-persona
-// default publishing accounts. The GET/PUT route is built in parallel, so
-// fetch is mocked; the four social-account query hooks are mocked too.
-//---------------
-
 vi.mock('@/lib/i18n/provider', () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const react = require('react') as typeof import('react');
@@ -96,8 +90,6 @@ vi.mock('@/lib/account-card-telemetry', () => ({
   reportAccountCardDisplay: vi.fn(),
 }));
 
-// Only notifyIfSessionExpired is doubled; the redirect behavior of the
-// module is pinned in lib/__tests__/session-expiry.test.tsx.
 vi.mock('@/lib/session-expiry', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/session-expiry')>();
   return {
@@ -177,9 +169,6 @@ beforeEach(() => {
 describe('PersonaPublishingAccountsSection', () => {
 
   it('does not fetch for a non-uuid personaId (placeholder callers stopped 400ing)', async () => {
-    // The production warnings ("invalid input syntax for type uuid: \"p-1\"")
-    // came from a placeholder id reaching the fetch. The guard in the section
-    // must skip it entirely: no GET, defaults stay empty, no crash.
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
     render(<PersonaPublishingAccountsSection personaId="p-1" />);
@@ -203,12 +192,11 @@ describe('PersonaPublishingAccountsSection', () => {
     expect(screen.getByText('Publishing accounts')).toBeInTheDocument();
 
     const checkboxes = screen.getAllByTestId('account-card-select') as HTMLInputElement[];
-    // 2 youtube + 1 instagram + 1 bluesky + 0 linkedin + 1 threespeak
     expect(checkboxes).toHaveLength(5);
-    expect(checkboxes[0].checked).toBe(true); // UC-1 in defaults
-    expect(checkboxes[1].checked).toBe(false); // UC-2 not in defaults
-    expect(checkboxes[3].checked).toBe(true); // did:plc:abc in defaults
-    expect(checkboxes[4].checked).toBe(true); // alice in defaults
+    expect(checkboxes[0].checked).toBe(true);
+    expect(checkboxes[1].checked).toBe(false);
+    expect(checkboxes[3].checked).toBe(true);
+    expect(checkboxes[4].checked).toBe(true);
   });
 
   it('renders the 3Speak card with the Hive username when no stored name exists, and toggles it', async () => {
@@ -217,8 +205,6 @@ describe('PersonaPublishingAccountsSection', () => {
     render(<PersonaPublishingAccountsSection personaId={PERSONA_ID} />);
     await screen.findByTestId('publishing-accounts-save');
 
-    // The group heading names the provider, and the card falls back to the
-    // Hive username when the stored name is missing.
     expect(screen.getByText('3Speak')).toBeInTheDocument();
     expect(screen.getByText('bob')).toBeInTheDocument();
     expect(reportAccountCardDisplay).toHaveBeenCalledWith(expect.objectContaining({
@@ -228,7 +214,6 @@ describe('PersonaPublishingAccountsSection', () => {
     }));
 
     const checkboxes = screen.getAllByTestId('account-card-select') as HTMLInputElement[];
-    // 2 youtube + 1 instagram + 1 bluesky + 1 threespeak (bob, unchecked)
     expect(checkboxes).toHaveLength(5);
     expect(checkboxes[4].checked).toBe(false);
     fireEvent.click(checkboxes[4]);
@@ -242,7 +227,6 @@ describe('PersonaPublishingAccountsSection', () => {
     await screen.findByTestId('publishing-accounts-save');
 
     const checkboxes = screen.getAllByTestId('account-card-select') as HTMLInputElement[];
-    // 2 youtube + 1 instagram + 1 bluesky + 0 threespeak
     expect(checkboxes).toHaveLength(4);
   });
 
@@ -251,8 +235,6 @@ describe('PersonaPublishingAccountsSection', () => {
     render(<PersonaPublishingAccountsSection personaId={PERSONA_ID} />);
 
     expect(await screen.findByText('boom')).toBeInTheDocument();
-    // A failed load must not also show the must-select error: nothing was
-    // ever loaded, so the saved binding is unknown, not empty.
     expect(screen.queryByText('Select at least one account to publish to.')).not.toBeInTheDocument();
     expect(screen.queryByTestId('publishing-accounts-save')).not.toBeInTheDocument();
 
@@ -303,19 +285,15 @@ describe('PersonaPublishingAccountsSection', () => {
     expect(checkboxes()[1].checked).toBe(false);
     fireEvent.click(checkboxes()[1]);
     expect(checkboxes()[1].checked).toBe(true);
-    // Unchecking a selected box removes it again.
     expect(checkboxes()[0].checked).toBe(true);
     fireEvent.click(checkboxes()[0]);
     expect(checkboxes()[0].checked).toBe(false);
-    // The instagram card toggles through the same path.
     expect(checkboxes()[2].checked).toBe(false);
     fireEvent.click(checkboxes()[2]);
     expect(checkboxes()[2].checked).toBe(true);
-    // And unchecking the pre-selected bluesky account.
     expect(checkboxes()[3].checked).toBe(true);
     fireEvent.click(checkboxes()[3]);
     expect(checkboxes()[3].checked).toBe(false);
-    // Toggling never talks to the server — only the initial GET happened.
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
@@ -324,7 +302,6 @@ describe('PersonaPublishingAccountsSection', () => {
     render(<PersonaPublishingAccountsSection personaId={PERSONA_ID} />);
     await screen.findByTestId('publishing-accounts-save');
 
-    // Check UC-2 as well, then save.
     fireEvent.click((screen.getAllByTestId('account-card-select') as HTMLInputElement[])[1]);
     fetchMock.mockResolvedValueOnce({
       ok: true,
@@ -430,7 +407,6 @@ describe('PersonaPublishingAccountsSection', () => {
     await screen.findByTestId('publishing-accounts-save');
 
     const checkboxes = () => screen.getAllByTestId('account-card-select') as HTMLInputElement[];
-    // 2 youtube + 1 instagram + 1 bluesky + 2 linkedin + 2 threads + 1 threespeak
     expect(checkboxes()).toHaveLength(9);
     expect(checkboxes()[4].checked).toBe(false);
     fireEvent.click(checkboxes()[4]);
@@ -697,13 +673,6 @@ describe('PersonaPublishingAccountsSection', () => {
   });
 });
 
-//---------------
-// Issue #572 — draft mode: while creating a persona there is no persisted
-// row, so the section cannot GET/PUT a binding. The picker writes the
-// selection straight into the persona store, which the create submit sends
-// as the `publishingAccounts` field; no Save button, no fetch. And in edit
-// mode the binding can never be emptied — Save disables at zero.
-//---------------
 describe('PersonaPublishingAccountsSection — draft mode (issue #572)', () => {
   it('renders the picker without fetching when there is no personaId', () => {
     const fetchMock = vi.fn();
@@ -714,7 +683,6 @@ describe('PersonaPublishingAccountsSection — draft mode (issue #572)', () => {
     expect(screen.queryByTestId('publishing-accounts-loading')).not.toBeInTheDocument();
     expect(screen.queryByTestId('publishing-accounts-save')).not.toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
-    // The account cards still render from the connected-accounts queries.
     expect(screen.getAllByTestId('account-card-select')).toHaveLength(5);
   });
 
@@ -750,7 +718,7 @@ describe('PersonaPublishingAccountsSection — draft mode (issue #572)', () => {
     expect(saveButton).not.toBeDisabled();
 
     const checkboxes = screen.getAllByTestId('account-card-select') as HTMLInputElement[];
-    fireEvent.click(checkboxes[0]); // untoggle UC-1, the only bound account
+    fireEvent.click(checkboxes[0]);
     expect(saveButton).toBeDisabled();
     expect(screen.getByText('Select at least one account to publish to.')).toBeInTheDocument();
   });

@@ -6,16 +6,8 @@ import type { TranslationKey } from '@/lib/i18n';
 import type { TokenTransaction, TokenTransactionsPage } from '@/lib/token-transactions';
 import { HttpStatusError } from '@/lib/errors';
 
-//---------------
-// TokenHistory — the user's full token ledger: purchases, video
-// generations and refunds, newest first, with "Load more" pagination.
-//---------------
-
 const PAGE_SIZE = 20;
 
-//---------------
-// Type guards for the /api/billing/transactions response shape.
-//---------------
 function isNullableString(value: unknown): value is string | null {
   return value === null || typeof value === 'string';
 }
@@ -51,18 +43,11 @@ export async function fetchTransactionsPage(offset: number): Promise<TokenTransa
   const response = await fetch(`/api/billing/transactions?limit=${PAGE_SIZE}&offset=${offset}`);
   const data: unknown = await response.json().catch(() => null);
   if (!response.ok || !isTransactionsPage(data)) {
-    // The used HttpStatusError keeps the shared 4xx/no-retry policy and the
-    // host-wide session-expiry redirect working for the billing history too;
-    // a 2xx answer with an invalid body keeps its 2xx status (transient).
     throw new HttpStatusError('Failed to load token transactions', response.status);
   }
   return data;
 }
 
-//---------------
-// Type badge styling — each ledger type gets a distinct badge; refunds
-// are visually distinct in green.
-//---------------
 interface TypeBadgeStyle {
   className: string;
   labelKey: TranslationKey;
@@ -92,10 +77,6 @@ function amountClassName(amount: number): string {
   return 'text-muted-text';
 }
 
-//---------------
-// TransactionRow — one ledger entry: type badge, date, description and
-// the signed amount (green for credits, red for debits).
-//---------------
 const TransactionRow = ({ tx }: { tx: TokenTransaction }) => {
   const { t } = useI18n();
   const style = TYPE_BADGE_STYLES[tx.type] ?? UNKNOWN_TYPE_STYLE;
@@ -131,8 +112,6 @@ export const TokenHistory = () => {
   });
 
   const pages = historyQuery.data?.pages ?? [];
-  // Dedupe by id: offset-based pagination can repeat a row if a new
-  // transaction lands while the user pages through the ledger.
   const seenIds = new Set<string>();
   const transactions = pages
     .flatMap((page) => page.transactions)

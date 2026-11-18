@@ -169,8 +169,6 @@ describe('supabase session cookie', () => {
 });
 
 describe('retry wait timeout', () => {
-  // cy.then waits on the sleep promise only up to defaultCommandTimeout
-  // (4s) unless told otherwise, and a capped Retry-After can be 30s.
   it('always outlasts the delay it waits for, including the Retry-After cap', () => {
     for (const delayMs of [0, 1000, PASSWORD_GRANT_BACKOFF_CAP_MS, PASSWORD_GRANT_RETRY_AFTER_CAP_MS]) {
       expect(retryWaitTimeoutMs(delayMs)).toBeGreaterThan(delayMs);

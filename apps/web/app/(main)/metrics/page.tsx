@@ -28,14 +28,6 @@ import {
 } from '@/lib/metrics/metrics-query';
 import { sortByViews, summarize, useMetricsQuery } from '@/lib/metrics/metrics-dashboard';
 
-//---------------
-// MetricsPage — how are my videos doing? Totals over the visible rows
-// (no averages, no per-group comparison — that lives on /experiments):
-// videos measured, total views, total engagement. One filter bar: the
-// window Tabs plus a Filters Sheet with Persona and Network only. The
-// list is sorted by views, highest first.
-//---------------
-
 const WINDOW_LABEL_KEYS: Record<MetricsQuery['window'], TranslationKey> = {
   '24h': 'metrics.window24h',
   '7d': 'metrics.window7d',
@@ -66,8 +58,6 @@ export default function MetricsPage(): React.ReactElement {
     () => (result !== undefined && result.success ? result.rows : []),
     [result],
   );
-  // Coverage (issue #525): the published videos with no snapshot for this
-  // window, and the newest collection time. Empty until the first load.
   const coverage: CoverageItem[] = result !== undefined && result.success ? result.coverage : [];
   const coverageTruncated = result !== undefined && result.success ? result.coverageTruncated : false;
   const asOf = result !== undefined && result.success ? result.asOf : null;
@@ -101,8 +91,6 @@ export default function MetricsPage(): React.ReactElement {
     new Date(iso).toLocaleDateString(locale === 'pt' ? 'pt-BR' : 'en-US', { dateStyle: 'medium' });
   const formatDateTime = (iso: string): string =>
     new Date(iso).toLocaleString(locale === 'pt' ? 'pt-BR' : 'en-US', { dateStyle: 'medium', timeStyle: 'short' });
-  // Tokens granted before yt-analytics.readonly: one prompt for the page,
-  // never zeros in the rows.
   const needsReconnect = rows.some((row) => row.analyticsStatus === 'scope_missing');
   const fallbackTitle = (row: MetricsRowView): string =>
     row.scriptAngle ?? `${PROVIDER_LABELS[row.provider]} · ${formatDate(row.collectedAt)}`;

@@ -10,37 +10,9 @@ import {
 } from './metrics-query';
 import type { DuePost, MetricsTarget, MetricsTargetsResult } from './post-metrics';
 
-//---------------
-// post-metrics-reopen — the late-target re-read (issue #525 item 4),
-// extracted from post-metrics.ts so that file stays under the 500-line
-// cap. Imported by post-metrics.ts; metricsTargets/targetKey arrive as
-// parameters so the modules never import each other's values (a value
-// import back would be a circular import).
-//---------------
-
-// How many published posts the re-open scan reads per run (newest first).
 const REOPEN_SCAN_LIMIT = 200;
-// Rows scale with published videos (a multi-video slot can repeat a
-// provider), not with the 9 providers, so the worst case is unbounded
-// per post. Hitting the cap aborts the re-open for the run (a truncated
-// rows read could mistake a collected target for missing and snapshot
-// it twice).
 export const REOPEN_ROWS_LIMIT = 6000;
 
-//---------------
-// findReopenedPosts — the late-target re-read (issue #525 item 4). The
-// due SQL never re-reads a post marked done, so a target that lands in
-// publish_outcomes after the post was marked done — a retry, or a publish
-// that only finished after the first collection — would miss its window
-// silently. Re-check published posts while their windows are still open:
-// a post is due again for a window when it has a measurable target with
-// no collected snapshot row for that window (a YouTube snapshot without
-// the Analytics scope is not collected — see the mirror below).
-// Best-effort: any read failure logs
-// and returns nothing, never failing the run. The (post, window) pairs
-// the RPC already returned are excluded, so a post is never collected
-// twice in one run.
-//---------------
 export async function findReopenedPosts(
   supabase: SupabaseClient,
   now: Date,
@@ -81,10 +53,6 @@ export async function findReopenedPosts(
   }
   const rows = Array.isArray(rowData) ? rowData : [];
   if (rows.length >= REOPEN_ROWS_LIMIT) {
-    // The cap drops the oldest rows first (newest are kept). An old
-    // collected target could read as missing and be snapshotted twice
-    // (the upsert is idempotent, but the PostHog event would fire
-    // twice). Skip the re-open this run.
     logger.warn('[post-metrics] reopen rows read hit its cap; skipping the re-open this run');
     return [];
   }
@@ -98,9 +66,6 @@ export async function findReopenedPosts(
     ) {
       continue;
     }
-    // Mirror the due SQL (migration 039): a YouTube snapshot without the
-    // Analytics scope is not "collected" — the run retries it until the
-    // token is reconnected or the window closes.
     if (
       record.provider === 'youtube'
       && (record.analytics_status === null || record.analytics_status === 'scope_missing')

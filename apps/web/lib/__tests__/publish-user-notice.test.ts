@@ -28,7 +28,6 @@ describe('noticesFromOutcomes', () => {
     expect(userNotices).toEqual([
       { provider: 'bluesky', accountId: 'b1', code: 'email_not_verified', requiresUser: true, notice: EMAIL },
     ]);
-    // providerFailures mirrors the stored outcome: a user failure stays requiresUser true.
     expect(providerFailures).toEqual([
       { provider: 'bluesky', accountId: 'b1', code: 'email_not_verified', requiresUser: true, notice: EMAIL },
     ]);

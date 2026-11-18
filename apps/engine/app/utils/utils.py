@@ -27,31 +27,22 @@ def get_response(status: int, body: Any = None, message: str = ""):
 
 def to_json(obj):
     try:
-        # Define a helper function to handle different types of objects
         def serialize(o):
-            # If the object is a serializable type, return it directly
             if isinstance(o, (int, float, bool, str)) or o is None:
                 return o
-            # If the object is binary data, convert it to a base64-encoded string
             elif isinstance(o, bytes):
                 return "*** binary data ***"
-            # If the object is a dictionary, recursively process each key-value pair
             elif isinstance(o, dict):
                 return {k: serialize(v) for k, v in o.items()}
-            # If the object is a list or tuple, recursively process each element
             elif isinstance(o, (list, tuple)):
                 return [serialize(item) for item in o]
-            # If the object is a custom type, attempt to return its __dict__ attribute
             elif hasattr(o, "__dict__"):
                 return serialize(o.__dict__)
-            # Return None for other cases (or choose to raise an exception)
             else:
                 return None
 
-        # Use the serialize function to process the input object
         serialized_obj = serialize(obj)
 
-        # Serialize the processed object into a JSON string
         return json.dumps(serialized_obj, ensure_ascii=False, indent=4)
     except Exception as e:
         logger.error(f"failed to serialize object to json: {str(e)}")
@@ -171,8 +162,6 @@ def run_in_background(func, *args, **kwargs):
 
 
 def time_convert_seconds_to_hmsm(seconds) -> str:
-    # Round to whole milliseconds first: float seconds like 24.8 are
-    # 24.7999..., and truncating each field wrote ",799".
     total_ms = int(round(seconds * 1000))
     hours, rest = divmod(total_ms, 3_600_000)
     minutes, rest = divmod(rest, 60_000)
@@ -221,15 +210,10 @@ def split_string_by_punctuations(s):
             next_char = s[i + 1]
 
         if char == "." and previous_char.isdigit() and next_char.isdigit():
-            # # In the case of "withdraw 10,000, charged at 2.5% fee", the dot in "2.5" should not be treated as a line break marker
             txt += char
             continue
 
         if char == "," and previous_char.isdigit() and next_char.isdigit():
-            # 英文数字里的千分位逗号不是断句符，例如 "1,000 years"。
-            # Edge TTS 的 word boundary 通常会把这种数字整体作为连续内容返回；
-            # 如果这里拆成 "1" 和 "000 years"，后续字幕聚合会无法匹配脚本原文，
-            # 进而错误回退到 Whisper。
             txt += char
             continue
 
@@ -239,7 +223,6 @@ def split_string_by_punctuations(s):
             result.append(txt.strip())
             txt = ""
     result.append(txt.strip())
-    # filter empty string
     result = list(filter(None, result))
     return result
 
@@ -260,8 +243,6 @@ def normalize_script_for_subtitle_matching(video_script: str) -> str:
     removed_separator_lines = 0
     for line in video_script.splitlines():
         line = line.strip()
-        # Markdown 分隔符或强调符号单独成行时不会被 TTS 朗读，必须从
-        # 脚本行里移除，避免字幕聚合卡在这类“不可发声”的目标行上。
         if re.fullmatch(r"[-*_]{3,}", line):
             removed_separator_lines += 1
             continue
@@ -286,8 +267,6 @@ def md5(text):
 def get_system_locale():
     try:
         loc = locale.getdefaultlocale()
-        # zh_CN, zh_TW return zh
-        # en_US, en_GB return en
         language_code = loc[0].split("_")[0]
         return language_code
     except Exception:
@@ -296,8 +275,6 @@ def get_system_locale():
 
 @lru_cache(maxsize=None)
 def load_locales(i18n_dir):
-    # WebUI 每次交互都会触发 Streamlit 重新执行脚本，语言文件运行期不会变化，
-    # 因此缓存解析结果，避免反复读取和解析所有 i18n JSON 文件。
     _locales = {}
     for root, dirs, files in os.walk(i18n_dir):
         for file in files:

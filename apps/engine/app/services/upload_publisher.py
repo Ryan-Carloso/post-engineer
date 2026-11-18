@@ -63,8 +63,6 @@ from app.services.upload_publisher_failure import application_failure_reason
 
 VALID_PRIVACY_STATUSES: tuple[str, ...] = ("public", "private", "unlisted")
 
-# Environment variable names for the internal upload API. Used by the
-# fill-schedule publisher and persona image resolution.
 BASE_URL_ENV: str = "MPT_UPLOAD_API_BASE_URL"
 SERVICE_KEY_ENV: str = "MONEYPRINT_API_SECRET"
 INSTAGRAM_CAPTION_MAX_LENGTH: int = 2200
@@ -216,8 +214,6 @@ def validate_publish_metadata(
             raise ValueError("youtube publish requires a non-empty title")
         if not youtube.description.strip():
             raise ValueError("youtube publish requires a non-empty description")
-        # The internal upload route 400s on empty tags ("Video tags are
-        # required"); fail here, before generation, instead of after it.
         if not youtube.tags:
             raise ValueError("youtube publish requires at least one tag")
     if INSTAGRAM_PROVIDER in providers:
@@ -357,10 +353,6 @@ class PublishError(Exception):
     ) -> None:
         super().__init__(message)
         self.status_code = status_code
-        # Upstream response body, for server logs only. Kept OUT of the
-        # message: the message reaches Discord alerts (a third-party
-        # service) via safe_reason, and the body is remote-controlled
-        # text that could echo sensitive data (e.g. an auth page).
         self.response_body = response_body
 
 
@@ -425,9 +417,6 @@ def publish_video(
         raise PublishError(f"unsupported publish metadata: {type(metadata).__name__}")
     parts.fields.append(("userId", owner_user_id))
     if publish_scope_key:
-        # Lets the web route recognise a retry of the same slot/video as
-        # the same publish (ledger key) instead of a new post. Callers
-        # without a key send nothing and keep today's behaviour.
         parts.fields.append(("publishScopeKey", publish_scope_key))
 
     if r2_object_path is not None and provider in _URL_PROVIDERS:
@@ -468,16 +457,8 @@ def publish_video(
                 result: dict[str, Any] = response.json()
             except ValueError as exc:
                 raise PublishError("upload API returned invalid JSON") from exc
-            # HTTP 200 is not success. Bluesky/LinkedIn/Threads/Facebook/3Speak answer 200 with
-            # success:false (and often error/errorType). YouTube/Instagram
-            # keep success:true and put per-account outcomes in results.
-            # Either shape with nothing posted must raise: the message
-            # stays Discord-safe and the body is server logs only.
-            # Not retried — the request completed; the post did not.
             if isinstance(result, dict):
                 failure = application_failure_reason(result)
-                # Fill-schedule passes surface_application_failure so it can
-                # classify each account. Other callers still get the raise.
                 if failure is not None and not surface_application_failure:
                     raise PublishError(
                         failure,

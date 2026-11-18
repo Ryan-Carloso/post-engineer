@@ -31,7 +31,6 @@ from app.services.fill_schedule.constants import MAX_PUBLISH_ATTEMPTS
 from app.services.fill_schedule.publish_results import entries_for_result, failed_entry
 from app.services import upload_publisher
 
-# Re-export the delay helper the publisher uses for the slot wake-up time.
 from app.services.fill_schedule.account_outcomes import next_delay_seconds as next_delay_seconds
 
 RecordResults = Callable[[list[dict[str, Any]]], bool]
@@ -53,7 +52,6 @@ class AccountPublishResult:
     provider_exceptions: list[tuple[str, BaseException]] = field(default_factory=list)
     failure_reason: str = ""
     state_write_failed: bool = False
-    # The final video could not be read: every due account spent one try.
     transport_error: BaseException | None = None
 
 
@@ -71,9 +69,6 @@ def publish_slot_accounts(
     publish_video: Callable[..., Any],
     persist_outcomes: PersistOutcomes,
     record_results: RecordResults | None = None,
-    # Content type of the bytes read_video returns (issue #384): video/mp4
-    # for generated and uploaded videos, image/jpeg|png for scheduled
-    # images. The upload API dispatches on it (Instagram takes images).
     content_type: str = "video/mp4",
     video_object_path: str | None = None,
 ) -> AccountPublishResult:
@@ -85,9 +80,6 @@ def publish_slot_accounts(
     Meta providers skip the read when ``video_object_path`` is set.
     """
     outcomes = load_outcomes(slot)
-    # A slot that never recorded per-account outcomes is still on the
-    # legacy slot-level counter: its accounts keep counting from it.
-    # Once any outcome exists, a brand-new account starts at zero.
     legacy_slot = not outcomes
     indexed = _index(outcomes)
     already_user = {
@@ -116,8 +108,6 @@ def publish_slot_accounts(
             started: list[dict[str, Any]] = []
             for account_id in pending:
                 prior = indexed.get((provider_name, account_id, video_name))
-                # A retrying row already at the cap was an in-flight last try
-                # that never recorded a result. Do not call the provider again.
                 if prior is not None and prior.get("status") == "retrying" and int(prior.get("attempts") or 0) >= MAX_PUBLISH_ATTEMPTS:
                     exhaust_outcome(prior)
                     _upsert(outcomes, prior)
@@ -125,9 +115,6 @@ def publish_slot_accounts(
                 attempt = _prior_attempts(prior, slot, legacy_slot=legacy_slot) + 1
                 outcome = _blank(provider_name, account_id, video_name, attempt)
                 if prior is not None and isinstance(prior.get("inProgressWaitSeconds"), int):
-                    # The in-progress wait clock survives across ticks: a
-                    # fresh blank outcome would otherwise reset it and the
-                    # wait cap in _fail_outcome could never fire.
                     outcome["inProgressWaitSeconds"] = int(prior["inProgressWaitSeconds"])
                 _upsert(outcomes, outcome)
                 indexed[(provider_name, account_id, video_name)] = outcome
@@ -164,9 +151,6 @@ def publish_slot_accounts(
             except RuntimeError as exc:
                 for outcome in started:
                     _fail_outcome(outcome, str(exc), "publish_rejected", 400, now)
-                # A metadata error is local: no provider was called, so it
-                # is not a provider exception and must not fire
-                # publish_provider_failed for that provider.
                 if not result.first_error:
                     result.first_error = str(exc)
                 persist_outcomes(outcomes, {"publish_attempts": max_attempts})
@@ -182,9 +166,6 @@ def publish_slot_accounts(
                     content_type=content_type,
                     max_attempts=1,
                     surface_application_failure=True,
-                    # Deterministic across retries of this slot/video: the
-                    # web route recognises a re-ask of the same publish and
-                    # answers from its ledger instead of posting again.
                     publish_scope_key=f"slot:{slot['id']}:video:{video_name}",
                     r2_object_path=video_object_path if use_archive else None,
                 )
@@ -253,8 +234,6 @@ def publish_slot_accounts(
                 entries = entries_for_result(provider_name, video_name, body if isinstance(body, dict) else {})
             result.publish_results.extend(entries)
             if record_results is not None and entries:
-                # Only the latest write counts: an early failed write
-                # followed by a successful one leaves nothing unwritten.
                 result.state_write_failed = record_results(list(result.publish_results)) is False
             persist_outcomes(outcomes, {
                 "publish_attempts": max(int(item.get("attempts") or 0) for item in outcomes),
@@ -292,9 +271,6 @@ def publish_slot_accounts(
         detail = f": {result.first_error}" if result.first_error else ""
         result.failure_reason = f"all providers failed: {names}{detail}"
     elif result.any_retrying:
-        # Some accounts published, so the reason above stays empty and the
-        # retry event would fall back to a bare "Error": name the accounts
-        # still waiting instead.
         names = ", ".join(failed) or "unknown"
         detail = f": {result.first_error}" if result.first_error else ""
         result.failure_reason = f"some accounts still retrying: {names}{detail}"

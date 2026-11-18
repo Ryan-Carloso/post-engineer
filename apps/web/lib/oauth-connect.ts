@@ -9,19 +9,6 @@ import {
   verifyOAuthNonce,
 } from './oauth-utils';
 
-//---------------
-// oauth-connect — helpers for the "connect via MCP/API key" flow.
-//
-// The traditional /start requires a browser session (httpOnly cookie for the nonce).
-// When the flow is initiated via API key (MCP server), the start has no
-// browser: the state is stored server-side in the oauth_states table (owned by
-// the caller) and the callback consumes it as a fallback when the cookie does
-// not exist — only for a browser signed in as that same owner.
-//---------------
-
-// The OAuth networks derive from the one provider list
-// (shared/contracts/providers.ts): every network that does not connect
-// directly with a typed credential.
 import { OAUTH_CONNECT_PROVIDERS, isOAuthConnectProvider, type OAuthConnectProvider } from '@/lib/contracts/providers';
 
 export { OAUTH_CONNECT_PROVIDERS, isOAuthConnectProvider, type OAuthConnectProvider };
@@ -31,10 +18,6 @@ export interface StoredOAuthState {
   provider: string;
   nonce: string;
   redirectUri: string;
-  // PKCE code verifier (Fanvue only, the first outbound PKCE flow).
-  // Stored server-side so the MCP flow can exchange the code without a
-  // browser cookie; the column is nullable (migration 057) and absent
-  // for every non-PKCE provider.
   codeVerifier?: string;
 }
 
@@ -44,11 +27,6 @@ export function hashOAuthState(state: string): string {
   return createHash('sha256').update(state, 'utf8').digest('hex');
 }
 
-//---------------
-// oauthStateRef — short, non-secret correlation id for a state value.
-// The raw state must never hit the logs; this 12-char hash prefix lets us
-// trace one OAuth flow (connect-url issuance -> callback) across log lines.
-//---------------
 export function oauthStateRef(state: string): string {
   return hashOAuthState(state).slice(0, 12);
 }
@@ -62,10 +40,6 @@ export async function storeOAuthState(
     nonce: string;
     redirectUri: string;
     expiresInSeconds?: number;
-    // PKCE code verifier (Fanvue only). Only written when present: the
-    // code_verifier column lands in migration 057, and an insert naming
-    // it for a provider that never sets it would fail before that
-    // migration applies.
     codeVerifier?: string;
   }
 ): Promise<void> {
@@ -81,8 +55,6 @@ export async function storeOAuthState(
     ...(input.codeVerifier !== undefined ? { code_verifier: input.codeVerifier } : {}),
   });
   if (error) {
-    // The message stays server-side (the route maps it to a stable error
-    // code), so include the underlying database detail for debugging.
     throw new Error(
       `Failed to store OAuth state (code=${error.code ?? 'unknown'}): ${error.message}`
     );
@@ -95,12 +67,6 @@ export async function storeOAuthState(
   });
 }
 
-// Atomic single-use: a single DELETE with an owner and an expiry condition.
-// The row is only returned (and removed) if it exists, belongs to ownerUserId
-// AND is not expired — two concurrent callbacks can never consume the same
-// state, because Postgres executes the DELETE as an atomic operation.
-// The owner is part of the predicate (not a check after the read), so a
-// browser signed in as another user can neither use nor burn the state.
 export async function consumeOAuthState(
   supabase: SupabaseClient,
   state: string,
@@ -134,8 +100,6 @@ export async function consumeOAuthState(
     };
   }
   if (error) {
-    // A database failure is not a miss: report it distinctly so an expired or
-    // unknown state is never blamed for a storage outage.
     logger.error(
       '[oauth-connect] state consumption failed',
       new Error(`Supabase error ${error.code ?? 'unknown'}: ${error.message}`),
@@ -143,9 +107,6 @@ export async function consumeOAuthState(
     );
     return null;
   }
-  // Miss path only: distinguish "the state belongs to another user",
-  // "the state existed but expired" and "unknown or already-consumed state"
-  // — the single most useful answer when a user authorizes and no account appears.
   let expiredAt: string | undefined;
   let ownedByAnotherUser = false;
   try {
@@ -162,13 +123,11 @@ export async function consumeOAuthState(
     expiredAt = undefined;
   }
   if (ownedByAnotherUser) {
-    // Left in place for its owner; the user ids stay out of this line.
     logger.warn('[oauth-connect] state belongs to another user', { stateRef });
     return null;
   }
   if (expiredAt) {
     logger.warn('[oauth-connect] state expired', { stateRef, expiredAt });
-    // Best-effort cleanup of the expired row (not critical).
     try {
       await supabase
         .from('oauth_states')
@@ -176,7 +135,6 @@ export async function consumeOAuthState(
         .eq('state_hash', stateHash)
         .lte('expires_at', nowIso);
     } catch {
-      // ignore: the expiry already denied the consumption above
     }
   } else {
     logger.warn('[oauth-connect] unknown or already-consumed state', { stateRef });
@@ -188,8 +146,6 @@ export type BuildOAuthConnectUrlResult =
   | { ok: true; authUrl: string; state: string; nonce: string; codeVerifier?: string }
   | { ok: false; error: string };
 
-// Generates the OAuth auth URL for a provider, without depending on a session.
-// Reuses the builders already used by the web app /start routes.
 export async function buildOAuthConnectUrl(
   provider: OAuthConnectProvider,
   redirectUri: string
@@ -268,12 +224,8 @@ export async function buildOAuthConnectUrl(
       const { buildFanvueAuthUrl } = await import('./fanvue');
       const { state, nonce } = createOAuthState({ provider: 'fanvue', redirectUri });
       const { authUrl, codeVerifier } = buildFanvueAuthUrl(state, redirectUri);
-      // The verifier is returned alongside the URL so the caller can
-      // store it server-side (oauth_states.code_verifier); it must never
-      // be embedded in the client-visible state.
       return { ok: true, authUrl, state, nonce, codeVerifier };
     }
-    // linkedin
     if (!process.env.LINKEDIN_CLIENT_ID || !process.env.LINKEDIN_CLIENT_SECRET) {
       return {
         ok: false,
@@ -295,17 +247,6 @@ export type ResolveOAuthCallbackAuthResult =
   | { ok: true; userId: string; viaMcp: boolean; redirectUri?: string; codeVerifier?: string }
   | { ok: false; error: string; status: number };
 
-// Resolves who is completing the OAuth in the callback.
-// 1st: traditional web flow (httpOnly nonce cookie + session).
-// 2nd: fallback for the flow initiated via API key (state stored in oauth_states).
-// Both flows require a signed-in session and always return the session user:
-// a connect-url state is only consumed by the user who created it, so a
-// browser signed in as someone else (or not signed in) can never attach its
-// provider tokens to the state owner's account. viaMcp only tells which flow
-// ran (for logs); persistence writes with the service client for that user.
-// The store is only built (getStore) if the fallback is needed.
-// expectedProvider binds the callback to the provider: an Instagram state
-// is never accepted in the YouTube callback (and vice-versa), in both flows.
 export async function resolveOAuthCallbackAuth(
   request: NextRequest,
   rawState: string | null,
@@ -343,9 +284,6 @@ export async function resolveOAuthCallbackAuth(
       provider: expectedProvider,
       stateRef,
     });
-    // Fanvue is the only PKCE provider: its verifier rides the httpOnly
-    // cookie the /start route set (never the client-visible state). Other
-    // providers have no verifier to return.
     const codeVerifier =
       expectedProvider === 'fanvue' ? (getFanvueCodeVerifier(request) ?? undefined) : undefined;
     return {
@@ -357,10 +295,6 @@ export async function resolveOAuthCallbackAuth(
     };
   }
 
-  // MCP fallback: the state was created via API key and stored server-side.
-  // The browser completing the consent must be signed in as the state owner.
-  // Checked before the store is touched, so a session-less browser cannot
-  // burn the owner's single-use state.
   if (sessionUserId === null) {
     logger.warn('[oauth-connect] MCP fallback without session', {
       provider: expectedProvider,
@@ -368,8 +302,6 @@ export async function resolveOAuthCallbackAuth(
     });
     return { ok: false, error: 'Authentication required. Please log in.', status: 401 };
   }
-  // Fail closed: any store read error becomes "invalid state"
-  // instead of crashing the callback — the fallback must never break the web flow.
   logger.debug('[oauth-connect] trying MCP fallback', {
     provider: expectedProvider,
     stateRef,
@@ -377,11 +309,8 @@ export async function resolveOAuthCallbackAuth(
   let stored: StoredOAuthState | null = null;
   if (rawState) {
     try {
-      // Consumed only when owned by the session user (predicate in the DELETE).
       stored = await consumeOAuthState(getStore(), rawState, sessionUserId);
     } catch (err) {
-      // A thrown store failure (e.g. network) must be visible in the logs:
-      // otherwise a failed authorization looks identical to an invalid state.
       logger.error(
         '[oauth-connect] MCP fallback store error',
         err instanceof Error ? err : new Error(String(err)),
@@ -397,9 +326,6 @@ export async function resolveOAuthCallbackAuth(
     });
     return { ok: false, error: 'Invalid or expired OAuth state.', status: 403 };
   }
-  // Binds to this callback provider and to the stored nonce (not the payload,
-  // which is client-controlled). The redirectUri used in the code exchange comes
-  // from the store (server-side), never from the decoded state.
   if (stored.provider !== expectedProvider || stored.nonce !== payload.nonce) {
     logger.warn('[oauth-connect] MCP fallback mismatch', {
       provider: stored.provider,
@@ -413,8 +339,6 @@ export async function resolveOAuthCallbackAuth(
     userId: sessionUserId,
     stateRef,
   });
-  // The verifier comes from the stored state (server-side), never from
-  // the decoded payload: only the state owner could have stored it.
   return {
     ok: true,
     userId: sessionUserId,

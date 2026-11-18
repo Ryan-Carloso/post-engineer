@@ -174,9 +174,6 @@ def test_unpinned_verification_test_file_runs_the_whole_scripts_suite():
     assert scope.local_suites([".github/scripts/tests/test_verification_workflow.py"]) == [
         "verification"
     ]
-    # A future test_verification_*.py file is not in the suite command, so
-    # it must fall through to review-scripts instead of claiming the
-    # verification suite ran it.
     assert scope.local_suites([".github/scripts/tests/test_verification_report.py"]) == [
         "review-scripts"
     ]

@@ -7,12 +7,6 @@ import {
   listExperiments as listExperimentsContract,
 } from '../contracts/experiments.js';
 
-//---------------
-// Experiments client against the shared contract: each literal request
-// site issues exactly its contract's method + path, and the response is
-// parsed by the contract (a malformed 200 is an error).
-//---------------
-
 const EXPERIMENT_ID = '7b0e6c1e-0000-4000-8000-000000000001';
 const VARIANTS = [
   { variantId: 'hook-calm', name: 'Calm', description: 'calm' },
@@ -34,7 +28,6 @@ function mockClient(response: unknown) {
   return { client: client as unknown as PostEngineerClient, request };
 }
 
-/** The template path with every `:param` replaced by its value. */
 function contractPath(template: string, params: Record<string, string>): string {
   return template
     .split('/')

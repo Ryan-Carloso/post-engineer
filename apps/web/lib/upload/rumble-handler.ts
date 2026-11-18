@@ -5,21 +5,6 @@ import { accountFailure } from '@/lib/upload/account-error';
 import { rememberDeadCredential, reportAccountUnauthorized } from '@/lib/upload/account-unauthorized';
 import { getAccountIdsFromFormData } from '@/lib/upload/account-utils';
 
-//---------------
-// handleRumbleUpload — publishes the video to the user's Rumble channels
-// via the Simple Upload API. Unlike Facebook/Threads, Rumble takes the
-// video bytes directly (multipart), so the file is forwarded without a
-// Supabase Storage round-trip.
-// FormData (multipart, coming from the engine or the UI):
-//   provider=rumble, video (File), title, description,
-//   rumbleAccountIds (repeated; Rumble channel ids),
-//   userId (internal engine call only).
-// The stored token is the manually issued 40-char Simple Upload API
-// access token (see lib/rumble.ts): there is no OAuth, no expiry to
-// check, and no way to validate it without uploading — a wrong token
-// surfaces here as an invalid_token error and is reported for reconnect.
-//---------------
-
 interface RumbleAccountResult {
   accountId: string;
   success: boolean;
@@ -58,8 +43,6 @@ export async function handleRumbleUpload(
   if (!(rawFile instanceof File)) return rejected('Video file is required');
   if (rawFile.size > RUMBLE_VIDEO_MAX_BYTES) return rejected('Video exceeds the Rumble 4GB limit');
 
-  // The bytes are checked rather than the client-declared type: MP4 and
-  // MOV both carry `ftyp` at offset 4.
   const buffer = Buffer.from(await rawFile.arrayBuffer());
   if (buffer.subarray(4, 8).toString('latin1') !== 'ftyp') return rejected('Video must be an MP4 or MOV file');
 
@@ -71,8 +54,6 @@ export async function handleRumbleUpload(
 
   for (const accountId of accountIds) {
     try {
-      // Ownership: resolves only the user's own accounts. The channel id
-      // is the account id itself (stored as provider_account_id at connect).
       const { tokens } = await getSocialAccountTokens(supabase, ownerUserId, 'rumble', accountId);
       const accessToken = tokens.access_token;
 
@@ -101,8 +82,6 @@ export async function handleRumbleUpload(
       });
     } catch (error) {
       reportAccountUnauthorized('rumble', accountId, ownerUserId, error);
-      // A non-Error throw stays generic: accountFailure would surface a
-      // thrown string as the message.
       results.push(accountFailure(accountId, error instanceof Error ? error : new Error('Unknown error')));
     }
   }

@@ -126,7 +126,6 @@ class StartAbortsOnDeadImageTests(unittest.TestCase):
         self.assertIn("HTTP 404", fail_task.call_args.args[1])
 
     def test_partial_runs_never_download_the_image(self):
-        # Only the render needs the image: a script-only run must stay free.
         preflight, generate_script, _ = self._run_start("script")
         preflight.assert_not_called()
         generate_script.assert_called_once()
@@ -174,7 +173,7 @@ class DownloadFailureReasonTests(unittest.TestCase):
 class IntroOnlyJobsArePreflightedTests(unittest.TestCase):
     def test_a_dead_image_fails_an_intro_only_video_run_at_the_start(self):
         params = _params()
-        self.assertEqual(params.video_type, "hook_lipsync")  # intro-only: no full lip-sync
+        self.assertEqual(params.video_type, "hook_lipsync")
         failure = longcat.LongCatError("persona image download failed: HTTP 404")
         with (
             patch.object(persona_preflight, "preflight_persona_image", side_effect=failure),
@@ -199,9 +198,6 @@ class ResolvePersonaImageFirstPhotoTests(unittest.TestCase):
     """
 
     def _task_params(self, hook_media):
-        # The valid-segments fixture (hook 25 words / 4 photos, body 42
-        # words / 6, CTA / 2): the test's media replaces the hook's, with
-        # fillers keeping the 4-photo minimum.
         segments = valid_segments()
         fillers = [
             {"url": f"https://e.com/filler{i}.jpg"}
@@ -273,9 +269,6 @@ class ResolvePersonaImageFirstPhotoTests(unittest.TestCase):
                 self.assertTrue(os.path.exists(asset))
 
     def test_no_segment_media_falls_back_to_the_persona_photo(self):
-        # The images modes require media on every segment, so this state
-        # reaches the resolver in production only from full_lipsync
-        # text-only segments (media is optional there): duck-type it.
         from types import SimpleNamespace
 
         with tempfile.TemporaryDirectory() as task_dir:

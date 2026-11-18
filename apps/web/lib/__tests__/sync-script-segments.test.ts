@@ -1,12 +1,3 @@
-//---------------
-// sync-script-segments — the web image builds from a partial checkout.
-//
-// apps/web's prebuild runs scripts/sync-script-segments.mjs, which writes the
-// generated copies in both apps/web and apps/mcp. The web Dockerfile copies
-// only apps/web plus the root scripts/ and shared/ sources, so the script must
-// skip apps/mcp instead of failing on its missing parent directory. Without
-// either piece the prod web build fails with MODULE_NOT_FOUND/ENOENT.
-//---------------
 /**
  * @vitest-environment node
  */

@@ -42,8 +42,6 @@ class _Session:
         )
 
 
-# ---- download
-
 
 def test_download_writes_an_image_after_the_ssrf_checks(tmp_path):
     session = _Session(_jpeg())
@@ -75,8 +73,6 @@ def test_download_rejects_oversized_photos(tmp_path):
         with pytest.raises(ssrf.UnsafeUrlError):
             image_fetch.download_image("https://example.com/a.jpg", str(tmp_path / "a.raw"), session=session)
 
-
-# ---- portrait still
 
 
 def test_a_landscape_photo_becomes_a_full_portrait_still(tmp_path):

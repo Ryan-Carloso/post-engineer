@@ -61,7 +61,6 @@ function statusBody(
   };
 }
 
-/** Deterministic clock: sleep advances fake time instead of waiting. */
 function fakeClock(): { now: () => number; sleep: (ms: number) => Promise<void> } {
   let now = 0;
   return {
@@ -284,9 +283,6 @@ describe('wait_for_video_tasks', () => {
         { now: clock.now, sleep },
       );
 
-      // A revoked key or a wrong route is broken for every taskId: the
-      // video itself may be fine, so this must never read as a failed
-      // render (the agent would regenerate a video that was never broken).
       expect(response.isError).toBe(true);
       expect(textOf(response)).toContain(
         `Error waiting for video tasks: Failed to get video status: ${status}`,
@@ -332,9 +328,6 @@ describe('wait_for_video_tasks', () => {
       .mockRejectedValueOnce(
         new ApiError('Failed to get video status: 408 Request Timeout.', null, null, 408),
       )
-      // Persistent (not once): the pre-fix code fails the task on the 408
-      // and never polls again, which would leave a queued once-value
-      // behind to pollute the next test.
       .mockResolvedValue(statusBody('task-1', 1, 100, null));
 
     const response = await handleWaitForVideoTasks(

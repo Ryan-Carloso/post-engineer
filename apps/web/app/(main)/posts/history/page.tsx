@@ -10,15 +10,6 @@ import { PostFiltersBar, SlotCard, usePostFilters, usePostJoins } from '../post-
 import { PageHeader } from '@/components/ui/page-header';
 import { Button } from '@/components/ui/button';
 
-//---------------
-// PostHistoryPage — past posts and video generations as a list, across all
-// connected accounts. Read-only: GET /api/schedule/status with a raised
-// limit (its `recent` half) plus the generations list. The month view of
-// the same posts is the calendar on /posts.
-//---------------
-
-// Max rows fetched; the API caps ?limit= at 500, the page asks for fewer to
-// keep the render cheap. Exported for tests.
 export const POSTS_LIMIT = 200;
 
 export default function PostHistoryPage() {
@@ -28,30 +19,22 @@ export default function PostHistoryPage() {
   const joins = usePostJoins();
   const filters = usePostFilters(joins);
 
-  // Slots whose schedule was deleted are dropped (they fail the filter), so
-  // the capped hint counts the fetched rows, not the visible ones.
   const recent = useMemo(() => statusQuery.data?.recent ?? [], [statusQuery.data]);
   const visibleSlots = useMemo(() => recent.filter(filters.passes), [recent, filters.passes]);
   const generations = generationsQuery.data ?? [];
 
   const isLoading = statusQuery.isLoading || generationsQuery.isLoading || joins.isLoading;
   const isError = statusQuery.isError || generationsQuery.isError || joins.isError;
-  // The error names what failed — the history list, the generations, or
-  // the supporting data behind the cards — never an internal detail.
   const loadErrorKey: TranslationKey = statusQuery.isError
     ? 'posts.loadErrorHistory'
     : generationsQuery.isError
       ? 'posts.loadErrorGenerations'
       : 'posts.loadErrorSupporting';
-  // The error state covers every query, so retry refetches all of them — a
-  // failed query would otherwise never clear without a full page reload.
   const handleRetry = () => {
     void statusQuery.refetch();
     void generationsQuery.refetch();
     joins.refetch();
   };
-  // The fetch truncates at POSTS_LIMIT rows; say so instead of implying the
-  // list is complete, even when a filter narrows the visible rows.
   const isCapped = recent.length >= POSTS_LIMIT;
 
   return (

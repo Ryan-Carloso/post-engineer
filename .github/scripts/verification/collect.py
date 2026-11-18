@@ -64,8 +64,6 @@ def build_payload(
 ) -> dict:
     findings = list(analyze(changes, exists))
     for path in oversized or []:
-        # A file the grader could not read escapes every honesty check, so
-        # it fails the grade instead of passing with a warning.
         findings.append(Finding(
             "fail",
             "file-too-large",

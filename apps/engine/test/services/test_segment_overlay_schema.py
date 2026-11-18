@@ -47,8 +47,6 @@ def test_overlay_rejects_what_the_validator_rejects(overlay):
 
 
 def test_overlay_text_is_measured_after_trimming_like_the_validators():
-    # check_script (action: validate) and the TS validators measure the trimmed string, so a
-    # title that only exceeds the limit by its padding must be accepted here.
     overlay = SegmentOverlay(
         title="x" * script_segments.MAX_OVERLAY_TITLE_CHARS + "  ", badge=" EUR 35 "
     )
@@ -111,8 +109,6 @@ def test_images_request_with_a_segment_missing_media_is_rejected():
 
 
 def test_request_without_segments_is_accepted_for_script_only_calls():
-    # Script-only direct API calls carry no segments: the script is used
-    # as-is. Web, MCP and the batch pipeline always send segments.
     from app.models.schema import TaskVideoRequest
 
     assert (
@@ -149,7 +145,5 @@ def test_segment_media_duration_out_of_range_or_not_a_number_is_rejected(duratio
 
 
 def test_segment_media_without_duration_dumps_without_it():
-    # Old clients send no duration: the dump is unchanged, so nothing
-    # downstream sees a new key.
     media = SegmentMedia(url="https://example.com/x.jpg")
     assert "duration" not in media.model_dump(exclude_none=True)

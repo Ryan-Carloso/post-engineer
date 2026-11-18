@@ -1,19 +1,3 @@
-//---------------
-// schedule-window — valid window for target date/time scheduling.
-// Product rule: minimum 3h in advance, maximum 30 days ahead.
-//
-// Callers pass the CONVERTED instant (a Date): timezone-aware parsing
-// happens before this validator runs — the route passes slots already
-// converted to UTC instants by distributeSlots (which resolves naive
-// startAt as wall-clock in the timezone via parseZonedDateTime and each
-// candidate slot via zonedTimeToUtc, lib/timezone.ts). The schedule form
-// parses the naive start date with parseZonedDateTime but does not run
-// this validator; the server enforces the window. One exception: the slot
-// reschedule route passes the raw client string, but it rejects naive
-// values first (hasExplicitOffset, lib/timezone.ts), so the instant that
-// reaches this validator is unambiguous.
-//---------------
-
 export const SCHEDULE_MIN_ADVANCE_HOURS = 3;
 export const SCHEDULE_MIN_ADVANCE_MS = SCHEDULE_MIN_ADVANCE_HOURS * 60 * 60 * 1000;
 
@@ -24,10 +8,6 @@ export type ScheduleWindowResult =
   | { ok: true }
   | { ok: false; error: string };
 
-//---------------
-// validateScheduleWindow — validates a target datetime against the window
-// [now + 3h, now + 30d]. Accepts a Date or an ISO string.
-//---------------
 export function validateScheduleWindow(
   target: Date | string | unknown,
   now: Date = new Date(),

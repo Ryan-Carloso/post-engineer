@@ -1,13 +1,4 @@
 #!/usr/bin/env node
-/**
- * Render the PR comment body for the API naming lint.
- *
- * Usage:
- *   node comment.mjs --findings <findings.json> --head-sha <sha>
- *
- * Prints the markdown body (with the <!-- api-naming-lint --> marker) to
- * stdout. The workflow posts/updates it via `gh`.
- */
 
 import fs from 'node:fs';
 import { buildCommentBody } from './report.mjs';

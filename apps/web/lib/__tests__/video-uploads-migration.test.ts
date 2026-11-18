@@ -3,13 +3,6 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { findRepoRoot } from '@/test/repo-root';
 
-//---------------
-// supabase/migrations/060_video-uploads.sql — signed video uploads for
-// publish-by-id (issue #561): one owner-bound row per upload with a
-// single-use status, pinned here so the migration, the TS status list
-// (lib/videos/signed-upload.ts) and supabase/README.md cannot drift.
-//---------------
-
 const repoRoot = findRepoRoot(import.meta.url);
 const migration = readFileSync(
   join(repoRoot, 'supabase', 'migrations', '060_video-uploads.sql'),

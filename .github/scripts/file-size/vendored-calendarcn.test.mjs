@@ -12,11 +12,6 @@ import {
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(HERE, '..', '..', '..');
 
-//---------------
-// The vendored CalendarCN list: the exact set the shadcn CLI copied from
-// vmnog/calendarcn. The gates trust this list, so it must stay exact:
-// every entry exists, and our own files in the same directories stay out.
-//---------------
 describe('vendored CalendarCN list', () => {
   it('pins the upstream commit', () => {
     assert.equal(VENDORED_CALENDARCN_COMMIT, '6e15924d');

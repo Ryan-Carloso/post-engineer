@@ -15,24 +15,6 @@ import { accountFailure } from '@/lib/upload/account-error';
 import { getAccountIdsFromFormData } from '@/lib/upload/account-utils';
 import { MAX_IMAGE_UPLOAD_BYTES, sniffPublishMedia } from '@/lib/upload/publish-media-file';
 
-//---------------
-// handlePinterestUpload — publishes the video or image as a Pin to the
-// user's Pinterest boards. Pinterest takes the file bytes: a video goes
-// register -> S3 presigned upload -> poll -> create Pin; a JPEG/PNG image
-// rides in the Pin body (image_base64). The handler passes the buffer
-// straight through, never through Supabase Storage.
-// FormData (multipart, coming from the engine or the UI):
-//   provider=pinterest, video (File: a video, or a JPEG/PNG image), title, description (or caption as
-//   a description fallback, the shape the direct-publish MCP tool sends),
-//   boardId (one board for the whole batch — a schedule carries exactly
-//   one pinterest_board_id), pinterestAccountIds (repeated),
-//   coverImageUrl (optional), userId (internal engine call only).
-// Title/description are validated, never truncated: over the Pinterest
-// ceilings the whole request is rejected. The access token lives 30
-// days; an expired token is refreshed from the stored refresh token
-// (which rotates — the new pair is persisted) before publishing.
-//---------------
-
 interface PinterestAccountResult {
   accountId: string;
   success: boolean;
@@ -72,8 +54,6 @@ export async function handlePinterestUpload(
   if (title.length > PINTEREST_TITLE_MAX_CHARS) {
     return rejected(`Title exceeds the Pinterest ${PINTEREST_TITLE_MAX_CHARS}-character limit`);
   }
-  // The direct-publish shape sends the text as `caption`; the engine sends
-  // it as `description`. Either is the pin description, never both.
   const description =
     typeof descriptionRaw === 'string' && descriptionRaw.trim() !== ''
       ? descriptionRaw.trim()
@@ -86,8 +66,6 @@ export async function handlePinterestUpload(
   if (!(rawFile instanceof File)) return rejected('A video or image file is required');
   if (rawFile.size > PINTEREST_VIDEO_MAX_BYTES) return rejected('Video exceeds the Pinterest 2GB limit');
 
-  // The file is checked by its bytes rather than the client-declared type:
-  // MP4 and MOV both carry `ftyp` at offset 4; JPEG and PNG their signature.
   const media = sniffPublishMedia(Buffer.from(await rawFile.arrayBuffer()), rawFile.type);
   if (media === null) return rejected('File must be an MP4 or MOV video, or a JPEG or PNG image');
   if (media.kind === 'image' && media.buffer.length > MAX_IMAGE_UPLOAD_BYTES) {
@@ -102,8 +80,6 @@ export async function handlePinterestUpload(
 
   for (const accountId of accountIds) {
     try {
-      // Ownership: resolves only the user's own accounts; an expired
-      // token is refreshed from the stored refresh token first.
       const accessToken = await getValidPinterestAccessToken(supabase, ownerUserId, accountId);
 
       const text = { ...(title === '' ? {} : { title }), ...(description === '' ? {} : { description }) };
@@ -132,8 +108,6 @@ export async function handlePinterestUpload(
         metadata: { accountId, error: message },
       });
       reportAccountUnauthorized('pinterest', accountId, ownerUserId, error);
-      // A non-Error throw stays generic: accountFailure would surface a
-      // thrown string as the message.
       results.push(accountFailure(accountId, error instanceof Error ? error : new Error('Unknown error')));
     }
   }

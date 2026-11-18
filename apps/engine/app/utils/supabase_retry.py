@@ -15,12 +15,7 @@ from __future__ import annotations
 
 from typing import Any
 
-# Connect-phase failures only (DNS, refused, connect timeout). 2 retries
-# means 3 attempts total — see worst_case_seconds.
 CONNECT_RETRIES = 2
-# urllib3's backoff schedule: the first retry sleeps 0, the k-th sleeps
-# ``backoff_factor * 2 ** (k - 1)`` (Retry.get_backoff_time), so the total
-# sleep across the budget is retry_sleep_seconds(), NOT one backoff period.
 CONNECT_RETRY_BACKOFF_SECONDS = 0.5
 
 
@@ -59,12 +54,7 @@ def connect_retry(count: int = CONNECT_RETRIES) -> Any:
     return Retry(
         total=count,
         connect=count,
-        # A read failure means the request reached Supabase and only the
-        # response was lost: retrying could re-apply a token RPC POST.
         read=False,
-        # other=0 disables retries for errors that are neither connect nor
-        # read (SSL, invalid headers): urllib3 skips 0 in the exhausted
-        # check but decrements it to -1, which does exhaust.
         other=0,
         backoff_factor=CONNECT_RETRY_BACKOFF_SECONDS,
     )
@@ -85,9 +75,6 @@ def mount_retry_adapter(session: Any, count: int = CONNECT_RETRIES) -> Any:
     return session
 
 
-# The scheduler re-arms this every tick, so the swap must not cost a
-# connection: each mounted prefix is mutated in place and the shared adapter
-# and its PoolManager survive.
 _MOUNTED_PREFIXES = ("https://", "http://")
 
 
@@ -101,8 +88,6 @@ def set_retry_budget(session: Any, count: int = CONNECT_RETRIES) -> Any:
     for prefix in _MOUNTED_PREFIXES:
         adapter = session.adapters.get(prefix)
         if adapter is None:
-            # Never mounted (a hand-built session): mount one so the budget
-            # still takes effect.
             session.mount(prefix, _adapter(count))
             continue
         adapter.max_retries = connect_retry(count)

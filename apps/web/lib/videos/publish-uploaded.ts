@@ -19,16 +19,6 @@ import {
   type VideoUploadStore,
 } from './signed-upload';
 
-//---------------
-// Publish-by-id (issue #561): publish a video that arrived through the
-// signed-upload flow. The publish fields are validated BEFORE the upload
-// is claimed, so a malformed publish never burns the single use; the
-// claim itself is the atomic `ready` -> `consumed` update in
-// signed-upload.ts. The provider dispatch reuses the exact handlers
-// POST /api/upload-content uses — the only difference is where the
-// bytes come from (storage, by id, instead of the multipart body).
-//---------------
-
 export interface PublishUploadedInput {
   uploadId: string;
   provider: SocialProvider;
@@ -95,9 +85,6 @@ export function parsePublishBody(body: unknown): PublishUploadedInput {
   return input;
 }
 
-// Provider-specific required fields, checked before the claim (mirrors
-// the MCP client's requireDirectPublishFields and the handlers' own
-// validation, which still runs on the dispatched form).
 export function validatePublishFields(input: PublishUploadedInput): void {
   if (input.provider === 'youtube' || input.provider === 'rumble' || input.provider === 'fanvue') {
     if (input.title === undefined || input.title.trim() === '') {
@@ -188,9 +175,6 @@ export function buildPublishForm(
   return formData;
 }
 
-// The provider handlers each return their own response shape (all of
-// them `{ success, results, ... }` with per-account entries). Normalize
-// to the one publish-by-id contract the MCP client narrows.
 export interface PublishUploadedResult {
   success: boolean;
   provider: SocialProvider;
@@ -272,8 +256,6 @@ export async function publishUploadedVideo(
   try {
     return await dispatchPublish(input.provider, formData, userId, logId, startTime);
   } finally {
-    // The upload is consumed either way; removing the object is
-    // best-effort cleanup, never a publish failure.
     void storage.remove([claimed.row.storage_path]).catch(() => undefined);
     logger.info('[publish-by-id] upload consumed', {
       logId,

@@ -19,11 +19,6 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-//---------------
-// Tests for metrics coverage (issue #525): published videos with no
-// snapshot for the selected window, and why each one is missing.
-//---------------
-
 const NOW = new Date('2026-10-22T12:00:00.000Z');
 const PERSONA = '11111111-2222-4333-8444-555555555555';
 
@@ -43,7 +38,6 @@ function post(overrides: Partial<CoveragePostInput> = {}): CoveragePostInput {
   };
 }
 
-// One module-level relative publish date (computed once, stable per run).
 const PUBLISHED_AT = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
 
 function row(overrides: Partial<MetricsRowView> = {}): MetricsRowView {
@@ -94,15 +88,10 @@ describe('metrics window hours (migrations 025/039)', () => {
       'utf8',
     );
     const fn = sql.slice(sql.indexOf('create or replace function public.find_post_metrics_due'));
-    // The TS constants are the single source the collector re-open and the
-    // dashboard coverage compute from; the SQL is the source the due
-    // query runs from. Both must agree, or a window opens in one and not
-    // the other.
     const values = (Object.entries(METRICS_WINDOW_START_HOURS) as Array<[string, number]>)
       .map(([window, hours]) => `('${window}', ${hours})`)
       .join(', ');
     expect(fn).toContain(`values ${values}`);
-    // The window width is the SQL's `start_hours + 24`.
     expect(fn).toContain('make_interval(hours => w.start_hours + 24)');
     expect(METRICS_WINDOW_WIDTH_HOURS).toBe(24);
   });
@@ -160,16 +149,11 @@ describe('computeCoverage', () => {
   });
 
   it('keeps one publish-failed item per (provider, account) when several videos fail there', () => {
-    // Two videos of one slot failing on the same account carry no video
-    // id, so without dedupe the items are identical and collide as
-    // React keys.
     const { items } = compute({
       posts: [post({ outcomes: [IG_FAILED_OUTCOME, IG_FAILED_OUTCOME, { provider: 'youtube', accountId: 'yt', status: 'failed' }] })],
     });
     expect(items).toHaveLength(2);
     expect(items.filter((item) => item.provider === 'instagram')).toHaveLength(1);
-    // The dedupe is per post: the same failure on another post is its
-    // own item.
     const { items: twoPosts } = compute({
       posts: [
         post({ id: 'post-1', outcomes: [IG_FAILED_OUTCOME] }),
@@ -201,9 +185,6 @@ describe('computeCoverage', () => {
   it('hides an orphaned post (deleted schedule, not faceless) from a scoped caller', () => {
     const posts = [
       post({ id: 'post-own', personaId: PERSONA }),
-      // No persona because the schedule is gone, but faceless is false:
-      // the post may belong to a persona outside the scope (its
-      // post_metrics rows still carry the persona), so it stays hidden.
       post({ id: 'post-orphan', personaId: null, faceless: false }),
       post({ id: 'post-faceless', personaId: null, faceless: true }),
     ];
@@ -230,8 +211,6 @@ describe('computeCoverage', () => {
   });
 
   it('takes a null angle from a row and shows the item with no angle', () => {
-    // The YouTube target is collected; the Instagram target is missing
-    // and inherits the null angle from the collected row.
     const { items } = compute({
       posts: [post({ outcomes: [YT_OUTCOME, IG_OUTCOME] })],
       rows: [row({ scriptAngle: null })],
@@ -284,7 +263,6 @@ describe('computeCoverage', () => {
         IG_FAILED_OUTCOME,
       ] })],
     });
-    // Only the well-formed Instagram failure survives, once.
     expect(items).toEqual([expect.objectContaining({
       provider: 'instagram', accountId: 'ig1', externalId: null, reason: 'publish-failed',
     })]);
@@ -302,8 +280,6 @@ describe('computeCoverage', () => {
   });
 
   it('takes the post angle from its rows, and skips unknown-angle posts under an angle filter', () => {
-    // The YouTube row is collected (angle 'myth'); the Instagram target is
-    // missing, so its item inherits the post angle from the collected row.
     const withAngle = compute({
       posts: [post({ outcomes: [YT_OUTCOME, IG_OUTCOME] })],
       rows: [row()],
@@ -312,15 +288,12 @@ describe('computeCoverage', () => {
     expect(withAngle.items).toHaveLength(1);
     expect(withAngle.items[0]).toMatchObject({ provider: 'instagram', scriptAngle: 'myth' });
 
-    // Same post under a different angle filter: hidden, not mislabelled.
     expect(compute({
       posts: [post({ outcomes: [YT_OUTCOME, IG_OUTCOME] })],
       rows: [row()],
       query: query({ angle: 'tutorial' }),
     }).items).toEqual([]);
 
-    // A post with no rows at all has an unknown angle: hidden under any
-    // angle filter, shown when no angle filter is set.
     expect(compute({ query: query({ angle: 'myth' }) }).items).toEqual([]);
     expect(compute().items).toHaveLength(1);
   });
@@ -356,12 +329,10 @@ describe('computeCoverage', () => {
     const { items, truncated } = compute({ posts });
     expect(items).toHaveLength(METRICS_ROW_LIMIT);
     expect(truncated).toBe(true);
-    // Deterministic order: publishedAt desc, then post id.
     expect(items[0]?.postId).toBe('post-0');
   });
 });
 
-// Records every chained filter; `limit` resolves the query like supabase-js.
 function fakeClient(tables: Record<string, { data: unknown; error: unknown }>) {
   const calls: Array<{ table: string; method: string; args: unknown[] }> = [];
   const from = vi.fn((table: string) => {
@@ -504,8 +475,6 @@ describe('fetchCoverage', () => {
       post_metrics: { data: [], error: null },
     });
     const { items } = await fetchCoverage(client, 'user-1', query(), NOW, { personaIds: [PERSONA] });
-    // The referenced schedule resolves to a persona outside the scope,
-    // so the post is dropped — never degraded to "no persona".
     expect(items).toEqual([]);
     expect(calls).toContainEqual({ table: 'schedules', method: 'in', args: ['id', ['sched-1']] });
     expect(calls).not.toContainEqual({ table: 'schedules', method: 'limit', args: [1000] });
@@ -626,7 +595,6 @@ describe('fetchCoverage', () => {
     });
     const { items } = await fetchCoverage(client, 'user-1', query(), NOW);
     expect(items[0]?.personaId).toBeNull();
-    // No post references a schedule, so the schedules read never runs.
     expect(from).not.toHaveBeenCalledWith('schedules');
   });
 
@@ -689,7 +657,6 @@ describe('fetchCoverage', () => {
       },
     });
     const { items } = await fetchCoverage(client, 'user-1', query(), NOW);
-    // The valid row collects the YouTube target; nothing is missing.
     expect(items).toEqual([]);
     expect(logger.warn).toHaveBeenCalledWith(
       '[metrics-coverage] skipped row with unknown provider or missing id',

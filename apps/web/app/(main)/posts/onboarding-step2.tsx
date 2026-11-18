@@ -25,21 +25,6 @@ import { useSocialAccountsQuery } from '@/lib/social-accounts-queries';
 import { INPUT_CLASS } from '@/lib/ui';
 import { PROVIDER_LABELS } from '@/lib/account-options';
 
-//---------------
-// Onboarding wizard step 2 — inline connect (issue #578, refs #573).
-// The old step 2 linked every provider to /accounts, which unmounted
-// this dialog (it only renders on /posts) and left the user to find
-// their way back through the saved-step resume. This step never
-// navigates: tapping a row swaps the dialog to that provider's real
-// connect UI, and the OAuth flows open a popup (lib/oauth/popup.ts),
-// so the page — and the wizard — stay mounted through the whole
-// connect. The saved-step resume in lib/onboarding-wizard.ts stays as
-// the safety net for a detour; dismiss-on-close is unchanged.
-//---------------
-
-// Display order is the approved mockup order: SOCIAL_PROVIDERS order with
-// Fanvue moved up before 3Speak/Rumble. Brand names are literals: the
-// same in both locales.
 const STEP2_PROVIDERS: readonly SocialProvider[] = SOCIAL_PROVIDERS.flatMap((provider): SocialProvider[] => {
   if (provider === 'fanvue') return [];
   return provider === '3speak' ? ['fanvue', provider] : [provider];
@@ -57,15 +42,6 @@ const PROVIDER_DESCRIPTIONS: Record<SocialProvider, TranslationKey> = {
   '3speak': 'accounts.threespeakDescription',
   rumble: 'accounts.rumbleDescription',
 };
-
-//---------------
-// ONBOARDING_OAUTH_CONFIG — the /accounts OAuth configs, by value.
-// The per-provider hooks (lib/oauth/*-handler.ts) are the same
-// useOAuthFlow call with the same config; the sync test in
-// __tests__/onboarding-step2-oauth-config.test.tsx pins the copy, so a
-// start URL or callback message that changes in a handler breaks there
-// instead of silently connecting the wrong provider.
-//---------------
 
 export const ONBOARDING_OAUTH_CONFIG: Record<
   OAuthProvider,
@@ -121,15 +97,6 @@ export const ONBOARDING_OAUTH_CONFIG: Record<
     queryKey: ['social-accounts'],
   },
 };
-
-//---------------
-// Credential providers have no OAuth: Bluesky takes a handle plus an
-// app password, 3Speak a Hive username plus its posting key, Rumble a
-// channel id plus a manual access token. The endpoints, field names,
-// and error mapping are the same as the /accounts sections
-// (credential-accounts-sections.tsx, threespeak-accounts-section.tsx);
-// only the form renders inline here instead of in a KeyConnectDialog.
-//---------------
 
 type CredentialProvider = Exclude<SocialProvider, OAuthProvider>;
 
@@ -187,10 +154,6 @@ const CREDENTIAL_CONFIG: Record<CredentialProvider, CredentialConnectConfig> = {
   },
 };
 
-// An account with sync status 'error' has a dead credential (revoked
-// token, undecryptable secret) — the /accounts page flags it as invalid
-// instead of healthy, so the wizard must not badge it Connected either.
-// The field is optional: payloads without it read as healthy.
 function connectedProviders(accounts: Array<{ provider: string; status?: AccountSyncStatus }>): Set<SocialProvider> {
   const connected = new Set<SocialProvider>();
   for (const account of accounts) {
@@ -203,9 +166,6 @@ export function WizardStepTwo() {
   const { t } = useI18n();
   const next = useOnboardingWizardStore((s) => s.next);
   const [selected, setSelected] = useState<SocialProvider | null>(null);
-  // One shared ['social-accounts'] query — the same single GET
-  // /api/account the /accounts page uses — so the badges read the
-  // live connected state with no extra fetch.
   const accountsQuery = useSocialAccountsQuery();
   const connected = connectedProviders(accountsQuery.data?.accounts ?? []);
 
@@ -264,8 +224,6 @@ function WizardStepTwoConnect({ provider, onBack }: { provider: SocialProvider; 
   const { t } = useI18n();
   const next = useOnboardingWizardStore((s) => s.next);
   const accountsQuery = useSocialAccountsQuery();
-  // Same dead-credential guard as connectedProviders: an 'error' account
-  // must not show Connected or Continue here either.
   const connected = (accountsQuery.data?.accounts ?? []).some(
     (account) => account.provider === provider && account.status !== 'error',
   );
@@ -335,13 +293,6 @@ function OAuthConnectView({ provider, connected }: { provider: OAuthProvider; co
   );
 }
 
-//---------------
-// useCredentialConnect — the /accounts credential POST as a hook: the
-// same endpoint, field names, and error mapping as the provider's
-// section, with the shared accounts query invalidated on success so
-// the Connected badge appears without a page reload.
-//---------------
-
 function useCredentialConnect(provider: CredentialProvider) {
   const { t } = useI18n();
   const queryClient = useQueryClient();
@@ -361,14 +312,8 @@ function useCredentialConnect(provider: CredentialProvider) {
       formData.append(config.passwordField, appPassword);
       const response = await fetch(config.endpoint, { method: 'POST', body: formData });
       if (!response.ok) {
-        // 401 here means a dead hub session (a rejected credential is 422
-        // for Bluesky/3Speak, 400 for Rumble — format-only validation), so
-        // it triggers the host-wide session-expiry redirect.
         notifyIfSessionExpired(response);
         if (config.credentialRejectedKey) {
-          // A rejected credential is 422 THREESPEAK_CREDENTIAL_REJECTED:
-          // name it, so the user knows the username/key pair is what
-          // 3Speak refused.
           const body: unknown = await response.json().catch(() => null);
           const code = (body as { code?: unknown } | null)?.code;
           setError(

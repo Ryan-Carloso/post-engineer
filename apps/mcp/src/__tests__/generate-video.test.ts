@@ -4,11 +4,6 @@ import type { PostEngineerClient } from '../client.js';
 import { GenerateVideoSchema, handleGenerateVideo } from '../generate-video.js';
 import type { McpToolResponse } from '../tools-call.js';
 
-// generate_video (issue #566): one call generates one video or a batch, and
-// the persona and accounts are given by name or id. Every reference of every
-// video is resolved BEFORE the first video is created, and the result echoes
-// what was resolved.
-
 const MARIA = '11111111-1111-4111-8111-111111111111';
 const JOAO = '22222222-2222-4222-8222-222222222222';
 
@@ -78,7 +73,6 @@ describe('generate_video: one video', () => {
     const sent = f.generatePersonaVideo.mock.calls[0][0];
     expect(sent.personaId).toBe(MARIA);
     expect(sent.providers).toEqual(['youtube', 'bluesky']);
-    // Bound accounts are the server default: the account arrays stay unset.
     expect(sent.youtubeAccountIds).toBeUndefined();
     expect(text(response)).toContain(`Resolved: persona "Maria" → ${MARIA}`);
     expect(text(response)).toContain("publishing to the persona's bound accounts: youtube (UC1); bluesky (did:plc:abc)");

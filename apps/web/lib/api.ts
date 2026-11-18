@@ -23,16 +23,9 @@ import { narrowHookPhoto, type HookPhoto } from './hook-photo';
 import { parseJsonBody, throwForBadResponse } from './api-response';
 import type { PersonaRecord } from './persona-record';
 
-// Re-exported so existing import sites (`@/lib/api`) keep working.
 export type { ProgressHistoryEntry };
 export type { PersonaRecord };
 
-//---------------
-// API — typed fetch clients
-//---------------
-
-// Social-account queries live in lib/social-accounts-queries.ts; re-exported
-// here so existing `@/lib/api` import sites keep working.
 export {
   useBlueskyAccountsQuery,
   useFacebookAccountsQuery,
@@ -49,8 +42,6 @@ async function createPersona(formData: FormData): Promise<CreatePersonaResult> {
   const response = await fetch('/api/persona', { method: 'POST', body: formData });
   notifyIfSessionExpired(response);
   const data = (await response.json()) as CreatePersonaResult;
-  // The server only sends string arrays here, but narrow defensively: a
-  // non-string entry would break the i18n warning mapper downstream.
   return {
     ...data,
     imageIds: toStringArray(data.imageIds),
@@ -58,10 +49,6 @@ async function createPersona(formData: FormData): Promise<CreatePersonaResult> {
   };
 }
 
-// String arrays, defensively filtered: non-string entries are dropped but
-// the valid ones are kept, so a partially malformed payload can't silently
-// swallow real partial-success notes (each warning is independently mapped
-// through i18n anyway). Non-arrays are absent.
 function toStringArray(value: unknown): string[] | undefined {
   if (!Array.isArray(value)) return undefined;
   const entries = value.filter((entry): entry is string => typeof entry === 'string');
@@ -81,7 +68,6 @@ async function generatePersonaAvatar(prompt: string): Promise<GeneratePersonaAva
 
 async function fetchVoices(): Promise<VoiceOption[]> {
   const response = await fetch('/api/persona/voices');
-  // Guarded: a non-JSON error page must still surface the status.
   const data: unknown = await response.json().catch(() => null);
 
   if (!response.ok) {
@@ -129,8 +115,6 @@ export function usePersonasQuery() {
 export interface DeletePersonaResult {
   success: boolean;
   error?: string;
-  // Present on non-ok responses when the server sent a structured code
-  // (e.g. PERSONA_NOT_FOUND). Lets the UI stop retrying permanent failures.
   code?: string;
 }
 
@@ -159,11 +143,6 @@ export interface DeletePreview {
   code?: string;
 }
 
-// Extract the server's structured error from a non-ok response, falling
-// back to a generic message when the body is missing or unreadable.
-// Returns the error text and, when present, the machine-readable code so
-// callers can distinguish permanent failures (PERSONA_NOT_FOUND) from
-// transient ones.
 async function parseErrorResponse(
   response: Response,
   fallback: string,
@@ -184,8 +163,6 @@ export async function fetchDeletePreview(personaId: string): Promise<DeletePrevi
   );
   if (!response.ok) {
     notifyIfSessionExpired(response);
-    // Surface the server's structured error (code/error) so the UI can
-    // distinguish e.g. PERSONA_NOT_FOUND from a transient 500.
     const parsed = await parseErrorResponse(response, `Preview request failed (${response.status}).`);
     return { success: false, error: parsed.error, code: parsed.code };
   }
@@ -262,25 +239,13 @@ export function usePersonaListQuery() {
   });
 }
 
-//---------------
-// Persona image library — up to 10 tagged images per persona used for
-// deterministic per-video image selection.
-//---------------
-
 export interface PersonaImageRecord {
   id: string;
-  // NOTE: image_path is intentionally absent — the API never exposes the
-  // internal storage path (GET projects only UI fields); signed URLs come
-  // via image_url.
   tag: string | null;
   description: string | null;
   is_primary: boolean;
   created_at: string;
-  /** Signed URL. Only GET /api/persona/images populates this; mutations
-      return ImageMutationResult (no image row), so this type is GET-only. */
   image_url: string | null;
-  /** True when signing failed transiently; the UI can show a retryable
-      error state instead of a silently broken thumbnail. */
   image_url_error?: true;
 }
 
@@ -290,8 +255,6 @@ async function fetchPersonaImages(personaId: string): Promise<PersonaImageRecord
   );
   const data: { success: boolean; images: PersonaImageRecord[]; error?: string } | null =
     await response.json().catch(() => null);
-  // Surface the server's error string when present, like the mutation
-  // paths do — a generic status message is less actionable.
   const serverError = data && typeof data.error === 'string' ? data.error : null;
   if (!response.ok) {
     throw new HttpStatusError(serverError ?? `Persona images request failed with status ${response.status}`, response.status);
@@ -299,10 +262,6 @@ async function fetchPersonaImages(personaId: string): Promise<PersonaImageRecord
   if (!data || data.success !== true || !Array.isArray(data.images)) {
     throw new Error(serverError ?? 'Persona images request returned an unexpected payload.');
   }
-  // Narrow each record: the UI reads id/image_url directly, is_primary
-  // drives the primary badge/toggle, and tag/description render as text,
-  // so a malformed entry must not flow through unchecked and break
-  // rendering downstream.
   return data.images.filter(
     (image): image is PersonaImageRecord =>
       typeof image?.id === 'string' &&
@@ -333,32 +292,15 @@ export interface UploadPersonaImageInput {
   file: File;
   tag?: string;
   description?: string;
-  /** Swap-only, like UpdatePersonaImageInput: false is meaningless on upload
-      (new images default to is_primary:false; the server only promotes on
-      'true'). */
   isPrimary?: true;
 }
 
 export interface ImageMutationResult {
   success: boolean;
   error?: string;
-  /**
-   * Partial-success notes from the server (e.g. the image uploaded but the
-   * primary swap failed). Present only when non-empty, mirroring the
-   * PATCH contract — callers surface these so the user knows the true
-   * state instead of assuming the full request applied.
-   */
   warnings?: string[];
 }
 
-/**
- * Reads a mutation-style JSON payload defensively: a non-2xx status, a
- * non-JSON body, or a success:false payload all surface as
- * { success: false } instead of throwing on .json() or resolving as success.
- * The server row is intentionally NOT carried: mutations return the raw DB
- * row (no signed image_url) and no consumer reads it — every mutation hook
- * invalidates the library query and refetches the signed GET shape.
- */
 async function parseImageMutationResult(
   response: Response,
 ): Promise<ImageMutationResult> {
@@ -397,16 +339,12 @@ export interface UpdatePersonaImageInput {
   id: string;
   tag?: string;
   description?: string;
-  /** Swap-only, like the MCP client: the server 400s isPrimary:false. */
   isPrimary?: true;
 }
 
 export async function updatePersonaImage(
   input: UpdatePersonaImageInput,
 ): Promise<ImageMutationResult> {
-  // Fail fast like the MCP client instead of a server 400 after the
-  // round-trip. The type above already prevents this at compile time;
-  // the runtime check guards JS callers (hence the cast).
   if ((input.isPrimary as boolean | undefined) === false) {
     throw new Error('isPrimary cannot be false: mark another image as primary instead.');
   }
@@ -433,12 +371,6 @@ function useInvalidatePersonaImages(personaId: string | null) {
   };
 }
 
-/**
- * Shared factory for the persona-image mutations. Every mutation needs the
- * same null-personaId guard and the same invalidate-on-success behavior;
- * keeping them in one place means future changes (surfacing warnings,
- * error toasts) land once instead of three times.
- */
 function usePersonaImageMutation<TInput>(
   personaId: string | null,
   mutationFn: (personaId: string, input: TInput) => Promise<ImageMutationResult>,
@@ -449,11 +381,6 @@ function usePersonaImageMutation<TInput>(
       if (personaId === null) throw new Error('personaId is required.');
       return mutationFn(personaId, input);
     },
-    // NOTE: server rejections resolve as { success: false } rather than
-    // throwing — consumers MUST check result.success / result.error;
-    // mutation.isError will never be true for these hooks.
-    // Only refresh the library when the server actually accepted the change;
-    // a success:false payload must not look like a completed mutation.
     onSuccess: (result) => {
       if (result.success) invalidate();
     },
@@ -478,10 +405,6 @@ export function useDeletePersonaImageMutation(personaId: string | null) {
   );
 }
 
-//---------------
-// Supabase session — authenticated user's session
-//----------------
-
 interface SupabaseSessionUser {
   id: string;
   email?: string;
@@ -501,14 +424,6 @@ async function fetchSession(): Promise<SupabaseSessionUser | null> {
   }
   return data.session.user as SupabaseSessionUser;
 }
-
-//---------------
-// React Query hooks — data shared across screens
-//---------------
-
-//---------------
-// disconnectAccount — removes a connected social account (DELETE /api/account).
-//---------------
 
 export interface DisconnectAccountResult {
   success: boolean;
@@ -539,8 +454,6 @@ export function useDisconnectAccountMutation(provider: DisconnectableProvider) {
     mutationFn: (input: DisconnectAccountInput) => disconnectAccount(provider, input.providerAccountId),
     onSuccess: (_data, input) => {
       void queryClient.invalidateQueries({ queryKey: ['social-accounts'] });
-      // Deselects the disconnected account from upload on any network
-      // (no-op if it was not selected).
       useUploadStore.getState().deselectAccount(provider, input.providerAccountId);
     },
   });
@@ -565,17 +478,8 @@ export function useVoicesQuery() {
 }
 
 
-//---------------
-// Fill Schedule — video publishing timetables (days + time window + posts/day).
-// Created by POST /api/videos/generate-and-schedule (one video + slot +
-// task per call); the engine does generation per slot, then publishing at
-// each slot's time via /api/upload-content.
-//---------------
-
 export interface ScheduleConfig {
   id: string;
-  /** Null for a schedule created without a persona (migration 012): the post
-      is faceless and carries its own voice. */
   personaId: string | null;
   providers: string[];
   youtubeAccountIds: string[];
@@ -594,8 +498,6 @@ export interface ScheduleConfig {
   postsPerDay: number;
   timezone: string;
   active: boolean;
-  /** How the post publishes (migration 015): at the slot times, or ASAP —
-      the moment generation finishes, with no scheduled time. */
   publishMode: 'scheduled' | 'asap';
 }
 
@@ -635,11 +537,6 @@ export function useScheduleStatusQuery(limit?: number) {
   });
 }
 
-//---------------
-// Video generation history (Posts > History). The row is the shared
-// contract's VideoGenerationRow (GET /api/persona/video-generations);
-// the alias keeps the existing import sites working.
-//---------------
 export type { VideoGeneration };
 
 async function fetchVideoGenerations(limit?: number): Promise<VideoGeneration[]> {
@@ -660,11 +557,6 @@ export function useVideoGenerationsQuery(limit?: number) {
     refetchInterval: 60_000,
   });
 }
-
-//---------------
-// Per-slot operations (Posts page). Only slots not yet dispatched can be
-// edited/deleted — the API returns 409 otherwise, surfaced to the user.
-//---------------
 
 export async function updateSlotTitle(slotId: string, title: string): Promise<string> {
   const response = await fetch(`/api/schedule/slots/${encodeURIComponent(slotId)}`, {
@@ -694,8 +586,6 @@ export function useUpdateSlotMutation() {
       updateSlotTitle(slotId, title),
     onSuccess: (_data, variables) => {
       void queryClient.invalidateQueries({ queryKey: ['fill-schedule-status'] });
-      // The detail page reads ['post-detail', slotId] with a 30s staleTime;
-      // invalidate it too so the saved title shows immediately.
       void queryClient.invalidateQueries({ queryKey: ['post-detail', variables.slotId] });
     },
   });
@@ -710,11 +600,6 @@ export function useDeleteSlotMutation() {
     },
   });
 }
-
-//---------------
-// Detail endpoints — one post per request. A 404 resolves to null (not
-// found — unknown id or another user's row); other failures throw.
-//---------------
 
 export interface SlotDetailPayload {
   slot: {
@@ -731,17 +616,9 @@ export interface SlotDetailPayload {
     retryable: boolean | null;
     queuePosition: number | null;
     queueTotal: number | null;
-    // The specific angle the engine built the script around (derived from
-    // the video subject). Null until generation starts, or when none was recorded.
     scriptAngle: string | null;
-    // Where the post went, one entry per provider. Empty until the slot is
-    // published (nothing exists to link to before that).
     publishLinks: PublishLink[];
-    // The photo the lip-sync hook opens with (issue #589): the first
-    // photo of the video's segments. Narrowed at the fetch boundary.
     hookPhoto: HookPhoto;
-    // Observed generation progress transitions, oldest first. Empty for
-    // posts that never started generating (or predate the history table).
     progressHistory: ProgressHistoryEntry[];
     userNotices?: PublishUserNotice[];
     providerFailures?: PublishProviderFailure[];
@@ -759,26 +636,13 @@ export interface SlotDetailPayload {
     pinterestAccountIds: string[];
     pinterestBoardId: string | null;
     threespeakAccountIds: string[];
-    // The schedule's IANA timezone — the detail page renders the slot time
-    // in this zone so "10:00" is never ambiguous about whose 10:00 it is.
     timezone: string;
-    // How the post publishes (migration 015). Narrowed defensively at the
-    // fetch boundary: only the literal 'asap' counts.
     publishMode: 'scheduled' | 'asap';
   };
   persona: { id: string; name: string } | null;
-  // What the post was generated with: the post_* snapshot columns written
-  // at creation (migration 012) plus the slot's faceless flag. Required
-  // with nullable leaves — the route always sends every key, so the UI
-  // never has to feature-detect.
   generation: GenerationFacts;
 }
 
-//---------------
-// PostDetail — the unified detail payload from GET /api/posts/[id]: one
-// endpoint resolves any post id (issue #208); both branches carry live
-// progress.
-//---------------
 export type PostDetail =
   | (SlotDetailPayload & { kind: 'slot' })
   | { kind: 'generation'; generation: VideoGeneration & { progress: number; stage: string | null; scriptAngle: string | null } };
@@ -825,10 +689,6 @@ export function usePostDetailQuery(id: string) {
     queryFn: () => fetchPostDetail(id),
     enabled: id !== '',
     staleTime: 30_000,
-    // The detail page shows live generation progress: without this the
-    // status freezes on mount (staleTime only gates manual refetches) and
-    // a generating post never flips to ready — so the <video>, which only
-    // renders for ready/publishing/published, never appears.
     refetchInterval: 60_000,
   });
 }

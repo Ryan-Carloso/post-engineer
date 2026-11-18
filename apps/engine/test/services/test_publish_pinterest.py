@@ -56,7 +56,6 @@ class PublishPinterestModuleTest(unittest.TestCase):
             validate(
                 publish_pinterest.PinterestMetadata(title="t", description="a" * 801, board_id="b1", account_ids=("1",))
             )
-        # At the limits is valid.
         validate(
             publish_pinterest.PinterestMetadata(
                 title="a" * 100, description="a" * 800, board_id="b1", account_ids=("1",)

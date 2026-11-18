@@ -7,7 +7,6 @@ import {
 import { accountOption, PROVIDER_LABELS } from '@/lib/account-options';
 import { SOCIAL_PROVIDERS } from '@/lib/providers/registry';
 
-// One module-level relative publish date so two view() calls compare equal.
 const PUBLISHED_AT = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
 
 function view(overrides: Partial<MetricsRowView> = {}): MetricsRowView {
@@ -29,8 +28,6 @@ describe('summarize', () => {
     const rows = [3, 0, 134, 1, 0, 0, 110, 0].map((views, i) =>
       view({ postId: `p${i}`, views, likes: 1, comments: 1, saves: 1 }),
     );
-    // 3 + 0 + 134 + 1 + 0 + 0 + 110 + 0 = 248 views; engagement is
-    // 3 per row (1 like + 1 comment + 1 save) across 8 rows = 24.
     expect(summarize(rows)).toEqual({ measurements: 8, views: 248, engagement: 24 });
   });
 
@@ -43,8 +40,6 @@ describe('summarize', () => {
   });
 
   it('counts one measurement per row, so one post on two networks is two measurements', () => {
-    // A row is one video on one network: the same post measured on YouTube
-    // and Instagram is two rows, and the tile counts both.
     const rows = [
       view({ postId: 'p1', provider: 'youtube', accountId: 'yt', externalId: 'yt-1', views: 10 }),
       view({ postId: 'p1', provider: 'instagram', accountId: 'ig', externalId: 'ig-1', views: 20 }),

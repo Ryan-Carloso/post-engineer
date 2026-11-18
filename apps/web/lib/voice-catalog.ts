@@ -1,12 +1,3 @@
-//---------------
-// Voice catalog entries as the engine serves them (GET /api/v1/personas/voices):
-// house voices (Phonon + Kokoro) carry gender/accent/kind for the picker
-// filters; OpenRouter voices carry none; the caller's clones are kind
-// "cloned". Shared by the /api/persona/voices proxy and the client fetcher so
-// both validate the same shape. The enums and the option shape live in the
-// shared voices contract; this module keeps the picker helpers.
-//---------------
-
 import {
   VOICE_ACCENTS,
   VOICE_GENDERS,
@@ -62,13 +53,6 @@ export function toVoiceOption(voice: VoiceOption): VoiceOption {
   };
 }
 
-//---------------
-// Picker filters. Gender: all / female / male. Origin: all / US / UK /
-// characters. Characters are their own origin (no accent) but keep a gender,
-// so the gender filter applies to them too. Clones never show in the house
-// grid — they live in the "clone my voice" tab.
-//---------------
-
 export const GENDER_FILTERS = ['all', 'female', 'male'] as const;
 export const ORIGIN_FILTERS = ['all', 'us', 'gb', 'character'] as const;
 
@@ -97,15 +81,6 @@ export function filterHouseVoices(
   });
 }
 
-//---------------
-// searchVoices — case- and accent-insensitive match on every word of the
-// query against the voice's label, description, id and tag words ("deep
-// british" finds a British voice described as deep). Each query word must
-// START a word of the voice text, so typing "pir" finds "pirate" while "male"
-// does not match "female". An empty query keeps every voice.
-//---------------
-// Searchable words for the structured tags, so "british woman" or
-// "character" match even when the description never says so.
 const ACCENT_SEARCH_WORDS: Record<VoiceAccent, string> = { us: 'american usa us', gb: 'british uk england' };
 const GENDER_SEARCH_WORDS: Record<VoiceGender, string> = { female: 'female woman', male: 'male man' };
 
@@ -131,14 +106,6 @@ export function searchVoices(voices: readonly VoiceOption[], query: string): Voi
   });
 }
 
-//---------------
-// LEGACY_VOICE_SAMPLE_ALIASES — mirrors the engine LEGACY_VOICE_ALIASES
-// (apps/engine/app/services/voice_catalog.py): personas may still store a
-// retired Modal voice id, the engine renders it through the alias target,
-// and the old sample files were deleted with the Modal catalog. Playing the
-// alias target's sample is both the file that exists and the voice the
-// persona will actually speak with.
-//---------------
 const LEGACY_VOICE_SAMPLE_ALIASES: Record<string, string> = {
   en_us_female_01: 'kokoro_af_heart',
   en_us_female_02: 'kokoro_af_bella',
@@ -153,14 +120,6 @@ const LEGACY_VOICE_SAMPLE_ALIASES: Record<string, string> = {
   ryan: 'kokoro_am_michael',
 };
 
-//---------------
-// Clone voice ids — the engine renamed the clone prefix from `chatterbox:`
-// to `chatterbox_nano:` while personas created before the rename still store
-// `chatterbox:<key>`. Both prefixes address the same clone, so any comparison
-// of a stored persona voice against a served clone row must compare the key,
-// never the full id. Engine clone keys are u{12 hex of user uuid}_{12 hex
-// of clone uuid} (apps/engine/app/services/cloned_voices/ownership.py).
-//---------------
 const CLONE_VOICE_ID_RE = /^chatterbox(_nano)?:u[0-9a-f]{12}_[0-9a-f]{12}$/i;
 
 export function isCloneVoiceId(voiceId: string): boolean {
@@ -174,11 +133,6 @@ export function cloneKeyOf(voiceId: string | null | undefined): string | null {
   return voiceId.replace(/^chatterbox(_nano)?:/, '');
 }
 
-//---------------
-// voiceSampleName — house voice samples live at /voice-samples/<name>.mp3,
-// keyed by the catalog name without the `chatterbox:` routing prefix (a colon
-// is not a portable file name). Only catalog voices have a sample.
-//---------------
 export function voiceSampleName(voice: VoiceOption): string | null {
   if (voice.kind === 'cloned' || voice.provider === 'openrouter' || isCloneVoiceId(voice.id)) {
     return null;

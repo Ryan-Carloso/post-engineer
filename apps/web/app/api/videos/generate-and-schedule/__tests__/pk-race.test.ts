@@ -61,8 +61,6 @@ describe('answerSchedulePkRace', () => {
 
     expect(result).toBe(replay);
     expect(refundRollbackSpend).toHaveBeenCalledTimes(0);
-    // The else branch logs the skip with the race context: a refund here
-    // would steal the legitimate prior spend.
     expect(loggerError).toHaveBeenCalledWith(
       '[generate-and-schedule] schedule PK race; already spent, nothing to refund, replaying winner',
       { code: '23505' },

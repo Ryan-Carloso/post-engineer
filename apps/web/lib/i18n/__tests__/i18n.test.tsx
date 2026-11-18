@@ -41,10 +41,6 @@ describe('i18n dictionaries', () => {
     }
   });
 
-  //---------------
-  // The scheduling screen is gone: its copy must go with it. The root route
-  // redirects to /posts, so there is no separate home tab or copy.
-  //---------------
   it('carries no scheduling copy', () => {
     for (const key of ['schedule', 'scheduleHint'] as const) {
       expect(ptDictionary.nav).not.toHaveProperty(key);

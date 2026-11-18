@@ -3,29 +3,10 @@ import type { PostEngineerClient } from './client.js';
 import { getErrorMessage } from './errors.js';
 import type { McpToolResponse } from './tools-call.js';
 
-//---------------
-// Reference resolution (issue #566 §7): a persona or an account is given as
-// an id or as a display name, and the tool resolves it inside the call, so
-// the agent does not chain list calls just to copy ids around.
-//
-// - An id wins: a UUID is a persona id (an unknown one is a 404 from the
-//   API later), and an account id is the provider-specific id the listing
-//   returns (channelId, igUserId, did, providerAccountId).
-// - Otherwise the name must match exactly, case-insensitive and trimmed.
-//   Never a prefix or a fragment: a wrong guess would publish to the wrong
-//   persona.
-// - Zero matches is an actionable error. Several matches is NOT an error
-//   and NOT a guess: a candidates result with actionTaken false, so the
-//   agent can present them or narrow the reference.
-// - Reads are scoped to the caller's own data (the same listings the tools
-//   call) and fail closed: a malformed listing is an error, never "no match".
-//---------------
-
 export type RefOutcome<T> = { kind: 'ok'; value: T } | { kind: 'response'; response: McpToolResponse };
 
 export interface ResolvedPersona {
   id: string;
-  /** The display name when it was resolved by name; null when the id was taken as given. */
   name: string | null;
 }
 
@@ -92,8 +73,6 @@ async function resolvePersona(listPersonas: Listing, ref: string): Promise<RefOu
   return { kind: 'ok', value: { id: matches[0].id, name: matches[0].name } };
 }
 
-// The id and the names of one listed account, by provider (the fields of the
-// web registry's toPublicAccount: apps/web/lib/providers/registry.ts).
 function accountOf(entry: unknown): { provider: string; id: string; names: string[]; label: string } | null {
   const item = record(entry);
   const provider = text(item?.provider);
@@ -133,7 +112,6 @@ async function resolveAccount(listAccounts: Listing, ref: string, provider?: str
   return { kind: 'ok', value: { provider: matches[0].provider, id: matches[0].id, label: matches[0].label } };
 }
 
-/** Reads a listing once, whatever the number of references resolved against it. */
 function once(read: Listing): Listing {
   let pending: Promise<unknown> | null = null;
   return () => {
@@ -147,7 +125,6 @@ export interface RefResolvers {
   account: (ref: string, provider?: string) => Promise<RefOutcome<ResolvedAccount>>;
 }
 
-/** Resolvers that share one personas listing and one accounts listing (a batch resolves many refs). */
 export function createRefResolvers(client: PostEngineerClient): RefResolvers {
   const personas = once(() => client.listPersonas());
   const accounts = once(() => client.listSocialAccounts());
@@ -165,20 +142,13 @@ export function resolveAccountRef(client: PostEngineerClient, ref: string, provi
   return createRefResolvers(client).account(ref, provider);
 }
 
-/** The `persona` field of every action that acts on one persona. */
 export const PERSONA_REF = z.string().min(1, 'persona is required').describe('The persona, by name or id (personas list shows both).');
 
-/** A shape with its `personaId` replaced by the `persona` reference (the other fields are kept as they are). */
 export function personaRefShape<TShape extends Record<string, z.ZodType>>(shape: TShape): { persona: typeof PERSONA_REF } & Omit<TShape, 'personaId'> {
   const { personaId: _replaced, ...rest } = shape;
   return { persona: PERSONA_REF, ...rest };
 }
 
-/**
- * Resolves `args.persona` and runs `run` with the persona id as `personaId`
- * (and the other fields untouched). An unknown or ambiguous persona ends the
- * call with the resolver's response, before `run`.
- */
 export async function withPersona<TArgs extends { persona: string }, TResult extends McpToolResponse>(
   client: PostEngineerClient,
   args: TArgs,
@@ -190,13 +160,11 @@ export async function withPersona<TArgs extends { persona: string }, TResult ext
   return run({ ...rest, personaId: outcome.value.id }, outcome.value);
 }
 
-/** Like personaRefShape, for an action where the persona is optional. */
 export function optionalPersonaRefShape<TShape extends Record<string, z.ZodType>>(shape: TShape): { persona: z.ZodOptional<typeof PERSONA_REF> } & Omit<TShape, 'personaId'> {
   const { personaId: _replaced, ...rest } = shape;
   return { persona: PERSONA_REF.optional(), ...rest };
 }
 
-/** Like withPersona, when the persona is optional: absent stays absent (no personaId). */
 export async function withOptionalPersona<TArgs extends { persona?: string | undefined }>(
   client: PostEngineerClient,
   args: TArgs,

@@ -15,15 +15,6 @@ import { handleGeneratePersonaVideo, handleValidateScript } from '../tools-singl
 import { RecipeSession, withScriptOutcome } from '../recipe-session.js';
 import type { McpToolResponse } from '../tools.js';
 
-//---------------
-// The images material (issue #481, narrowed by #542): the video shows
-// only the segment images, so every segment needs media. The MCP checks
-// it locally before any client call (no token is ever charged for a script
-// the web would reject) and forwards full lip sync to the web when the
-// video is full lip sync (media optional there). The mode is options.
-// videoType now: 'faceless' and 'hook_lipsync' need media on every
-// segment, 'full_lipsync' makes it optional.
-//---------------
 const hook =
   'Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is still waiting nearby for you today.';
 const content =
@@ -170,8 +161,6 @@ describe('validate_script with videoType', () => {
   });
 
   it('forwards full lip sync to the web validation', async () => {
-    // Full lip sync caps media at 6 photos for the whole video, so the
-    // forwarded segments carry none.
     const bare = withMedia.map((segment) => ({ kind: segment.kind, text: segment.text }));
     const client = mockClient();
     const response = await handleValidateScript(client, { segments: bare, videoType: 'full_lipsync' });

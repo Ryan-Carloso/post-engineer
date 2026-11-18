@@ -1,15 +1,5 @@
 import type { Locale } from '@/lib/i18n/types';
 
-//---------------
-// MCP install prompt — the text the user pastes into their AI agent to
-// install the Post Engineer MCP server and learn how to use it. It is the
-// agent's source of truth for the server's tools, pinned line by line in
-// __tests__/mcp-install-prompt.test.ts. Pure: the prompts hub passes the
-// key it just created (or null) and gets the prompt back; with a key the
-// config already carries it, without one the placeholder stays and the
-// prompt tells the agent to replace it.
-//---------------
-
 interface InstallPromptCopy {
   lines: readonly string[];
   placeholder: string;

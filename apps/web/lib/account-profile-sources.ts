@@ -1,13 +1,5 @@
 import 'server-only';
 
-//---------------
-// Per-provider profile readers for the account profile resync
-// (lib/account-profile-sync.ts). Each returns the account name and the
-// metadata fields the card shows, read fresh from the provider with the
-// stored credentials. A field the provider did not return is null/absent,
-// so the resync never overwrites stored data with a fallback.
-//---------------
-
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getSocialAccountTokens, type SocialAccountRecord } from './social-accounts';
 import { INSTAGRAM_USERNAME_FALLBACK, YOUTUBE_PLACEHOLDER_ACCOUNT_ID, type SocialProvider } from './providers/registry';
@@ -30,7 +22,6 @@ export interface FetchedProfile {
 }
 
 export interface ProfileSource {
-  // Metadata key the card reads the picture from.
   pictureKey: string;
   applies(record: SocialAccountRecord): boolean;
   fetch(supabase: SupabaseClient, userId: string, record: SocialAccountRecord): Promise<FetchedProfile>;
@@ -87,9 +78,6 @@ const youtube: ProfileSource = {
     const { tokens } = await getSocialAccountTokens(supabase, userId, 'youtube', record.providerAccountId);
     const client = await createGoogleOAuth2Client();
     client.setCredentials(tokens);
-    // Legacy rows saved before connect failed closed carry a placeholder id:
-    // read the channel the stored grant belongs to instead of looking it up
-    // by an id that does not exist.
     const channel = await fetchYouTubeChannel(
       client,
       record.providerAccountId === YOUTUBE_PLACEHOLDER_ACCOUNT_ID ? { mine: true } : { id: record.providerAccountId },
@@ -122,7 +110,6 @@ const bluesky: ProfileSource = {
 
 const linkedin: ProfileSource = {
   pictureKey: 'picture',
-  // Organization pages have no member userinfo; only the member row resyncs.
   applies: (record) => record.accountMetadata.kind === 'member',
   async fetch(supabase, userId, record) {
     const profile = await fetchLinkedInMemberProfile(await accessToken(supabase, userId, record));
@@ -173,10 +160,6 @@ const pinterest: ProfileSource = {
   },
 };
 
-// 3Speak has no public profile endpoint in the documented Studio API
-// (my-videos returns videos, not a profile), so the resync never applies:
-// the card keeps the Hive username stored at connect time. fetch returns
-// the stored name so a future caller degrades safely instead of throwing.
 const threespeak: ProfileSource = {
   pictureKey: 'profilePictureUrl',
   applies: () => false,
@@ -185,8 +168,6 @@ const threespeak: ProfileSource = {
   },
 };
 
-// Rumble has no profile API: the resync never applies, so the stored
-// channel id (written at connect) is never overwritten with a fallback.
 const rumble: ProfileSource = {
   pictureKey: 'profilePictureUrl',
   applies: () => false,

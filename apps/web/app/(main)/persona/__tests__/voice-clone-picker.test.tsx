@@ -91,7 +91,6 @@ interface FakeRecorder {
   stop: ReturnType<typeof vi.fn>;
 }
 
-/** Installs a fake MediaRecorder + getUserMedia the way the component uses them. */
 function setupRecordingEnv(options?: { mimeSupported?: boolean; deny?: boolean }) {
   const track = { stop: vi.fn() };
   const stream = { getTracks: () => [track] };
@@ -133,7 +132,6 @@ function setupRecordingEnv(options?: { mimeSupported?: boolean; deny?: boolean }
   return { track, stream, getUserMedia, instances };
 }
 
-/** Minimal WAV header (44 bytes) for upload tests. */
 function makeWavFile(name = 'sample.wav'): File {
   const bytes = new Uint8Array(44);
   bytes.set([0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x41, 0x56, 0x45], 0);
@@ -162,8 +160,6 @@ describe('PersonaVoiceClonePanel', () => {
     cloneMocks.create.mockReset();
     cloneMocks.delete.mockReset();
     cloneMocks.denoise.mockReset();
-    // Default: cleaning never settles, so tests about the original take see
-    // no extra object URL. A/B tests resolve it explicitly.
     cloneMocks.denoise.mockReturnValue(new Promise(() => {}));
     cloneMocks.setVoiceId.mockReset();
     cloneMocks.validateResult = { ok: true };
@@ -247,7 +243,6 @@ describe('PersonaVoiceClonePanel', () => {
     await user.click(screen.getByRole('button', { name: 'persona.voiceCloneSubmit' }));
     await waitFor(() => expect(cloneMocks.create).toHaveBeenCalledTimes(1));
     expect(cloneMocks.create.mock.calls[0]?.[2]).toBe(true);
-    // Clean audio is on by default.
     expect(cloneMocks.create.mock.calls[0]?.[3]).toBe(true);
   });
 
@@ -315,8 +310,6 @@ describe('PersonaVoiceClonePanel', () => {
     expect(cloneMocks.setVoiceId).toHaveBeenCalledWith('chatterbox:uabc_123');
     await user.click(screen.getByRole('button', { name: 'persona.voiceClonePlayPreview' }));
     expect(cloneMocks.audioPlay).toHaveBeenCalled();
-    // No language override: a legacy non-English clone must not hit the
-    // English-only gate; the engine uses the clone's registered language.
     expect(vi.mocked(clonedVoicePreviewUrl)).toHaveBeenCalledWith('clone-ready', null);
   });
 
@@ -393,9 +386,6 @@ describe('PersonaVoiceClonePanel', () => {
   });
 
   it('marks a nano clone as active when the persona voice uses the legacy prefix', async () => {
-    // The served row carries chatterbox_nano:<key> while a persona stored
-    // before the rename holds the same key under chatterbox: — the
-    // comparison strips the prefix, so the row still shows as active.
     cloneMocks.list = [
       publicRow({ id: 'clone-nano', status: 'ready', voice_id: 'chatterbox_nano:voice-1' }),
     ];
@@ -642,8 +632,6 @@ describe('PersonaVoiceClonePanel', () => {
     const sentBlob = cloneMocks.create.mock.calls[0]?.[0] as Blob;
     expect(sentBlob.type).toBe('audio/webm;codecs=opus');
     expect(sentBlob.size).toBe(5);
-    // English-only launch: the clone language is fixed to English —
-    // the form has no language picker.
     expect(cloneMocks.create.mock.calls[0]?.[1]).toBe('en');
     expect(cloneMocks.create.mock.calls[0]?.[2]).toBe(true);
   });

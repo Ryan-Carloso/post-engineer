@@ -49,27 +49,14 @@ class SendDiscordTests(unittest.TestCase):
         post.assert_called_once()
 
     def test_real_network_path_skipped_under_pytest(self):
-        # Regression: the engine test suite must never ping the production
-        # Discord channel. Importing app.asgi during collection runs
-        # load_dotenv(), which loads the tracked .env with the REAL
-        # DISCORD_WEBHOOK_URL — without this guard, every full-suite run
-        # fires a real alert (e.g. task "test-custom-audio-missing").
-        # ENGINE_UNDER_TEST is kept: the suite bootstrap marker is what the
-        # guard relies on under `python -m unittest`.
         env = {"DISCORD_WEBHOOK_URL": "https://discord/hook", "ENGINE_UNDER_TEST": "1"}
         with patch.dict(os_environ(), env, clear=True), \
              patch.object(nf, "_default_post") as default_post:
-            sent = nf.send_discord("hello")  # no injected post: the production path
+            sent = nf.send_discord("hello")
         self.assertFalse(sent)
         default_post.assert_not_called()
 
     def test_bare_pytest_import_is_not_treated_as_test_run(self):
-        # Review MINOR: a bare pytest import in a production process
-        # (debugger, profiler, plugin) must NOT disable alerts — the
-        # "pytest in sys.modules" heuristic is dropped. Genuine runs are
-        # covered by ENGINE_UNDER_TEST / PYTEST_CURRENT_TEST instead.
-        # Import pytest explicitly to simulate the leak; its presence
-        # must not matter either way.
         import pytest  # noqa: F401
         env = {
             k: v
@@ -82,10 +69,6 @@ class SendDiscordTests(unittest.TestCase):
             self.assertFalse(nf.test_skip_is_suspicious())
 
     def test_skip_warns_when_marker_leaks_without_runner(self):
-        # Review MINOR: ENGINE_UNDER_TEST=1 with no test runner behind it
-        # (leaked production env) must warn, not stay silent at debug.
-        # The entry point is faked as a plain process: without it, the
-        # real `python -m unittest` CLI entry would count as a runner.
         plain_main = SimpleNamespace(__spec__=None)
         env = {"DISCORD_WEBHOOK_URL": "https://discord/hook", "ENGINE_UNDER_TEST": "1"}
         with _without_pytest_modules(), \
@@ -97,19 +80,11 @@ class SendDiscordTests(unittest.TestCase):
         self.assertFalse(sent)
         warn.assert_called_once()
         debug.assert_not_called()
-        # Review MINOR round 2: the warning must describe the leaked-marker
-        # case (ENGINE_UNDER_TEST=1 with no runner behind it), not the old
-        # pytest-leak-into-sys.modules scenario.
         (warning_text,), _ = warn.call_args
         self.assertIn("ENGINE_UNDER_TEST", warning_text)
         self.assertIn("no test runner", warning_text)
 
     def test_skip_stays_quiet_under_ide_unittest_driver(self):
-        # Review MINOR: PyCharm/VSCode run unittest modules without the
-        # `python -m unittest` entry point — their driver scripts count as
-        # unittest runners (best-effort, matched on the entry script path),
-        # so the bootstrap marker is corroborated and the skip stays at
-        # debug level.
         ide_main = SimpleNamespace(__spec__=None)
         env = {"DISCORD_WEBHOOK_URL": "https://discord/hook", "ENGINE_UNDER_TEST": "1"}
         for argv0 in (
@@ -129,8 +104,6 @@ class SendDiscordTests(unittest.TestCase):
             debug.assert_called_once()
 
     def test_skip_stays_quiet_during_real_test_run(self):
-        # A genuine test run (PYTEST_CURRENT_TEST set) keeps the skip at
-        # debug — no warning noise in the test suite.
         env = {"DISCORD_WEBHOOK_URL": "https://discord/hook", "PYTEST_CURRENT_TEST": "test_x (call)"}
         with patch.dict(os_environ(), env, clear=True), \
              patch.object(nf.logger, "warning") as warn, \
@@ -141,12 +114,6 @@ class SendDiscordTests(unittest.TestCase):
         debug.assert_called_once()
 
     def test_skip_under_unittest_cli_runner(self):
-        # Review MINOR: the guard must also hold under `python -m unittest`,
-        # where neither PYTEST_CURRENT_TEST nor pytest is present. Simulate
-        # the CLI runner precisely: runpy executes unittest.__main__ as
-        # __main__, so the entry module's spec name is "unittest.__main__"
-        # (verified). The suite bootstrap marker is the authoritative
-        # signal there — the skip stays quiet (debug).
         cli_main = SimpleNamespace(__spec__=SimpleNamespace(name="unittest.__main__"))
         env = {"DISCORD_WEBHOOK_URL": "https://discord/hook", "ENGINE_UNDER_TEST": "1"}
         with _without_pytest_modules(), \
@@ -162,9 +129,6 @@ class SendDiscordTests(unittest.TestCase):
         debug.assert_called_once()
 
     def test_skip_warns_when_marker_leaks_with_plain_unittest_import(self):
-        # Review MINOR: ENGINE_UNDER_TEST=1 plus a mere `import unittest`
-        # (no CLI runner behind it — e.g. a library importing unittest in
-        # production) must warn, not silently disable alerts at debug.
         plain_main = SimpleNamespace(__spec__=None)
         env = {"DISCORD_WEBHOOK_URL": "https://discord/hook", "ENGINE_UNDER_TEST": "1"}
         with _without_pytest_modules(), \
@@ -172,7 +136,6 @@ class SendDiscordTests(unittest.TestCase):
              patch.dict(sys.modules, {"__main__": plain_main}), \
              patch.object(nf.logger, "warning") as warn, \
              patch.object(nf.logger, "debug") as debug:
-            # unittest stays importable — only the CLI entry point is absent.
             self.assertIn("unittest", sys.modules)
             sent = nf.send_discord("hello")
         self.assertFalse(sent)
@@ -180,8 +143,6 @@ class SendDiscordTests(unittest.TestCase):
         debug.assert_not_called()
 
     def test_injected_post_still_works_under_pytest(self):
-        # The guard only blocks the real network path; tests that inject a
-        # fake post keep exercising the send logic.
         post = MagicMock()
         with patch.dict(os_environ(), {"DISCORD_WEBHOOK_URL": "https://discord/hook"}, clear=True):
             sent = nf.send_discord("hello", post=post)
@@ -189,19 +150,14 @@ class SendDiscordTests(unittest.TestCase):
         post.assert_called_once()
 
     def test_reason_never_contains_webhook_url(self):
-        # M5: detection uses the REAL configured env URL (not the "http"
-        # substring), so exceptions with a generic "http" keep the detail.
         with patch.dict(os_environ(), {"DISCORD_WEBHOOK_URL": "https://discord/hook"}, clear=True):
             exc = Exception("https://discord/hook connection refused")
             self.assertNotIn("discord/hook", nf.safe_reason(exc))
             self.assertEqual(nf.safe_reason(exc), "Exception")
-            # common error with another URL: detail preserved
             other = Exception("connection to https://api.example.com refused")
             self.assertIn("api.example.com", nf.safe_reason(other))
 
     def test_reason_keeps_publish_error_detail(self):
-        # M5: a real PublishError carries "HTTP 500" in the text — the detail
-        # is useful and does NOT contain the webhook URL, so it must be kept.
         from app.services.upload_publisher import PublishError
 
         exc = PublishError("upload API returned HTTP 500: internal error")
@@ -209,16 +165,11 @@ class SendDiscordTests(unittest.TestCase):
         self.assertIn("HTTP 500", reason)
 
     def test_reason_strips_webhook_url_from_custom_message(self):
-        # The webhook URL comes from the env — if it shows up in the message
-        # (any exception), the reason becomes just the type.
         with patch.dict(os_environ(), {"DISCORD_WEBHOOK_URL": "https://discord/hook"}, clear=True):
             exc = RuntimeError("failed calling https://discord/hook: timeout")
             self.assertEqual(nf.safe_reason(exc), "RuntimeError")
 
     def test_reason_strips_requoted_url_variant(self):
-        # requests requotes the target URL (response.url), so the exception
-        # may carry the percent-encoded form instead of the configured
-        # string — safe_reason must treat it as the webhook URL too.
         url = "https://discord/hook with space/secret-token"
         with patch.dict(os_environ(), {"DISCORD_WEBHOOK_URL": url}, clear=True):
             exc = RuntimeError(f"failed calling {requote_uri(url)}: timeout")
@@ -226,8 +177,6 @@ class SendDiscordTests(unittest.TestCase):
             self.assertNotIn("secret-token", nf.safe_reason(exc))
 
     def test_reason_strips_path_fragment_variant(self):
-        # Connection-phase errors embed only the requoted path fragment —
-        # the path-embedded token must still collapse the reason to the type.
         url = "https://discord/hook with space/secret-token"
         with patch.dict(os_environ(), {"DISCORD_WEBHOOK_URL": url}, clear=True):
             fragment = requote_uri(urlparse(url).path)
@@ -236,10 +185,6 @@ class SendDiscordTests(unittest.TestCase):
             self.assertNotIn("secret-token", nf.safe_reason(exc))
 
     def test_redact_known_url_skips_degenerate_path(self):
-        # A misconfigured webhook URL with a trivial path ("/") must not
-        # rewrite every slash in the message — or collapse every
-        # safe_reason to the bare type name. Only the full URL is
-        # redacted in that case.
         url = "https://hooks.example.com/"
         message = "open /var/log/app.log: permission denied"
         self.assertEqual(nf.redact_known_url(message, url), message)
@@ -249,11 +194,6 @@ class SendDiscordTests(unittest.TestCase):
         self.assertIn("failed calling", redacted)
 
     def test_reason_scrubs_secrets_before_truncation(self):
-        # safe_reason feeds Discord AND (via _fail_task) client-visible task
-        # errors: the full message must be scrubbed before the 200-cut, like
-        # the telemetry reason. The probe is longer than the cap — with a
-        # shorter message [:200] is a no-op and a truncate-first revert
-        # would stay green.
         from app.services import analytics as analytics_module
 
         exc = RuntimeError("E" * 150 + " api_key=TOPSECRET123 " + "F" * 150)
@@ -267,8 +207,6 @@ class SendDiscordTests(unittest.TestCase):
         self.assertLessEqual(len(reason), 200)
 
     def test_diagnostic_keeps_class_and_root_cause_of_long_message(self):
-        # requests puts the long request URL first and the urllib3 root
-        # cause last: the log line must keep both ends of the message.
         exc = ConnectionError(
             "HTTPSConnectionPool(host='db.example', port=443): Max retries "
             "exceeded with url: /rest/v1/scheduled_posts?select=" + "x" * 600
@@ -283,8 +221,6 @@ class SendDiscordTests(unittest.TestCase):
         self.assertEqual(nf.safe_diagnostic(RuntimeError("supabase down")), "RuntimeError: supabase down")
 
     def test_diagnostic_scrubs_secrets_before_cutting(self):
-        # The probe is longer than both edges: a cut-first revert would let
-        # the scrubber see only fragments.
         from app.services import analytics as analytics_module
 
         exc = RuntimeError("E" * 300 + " api_key=TOPSECRET123 " + "F" * 300)
@@ -301,7 +237,6 @@ class SendDiscordTests(unittest.TestCase):
             self.assertEqual(nf.safe_diagnostic(exc), "RuntimeError")
 
     def test_long_messages_are_truncated_to_discord_limit(self):
-        # m2: Discord rejects messages > 2000 chars — the builder truncates.
         message = nf.generation_batch_msg(3, ["t" * 900] * 3)
         self.assertLessEqual(len(message), 2000)
         message = nf.slot_published_msg("p" * 1500, "t" * 1500, ["youtube"])
@@ -345,9 +280,6 @@ class RunningUnderTestTests(unittest.TestCase):
             self.assertFalse(nf.running_under_test())
 
     def test_true_via_engine_under_test_marker(self):
-        # The suite bootstrap marker (test/__init__.py) is the authoritative
-        # signal — it works under `python -m unittest`, where neither
-        # PYTEST_CURRENT_TEST nor pytest is present.
         with patch.dict(os_environ(), {"ENGINE_UNDER_TEST": "1"}, clear=True), \
              _without_pytest_modules():
             self.assertNotIn("PYTEST_CURRENT_TEST", os_environ())

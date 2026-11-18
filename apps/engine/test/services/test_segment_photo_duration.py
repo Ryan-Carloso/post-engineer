@@ -46,7 +46,6 @@ def test_a_non_number_duration_is_rejected(value):
 
 
 def test_a_number_that_is_not_a_bool_passes_the_type_check():
-    # bool is an int subclass: True must not slip through as 1 second.
     assert duration_error(True) is not None
     assert duration_error(1) is None
 

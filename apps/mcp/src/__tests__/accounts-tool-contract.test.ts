@@ -14,23 +14,6 @@ import {
 } from '../contracts/accounts.js';
 import { GetPersonaPublishingAccountsSchema } from '../tools-publishing-accounts.js';
 
-//---------------
-// accounts tool↔contract equivalence (shared/contracts/accounts.ts):
-// the tool schemas and the contract schemas/parsers must accept and
-// reject the same inputs, so a call the tool allows is one the route
-// accepts and a call the route rejects fails fast in the tool.
-//
-// Deliberate differences, pinned here so they stay deliberate:
-// - The connect tool shape is one flat shape for all providers: a
-//   missing credential passes the tool schema and the handler enforces
-//   presence per provider, while each contract body requires both of its
-//   fields. Only the blank-credential cases are equivalent.
-// - The publishing-accounts PUT body accepts unknown provider keys on
-//   both sides; the route rejects them server-side.
-// - The publishing-accounts GET personaId is a UUID on the route only;
-//   the tool accepts any non-empty string and the route 400s the rest.
-//---------------
-
 const ALL_PROVIDERS = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'pinterest', 'fanvue', '3speak', 'rumble'] as const;
 
 describe('accounts tool-contract equivalence', () => {
@@ -109,7 +92,6 @@ describe('accounts tool-contract equivalence', () => {
     const notArray = { accounts: { youtube: 'UC-1' } };
     expect(SetPersonaPublishingAccountsSchema.safeParse({ personaId: 'p-1', ...notArray }).success).toBe(false);
     expect(SetPersonaPublishingAccountsBodySchema.safeParse(notArray).success).toBe(false);
-    // Unknown provider keys pass both sides; the route rejects them.
     const unknownProvider = { accounts: { myspace: ['id-1'] } };
     expect(SetPersonaPublishingAccountsSchema.safeParse({ personaId: 'p-1', ...unknownProvider }).success).toBe(true);
     expect(SetPersonaPublishingAccountsBodySchema.safeParse(unknownProvider).success).toBe(true);
@@ -119,7 +101,6 @@ describe('accounts tool-contract equivalence', () => {
     const uuid = '11111111-1111-4111-8111-111111111111';
     expect(GetPersonaPublishingAccountsSchema.safeParse({ personaId: uuid }).success).toBe(true);
     expect(parsePersonaPublishingAccountsQuery(new URLSearchParams({ personaId: uuid })).ok).toBe(true);
-    // The tool accepts any non-empty id; the route 400s a non-UUID.
     expect(GetPersonaPublishingAccountsSchema.safeParse({ personaId: 'p-1' }).success).toBe(true);
     const parsed = parsePersonaPublishingAccountsQuery(new URLSearchParams({ personaId: 'p-1' }));
     expect(parsed.ok).toBe(false);
