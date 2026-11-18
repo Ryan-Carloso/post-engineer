@@ -178,7 +178,7 @@ describe('Posts list progress', () => {
     // A narrow screen shows the week view, not the month grid: the days are
     // columns (role="group", full-date label), not day buttons. Move a week
     // forward so the pick is a day other than today, proving the panel
-    // follows the pick — and the pick scrolls the panel (above the grid)
+    // follows the pick — and the pick scrolls the panel (below the grid)
     // into view, as the month view does.
     cy.get('[data-calendar-card]').find('button[aria-label="Próxima semana"]').click();
     const nextSunday = new Date();
@@ -188,7 +188,17 @@ describe('Posts list progress', () => {
     // the fold; the top of the column is always visible, just under the day
     // header, and a tap there is the same day pick.
     cy.get('[data-posts-calendar-week]').find(`[role="group"][aria-label^="${label}"]`).click('top');
-    cy.contains(`Publicações de ${shortDate(nextSunday)}`).should('be.visible');
+    // Mobile week panel heading: long weekday, day, short month
+    // ("Domingo, 22 de nov.") — the count suffix only shows when the day
+    // has posts, and this Sunday has none, so the heading is the date alone.
+    // This is not the month view's "Publicações de ..." heading.
+    const mobileWeekHeading = new Intl.DateTimeFormat('pt-BR', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'short',
+    }).format(nextSunday);
+    const heading = mobileWeekHeading.charAt(0).toUpperCase() + mobileWeekHeading.slice(1);
+    cy.contains(heading).should('be.visible');
   });
 });
 
