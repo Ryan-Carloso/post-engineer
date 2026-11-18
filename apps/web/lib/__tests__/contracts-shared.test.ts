@@ -252,16 +252,18 @@ describe('contracts shared source', () => {
   // persona-images.ts import them from there and re-export them so the
   // existing import paths keep working. A one-sided edit would make the
   // contract reject a value the form serves, or the form accept one the
-  // route rejects. The CTA constants are pinned by value only here: the
-  // persona-schema re-export moves with the form change (issue #639),
-  // which replaces ctaText with the intent fields.
+  // route rejects.
   it('pins the persona constants to the contract', () => {
     const root = findRepoRoot(import.meta.url);
     const schema = readFileSync(join(root, 'apps', 'web', 'lib', 'persona-schema.ts'), 'utf8');
     expect(schema).toContain("from './contracts/personas'");
     expect(schema).toContain('FACE_QUALITIES,');
+    expect(schema).toContain('PERSONA_CTA_TYPES,');
+    expect(schema).toContain('PERSONA_CTA_URL_MAX_LENGTH,');
+    expect(schema).toContain('PERSONA_CTA_INSTRUCTION_MAX_LENGTH,');
     expect(schema).toContain('VALID_VIDEO_ASPECTS,');
     expect(schema).toContain('VIDEO_LAYOUTS,');
+    expect(schema).toContain('export { FACE_QUALITIES, PERSONA_CTA_TYPES, PERSONA_CTA_URL_MAX_LENGTH, PERSONA_CTA_INSTRUCTION_MAX_LENGTH, VALID_VIDEO_ASPECTS, VIDEO_LAYOUTS };');
     expect(FACE_QUALITIES).toEqual(['ok', 'very_good']);
     expect(PERSONA_CTA_TYPES).toEqual(['follow', 'comment', 'share', 'save', 'link', 'buy', 'other']);
     expect(PERSONA_CTA_URL_MAX_LENGTH).toBe(2048);

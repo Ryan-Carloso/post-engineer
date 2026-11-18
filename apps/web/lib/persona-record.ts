@@ -19,8 +19,10 @@ export interface PersonaRecord {
   videoAspect?: string;
   videoLayout?: string;
   scriptPrompt?: string;
-  // The persona's call to action; absent = the engine picks a generic one.
-  ctaText?: string;
+  // The persona's CTA intent (issue #639): a type plus facts, never wording.
+  ctaType?: string;
+  ctaUrl?: string;
+  ctaInstruction?: string;
   paragraphNumber?: number;
   niche?: string;
   // Billing input for the per-video token cost estimate (the persona's face

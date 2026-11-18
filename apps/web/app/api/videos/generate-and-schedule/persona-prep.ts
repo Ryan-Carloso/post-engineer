@@ -15,6 +15,7 @@ import { IMAGE_BUCKET } from '@/lib/persona-images';
 import { logger } from '@/lib/logger';
 import type { FaceQuality } from '@/lib/tokens';
 import type { VoiceFallbackInfo } from '@/lib/voice-fallback';
+import type { ResolvedCta } from './cta-validation';
 
 // Generation URLs must outlive the serial render queue: the engine renders
 // one video at a time (~15 min each), so the last slot of a batch is picked
@@ -59,8 +60,9 @@ export interface PersonaPrep {
   avatarUrl: string | null;
   photoPath: string | null;
   niche: string | null;
-  /** The persona's call to action (null = the engine picks a generic one). */
-  ctaText: string | null;
+  /** The persona's CTA intent (issue #639): type plus facts, never wording.
+   * Null on a faceless post: no persona, no persona CTA. */
+  cta: ResolvedCta | null;
   language: string | null;
   videoAspect: string | null;
   videoLayout: string | null;
@@ -164,8 +166,8 @@ export function resolvePostWithoutPersona(opts: {
     avatarUrl: null,
     photoPath: null,
     niche: opts.niche ?? null,
-    // No persona, no persona call to action: the engine picks a generic one.
-    ctaText: null,
+    // No persona, no persona CTA: only a per-video override can add one.
+    cta: null,
     language: opts.language ?? null,
     videoAspect: opts.videoAspect ?? null,
     videoLayout: opts.videoLayout ?? null,

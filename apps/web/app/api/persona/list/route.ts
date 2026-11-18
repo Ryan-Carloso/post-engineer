@@ -36,7 +36,7 @@ async function getHandler(request: Request): Promise<NextResponse> {
   let query = supabase
     .from('personas')
     .select(
-      'id, name, photo_path, avatar_url, voice_id, voice_audio_path, created_at, language, video_aspect, video_layout, script_prompt, cta_text, paragraph_number, niche, face_quality',
+      'id, name, photo_path, avatar_url, voice_id, voice_audio_path, created_at, language, video_aspect, video_layout, script_prompt, cta_type, cta_url, cta_instruction, paragraph_number, niche, face_quality',
     )
     .eq('user_id', auth.userId);
 
@@ -112,7 +112,9 @@ async function getHandler(request: Request): Promise<NextResponse> {
       const videoAspect = (record.video_aspect as string | null) ?? undefined;
       const videoLayout = (record.video_layout as string | null) ?? undefined;
       const scriptPrompt = (record.script_prompt as string | null) ?? undefined;
-      const ctaText = (record.cta_text as string | null) ?? undefined;
+      const ctaType = (record.cta_type as string | null) ?? undefined;
+      const ctaUrl = (record.cta_url as string | null) ?? undefined;
+      const ctaInstruction = (record.cta_instruction as string | null) ?? undefined;
       const paragraphNumber = (record.paragraph_number as number | null) ?? undefined;
       const niche = (record.niche as string | null) ?? undefined;
       const faceQuality = (record.face_quality as string | null) ?? undefined;
@@ -136,7 +138,9 @@ async function getHandler(request: Request): Promise<NextResponse> {
         videoAspect,
         videoLayout,
         scriptPrompt,
-        ctaText,
+        ctaType,
+        ctaUrl,
+        ctaInstruction,
         paragraphNumber,
         niche,
         faceQuality,

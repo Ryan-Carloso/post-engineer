@@ -447,13 +447,20 @@ const DEFAULT_SEGMENTS = [
   {
     kind: 'content',
     text: 'Save this video before your next trip to Porto.',
+    // The persona CTA (follow, the default) is performed by this take.
+    cta: true,
     media: [0, 1].map((photo) => ({ url: `https://e.com/c${photo}.jpg` })),
   },
 ];
 
 // Full lip sync caps media at 6 photos for the whole video, so its requests
-// carry no media at all.
-const NO_MEDIA_SEGMENTS = DEFAULT_SEGMENTS.map(({ kind, text }) => ({ kind, text }));
+// carry no media at all. The CTA marker survives: without it the request
+// would 400 on the pre-charge CTA check before reaching the preflight.
+const NO_MEDIA_SEGMENTS = DEFAULT_SEGMENTS.map(({ kind, text, cta }) => ({ kind, text, ...(cta ? { cta } : {}) }));
+
+// A persona-less post has no CTA, so a marked take would 400 as a stray
+// marker: the faceless fixtures strip the marker the persona fixtures carry.
+const UNMARKED_SEGMENTS = DEFAULT_SEGMENTS.map(({ kind, text, media }) => ({ kind, text, media }));
 
 function baseBody(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   const { options: optionsOverrides, ...rest } = overrides;
@@ -969,7 +976,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
         text: segmentsContent,
         media: [0, 1, 2, 3, 4, 5].map((photo) => ({ url: `https://e.com/b${photo}.jpg` })),
       },
-      { kind: 'content', text: segmentsCtaTake, media: [0, 1].map((photo) => ({ url: `https://e.com/c${photo}.jpg` })) },
+      { kind: 'content', text: segmentsCtaTake, cta: true, media: [0, 1].map((photo) => ({ url: `https://e.com/c${photo}.jpg` })) },
     ];
 
     it('rejects invalid segments before any charge', async () => {
@@ -2006,7 +2013,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
           // Absent, not null: the schema rejects an explicit null personaId.
           personaId: undefined,
           // A persona-less post carries its own voice (no persona to read one from).
-          options: { videoType: 'faceless', voiceId: 'chatterbox:kokoro_af_heart' },
+          options: { videoType: 'faceless', voiceId: 'chatterbox:kokoro_af_heart', segments: UNMARKED_SEGMENTS },
           publishing: {
             providers: ['youtube'],
             accounts: { youtube: ['acct-1'] },
@@ -3004,7 +3011,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
       // Null is the only accepted spelling: a blank string cannot
       // half-intend a persona, it becomes the persona-less path (and must
       // still satisfy it).
-      const res = await post(baseBody({ personaId: '', options: { videoType: 'faceless', voiceId: 'chatterbox:kokoro_af_heart' } }));
+      const res = await post(baseBody({ personaId: '', options: { videoType: 'faceless', voiceId: 'chatterbox:kokoro_af_heart', segments: UNMARKED_SEGMENTS } }));
       expect(res.status).toBe(200);
       const scheduleRows = inserts['schedules'] as Array<Record<string, unknown>>;
       expect(scheduleRows).toHaveLength(1);
@@ -3022,6 +3029,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
             niche: 'comedy',
             videoAspect: '16:9',
             paragraphNumber: 3,
+            segments: UNMARKED_SEGMENTS,
           },
         }),
       );
@@ -3042,8 +3050,11 @@ describe('POST /api/videos/generate-and-schedule', () => {
       // Phase 5-4: no script prompt is snapshotted onto the schedule —
       // the script lives on the slot's segments.
       expect(scheduleRows[0]).not.toHaveProperty('post_script_prompt');
-      // No persona, no persona call to action: the engine picks a generic one.
-      expect(scheduleRows[0].post_cta_text).toBeNull();
+      // No persona, no persona call to action: nothing is snapshotted and
+      // no CTA rides to the engine — the video carries no CTA at all.
+      expect(scheduleRows[0].post_cta_type).toBeNull();
+      expect(scheduleRows[0].post_cta_url).toBeNull();
+      expect(scheduleRows[0].post_cta_instruction).toBeNull();
       expect(scheduleRows[0].post_face_quality).toBe('ok');
 
       // The engine payload identifies the post by its own shape: no persona
@@ -3069,6 +3080,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
             niche: 'comedy',
             videoAspect: '1:1',
             paragraphNumber: 3,
+            segments: UNMARKED_SEGMENTS,
           },
         }),
       );
@@ -3083,7 +3095,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
       // A scoped API key that allows nothing still creates a persona-less
       // post: there is no persona to scope against.
       vi.mocked(isPersonaAllowed).mockReturnValue(false);
-      const res = await post(baseBody({ personaId: undefined, options: { videoType: 'faceless', voiceId: 'chatterbox:kokoro_af_heart' } }));
+      const res = await post(baseBody({ personaId: undefined, options: { videoType: 'faceless', voiceId: 'chatterbox:kokoro_af_heart', segments: UNMARKED_SEGMENTS } }));
       expect(res.status).toBe(200);
       expect(vi.mocked(isPersonaAllowed)).not.toHaveBeenCalled();
     });
@@ -3094,7 +3106,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
       const res = await post(
         baseBody({
           personaId: undefined,
-          options: { videoType: 'faceless', audioUrl: 'https://example.com/voice.mp3' },
+          options: { videoType: 'faceless', audioUrl: 'https://example.com/voice.mp3', segments: UNMARKED_SEGMENTS },
         }),
       );
       expect(res.status).toBe(200);
@@ -3119,7 +3131,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
     });
 
     it('charges the faceless rate and never touches library images for a persona-less post', async () => {
-      const res = await post(baseBody({ personaId: undefined, options: { videoType: 'faceless', voiceId: 'chatterbox:kokoro_af_heart' } }));
+      const res = await post(baseBody({ personaId: undefined, options: { videoType: 'faceless', voiceId: 'chatterbox:kokoro_af_heart', segments: UNMARKED_SEGMENTS } }));
       expect(res.status).toBe(200);
       const spends = rpcCalls.filter((c) => c.name === 'spend_tokens');
       expect(spends).toHaveLength(1);
@@ -3171,14 +3183,105 @@ describe('POST /api/videos/generate-and-schedule', () => {
   });
 
   describe('persona call to action', () => {
-    it('snapshots the persona call to action and sends it to the engine', async () => {
-      setup({ ...DEFAULT_CFG, persona: { ...PERSONA, cta_text: 'Link na bio' } });
+    it('snapshots the persona CTA intent and sends only its type to the engine', async () => {
+      setup({ ...DEFAULT_CFG, persona: { ...PERSONA, cta_type: 'link', cta_url: 'https://example.com/course', cta_instruction: null } });
       const res = await post(baseBody());
       expect(res.status).toBe(200);
       const scheduleRows = inserts['schedules'] as Array<Record<string, unknown>>;
-      expect(scheduleRows[0].post_cta_text).toBe('Link na bio');
+      expect(scheduleRows[0].post_cta_type).toBe('link');
+      expect(scheduleRows[0].post_cta_url).toBe('https://example.com/course');
+      expect(scheduleRows[0].post_cta_instruction).toBeNull();
       const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
-      expect(payload.video_cta).toBe('Link na bio');
+      expect(payload.cta_type).toBe('link');
+      expect(payload).not.toHaveProperty('video_cta');
+    });
+
+    it('a per-video override wins over the persona CTA', async () => {
+      setup({ ...DEFAULT_CFG, persona: { ...PERSONA, cta_type: 'follow', cta_url: null, cta_instruction: null } });
+      const res = await post(baseBody({ cta: { type: 'comment' }, options: { segments: DEFAULT_SEGMENTS.map((segment) => (segment.cta ? { ...segment, text: 'What did your first trip to Porto taste like?' } : segment)) } }));
+      expect(res.status).toBe(200);
+      const scheduleRows = inserts['schedules'] as Array<Record<string, unknown>>;
+      expect(scheduleRows[0].post_cta_type).toBe('comment');
+      const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
+      expect(payload.cta_type).toBe('comment');
+    });
+
+    it('a null per-video override disables the CTA: no snapshot, no engine field, no 400', async () => {
+      setup({ ...DEFAULT_CFG, persona: { ...PERSONA, cta_type: 'follow', cta_url: null, cta_instruction: null } });
+      const res = await post(baseBody({ cta: null, options: { segments: UNMARKED_SEGMENTS } }));
+      expect(res.status).toBe(200);
+      const scheduleRows = inserts['schedules'] as Array<Record<string, unknown>>;
+      expect(scheduleRows[0].post_cta_type).toBeNull();
+      expect(scheduleRows[0].post_cta_url).toBeNull();
+      expect(scheduleRows[0].post_cta_instruction).toBeNull();
+      const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
+      expect(payload).not.toHaveProperty('cta_type');
+    });
+
+    it('400s before any charge when a CTA applies but no take is marked', async () => {
+      const res = await post(baseBody({ options: { segments: UNMARKED_SEGMENTS } }));
+      expect(res.status).toBe(400);
+      const json = (await res.json()) as { field?: string; error?: string };
+      expect(json.field).toBe('options.segments');
+      expect(String(json.error)).toContain('cta: true');
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
+      expect(inserts['schedules']).toBeUndefined();
+    });
+
+    it('400s before any charge when a comment CTA take has no question', async () => {
+      setup({ ...DEFAULT_CFG, persona: { ...PERSONA, cta_type: 'comment', cta_url: null, cta_instruction: null } });
+      const res = await post(baseBody());
+      expect(res.status).toBe(400);
+      const json = (await res.json()) as { field?: string; error?: string };
+      expect(json.field).toBe('options.segments');
+      expect(String(json.error)).toContain('must ask a question');
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
+      expect(inserts['schedules']).toBeUndefined();
+    });
+
+    it('400s before any charge when the hook is the marked take', async () => {
+      const hookMarked = DEFAULT_SEGMENTS.map((segment) =>
+        segment.kind === 'hook' ? { ...segment, cta: true } : { ...segment, cta: undefined },
+      );
+      const res = await post(baseBody({ options: { segments: hookMarked } }));
+      expect(res.status).toBe(400);
+      const json = (await res.json()) as { field?: string; error?: string };
+      expect(json.field).toBe('options.segments');
+      expect(String(json.error)).toContain('hook cannot be the CTA take');
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
+      expect(inserts['schedules']).toBeUndefined();
+    });
+
+    it('400s before any charge when a take is marked but the CTA is disabled', async () => {
+      const res = await post(baseBody({ cta: null }));
+      expect(res.status).toBe(400);
+      const json = (await res.json()) as { field?: string; error?: string };
+      expect(json.field).toBe('options.segments');
+      expect(String(json.error)).toContain('CTA is disabled');
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
+      expect(inserts['schedules']).toBeUndefined();
+    });
+
+    it('editing the persona after scheduling does not rewrite the snapshot', async () => {
+      setup({ ...DEFAULT_CFG, persona: { ...PERSONA, cta_type: 'link', cta_url: 'https://example.com/course', cta_instruction: null } });
+      const first = await post(baseBody());
+      expect(first.status).toBe(200);
+      const firstRows = inserts['schedules'] as Array<Record<string, unknown>>;
+      expect(firstRows).toHaveLength(1);
+      expect(firstRows[0].post_cta_type).toBe('link');
+      expect(firstRows[0].post_cta_url).toBe('https://example.com/course');
+      // The persona changes its mind; the scheduled video keeps the CTA
+      // it was created with — the snapshot is a copy, not a reference.
+      setup({ ...DEFAULT_CFG, persona: { ...PERSONA, cta_type: 'comment', cta_url: null, cta_instruction: null } });
+      const second = await post(baseBody({ title: 'Porto food', options: { segments: DEFAULT_SEGMENTS.map((segment) => (segment.cta ? { ...segment, text: 'What did your first trip to Porto taste like?' } : segment)) } }));
+      expect(second.status).toBe(200);
+      const secondRows = inserts['schedules'] as Array<Record<string, unknown>>;
+      expect(secondRows).toHaveLength(1);
+      expect(secondRows[0].post_cta_type).toBe('comment');
+      expect(secondRows[0].post_cta_url).toBeNull();
+      // The first snapshot is untouched by the edit.
+      expect(firstRows[0].post_cta_type).toBe('link');
+      expect(firstRows[0].post_cta_url).toBe('https://example.com/course');
     });
   });
 
@@ -3341,7 +3444,7 @@ describe('segments-only contract (Phase 4)', () => {
       text: contentText,
       media: [0, 1, 2, 3, 4, 5].map((photo) => ({ url: `https://e.com/b${photo}.jpg` })),
     },
-    { kind: 'content', text: ctaTake, media: [0, 1].map((photo) => ({ url: `https://e.com/c${photo}.jpg` })) },
+    { kind: 'content', text: ctaTake, cta: true, media: [0, 1].map((photo) => ({ url: `https://e.com/c${photo}.jpg` })) },
   ];
   function singleBody(overrides: Record<string, unknown> = {}): Record<string, unknown> {
     const base: Record<string, unknown> = {

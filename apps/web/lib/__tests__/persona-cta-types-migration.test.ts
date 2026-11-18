@@ -13,8 +13,9 @@ import { findRepoRoot } from '@/test/repo-root';
 // the enums produces a task that fails at RENDER time, after a paid
 // LongCat submit — so the drift between them has to be caught by a test,
 // not by a user. The web zod enum and the MCP schemas both import the
-// contract literal, so they cannot drift from each other; their re-export
-// pins land with the web (persona-schema.ts) and MCP (limits.ts) commits.
+// contract literal, so they cannot drift from each other; the web
+// re-export pin lives below, the MCP (limits.ts) pin lands with the
+// MCP commit.
 //
 // This mirrors persona-video-layout-migration.test.ts.
 //---------------
@@ -124,5 +125,16 @@ describe('cta_type literal sync across the three surfaces', () => {
     ]) {
       expect(allowed).toContain('follow');
     }
+  });
+
+  it('the web persona form re-exports the contract literal, it does not define its own', () => {
+    // A second literal in persona-schema.ts would drift the moment the
+    // contract adds a type: the form would accept a value the route (or
+    // the database CHECK) rejects.
+    const schemaPath = join(repoRoot, 'apps', 'web', 'lib', 'persona-schema.ts');
+    const schema = readFileSync(schemaPath, 'utf8');
+    expect(schema).toContain("from './contracts/personas'");
+    expect(schema).toContain('PERSONA_CTA_TYPES,');
+    expect(schema).not.toMatch(/PERSONA_CTA_TYPES\s*(?::[^=]+)?=\s*\[/);
   });
 });

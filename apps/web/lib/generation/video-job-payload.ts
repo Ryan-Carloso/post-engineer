@@ -17,7 +17,6 @@ const PERSONA_PREFERENCE_FIELDS: ReadonlyArray<{
   { personaKey: 'language', jobKey: 'video_language' },
   { personaKey: 'video_aspect', jobKey: 'video_aspect' },
   { personaKey: 'video_layout', jobKey: 'video_layout' },
-  { personaKey: 'cta_text', jobKey: 'video_cta' },
   { personaKey: 'paragraph_number', jobKey: 'paragraph_number' },
 ];
 
@@ -70,6 +69,12 @@ const REQUEST_FORWARD_FIELDS: ReadonlyArray<EngineVideoRequestField> = [
   // without it a segments request would render the neutral canvas for
   // every segment and drop every user photo with no warning.
   'segments',
+  // cta_type is a first-class engine field (TaskVideoRequest carries it):
+  // the resolved CTA intent, from which the engine enforces the
+  // marked-take rule (issue #639). It is set by the route, never by a
+  // persona fallback here — an explicit null-disable must not resurrect
+  // the persona CTA.
+  'cta_type',
 ];
 // String-keyed view for membership checks on untyped request keys.
 const REQUEST_FORWARD_FIELD_SET: ReadonlySet<string> = new Set(REQUEST_FORWARD_FIELDS);
@@ -82,7 +87,6 @@ export interface JobPersona {
   language?: string | null;
   video_aspect?: string | null;
   video_layout?: string | null;
-  cta_text?: string | null;
   paragraph_number?: number | null;
   niche?: string | null;
   face_quality?: string | null;

@@ -223,9 +223,14 @@ describe('buildJobPayload — persona preference defaults', () => {
     expect(payload).not.toHaveProperty('video_aspect');
   });
 
-  it('maps the persona call to action to video_cta, and omits a missing one', () => {
-    expect(buildJobPayload(persona({ cta_text: 'Link na bio' }), {}).video_cta).toBe('Link na bio');
-    expect(buildJobPayload(persona({ cta_text: null }), {})).not.toHaveProperty('video_cta');
+  it('forwards the resolved CTA type as a request field, and omits it when there is none', () => {
+    // Issue #639: the CTA rides as cta_type, a first-class engine field —
+    // never as a persona preference, so an explicit null-disable cannot
+    // resurrect the persona CTA through the preference fallback.
+    expect(buildJobPayload(persona({}), { cta_type: 'comment' }).cta_type).toBe('comment');
+    expect(buildJobPayload(persona({}), { cta_type: null })).not.toHaveProperty('cta_type');
+    expect(buildJobPayload(persona({}), {})).not.toHaveProperty('cta_type');
+    expect(buildJobPayload(persona({}), {})).not.toHaveProperty('video_cta');
   });
 
   it('never forwards null or empty persona preferences verbatim', () => {

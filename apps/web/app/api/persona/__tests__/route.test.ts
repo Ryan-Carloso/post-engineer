@@ -778,7 +778,8 @@ describe('POST /api/persona', () => {
         language: 'en',
         videoAspect: '16:9',
         scriptPrompt: 'Storytelling com hook forte.',
-        ctaText: 'Link na bio',
+        ctaType: 'link',
+        ctaUrl: 'https://example.com/course',
         paragraphNumber: '3',
       }, [photo()]),
     );
@@ -788,7 +789,9 @@ describe('POST /api/persona', () => {
       language: 'en',
       video_aspect: '16:9',
       script_prompt: 'Storytelling com hook forte.',
-      cta_text: 'Link na bio',
+      cta_type: 'link',
+      cta_url: 'https://example.com/course',
+      cta_instruction: null,
       paragraph_number: 3,
     });
   });
@@ -821,18 +824,50 @@ describe('POST /api/persona', () => {
       language: null,
       video_aspect: null,
       script_prompt: null,
-      cta_text: null,
+      cta_type: 'follow',
+      cta_url: null,
+      cta_instruction: null,
       paragraph_number: null,
     });
   });
 
-  it('returns 400 when ctaText is over 200 characters on create', async () => {
+  it('returns 400 when a link CTA has no URL on create', async () => {
     const { inserted } = mockSupabase();
 
-    const res = await POST(formRequest({ name: 'Ana', voiceId: 'chatterbox:kokoro_af_heart', ctaText: 'a'.repeat(201) }, [photo()]));
+    const res = await POST(formRequest({ name: 'Ana', voiceId: 'chatterbox:kokoro_af_heart', ctaType: 'link' }, [photo()]));
 
     expect(res.status).toBe(400);
-    expect(((await res.json()) as { error: string }).error).toBe('Invalid ctaText: use at most 200 characters.');
+    expect(((await res.json()) as { error: string }).error).toBe('A link CTA needs a URL.');
+    expect(inserted).toHaveLength(0);
+  });
+
+  it('returns 400 when an other CTA has no instruction on create', async () => {
+    const { inserted } = mockSupabase();
+
+    const res = await POST(formRequest({ name: 'Ana', voiceId: 'chatterbox:kokoro_af_heart', ctaType: 'other' }, [photo()]));
+
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toBe('An other CTA needs an instruction.');
+    expect(inserted).toHaveLength(0);
+  });
+
+  it('returns 400 when a CTA URL is over 2048 characters on create', async () => {
+    const { inserted } = mockSupabase();
+
+    const res = await POST(formRequest({ name: 'Ana', voiceId: 'chatterbox:kokoro_af_heart', ctaType: 'link', ctaUrl: `https://example.com/${'a'.repeat(2048)}` }, [photo()]));
+
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toBe('Invalid ctaUrl: use a valid URL of at most 2048 characters.');
+    expect(inserted).toHaveLength(0);
+  });
+
+  it('returns 400 when a CTA instruction is over 500 characters on create', async () => {
+    const { inserted } = mockSupabase();
+
+    const res = await POST(formRequest({ name: 'Ana', voiceId: 'chatterbox:kokoro_af_heart', ctaType: 'other', ctaInstruction: 'a'.repeat(501) }, [photo()]));
+
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toBe('Invalid ctaInstruction: use at most 500 characters.');
     expect(inserted).toHaveLength(0);
   });
 
@@ -1597,34 +1632,61 @@ describe('PATCH /api/persona', () => {
       });
     });
 
-    it('ctaText: updates only the call to action', async () => {
+    it('ctaType: updates only the call to action type', async () => {
       const { updated } = mockSupabaseForPatch({ existing: PERSONA_COMPLETA });
 
-      const res = await PATCH(patchRequest('persona-uuid-1', { ctaText: 'Segue @canal' }));
+      const res = await PATCH(patchRequest('persona-uuid-1', { ctaType: 'comment' }));
 
       expect(res.status).toBe(200);
-      expect(updated[0]).toEqual({ cta_text: 'Segue @canal' });
+      expect(updated[0]).toEqual({ cta_type: 'comment' });
     });
 
-    it('ctaText: returns 400 when over 200 characters', async () => {
+    it('ctaType: returns 400 for an unknown type', async () => {
       const { updated } = mockSupabaseForPatch({ existing: PERSONA_COMPLETA });
 
-      const res = await PATCH(patchRequest('persona-uuid-1', { ctaText: 'a'.repeat(201) }));
+      const res = await PATCH(patchRequest('persona-uuid-1', { ctaType: 'subscribe' }));
 
       expect(res.status).toBe(400);
       expect(updated).toHaveLength(0);
     });
 
-    it('ctaText: a blank value clears the stored call to action', async () => {
+    it('ctaUrl: returns 400 when not a URL', async () => {
       const { updated } = mockSupabaseForPatch({ existing: PERSONA_COMPLETA });
 
-      const res = await PATCH(patchRequest('persona-uuid-1', { ctaText: '' }));
+      const res = await PATCH(patchRequest('persona-uuid-1', { ctaUrl: 'not-a-url' }));
 
-      expect(res.status).toBe(200);
-      expect(updated[0]).toEqual({ cta_text: '' });
+      expect(res.status).toBe(400);
+      expect(updated).toHaveLength(0);
     });
 
-    it('ctaText: an absent field leaves the stored call to action untouched', async () => {
+    it('ctaUrl: returns 400 when over 2048 characters', async () => {
+      const { updated } = mockSupabaseForPatch({ existing: PERSONA_COMPLETA });
+
+      const res = await PATCH(patchRequest('persona-uuid-1', { ctaUrl: `https://example.com/${'a'.repeat(2048)}` }));
+
+      expect(res.status).toBe(400);
+      expect(updated).toHaveLength(0);
+    });
+
+    it('ctaUrl: a blank value clears the stored URL', async () => {
+      const { updated } = mockSupabaseForPatch({ existing: PERSONA_COMPLETA });
+
+      const res = await PATCH(patchRequest('persona-uuid-1', { ctaUrl: '' }));
+
+      expect(res.status).toBe(200);
+      expect(updated[0]).toEqual({ cta_url: '' });
+    });
+
+    it('ctaInstruction: a blank value clears the stored instruction', async () => {
+      const { updated } = mockSupabaseForPatch({ existing: PERSONA_COMPLETA });
+
+      const res = await PATCH(patchRequest('persona-uuid-1', { ctaInstruction: '' }));
+
+      expect(res.status).toBe(200);
+      expect(updated[0]).toEqual({ cta_instruction: '' });
+    });
+
+    it('ctaType: an absent field leaves the stored call to action untouched', async () => {
       const { updated } = mockSupabaseForPatch({ existing: PERSONA_COMPLETA });
 
       const res = await PATCH(patchRequest('persona-uuid-1', { name: 'Ana Maria' }));

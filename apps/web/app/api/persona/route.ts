@@ -185,7 +185,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
       video_aspect: body.values.videoAspect,
       video_layout: body.values.videoLayout,
       script_prompt: body.values.scriptPrompt,
-      cta_text: body.values.ctaText,
+      cta_type: body.values.ctaType, cta_url: body.values.ctaUrl, cta_instruction: body.values.ctaInstruction,
       paragraph_number: body.values.paragraphNumber,
       niche: body.values.niche,
       // face_quality is the persona's only face-related choice: the face itself is

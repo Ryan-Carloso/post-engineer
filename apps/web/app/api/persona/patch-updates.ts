@@ -17,7 +17,9 @@ export function applyPersonaPatchFields(
   if (patch.videoAspect !== null) updates.video_aspect = patch.videoAspect;
   if (patch.videoLayout !== null) updates.video_layout = patch.videoLayout;
   if (patch.scriptPrompt !== null) updates.script_prompt = patch.scriptPrompt;
-  if (patch.ctaText !== null) updates.cta_text = patch.ctaText;
+  if (patch.ctaType !== null) updates.cta_type = patch.ctaType;
+  if (patch.ctaUrl !== null) updates.cta_url = patch.ctaUrl;
+  if (patch.ctaInstruction !== null) updates.cta_instruction = patch.ctaInstruction;
   if (patch.paragraphNumber !== null) updates.paragraph_number = patch.paragraphNumber;
   if (patch.niche !== null) updates.niche = patch.niche;
   // Face quality is a plain scalar like the rest: changing it only rewrites

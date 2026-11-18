@@ -1,6 +1,5 @@
 'use client';
 
-import { useState } from 'react';
 import { PROVIDER_LABELS } from '@/lib/account-options';
 import { SOCIAL_PROVIDERS, type SocialProvider } from '@/lib/providers/registry';
 import { ProviderIcon } from '@/components/provider-icon';
@@ -15,21 +14,19 @@ import {
 } from '@/components/ui/select';
 import { useI18n } from '@/lib/i18n/provider';
 import type { TranslationKey } from '@/lib/i18n';
+import { PERSONA_CTA_TYPES, type PersonaCtaType } from '@/lib/contracts/personas';
+import { usePersonaStore } from '@/lib/store';
 import { SectionDivider } from './persona-section-parts';
 
 //---------------
 // PersonaCtaSection — per-persona call to action, intent only.
 //
-// PREVIEW ONLY (issue #639): local state, no save wiring yet — the
-// migration, API and engine checks land with the implementation PR.
 // The persona stores the CTA type + facts (URL, or the "other"
 // instruction). The agent writes the CTA words per video from the
-// story and the topic; no wording is stored here.
+// story and the topic; no wording is stored here. Writes the zustand
+// store directly (like the publishing-accounts section); the page
+// hydrates the store on edit.
 //---------------
-
-export type PersonaCtaType = 'follow' | 'comment' | 'share' | 'save' | 'link' | 'buy' | 'other';
-
-const CTA_TYPES: PersonaCtaType[] = ['follow', 'comment', 'share', 'save', 'link', 'buy', 'other'];
 
 const CTA_TYPE_LABEL_KEYS: Record<PersonaCtaType, TranslationKey> = {
   follow: 'personas.ctaTypeFollow',
@@ -123,9 +120,10 @@ function CtaLinkTable() {
 
 export function PersonaCtaSection() {
   const { t } = useI18n();
-  const [ctaType, setCtaType] = useState<PersonaCtaType>('follow');
-  const [customInstruction, setCustomInstruction] = useState('');
-  const [ctaUrl, setCtaUrl] = useState('');
+  const ctaType = usePersonaStore((s) => s.ctaType);
+  const ctaUrl = usePersonaStore((s) => s.ctaUrl);
+  const ctaInstruction = usePersonaStore((s) => s.ctaInstruction);
+  const setCta = usePersonaStore((s) => s.setCta);
   const needsUrl = ctaType === 'link' || ctaType === 'buy';
   return (
     <section>
@@ -133,12 +131,12 @@ export function PersonaCtaSection() {
       <div className="mt-4 space-y-5 rounded-2xl border border-line bg-card p-5 shadow-sm sm:p-6">
         <div className="flex flex-col gap-1.5">
           <Label>{t('personas.ctaTypeLabel')}</Label>
-          <Select value={ctaType} onValueChange={(value) => setCtaType(value as PersonaCtaType)}>
+          <Select value={ctaType} onValueChange={(value) => setCta({ type: value as PersonaCtaType, url: ctaUrl, instruction: ctaInstruction })}>
             <SelectTrigger aria-label={t('personas.ctaTypeLabel')} className="w-full" data-testid="persona-cta-type">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {CTA_TYPES.map((type) => (
+              {PERSONA_CTA_TYPES.map((type) => (
                 <SelectItem key={type} value={type}>
                   {t(CTA_TYPE_LABEL_KEYS[type])}
                 </SelectItem>
@@ -154,8 +152,8 @@ export function PersonaCtaSection() {
               type="text"
               className={INPUT_CLASS}
               placeholder={t('personas.ctaOtherPlaceholder')}
-              value={customInstruction}
-              onChange={(event) => setCustomInstruction(event.target.value)}
+              value={ctaInstruction}
+              onChange={(event) => setCta({ type: ctaType, url: ctaUrl, instruction: event.target.value })}
               data-testid="persona-cta-instruction"
             />
           </label>
@@ -168,7 +166,7 @@ export function PersonaCtaSection() {
               className={INPUT_CLASS}
               placeholder={t('personas.ctaUrlPlaceholder')}
               value={ctaUrl}
-              onChange={(event) => setCtaUrl(event.target.value)}
+              onChange={(event) => setCta({ type: ctaType, url: event.target.value, instruction: ctaInstruction })}
               data-testid="persona-cta-url"
             />
             <span className="mt-1 block text-xs font-normal text-muted-foreground">{t('personas.ctaUrlHint')}</span>

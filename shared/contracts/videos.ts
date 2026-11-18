@@ -112,11 +112,8 @@ export const segmentsRequestSchema = z.array(
   z
     .object({
       kind: z.enum(['hook', 'content']),
-      text: z.string(),
-      // Marks the content take that performs this video's CTA (issue
-      // #639): the engine and the pre-charge checks require a marked take
-      // when a CTA applies, and reject a comment take without '?'.
-      cta: z.boolean().optional(),
+      // Marks the take that performs this video's CTA (issue #639).
+      text: z.string(), cta: z.boolean().optional(),
       media: z
         .array(
           z
@@ -221,10 +218,7 @@ export const GenerateAndScheduleBodySchema = z.object({
   options: OptionsSchema,
   idempotencyKey: z.string().optional(),
   // Paired A/B experiment link (issue #476), checked before the charge.
-  experiment: ExperimentLinkSchema.optional(),
-  // Per-video CTA override (issue #639): an explicit value wins over the
-  // persona default; null disables the CTA for this video; absent inherits it.
-  cta: PersonaCtaSchema.nullable().optional(),
+  experiment: ExperimentLinkSchema.optional(), cta: PersonaCtaSchema.nullable().optional(),
 });
 
 export type GenerateAndScheduleBody = z.infer<typeof GenerateAndScheduleBodySchema>;

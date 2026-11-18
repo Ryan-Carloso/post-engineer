@@ -166,7 +166,6 @@ async function scheduleExistingMedia(ctx: PublishExistingContext): Promise<NextR
     // generation identity, and the engine never reads them for a ready slot.
     post_voice_id: null,
     post_voice_audio_url: null,
-    post_cta_text: null,
     post_niche: null,
     post_language: null,
     post_video_aspect: null,

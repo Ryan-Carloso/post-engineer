@@ -11,6 +11,7 @@ import { isEnglishLanguage } from '@/lib/language-gate';
 import { MAX_PERSONA_IMAGES } from '@/lib/persona-image-select';
 import { SOCIAL_PROVIDERS } from '@/lib/types';
 import type { FaceQuality } from '@/lib/tokens';
+import type { PersonaCtaType } from '@/lib/contracts/personas';
 import {
   emptyPersonaDefaultAccounts,
   type PersonaDefaultAccounts,
@@ -227,8 +228,10 @@ interface PersonaFormState {
    *  avatar on top and the video material below. See VIDEO_LAYOUTS in persona-schema. */
   videoLayout: string;
   scriptPrompt: string;
-  /** The persona's call to action ('' = the engine picks a generic one). */
-  ctaText: string;
+  /** The persona's CTA intent (issue #639): a type plus facts, never wording. */
+  ctaType: PersonaCtaType;
+  ctaUrl: string;
+  ctaInstruction: string;
   niche: string;
   result: CreatePersonaResult | null;
   /** Avatar resolution: 'ok' (480p, 2 tokens/video) or 'very_good' (720p,
@@ -254,7 +257,7 @@ interface PersonaFormState {
   setVideoAspect: (value: string) => void;
   setVideoLayout: (value: string) => void;
   setScriptPrompt: (value: string) => void;
-  setCtaText: (value: string) => void;
+  setCta: (cta: { type: PersonaCtaType; url: string; instruction: string }) => void;
   setNiche: (value: string) => void;
   setResult: (result: CreatePersonaResult | null) => void;
   setFaceQuality: (quality: FaceQuality) => void;
@@ -275,7 +278,9 @@ const initialPersonaState = {
   videoAspect: '9:16',
   videoLayout: 'standard',
   scriptPrompt: '',
-  ctaText: '',
+  ctaType: 'follow' as PersonaCtaType,
+  ctaUrl: '',
+  ctaInstruction: '',
   niche: '',
   result: null,
   faceQuality: 'ok' as FaceQuality,
@@ -310,7 +315,7 @@ export const usePersonaStore = create<PersonaFormState>()(
     setVideoAspect: (videoAspect) => set({ videoAspect }),
     setVideoLayout: (videoLayout) => set({ videoLayout }),
     setScriptPrompt: (scriptPrompt) => set({ scriptPrompt }),
-    setCtaText: (ctaText) => set({ ctaText }),
+    setCta: (cta) => set({ ctaType: cta.type, ctaUrl: cta.url, ctaInstruction: cta.instruction }),
     setNiche: (niche) => set({ niche }),
     setResult: (result) => set({ result }),
     setFaceQuality: (faceQuality) => set({ faceQuality }),
@@ -344,7 +349,9 @@ export const usePersonaStore = create<PersonaFormState>()(
       if (s.videoAspect) formData.append('videoAspect', s.videoAspect);
       if (s.videoLayout) formData.append('videoLayout', s.videoLayout);
       if (s.scriptPrompt.trim()) formData.append('scriptPrompt', s.scriptPrompt.trim());
-      if (s.ctaText.trim()) formData.append('ctaText', s.ctaText.trim());
+      formData.append('ctaType', s.ctaType);
+      if (s.ctaUrl.trim()) formData.append('ctaUrl', s.ctaUrl.trim());
+      if (s.ctaInstruction.trim()) formData.append('ctaInstruction', s.ctaInstruction.trim());
       if (s.niche.trim()) formData.append('niche', s.niche.trim());
       const videoSubject = s.niche.trim() || s.scriptPrompt.trim();
       if (videoSubject) formData.append('video_subject', videoSubject);
@@ -364,10 +371,12 @@ export const usePersonaStore = create<PersonaFormState>()(
       if (s.videoAspect) formData.append('videoAspect', s.videoAspect);
       if (s.videoLayout) formData.append('videoLayout', s.videoLayout);
       if (s.scriptPrompt.trim()) formData.append('scriptPrompt', s.scriptPrompt.trim());
-      // Always sent on edit: a blank value clears the persona's CTA
-      // (the PATCH parser maps present-but-blank to ''), omitting the
-      // field would leave the old CTA in place forever.
-      formData.append('ctaText', s.ctaText.trim());
+      // Always sent on edit: a blank URL/instruction clears it (the PATCH
+      // parser maps present-but-blank to ''), omitting the field would leave
+      // the old value in place forever.
+      formData.append('ctaType', s.ctaType);
+      formData.append('ctaUrl', s.ctaUrl.trim());
+      formData.append('ctaInstruction', s.ctaInstruction.trim());
       if (s.niche.trim()) formData.append('niche', s.niche.trim());
       formData.append('faceQuality', s.faceQuality);
       return formData;

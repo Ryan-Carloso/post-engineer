@@ -31,6 +31,8 @@ import { answerSchedulePkRace } from './pk-race';
 import { fetchReplay } from './replay';
 import { refundRollbackSpend } from './rollback-refund';
 import { buildPairFacts, checkExperimentLink, verifyExperimentPairAfterInsert } from './experiment-link';
+import { buildIdentitySnapshot } from './identity-snapshot';
+import { resolveEffectiveCta, validateCtaTake } from './cta-validation';
 import { scheduleAccountColumns } from './account-columns';
 import { checkPreChargePreflights } from './aspect-preflight';
 import { resolvePreChargeFallbackPhotos } from './library-photo';
@@ -168,7 +170,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
   const rawIssues = rawKeyIssues(body);
   const parsed = GenerateAndScheduleBodySchema.safeParse(body);
   if (!parsed.success) return rejectInvalidRequest([...rawIssues, ...shapeIssues(parsed.error)]);
-  const { publishing, options, idempotencyKey, experiment } = parsed.data;
+  const { publishing, options, idempotencyKey, experiment, cta: ctaOverride } = parsed.data;
 
   // A blank/absent personaId means "post without a persona" (migration 012).
   // Null is the only accepted spelling so a caller cannot half-intend a
@@ -252,6 +254,15 @@ async function postHandler(request: Request): Promise<NextResponse> {
   });
   if (prep instanceof NextResponse) return prep;
 
+  // CTA (issue #639): resolve the effective CTA before any charge, then
+  // require the marked take — a missing marker or a comment take without
+  // '?' is a 400 here, never a charge-then-refund.
+  const effectiveCta = resolveEffectiveCta(ctaOverride, prep.cta);
+  const ctaCheck = validateCtaTake(effectiveCta, options?.segments);
+  if (!ctaCheck.ok) {
+    return validationFailed(ERROR_CODES.VALIDATION_FAILED, ctaCheck.message, ctaCheck.field);
+  }
+
   // 5. Providers + social accounts (fail fast: never charge for a bad selection).
   // The binding is loaded once here: resolvePublishingAccounts falls back
   // to it when accounts are omitted, and validateAccounts proves every
@@ -301,7 +312,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
   // Idempotency anchor, resolved once: the experiment check below needs the
   // same schedule id step 7 uses to tell a replay from a duplicate.
   const idem = resolveIdempotency(userId, idempotencyKey, request);
-  const pairFacts = buildPairFacts({ providers, accountIds, pinterestBoardId, prep, title, segments: options?.segments, videoType: validatedOptions.videoType, audioUrl: validatedOptions.audioUrl });
+  const pairFacts = buildPairFacts({ providers, accountIds, pinterestBoardId, prep, title, segments: options?.segments, videoType: validatedOptions.videoType, audioUrl: validatedOptions.audioUrl, cta: effectiveCta });
   if (experiment !== undefined) {
     const link = await checkExperimentLink(supabase, { link: experiment, userId, personaId, replayScheduleId: idem.scheduleId, facts: pairFacts });
     if (!link.ok && link.status === 500) return coded(500, ERROR_CODES.INTERNAL_ERROR, formatErrorMessage(ERROR_CODES.INTERNAL_ERROR));
@@ -480,24 +491,9 @@ async function postHandler(request: Request): Promise<NextResponse> {
     // Publish mode (migration 015): 'scheduled' publishes at the slot
     // times, 'asap' publishes each video the moment generation finishes.
     publish_mode: mode,
-    // Identity snapshot (migration 012). The engine reads these at tick time
-    // through post_identity, and they are the values this request was priced
-    // with — writing them here is what makes a scheduled post reproducible
-    // when the persona is edited (or deleted) afterwards.
-    post_voice_id: prep.voiceIdValue ?? null,
-    // Snapshot the RAW request audioUrl, not the resolved voiceAudioUrl: for
-    // a persona-backed post that is a 1-hour signed URL of the persona's
-    // voice_audio_path, and snapshotting it would store an expired URL that
-    // shadows the fresh re-signing at tick time. The raw URL is only ever a
-    // stable remote URL (validated + SSRF-checked above).
-    post_voice_audio_url: validatedOptions.audioUrl ?? null,
-    post_cta_text: prep.ctaText,
-    post_niche: prep.niche,
-    post_language: prep.language,
-    post_video_aspect: prep.videoAspect,
-    post_video_layout: prep.videoLayout,
-    post_paragraph_number: prep.paragraphNumber,
-    post_face_quality: prep.faceQuality,
+    // Identity snapshot (migration 012): the priced identity, spread from
+    // its builder — the engine reads it at tick time through post_identity.
+    ...buildIdentitySnapshot(prep, validatedOptions.audioUrl, effectiveCta),
   });
   if (scheduleError) {
     const constraint = violatedConstraint(scheduleError);
@@ -689,7 +685,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
         language: prep.language,
         video_aspect: prep.videoAspect,
         video_layout: prep.videoLayout,
-        cta_text: prep.ctaText,
         paragraph_number: prep.paragraphNumber,
         niche: prep.niche,
         face_quality: prep.faceQuality,
@@ -699,6 +694,10 @@ async function postHandler(request: Request): Promise<NextResponse> {
         video_type: validatedOptions.videoType,
         video_script: segmentsScript,
         webhook_url: validatedOptions.webhookUrl,
+        // The resolved CTA type rides as a request field (issue #639): the
+        // engine enforces the marked-take rule from it. Null (no CTA)
+        // is deleted by the payload's null pass, so the key is absent.
+        cta_type: effectiveCta?.type ?? null,
         // generation_id: web-side correlation id for PostHog event joins;
         // slot_id: lets boot orphan triage requeue (not fail) on engine restart.
         generation_id: slotGenerationId,

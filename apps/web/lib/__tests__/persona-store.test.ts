@@ -39,6 +39,51 @@ describe('usePersonaStore', () => {
     expect(updated.avatarUrl).toBe('data:image/png;base64,ABC');
   });
 
+  it('setCta replaces the whole CTA intent', () => {
+    const state = usePersonaStore.getState();
+
+    state.setCta({ type: 'link', url: 'https://example.com/x', instruction: '' });
+
+    const updated = usePersonaStore.getState();
+    expect(updated.ctaType).toBe('link');
+    expect(updated.ctaUrl).toBe('https://example.com/x');
+    expect(updated.ctaInstruction).toBe('');
+  });
+
+  it('resetForm restores the default CTA (follow, no facts)', () => {
+    const state = usePersonaStore.getState();
+    state.setCta({ type: 'other', url: '', instruction: 'join the group' });
+
+    state.resetForm();
+
+    const reset = usePersonaStore.getState();
+    expect(reset.ctaType).toBe('follow');
+    expect(reset.ctaUrl).toBe('');
+    expect(reset.ctaInstruction).toBe('');
+  });
+
+  it('buildPersonaFormData always sends the type and only non-blank facts', () => {
+    const state = usePersonaStore.getState();
+    state.setCta({ type: 'link', url: 'https://example.com/x', instruction: '' });
+
+    const formData = state.buildPersonaFormData();
+
+    expect(formData.get('ctaType')).toBe('link');
+    expect(formData.get('ctaUrl')).toBe('https://example.com/x');
+    expect(formData.get('ctaInstruction')).toBeNull();
+  });
+
+  it('buildPersonaEditFormData always sends all three CTA fields, blank clears', () => {
+    const state = usePersonaStore.getState();
+    state.setCta({ type: 'follow', url: '', instruction: '' });
+
+    const formData = state.buildPersonaEditFormData();
+
+    expect(formData.get('ctaType')).toBe('follow');
+    expect(formData.get('ctaUrl')).toBe('');
+    expect(formData.get('ctaInstruction')).toBe('');
+  });
+
   it('buildPersonaFormData sends name, photo and house voice', () => {
     const photo = new File(['img'], 'foto.png', { type: 'image/png' });
     const s = usePersonaStore.getState();

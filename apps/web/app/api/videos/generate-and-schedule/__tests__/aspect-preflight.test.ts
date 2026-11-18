@@ -72,7 +72,7 @@ const PREP: PersonaPrep = {
   avatarUrl: null,
   photoPath: null,
   niche: null,
-  ctaText: null,
+  cta: null,
   language: 'en',
   videoAspect: '9:16',
   videoLayout: null,

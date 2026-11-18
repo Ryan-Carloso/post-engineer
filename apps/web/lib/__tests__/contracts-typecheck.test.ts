@@ -503,8 +503,9 @@ describe('contracts typecheck', () => {
     expect(added.image.id).toBe('img-1');
     // @ts-expect-error -- the mutation row has no `image_path` field
     expect(added.image.image_path).toBeUndefined();
-    const updateBody: UpdatePersonaBody = { ctaText: '' };
-    expect(updateBody.ctaText).toBe('');
+    const updateBody: UpdatePersonaBody = { ctaType: 'comment', ctaUrl: 'https://example.com/x' };
+    expect(updateBody.ctaType).toBe('comment');
+    expect(updateBody.ctaUrl).toBe('https://example.com/x');
     const updatedImage: UpdatePersonaImageResponse = { success: true, image: null };
     expect(updatedImage.image).toBeNull();
     const updateImageBody: UpdatePersonaImageBody = { id: 'img-1', isPrimary: true };

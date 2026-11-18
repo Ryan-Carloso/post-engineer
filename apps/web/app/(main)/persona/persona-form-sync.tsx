@@ -7,17 +7,14 @@ import { usePersonaStore } from '@/lib/store';
 //---------------
 // PersonaFormSync — mirrors RHF fields into the zustand store
 // (only when the field is dirty, so the store is not overwritten
-// on mount or in the edit flow).
-//
-// Extracted from page.tsx so the page module stays under the file-size
-// ratchet.
+// on mount or in the edit flow). The CTA section writes the store
+// directly, so it has no RHF field to sync.
 //---------------
 export const PersonaFormSync = () => {
   const { formState: { dirtyFields } } = useFormContext();
   const name = useWatch({ name: 'name' });
   const niche = useWatch({ name: 'niche' });
   const scriptPrompt = useWatch({ name: 'scriptPrompt' });
-  const ctaText = useWatch({ name: 'ctaText' });
 
   useEffect(() => {
     if (dirtyFields.name && typeof name === 'string') {
@@ -36,12 +33,6 @@ export const PersonaFormSync = () => {
       usePersonaStore.getState().setScriptPrompt(scriptPrompt);
     }
   }, [scriptPrompt, dirtyFields.scriptPrompt]);
-
-  useEffect(() => {
-    if (dirtyFields.ctaText && typeof ctaText === 'string') {
-      usePersonaStore.getState().setCtaText(ctaText);
-    }
-  }, [ctaText, dirtyFields.ctaText]);
 
   return null;
 };
