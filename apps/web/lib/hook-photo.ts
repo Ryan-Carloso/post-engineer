@@ -2,13 +2,14 @@
  * The hook photo (issue #589): the lip-sync hook opens with the first
  * photo of the video, not the persona avatar. The web pre-charge face
  * preflight and the post detail both derive it from the slot's segments
- * with this one definition — the first media item across segments in
+ * with this one definition — the first photo across segments in
  * order — mirroring the engine's first_segment_media in
- * apps/engine/app/services/user_media.py. A segment media item carries
- * either a mediaId (an engine temp asset, 1h TTL, no durable web URL)
- * or a url. When an item carries both, the mediaId wins: the engine
- * resolves the temp asset first, and the pre-charge face check and the
- * post detail follow the same order.
+ * apps/engine/app/services/user_media.py. A video clip is never the hook
+ * photo: clips are skipped, like the engine (segment_video.is_video_ref).
+ * A segment media item carries either a mediaId (an engine temp asset,
+ * 1h TTL, no durable web URL) or a url. When an item carries both, the
+ * mediaId wins: the engine resolves the temp asset first, and the
+ * pre-charge face check and the post detail follow the same order.
  */
 
 export interface SegmentMediaRef {
@@ -20,6 +21,20 @@ export interface SegmentMediaRef {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+// True when a segment media item references a video clip, by its suffix
+// — mirroring the engine's segment_video.is_video_ref. The mediaId wins
+// when present; otherwise the URL path decides (query and fragment are
+// not part of the path). A suffix is admission only: ffprobe is the
+// content gate.
+function isVideoRef(mediaId: string | undefined, url: string | undefined): boolean {
+  if (mediaId !== undefined) return mediaId.toLowerCase().endsWith('.mp4');
+  if (url !== undefined) {
+    const path = url.split(/[?#]/, 1)[0] ?? '';
+    return path.toLowerCase().endsWith('.mp4');
+  }
+  return false;
 }
 
 export function firstSegmentMedia(segments: unknown): SegmentMediaRef | null {
@@ -34,6 +49,7 @@ export function firstSegmentMedia(segments: unknown): SegmentMediaRef | null {
         typeof item.mediaId === 'string' && item.mediaId !== '' ? item.mediaId : undefined;
       const url = typeof item.url === 'string' && item.url !== '' ? item.url : undefined;
       if (mediaId === undefined && url === undefined) continue;
+      if (isVideoRef(mediaId, url)) continue;
       return { segmentIndex, imageIndex, mediaId, url };
     }
   }
