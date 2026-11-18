@@ -8,9 +8,12 @@ import { PROVIDER_LABELS } from '@/lib/account-options';
 import { isSocialProvider } from '@/lib/providers/registry';
 import {
   EXPERIMENT_CHART_METRICS,
+  isChartMetric,
   pairChartRows,
   variantMetricTotals,
+  variantTooltipName,
   winSplit,
+  winSplitTooltipName,
   type ExperimentChartMetric,
 } from '@/lib/experiments/experiment-chart-data';
 import type {
@@ -49,10 +52,6 @@ const METRIC_LABEL_KEY = {
   comments: 'experiments.metricComments',
   averageViewDurationSeconds: 'experiments.metricAvgDuration',
 } as const satisfies Record<ExperimentChartMetric, string>;
-
-function isChartMetric(value: string): value is ExperimentChartMetric {
-  return EXPERIMENT_CHART_METRICS.some((option) => option === value);
-}
 
 export function ProviderCard({ provider, firstName, secondName, firstId, secondId, variantName, pairsCreated, formatNumber }: {
   provider: ExperimentProviderResult;
@@ -200,7 +199,7 @@ export function VariantComparisonChart({ comparisons, firstId, secondId, firstNa
             <XAxis dataKey="name" hide />
             <YAxis width={48} tickFormatter={(value: number) => formatNumber(value)} tickLine={false} axisLine={false} />
             <ChartTooltip
-              content={<ChartTooltipContent formatter={(value, name) => `${name === 'a' ? firstName : secondName}: ${formatNumber(Number(value))}`} />}
+              content={<ChartTooltipContent formatter={(value, name) => `${variantTooltipName(name, firstName, secondName)}: ${formatNumber(Number(value))}`} />}
             />
             <ChartLegend content={<ChartLegendContent />} verticalAlign="top" />
             {hasA && <Bar dataKey="a" isAnimationActive={false} radius={[6, 6, 0, 0]} fill="var(--color-a)" />}
@@ -242,7 +241,7 @@ export function PerPairChart({ comparisons, firstId, secondId, firstName, second
             <XAxis type="number" tickFormatter={(value: number) => formatNumber(value)} tickLine={false} axisLine={false} />
             <YAxis type="category" dataKey="pair" width={36} tickLine={false} axisLine={false} />
             <ChartTooltip
-              content={<ChartTooltipContent formatter={(value, name) => `${name === 'a' ? firstName : secondName}: ${formatNumber(Number(value))}`} />}
+              content={<ChartTooltipContent formatter={(value, name) => `${variantTooltipName(name, firstName, secondName)}: ${formatNumber(Number(value))}`} />}
             />
             <ChartLegend content={<ChartLegendContent />} verticalAlign="top" />
             <Bar dataKey="a" isAnimationActive={false} radius={[0, 6, 6, 0]} fill="var(--color-a)">
@@ -293,7 +292,7 @@ export function WinSplitChart({ provider, firstName, secondName, firstId, second
             <XAxis type="number" allowDecimals={false} tickFormatter={(value: number) => formatNumber(value)} tickLine={false} axisLine={false} />
             <YAxis type="category" dataKey="name" width={1} tickLine={false} axisLine={false} tick={false} />
             <ChartTooltip
-              content={<ChartTooltipContent formatter={(value, name) => `${name === 'a' ? firstName : name === 'b' ? secondName : t('experiments.tie')}: ${formatNumber(Number(value))}`} />}
+              content={<ChartTooltipContent formatter={(value, name) => `${winSplitTooltipName(name, firstName, secondName, t('experiments.tie'))}: ${formatNumber(Number(value))}`} />}
             />
             <ChartLegend content={<ChartLegendContent />} verticalAlign="top" />
             <Bar dataKey="a" isAnimationActive={false} stackId="wins" fill="var(--color-a)" />

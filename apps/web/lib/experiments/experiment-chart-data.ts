@@ -12,6 +12,24 @@ export const EXPERIMENT_CHART_METRICS: readonly ExperimentChartMetric[] = [
   'averageViewDurationSeconds',
 ];
 
+/** True when the value is one of the chart metrics (the metric toggle's
+ * Radix value is an untyped string; only known metrics may switch). */
+export function isChartMetric(value: string): value is ExperimentChartMetric {
+  return EXPERIMENT_CHART_METRICS.some((option) => option === value);
+}
+
+/** Display name for a chart series key ('a' or 'b'); anything else is the
+ * second variant's name. */
+export function variantTooltipName(name: string | number, firstName: string, secondName: string): string {
+  return name === 'a' ? firstName : secondName;
+}
+
+/** Display name for a win-split series key ('a', 'ties' or 'b'); anything
+ * else falls back to the tie label. */
+export function winSplitTooltipName(name: string | number, firstName: string, secondName: string, tieLabel: string): string {
+  return name === 'a' ? firstName : name === 'b' ? secondName : tieLabel;
+}
+
 export interface VariantMetricTotals {
   variantId: string;
   total: number;

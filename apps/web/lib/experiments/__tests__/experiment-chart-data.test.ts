@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  isChartMetric,
   pairChartRows,
   variantMetricTotals,
+  variantTooltipName,
   winSplit,
+  winSplitTooltipName,
 } from '../experiment-chart-data';
 import type {
   ExperimentPairComparison,
@@ -128,6 +131,35 @@ describe('pairChartRows', () => {
       { pair: 2, a: null, b: 1, winner: A },
       { pair: 3, a: 1, b: 0, winner: null },
     ]);
+  });
+});
+
+describe('isChartMetric', () => {
+  it('accepts each of the four chart metrics', () => {
+    for (const metric of ['views', 'likes', 'comments', 'averageViewDurationSeconds']) {
+      expect(isChartMetric(metric)).toBe(true);
+    }
+  });
+
+  it('rejects anything else, including the empty string', () => {
+    expect(isChartMetric('bogus')).toBe(false);
+    expect(isChartMetric('')).toBe(false);
+    expect(isChartMetric('Views')).toBe(false);
+  });
+});
+
+describe('tooltip names', () => {
+  it('maps series keys to variant names', () => {
+    expect(variantTooltipName('a', 'First', 'Second')).toBe('First');
+    expect(variantTooltipName('b', 'First', 'Second')).toBe('Second');
+    expect(variantTooltipName('other', 'First', 'Second')).toBe('Second');
+  });
+
+  it('maps the win-split tie key to the tie label', () => {
+    expect(winSplitTooltipName('a', 'First', 'Second', 'Tie')).toBe('First');
+    expect(winSplitTooltipName('b', 'First', 'Second', 'Tie')).toBe('Second');
+    expect(winSplitTooltipName('ties', 'First', 'Second', 'Tie')).toBe('Tie');
+    expect(winSplitTooltipName('other', 'First', 'Second', 'Tie')).toBe('Tie');
   });
 });
 
