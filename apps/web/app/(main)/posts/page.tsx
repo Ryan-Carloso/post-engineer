@@ -140,12 +140,16 @@ export default function PostsPage() {
   // day instead of leaving the detail below on a day from the month left.
   // In week view the pick only moves the panel: the week stays put, and
   // the month cursor is untouched (switching back to month resyncs it).
+  // On a narrow screen the pick scrolls the day panel into view in both
+  // views: the panel sits above the grid, but the grid can be scrolled
+  // into view when the pick happens.
   const handleSelect = useCallback(
     (key: string) => {
       setPickedKey(key);
-      if (view === 'week') return;
-      const date = dateFromKey(key);
-      setCursor({ year: date.getFullYear(), month: date.getMonth() });
+      if (view === 'month') {
+        const date = dateFromKey(key);
+        setCursor({ year: date.getFullYear(), month: date.getMonth() });
+      }
       const section = daySectionRef.current;
       if (section === null || typeof window.matchMedia !== 'function' || !window.matchMedia(NARROW_SCREEN_QUERY).matches) return;
       requestAnimationFrame(() => {

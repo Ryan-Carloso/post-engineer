@@ -172,14 +172,14 @@ describe('Posts list progress', () => {
     cy.contains('E2E generating topic').scrollIntoView().should('be.visible');
   });
 
-  it('shows the day panel above the week grid when picking a day on a narrow screen', () => {
+  it('scrolls the day panel into view when picking a day on a narrow screen', () => {
     cy.viewport(390, 844);
     visitPosts();
     // A narrow screen shows the week view, not the month grid: the days are
     // columns (role="group", full-date label), not day buttons. Move a week
     // forward so the pick is a day other than today, proving the panel
-    // follows the pick — and the panel sits above the grid, so it is visible
-    // with no scroll.
+    // follows the pick — and the pick scrolls the panel (above the grid)
+    // into view, as the month view does.
     cy.get('[data-calendar-card]').find('button[aria-label="Próxima semana"]').click();
     const nextSunday = new Date();
     nextSunday.setDate(nextSunday.getDate() - nextSunday.getDay() + 7);

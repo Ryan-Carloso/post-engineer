@@ -1227,8 +1227,13 @@ describe('PostsPage week view', () => {
     expect(last).toEqual(['2030-06', expected.from, expected.to, true]);
   });
 
-  it('does not scroll on a narrow screen: the day panel is already on top', async () => {
-    vi.stubGlobal('matchMedia', vi.fn(mobileMatchMedia));
+  it('scrolls the day panel into view after a column pick on a narrow screen', async () => {
+    // Narrow here means both the page's mobile query (767px, week view)
+    // and its scroll query (639px): a 390px screen matches both.
+    vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
+      ...mobileMatchMedia(query),
+      matches: query === '(max-width: 767px)' || query === '(max-width: 639px)',
+    })));
     render(<PostsPage />);
 
     await waitFor(() =>
@@ -1238,9 +1243,10 @@ describe('PostsPage week view', () => {
     if (grid === null) throw new Error('week grid not rendered');
     const columns = grid.querySelectorAll('[role="group"][aria-label]:not([inert])');
     expect(columns).toHaveLength(7);
-    fireEvent.click(columns[0]);
+    const user = userEvent.setup();
+    await user.click(columns[0]);
     expect(screen.getByText('posts.calendarDayNone')).toBeInTheDocument();
-    expect(scrollIntoView).not.toHaveBeenCalled();
+    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });
   });
 });
 
