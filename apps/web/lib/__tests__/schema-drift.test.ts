@@ -38,7 +38,7 @@ function fakeClient(existing: Existing): SupabaseClient {
   } as unknown as SupabaseClient;
 }
 
-const EXPECTED = { scheduled_posts: ['faceless_material', 'full_lipsync'], personas: ['cta_text'] };
+const EXPECTED = { scheduled_posts: ['faceless_material', 'full_lipsync'], personas: ['cta_type'] };
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -46,23 +46,23 @@ beforeEach(() => {
 
 describe('checkSchemaDrift', () => {
   it('reports nothing when every expected column exists', async () => {
-    const client = fakeClient({ scheduled_posts: ['faceless_material', 'full_lipsync'], personas: ['cta_text'] });
+    const client = fakeClient({ scheduled_posts: ['faceless_material', 'full_lipsync'], personas: ['cta_type'] });
     expect(await checkSchemaDrift(client, EXPECTED)).toEqual({ missing: {}, unverified: [] });
   });
 
   it('names exactly the missing column, not the whole table', async () => {
-    const client = fakeClient({ scheduled_posts: ['full_lipsync'], personas: ['cta_text'] });
+    const client = fakeClient({ scheduled_posts: ['full_lipsync'], personas: ['cta_type'] });
     const report = await checkSchemaDrift(client, EXPECTED);
     expect(report.missing).toEqual({ scheduled_posts: ['faceless_material'] });
   });
 
   it('reports every column of a table that does not exist', async () => {
     const client = fakeClient({ scheduled_posts: ['faceless_material', 'full_lipsync'], personas: 'missing-table' });
-    expect((await checkSchemaDrift(client, EXPECTED)).missing).toEqual({ personas: ['cta_text'] });
+    expect((await checkSchemaDrift(client, EXPECTED)).missing).toEqual({ personas: ['cta_type'] });
   });
 
   it('does not call an unreachable database drift', async () => {
-    const client = fakeClient({ scheduled_posts: 'unreachable', personas: ['cta_text'] });
+    const client = fakeClient({ scheduled_posts: 'unreachable', personas: ['cta_type'] });
     expect(await checkSchemaDrift(client, EXPECTED)).toEqual({ missing: {}, unverified: ['scheduled_posts'] });
   });
 });
