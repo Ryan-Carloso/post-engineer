@@ -328,6 +328,8 @@ describe('PostsCalendar', () => {
         <PostsCalendar
           events={[calendarEvent()]}
           date={new Date(2030, 5, 1)}
+          view="month"
+          showViewSwitcher={false}
           weekStartsOn={0}
           locale="en"
           loading={false}
@@ -335,6 +337,8 @@ describe('PostsCalendar', () => {
           onSelectDay={vi.fn()}
           onDateChange={vi.fn()}
           onMonthNavigate={vi.fn()}
+          onWeekNavigate={vi.fn()}
+          onViewChange={vi.fn()}
           onGoToToday={vi.fn()}
         />
       </div>,
@@ -350,6 +354,8 @@ describe('PostsCalendar', () => {
         <PostsCalendar
           events={[calendarEvent()]}
           date={new Date(2030, 5, 1)}
+          view="month"
+          showViewSwitcher={false}
           weekStartsOn={0}
           locale="en"
           loading={false}
@@ -357,6 +363,8 @@ describe('PostsCalendar', () => {
           onSelectDay={vi.fn()}
           onDateChange={vi.fn()}
           onMonthNavigate={vi.fn()}
+          onWeekNavigate={vi.fn()}
+          onViewChange={vi.fn()}
           onGoToToday={vi.fn()}
         />
       </div>,

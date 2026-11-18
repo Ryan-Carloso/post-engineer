@@ -184,7 +184,10 @@ describe('Posts list progress', () => {
     const nextSunday = new Date();
     nextSunday.setDate(nextSunday.getDate() - nextSunday.getDay() + 7);
     const label = new Intl.DateTimeFormat('pt-BR', { weekday: 'long', month: 'long', day: 'numeric' }).format(nextSunday);
-    cy.get('[data-posts-calendar-week]').find(`[role="group"][aria-label^="${label}"]`).click();
+    // The column spans the full grid height, so its center can sit below
+    // the fold; the top of the column is always visible, just under the day
+    // header, and a tap there is the same day pick.
+    cy.get('[data-posts-calendar-week]').find(`[role="group"][aria-label^="${label}"]`).click('top');
     cy.contains(`Publicações de ${shortDate(nextSunday)}`).should('be.visible');
   });
 });
