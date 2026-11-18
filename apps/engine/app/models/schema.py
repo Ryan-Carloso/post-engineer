@@ -1,23 +1,14 @@
 import warnings
 from enum import Enum
-from typing import Any, Literal, Optional, Union
+from typing import Any, Optional, Union
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.config import config
 from app.utils.ssrf import UnsafeUrlError, assert_public_url
 from app.models import publish as publish_models
-from app.services.script_segments import (
-    MAX_IMAGES_MODE_MEDIAS,
-    MAX_OVERLAY_BADGE_CHARS,
-    MAX_OVERLAY_SUBTITLE_CHARS,
-    MAX_OVERLAY_TITLE_CHARS,
-)
-from app.services.segment_photo_duration import (
-    MAX_REQUESTED_PHOTO_SECONDS,
-    MIN_REQUESTED_PHOTO_SECONDS,
-    duration_error,
-)
+from app.models.cta import CtaType
+from app.models.segments import ScriptSegment, SegmentMedia, SegmentOverlay  # noqa: F401 — re-exported for existing import sites
 
 # Ignore specific Pydantic warnings
 warnings.filterwarnings(
@@ -256,8 +247,6 @@ class VideoParams(BaseModel):
     # Phase 5-5: the /scripts controller is deleted, so no script prompt
     # fields remain anywhere in the request models — scripts come from
     # segments only.
-    # The persona's call to action ("" = generic); 200 mirrors migration 024.
-    video_cta: str = Field(default="", max_length=200)
 
 
 class SubtitleRequest(BaseModel):
@@ -306,61 +295,6 @@ def _validate_webhook_url(value: Optional[str]) -> Optional[str]:
     return value
 
 
-class SegmentOverlay(BaseModel):
-    """Info card painted inside a segment photo's panel: real name, address, price."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    title: str = Field(min_length=1, max_length=MAX_OVERLAY_TITLE_CHARS)
-    subtitle: Optional[str] = Field(default=None, min_length=1, max_length=MAX_OVERLAY_SUBTITLE_CHARS)
-    badge: Optional[str] = Field(default=None, min_length=1, max_length=MAX_OVERLAY_BADGE_CHARS)
-
-    @field_validator("title", "subtitle", "badge", mode="before")
-    @classmethod
-    def _strip_text(cls, value: Optional[str]) -> Optional[str]:
-        """Measure the trimmed text, like check_script (action: validate) and the TS validators."""
-        return value.strip() if isinstance(value, str) else value
-
-
-class SegmentMedia(BaseModel):
-    """Media reference shape for a segment's photo (media (action: upload) uploads it, media (action: check) verifies it)."""
-
-    # Unknown keys are forbidden, not stripped: the unknown-field guard in
-    # validate_segments runs on model_dump output, so extra='ignore' would
-    # silently drop a key like voice on the request path before the guard
-    # ever sees it.
-    model_config = ConfigDict(extra="forbid")
-
-    mediaId: Optional[str] = None
-    url: Optional[str] = None
-    overlay: Optional["SegmentOverlay"] = None
-    # Requested on-screen seconds for a full-frame photo: hold the
-    # turning point longer, flash one briefly. Absent = default 2s pace.
-    duration: Optional[float] = Field(
-        default=None, ge=MIN_REQUESTED_PHOTO_SECONDS, le=MAX_REQUESTED_PHOTO_SECONDS
-    )
-
-    @field_validator("duration", mode="before")
-    @classmethod
-    def _validate_duration(cls, value: Any) -> Any:
-        # Reject coerced values (strings, bools, NaN, inf) with the shared rule.
-        error = duration_error(value)
-        if error is not None:
-            raise ValueError(error[0])
-        return value
-
-
-class ScriptSegment(BaseModel):
-    # Same reason as SegmentMedia: forbid so unknown segment keys fail
-    # request validation instead of being dropped before validation.
-    model_config = ConfigDict(extra="forbid")
-
-    # Takes (issue #577): hook first, content after; a CTA is a content take.
-    kind: Literal["hook", "content"]
-    text: str
-    media: Optional[list[SegmentMedia]] = Field(None, max_length=MAX_IMAGES_MODE_MEDIAS)
-
-
 class TaskVideoRequest(VideoParams, BaseModel):
     # Optional callback fired once when the task reaches a terminal state
     # (completed/failed). Must be a public https URL; delivery is best-effort.
@@ -370,6 +304,11 @@ class TaskVideoRequest(VideoParams, BaseModel):
     # video_script before the task is created; a supplied video_script
     # that differs from the joined segments is rejected, never coerced.
     segments: Optional[list[ScriptSegment]] = None
+    # Effective CTA intent for this video (issue #639): the persona's
+    # cta_type, or a per-video override resolved by the web before
+    # dispatch. None = no CTA applies (legacy/script-only rows): the
+    # CTA-take rule does not run. A faceless video can still carry one.
+    cta_type: Optional[CtaType] = None
     # Web-side correlation id (video_generations.generation_id). Carried
     # through the task row into PostHog events so a generation can be
     # traced end-to-end without a database lookup. Never used as the task
@@ -400,8 +339,9 @@ class TaskVideoRequest(VideoParams, BaseModel):
             return self
         from app.services import script_segments
 
+        dumped = [segment.model_dump(exclude_none=True) for segment in self.segments]
         joined = script_segments.segments_to_script(
-            [segment.model_dump(exclude_none=True) for segment in self.segments],
+            dumped,
             video_type=self.video_type,
         )
         # Pydantic v2 does not re-validate on assignment: enforce the
@@ -411,6 +351,9 @@ class TaskVideoRequest(VideoParams, BaseModel):
             raise ValueError(f"segments join to a script longer than video_script allows ({max_chars} characters)")
         if self.video_script and self.video_script != joined:
             raise ValueError("video_script must match the segments script")
+        from app.services import cta_validation
+
+        cta_validation.validate_cta_take(dumped, self.cta_type)
         self.video_script = joined
         return self
 

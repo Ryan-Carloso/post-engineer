@@ -2,8 +2,8 @@
 
 One call = one video. ``segments`` is an ordered list of takes whose
 first segment is the hook and whose later segments are all content. A
-CTA is just a content take, placed anywhere — there is no cta kind, no
-CTA count rule, and no CTA position rule. Validation here is mechanical
+CTA is just a content take, placed anywhere and marked cta — there is no cta kind;
+the presence rule lives in cta_validation, not here. Validation here is mechanical
 only: shape, forbidden content, word counts, and the hook word guard.
 It never calls an LLM, never calls a TTS service, and never fixes the
 input silently: the first failed rule raises ``SegmentValidationError``
@@ -312,7 +312,7 @@ def validate_segments(segments: Any, video_type: str = "hook_lipsync") -> dict[s
             raise SegmentValidationError(
                 field, "Segment must be an object.", "Send each segment as { kind, text }."
             )
-        unknown = sorted(set(segment) - {"kind", "text", "media"})
+        unknown = sorted(set(segment) - {"kind", "text", "media", "cta"})
         if unknown:
             raise SegmentValidationError(
                 field,

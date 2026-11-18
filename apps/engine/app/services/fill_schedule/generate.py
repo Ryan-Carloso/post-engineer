@@ -225,7 +225,19 @@ class BatchGenerator:
                     # malformed row, so a corrupt row fails the slot loudly
                     # instead of rendering a different video.
                     segments=segments,
-                    video_cta=identity.get("cta_text") or "",
+                    # CTA intent (issue #639): the snapshot carries the
+                    # resolved type, but a slot stored before the rule has
+                    # segments with no cta marker — for those the CTA does
+                    # not apply (they render without a CTA take) instead of
+                    # failing a row that was valid when it was stored.
+                    cta_type=(
+                        identity.get("cta_type")
+                        if any(
+                            isinstance(segment, dict) and segment.get("cta") is True
+                            for segment in segments
+                        )
+                        else None
+                    ),
                     # Snapshot (post_language) already resolved by post_identity();
                     # without this the job carries no language for TTS and the
                     # English-only gate below.

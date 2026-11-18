@@ -505,15 +505,16 @@ class BatchScheduleTests(unittest.TestCase):
         self.assertNotIn("video_script_prompt", request.model_dump())
         self.assertFalse(hasattr(request, "video_script_prompt"))
 
-    def test_generate_slot_forwards_the_snapshot_call_to_action(self):
+    def test_generate_slot_forwards_the_snapshot_cta_type(self):
         slot = self._batch_slot()
         del slot["schedules"]["personas"]
         slot["video_type"] = "faceless"
+        slot["segments"][2]["cta"] = True
         slot["schedules"].update(
             {
                 "post_voice_id": "energetic",
                 "post_face_quality": "ok",
-                "post_cta_text": "Link na bio",
+                "post_cta_type": "link",
             }
         )
         store = _FakeStore()
@@ -524,7 +525,31 @@ class BatchScheduleTests(unittest.TestCase):
         with patch.object(scheduler.generator, "_dispatch_generation") as dispatch_generation:
             scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
 
-        self.assertEqual(dispatch_generation.call_args.args[1].video_cta, "Link na bio")
+        self.assertEqual(dispatch_generation.call_args.args[1].cta_type, "link")
+
+    def test_generate_slot_stored_before_cta_rule_renders_without_a_cta(self):
+        # A slot stored before issue #639 has segments with no cta marker:
+        # the snapshot type (backfilled 'follow' by migration 070) must not
+        # fail the row — the CTA simply does not apply to it.
+        slot = self._batch_slot()
+        del slot["schedules"]["personas"]
+        slot["video_type"] = "faceless"
+        slot["schedules"].update(
+            {
+                "post_voice_id": "energetic",
+                "post_face_quality": "ok",
+                "post_cta_type": "follow",
+            }
+        )
+        store = _FakeStore()
+        store.pending_slots = lambda now, limit: [slot]
+        scheduler = self._scheduler(store)
+        scheduler.store.signed_url = MagicMock(return_value="https://signed/foto.png")
+
+        with patch.object(scheduler.generator, "_dispatch_generation") as dispatch_generation:
+            scheduler.generate(datetime(2026, 9, 6, 12, 0, tzinfo=UTC))
+
+        self.assertIsNone(dispatch_generation.call_args.args[1].cta_type)
 
     def test_generate_slot_without_any_voice_fails_before_dispatch(self):
         # A persona with no voice and no audio cannot produce a job:
@@ -3261,19 +3286,19 @@ class PostIdentityTests(unittest.TestCase):
         self.assertEqual(identity["voice_id"], "energetic")
         self.assertEqual(identity["video_aspect"], "16:9")
 
-    def test_snapshot_call_to_action_overrides_the_persona_embed(self):
+    def test_snapshot_cta_type_overrides_the_persona_embed(self):
         identity = fs.post_identity(
             {
                 "id": "sched-cta",
-                "personas": {"voice_id": "calm", "cta_text": "old ask"},
-                "post_cta_text": "new ask",
+                "personas": {"voice_id": "calm", "cta_type": "follow"},
+                "post_cta_type": "comment",
             }
         )
-        self.assertEqual(identity["cta_text"], "new ask")
+        self.assertEqual(identity["cta_type"], "comment")
 
-    def test_slot_select_reads_the_call_to_action_columns(self):
-        self.assertIn("post_cta_text", ScheduleStore.SLOT_IDENTITY_SELECT)
-        self.assertIn("personas(name,niche,cta_text,", ScheduleStore.SLOT_IDENTITY_SELECT)
+    def test_slot_select_reads_the_cta_type_columns(self):
+        self.assertIn("post_cta_type", ScheduleStore.SLOT_IDENTITY_SELECT)
+        self.assertIn("personas(name,niche,cta_type,", ScheduleStore.SLOT_IDENTITY_SELECT)
         # Phase 5-4: the script prompt no longer rides the identity select.
         self.assertNotIn("script_prompt", ScheduleStore.SLOT_IDENTITY_SELECT)
 

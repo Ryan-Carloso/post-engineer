@@ -152,3 +152,84 @@ def test_media_shape_only_in_phase_one():
             video_type="faceless",
             segments=segments,
         )
+
+
+def test_cta_take_marked_content_passes_with_cta_type():
+    segments = valid_segments()
+    segments[2]["cta"] = True
+    request = TaskVideoRequest(
+        video_title="Porto",
+        video_description="Test description.",
+        video_type="faceless",
+        cta_type="follow",
+        segments=segments,
+    )
+    assert request.video_script == f"{HOOK}\n\n{BODY}\n\n{CTA}"
+    assert request.cta_type == "follow"
+
+
+def test_cta_type_without_marked_take_is_rejected():
+    with pytest.raises(ValidationError, match="No content take is marked"):
+        TaskVideoRequest(
+            video_title="Porto",
+            video_description="Test description.",
+            video_type="faceless",
+            cta_type="follow",
+            segments=valid_segments(),
+        )
+
+
+def test_comment_cta_without_question_is_rejected():
+    segments = valid_segments()
+    segments[2]["cta"] = True
+    with pytest.raises(ValidationError, match="must ask a question"):
+        TaskVideoRequest(
+            video_title="Porto",
+            video_description="Test description.",
+            video_type="faceless",
+            cta_type="comment",
+            segments=segments,
+        )
+
+
+def test_comment_cta_with_question_passes():
+    segments = valid_segments()
+    segments[2] = {
+        "kind": "content",
+        "text": "What would you pack first for a weekend in Porto?",
+        "media": _photos("c", 2),
+        "cta": True,
+    }
+    request = TaskVideoRequest(
+        video_title="Porto",
+        video_description="Test description.",
+        video_type="faceless",
+        cta_type="comment",
+        segments=segments,
+    )
+    assert request.cta_type == "comment"
+
+
+def test_hook_marked_as_cta_is_rejected():
+    segments = valid_segments()
+    segments[0]["cta"] = True
+    with pytest.raises(ValidationError, match="hook cannot be the CTA"):
+        TaskVideoRequest(
+            video_title="Porto",
+            video_description="Test description.",
+            video_type="faceless",
+            cta_type="follow",
+            segments=segments,
+        )
+
+
+def test_stray_cta_marker_without_cta_type_is_rejected():
+    segments = valid_segments()
+    segments[2]["cta"] = True
+    with pytest.raises(ValidationError, match="no CTA applies"):
+        TaskVideoRequest(
+            video_title="Porto",
+            video_description="Test description.",
+            video_type="faceless",
+            segments=segments,
+        )
