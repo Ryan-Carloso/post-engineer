@@ -373,9 +373,9 @@ export default function PostsPage() {
                   ref={daySectionRef}
                   aria-live="polite"
                   className={cn(
-                  'min-w-0 scroll-mt-4 xl:col-start-2 xl:row-start-1 xl:mt-0 xl:pt-4',
-                  panelOnTop ? 'order-1 mt-0' : 'order-2 mt-4 max-xl:pb-24',
-                )}
+                    'min-w-0 scroll-mt-4 xl:col-start-2 xl:row-start-1 xl:mt-0 xl:pt-4',
+                    panelOnTop ? 'order-1 mt-0' : 'order-2 mt-4 max-xl:pb-24',
+                  )}
                 >
                   {isAccountEmpty ? (
                     <>
