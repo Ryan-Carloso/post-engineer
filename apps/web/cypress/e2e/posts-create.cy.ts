@@ -20,12 +20,12 @@ function visitPosts() {
 }
 
 // Day 15 is always in the shown month, so the same test works on any
-// day; the button's aria-label is the full pt-BR date react-day-picker
-// renders (pt is the default locale).
+// day; the button's aria-label is the CalendarCN full date (weekday,
+// month, day — no year) in the pt-BR locale the app defaults to.
 function day15FullDate(): string {
   const target = new Date();
   target.setDate(15);
-  return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'full' }).format(target);
+  return new Intl.DateTimeFormat('pt-BR', { weekday: 'long', month: 'long', day: 'numeric' }).format(target);
 }
 
 function day15ShortDate(): string {
@@ -149,7 +149,13 @@ describe('Posts list progress', () => {
     visitPosts();
     // Pick a day: the day panel names the 15th.
     cy.get('[data-calendar-card]').find(`button[aria-label^="${day15FullDate()}"]`).click();
-    cy.contains(`Publicações de ${day15ShortDate()}`).should('be.visible');
+    // The CalendarCN grid is taller than the old one, so in a month that
+    // spans six weeks the day panel sits below the fold at the default
+    // viewport and the heading is clipped by the scrolling shell: what
+    // is under test here is the panel syncing to the picked day, not
+    // the scroll position, so scroll it into view first (the same
+    // pattern the refresh step below already uses).
+    cy.contains(`Publicações de ${day15ShortDate()}`).scrollIntoView().should('be.visible');
     // Next month: the panel moves to the next month.
     const nextMonth = new Date();
     // Pin the day first: setMonth(+1) on a day the next month lacks rolls
@@ -157,10 +163,10 @@ describe('Posts list progress', () => {
     nextMonth.setDate(1);
     nextMonth.setMonth(nextMonth.getMonth() + 1);
     cy.get('[data-calendar-card]').find('button[aria-label="Próximo mês"]').click();
-    cy.contains(`Publicações de ${monthLong(nextMonth)}`).should('be.visible');
+    cy.contains(`Publicações de ${monthLong(nextMonth)}`).scrollIntoView().should('be.visible');
     // Go to today: the day panel names today again.
     cy.get('[data-calendar-card]').contains('Ir para hoje').click();
-    cy.contains(`Publicações de ${shortDate(new Date())}`).should('be.visible');
+    cy.contains(`Publicações de ${shortDate(new Date())}`).scrollIntoView().should('be.visible');
     // Refresh: the generating card is still there after the refetch.
     cy.get('button[aria-label="Atualizar"]').click();
     cy.contains('E2E generating topic').scrollIntoView().should('be.visible');

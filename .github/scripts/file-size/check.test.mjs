@@ -154,3 +154,26 @@ describe('file-size ratchet (multiple violations)', () => {
     assert.ok(errors.some((l) => l.includes('apps/engine/app/b.py')));
   });
 });
+
+describe('file-size ratchet (vendored CalendarCN)', () => {
+  it('passes for a vendored file above the cap', () => {
+    const { exitCode, stdout } = runCheck([A('apps/web/components/calendar-provider.tsx', 3141)]);
+    assert.equal(exitCode, 0, stdout);
+  });
+
+  it('passes for a vendored lib file above the cap', () => {
+    const { exitCode, stdout } = runCheck([A('apps/web/lib/event-utils.ts', 2055)]);
+    assert.equal(exitCode, 0, stdout);
+  });
+
+  it('still fails for our own file above the cap next to a vendored one', () => {
+    const { stdout, exitCode } = runCheck([
+      A('apps/web/components/calendar-provider.tsx', 3141),
+      A('apps/web/app/(main)/posts/calendar-provider.tsx', 501),
+    ]);
+    assert.equal(exitCode, 1);
+    const errors = stdout.split('\n').filter((l) => l.startsWith('::error'));
+    assert.equal(errors.length, 1);
+    assert.ok(errors[0].includes('apps/web/app/(main)/posts/calendar-provider.tsx'));
+  });
+});
