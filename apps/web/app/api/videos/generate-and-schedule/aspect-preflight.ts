@@ -246,7 +246,7 @@ export interface FirstPhotoFaceInput {
  * engine reports has_face null for these). The text names the real
  * reason the photo cannot be the hook image. These apply to the first
  * segment photo only: the engine really rejects those files there
- * (resolve_first_segment_photo runs _validate_photo), while the persona
+ * (resolve_first_segment_photo runs image_fetch.validate_photo), while the persona
  * fallback has no size bounds — only an unreadable file is a 400 there.
  */
 const MECHANICAL_REJECTION_REASONS: Record<string, string> = {

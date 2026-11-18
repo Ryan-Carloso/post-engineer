@@ -332,13 +332,13 @@ def test_two_photos_split_the_segment_and_a_dropped_one_fails_the_task(tmp_path)
 # ---- aspect ratio (issue #538): a photo that fills the frame must match it
 
 
-def test_validate_photo_rejects_a_landscape_photo_for_a_portrait_video(tmp_path):
+def test_photo_validation_rejects_a_landscape_photo_for_a_portrait_video(tmp_path):
     path = str(tmp_path / "landscape.jpg")
     with open(path, "wb") as handle:
         handle.write(_jpeg(1920, 1080))
-    assert user_media._validate_photo(path, VideoAspect.portrait) == "wrong_aspect"
-    assert user_media._validate_photo(path, VideoAspect.landscape) is None
-    assert user_media._validate_photo(path) is None
+    assert image_fetch.validate_photo(path, VideoAspect.portrait) == "wrong_aspect"
+    assert image_fetch.validate_photo(path, VideoAspect.landscape) is None
+    assert image_fetch.validate_photo(path) is None
 
 
 def test_check_media_code_reports_wrong_aspect_for_a_landscape_photo(tmp_path):
@@ -498,3 +498,71 @@ def test_resolve_media_id_skips_a_wrong_ratio_photo_with_both_ratios_named(
         "segment 0 image 0 media skipped: wrong aspect ratio "
         "(1920x1080 (16:9); expected 9:16 (1080x1920))"
     ]
+
+
+# ---- media (action: check) for video clips (PR-B): the photo codes
+
+
+def _clip(tmp_path, name="clip.mp4", seconds=5, width=1080, height=1920, codec="libx264"):
+    import subprocess
+
+    path = str(tmp_path / name)
+    subprocess.run(
+        ["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i",
+         f"color=c=0xff0000:s={width}x{height}:r=25:d={seconds}",
+         "-c:v", codec, "-pix_fmt", "yuv420p", "-an", path],
+        check=True,
+    )
+    return path
+
+
+def _check_clip(url, tmp_path, blob, aspect=None):
+    from app.services import segment_video
+
+    def download(url, dest_path, session=None):
+        with open(dest_path, "wb") as handle:
+            handle.write(blob)
+        return dest_path
+
+    with patch.object(segment_video, "download_video", side_effect=download):
+        return user_media.check_media_code(url, str(tmp_path), aspect)
+
+
+def test_check_media_ok_for_a_good_portrait_clip(tmp_path):
+    blob = open(_clip(tmp_path), "rb").read()
+    assert _check_clip("https://e.com/broll.mp4", tmp_path, blob) == "ok"
+
+
+def test_check_media_not_image_for_a_non_h264_clip(tmp_path):
+    blob = open(_clip(tmp_path, codec="mpeg4"), "rb").read()
+    assert _check_clip("https://e.com/broll.mp4", tmp_path, blob) == "not_image"
+
+
+def test_check_media_too_large_for_a_clip_over_the_duration_cap(tmp_path):
+    blob = open(_clip(tmp_path, seconds=35), "rb").read()
+    assert _check_clip("https://e.com/broll.mp4", tmp_path, blob) == "too_large"
+
+
+def test_check_media_wrong_aspect_for_a_landscape_clip(tmp_path):
+    blob = open(_clip(tmp_path, width=1920, height=1080), "rb").read()
+    assert (
+        _check_clip("https://e.com/broll.mp4", tmp_path, blob, VideoAspect.portrait)
+        == "wrong_aspect"
+    )
+
+
+def test_check_media_detail_for_a_clip_media_id_reports_dimensions_and_no_face(
+    tmp_path, monkeypatch
+):
+    from app.services import segment_video
+
+    monkeypatch.setattr(user_media, "_temp_assets_dir", lambda: str(tmp_path))
+    monkeypatch.setattr(segment_video, "_temp_assets_dir", lambda: str(tmp_path))
+    name = "aabbccddeeff00112233445566778899.mp4"
+    (tmp_path / name).write_bytes(open(_clip(tmp_path, name="src.mp4"), "rb").read())
+    assert user_media.check_media_detail(
+        media_id=name, aspect=VideoAspect.portrait
+    ) == {"code": "ok", "width": 1080, "height": 1920, "has_face": None}
+    assert user_media.check_media_detail(
+        media_id="ffffffffffffffffffffffffffffffff.mp4", aspect=VideoAspect.portrait
+    ) == {"code": "media_expired", "width": None, "height": None, "has_face": None}

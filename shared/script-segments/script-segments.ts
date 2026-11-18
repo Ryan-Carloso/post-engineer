@@ -23,6 +23,11 @@ export const MAX_MEDIAS = 6;
 export const WORDS_PER_IMAGE = 8;
 export const MIN_WORDS_PER_IMAGE = 3;
 export const MAX_IMAGES_MODE_MEDIAS = 30;
+// A video clip covers ~12s of speech, not one 3s photo slot: one clip
+// counts as this many items for the density minimum only (the maximum
+// still counts items one for one). Same number as CLIP_DENSITY_ITEMS in
+// apps/engine/app/services/segment_video.py.
+export const CLIP_DENSITY_ITEMS = 4;
 export const MIN_TOTAL_WORDS = 60;
 export const MAX_TOTAL_WORDS = 200;
 export const MIN_CONTENT_WORDS = 30;
@@ -93,17 +98,46 @@ function fail(field: string, rule: string, fix: string): SegmentsResult {
   return { ok: false, error: { field, rule, fix } };
 }
 
+// True when a segment media item references a video clip, by its
+// suffix — mirroring the engine's segment_video.is_video_ref. The
+// mediaId wins when present; otherwise the URL path decides (query and
+// fragment are not part of the path).
+function isVideoRef(media: unknown): boolean {
+  if (typeof media !== 'object' || media === null || Array.isArray(media)) return false;
+  const record = media as Record<string, unknown>;
+  const mediaId = record['mediaId'];
+  if (typeof mediaId === 'string' && mediaId.length > 0) {
+    return mediaId.toLowerCase().endsWith('.mp4');
+  }
+  const url = record['url'];
+  if (typeof url === 'string' && url.length > 0) {
+    const path = url.split(/[?#]/, 1)[0] ?? '';
+    return path.toLowerCase().endsWith('.mp4');
+  }
+  return false;
+}
+
 // Half-up seconds, matching image_density.spoken_seconds.
 function spokenSeconds(words: number): number {
   return Math.floor((words * 3 + Math.floor(WORDS_PER_IMAGE / 2)) / WORDS_PER_IMAGE);
 }
 
-function imageDensityError(words: number, count: number): { rule: string; fix: string } | null {
+function imageDensityError(
+  words: number,
+  count: number,
+  minCount?: number,
+): { rule: string; fix: string } | null {
   const low = Math.ceil(words / WORDS_PER_IMAGE);
   const high = Math.max(1, Math.floor(words / MIN_WORDS_PER_IMAGE));
   const seconds = spokenSeconds(words);
-  if (count < low) {
-    const missing = low - count;
+  // minCount, when given, is what the minimum is measured against: a
+  // video clip covers more than one photo slot (CLIP_DENSITY_ITEMS), so
+  // a take carried by clips meets its minimum with fewer items. The
+  // maximum still counts items one for one: a clip flickers like a
+  // photo when the take is crowded. Mirrors image_density.density_error.
+  const effective = minCount ?? count;
+  if (effective < low) {
+    const missing = low - effective;
     const images = low === 1 ? 'image' : 'images';
     const more = missing === 1 ? 'image' : 'images';
     return {
@@ -211,6 +245,9 @@ function repeatedPhoto(media: unknown, field: string, seen: Set<string>): Segmen
     if (typeof value !== 'string' || value.trim().length === 0) continue;
     const token = `${key}\u0000${value.trim()}`;
     if (seen.has(token)) {
+      if (isVideoRef(media)) {
+        return fail(field, 'the same video clip must not repeat', 'Use a different video clip for each media item.');
+      }
       return fail(field, 'the same photo must not repeat', 'Use a different photo for each media item.');
     }
     seen.add(token);
@@ -425,7 +462,10 @@ export function validateSegments(input: unknown, videoType: VideoType = 'hook_li
       if (repeat !== null) return repeat;
     }
     if (imagesMode) {
-      const density = imageDensityError(countWords(segments[i].text), media.length);
+      // A clip covers ~12s of speech, not one 3s photo slot: credit it in the minimum.
+      const clips = media.filter((item) => isVideoRef(item)).length;
+      const minCount = media.length + (CLIP_DENSITY_ITEMS - 1) * clips;
+      const density = imageDensityError(countWords(segments[i].text), media.length, minCount);
       if (density !== null) return fail(`segments.${i}.media`, density.rule, density.fix);
       if (!hasSpokenWords(segments[i].text)) {
         return fail(

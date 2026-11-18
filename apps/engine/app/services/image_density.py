@@ -29,13 +29,21 @@ def spoken_seconds(words: int) -> int:
     return (words * 3 + WORDS_PER_IMAGE // 2) // WORDS_PER_IMAGE
 
 
-def density_error(words: int, count: int) -> Optional[tuple[str, str]]:
-    """(rule, fix) when count is outside the images-mode range, else None."""
+def density_error(words: int, count: int, min_count: Optional[int] = None) -> Optional[tuple[str, str]]:
+    """(rule, fix) when count is outside the images-mode range, else None.
+
+    min_count, when given, is what the minimum is measured against: a
+    video clip covers more than one photo slot (segment_video
+    CLIP_DENSITY_ITEMS), so a take carried by clips meets its minimum
+    with fewer items. The maximum still counts items one for one: a
+    clip flickers like a photo when the take is crowded.
+    """
     low = min_images(words)
     high = max_images(words)
     seconds = spoken_seconds(words)
-    if count < low:
-        missing = low - count
+    effective = min_count if min_count is not None else count
+    if effective < low:
+        missing = low - effective
         images = "image" if low == 1 else "images"
         more = "image" if missing == 1 else "images"
         return (

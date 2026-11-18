@@ -144,7 +144,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Mechanically check one image URL or media id (MCP media check) */
+        /** Mechanically check one image or video URL or media id (MCP media check) */
         post: operations["check_media_api_v1_media_check_post"];
         delete?: never;
         options?: never;

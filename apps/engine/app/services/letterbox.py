@@ -20,8 +20,9 @@ def ratio_matches(width: int, height: int, aspect: VideoAspect) -> bool:
     engine's aspect gate (media_aspect) and video.py's fit check.
 
     Callers pass probed dimensions, never None: probe_size returns
-    None only when the image cannot be opened, and _validate_photo
-    calls mismatch_detail only after a successful open.
+    None only when the image cannot be opened, and
+    image_fetch.validate_photo calls mismatch_detail only after a
+    successful open.
     """
     if width <= 0 or height <= 0:
         return False

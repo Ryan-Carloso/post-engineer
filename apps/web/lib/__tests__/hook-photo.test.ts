@@ -27,6 +27,41 @@ describe('firstSegmentMedia', () => {
     expect(firstSegmentMedia([{ kind: 'hook', text: 'Welcome.' }])).toBeNull();
     expect(firstSegmentMedia([{ kind: 'hook', text: 'Welcome.', media: [] }])).toBeNull();
   });
+
+  it('skips a video clip and picks the next photo', () => {
+    // A clip is never the hook photo: the hook opens with a still
+    // (engine: segment_video.is_video_ref, user_media.first_segment_media).
+    expect(
+      firstSegmentMedia([
+        {
+          kind: 'hook',
+          text: 'Welcome.',
+          media: [{ url: 'https://e.com/broll.mp4' }, { url: 'https://e.com/hook.jpg' }],
+        },
+      ]),
+    ).toEqual({ segmentIndex: 0, imageIndex: 1, mediaId: undefined, url: 'https://e.com/hook.jpg' });
+  });
+
+  it('skips a clip media id, case-insensitively and past a query string', () => {
+    expect(
+      firstSegmentMedia([
+        {
+          kind: 'hook',
+          text: 'Welcome.',
+          media: [{ mediaId: 'aabbcc.MP4' }, { url: 'https://e.com/broll.mp4?token=1' }, { url: 'https://e.com/hook.jpg' }],
+        },
+      ]),
+    ).toEqual({ segmentIndex: 0, imageIndex: 2, mediaId: undefined, url: 'https://e.com/hook.jpg' });
+  });
+
+  it('returns null when every media item is a clip', () => {
+    expect(
+      firstSegmentMedia([
+        { kind: 'hook', text: 'Welcome.', media: [{ url: 'https://e.com/broll.mp4' }] },
+        { kind: 'content', text: 'More.', media: [{ mediaId: 'aabbcc.mp4' }] },
+      ]),
+    ).toBeNull();
+  });
 });
 
 describe('hookPhotoForSegments', () => {
@@ -49,6 +84,14 @@ describe('hookPhotoForSegments', () => {
         { kind: 'hook', text: 'Welcome.', media: [{ mediaId: 'aabbcc.jpg' }] },
       ]),
     ).toEqual({ url: null, source: 'upload', segmentIndex: 0, imageIndex: 0 });
+  });
+
+  it('falls back to the persona photo when every media item is a clip', () => {
+    expect(
+      hookPhotoForSegments([
+        { kind: 'hook', text: 'Welcome.', media: [{ url: 'https://e.com/broll.mp4' }] },
+      ]),
+    ).toEqual({ url: null, source: 'persona', segmentIndex: null, imageIndex: null });
   });
 
   it('prefers the media id over the URL when the first photo carries both', () => {

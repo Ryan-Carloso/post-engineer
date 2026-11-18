@@ -1834,7 +1834,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Mechanically check one image URL or media id (MCP media check)",
+        "summary": "Mechanically check one image or video URL or media id (MCP media check)",
         "tags": [
           "V1"
         ]
