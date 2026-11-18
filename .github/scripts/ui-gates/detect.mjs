@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { changedUiFiles } from './changed.mjs';
+import { filterCodeChanged } from './code-changed.mjs';
 
 function arg(name) {
   const idx = process.argv.indexOf(name);
@@ -13,4 +14,4 @@ if (!base || !head) {
   process.exit(2);
 }
 
-console.log(changedUiFiles(base, head).join(','));
+console.log((await filterCodeChanged(changedUiFiles(base, head), base, head)).join(','));

@@ -7,7 +7,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(HERE, '../../..');
 
 let tsModule = null;
-function loadTypeScript() {
+export function loadTypeScript() {
   if (tsModule === null) {
     const require = createRequire(path.join(REPO_ROOT, 'apps/web/package.json'));
     tsModule = require('typescript');
@@ -33,7 +33,7 @@ export function isPyDirective(commentText) {
   return PY_DIRECTIVE.test(commentText);
 }
 
-function scriptKind(ts, file) {
+export function scriptKind(ts, file) {
   if (file.endsWith('.tsx')) return ts.ScriptKind.TSX;
   if (file.endsWith('.jsx')) return ts.ScriptKind.JSX;
   if (/\.(c|m)?js$/.test(file)) return ts.ScriptKind.JS;

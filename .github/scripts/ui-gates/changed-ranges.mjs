@@ -2,6 +2,7 @@
 
 import { execFileSync } from 'node:child_process';
 import { isVendoredCalendarCN } from '../file-size/vendored-calendarcn.mjs';
+import { filterCodeChanged } from './code-changed.mjs';
 
 const DEFAULT_MERGE_GAP = 3;
 const DEFAULT_MAX_RANGES = 50;
@@ -205,11 +206,11 @@ if (process.argv[1] && process.argv[1].endsWith('changed-ranges.mjs')) {
         ? (path) => filesSet.has(path)
         : null;
   console.log(
-    runForScope({ base, head, filter, stripPrefix: stripPrefix ?? null, mergeGap, maxRanges }),
+    await runForScope({ base, head, filter, stripPrefix: stripPrefix ?? null, mergeGap, maxRanges }),
   );
 }
 
-function runForScope({ base, head, filter, stripPrefix, mergeGap, maxRanges }) {
+async function runForScope({ base, head, filter, stripPrefix, mergeGap, maxRanges }) {
   const diff = runGitFromRepoRoot([
     '-c',
     'core.quotePath=false',
@@ -227,5 +228,16 @@ function runForScope({ base, head, filter, stripPrefix, mergeGap, maxRanges }) {
   const entries = parseChangedRanges(diff, { mergeGap, maxRanges }).filter((entry) =>
     filter ? filter(entry.path) : true,
   );
-  return mutateArgument(entries, { stripPrefix });
+  const codeChanged = new Set(
+    await filterCodeChanged(
+      entries.map((entry) => entry.path),
+      base,
+      head,
+      { runGit: runGitFromRepoRoot },
+    ),
+  );
+  return mutateArgument(
+    entries.filter((entry) => codeChanged.has(entry.path)),
+    { stripPrefix },
+  );
 }

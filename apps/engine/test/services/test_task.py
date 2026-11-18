@@ -1137,5 +1137,23 @@ class TestArchiveFinalVideos(unittest.TestCase):
         track.assert_not_called()
 
 
+
+class TestReleaseFailureAlertUnreserved(unittest.TestCase):
+    def setUp(self):
+        tm._discord_notified_failed_tasks.clear()
+
+    def tearDown(self):
+        tm._discord_notified_failed_tasks.clear()
+
+    def test_releasing_an_unreserved_task_is_a_no_op(self):
+        tm._discord_notified_failed_tasks.append("task-other")
+
+        tm._release_failure_alert("task-never-reserved")
+
+        self.assertEqual(list(tm._discord_notified_failed_tasks), ["task-other"])
+        self.assertTrue(tm._discord_notified_failed_tasks_lock.acquire(blocking=False))
+        tm._discord_notified_failed_tasks_lock.release()
+
+
 if __name__ == "__main__":
     unittest.main()

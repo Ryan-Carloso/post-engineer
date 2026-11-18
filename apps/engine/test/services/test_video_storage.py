@@ -412,5 +412,26 @@ class ReadFinalVideoR2Tests(unittest.TestCase):
         )
 
 
+
+class R2ClientTests(unittest.TestCase):
+    def test_builds_an_s3_client_on_the_account_endpoint_with_trimmed_keys(self):
+        env = {
+            "R2_ACCOUNT_ID": "acct123",
+            "R2_ACCESS_KEY_ID": " key-id ",
+            "R2_SECRET_ACCESS_KEY": " secret ",
+        }
+        with patch.dict(os.environ, env), patch("boto3.client") as client:
+            result = vs._r2_client()
+
+        self.assertIs(result, client.return_value)
+        client.assert_called_once_with(
+            "s3",
+            endpoint_url="https://acct123.r2.cloudflarestorage.com",
+            aws_access_key_id="key-id",
+            aws_secret_access_key="secret",
+            region_name="auto",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

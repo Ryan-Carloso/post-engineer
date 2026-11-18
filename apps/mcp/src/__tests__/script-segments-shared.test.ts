@@ -28,6 +28,7 @@ describe('script-segments shared source', () => {
     const root = findRepoRoot(import.meta.url);
     const shared = readFileSync(join(root, SHARED_RELATIVE), 'utf8');
     const generated = readFileSync(join(root, GENERATED_RELATIVE), 'utf8');
+    expect(shared).toContain('export const MAX_SEGMENTS');
     expect(generated).toBe(shared);
   });
 

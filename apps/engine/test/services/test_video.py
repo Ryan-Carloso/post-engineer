@@ -1946,5 +1946,33 @@ class TestSubprocessErrorScrubbing(unittest.TestCase):
         self.assertNotIn("/var/cache/material", warnings[0])
         self.assertIn("<path>", warnings[0])
 
+
+class CloseClipCompositeTests(unittest.TestCase):
+    def test_closes_children_but_skips_a_self_reference(self):
+        class _Reader:
+            def __init__(self):
+                self.closed = 0
+
+            def close(self):
+                self.closed += 1
+
+        class _Clip:
+            def __init__(self):
+                self.reader = _Reader()
+                self.audio = None
+                self.mask = None
+                self.clips = []
+
+        parent = _Clip()
+        child = _Clip()
+        parent.clips = [parent, child]
+
+        vd.close_clip(parent)
+
+        self.assertEqual(parent.reader.closed, 1)
+        self.assertEqual(child.reader.closed, 1)
+        self.assertEqual(parent.clips, [])
+
+
 if __name__ == "__main__":
     unittest.main()

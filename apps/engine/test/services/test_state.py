@@ -226,5 +226,27 @@ class TestRedisState(unittest.TestCase):
         self.assertFalse(is_cancelled("task:0"))
 
 
+
+class StateBackendSelectionTests(unittest.TestCase):
+    def test_supabase_backend_uses_the_death_diagnostic_state(self):
+        import importlib.util
+        import os
+        from unittest.mock import patch
+
+        from app.services import death_diagnostics
+        from app.services import state as state_module
+
+        sentinel = object()
+        spec = importlib.util.spec_from_file_location("state_backend_probe", state_module.__file__)
+        probe = importlib.util.module_from_spec(spec)
+        with patch.dict(os.environ, {"MPT_STATE_BACKEND": "SupaBase"}), patch.object(
+            death_diagnostics, "DeathDiagnosticTaskState", return_value=sentinel
+        ) as factory:
+            spec.loader.exec_module(probe)
+
+        factory.assert_called_once_with()
+        self.assertIs(probe.state, sentinel)
+
+
 if __name__ == "__main__":
     unittest.main()
