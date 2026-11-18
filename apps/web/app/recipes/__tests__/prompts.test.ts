@@ -640,11 +640,19 @@ describe('prompts hub data', () => {
       'Ask me the persona, the topic, and the video type',
       'Find the real story first',
       'setup, turning point, payoff',
+      'Every emotional beat must be VISIBLE in the image',
+      'the turning point MUST have a visual moment',
+      'An invisible beat is a failure',
       'Build the hook from one mechanism',
       'Draft three hooks',
       'Write for watch-through',
       'Open a loop early',
       'echo one word from the hook',
+      'Vary the rhythm deliberately',
+      'a short, direct hook',
+      'a longer discovery',
+      'a short close',
+      'pace changes from take to take',
       'Voice: direct, plain spoken sentences',
       'If a line sounds written rather than spoken',
       'Mix the media',
@@ -654,6 +662,10 @@ describe('prompts hub data', () => {
       'stock video (b-roll)',
       'without a licence',
       'the base lines about material do not apply here',
+      'Match text to image per SENTENCE, not per segment',
+      'gets an image that shows what the sentence says',
+      'Image quality, no exceptions',
+      'No neutral filler photo',
       'One consistent persona',
       'the same person, the same look',
       'one fixed group',
@@ -684,6 +696,19 @@ describe('prompts hub data', () => {
     expect(text).toContain('licensed stock is allowed');
     expect(text).toContain('real photos are welcome');
     expect(text).toContain('without a licence');
+    // v3/v4 lessons, for a 10/10 video: every emotional beat is visible
+    // in the image, the rhythm varies take by take, every sentence gets
+    // its own image, and every image is sharp, well-lit, and on-topic.
+    expect(text).toContain('Every emotional beat must be VISIBLE in the image');
+    expect(text).toContain('visibly triumphant');
+    expect(text).toContain('An invisible beat is a failure');
+    expect(text).toContain('Vary the rhythm deliberately');
+    expect(text).toContain('pace changes from take to take');
+    expect(text).toContain('Match text to image per SENTENCE, not per segment');
+    expect(text).toContain('gets an image that shows what the sentence says');
+    expect(text).toContain('Image quality, no exceptions');
+    expect(text).toContain('No neutral filler photo');
+    expect(text).toContain('no repeated compositions');
     // The old rule is gone: no more AI-only photos, no "never stock".
     expect(text).not.toContain('Generate every photo with AI');
     expect(text).not.toContain('never stock');

@@ -26,7 +26,9 @@ the whole video whenever the persona appears, never unlicensed media.
 The agent finds the real story first (setup, turning point,
 payoff), builds the hook from one mechanism that fits, writes for
 watch-through, and follows the base: validate, score, confirm, then
-generate once.
+generate once. Every emotional beat is visible in the image, the
+rhythm varies take by take, every sentence gets its own image, and
+every image is sharp, well-lit, and on-topic.
 
 ## Prerequisites (not part of the prompt)
 
