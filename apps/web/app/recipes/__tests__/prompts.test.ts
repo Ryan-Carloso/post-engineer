@@ -239,11 +239,12 @@ describe('prompts hub data', () => {
       'voiceId',
       'language "en-US"',
       'Remember the persona name',
-      'which search tool for',
-      'Tavily, Exa, or my own web or MCP search tool',
-      'licensed stock video sources I have keys for (Pexels, Pixabay,',
-      'Coverr, or none)',
-      'Reuse those answers for later videos in this',
+      'which search tools for',
+      'facts, in order (Tavily and Exa, or my own web or MCP search',
+      'tool) and which licensed stock video sources I have keys for,',
+      'in order (Pexels, Pixabay, Coverr, or none)',
+      'Reuse those answers',
+      'for later videos in this',
       'conversation',
       'uses images only',
       'There is no saved account configuration',
@@ -255,6 +256,11 @@ describe('prompts hub data', () => {
       'YOUR_COVERR_API_KEY',
       'never ask me to paste one in chat',
       'never use a source with no key',
+      'If a tool fails - timeout, out of',
+      'tokens, or error - use the next configured one',
+      'never stop at the first failure',
+      'try the best-matching source',
+      'first, then the next configured source',
       'billing (action: balance)',
       'check_script (action: validate)',
       'confirm the providers/accounts and the mode (scheduled|asap)',
@@ -271,7 +277,8 @@ describe('prompts hub data', () => {
     expect(text).toContain('Pexels');
     expect(text).toContain('Pixabay');
     expect(text).toContain('Coverr');
-    expect(text).toContain('Reuse those answers for later videos in this');
+    // The phrase spans a line break, so pin it with a regex.
+    expect(text).toMatch(/Reuse those answers\s+for later videos in this/);
     expect(text).toContain('never claim the answers were saved');
     expect(text).not.toContain('issue #');
   });
@@ -284,7 +291,8 @@ describe('prompts hub data', () => {
     // The phrase spans a line break, so pin it with a regex — a bare
     // toContain('video') would pass even with the clause removed.
     expect(text).toMatch(/later videos in this\s+conversation/);
-    expect(text).toContain('the first video in this setup follows the base and');
+    // The phrase spans a line break, so pin it with a regex.
+    expect(text).toMatch(/the first video in this setup\s+follows the base and/);
     expect(text).toContain('uses images only');
     expect(text).toContain('There is no saved account configuration');
     expect(text).toContain('never claim the answers were saved');
@@ -294,6 +302,19 @@ describe('prompts hub data', () => {
     expect(text).toMatch(/never print them, never paste them anywhere\s+else, never log them/);
     expect(text).not.toContain('standing configuration for this account');
     expect(text).not.toContain('save the answers as the');
+  });
+
+  it('falls back to the next configured tool when one fails', () => {
+    const fullText = getPrompt('full-setup')?.prompt ?? '';
+    const baseText = SHARED_PROMPT_BASE.join('\n');
+    expect(fullText.startsWith(baseText)).toBe(true);
+    const text = fullText.slice(baseText.length + 2);
+    expect(text).toContain('which search tools for');
+    // Both phrases span a line break, so pin them with regexes.
+    expect(text).toMatch(/facts, in order \(Tavily and Exa, or my own web or MCP search\s+tool\)/);
+    expect(text).toMatch(/If a tool fails - timeout, out of\s+tokens, or error - use the next configured one/);
+    expect(text).toContain('never stop at the first failure');
+    expect(text).toMatch(/try the best-matching source\s+first, then the next configured source/);
   });
 
   it('says images is the only material and names the video types with the full-lip-sync media cap', () => {
@@ -717,6 +738,10 @@ describe('prompts hub data', () => {
       'a skipped clip fails the render',
       'If no stock source is configured,',
       'photos only. A clip is full-frame',
+      'If a source fails - timeout, no results, or',
+      'error - use the next configured source',
+      'try the best-matching',
+      'source first and never stop at the first failure',
       'extract frames',
       'same subject,',
       'same action, same mood',
@@ -785,6 +810,9 @@ describe('prompts hub data', () => {
     expect(text).toContain('Never invent a fact');
     expect(text).toContain('Tavily');
     expect(text).toContain('Exa');
+    // The fallback phrase spans a line break, so pin it with a regex.
+    expect(text).toMatch(/If\s+that tool fails - timeout, out of tokens, or error - try the next/);
+    expect(text).toContain('configured search tool');
     expect(text).toContain('cut it from the script');
     expect(text).toContain('unconfirmed fact never enters');
     // Step 7 overrides the base's material lines for this prompt only:
@@ -817,6 +845,12 @@ describe('prompts hub data', () => {
     expect(text).toContain('photos only. A clip is full-frame');
     // "clip audio is discarded" spans a line break, so pin it with a regex.
     expect(text).toMatch(/clip\s+audio is discarded/);
+    // If a stock source fails, the agent tries the next configured one —
+    // best match first, never stopping at the first failure.
+    expect(text).toContain('If a source fails - timeout, no results, or');
+    expect(text).toContain('error - use the next configured source');
+    expect(text).toContain('try the best-matching');
+    expect(text).toContain('source first and never stop at the first failure');
     expect(text).toContain('extract frames');
     expect(text).toContain('same subject,');
     expect(text).toContain('same action, same mood');

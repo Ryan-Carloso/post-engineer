@@ -47,9 +47,12 @@ never a blocker.
 - Script planning answers: what the user's channel is about, and the persona
   details (name, face pick, voice pick, language English-only, niche).
 - Which tools the user already has, asked once at setup and reused for
-  later videos in this conversation: the search tool for facts (Tavily,
-  Exa, or the agent's own web or MCP search tool) and the licensed stock
-  video sources (Pexels, Pixabay, Coverr, or none). There is no saved
+  later videos in this conversation: the search tools for facts, in order
+  (Tavily and Exa, or the agent's own web or MCP search tool) and the
+  licensed stock video sources, in order (Pexels, Pixabay, Coverr, or
+  none). If a tool fails — timeout, out of tokens, or error — the agent
+  uses the next configured one and never stops at the first failure; for
+  stock video it tries the best-matching source first. There is no saved
   account configuration: for a later conversation the agent uses only
   the sources whose key is present in its own environment. The keys live
   in the agent's own environment as `YOUR_TAVILY_API_KEY`,
