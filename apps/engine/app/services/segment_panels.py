@@ -11,6 +11,10 @@ The panels are prepared at the materials stage (download, checks, drawing)
 and written to a manifest in the task directory; the overlay runs when the
 final video is assembled. A panel that cannot be drawn or overlaid costs only
 the photo, never the video, and is reported as a task warning.
+
+A video clip (segment_video) is a panel too, but a moving one: it plays
+full-frame for its seconds, looped on its input and trimmed, and is
+never zoomed. Its Panel carries the clip's seconds and frame size.
 """
 
 import contextlib
@@ -81,6 +85,12 @@ class Panel:
     caption_bottom: Optional[int] = None
     # "in"/"out": a full-frame photo that zooms slowly (images material, panel_motion).
     motion: Optional[str] = None
+    # A video clip (segment_video): its source duration in seconds. None
+    # for a photo. A clip loops to fill its seconds (at most 3 plays),
+    # plays full-frame at frame_width x frame_height, and never zooms.
+    clip_seconds: Optional[float] = None
+    frame_width: Optional[int] = None
+    frame_height: Optional[int] = None
 
 
 def _scale(width: int, height: int) -> float:
@@ -229,6 +239,24 @@ def caption_bands(task_id: str) -> list[tuple[float, float, int]]:
     ]
 
 
+def _clip_filter(input_label: str, panel: Panel, output_label: str) -> str:
+    """Filter chain fitting one clip to the frame for its seconds on screen.
+
+    The clip is scaled up to fill the frame and centre-cropped, then
+    trimmed to the panel's seconds (the looped input supplies the frames)
+    and re-timed to start at the panel's start, like the zoompan path:
+    without the shift the clip's frames would play from t=0 instead of
+    from the take.
+    """
+    seconds = max(0.0, panel.end - panel.start)
+    width, height = panel.frame_width, panel.frame_height
+    return (
+        f"[{input_label}]scale={width}:{height}:force_original_aspect_ratio=increase,"
+        f"crop={width}:{height},trim=0:{seconds:.3f},"
+        f"setpts=PTS-STARTPTS+{panel.start:.3f}/TB[{output_label}]"
+    )
+
+
 def overlay_command(
     video_path: str,
     panels: Sequence[Panel],
@@ -243,17 +271,31 @@ def overlay_command(
     A still panel is a looped image (shortest=1 ends it with the video). A
     panel with motion is a single image zoompan turns into a finite clip of
     frame_size, so its overlay passes the video through after the clip ends.
+    A video clip is looped on its input (stream_loop) and trimmed to its
+    seconds, so a short clip fills its take and a long one is cut; its
+    audio track is never mapped, so only the spoken script is heard. A
+    clip without a frame size is a caller bug: fail loudly, never guess.
     """
     command = [ffmpeg, "-y", "-i", video_path]
     for panel in panels:
-        command += ["-i", panel.path] if _moves(panel, frame_size) else ["-loop", "1", "-i", panel.path]
+        if panel.clip_seconds is not None:
+            if panel.frame_width is None or panel.frame_height is None:
+                raise ValueError("a video clip panel needs a frame size")
+            command += ["-stream_loop", "-1", "-i", panel.path]
+        elif _moves(panel, frame_size):
+            command += ["-i", panel.path]
+        else:
+            command += ["-loop", "1", "-i", panel.path]
     steps: list[str] = []
     source = "0:v"
     for position, panel in enumerate(panels):
         target = f"v{position}"
         layer = f"{position + 1}:v"
         ending = "shortest=1"
-        if frame_size is not None and _moves(panel, frame_size):
+        if panel.clip_seconds is not None:
+            steps.append(_clip_filter(layer, panel, f"c{position}"))
+            layer, ending = f"c{position}", "eof_action=pass"
+        elif frame_size is not None and _moves(panel, frame_size):
             steps.append(panel_motion.zoom_filter(layer, panel, frame_size[0], frame_size[1], f"m{position}"))
             layer, ending = f"m{position}", "eof_action=pass"
         steps.append(

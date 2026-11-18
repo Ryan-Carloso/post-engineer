@@ -29,6 +29,11 @@ never a failure.
 
 Full-frame photos also get a slow zoom (Ken Burns, panel_motion), alternating
 in and out, so a still photo never looks frozen.
+
+A video clip (segment_video) covers its take instead: it loops to fill
+its slice, at most MAX_CLIP_LOOPS plays, and never zooms — it already
+moves. A clip that loops out still leaves the window short, and the
+task fails naming the gap, exactly like a missing photo.
 """
 
 import math
@@ -36,7 +41,7 @@ from collections import Counter
 from dataclasses import replace
 from typing import Optional, Sequence
 
-from app.services import segment_panels
+from app.services import segment_panels, segment_video
 from app.services.segment_panels import Panel
 
 IMAGES_DO_NOT_COVER_AUDIO = "images_do_not_cover_audio"
@@ -161,15 +166,36 @@ def extend_over_gaps(
         raise ImagesDoNotCoverAudio()
     covered: list[Panel] = []
     cursor = window_start
+    photo_position = 0
     for position, panel in enumerate(full):
         start = cursor
         end = full[position + 1].start if position + 1 < len(full) else audio_duration
-        end = min(end, start + MAX_PHOTO_SECONDS)
-        motion = MOTION_IN if position % 2 == 0 else MOTION_OUT
+        if panel.clip_seconds is not None:
+            # A clip loops to fill its slice (at most MAX_CLIP_LOOPS
+            # plays): it covers its take, not the 2s photo cap, and it
+            # never zooms — it already moves.
+            cap = min(panel.end - panel.start, segment_video.MAX_CLIP_LOOPS * panel.clip_seconds)
+            end = min(end, start + cap)
+            motion = None
+        else:
+            end = min(end, start + MAX_PHOTO_SECONDS)
+            # Photos alternate in/out among themselves: a clip between
+            # two photos breaks the sequence, so the count skips clips.
+            motion = MOTION_IN if photo_position % 2 == 0 else MOTION_OUT
+            photo_position += 1
         covered.append(replace(panel, start=start, end=end, motion=motion))
         cursor = end
     if cursor < audio_duration - _COVERAGE_EPSILON_SECONDS:
         missing = math.ceil((audio_duration - cursor) / MAX_PHOTO_SECONDS)
+        if any(panel.clip_seconds is not None for panel in full):
+            count_word = "item" if len(full) == 1 else "items"
+            cover_verb = "covers" if len(full) == 1 else "cover"
+            missing_word = "photo" if missing == 1 else "photos"
+            raise ImagesDoNotCoverAudio(
+                f"{len(full)} {count_word} {cover_verb} {cursor - window_start:.1f}s of "
+                f"{audio_duration - window_start:.1f}s; "
+                f"need {missing} more {missing_word} or video clips"
+            )
         photo_word = "photo" if len(full) == 1 else "photos"
         cover_verb = "covers" if len(full) == 1 else "cover"
         missing_word = "photo" if missing == 1 else "photos"

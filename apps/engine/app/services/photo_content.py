@@ -45,7 +45,8 @@ def content_hash(path: str) -> Optional[str]:
 
 
 def duplicate_skip(
-    seen: dict[str, str], photo: str, index: int, image_index: int, downloaded: str
+    seen: dict[str, str], photo: str, index: int, image_index: int, downloaded: str,
+    reason: str = REASON_DUPLICATE_PHOTO,
 ) -> tuple[Optional[str], Optional[str]]:
     """Skip line plus hash to claim, for a photo whose bytes were already placed.
 
@@ -68,7 +69,7 @@ def duplicate_skip(
         if downloaded:
             with contextlib.suppress(OSError):
                 os.remove(downloaded)
-        return f"{label} media skipped: {REASON_DUPLICATE_PHOTO}", None
+        return f"{label} media skipped: {reason}", None
     return None, photo_hash
 
 

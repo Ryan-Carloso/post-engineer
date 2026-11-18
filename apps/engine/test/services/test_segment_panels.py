@@ -374,3 +374,136 @@ def test_a_full_frame_photo_and_a_panel_can_follow_each_other_in_one_video(task_
     assert _near(first.getpixel((540, 1500)), RED) and _near(first.getpixel((540, 400)), BLUE)
     second = _frame(out, 4, task_dir)
     assert _near(second.getpixel((540, 400)), (30, 200, 30)) and _near(second.getpixel((540, 1500)), (30, 200, 30))
+
+
+# ---- video clips (PR-B): a clip plays full-frame, looped, never zoomed
+
+
+def _clip_panel(index=0, start=1.0, end=3.5, seconds=5.0, path="/t/c.mp4"):
+    return Panel(
+        index, path, 0, 0, start, end,
+        clip_seconds=seconds, frame_width=1080, frame_height=1920,
+    )
+
+
+def test_manifest_round_trips_a_video_clip_panel(task_dir):
+    panel = _clip_panel()
+    segment_panels.write_manifest("t", [panel], [])
+    read_panels, _ = segment_panels._read_manifest("t")
+    assert read_panels == [panel]
+
+
+def test_manifest_round_trips_a_photo_panel_without_clip_fields(task_dir):
+    panel = Panel(1, "/t/a.png", 0, -10, 1.5, 4.0)
+    segment_panels.write_manifest("t", [panel], [])
+    read_panels, _ = segment_panels._read_manifest("t")
+    assert read_panels == [panel]
+    assert read_panels[0].clip_seconds is None
+
+
+def test_overlay_command_loops_a_clip_and_trims_it_to_its_seconds():
+    command = segment_panels.overlay_command(
+        "/t/in.mp4", [_clip_panel()], "/t/out.mp4", "libx264", "veryfast", "ffmpeg"
+    )
+    assert command[: command.index("-filter_complex")] == [
+        "ffmpeg", "-y", "-i", "/t/in.mp4", "-stream_loop", "-1", "-i", "/t/c.mp4",
+    ]
+    graph = command[command.index("-filter_complex") + 1]
+    assert (
+        "[1:v]scale=1080:1920:force_original_aspect_ratio=increase,"
+        "crop=1080:1920,trim=0:2.500,setpts=PTS-STARTPTS+1.000/TB[c0]" in graph
+    )
+    assert "[0:v][c0]overlay=0:0:enable='between(t,1.000,3.500)':eof_action=pass[v0]" in graph
+    assert "-loop" not in command, "a clip loops on its own input, never as a still"
+    assert command[command.index("-map") + 1] == "[v0]"
+    assert "0:a?" in command
+
+
+def test_overlay_command_mixes_a_still_photo_and_a_clip():
+    panels = [Panel(0, "/t/a.png", 0, -10, 1.0, 3.0), _clip_panel(index=1, start=3.0, end=6.0)]
+    command = segment_panels.overlay_command(
+        "/t/in.mp4", panels, "/t/out.mp4", "libx264", "veryfast", "ffmpeg"
+    )
+    inputs = command[: command.index("-filter_complex")]
+    assert inputs == [
+        "ffmpeg", "-y", "-i", "/t/in.mp4",
+        "-loop", "1", "-i", "/t/a.png",
+        "-stream_loop", "-1", "-i", "/t/c.mp4",
+    ]
+    graph = command[command.index("-filter_complex") + 1]
+    assert ":shortest=1[v0]" in graph
+    assert ":eof_action=pass[v1]" in graph
+
+
+def test_overlay_command_refuses_a_clip_without_a_frame_size():
+    panel = Panel(0, "/t/c.mp4", 0, 0, 1.0, 3.5, clip_seconds=5.0)
+    with pytest.raises(ValueError, match="frame size"):
+        segment_panels.overlay_command(
+            "/t/in.mp4", [panel], "/t/out.mp4", "libx264", "veryfast", "ffmpeg"
+        )
+
+
+def _clip_file(tmp_path, name="clip.mp4", seconds=5, color="0xd21e1e"):
+    path = str(tmp_path / name)
+    subprocess.run(
+        ["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i",
+         f"color=c={color}:s=1080x1920:r=25:d={seconds}",
+         "-c:v", "libx264", "-pix_fmt", "yuv420p", "-an", path],
+        check=True,
+    )
+    return path
+
+
+def test_real_overlay_shows_the_clip_full_frame_only_in_its_seconds(task_dir):
+    base = _video(task_dir, seconds=4)
+    clip = _clip_file(task_dir)
+    segment_panels.write_manifest(
+        "t", [_clip_panel(path=clip, start=1.0, end=3.0)], []
+    )
+    recorded = []
+    out = segment_panels.overlay_onto("t", base, lambda *a, **k: recorded.append(k))
+    assert out != base and recorded == []
+    inside = _frame(out, 2, task_dir)
+    assert _near(inside.getpixel((540, 960)), RED), "the clip fills the frame while it plays"
+    assert _near(inside.getpixel((540, 400)), RED), "full-frame, not a panel"
+    assert _near(_frame(out, 0.4, task_dir).getpixel((540, 960)), BLUE), "no clip before its take"
+    assert _near(_frame(out, 3.6, task_dir).getpixel((540, 960)), BLUE), "no clip after its take"
+    probe = subprocess.run(
+        ["ffprobe", "-v", "error", "-select_streams", "a", "-show_entries", "stream=codec_name",
+         "-of", "csv=p=0", out],
+        capture_output=True, text=True, check=True,
+    )
+    assert probe.stdout.strip() == "aac", "the audio track is kept"
+
+
+def test_real_overlay_loops_a_short_clip_to_fill_its_take(task_dir):
+    base = _video(task_dir, seconds=4)
+    clip = _clip_file(task_dir, name="short.mp4", seconds=1)
+    segment_panels.write_manifest(
+        "t", [_clip_panel(path=clip, start=1.0, end=4.0, seconds=1.0)], []
+    )
+    out = segment_panels.overlay_onto("t", base, lambda *a, **k: None)
+    assert _near(_frame(out, 3.5, task_dir).getpixel((540, 960)), RED), (
+        "a 1s clip still shows at 3.5s: it looped to fill the 3s take"
+    )
+
+
+def test_real_overlay_ignores_a_clip_with_an_audio_track(task_dir):
+    base = _video(task_dir, seconds=4)
+    clip = str(task_dir / "noisy.mp4")
+    subprocess.run(
+        ["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "color=c=0xd21e1e:s=1080x1920:r=25:d=5",
+         "-f", "lavfi", "-i", "sine=frequency=880:d=5",
+         "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", clip],
+        check=True,
+    )
+    segment_panels.write_manifest(
+        "t", [_clip_panel(path=clip, start=1.0, end=3.0)], []
+    )
+    out = segment_panels.overlay_onto("t", base, lambda *a, **k: None)
+    probe = subprocess.run(
+        ["ffprobe", "-v", "error", "-select_streams", "a", "-show_entries", "stream=codec_name",
+         "-of", "csv=p=0", out],
+        capture_output=True, text=True, check=True,
+    )
+    assert probe.stdout.strip() == "aac", "only the main audio survives; the clip audio is dropped"

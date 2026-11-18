@@ -38,12 +38,11 @@ from typing import Any, Optional, Sequence
 
 import requests
 from loguru import logger
-from PIL import Image
 
 from app.models.schema import VideoAspect
 from app.services import (
-    face_detect, image_coverage, media_aspect, media_overlay, persona_hook, image_fetch, segment_panels, subtitle, video,
-    photo_content,
+    face_detect, image_coverage, media_overlay, persona_hook, image_fetch, segment_panels, subtitle, video,
+    photo_content, segment_video,
 )
 from app.services.image_density import split_interval
 from app.services.lipsync_active import persona_lipsync_active
@@ -60,7 +59,7 @@ MIN_PHOTO_LONG_EDGE = image_fetch.MIN_PHOTO_LONG_EDGE
 MIN_PHOTO_SHORT_EDGE = image_fetch.MIN_PHOTO_SHORT_EDGE
 MAX_PHOTO_PIXELS = image_fetch.MAX_PHOTO_PIXELS
 
-_MEDIA_ID_PATTERN = re.compile(r"^[0-9a-f]{32}\.(jpg|jpeg|png|webp)$")
+_MEDIA_ID_PATTERN = re.compile(r"^[0-9a-f]{32}\.(jpg|jpeg|png|webp|mp4)$")
 
 CHECK_CODES = ("ok", "blocked_403", "not_image", "too_small", "too_large", "timeout", "wrong_aspect", "media_expired")
 
@@ -99,10 +98,11 @@ def _segment_dict(segment: Any) -> dict[str, Any]:
 def first_segment_media(segments: Sequence[Any]) -> tuple[int, int, dict] | None:
     """The first photo of the video: (segment index, image index, media dict).
 
-    The first usable media item across segments, in order — usable means
-    it carries a mediaId or a url, mirroring the web selector in
+    The first usable photo across segments, in order — usable means it
+    carries a mediaId or a url, mirroring the web selector in
     apps/web/lib/hook-photo.ts and the segment-media path, which both
-    skip ref-less items. None when no segment carries a usable photo.
+    skip ref-less items. A video clip is never the hook photo: the hook
+    opens with a still. None when no segment carries a usable photo.
     Pure selection; the caller resolves the ref (mediaId or url) to a
     file. The hook opens with this photo (issue #589).
     """
@@ -117,6 +117,8 @@ def first_segment_media(segments: Sequence[Any]) -> tuple[int, int, dict] | None
             if not (isinstance(media_id, str) and media_id) and not (
                 isinstance(url, str) and url
             ):
+                continue
+            if segment_video.is_video_ref(media):
                 continue
             return segment_index, image_index, media
     return None
@@ -150,39 +152,6 @@ def resolve_first_segment_photo(
     if reason is not None:
         return "", segment_index, image_index, reason
     return photo, segment_index, image_index, None
-
-
-def _wrong_aspect_reason(source_path: str, aspect: VideoAspect) -> str:
-    """The skip reason for a wrong-ratio photo, naming both sides."""
-    size = photo_content.probe_size(source_path)
-    if size is None:
-        return "wrong aspect ratio"
-    detail = media_aspect.mismatch_detail(size[0], size[1], aspect)
-    return f"wrong aspect ratio ({detail})" if detail is not None else "wrong aspect ratio"
-
-
-def _validate_photo(source_path: str, aspect: Optional[VideoAspect] = None) -> Optional[str]:
-    """Mechanical check of one image file: None when usable, else a failure code.
-
-    The code is one of not_image / too_small / too_large / wrong_aspect.
-    Size is checked on the decoded pixels, so a thumbnail is too_small
-    rather than an opaque render failure. The aspect is only checked when
-    one was given: a photo that cannot fill the frame is wrong_aspect, so
-    it never ships as a blurred strip. Faces are not checked: these are
-    the agent's own photos, and they may show people.
-    """
-    try:
-        with Image.open(source_path) as opened:
-            width, height = opened.size
-    except (OSError, ValueError, Image.DecompressionBombError):
-        return "not_image"
-    if width * height > MAX_PHOTO_PIXELS:
-        return "too_large"
-    if max(width, height) < MIN_PHOTO_LONG_EDGE or min(width, height) < MIN_PHOTO_SHORT_EDGE:
-        return "too_small"
-    if aspect is not None and media_aspect.mismatch_detail(width, height, aspect) is not None:
-        return "wrong_aspect"
-    return None
 
 
 def _download_failure_code(exc: Exception) -> str:
@@ -256,13 +225,22 @@ def check_media_detail(
     filter: this path never rejects a photo for lacking a face (issue
     #589 — the hook-photo gate that consumes it lives in the lip-sync
     resolution and the web pre-charge preflight).
+
+    A clip (.mp4 mediaId or URL) is checked by segment_video instead:
+    same {code, width, height, has_face} shape, has_face always None,
+    and the code reuses the photo vocabulary (an unusable clip is
+    not_image, one over the duration cap is too_large).
     """
+    if media_id is not None and segment_video.is_video_media_id(media_id):
+        return segment_video.check_media_id(media_id, aspect)
+    if url is not None and segment_video.is_video_url(url):
+        return segment_video.check_media_url(url, aspect, work_dir)
     if media_id is not None:
         source, reason = _media_id_path(media_id)
         if reason is not None:
             return {"code": "media_expired", "width": None, "height": None, "has_face": None}
         size = photo_content.probe_size(source)
-        code = _validate_photo(source, aspect)
+        code = image_fetch.validate_photo(source, aspect)
         return {
             "code": code if code is not None else "ok",
             "width": size[0] if size is not None else None,
@@ -276,7 +254,7 @@ def check_media_detail(
         return {"code": _download_failure_code(exc), "width": None, "height": None, "has_face": None}
     try:
         size = photo_content.probe_size(raw_path)
-        failure = _validate_photo(raw_path, aspect)
+        failure = image_fetch.validate_photo(raw_path, aspect)
         return {
             "code": failure if failure is not None else "ok",
             "width": size[0] if size is not None else None,
@@ -302,11 +280,11 @@ def _resolve_media_id(
     source, reason = _media_id_path(media_id)
     if reason is not None:
         return "", reason
-    failure = _validate_photo(source, aspect)
+    failure = image_fetch.validate_photo(source, aspect)
     if failure is None:
         return source, None
     if failure == "wrong_aspect" and aspect is not None:
-        return "", _wrong_aspect_reason(source, aspect)
+        return "", image_fetch.wrong_aspect_reason(source, aspect)
     return "", _CODE_TO_REASON.get(failure, "unusable media")
 
 
@@ -322,11 +300,11 @@ def _resolve_url(
         image_fetch.download_image(url, raw_path, session=session)
     except Exception as exc:  # noqa: BLE001 - one bad URL costs only this segment
         return "", _CODE_TO_REASON.get(_download_failure_code(exc), "download failed")
-    failure = _validate_photo(raw_path, aspect)
+    failure = image_fetch.validate_photo(raw_path, aspect)
     if failure is None:
         return raw_path, None
     if failure == "wrong_aspect" and aspect is not None:
-        reason = _wrong_aspect_reason(raw_path, aspect)
+        reason = image_fetch.wrong_aspect_reason(raw_path, aspect)
     else:
         reason = _CODE_TO_REASON.get(failure, "unusable media")
     with contextlib.suppress(OSError):
@@ -415,6 +393,17 @@ def prepare_segment_media(
             if not isinstance(media, dict):
                 continue
             on_face = face == segment_panels.FACE_FULL or (face == segment_panels.FACE_HOOK and slice_start < hook_end)
+            if segment_video.is_video_ref(media):
+                # A clip plays full-frame, never as a panel: it is
+                # resolved, validated and copied by segment_video.
+                panel, lines = segment_video.clip_panel(
+                    media, index, image_index, slice_start, slice_end, task_dir,
+                    aspect, on_face=on_face, seen=seen_hashes,
+                )
+                skipped.extend(lines)
+                if panel is not None:
+                    panels.append(panel)
+                continue
             # A photo that fills the frame must match its ratio; a photo
             # shown as a panel is contained by the panel, so no gate.
             resolve_aspect = None if on_face else aspect

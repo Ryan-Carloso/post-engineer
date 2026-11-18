@@ -316,3 +316,60 @@ def test_the_reported_short_fails_with_twelve_photos_for_thirty_five_seconds():
         "images_do_not_cover_audio: 12 photos cover 24.0s of 35.0s at 2s each; "
         "need 6 more photos"
     )
+
+
+# ---- video clips (PR-B): a clip covers its take, looping at most 3x
+
+
+def _clip(index, start, end, seconds):
+    return Panel(
+        index=index, path=f"/t/{index}.mp4", x=0, y=0, start=start, end=end,
+        clip_seconds=seconds, frame_width=1080, frame_height=1920,
+    )
+
+
+def test_a_clip_covers_its_take_past_the_two_second_photo_cap():
+    covered = image_coverage.extend_over_gaps([_clip(0, 0.0, 6.0, 6.0)], 0.0, 6.0)
+    assert [(p.start, p.end, p.motion) for p in covered] == [(0.0, 6.0, None)]
+
+
+def test_a_long_clip_is_trimmed_to_its_take():
+    covered = image_coverage.extend_over_gaps([_clip(0, 0.0, 4.0, 10.0)], 0.0, 4.0)
+    assert [(p.start, p.end) for p in covered] == [(0.0, 4.0)]
+
+
+def test_a_short_clip_loops_at_most_three_times_then_fails():
+    # A 2s clip covers 6s (3 plays); the 9s audio still needs 3s more.
+    with pytest.raises(ImagesDoNotCoverAudio) as exc_info:
+        image_coverage.extend_over_gaps([_clip(0, 0.0, 9.0, 2.0)], 0.0, 9.0)
+    assert str(exc_info.value) == (
+        "images_do_not_cover_audio: 1 item covers 6.0s of 9.0s; "
+        "need 2 more photos or video clips"
+    )
+
+
+def test_a_clip_and_photos_share_the_window_with_their_own_rules():
+    # The clip covers 2-8s (its 6s, no loop needed) with no motion; the
+    # photos alternate in/out among themselves — the clip between them
+    # does not flip the second photo's zoom (both "in" was the bug).
+    panels = [_full(0, 0.0, 2.0), _clip(1, 2.0, 8.0, 6.0), _full(2, 8.0, 10.0)]
+    covered = image_coverage.extend_over_gaps(panels, 0.0, 10.0)
+    assert [(p.index, p.start, p.end, p.motion) for p in covered] == [
+        (0, 0.0, 2.0, "in"), (1, 2.0, 8.0, None), (2, 8.0, 10.0, "out"),
+    ]
+
+
+def test_a_skipped_clip_fails_the_task_like_a_skipped_photo():
+    panels = [_clip(0, 0.0, 6.0, 6.0)]
+    with pytest.raises(ImagesDoNotCoverAudio) as exc_info:
+        image_coverage.ensure_coverage(
+            panels,
+            face=segment_panels.FACE_NONE,
+            hook_end=0.0,
+            audio_duration=12.0,
+            sent=2,
+            skipped=["segment 1 image 0 media skipped: not a video clip"],
+        )
+    message = str(exc_info.value)
+    assert "2 sent, 1 survived, 1 skipped (not a video clip x1)" in message
+    assert "segment 1 image 0 media skipped: not a video clip" in message
