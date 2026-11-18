@@ -110,15 +110,16 @@ describe('experiments results page', () => {
     // Show table, and no A/B variant letters appear anywhere.
     cy.contains('Comparação de variantes').should('be.visible');
     cy.contains('Calm question: 1.500').should('be.visible');
-    cy.contains('Mostrar tabela').should('be.visible');
+    // Off-screen elements read as clipped to Cypress: scroll in first.
+    cy.contains('Mostrar tabela').scrollIntoView().should('be.visible');
     cy.contains('button', 'Mostrar tabela').click();
     // Per-pair views in the table.
-    cy.contains('td', '500').should('be.visible');
+    cy.contains('td', '500').scrollIntoView().should('be.visible');
     cy.contains('td', '250').should('be.visible');
     cy.contains(/variante a/i).should('not.exist');
     cy.contains(/variant a/i).should('not.exist');
     // The winner stays unnamed while the label is indicative.
-    cy.contains('Ainda sem vencedor').should('be.visible');
+    cy.contains('Ainda sem vencedor').scrollIntoView().should('be.visible');
   });
 
   it('shows the three charts and switches the metric', () => {
