@@ -13,7 +13,7 @@ from os import path
 from loguru import logger
 
 from app.config import config
-from app.services import subtitle, voice
+from app.services import subtitle, subtitle_cleanup, voice
 from app.utils import utils
 
 
@@ -36,9 +36,7 @@ def _whisper(audio_file: str, video_script: str, subtitle_path: str) -> bool:
 
 
 def _edge(sub_maker, video_script: str, subtitle_path: str) -> bool:
-    voice.create_subtitle(
-        text=video_script, sub_maker=sub_maker, subtitle_file=subtitle_path
-    )
+    voice.create_subtitle(text=video_script, sub_maker=sub_maker, subtitle_file=subtitle_path)
     return os.path.exists(subtitle_path) and _has_cues(subtitle_path)
 
 
@@ -46,7 +44,8 @@ def build_subtitle(task_id, params, video_script, sub_maker, audio_file) -> str:
     """Write `subtitle.srt` for the task; return its path, or "" when none.
 
     Returns "" when subtitles are off, when the provider needs a TTS timeline
-    that custom audio does not have, or when no provider produced cues.
+    that custom audio does not have, when no provider produced cues, or when
+    subtitle cleanup could not produce a cleaned file.
     """
     logger.info("\n\n## generating subtitle")
     if not params.subtitle_enabled:
@@ -79,5 +78,12 @@ def build_subtitle(task_id, params, video_script, sub_maker, audio_file) -> str:
 
     if not ok:
         logger.error(f"no subtitle provider produced cues (provider: {provider})")
+        return ""
+    # Both providers write the script's punctuation into the cues; the
+    # renderer burns the SRT file verbatim, so the cleanup runs here, on
+    # the one path every provider funnels through, before the path is
+    # handed to any consumer.
+    if not subtitle_cleanup.clean_subtitle_file(subtitle_path):
+        logger.error("subtitle cleanup failed; shipping no subtitles")
         return ""
     return subtitle_path
