@@ -152,6 +152,7 @@ async function applyProviderFilter(label: string): Promise<void> {
 }
 
 beforeEach(() => {
+  window.localStorage.clear();
   setLocale('en');
   vi.mocked(usePersonasQuery).mockReturnValue({
     data: [
@@ -277,6 +278,38 @@ describe('MetricsPage', () => {
     expect(screen.getByText('metrics.filterProvider')).toBeInTheDocument();
     expect(screen.queryByText('metrics.filterAccount')).toBeNull();
     expect(screen.queryByText('metrics.filterAngle')).toBeNull();
+  });
+
+  it('switches between the list and the chart view, remembering the choice', async () => {
+    stubMetricsFetch({
+      success: true,
+      rows: [row({ views: 1200 }), row({ postId: 'post-2', views: 300 })],
+      truncated: false,
+    });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('metrics.tableTitle')).toBeInTheDocument());
+    // Default view is the list.
+    expect(screen.queryByText('metrics.chartsOverTimeTitle')).toBeNull();
+    activateTab('metrics.viewChart');
+    expect(screen.getByText('metrics.chartsOverTimeTitle')).toBeInTheDocument();
+    expect(screen.getByText('metrics.chartsBreakdownTitle')).toBeInTheDocument();
+    expect(screen.getByText('metrics.chartsTopTitle')).toBeInTheDocument();
+    expect(window.localStorage.getItem('metrics-view-mode')).toBe('chart');
+    activateTab('metrics.viewList');
+    expect(screen.getByText('metrics.tableTitle')).toBeInTheDocument();
+    expect(screen.queryByText('metrics.chartsOverTimeTitle')).toBeNull();
+    expect(window.localStorage.getItem('metrics-view-mode')).toBe('list');
+  });
+
+  it('opens in the chart view when it is the stored choice', async () => {
+    window.localStorage.setItem('metrics-view-mode', 'chart');
+    stubMetricsFetch({
+      success: true,
+      rows: [row({ views: 1200 }), row({ postId: 'post-2', views: 300 })],
+      truncated: false,
+    });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('metrics.chartsOverTimeTitle')).toBeInTheDocument());
   });
 
   it('shows the coverage card below the list, with attention and waiting groups, and the as-of line', async () => {

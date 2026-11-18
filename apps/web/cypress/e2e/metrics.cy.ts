@@ -76,7 +76,7 @@ describe('metrics dashboard', () => {
     // + 10 + 1 + 0 = 117 (nulls skipped).
     cy.contains('1.500').should('be.visible');
     cy.contains('117').should('be.visible');
-    // No per-group chart anymore.
+    // The default view is the list; no charts render yet.
     cy.get('.recharts-wrapper').should('not.exist');
     // Rows sorted by views: the 1200-view video first, then 300, then n/d.
     cy.contains('myth-busting').should('be.visible');
@@ -112,6 +112,29 @@ describe('metrics dashboard', () => {
     cy.wait('@getMetrics').its('request.url').should('include', `persona=${PERSONA_ID}`);
     cy.contains('button', 'Limpar filtros').click();
     cy.contains('button', 'Limpar filtros').should('not.exist');
+  });
+
+  it('shows the three charts in the chart view; clicking a top bar scrolls to its row', () => {
+    interceptMetrics({ success: true, truncated: true, rows: ROWS });
+    cy.visit('/metrics');
+    cy.wait('@getMetrics');
+
+    cy.contains('button', 'Gráficos').click();
+    cy.contains('Ao longo do tempo').scrollIntoView().should('be.visible');
+    cy.contains('Distribuição de views').scrollIntoView().should('be.visible');
+    cy.contains('Vídeos mais vistos').scrollIntoView().should('be.visible');
+    // The charts say they cover truncated data and skip the null row.
+    cy.contains('Os gráficos cobrem só as').scrollIntoView().should('be.visible');
+    cy.contains('1 vídeos sem dados de views').should('be.visible');
+    // The views-by-day area and the top bars render (one provider only,
+    // so the breakdown is a donut, not bars).
+    cy.get('.recharts-wrapper').should('have.length', 3);
+    cy.get('.recharts-wrapper').last().find('.recharts-bar-rectangle').first().click();
+    // Clicking a bar returns to the list on the clicked video's row.
+    cy.contains('myth-busting').scrollIntoView().should('be.visible');
+    cy.contains('button', 'Lista').should('be.visible');
+    cy.contains('button', 'Gráficos').click();
+    cy.get('.recharts-wrapper').should('have.length', 3);
   });
 
   it('shows YouTube retention on a row and the reconnect prompt for an old token', () => {
