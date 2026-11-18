@@ -655,12 +655,16 @@ describe('prompts hub data', () => {
       'pace changes from take to take',
       'Voice: direct, plain spoken sentences',
       'If a line sounds written rather than spoken',
-      'Mix the media',
+      'Mix the photos',
       'never AI photos only',
       'identical static panels is monotonous',
       'licensed',
-      'stock video (b-roll)',
+      'stock photos from an image library',
       'without a licence',
+      'Photos only',
+      'it cannot use',
+      'video (b-roll) as segment media',
+      'never attach a video URL',
       'the base lines about material do not apply here',
       'Match text to image per SENTENCE, not per segment',
       'gets an image that shows what the sentence says',
@@ -689,13 +693,20 @@ describe('prompts hub data', () => {
     expect(text).toContain('Never present it as a real person');
     expect(text).toContain('verified testimonial');
     // Step 6 overrides the base's material lines for this prompt only:
-    // licensed stock video is allowed here, and real photos are welcome
+    // licensed stock photos are allowed here, and real photos are welcome
     // — the base's "images only, your own real photos, no stock footage"
-    // rule does not apply to this prompt.
+    // rule does not apply to this prompt. Photos only: the engine renders
+    // segment media as photos and cannot use video (b-roll) as segment
+    // media, so the prompt must never promise it.
     expect(text).toContain('the base lines about material do not apply here');
-    expect(text).toContain('licensed stock is allowed');
+    expect(text).toContain('licensed stock photos are allowed');
     expect(text).toContain('real photos are welcome');
     expect(text).toContain('without a licence');
+    expect(text).toContain('Photos only');
+    expect(text).toContain('it cannot use');
+    expect(text).toContain('never attach a video URL');
+    expect(text).not.toContain('licensed stock video');
+    expect(text).not.toContain('stock video (b-roll)');
     // v3/v4 lessons, for a 10/10 video: every emotional beat is visible
     // in the image, the rhythm varies take by take, every sentence gets
     // its own image, and every image is sharp, well-lit, and on-topic.

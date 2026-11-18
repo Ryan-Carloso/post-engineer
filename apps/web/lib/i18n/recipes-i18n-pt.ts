@@ -207,7 +207,7 @@ export const recipesI18nPt = {
   storyFirstReelsStep4:
       'Ele escreve para segurar a atenção: abre um gancho, entrega o desfecho prometido, um CTA com valor.',
   storyFirstReelsStep5:
-      'Ele mistura fotos de IA com fotos reais e vídeo de banco de imagem com licença — uma só persona consistente, nunca mídia sem licença.',
+      'Ele mistura fotos de IA com fotos reais e fotos de banco de imagem com licença — uma só persona consistente, nunca mídia sem licença.',
   storyFirstReelsStep6:
       'Valide, pontue, confirme e gere uma vez — igual a todos os prompts.',
   storyFirstReelsDeliver1:

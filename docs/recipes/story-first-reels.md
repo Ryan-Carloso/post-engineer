@@ -21,8 +21,10 @@ hand-maintained copy to drift.
 
 In short: one story per video — a real first-person story about one
 concrete day, never a generic explainer. Media is mixed: AI photos,
-real photos, and licensed stock video, with one consistent persona for
+real photos, and licensed stock photos, with one consistent persona for
 the whole video whenever the persona appears, never unlicensed media.
+Photos only: the engine renders segment media as photos and cannot use
+video (b-roll) as segment media yet.
 The agent finds the real story first (setup, turning point,
 payoff), builds the hook from one mechanism that fits, writes for
 watch-through, and follows the base: validate, score, confirm, then
