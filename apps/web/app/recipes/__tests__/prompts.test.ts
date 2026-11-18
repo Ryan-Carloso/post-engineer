@@ -239,14 +239,17 @@ describe('prompts hub data', () => {
       'voiceId',
       'language "en-US"',
       'Remember the persona name',
-      'which search tool for',
-      'Tavily, Exa, or my own web or MCP search tool',
-      'licensed stock video sources I have keys for (Pexels, Pixabay,',
-      'Coverr, or none)',
-      'Reuse those answers for later videos in this',
+      'Ask which licensed stock video sources I have keys for',
+      'The search tool was',
+      'already asked above',
+      'if only one is',
+      'configured, use it without asking which',
+      'Reuse the stock answers',
+      'for later videos in this',
       'conversation',
       'uses images only',
-      'There is no saved account configuration',
+      'There is no saved',
+      'tool or source configuration',
       'never claim the answers were saved',
       'YOUR_TAVILY_API_KEY',
       'YOUR_EXA_API_KEY',
@@ -271,8 +274,11 @@ describe('prompts hub data', () => {
     expect(text).toContain('Pexels');
     expect(text).toContain('Pixabay');
     expect(text).toContain('Coverr');
-    expect(text).toContain('Reuse those answers for later videos in this');
+    expect(text).toContain('Reuse the stock answers');
     expect(text).toContain('never claim the answers were saved');
+    // The search-tool ask lives in the base; step 4 must not repeat it,
+    // so the composed prompt asks it exactly once.
+    expect(fullText.split('Ask me once which search tool you already have').length - 1).toBe(1);
     expect(text).not.toContain('issue #');
   });
 
@@ -284,9 +290,12 @@ describe('prompts hub data', () => {
     // The phrase spans a line break, so pin it with a regex — a bare
     // toContain('video') would pass even with the clause removed.
     expect(text).toMatch(/later videos in this\s+conversation/);
-    expect(text).toContain('the first video in this setup follows the base and');
+    // This phrase spans a line break too.
+    expect(text).toMatch(/the first video in this\s+setup follows the base and/);
     expect(text).toContain('uses images only');
-    expect(text).toContain('There is no saved account configuration');
+    // "There is no saved tool or source configuration" spans a line break.
+    expect(text).toContain('There is no saved');
+    expect(text).toContain('tool or source configuration');
     expect(text).toContain('never claim the answers were saved');
     expect(text).toContain('If a key is missing, tell');
     // Both phrases span a line break, so pin them with regexes.
@@ -823,7 +832,6 @@ describe('prompts hub data', () => {
     expect(text).toContain('never forced in');
     expect(text).not.toContain('it cannot use');
     expect(text).not.toContain('never attach a video URL');
-    expect(text).not.toContain('saved at setup');
     // v3/v4 lessons, for a 10/10 video: every emotional beat is visible
     // in the image, the rhythm varies take by take, every sentence gets
     // its own image, and every image is sharp, well-lit, and on-topic.

@@ -20,10 +20,10 @@ hand-maintained copy to drift.
 
 In short: the user goes from zero (no connected accounts, no persona) to
 one published persona video in a single ordered flow. Setup asks once
-which search tool and which licensed stock video sources the user
-already has keys for, and reuses those answers for later videos in
-this conversation; the first video uses images only, and there is no
-saved account configuration. Validation runs before any token is spent, the publish is real (the agent says so and
+which licensed stock video sources the user already has keys for (the
+search tool is asked once in the base prompt), and reuses those answers
+for later videos in this conversation; the first video uses images
+only, and there is no saved tool or source configuration. Validation runs before any token is spent, the publish is real (the agent says so and
 confirms the providers/accounts and the mode, `scheduled` or `asap`,
 before generating), and Bluesky is optional — one provider among the
 accounts the user chooses, skipped or connected with an app password,
@@ -46,16 +46,15 @@ never a blocker.
   settings if they do not have one.
 - Script planning answers: what the user's channel is about, and the persona
   details (name, face pick, voice pick, language English-only, niche).
-- Which tools the user already has, asked once at setup and reused for
-  later videos in this conversation: the search tool for facts (Tavily,
-  Exa, or the agent's own web or MCP search tool) and the licensed stock
-  video sources (Pexels, Pixabay, Coverr, or none). There is no saved
-  account configuration: for a later conversation the agent uses only
+- Which licensed stock video sources the user has keys for (Pexels,
+  Pixabay, Coverr, or none), asked once at setup and reused for later
+  videos in this conversation. The search tool for facts is asked once
+  in the base prompt and reused the same way. There is no saved tool or
+  source configuration: for a later conversation the agent uses only
   the sources whose key is present in its own environment. The keys live
-  in the agent's own environment as `YOUR_TAVILY_API_KEY`,
-  `YOUR_EXA_API_KEY`, `YOUR_PEXELS_API_KEY`, `YOUR_PIXABAY_API_KEY`, or
-  `YOUR_COVERR_API_KEY`; never paste one in chat, in a prompt, or in
-  this repo.
+  in the agent's own environment as `YOUR_PEXELS_API_KEY`,
+  `YOUR_PIXABAY_API_KEY`, or `YOUR_COVERR_API_KEY`; never paste one in
+  chat, in a prompt, or in this repo.
 
 ## Example
 
