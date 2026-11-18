@@ -12,10 +12,10 @@
 // duration is checked by the engine when a hook-only TTS endpoint exists
 // (Phase 1 gap, see check_script (action: validate)).
 
-import { clipDensityMinCount, isVideoRef } from './segment-media.js';
-import { hasForbiddenContent, normalize } from './segment-text.js';
+import { clipDensityMinCount, isVideoRef } from './segment-media';
+import { hasForbiddenContent, normalize } from './segment-text';
 
-export { CLIP_DENSITY_ITEMS } from './segment-media.js';
+export { CLIP_DENSITY_ITEMS } from './segment-media';
 
 export const MAX_SEGMENTS = 12;
 // Full lip sync renders the persona's face over the whole video, so media

@@ -1,8 +1,8 @@
 // Sync the generated segments-validation copies from the shared source.
 //
 // Single source of truth: shared/script-segments/*.ts. Each shared module
-// has generated copies (byte-identical, committed so a fresh checkout
-// builds and tests without running this first):
+// has generated copies (committed so a fresh checkout builds and tests
+// without running this first):
 //   shared/script-segments/script-segments.ts
 //     -> apps/web/lib/generation/script-segments.ts
 //     -> apps/mcp/src/script-segments.ts
@@ -12,6 +12,16 @@
 //   shared/script-segments/segment-text.ts
 //     -> apps/web/lib/generation/segment-text.ts
 //     -> apps/mcp/src/segment-text.ts
+//
+// The MCP copies are byte-identical to shared. The web copy of
+// script-segments.ts is the shared text with the `.js` suffix stripped
+// from its relative sibling imports (`./segment-media.js` ->
+// `./segment-media`): the MCP's NodeNext tsc requires the `.js` suffix
+// (TS2835 without it), but the web's Next.js webpack build fails with
+// "Module not found: Can't resolve './segment-media.js'" on the same
+// suffix, because webpack resolves an explicit `.js` extension
+// literally and there is no `.js` file. The sibling helper copies have
+// no imports, so they are byte-identical in both apps.
 //
 // Why copies instead of a direct import or a workspace package:
 //   - The MCP tsconfig has rootDir ./src, so tsc rejects an import of a
@@ -33,7 +43,7 @@
 // Usage: node scripts/sync-script-segments.mjs [--check]
 //   --check  exit 1 (without writing) when any copy differs from shared.
 import { spawnSync } from 'node:child_process';
-import { copyFileSync, existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -48,10 +58,21 @@ const files = ['script-segments.ts', 'segment-media.ts', 'segment-text.ts'].map(
 }));
 const checkOnly = process.argv.includes('--check');
 
+// The web copy of script-segments.ts drops the `.js` suffix from its
+// relative sibling imports: Next.js webpack resolves an explicit `.js`
+// extension literally and fails the production build, while the MCP's
+// NodeNext tsc requires it. Only `from './<name>.js'` spellings are
+// rewritten; every other line (including comments) is untouched.
+function toWebCopy(sourceText) {
+  return sourceText.replaceAll(/from '(\.\/[^']+)\.js'/g, "from '$1'");
+}
+
 let drifted = false;
 for (const { source, targets } of files) {
   const sourceText = readFileSync(source, 'utf8');
   for (const target of targets) {
+    const isWeb = target.includes(join('apps', 'web')) && target.endsWith('script-segments.ts');
+    const expected = isWeb ? toWebCopy(sourceText) : sourceText;
     // Partial checkouts (e.g. the web Docker build context, which copies only
     // apps/web) do not contain every target app. Skip those instead of failing
     // when copyFileSync cannot create the missing parent directory.
@@ -65,7 +86,7 @@ for (const { source, targets } of files) {
     } catch {
       current = undefined;
     }
-    if (current === sourceText) {
+    if (current === expected) {
       console.log(`unchanged ${target}`);
       continue;
     }
@@ -74,7 +95,7 @@ for (const { source, targets } of files) {
       console.log(`drifted ${target}`);
       continue;
     }
-    copyFileSync(source, target);
+    writeFileSync(target, expected);
     console.log(`synced ${target}`);
   }
 }

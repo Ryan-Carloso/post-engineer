@@ -86,6 +86,13 @@ function runSync(root: string): string {
   });
 }
 
+// The sync script strips the `.js` suffix from relative sibling imports
+// in the web copy only (Next.js webpack cannot resolve `./x.js` when only
+// `./x.ts` exists); the MCP copy stays byte-identical to shared.
+function toWebCopy(sourceText: string): string {
+  return sourceText.replaceAll(/from '(\.\/[^']+)\.js'/g, "from '$1'");
+}
+
 describe('sync-script-segments in a partial checkout', () => {
   it('skips the app directories that are not present instead of failing', () => {
     const root = createPartialCheckout({ withMcp: false });
@@ -93,7 +100,7 @@ describe('sync-script-segments in a partial checkout', () => {
     const output = runSync(root);
 
     expect(readFileSync(join(root, webTarget), 'utf8')).toBe(
-      readFileSync(sharedSource, 'utf8'),
+      toWebCopy(readFileSync(sharedSource, 'utf8')),
     );
     expect(readFileSync(join(root, webMediaTarget), 'utf8')).toBe(
       readFileSync(sharedMedia, 'utf8'),
@@ -116,7 +123,7 @@ describe('sync-script-segments in a partial checkout', () => {
     runSync(root);
 
     const source = readFileSync(sharedSource, 'utf8');
-    expect(readFileSync(join(root, webTarget), 'utf8')).toBe(source);
+    expect(readFileSync(join(root, webTarget), 'utf8')).toBe(toWebCopy(source));
     expect(readFileSync(join(root, mcpTarget), 'utf8')).toBe(source);
     const media = readFileSync(sharedMedia, 'utf8');
     expect(readFileSync(join(root, webMediaTarget), 'utf8')).toBe(media);
