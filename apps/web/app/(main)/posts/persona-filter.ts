@@ -12,8 +12,9 @@ import type { PostJoins } from './post-joins';
 // account filters keep applying on top.
 //---------------
 
-// One swatch per persona, in row order: the colors are fixed so a persona
-// keeps its swatch when another persona is added or removed.
+// One swatch per persona, assigned by row order (alphabetical rank): the
+// palette is fixed, but a persona's swatch shifts when a persona that
+// sorts before it is added or removed.
 export const PERSONA_CALENDAR_COLORS = [
   '#22c55e',
   '#f59e0b',

@@ -175,8 +175,20 @@ describe('Posts list progress', () => {
   it('scrolls the day panel into view when picking a day on a narrow screen', () => {
     cy.viewport(390, 844);
     visitPosts();
-    cy.get('[data-calendar-card]').find(`button[aria-label^="${day15FullDate()}"]`).click();
-    cy.contains(`Publicações de ${day15ShortDate()}`).should('be.visible');
+    // A narrow screen shows the week view, not the month grid: the days are
+    // columns (role="group", full-date label), not day buttons. Move a week
+    // forward so the pick is a day other than today, proving the panel
+    // follows the pick — and the pick scrolls the panel (above the grid)
+    // into view, as the month view does.
+    cy.get('[data-calendar-card]').find('button[aria-label="Próxima semana"]').click();
+    const nextSunday = new Date();
+    nextSunday.setDate(nextSunday.getDate() - nextSunday.getDay() + 7);
+    const label = new Intl.DateTimeFormat('pt-BR', { weekday: 'long', month: 'long', day: 'numeric' }).format(nextSunday);
+    // The column spans the full grid height, so its center can sit below
+    // the fold; the top of the column is always visible, just under the day
+    // header, and a tap there is the same day pick.
+    cy.get('[data-posts-calendar-week]').find(`[role="group"][aria-label^="${label}"]`).click('top');
+    cy.contains(`Publicações de ${shortDate(nextSunday)}`).should('be.visible');
   });
 });
 

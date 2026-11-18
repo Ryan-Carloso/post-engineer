@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 
@@ -63,6 +63,7 @@ vi.mock('@/lib/i18n/provider', () => {
 });
 
 import PostsPage from '../page';
+import { buildMonthGrid, gridRange } from '../calendar-days';
 import { postsCalendarStrings } from '@/lib/i18n/posts-calendar-i18n';
 import { useHasAnyPostQuery, useScheduleRangeQuery } from '@/lib/schedule-range';
 import {
@@ -1171,6 +1172,193 @@ describe('PostsPage day pick on a phone', () => {
 
     await pickDay5();
     expect(scrollIntoView).not.toHaveBeenCalled();
+  });
+});
+
+describe('PostsPage week view', () => {
+  const mobileMatchMedia = (query: string) => ({
+    matches: query === '(max-width: 767px)',
+    media: query,
+    onchange: null,
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+    addListener: () => undefined,
+    removeListener: () => undefined,
+    dispatchEvent: () => false,
+  });
+
+  let scrollIntoView: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    scrollIntoView = vi.fn();
+    Object.defineProperty(Element.prototype, 'scrollIntoView', { configurable: true, value: scrollIntoView });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('opens the month view on a wide screen, with the view switcher', () => {
+    render(<PostsPage />);
+
+    expect(screen.getByRole('button', { name: 'posts.calendarPrevMonth' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'posts.calendarPrevWeek' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'posts.calendarViewMonth' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'posts.calendarViewWeek' })).toBeInTheDocument();
+  });
+
+  it('opens the week view on a narrow screen, with no switcher', async () => {
+    vi.stubGlobal('matchMedia', vi.fn(mobileMatchMedia));
+    render(<PostsPage />);
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'posts.calendarPrevWeek' })).toBeInTheDocument(),
+    );
+    expect(screen.queryByRole('button', { name: 'posts.calendarViewMonth' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'posts.calendarViewWeek' })).not.toBeInTheDocument();
+  });
+
+  it('puts the day panel above the week grid on a narrow screen', async () => {
+    vi.stubGlobal('matchMedia', vi.fn(mobileMatchMedia));
+    render(<PostsPage />);
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'posts.calendarPrevWeek' })).toBeInTheDocument(),
+    );
+    // Flex `order` is visual, not DOM order: the panel carries order-1 and
+    // the calendar wrapper order-2, so the panel renders above the grid.
+    const panel = document.querySelector('section[aria-live="polite"]') as HTMLElement;
+    const card = document.querySelector('[data-calendar-card]') as HTMLElement;
+    const calendarWrap = card.parentElement as HTMLElement;
+    expect(panel.className).toContain('order-1');
+    expect(calendarWrap.className).toContain('order-2');
+  });
+
+  it('switches to the week view from the desktop switcher', async () => {
+    render(<PostsPage />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'posts.calendarViewWeek' }));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'posts.calendarPrevWeek' })).toBeInTheDocument(),
+    );
+  });
+
+  it('moves the month cursor with the shown week so the range read stays within the API span', async () => {
+    vi.stubGlobal('matchMedia', vi.fn(mobileMatchMedia));
+    render(<PostsPage />);
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'posts.calendarNextWeek' })).toBeInTheDocument(),
+    );
+    for (let i = 0; i < 6; i++) {
+      fireEvent.click(screen.getByRole('button', { name: 'posts.calendarNextWeek' }));
+    }
+    const calls = vi.mocked(useScheduleRangeQuery).mock.calls;
+    const last = calls[calls.length - 1];
+    // Six weeks forward from the week of 2030-06-01: the week of 2030-07-07,
+    // so the cursor follows to July and the read is July's grid (42 days),
+    // never the June grid plus a runaway week.
+    const expected = gridRange(buildMonthGrid(2030, 6, 0));
+    expect(last).toEqual(['2030-07', expected.from, expected.to, true]);
+  });
+
+  it('keeps the range read within the API span when browsing many weeks ahead', async () => {
+    vi.stubGlobal('matchMedia', vi.fn(mobileMatchMedia));
+    render(<PostsPage />);
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'posts.calendarNextWeek' })).toBeInTheDocument(),
+    );
+    for (let i = 0; i < 10; i++) {
+      fireEvent.click(screen.getByRole('button', { name: 'posts.calendarNextWeek' }));
+    }
+    const calls = vi.mocked(useScheduleRangeQuery).mock.calls;
+    const last = calls[calls.length - 1];
+    const spanDays = (Date.parse(last[2] as string) - Date.parse(last[1] as string)) / 86400000;
+    expect(spanDays).toBeLessThanOrEqual(62);
+  });
+
+  it('clears the pick when the shown week moves on, so the panel never names an abandoned day', async () => {
+    // June 1 picked, July 8 waiting: after six weeks forward the panel
+    // must follow the shown week (July 8's card), not claim June 1 — whose
+    // slots the July read never loaded — has no posts.
+    const julySlot = { ...UPCOMING_SLOT, id: 'u2', slotAt: '2030-07-08T10:00:00.000Z', title: 'July topic' };
+    mockQueries({ range: [UPCOMING_SLOT, julySlot] });
+    vi.stubGlobal('matchMedia', vi.fn(mobileMatchMedia));
+    render(<PostsPage />);
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'posts.calendarPrevWeek' })).toBeInTheDocument(),
+    );
+    const grid = document.querySelector('[data-posts-calendar-week]');
+    if (grid === null) throw new Error('week grid not rendered');
+    const columns = grid.querySelectorAll('[role="group"][aria-label]:not([inert])');
+    expect(columns).toHaveLength(7);
+    // June 1 is the Saturday column (index 6) of the week starting Sunday May 26.
+    fireEvent.click(columns[6]);
+    expect(dayPanelCardText('Upcoming topic')).toBeInTheDocument();
+    for (let i = 0; i < 6; i++) {
+      fireEvent.click(screen.getByRole('button', { name: 'posts.calendarNextWeek' }));
+    }
+    expect(dayPanelCardText('July topic')).toBeInTheDocument();
+  });
+
+  it('keeps the range read within the API span when switching to week from an empty month', async () => {
+    // Desktop: move the month cursor to July (no posts), then switch to the
+    // week view, which anchors on today — the cursor must follow the anchor
+    // back to June, or the read spans July's grid plus June's week (77 days).
+    render(<PostsPage />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'posts.calendarNextMonth' }));
+    fireEvent.click(screen.getByRole('button', { name: 'posts.calendarViewWeek' }));
+    const calls = vi.mocked(useScheduleRangeQuery).mock.calls;
+    const last = calls[calls.length - 1];
+    const spanDays = (Date.parse(last[2] as string) - Date.parse(last[1] as string)) / 86400000;
+    expect(spanDays).toBeLessThanOrEqual(62);
+  });
+
+  it('shows a picked day in another month even when the cursor month has no posts', async () => {
+    // May slot only: June (the cursor month) has no posts, but the shown
+    // week (May 26 – Jun 1) does — the pick must not be discarded for the
+    // cursor month's emptiness.
+    const maySlot = { ...UPCOMING_SLOT, id: 'u2', slotAt: '2030-05-28T10:00:00.000Z', title: 'May topic' };
+    mockQueries({ range: [maySlot] });
+    vi.stubGlobal('matchMedia', vi.fn(mobileMatchMedia));
+    render(<PostsPage />);
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'posts.calendarPrevWeek' })).toBeInTheDocument(),
+    );
+    const grid = document.querySelector('[data-posts-calendar-week]');
+    if (grid === null) throw new Error('week grid not rendered');
+    const columns = grid.querySelectorAll('[role="group"][aria-label]:not([inert])');
+    expect(columns).toHaveLength(7);
+    // May 28 is the Tuesday column (index 2) of the week starting Sunday May 26.
+    fireEvent.click(columns[2]);
+    expect(dayPanelCardText('May topic')).toBeInTheDocument();
+  });
+
+  it('scrolls the day panel into view after a column pick on a narrow screen', async () => {
+    // Narrow here means both the page's mobile query (767px, week view)
+    // and its scroll query (639px): a 390px screen matches both.
+    vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
+      ...mobileMatchMedia(query),
+      matches: query === '(max-width: 767px)' || query === '(max-width: 639px)',
+    })));
+    render(<PostsPage />);
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'posts.calendarPrevWeek' })).toBeInTheDocument(),
+    );
+    const grid = document.querySelector('[data-posts-calendar-week]');
+    if (grid === null) throw new Error('week grid not rendered');
+    const columns = grid.querySelectorAll('[role="group"][aria-label]:not([inert])');
+    expect(columns).toHaveLength(7);
+    const user = userEvent.setup();
+    await user.click(columns[0]);
+    expect(screen.getByText('posts.calendarDayNone')).toBeInTheDocument();
+    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });
   });
 });
 

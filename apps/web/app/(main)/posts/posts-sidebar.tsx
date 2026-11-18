@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { MiniCalendar } from '@/components/mini-calendar';
 import { Kbd } from '@/components/ui/kbd';
 import { Switch } from '@/components/ui/switch';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { useNow } from '@/hooks/use-now';
 import { getTimeZoneCity } from '@/lib/timezone-label';
 import { SECTION_LABEL_CLASS } from '@/lib/ui';
 import { useI18n } from '@/lib/i18n/provider';
@@ -27,9 +28,6 @@ import type { PersonaCalendar } from './persona-filter';
 // The second time zone shown beside the viewer's own (read by the week
 // view from its stored setting; here it is display only).
 const SECOND_TIME_ZONE = 'Europe/Lisbon';
-
-// The clock ticks with the minute, so the box never shows a stale hour.
-const CLOCK_TICK_MS = 30_000;
 
 export interface PostsSidebarProps {
   calendars: PersonaCalendar[];
@@ -60,11 +58,12 @@ export function PostsSidebar({
 }: PostsSidebarProps) {
   const { t } = useI18n();
   const viewerTimeZone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []);
-  const [now, setNow] = useState(() => new Date());
-  useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), CLOCK_TICK_MS);
-    return () => clearInterval(timer);
-  }, []);
+  // The shared clock: null during server rendering and hydration, the real
+  // time right after. The box renders a dash until the time is known, so
+  // the server markup matches the first client render — a live `new Date()`
+  // here renders a different minute whenever hydration straddles the
+  // boundary, and React fails the page with error #418.
+  const now = useNow();
   const localeTag = INTL_TAG[locale];
   const viewerLabel = getTimeZoneCity(viewerTimeZone) || viewerTimeZone;
 
@@ -120,13 +119,13 @@ export function PostsSidebar({
             <p className="flex items-baseline justify-between gap-2">
               <span className="text-primary">{viewerLabel}</span>
               <span className="font-semibold text-primary tabular-nums">
-                {formatZoneTime(now, localeTag, viewerTimeZone)}
+                {now === null ? '—' : formatZoneTime(now, localeTag, viewerTimeZone)}
               </span>
             </p>
             <p className="mt-1 flex items-baseline justify-between gap-2">
               <span className="text-primary">{t('posts.sidebarLisbon')}</span>
               <span className="font-semibold text-primary tabular-nums">
-                {formatZoneTime(now, localeTag, SECOND_TIME_ZONE)}
+                {now === null ? '—' : formatZoneTime(now, localeTag, SECOND_TIME_ZONE)}
               </span>
             </p>
           </div>
