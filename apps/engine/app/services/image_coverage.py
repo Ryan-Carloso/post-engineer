@@ -1,10 +1,12 @@
 """Coverage for the "images" material: the agent's photos are the whole picture.
 
 Every segment carries an image (validated before charging), and each photo
-is on screen for at most MAX_PHOTO_SECONDS. The surviving photos are laid
+is on screen for at most its cap — MAX_PHOTO_SECONDS by default, or its
+requested duration (see below). The surviving photos are laid
 out back to back from the coverage window start: a photo may start early
 into the pause before its segment, but it never runs past the next photo's
-start or past start + MAX_PHOTO_SECONDS. When the photos run out before
+start or past start + its cap — except a requested photo, which runs its
+seconds even past the next photo's original slice start. When the photos run out before
 the end of the audio the task fails with IMAGES_DO_NOT_COVER_AUDIO naming
 how many more photos the window needs, so the caller sends more photos
 instead of one photo being stretched over the gap. A dropped photo is
@@ -12,7 +14,7 @@ never covered either: in the images modes it fails the task (see below).
 
 - the first full-frame photo starts where the face hands over (0 on a
   faceless video, the hook's end on a hook-only persona video);
-- every surviving photo runs at most MAX_PHOTO_SECONDS, back to back;
+- every surviving photo runs at most its cap, back to back;
 - the last photo runs to the end of the audio, or the task fails.
 
 Every sent photo must survive. If any photo is skipped at render, the
@@ -127,7 +129,7 @@ def ensure_coverage(
     time, so media is optional there and a skipped photo never fails.
     Raises ImagesDoNotCoverAudio with the aggregated skip reasons when
     a photo was skipped or no full-frame photo survived, and when the
-    surviving photos run out before the end of the audio at 2s each.
+    surviving photos run out before the end of the audio at their caps.
     """
     window_start = coverage_start(face, hook_end)
     _summary, fatal = _skip_summary(sent, len(panels), skipped)

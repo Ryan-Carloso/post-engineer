@@ -209,6 +209,8 @@ describe('validateSegments with a requested photo duration', () => {
     const media = (segments[1] as Record<string, unknown>).media as Array<Record<string, unknown>>;
     media[0] = { ...media[0], duration: 3 };
     media[1] = { ...media[1], duration: 0.5 };
+    media[2] = { ...media[2], duration: 6 };
+    media[3] = { ...media[3], duration: null };
     expect(validateSegments(segments).ok).toBe(true);
   });
 
