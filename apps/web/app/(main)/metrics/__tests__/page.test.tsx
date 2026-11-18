@@ -381,6 +381,54 @@ describe('MetricsPage', () => {
     expect(screen.queryByText('metrics.chartsOverTimeTitle')).toBeNull();
   });
 
+  it('shows the truncation caption in the chart view when the payload was truncated', async () => {
+    window.localStorage.clear();
+    stubMetricsFetch({
+      success: true,
+      rows: [row({ views: 1200 }), row({ postId: 'post-2', views: 300 })],
+      truncated: true,
+    });
+    renderPage();
+    // Wait for the rows to load: only then do the chart bodies (and
+    // their footnotes) render — the titles render while loading too.
+    await waitFor(() => expect(screen.getByRole('button', { name: /myth 1200/ })).toBeInTheDocument());
+    expect(screen.getAllByText(/metrics\.chartsTruncated/)).toHaveLength(3);
+  });
+
+  it('shows the error state in the chart view when the metrics load fails', async () => {
+    window.localStorage.clear();
+    stubMetricsFetch({ success: false, error: 'nope' }, 500);
+    renderPage();
+    await waitFor(() => expect(screen.getAllByText('metrics.loadError')).toHaveLength(3));
+  });
+
+  it('shows no truncation caption while the chart data is still loading', async () => {
+    window.localStorage.clear();
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => {})));
+    renderPage();
+    await waitFor(() => expect(screen.getAllByText('metrics.chartsLoading')).toHaveLength(3));
+    expect(screen.queryByText(/metrics\.chartsTruncated/)).toBeNull();
+  });
+
+  it('renders each list row with the scroll anchor id the charts use', async () => {
+    stubMetricsFetch({
+      success: true,
+      rows: [row({ postId: 'post-1' }), row({ postId: 'post-2', provider: 'instagram', accountId: 'ig1', externalId: 'v2' })],
+      truncated: false,
+    });
+    renderPage();
+    // Wait for the rows themselves (the list heading renders while loading).
+    await waitFor(() => expect(document.getElementById('metric-row-post-1-youtube-v1')).toBeInTheDocument());
+    expect(document.getElementById('metric-row-post-2-instagram-v2')).toBeInTheDocument();
+  });
+
+  it('shows no truncation caption in the list view when the payload was not truncated', async () => {
+    stubMetricsFetch({ success: true, rows: [row()], truncated: false });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('metrics.tableTitle')).toBeInTheDocument());
+    expect(screen.queryByText(/metrics\.truncated/)).toBeNull();
+  });
+
   it('shows the chart view when localStorage throws', async () => {
     const getItem = vi.spyOn(window.localStorage, 'getItem').mockImplementation(() => {
       throw new Error('storage unavailable');
@@ -401,6 +449,13 @@ describe('MetricsPage', () => {
 
   it('clicking a top-videos bar shows the list without overwriting the saved preference', async () => {
     window.localStorage.clear();
+    // Capture the scrolled-to element: the bar click must center the
+    // clicked row in the list view.
+    const scrolled: HTMLElement[] = [];
+    const scrollIntoView = vi.fn(function scrollCapture(this: HTMLElement) {
+      scrolled.push(this);
+    });
+    window.HTMLElement.prototype.scrollIntoView = scrollIntoView as never;
     stubMetricsFetch({
       success: true,
       rows: [row({ views: 1200 }), row({ postId: 'post-2', views: 300 })],
@@ -418,6 +473,12 @@ describe('MetricsPage', () => {
     // The peek at the list must not persist: nothing was ever saved,
     // so the stored preference stays absent rather than becoming 'list'.
     expect(window.localStorage.getItem('metrics-view-mode')).toBeNull();
+    // The list tab is the active one now.
+    expect(screen.getByText('metrics.viewList')).toHaveAttribute('data-state', 'active');
+    // The clicked row is centered in the viewport.
+    await waitFor(() => expect(scrollIntoView).toHaveBeenCalledWith({ block: 'center' }));
+    expect(scrolled).toHaveLength(1);
+    expect(scrolled[0]?.id).toBe('metric-row-post-1-youtube-v1');
   });
 
   it('shows the coverage card below the list, with attention and waiting groups, and the as-of line', async () => {
@@ -587,7 +648,10 @@ describe('MetricsPage', () => {
       { status: 200 },
     ));
     fireEvent.click(screen.getByText('metrics.retry'));
-    await waitFor(() => expect(screen.getByText('metrics.tableTitle')).toBeInTheDocument());
+    // The retry must actually refetch: waiting for the rows (the tiles
+    // only exist with rows) proves recovery, not the always-rendered
+    // list heading.
+    await waitFor(() => expect(screen.getByText('metrics.statMeasurements')).toBeInTheDocument());
   });
 
   it('sends the window and the sheet filters to the API, and clears them from the chips', async () => {

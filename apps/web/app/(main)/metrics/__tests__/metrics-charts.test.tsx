@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 
@@ -8,8 +8,10 @@ import type { ReactNode } from 'react';
 // error and empty state, the donut appears only with five or fewer
 // groups, the top-videos bars report clicks, and captions state the
 // rows excluded from the sums. Recharts is replaced with data-driven
-// stand-ins (jsdom has no layout, so the real charts render nothing) that
-// still exercise the metric/grouping toggles and the click wiring.
+// stand-ins (jsdom has no layout, so the real charts render nothing)
+// that still exercise the metric/grouping toggles, the click wiring,
+// the axis tick formatters, the tooltip formatters and the donut palette.
+// The locale-flipped pt-BR tests cover the number/date branches.
 //---------------
 
 vi.mock('recharts', () => {
@@ -45,30 +47,52 @@ vi.mock('recharts', () => {
       <div data-testid="bar-chart"><DatumButtons data={data} onClick={onClick} />{children}</div>
     ),
     CartesianGrid: nullComponent,
-    Cell: nullComponent,
-    Pie: nullComponent,
+    Cell: ({ fill }: { fill?: string }) => <span data-testid="chart-cell" data-fill={String(fill)} />,
+    Pie: ({ data, children }: { data?: Array<Record<string, unknown>>; children?: ReactNode }) => (
+      <div data-testid="pie"><DatumButtons data={data} />{children}</div>
+    ),
     PieChart: ({ data, children }: { data?: Array<Record<string, unknown>>; children?: ReactNode }) => (
       <div data-testid="pie-chart"><DatumButtons data={data} />{children}</div>
     ),
     ResponsiveContainer: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
     Tooltip: nullComponent,
-    XAxis: nullComponent,
-    YAxis: nullComponent,
+    // Render the axis tick formatter so the locale, compact-notation
+    // and truncation behaviour is observable without a real layout:
+    // the day axis gets a fixed day, numeric axes a fixed value, and
+    // the top-videos label axis fixed long/short labels.
+    XAxis: ({ dataKey, tickFormatter }: { dataKey?: string; tickFormatter?: (value: never) => ReactNode }) => (
+      <span data-testid="x-tick">{tickFormatter?.(dataKey === 'day' ? ('2026-10-21' as never) : (1500 as never))}</span>
+    ),
+    YAxis: ({ dataKey, tickFormatter }: { dataKey?: string; tickFormatter?: (value: never) => ReactNode }) => {
+      if (tickFormatter === undefined) return null;
+      if (dataKey === 'label') {
+        return (
+          <span data-testid="y-tick">
+            {tickFormatter('a'.repeat(25) as never)}|{tickFormatter('a'.repeat(21) as never)}|{tickFormatter('a'.repeat(20) as never)}
+          </span>
+        );
+      }
+      return <span data-testid="y-tick">{tickFormatter(1500 as never)}</span>;
+    },
   };
 });
 
 vi.mock('@/components/ui/chart', () => ({
   ChartContainer: ({ children }: { children?: ReactNode }) => <div data-testid="chart-container">{children}</div>,
-  ChartTooltip: () => null,
-  ChartTooltipContent: () => null,
+  ChartTooltip: ({ content }: { content?: ReactNode }) => <>{content}</>,
+  ChartTooltipContent: ({ formatter }: { formatter?: (value: unknown, name: unknown) => string }) => (
+    <span data-testid="chart-tooltip">{formatter?.(1500, 'value')}</span>
+  ),
 }));
 
 vi.mock('@/lib/i18n/provider', () => ({
-  useI18n: () => ({
+  // Settable locale (same pattern as page.test.tsx): the charts use
+  // the locale to pick the number/date formats.
+  useI18n: vi.fn(() => ({
     t: (key: string, vars?: Record<string, unknown>) => (vars === undefined ? key : `${key} ${JSON.stringify(vars)}`),
     locale: 'en',
     setLocale: vi.fn(),
-  }),
+  })),
 }));
 
 vi.mock('@/lib/ui', () => ({
@@ -77,8 +101,23 @@ vi.mock('@/lib/ui', () => ({
   SpinnerIcon: () => <span data-testid="icon-spinner" />,
 }));
 
-import { MetricsCharts, MetricsViewToggle, readMetricsView, withoutViewsKey, withoutPublishDateKey, withoutMetricKey } from '../metrics-charts';
+import { MetricsCharts, MetricsViewToggle, readMetricsView, rowElementId, withoutViewsKey, withoutPublishDateKey, withoutMetricKey, writeMetricsView } from '../metrics-charts';
+import { useI18n } from '@/lib/i18n/provider';
 import type { MetricsRowView } from '@/lib/metrics/metrics-query';
+
+// The i18n mock defaults to 'en'; tests needing the pt-BR number/date
+// branches flip it (same pattern as page.test.tsx).
+function setLocale(locale: 'en' | 'pt'): void {
+  vi.mocked(useI18n).mockReturnValue({
+    t: (key: string, vars?: Record<string, unknown>) => (vars === undefined ? key : `${key} ${JSON.stringify(vars)}`),
+    locale,
+    setLocale: vi.fn(),
+  } as never);
+}
+
+beforeEach(() => {
+  setLocale('en');
+});
 
 const DAY = new Date(Date.now() - 86400000).toISOString();
 
@@ -116,7 +155,15 @@ describe('MetricsCharts', () => {
   it('shows the loading state in every card', () => {
     renderCharts([row()], { isLoading: true });
     expect(screen.getAllByText('metrics.chartsLoading')).toHaveLength(3);
+    expect(screen.getAllByRole('status', { name: 'metrics.chartsLoading' })).toHaveLength(3);
     expect(screen.queryByTestId('area-chart')).not.toBeInTheDocument();
+  });
+
+  it('exposes each chart card by its accessible name', () => {
+    renderCharts([row({ views: 100 })]);
+    expect(screen.getByRole('region', { name: 'metrics.chartsOverTimeTitle' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'metrics.chartsBreakdownTitle' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'metrics.chartsTopTitle' })).toBeInTheDocument();
   });
 
   it('shows the error state in every card', () => {
@@ -163,6 +210,10 @@ describe('MetricsCharts', () => {
     expect(screen.queryByTestId('pie-chart')).not.toBeInTheDocument();
     // The breakdown bars plus the top-videos chart.
     expect(screen.getAllByTestId('bar-chart')).toHaveLength(2);
+    // Both bar layouts format their numeric axes compact and show the
+    // metric tooltip (over-time value axis, breakdown axis, top axis).
+    expect(screen.getAllByText('1.5K')).toHaveLength(3);
+    expect(screen.getAllByText('metrics.chartsMetricViews: 1,500')).toHaveLength(3);
   });
 
   it('groups by persona after the breakdown toggle', () => {
@@ -172,7 +223,29 @@ describe('MetricsCharts', () => {
     ]);
     activateTab('metrics.chartsByPersona');
     expect(screen.getByTestId('pie-chart')).toBeInTheDocument();
-    expect(screen.getByText(/Persona p1/)).toBeInTheDocument();
+    expect(screen.getByText('Persona p1 · 10')).toBeInTheDocument();
+  });
+
+  it('returns to the provider breakdown after toggling to persona', () => {
+    renderCharts([
+      row({ postId: 'a', personaId: 'p1', provider: 'youtube', views: 10 }),
+      row({ postId: 'b', personaId: null, provider: 'instagram', views: 20 }),
+    ]);
+    activateTab('metrics.chartsByPersona');
+    expect(screen.getByText('Persona p1 · 10')).toBeInTheDocument();
+    activateTab('metrics.chartsByNetwork');
+    expect(screen.getByText('YouTube · 10')).toBeInTheDocument();
+    expect(screen.queryByText(/Persona p1/)).toBeNull();
+    expect(screen.getByText('metrics.chartsByNetwork')).toHaveAttribute('data-state', 'active');
+  });
+
+  it('re-plots views after toggling away to another metric', () => {
+    renderCharts([row({ views: 100, likes: 10, comments: 3, saves: 1 })]);
+    const area = () => within(screen.getByTestId('area-chart'));
+    activateTab('metrics.chartsMetricEngagement');
+    expect(area().getByRole('button', { name: /14/ })).toBeInTheDocument();
+    activateTab('metrics.chartsMetricViews');
+    expect(area().getByRole('button', { name: /100/ })).toBeInTheDocument();
   });
 
   it('reports the clicked top video to the page', () => {
@@ -206,6 +279,142 @@ describe('MetricsCharts', () => {
     ]);
     expect(screen.getAllByText('metrics.chartsWithoutViews {"count":2}')).toHaveLength(2);
   });
+
+  it('draws a donut with exactly five breakdown groups', () => {
+    renderCharts([
+      row({ postId: 'a', provider: 'youtube', views: 10 }),
+      row({ postId: 'b', provider: 'instagram', views: 30 }),
+      row({ postId: 'c', provider: 'linkedin', views: 20 }),
+      row({ postId: 'd', provider: 'bluesky', views: 40 }),
+      row({ postId: 'e', provider: 'threads', views: 50 }),
+    ]);
+    expect(screen.getByTestId('pie-chart')).toBeInTheDocument();
+    expect(screen.getAllByTestId('bar-chart')).toHaveLength(1);
+    expect(screen.getAllByTestId('chart-cell').map((cell) => cell.getAttribute('data-fill'))).toEqual([
+      'var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-4)', 'var(--chart-5)',
+    ]);
+  });
+
+  it('labels the donut legend with provider names and grouped totals', () => {
+    renderCharts([
+      row({ postId: 'a', provider: 'youtube', views: 1500 }),
+      row({ postId: 'b', provider: 'instagram', views: 250 }),
+    ]);
+    expect(screen.getByText('YouTube · 1,500')).toBeInTheDocument();
+    expect(screen.getByText('Instagram · 250')).toBeInTheDocument();
+  });
+
+  it('labels the faceless persona group with the no-persona copy in the persona view', () => {
+    renderCharts([
+      row({ postId: 'a', personaId: 'p1', views: 10 }),
+      row({ postId: 'b', personaId: null, views: 20 }),
+    ]);
+    activateTab('metrics.chartsByPersona');
+    expect(screen.getByText('Persona p1 · 10')).toBeInTheDocument();
+    expect(screen.getByText('metrics.noPersona · 20')).toBeInTheDocument();
+  });
+
+  it('colors donut slices and legend swatches from the chart palette in order', () => {
+    renderCharts([
+      row({ postId: 'a', provider: 'youtube', views: 10 }),
+      row({ postId: 'b', provider: 'instagram', views: 30 }),
+    ]);
+    const cells = screen.getAllByTestId('chart-cell');
+    expect(cells).toHaveLength(2);
+    expect(cells[0]).toHaveAttribute('data-fill', 'var(--chart-1)');
+    expect(cells[1]).toHaveAttribute('data-fill', 'var(--chart-2)');
+    // The breakdown sorts by views descending: Instagram (30) is
+    // first, YouTube (10) second, and the palette follows that order.
+    const youtube = screen.getByText('YouTube · 10').closest('li');
+    const instagram = screen.getByText('Instagram · 30').closest('li');
+    expect(youtube?.querySelector('span')?.style.backgroundColor).toBe('var(--chart-2)');
+    expect(instagram?.querySelector('span')?.style.backgroundColor).toBe('var(--chart-1)');
+  });
+
+  it('shows metric labels and grouped values in the chart tooltips', () => {
+    renderCharts([row({ views: 100 })]);
+    // One tooltip per chart (over-time, breakdown, top videos).
+    expect(screen.getAllByText('metrics.chartsMetricViews: 1,500')).toHaveLength(3);
+  });
+
+  it('relabels the over-time tooltip when the metric toggle changes', () => {
+    renderCharts([row({ views: 100 })]);
+    activateTab('metrics.chartsMetricEngagement');
+    expect(screen.getAllByText('metrics.chartsMetricEngagement: 1,500')).toHaveLength(1);
+    expect(screen.getAllByText('metrics.chartsMetricViews: 1,500')).toHaveLength(2);
+  });
+
+  it('plots the comments total after the comments toggle', () => {
+    renderCharts([row({ views: 100, likes: 10, comments: 3, saves: 1 })]);
+    activateTab('metrics.chartsMetricComments');
+    const area = () => within(screen.getByTestId('area-chart'));
+    expect(area().getByRole('button', { name: /3/ })).toBeInTheDocument();
+    expect(screen.getAllByText('metrics.chartsMetricComments: 1,500')).toHaveLength(1);
+  });
+
+  it('reports the second top video when its bar is clicked', () => {
+    const onSelectRow = vi.fn<(item: MetricsRowView) => void>();
+    renderCharts([
+      row({ postId: 'a', scriptAngle: 'best', views: 500 }),
+      row({ postId: 'b', scriptAngle: 'second', views: 9 }),
+    ], { onSelectRow });
+    fireEvent.click(screen.getByRole('button', { name: /second 9/ }));
+    expect(onSelectRow).toHaveBeenCalledTimes(1);
+    expect(onSelectRow.mock.calls[0][0].postId).toBe('b');
+  });
+
+  it('truncates long top-video labels on the axis and leaves short ones untouched', () => {
+    renderCharts([row({ views: 100 })]);
+    const ticks = screen.getAllByTestId('y-tick').map((el) => el.textContent ?? '');
+    // The label axis renders its formatter over 25/21/20-char labels:
+    // 25 and 21 exceed the 20-char cap (cut at 19 + ellipsis), 20 fits.
+    expect(ticks).toContain(`${'a'.repeat(19)}…|${'a'.repeat(19)}…|${'a'.repeat(20)}`);
+  });
+
+  it('formats the over-time day axis and compact value axis', () => {
+    renderCharts([row({ views: 100 })]);
+    const overTime = within(screen.getByLabelText('metrics.chartsOverTimeTitle'));
+    expect(overTime.getByTestId('x-tick')).toHaveTextContent('Oct 21, 2026');
+    expect(overTime.getByTestId('y-tick')).toHaveTextContent('1.5K');
+  });
+
+  it('states the excluded-metric caption with the lowercase metric name per metric', () => {
+    renderCharts([
+      row({ postId: 'a', views: null, likes: null, comments: null, saves: null }),
+      row({ postId: 'b', views: 10, likes: null, comments: 5, saves: 2 }),
+    ]);
+    expect(screen.getByText('metrics.chartsWithoutMetricOne {"count":1,"metric":"metrics.chartsmetricviews"}')).toBeInTheDocument();
+    activateTab('metrics.chartsMetricLikes');
+    expect(screen.getByText('metrics.chartsWithoutMetric {"count":2,"metric":"metrics.chartsmetriclikes"}')).toBeInTheDocument();
+    activateTab('metrics.chartsMetricComments');
+    expect(screen.getByText('metrics.chartsWithoutMetricOne {"count":1,"metric":"metrics.chartsmetriccomments"}')).toBeInTheDocument();
+  });
+
+  it('states no excluded-row captions or footnote paragraphs when nothing was excluded', () => {
+    renderCharts([row({ views: 100 })]);
+    expect(screen.queryByText(/metrics\.chartsWithout/)).toBeNull();
+    for (const title of ['metrics.chartsOverTimeTitle', 'metrics.chartsBreakdownTitle', 'metrics.chartsTopTitle']) {
+      expect(screen.getByLabelText(title).querySelectorAll('p')).toHaveLength(0);
+    }
+  });
+
+  it('states no truncation caption when the rows were not truncated', () => {
+    renderCharts([row({ views: 100 })]);
+    expect(screen.queryByText(/metrics\.chartsTruncated/)).toBeNull();
+  });
+
+  it('formats legend totals, ticks and tooltips with the pt-BR locale', () => {
+    setLocale('pt');
+    renderCharts([
+      row({ postId: 'a', provider: 'youtube', views: 1500 }),
+      row({ postId: 'b', provider: 'instagram', views: 250 }),
+    ]);
+    expect(screen.getByText('YouTube · 1.500')).toBeInTheDocument();
+    expect(screen.getAllByText('metrics.chartsMetricViews: 1.500')).toHaveLength(3);
+    const overTime = within(screen.getByLabelText('metrics.chartsOverTimeTitle'));
+    expect(overTime.getByTestId('x-tick')).toHaveTextContent('21 de out. de 2026');
+    expect(overTime.getByTestId('y-tick')).toHaveTextContent('1,5 mil');
+  });
 });
 
 describe('readMetricsView', () => {
@@ -234,6 +443,39 @@ describe('readMetricsView', () => {
       getItem.mockRestore();
     }
   });
+
+  it('returns the chart for an unrecognized stored view', () => {
+    window.localStorage.setItem('metrics-view-mode', 'garbage');
+    expect(readMetricsView()).toBe('chart');
+  });
+});
+
+describe('writeMetricsView', () => {
+  it('persists the chosen view under the storage key', () => {
+    window.localStorage.clear();
+    writeMetricsView('list');
+    expect(window.localStorage.getItem('metrics-view-mode')).toBe('list');
+    writeMetricsView('chart');
+    expect(window.localStorage.getItem('metrics-view-mode')).toBe('chart');
+  });
+
+  it('does not throw when the storage write fails', () => {
+    const setItem = vi.spyOn(window.localStorage, 'setItem').mockImplementation(() => {
+      throw new Error('storage unavailable');
+    });
+    try {
+      expect(() => writeMetricsView('list')).not.toThrow();
+    } finally {
+      setItem.mockRestore();
+    }
+  });
+});
+
+describe('rowElementId', () => {
+  it('builds the anchor id from post, provider and external id', () => {
+    expect(rowElementId(row({ postId: 'p', provider: 'instagram', externalId: 'e' })))
+      .toBe('metric-row-p-instagram-e');
+  });
 });
 
 describe('MetricsViewToggle', () => {
@@ -242,6 +484,12 @@ describe('MetricsViewToggle', () => {
     render(<MetricsViewToggle value="list" onChange={onChange} />);
     activateTab('metrics.viewChart');
     expect(onChange).toHaveBeenCalledWith('chart');
+  });
+
+  it('marks the current view trigger as active and the other as inactive', () => {
+    render(<MetricsViewToggle value="list" onChange={() => {}} />);
+    expect(screen.getByText('metrics.viewList')).toHaveAttribute('data-state', 'active');
+    expect(screen.getByText('metrics.viewChart')).toHaveAttribute('data-state', 'inactive');
   });
 });
 
