@@ -91,11 +91,55 @@ async function getHandler(request: Request): Promise<NextResponse> {
   }
 
   const records = Array.isArray(data) ? data : [];
+  // Publish dates live on the parent slot (scheduled_posts.published_at),
+  // not on post_metrics. One bounded second read for the returned post
+  // ids, scoped to the caller: service role bypasses RLS, so the
+  // user_id filter here is the ownership check. postIds is already
+  // capped at METRICS_ROW_LIMIT, so the read reads at most one row per
+  // id and never fans out. Persona scope needs no extra filter: the ids
+  // come from the scoped rows query above, so this read only adds the
+  // publish date of rows the caller may already see.
+  const publishDateByPostId = new Map<string, string>();
+  {
+    const postIds = [...new Set(
+      records.slice(0, METRICS_ROW_LIMIT).map((record) => record.post_id),
+    )];
+    if (postIds.length > 0) {
+      const { data: postData, error: postError } = await supabase
+        .from('scheduled_posts')
+        .select('id, published_at')
+        .eq('user_id', auth.userId)
+        .in('id', postIds)
+        .limit(METRICS_ROW_LIMIT);
+      if (postError) {
+        logger.error('[api/metrics] publish-date lookup failed', postError);
+        return apiErrorResponse(500, 'Failed to load metrics.', { route: 'GET /api/metrics', cause: postError });
+      }
+      const postRecords = Array.isArray(postData) ? postData : [];
+      for (const record of postRecords) {
+        if (typeof record.id === 'string' && typeof record.published_at === 'string') {
+          publishDateByPostId.set(record.id, record.published_at);
+        }
+      }
+    }
+  }
   const rows: MetricsRowView[] = [];
   for (const record of records.slice(0, METRICS_ROW_LIMIT)) {
     if (!isSocialProvider(record.provider)) {
       logger.warn('[api/metrics] skipped row with unknown provider', { provider: record.provider });
       continue;
+    }
+    // A post that has measured rows but no publish date cannot be
+    // represented: publishedAt is required (see MetricsRowSchema).
+    // A missing parent (a concurrent delete between the two reads —
+    // the FK cascade deletes the metrics rows with it, so only a race),
+    // a null published_at, or another user's slot is a failed read,
+    // never silently dropped data.
+    const publishedAt = publishDateByPostId.get(record.post_id);
+    if (publishedAt === undefined) {
+      const error = new Error(`publish date missing for post ${record.post_id}`);
+      logger.error('[api/metrics] publish-date lookup failed', error);
+      return apiErrorResponse(500, 'Failed to load metrics.', { route: 'GET /api/metrics', cause: error });
     }
     rows.push({
       postId: record.post_id,
@@ -104,6 +148,7 @@ async function getHandler(request: Request): Promise<NextResponse> {
       accountId: record.account_id,
       externalId: record.external_id,
       scriptAngle: record.script_angle,
+      publishedAt,
       views: record.views,
       likes: record.likes,
       comments: record.comments,

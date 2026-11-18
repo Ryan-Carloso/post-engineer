@@ -182,6 +182,16 @@ export const MetricsRowSchema = z.object({
   accountId: z.string(),
   externalId: z.string(),
   scriptAngle: z.string().nullable(),
+  // When the slot was published, from scheduled_posts.published_at (the
+  // publish date every date chart buckets by, #647). Required, not
+  // nullable: post_metrics rows are only ever created for published slots
+  // with a non-null published_at — find_post_metrics_due (migrations 025
+  // and 039) requires status 'published' plus published_at window
+  // comparisons that NULL never satisfies, the re-open scan requires a
+  // string published_at, and the engine sets published_at once on publish
+  // and never clears it. A missing parent at read time (a concurrent
+  // delete race) is a read failure (500), never a null row.
+  publishedAt: z.string(),
   views: z.number().nullable(),
   likes: z.number().nullable(),
   comments: z.number().nullable(),

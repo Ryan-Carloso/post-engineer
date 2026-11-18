@@ -7,10 +7,13 @@ import {
 import { accountOption, PROVIDER_LABELS } from '@/lib/account-options';
 import { SOCIAL_PROVIDERS } from '@/lib/providers/registry';
 
+// One module-level relative publish date so two view() calls compare equal.
+const PUBLISHED_AT = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
+
 function view(overrides: Partial<MetricsRowView> = {}): MetricsRowView {
   return {
     postId: 'p', personaId: 'persona-a', provider: 'youtube', accountId: 'yt', externalId: 'v',
-    scriptAngle: 'myth', views: 100, likes: null, comments: 3, saves: null, collectedAt: '2026-10-21T12:00:00Z',
+    scriptAngle: 'myth', publishedAt: PUBLISHED_AT, views: 100, likes: null, comments: 3, saves: null, collectedAt: '2026-10-21T12:00:00Z',
     analyticsViews: null, engagedViews: null, stayedToWatchPct: null, averageViewDurationSeconds: null,
     averageViewPercentage: null, contentType: null, analyticsStatus: null, provisional: false,
     ...overrides,
