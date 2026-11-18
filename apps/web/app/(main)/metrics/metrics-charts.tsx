@@ -263,10 +263,6 @@ export function MetricsCharts({ rows, isLoading, isError, truncated, personaLabe
               data={topData}
               layout="vertical"
               margin={{ left: 0, right: 12, top: 4, bottom: 0 }}
-              onClick={(_data: unknown, index: number) => {
-                const selected = topData[index];
-                if (selected !== undefined) onSelectRow(selected.row);
-              }}
             >
               <CartesianGrid horizontal={false} />
               <XAxis type="number" tickLine={false} axisLine={false} tickFormatter={(value: number) => formatCompact(value)} />
@@ -281,7 +277,20 @@ export function MetricsCharts({ rows, isLoading, isError, truncated, personaLabe
               <ChartTooltip cursor={{ fill: 'var(--color-value)', fillOpacity: 0.12 }} content={<ChartTooltipContent
                 formatter={(value, name) => `${String(topConfig[String(name)]?.label ?? name)}: ${formatNumber(Number(value))}`}
               />} />
-              <Bar dataKey="value" fill="var(--color-value)" radius={[0, 4, 4, 0]} isAnimationActive={false} />
+              {/* The click handler lives on the series: Recharts calls a <Bar>
+                  onClick with (datum, index, event), while a chart-level
+                  BarChart onClick gets (chartState, event) instead. */}
+              <Bar
+                dataKey="value"
+                fill="var(--color-value)"
+                radius={[0, 4, 4, 0]}
+                isAnimationActive={false}
+                className="cursor-pointer"
+                onClick={(_data: unknown, index: number) => {
+                  const selected = topData[index];
+                  if (selected !== undefined) onSelectRow(selected.row);
+                }}
+              />
             </BarChart>
           </ChartContainer>
         </ChartState>

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { MetricsRowView } from '../metrics-query';
 import {
   breakdownBy,
@@ -62,13 +62,14 @@ describe('rowMetricValue', () => {
 
 describe('localDayKey', () => {
   it('buckets by the local day, not the UTC day', () => {
-    // 2026-10-21T02:30Z is still 2026-10-21 in Berlin (+02) but 2026-10-20 in São Paulo (-03).
-    const iso = '2026-10-21T02:30:00Z';
-    const date = new Date(iso);
-    date.setMinutes(date.getMinutes());
-    const key = localDayKey(iso);
-    expect(key).toBe(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`);
-    expect(key).not.toBe('2026-10-21T02:30:00Z');
+    // 2026-10-21T02:30Z is still 2026-10-20 in São Paulo (-03) and
+    // already 2026-10-21 in Berlin (+02). Node re-reads TZ on change,
+    // so each zone is pinned for its own assertion.
+    vi.stubEnv('TZ', 'America/Sao_Paulo');
+    expect(localDayKey('2026-10-21T02:30:00Z')).toBe('2026-10-20');
+    vi.stubEnv('TZ', 'Europe/Berlin');
+    expect(localDayKey('2026-10-21T02:30:00Z')).toBe('2026-10-21');
+    vi.unstubAllEnvs();
   });
 
   it('returns null for a missing or unparseable date', () => {

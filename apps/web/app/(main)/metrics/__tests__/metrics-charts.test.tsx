@@ -14,7 +14,8 @@ import type { ReactNode } from 'react';
 // The locale-flipped pt-BR tests cover the number/date branches.
 //---------------
 
-vi.mock('recharts', () => {
+vi.mock('recharts', async () => {
+  const { Children, cloneElement, isValidElement } = await vi.importActual<typeof import('react')>('react');
   function DatumButtons({ data, onClick }: { data?: Array<Record<string, unknown>>; onClick?: (data: unknown, index: number) => void }): ReactNode {
     return (
       <div>
@@ -36,15 +37,17 @@ vi.mock('recharts', () => {
     AreaChart: ({ data, children }: { data?: Array<Record<string, unknown>>; children?: ReactNode }) => (
       <div data-testid="area-chart"><DatumButtons data={data} />{children}</div>
     ),
-    Bar: nullComponent,
-    BarChart: ({
-      data, children, onClick,
-    }: {
-      data?: Array<Record<string, unknown>>;
-      children?: ReactNode;
-      onClick?: (data: unknown, index: number) => void;
-    }) => (
-      <div data-testid="bar-chart"><DatumButtons data={data} onClick={onClick} />{children}</div>
+    // Mirrors Recharts: the series (<Bar>) gets (datum, index, event) on
+    // click; the chart-level BarChart onClick gets (chartState, event) and
+    // is never a per-bar handler, so the stand-in ignores it. BarChart
+    // hands its data to the series the way the real chart does.
+    Bar: ({ chartData, onClick }: { chartData?: Array<Record<string, unknown>>; onClick?: (data: unknown, index: number) => void }) => (
+      <DatumButtons data={chartData} onClick={onClick} />
+    ),
+    BarChart: ({ data, children }: { data?: Array<Record<string, unknown>>; children?: ReactNode }) => (
+      <div data-testid="bar-chart">
+        {Children.map(children, (child) => (isValidElement(child) ? cloneElement(child, { chartData: data } as Record<string, unknown>) : child))}
+      </div>
     ),
     CartesianGrid: nullComponent,
     Cell: ({ fill }: { fill?: string }) => <span data-testid="chart-cell" data-fill={String(fill)} />,

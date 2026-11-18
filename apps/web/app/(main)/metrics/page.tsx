@@ -31,10 +31,12 @@ import { sortByViews, summarize, useMetricsQuery } from '@/lib/metrics/metrics-d
 
 //---------------
 // MetricsPage — how are my videos doing? Totals over the visible rows
-// (no averages, no per-group comparison — that lives on /experiments):
-// videos measured, total views, total engagement. One filter bar: the
-// window Tabs plus a Filters Sheet with Persona and Network only. The
-// list is sorted by views, highest first.
+// (videos measured, total views, total engagement), then either the
+// charts (views over time by publish day, views by network or persona,
+// top videos) or the per-video list sorted by views, highest first.
+// Charts is the default view. One filter bar: the window Tabs plus a
+// Filters Sheet with Persona and Network only. The A/B experiment
+// comparison lives on /experiments.
 //---------------
 
 const WINDOW_LABEL_KEYS: Record<MetricsQuery['window'], TranslationKey> = {
