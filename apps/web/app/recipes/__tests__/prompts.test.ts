@@ -708,6 +708,12 @@ describe('prompts hub data', () => {
     expect(text).toContain('provocative');
     expect(text).toContain('One archetype only');
     expect(text).toContain('adds nothing to the viewer');
+    // The archetype must be OBVIOUS, not subtle: the viewer recognizes
+    // it instantly, without thinking. If it could be any archetype, it
+    // is none of them.
+    expect(text).toContain('The archetype must be OBVIOUS');
+    expect(text).toContain('without thinking');
+    expect(text).toContain('it is none of them');
     // The story is real, concrete, and lived, first person, plausible in
     // real life. "The day it happened to me" is one valid form, not the
     // only one: a first time, a week, a realization, a repeating ritual,
