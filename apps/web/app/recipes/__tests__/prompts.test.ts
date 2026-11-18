@@ -239,10 +239,15 @@ describe('prompts hub data', () => {
       'voiceId',
       'language "en-US"',
       'Remember the persona name',
-      'standing configuration for this account',
       'which search tool for',
       'Tavily, Exa, or my own web or MCP search tool',
-      'licensed stock video sources (Pexels, Pixabay, Coverr, or none)',
+      'licensed stock video sources I have keys for (Pexels, Pixabay,',
+      'Coverr, or none)',
+      'Reuse those answers for later videos in this',
+      'conversation',
+      'uses images only',
+      'There is no saved account configuration',
+      'never claim the answers were saved',
       'YOUR_TAVILY_API_KEY',
       'YOUR_EXA_API_KEY',
       'YOUR_PEXELS_API_KEY',
@@ -266,23 +271,29 @@ describe('prompts hub data', () => {
     expect(text).toContain('Pexels');
     expect(text).toContain('Pixabay');
     expect(text).toContain('Coverr');
-    expect(text).toContain('Reuse those answers for the rest of this setup');
-    expect(text).toContain('ask again only if I change them');
+    expect(text).toContain('Reuse those answers for later videos in this');
+    expect(text).toContain('never claim the answers were saved');
     expect(text).not.toContain('issue #');
   });
 
-  it('saves the setup answers as standing config and never uses an unconfigured source', () => {
+  it('never claims the setup answers are saved, and scopes them to this conversation', () => {
     const fullText = getPrompt('full-setup')?.prompt ?? '';
     const baseText = SHARED_PROMPT_BASE.join('\n');
     expect(fullText.startsWith(baseText)).toBe(true);
     const text = fullText.slice(baseText.length + 2);
-    expect(text).toContain('save the answers as the');
-    expect(text).toContain('standing configuration for this account');
-    expect(text).toContain('for every later');
-    expect(text).toContain('video');
+    // The phrase spans a line break, so pin it with a regex — a bare
+    // toContain('video') would pass even with the clause removed.
+    expect(text).toMatch(/later videos in this\s+conversation/);
+    expect(text).toContain('the first video in this setup follows the base and');
+    expect(text).toContain('uses images only');
+    expect(text).toContain('There is no saved account configuration');
+    expect(text).toContain('never claim the answers were saved');
     expect(text).toContain('If a key is missing, tell');
-    expect(text).toContain('me to set it and keep going with the sources that are configured');
-    expect(text).toContain('never print them, never paste them anywhere else, never log them');
+    // Both phrases span a line break, so pin them with regexes.
+    expect(text).toMatch(/me to set it and keep going with the\s+sources that are configured/);
+    expect(text).toMatch(/never print them, never paste them anywhere\s+else, never log them/);
+    expect(text).not.toContain('standing configuration for this account');
+    expect(text).not.toContain('save the answers as the');
   });
 
   it('says images is the only material and names the video types with the full-lip-sync media cap', () => {
@@ -696,14 +707,16 @@ describe('prompts hub data', () => {
       'licensed',
       'stock photos from an image library',
       'without a licence',
-      'Licensed stock VIDEO (b-roll) is allowed too',
-      'from the stock sources saved at setup',
-      'Never use a source that is not configured',
-      'if no stock source is',
-      'configured, photos only',
-      'the hook photo is never a clip',
-      'clip audio is',
-      'discarded',
+      'Licensed stock VIDEO (b-roll) is allowed on faceless videos and',
+      'on the non-hook takes of hook_lipsync videos',
+      'from the stock sources configured for this video (Pexels, Pixabay,',
+      'Coverr)',
+      'On full_lipsync the face fills the frame, so photos',
+      'only - never a clip',
+      'Never put a clip in the hook window',
+      'a skipped clip fails the render',
+      'If no stock source is configured,',
+      'photos only. A clip is full-frame',
       'extract frames',
       'same subject,',
       'same action, same mood',
@@ -778,8 +791,11 @@ describe('prompts hub data', () => {
     // licensed stock photos and licensed stock video are allowed here,
     // and real photos are welcome — the base's "images only, your own
     // real photos, no stock footage" rule does not apply to this prompt.
-    // Clips come only from the stock sources saved at setup, and only
-    // after a frame check proves they fit the segment sentence.
+    // Clips come only from the stock sources configured for this video,
+    // and only after a frame check proves they fit the segment sentence.
+    // Clips are scoped to where the engine can play them: faceless and
+    // the non-hook takes of hook_lipsync — never full_lipsync, never
+    // in the hook window, where a skipped clip fails the render.
     // (The story-rule PR's step-6 assertions — "do not search for images",
     // "the base lines about searching images", "about your own real photos"
     // — pinned the AI-only step 6 this PR replaces, so they do not carry
@@ -788,19 +804,26 @@ describe('prompts hub data', () => {
     expect(text).toContain('licensed stock photos and licensed stock video are allowed');
     expect(text).toContain('real photos are welcome');
     expect(text).toContain('without a licence');
-    expect(text).toContain('Licensed stock VIDEO (b-roll) is allowed too');
-    expect(text).toContain('from the stock sources saved at setup');
-    expect(text).toContain('Never use a source that is not configured');
-    expect(text).toContain('if no stock source is');
-    expect(text).toContain('configured, photos only');
-    expect(text).toContain('the hook photo is never a clip');
-    expect(text).toContain('clip audio is');
+    expect(text).toContain('Licensed stock VIDEO (b-roll) is allowed on faceless videos and');
+    expect(text).toContain('on the non-hook takes of hook_lipsync videos');
+    expect(text).toContain('from the stock sources configured for this video');
+    expect(text).toContain('On full_lipsync the face fills the frame, so photos');
+    expect(text).toContain('only - never a clip');
+    expect(text).toContain('Never put a clip in the hook window');
+    expect(text).toContain('a skipped clip fails the render');
+    expect(text).toContain('If no stock source is configured,');
+    // "never AI photos only" appears earlier in step 7, so pin the
+    // fallback occurrence with its following words, not the bare phrase.
+    expect(text).toContain('photos only. A clip is full-frame');
+    // "clip audio is discarded" spans a line break, so pin it with a regex.
+    expect(text).toMatch(/clip\s+audio is discarded/);
     expect(text).toContain('extract frames');
     expect(text).toContain('same subject,');
     expect(text).toContain('same action, same mood');
     expect(text).toContain('never forced in');
     expect(text).not.toContain('it cannot use');
     expect(text).not.toContain('never attach a video URL');
+    expect(text).not.toContain('saved at setup');
     // v3/v4 lessons, for a 10/10 video: every emotional beat is visible
     // in the image, the rhythm varies take by take, every sentence gets
     // its own image, and every image is sharp, well-lit, and on-topic.
