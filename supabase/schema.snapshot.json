@@ -351,7 +351,7 @@
                     "name": "post_cta_type",
                     "type": "text",
                     "default": "'follow'::text",
-                    "notNull": true
+                    "notNull": false
                 },
                 {
                     "name": "post_cta_url",

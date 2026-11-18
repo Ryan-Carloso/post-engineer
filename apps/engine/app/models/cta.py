@@ -18,7 +18,3 @@ class CtaType(str, Enum):
     link = "link"
     buy = "buy"
     other = "other"
-
-    @classmethod
-    def values(cls) -> list[str]:
-        return [item.value for item in cls]

@@ -720,7 +720,7 @@ export interface Database {
         threespeak_account_ids: string[];
         rumble_account_ids: string[];
         fanvue_account_ids: string[];
-        post_cta_type: 'follow' | 'comment' | 'share' | 'save' | 'link' | 'buy' | 'other';
+        post_cta_type: 'follow' | 'comment' | 'share' | 'save' | 'link' | 'buy' | 'other' | null;
         post_cta_url: string | null;
         post_cta_instruction: string | null;
         };
@@ -759,7 +759,7 @@ export interface Database {
         threespeak_account_ids?: string[];
         rumble_account_ids?: string[];
         fanvue_account_ids?: string[];
-        post_cta_type?: 'follow' | 'comment' | 'share' | 'save' | 'link' | 'buy' | 'other';
+        post_cta_type?: 'follow' | 'comment' | 'share' | 'save' | 'link' | 'buy' | 'other' | null;
         post_cta_url?: string | null;
         post_cta_instruction?: string | null;
         };
@@ -798,7 +798,7 @@ export interface Database {
         threespeak_account_ids?: string[];
         rumble_account_ids?: string[];
         fanvue_account_ids?: string[];
-        post_cta_type?: 'follow' | 'comment' | 'share' | 'save' | 'link' | 'buy' | 'other';
+        post_cta_type?: 'follow' | 'comment' | 'share' | 'save' | 'link' | 'buy' | 'other' | null;
         post_cta_url?: string | null;
         post_cta_instruction?: string | null;
         };

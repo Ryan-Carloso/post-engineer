@@ -1641,6 +1641,72 @@ describe('PATCH /api/persona', () => {
       expect(updated[0]).toEqual({ cta_type: 'comment' });
     });
 
+    it('ctaType: switching a link persona to comment clears the stored URL', async () => {
+      const { updated } = mockSupabaseForPatch({
+        existing: { ...PERSONA_COMPLETA, cta_type: 'link', cta_url: 'https://example.com/course', cta_instruction: null },
+      });
+
+      const res = await PATCH(patchRequest('persona-uuid-1', { ctaType: 'comment' }));
+
+      expect(res.status).toBe(200);
+      expect(updated[0]).toEqual({ cta_type: 'comment', cta_url: '' });
+    });
+
+    it('ctaType: switching an other persona to follow clears the stored instruction', async () => {
+      const { updated } = mockSupabaseForPatch({
+        existing: { ...PERSONA_COMPLETA, cta_type: 'other', cta_url: null, cta_instruction: 'Invite to the WhatsApp group' },
+      });
+
+      const res = await PATCH(patchRequest('persona-uuid-1', { ctaType: 'follow' }));
+
+      expect(res.status).toBe(200);
+      expect(updated[0]).toEqual({ cta_type: 'follow', cta_instruction: '' });
+    });
+
+    it('ctaType: switching to link without a URL returns 400 and stores nothing', async () => {
+      const { updated } = mockSupabaseForPatch({
+        existing: { ...PERSONA_COMPLETA, cta_type: 'follow', cta_url: null, cta_instruction: null },
+      });
+
+      const res = await PATCH(patchRequest('persona-uuid-1', { ctaType: 'link' }));
+
+      expect(res.status).toBe(400);
+      expect(updated).toHaveLength(0);
+    });
+
+    it('ctaType: switching link to buy keeps the stored URL', async () => {
+      const { updated } = mockSupabaseForPatch({
+        existing: { ...PERSONA_COMPLETA, cta_type: 'link', cta_url: 'https://example.com/course', cta_instruction: null },
+      });
+
+      const res = await PATCH(patchRequest('persona-uuid-1', { ctaType: 'buy' }));
+
+      expect(res.status).toBe(200);
+      expect(updated[0]).toEqual({ cta_type: 'buy' });
+    });
+
+    it('ctaUrl: updating only the URL is checked against the stored link type', async () => {
+      const { updated } = mockSupabaseForPatch({
+        existing: { ...PERSONA_COMPLETA, cta_type: 'link', cta_url: 'https://example.com/old', cta_instruction: null },
+      });
+
+      const res = await PATCH(patchRequest('persona-uuid-1', { ctaUrl: 'https://example.com/new' }));
+
+      expect(res.status).toBe(200);
+      expect(updated[0]).toEqual({ cta_url: 'https://example.com/new' });
+    });
+
+    it('ctaUrl: a URL on a follow persona returns 400', async () => {
+      const { updated } = mockSupabaseForPatch({
+        existing: { ...PERSONA_COMPLETA, cta_type: 'follow', cta_url: null, cta_instruction: null },
+      });
+
+      const res = await PATCH(patchRequest('persona-uuid-1', { ctaUrl: 'https://example.com/course' }));
+
+      expect(res.status).toBe(400);
+      expect(updated).toHaveLength(0);
+    });
+
     it('ctaType: returns 400 for an unknown type', async () => {
       const { updated } = mockSupabaseForPatch({ existing: PERSONA_COMPLETA });
 

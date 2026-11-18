@@ -3,6 +3,7 @@
 // Extracted from route.ts so the route module stays under the file-size
 // ratchet. All fields are optional on edit; missing fields parse as null.
 import { FACE_QUALITIES, PERSONA_CTA_INSTRUCTION_MAX_LENGTH, PERSONA_CTA_TYPES, PERSONA_CTA_URL_MAX_LENGTH, photoExtensionOf, VALID_VIDEO_ASPECTS, VIDEO_LAYOUTS } from '@/lib/persona-schema';
+import { isEnglishLanguage, ONLY_ENGLISH_VIDEOS_MESSAGE } from '@/lib/language-gate';
 import { isFileLike } from '@/lib/persona-images';
 
 function isVideoLayout(value: string): value is (typeof VIDEO_LAYOUTS)[number] {
@@ -162,4 +163,18 @@ function asFile(value: FormDataEntryValue | null): File | null {
 function optionalString(value: FormDataEntryValue | null): string | null {
   if (typeof value !== 'string' || value.trim().length === 0) return null;
   return value;
+}
+
+// English-only launch gate for PATCH: same gate as persona creation —
+// the language cannot be switched away from English while the lock is
+// on. Returns the rejection message, or null when the patch keeps English.
+export function englishOnlyPatchError(patch: PersonaPatchBody): string | null {
+  if (
+    patch.language !== null
+    && patch.language.trim().length > 0
+    && !isEnglishLanguage(patch.language)
+  ) {
+    return ONLY_ENGLISH_VIDEOS_MESSAGE;
+  }
+  return null;
 }

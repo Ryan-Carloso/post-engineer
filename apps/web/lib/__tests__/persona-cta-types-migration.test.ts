@@ -28,6 +28,15 @@ const migrationPath = join(
   '070_persona-cta-intent.sql',
 );
 
+// 071 later dropped NOT NULL on schedules.post_cta_type only (a schedule
+// legitimately has no CTA); personas.cta_type stays NOT NULL.
+const migration071Path = join(
+  repoRoot,
+  'supabase',
+  'migrations',
+  '071_schedules-post-cta-type-nullable.sql',
+);
+
 // The single TS literal both apps share.
 const contractPath = join(repoRoot, 'shared', 'contracts', 'personas.ts');
 
@@ -76,12 +85,32 @@ describe('supabase/migrations/070_persona-cta-intent.sql', () => {
   it('defaults cta_type to follow and drops the stored-text columns', () => {
     const sql = readFileSync(migrationPath, 'utf8');
     // No backfill UPDATE: the NOT NULL DEFAULT covers every existing row.
+    // (071 later dropped NOT NULL on post_cta_type only; this pins 070's
+    // text as shipped, not the live schema.)
     expect(sql).toContain("cta_type text not null default 'follow'");
     expect(sql).toContain("post_cta_type text not null default 'follow'");
     expect(sql).not.toMatch(/update\s+public\.personas\s+set\s+cta_type/i);
     // BETA rule: delete the old path, never keep both.
     expect(sql).toContain('drop column if exists cta_text');
     expect(sql).toContain('drop column if exists post_cta_text');
+  });
+});
+
+describe('supabase/migrations/071_schedules-post-cta-type-nullable.sql', () => {
+  it('drops NOT NULL on schedules.post_cta_type only', () => {
+    const sql = readFileSync(migration071Path, 'utf8');
+    // A schedule legitimately has no CTA (faceless posts, per-video
+    // `cta: null`); the snapshot writer stores NULL for those, so the
+    // NOT NULL from 070 rejected the row. NULL means "no CTA" — it must
+    // NOT fall back to 'follow', which would read back as a follow CTA.
+    expect(sql).toContain('alter column post_cta_type drop not null');
+    expect(sql).not.toMatch(/alter column cta_type drop not null/i);
+    expect(sql).not.toMatch(/drop column/i);
+  });
+
+  it('does not recreate or drop the CHECK: only the seven intent values are admitted', () => {
+    const sql = readFileSync(migration071Path, 'utf8');
+    expect(sql).not.toMatch(/schedules_post_cta_type_check/i);
   });
 });
 

@@ -21,7 +21,7 @@ import {
 import { validateLibraryInputs } from '@/lib/persona-library-validate';
 import { resolvePersonaAvatar, rollbackStoragePath } from '@/lib/persona-remote-face';
 import { logger } from '@/lib/logger';
-import { parsePatchBody } from './patch-body';
+import { englishOnlyPatchError, parsePatchBody } from './patch-body';
 import { parsePersonaIdQuery } from '@/lib/contracts/personas';
 import { collectPersonaStoragePaths } from './delete-storage-paths';
 import { applyPersonaPatchFields } from './patch-updates';
@@ -286,19 +286,12 @@ async function patchHandler(request: Request): Promise<NextResponse> {
   if (!parsedPatch.ok) return personaValidationError(parsedPatch.error, 'PATCH /api/persona', { logMessage: parsedPatch.logMessage });
   const patch = parsedPatch.value;
 
-  // English-only launch: same gate as persona creation — the language
-  // cannot be switched away from English while the lock is on.
-  if (
-    patch.language !== null &&
-    patch.language.trim().length > 0 &&
-    !isEnglishLanguage(patch.language)
-  ) {
-    return personaValidationError(ONLY_ENGLISH_VIDEOS_MESSAGE, 'PATCH /api/persona', { field: 'language' });
-  }
+  const languageError = englishOnlyPatchError(patch);
+  if (languageError) return personaValidationError(languageError, 'PATCH /api/persona', { field: 'language' });
 
   const { data: persona, error: selectError } = await supabase
     .from('personas')
-    .select('id, name, photo_path, avatar_url, voice_id, voice_audio_path')
+    .select('id, name, photo_path, avatar_url, voice_id, voice_audio_path, cta_type, cta_url, cta_instruction')
     .eq('id', personaId)
     .eq('user_id', user.id)
     .single();
@@ -347,7 +340,12 @@ async function patchHandler(request: Request): Promise<NextResponse> {
     }
   }
 
-  applyPersonaPatchFields(patch, updates);
+  // The merged CTA row is validated against the stored persona (see
+  // patch-updates.ts): a type-only patch clears the stored facts the new
+  // type cannot carry, and a fact-only patch is checked against the type
+  // already stored.
+  const ctaError = applyPersonaPatchFields(patch, updates, persona);
+  if (ctaError) return personaValidationError(ctaError, 'PATCH /api/persona', { field: 'ctaType' });
 
   if (Object.keys(updates).length === 0) {
     return personaValidationError('Nothing to update.', 'PATCH /api/persona');

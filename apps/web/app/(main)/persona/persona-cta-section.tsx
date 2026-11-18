@@ -131,7 +131,21 @@ export function PersonaCtaSection() {
       <div className="mt-4 space-y-5 rounded-2xl border border-line bg-card p-5 shadow-sm sm:p-6">
         <div className="flex flex-col gap-1.5">
           <Label>{t('personas.ctaTypeLabel')}</Label>
-          <Select value={ctaType} onValueChange={(value) => setCta({ type: value as PersonaCtaType, url: ctaUrl, instruction: ctaInstruction })}>
+          {/* Switching type drops the previous type's facts: the URL and
+          instruction inputs are hidden unless the new type takes them, so
+          keeping a stale value would 400 on create (a hidden field the
+          user cannot see or clear) and store an incoherent CTA on edit. */}
+          <Select
+            value={ctaType}
+            onValueChange={(value) => {
+              const type = value as PersonaCtaType;
+              setCta({
+                type,
+                url: type === 'link' || type === 'buy' ? ctaUrl : '',
+                instruction: type === 'other' ? ctaInstruction : '',
+              });
+            }}
+          >
             <SelectTrigger aria-label={t('personas.ctaTypeLabel')} className="w-full" data-testid="persona-cta-type">
               <SelectValue />
             </SelectTrigger>
