@@ -24,17 +24,23 @@ export function rowMetricValue(row: MetricsRowView, metric: ChartMetric): number
 }
 
 //---------------
-// localDayKey — the viewer's local calendar day ('YYYY-MM-DD') for one
-// publish date, or null when the date is missing/unparseable. Buckets
-// are local days: a video published at 23:30 UTC lands on different
-// days in Brazil (-03) and in Berlin (+02).
+// localDayKey — the calendar day ('YYYY-MM-DD') of one publish date in
+// the viewer's time zone (or in `options.timeZone`, an IANA zone), or
+// null when the date is missing/unparseable. Buckets are local days: a
+// video published at 02:30 UTC lands on different days in São Paulo
+// (-03) and in Berlin (+02).
 //---------------
-export function localDayKey(publishedAt: string): string | null {
+export function localDayKey(publishedAt: string, options: { timeZone?: string } = {}): string | null {
   const date = new Date(publishedAt);
   if (Number.isNaN(date.getTime())) return null;
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${date.getFullYear()}-${month}-${day}`;
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: options.timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const part = (type: 'year' | 'month' | 'day'): string => parts.find((item) => item.type === type)?.value ?? '';
+  return `${part('year')}-${part('month')}-${part('day')}`;
 }
 
 // dayKeyToDate — the local Date at noon for a day key, so locale date

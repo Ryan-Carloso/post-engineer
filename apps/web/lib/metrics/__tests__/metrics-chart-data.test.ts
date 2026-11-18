@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import type { MetricsRowView } from '../metrics-query';
 import {
   breakdownBy,
@@ -61,15 +61,18 @@ describe('rowMetricValue', () => {
 });
 
 describe('localDayKey', () => {
-  it('buckets by the local day, not the UTC day', () => {
+  it('buckets by the day in the given time zone, not the UTC day', () => {
     // 2026-10-21T02:30Z is still 2026-10-20 in São Paulo (-03) and
-    // already 2026-10-21 in Berlin (+02). Node re-reads TZ on change,
-    // so each zone is pinned for its own assertion.
-    vi.stubEnv('TZ', 'America/Sao_Paulo');
-    expect(localDayKey('2026-10-21T02:30:00Z')).toBe('2026-10-20');
-    vi.stubEnv('TZ', 'Europe/Berlin');
-    expect(localDayKey('2026-10-21T02:30:00Z')).toBe('2026-10-21');
-    vi.unstubAllEnvs();
+    // already 2026-10-21 in Berlin (+02).
+    expect(localDayKey('2026-10-21T02:30:00Z', { timeZone: 'America/Sao_Paulo' })).toBe('2026-10-20');
+    expect(localDayKey('2026-10-21T02:30:00Z', { timeZone: 'Europe/Berlin' })).toBe('2026-10-21');
+    expect(localDayKey('2026-10-21T02:30:00Z', { timeZone: 'UTC' })).toBe('2026-10-21');
+  });
+
+  it('uses the runtime time zone by default', () => {
+    const iso = '2026-10-21T02:30:00Z';
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    expect(localDayKey(iso)).toBe(localDayKey(iso, { timeZone: zone }));
   });
 
   it('returns null for a missing or unparseable date', () => {
