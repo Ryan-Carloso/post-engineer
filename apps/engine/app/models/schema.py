@@ -13,6 +13,11 @@ from app.services.script_segments import (
     MAX_OVERLAY_SUBTITLE_CHARS,
     MAX_OVERLAY_TITLE_CHARS,
 )
+from app.services.segment_photo_duration import (
+    MAX_REQUESTED_PHOTO_SECONDS,
+    MIN_REQUESTED_PHOTO_SECONDS,
+    duration_error,
+)
 
 # Ignore specific Pydantic warnings
 warnings.filterwarnings(
@@ -329,6 +334,20 @@ class SegmentMedia(BaseModel):
     mediaId: Optional[str] = None
     url: Optional[str] = None
     overlay: Optional["SegmentOverlay"] = None
+    # Requested on-screen seconds for a full-frame photo: hold the
+    # turning point longer, flash one briefly. Absent = default 2s pace.
+    duration: Optional[float] = Field(
+        default=None, ge=MIN_REQUESTED_PHOTO_SECONDS, le=MAX_REQUESTED_PHOTO_SECONDS
+    )
+
+    @field_validator("duration", mode="before")
+    @classmethod
+    def _validate_duration(cls, value: Any) -> Any:
+        # Reject coerced values (strings, bools, NaN, inf) with the shared rule.
+        error = duration_error(value)
+        if error is not None:
+            raise ValueError(error[0])
+        return value
 
 
 class ScriptSegment(BaseModel):

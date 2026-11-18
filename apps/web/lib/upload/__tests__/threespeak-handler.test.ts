@@ -5,6 +5,7 @@ vi.mock('@/lib/social-accounts', () => ({ getSocialAccountTokens: vi.fn(), touch
 vi.mock('@/lib/supabase/service', () => ({ createSupabaseServiceClient: vi.fn(() => ({ __mock: 'service-client' })) }));
 vi.mock('@/lib/logger', () => ({ logger: { warn: vi.fn(), info: vi.fn(), error: vi.fn() } }));
 vi.mock('@/lib/analytics', () => ({ trackApiEvent: vi.fn() }));
+vi.mock('@/lib/account-needs-reconnect', () => ({ markAccountNeedsReconnect: vi.fn(async () => undefined) }));
 vi.mock('@/lib/threespeak', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/threespeak')>()),
   publishThreespeakVideo: vi.fn(),
@@ -15,6 +16,7 @@ import { ThreespeakError, THREESPEAK_VIDEO_MAX_BYTES } from '@/lib/threespeak';
 import { handleThreespeakUpload } from '@/lib/upload/threespeak-handler';
 import { getSocialAccountTokens, touchSocialAccount } from '@/lib/social-accounts';
 import { publishThreespeakVideo } from '@/lib/threespeak';
+import { markAccountNeedsReconnect } from '@/lib/account-needs-reconnect';
 
 const MP4_BYTES = new Uint8Array([0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d]);
 
@@ -80,6 +82,9 @@ describe('handleThreespeakUpload', () => {
     const result = await handleThreespeakUpload(formData(), 'user-1');
     expect(result).toEqual({ success: false, results: [{ accountId: 'alice', success: false, error: '3Speak posting key not found' }] });
     expect(publishThreespeakVideo).not.toHaveBeenCalled();
+    // The credential never reached 3Speak: the account is flagged for
+    // reconnect, like the other providers' missing-credential branches.
+    expect(markAccountNeedsReconnect).toHaveBeenCalledWith('user-1', '3speak', 'alice');
   });
 
   it('reports an account without a stored Hive username without calling 3Speak', async () => {

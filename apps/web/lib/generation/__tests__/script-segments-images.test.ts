@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   MAX_IMAGES_MODE_MEDIAS,
   MAX_MEDIAS,
+  MAX_REQUESTED_PHOTO_SECONDS,
+  MIN_REQUESTED_PHOTO_SECONDS,
   MIN_WORDS_PER_IMAGE,
   WORDS_PER_IMAGE,
   joinSegments,
@@ -18,6 +20,10 @@ const cta = 'Save this video before your next trip to Porto.';
 
 function photos(count: number, prefix: string): Array<{ url: string }> {
   return Array.from({ length: count }, (_, index) => ({ url: `https://e.com/${prefix}${index}.jpg` }));
+}
+
+function clips(count: number, prefix: string): Array<{ url: string }> {
+  return Array.from({ length: count }, (_, index) => ({ url: `https://e.com/${prefix}${index}.mp4` }));
 }
 
 function withMedia(): Array<Record<string, unknown>> {
@@ -194,4 +200,89 @@ describe('validateSegments with the images material', () => {
     expect(() => joinSegments(segments)).toThrow('segments.0.media');
     expect(joinSegments(segments, 'full_lipsync')).toBe(`${hook}\n\n${content}\n\n${cta}`);
   });
+
+  it('one clip per take passes the density minimum', () => {
+    // A clip covers ~12s of speech, not one 3s photo slot: the engine
+    // credits it as 4 items for the minimum (segment_video
+    // CLIP_DENSITY_ITEMS), so a 25-word hook passes with one clip and a
+    // 42-word take with two. The raw media count stays 4.
+    const result = validateSegments([
+      { kind: 'hook', text: hook, media: clips(1, 'h') },
+      { kind: 'content', text: content, media: clips(2, 'b') },
+      { kind: 'content', text: 'Save this video now please.', media: photos(1, 'c') },
+    ]);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.mediaCount).toBe(4);
+  });
+
+  it('one clip in a 40-word hook still fails the density minimum', () => {
+    const segments = [
+      { kind: 'hook', text: `${Array(40).fill('word').join(' ')}.`, media: clips(1, 'h') },
+      { kind: 'content', text: content, media: clips(2, 'b') },
+      { kind: 'content', text: 'Save this video now please.', media: photos(1, 'c') },
+    ];
+    const result = validateSegments(segments);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.field).toBe('segments.0.media');
+      expect(result.error.rule).toBe(
+        'segment has 40 words (~15s) and needs at least 5 images (one per ~3s); it has 1.',
+      );
+      expect(result.error.fix).toBe("Add 1 more image to this segment's media array.");
+    }
+  });
+
+  it('the density maximum counts clips one for one', () => {
+    // A clip must not inflate the flicker cap: 1 clip + 2 photos in a
+    // 5-word take is 3 items against a max of 1, clip credit or not.
+    const segments = [
+      { kind: 'hook', text: hook, media: clips(1, 'h') },
+      { kind: 'content', text: content, media: clips(2, 'b') },
+      {
+        kind: 'content',
+        text: 'Save this video now please.',
+        media: [...clips(1, 'c'), ...photos(2, 'c')],
+      },
+    ];
+    const result = validateSegments(segments);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.field).toBe('segments.2.media');
+      expect(result.error.rule).toBe(
+        'segment has 5 words (~2s) and allows at most 1 image (each image needs ~1s); it has 3.',
+      );
+    }
+  });
+});
+
+describe('validateSegments with a requested photo duration', () => {
+  it('pins the requested-duration bounds to half a second and six seconds', () => {
+    expect(MIN_REQUESTED_PHOTO_SECONDS).toBe(0.5);
+    expect(MAX_REQUESTED_PHOTO_SECONDS).toBe(6);
+  });
+
+  it('accepts a requested duration in range on a photo', () => {
+    const segments = withMedia();
+    const media = (segments[1] as Record<string, unknown>).media as Array<Record<string, unknown>>;
+    media[0] = { ...media[0], duration: 3 };
+    media[1] = { ...media[1], duration: 0.5 };
+    media[2] = { ...media[2], duration: 6 };
+    media[3] = { ...media[3], duration: null };
+    expect(validateSegments(segments).ok).toBe(true);
+  });
+
+  it.each([0, -1, 0.49, 6.01, 60, '3', true, Number.NaN, Number.POSITIVE_INFINITY])(
+    'rejects a duration of %s before charging',
+    (duration) => {
+      const segments = withMedia();
+      const media = (segments[1] as Record<string, unknown>).media as Array<Record<string, unknown>>;
+      media[0] = { ...media[0], duration };
+      const result = validateSegments(segments);
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.field).toBe('segments.1.media.0.duration');
+        expect(result.error.fix).toBeTruthy();
+      }
+    },
+  );
 });

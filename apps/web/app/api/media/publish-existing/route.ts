@@ -20,8 +20,10 @@
 // >= 1 bound account; publish only to bound accounts), and a scheduled
 // post is one instant (publishAt) inside the same 3h–30d window as
 // generate-and-schedule. A signed upload backs at most one live slot
-// (migration 067). An ASAP call with an idempotency key publishes once per
-// account across retries (asap.ts).
+// (migration 067). A dead provider login warns (`warnings` with
+// `account_needs_reconnect`) but does not refuse the slot — scheduled
+// replies, including idempotent replays, carry the warning. An ASAP call
+// with an idempotency key publishes once per account across retries (asap.ts).
 //---------------
 
 import { NextResponse } from 'next/server';
@@ -52,11 +54,9 @@ import {
   SCHEDULE_PK_CONSTRAINT,
   violatedConstraint,
 } from '../../videos/generate-and-schedule/constraint-violations';
-import { resolvePublishingAccounts } from '../../videos/generate-and-schedule/persona-prep';
 import { rejectInvalidRequest } from '../../videos/generate-and-schedule/request-validation';
 import { buildSlotRows } from '../../videos/generate-and-schedule/slot-rows';
-import { validateAccounts } from '../../videos/generate-and-schedule/validate-accounts';
-import { loadPublishBinding } from './bound-accounts';
+import { resolvePublishAccounts } from './resolve-accounts';
 import { invalid } from '../../videos/generate-and-schedule/validation-issues';
 import {
   asapReplayResponse,
@@ -88,7 +88,7 @@ import { resolvePublishAtSlot } from './schedule-slot';
 const ROUTE = 'POST /api/media/publish-existing';
 
 async function scheduleExistingMedia(ctx: PublishExistingContext): Promise<NextResponse> {
-  const { supabase, userId, input, accountIds } = ctx;
+  const { supabase, userId, input, accountIds, reconnectWarning } = ctx;
   const schedule = input.publishing.schedule;
   if (schedule === undefined) {
     return apiErrorResponse(400, 'publishing.schedule is required when publishing.mode is \'scheduled\'.', {
@@ -183,7 +183,7 @@ async function scheduleExistingMedia(ctx: PublishExistingContext): Promise<NextR
     }
     if (violatedConstraint(scheduleError) === SCHEDULE_PK_CONSTRAINT) {
       // Lost a PK race with a concurrent duplicate: replay the winner.
-      const replay = await replaySchedule(supabase, scheduleId, userId, ROUTE);
+      const replay = await replaySchedule(supabase, scheduleId, userId, ROUTE, reconnectWarning);
       if (replay !== null) return replay;
     }
     logger.error('[publish-existing] schedule insert failed', scheduleError, { scheduleId, userId });
@@ -250,6 +250,7 @@ async function scheduleExistingMedia(ctx: PublishExistingContext): Promise<NextR
     replayed: false,
     schedule: { id: scheduleId },
     slots: toSlotSummaries(inserted),
+    ...(reconnectWarning === null ? {} : { warnings: [reconnectWarning] }),
   });
 }
 
@@ -286,23 +287,30 @@ async function postHandler(request: Request): Promise<NextResponse> {
     });
   }
 
-  // Scheduled replays answer before any other work: the same key is the
-  // same request, and re-running it would re-verify (and, for uploads,
-  // re-claim) media the first attempt already handled. ASAP replays come
-  // from the publish ledger, claimed below once the accounts are known.
+  // A dead login warns; it does not refuse the slot. Account validation
+  // runs before the idempotent replay so a retry of an existing schedule
+  // still names the accounts that need a reconnect. Validation is
+  // read-only — the media is verified (and, for uploads, claimed) only
+  // after the replay check — so a replay still answers before any other
+  // work. A validation failure still replays a schedule that already
+  // exists (warning omitted): the first attempt already passed these
+  // checks.
+  const resolved = await resolvePublishAccounts(
+    supabase,
+    userId,
+    personaId,
+    input.publishing.providers,
+    input.publishing.accounts,
+    ROUTE,
+  );
+  const reconnectWarning = resolved instanceof NextResponse ? null : resolved.reconnectWarning;
   const idem = resolveIdempotency(userId, input.idempotencyKey, request, PUBLISH_EXISTING_NAMESPACE);
   if (input.publishing.mode === 'scheduled') {
-    const replay = await replaySchedule(supabase, idem.scheduleId, userId, ROUTE);
+    const replay = await replaySchedule(supabase, idem.scheduleId, userId, ROUTE, reconnectWarning);
     if (replay !== null) return replay;
   }
-
-  // Persona existence + bound accounts (issue #572): a persona with zero
-  // bound accounts cannot publish at all; explicit accounts must be bound.
-  const bound = await loadPublishBinding(supabase, personaId, userId, ROUTE);
-  if (bound instanceof NextResponse) return bound;
-  const resolvedAccounts = await resolvePublishingAccounts(supabase, personaId, input.publishing.accounts, bound ?? undefined, userId);
-  const accountIds = await validateAccounts(supabase, userId, input.publishing.providers, resolvedAccounts, bound);
-  if (accountIds instanceof NextResponse) return accountIds;
+  if (resolved instanceof NextResponse) return resolved;
+  const { accountIds } = resolved;
 
   // ASAP with a caller key: claim every account before touching the media,
   // so a retry of a call that already published answers from the ledger —
@@ -328,7 +336,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
     return verified;
   }
 
-  const ctx: PublishExistingContext = { route: ROUTE, supabase, userId, request, input, accountIds, ...verified, logId, startTime };
+  const ctx: PublishExistingContext = { route: ROUTE, supabase, userId, request, input, accountIds, reconnectWarning, ...verified, logId, startTime };
   if (input.publishing.mode === 'scheduled') {
     return scheduleExistingMedia(ctx);
   }

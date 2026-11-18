@@ -573,6 +573,19 @@
         "additionalProperties": false,
         "description": "Media reference shape for a segment's photo (media (action: upload) uploads it, media (action: check) verifies it).",
         "properties": {
+          "duration": {
+            "anyOf": [
+              {
+                "maximum": 6.0,
+                "minimum": 0.5,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration"
+          },
           "mediaId": {
             "anyOf": [
               {
@@ -1821,7 +1834,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Mechanically check one image URL or media id (MCP media check)",
+        "summary": "Mechanically check one image or video URL or media id (MCP media check)",
         "tags": [
           "V1"
         ]

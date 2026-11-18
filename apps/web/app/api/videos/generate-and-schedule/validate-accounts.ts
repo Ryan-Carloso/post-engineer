@@ -17,6 +17,7 @@
 
 import type { NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { accountNeedsReconnectWarning, type AccountNeedsReconnectWarning } from '@/lib/account-needs-reconnect';
 import { ERROR_CODES, formatErrorMessage } from '@/lib/error-codes';
 import { logger } from '@/lib/logger';
 import {
@@ -26,16 +27,21 @@ import {
 import { coded, validationFailed } from './prepare-persona';
 import type { Provider } from './providers-validation';
 
+export interface ValidatedAccounts {
+  accountIds: Record<Provider, string[]>;
+  reconnectWarning: AccountNeedsReconnectWarning | null;
+}
+
 export async function validateAccounts(
   supabase: SupabaseClient,
   userId: string,
   providers: Provider[],
   accounts: Record<string, string[] | undefined>,
   bound: PersonaDefaultAccounts | null,
-): Promise<Record<Provider, string[]> | NextResponse> {
+): Promise<ValidatedAccounts | NextResponse> {
   const { data: rows, error } = await supabase
     .from('social_accounts')
-    .select('provider, provider_account_id')
+    .select('provider, provider_account_id, needs_reconnect')
     .eq('user_id', userId);
   if (error) {
     logger.error('[generate-and-schedule] social accounts lookup failed', error, { userId });
@@ -43,6 +49,7 @@ export async function validateAccounts(
   }
   const byProvider = new Map<string, Set<string>>();
   const providerOfId = new Map<string, string>();
+  const deadKeys = new Set<string>();
   for (const row of rows ?? []) {
     const provider = (row as { provider: string }).provider;
     const accountId = (row as { provider_account_id: string }).provider_account_id;
@@ -50,9 +57,13 @@ export async function validateAccounts(
     if (!byProvider.has(provider)) byProvider.set(provider, new Set());
     byProvider.get(provider)?.add(accountId);
     providerOfId.set(accountId, provider);
+    if ((row as { needs_reconnect?: unknown }).needs_reconnect === true) {
+      deadKeys.add(`${provider}\0${accountId}`);
+    }
   }
 
   const accountIds = {} as Record<Provider, string[]>;
+  const deadAccounts: Array<{ provider: string; accountId: string }> = [];
   for (const provider of providers) {
     const field = `publishing.accounts.${provider}`;
     const ids = [...new Set((accounts[provider] ?? []).map((id) => id.trim()).filter((id) => id.length > 0))];
@@ -93,6 +104,7 @@ export async function validateAccounts(
             field,
           );
         }
+        if (deadKeys.has(`${provider}\0${id}`)) deadAccounts.push({ provider, accountId: id });
         continue;
       }
       const actualProvider = providerOfId.get(id);
@@ -110,5 +122,5 @@ export async function validateAccounts(
       );
     }
   }
-  return accountIds;
+  return { accountIds, reconnectWarning: accountNeedsReconnectWarning(deadAccounts) };
 }

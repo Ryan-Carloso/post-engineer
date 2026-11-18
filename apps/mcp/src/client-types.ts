@@ -245,6 +245,12 @@ export interface PublishExistingSlot {
   status: string;
 }
 
+/** A stored login is already dead. The slot was still scheduled. */
+export interface PublishExistingReconnectWarning {
+  code: 'account_needs_reconnect';
+  accounts: Array<{ provider: string; accountId: string }>;
+}
+
 /** Narrowed POST /api/media/publish-existing response. */
 export type PublishExistingResult =
   | {
@@ -253,6 +259,7 @@ export type PublishExistingResult =
       replayed: boolean;
       scheduleId: string;
       slots: PublishExistingSlot[];
+      warnings?: PublishExistingReconnectWarning[];
     }
   | {
       mode: 'asap';

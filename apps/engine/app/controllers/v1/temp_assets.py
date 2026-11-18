@@ -47,6 +47,7 @@ _TEMP_ASSET_MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
 _ALLOWED_SUFFIXES = (
     "jpg", "jpeg", "png", "webp",
     "mp3", "wav", "m4a", "aac", "ogg", "flac", "webm",
+    "mp4",
 )
 
 

@@ -6,6 +6,8 @@ import { validateSegments } from '../script-segments';
 
 const REPEAT_RULE = 'the same photo must not repeat';
 const REPEAT_FIX = 'Use a different photo for each media item.';
+const CLIP_REPEAT_RULE = 'the same video clip must not repeat';
+const CLIP_REPEAT_FIX = 'Use a different video clip for each media item.';
 
 const hook =
   'Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is still waiting nearby for you today.';
@@ -86,5 +88,31 @@ describe('validateSegments repeated photos', () => {
     expect(result.error.field).toBe('segments.0.media.2');
     expect(result.error.rule).toBe(REPEAT_RULE);
     expect(result.error.fix).toBe(REPEAT_FIX);
+  });
+
+  it('rejects a repeated clip media id and names it a video clip', () => {
+    const input = segments();
+    input[0] = { ...input[0], media: [{ mediaId: 'clip-1.mp4' }] };
+    input[1] = { ...input[1], media: [{ mediaId: 'clip-1.mp4' }] };
+    const result = validateSegments(input, 'full_lipsync');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.field).toBe('segments.1.media.0');
+    expect(result.error.rule).toBe(CLIP_REPEAT_RULE);
+    expect(result.error.fix).toBe(CLIP_REPEAT_FIX);
+  });
+
+  it('rejects a repeated clip url and names it a video clip', () => {
+    const input = segments();
+    input[1] = {
+      ...input[1],
+      media: [{ url: 'https://example.com/broll.mp4' }, { url: 'https://example.com/broll.mp4' }],
+    };
+    const result = validateSegments(input, 'full_lipsync');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.field).toBe('segments.1.media.1');
+    expect(result.error.rule).toBe(CLIP_REPEAT_RULE);
+    expect(result.error.fix).toBe(CLIP_REPEAT_FIX);
   });
 });

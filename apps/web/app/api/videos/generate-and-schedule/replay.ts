@@ -9,11 +9,13 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { logger } from '@/lib/logger';
 
+import { type ScheduleWarning } from './schedule-warnings';
+
 export async function fetchReplay(
   supabase: SupabaseClient,
   userId: string,
   scheduleId: string,
-  voiceFallbackWarning: { code: string; fromVoice: string; toVoice: string } | null = null,
+  warnings: ScheduleWarning[] = [],
 ): Promise<NextResponse | null> {
   const { data: slots, error } = await supabase
     .from('scheduled_posts')
@@ -45,6 +47,6 @@ export async function fetchReplay(
       status: (row as { status: string }).status,
     })),
     replayed: true,
-    ...(voiceFallbackWarning !== null ? { warnings: [voiceFallbackWarning] } : {}),
+    ...(warnings.length > 0 ? { warnings } : {}),
   });
 }

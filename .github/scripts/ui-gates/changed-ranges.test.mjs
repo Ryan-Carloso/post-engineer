@@ -269,6 +269,31 @@ describe('isTestishPath', () => {
   });
 });
 
+describe('vendored CalendarCN files', () => {
+  it('drops a vendored file from the parsed ranges but keeps our own file', () => {
+    const diff = `diff --git a/apps/web/components/calendar-provider.tsx b/apps/web/components/calendar-provider.tsx
+new file mode 100644
+index 0000000..1111111
+--- /dev/null
++++ b/apps/web/components/calendar-provider.tsx
+@@ -0,0 +1,2 @@
++export const a = 1;
++export const b = 2;
+diff --git a/apps/web/app/(main)/posts/calendar-provider.tsx b/apps/web/app/(main)/posts/calendar-provider.tsx
+index 1111111..2222222 100644
+--- a/apps/web/app/(main)/posts/calendar-provider.tsx
++++ b/apps/web/app/(main)/posts/calendar-provider.tsx
+@@ -4,1 +4,1 @@
+-const x = 1;
++const x = 2;
+`;
+    const entries = parseChangedRanges(diff);
+    assert.equal(entries.length, 1);
+    assert.equal(entries[0].path, 'apps/web/app/(main)/posts/calendar-provider.tsx');
+    assert.deepEqual(entries[0].ranges, [[4, 4]]);
+  });
+});
+
 describe('escapeBrackets', () => {
   it('escapes minimatch classes in one pass', () => {
     assert.equal(escapeBrackets('app/[taskId]/page.tsx'), 'app/[[]taskId[]]/page.tsx');

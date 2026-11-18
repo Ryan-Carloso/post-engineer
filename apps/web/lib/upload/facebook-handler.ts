@@ -3,7 +3,7 @@ import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { getSocialAccountTokens, touchSocialAccount } from '@/lib/social-accounts';
 import { publishFacebookMedia, FACEBOOK_TEXT_MAX_CHARS, FACEBOOK_VIDEO_MAX_BYTES } from '@/lib/facebook';
 import { accountFailure } from '@/lib/upload/account-error';
-import { reportAccountUnauthorized } from '@/lib/upload/account-unauthorized';
+import { rememberDeadCredential, reportAccountUnauthorized } from '@/lib/upload/account-unauthorized';
 import { getAccountIdsFromFormData } from '@/lib/upload/account-utils';
 import { cleanupPublishMedia } from '@/lib/upload/publish-media';
 import { stagePublishMedia } from '@/lib/upload/publish-media-file';
@@ -74,6 +74,7 @@ export async function handleFacebookUpload(
       const pageAccessToken = tokens.access_token;
 
       if (typeof pageAccessToken !== 'string' || pageAccessToken === '') {
+        rememberDeadCredential('facebook', accountId, ownerUserId);
         results.push(accountFailure(accountId, 'Facebook Page token not found', 'token_missing'));
         continue;
       }

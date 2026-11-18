@@ -3,13 +3,15 @@
 import hashlib
 import io
 import json
+import subprocess
 from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
 from PIL import Image
 
-from app.services import image_coverage, image_fetch, segment_panels, user_media
+from app.models.schema import VideoAspect
+from app.services import image_coverage, image_fetch, segment_panels, segment_video, user_media
 
 # Hook spoken 0.0-1.2 s, CTA 5.0-5.9 s, audio 6.0 s.
 WORDS = [("Welcome", 0.0, 0.5), ("to", 0.5, 0.7), ("Porto", 0.7, 1.2), ("Visit", 5.0, 5.4), ("Porto", 5.4, 5.9)]
@@ -278,3 +280,267 @@ def test_a_landscape_hook_photo_stays_a_panel_when_the_face_shows(task_dir):
     assert [(p.index, p.start, p.end) for p in framed] == [(0, 0.0, 1.2)]
     assert [(p.index, p.start, p.end) for p in full] == [(1, 1.5, 2.5), (1, 2.5, 4.5), (2, 4.5, 6.0)]
     assert warnings == []
+
+
+# ---- video clips (PR-B): a clip loops to fill its take, photos unchanged
+
+
+def _clip(tmp_path, name="clip.mp4", seconds=5, width=1080, height=1920,
+          color="0xff0000", codec="libx264"):
+    path = str(tmp_path / name)
+    subprocess.run(
+        ["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i",
+         f"color=c={color}:s={width}x{height}:r=25:d={seconds}",
+         "-c:v", codec, "-pix_fmt", "yuv420p", "-an", path],
+        check=True,
+    )
+    return path
+
+
+def _clip_bytes(tmp_path, **kwargs):
+    with open(_clip(tmp_path, **kwargs), "rb") as handle:
+        return handle.read()
+
+
+def _run_clip(task_dir, params, words, clip_source, photo_download=_download):
+    """prepare_segment_panels with clips downloaded by segment_video."""
+    def download_video(url, dest_path, session=None):
+        with open(dest_path, "wb") as handle:
+            handle.write(clip_source(url, dest_path))
+        return dest_path
+
+    with (
+        patch.object(image_fetch, "download_image", side_effect=photo_download),
+        patch.object(segment_video, "download_video", side_effect=download_video),
+    ):
+        return user_media.prepare_segment_panels(
+            "task-1", params, _subtitle(task_dir, words), 6.0
+        )
+
+
+def _one_clip_segments():
+    return [{"kind": "hook", "text": "Welcome to Porto.",
+             "media": [{"url": "https://e.com/broll.mp4"}]}]
+
+
+def _one_clip_words():
+    return [("Welcome", 0.0, 2.0), ("to", 2.0, 4.0), ("Porto", 4.0, 6.0)]
+
+
+def test_a_video_clip_loops_to_cover_its_whole_take(task_dir):
+    blob = _clip_bytes(task_dir)
+    warnings = _run_clip(
+        task_dir, _params(segments=_one_clip_segments()), _one_clip_words(),
+        lambda url, dest: blob,
+    )
+    panels, _ = segment_panels._read_manifest("task-1")
+    assert warnings == []
+    assert len(panels) == 1
+    assert panels[0].path.endswith("segment-clip-0-0.mp4")
+    assert (panels[0].start, panels[0].end) == (0.0, 6.0)
+    assert panels[0].clip_seconds == pytest.approx(5.0, abs=0.1)
+    assert panels[0].motion is None, "a clip plays as-is, never zoomed"
+    assert panels[0].caption_bottom is None, "a clip is always full-frame"
+
+
+def test_a_clip_and_photos_share_a_video_with_their_own_rules(task_dir):
+    # Clip 0-2s (its slice, past the 2s photo cap), then two photos at
+    # 2s each with alternating zoom: the clip never zooms, the photos do.
+    blob = _clip_bytes(task_dir)
+    words = [
+        ("Welcome", 0.0, 1.0), ("to", 1.0, 1.5), ("Porto", 1.5, 2.0),
+        ("Where", 2.0, 2.5), ("the", 2.5, 3.0), ("river", 3.0, 4.0),
+        ("Visit", 4.0, 5.0), ("Porto", 5.0, 6.0),
+    ]
+    segments = [
+        {"kind": "hook", "text": "Welcome to Porto.",
+         "media": [{"url": "https://e.com/broll.mp4"}]},
+        {"kind": "content", "text": "Where the river.",
+         "media": [{"url": "https://e.com/body.jpg"}]},
+        {"kind": "content", "text": "Visit Porto.",
+         "media": [{"url": "https://e.com/cta.jpg"}]},
+    ]
+    warnings = _run_clip(
+        task_dir, _params(segments=segments), words, lambda url, dest: blob
+    )
+    panels, _ = segment_panels._read_manifest("task-1")
+    assert warnings == []
+    assert [(p.index, p.start, p.end, p.motion) for p in panels] == [
+        (0, 0.0, 2.0, None), (1, 2.0, 4.0, "in"), (2, 4.0, 6.0, "out"),
+    ]
+    assert panels[0].path.endswith(".mp4")
+    assert panels[1].path.endswith(".png")
+
+
+def test_a_clip_by_media_id_is_copied_not_moved(task_dir, monkeypatch):
+    monkeypatch.setattr(user_media, "_temp_assets_dir", lambda: str(task_dir))
+    monkeypatch.setattr(segment_video, "_temp_assets_dir", lambda: str(task_dir))
+    name = "aabbccddeeff00112233445566778899.mp4"
+    (task_dir / name).write_bytes(_clip_bytes(task_dir, name="src.mp4"))
+    segments = [{"kind": "hook", "text": "Welcome to Porto.",
+                 "media": [{"mediaId": name}]}]
+    warnings = user_media.prepare_segment_panels(
+        "task-1", _params(segments=segments),
+        _subtitle(task_dir, _one_clip_words()), 6.0,
+    )
+    panels, _ = segment_panels._read_manifest("task-1")
+    assert warnings == []
+    assert len(panels) == 1
+    assert panels[0].path == str(task_dir / "segment-clip-0-0.mp4")
+    assert (task_dir / name).exists(), "the temp asset stays for the caller"
+
+
+def test_an_invalid_clip_fails_the_task_like_a_skipped_photo(task_dir):
+    with pytest.raises(image_coverage.ImagesDoNotCoverAudio) as exc_info:
+        _run_clip(
+            task_dir, _params(segments=_one_clip_segments()), _one_clip_words(),
+            lambda url, dest: b"not a video at all",
+        )
+    assert "segment 0 image 0 media skipped: not a video clip" in str(exc_info.value)
+
+
+def test_a_too_long_clip_fails_naming_its_seconds(task_dir):
+    blob = _clip_bytes(task_dir, seconds=35)
+    with pytest.raises(image_coverage.ImagesDoNotCoverAudio) as exc_info:
+        _run_clip(
+            task_dir, _params(segments=_one_clip_segments()), _one_clip_words(),
+            lambda url, dest: blob,
+        )
+    assert "segment 0 image 0 media skipped: video clip is too long (35.0s; max 30s)" in str(
+        exc_info.value
+    )
+
+
+def test_a_non_h264_clip_fails_as_not_a_video_clip(task_dir):
+    blob = _clip_bytes(task_dir, codec="mpeg4")
+    with pytest.raises(image_coverage.ImagesDoNotCoverAudio) as exc_info:
+        _run_clip(
+            task_dir, _params(segments=_one_clip_segments()), _one_clip_words(),
+            lambda url, dest: blob,
+        )
+    assert "segment 0 image 0 media skipped: not a video clip" in str(exc_info.value)
+
+
+def test_a_landscape_clip_fails_for_a_portrait_video(task_dir):
+    blob = _clip_bytes(task_dir, width=1920, height=1080)
+    with pytest.raises(image_coverage.ImagesDoNotCoverAudio) as exc_info:
+        _run_clip(
+            task_dir, _params(segments=_one_clip_segments()), _one_clip_words(),
+            lambda url, dest: blob,
+        )
+    assert (
+        "segment 0 image 0 media skipped: wrong aspect ratio "
+        "(1920x1080 (16:9); expected 9:16 (1080x1920))" in str(exc_info.value)
+    )
+
+
+def test_a_clip_over_the_personas_face_is_skipped(task_dir):
+    # Full lip sync shows the face the whole time, so a full-frame clip
+    # can never play there: it is skipped (a warning in this mode, never
+    # a failure — the face is the picture).
+    blob = _clip_bytes(task_dir)
+    words = [("Welcome", 0.0, 2.0), ("to", 2.0, 3.0), ("Porto", 3.0, 4.0)]
+    segments = [{"kind": "hook", "text": "Welcome to Porto.",
+                 "media": [{"url": "https://e.com/broll.mp4"}]}]
+
+    def download_video(url, dest_path, session=None):
+        with open(dest_path, "wb") as handle:
+            handle.write(blob)
+        return dest_path
+
+    with patch.object(segment_video, "download_video", side_effect=download_video):
+        panels, skipped = user_media.prepare_segment_media(
+            "task-1", segments, _subtitle(task_dir, words), 4.0, str(task_dir),
+            VideoAspect.portrait, face=segment_panels.FACE_FULL,
+        )
+    assert panels == []
+    assert skipped == [
+        "segment 0 image 0 media skipped: video clip cannot cover the persona's face"
+    ]
+
+
+def test_a_repeated_clip_under_a_different_url_is_a_duplicate(task_dir):
+    blob = _clip_bytes(task_dir)
+    words = [
+        ("Welcome", 0.0, 1.0), ("to", 1.0, 1.5), ("Porto", 1.5, 2.0),
+        ("Where", 2.0, 2.5), ("the", 2.5, 3.0), ("river", 3.0, 4.0),
+        ("Visit", 4.0, 5.0), ("Porto", 5.0, 6.0),
+    ]
+    segments = [
+        {"kind": "hook", "text": "Welcome to Porto.",
+         "media": [{"url": "https://e.com/one.mp4"}]},
+        {"kind": "content", "text": "Where the river.",
+         "media": [{"url": "https://e.com/two.mp4"}]},
+        {"kind": "content", "text": "Visit Porto.",
+         "media": [{"url": "https://e.com/cta.jpg"}]},
+    ]
+    with pytest.raises(image_coverage.ImagesDoNotCoverAudio) as exc_info:
+        _run_clip(task_dir, _params(segments=segments), words, lambda url, dest: blob)
+    assert "segment 1 image 0 media skipped: duplicate video clip" in str(exc_info.value)
+
+
+def test_the_hook_photo_is_the_first_photo_never_a_clip(task_dir):
+    clip = {"mediaId": "aabbccddeeff00112233445566778899.mp4"}
+    photo = {"mediaId": "00112233445566778899aabbccddeeff.jpg"}
+    segments = [
+        {"kind": "hook", "text": "Welcome to Porto.", "media": [clip]},
+        {"kind": "content", "text": "Visit Porto.", "media": [photo]},
+    ]
+    assert user_media.first_segment_media(segments) == (1, 0, photo)
+
+
+def test_an_overlay_on_a_clip_warns_and_the_clip_still_ships(task_dir):
+    blob = _clip_bytes(task_dir)
+    segments = [{"kind": "hook", "text": "Welcome to Porto.",
+                 "media": [{"url": "https://e.com/broll.mp4",
+                            "overlay": {"title": "Porto"}}]}]
+    warnings = _run_clip(
+        task_dir, _params(segments=segments), _one_clip_words(),
+        lambda url, dest: blob,
+    )
+    panels, _ = segment_panels._read_manifest("task-1")
+    assert len(panels) == 1
+    assert warnings == [
+        "segment 0 image 0 media overlay skipped: overlays are not supported on video clips"
+    ]
+def test_a_requested_duration_rides_to_the_panel_and_sets_its_seconds(task_dir):
+    # The agent asked the hook photo to hold 3s and the CTA to flash 1s:
+    # the manifest panels carry the requests and the layout honors them.
+    words = [
+        ("Welcome", 0.0, 0.5), ("to", 0.5, 0.7), ("Porto", 0.7, 1.2),
+        ("Where", 2.0, 2.3), ("the", 2.3, 2.5), ("river", 2.5, 3.0),
+        ("Visit", 5.0, 5.4), ("Porto", 5.4, 5.9),
+    ]
+    segments = [
+        {"kind": "hook", "text": "Welcome to Porto.", "media": [{"url": "https://e.com/hook.jpg", "duration": 3.0}]},
+        {"kind": "content", "text": "Where the river.", "media": [{"url": "https://e.com/body.jpg", "duration": 2.0}]},
+        {"kind": "content", "text": "Visit Porto.", "media": [{"url": "https://e.com/cta.jpg", "duration": 1.0}]},
+    ]
+    warnings = _run(task_dir, _params(segments=segments), words=words)
+    panels, stored = segment_panels._read_manifest("task-1")
+    assert [(p.index, p.start, p.end, p.motion) for p in panels] == [
+        (0, 0.0, 3.0, "in"), (1, 3.0, 5.0, "out"), (2, 5.0, 6.0, "in"),
+    ]
+    assert [p.requested_duration for p in panels] == [3.0, 2.0, 1.0]
+    assert warnings == []
+    assert stored == warnings
+
+
+def test_photos_without_a_request_carry_no_duration(task_dir):
+    # Backward compatible: a photo with no duration behaves exactly as
+    # before and the manifest carries no request for it.
+    words = [
+        ("Welcome", 0.0, 0.5), ("to", 0.5, 0.7), ("Porto", 0.7, 1.2),
+        ("Where", 2.0, 2.3), ("the", 2.3, 2.5), ("river", 2.5, 3.0),
+        ("Visit", 5.0, 5.4), ("Porto", 5.4, 5.9),
+    ]
+    segments = [
+        {"kind": "hook", "text": "Welcome to Porto.", "media": [{"url": "https://e.com/hook.jpg"}]},
+        {"kind": "content", "text": "Where the river.", "media": [{"url": "https://e.com/body.jpg"}]},
+        {"kind": "content", "text": "Visit Porto.", "media": [{"url": "https://e.com/cta.jpg"}]},
+    ]
+    warnings = _run(task_dir, _params(segments=segments), words=words)
+    assert warnings == []
+    panels, _stored = segment_panels._read_manifest("task-1")
+    assert [(p.start, p.end) for p in panels] == [(0.0, 2.0), (2.0, 4.0), (4.0, 6.0)]
+    assert [p.requested_duration for p in panels] == [None, None, None]

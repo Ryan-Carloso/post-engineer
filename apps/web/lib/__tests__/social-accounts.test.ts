@@ -112,8 +112,9 @@ describe('social-accounts', () => {
       });
 
       expect(caller.upsert).not.toHaveBeenCalled();
-      const payload = writer.upsert.mock.calls[0]?.[0] as { encrypted_tokens?: string };
+      const payload = writer.upsert.mock.calls[0]?.[0] as { encrypted_tokens?: string; needs_reconnect?: boolean };
       expect(payload.encrypted_tokens).toBe('encrypted.{"access_token":"tok"}');
+      expect(payload.needs_reconnect).toBe(false);
     });
 
     it.each(['unknown', 'UNKNOWN', '', '  '])(
@@ -260,9 +261,10 @@ describe('social-accounts', () => {
         })
       ).resolves.toBeUndefined();
       expect(fromReturn.update).not.toHaveBeenCalled();
-      const payload = serviceChain.update.mock.calls[0]?.[0] as { encrypted_tokens?: string };
+      const payload = serviceChain.update.mock.calls[0]?.[0] as { encrypted_tokens?: string; needs_reconnect?: boolean };
       expect(payload.encrypted_tokens).toContain('encrypted.');
       expect(payload.encrypted_tokens).not.toBe('new-tok');
+      expect(payload.needs_reconnect).toBe(false);
     });
 
     it('throws on error', async () => {
@@ -286,6 +288,7 @@ describe('social-accounts', () => {
       const payload = serviceChain.update.mock.calls[0][0] as Record<string, unknown>;
       expect(payload.account_metadata).toEqual({ username: 'x' });
       expect('account_name' in payload).toBe(false);
+      expect('needs_reconnect' in payload).toBe(false);
       expect(fromReturn.update).not.toHaveBeenCalled();
     });
 

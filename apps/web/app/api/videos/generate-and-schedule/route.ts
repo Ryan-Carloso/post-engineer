@@ -35,6 +35,7 @@ import { scheduleAccountColumns } from './account-columns';
 import { checkPreChargePreflights } from './aspect-preflight';
 import { resolvePreChargeFallbackPhotos } from './library-photo';
 import { loadBoundPublishingAccounts, resolvePublishingAccounts, signedUrl } from './persona-prep';
+import { scheduleWarnings } from './schedule-warnings';
 import { validateAccounts } from './validate-accounts';
 import { GenerateAndScheduleBodySchema, type GenerateAndScheduleBody } from '@/lib/contracts/videos';
 import { rawKeyIssues } from './request-title';
@@ -58,7 +59,6 @@ import { recordRecentImageId, resolveVideoImage } from '@/lib/persona-images';
 import { resolveIdempotency } from '@/lib/idempotency';
 import { trackApiEvent } from '@/lib/analytics';
 import { logger } from '@/lib/logger';
-import { VOICE_FALLBACK_WARNING_CODE } from '@/lib/voice-fallback';
 import { ensureEngineImageUrl } from '@/lib/engine-image-url';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
@@ -251,14 +251,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
     niche: validatedOptions.niche,
   });
   if (prep instanceof NextResponse) return prep;
-  const voiceFallbackWarning =
-    prep.voiceFallback === undefined
-      ? null
-      : {
-        code: VOICE_FALLBACK_WARNING_CODE,
-        fromVoice: prep.voiceFallback.fromVoice,
-        toVoice: prep.voiceFallback.toVoice,
-      };
 
   // 5. Providers + social accounts (fail fast: never charge for a bad selection).
   // The binding is loaded once here: resolvePublishingAccounts falls back
@@ -266,14 +258,16 @@ async function postHandler(request: Request): Promise<NextResponse> {
   // requested id is bound to the persona (issue #572).
   const bound = await loadBoundPublishingAccounts(supabase, personaId, userId);
   if (bound instanceof NextResponse) return bound;
-  const accountIds = await validateAccounts(
+  const validatedAccounts = await validateAccounts(
     supabase,
     userId,
     providers,
     await resolvePublishingAccounts(supabase, personaId, publishing.accounts, bound ?? undefined, userId),
     bound,
   );
-  if (accountIds instanceof NextResponse) return accountIds;
+  if (validatedAccounts instanceof NextResponse) return validatedAccounts;
+  const { accountIds, reconnectWarning } = validatedAccounts;
+  const warnings = scheduleWarnings(prep.voiceFallback, reconnectWarning);
 
   // Pinned library image: fail fast when the id does not resolve, before any charge.
   // The fallback photo is resolved once here, pre-charge: the engine face-gates the library image dispatch signs, not the avatar.
@@ -380,7 +374,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
       await supabase.from('schedules').delete().eq('id', idem.scheduleId).eq('user_id', userId);
     } else {
       trackApiEvent('video_creation_replayed', { userId, scheduleId: idem.scheduleId });
-      const replayed = await fetchReplay(supabase, userId, idem.scheduleId, voiceFallbackWarning);
+      const replayed = await fetchReplay(supabase, userId, idem.scheduleId, warnings);
       if (replayed) return replayed;
     }
   }
@@ -424,7 +418,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
       if (violatedConstraint(spendError) !== null) {
         // A concurrent duplicate spent under the same generation_id first:
         // replay instead of double-charging.
-        const replayed = await fetchReplay(supabase, userId, idem.scheduleId, voiceFallbackWarning);
+        const replayed = await fetchReplay(supabase, userId, idem.scheduleId, warnings);
         if (replayed) {
           trackApiEvent('video_creation_replayed', { userId, scheduleId: idem.scheduleId });
           return replayed;
@@ -547,7 +541,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
         alreadySpent,
         scheduleError,
         constraint,
-        voiceFallbackWarning,
+        warnings,
       });
     }
     // Real DB failure after the spend: refund the whole generation loudly.
@@ -824,7 +818,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
     schedule: { id: idem.scheduleId, mode },
     slots: results,
     replayed: false,
-    ...(voiceFallbackWarning !== null ? { warnings: [voiceFallbackWarning] } : {}),
+    ...(warnings.length > 0 ? { warnings } : {}),
   };
   if (failed > 0 && accepted === 0) {
     // Every video failed (each already refunded): report the operation as

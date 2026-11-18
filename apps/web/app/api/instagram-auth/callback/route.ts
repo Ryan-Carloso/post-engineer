@@ -66,7 +66,6 @@ async function getHandler(request: NextRequest) {
   }
 
   if (!code) {
-    logger.warn('[instagram-callback] missing authorization code', { logId, stateRef });
     return oauthPopupResponse('instagram-oauth-error', {
       error: 'Missing authorization code',
     });

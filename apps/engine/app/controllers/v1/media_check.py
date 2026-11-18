@@ -1,4 +1,4 @@
-"""POST /api/v1/media/check — mechanical check of one image URL or media id.
+"""POST /api/v1/media/check — mechanical check of one image or video URL or media id.
 
 The MCP media (action: check) tool's engine side: the web route authenticates the
 user, then calls here with the server secret, and this endpoint runs
@@ -9,6 +9,11 @@ detectable face is in the photo, or null when there is no file to check
 or the detector is unavailable). No judgement, no
 relevance score, and the URL is never logged: a URL can carry
 credentials in its query string.
+
+A clip (.mp4) is checked by segment_video through the same shape: the
+code reuses the photo vocabulary (an unusable clip is not_image, one
+over the duration cap is too_large) and has_face is always null — face
+detection never runs on a clip.
 
 With video_aspect given, a photo that cannot fill the frame reports
 wrong_aspect instead of ok, so the caller can reject it before any
@@ -48,7 +53,7 @@ class MediaCheckRequest(BaseModel):
 
 @router.post(
     "/media/check",
-    summary="Mechanically check one image URL or media id (MCP media check)",
+    summary="Mechanically check one image or video URL or media id (MCP media check)",
 )
 def check_media(request: Request, body: MediaCheckRequest):
     base.get_auth_context(request)

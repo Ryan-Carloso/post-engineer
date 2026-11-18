@@ -797,3 +797,107 @@ def test_segments_to_script_forwards_full_lipsync_to_validation():
     assert script_segments.segments_to_script(sparse, video_type="full_lipsync") == "\n\n".join(
         [_hook(), _content(), _cta_take()]
     )
+
+
+# ---- video clips (PR-B): one clip stands in for ~12s of speech
+
+
+def _clip_segments():
+    return [
+        {"kind": "hook", "text": _hook(), "media": [{"url": "https://example.com/h.mp4"}]},
+        {"kind": "content", "text": _content(),
+         "media": [{"url": "https://example.com/b1.mp4"}, {"url": "https://example.com/b2.mp4"}]},
+        {"kind": "content", "text": "Save this video now please.",
+         "media": [{"url": "https://example.com/c.jpg"}]},
+    ]
+
+
+def test_one_clip_per_take_passes_the_density_minimum():
+    # Hook 25 words needs 4 images: one clip counts as 4. Content 42
+    # words needs 6: two clips count as 8. The raw media count stays 4.
+    result = script_segments.validate_segments(_clip_segments())
+    assert result["media_count"] == 4
+
+
+def test_one_clip_in_a_long_take_still_fails_the_density_minimum():
+    segments = _clip_segments()
+    segments[0]["text"] = " ".join(["word"] * 40) + "."
+    with pytest.raises(SegmentValidationError) as exc_info:
+        script_segments.validate_segments(segments)
+    assert exc_info.value.field == "segments.0.media"
+    assert exc_info.value.rule == (
+        "segment has 40 words (~15s) and needs at least 5 images (one per ~3s); it has 1."
+    )
+    assert exc_info.value.fix == "Add 1 more image to this segment's media array."
+
+
+def test_the_density_maximum_counts_clips_one_for_one():
+    # A clip must not inflate the flicker cap: 1 clip + 2 photos in a
+    # 5-word take is 3 items against a max of 1, clip credit or not.
+    segments = _clip_segments()
+    segments[2]["media"] = [
+        {"url": "https://example.com/c.mp4"},
+        {"url": "https://example.com/c1.jpg"},
+        {"url": "https://example.com/c2.jpg"},
+    ]
+    with pytest.raises(SegmentValidationError) as exc_info:
+        script_segments.validate_segments(segments)
+    assert exc_info.value.field == "segments.2.media"
+    assert exc_info.value.rule == (
+        "segment has 5 words (~2s) and allows at most 1 image "
+        "(each image needs ~1s); it has 3."
+    )
+
+
+def test_a_repeated_clip_reference_is_rejected_before_charging():
+    segments = _clip_segments()
+    segments[1]["media"] = [{"url": "https://example.com/h.mp4"}]
+    with pytest.raises(SegmentValidationError) as exc_info:
+        script_segments.validate_segments(segments)
+    assert exc_info.value.field == "segments.1.media.0"
+    assert exc_info.value.rule == "the same video clip must not repeat"
+    assert exc_info.value.fix == "Use a different video clip for each media item."
+
+
+def test_a_repeated_photo_reference_keeps_its_message():
+    segments = _images_segments()
+    segments[1]["media"] = [{"url": "https://example.com/h0.jpg"}]
+    with pytest.raises(SegmentValidationError) as exc_info:
+        script_segments.validate_segments(segments)
+    assert exc_info.value.rule == "the same photo must not repeat"
+def _with_duration(duration):
+    return [
+        {"kind": "hook", "text": _hook()},
+        {
+            "kind": "content",
+            "text": _content(),
+            "media": [{"url": "https://example.com/x.jpg", "duration": duration}],
+        },
+        {"kind": "content", "text": _cta_take()},
+    ]
+
+
+@pytest.mark.parametrize("duration", [0.5, 1, 2.0, 3, 6.0])
+def test_media_duration_in_range_passes(duration):
+    result = script_segments.validate_segments(_with_duration(duration), video_type="full_lipsync")
+    assert result["media_count"] == 1
+
+
+@pytest.mark.parametrize("duration", [None])
+def test_media_duration_may_be_omitted(duration):
+    # Explicit null is the same as absent: the photo ticks at the
+    # default 2s pace.
+    assert (
+        script_segments.validate_segments(_with_duration(duration), video_type="full_lipsync")[
+            "media_count"
+        ]
+        == 1
+    )
+
+
+@pytest.mark.parametrize("duration", [0, -1, 0.49, 6.01, 60, "3", True, float("nan"), float("inf")])
+def test_media_duration_out_of_range_or_not_a_number_is_400(duration):
+    with pytest.raises(SegmentValidationError) as exc_info:
+        script_segments.validate_segments(_with_duration(duration), video_type="full_lipsync")
+    assert exc_info.value.field == "segments.1.media.0.duration"
+    assert exc_info.value.fix

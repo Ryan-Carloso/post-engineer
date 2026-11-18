@@ -17,13 +17,29 @@ import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { parseMediaUpload } from '@/lib/media/upload-schema';
 import { InstagramService } from '@/lib/instagram';
 import { cleanupPublishMedia, presignPublishMedia, uploadPublishMedia } from '@/lib/upload/publish-media';
-import { httpStatusOf, reportAccountUnauthorized } from './account-unauthorized';
+import { httpStatusOf, rememberDeadCredential, reportAccountUnauthorized } from './account-unauthorized';
+import { TokenDecryptError } from '@/lib/token-crypto';
 import { classifyUploadAccountError } from '@/lib/upload/account-error';
 import type { OAuth2Client } from 'google-auth-library';
 
 // Upload handlers — one account failing does not abort the others.
 
 import type { ContentUploadAccountResult, ContentUploadResponse } from './content-upload-result';
+
+//---------------
+// isRevokedGoogleGrant — Google answers a revoked or expired refresh token
+// with 400 invalid_grant (or 401). A 5xx or a network error is transient
+// and must not mark the account dead.
+//---------------
+function isRevokedGoogleGrant(error: unknown): boolean {
+  const status = httpStatusOf(error);
+  if (status === 401) return true;
+  if (status !== 400) return false;
+  const response = typeof error === 'object' && error !== null && 'response' in error ? error.response : undefined;
+  const data = typeof response === 'object' && response !== null && 'data' in response ? response.data : undefined;
+  const code = typeof data === 'object' && data !== null && 'error' in data ? data.error : undefined;
+  return code === 'invalid_grant';
+}
 
 //---------------
 // getAuthenticatedClient — OAuth client with the account's valid tokens
@@ -39,7 +55,11 @@ export async function getAuthenticatedClient(
   try {
     const result = await getSocialAccountTokens(supabase, ownerUserId, 'youtube', accountId);
     tokens = result.tokens;
-  } catch {
+  } catch (error) {
+    // An undecryptable token is a dead login; a missing row is not (the
+    // account is gone, nothing to reconnect). The AuthError below hides the
+    // cause from classifyAccountBreak, so the flag is written here.
+    if (error instanceof TokenDecryptError) rememberDeadCredential('youtube', accountId, ownerUserId);
     throw new AuthError(
       `Account ${accountId} not found for the API key owner. Start the OAuth flow first`,
       'account_not_found',
@@ -69,6 +89,7 @@ export async function getAuthenticatedClient(
     return oauth2Client;
   } catch (error) {
     if (error instanceof AuthError) throw error;
+    if (isRevokedGoogleGrant(error)) rememberDeadCredential('youtube', accountId, ownerUserId);
     throw new AuthError('Failed to load account token. Start the OAuth flow again', 'invalid_token');
   }
 }

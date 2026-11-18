@@ -19,13 +19,29 @@ steps, rules, or tool calls into this doc: an edit to the prompt must
 reach the hub, the MCP, and this page from that one source, with no
 hand-maintained copy to drift.
 
-In short: one story per video — a real first-person story about one
-concrete day, never a generic explainer. Every photo is AI-generated from
-one base photo, with one consistent persona for the whole video, never
-stock. The agent finds the real story first (setup, turning point,
-payoff), builds the hook from one mechanism that fits, writes for
+In short: one story per video — a real, concrete, lived first-person
+story about one concrete day, plausible in real life, never a generic
+explainer and never a random anecdote. "The day it happened to me" is
+one valid form, not the only one: a first time, a week, a realization,
+a repeating ritual, or a before/after arc. A documentary, a study, or
+a fact is transformed into a concrete story lived by someone: the fact
+goes inside the story, never as exposition. Every fact is researched
+before it is asserted — mechanisms, hormones, numbers, deadlines —
+never invented; a fact that cannot be confirmed is cut from the script.
+Every story picks one archetype for the value it delivers —
+informative, funny, inspirational, relatable, or provocative — never
+basic content.
+Media is mixed: AI photos, real photos, and licensed stock photos,
+with one consistent persona for the whole video whenever the persona
+appears, never unlicensed media. Photos only: the engine renders
+segment media as photos and cannot use video (b-roll) as segment
+media yet.
+The agent finds the real story first (setup, turning point,
+payoff), picks the archetype, builds the hook from one mechanism that fits, writes for
 watch-through, and follows the base: validate, score, confirm, then
-generate once.
+generate once. Every emotional beat is visible in the image, the
+rhythm varies take by take, every sentence gets its own image, and
+every image is sharp, well-lit, and on-topic.
 
 ## Prerequisites (not part of the prompt)
 

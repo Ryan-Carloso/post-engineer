@@ -1,10 +1,12 @@
 """Coverage for the "images" material: the agent's photos are the whole picture.
 
 Every segment carries an image (validated before charging), and each photo
-is on screen for at most MAX_PHOTO_SECONDS. The surviving photos are laid
+is on screen for at most its cap — MAX_PHOTO_SECONDS by default, or its
+requested duration (see below). The surviving photos are laid
 out back to back from the coverage window start: a photo may start early
 into the pause before its segment, but it never runs past the next photo's
-start or past start + MAX_PHOTO_SECONDS. When the photos run out before
+start or past start + its cap — except a requested photo, which runs its
+seconds even past the next photo's original slice start. When the photos run out before
 the end of the audio the task fails with IMAGES_DO_NOT_COVER_AUDIO naming
 how many more photos the window needs, so the caller sends more photos
 instead of one photo being stretched over the gap. A dropped photo is
@@ -12,7 +14,7 @@ never covered either: in the images modes it fails the task (see below).
 
 - the first full-frame photo starts where the face hands over (0 on a
   faceless video, the hook's end on a hook-only persona video);
-- every surviving photo runs at most MAX_PHOTO_SECONDS, back to back;
+- every surviving photo runs at most its cap, back to back;
 - the last photo runs to the end of the audio, or the task fails.
 
 Every sent photo must survive. If any photo is skipped at render, the
@@ -27,8 +29,25 @@ spoken seconds. On a full lip-sync video the face is on screen the whole
 time, so photos are optional panels there: a skipped photo is a warning,
 never a failure.
 
+A photo may carry a requested duration (seconds on screen): the agent
+holds the turning-point photo longer or flashes one briefly instead of
+every photo ticking at the same 2s pace. A requested photo runs its
+seconds even past the next photo's original slice start, and the next
+photo starts when it ends. A photo without a request keeps the old
+pacing: at most MAX_PHOTO_SECONDS, never past the next photo's start —
+unless its own slice already covers its cap, in which case the next
+photo's start no longer paces it (a requested photo before it may have
+shifted the grid). Requested seconds never stretch a photo to cover a
+gap: short requests still fail naming the missing photos, and a request
+that leaves a later photo no time at all fails naming that photo.
+
 Full-frame photos also get a slow zoom (Ken Burns, panel_motion), alternating
 in and out, so a still photo never looks frozen.
+
+A video clip (segment_video) covers its take instead: it loops to fill
+its slice, at most MAX_CLIP_LOOPS plays, and never zooms — it already
+moves. A clip that loops out still leaves the window short, and the
+task fails naming the gap, exactly like a missing photo.
 """
 
 import math
@@ -36,8 +55,9 @@ from collections import Counter
 from dataclasses import replace
 from typing import Optional, Sequence
 
-from app.services import segment_panels
+from app.services import segment_panels, segment_video
 from app.services.segment_panels import Panel
+from app.services.segment_photo_duration import photo_cap
 
 IMAGES_DO_NOT_COVER_AUDIO = "images_do_not_cover_audio"
 MOTION_IN = "in"
@@ -114,7 +134,7 @@ def ensure_coverage(
     time, so media is optional there and a skipped photo never fails.
     Raises ImagesDoNotCoverAudio with the aggregated skip reasons when
     a photo was skipped or no full-frame photo survived, and when the
-    surviving photos run out before the end of the audio at 2s each.
+    surviving photos run out before the end of the audio at their caps.
     """
     window_start = coverage_start(face, hook_end)
     _summary, fatal = _skip_summary(sent, len(panels), skipped)
@@ -144,12 +164,16 @@ def extend_over_gaps(
 
     Framed panels (shown over the face, caption_bottom set) keep their own
     times. Full-frame photos are laid out back to back from window_start,
-    at most MAX_PHOTO_SECONDS each: a photo may start early into the pause
-    before its segment, but it never runs past the next photo's start or
-    past start + MAX_PHOTO_SECONDS. Raises ImagesDoNotCoverAudio when
-    there is a window to cover and no full-frame photo survived, and when
-    the surviving photos run out before the end of the audio, naming how
-    many more photos the window needs.
+    at most MAX_PHOTO_SECONDS each — or their requested duration, when the
+    agent asked one photo to hold longer or flash briefly. A photo may
+    start early into the pause before its segment, but it never runs past
+    the next photo's start or past start + its cap, unless its own slice
+    already covers the cap (then a requested photo before it may have
+    shifted the grid). Raises ImagesDoNotCoverAudio when there is a
+    window to cover and no full-frame photo survived, when the surviving
+    photos run out before the end of the audio, naming how many more
+    photos the window needs, and when a requested duration leaves a
+    later photo no time at all.
     """
     if window_start is None or window_start >= audio_duration:
         return list(panels)
@@ -159,23 +183,75 @@ def extend_over_gaps(
     )
     if not full:
         raise ImagesDoNotCoverAudio()
+    requested_any = any(panel.requested_duration is not None for panel in full)
     covered: list[Panel] = []
     cursor = window_start
+    photo_position = 0
     for position, panel in enumerate(full):
         start = cursor
-        end = full[position + 1].start if position + 1 < len(full) else audio_duration
-        end = min(end, start + MAX_PHOTO_SECONDS)
-        motion = MOTION_IN if position % 2 == 0 else MOTION_OUT
+        if panel.clip_seconds is not None:
+            # A clip loops to fill its slice (at most MAX_CLIP_LOOPS
+            # plays): it covers its take, not the 2s photo cap, and it
+            # never zooms — it already moves.
+            limit = full[position + 1].start if position + 1 < len(full) else audio_duration
+            if limit <= start:
+                # The bound is already spent: an earlier requested photo
+                # ran past it, so the clip just runs its own loops.
+                limit = audio_duration
+            cap = min(panel.end - panel.start, segment_video.MAX_CLIP_LOOPS * panel.clip_seconds)
+            end = min(limit, start + cap)
+            motion = None
+        else:
+            cap = photo_cap(panel.requested_duration, MAX_PHOTO_SECONDS)
+            if panel.requested_duration is not None:
+                # A requested duration is honored absolutely: the photo runs
+                # its seconds even past the next photo's original slice start.
+                end = min(audio_duration, start + cap)
+            else:
+                limit = full[position + 1].start if position + 1 < len(full) else audio_duration
+                own_slice = panel.end - panel.start
+                if own_slice >= MAX_PHOTO_SECONDS:
+                    # The split gave this photo its full cap, so the next
+                    # photo's start no longer paces it: a requested photo
+                    # before it may have shifted the grid, and clipping here
+                    # would fail a request whose caps cover the audio.
+                    limit = audio_duration
+                elif limit <= start:
+                    # The bound is already spent: an earlier requested photo
+                    # ran past it, so this photo just runs its own cap.
+                    limit = audio_duration
+                end = min(limit, start + cap)
+            if end <= start:
+                # A photo with no seconds is a dropped photo: fail naming it
+                # instead of shipping a video without it.
+                raise ImagesDoNotCoverAudio(
+                    "requested durations leave no time for "
+                    f"photo {position + 1} of {len(full)} (segment {panel.index})"
+                )
+            # Photos alternate in/out among themselves: a clip between
+            # two photos breaks the sequence, so the count skips clips.
+            motion = MOTION_IN if photo_position % 2 == 0 else MOTION_OUT
+            photo_position += 1
         covered.append(replace(panel, start=start, end=end, motion=motion))
         cursor = end
     if cursor < audio_duration - _COVERAGE_EPSILON_SECONDS:
         missing = math.ceil((audio_duration - cursor) / MAX_PHOTO_SECONDS)
+        if any(panel.clip_seconds is not None for panel in full):
+            count_word = "item" if len(full) == 1 else "items"
+            cover_verb = "covers" if len(full) == 1 else "cover"
+            missing_word = "photo" if missing == 1 else "photos"
+            raise ImagesDoNotCoverAudio(
+                f"{len(full)} {count_word} {cover_verb} {cursor - window_start:.1f}s of "
+                f"{audio_duration - window_start:.1f}s; "
+                f"need {missing} more {missing_word} or video clips"
+            )
         photo_word = "photo" if len(full) == 1 else "photos"
         cover_verb = "covers" if len(full) == 1 else "cover"
         missing_word = "photo" if missing == 1 else "photos"
+        pace = "requested durations" if requested_any else f"{MAX_PHOTO_SECONDS:.0f}s each"
         raise ImagesDoNotCoverAudio(
             f"{len(full)} {photo_word} {cover_verb} {cursor - window_start:.1f}s of "
-            f"{audio_duration - window_start:.1f}s at {MAX_PHOTO_SECONDS:.0f}s each; "
+            f"{audio_duration - window_start:.1f}s at {pace}; "
             f"need {missing} more {missing_word}"
         )
     return sorted([*framed, *covered], key=lambda panel: panel.start)

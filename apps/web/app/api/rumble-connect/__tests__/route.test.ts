@@ -212,6 +212,7 @@ describe('POST /api/rumble-connect', () => {
       provider_account_id: 'chan-1',
       account_name: 'chan-1',
       account_metadata: {},
+      needs_reconnect: false,
     });
   });
 

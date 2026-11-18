@@ -68,6 +68,7 @@ describe('Rumble across the shared surfaces', () => {
       createdAt: '2026-11-01T00:00:00.000Z',
       updatedAt: '2026-11-01T00:00:00.000Z',
       lastUsedAt: null,
+      needsReconnect: false,
     };
     expect(PROVIDER_REGISTRY.rumble.toPublicAccount(record)).toMatchObject({
       provider: 'rumble',

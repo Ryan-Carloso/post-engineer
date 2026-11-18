@@ -16,6 +16,7 @@
 // VIDEO_TYPE_ERROR_SUFFIX / unknownVideoTypeMessage mirror lib/tokens.ts,
 // apps/mcp/src/video-type.ts and the engine's VIDEO_TYPE_ERROR_SUFFIX;
 // MAX_SEGMENTS / MAX_IMAGES_MODE_MEDIAS / HOOK_MIN_SECONDS / HOOK_MAX_SECONDS
+// / MIN_REQUESTED_PHOTO_SECONDS / MAX_REQUESTED_PHOTO_SECONDS
 // mirror shared/script-segments/script-segments.ts, the source of the
 // generated copies in both apps (a relative import from a synced contract
 // cannot reach it: the two apps keep it at different depths).
@@ -26,6 +27,7 @@ import { EXPERIMENT_TARGET_PAIRS_MAX, EXPERIMENT_VARIANT_ID_PATTERN } from './ex
 import { UploadContentResponseSchema } from './media.js';
 import { UUID } from './metrics.js';
 import { SOCIAL_PROVIDERS } from './providers.js';
+import { ScheduleWarningSchema } from './schedule-warnings.js';
 import { MAX_IMAGE_UPLOAD_BYTES, MAX_VIDEO_UPLOAD_BYTES, UPLOAD_CONTENT_TYPES, UPLOAD_CONTENT_TYPE_MESSAGE, isImageUploadContentType } from './upload-types.js';
 
 /** The one video mode (issue #542): it decides render path + price. */
@@ -57,6 +59,9 @@ export const MAX_IMAGES_MODE_MEDIAS = 30;
 /** Spoken hook window, seconds: reported by validate-script. */
 export const HOOK_MIN_SECONDS = 8;
 export const HOOK_MAX_SECONDS = 12;
+/** Requested on-screen seconds for one full-frame photo (segment pacing). */
+export const MIN_REQUESTED_PHOTO_SECONDS = 0.5;
+export const MAX_REQUESTED_PHOTO_SECONDS = 6;
 
 /**
  * How many problems a pre-auth 400 will echo. The route runs before session
@@ -114,6 +119,11 @@ export const segmentsRequestSchema = z.array(
               mediaId: z.string().optional(),
               url: z.string().optional(),
               overlay: segmentOverlaySchema.optional(),
+              duration: z
+                .number()
+                .min(MIN_REQUESTED_PHOTO_SECONDS)
+                .max(MAX_REQUESTED_PHOTO_SECONDS)
+                .optional(),
             })
             .strict(),
         )
@@ -223,10 +233,8 @@ export const GenerateSlotResultSchema = z.object({
   tokensRefunded: z.boolean().optional(),
 });
 
-// Voice-fallback warning object (never a bare string): the persona's stored
-// voice was missing or unroutable, so the route dispatched with the house
-// default. Only one code exists today (`voice_fallback_applied`).
-export const GenerateAndScheduleWarningSchema = z.object({ code: z.string(), fromVoice: z.string(), toVoice: z.string() });
+// Warning objects, never a bare string. See schedule-warnings.ts.
+export const GenerateAndScheduleWarningSchema = ScheduleWarningSchema;
 
 // The all-failed 502 envelope ({ success: false, error, code, ... }) is
 // not modelled: the MCP throws on non-2xx before parsing, so only the

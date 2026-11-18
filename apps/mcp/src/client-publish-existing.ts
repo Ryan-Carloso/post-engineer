@@ -1,6 +1,12 @@
 import type { PostEngineerClient } from './client.js';
-import type { DirectPublishAccountResult, PublishExistingInput, PublishExistingResult } from './client-types.js';
+import type {
+  DirectPublishAccountResult,
+  PublishExistingInput,
+  PublishExistingReconnectWarning,
+  PublishExistingResult,
+} from './client-types.js';
 import { isRecord, narrowDirectPublishAccountResult } from './direct-publish-narrowing.js';
+import { isSocialProvider } from './contracts/providers.js';
 
 //---------------
 // Publish-existing client call (issue #384). Standalone function (not a
@@ -15,6 +21,32 @@ import { isRecord, narrowDirectPublishAccountResult } from './direct-publish-nar
 //---------------
 
 const PUBLISH_EXISTING_TIMEOUT_MS = 120_000;
+
+function narrowReconnectWarnings(value: unknown): PublishExistingReconnectWarning[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const warnings: PublishExistingReconnectWarning[] = [];
+  for (const item of value) {
+    if (!isRecord(item) || item.code !== 'account_needs_reconnect' || !Array.isArray(item.accounts)) continue;
+    const accounts: PublishExistingReconnectWarning['accounts'] = [];
+    let valid = true;
+    for (const account of item.accounts) {
+      if (
+        !isRecord(account) ||
+        typeof account.provider !== 'string' ||
+        !isSocialProvider(account.provider) ||
+        typeof account.accountId !== 'string' ||
+        account.accountId.length === 0
+      ) {
+        valid = false;
+        break;
+      }
+      accounts.push({ provider: account.provider, accountId: account.accountId });
+    }
+    if (valid && accounts.length > 0) warnings.push({ code: 'account_needs_reconnect', accounts });
+  }
+  return warnings.length > 0 ? warnings : undefined;
+}
+
 function narrowScheduledSlot(value: unknown): { id: string; slot_at: string; title: string; status: string } | null {
   if (!isRecord(value)) return null;
   if (typeof value.id !== 'string' || typeof value.slot_at !== 'string' || typeof value.title !== 'string') return null;
@@ -37,12 +69,14 @@ function narrowPublishExistingResult(value: unknown): PublishExistingResult {
     ) {
       throw new Error('Malformed publish-existing response from the API.');
     }
+    const warnings = narrowReconnectWarnings(value.warnings);
     return {
       mode: 'scheduled',
       success: true,
       replayed: value.replayed === true,
       scheduleId: value.schedule.id,
       slots: value.slots.map((slot) => narrowScheduledSlot(slot) as { id: string; slot_at: string; title: string; status: string }),
+      ...(warnings === undefined ? {} : { warnings }),
     };
   }
   if (

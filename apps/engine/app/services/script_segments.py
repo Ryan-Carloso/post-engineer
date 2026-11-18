@@ -26,6 +26,7 @@ from app.services.persona_hook import (
     PERSONA_HOOK_MAX_SECONDS,
     PERSONA_HOOK_MIN_SECONDS,
 )
+from app.services.segment_photo_duration import duration_error
 
 MAX_SEGMENTS = 12
 # Full lip-sync videos show the talking head, so segment photos are
@@ -145,7 +146,7 @@ def _check_media_item(media: Any, field: str) -> None:
     # SegmentMedia extra="forbid" shape on the request path and the TS
     # validators: otherwise validate_segments accepts what the request
     # parsers reject.
-    unknown = sorted(set(media) - {"mediaId", "url", "overlay"})
+    unknown = sorted(set(media) - {"mediaId", "url", "overlay", "duration"})
     if unknown:
         raise SegmentValidationError(
             field,
@@ -174,6 +175,10 @@ def _check_media_item(media: Any, field: str) -> None:
         raise SegmentValidationError(
             field, "url must be a non-empty string.", "Send a non-empty image URL."
         )
+    error = duration_error(media.get("duration"))
+    if error is not None:
+        rule, fix = error
+        raise SegmentValidationError(f"{field}.duration", rule, fix)
     if "overlay" in media and media["overlay"] is not None:
         _check_overlay(media["overlay"], f"{field}.overlay")
 
@@ -181,11 +186,20 @@ def _check_media_item(media: Any, field: str) -> None:
 def _remember_photo(item: Any, field: str, seen: set[tuple[str, str]]) -> None:
     if not isinstance(item, dict):
         return
+    # Lazy: schema.py imports this module; a top-level import would cycle via media_aspect.
+    from app.services import segment_video
+
     for name in ("mediaId", "url"):
         value = item.get(name)
         if isinstance(value, str) and value.strip():
             token = (name, value.strip())
             if token in seen:
+                if segment_video.is_video_ref(item):
+                    raise SegmentValidationError(
+                        field,
+                        "the same video clip must not repeat",
+                        "Use a different video clip for each media item.",
+                    )
                 raise SegmentValidationError(field, "the same photo must not repeat", "Use a different photo for each media item.")
             seen.add(token)
             return
@@ -281,6 +295,9 @@ def validate_segments(segments: Any, video_type: str = "hook_lipsync") -> dict[s
     video is the exception: it shows the talking head, so segment photos
     are optional panels capped at 6 per video.
     """
+    # Lazy: schema.py imports this module; a top-level import would cycle via media_aspect.
+    from app.services import segment_video
+
     if not isinstance(segments, list) or not segments:
         raise SegmentValidationError(
             "segments",
@@ -397,7 +414,10 @@ def validate_segments(segments: Any, video_type: str = "hook_lipsync") -> dict[s
                 "Send images for this segment as a list of { mediaId } or { url }.",
             )
         if images_mode and counted > 0:
-            problem = density_error(_word_count(texts[index]), counted)
+            # A clip covers ~12s of speech, not one 3s photo slot: credit it in the minimum.
+            clips = sum(1 for item in segment["media"] if segment_video.is_video_ref(item))
+            min_count = counted + (segment_video.CLIP_DENSITY_ITEMS - 1) * clips
+            problem = density_error(_word_count(texts[index]), counted, min_count=min_count)
             if problem is not None:
                 rule, fix = problem
                 raise SegmentValidationError(f"segments.{index}.media", rule, fix)

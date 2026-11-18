@@ -1338,6 +1338,12 @@
                     "type": "timestamp with time zone",
                     "default": null,
                     "notNull": false
+                },
+                {
+                    "name": "needs_reconnect",
+                    "type": "boolean",
+                    "default": "false",
+                    "notNull": true
                 }
             ],
             "policies": {

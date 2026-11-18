@@ -9,9 +9,10 @@ vi.mock('@/lib/social-accounts', () => ({
   deleteSocialAccount: vi.fn(),
 }));
 
-vi.mock('@/lib/account-profile-sync', () => ({
-  syncAccountProfile: vi.fn(),
-}));
+vi.mock('@/lib/account-profile-sync', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/account-profile-sync')>();
+  return { syncAccountProfile: vi.fn(), credentialFailureHeld: actual.credentialFailureHeld };
+});
 
 vi.mock('@/lib/supabase/service', () => ({
   createSupabaseServiceClient: vi.fn(),
@@ -241,6 +242,30 @@ describe('GET /api/account', () => {
     expect(body.accounts.find((account) => account.recordId === 'rec-bsky')?.status).toBe('error');
   });
 
+  it('keeps a row flagged while the failure cooldown holds a dead credential, and only then', async () => {
+    mockSession();
+    const recent = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+    const old = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+    const row = (id: string, metadata: Record<string, unknown>) => ({
+      id, provider: 'youtube', providerAccountId: `ch-${id}`, accountName: id,
+      createdAt: '2024-01-01T00:00:00.000Z', lastUsedAt: null, accountMetadata: metadata,
+    });
+    vi.mocked(listSocialAccounts).mockResolvedValue([
+      row('rec-held-401', { profileSyncFailedAt: recent, profileSyncFailedReason: 'unauthorized' }),
+      row('rec-held-decrypt', { profileSyncFailedAt: recent, profileSyncFailedReason: 'TokenDecryptError' }),
+      row('rec-held-transient', { profileSyncFailedAt: recent, profileSyncFailedReason: 'Error' }),
+      row('rec-expired-401', { profileSyncFailedAt: old, profileSyncFailedReason: 'unauthorized' }),
+    ] as never);
+
+    const res = await GET();
+    const body = (await res.json()) as { accounts: Array<{ recordId: string; status: string }> };
+    const status = (id: string) => body.accounts.find((account) => account.recordId === id)?.status;
+    expect(status('rec-held-401')).toBe('error');
+    expect(status('rec-held-decrypt')).toBe('error');
+    expect(status('rec-held-transient')).toBe('ok');
+    expect(status('rec-expired-401')).toBe('ok');
+  });
+
   it('leaves transient sync failures unflagged so the card keeps its disconnect action', async () => {
     // A provider 5xx, a DB read failure and an unclassified error are not
     // credential failures: flagging them would mislabel the card as
@@ -272,6 +297,26 @@ describe('GET /api/account', () => {
     expect(body.accounts.find((account) => account.recordId === 'rec-502')?.status).toBe('ok');
     expect(body.accounts.find((account) => account.recordId === 'rec-db')?.status).toBe('ok');
     expect(body.accounts.find((account) => account.recordId === 'rec-unknown')?.status).toBe('ok');
+  });
+
+  it('marks a persisted needs_reconnect row as error even when profile sync succeeds', async () => {
+    mockSession();
+    const dead = {
+      id: 'rec-dead', provider: 'bluesky', providerAccountId: 'did:plc:dead', accountName: 'dead.bsky.social',
+      createdAt: '2024-01-01T00:00:00.000Z', lastUsedAt: null, accountMetadata: {}, needsReconnect: true,
+    };
+    const healthy = {
+      id: 'rec-ok', provider: 'youtube', providerAccountId: 'chan-ok', accountName: 'Healthy',
+      createdAt: '2024-01-01T00:00:00.000Z', lastUsedAt: null, accountMetadata: {}, needsReconnect: false,
+    };
+    vi.mocked(listSocialAccounts).mockResolvedValue([dead, healthy] as never);
+
+    const res = await GET();
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { accounts: Array<{ recordId: string; status?: string; handle?: string }> };
+    expect(body.accounts.find((account) => account.recordId === 'rec-dead')?.status).toBe('error');
+    expect(body.accounts.find((account) => account.recordId === 'rec-ok')?.status).toBe('ok');
+    expect(JSON.stringify(body)).not.toContain('invalid_credentials');
   });
 
   it('leaves a row deleted mid-list unflagged: a missing row is not a dead token', async () => {
@@ -413,7 +458,7 @@ describe('GET /api/account', () => {
     expect(body.accounts).toHaveLength(1);
     expect(body.accounts[0]?.provider).toBe('youtube');
     expect(consoleError).toHaveBeenCalledWith(
-      '[ACCOUNT] Registro com provider desconhecido ignorado',
+      '[ACCOUNT] Dropped a row with an unknown provider',
       expect.objectContaining({ recordId: 'rec-5', provider: 'tiktok' }),
     );
     consoleError.mockRestore();
@@ -483,7 +528,7 @@ describe('GET /api/account', () => {
       expect(res.status).toBe(500);
       const body = (await res.json()) as { error: string };
       expect(body.error).toBe('LIST_ERROR');
-      expect(errorSpy).toHaveBeenCalledWith('[ACCOUNT] Erro ao listar contas', listError);
+      expect(errorSpy).toHaveBeenCalledWith('[ACCOUNT] Failed to list accounts', listError);
     } finally {
       errorSpy.mockRestore();
     }
@@ -557,7 +602,7 @@ describe('DELETE /api/account', () => {
       expect(res.status).toBe(500);
       const body = (await res.json()) as { error: string };
       expect(body.error).toBe('DELETE_ERROR');
-      expect(errorSpy).toHaveBeenCalledWith('[ACCOUNT] Erro ao desconectar conta', deleteError);
+      expect(errorSpy).toHaveBeenCalledWith('[ACCOUNT] Failed to disconnect account', deleteError);
     } finally {
       errorSpy.mockRestore();
     }

@@ -37,6 +37,7 @@ function record(provider: SocialAccountRecord['provider'], providerAccountId: st
   return {
     id: 'r', userId: 'u1', provider, providerAccountId, accountName: 'stored', accountMetadata: metadata,
     tokenExpiresAt: null, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z', lastUsedAt: null,
+    needsReconnect: false,
   };
 }
 

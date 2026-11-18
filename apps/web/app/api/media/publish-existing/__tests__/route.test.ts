@@ -126,6 +126,9 @@ interface FakeConfig {
   existingSchedule?: Record<string, unknown> | null;
   existingSlots?: Record<string, unknown>[];
   scheduleInsertError?: unknown;
+  storageRemoveError?: unknown;
+  /** The schedule row is invisible until a schedule insert was attempted (a concurrent winner). */
+  raceWinner?: boolean;
   slotInsertError?: unknown;
   slotInsertRows?: Record<string, unknown>[];
   storageUpload?: { data: { path: string } | null; error: { message: string } | null };
@@ -144,6 +147,7 @@ function fakeSupabase(config: FakeConfig = {}) {
   const updatedUploads: Array<{ id: string; patch: Record<string, unknown> }> = [];
   const removedPaths: string[] = [];
   const uploadedPaths: string[] = [];
+  let scheduleInsertAttempts = 0;
   const rpcCalls: Array<{ fn: string; args: Record<string, unknown> }> = [];
   const rpc = vi.fn(async (fn: string, args: Record<string, unknown>) => {
     rpcCalls.push({ fn, args });
@@ -160,6 +164,7 @@ function fakeSupabase(config: FakeConfig = {}) {
   });
   const storageRemove = vi.fn(async (paths: string[]) => {
     removedPaths.push(...paths);
+    if (config.storageRemoveError !== undefined) throw config.storageRemoveError;
     return { error: null };
   });
 
@@ -201,7 +206,10 @@ function fakeSupabase(config: FakeConfig = {}) {
     insert(values: unknown): this {
       this.op = 'insert';
       this.values = values;
-      if (this.table === 'schedules') insertedSchedules.push(values as Record<string, unknown>);
+      if (this.table === 'schedules') {
+        insertedSchedules.push(values as Record<string, unknown>);
+        scheduleInsertAttempts += 1;
+      }
       if (this.table === 'scheduled_posts') insertedSlots.push(...(values as Record<string, unknown>[]));
       return this;
     }
@@ -223,7 +231,10 @@ function fakeSupabase(config: FakeConfig = {}) {
         if (next !== undefined) return next;
         return { data: config.personaRow ?? null, error: null };
       }
-      if (this.table === 'schedules') return { data: config.existingSchedule ?? null, error: null };
+      if (this.table === 'schedules') {
+        const visible = !config.raceWinner || scheduleInsertAttempts > 0;
+        return { data: visible ? (config.existingSchedule ?? null) : null, error: null };
+      }
       if (this.table === 'video_generations') {
         if (config.generationError) return { data: null, error: config.generationError };
         return { data: config.generationRow === undefined ? null : config.generationRow, error: null };
@@ -676,6 +687,39 @@ describe('POST /api/media/publish-existing', () => {
     expect(vi.mocked(dispatchPublish)).not.toHaveBeenCalled();
   });
 
+  it('schedules a dead account and returns account_needs_reconnect', async () => {
+    const fetchFn = vi.fn(async () => new Response(JSON.stringify(taskEnvelope()), { status: 200 }));
+    vi.stubGlobal('fetch', fetchFn);
+    const publishAt = futurePublishAt(48);
+    const client = fakeSupabase({
+      socialRows: [{ provider: 'youtube', provider_account_id: 'UC1', needs_reconnect: true }],
+    });
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await POST(
+      jsonRequest({
+        media: { kind: 'task', taskId: TASK_ID },
+        title: 'Porto walk',
+        description: 'Walking the riverside.',
+        publishing: {
+          mode: 'scheduled',
+          providers: ['youtube'],
+          accounts: { youtube: ['UC1'] },
+          schedule: { publishAt, timezone: 'UTC' },
+        },
+        idempotencyKey: 'key-dead',
+      }),
+    );
+    const body = await response.json();
+    expect(response.status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(body.mode).toBe('scheduled');
+    expect(body.warnings).toEqual([
+      { code: 'account_needs_reconnect', accounts: [{ provider: 'youtube', accountId: 'UC1' }] },
+    ]);
+    expect(client.__insertedSchedules).toHaveLength(1);
+  });
+
   it('schedules a ready upload, holding the row until the slot time', async () => {
     const publishAt = futurePublishAt(48);
     const client = fakeSupabase({
@@ -713,6 +757,76 @@ describe('POST /api/media/publish-existing', () => {
       UPLOAD_ID,
       'ready',
       expect.objectContaining({ expires_at: expect.any(String) }),
+    );
+  });
+
+  it('replays the winner of a schedule primary-key race instead of failing', async () => {
+    const publishAt = futurePublishAt(48);
+    const scheduleId = deterministicUuid('publish-existing/v1', `${USER_ID}:key-race`);
+    const client = fakeSupabase({
+      socialRows: [{ provider: 'youtube', provider_account_id: 'UC1' }],
+      existingSchedule: { id: scheduleId },
+      existingSlots: [{ id: 'slot-1', slot_at: publishAt, title: 'Porto walk', task_id: TASK_ID, status: 'ready' }],
+      raceWinner: true,
+      scheduleInsertError: {
+        code: '23505',
+        message: 'duplicate key value violates unique constraint "schedules_pkey"',
+      },
+    });
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(taskEnvelope()), { status: 200 })));
+
+    const response = await POST(
+      jsonRequest({
+        media: { kind: 'task', taskId: TASK_ID },
+        title: 'Porto walk',
+        description: 'Walking the riverside.',
+        publishing: {
+          mode: 'scheduled',
+          providers: ['youtube'],
+          accounts: { youtube: ['UC1'] },
+          schedule: { publishAt, timezone: 'UTC' },
+        },
+        idempotencyKey: 'key-race',
+      }),
+    );
+    const body = await response.json();
+    expect(response.status).toBe(200);
+    expect(body.replayed).toBe(true);
+    expect(body.schedule.id).toBe(scheduleId);
+    expect(client.__insertedSlots).toHaveLength(0);
+  });
+
+  it('logs a failed cleanup of the stored image when the schedule insert fails, and still answers 500', async () => {
+    const publishAt = futurePublishAt(48);
+    const client = fakeSupabase({
+      socialRows: [{ provider: 'instagram', provider_account_id: 'ig-1' }],
+      scheduleInsertError: { code: '23503', message: 'insert or update on table "schedules" violates foreign key constraint' },
+      storageRemoveError: new Error('storage unavailable'),
+    });
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+    const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01]);
+
+    const response = await POST(
+      jsonRequest({
+        media: { kind: 'image', imageData: jpeg.toString('base64'), contentType: 'image/jpeg' },
+        title: 'Sunset photo',
+        description: 'Edited photo.',
+        publishing: {
+          mode: 'scheduled',
+          providers: ['instagram'],
+          accounts: { instagram: ['ig-1'] },
+          schedule: { publishAt, timezone: 'UTC' },
+        },
+        idempotencyKey: 'key-cleanup-fail',
+      }),
+    );
+    expect(response.status).toBe(500);
+    expect(client.__uploadedPaths).toHaveLength(1);
+    expect(logger.error).toHaveBeenCalledWith(
+      '[publish-existing] stored image cleanup failed',
+      expect.any(Error),
+      expect.objectContaining({ userId: USER_ID }),
     );
   });
 

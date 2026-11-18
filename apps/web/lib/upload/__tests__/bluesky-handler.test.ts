@@ -6,6 +6,7 @@ const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);
 
 vi.mock('@/lib/analytics', () => ({ trackApiEvent: vi.fn() }));
+vi.mock('@/lib/account-needs-reconnect', () => ({ markAccountNeedsReconnect: vi.fn(async () => undefined) }));
 
 vi.mock('@/lib/social-accounts', () => ({
   getSocialAccountTokens: vi.fn(),
@@ -37,6 +38,7 @@ import { trackApiEvent } from '@/lib/analytics';
 import { BlueskyError } from '@/lib/bluesky';
 import { handleBlueskyUpload } from '@/lib/upload/bluesky-handler';
 import { getSocialAccountTokens, touchSocialAccount } from '@/lib/social-accounts';
+import { markAccountNeedsReconnect } from '@/lib/account-needs-reconnect';
 
 const USER_ID = 'user-uuid-1';
 const DID = 'did:plc:abc';
@@ -333,5 +335,18 @@ describe('handleBlueskyUpload', () => {
     const results = (res as { results?: Array<{ success: boolean; accountId: string }> }).results ?? [];
     expect(results[0]?.success).toBe(false);
     expect(results[1]?.success).toBe(true);
+  });
+
+  it('flags a Bluesky account whose stored app password is empty', async () => {
+    mockHappyFetch();
+    vi.mocked(getSocialAccountTokens).mockResolvedValueOnce({
+      tokens: { access_token: '' },
+      account: {} as never,
+    } as never);
+    const res = await handleBlueskyUpload(formData({ did: DID }), USER_ID);
+    const results = (res as { results?: Array<{ success: boolean; errorCode?: string }> }).results ?? [];
+    expect(results[0]).toMatchObject({ success: false, errorCode: 'token_missing' });
+    expect(markAccountNeedsReconnect).toHaveBeenCalledWith(USER_ID, 'bluesky', DID);
+    expect(mockBlueskyLogin).not.toHaveBeenCalled();
   });
 });
