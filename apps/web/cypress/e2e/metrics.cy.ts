@@ -135,7 +135,7 @@ describe('metrics dashboard', () => {
     cy.get('.recharts-wrapper').last().find('.recharts-bar-rectangle').first().click();
     // Clicking a bar returns to the list on the clicked video's row.
     cy.contains('myth-busting').scrollIntoView().should('be.visible');
-    cy.contains('button', 'Lista').should('be.visible');
+    cy.contains('button', 'Lista').should('have.attr', 'data-state', 'active');
     // The bar click only peeks at the list: the saved preference is untouched.
     cy.window().then((win) => {
       expect(win.localStorage.getItem('metrics-view-mode')).to.not.equal('list');
