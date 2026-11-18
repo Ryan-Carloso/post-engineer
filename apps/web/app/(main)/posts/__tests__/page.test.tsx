@@ -1297,11 +1297,11 @@ describe('PostsPage week view', () => {
     expect(columns).toHaveLength(7);
     // June 1 is the Saturday column (index 6) of the week starting Sunday May 26.
     fireEvent.click(columns[6]);
-    expect(dayPanelCardTitle('Upcoming topic')).toBeInTheDocument();
+    expect(dayPanelCardText('Upcoming topic')).toBeInTheDocument();
     for (let i = 0; i < 6; i++) {
       fireEvent.click(screen.getByRole('button', { name: 'posts.calendarNextWeek' }));
     }
-    expect(dayPanelCardTitle('July topic')).toBeInTheDocument();
+    expect(dayPanelCardText('July topic')).toBeInTheDocument();
   });
 
   it('keeps the range read within the API span when switching to week from an empty month', async () => {
@@ -1336,7 +1336,7 @@ describe('PostsPage week view', () => {
     expect(columns).toHaveLength(7);
     // May 28 is the Tuesday column (index 2) of the week starting Sunday May 26.
     fireEvent.click(columns[2]);
-    expect(dayPanelCardTitle('May topic')).toBeInTheDocument();
+    expect(dayPanelCardText('May topic')).toBeInTheDocument();
   });
 
   it('scrolls the day panel into view after a column pick on a narrow screen', async () => {
