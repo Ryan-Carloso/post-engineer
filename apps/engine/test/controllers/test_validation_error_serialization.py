@@ -24,7 +24,7 @@ def _post(payload: dict, auth_headers: dict) -> object:
 
 def test_repeated_photo_returns_400_with_field_rule_and_fix(auth_headers):
     segments = valid_segments()
-    # The same photo twice: _remember_photo rejects the repeat.
+    # The same photo twice: check_repeat rejects the repeat.
     segments[1]["media"] = segments[0]["media"]
     response = _post(
         {

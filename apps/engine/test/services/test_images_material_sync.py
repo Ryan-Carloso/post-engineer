@@ -44,9 +44,14 @@ def test_repeated_photo_rule_matches_the_shared_validator():
     # identity, mediaId-vs-url distinctness, rule precedence). Those are
     # pinned per validator by the repeat tests (test_repeated_photo.py
     # and script-segments-repeat.test.ts), not by this string check.
+    # The engine rule lives in segment_media_repeat.py now, not in
+    # script_segments.py, so both engine files are read here.
     rule = "the same photo must not repeat"
     fix = "Use a different photo for each media item."
+    from app.services import segment_media_repeat
+
     engine = Path(script_segments.__file__).read_text(encoding="utf-8")
+    engine += Path(segment_media_repeat.__file__).read_text(encoding="utf-8")
     shared = _shared_text()
     assert rule in engine and rule in shared
     assert fix in engine and fix in shared

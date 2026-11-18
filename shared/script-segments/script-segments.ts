@@ -7,10 +7,16 @@
 // repo root (both apps also run it from their prebuild/pretest scripts).
 // Mirrors apps/engine/app/services/script_segments.py: same limits,
 // same accepted inputs, same field/rule/fix shape, with one documented
-// exception in normalize() below (Python casefold vs JS toLowerCase).
+// exception in normalize() in segment-text.ts (Python casefold vs JS
+// toLowerCase).
 // No LLM, no network, no TTS: the hook word guard runs here; measured TTS
 // duration is checked by the engine when a hook-only TTS endpoint exists
 // (Phase 1 gap, see check_script (action: validate)).
+
+import { clipDensityMinCount, isVideoRef } from './segment-media.js';
+import { hasForbiddenContent, normalize } from './segment-text.js';
+
+export { CLIP_DENSITY_ITEMS } from './segment-media.js';
 
 export const MAX_SEGMENTS = 12;
 // Full lip sync renders the persona's face over the whole video, so media
@@ -23,11 +29,6 @@ export const MAX_MEDIAS = 6;
 export const WORDS_PER_IMAGE = 8;
 export const MIN_WORDS_PER_IMAGE = 3;
 export const MAX_IMAGES_MODE_MEDIAS = 30;
-// A video clip covers ~12s of speech, not one 3s photo slot: one clip
-// counts as this many items for the density minimum only (the maximum
-// still counts items one for one). Same number as CLIP_DENSITY_ITEMS in
-// apps/engine/app/services/segment_video.py.
-export const CLIP_DENSITY_ITEMS = 4;
 export const MIN_TOTAL_WORDS = 60;
 export const MAX_TOTAL_WORDS = 200;
 export const MIN_CONTENT_WORDS = 30;
@@ -96,25 +97,6 @@ export type SegmentsResult =
 
 function fail(field: string, rule: string, fix: string): SegmentsResult {
   return { ok: false, error: { field, rule, fix } };
-}
-
-// True when a segment media item references a video clip, by its
-// suffix — mirroring the engine's segment_video.is_video_ref. The
-// mediaId wins when present; otherwise the URL path decides (query and
-// fragment are not part of the path).
-function isVideoRef(media: unknown): boolean {
-  if (typeof media !== 'object' || media === null || Array.isArray(media)) return false;
-  const record = media as Record<string, unknown>;
-  const mediaId = record['mediaId'];
-  if (typeof mediaId === 'string' && mediaId.length > 0) {
-    return mediaId.toLowerCase().endsWith('.mp4');
-  }
-  const url = record['url'];
-  if (typeof url === 'string' && url.length > 0) {
-    const path = url.split(/[?#]/, 1)[0] ?? '';
-    return path.toLowerCase().endsWith('.mp4');
-  }
-  return false;
 }
 
 // Half-up seconds, matching image_density.spoken_seconds.
@@ -269,50 +251,11 @@ export function hasSpokenWords(text: string): boolean {
   return /[\p{L}\p{N}]/u.test(text);
 }
 
-function hasForbiddenContent(text: string): boolean {
-  const lower = text.toLowerCase();
-  if (
-    lower.includes('[insira') ||
-    lower.includes('[insert') ||
-    lower.includes('todo') ||
-    lower.includes('lorem')
-  ) {
-    return true;
-  }
-  if (lower.includes('http://') || lower.includes('https://') || lower.includes('www.')) {
-    return true;
-  }
-  if (
-    text.includes('**') ||
-    text.includes('__') ||
-    text.includes('`') ||
-    text.split('\n').some((line) => line.trim().startsWith('#'))
-  ) {
-    return true;
-  }
-  if (/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{1F000}-\u{1F2FF}\u{FE0F}]/u.test(text)) {
-    return true;
-  }
-  // Any bracketed span is a placeholder or a stage direction.
-  return text.includes('[') || text.includes(']');
-}
-
-function normalize(text: string): string {
-  // Mirrors the engine _normalized: strip punctuation, keep letters,
-  // numbers, underscores and whitespace runs exactly as written (no
-  // collapsing), then trim. JS \w is ASCII-only, so the class spells out
-  // Unicode letters/numbers plus '_' to match Python's Unicode \w.
-  // One remaining difference: Python casefold vs JS toLowerCase differ
-  // on a few characters (for example ß), so this is a near mirror, not
-  // byte-identical, for those edge cases.
-  return text.toLowerCase().replace(/[^\p{L}\p{N}_\s]/gu, '').trim();
-}
-
-/** The one video mode (issue #542 follow-up). Defined here so this shared
- *  file stays dependency-free: the web and MCP copies are byte-identical
- *  generated files and cannot import either app's VideoType. Structurally
- *  identical to the VideoType in web lib/tokens.ts and MCP video-type.ts;
- *  the literal values are pinned together by the video-type sync tests. */
+/** The one video mode (issue #542 follow-up). Defined here so the shared
+ *  file depends only on its sibling helper modules and cannot import
+ *  either app's VideoType. Structurally identical to the VideoType in
+ *  web lib/tokens.ts and MCP video-type.ts; the literal values are
+ *  pinned together by the video-type sync tests. */
 export type VideoType = 'full_lipsync' | 'hook_lipsync' | 'faceless';
 
 export function validateSegments(input: unknown, videoType: VideoType = 'hook_lipsync'): SegmentsResult {
@@ -462,10 +405,7 @@ export function validateSegments(input: unknown, videoType: VideoType = 'hook_li
       if (repeat !== null) return repeat;
     }
     if (imagesMode) {
-      // A clip covers ~12s of speech, not one 3s photo slot: credit it in the minimum.
-      const clips = media.filter((item) => isVideoRef(item)).length;
-      const minCount = media.length + (CLIP_DENSITY_ITEMS - 1) * clips;
-      const density = imageDensityError(countWords(segments[i].text), media.length, minCount);
+      const density = imageDensityError(countWords(segments[i].text), media.length, clipDensityMinCount(media));
       if (density !== null) return fail(`segments.${i}.media`, density.rule, density.fix);
       if (!hasSpokenWords(segments[i].text)) {
         return fail(

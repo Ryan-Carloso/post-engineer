@@ -26,6 +26,7 @@ from app.services.persona_hook import (
     PERSONA_HOOK_MAX_SECONDS,
     PERSONA_HOOK_MIN_SECONDS,
 )
+from app.services.segment_media_repeat import check_repeat
 from app.services.segment_photo_duration import duration_error
 
 MAX_SEGMENTS = 12
@@ -183,28 +184,6 @@ def _check_media_item(media: Any, field: str) -> None:
         _check_overlay(media["overlay"], f"{field}.overlay")
 
 
-def _remember_photo(item: Any, field: str, seen: set[tuple[str, str]]) -> None:
-    if not isinstance(item, dict):
-        return
-    # Lazy: schema.py imports this module; a top-level import would cycle via media_aspect.
-    from app.services import segment_video
-
-    for name in ("mediaId", "url"):
-        value = item.get(name)
-        if isinstance(value, str) and value.strip():
-            token = (name, value.strip())
-            if token in seen:
-                if segment_video.is_video_ref(item):
-                    raise SegmentValidationError(
-                        field,
-                        "the same video clip must not repeat",
-                        "Use a different video clip for each media item.",
-                    )
-                raise SegmentValidationError(field, "the same photo must not repeat", "Use a different photo for each media item.")
-            seen.add(token)
-            return
-
-
 def _check_media(media: Any, field: str, seen: set[tuple[str, str]]) -> int:
     if not isinstance(media, list):
         raise SegmentValidationError(
@@ -215,7 +194,10 @@ def _check_media(media: Any, field: str, seen: set[tuple[str, str]]) -> int:
     for index, item in enumerate(media):
         item_field = f"{field}.{index}"
         _check_media_item(item, item_field)
-        _remember_photo(item, item_field, seen)
+        repeat = check_repeat(item, seen)
+        if repeat is not None:
+            rule, fix = repeat
+            raise SegmentValidationError(item_field, rule, fix)
     return len(media)
 
 
@@ -414,9 +396,7 @@ def validate_segments(segments: Any, video_type: str = "hook_lipsync") -> dict[s
                 "Send images for this segment as a list of { mediaId } or { url }.",
             )
         if images_mode and counted > 0:
-            # A clip covers ~12s of speech, not one 3s photo slot: credit it in the minimum.
-            clips = sum(1 for item in segment["media"] if segment_video.is_video_ref(item))
-            min_count = counted + (segment_video.CLIP_DENSITY_ITEMS - 1) * clips
+            min_count = segment_video.clip_density_min_count(segment["media"], counted)
             problem = density_error(_word_count(texts[index]), counted, min_count=min_count)
             if problem is not None:
                 rule, fix = problem
