@@ -89,8 +89,11 @@ function runSync(root: string): string {
 // The sync script strips the `.js` suffix from relative sibling imports
 // in the web copy only (Next.js webpack cannot resolve `./x.js` when only
 // `./x.ts` exists); the MCP copy stays byte-identical to shared.
+// (No replaceAll here: the web tsconfig lib predates ES2021, so
+// String.replaceAll does not typecheck; the /g regex replace is
+// equivalent.)
 function toWebCopy(sourceText: string): string {
-  return sourceText.replaceAll(/from '(\.\/[^']+)\.js'/g, "from '$1'");
+  return sourceText.replace(/from '(\.\/[^']+)\.js'/g, "from '$1'");
 }
 
 describe('sync-script-segments in a partial checkout', () => {

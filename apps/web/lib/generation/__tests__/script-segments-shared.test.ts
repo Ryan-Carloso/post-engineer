@@ -25,9 +25,11 @@ const GENERATED_RELATIVE = join('apps', 'web', 'lib', 'generation', 'script-segm
 const SIBLINGS = ['segment-media.ts', 'segment-text.ts'];
 
 // The web copy the sync script generates: shared text with `.js`
-// stripped from relative sibling imports.
+// stripped from relative sibling imports. (No replaceAll here: the
+// web tsconfig lib predates ES2021, so String.replaceAll does not
+// typecheck; the /g regex replace is equivalent.)
 function toWebCopy(sourceText: string): string {
-  return sourceText.replaceAll(/from '(\.\/[^']+)\.js'/g, "from '$1'");
+  return sourceText.replace(/from '(\.\/[^']+)\.js'/g, "from '$1'");
 }
 
 describe('script-segments shared source', () => {
