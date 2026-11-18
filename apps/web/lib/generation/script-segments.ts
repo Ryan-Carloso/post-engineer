@@ -7,7 +7,8 @@
 // repo root (both apps also run it from their prebuild/pretest scripts).
 // Mirrors apps/engine/app/services/script_segments.py: same limits,
 // same accepted inputs, same field/rule/fix shape, with one documented
-// exception in normalize() below (Python casefold vs JS toLowerCase).
+// exception in normalize() in segment-text.ts (Python casefold vs JS
+// toLowerCase).
 // No LLM, no network, no TTS: the hook word guard runs here; measured TTS
 // duration is checked by the engine when a hook-only TTS endpoint exists
 // (Phase 1 gap, see check_script (action: validate)).
@@ -250,11 +251,11 @@ export function hasSpokenWords(text: string): boolean {
   return /[\p{L}\p{N}]/u.test(text);
 }
 
-/** The one video mode (issue #542 follow-up). Defined here so this shared
- *  file stays dependency-free: the web and MCP copies are byte-identical
- *  generated files and cannot import either app's VideoType. Structurally
- *  identical to the VideoType in web lib/tokens.ts and MCP video-type.ts;
- *  the literal values are pinned together by the video-type sync tests. */
+/** The one video mode (issue #542 follow-up). Defined here so the shared
+ *  file depends only on its sibling helper modules and cannot import
+ *  either app's VideoType. Structurally identical to the VideoType in
+ *  web lib/tokens.ts and MCP video-type.ts; the literal values are
+ *  pinned together by the video-type sync tests. */
 export type VideoType = 'full_lipsync' | 'hook_lipsync' | 'faceless';
 
 export function validateSegments(input: unknown, videoType: VideoType = 'hook_lipsync'): SegmentsResult {

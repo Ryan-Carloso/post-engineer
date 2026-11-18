@@ -67,11 +67,24 @@ function toWebCopy(sourceText) {
   return sourceText.replaceAll(/from '(\.\/[^']+)\.js'/g, "from '$1'");
 }
 
+// Exact-path comparison on purpose: `target` is absolute, so a substring
+// check for 'apps/web' would also match a checkout rooted under a path
+// containing it (e.g. /home/me/apps/web-tools/post-engineer) and would
+// wrongly strip the MCP copy's `.js` suffix, breaking its NodeNext tsc.
+const webScriptSegments = join(
+  root,
+  'apps',
+  'web',
+  'lib',
+  'generation',
+  'script-segments.ts',
+);
+
 let drifted = false;
 for (const { source, targets } of files) {
   const sourceText = readFileSync(source, 'utf8');
   for (const target of targets) {
-    const isWeb = target.includes(join('apps', 'web')) && target.endsWith('script-segments.ts');
+    const isWeb = target === webScriptSegments;
     const expected = isWeb ? toWebCopy(sourceText) : sourceText;
     // Partial checkouts (e.g. the web Docker build context, which copies only
     // apps/web) do not contain every target app. Skip those instead of failing

@@ -49,8 +49,8 @@ afterEach(() => {
   }
 });
 
-function createPartialCheckout(options: { withMcp: boolean }): string {
-  const root = mkdtempSync(join(tmpdir(), 'sync-script-segments-'));
+function createPartialCheckout(options: { withMcp: boolean; base?: string }): string {
+  const root = mkdtempSync(join(options.base ?? tmpdir(), 'sync-script-segments-'));
   tempDirs.push(root);
 
   mkdirSync(join(root, 'scripts'), { recursive: true });
@@ -137,6 +137,24 @@ describe('sync-script-segments in a partial checkout', () => {
     const music = readFileSync(musicSource, 'utf8');
     expect(readFileSync(join(root, musicWebTarget), 'utf8')).toBe(music);
     expect(readFileSync(join(root, musicMcpTarget), 'utf8')).toBe(music);
+  });
+
+  it('keeps the MCP copy byte-identical when the checkout path contains apps/web', () => {
+    // A substring check for 'apps/web' would also match the checkout root
+    // (e.g. /home/me/apps/web-tools/post-engineer) and wrongly strip the
+    // MCP copy's `.js` suffix, breaking its NodeNext tsc. The sync must
+    // tell the apps apart by their exact target paths, not by substring.
+    const base = join(tmpdir(), 'apps', 'web-tools');
+    mkdirSync(base, { recursive: true });
+    const root = createPartialCheckout({ withMcp: true, base });
+
+    runSync(root);
+
+    const source = readFileSync(sharedSource, 'utf8');
+    expect(root).toContain(join('apps', 'web'));
+    expect(readFileSync(join(root, webTarget), 'utf8')).toBe(toWebCopy(source));
+    expect(readFileSync(join(root, mcpTarget), 'utf8')).toBe(source);
+    expect(readFileSync(join(root, mcpTarget), 'utf8')).toContain('./segment-media.js');
   });
 
   it('forwards --check to the music-mood sync and does not rewrite a drifted copy', () => {

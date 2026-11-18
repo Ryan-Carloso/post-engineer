@@ -17,14 +17,16 @@ documented exception (Python `casefold` vs JS `toLowerCase`, e.g. `ß`).
 The engine Python copy stays duplicated on purpose: Python and
 TypeScript cannot share code.
 
-The consumers use byte-identical generated copies, committed to git:
+The consumers use generated copies, committed to git:
 
 - `apps/web/lib/generation/script-segments.ts`
 - `apps/mcp/src/script-segments.ts`
 
-The shared file has no imports, so the same bytes compile under the
-web's bundler resolution and the MCP's NodeNext resolution, and both
-apps keep their existing import paths unchanged.
+The MCP copy is byte-identical to the shared source. The web copy has
+the `.js` suffix stripped from its relative sibling imports
+(`./segment-media.js` -> `./segment-media`) so webpack can resolve
+them; the sibling helper modules have no imports and are byte-identical
+in both apps.
 
 To change the validation, edit only the shared file, then regenerate:
 
