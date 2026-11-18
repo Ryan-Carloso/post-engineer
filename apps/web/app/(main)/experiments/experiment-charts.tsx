@@ -8,6 +8,7 @@ import { PROVIDER_LABELS } from '@/lib/account-options';
 import { isSocialProvider } from '@/lib/providers/registry';
 import {
   EXPERIMENT_CHART_METRICS,
+  excludedNullPairs,
   isChartMetric,
   pairChartRows,
   variantMetricTotals,
@@ -34,8 +35,10 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 //---------------
 // experiment-charts — per-provider A/B charts (issue #647): variant
 // comparison, per-pair rows and win split, all from the comparisons the
-// API already returns. The per-pair table stays behind "Show table" as
-// the accessible fallback; every chart also states its totals as text.
+// API already returns. Variant comparison and win split state their
+// totals as text; the per-pair chart explains its color encoding in a
+// caption; the per-pair table stays behind "Show table" as the
+// accessible fallback.
 // Theme tokens only (var(--info) / var(--warning) / var(--faint));
 // A/B are labelled by name, so they are distinguishable without colour.
 //---------------
@@ -170,18 +173,18 @@ export function VariantComparisonChart({ comparisons, firstId, secondId, firstNa
   const { t } = useI18n();
   const totalsA = variantMetricTotals(comparisons, firstId, metric);
   const totalsB = variantMetricTotals(comparisons, secondId, metric);
-  const excluded = totalsA.excludedNulls + totalsB.excludedNulls;
+  const excluded = excludedNullPairs(comparisons, firstId, secondId, metric);
   const hasA = totalsA.includedPairs > 0;
   const hasB = totalsB.includedPairs > 0;
   const hasData = hasA || hasB;
   // One group, two series (grouped bars). A variant with no non-null
   // value has no series at all, so its bar is never drawn, not drawn as 0.
-  const rows = [{ name: t(METRIC_LABEL_KEY[metric]), a: hasA ? totalsA.total : 0, b: hasB ? totalsB.total : 0 }];
+  const rows = [{ name: t(METRIC_LABEL_KEY[metric]), a: totalsA.total ?? 0, b: totalsB.total ?? 0 }];
   const config: ChartConfig = {
     a: { label: firstName, color: 'var(--info)' },
     b: { label: secondName, color: 'var(--warning)' },
   };
-  const totalsText = `${firstName}: ${hasA ? formatNumber(totalsA.total) : '—'} · ${secondName}: ${hasB ? formatNumber(totalsB.total) : '—'}`;
+  const totalsText = `${firstName}: ${totalsA.total === null ? '—' : formatNumber(totalsA.total)} · ${secondName}: ${totalsB.total === null ? '—' : formatNumber(totalsB.total)}`;
   return (
     <figure className="mt-4">
       <figcaption className="mb-2 text-sm font-semibold text-ink">{t('experiments.variantComparison')}</figcaption>
@@ -235,27 +238,30 @@ export function PerPairChart({ comparisons, firstId, secondId, firstName, second
       ) : !hasData ? (
         <ChartEmpty message={t('experiments.noMetricData')} />
       ) : (
-        <ChartContainer config={config} className="aspect-auto h-56 w-full">
-          <BarChart data={rows} layout="vertical" margin={{ left: 0, right: 12, top: 8, bottom: 4 }}>
-            <CartesianGrid horizontal={false} />
-            <XAxis type="number" tickFormatter={(value: number) => formatNumber(value)} tickLine={false} axisLine={false} />
-            <YAxis type="category" dataKey="pair" width={36} tickLine={false} axisLine={false} />
-            <ChartTooltip
-              content={<ChartTooltipContent formatter={(value, name) => `${variantTooltipName(name, firstName, secondName)}: ${formatNumber(Number(value))}`} />}
-            />
-            <ChartLegend content={<ChartLegendContent />} verticalAlign="top" />
-            <Bar dataKey="a" isAnimationActive={false} radius={[0, 6, 6, 0]} fill="var(--color-a)">
-              {rows.map((row) => (
-                <Cell key={`a-${row.pair}`} fill={cellFill(row.winner, row.a, firstId, 'a')} />
-              ))}
-            </Bar>
-            <Bar dataKey="b" isAnimationActive={false} radius={[0, 6, 6, 0]} fill="var(--color-b)">
-              {rows.map((row) => (
-                <Cell key={`b-${row.pair}`} fill={cellFill(row.winner, row.b, secondId, 'b')} />
-              ))}
-            </Bar>
-          </BarChart>
-        </ChartContainer>
+        <>
+          <ChartContainer config={config} className="aspect-auto h-56 w-full">
+            <BarChart data={rows} layout="vertical" margin={{ left: 0, right: 12, top: 8, bottom: 4 }}>
+              <CartesianGrid horizontal={false} />
+              <XAxis type="number" tickFormatter={(value: number) => formatNumber(value)} tickLine={false} axisLine={false} />
+              <YAxis type="category" dataKey="pair" width={36} tickLine={false} axisLine={false} />
+              <ChartTooltip
+                content={<ChartTooltipContent formatter={(value, name) => `${variantTooltipName(name, firstName, secondName)}: ${formatNumber(Number(value))}`} />}
+              />
+              <ChartLegend content={<ChartLegendContent />} verticalAlign="top" />
+              <Bar dataKey="a" isAnimationActive={false} radius={[0, 6, 6, 0]} fill="var(--color-a)">
+                {rows.map((row) => (
+                  <Cell key={`a-${row.pair}`} {...cellStyle(row.winner, row.a, firstId, 'a')} />
+                ))}
+              </Bar>
+              <Bar dataKey="b" isAnimationActive={false} radius={[0, 6, 6, 0]} fill="var(--color-b)">
+                {rows.map((row) => (
+                  <Cell key={`b-${row.pair}`} {...cellStyle(row.winner, row.b, secondId, 'b')} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ChartContainer>
+          <p className="mt-2 text-xs text-muted-text">{t('experiments.perPairCaption')}</p>
+        </>
       )}
     </figure>
   );
@@ -305,11 +311,11 @@ export function WinSplitChart({ provider, firstName, secondName, firstId, second
   );
 }
 
-function cellFill(winner: string | null, value: number | null, variantId: string, fallback: 'a' | 'b'): string {
-  if (value === null) return 'transparent';
-  if (winner === null) return 'var(--faint)';
-  if (winner === variantId) return `var(--color-${fallback})`;
-  return 'var(--faint)';
+function cellStyle(winner: string | null, value: number | null, variantId: string, fallback: 'a' | 'b'): { fill: string; fillOpacity: number | undefined } {
+  if (value === null) return { fill: 'transparent', fillOpacity: undefined };
+  if (winner === null) return { fill: 'var(--faint)', fillOpacity: undefined };
+  if (winner === variantId) return { fill: `var(--color-${fallback})`, fillOpacity: undefined };
+  return { fill: `var(--color-${fallback})`, fillOpacity: 0.35 };
 }
 
 function ChartEmpty({ message }: { message: string }): React.ReactElement {

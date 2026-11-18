@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  excludedNullPairs,
   isChartMetric,
   pairChartRows,
   variantMetricTotals,
@@ -82,13 +83,13 @@ describe('variantMetricTotals', () => {
     expect(variantMetricTotals(COMPARISONS, B, 'averageViewDurationSeconds').total).toBe(14);
   });
 
-  it('returns NaN when there is no non-null value at all', () => {
+  it('returns null when there is no non-null value at all', () => {
     const allNull: ExperimentPairComparison[] = [
       { pair: 1, values: { [A]: cell(null, null, null, null), [B]: cell(null, null, null, null) }, winner: null },
     ];
     for (const metric of ['views', 'likes', 'comments', 'averageViewDurationSeconds'] as const) {
       const result = variantMetricTotals(allNull, A, metric);
-      expect(Number.isNaN(result.total)).toBe(true);
+      expect(result.total).toBeNull();
       expect(result.includedPairs).toBe(0);
       expect(result.excludedNulls).toBe(1);
     }
@@ -109,10 +110,36 @@ describe('variantMetricTotals', () => {
     ];
     expect(variantMetricTotals(missing, B, 'views')).toEqual({
       variantId: B,
-      total: Number.NaN,
+      total: null,
       excludedNulls: 1,
       includedPairs: 0,
     });
+  });
+});
+
+describe('excludedNullPairs', () => {
+  it('counts a pair with both values missing once, not twice', () => {
+    const comparisons: ExperimentPairComparison[] = [
+      { pair: 1, values: { [A]: cell(null, 1, 0, 5), [B]: cell(null, 1, 0, 5) }, winner: null },
+      { pair: 2, values: { [A]: cell(100, 1, 0, 5), [B]: cell(50, 1, 0, 5) }, winner: A },
+    ];
+    expect(excludedNullPairs(comparisons, A, B, 'views')).toBe(1);
+  });
+
+  it('counts each missing pair once when missing values are spread', () => {
+    const comparisons: ExperimentPairComparison[] = [
+      { pair: 1, values: { [A]: cell(null, 1, 0, 5), [B]: cell(10, 1, 0, 5) }, winner: null },
+      { pair: 2, values: { [A]: cell(100, 1, 0, 5), [B]: cell(null, 1, 0, 5) }, winner: null },
+      { pair: 3, values: { [A]: cell(100, 1, 0, 5), [B]: cell(50, 1, 0, 5) }, winner: A },
+    ];
+    expect(excludedNullPairs(comparisons, A, B, 'views')).toBe(2);
+  });
+
+  it('counts a missing variant cell as an excluded pair', () => {
+    const missing: ExperimentPairComparison[] = [
+      { pair: 1, values: { [A]: cell(10, 1, 1, 5) }, winner: null },
+    ];
+    expect(excludedNullPairs(missing, A, B, 'views')).toBe(1);
   });
 });
 

@@ -32,9 +32,31 @@ export function winSplitTooltipName(name: string | number, firstName: string, se
 
 export interface VariantMetricTotals {
   variantId: string;
-  total: number;
+  total: number | null;
   excludedNulls: number;
   includedPairs: number;
+}
+
+/**
+ * Distinct pairs where either variant lacks the metric (null, undefined
+ * or a missing cell). The variant-comparison caption counts pairs, not
+ * cells, so one pair with both A and B null counts once.
+ */
+export function excludedNullPairs(
+  comparisons: ExperimentPairComparison[],
+  firstId: string,
+  secondId: string,
+  metric: ExperimentChartMetric,
+): number {
+  let count = 0;
+  for (const comparison of comparisons) {
+    const first = comparison.values[firstId]?.[metric] ?? null;
+    const second = comparison.values[secondId]?.[metric] ?? null;
+    if (first === null || second === null) {
+      count += 1;
+    }
+  }
+  return count;
 }
 
 export interface WinSplit {
@@ -74,9 +96,9 @@ export function variantMetricTotals(
     sum += value;
     includedPairs += 1;
   }
-  // No non-null value at all: there is no total to draw (NaN), never 0.
+  // No non-null value at all: there is no total to draw (null), never 0.
   const total = includedPairs === 0
-    ? Number.NaN
+    ? null
     : metric === 'averageViewDurationSeconds'
       ? sum / includedPairs
       : sum;

@@ -152,7 +152,7 @@ describe('VariantComparisonChart', () => {
     expect(screen.queryByText('Calm question: 10 · Direct hook: 0')).toBeNull();
   });
 
-  it('shows the plural excluded-nulls caption when two values are missing', () => {
+  it('counts a pair with both values missing as one excluded pair', () => {
     render(
       <VariantComparisonChart
         comparisons={[
@@ -167,8 +167,29 @@ describe('VariantComparisonChart', () => {
         formatNumber={formatNumber}
       />,
     );
-    expect(screen.getByText('experiments.excludedNullOther [2]')).toBeInTheDocument();
+    expect(screen.getByText('experiments.excludedNullOne')).toBeInTheDocument();
     expect(screen.getByText('Calm question: 100 · Direct hook: 50')).toBeInTheDocument();
+    expect(screen.queryByText('experiments.excludedNullOther [2]')).toBeNull();
+  });
+
+  it('shows the plural excluded-nulls caption when two pairs are missing values', () => {
+    render(
+      <VariantComparisonChart
+        comparisons={[
+          { pair: 1, values: { [A]: { views: null, likes: 1, comments: 0, averageViewDurationSeconds: 5 }, [B]: { views: 10, likes: 1, comments: 0, averageViewDurationSeconds: 5 } }, winner: null },
+          { pair: 2, values: { [A]: { views: 100, likes: 1, comments: 0, averageViewDurationSeconds: 5 }, [B]: { views: null, likes: 1, comments: 0, averageViewDurationSeconds: 5 } }, winner: null },
+          { pair: 3, values: { [A]: { views: 100, likes: 1, comments: 0, averageViewDurationSeconds: 5 }, [B]: { views: 50, likes: 1, comments: 0, averageViewDurationSeconds: 5 } }, winner: A },
+        ]}
+        firstId={A}
+        secondId={B}
+        firstName={FIRST}
+        secondName={SECOND}
+        metric="views"
+        formatNumber={formatNumber}
+      />,
+    );
+    expect(screen.getByText('experiments.excludedNullOther [2]')).toBeInTheDocument();
+    expect(screen.getByText('Calm question: 200 · Direct hook: 60')).toBeInTheDocument();
     expect(screen.queryByText('experiments.excludedNullOne')).toBeNull();
   });
 
@@ -201,10 +222,26 @@ describe('VariantComparisonChart', () => {
     );
     expect(screen.getByText('experiments.noMetricData')).toBeInTheDocument();
   });
+
+  it('never renders NaN for a null total', () => {
+    const { container } = render(
+      <VariantComparisonChart
+        comparisons={[{ pair: 1, values: { [A]: { views: null, likes: null, comments: null, averageViewDurationSeconds: null }, [B]: { views: 10, likes: 1, comments: 0, averageViewDurationSeconds: 5 } }, winner: null }]}
+        firstId={A}
+        secondId={B}
+        firstName={FIRST}
+        secondName={SECOND}
+        metric="views"
+        formatNumber={formatNumber}
+      />,
+    );
+    expect(screen.getByText('Calm question: — · Direct hook: 10')).toBeInTheDocument();
+    expect(container.textContent).not.toContain('NaN');
+  });
 });
 
 describe('PerPairChart', () => {
-  it('shows one row per pair with the A/B totals stated in the fallback table', () => {
+  it('shows the per-pair chart title, legend and encoding caption', () => {
     render(
       <PerPairChart
         comparisons={COMPARISONS}
@@ -219,6 +256,7 @@ describe('PerPairChart', () => {
     expect(screen.getByText('experiments.perPair')).toBeInTheDocument();
     expect(screen.getByText(FIRST)).toBeInTheDocument();
     expect(screen.getByText(SECOND)).toBeInTheDocument();
+    expect(screen.getByText('experiments.perPairCaption')).toBeInTheDocument();
   });
 
   it('shows the no-metric-data state when every pair value is null', () => {
@@ -236,7 +274,7 @@ describe('PerPairChart', () => {
     expect(screen.getByText('experiments.noMetricData')).toBeInTheDocument();
   });
 
-  it('highlights the winner bar, greys ties and the loser, and skips nulls', () => {
+  it('keeps each variant color with the loser faded, ties grey, and skips nulls', () => {
     const { container } = render(
       <PerPairChart
         comparisons={[
@@ -253,13 +291,18 @@ describe('PerPairChart', () => {
         formatNumber={formatNumber}
       />,
     );
-    const fills = Array.from(container.querySelectorAll('.recharts-bar-rectangle path')).map((path) => path.getAttribute('fill'));
-    // Series A bars, then series B bars: winner coloured, loser and
-    // ties --faint. The null pair renders no path at all — never 0.
+    const paths = Array.from(container.querySelectorAll('.recharts-bar-rectangle path'));
+    const fills = paths.map((path) => path.getAttribute('fill'));
+    const opacities = paths.map((path) => path.getAttribute('fill-opacity') ?? path.getAttribute('fillOpacity'));
+    // Series A bars, then series B bars. The winner keeps its variant
+    // color at full opacity, the loser keeps its own variant color
+    // faded (0.35), both bars of a tie are grey. The null pair renders
+    // no path at all — never 0.
     expect(fills).toEqual([
-      'var(--color-a)', 'var(--faint)', 'var(--faint)',
-      'var(--faint)', 'var(--color-b)', 'var(--faint)', 'var(--color-b)',
+      'var(--color-a)', 'var(--color-a)', 'var(--faint)',
+      'var(--color-b)', 'var(--color-b)', 'var(--faint)', 'var(--color-b)',
     ]);
+    expect(opacities).toEqual([null, '0.35', null, '0.35', null, null, null]);
   });
 
   it('shows the pending empty state with no published pairs', () => {
