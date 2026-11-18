@@ -108,7 +108,9 @@ describe('bucketOverTime', () => {
       row({ postId: 'a', publishedAt: day1, views: null }),
       row({ postId: 'b', publishedAt: day1, views: 4 }),
     ], 'views');
-    expect(result.points).toEqual([{ day: localDayKey(day1) as string, value: 4 }]);
+    const day = localDayKey(day1);
+    expect(day).not.toBeNull();
+    expect(result.points).toEqual([{ day, value: 4 }]);
     expect(result.withoutMetricValue).toBe(1);
   });
 

@@ -44,6 +44,56 @@ vi.mock('@/components/provider-icon', () => ({
   ProviderIcon: ({ provider }: { provider: string }) => <span data-testid={`provider-${provider}`} />,
 }));
 
+// Recharts needs a layout jsdom has no size for, so the real charts
+// render nothing there. Data-driven stand-ins keep the chart titles
+// and the top-videos bar clicks drivable (same pattern as
+// metrics-charts.test.tsx).
+vi.mock('recharts', () => {
+  function DatumButtons({ data, onClick }: { data?: Array<Record<string, unknown>>; onClick?: (data: unknown, index: number) => void }): ReactNode {
+    return (
+      <div>
+        {(data ?? []).map((datum, index) => (
+          <button
+            key={index}
+            type="button"
+            onClick={() => onClick?.(datum, index)}
+          >
+            {String(datum.label ?? datum.day ?? index)} {String(datum.value)}
+          </button>
+        ))}
+      </div>
+    );
+  }
+  const nullComponent = (): null => null;
+  return {
+    Area: nullComponent,
+    AreaChart: ({ data, children }: { data?: Array<Record<string, unknown>>; children?: ReactNode }) => (
+      <div data-testid="area-chart"><DatumButtons data={data} />{children}</div>
+    ),
+    Bar: nullComponent,
+    BarChart: ({
+      data, children, onClick,
+    }: {
+      data?: Array<Record<string, unknown>>;
+      children?: ReactNode;
+      onClick?: (data: unknown, index: number) => void;
+    }) => (
+      <div data-testid="bar-chart"><DatumButtons data={data} onClick={onClick} />{children}</div>
+    ),
+    CartesianGrid: nullComponent,
+    Cell: nullComponent,
+    Pie: nullComponent,
+    PieChart: ({ data, children }: { data?: Array<Record<string, unknown>>; children?: ReactNode }) => (
+      <div data-testid="pie-chart"><DatumButtons data={data} />{children}</div>
+    ),
+    ResponsiveContainer: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+    Legend: nullComponent,
+    Tooltip: nullComponent,
+    XAxis: nullComponent,
+    YAxis: nullComponent,
+  };
+});
+
 import MetricsPage from '../page';
 import { usePersonasQuery, useSocialAccountsQuery } from '@/lib/api';
 import { useI18n } from '@/lib/i18n/provider';
@@ -152,7 +202,11 @@ async function applyProviderFilter(label: string): Promise<void> {
 }
 
 beforeEach(() => {
+  // The saved preference defaults the suite to the list view the
+  // row-focused tests below assert against; the view tests that
+  // cover the default and the stored choice set their own value.
   window.localStorage.clear();
+  window.localStorage.setItem('metrics-view-mode', 'list');
   setLocale('en');
   vi.mocked(usePersonasQuery).mockReturnValue({
     data: [
@@ -281,24 +335,25 @@ describe('MetricsPage', () => {
   });
 
   it('switches between the list and the chart view, remembering the choice', async () => {
+    window.localStorage.clear();
     stubMetricsFetch({
       success: true,
       rows: [row({ views: 1200 }), row({ postId: 'post-2', views: 300 })],
       truncated: false,
     });
     renderPage();
-    await waitFor(() => expect(screen.getByText('metrics.tableTitle')).toBeInTheDocument());
-    // Default view is the list.
-    expect(screen.queryByText('metrics.chartsOverTimeTitle')).toBeNull();
-    activateTab('metrics.viewChart');
-    expect(screen.getByText('metrics.chartsOverTimeTitle')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('metrics.chartsOverTimeTitle')).toBeInTheDocument());
+    // Default view (nothing stored) is the chart.
+    expect(screen.queryByText('metrics.tableTitle')).toBeNull();
     expect(screen.getByText('metrics.chartsBreakdownTitle')).toBeInTheDocument();
     expect(screen.getByText('metrics.chartsTopTitle')).toBeInTheDocument();
-    expect(window.localStorage.getItem('metrics-view-mode')).toBe('chart');
     activateTab('metrics.viewList');
     expect(screen.getByText('metrics.tableTitle')).toBeInTheDocument();
     expect(screen.queryByText('metrics.chartsOverTimeTitle')).toBeNull();
     expect(window.localStorage.getItem('metrics-view-mode')).toBe('list');
+    activateTab('metrics.viewChart');
+    expect(screen.getByText('metrics.chartsOverTimeTitle')).toBeInTheDocument();
+    expect(window.localStorage.getItem('metrics-view-mode')).toBe('chart');
   });
 
   it('opens in the chart view when it is the stored choice', async () => {
@@ -310,6 +365,59 @@ describe('MetricsPage', () => {
     });
     renderPage();
     await waitFor(() => expect(screen.getByText('metrics.chartsOverTimeTitle')).toBeInTheDocument());
+  });
+
+  it('opens in the list view when list is the stored choice', async () => {
+    window.localStorage.setItem('metrics-view-mode', 'list');
+    stubMetricsFetch({
+      success: true,
+      rows: [row({ views: 1200 })],
+      truncated: false,
+    });
+    renderPage();
+    // The stored list is applied after mount (never during the first
+    // render), so the list shows once effects run.
+    await waitFor(() => expect(screen.getByText('metrics.tableTitle')).toBeInTheDocument());
+    expect(screen.queryByText('metrics.chartsOverTimeTitle')).toBeNull();
+  });
+
+  it('shows the chart view when localStorage throws', async () => {
+    const getItem = vi.spyOn(window.localStorage, 'getItem').mockImplementation(() => {
+      throw new Error('storage unavailable');
+    });
+    try {
+      window.localStorage.clear();
+      stubMetricsFetch({
+        success: true,
+        rows: [row({ views: 1200 })],
+        truncated: false,
+      });
+      renderPage();
+      await waitFor(() => expect(screen.getByText('metrics.chartsOverTimeTitle')).toBeInTheDocument());
+    } finally {
+      getItem.mockRestore();
+    }
+  });
+
+  it('clicking a top-videos bar shows the list without overwriting the saved preference', async () => {
+    window.localStorage.clear();
+    stubMetricsFetch({
+      success: true,
+      rows: [row({ views: 1200 }), row({ postId: 'post-2', views: 300 })],
+      truncated: false,
+    });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('metrics.chartsOverTimeTitle')).toBeInTheDocument());
+    // Wait for the rows to load: only then do the top bars render (the
+    // chart titles render while loading too).
+    await waitFor(() => expect(screen.getByRole('button', { name: /myth 1200/ })).toBeInTheDocument());
+    // The top bar for the 1200-view row (its label is the script angle).
+    fireEvent.click(screen.getByRole('button', { name: /myth 1200/ }));
+    expect(screen.getByText('metrics.tableTitle')).toBeInTheDocument();
+    expect(screen.queryByText('metrics.chartsOverTimeTitle')).toBeNull();
+    // The peek at the list must not persist: nothing was ever saved,
+    // so the stored preference stays absent rather than becoming 'list'.
+    expect(window.localStorage.getItem('metrics-view-mode')).toBeNull();
   });
 
   it('shows the coverage card below the list, with attention and waiting groups, and the as-of line', async () => {

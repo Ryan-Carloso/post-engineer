@@ -7,6 +7,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useI18n } from '@/lib/i18n/provider';
 import { AlertIcon, ChartIcon, SpinnerIcon } from '@/lib/ui';
 import { PROVIDER_LABELS } from '@/lib/account-options';
+import { isSocialProvider } from '@/lib/providers/registry';
 import { METRICS_ROW_LIMIT, type MetricsRowView } from '@/lib/metrics/metrics-query';
 import {
   breakdownBy,
@@ -32,16 +33,18 @@ export type MetricsView = 'chart' | 'list';
 //---------------
 // The Chart/List toggle is remembered per viewer: localStorage may
 // throw (private mode, disabled storage), so every read/write is in a
-// try/catch and falls back to the list view.
+// try/catch. The default view is the chart (the feature this page
+// ships); it falls back to the chart when nothing is stored, and only
+// a saved 'list' opts the viewer out.
 //---------------
 export const METRICS_VIEW_STORAGE_KEY = 'metrics-view-mode';
 
 export function readMetricsView(): MetricsView {
   try {
-    if (typeof window === 'undefined') return 'list';
-    return window.localStorage.getItem(METRICS_VIEW_STORAGE_KEY) === 'chart' ? 'chart' : 'list';
+    if (typeof window === 'undefined') return 'chart';
+    return window.localStorage.getItem(METRICS_VIEW_STORAGE_KEY) === 'list' ? 'list' : 'chart';
   } catch {
-    return 'list';
+    return 'chart';
   }
 }
 
@@ -126,12 +129,14 @@ export function MetricsCharts({ rows, isLoading, isError, truncated, personaLabe
 
   const breakdown = useMemo(() => breakdownBy(rows, breakdownGroup), [rows, breakdownGroup]);
   const breakdownLabel = (key: string): string =>
-    breakdownGroup === 'provider' ? (PROVIDER_LABELS[key as keyof typeof PROVIDER_LABELS] ?? key) : key === 'faceless' ? t('metrics.noPersona') : personaLabel(key);
+    breakdownGroup === 'provider'
+      ? (isSocialProvider(key) ? PROVIDER_LABELS[key] : key)
+      : key === 'faceless' ? t('metrics.noPersona') : personaLabel(key);
   const withoutViews = countWithoutViews(rows);
 
   const top = useMemo(() => topVideosByViews(rows), [rows]);
   const topData = useMemo(
-    () => top.map((row) => ({ label: rowTitle(row), value: row.views as number, row })),
+    () => top.map((row) => ({ label: rowTitle(row), value: row.views, row })),
     [top, rowTitle],
   );
 

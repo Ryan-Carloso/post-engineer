@@ -77,7 +77,7 @@ vi.mock('@/lib/ui', () => ({
   SpinnerIcon: () => <span data-testid="icon-spinner" />,
 }));
 
-import { MetricsCharts, MetricsViewToggle, withoutViewsKey, withoutPublishDateKey, withoutMetricKey } from '../metrics-charts';
+import { MetricsCharts, MetricsViewToggle, readMetricsView, withoutViewsKey, withoutPublishDateKey, withoutMetricKey } from '../metrics-charts';
 import type { MetricsRowView } from '@/lib/metrics/metrics-query';
 
 const DAY = new Date(Date.now() - 86400000).toISOString();
@@ -176,14 +176,14 @@ describe('MetricsCharts', () => {
   });
 
   it('reports the clicked top video to the page', () => {
-    const onSelectRow = vi.fn();
+    const onSelectRow = vi.fn<(item: MetricsRowView) => void>();
     renderCharts([
       row({ postId: 'a', scriptAngle: 'best', views: 500 }),
       row({ postId: 'b', scriptAngle: 'second', views: 9 }),
     ], { onSelectRow });
     fireEvent.click(screen.getByRole('button', { name: /best 500/ }));
     expect(onSelectRow).toHaveBeenCalledTimes(1);
-    expect((onSelectRow.mock.calls[0][0] as MetricsRowView).postId).toBe('a');
+    expect(onSelectRow.mock.calls[0][0].postId).toBe('a');
   });
 
   it('states the rows excluded from the sums and the truncation', () => {
@@ -205,6 +205,34 @@ describe('MetricsCharts', () => {
       row({ postId: 'c', views: 4 }),
     ]);
     expect(screen.getAllByText('metrics.chartsWithoutViews {"count":2}')).toHaveLength(2);
+  });
+});
+
+describe('readMetricsView', () => {
+  it('defaults to the chart view when nothing is stored', () => {
+    window.localStorage.clear();
+    expect(readMetricsView()).toBe('chart');
+  });
+
+  it('returns the stored list only when the viewer saved it', () => {
+    window.localStorage.setItem('metrics-view-mode', 'list');
+    expect(readMetricsView()).toBe('list');
+  });
+
+  it('returns the chart when the viewer stored the chart', () => {
+    window.localStorage.setItem('metrics-view-mode', 'chart');
+    expect(readMetricsView()).toBe('chart');
+  });
+
+  it('falls back to the chart when localStorage throws', () => {
+    const getItem = vi.spyOn(window.localStorage, 'getItem').mockImplementation(() => {
+      throw new Error('storage unavailable');
+    });
+    try {
+      expect(readMetricsView()).toBe('chart');
+    } finally {
+      getItem.mockRestore();
+    }
   });
 });
 

@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { usePersonasQuery, useSocialAccountsQuery } from '@/lib/api';
 import { useI18n } from '@/lib/i18n/provider';
 import type { TranslationKey } from '@/lib/i18n';
@@ -49,13 +49,22 @@ const EMPTY_QUERY: MetricsQuery = { window: '24h', personaId: null, accountId: n
 export default function MetricsPage(): React.ReactElement {
   const { t, locale } = useI18n();
   const [query, setQuery] = useState<MetricsQuery>(EMPTY_QUERY);
-  const [view, setView] = useState<MetricsView>(() => readMetricsView());
+  const [view, setView] = useState<MetricsView>('chart');
+  // The saved view is read after mount, not during the first render,
+  // so the server render (default 'chart') and the client render
+  // agree and there is no hydration mismatch for a viewer with a
+  // stored preference either way.
+  useEffect(() => {
+    setView(readMetricsView());
+  }, []);
   const changeView = (next: MetricsView): void => {
     setView(next);
     writeMetricsView(next);
   };
   const scrollToRow = (row: MetricsRowView): void => {
-    changeView('list');
+    // A bar click only peeks at the list to land on the row: it must
+    // not rewrite the viewer's saved preference.
+    setView('list');
     window.requestAnimationFrame(() => {
       document.getElementById(rowElementId(row))?.scrollIntoView({ block: 'center' });
     });

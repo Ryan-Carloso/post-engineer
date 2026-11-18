@@ -131,9 +131,12 @@ export const TOP_VIDEOS_LIMIT = 10;
 // reported views never make the list; ties break on the newest
 // collectedAt so the order is deterministic.
 //---------------
-export function topVideosByViews(rows: MetricsRowView[], limit: number = TOP_VIDEOS_LIMIT): MetricsRowView[] {
+export function topVideosByViews(
+  rows: MetricsRowView[],
+  limit: number = TOP_VIDEOS_LIMIT,
+): Array<MetricsRowView & { views: number }> {
   return rows
-    .filter((row) => row.views !== null)
-    .sort((a, b) => (b.views as number) - (a.views as number) || b.collectedAt.localeCompare(a.collectedAt))
+    .filter((row): row is MetricsRowView & { views: number } => row.views !== null)
+    .sort((a, b) => b.views - a.views || b.collectedAt.localeCompare(a.collectedAt))
     .slice(0, limit);
 }
