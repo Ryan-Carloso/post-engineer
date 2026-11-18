@@ -692,12 +692,43 @@ describe('prompts hub data', () => {
     expect(text).toContain('Never a generic explainer');
     expect(text).toContain('Never present it as a real person');
     expect(text).toContain('verified testimonial');
+    // The story is real, concrete, and lived, first person, plausible in
+    // real life. "The day it happened to me" is one valid form, not the
+    // only one: a first time, a week, a realization, a repeating ritual,
+    // or a before/after arc all count — as long as one concrete moment
+    // is lived, not described. A documentary, study, or fact is
+    // transformed into a lived story; the fact goes inside the story,
+    // never as exposition.
+    expect(text).toContain('the day it happened to me');
+    expect(text).toContain('one valid form, not the only one');
+    expect(text).toContain('the first time I');
+    expect(text).toContain('the day I realized');
+    expect(text).toContain('every Tuesday');
+    expect(text).toContain('before/after arc');
+    expect(text).toContain('lived, not described');
+    expect(text).toContain('never random');
+    expect(text).toContain('documentary');
+    expect(text).toContain('transform it into a concrete story');
+    expect(text).toContain('never as exposition');
+    // Research, never invent: every fact is verified before it is
+    // asserted — mechanisms, hormones, numbers, deadlines. A fact that
+    // cannot be confirmed is cut from the script, never asserted anyway.
+    expect(text).toContain('Research every fact before you assert it');
+    expect(text).toContain('Never invent a fact');
+    expect(text).toContain('Tavily');
+    expect(text).toContain('Exa');
+    expect(text).toContain('cut it from the script');
+    expect(text).toContain('unconfirmed fact never enters');
     // Step 6 overrides the base's material lines for this prompt only:
     // licensed stock photos are allowed here, and real photos are welcome
     // — the base's "images only, your own real photos, no stock footage"
     // rule does not apply to this prompt. Photos only: the engine renders
     // segment media as photos and cannot use video (b-roll) as segment
     // media, so the prompt must never promise it.
+    // (The story-rule PR's step-6 assertions — "do not search for images",
+    // "the base lines about searching images", "about your own real photos"
+    // — pinned the AI-only step 6 this PR replaces, so they do not carry
+    // over: this prompt searches licensed libraries for real photos.)
     expect(text).toContain('the base lines about material do not apply here');
     expect(text).toContain('licensed stock photos are allowed');
     expect(text).toContain('real photos are welcome');
@@ -730,9 +761,11 @@ describe('prompts hub data', () => {
     expect(text).toContain('wait for my yes');
     // Generalized: the winning test brief (HabitLoom, the diet topic) must
     // not leak into the prompt — it takes persona, topic, and video type
-    // as inputs instead.
+    // as inputs instead. Same for Mara, the local test-video persona:
+    // product copy always says "the persona", never a test persona name.
     expect(text).not.toContain('HabitLoom');
     expect(text).not.toContain('why you regain weight after a diet');
+    expect(text).not.toContain('Mara');
     expect(text).not.toContain('issue #');
   });
 });
