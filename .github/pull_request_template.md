@@ -13,6 +13,23 @@ Link the issue(s): closes #
 - [ ] `pnpm typecheck` green
 - [ ] New/updated tests cover the change (TDD)
 
+## Verification evidence
+
+The author does not grade their own change. The `verification` workflow posts mechanical evidence (deleted, skipped, or weakened tests, plus the diff-scoped commands). A separate reviewer grades `.github/REVIEW_RUBRIC.md` from the **base** branch.
+
+Stamp (pick one): `repro` / `property` / `differential` / `e2e` / `delegated-ci` / `none`
+
+- [ ] Command(s) and output are pasted below, or the workflow evidence comment is for this commit
+- [ ] No test was deleted, skipped, weakened, or narrowed to make CI pass
+- [ ] Rubric area ids this diff triggers, each with pass / fail / not-applicable
+- [ ] `none` is explicit when the diff has no runtime behavior
+
+```
+command:
+output:
+rubric:
+```
+
 ## UI changes
 
 Delete this section if this PR does not change anything the user sees. Copy changes count as UI changes.

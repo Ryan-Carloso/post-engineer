@@ -30,6 +30,7 @@ export const SHARED_PROMPT_BASE: string[] = [
   'CTA: one specific action tied to this video, never a generic "follow for more".',
   "Cut: unlock, elevate, seamless, game-changer, next-level, delve, \"the future of\", \"a new era\", \"it's not just X, it's Y\", forced groups of three, runs of fragments, \"let's dive in\", \"here's the thing\", \"honestly?\", upbeat closers, all-caps emphasis, stacked hedges, filler.",
   'No em dashes. Do not sand off real voice: one short line or one "however" is fine; clusters of these habits are the problem.',
+  'Subtitles: never use "-" in a subtitle.',
   'Test each line: could I picture it, could it be proven true or false, and could another creator say it about another topic? If yes to the last, rewrite it.',
   'Before check_script (action: validate), read it aloud and ask what still sounds like AI and which fact is not in the source. Fix both.',
   '',

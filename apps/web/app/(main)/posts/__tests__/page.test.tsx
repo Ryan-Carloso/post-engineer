@@ -1304,6 +1304,38 @@ describe('PostsPage week view', () => {
     expect(dayPanelCardText('July topic')).toBeInTheDocument();
   });
 
+  it('follows a mini-calendar pick back to today in week view, so the read covers the picked day', async () => {
+    // Six weeks ahead, then the sidebar mini calendar's "Go back to today":
+    // today sits outside the shown week, so the anchor must follow the pick
+    // back to June — otherwise the panel names a day whose slots the July
+    // read never loaded. The mock returns slots regardless of the range, so
+    // the range args (not the card) are the pin: without the fix the last
+    // read still starts in July.
+    const julySlot = { ...UPCOMING_SLOT, id: 'u2', slotAt: '2030-07-08T10:00:00.000Z', title: 'July topic' };
+    mockQueries({ range: [UPCOMING_SLOT, julySlot] });
+    render(<PostsPage />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'posts.calendarViewWeek' }));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'posts.calendarNextWeek' })).toBeInTheDocument(),
+    );
+    for (let i = 0; i < 6; i++) {
+      fireEvent.click(screen.getByRole('button', { name: 'posts.calendarNextWeek' }));
+    }
+    expect(dayPanelCardText('July topic')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Go back to today' })).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Go back to today' }));
+    expect(dayPanelCardText('Upcoming topic')).toBeInTheDocument();
+    const calls = vi.mocked(useScheduleRangeQuery).mock.calls;
+    const last = calls[calls.length - 1];
+    expect(Date.parse(last[1] as string)).toBeLessThanOrEqual(Date.parse('2030-06-01T00:00:00.000Z'));
+    expect(Date.parse(last[2] as string)).toBeGreaterThan(Date.parse('2030-06-01T00:00:00.000Z'));
+    const spanDays = (Date.parse(last[2] as string) - Date.parse(last[1] as string)) / 86400000;
+    expect(spanDays).toBeLessThanOrEqual(62);
+  });
+
   it('keeps the range read within the API span when switching to week from an empty month', async () => {
     // Desktop: move the month cursor to July (no posts), then switch to the
     // week view, which anchors on today — the cursor must follow the anchor

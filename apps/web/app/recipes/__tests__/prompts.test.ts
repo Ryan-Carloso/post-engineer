@@ -289,6 +289,7 @@ describe('prompts hub data', () => {
   it('starts every prompt with the shared base and carries humanizer + anti-slop in all of them', () => {
     const baseText = SHARED_PROMPT_BASE.join('\n');
     expect(baseText).toContain('No em dashes');
+    expect(baseText).toContain('Subtitles: never use "-"');
     expect(baseText).toContain('never invent it');
     expect(baseText).toContain('make me want the next sentence');
     expect(baseText).toContain('another creator');

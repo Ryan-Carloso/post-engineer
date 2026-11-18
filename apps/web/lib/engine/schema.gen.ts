@@ -708,6 +708,8 @@ export interface components {
          * @description Media reference shape for a segment's photo (media (action: upload) uploads it, media (action: check) verifies it).
          */
         SegmentMedia: {
+            /** Duration */
+            duration?: number | null;
             /** Mediaid */
             mediaId?: string | null;
             overlay?: components["schemas"]["SegmentOverlay"] | null;

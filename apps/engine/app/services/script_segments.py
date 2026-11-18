@@ -26,6 +26,7 @@ from app.services.persona_hook import (
     PERSONA_HOOK_MAX_SECONDS,
     PERSONA_HOOK_MIN_SECONDS,
 )
+from app.services.segment_photo_duration import duration_error
 
 MAX_SEGMENTS = 12
 # Full lip-sync videos show the talking head, so segment photos are
@@ -145,7 +146,7 @@ def _check_media_item(media: Any, field: str) -> None:
     # SegmentMedia extra="forbid" shape on the request path and the TS
     # validators: otherwise validate_segments accepts what the request
     # parsers reject.
-    unknown = sorted(set(media) - {"mediaId", "url", "overlay"})
+    unknown = sorted(set(media) - {"mediaId", "url", "overlay", "duration"})
     if unknown:
         raise SegmentValidationError(
             field,
@@ -174,6 +175,10 @@ def _check_media_item(media: Any, field: str) -> None:
         raise SegmentValidationError(
             field, "url must be a non-empty string.", "Send a non-empty image URL."
         )
+    error = duration_error(media.get("duration"))
+    if error is not None:
+        rule, fix = error
+        raise SegmentValidationError(f"{field}.duration", rule, fix)
     if "overlay" in media and media["overlay"] is not None:
         _check_overlay(media["overlay"], f"{field}.overlay")
 

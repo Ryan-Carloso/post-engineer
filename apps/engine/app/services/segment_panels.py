@@ -91,6 +91,9 @@ class Panel:
     clip_seconds: Optional[float] = None
     frame_width: Optional[int] = None
     frame_height: Optional[int] = None
+    # Requested on-screen seconds for a full-frame photo (segment pacing):
+    # None means the default 2s pace. Framed panels over the face ignore it.
+    requested_duration: Optional[float] = None
 
 
 def _scale(width: int, height: int) -> float:

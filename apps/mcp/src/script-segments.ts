@@ -47,6 +47,11 @@ const OVERLAY_LIMITS: Record<string, number> = {
 // Hook window from the engine persona_hook constants (8-12 seconds).
 export const HOOK_MIN_SECONDS = 8;
 export const HOOK_MAX_SECONDS = 12;
+// Requested on-screen seconds for one full-frame photo (segment pacing):
+// hold the turning-point photo longer, flash one briefly. Absent means
+// the default 2s pace; framed panels over the face ignore it.
+export const MIN_REQUESTED_PHOTO_SECONDS = 0.5;
+export const MAX_REQUESTED_PHOTO_SECONDS = 6;
 
 export type SegmentKind = 'hook' | 'content';
 
@@ -60,6 +65,7 @@ export type SegmentMedia = {
   mediaId?: string;
   url?: string;
   overlay?: SegmentOverlay;
+  duration?: number;
 };
 
 export type ScriptSegment = {
@@ -189,7 +195,7 @@ function checkMediaItem(media: unknown, field: string): SegmentsResult | null {
   }
   const record = media as Record<string, unknown>;
   const unknownMedia = Object.keys(record)
-    .filter((key) => key !== 'mediaId' && key !== 'url' && key !== 'overlay')
+    .filter((key) => key !== 'mediaId' && key !== 'url' && key !== 'overlay' && key !== 'duration')
     .sort();
   if (unknownMedia.length > 0) {
     return fail(field, `media has unknown field ${unknownMedia[0]}`, 'Remove unknown fields from the media.');
@@ -207,6 +213,20 @@ function checkMediaItem(media: unknown, field: string): SegmentsResult | null {
   }
   if (urlPresent && (typeof record.url !== 'string' || record.url.trim().length === 0)) {
     return fail(field, 'url must be a non-empty string.', 'Send a non-empty image URL.');
+  }
+  if (record.duration !== undefined && record.duration !== null) {
+    if (
+      typeof record.duration !== 'number' ||
+      !Number.isFinite(record.duration) ||
+      record.duration < MIN_REQUESTED_PHOTO_SECONDS ||
+      record.duration > MAX_REQUESTED_PHOTO_SECONDS
+    ) {
+      return fail(
+        `${field}.duration`,
+        `duration must be between ${MIN_REQUESTED_PHOTO_SECONDS} and ${MAX_REQUESTED_PHOTO_SECONDS} seconds.`,
+        'Send a duration in seconds, or omit it for the default 2s pace.',
+      );
+    }
   }
   if (record.overlay !== undefined && record.overlay !== null) {
     return checkOverlay(record.overlay, `${field}.overlay`);
