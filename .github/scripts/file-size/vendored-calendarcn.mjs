@@ -58,6 +58,7 @@ export const VENDORED_CALENDARCN_FILES = new Set([
   'apps/web/components/event-detail-timezone.tsx',
   'apps/web/components/event-series-scope-dialog.tsx',
   'apps/web/components/event-title-focus-context.tsx',
+  'apps/web/components/mini-calendar.tsx',
   'apps/web/components/month-view-day-cell.tsx',
   'apps/web/components/month-view-event-bar.tsx',
   'apps/web/components/month-view-event-item.tsx',
