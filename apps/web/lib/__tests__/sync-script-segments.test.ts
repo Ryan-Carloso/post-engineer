@@ -77,12 +77,6 @@ function runSync(root: string): string {
   });
 }
 
-// The sync script strips the `.js` suffix from relative sibling imports
-// in the web copy only (Next.js webpack cannot resolve `./x.js` when only
-// `./x.ts` exists); the MCP copy stays byte-identical to shared.
-// (No replaceAll here: the web tsconfig lib predates ES2021, so
-// String.replaceAll does not typecheck; the /g regex replace is
-// equivalent.)
 function toWebCopy(sourceText: string): string {
   return sourceText.replace(/from '(\.\/[^']+)\.js'/g, "from '$1'");
 }
@@ -131,10 +125,6 @@ describe('sync-script-segments in a partial checkout', () => {
   });
 
   it('keeps the MCP copy byte-identical when the checkout path contains apps/web', () => {
-    // A substring check for 'apps/web' would also match the checkout root
-    // (e.g. /home/me/apps/web-tools/post-engineer) and wrongly strip the
-    // MCP copy's `.js` suffix, breaking its NodeNext tsc. The sync must
-    // tell the apps apart by their exact target paths, not by substring.
     const base = join(tmpdir(), 'apps', 'web-tools');
     mkdirSync(base, { recursive: true });
     const root = createPartialCheckout({ withMcp: true, base });

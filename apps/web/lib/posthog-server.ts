@@ -1,10 +1,6 @@
-// posthog-node is loaded via a dynamic import marked `webpackIgnore: true`
-
 import { resolveHost } from './posthog-config';
 
 const SERVER_DISTINCT_ID = 'post-engineer-server';
-
-// `webpackIgnore: true` so webpack does not try to bundle the Node-only
 
 interface PostHogNodeClient {
   capture(args: {
@@ -50,7 +46,6 @@ function loadSdk(): Promise<PostHogNodeClient | null> {
       const config = getConfig();
       if (!config) return null;
       try {
-        // webpackIgnore: true is load-bearing — without it, webpack
         const { PostHog } = await import(/* webpackIgnore: true */ 'posthog-node');
         return new PostHog(config.key, {
           host: config.host,

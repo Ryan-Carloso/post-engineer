@@ -28,6 +28,7 @@ describe('prompt-base shared source', () => {
     const root = findRepoRoot(import.meta.url);
     const sharedModule: Record<string, unknown> = await import(/* @vite-ignore */ join(root, SHARED_RELATIVE));
     expect({ ...sharedModule }).toEqual({ ...linkedModule });
+    expect(Object.keys(linkedModule)).toContain('SHARED_PROMPT_BASE');
     expect(linkedModule.SHARED_PROMPT_BASE.length).toBeGreaterThan(0);
   });
 });

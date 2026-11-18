@@ -3,8 +3,6 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// lib/posthog-server.ts carries `webpackIgnore: true` so webpack never
-
 describe('getPostHogServer browser guard', () => {
   beforeEach(() => {
     vi.resetModules();

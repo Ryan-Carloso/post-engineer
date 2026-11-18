@@ -1,10 +1,25 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { test } from 'node:test';
 import { findComments } from './scan.mjs';
 import { stripComments } from './strip.mjs';
-import { isExempt } from './check.mjs';
+import { isExempt, run } from './check.mjs';
 
 const strip = (text, file) => stripComments(text, findComments(text, file));
+
+function runFix(file, text) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'comments-'));
+  try {
+    fs.writeFileSync(path.join(dir, file), text);
+    const code = run(['--fix', file], dir, () => {});
+    assert.equal(code, 0);
+    return fs.readFileSync(path.join(dir, file), 'utf8');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
 
 test('removes whole-line and trailing ts comments', () => {
   const src = '// header\n\nconst a = 1; // trailing\n/** doc */\nexport function f() {\n  // inside\n  return a;\n}\n';
@@ -19,6 +34,16 @@ test('keeps directives', () => {
 test('keeps webpackIgnore and vite-ignore inside import()', () => {
   const src = 'await import(/* webpackIgnore: true */ "x");\nawait import(/* @vite-ignore */ p);\n';
   assert.equal(strip(src, 'a.ts'), src);
+});
+
+test('keeps a jsx directive sharing its wrapper with a note comment', () => {
+  const src = 'const el = (\n  <div>\n    {/* eslint-disable-next-line */ /* note */}\n    <span />\n  </div>\n);\n';
+  assert.equal(runFix('a.tsx', src), 'const el = (\n  <div>\n    {/* eslint-disable-next-line */ }\n    <span />\n  </div>\n);\n');
+});
+
+test('strips a prose comment that only mentions webpackIgnore', () => {
+  const src = '// `webpackIgnore: true` so webpack does not try to bundle the Node-only\nconst a = 1;\n';
+  assert.equal(runFix('a.ts', src), 'const a = 1;\n');
 });
 
 test('leaves comment-like text inside strings, templates, regex and jsx text', () => {

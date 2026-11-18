@@ -59,10 +59,11 @@ export function run(argv, root = REPO_ROOT, log = console.log) {
     const abs = path.join(root, file);
     if (!fs.existsSync(abs)) continue;
     const text = fs.readFileSync(abs, 'utf8');
-    const comments = findComments(text, file).filter((c) => !c.directive);
+    const all = findComments(text, file);
+    const comments = all.filter((c) => !c.directive);
     if (comments.length === 0) continue;
     if (fix) {
-      fs.writeFileSync(abs, stripComments(text, comments));
+      fs.writeFileSync(abs, stripComments(text, all));
       fixedFiles++;
       continue;
     }

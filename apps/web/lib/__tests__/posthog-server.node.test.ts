@@ -48,7 +48,6 @@ describe('getPostHogServer (node runtime)', () => {
   });
 
   it('marks the posthog-node dynamic import with webpackIgnore: true', () => {
-    // (UnhandledSchemeError). webpackIgnore: true keeps the import() native
     const source = readFileSync(path.resolve(process.cwd(), 'lib/posthog-server.ts'), 'utf8');
     const dynamicImports = [...source.matchAll(/import\(([\s\S]*?)\)/g)];
     const posthogImports = dynamicImports.filter((m) => m[1].includes('posthog-node'));
