@@ -5,6 +5,7 @@
 // (`./client.js`) keep working.
 import { VIDEO_LAYOUTS } from './limits.js';
 import type { FaceQuality, VideoAspect } from './contracts/personas.js';
+import type { PersonaCtaType } from './contracts/personas.js';
 import type { VideoType } from './video-type.js';
 import type { SocialProvider } from './contracts/providers.js';
 
@@ -41,6 +42,13 @@ export interface PersonaLibraryImageInput {
  */
 export type VideoLayout = (typeof VIDEO_LAYOUTS)[number];
 
+/** The per-persona CTA intent (issue #639): a type plus facts, never wording. */
+export interface PersonaCtaInput {
+  type: PersonaCtaType;
+  url?: string;
+  instruction?: string;
+}
+
 export interface CreatePersonaInput {
   name: string;
   /** Every persona has a face: exactly one of avatarUrl or avatarPath. */
@@ -55,6 +63,8 @@ export interface CreatePersonaInput {
   paragraphNumber?: number;
   niche?: string;
   faceQuality?: FaceQuality;
+  /** Call to action for this persona's videos (issue #639): the intent only. */
+  cta?: PersonaCtaInput;
   /**
    * Bound publishing accounts per provider (issue #572, required): at
    * least one account, e.g. { youtube: ['UC...'] }. The persona publishes
@@ -81,6 +91,8 @@ export interface GeneratePersonaVideoInput {
   description: string;
   /** Paired A/B experiment link (issue #476); checked server-side before the charge. */
   experiment?: { experimentId: string; variantId: string; pair: number };
+  /** Per-video CTA override (issue #639): explicit wins over the persona CTA; null disables it; omit to inherit. */
+  cta?: PersonaCtaInput | null;
   providers: SocialProvider[];
   youtubeAccountIds?: string[];
   instagramAccountIds?: string[];
@@ -124,6 +136,8 @@ export interface GeneratePersonaVideoInput {
     segments?: Array<{
       kind: 'hook' | 'content';
       text: string;
+      /** Marks the content take that performs this video's CTA (issue #639). */
+      cta?: boolean;
       media?: Array<{ mediaId?: string; url?: string; overlay?: { title: string; subtitle?: string; badge?: string } }>;
     }>;
   };
@@ -144,6 +158,8 @@ export interface UpdatePersonaInput {
   paragraphNumber?: number;
   niche?: string;
   faceQuality?: FaceQuality;
+  /** New call to action intent (issue #639): only provided facts change. */
+  cta?: PersonaCtaInput;
 }
 
 /** Input for publishing a user-provided video directly, without generation. */

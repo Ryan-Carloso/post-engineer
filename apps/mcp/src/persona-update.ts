@@ -10,6 +10,7 @@ import { VIDEO_LAYOUTS } from './client.js';
 import { FACE_QUALITIES, VIDEO_ASPECTS } from './contracts/personas.js';
 import { handleLibraryCall, type McpToolResponse } from './tools-call.js';
 import { isEnglishLanguage, ONLY_ENGLISH_VIDEOS_MESSAGE } from './language.js';
+import { PersonaCtaShape } from './persona-cta-shape.js';
 import { refinePersonaAvatar, UpdatePersonaAvatarFields } from './persona-avatar.js';
 import { personaVoiceField, withResolvedPersonaVoiceForUpdate } from './voice-filters.js';
 
@@ -32,6 +33,10 @@ export const UpdatePersonaShape = {
     .enum(FACE_QUALITIES)
     .optional()
     .describe('New face resolution of the rendered videos: ok (480p, 2 tokens/video) or very_good (720p, 3 tokens/video). Future videos price at the new quality; already-scheduled posts keep the quality they were charged for.'),
+  // New call to action intent (issue #639): a type plus a URL (link/buy)
+  // or an instruction (other). Only provided facts change: omitting url or
+  // instruction leaves the stored fact untouched.
+  cta: PersonaCtaShape.optional(),
 };
 
 export const UpdatePersonaSchema = z.object(UpdatePersonaShape).superRefine(refinePersonaAvatar(false));

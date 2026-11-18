@@ -24,6 +24,8 @@ import type {
   UpdatePersonaInput, VideoType,
 } from './client-types.js';
 import { requirePublishingAccounts } from './require-publishing-accounts.js';
+import { resolveBaseUrl } from './client-base-url.js';
+import { appendPersonaCtaFields } from './persona-cta-shape.js';
 import { publishVideoDirect } from './client-publish-uploaded.js';
 import {
   getTokenBalance,
@@ -98,7 +100,6 @@ import { basename } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { mcpTelemetryHeaders } from './analytics.js';
 
-const PRODUCTION_API_URL = 'https://post-engineer.com';
 // Hung requests must not block the stdio tool call (and the agent session) forever.
 const REQUEST_TIMEOUT_MS = 30_000;
 // Multipart uploads can exceed the 30s default (up to 10 10MB images).
@@ -153,36 +154,6 @@ function normalizeLibraryMetadata(
   const description = image.description?.trim() ?? '';
   checkLibraryMetadataLengths(tag, description, label);
   return { tag, description };
-}
-
-// The bearer key is sent to this URL, so fail fast on a malformed or
-// non-https override instead of silently targeting it. Loopback http is
-// allowed for local staging; anything else must be https so the key never
-// travels in cleartext.
-function resolveBaseUrl(override: string | undefined): string {
-  const raw = override ?? PRODUCTION_API_URL;
-  let url: URL;
-  try {
-    url = new URL(raw);
-  } catch {
-    throw new Error('Invalid POST_ENGINEER_API_URL: not an absolute URL (use https:)');
-  }
-  if (url.protocol !== 'https:' && url.protocol !== 'http:') {
-    throw new Error(`Invalid POST_ENGINEER_API_URL: protocol "${url.protocol}" is not allowed (use https:)`);
-  }
-  const loopback =
-    url.hostname === 'localhost' ||
-    url.hostname === '127.0.0.1' ||
-    url.hostname === '::1' ||
-    url.hostname === '[::1]';
-  if (url.protocol === 'http:' && !loopback) {
-    throw new Error('Invalid POST_ENGINEER_API_URL: http: is only allowed for loopback hosts (use https:)');
-  }
-  // Never echo the raw value: it may embed credentials (userinfo/query).
-  // Return the normalized form so the validated value and the used value are
-  // identical: origin drops userinfo, trailing slashes are stripped so
-  // `${baseUrl}${path}` never yields `//api/...`.
-  return url.origin + url.pathname.replace(/\/+$/, '');
 }
 
 export class PostEngineerClient {
@@ -262,6 +233,7 @@ export class PostEngineerClient {
     formData.set('paragraphNumber', String(input.paragraphNumber ?? 1));
     formData.set('niche', input.niche ?? 'General');
     formData.set('faceQuality', input.faceQuality ?? 'very_good');
+    appendPersonaCtaFields(formData, input.cta);
     const images = input.images ?? [];
     // An imagePrimaryIndex without images is a caller bug (typo'd `images`
     // or a lone index): fail fast instead of a silent successful creation
@@ -346,6 +318,7 @@ export class PostEngineerClient {
     if (input.paragraphNumber !== undefined) formData.set('paragraphNumber', String(input.paragraphNumber));
     if (input.niche !== undefined) formData.set('niche', input.niche);
     if (input.faceQuality !== undefined) formData.set('faceQuality', input.faceQuality);
+    appendPersonaCtaFields(formData, input.cta);
     const raw = await this.request(
       `/api/persona?personaId=${encodeURIComponent(input.personaId)}`,
       { method: 'PATCH', headers: this.getHeaders(false), body: formData },
@@ -605,6 +578,9 @@ export class PostEngineerClient {
           },
           options: input.options ?? undefined,
           ...(input.experiment !== undefined ? { experiment: input.experiment } : {}),
+          // Null is an explicit disable, not an absence: the !== undefined
+          // check preserves it, so a null CTA reaches the route as null.
+          ...(input.cta !== undefined ? { cta: input.cta } : {}),
           // No caller key: a fresh UUID per call (a retry needs a stable key).
           idempotencyKey: input.idempotencyKey ?? randomUUID(),
         }),

@@ -5,6 +5,7 @@
 import { z } from 'zod';
 import { isEnglishLanguage, ONLY_ENGLISH_VIDEOS_MESSAGE } from './language.js';
 import { GeneratePersonaVideoOptionsShape } from './schedule-shapes.js';
+import { PersonaCtaShape } from './persona-cta-shape.js';
 import { RECIPE_SLUG_PATTERN } from './recipe-session.js';
 import { EXPERIMENT_TARGET_PAIRS_MAX, EXPERIMENT_VARIANT_ID_PATTERN } from './limits.js';
 import { VIDEO_TYPES, VIDEO_TYPE_ERROR_SUFFIX, unknownVideoTypeMessage } from './video-type.js';
@@ -29,11 +30,21 @@ export const SegmentOverlayShape = z
 export const ScriptSegmentShape = {
   kind: z.enum(['hook', 'content']).describe('Segment role: hook first, content after. Exactly one hook; a CTA is just a content take, placed anywhere.'),
   text: z.string().min(1, 'Each segment text must be non-empty').describe('Spoken text only: no placeholders, links, markdown, emoji or stage directions.'),
+  // Marks the content take that performs this video's CTA (issue #639):
+  // exactly one marked content take is required when a CTA applies; a
+  // comment CTA must ask a question about this video's topic. The hook
+  // can never be the CTA take.
+  cta: z.boolean().optional(),
   media: z
     .array(z.object({ mediaId: z.string().min(1).optional(), url: z.string().min(1).optional(), duration: z.number().min(MIN_REQUESTED_PHOTO_SECONDS).max(MAX_REQUESTED_PHOTO_SECONDS).optional(), overlay: SegmentOverlayShape.optional() }).strict())
     .max(MAX_IMAGES_MODE_MEDIAS)
     .optional()
-    .describe('Photos for this segment. Each item is mediaId (from media (action: upload)) or url (a public image URL). One image per ~3s of speech (~8 words); a 60s video needs ~20 images, split across segments (max 30). Full lip sync: max 6 images total. Each photo shows while its share of the segment is spoken: full frame on faceless videos, or a framed panel (~38% of the frame) at the bottom, face still showing. Optional duration (0.5-6s): on-screen seconds for a full-frame photo; omit for the 2s default. Optional overlay: an info card (title, subtitle, badge), e.g. a place name, address and price; a spoken caption sits above it, never on the photo.'),
+    // The rendering-geometry sentence (full frame vs framed bottom panel)
+    // was dropped here for the tools/list payload budget (issue #639):
+    // this describe is serialized into four tools, so every word costs
+    // four times. The density, caps, duration and overlay rules below
+    // are the call-construction rules and stay.
+    .describe('Photos for this segment. Each item is mediaId (from media (action: upload)) or url (a public image URL). One image per ~3s of speech (~8 words); a 60s video needs ~20 images, split across segments (max 30). Full lip sync: max 6 images total. Optional duration (0.5-6s): on-screen seconds for a full-frame photo; omit for the 2s default. Optional overlay: an info card (title, subtitle, badge), e.g. a place name, address and price; a spoken caption sits above it, never on the photo.'),
 };
 
 /** Paired A/B experiment link (issue #476): one variant of one pair. */
@@ -108,7 +119,12 @@ export const GeneratePersonaVideoShape = {
   timezone: z.string().min(1).default('UTC').describe('IANA timezone for a naive startAt and the HH:MM times, e.g. "Europe/Lisbon". Defaults to UTC.'),
   options: z.object(GeneratePersonaVideoOptionsShape).optional().describe('Generation options applied to this video.'),
   idempotencyKey: z.string().min(1).optional().describe('Idempotency key: retrying the call with the same key returns the original schedule (replayed: true) instead of generating again.'),
-  experiment: ExperimentLinkShape.optional().describe('Join a paired A/B experiment (experiments (action: create)): this video is one variant of one pair. The server rejects it when the pair partner differs in: the same providers and accounts, the same title, voice (id and audio URL), video type, video aspect and layout, paragraph number, face quality, language, niche and CTA text, and identical content segments, with a different hook. The pinned options.imageId is not stored, so it is not compared: pass the same imageId (or none) to both videos yourself. Prefer experiments (action: add_pair), which creates both videos of a pair.'),
+  experiment: ExperimentLinkShape.optional().describe('Join a paired A/B experiment (experiments (action: create)): this video is one variant of one pair. The server rejects it when the pair partner differs in: the same providers and accounts, the same title, voice (id and audio URL), video type, video aspect and layout, paragraph number, face quality, language, niche and CTA intent (type, URL, instruction), and identical content segments, with a different hook. The pinned options.imageId is not stored, so it is not compared: pass the same imageId (or none) to both videos yourself. Prefer experiments (action: add_pair), which creates both videos of a pair.'),
+  // Per-video CTA override (issue #639): an explicit value wins over the
+  // persona CTA; null disables the CTA for this video; omit to inherit the
+  // persona CTA. The marked take (segments[].cta) is still required when a
+  // CTA applies.
+  cta: PersonaCtaShape.nullable().optional(),
   // Telemetry-only: the recipe the script came from. Never forwarded in the
   // request body (handleGeneratePersonaVideo builds it field by field);
   // recipe-session.ts sends it as the X-MCP-Recipe header.
@@ -143,7 +159,10 @@ export const ValidateScriptShape = {
       error: (issue) => unknownVideoTypeMessage(issue.input),
     })
     .optional()
-    .describe('The video mode the script is for: full_lipsync = media is optional (at most 6 images in total); hook_lipsync or faceless = images mode, which checks that every segment carries a media list, about one image per ~3s of speech (a 60s video needs about 20 images, at most 30). Omitted means hook_lipsync.'),
+    // The density rule (one image per ~3s) lives in the media describe
+    // of the same tool; it is not repeated here, for the tools/list
+    // payload budget (issue #639).
+    .describe('The video mode the script is for: full_lipsync = media is optional (at most 6 images in total); hook_lipsync or faceless = images mode, which checks that every segment carries a media list. Omitted means hook_lipsync.'),
 };
 
 export const ValidateScriptSchema = z.object(ValidateScriptShape);

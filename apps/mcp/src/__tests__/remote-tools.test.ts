@@ -107,6 +107,17 @@ describe('remote schemas reject local paths', () => {
     expect(Object.keys(UpdatePersonaRemoteShape)).not.toContain('avatarPath');
   });
 
+  it('persona remote schemas accept the CTA intent and reject an incoherent one (issue #639)', () => {
+    // The remote (http) surface offers the same nested cta object as the
+    // stdio tools: the CTA is set at creation and on update over both
+    // transports, and the coherence rule applies on both.
+    const base = { name: 'Ava', avatarUrl: 'https://example.com/face.png', voiceId: 'alloy', accounts: { youtube: ['UC-1'] } };
+    expect(CreatePersonaRemoteSchema.safeParse({ ...base, cta: { type: 'link', url: 'https://example.com/course' } }).success).toBe(true);
+    expect(CreatePersonaRemoteSchema.safeParse({ ...base, cta: { type: 'link' } }).success).toBe(false);
+    expect(UpdatePersonaRemoteSchema.safeParse({ personaId: 'p1', cta: { type: 'other', instruction: 'Invite to the WhatsApp group' } }).success).toBe(true);
+    expect(UpdatePersonaRemoteSchema.safeParse({ personaId: 'p1', cta: { type: 'other' } }).success).toBe(false);
+  });
+
   it('create_cloned_voice remote schema accepts a URL and rejects a path', () => {
     const base = { audioUrl: 'https://example.com/voice.mp3', language: 'en', consent: true as const, denoise: true };
     expect(CreateClonedVoiceRemoteSchema.safeParse(base).success).toBe(true);

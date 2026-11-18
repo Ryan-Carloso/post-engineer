@@ -88,7 +88,9 @@ export const GetExperimentResultsSchema = z.object(GetExperimentResultsShape);
 
 // Both videos of a pair share everything but the hook: the delivery fields are
 // the ones of a generate_video video (persona and accounts by name or id).
-const { segments: _segments, title: _title, experiment: _experiment, ...deliveryShape } = GenerateVideoItemSchema.shape;
+// cta is excluded on purpose: the pair tests one variable (the hook), so
+// both videos inherit the persona CTA instead of carrying an override.
+const { segments: _segments, title: _title, experiment: _experiment, cta: _cta, ...deliveryShape } = GenerateVideoItemSchema.shape;
 
 export const AddExperimentPairShape = {
   experimentId: z.string().uuid().describe('Experiment id from experiments (action: create).'),

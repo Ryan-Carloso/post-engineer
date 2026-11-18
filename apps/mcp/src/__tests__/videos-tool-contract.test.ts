@@ -235,6 +235,24 @@ describe('generate tool shape vs the videos contract', () => {
     expect(accepts(GenerateAndScheduleBodySchema, asapWithPlan)).toBe(true);
   });
 
+  it('accepts the per-video CTA override and the marked take on both sides (issue #639)', () => {
+    // The override is the same nested intent object on both sides; null
+    // disables the CTA; a marked content take carries cta: true. Both
+    // sides enforce coherence (link needs a URL, other needs an instruction).
+    const markedSegments = [
+      { kind: 'hook', text: 'Hook text here today now.' },
+      { kind: 'content', text: 'Save this for your next trip.', cta: true },
+    ];
+    expect(accepts(GeneratePersonaVideoSchema, { ...TOOL_GENERATE, cta: { type: 'save' }, segments: markedSegments })).toBe(true);
+    expect(accepts(GenerateAndScheduleBodySchema, { ...CONTRACT_GENERATE, cta: { type: 'save' }, options: { ...CONTRACT_GENERATE.options, segments: markedSegments } })).toBe(true);
+    expect(accepts(GeneratePersonaVideoSchema, { ...TOOL_GENERATE, cta: null })).toBe(true);
+    expect(accepts(GenerateAndScheduleBodySchema, { ...CONTRACT_GENERATE, cta: null })).toBe(true);
+    expect(accepts(GeneratePersonaVideoSchema, { ...TOOL_GENERATE, cta: { type: 'link' } })).toBe(false);
+    expect(accepts(GenerateAndScheduleBodySchema, { ...CONTRACT_GENERATE, cta: { type: 'link' } })).toBe(false);
+    expect(accepts(GeneratePersonaVideoSchema, { ...TOOL_GENERATE, cta: { type: 'other' } })).toBe(false);
+    expect(accepts(GenerateAndScheduleBodySchema, { ...CONTRACT_GENERATE, cta: { type: 'other' } })).toBe(false);
+  });
+
   it('pins the inlined musicMood field to the shared field', () => {
     expect(firstIssue(musicMoodField, 'x'.repeat(65))).not.toBeNull();
     expect(

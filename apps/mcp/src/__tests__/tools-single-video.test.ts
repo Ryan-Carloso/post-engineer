@@ -87,6 +87,52 @@ describe('generate_persona_video tool', () => {
     expect(textOf(response)).toContain('Porto trip');
   });
 
+  it('forwards the per-video CTA override and the marked take to the client, including an explicit null (issue #639)', async () => {
+    const client = mockClient();
+    const marked = [
+      { kind: 'hook' as const, text: hook, media: photos(4, 'hook') },
+      { kind: 'content' as const, text: content, media: photos(6, 'content') },
+      { kind: 'content' as const, text: ctaTake, cta: true, media: photos(2, 'ctaTake') },
+    ];
+    await handleGeneratePersonaVideo(client, {
+      personaId: 'persona-1',
+      segments: marked,
+      cta: { type: 'save' },
+      title: 'Porto trip',
+      description: 'Agent description.',
+      language: 'en-US',
+      providers: ['youtube'],
+      youtubeAccountIds: ['acct-1'],
+      mode: 'scheduled',
+      startAt: '2026-10-30T18:00:00',
+      times: ['18:00'],
+      timezone: 'Europe/Lisbon',
+    });
+    const generate = vi.mocked(client.generatePersonaVideo);
+    expect(generate).toHaveBeenCalledTimes(1);
+    const input = generate.mock.calls[0][0];
+    expect(input.cta).toEqual({ type: 'save' });
+    expect(input.options?.segments?.[2]).toMatchObject({ cta: true });
+
+    // Null disables the persona CTA for this video and must reach the
+    // client as null, not as an absence.
+    await handleGeneratePersonaVideo(client, {
+      personaId: 'persona-1',
+      segments: marked,
+      cta: null,
+      title: 'Porto trip',
+      description: 'Agent description.',
+      language: 'en-US',
+      providers: ['youtube'],
+      youtubeAccountIds: ['acct-1'],
+      mode: 'scheduled',
+      startAt: '2026-10-30T18:00:00',
+      times: ['18:00'],
+      timezone: 'Europe/Lisbon',
+    });
+    expect(generate.mock.calls[1][0].cta).toBeNull();
+  });
+
   it('passes the pinterest account ids and board id through to the client', async () => {
     const client = mockClient();
     const response = await handleGeneratePersonaVideo(client, {

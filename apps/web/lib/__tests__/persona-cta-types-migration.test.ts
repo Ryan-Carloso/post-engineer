@@ -13,9 +13,8 @@ import { findRepoRoot } from '@/test/repo-root';
 // the enums produces a task that fails at RENDER time, after a paid
 // LongCat submit — so the drift between them has to be caught by a test,
 // not by a user. The web zod enum and the MCP schemas both import the
-// contract literal, so they cannot drift from each other; the web
-// re-export pin lives below, the MCP (limits.ts) pin lands with the
-// MCP commit.
+// contract literal, so they cannot drift from each other; the web and MCP
+// re-export pins live below.
 //
 // This mirrors persona-video-layout-migration.test.ts.
 //---------------
@@ -136,5 +135,24 @@ describe('cta_type literal sync across the three surfaces', () => {
     expect(schema).toContain("from './contracts/personas'");
     expect(schema).toContain('PERSONA_CTA_TYPES,');
     expect(schema).not.toMatch(/PERSONA_CTA_TYPES\s*(?::[^=]+)?=\s*\[/);
+  });
+
+  it('the MCP re-exports the contract literal, it does not define its own', () => {
+    // Same drift rule on the MCP side: limits.ts is the single MCP
+    // import site for the shared constants, and persona-cta-shape.ts
+    // imports them from the contract, never a local literal.
+    const limitsPath = join(repoRoot, 'apps', 'mcp', 'src', 'limits.ts');
+    const limits = readFileSync(limitsPath, 'utf8');
+    // The MCP imports with the .js suffix; the web imports without it.
+    expect(limits).toContain("from './contracts/personas.js'");
+    expect(limits).toContain('PERSONA_CTA_TYPES,');
+    expect(limits).toContain('PERSONA_CTA_URL_MAX_LENGTH,');
+    expect(limits).toContain('PERSONA_CTA_INSTRUCTION_MAX_LENGTH,');
+    expect(limits).not.toMatch(/PERSONA_CTA_TYPES\s*(?::[^=]+)?=\s*\[/);
+    const shapePath = join(repoRoot, 'apps', 'mcp', 'src', 'persona-cta-shape.ts');
+    const shape = readFileSync(shapePath, 'utf8');
+    expect(shape).toContain("from './contracts/personas.js'");
+    expect(shape).toContain('PERSONA_CTA_TYPES');
+    expect(shape).not.toMatch(/PERSONA_CTA_TYPES\s*(?::[^=]+)?=\s*\[/);
   });
 });

@@ -32,6 +32,7 @@ export const CreatePersonaRemoteShape = {
   paragraphNumber: CreatePersonaShape.paragraphNumber,
   niche: CreatePersonaShape.niche,
   faceQuality: CreatePersonaShape.faceQuality,
+  cta: CreatePersonaShape.cta,
   // Issue #572: same binding rule as the local shape — a persona is born
   // bound to at least one publishing account. Without this field the
   // handler's re-parse against CreatePersonaSchema (which requires
@@ -57,6 +58,7 @@ export const UpdatePersonaRemoteShape = {
   paragraphNumber: UpdatePersonaShape.paragraphNumber,
   niche: UpdatePersonaShape.niche,
   faceQuality: UpdatePersonaShape.faceQuality,
+  cta: UpdatePersonaShape.cta,
 };
 
 export const UpdatePersonaRemoteSchema = z

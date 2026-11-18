@@ -104,12 +104,30 @@ describe('personas · create: tool vs contract', () => {
     expect(CreatePersonaBodySchema.safeParse({ ...validCreateContract, niche: 'x'.repeat(300) }).success).toBe(true);
   });
 
-  it('the create tool has no ctaText field while the contract accepts it (deliberate)', () => {
-    // The CTA is set on update, not at creation; the tool drops the key.
+  it('the tool and the contract both accept the CTA intent, and both drop the legacy stored text', () => {
+    // Issue #639: the CTA is an intent (type plus facts), set at creation
+    // — the old stored-text ctaText is gone on both sides. A legacy key is
+    // stripped by zod on both sides, never rejected and never stored.
+    const cta = { type: 'link', url: 'https://example.com/course' };
+    expect(CreatePersonaSchema.safeParse({ ...validCreateTool, cta }).success).toBe(true);
+    expect(CreatePersonaBodySchema.safeParse({ ...validCreateContract, ctaType: 'link', ctaUrl: 'https://example.com/course' }).success).toBe(true);
     const parsed = CreatePersonaSchema.safeParse({ ...validCreateTool, ctaText: 'Buy now' });
     expect(parsed.success).toBe(true);
     if (parsed.success) expect('ctaText' in parsed.data).toBe(false);
     expect(CreatePersonaBodySchema.safeParse({ ...validCreateContract, ctaText: 'Buy now' }).success).toBe(true);
+  });
+
+  it('the tool rejects an incoherent CTA; the contract carries no cross-field rule', () => {
+    // The tool fails fast locally on a link without a URL, an other
+    // without an instruction, and facts on a type that takes none. The
+    // create contract takes the flat fields independently — coherence is
+    // enforced by the web form parser (parsePersonaForm) and by the tool,
+    // not by this schema.
+    expect(CreatePersonaSchema.safeParse({ ...validCreateTool, cta: { type: 'link' } }).success).toBe(false);
+    expect(CreatePersonaSchema.safeParse({ ...validCreateTool, cta: { type: 'other' } }).success).toBe(false);
+    expect(CreatePersonaSchema.safeParse({ ...validCreateTool, cta: { type: 'follow', url: 'https://example.com/x' } }).success).toBe(false);
+    expect(CreatePersonaBodySchema.safeParse({ ...validCreateContract, ctaType: 'link' }).success).toBe(true);
+    expect(CreatePersonaBodySchema.safeParse({ ...validCreateContract, ctaType: 'other' }).success).toBe(true);
   });
 });
 
@@ -121,12 +139,16 @@ describe('personas · update: tool vs contract', () => {
     expect(UpdatePersonaBodySchema.safeParse({ niche: 'x'.repeat(301) }).success).toBe(false);
   });
 
-  it('accepts ctaText in the contract and drops it in the tool (deliberate)', () => {
-    expect(UpdatePersonaBodySchema.safeParse({ ctaText: 'Buy now' }).success).toBe(true);
-    expect(UpdatePersonaBodySchema.safeParse({ ctaText: '' }).success).toBe(true);
+  it('the tool and the contract both accept the CTA intent; the legacy key is stripped by the tool and rejected by the contract', () => {
+    // Issue #639: the CTA is an intent (type plus facts). A legacy ctaText
+    // key is stripped by the tool's zod parse, never stored; a body with
+    // only that key fails the contract's "Nothing to update" refine.
+    expect(UpdatePersonaSchema.safeParse({ personaId: 'p1', cta: { type: 'comment' } }).success).toBe(true);
+    expect(UpdatePersonaBodySchema.safeParse({ ctaType: 'comment' }).success).toBe(true);
     const parsed = UpdatePersonaSchema.safeParse({ personaId: 'p1', ctaText: 'Buy now' });
     expect(parsed.success).toBe(true);
     if (parsed.success) expect('ctaText' in parsed.data).toBe(false);
+    expect(UpdatePersonaBodySchema.safeParse({ ctaText: 'Buy now' }).success).toBe(false);
   });
 
   it('the contract rejects an empty update while the tool accepts a personaId-only call (deliberate)', () => {

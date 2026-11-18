@@ -124,6 +124,22 @@ describe('generate_video: one video', () => {
     expect(f.generatePersonaVideo.mock.calls[0][0].idempotencyKey).toBe('once-1');
   });
 
+  it('forwards the per-video CTA override and the marked take, including an explicit null (issue #639)', async () => {
+    const f = fakes();
+    const marked = [
+      { kind: 'hook' as const, text: HOOK },
+      { kind: 'content' as const, text: CONTENT_1 },
+      { kind: 'content' as const, text: 'What did you think of this plan?', cta: true },
+    ];
+    await handleGenerateVideo(f.client, parse({ videos: [video({ segments: marked, cta: { type: 'comment' } })] }));
+    const sent = f.generatePersonaVideo.mock.calls[0][0];
+    expect(sent.cta).toEqual({ type: 'comment' });
+    expect(sent.options.segments[2]).toMatchObject({ cta: true });
+
+    await handleGenerateVideo(f.client, parse({ videos: [video({ segments: marked, cta: null })] }));
+    expect(f.generatePersonaVideo.mock.calls[1][0].cta).toBeNull();
+  });
+
   it('answers an ambiguous persona with candidates and creates nothing', async () => {
     const f = fakes({ personas: { personas: [{ id: MARIA, name: 'Maria' }, { id: JOAO, name: 'maria' }] } });
     const response = await handleGenerateVideo(f.client, parse({ videos: [video()] }));
