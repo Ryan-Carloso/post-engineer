@@ -69,6 +69,7 @@ const METRICS_ROW = {
   accountId: 'UC-1',
   externalId: 'vid_1',
   scriptAngle: 'hot take',
+  publishedAt: '2026-11-12T10:00:00.000Z',
   views: 10,
   likes: 2,
   comments: 1,
