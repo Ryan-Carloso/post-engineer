@@ -88,7 +88,7 @@ for (const { source, targets } of files) {
     const expected = isWeb ? toWebCopy(sourceText) : sourceText;
     // Partial checkouts (e.g. the web Docker build context, which copies only
     // apps/web) do not contain every target app. Skip those instead of failing
-    // when copyFileSync cannot create the missing parent directory.
+    // when writeFileSync cannot create the missing parent directory.
     if (!existsSync(dirname(target))) {
       console.log(`skipped ${target} (app not present in this checkout)`);
       continue;

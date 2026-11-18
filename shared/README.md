@@ -13,10 +13,12 @@ copies only the app root (see prompt-base below).
 `script-segments/script-segments.ts` is the mechanical segments-script
 validation entry point (limits, `validateSegments`, `joinSegments`).
 Its helpers live in siblings: `normalize`/`hasForbiddenContent` in
-`segment-text.ts`, and `CLIP_DENSITY_ITEMS`/`isVideoRef`/
-`clipDensityMinCount` in `segment-media.ts`, all mirroring
-`apps/engine/app/services/script_segments.py` with the one documented
-exception (Python `casefold` vs JS `toLowerCase`, e.g. `ß`).
+`segment-text.ts`, mirroring `_normalized`/`_check_text_content` in
+`apps/engine/app/services/script_segments.py` (with the one documented
+exception: Python `casefold` vs JS `toLowerCase`, e.g. `ß`), and
+`CLIP_DENSITY_ITEMS`/`isVideoRef`/`clipDensityMinCount` in
+`segment-media.ts`, mirroring
+`apps/engine/app/services/segment_video.py`.
 The engine Python copy stays duplicated on purpose: Python and
 TypeScript cannot share code.
 
