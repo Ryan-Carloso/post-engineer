@@ -6,7 +6,7 @@
 import { z } from 'zod';
 
 import type { PostEngineerClient } from './client.js';
-import { SOCIAL_PROVIDERS } from './contracts/providers.js';
+import { SOCIAL_PROVIDERS, isOAuthConnectProvider, type DirectConnectProvider } from './contracts/providers.js';
 import { getErrorMessage } from './errors.js';
 import { handleLibraryCall, type McpToolResponse } from './tools-call.js';
 
@@ -31,15 +31,16 @@ export const ConnectAccountShape = {
 
 export const ConnectAccountSchema = z.object(ConnectAccountShape);
 
-export async function handleConnectAccount(
-  client: PostEngineerClient,
-  args: z.infer<typeof ConnectAccountSchema>
-): Promise<McpToolResponse> {
-  // Bluesky and Rumble connect directly (app password / access token),
-  // no OAuth URL. Bluesky projects the upstream response to named fields
-  // (the 3Speak branch does the same); Rumble shares handleLibraryCall,
-  // which renders the same success/error text the hand-built block used to.
-  if (args.provider === 'bluesky') {
+type ConnectAccountArgs = z.infer<typeof ConnectAccountSchema>;
+type DirectConnectHandler = (client: PostEngineerClient, args: ConnectAccountArgs) => Promise<McpToolResponse>;
+
+// One handler per direct-connect network (a record, not a chain): a new
+// direct-connect network fails the typecheck until it has a handler,
+// instead of falling through to the OAuth URL path. Bluesky and 3Speak
+// project the upstream response to named fields; Rumble shares
+// handleLibraryCall, which renders the same success/error text.
+const DIRECT_CONNECT_HANDLERS: Record<DirectConnectProvider, DirectConnectHandler> = {
+  bluesky: async (client, args) => {
     if (!args.handle || !args.appPassword) {
       return {
         content: [
@@ -75,8 +76,8 @@ export async function handleConnectAccount(
         isError: true,
       };
     }
-  }
-  if (args.provider === '3speak') {
+  },
+  '3speak': async (client, args) => {
     if (!args.username || !args.postingKey) {
       return {
         content: [
@@ -112,11 +113,10 @@ export async function handleConnectAccount(
         isError: true,
       };
     }
-  }
-
-  if (args.provider === 'rumble') {
+  },
+  rumble: (client, args) => {
     if (!args.channelId || !args.accessToken) {
-      return {
+      return Promise.resolve({
         content: [
           {
             type: 'text',
@@ -124,7 +124,7 @@ export async function handleConnectAccount(
           },
         ],
         isError: true,
-      };
+      });
     }
     const channelId = args.channelId;
     const accessToken = args.accessToken;
@@ -133,6 +133,15 @@ export async function handleConnectAccount(
       'connecting Rumble account',
       'Rumble account connected successfully',
     );
+  },
+};
+
+export async function handleConnectAccount(
+  client: PostEngineerClient,
+  args: z.infer<typeof ConnectAccountSchema>
+): Promise<McpToolResponse> {
+  if (!isOAuthConnectProvider(args.provider)) {
+    return DIRECT_CONNECT_HANDLERS[args.provider](client, args);
   }
 
   try {

@@ -24,6 +24,7 @@ import { handlePinterestUpload } from '@/lib/upload/pinterest-handler';
 import { handleRumbleUpload } from '@/lib/upload/rumble-handler';
 import { handleThreadsUpload } from '@/lib/upload/threads-handler';
 import { handleThreespeakUpload } from '@/lib/upload/threespeak-handler';
+import { PUBLISH_ACCOUNT_FIELDS } from '@/lib/contracts/providers';
 import { SOCIAL_PROVIDERS, type SocialProvider } from '@/lib/providers/registry';
 import { buildPublishForm, parsePublishBody, publishUploadedVideo } from '../publish-uploaded';
 import type {
@@ -419,6 +420,18 @@ describe('buildPublishForm', () => {
     );
     expect(threespeak.get('caption')).toBe('');
     expect(threespeak.getAll('threespeakAccountIds')).toEqual(['sp-1']);
+  });
+
+  it("appends every network's ids under its own account field only", () => {
+    for (const provider of SOCIAL_PROVIDERS) {
+      const form = buildPublishForm({ uploadId: UPLOAD_ID, provider, accountIds: ['a1'] }, MP4, 'video/mp4');
+      expect(form.get('provider')).toBe(provider);
+      expect(form.getAll(PUBLISH_ACCOUNT_FIELDS[provider])).toEqual(['a1']);
+      for (const other of SOCIAL_PROVIDERS) {
+        if (other === provider) continue;
+        expect(form.getAll(PUBLISH_ACCOUNT_FIELDS[other])).toEqual([]);
+      }
+    }
   });
 });
 

@@ -19,8 +19,11 @@
 //   fanvue    → permalink  ready-made post URL (best-effort; no URL can be derived from the id —
 //              the Fanvue post-URL format is unknown, so no derivation is attempted)
 //
-// So three providers arrive with a URL and two need one derived. A provider
-// entry with neither is omitted rather than rendered as a dead link.
+// So eight of the ten arrive with a ready-made URL, and the three that can
+// fall back to a bare post id have a derivation: Bluesky and LinkedIn
+// always (they carry no URL), Pinterest only when the entry has no
+// permalink. A provider entry with neither is omitted rather than rendered
+// as a dead link.
 // An entry whose status is "failed" is omitted even when it also carries
 // a URL: that publish did not happen.
 //

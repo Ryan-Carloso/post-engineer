@@ -44,6 +44,34 @@ def scan(path: str, text: str, index: dict[str, str]) -> list[dict[str, object]]
             return [name for name in names if name is not None]
         return []
 
+    def subject_providers(node: ast.AST) -> list[tuple[str, str]]:
+        """(subject dump, provider) pairs for a test: `subject == 'p'` or
+        `'p' == subject`, combined with `and`."""
+        if isinstance(node, ast.BoolOp) and isinstance(node.op, ast.And):
+            pairs: list[tuple[str, str]] = []
+            for value in node.values:
+                pairs.extend(subject_providers(value))
+            return pairs
+        if isinstance(node, ast.Compare) and len(node.ops) == 1 and isinstance(node.ops[0], ast.Eq):
+            left = mention(node.left)
+            right = mention(node.comparators[0])
+            if left is not None and right is None:
+                return [(ast.dump(node.comparators[0]), left)]
+            if right is not None and left is None:
+                return [(ast.dump(node.left), right)]
+        return []
+
+    def if_names(node: ast.If) -> list[str]:
+        # Every provider an `if` compares against through its whole elif
+        # expansion, so a head elif chain and its sibling continuations
+        # group as one run instead of splitting across the two detectors.
+        names: list[str] = []
+        current: ast.AST | None = node
+        while isinstance(current, ast.If):
+            names.extend(compared(current.test))
+            current = current.orelse[0] if len(current.orelse) == 1 and isinstance(current.orelse[0], ast.If) else None
+        return names
+
     def report(node: ast.AST, kind: str, names: list[str | None]) -> None:
         providers = [name for name in names if name is not None]
         if len(set(providers)) < 2:
@@ -92,6 +120,46 @@ def scan(path: str, text: str, index: dict[str, str]) -> list[dict[str, object]]
             report(node, "chain", list(compared(node)))
         elif isinstance(node, ast.Constant) and isinstance(node.value, str) and id(node) not in docstrings:
             report(node, "text", [index.get(token) for token in TOKEN.findall(node.value)])
+
+    # Runs of consecutive `if` statements in one statement list that spread
+    # the dispatch across siblings instead of if/elif links: each statement
+    # alone names one provider, so without this grouping every sibling is
+    # dropped by the per-node minimum while the combined run is
+    # per-provider dispatch with a silent fall-through to whatever follows.
+    def report_sibling_runs(statements: list[ast.stmt]) -> None:
+        run: list[ast.If] = []
+        subject: str | None = None
+
+        def flush() -> None:
+            nonlocal run, subject
+            if len(run) > 1:
+                names: list[str] = []
+                for statement in run:
+                    names.extend(if_names(statement))
+                report(run[0], "chain", names)
+            run = []
+            subject = None
+
+        for statement in statements:
+            if not isinstance(statement, ast.If):
+                flush()
+                continue
+            pairs = subject_providers(statement.test)
+            single_subject = bool(pairs) and all(name == pairs[0][0] for name, _ in pairs)
+            if not single_subject or (subject is not None and pairs[0][0] != subject):
+                flush()
+            if not single_subject:
+                continue
+            if subject is None:
+                subject = pairs[0][0]
+            run.append(statement)
+        flush()
+
+    for node in ast.walk(tree):
+        for field in ("body", "orelse", "finalbody"):
+            statements = getattr(node, field, None)
+            if isinstance(statements, list) and statements and all(isinstance(item, ast.stmt) for item in statements):
+                report_sibling_runs(statements)
     return groups
 
 

@@ -46,13 +46,68 @@ export function scanTs(file, text, index) {
     }
     return [];
   };
+  // The subject each comparison tests, as source text (`account.provider`,
+  // `p`). Sibling `if` statements that compare the same subject against a
+  // different provider form one chain: consecutive `if (p === 'a') ...` /
+  // `if (p === 'b') ...` runs where each statement alone names one provider
+  // and the combined run is per-provider dispatch with a silent fall-through.
+  const comparedWithSubject = (node) => {
+    if (ts.isParenthesizedExpression(node)) return comparedWithSubject(node.expression);
+    if (ts.isPrefixUnaryExpression(node)) return comparedWithSubject(node.operand);
+    if (ts.isBinaryExpression(node)) {
+      if (LOGICAL.has(node.operatorToken.kind)) return [...comparedWithSubject(node.left), ...comparedWithSubject(node.right)];
+      if (EQUALITY.has(node.operatorToken.kind)) {
+        const left = stringLiteral(node.left);
+        const right = stringLiteral(node.right);
+        if (left !== null) return [{ subject: node.right.getText(source), provider: left }];
+        if (right !== null) return [{ subject: node.left.getText(source), provider: right }];
+      }
+    }
+    return [];
+  };
   const report = (node, kind, names) => {
     const providers = names.filter((name) => name !== null);
     if (new Set(providers).size < 2) return;
     groups.push({ file, line: source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1, kind, providers });
   };
+  // Runs of consecutive `if` statements in one statement list that spread
+  // the dispatch across siblings instead of else-if links. A statement that
+  // returns on every branch still falls a new provider through to whatever
+  // follows the run. Each statement names one provider, so without this run
+  // grouping every sibling would be dropped by the per-node minimum.
+  const reportSiblingRuns = (statements) => {
+    // Every provider a statement compares against through its whole else-if
+    // expansion, so a head else-chain and its sibling continuations group as
+    // one run instead of splitting across the two detectors.
+    const namesOf = (statement) => {
+      const names = [];
+      for (let current = statement; current !== undefined && ts.isIfStatement(current); current = current.elseStatement) names.push(...compared(current.expression));
+      return names;
+    };
+    let run = [];
+    let subject = null;
+    const flush = () => {
+      if (run.length > 1) report(run[0], 'chain', run.flatMap(namesOf));
+      run = [];
+      subject = null;
+    };
+    for (const statement of statements) {
+      if (!ts.isIfStatement(statement)) {
+        flush();
+        continue;
+      }
+      const pairs = comparedWithSubject(statement.expression);
+      const singleSubject = pairs.length > 0 && pairs.every((pair) => pair.subject === pairs[0].subject);
+      if (!singleSubject || (subject !== null && pairs[0].subject !== subject)) flush();
+      if (!singleSubject) continue;
+      if (subject === null) subject = pairs[0].subject;
+      run.push(statement);
+    }
+    flush();
+  };
 
   const visit = (node) => {
+    if (ts.isBlock(node) || ts.isSourceFile(node)) reportSiblingRuns(node.statements);
     if (ts.isArrayLiteralExpression(node)) {
       report(node, 'list', node.elements.map(stringLiteral));
     } else if (ts.isUnionTypeNode(node)) {

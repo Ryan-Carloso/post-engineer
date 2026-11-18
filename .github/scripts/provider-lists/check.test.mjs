@@ -87,6 +87,19 @@ describe('scanTs', () => {
   it('reports nothing for single providers and for constants read by name', () => {
     assert.deepEqual(tsKinds("if (p === 'youtube') a(); const l = SOCIAL_PROVIDERS.map((x) => x); const f = PUBLISH_ACCOUNT_FIELDS[p];"), []);
   });
+  it('finds runs of sibling if statements that share a subject', () => {
+    assert.deepEqual(tsKinds("if (p === 'youtube') a();\nif (p === 'instagram') b();\nif (p === 'bluesky') c();\n"), [['chain', 3]]);
+    assert.deepEqual(tsKinds("if (a.provider === 'youtube') a();\nif (a.provider === 'instagram') b();\nif (a.provider === 'bluesky') c();\n"), [['chain', 3]]);
+    // The scanner groups runs of two or more; the rules drop the ones under
+    // the per-provider threshold. Unrelated statements and a different
+    // subject break the run.
+    assert.deepEqual(tsKinds("if (p === 'youtube') a();\nif (p === 'instagram') b();\n"), [['chain', 2]]);
+    assert.deepEqual(tsKinds("if (p === 'youtube') a();\nwork();\nif (p === 'instagram') b();\nif (p === 'bluesky') c();\n"), [['chain', 2]]);
+    assert.deepEqual(tsKinds("if (p === 'youtube') a();\nif (q === 'instagram') b();\nif (q === 'bluesky') c();\n"), [['chain', 2]]);
+    const violations = tsViolations("if (p === 'youtube') a();\nif (p === 'instagram') b();\nif (p === 'bluesky') c();\n");
+    assert.equal(violations.length, 1);
+    assert.match(violations[0].message, /per-provider chain/);
+  });
   it('turns the findings into violations with the line of the node', () => {
     const violations = tsViolations("const x = 1;\nconst P = ['youtube', 'instagram', 'linkedin'];\n");
     assert.equal(violations.length, 1);
@@ -123,6 +136,12 @@ describe('scanPython', () => {
     assert.deepEqual(python('M = {"youtube": 1, "instagram": 2, "bluesky": 3}\n'), [['map', 3]]);
     assert.deepEqual(python('if p == "youtube":\n    a()\nelif p == "instagram":\n    b()\nelif p == "bluesky":\n    c()\n'), [['chain', 3]]);
     assert.deepEqual(python('ok = p == "youtube" or p == "rumble" or p == "fanvue"\n'), [['chain', 3]]);
+  });
+  it('finds runs of sibling if statements that share a subject', () => {
+    assert.deepEqual(python('if p == "youtube":\n    a()\nif p == "instagram":\n    b()\nif p == "bluesky":\n    c()\n'), [['chain', 3]]);
+    assert.deepEqual(python('if p == YOUTUBE_PROVIDER:\n    a()\nif p == INSTAGRAM_PROVIDER:\n    b()\nif p == BLUESKY_PROVIDER:\n    c()\n'), [['chain', 3]]);
+    assert.deepEqual(python('if p == "youtube":\n    a()\nif p == "instagram":\n    b()\n'), [['chain', 2]]);
+    assert.deepEqual(python('if p == "youtube":\n    a()\nwork()\nif p == "instagram":\n    b()\nif p == "bluesky":\n    c()\n'), [['chain', 2]]);
   });
   it('reads an implicitly concatenated select string as one string and skips docstrings', () => {
     assert.deepEqual(python('"""youtube instagram bluesky"""\nS = (\n    "youtube_account_ids,"\n    "instagram_account_ids,bluesky_account_ids"\n)\n'), [['text', 3]]);

@@ -12,16 +12,15 @@ application/x-www-form-urlencoded when ``videoStoragePath`` replaces it):
 - Instagram: ``provider=instagram``, ``file`` xor ``videoStoragePath`` (R2 key),
   ``caption``, repeated ``igAccountIds`` fields.
 - Bluesky: ``provider=bluesky``, ``file`` (file), ``caption``,
-  repeated ``accountIds`` fields.
+  repeated ``did`` fields.
 - LinkedIn: ``provider=linkedin``, ``video`` (file), ``caption``,
-  repeated ``accountIds`` fields.
+  repeated ``linkedinAccountIds`` fields.
 - Threads: ``provider=threads``, ``video`` xor ``videoStoragePath``, ``caption``,
   repeated ``threadsAccountIds`` fields.
 - Facebook: ``provider=facebook``, ``video`` xor ``videoStoragePath``, ``caption``,
   repeated ``facebookAccountIds`` fields (see ``publish_facebook``). Pinterest: ``provider=pinterest``, ``video`` (file), ``title``, ``description``, ``boardId``, repeated ``pinterestAccountIds`` fields (see ``publish_pinterest``; validated by ``fill_schedule/metadata.py``).
 - 3Speak: ``provider=3speak``, ``video`` (file), ``caption``,
   repeated ``threespeakAccountIds`` fields (see ``publish_threespeak``).
-  repeated ``facebookAccountIds`` fields (see ``publish_facebook``).
 - Rumble: ``provider=rumble``, ``video`` (file), ``title``,
   ``description``, ``license_type`` (``0`` = Personal Use), repeated
   ``rumbleAccountIds`` fields (see ``publish_rumble``).
