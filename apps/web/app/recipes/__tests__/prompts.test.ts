@@ -20,8 +20,8 @@ describe('prompts hub data', () => {
       expect(prompt.titleKey).toMatch(/^recipes\./);
       expect(prompt.objectiveKey).toMatch(/^recipes\./);
       expect(prompt.kindKey).toMatch(/^recipes\./);
-      // Story-first carries one extra step: every photo is AI-generated
-      // from one base photo (step 5); every other prompt has the uniform
+      // Story-first carries one extra step: mixed media with one
+      // consistent persona (step 5); every other prompt has the uniform
       // 5 steps.
       const expectedStepCount = prompt.slug === 'story-first-reels' ? 6 : 5;
       expect(prompt.stepKeys).toHaveLength(expectedStepCount);
@@ -640,17 +640,36 @@ describe('prompts hub data', () => {
       'Ask me the persona, the topic, and the video type',
       'Find the real story first',
       'setup, turning point, payoff',
+      'Every emotional beat must be VISIBLE in the image',
+      'the turning point MUST have a visual moment',
+      'An invisible beat is a failure',
       'Build the hook from one mechanism',
       'Draft three hooks',
       'Write for watch-through',
       'Open a loop early',
       'echo one word from the hook',
+      'Vary the rhythm deliberately',
+      'a short, direct hook',
+      'a longer discovery',
+      'a short close',
+      'pace changes from take to take',
       'Voice: direct, plain spoken sentences',
       'If a line sounds written rather than spoken',
-      'Generate every photo with AI',
-      'never stock',
-      'do not search for images',
-      'about your own real photos',
+      'Mix the photos',
+      'never AI photos only',
+      'identical static panels is monotonous',
+      'licensed',
+      'stock photos from an image library',
+      'without a licence',
+      'Photos only',
+      'it cannot use',
+      'video (b-roll) as segment media',
+      'never attach a video URL',
+      'the base lines about material do not apply here',
+      'Match text to image per SENTENCE, not per segment',
+      'gets an image that shows what the sentence says',
+      'Image quality, no exceptions',
+      'No neutral filler photo',
       'One consistent persona',
       'the same person, the same look',
       'one fixed group',
@@ -700,13 +719,43 @@ describe('prompts hub data', () => {
     expect(text).toContain('Exa');
     expect(text).toContain('cut it from the script');
     expect(text).toContain('unconfirmed fact never enters');
-    // Step 6 overrides the base's image-search lines for this prompt only:
-    // the agent must not search for images at all.
-    expect(text).toContain('do not search for images');
-    expect(text).toContain('the base lines about searching images');
-    // And the base's "own real photos" material rule: AI-generated photos
-    // from the base photo replace it for this prompt.
-    expect(text).toContain('about your own real photos');
+    // Step 6 overrides the base's material lines for this prompt only:
+    // licensed stock photos are allowed here, and real photos are welcome
+    // — the base's "images only, your own real photos, no stock footage"
+    // rule does not apply to this prompt. Photos only: the engine renders
+    // segment media as photos and cannot use video (b-roll) as segment
+    // media, so the prompt must never promise it.
+    // (The story-rule PR's step-6 assertions — "do not search for images",
+    // "the base lines about searching images", "about your own real photos"
+    // — pinned the AI-only step 6 this PR replaces, so they do not carry
+    // over: this prompt searches licensed libraries for real photos.)
+    expect(text).toContain('the base lines about material do not apply here');
+    expect(text).toContain('licensed stock photos are allowed');
+    expect(text).toContain('real photos are welcome');
+    expect(text).toContain('without a licence');
+    expect(text).toContain('Photos only');
+    expect(text).toContain('it cannot use');
+    expect(text).toContain('never attach a video URL');
+    expect(text).not.toContain('licensed stock video');
+    expect(text).not.toContain('stock video (b-roll)');
+    // v3/v4 lessons, for a 10/10 video: every emotional beat is visible
+    // in the image, the rhythm varies take by take, every sentence gets
+    // its own image, and every image is sharp, well-lit, and on-topic.
+    expect(text).toContain('Every emotional beat must be VISIBLE in the image');
+    expect(text).toContain('visibly triumphant');
+    expect(text).toContain('An invisible beat is a failure');
+    expect(text).toContain('Vary the rhythm deliberately');
+    expect(text).toContain('pace changes from take to take');
+    expect(text).toContain('Match text to image per SENTENCE, not per segment');
+    expect(text).toContain('gets an image that shows what the sentence says');
+    expect(text).toContain('Image quality, no exceptions');
+    expect(text).toContain('No neutral filler photo');
+    expect(text).toContain('no repeated compositions');
+    // The old rule is gone: no more AI-only photos, no "never stock".
+    expect(text).not.toContain('Generate every photo with AI');
+    expect(text).not.toContain('never stock');
+    // The prompt never names a test persona: it talks about "the persona".
+    expect(text).not.toContain('Mara');
     expect(text).toContain('who would DM this to whom, and why');
     expect(text).toContain('never a rote "like and subscribe"');
     expect(text).toContain('wait for my yes');
