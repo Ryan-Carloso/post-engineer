@@ -1219,20 +1219,105 @@ describe('PostsPage week view', () => {
     expect(screen.queryByRole('button', { name: 'posts.calendarViewWeek' })).not.toBeInTheDocument();
   });
 
-  it('puts the day panel above the week grid on a narrow screen', async () => {
+  it('hides the day panel on a narrow screen until a day is tapped', async () => {
     vi.stubGlobal('matchMedia', vi.fn(mobileMatchMedia));
     render(<PostsPage />);
 
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'posts.calendarPrevWeek' })).toBeInTheDocument(),
     );
-    // Flex `order` is visual, not DOM order: the panel carries order-1 and
-    // the calendar wrapper order-2, so the panel renders above the grid.
+    // Nothing below the grid on open: the panel only appears on a tap.
+    expect(document.querySelector('section[aria-live="polite"]')).not.toBeInTheDocument();
+  });
+
+  it('puts the day panel below the week grid on a narrow screen, once a day is tapped', async () => {
+    vi.stubGlobal('matchMedia', vi.fn(mobileMatchMedia));
+    render(<PostsPage />);
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'posts.calendarPrevWeek' })).toBeInTheDocument(),
+    );
+    const grid = document.querySelector('[data-posts-calendar-week]');
+    if (grid === null) throw new Error('week grid not rendered');
+    const columns = grid.querySelectorAll('[role="group"][aria-label]:not([inert])');
+    expect(columns).toHaveLength(7);
+    fireEvent.click(columns[6]);
+    expect(dayPanelCardText('Upcoming topic')).toBeInTheDocument();
+    // Flex `order` is visual, not DOM order: the panel carries order-2
+    // and the calendar wrapper none (first), so the panel renders below
+    // the grid. DOM order agrees: the panel follows the calendar wrapper.
     const panel = document.querySelector('section[aria-live="polite"]') as HTMLElement;
     const card = document.querySelector('[data-calendar-card]') as HTMLElement;
     const calendarWrap = card.parentElement as HTMLElement;
-    expect(panel.className).toContain('order-1');
-    expect(calendarWrap.className).toContain('order-2');
+    expect(panel.className).toContain('order-2');
+    expect(calendarWrap.nextElementSibling).toBe(panel);
+    expect(screen.getByText('posts.dayPanelSwitchHint')).toBeInTheDocument();
+  });
+
+  it('collapses the day panel when the same day is tapped again', async () => {
+    vi.stubGlobal('matchMedia', vi.fn(mobileMatchMedia));
+    render(<PostsPage />);
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'posts.calendarPrevWeek' })).toBeInTheDocument(),
+    );
+    const columnsOf = () => {
+      const grid = document.querySelector('[data-posts-calendar-week]');
+      if (grid === null) throw new Error('week grid not rendered');
+      return grid.querySelectorAll('[role="group"][aria-label]:not([inert])');
+    };
+    fireEvent.click(columnsOf()[6]);
+    expect(dayPanelCardText('Upcoming topic')).toBeInTheDocument();
+    fireEvent.click(columnsOf()[6]);
+    expect(dayPanelCardText('Upcoming topic')).toBeUndefined();
+    expect(document.querySelector('section[aria-live="polite"]')).not.toBeInTheDocument();
+  });
+
+  it('switches the day panel to another day on tap', async () => {
+    const maySlot = { ...UPCOMING_SLOT, id: 'u2', slotAt: '2030-05-28T10:00:00.000Z', title: 'May topic' };
+    mockQueries({ range: [UPCOMING_SLOT, maySlot] });
+    vi.stubGlobal('matchMedia', vi.fn(mobileMatchMedia));
+    render(<PostsPage />);
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'posts.calendarPrevWeek' })).toBeInTheDocument(),
+    );
+    const columnsOf = () => {
+      const grid = document.querySelector('[data-posts-calendar-week]');
+      if (grid === null) throw new Error('week grid not rendered');
+      return grid.querySelectorAll('[role="group"][aria-label]:not([inert])');
+    };
+    // June 1 is the Saturday column (index 6), May 28 the Tuesday (index 2).
+    fireEvent.click(columnsOf()[6]);
+    expect(dayPanelCardText('Upcoming topic')).toBeInTheDocument();
+    fireEvent.click(columnsOf()[2]);
+    expect(dayPanelCardText('May topic')).toBeInTheDocument();
+    expect(dayPanelCardText('Upcoming topic')).toBeUndefined();
+  });
+
+  it('shows the tapped day as a summarized card: one line per video, no thumbnails', async () => {
+    vi.stubGlobal('matchMedia', vi.fn(mobileMatchMedia));
+    render(<PostsPage />);
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'posts.calendarPrevWeek' })).toBeInTheDocument(),
+    );
+    const grid = document.querySelector('[data-posts-calendar-week]');
+    if (grid === null) throw new Error('week grid not rendered');
+    const columns = grid.querySelectorAll('[role="group"][aria-label]:not([inert])');
+    fireEvent.click(columns[6]);
+    const panel = document.querySelector('section[aria-live="polite"]') as HTMLElement;
+    // One line per video: time, persona, title and the status chip, no
+    // thumbnail video and no big card chrome.
+    expect(panel.querySelector('video')).toBeNull();
+    expect(within(panel).getByText('Upcoming topic')).toBeInTheDocument();
+    expect(within(panel).getByText('Viva Leve')).toBeInTheDocument();
+    expect(within(panel).getByText('posts.groupScheduled')).toBeInTheDocument();
+    // Heading names the day and its count on one line, like the mockup.
+    // textContent, not the accessible name: the name computation trims
+    // the space before the "·" that separates the date from the count.
+    const heading = panel.querySelector('h2') as HTMLElement;
+    expect(heading.textContent).toBe('Saturday, Jun 1 · posts.calendarDayPostCountOne');
   });
 
   it('switches to the week view from the desktop switcher', async () => {

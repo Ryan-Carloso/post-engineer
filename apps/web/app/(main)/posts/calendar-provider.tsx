@@ -11,6 +11,7 @@ import { WeekView } from '@/components/week-view';
 import type { DetailedCalendarEvent } from '@/components/calendar-types';
 import { useI18n } from '@/lib/i18n/provider';
 import type { Locale } from '@/lib/i18n';
+import { useTimeZoneLabel } from '@/hooks/use-timezone-label';
 import { cn } from '@/lib/utils';
 import { addDays, dayKey, weekStart } from './calendar-days';
 import { readSecondaryTimeZone } from './secondary-timezone';
@@ -40,7 +41,11 @@ import { readSecondaryTimeZone } from './secondary-timezone';
 // week below the `md` breakpoint). The page owns `date`: the first day of
 // the shown month in month view, the first day of the shown week in week
 // view — the lib draws its seven columns from that date, and the wrapper
-// maps a column click back to a day the same way.
+// maps a column click back to a day the same way. On a phone the week
+// shows one time axis (the viewer's) and dots instead of chips: the
+// second Lisbon axis ate ~40% of a 390px screen and cut the chips to a
+// single letter (Alternative A). The dots are CSS on `[data-mobile-week]`
+// (globals.css) — the lib still positions the chip at the event's time.
 //---------------
 
 // The month's toolbar chevrons: one size, ink chevrons, 40px touch target.
@@ -81,6 +86,8 @@ export interface PostsCalendarProps {
   /** First day of the shown month (month view) or week (week view), owned by the page. */
   date: Date;
   view: PostsCalendarView;
+  /** The week view on a phone: one time axis, dots instead of chips. */
+  mobileWeek?: boolean;
   /** Desktop only: the page hides the switcher below the `md` breakpoint, where the week is the only view. */
   showViewSwitcher: boolean;
   weekStartsOn: 0 | 1;
@@ -109,6 +116,7 @@ export function PostsCalendar({
   events,
   date,
   view,
+  mobileWeek = false,
   showViewSwitcher,
   weekStartsOn,
   locale,
@@ -136,6 +144,10 @@ export function PostsCalendar({
   // The week view draws its columns from the week start, never from a
   // mid-week date: the page passes the start, this normalizes defensively.
   const weekStartDate = view === 'week' ? weekStart(date, weekStartsOn) : date;
+  // The viewer's zone label ("GMT-3"), empty on the server and during
+  // hydration so the markup matches — it only names the mobile week
+  // subtitle once the client clock is known.
+  const viewerZoneLabel = useTimeZoneLabel();
   // The month grid wrapper: its native capture listener stops the wheel
   // before the lib's native listener on the grid container can swallow it.
   // The week wrapper has no such listener: its time grid scrolls its hours
@@ -257,6 +269,11 @@ export function PostsCalendar({
   const caption = format(date, 'LLLL yyyy', { locale: dateFnsLocale });
   const captionLabel = caption.charAt(0).toUpperCase() + caption.slice(1);
   const weekRangeText = formatWeekRange(weekStartDate, addDays(weekStartDate, 6), locale);
+  const weekLabel = t('posts.calendarWeekLabel', { range: weekRangeText });
+  // On a phone the week has one axis, the viewer's: its label rides in the
+  // subtitle ("Semana 15 – 21 Nov · GMT-3") since the axis itself carries
+  // no second zone to name. Desktop keeps the plain range.
+  const weekSubtitle = view === 'week' && mobileWeek && viewerZoneLabel ? `${weekLabel} · ${viewerZoneLabel}` : weekLabel;
 
   return (
     <div
@@ -267,9 +284,7 @@ export function PostsCalendar({
         <div className="min-w-0">
           <div className="truncate text-base font-bold text-primary">{captionLabel}</div>
           {view === 'week' && (
-            <div className="truncate text-xs font-medium text-muted-foreground">
-              {t('posts.calendarWeekLabel', { range: weekRangeText })}
-            </div>
+            <div className="truncate text-xs font-medium text-muted-foreground">{weekSubtitle}</div>
           )}
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -348,7 +363,9 @@ export function PostsCalendar({
         locale={dateFnsLocale}
         hourCycle={locale === 'pt' ? 24 : 12}
         loading={loading}
-        secondaryTimeZone={secondaryTimeZone}
+        // On a phone the week has one axis: the secondary zone stays off,
+        // so the viewer zone is the only column and the grid fits.
+        secondaryTimeZone={mobileWeek ? undefined : secondaryTimeZone}
         createEvent={() => null}
         onEventSelect={handleEventSelect}
       >
@@ -362,6 +379,7 @@ export function PostsCalendar({
             <div
               ref={weekWrapRef}
               data-posts-calendar-week
+              data-mobile-week={mobileWeek || undefined}
               role="group"
               aria-label={captionLabel}
               className="h-150"
