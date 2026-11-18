@@ -68,6 +68,20 @@ describe('validateSegments', () => {
     expect(joinSegments(segments, 'full_lipsync')).toBe(`${hook}\n\n${cta}\n\n${content}`);
   });
 
+  it('accepts a cta marker on a content take', () => {
+    // Issue #639: the agent marks the take that performs this video's
+    // CTA, so the marker is part of the shared segment shape and must
+    // survive validation instead of tripping the unknown-key check.
+    const segments = [
+      { kind: 'hook', text: hook },
+      { kind: 'content', text: content },
+      { kind: 'content', text: cta, cta: true },
+    ];
+    const result = validateSegments(segments, 'full_lipsync');
+    expect(result.ok).toBe(true);
+    expect(joinSegments(segments, 'full_lipsync')).toBe(`${hook}\n\n${content}\n\n${cta}`);
+  });
+
   it('rejects placeholder, link, markdown, emoji and stage direction text', () => {
     const badTexts = [
       '[insira o texto aqui]',

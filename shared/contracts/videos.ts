@@ -26,6 +26,7 @@ import { defineEndpoint } from './endpoint.js';
 import { EXPERIMENT_TARGET_PAIRS_MAX, EXPERIMENT_VARIANT_ID_PATTERN } from './experiments.js';
 import { UploadContentResponseSchema } from './media.js';
 import { UUID } from './metrics.js';
+import { PersonaCtaSchema } from './personas.js';
 import { SOCIAL_PROVIDERS } from './providers.js';
 import { ScheduleWarningSchema } from './schedule-warnings.js';
 import { MAX_IMAGE_UPLOAD_BYTES, MAX_VIDEO_UPLOAD_BYTES, UPLOAD_CONTENT_TYPES, UPLOAD_CONTENT_TYPE_MESSAGE, isImageUploadContentType } from './upload-types.js';
@@ -112,6 +113,10 @@ export const segmentsRequestSchema = z.array(
     .object({
       kind: z.enum(['hook', 'content']),
       text: z.string(),
+      // Marks the content take that performs this video's CTA (issue
+      // #639): the engine and the pre-charge checks require a marked take
+      // when a CTA applies, and reject a comment take without '?'.
+      cta: z.boolean().optional(),
       media: z
         .array(
           z
@@ -217,6 +222,9 @@ export const GenerateAndScheduleBodySchema = z.object({
   idempotencyKey: z.string().optional(),
   // Paired A/B experiment link (issue #476), checked before the charge.
   experiment: ExperimentLinkSchema.optional(),
+  // Per-video CTA override (issue #639): an explicit value wins over the
+  // persona default; null disables the CTA for this video; absent inherits it.
+  cta: PersonaCtaSchema.nullable().optional(),
 });
 
 export type GenerateAndScheduleBody = z.infer<typeof GenerateAndScheduleBodySchema>;

@@ -33,9 +33,8 @@ export const MAX_TOTAL_WORDS = 200;
 export const MIN_CONTENT_WORDS = 30;
 export const MIN_HOOK_WORDS = 25;
 export const MAX_HOOK_WORDS = 40;
-// The info card painted inside a segment photo's panel (engine media_overlay). Same
-// numbers as MAX_OVERLAY_*_CHARS in apps/engine/app/services/script_segments.py;
-// a sync test in the engine pins them.
+// The info card painted inside a segment photo's panel (engine media_overlay):
+// same numbers as MAX_OVERLAY_*_CHARS in apps/engine/app/services/script_segments.py, pinned by an engine sync test.
 export const MAX_OVERLAY_TITLE_CHARS = 60;
 export const MAX_OVERLAY_SUBTITLE_CHARS = 80;
 export const MAX_OVERLAY_BADGE_CHARS = 30;
@@ -71,6 +70,8 @@ export type SegmentMedia = {
 export type ScriptSegment = {
   kind: SegmentKind;
   text: string;
+  // Marks the take that performs this video's CTA (issue #639).
+  cta?: boolean;
   media?: SegmentMedia[];
 };
 
@@ -98,10 +99,9 @@ function fail(field: string, rule: string, fix: string): SegmentsResult {
   return { ok: false, error: { field, rule, fix } };
 }
 
-// True when a segment media item references a video clip, by its
-// suffix — mirroring the engine's segment_video.is_video_ref. The
-// mediaId wins when present; otherwise the URL path decides (query and
-// fragment are not part of the path).
+// True when a segment media item references a video clip, by its suffix —
+// mirroring the engine's segment_video.is_video_ref. The mediaId wins when
+// present; otherwise the URL path decides (query and fragment are not part of the path).
 function isVideoRef(media: unknown): boolean {
   if (typeof media !== 'object' || media === null || Array.isArray(media)) return false;
   const record = media as Record<string, unknown>;
@@ -347,7 +347,7 @@ export function validateSegments(input: unknown, videoType: VideoType = 'hook_li
     // behind the media loop below, or a media-less segment with an
     // unknown key passes here while the engine rejects it.
     const unknown = Object.keys(segment)
-      .filter((key) => key !== 'kind' && key !== 'text' && key !== 'media')
+      .filter((key) => key !== 'kind' && key !== 'text' && key !== 'media' && key !== 'cta')
       .sort();
     if (unknown.length > 0) {
       return fail(

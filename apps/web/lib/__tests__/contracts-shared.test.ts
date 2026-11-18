@@ -18,7 +18,7 @@ import { PublicAccountItemSchema } from '@/lib/contracts/accounts';
 import { CancelRefundSchema, RANGE_STATUSES, ScheduleRowSchema } from '@/lib/contracts/schedule';
 import { VideoGenerationRowSchema } from '@/lib/contracts/video-tasks';
 import { VOICE_ACCENTS, VOICE_GENDERS, VOICE_KINDS } from '@/lib/contracts/voices';
-import { FACE_QUALITIES, MAX_DESCRIPTION_LENGTH, MAX_TAG_LENGTH, PERSONA_CTA_MAX_LENGTH, PERSONA_IMAGE_WARNING_CODES, VIDEO_LAYOUTS } from '@/lib/contracts/personas';
+import { FACE_QUALITIES, MAX_DESCRIPTION_LENGTH, MAX_TAG_LENGTH, PERSONA_CTA_INSTRUCTION_MAX_LENGTH, PERSONA_CTA_TYPES, PERSONA_CTA_URL_MAX_LENGTH, PERSONA_IMAGE_WARNING_CODES, PersonaCtaSchema, VIDEO_LAYOUTS } from '@/lib/contracts/personas';
 import { BATCH_KEY_MAX_LENGTH, BATCH_KEY_PATTERN, DRAFT_KINDS, DRAFT_MAX_INPUT_CHARS, HOOK_MAX_SECONDS, HOOK_MIN_SECONDS, MAX_BATCH_VIDEOS, MAX_IMAGES_MODE_MEDIAS, MAX_REPORTED_ISSUES, MAX_REQUESTED_PHOTO_SECONDS, MAX_SEGMENTS, MAX_VIDEO_UPLOAD_BYTES, MIN_REQUESTED_PHOTO_SECONDS, VIDEO_TYPES, VIDEO_TYPE_ERROR_SUFFIX, VIDEO_UPLOAD_CONTENT_TYPES } from '@/lib/contracts/videos';
 
 const HEADER = '// GENERATED from shared/contracts — do not edit.\n// Run `node scripts/sync-contracts.mjs` from the repo root to regenerate.\n';
@@ -252,24 +252,47 @@ describe('contracts shared source', () => {
   // persona-images.ts import them from there and re-export them so the
   // existing import paths keep working. A one-sided edit would make the
   // contract reject a value the form serves, or the form accept one the
-  // route rejects.
+  // route rejects. The CTA constants are pinned by value only here: the
+  // persona-schema re-export moves with the form change (issue #639),
+  // which replaces ctaText with the intent fields.
   it('pins the persona constants to the contract', () => {
     const root = findRepoRoot(import.meta.url);
     const schema = readFileSync(join(root, 'apps', 'web', 'lib', 'persona-schema.ts'), 'utf8');
     expect(schema).toContain("from './contracts/personas'");
     expect(schema).toContain('FACE_QUALITIES,');
-    expect(schema).toContain('PERSONA_CTA_MAX_LENGTH,');
     expect(schema).toContain('VALID_VIDEO_ASPECTS,');
     expect(schema).toContain('VIDEO_LAYOUTS,');
-    expect(schema).toContain('export { FACE_QUALITIES, PERSONA_CTA_MAX_LENGTH, VALID_VIDEO_ASPECTS, VIDEO_LAYOUTS };');
     expect(FACE_QUALITIES).toEqual(['ok', 'very_good']);
-    expect(PERSONA_CTA_MAX_LENGTH).toBe(200);
+    expect(PERSONA_CTA_TYPES).toEqual(['follow', 'comment', 'share', 'save', 'link', 'buy', 'other']);
+    expect(PERSONA_CTA_URL_MAX_LENGTH).toBe(2048);
+    expect(PERSONA_CTA_INSTRUCTION_MAX_LENGTH).toBe(500);
     expect(VIDEO_LAYOUTS).toEqual(['standard', 'react']);
     const images = readFileSync(join(root, 'apps', 'web', 'lib', 'persona-images.ts'), 'utf8');
     expect(images).toContain("from '@/lib/contracts/personas'");
     expect(images).toContain('MAX_DESCRIPTION_LENGTH, MAX_TAG_LENGTH');
     expect(MAX_TAG_LENGTH).toBe(100);
     expect(MAX_DESCRIPTION_LENGTH).toBe(500);
+  });
+
+  // Persona CTA intent (issue #639): the persona stores an intent plus
+  // facts, never wording. link/buy need a URL, other needs an
+  // instruction, and the other types carry no facts at all.
+  it('pins the persona CTA intent shape to the contract', () => {
+    expect(PersonaCtaSchema.safeParse({ type: 'follow' }).success).toBe(true);
+    expect(PersonaCtaSchema.safeParse({ type: 'comment' }).success).toBe(true);
+    expect(PersonaCtaSchema.safeParse({ type: 'link', url: 'https://example.com/group' }).success).toBe(true);
+    expect(PersonaCtaSchema.safeParse({ type: 'buy', url: 'https://example.com/checkout' }).success).toBe(true);
+    expect(PersonaCtaSchema.safeParse({ type: 'other', instruction: 'invite to the WhatsApp group' }).success).toBe(true);
+    expect(PersonaCtaSchema.safeParse({ type: 'link' }).success).toBe(false);
+    expect(PersonaCtaSchema.safeParse({ type: 'buy' }).success).toBe(false);
+    expect(PersonaCtaSchema.safeParse({ type: 'other' }).success).toBe(false);
+    expect(PersonaCtaSchema.safeParse({ type: 'follow', url: 'https://example.com' }).success).toBe(false);
+    expect(PersonaCtaSchema.safeParse({ type: 'follow', instruction: 'do something' }).success).toBe(false);
+    expect(PersonaCtaSchema.safeParse({ type: 'link', url: 'not-a-url' }).success).toBe(false);
+    expect(PersonaCtaSchema.safeParse({ type: 'subscribe' }).success).toBe(false);
+    expect(PersonaCtaSchema.safeParse({ type: 'other', instruction: 'x'.repeat(501) }).success).toBe(false);
+    expect(PersonaCtaSchema.safeParse({ type: 'link', url: `https://example.com/${'a'.repeat(2029)}` }).success).toBe(false);
+    expect(PersonaCtaSchema.safeParse({ type: 'link', url: `https://example.com/${'a'.repeat(2028)}` }).success).toBe(true);
   });
 
   // The warning codes are duplicated in the contract because

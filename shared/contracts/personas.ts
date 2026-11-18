@@ -33,9 +33,36 @@ export type VideoLayout = (typeof VIDEO_LAYOUTS)[number];
 export const FACE_QUALITIES = ['ok', 'very_good'] as const;
 export type FaceQuality = (typeof FACE_QUALITIES)[number];
 
-// Cap on the persona's call to action. Mirrored by the DB check
-// (migration 024) and the engine schema (video_cta: Field(max_length=200));
-export const PERSONA_CTA_MAX_LENGTH = 200;
+// Per-persona call to action, intent only (issue #639). The persona stores
+// a type plus facts — never wording: the agent writes the CTA per video.
+// The type list and the fact caps mirror the DB checks (migration 070);
+// persona-cta-types-migration.test.ts pins all three surfaces together.
+export const PERSONA_CTA_TYPES = ['follow', 'comment', 'share', 'save', 'link', 'buy', 'other'] as const;
+export type PersonaCtaType = (typeof PERSONA_CTA_TYPES)[number];
+// Fact caps, mirrored by the DB checks (migration 070).
+export const PERSONA_CTA_URL_MAX_LENGTH = 2048;
+export const PERSONA_CTA_INSTRUCTION_MAX_LENGTH = 500;
+
+// One persona CTA: the intent plus its facts. A link/buy CTA needs its URL;
+// an other CTA needs its instruction; the other types carry no facts.
+export const PersonaCtaSchema = z
+  .object({
+    type: z.enum(PERSONA_CTA_TYPES),
+    url: z.string().url().max(PERSONA_CTA_URL_MAX_LENGTH).optional(),
+    instruction: z.string().max(PERSONA_CTA_INSTRUCTION_MAX_LENGTH).optional(),
+  })
+  .refine(
+    (cta) =>
+      (cta.type === 'link' || cta.type === 'buy'
+        ? cta.url !== undefined
+        : cta.url === undefined) &&
+      (cta.type === 'other' ? cta.instruction !== undefined : cta.instruction === undefined),
+    {
+      message:
+        'A link/buy CTA needs its URL, an other CTA needs its instruction, and the other types carry no facts.',
+    },
+  );
+export type PersonaCta = z.infer<typeof PersonaCtaSchema>;
 
 // Image-library caps. Mirrored by the MCP client (fail-fast before the
 // round-trip) and by lib/persona-images.ts (the route-side check).
@@ -78,7 +105,9 @@ export const PersonaListItemSchema = z.object({
   videoAspect: z.string().optional(),
   videoLayout: z.string().optional(),
   scriptPrompt: z.string().optional(),
-  ctaText: z.string().optional(),
+  ctaType: z.enum(PERSONA_CTA_TYPES).optional(),
+  ctaUrl: z.string().max(PERSONA_CTA_URL_MAX_LENGTH).optional(),
+  ctaInstruction: z.string().max(PERSONA_CTA_INSTRUCTION_MAX_LENGTH).optional(),
   paragraphNumber: z.number().optional(),
   niche: z.string().optional(),
   faceQuality: z.string().optional(),
@@ -245,7 +274,9 @@ export const CreatePersonaBodySchema = z.object({
   videoAspect: z.enum(VIDEO_ASPECTS).optional(),
   videoLayout: z.enum(VIDEO_LAYOUTS).optional(),
   scriptPrompt: z.string().max(2000).optional(),
-  ctaText: z.string().max(PERSONA_CTA_MAX_LENGTH).optional(),
+  ctaType: z.enum(PERSONA_CTA_TYPES).optional(),
+  ctaUrl: z.string().url().max(PERSONA_CTA_URL_MAX_LENGTH).optional(),
+  ctaInstruction: z.string().max(PERSONA_CTA_INSTRUCTION_MAX_LENGTH).optional(),
   niche: z.string().max(300).optional(),
   paragraphNumber: z.coerce.number().int().min(1).max(10).optional(),
   faceQuality: z.enum(FACE_QUALITIES).optional(),
@@ -260,10 +291,11 @@ export const CreatePersonaBodySchema = z.object({
 });
 
 // PATCH mirrors parsePatchBody (app/api/persona/patch-body.ts). A blank
-// value means "leave unchanged" (null) except ctaText, where a present but
-// blank value clears the CTA (''). paragraphNumber is a string here: the
-// route parses it with parseInt, so '3x' reads as 3 — the parseInt
-// semantics stay in parsePatchBody, this schema only requires a string.
+// value means "leave unchanged" (null) except ctaUrl and ctaInstruction,
+// where a present but blank value clears the fact (''). paragraphNumber is
+// a string here: the route parses it with parseInt, so '3x' reads as 3 —
+// the parseInt semantics stay in parsePatchBody, this schema only requires
+// a string.
 const optionalFormText = <T extends z.ZodType>(schema: T) =>
   z.preprocess(
     (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
@@ -279,7 +311,11 @@ export const UpdatePersonaBodySchema = z
     videoAspect: optionalFormText(z.enum(VIDEO_ASPECTS)),
     videoLayout: optionalFormText(z.enum(VIDEO_LAYOUTS)),
     scriptPrompt: optionalFormText(z.string().max(2000)),
-    ctaText: z.string().max(PERSONA_CTA_MAX_LENGTH).optional(),
+    ctaType: z.enum(PERSONA_CTA_TYPES).optional(),
+    // No .url() here: a present-but-blank value clears the URL (''), and
+    // the route's parsePatchBody enforces the URL shape on the rest.
+    ctaUrl: z.string().max(PERSONA_CTA_URL_MAX_LENGTH).optional(),
+    ctaInstruction: z.string().max(PERSONA_CTA_INSTRUCTION_MAX_LENGTH).optional(),
     paragraphNumber: optionalFormText(z.string()),
     niche: optionalFormText(z.string().max(300)),
     faceQuality: optionalFormText(z.enum(FACE_QUALITIES)),
