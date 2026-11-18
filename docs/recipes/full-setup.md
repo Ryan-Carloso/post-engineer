@@ -49,10 +49,7 @@ never a blocker.
 - Which licensed stock video sources the user has keys for (Pexels,
   Pixabay, Coverr, or none), asked once at setup and reused for later
   videos in this conversation. The search tool for facts is asked once
-  in the base prompt and reused the same way. If a stock source fails —
-  timeout, no results, or error — the agent tries the next configured
-  source, best match first, and never stops at the first failure. If every
-  configured source fails, photos only.
+  in the base prompt and reused the same way.
   There is no saved tool or source configuration: for a later conversation
   the agent uses only the sources whose key is present in its own
   environment. The keys live in the agent's own environment as
