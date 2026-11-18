@@ -9,6 +9,7 @@ import {
   fetchThreadsProfile,
   getThreadsInsights,
   publishThreadsMedia,
+  refreshThreadsToken,
 } from '@/lib/threads';
 import { ThreadsError } from '@/lib/errors';
 import { findRepoRoot } from '@/test/repo-root';
@@ -189,5 +190,42 @@ describe('literals shared with the engine and the schema', () => {
     const migration = readFileSync(join(root, 'supabase/migrations/034_threads-provider.sql'), 'utf8');
     expect(migration).toContain("'linkedin', 'threads'");
     expect(migration).toContain('threads_account_ids');
+  });
+});
+
+describe('refreshThreadsToken', () => {
+  it('exchanges the long-lived token with th_refresh_token and returns the new token', async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse({ access_token: 'fresh', token_type: 'bearer', expires_in: 5_184_000 }));
+
+    await expect(refreshThreadsToken('old-tok')).resolves.toEqual({ access_token: 'fresh', expires_in: 5_184_000 });
+
+    const url = new URL(String(mockFetch.mock.calls[0][0]));
+    expect(url.origin + url.pathname).toBe('https://graph.threads.com/refresh_access_token');
+    expect(url.searchParams.get('grant_type')).toBe('th_refresh_token');
+    expect(url.searchParams.get('access_token')).toBe('old-tok');
+    const init = mockFetch.mock.calls[0][1] as RequestInit;
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it('keeps Meta code 190 so an invalidated token reads as unauthorized, without the token in the message', async () => {
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse({ error: { message: 'Error validating access token', type: 'OAuthException', code: 190 } }, 400),
+    );
+
+    const error = await refreshThreadsToken('old-tok').catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(ThreadsError);
+    expect((error as ThreadsError).providerCode).toBe(190);
+    expect((error as ThreadsError).message).toBe('THREADS_TOKEN_REFRESH_FAILED: Error validating access token');
+    expect((error as ThreadsError).message).not.toContain('old-tok');
+  });
+
+  it.each([
+    ['no access token', { expires_in: 100 }, 'missing access_token'],
+    ['no lifetime', { access_token: 'fresh' }, 'missing expires_in'],
+    ['a zero lifetime', { access_token: 'fresh', expires_in: 0 }, 'missing expires_in'],
+  ])('rejects a 200 answer with %s', async (_label, body, message) => {
+    mockFetch.mockResolvedValueOnce(jsonResponse(body));
+    await expect(refreshThreadsToken('old-tok')).rejects.toThrow(message);
   });
 });

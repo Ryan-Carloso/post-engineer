@@ -1,10 +1,13 @@
+import 'server-only';
+
 //---------------
 // Threads — API client to connect accounts (OAuth 2.0) and publish videos.
 //
 // Documentation (2026): https://developers.facebook.com/docs/threads
 // Publishing is container-based: POST /{user}/threads with a public video_url,
 // wait for the container to reach FINISHED, then POST /{user}/threads_publish.
-// The long-lived token expires in 60 days (refreshed on reconnect).
+// The long-lived token expires in 60 days; the scheduler's
+// social-token-refresh job renews it before then (refreshThreadsToken).
 //---------------
 
 import { ThreadsError } from '@/lib/errors';
@@ -129,6 +132,23 @@ export async function exchangeThreadsCodeForToken(code: string, redirectUriOverr
     access_token: longLived.access_token,
     expires_in: typeof longLived.expires_in === 'number' ? longLived.expires_in : 5_184_000,
   };
+}
+
+//---------------
+// refreshThreadsToken — exchanges a valid long-lived token (at least 24h
+// old) for a fresh 60-day one. A token Meta already invalidated fails with
+// code 190 and only a reconnect fixes it.
+//---------------
+export async function refreshThreadsToken(accessToken: string): Promise<ThreadsToken> {
+  const params = new URLSearchParams({ grant_type: 'th_refresh_token', access_token: accessToken });
+  const body = await threadsFetch('THREADS_TOKEN_REFRESH_FAILED', `${THREADS_API}/refresh_access_token?${params.toString()}`);
+  if (typeof body.access_token !== 'string' || body.access_token === '') {
+    throw new ThreadsError('THREADS_TOKEN_REFRESH_FAILED: missing access_token', 502);
+  }
+  if (typeof body.expires_in !== 'number' || body.expires_in <= 0) {
+    throw new ThreadsError('THREADS_TOKEN_REFRESH_FAILED: missing expires_in', 502);
+  }
+  return { access_token: body.access_token, expires_in: body.expires_in };
 }
 
 //---------------

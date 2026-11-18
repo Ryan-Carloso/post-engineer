@@ -286,6 +286,55 @@ describe('InstagramService', () => {
     });
   });
 
+  describe('refreshLongLivedToken', () => {
+    it('refreshes with ig_refresh_token, a timeout, and returns the new token', async () => {
+      mockGet.mockResolvedValueOnce({ data: { access_token: 'fresh', token_type: 'bearer', expires_in: 5184000 } });
+
+      const result = await new InstagramService().refreshLongLivedToken('old-tok');
+
+      expect(result).toEqual({ accessToken: 'fresh', tokenType: 'bearer', expiresIn: 5184000 });
+      expect(mockGet).toHaveBeenCalledWith('https://graph.instagram.com/refresh_access_token', {
+        params: { grant_type: 'ig_refresh_token', access_token: 'old-tok' },
+        timeout: 15_000,
+      });
+    });
+
+    it('keeps Meta code 190 on an invalidated token', async () => {
+      mockGet.mockRejectedValueOnce({
+        isAxiosError: true,
+        message: 'Request failed with status code 400',
+        response: {
+          status: 400,
+          data: { error: { message: 'Error validating access token', type: 'OAuthException', code: 190 } },
+        },
+      });
+
+      const error = await new InstagramService().refreshLongLivedToken('old-tok').catch((caught: unknown) => caught);
+
+      expect(error).toBeInstanceOf(InstagramApiError);
+      expect((error as InstagramApiError).providerCode).toBe(190);
+    });
+
+    it.each([
+      ['no access token', { expires_in: 100 }, 'Instagram token refresh returned no access token'],
+      ['no lifetime', { access_token: 'fresh' }, 'Instagram token refresh returned an invalid expires_in'],
+      ['a zero lifetime', { access_token: 'fresh', expires_in: 0 }, 'Instagram token refresh returned an invalid expires_in'],
+    ])('rejects a 200 answer with %s', async (_label, body, message) => {
+      mockGet.mockResolvedValueOnce({ data: body });
+      const error = await new InstagramService().refreshLongLivedToken('old-tok').catch((caught: unknown) => caught);
+      expect(error).toBeInstanceOf(InstagramApiError);
+      expect((error as InstagramApiError).message).toBe(message);
+      expect((error as InstagramApiError).statusCode).toBe(502);
+    });
+
+    it('defaults the token type to bearer when the answer omits it', async () => {
+      mockGet.mockResolvedValueOnce({ data: { access_token: 'fresh', expires_in: 100 } });
+      await expect(new InstagramService().refreshLongLivedToken('old-tok')).resolves.toEqual({
+        accessToken: 'fresh', tokenType: 'bearer', expiresIn: 100,
+      });
+    });
+  });
+
   describe('getProfile', () => {
     it('returns profile data', async () => {
       mockGet.mockResolvedValueOnce({

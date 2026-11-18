@@ -467,7 +467,7 @@ export class InstagramService {
   }
 
   //---------------
-  // refreshLongLivedToken — renews the long-lived token (~60 days, with a 24h margin)
+  // refreshLongLivedToken — renews a valid long-lived token (>= 24h old) for ~60 days
   //---------------
   async refreshLongLivedToken(accessToken: string): Promise<InstagramLongLivedToken> {
     try {
@@ -478,21 +478,22 @@ export class InstagramService {
             grant_type: 'ig_refresh_token',
             access_token: accessToken,
           },
+          timeout: 15_000,
         }
       );
 
-      const data = response.data as {
-        access_token: string;
-        token_type?: string;
-        expires_in: number;
-      };
-
-      return {
-        accessToken: data.access_token,
-        tokenType: data.token_type || 'bearer',
-        expiresIn: data.expires_in,
-      };
+      const data = response.data as { access_token?: unknown; token_type?: unknown; expires_in?: unknown };
+      // A malformed 200 is a failure, never a stored blank token.
+      if (typeof data.access_token !== 'string' || data.access_token === '') {
+        throw new InstagramApiError('Instagram token refresh returned no access token', 502);
+      }
+      if (typeof data.expires_in !== 'number' || !(data.expires_in > 0)) {
+        throw new InstagramApiError('Instagram token refresh returned an invalid expires_in', 502);
+      }
+      const tokenType = typeof data.token_type === 'string' && data.token_type !== '' ? data.token_type : 'bearer';
+      return { accessToken: data.access_token, tokenType, expiresIn: data.expires_in };
     } catch (error) {
+      if (error instanceof InstagramApiError) throw error;
       this.handleApiError(error, 'refreshLongLivedToken');
     }
   }
