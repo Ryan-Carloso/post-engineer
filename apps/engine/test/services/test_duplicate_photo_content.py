@@ -1,6 +1,6 @@
 """Duplicate photos by content: same image bytes under different references.
 
-Exact-repeat validation (script_segments._remember_photo) only sees
+Exact-repeat validation (segment_media_repeat.check_repeat) only sees
 reference strings, so the same file uploaded twice (two mediaIds) or the
 same photo behind two signed URLs (different query strings, same bytes)
 passes validation. prepare_segment_media hashes the resolved photo bytes

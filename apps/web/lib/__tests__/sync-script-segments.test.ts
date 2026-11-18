@@ -27,11 +27,17 @@ import { findRepoRoot } from '@/test/repo-root';
 
 const repoRoot = findRepoRoot(import.meta.url);
 const sharedSource = join(repoRoot, 'shared', 'script-segments', 'script-segments.ts');
+const sharedMedia = join(repoRoot, 'shared', 'script-segments', 'segment-media.ts');
+const sharedText = join(repoRoot, 'shared', 'script-segments', 'segment-text.ts');
 const syncScript = join(repoRoot, 'scripts', 'sync-script-segments.mjs');
 const musicSource = join(repoRoot, 'shared', 'music-mood-field', 'music-mood-field.ts');
 const musicScript = join(repoRoot, 'scripts', 'sync-music-mood-field.mjs');
 const webTarget = join('apps', 'web', 'lib', 'generation', 'script-segments.ts');
 const mcpTarget = join('apps', 'mcp', 'src', 'script-segments.ts');
+const webMediaTarget = join('apps', 'web', 'lib', 'generation', 'segment-media.ts');
+const mcpMediaTarget = join('apps', 'mcp', 'src', 'segment-media.ts');
+const webTextTarget = join('apps', 'web', 'lib', 'generation', 'segment-text.ts');
+const mcpTextTarget = join('apps', 'mcp', 'src', 'segment-text.ts');
 const musicWebTarget = join('apps', 'web', 'lib', 'generation', 'music-mood-field.ts');
 const musicMcpTarget = join('apps', 'mcp', 'src', 'music-mood-field.ts');
 
@@ -53,15 +59,21 @@ function createPartialCheckout(options: { withMcp: boolean }): string {
 
   mkdirSync(join(root, 'shared', 'script-segments'), { recursive: true });
   copyFileSync(sharedSource, join(root, 'shared', 'script-segments', 'script-segments.ts'));
+  copyFileSync(sharedMedia, join(root, 'shared', 'script-segments', 'segment-media.ts'));
+  copyFileSync(sharedText, join(root, 'shared', 'script-segments', 'segment-text.ts'));
   mkdirSync(join(root, 'shared', 'music-mood-field'), { recursive: true });
   copyFileSync(musicSource, join(root, 'shared', 'music-mood-field', 'music-mood-field.ts'));
 
   mkdirSync(join(root, 'apps', 'web', 'lib', 'generation'), { recursive: true });
   writeFileSync(join(root, webTarget), 'stale web copy\n');
+  writeFileSync(join(root, webMediaTarget), 'stale web media copy\n');
+  writeFileSync(join(root, webTextTarget), 'stale web text copy\n');
 
   if (options.withMcp) {
     mkdirSync(join(root, 'apps', 'mcp', 'src'), { recursive: true });
     writeFileSync(join(root, mcpTarget), 'stale mcp copy\n');
+    writeFileSync(join(root, mcpMediaTarget), 'stale mcp media copy\n');
+    writeFileSync(join(root, mcpTextTarget), 'stale mcp text copy\n');
   }
 
   return root;
@@ -83,10 +95,18 @@ describe('sync-script-segments in a partial checkout', () => {
     expect(readFileSync(join(root, webTarget), 'utf8')).toBe(
       readFileSync(sharedSource, 'utf8'),
     );
+    expect(readFileSync(join(root, webMediaTarget), 'utf8')).toBe(
+      readFileSync(sharedMedia, 'utf8'),
+    );
+    expect(readFileSync(join(root, webTextTarget), 'utf8')).toBe(
+      readFileSync(sharedText, 'utf8'),
+    );
     expect(readFileSync(join(root, musicWebTarget), 'utf8')).toBe(
       readFileSync(musicSource, 'utf8'),
     );
     expect(output).toContain(`skipped ${join(root, mcpTarget)}`);
+    expect(output).toContain(`skipped ${join(root, mcpMediaTarget)}`);
+    expect(output).toContain(`skipped ${join(root, mcpTextTarget)}`);
     expect(output).toContain(`skipped ${join(root, musicMcpTarget)}`);
   });
 
@@ -98,6 +118,12 @@ describe('sync-script-segments in a partial checkout', () => {
     const source = readFileSync(sharedSource, 'utf8');
     expect(readFileSync(join(root, webTarget), 'utf8')).toBe(source);
     expect(readFileSync(join(root, mcpTarget), 'utf8')).toBe(source);
+    const media = readFileSync(sharedMedia, 'utf8');
+    expect(readFileSync(join(root, webMediaTarget), 'utf8')).toBe(media);
+    expect(readFileSync(join(root, mcpMediaTarget), 'utf8')).toBe(media);
+    const text = readFileSync(sharedText, 'utf8');
+    expect(readFileSync(join(root, webTextTarget), 'utf8')).toBe(text);
+    expect(readFileSync(join(root, mcpTextTarget), 'utf8')).toBe(text);
     const music = readFileSync(musicSource, 'utf8');
     expect(readFileSync(join(root, musicWebTarget), 'utf8')).toBe(music);
     expect(readFileSync(join(root, musicMcpTarget), 'utf8')).toBe(music);
