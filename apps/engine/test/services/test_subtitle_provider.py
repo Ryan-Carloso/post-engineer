@@ -13,6 +13,7 @@ from app.models.schema import VideoParams
 from app.services import subtitle_provider
 
 _SRT = "1\n00:00:00,000 --> 00:00:01,000\nHello world.\n\n"
+_CLEANED_SRT = "1\n00:00:00,000 --> 00:00:01,000\nHello world\n\n"
 
 
 @pytest.fixture
@@ -54,8 +55,8 @@ def test_disabled_subtitles_return_empty_and_call_nobody(task_dir):
         patch.object(subtitle_provider.voice, "create_subtitle") as estimate,
     ):
         assert _build(object(), _params(enabled=False)) == ""
-    whisper.assert_not_called()
-    estimate.assert_not_called()
+    assert whisper.call_count == 0
+    assert estimate.call_count == 0
 
 
 def test_whisper_times_the_captions_even_when_a_tts_timeline_exists(task_dir):
@@ -68,9 +69,12 @@ def test_whisper_times_the_captions_even_when_a_tts_timeline_exists(task_dir):
     ):
         result = _build(object())
     assert result == str(task_dir / "subtitle.srt")
+    assert create.call_count == 1
     create.assert_called_once_with(audio_file="audio.mp3", subtitle_file=result)
+    assert correct.call_count == 1
     correct.assert_called_once_with(subtitle_file=result, video_script="Hello world.")
-    estimate.assert_not_called()
+    assert estimate.call_count == 0
+    assert Path(result).read_text(encoding="utf-8") == _CLEANED_SRT
 
 
 def test_the_provider_setting_no_longer_selects_the_tts_estimate(task_dir):
@@ -81,8 +85,8 @@ def test_the_provider_setting_no_longer_selects_the_tts_estimate(task_dir):
         patch.dict(config.app, {"subtitle_provider": "edge"}),
     ):
         _build(object())
-    create.assert_called_once()
-    estimate.assert_not_called()
+    assert create.call_count == 1
+    assert estimate.call_count == 0
 
 
 def test_whisper_without_a_file_falls_back_to_the_estimate_and_logs_an_error(task_dir):
@@ -96,8 +100,9 @@ def test_whisper_without_a_file_falls_back_to_the_estimate_and_logs_an_error(tas
     ):
         result = _build(object())
     assert result == str(task_dir / "subtitle.srt")
-    estimate.assert_called_once()
-    correct.assert_not_called()
+    assert estimate.call_count == 1
+    assert correct.call_count == 0
+    assert Path(result).read_text(encoding="utf-8") == _CLEANED_SRT
     log_error.assert_any_call("whisper wrote no subtitle file")
     log_error.assert_any_call(
         "whisper produced no subtitle; falling back to the estimated TTS timeline"
@@ -116,7 +121,8 @@ def test_whisper_raising_falls_back_to_the_estimate_and_logs_an_error(task_dir):
     ):
         result = _build(object())
     assert result == str(task_dir / "subtitle.srt")
-    estimate.assert_called_once()
+    assert estimate.call_count == 1
+    assert Path(result).read_text(encoding="utf-8") == _CLEANED_SRT
     log_error.assert_any_call("whisper subtitle failed: RuntimeError: model load failed")
 
 
@@ -133,7 +139,8 @@ def test_whisper_correction_failure_falls_back_to_the_estimate(task_dir):
     ):
         result = _build(object())
     assert result == str(task_dir / "subtitle.srt")
-    estimate.assert_called_once()
+    assert estimate.call_count == 1
+    assert Path(result).read_text(encoding="utf-8") == _CLEANED_SRT
     log_error.assert_any_call("whisper subtitle failed: RuntimeError: align failed")
 
 
@@ -147,7 +154,7 @@ def test_estimate_without_cues_returns_empty(task_dir):
     ):
         result = _build(object())
     assert result == ""
-    estimate.assert_called_once()
+    assert estimate.call_count == 1
     log_error.assert_any_call(
         "no subtitle cues: whisper failed and no TTS timeline could replace it"
     )
@@ -163,7 +170,8 @@ def test_whisper_with_an_empty_file_falls_back_to_the_estimate(task_dir):
     ):
         result = _build(object())
     assert result == str(task_dir / "subtitle.srt")
-    estimate.assert_called_once()
+    assert estimate.call_count == 1
+    assert Path(result).read_text(encoding="utf-8") == _CLEANED_SRT
 
 
 def test_whisper_failing_with_custom_audio_has_no_estimate_fallback(task_dir):
@@ -174,7 +182,7 @@ def test_whisper_failing_with_custom_audio_has_no_estimate_fallback(task_dir):
     ):
         result = _build(None)
     assert result == ""
-    estimate.assert_not_called()
+    assert estimate.call_count == 0
     log_error.assert_any_call(
         "no subtitle cues: whisper failed and no TTS timeline could replace it"
     )
