@@ -44,14 +44,19 @@ describe('prompt-data files', () => {
   });
 
   it('holds only prompt wording, never logic or helpers', () => {
-    const files = walk(PROMPT_BASE_DIR).filter((f) => f.endsWith('.ts'));
+    // Every source type the exemption covers (.py, .ts, .tsx), not just
+    // the .ts files the store holds today.
+    const files = walk(PROMPT_BASE_DIR).filter((f) => /\.(py|tsx?)$/.test(f));
     assert.ok(files.length > 0, 'expected at least one prompt-data file');
     for (const file of files) {
       const text = fs.readFileSync(file, 'utf8');
-      assert.doesNotMatch(text, /^\s*import\s/m, `${file} must not import`);
+      assert.doesNotMatch(text, /^\s*(import|from)\s/m, `${file} must be data only`);
+      // Reject helpers, not just function/class declarations: arrow
+      // functions, function expressions assigned to a const, and Python
+      // defs (the exemption covers .py files too).
       assert.doesNotMatch(
         text,
-        /^\s*(export\s+)?(async\s+)?(function|class)\s/m,
+        /=>|^\s*(export\s+)?(async\s+)?(function|class)\b|=\s*(async\s+)?function\s*\(|^\s*def\s/m,
         `${file} must not hold logic`,
       );
     }
