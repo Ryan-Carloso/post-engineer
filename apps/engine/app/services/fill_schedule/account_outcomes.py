@@ -43,6 +43,7 @@ _ACCOUNT_COLUMNS = {
     "3speak": "threespeak_account_ids",
     "rumble": "rumble_account_ids",
     "fanvue": "fanvue_account_ids",
+    "telegram": "telegram_account_ids",
 }
 _LABELS = {
     "youtube": "YouTube",
@@ -55,6 +56,7 @@ _LABELS = {
     "3speak": "3Speak",
     "rumble": "Rumble",
     "fanvue": "Fanvue",
+    "telegram": "Telegram",
 }
 _LINK_FIELDS = ("videoUrl", "permalink", "postId")
 

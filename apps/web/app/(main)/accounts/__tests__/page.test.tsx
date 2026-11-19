@@ -33,6 +33,7 @@ vi.mock('@/lib/api', () => ({
 
 vi.mock('@/lib/social-accounts-queries', () => ({
   useRumbleAccountsQuery: vi.fn(),
+  useTelegramAccountsQuery: vi.fn(),
 }));
 
 // Only notifyIfSessionExpired is doubled; the module's redirect behavior is
@@ -160,7 +161,7 @@ vi.mock('@/components/account-card', () => ({
 import AccountsPage from '../page';
 import { reportAccountDisconnectFailed, useAccountListErrorTelemetry } from '@/lib/account-card-telemetry';
 import { useYouTubeAccountsQuery, useInstagramAccountsQuery, useBlueskyAccountsQuery, useLinkedinAccountsQuery, useThreadsAccountsQuery, useFacebookAccountsQuery, useThreespeakAccountsQuery, useDisconnectAccountMutation } from '@/lib/api';
-import { useRumbleAccountsQuery } from '@/lib/social-accounts-queries';
+import { useRumbleAccountsQuery, useTelegramAccountsQuery } from '@/lib/social-accounts-queries';
 import { useYouTubeOAuth } from '@/lib/oauth/google-handler';
 import { notifyIfSessionExpired } from '@/lib/session-expiry';
 import { useInstagramOAuth } from '@/lib/oauth/instagram-handler';
@@ -219,6 +220,7 @@ beforeEach(() => {
   vi.mocked(useFanvueAccountsQuery, { partial: true }).mockReturnValue({ data: { authenticated: true, accounts: [] }, isLoading: false, error: null, refetch: vi.fn() });
   vi.mocked(useFanvueOAuth).mockReturnValue(fanvueOAuth);
   vi.mocked(useRumbleAccountsQuery, { partial: true }).mockReturnValue({ data: { authenticated: true, accounts: [] }, isLoading: false, error: null, refetch: vi.fn() });
+  vi.mocked(useTelegramAccountsQuery, { partial: true }).mockReturnValue({ data: { authenticated: true, accounts: [] }, isLoading: false, error: null, refetch: vi.fn() });
   vi.mocked(useLinkedInOAuth).mockReturnValue({
     startOAuth: vi.fn().mockResolvedValue(undefined),
     isLoading: false,
@@ -259,12 +261,12 @@ describe('app/(main)/accounts/page — AccountsPage', () => {
 
   it('shows the shared connection slot when YouTube has no accounts', () => {
     render(<AccountsPage />, { wrapper: createWrapper() });
-    expect(screen.getAllByText('accounts.connectFirst')).toHaveLength(10);
+    expect(screen.getAllByText('accounts.connectFirst')).toHaveLength(11);
   });
 
   it('shows the shared connection slot when Instagram has no accounts', () => {
     render(<AccountsPage />, { wrapper: createWrapper() });
-    expect(screen.getAllByRole('button', { name: 'accounts.connectFirst' })).toHaveLength(10);
+    expect(screen.getAllByRole('button', { name: 'accounts.connectFirst' })).toHaveLength(11);
   });
 
   it('shows loading skeletons while loading', () => {
@@ -1103,8 +1105,8 @@ describe('Rumble accounts section', () => {
     const fetchMock = vi.fn(async () => ({ ok: status >= 200 && status < 300, status, json: async () => body }));
     vi.stubGlobal('fetch', fetchMock);
     render(<AccountsPage />, { wrapper: createWrapper() });
-    // Rumble is the last section on the page, so its connect button is last.
-    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' }).at(-1) as HTMLElement);
+    // Rumble is the second-to-last section (Telegram follows it).
+    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' }).at(-2) as HTMLElement);
     fireEvent.change(await screen.findByTestId('rumble-handle-input'), { target: { value: 'chan-1' } });
     fireEvent.change(screen.getByTestId('rumble-password-input'), { target: { value: 'a'.repeat(40) } });
     fireEvent.click(screen.getByTestId('rumble-connect-button'));
@@ -1115,7 +1117,7 @@ describe('Rumble accounts section', () => {
     render(<AccountsPage />, { wrapper: createWrapper() });
     expect(screen.getByText('accounts.rumbleLabel')).toBeTruthy();
     expect(screen.getByText('accounts.rumbleDescription')).toBeTruthy();
-    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' }).at(-1) as HTMLElement);
+    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' }).at(-2) as HTMLElement);
     expect(await screen.findByTestId('rumble-handle-input')).toBeTruthy();
     expect(screen.getByTestId('rumble-password-input')).toBeTruthy();
   });
@@ -1158,8 +1160,8 @@ describe('Rumble accounts section', () => {
   it('renders the dialog copy and starts closed with empty fields', async () => {
     render(<AccountsPage />, { wrapper: createWrapper() });
     expect(screen.queryByTestId('rumble-handle-input')).not.toBeInTheDocument();
-    // Rumble is the last section on the page, so its connect button is last.
-    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' }).at(-1) as HTMLElement);
+    // Rumble is the second-to-last section (Telegram follows it).
+    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' }).at(-2) as HTMLElement);
     expect(await screen.findByTestId('rumble-handle-input')).toBeTruthy();
     expect(screen.getByText('accounts.rumbleConnectTitle')).toBeTruthy();
     expect(screen.getByText('accounts.rumbleConnectHint')).toBeTruthy();
@@ -1175,7 +1177,7 @@ describe('Rumble accounts section', () => {
 
   it('closes the Rumble dialog from its close button', async () => {
     render(<AccountsPage />, { wrapper: createWrapper() });
-    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' }).at(-1) as HTMLElement);
+    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' }).at(-2) as HTMLElement);
     expect(await screen.findByTestId('rumble-handle-input')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'accounts.closeDialog' }));
     await waitFor(() => expect(screen.queryByTestId('rumble-handle-input')).not.toBeInTheDocument());
@@ -1183,7 +1185,7 @@ describe('Rumble accounts section', () => {
 
   it('keeps the Rumble connect button disabled until both fields are non-blank', async () => {
     render(<AccountsPage />, { wrapper: createWrapper() });
-    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' }).at(-1) as HTMLElement);
+    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' }).at(-2) as HTMLElement);
     const button = await screen.findByTestId('rumble-connect-button');
     expect(button).toBeDisabled();
     fireEvent.change(screen.getByTestId('rumble-handle-input'), { target: { value: '   ' } });
@@ -1218,7 +1220,7 @@ describe('Rumble accounts section', () => {
     const fetchMock = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ success: true }) }));
     vi.stubGlobal('fetch', fetchMock);
     render(<AccountsPage />, { wrapper: createWrapper() });
-    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' }).at(-1) as HTMLElement);
+    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' }).at(-2) as HTMLElement);
     fireEvent.change(await screen.findByTestId('rumble-handle-input'), { target: { value: '  chan-1  ' } });
     fireEvent.change(screen.getByTestId('rumble-password-input'), { target: { value: 'a'.repeat(40) } });
     fireEvent.click(screen.getByTestId('rumble-connect-button'));
@@ -1239,7 +1241,7 @@ describe('Rumble accounts section', () => {
     );
     vi.stubGlobal('fetch', fetchMock);
     render(<AccountsPage />, { wrapper: createWrapper() });
-    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' }).at(-1) as HTMLElement);
+    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' }).at(-2) as HTMLElement);
     fireEvent.change(await screen.findByTestId('rumble-handle-input'), { target: { value: 'chan-1' } });
     fireEvent.change(screen.getByTestId('rumble-password-input'), { target: { value: 'a'.repeat(40) } });
     fireEvent.click(screen.getByTestId('rumble-connect-button'));
@@ -1262,7 +1264,7 @@ describe('Rumble accounts section', () => {
   it('shows the error text when the connect request throws', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('network down'); }));
     render(<AccountsPage />, { wrapper: createWrapper() });
-    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' }).at(-1) as HTMLElement);
+    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' }).at(-2) as HTMLElement);
     fireEvent.change(await screen.findByTestId('rumble-handle-input'), { target: { value: 'chan-1' } });
     fireEvent.change(screen.getByTestId('rumble-password-input'), { target: { value: 'a'.repeat(40) } });
     fireEvent.click(screen.getByTestId('rumble-connect-button'));

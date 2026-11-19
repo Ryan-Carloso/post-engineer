@@ -358,7 +358,7 @@ describe('image uploads', () => {
     await expect(claimUploadForPublish(store, storage, USER, 'upload-1', NOW, ['instagram', 'youtube'])).rejects.toMatchObject({
       status: 400,
       code: 'IMAGE_PROVIDER_UNSUPPORTED',
-      message: 'This upload is an image: youtube publishes video only. Images go to instagram, bluesky, linkedin, threads, facebook, pinterest.',
+      message: 'This upload is an image: youtube publishes video only. Images go to instagram, bluesky, linkedin, threads, facebook, pinterest, telegram.',
     });
     expect(store.rows.get('upload-1')?.status).toBe('ready');
     expect(storage.removed).toEqual([]);

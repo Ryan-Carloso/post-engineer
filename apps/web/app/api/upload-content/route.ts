@@ -5,6 +5,7 @@ import { handlePinterestUpload } from '@/lib/upload/pinterest-handler';
 import { handleFanvueUpload } from '@/lib/upload/fanvue-handler';
 import { handleThreespeakUpload } from '@/lib/upload/threespeak-handler';
 import { handleRumbleUpload } from '@/lib/upload/rumble-handler';
+import { handleTelegramUpload } from '@/lib/upload/telegram-handler';
 import { logger } from '@/lib/logger';
 import { ValidationError } from '@/lib/errors';
 import { requireSupabaseSession } from '@/lib/request-auth';
@@ -47,6 +48,7 @@ import { startLedgerHeartbeat } from '@/lib/upload/publish-ledger-heartbeat';
 //   fanvue:     video, title, description, fanvueAccountIds (repeatable; Fanvue user uuids)
 //   3speak:     video, caption, threespeakAccountIds (repeatable; Hive usernames)
 //   rumble:     video, title, description, rumbleAccountIds (repeatable; channel ids)
+//   telegram:   video|image|audio, caption, telegramAccountIds (repeatable; chat ids)
 //   engine:     userId (MONEYPRINT_API_SECRET only — internal publish-back)
 // Auth = Supabase session (UI), personal API key (pe_live_...), or
 // Authorization: Bearer <MONEYPRINT_API_SECRET> (engine). Per-user rate limit.
@@ -210,7 +212,9 @@ async function postHandler(request: NextRequest) {
                           ? await handleThreespeakUpload(handlerForm, userId)
                           : provider === 'rumble'
                             ? await handleRumbleUpload(handlerForm, userId)
-                            : await handleInstagramUpload(handlerForm, userId, logId, startTime);
+                            : provider === 'telegram'
+                              ? await handleTelegramUpload(handlerForm, userId)
+                              : await handleInstagramUpload(handlerForm, userId, logId, startTime);
         } catch (error) {
           if (partition !== null && ledgerClient !== null) {
           // The handler failed before publishing (validation): release the

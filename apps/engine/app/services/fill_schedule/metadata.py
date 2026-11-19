@@ -8,6 +8,7 @@ from app.services import upload_publisher
 from app.services.fill_schedule.youtube_tags import derive_tags_from_title
 from app.services.publish_fanvue import validate_fanvue_metadata
 from app.services.publish_pinterest import validate_pinterest_metadata
+from app.services.publish_telegram import validate_telegram_metadata
 
 
 class AccountNotBoundError(RuntimeError):
@@ -68,6 +69,11 @@ def metadata_for(provider: str, title: str, schedule: dict[str, Any], descriptio
             title=title[: upload_publisher.FANVUE_TITLE_MAX_LENGTH],
             description=copy[: upload_publisher.FANVUE_DESCRIPTION_MAX_LENGTH],
             account_ids=tuple(str(value) for value in schedule.get("fanvue_account_ids", [])),
+        )
+    if provider == upload_publisher.TELEGRAM_PROVIDER:
+        return upload_publisher.TelegramMetadata(
+            caption=copy[: upload_publisher.TELEGRAM_CAPTION_MAX_LENGTH],
+            account_ids=tuple(str(value) for value in schedule.get("telegram_account_ids", [])),
         )
     if provider == upload_publisher.THREESPEAK_PROVIDER:
         return upload_publisher.ThreespeakMetadata(
@@ -163,6 +169,9 @@ def validate_publish_plan(
             # its validator takes no new provider parameter. The pre-flight
             # is the only production caller, so this is the whole gate.
             validate_fanvue_metadata(metadata)
+        elif isinstance(metadata, upload_publisher.TelegramMetadata):
+            # Gated here for the same file-size reason as Fanvue above.
+            validate_telegram_metadata(metadata)
     upload_publisher.validate_publish_metadata(
         providers,
         youtube,

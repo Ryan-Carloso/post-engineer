@@ -11,6 +11,7 @@ import { handlePinterestUpload } from '@/lib/upload/pinterest-handler';
 import { handleRumbleUpload } from '@/lib/upload/rumble-handler';
 import { handleThreadsUpload } from '@/lib/upload/threads-handler';
 import { handleThreespeakUpload } from '@/lib/upload/threespeak-handler';
+import { handleTelegramUpload } from '@/lib/upload/telegram-handler';
 import type { ContentUploadAccountResult } from '@/lib/upload/content-upload-result';
 import {
   VideoUploadError,
@@ -143,6 +144,7 @@ const ACCOUNT_FIELD: Partial<Record<SocialProvider, string>> = {
   fanvue: 'fanvueAccountIds',
   '3speak': 'threespeakAccountIds',
   rumble: 'rumbleAccountIds',
+  telegram: 'telegramAccountIds',
 };
 
 export function buildPublishForm(
@@ -254,7 +256,9 @@ export async function dispatchPublish(
                     ? await handleFanvueUpload(formData, userId)
                     : provider === '3speak'
                       ? await handleThreespeakUpload(formData, userId)
-                      : await handleRumbleUpload(formData, userId);
+                      : provider === 'telegram'
+                        ? await handleTelegramUpload(formData, userId)
+                        : await handleRumbleUpload(formData, userId);
   return normalizePublishResponse(provider, response, logId);
 }
 

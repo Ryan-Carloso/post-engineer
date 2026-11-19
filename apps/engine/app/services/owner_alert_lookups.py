@@ -29,6 +29,7 @@ PROVIDER_LABELS = {
     "3speak": "3Speak",
     "rumble": "Rumble",
     "fanvue": "Fanvue",
+    "telegram": "Telegram",
 }
 
 

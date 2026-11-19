@@ -27,6 +27,7 @@ const ACCOUNT_FIELD: Partial<Record<SocialProvider, string>> = {
   fanvue: 'fanvueAccountIds',
   '3speak': 'threespeakAccountIds',
   rumble: 'rumbleAccountIds',
+  telegram: 'telegramAccountIds',
 };
 
 function fileName(contentType: string): string {

@@ -21,6 +21,7 @@ export interface ScheduleRow {
   threespeak_account_ids: string[];
   rumble_account_ids: string[];
   fanvue_account_ids: string[];
+  telegram_account_ids: string[];
   days_of_week: number[] | null;
   start_hour: number | null;
   end_hour: number | null;
@@ -35,7 +36,7 @@ export interface ScheduleRow {
 // lib/api.ts is grandfathered over the 500-line cap and may not grow, so
 // its ScheduleConfig cannot gain the field here — the extraction that
 // moves the schedule shapes out of lib/api.ts adds it there.
-export function mapSchedule(row: ScheduleRow): ScheduleConfig & { fanvueAccountIds: string[] } {
+export function mapSchedule(row: ScheduleRow): ScheduleConfig & { fanvueAccountIds: string[]; telegramAccountIds: string[] } {
   return {
     id: row.id,
     personaId: row.persona_id,
@@ -51,6 +52,7 @@ export function mapSchedule(row: ScheduleRow): ScheduleConfig & { fanvueAccountI
     threespeakAccountIds: row.threespeak_account_ids ?? [],
     rumbleAccountIds: row.rumble_account_ids ?? [],
     fanvueAccountIds: row.fanvue_account_ids ?? [],
+    telegramAccountIds: row.telegram_account_ids ?? [],
     daysOfWeek: row.days_of_week ?? [],
     startHour: row.start_hour ?? null,
     endHour: row.end_hour ?? null,

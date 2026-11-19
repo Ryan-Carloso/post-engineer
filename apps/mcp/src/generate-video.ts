@@ -39,6 +39,7 @@ const ACCOUNT_FIELD: Record<Provider, string> = {
   fanvue: 'fanvueAccountIds',
   '3speak': 'threespeakAccountIds',
   rumble: 'rumbleAccountIds',
+  telegram: 'telegramAccountIds',
 };
 
 const OMITTED_PER_VIDEO = {
@@ -53,6 +54,7 @@ const OMITTED_PER_VIDEO = {
   fanvueAccountIds: true,
   threespeakAccountIds: true,
   rumbleAccountIds: true,
+  telegramAccountIds: true,
   providers: true,
   idempotencyKey: true,
   recipe: true,

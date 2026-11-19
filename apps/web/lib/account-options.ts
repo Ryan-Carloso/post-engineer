@@ -19,6 +19,7 @@ export const PROVIDER_LABELS: Record<SocialProvider, string> = {
   '3speak': '3Speak',
   rumble: 'Rumble',
   fanvue: 'Fanvue',
+  telegram: 'Telegram',
 };
 
 // Every account a schedule targets, across all networks.
@@ -33,6 +34,7 @@ export function scheduleAccountIds(schedule: {
   threespeakAccountIds?: string[];
   rumbleAccountIds?: string[];
   fanvueAccountIds?: string[];
+  telegramAccountIds?: string[];
 }): string[] {
   return [
     ...(schedule.youtubeAccountIds ?? []),
@@ -45,6 +47,7 @@ export function scheduleAccountIds(schedule: {
     ...(schedule.threespeakAccountIds ?? []),
     ...(schedule.rumbleAccountIds ?? []),
     ...(schedule.fanvueAccountIds ?? []),
+    ...(schedule.telegramAccountIds ?? []),
   ];
 }
 
@@ -85,6 +88,9 @@ export function accountOption(account: PublicAccountItem): AccountOption {
   }
   if (account.provider === 'rumble') {
     return { id: account.providerAccountId, provider: 'rumble', label: account.accountName ?? account.providerAccountId };
+  }
+  if (account.provider === 'telegram') {
+    return { id: account.providerAccountId, provider: 'telegram', label: account.accountName ?? account.providerAccountId };
   }
   if (account.provider === 'instagram') return { id: account.igUserId, provider: 'instagram', label: formatSocialHandle(account.username) };
   return { id: account.channelId, provider: 'youtube', label: account.channelName };

@@ -34,8 +34,8 @@ export const SetPersonaPublishingAccountsShape = {
   accounts: z
     .record(z.string(), z.array(z.string().min(1)))
     .describe(
-      'Publishing accounts the persona is bound to, per provider, e.g. { youtube: ["UC..."], bluesky: ["did:plc:..."], \'3speak\': ["alice"] }. ' +
-        'Replaces the whole set: providers mapped to [] (or omitted) keep no binding for that provider, but the binding as a whole must keep at least one account (issue #572). ' +
+      'Publishing accounts the persona is bound to, per provider, e.g. { youtube: ["UC..."], bluesky: ["did:plc:..."] }. ' +
+        'Replaces the whole set: providers mapped to [] (or omitted) keep no binding for that provider, but the binding as a whole must keep at least one account. ' +
         'Account IDs come from accounts (action: list) (channelId / igUserId / providerAccountId / did).'
     ),
 };

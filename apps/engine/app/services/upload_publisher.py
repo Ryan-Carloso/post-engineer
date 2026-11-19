@@ -21,12 +21,12 @@ application/x-www-form-urlencoded when ``videoStoragePath`` replaces it):
   repeated ``facebookAccountIds`` fields (see ``publish_facebook``). Pinterest: ``provider=pinterest``, ``video`` (file), ``title``, ``description``, ``boardId``, repeated ``pinterestAccountIds`` fields (see ``publish_pinterest``; validated by ``fill_schedule/metadata.py``).
 - 3Speak: ``provider=3speak``, ``video`` (file), ``caption``,
   repeated ``threespeakAccountIds`` fields (see ``publish_threespeak``).
-  repeated ``facebookAccountIds`` fields (see ``publish_facebook``).
 - Rumble: ``provider=rumble``, ``video`` (file), ``title``,
   ``description``, ``license_type`` (``0`` = Personal Use), repeated
   ``rumbleAccountIds`` fields (see ``publish_rumble``).
 - Fanvue: ``provider=fanvue``, ``video`` (file), ``title``, ``description``,
   repeated ``fanvueAccountIds`` fields (see ``publish_fanvue``; validated by ``fill_schedule/metadata.py``).
+- Telegram: ``provider=telegram``, ``video`` (file), ``caption``, repeated ``telegramAccountIds`` fields (see ``publish_telegram``; validated by ``fill_schedule/metadata.py``).
 
 This module owns only types, validation and form-data part builders
 (multipart when a file part is sent, urlencoded when ``videoStoragePath``
@@ -51,14 +51,12 @@ from app.services.publish_facebook import (  # noqa: F401 - re-exported for call
 )
 from app.services.publish_pinterest import PINTEREST_DESCRIPTION_MAX_LENGTH, PINTEREST_PROVIDER, PINTEREST_TITLE_MAX_LENGTH, PinterestMetadata, pinterest_fields  # noqa: F401 - re-exported for callers
 from app.services.publish_fanvue import FANVUE_DESCRIPTION_MAX_LENGTH, FANVUE_PROVIDER, FANVUE_TITLE_MAX_LENGTH, FanvueMetadata, fanvue_fields  # noqa: F401 - re-exported for callers
+from app.services.publish_telegram import TELEGRAM_CAPTION_MAX_LENGTH, TELEGRAM_PROVIDER, TelegramMetadata, telegram_fields  # noqa: F401 - re-exported for callers
 from app.services.publish_threespeak import (  # noqa: F401 - re-exported for callers
     THREESPEAK_PROVIDER, ThreespeakMetadata,
     threespeak_fields, validate_threespeak_metadata,
 )
-from app.services.publish_rumble import (  # noqa: F401 - re-exported for callers
-    RUMBLE_PROVIDER, RUMBLE_TITLE_MAX_LENGTH, RumbleMetadata,
-    rumble_fields, validate_rumble_metadata,
-)
+from app.services.publish_rumble import RUMBLE_PROVIDER, RUMBLE_TITLE_MAX_LENGTH, RumbleMetadata, rumble_fields, validate_rumble_metadata  # noqa: F401 - re-exported for callers
 from app.services.upload_publisher_failure import application_failure_reason
 
 VALID_PRIVACY_STATUSES: tuple[str, ...] = ("public", "private", "unlisted")
@@ -86,7 +84,7 @@ VALID_PROVIDERS: tuple[str, ...] = (
     PINTEREST_PROVIDER,
     THREESPEAK_PROVIDER,
     RUMBLE_PROVIDER,
-    FANVUE_PROVIDER,
+    FANVUE_PROVIDER, TELEGRAM_PROVIDER,
 )
 _URL_PROVIDERS = frozenset({INSTAGRAM_PROVIDER, THREADS_PROVIDER, FACEBOOK_PROVIDER})
 
@@ -193,7 +191,7 @@ def validate_publish_metadata(
 
     Raises:
         ValueError: when providers are unknown/empty, or a selected provider other than
-            pinterest/fanvue (both gated in fill_schedule/metadata.py) has no metadata,
+            pinterest/fanvue/telegram (gated in fill_schedule/metadata.py) has no metadata,
             or metadata violates the contract.
     """
     if not providers:
@@ -383,6 +381,7 @@ _PART_BUILDERS: _PartBuilders = {
     THREESPEAK_PROVIDER: (ThreespeakMetadata, lambda metadata: MultipartParts(fields=threespeak_fields(metadata))),
     RUMBLE_PROVIDER: (RumbleMetadata, lambda metadata: MultipartParts(fields=rumble_fields(metadata))),
     FANVUE_PROVIDER: (FanvueMetadata, lambda metadata: MultipartParts(fields=fanvue_fields(metadata))),
+    TELEGRAM_PROVIDER: (TelegramMetadata, lambda metadata: MultipartParts(fields=telegram_fields(metadata))),
 }
 
 
@@ -390,7 +389,7 @@ def publish_video(
     base_url: str,
     api_secret: str,
     owner_user_id: str,
-    metadata: YouTubeMetadata | InstagramMetadata | BlueskyMetadata | LinkedInMetadata | ThreadsMetadata | FacebookMetadata | PinterestMetadata | ThreespeakMetadata | RumbleMetadata | FanvueMetadata,
+    metadata: YouTubeMetadata | InstagramMetadata | BlueskyMetadata | LinkedInMetadata | ThreadsMetadata | FacebookMetadata | PinterestMetadata | ThreespeakMetadata | RumbleMetadata | FanvueMetadata | TelegramMetadata,
     video_path: str,
     video_bytes: bytes | None,
     content_type: str,

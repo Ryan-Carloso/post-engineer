@@ -213,6 +213,16 @@ const fanvue: ProfileSource = {
   },
 };
 
+// Telegram's Bot API can re-read the chat (getChat) but no avatar is
+// managed, so the resync only refreshes the stored title/username.
+const telegram: ProfileSource = {
+  pictureKey: 'profilePictureUrl',
+  applies: () => false,
+  async fetch(_supabase, _userId, record) {
+    return { accountName: record.accountName, pictureUrl: null, metadata: {} };
+  },
+};
+
 export const PROFILE_SOURCES: Record<SocialProvider, ProfileSource> = {
   instagram,
   threads,
@@ -224,4 +234,5 @@ export const PROFILE_SOURCES: Record<SocialProvider, ProfileSource> = {
   '3speak': threespeak,
   rumble,
   fanvue,
+  telegram,
 };

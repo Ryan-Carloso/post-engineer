@@ -4,9 +4,10 @@
 //
 // GET /api/account lists the caller's connected accounts (no tokens);
 // DELETE disconnects one; POST /api/account/connect-url mints an OAuth
-// URL for the seven OAuth providers (Bluesky takes an app password and
-// Rumble a manual access token instead); POST /api/bluesky-connect,
-// /api/threespeak-connect and /api/rumble-connect connect those three;
+// URL for the seven OAuth providers (Bluesky takes an app password,
+// Rumble a manual access token and Telegram a @BotFather bot token
+// instead); POST /api/bluesky-connect, /api/threespeak-connect,
+// /api/rumble-connect and /api/telegram-connect connect those four;
 // GET /api/pinterest/boards lists one Pinterest account's boards; and
 // GET/PUT /api/persona/publishing-accounts read/replace a persona's
 // bound publishing accounts.
@@ -141,6 +142,17 @@ export const FanvueAccountSchema = z.object({
   ...accountTimestamps,
 });
 
+export const TelegramAccountSchema = z.object({
+  provider: z.literal('telegram'),
+  recordId: z.string(),
+  providerAccountId: z.string(),
+  accountName: z.string().nullable(),
+  chatType: z.enum(['channel', 'group', 'supergroup']).optional(),
+  username: z.string().optional(),
+  botUsername: z.string().optional(),
+  ...accountTimestamps,
+});
+
 export const PublicAccountItemSchema = z.discriminatedUnion('provider', [
   YoutubeAccountSchema,
   InstagramAccountSchema,
@@ -152,6 +164,7 @@ export const PublicAccountItemSchema = z.discriminatedUnion('provider', [
   ThreespeakAccountSchema,
   RumbleAccountSchema,
   FanvueAccountSchema,
+  TelegramAccountSchema,
 ]);
 export type PublicAccountItem = z.infer<typeof PublicAccountItemSchema>;
 
@@ -184,6 +197,17 @@ export const ThreespeakConnectBodySchema = z.object({
 export const RumbleConnectBodySchema = z.object({
   channelId: nonBlank('Rumble channel ID is required.'),
   accessToken: nonBlank('Rumble access token is required.'),
+});
+
+// Telegram connects one destination (a channel or a group/supergroup) with
+// a @BotFather bot token. chatType is the kind the user picked in the setup
+// guide; the route proves it against the real chat before saving.
+export const TelegramConnectBodySchema = z.object({
+  botToken: nonBlank('Telegram bot token is required.'),
+  chatId: nonBlank('Telegram chat ID or @username is required.'),
+  chatType: z.enum(['channel', 'group'], {
+    error: () => 'chatType must be channel or group.',
+  }),
 });
 
 export const DisconnectAccountQuerySchema = z.strictObject({
@@ -286,6 +310,14 @@ export const RumbleConnectResponseSchema = z.object({
   channelId: z.string(),
 });
 
+export const TelegramConnectResponseSchema = z.object({
+  success: z.literal(true),
+  accountId: z.string(),
+  chatId: z.string(),
+  chatType: z.enum(['channel', 'group', 'supergroup']),
+  title: z.string(),
+});
+
 export const PinterestBoardSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -310,6 +342,7 @@ export const PersonaPublishingAccountsSchema = z.object({
   '3speak': z.array(z.string()),
   rumble: z.array(z.string()),
   fanvue: z.array(z.string()),
+  telegram: z.array(z.string()),
 });
 export type PersonaPublishingAccounts = z.infer<typeof PersonaPublishingAccountsSchema>;
 
@@ -361,6 +394,13 @@ export const connectRumbleAccount = defineEndpoint({
   path: '/api/rumble-connect',
   body: RumbleConnectBodySchema,
   response: RumbleConnectResponseSchema,
+});
+
+export const connectTelegramAccount = defineEndpoint({
+  method: 'POST',
+  path: '/api/telegram-connect',
+  body: TelegramConnectBodySchema,
+  response: TelegramConnectResponseSchema,
 });
 
 export const listPinterestBoards = defineEndpoint({

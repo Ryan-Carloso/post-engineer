@@ -134,6 +134,7 @@ describe('GET /api/posts/[id]', () => {
         threespeakAccountIds: [],
         rumbleAccountIds: [],
         fanvueAccountIds: [],
+        telegramAccountIds: [],
         timezone: 'UTC',
         publishMode: 'scheduled',
       },

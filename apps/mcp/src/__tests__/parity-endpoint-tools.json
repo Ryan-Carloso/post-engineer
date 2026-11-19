@@ -35,6 +35,12 @@
       "action": "connect"
     }
   ],
+  "POST /api/telegram-connect": [
+    {
+      "tool": "accounts",
+      "action": "connect"
+    }
+  ],
   "GET /api/persona/faces": [
     {
       "tool": "persona_media",

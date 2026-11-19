@@ -60,9 +60,9 @@ function providerListCopies(text: string): string[] {
 
 describe('one provider list (shared/contracts/providers.ts)', () => {
   it('flags an array copy and a union copy in any order, not a subset', () => {
-    expect(providerListCopies("const P = ['rumble', 'youtube', 'instagram', 'bluesky', 'linkedin', 'threads', 'facebook', 'pinterest', '3speak', 'fanvue'];")).toHaveLength(1);
-    expect(providerListCopies("type P = 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook' | 'pinterest' | '3speak' | 'rumble' | 'fanvue';")).toHaveLength(1);
-    expect(providerListCopies("const D = ['bluesky', '3speak', 'rumble'] as const;")).toHaveLength(0);
+    expect(providerListCopies("const P = ['rumble', 'youtube', 'instagram', 'bluesky', 'linkedin', 'threads', 'facebook', 'pinterest', '3speak', 'fanvue', 'telegram'];")).toHaveLength(1);
+    expect(providerListCopies("type P = 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook' | 'pinterest' | '3speak' | 'rumble' | 'fanvue' | 'telegram';")).toHaveLength(1);
+    expect(providerListCopies("const D = ['bluesky', '3speak', 'rumble', 'telegram'] as const;")).toHaveLength(0);
   });
 
   it('has no hand-typed copy of the list in any web, MCP or script source', () => {

@@ -743,6 +743,7 @@ function presentSlotDetail(detail: ResponseOf<typeof getSlotContract>) {
       threespeakAccountIds: schedule.threespeakAccountIds,
       rumbleAccountIds: schedule.rumbleAccountIds,
       fanvueAccountIds: schedule.fanvueAccountIds,
+      telegramAccountIds: schedule.telegramAccountIds,
       timezone: schedule.timezone,
       publishMode: schedule.publishMode,
     },

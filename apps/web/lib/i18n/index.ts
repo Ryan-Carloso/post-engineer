@@ -14,6 +14,7 @@ import { facebookStrings } from './facebook-i18n';
 import { pinterestStrings } from './pinterest-i18n';
 import { fanvueStrings } from './fanvue-i18n';
 import { rumbleStrings } from './rumble-i18n';
+import { telegramStrings } from './telegram-i18n';
 import { promptsStrings } from './nav-prompts-i18n';
 import { voiceFallbackStrings } from './voice-fallback-i18n';
 import { personaLayoutHintStrings } from './persona-layout-hint-i18n';
@@ -46,7 +47,7 @@ export const ptDictionary = {
   nav: { ...basePtDictionary.nav, ...metricsStrings.pt.nav, ...promptsStrings.pt.nav, ...experimentsStrings.pt.nav },
   metrics: { ...metricsStrings.pt.metrics, ...metricsCoverageStrings.pt.metrics, ...metricsFiltersStrings.pt.metrics },
   experiments: experimentsStrings.pt.experiments,
-  accounts: { ...basePtDictionary.accounts, ...threadsStrings.pt.accounts, ...facebookStrings.pt.accounts, ...pinterestStrings.pt.accounts, ...fanvueStrings.pt.accounts, ...rumbleStrings.pt.accounts },
+  accounts: { ...basePtDictionary.accounts, ...threadsStrings.pt.accounts, ...facebookStrings.pt.accounts, ...pinterestStrings.pt.accounts, ...fanvueStrings.pt.accounts, ...rumbleStrings.pt.accounts, ...telegramStrings.pt.accounts },
   posts: { ...basePtDictionary.posts, ...postsCalendarStrings.pt.posts, ...hookPhotoStrings.pt.posts },
   personas: { ...basePtDictionary.personas, ...personaLayoutHintStrings.pt.personas, ...personaBoundAccountsStrings.pt.personas },
   landing: { ...basePtDictionary.landing, ...pricingContactStrings.pt.landing },
@@ -63,7 +64,7 @@ export const enDictionary = {
   nav: { ...baseEnDictionary.nav, ...metricsStrings.en.nav, ...promptsStrings.en.nav, ...experimentsStrings.en.nav },
   metrics: { ...metricsStrings.en.metrics, ...metricsCoverageStrings.en.metrics, ...metricsFiltersStrings.en.metrics },
   experiments: experimentsStrings.en.experiments,
-  accounts: { ...baseEnDictionary.accounts, ...threadsStrings.en.accounts, ...facebookStrings.en.accounts, ...pinterestStrings.en.accounts, ...fanvueStrings.en.accounts, ...rumbleStrings.en.accounts },
+  accounts: { ...baseEnDictionary.accounts, ...threadsStrings.en.accounts, ...facebookStrings.en.accounts, ...pinterestStrings.en.accounts, ...fanvueStrings.en.accounts, ...rumbleStrings.en.accounts, ...telegramStrings.en.accounts },
   posts: { ...baseEnDictionary.posts, ...postsCalendarStrings.en.posts, ...hookPhotoStrings.en.posts },
   personas: { ...baseEnDictionary.personas, ...personaLayoutHintStrings.en.personas, ...personaBoundAccountsStrings.en.personas },
   landing: { ...baseEnDictionary.landing, ...pricingContactStrings.en.landing },
@@ -76,7 +77,7 @@ type MetricsKeys = typeof metricsStrings.en;
 type ExperimentsKeys = typeof experimentsStrings.en;
 type MetricsCoverageKeys = typeof metricsCoverageStrings.en;
 type MetricsFiltersKeys = typeof metricsFiltersStrings.en;
-type ThreadsKeys = typeof threadsStrings.en & typeof facebookStrings.en & typeof pinterestStrings.en & typeof fanvueStrings.en & typeof rumbleStrings.en;
+type ThreadsKeys = typeof threadsStrings.en & typeof facebookStrings.en & typeof pinterestStrings.en & typeof fanvueStrings.en & typeof rumbleStrings.en & typeof telegramStrings.en;
 type PromptsKeys = typeof promptsStrings.en;
 type VoiceFallbackKeys = typeof voiceFallbackStrings.en;
 type PersonaLayoutHintKeys = typeof personaLayoutHintStrings.en;

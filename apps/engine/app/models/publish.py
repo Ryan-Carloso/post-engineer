@@ -1,4 +1,4 @@
-"""Publish metadata models for task requests (YouTube / Instagram / Bluesky / LinkedIn / Threads / Facebook / Pinterest / 3Speak / Rumble / Fanvue)."""
+"""Publish metadata models for task requests (YouTube / Instagram / Bluesky / LinkedIn / Threads / Facebook / Pinterest / 3Speak / Rumble / Fanvue / Telegram)."""
 
 from typing import Literal, Optional
 
@@ -86,11 +86,18 @@ class FanvuePublish(BaseModel):
     account_ids: list[str] = Field(min_length=1)
 
 
+class TelegramPublish(BaseModel):
+    """Telegram publish fields required by the internal upload API."""
+
+    caption: str = Field(min_length=1, max_length=1024)
+    account_ids: list[str] = Field(min_length=1)
+
+
 class PublishParams(BaseModel):
-    """Optional publish selection for a task (YouTube/Instagram/Bluesky/LinkedIn/Threads/Facebook/Pinterest/3Speak/Rumble/Fanvue)."""
+    """Optional publish selection for a task (YouTube/Instagram/Bluesky/LinkedIn/Threads/Facebook/Pinterest/3Speak/Rumble/Fanvue/Telegram)."""
 
     providers: list[
-        Literal["youtube", "instagram", "bluesky", "linkedin", "threads", "facebook", "pinterest", "3speak", "rumble", "fanvue"]
+        Literal["youtube", "instagram", "bluesky", "linkedin", "threads", "facebook", "pinterest", "3speak", "rumble", "fanvue", "telegram"]
     ] = Field(min_length=1)
     youtube: Optional[YouTubePublish] = None
     instagram: Optional[InstagramPublish] = None
@@ -102,6 +109,7 @@ class PublishParams(BaseModel):
     threespeak: Optional[ThreespeakPublish] = None
     rumble: Optional[RumblePublish] = None
     fanvue: Optional[FanvuePublish] = None
+    telegram: Optional[TelegramPublish] = None
 
     @model_validator(mode="after")
     def check_provider_metadata(self) -> "PublishParams":
@@ -125,4 +133,6 @@ class PublishParams(BaseModel):
             raise ValueError("rumble provider requires rumble metadata")
         if "fanvue" in self.providers and self.fanvue is None:
             raise ValueError("fanvue provider requires fanvue metadata")
+        if "telegram" in self.providers and self.telegram is None:
+            raise ValueError("telegram provider requires telegram metadata")
         return self

@@ -22,6 +22,7 @@ import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-r
 // consumes it as a fallback. Body: { provider: one of OAUTH_CONNECT_PROVIDERS (shared/contracts/providers.ts) }.
 // Bluesky uses an app password: POST /api/bluesky-connect.
 // Rumble uses a manual access token: POST /api/rumble-connect.
+// Telegram uses a @BotFather bot token: POST /api/telegram-connect.
 //
 // Error contract (agent/MCP-consumed API): failures return
 //   { success: false, error: '<stable-code>' }
@@ -36,6 +37,7 @@ export const CONNECT_URL_ERRORS = {
   INVALID_JSON_BODY: 'invalid_json_body',
   BLUESKY_REQUIRES_APP_PASSWORD: 'bluesky_requires_app_password',
   RUMBLE_REQUIRES_ACCESS_TOKEN: 'rumble_requires_access_token',
+  TELEGRAM_REQUIRES_BOT_TOKEN: 'telegram_requires_bot_token',
   INVALID_PROVIDER: 'invalid_provider',
   REDIRECT_URI_UNAVAILABLE: 'redirect_uri_unavailable',
   PROVIDER_NOT_CONFIGURED: 'provider_not_configured',
@@ -91,6 +93,9 @@ async function postHandler(request: NextRequest): Promise<NextResponse> {
     }
     if (provider === 'rumble') {
       return errorResponse(400, CONNECT_URL_ERRORS.RUMBLE_REQUIRES_ACCESS_TOKEN, 'POST /api/account/connect-url');
+    }
+    if (provider === 'telegram') {
+      return errorResponse(400, CONNECT_URL_ERRORS.TELEGRAM_REQUIRES_BOT_TOKEN, 'POST /api/account/connect-url');
     }
     if (!isOAuthConnectProvider(provider)) {
       return errorResponse(400, CONNECT_URL_ERRORS.INVALID_PROVIDER, 'POST /api/account/connect-url');

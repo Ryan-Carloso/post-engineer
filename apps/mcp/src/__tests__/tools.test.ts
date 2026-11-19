@@ -72,6 +72,7 @@ const FULL_SCHEDULE_ROW: ResponseOf<typeof listSchedulesContract>['schedules'][n
   pinterest_board_id: null,
   threespeak_account_ids: [],
   rumble_account_ids: [],
+  telegram_account_ids: [],
   days_of_week: [1, 3, 5],
   start_hour: 9,
   end_hour: 17,
@@ -144,6 +145,7 @@ const FULL_SLOT_DETAIL: ResponseOf<typeof getSlotContract> = {
     threespeakAccountIds: [],
     rumbleAccountIds: [],
     fanvueAccountIds: [],
+    telegramAccountIds: [],
     timezone: 'Europe/Lisbon',
     publishMode: 'scheduled',
   },
@@ -178,6 +180,7 @@ describe('MCP Tool Handlers', () => {
     connectBlueskyAccount: vi.fn(),
     connectThreespeakAccount: vi.fn(),
     connectRumbleAccount: vi.fn(),
+    connectTelegramAccount: vi.fn(),
     request: vi.fn(),
     getHeaders: vi.fn().mockReturnValue({}),
   } as unknown as PostEngineerClient;
@@ -370,7 +373,7 @@ describe('MCP Tool Handlers', () => {
   it('handleGetPersonaPublishingAccounts returns the persona defaults', async () => {
     vi.mocked(mockClient.request).mockResolvedValue({
       success: true,
-      defaults: { youtube: [], instagram: [], bluesky: ['did:plc:a'], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [] },
+      defaults: { youtube: [], instagram: [], bluesky: ['did:plc:a'], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [], telegram: [] },
     });
 
     const response = await handleGetPersonaPublishingAccounts(mockClient, { personaId: 'p-1' });
@@ -386,7 +389,7 @@ describe('MCP Tool Handlers', () => {
   it('handleSetPersonaPublishingAccounts replaces the defaults', async () => {
     vi.mocked(mockClient.request).mockResolvedValue({
       success: true,
-      defaults: { youtube: ['UC-1'], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [] },
+      defaults: { youtube: ['UC-1'], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [], telegram: [] },
     });
 
     const response = await handleSetPersonaPublishingAccounts(mockClient, {
@@ -763,6 +766,61 @@ describe('MCP Tool Handlers', () => {
     const text = textOf(response);
     expect(text).toMatch(/Invalid channelId or access token/);
     expect(text).not.toContain('a'.repeat(40));
+  });
+
+  it('handleConnectAccount connects Telegram directly with the bot token, chat and kind', async () => {
+    vi.mocked(mockClient.connectTelegramAccount).mockResolvedValue({
+      success: true,
+      accountId: 'acc-tg',
+      chatId: '-1001234567890',
+      chatType: 'channel',
+      title: 'Maria TV',
+    });
+
+    const botToken = '123456789:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+    const response = await handleConnectAccount(mockClient, {
+      provider: 'telegram',
+      botToken,
+      chatId: '-1001234567890',
+      chatType: 'channel',
+    });
+
+    expect(mockClient.connectTelegramAccount).toHaveBeenCalledWith(botToken, '-1001234567890', 'channel');
+    expect(response.isError).toBeUndefined();
+    const text = textOf(response);
+    expect(text).toMatch(/connected/i);
+    expect(text).toContain('chatId=-1001234567890');
+    expect(text).toContain('chatType=channel');
+    expect(text).toContain('accountId=acc-tg');
+    expect(text).not.toContain(botToken);
+  });
+
+  it('handleConnectAccount requires botToken, chatId and chatType for Telegram', async () => {
+    vi.clearAllMocks();
+    const response = await handleConnectAccount(mockClient, { provider: 'telegram' });
+
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toMatch(/botToken.*chatId.*chatType/i);
+    expect(mockClient.connectTelegramAccount).not.toHaveBeenCalled();
+  });
+
+  it('handleConnectAccount never leaks the bot token on Telegram errors', async () => {
+    const botToken = '123456789:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+    vi.mocked(mockClient.connectTelegramAccount).mockRejectedValue(
+      new Error(`Failed to connect Telegram account: 422 Telegram rejected the bot token ${botToken}.`),
+    );
+
+    const response = await handleConnectAccount(mockClient, {
+      provider: 'telegram',
+      botToken,
+      chatId: '-1001234567890',
+      chatType: 'group',
+    });
+
+    expect(response.isError).toBe(true);
+    const text = textOf(response);
+    expect(text).toMatch(/Telegram/);
+    expect(text).not.toContain(botToken);
   });
 });
 

@@ -8,6 +8,7 @@ import { z } from 'zod';
 import type { PostEngineerClient } from './client.js';
 import { SOCIAL_PROVIDERS } from './contracts/providers.js';
 import { getErrorMessage } from './errors.js';
+import { redactSecretFromError } from './secret-redaction.js';
 import { handleLibraryCall, type McpToolResponse } from './tools-call.js';
 
 // A credential present but blank is rejected with the same message the
@@ -21,12 +22,15 @@ function nonBlank(message: string) {
 
 export const ConnectAccountShape = {
   provider: z.enum(SOCIAL_PROVIDERS).describe('The social platform to connect'),
-  handle: nonBlank('Bluesky handle is required.').optional().describe('Bluesky handle (e.g. user.bsky.social). Required only for bluesky.'),
-  appPassword: nonBlank('Bluesky app password is required.').optional().describe('Bluesky app password (Settings > App passwords). Required only for bluesky. Never shared or logged.'),
-  username: nonBlank('Hive username is required.').optional().describe('Hive username (e.g. alice). Required only for 3speak.'),
-  postingKey: nonBlank('Hive posting key is required.').optional().describe('Hive posting key (the posting key only — never the owner, active, or master password). Required only for 3speak. Never shared or logged.'),
-  channelId: nonBlank('Rumble channel ID is required.').optional().describe('Rumble channel ID. Required only for rumble.'),
-  accessToken: nonBlank('Rumble access token is required.').optional().describe('Rumble 40-character Simple Upload API access token (issued by emailing bd@rumble.com). Required only for rumble. Never shared or logged.'),
+  handle: nonBlank('Bluesky handle is required.').optional().describe('bluesky only: the handle (e.g. user.bsky.social).'),
+  appPassword: nonBlank('Bluesky app password is required.').optional().describe('bluesky only: an app password (Settings > App passwords). Never logged.'),
+  username: nonBlank('Hive username is required.').optional().describe('3speak only: the Hive username.'),
+  postingKey: nonBlank('Hive posting key is required.').optional().describe('3speak only: the Hive posting key (never the owner/active/master key). Never logged.'),
+  channelId: nonBlank('Rumble channel ID is required.').optional().describe('rumble only: the channel ID.'),
+  accessToken: nonBlank('Rumble access token is required.').optional().describe('rumble only: the upload access token (from bd@rumble.com). Never logged.'),
+  botToken: nonBlank('Telegram bot token is required.').optional().describe('telegram only: the @BotFather bot token. Never logged.'),
+  chatId: nonBlank('Telegram chat ID or @username is required.').optional().describe('telegram only: @username or numeric chat ID.'),
+  chatType: z.enum(['channel', 'group']).optional().describe('telegram only: channel or group.'),
 };
 
 export const ConnectAccountSchema = z.object(ConnectAccountShape);
@@ -133,6 +137,44 @@ export async function handleConnectAccount(
       'connecting Rumble account',
       'Rumble account connected successfully',
     );
+  }
+
+  if (args.provider === 'telegram') {
+    if (!args.botToken || !args.chatId || !args.chatType) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: 'Error: Telegram requires botToken, chatId and chatType (channel or group).',
+          },
+        ],
+        isError: true,
+      };
+    }
+    try {
+      const result = await client.connectTelegramAccount(args.botToken, args.chatId, args.chatType);
+      // Project the upstream response to named fields: stringifying the
+      // whole body would surface any field the route adds later.
+      const { accountId, chatId, chatType, title } = result;
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Telegram account connected successfully: chatId=${chatId} chatType=${chatType} title=${title} accountId=${accountId}`,
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Error connecting Telegram account: ${getErrorMessage(redactSecretFromError(error, args.botToken))}`,
+          },
+        ],
+        isError: true,
+      };
+    }
   }
 
   try {

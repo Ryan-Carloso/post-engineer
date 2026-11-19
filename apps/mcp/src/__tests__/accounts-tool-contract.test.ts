@@ -10,6 +10,7 @@ import {
   parsePersonaPublishingAccountsQuery,
   RumbleConnectBodySchema,
   SetPersonaPublishingAccountsBodySchema,
+  TelegramConnectBodySchema,
   ThreespeakConnectBodySchema,
 } from '../contracts/accounts.js';
 import { GetPersonaPublishingAccountsSchema } from '../tools-publishing-accounts.js';
@@ -31,7 +32,7 @@ import { GetPersonaPublishingAccountsSchema } from '../tools-publishing-accounts
 //   the tool accepts any non-empty string and the route 400s the rest.
 //---------------
 
-const ALL_PROVIDERS = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'pinterest', 'fanvue', '3speak', 'rumble'] as const;
+const ALL_PROVIDERS = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'pinterest', 'fanvue', '3speak', 'rumble', 'telegram'] as const;
 
 describe('accounts tool-contract equivalence', () => {
   it('disconnect accepts every provider on both sides', () => {
@@ -72,8 +73,10 @@ describe('accounts tool-contract equivalence', () => {
       { tool: { provider: '3speak', username: 'x', postingKey: '   ' }, contract: { username: 'x', postingKey: '   ' } },
       { tool: { provider: 'rumble', channelId: '   ', accessToken: 'x' }, contract: { channelId: '   ', accessToken: 'x' } },
       { tool: { provider: 'rumble', channelId: 'x', accessToken: '   ' }, contract: { channelId: 'x', accessToken: '   ' } },
+      { tool: { provider: 'telegram', botToken: '   ', chatId: '-1001', chatType: 'channel' }, contract: { botToken: '   ', chatId: '-1001', chatType: 'channel' } },
+      { tool: { provider: 'telegram', botToken: '123:abc', chatId: '   ', chatType: 'group' }, contract: { botToken: '123:abc', chatId: '   ', chatType: 'group' } },
     ];
-    const contracts = [BlueskyConnectBodySchema, BlueskyConnectBodySchema, ThreespeakConnectBodySchema, ThreespeakConnectBodySchema, RumbleConnectBodySchema, RumbleConnectBodySchema];
+    const contracts = [BlueskyConnectBodySchema, BlueskyConnectBodySchema, ThreespeakConnectBodySchema, ThreespeakConnectBodySchema, RumbleConnectBodySchema, RumbleConnectBodySchema, TelegramConnectBodySchema, TelegramConnectBodySchema];
     for (const [index, { tool, contract }] of cases.entries()) {
       expect(ConnectAccountSchema.safeParse(tool).success).toBe(false);
       expect(contracts[index]?.safeParse(contract).success).toBe(false);
@@ -87,6 +90,8 @@ describe('accounts tool-contract equivalence', () => {
     expect(ThreespeakConnectBodySchema.safeParse({ username: 'alice', postingKey: '5Kkey' }).success).toBe(true);
     expect(ConnectAccountSchema.safeParse({ provider: 'rumble', channelId: 'chan-1', accessToken: 'a'.repeat(40) }).success).toBe(true);
     expect(RumbleConnectBodySchema.safeParse({ channelId: 'chan-1', accessToken: 'a'.repeat(40) }).success).toBe(true);
+    expect(ConnectAccountSchema.safeParse({ provider: 'telegram', botToken: '123:abc', chatId: '-1001', chatType: 'channel' }).success).toBe(true);
+    expect(TelegramConnectBodySchema.safeParse({ botToken: '123:abc', chatId: '-1001', chatType: 'channel' }).success).toBe(true);
   });
 
   it('pinterest boards rejects a blank account id on both sides and trims a valid one', () => {

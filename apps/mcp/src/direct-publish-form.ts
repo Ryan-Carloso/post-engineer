@@ -101,7 +101,7 @@ export function buildDirectPublishForm(
       formData.append('igAccountIds', accountId);
     }
   } else {
-    const accountField = { bluesky: 'did', linkedin: 'linkedinAccountIds', threads: 'threadsAccountIds', facebook: 'facebookAccountIds', pinterest: 'pinterestAccountIds', fanvue: 'fanvueAccountIds', '3speak': 'threespeakAccountIds', rumble: 'rumbleAccountIds' }[input.provider];
+    const accountField = { bluesky: 'did', linkedin: 'linkedinAccountIds', threads: 'threadsAccountIds', facebook: 'facebookAccountIds', pinterest: 'pinterestAccountIds', fanvue: 'fanvueAccountIds', '3speak': 'threespeakAccountIds', rumble: 'rumbleAccountIds', telegram: 'telegramAccountIds' }[input.provider];
     formData.append('video', videoBlob, filename);
     // Rumble and Fanvue take title + description, not a caption.
     if (input.provider === 'rumble' || input.provider === 'fanvue') {

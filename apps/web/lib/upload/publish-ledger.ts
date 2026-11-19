@@ -87,6 +87,7 @@ export const PUBLISH_ACCOUNT_FIELDS: Record<SocialProvider, string> = {
   fanvue: 'fanvueAccountIds',
   '3speak': 'threespeakAccountIds',
   rumble: 'rumbleAccountIds',
+  telegram: 'telegramAccountIds',
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {

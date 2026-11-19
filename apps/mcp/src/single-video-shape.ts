@@ -89,6 +89,7 @@ export const GeneratePersonaVideoShape = {
   fanvueAccountIds: z.array(z.string().min(1)).optional().describe('Fanvue account IDs (the providerAccountId field from accounts (action: list)).'),
   threespeakAccountIds: z.array(z.string().min(1)).optional().describe('3Speak Hive usernames (the providerAccountId field from accounts (action: list)).'),
   rumbleAccountIds: z.array(z.string().min(1)).optional().describe('Rumble channel IDs (the providerAccountId field from accounts (action: list)).'),
+  telegramAccountIds: z.array(z.string().min(1)).optional().describe('Telegram chat IDs (the providerAccountId field from accounts (action: list)).'),
   mode: z
     .enum(['scheduled', 'asap'])
     .default('scheduled')

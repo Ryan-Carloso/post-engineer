@@ -117,6 +117,7 @@ const EMPTY_BINDING = {
   '3speak': [],
   rumble: [],
   fanvue: [],
+  telegram: [],
 };
 
 function mockSupabase(

@@ -38,6 +38,7 @@ import {
 import {
   connectBlueskyAccount as connectBlueskyAccountContract,
   connectRumbleAccount as connectRumbleAccountContract,
+  connectTelegramAccount as connectTelegramAccountContract,
   connectThreespeakAccount as connectThreespeakAccountContract,
   disconnectAccount as disconnectAccountContract,
   getOAuthConnectUrl as getOAuthConnectUrlContract,
@@ -405,6 +406,19 @@ export class PostEngineerClient {
     }
   }
 
+  async connectTelegramAccount(botToken: string, chatId: string, chatType: 'channel' | 'group'): Promise<ResponseOf<typeof connectTelegramAccountContract>> {
+    try {
+      const raw = await this.request(
+        '/api/telegram-connect',
+        { method: 'POST', headers: this.getHeaders(), body: JSON.stringify({ botToken, chatId, chatType }) },
+        'connect Telegram account',
+      );
+      return parseContractResponse(connectTelegramAccountContract, raw);
+    } catch (error) {
+      throw redactSecretFromError(error, botToken);
+    }
+  }
+
   async listSchedules(): Promise<ResponseOf<typeof listSchedulesContract>> {
     const raw = await this.request(
       '/api/schedule',
@@ -562,7 +576,7 @@ export class PostEngineerClient {
     // record. Only set entries the caller provided: the server enforces
     // which providers need accounts and rejects unknown ones.
     const accounts: Record<string, string[]> = {};
-    const byProvider = { youtube: input.youtubeAccountIds, instagram: input.instagramAccountIds, linkedin: input.linkedinAccountIds, bluesky: input.blueskyAccountIds, threads: input.threadsAccountIds, facebook: input.facebookAccountIds, pinterest: input.pinterestAccountIds, fanvue: input.fanvueAccountIds, '3speak': input.threespeakAccountIds, rumble: input.rumbleAccountIds };
+    const byProvider = { youtube: input.youtubeAccountIds, instagram: input.instagramAccountIds, linkedin: input.linkedinAccountIds, bluesky: input.blueskyAccountIds, threads: input.threadsAccountIds, facebook: input.facebookAccountIds, pinterest: input.pinterestAccountIds, fanvue: input.fanvueAccountIds, '3speak': input.threespeakAccountIds, rumble: input.rumbleAccountIds, telegram: input.telegramAccountIds };
     for (const [provider, ids] of Object.entries(byProvider)) if (ids !== undefined) accounts[provider] = ids;
     // A stray schedule plan in ASAP mode is a caller bug: the server 400s
     // ("publishing.schedule must not be set"), so fail fast with the same

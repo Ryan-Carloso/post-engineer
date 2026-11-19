@@ -18,7 +18,7 @@ import { SOCIAL_PROVIDERS, type SocialProvider } from './providers/registry';
 export type PersonaDefaultAccounts = Record<SocialProvider, string[]>;
 
 export function emptyPersonaDefaultAccounts(): PersonaDefaultAccounts {
-  return { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [] };
+  return { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [], telegram: [] };
 }
 
 /** Total bound accounts across providers. */

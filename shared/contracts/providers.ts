@@ -26,6 +26,7 @@ export const SOCIAL_PROVIDERS = [
   '3speak',
   'rumble',
   'fanvue',
+  'telegram',
 ] as const;
 export type SocialProvider = (typeof SOCIAL_PROVIDERS)[number];
 
@@ -35,7 +36,7 @@ export function isSocialProvider(value: unknown): value is SocialProvider {
 
 /** Networks that connect with a credential typed by the user (Bluesky
  * app password, Hive posting key, Rumble access token), not OAuth. */
-export const DIRECT_CONNECT_PROVIDERS = ['bluesky', '3speak', 'rumble'] as const satisfies readonly SocialProvider[];
+export const DIRECT_CONNECT_PROVIDERS = ['bluesky', '3speak', 'rumble', 'telegram'] as const satisfies readonly SocialProvider[];
 export type DirectConnectProvider = (typeof DIRECT_CONNECT_PROVIDERS)[number];
 
 /** Networks served by POST /api/account/connect-url: every network that
@@ -52,7 +53,7 @@ export function isOAuthConnectProvider(value: unknown): value is OAuthConnectPro
 /** Networks whose publish handler posts an image (JPEG/PNG) as well as a
  * video. YouTube, Rumble and 3Speak are video-only platforms; Fanvue's
  * vault upload is wired for video only. */
-export const IMAGE_PROVIDERS = ['instagram', 'bluesky', 'linkedin', 'threads', 'facebook', 'pinterest'] as const satisfies readonly SocialProvider[];
+export const IMAGE_PROVIDERS = ['instagram', 'bluesky', 'linkedin', 'threads', 'facebook', 'pinterest', 'telegram'] as const satisfies readonly SocialProvider[];
 export type ImageProvider = (typeof IMAGE_PROVIDERS)[number];
 
 export function isImageProvider(value: unknown): value is ImageProvider {
