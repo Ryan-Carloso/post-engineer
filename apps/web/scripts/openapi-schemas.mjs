@@ -172,9 +172,6 @@ const clonedVoice = { ...anyObject, description: 'Cloned voice record.' };
 const slotIdPath = 'slotId is the slot id returned by generate-and-schedule.';
 const ok = success({});
 
-// apps/web/app/api/tool-config/route.ts (GetToolConfigResponseSchema):
-// presence only — never a key value. PUT returns the same shape with
-// configured always true.
 const toolConfigPresence = {
   configured: { type: 'boolean' },
   searchTool: { type: 'string', enum: ['tavily', 'exa'], nullable: true },
@@ -301,7 +298,6 @@ export const operationSchemas = {
       message: str,
     }),
   },
-  // apps/web/app/api/tool-config/route.ts (SaveToolConfigBodySchema)
   'GET /api/tool-config': {
     response: success(toolConfigPresence),
   },
@@ -316,7 +312,6 @@ export const operationSchemas = {
     ),
     response: success({ ...toolConfigPresence, configured: { type: 'boolean', enum: [true] } }),
   },
-  // apps/web/app/api/pinterest/boards/route.ts
   'GET /api/pinterest/boards': {
     query: [{ name: 'accountId', required: true, description: 'Pinterest user id stored at OAuth connect.' }],
     response: success({

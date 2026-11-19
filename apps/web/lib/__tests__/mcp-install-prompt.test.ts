@@ -9,9 +9,6 @@ describe('buildInstallPrompt', () => {
     expect(buildInstallPrompt('pt', null).split('\n')).toEqual(EXPECTED_PT_PROMPT);
   });
 
-  // Issue #566: 17 intent tools. The prompt documents every tool with one
-  // bullet and names each of its actions, in both locales, or the agent
-  // silently never learns what the server offers.
   const TOOL_ACTIONS: Record<string, string[]> = {
     generate_video: [],
     video_tasks: ['status', 'list_generations', 'get_generation'],

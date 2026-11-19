@@ -92,8 +92,6 @@ describe('handleMcpWebRequest', () => {
       const memoryNames = await listedNames(client, 'http');
       const stdioNames = await listedNames(client, 'stdio');
 
-      // The hosted endpoint must serve the same tools as the http factory,
-      // and the stdio server has the same 17 tools with extra file actions.
       expect(httpNames).toEqual(memoryNames);
       expect(stdioNames).toEqual(httpNames);
       expect(httpNames).toHaveLength(17);

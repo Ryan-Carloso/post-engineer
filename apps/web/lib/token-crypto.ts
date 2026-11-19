@@ -28,14 +28,6 @@ function getEncryptionKey(): Buffer {
   return key;
 }
 
-//---------------
-// Shared AES-256-GCM envelope: every encrypted blob in this file is
-// `v1.<iv_b64url>.<auth_tag_b64url>.<payload_b64url>` under
-// TOKEN_ENCRYPTION_KEY. encryptTokens/decryptTokens are the OAuth-token
-// shape; encryptJson/decryptJson are the same envelope for any other JSON
-// payload (tool-config API keys) — no second crypto scheme, same key,
-// same format, same errors.
-//---------------
 function encryptPlaintext(plaintext: string): string {
   const key = getEncryptionKey();
   const iv = crypto.randomBytes(12);
@@ -69,7 +61,7 @@ function decryptPlaintext(encrypted: string, key: Buffer): string {
 
   const decrypted = Buffer.concat([
     decipher.update(Buffer.from(payloadB64, 'base64url')),
-    decipher.final(), // throws if the auth tag does not match
+    decipher.final(),
   ]);
 
   return decrypted.toString('utf-8');
@@ -83,20 +75,10 @@ function parseDecryptedObject(plaintext: string): Record<string, unknown> {
   return parsed as Record<string, unknown>;
 }
 
-//---------------
-// encryptTokens — encrypts a tokens object
-//---------------
 export function encryptTokens(payload: EncryptedTokenPayload): string {
   return encryptPlaintext(JSON.stringify(payload));
 }
 
-//---------------
-// TokenDecryptError — the stored blob cannot be decrypted (tampered,
-// truncated, or encrypted under a different key). Callers use it to tell
-// an undecryptable stored token — reconnecting fixes it — from a transient
-// failure. Key-config errors are NOT this: a missing TOKEN_ENCRYPTION_KEY
-// is a server misconfiguration, not a dead token.
-//---------------
 export class TokenDecryptError extends Error {
   constructor(message: string, options?: { cause?: unknown }) {
     super(message);
@@ -107,12 +89,6 @@ export class TokenDecryptError extends Error {
   }
 }
 
-//---------------
-// decryptTokens — decrypts and validates format/version/tag
-// Throws TokenDecryptError on tampering or invalid format. A missing or
-// wrong-size TOKEN_ENCRYPTION_KEY throws a plain Error before the try:
-// a key-config error is a server misconfiguration, not a dead token.
-//---------------
 export function decryptTokens(encrypted: string): EncryptedTokenPayload {
   const key = getEncryptionKey();
   try {
@@ -125,12 +101,6 @@ export function decryptTokens(encrypted: string): EncryptedTokenPayload {
   }
 }
 
-//---------------
-// encryptJson/decryptJson — same envelope for a plain JSON object
-// (tool-config API keys). The caller validates the shape after
-// decryption; a tampered or foreign blob fails here with
-// TokenDecryptError, never with a partial object.
-//---------------
 export function encryptJson(payload: Record<string, unknown>): string {
   return encryptPlaintext(JSON.stringify(payload));
 }

@@ -16,9 +16,6 @@ vi.mock('../analytics.js', async (importOriginal) => {
   };
 });
 
-// Issue #566: 17 intent tools instead of one tool per endpoint. Each action
-// tool advertises ONE flat object (a required `action` enum plus every field
-// of every action, optional); tools without actions keep their own shape.
 const ACTIONS: Record<string, string[]> = {
   video_tasks: ['status', 'list_generations', 'get_generation'],
   personas: ['list', 'get', 'create', 'update', 'delete'],
@@ -135,10 +132,6 @@ describe('action tools advertise one flat schema', () => {
   it('keeps the whole tools/list payload at least 35% below the 102,160 bytes of the 56 endpoint-mirror tools', async () => {
     const tools = [...(await listTools('stdio')).values()];
     const bytes = Buffer.byteLength(JSON.stringify(tools), 'utf8');
-    // Was 40% (0.6) with 16 tools at ~59 KB; the 17th tool (tool_config,
-    // ~2.4 KB) puts the set at ~62 KB, 38% below the mirror set. The cap
-    // is a bloat guard, not a product limit: a real tool the user asked
-    // for moves it, and the set stays far lighter than 56 mirror tools.
     expect(bytes).toBeLessThanOrEqual(102_160 * 0.65);
   });
 });

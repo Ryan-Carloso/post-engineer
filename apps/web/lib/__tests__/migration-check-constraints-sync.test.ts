@@ -68,8 +68,6 @@ const EXPECTED: Record<string, readonly string[]> = {
   video_uploads_declared_content_type_check: UPLOAD_CONTENT_TYPES,
   video_uploads_detected_content_type_check: UPLOAD_CONTENT_TYPES,
   scheduled_posts_media_kind_check: SCHEDULED_MEDIA_KINDS,
-  // migration 070 (issue #669). search_tool is nullable: the parser keeps
-  // only the ANY (ARRAY[...]) arm, which is this list.
   user_tool_configs_search_tool_check: TOOL_CONFIG_SEARCH_TOOLS,
 };
 

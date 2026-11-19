@@ -216,7 +216,6 @@ describe('POST /mcp', () => {
     expect(list.status).toBe(200);
     const listResult = (await readSseJson(list)) as { result?: Record<string, unknown> };
     const names = toolNames(listResult.result ?? {});
-    // The 17 intent tools (issue #566): the same tools as stdio, minus the actions below.
     expect(names).toHaveLength(17);
     expect(names).toContain('personas');
     expect(names).toContain('tool_config');

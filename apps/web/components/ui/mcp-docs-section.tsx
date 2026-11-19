@@ -33,8 +33,6 @@ interface McpToolCard {
   Icon: ComponentType;
 }
 
-// The 17 intent tools of the MCP server (issue #566). apps/mcp/src registers
-// them; the docs-sync test there checks that every one is named here.
 const MCP_TOOL_CARDS: McpToolCard[] = [
   { id: 'generate_video', actions: [], descKey: 'apiKeys.toolDescGenerateVideo', Icon: FilmIcon },
   { id: 'video_tasks', actions: ['status', 'list_generations', 'get_generation'], descKey: 'apiKeys.toolDescVideoTasks', Icon: SpinnerIcon },

@@ -262,8 +262,6 @@ describe('prompts hub data', () => {
     expect(text).toContain('Coverr');
     expect(text).toContain('Reuse those answers for later videos in this');
     expect(text).toContain('a later session reuses them instead of asking again');
-    // The search-tool ask lives in the base; step 4 must not repeat it,
-    // so the composed prompt asks it exactly once.
     expect(fullText.split('Ask me once which search tool you already have').length - 1).toBe(1);
     expect(text).not.toContain('issue #');
   });

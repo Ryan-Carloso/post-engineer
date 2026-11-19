@@ -37,10 +37,7 @@ export const RATE_LIMITS = {
   personaWrite: { name: 'persona-write', limit: 20, windowMs: 60_000 },
   postDetail: { name: 'post-detail', limit: 120, windowMs: 60_000 },
   publishingAccounts: { name: 'publishing-accounts', limit: 60, windowMs: 60_000 },
-  // Tool configuration (issue #669): one tiny row, no fan-out. The agent
-  // reads it at setup and saves on button click, so 60/min is generous.
   toolConfig: { name: 'tool-config', limit: 60, windowMs: 60_000 },
-  // Metrics dashboard: one bounded read per filter change.
   metrics: { name: 'metrics', limit: 60, windowMs: 60_000 },
   experimentCreate: { name: 'experiment-create', limit: 10, windowMs: 60_000 },
   experimentRead: { name: 'experiment-read', limit: 60, windowMs: 60_000 },

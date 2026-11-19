@@ -81,9 +81,6 @@ describe('McpDocsSection', () => {
 
     const grid = screen.getByTestId('mcp-tools-grid');
     expect(grid).toBeInTheDocument();
-    // Each card renders its tool id in the bold mono paragraph, in registry
-    // order — asserting the id itself (not just grid text) so a blanked id
-    // fails. The 17 tools are the MCP server's surface (issue #566).
     const ids = [...grid.querySelectorAll('p.font-bold')].map((p) => p.textContent);
     expect(ids).toEqual([
       'generate_video',
