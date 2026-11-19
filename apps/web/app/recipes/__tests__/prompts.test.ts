@@ -954,5 +954,9 @@ describe('prompts hub data', () => {
     expect(text).toContain('re-tune the photo windows');
     expect(text).toContain('measured audio ends');
     expect(text).toContain('never re-estimate');
+    // Round-2 review clarification: the study runs fast except for its
+    // chart, which holds 2s or more - the chart-duration rule moved here
+    // from the study sentence so the exception is explicit.
+    expect(text).toContain('The study is fast except for its chart');
   });
 });
