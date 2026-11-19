@@ -34,112 +34,113 @@ export const ConnectAccountSchema = z.object(ConnectAccountShape);
 type ConnectAccountArgs = z.infer<typeof ConnectAccountSchema>;
 type DirectConnectHandler = (client: PostEngineerClient, args: ConnectAccountArgs) => Promise<McpToolResponse>;
 
-// One handler per direct-connect network (a record, not a chain): a new
-// direct-connect network fails the typecheck until it has a handler,
-// instead of falling through to the OAuth URL path. Bluesky and 3Speak
-// project the upstream response to named fields; Rumble shares
-// handleLibraryCall, which renders the same success/error text.
-const DIRECT_CONNECT_HANDLERS: Record<DirectConnectProvider, DirectConnectHandler> = {
-  bluesky: async (client, args) => {
-    if (!args.handle || !args.appPassword) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: 'Error: Bluesky requires both handle and appPassword.',
-          },
-        ],
-        isError: true,
-      };
-    }
-    try {
-      const result = await client.connectBlueskyAccount(args.handle, args.appPassword);
-      // Project the upstream response to named fields: stringifying the
-      // whole body would surface any field the route adds later.
-      const { accountId, did } = result;
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Bluesky account connected successfully: accountId=${accountId} did=${did}`,
-          },
-        ],
-      };
-    } catch (error) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Error connecting Bluesky account: ${getErrorMessage(error)}`,
-          },
-        ],
-        isError: true,
-      };
-    }
-  },
-  '3speak': async (client, args) => {
-    if (!args.username || !args.postingKey) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: 'Error: 3Speak requires both username and postingKey.',
-          },
-        ],
-        isError: true,
-      };
-    }
-    try {
-      const result = await client.connectThreespeakAccount(args.username, args.postingKey);
-      // Project the upstream response to named fields: stringifying the
-      // whole body would surface any field the route adds later.
-      const { accountId, username } = result;
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `3Speak account connected successfully: username=${username} accountId=${accountId}`,
-          },
-        ],
-      };
-    } catch (error) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Error connecting 3Speak account: ${getErrorMessage(error)}`,
-          },
-        ],
-        isError: true,
-      };
-    }
-  },
-  rumble: (client, args) => {
-    if (!args.channelId || !args.accessToken) {
-      return Promise.resolve({
-        content: [
-          {
-            type: 'text',
-            text: 'Error: Rumble requires both channelId and accessToken.',
-          },
-        ],
-        isError: true,
-      });
-    }
-    const channelId = args.channelId;
-    const accessToken = args.accessToken;
-    return handleLibraryCall(
-      () => client.connectRumbleAccount(channelId, accessToken),
-      'connecting Rumble account',
-      'Rumble account connected successfully',
-    );
-  },
-};
-
 export async function handleConnectAccount(
   client: PostEngineerClient,
   args: z.infer<typeof ConnectAccountSchema>
 ): Promise<McpToolResponse> {
+  // One handler per direct-connect network (a record, not a chain): a new
+  // direct-connect network fails the typecheck until it has a handler,
+  // instead of falling through to the OAuth URL path. Bluesky and 3Speak
+  // project the upstream response to named fields; Rumble shares
+  // handleLibraryCall, which renders the same success/error text. Built
+  // inside the handler so the parity check, which follows calls from the
+  // action's own body, sees each network's client call.
+  const DIRECT_CONNECT_HANDLERS: Record<DirectConnectProvider, DirectConnectHandler> = {
+    bluesky: async (client, args) => {
+      if (!args.handle || !args.appPassword) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: 'Error: Bluesky requires both handle and appPassword.',
+            },
+          ],
+          isError: true,
+        };
+      }
+      try {
+        const result = await client.connectBlueskyAccount(args.handle, args.appPassword);
+        // Project the upstream response to named fields: stringifying the
+        // whole body would surface any field the route adds later.
+        const { accountId, did } = result;
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Bluesky account connected successfully: accountId=${accountId} did=${did}`,
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Error connecting Bluesky account: ${getErrorMessage(error)}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    },
+    '3speak': async (client, args) => {
+      if (!args.username || !args.postingKey) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: 'Error: 3Speak requires both username and postingKey.',
+            },
+          ],
+          isError: true,
+        };
+      }
+      try {
+        const result = await client.connectThreespeakAccount(args.username, args.postingKey);
+        // Project the upstream response to named fields: stringifying the
+        // whole body would surface any field the route adds later.
+        const { accountId, username } = result;
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `3Speak account connected successfully: username=${username} accountId=${accountId}`,
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Error connecting 3Speak account: ${getErrorMessage(error)}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    },
+    rumble: (client, args) => {
+      if (!args.channelId || !args.accessToken) {
+        return Promise.resolve({
+          content: [
+            {
+              type: 'text',
+              text: 'Error: Rumble requires both channelId and accessToken.',
+            },
+          ],
+          isError: true,
+        });
+      }
+      const channelId = args.channelId;
+      const accessToken = args.accessToken;
+      return handleLibraryCall(
+        () => client.connectRumbleAccount(channelId, accessToken),
+        'connecting Rumble account',
+        'Rumble account connected successfully',
+      );
+    },
+  };
   if (!isOAuthConnectProvider(args.provider)) {
     return DIRECT_CONNECT_HANDLERS[args.provider](client, args);
   }
