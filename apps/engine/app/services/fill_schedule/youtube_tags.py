@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import unicodedata
 
-# YouTube accepts at most 500 characters across all tags; stay well under it.
 _MAX_TAGS = 8
 _MAX_TOTAL_CHARS = 400
 _MIN_TOKEN_LENGTH = 3

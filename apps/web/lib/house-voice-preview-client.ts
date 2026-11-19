@@ -1,9 +1,3 @@
-//---------------
-// House voice preview — POST the caller's text to the house preview route
-// and return the audio blob. Never throws on HTTP errors: the caller maps
-// the status to UI copy (429 = daily limit, 400 = text too long).
-//---------------
-
 import { HOUSE_PREVIEW_TEXT_MAX_CHARS } from '@/app/api/persona/voices/[voiceId]/preview/preview-text';
 import { notifyIfSessionExpired } from '@/lib/session-expiry';
 

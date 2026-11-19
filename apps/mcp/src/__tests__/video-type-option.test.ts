@@ -18,17 +18,6 @@ import { handleGeneratePersonaVideo, handleValidateScript } from '../tools-singl
 import type { PostEngineerClient } from '../client.js';
 import type { McpToolResponse } from '../tools.js';
 
-//---------------
-// video_type (issue #542 follow-up): the one video mode, with the
-// invalid-value message listing every mode WITH its token cost, so the
-// agent can choose knowing the price. The message is short on purpose:
-// the MCP relays upstream errors through errors.ts, which truncates
-// error detail at 200 chars — the message must arrive whole.
-//---------------
-// Walk up to the pnpm-workspace.yaml marker instead of climbing a fixed
-// number of `..` segments: Stryker runs tests from a sandbox nested deeper
-// than the repo layout (`.stryker-tmp/sandbox-<n>/`), where a fixed climb
-// lands in apps/mcp instead of the repo root.
 function findRepoRoot(fromUrl: string): string {
   let dir = dirname(fileURLToPath(fromUrl));
   for (;;) {
@@ -61,10 +50,6 @@ const segments = [
   { kind: 'content' as const, text: content, media: photos(6, 'content') },
   { kind: 'content' as const, text: ctaTake, media: photos(2, 'ctaTake') },
 ];
-// Guard tests need segments that pass mechanical validation first (the
-// handler validates the script before the persona guard): the 3/6/2-photo
-// segments already satisfy the images-mode density rule, so only
-// full_lipsync needs bare segments (11 photos exceed its 6-photo cap).
 const bareSegments = segments.map((segment) => ({ kind: segment.kind, text: segment.text }));
 const baseArgs = {
   personaId: 'persona-123',
@@ -108,7 +93,6 @@ describe('video_type error messages', () => {
     const message = unknownVideoTypeMessage('sideways');
     expect(message).toBe("unknown video_type 'sideways'; use full_lipsync (8/15), hook_lipsync (2/3) or faceless (1)");
     expect(message.length).toBeLessThan(200);
-    // A 100-char value is clipped to 32, so the whole message still fits.
     expect(unknownVideoTypeMessage('x'.repeat(100)).length).toBeLessThan(200);
     expect(unknownVideoTypeMessage('x'.repeat(100))).toContain(`'${'x'.repeat(32)}'`);
     expect(unknownVideoTypeMessage(null)).toBe("unknown video_type ''; use full_lipsync (8/15), hook_lipsync (2/3) or faceless (1)");

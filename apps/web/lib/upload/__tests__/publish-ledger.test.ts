@@ -341,9 +341,6 @@ describe('partitionPublishAccounts with an unknown claim', () => {
     await expect(
       partitionPublishAccounts(mockSupabase(rpc), 'slot:s1:video:v.mp4', 'fanvue', 'user-1', formData),
     ).rejects.toThrow('claim_publish_ledger failed: db down');
-    // Nothing was published, so the granted claim is released at once
-    // instead of parking the next retry in publish_in_progress for the
-    // 30-minute lease.
     const claimCall = rpc.mock.calls.find(
       ([fn, args]) => fn === 'claim_publish_ledger' && args.p_key === 'publish:slot:s1:video:v.mp4:fanvue:acc-1',
     );

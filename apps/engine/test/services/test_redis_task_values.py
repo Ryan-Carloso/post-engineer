@@ -16,8 +16,6 @@ def test_plain_integer_round_trips():
 
 
 def test_leading_zero_numeral_uses_the_digit_branch():
-    # ast.literal_eval rejects "08" (invalid octal). The digit branch
-    # still has to return an int, or progress stored that way stays a string.
     assert convert_redis_task_value(b"08") == 8
 
 

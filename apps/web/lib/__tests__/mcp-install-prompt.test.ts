@@ -5,15 +5,10 @@ const KEY = 'pe_live_abcdef1234567890abcdef1234567890';
 
 describe('buildInstallPrompt', () => {
   it('pins the full install prompt in each locale (agent-facing contract)', () => {
-    // The install prompt is the agent's source of truth for the MCP server:
-    // every line is asserted so prompt copy can only change deliberately.
     expect(buildInstallPrompt('en', null).split('\n')).toEqual(EXPECTED_EN_PROMPT);
     expect(buildInstallPrompt('pt', null).split('\n')).toEqual(EXPECTED_PT_PROMPT);
   });
 
-  // Issue #566: 17 intent tools. The prompt documents every tool with one
-  // bullet and names each of its actions, in both locales, or the agent
-  // silently never learns what the server offers.
   const TOOL_ACTIONS: Record<string, string[]> = {
     generate_video: [],
     video_tasks: ['status', 'list_generations', 'get_generation'],
@@ -52,8 +47,6 @@ describe('buildInstallPrompt', () => {
     expect(prompt).toContain('POST_ENGINEER_API_KEY');
     expect(prompt).toContain('"command": ["npx", "-y", "post-engineer-mcp@latest"]');
     expect(prompt).toContain('persona and account fields accept a name or an id');
-    // Recipe self-serve must be discoverable in the copied prompt: the
-    // agent learns prompts (action: list) before any improvised script.
     expect(prompt).toContain('prompts: list');
     expect(prompt).toContain('segments');
     expect(prompt).toContain('How to work with me');
@@ -64,16 +57,12 @@ describe('buildInstallPrompt', () => {
     expect(prompt).not.toContain('Clone');
     expect(prompt).not.toContain('apps/mcp/dist/index.js');
     expect(prompt).not.toContain('POST_ENGINEER_API_URL');
-    // None of the 56 removed tool names may be left in the copy agents paste.
     for (const old of ['generate_persona_video', 'list_personas', 'get_video_status', 'wait_for_video_tasks', 'list_social_accounts', 'validate_script', 'get_persona_delete_preview', 'cancel_video_task']) {
       expect(prompt, old).not.toContain(old);
     }
   });
 
   it('documents the hosted remote MCP endpoint beside the npx snippet', () => {
-    // Step 5 of issue #561: a hosted agent (ChatGPT) connects by URL, so
-    // the prompt must name the remote endpoint and the local-file actions
-    // it drops, with the signed-upload actions that replace them.
     for (const locale of ['en', 'pt'] as const) {
       const prompt = buildInstallPrompt(locale, null);
       expect(prompt, locale).toContain('https://post-engineer.com/mcp');
@@ -134,14 +123,7 @@ describe('buildInstallPrompt', () => {
       en: buildInstallPrompt('en', null),
       pt: buildInstallPrompt('pt', null),
     };
-    // The generate_video doc line is the agent's source of truth
-    // for the schedule window; EN and PT must agree on the minimum advance
-    // (regression: the PT line still advertised the old 24h window).
-    // Step 5 of the prompt carries the same window and is pinned too, plus
-    // a prompt-wide guard so no 24h copy can slip back in anywhere.
     for (const locale of ['en', 'pt'] as const) {
-      // Scoped to the window phrase: a bare '24h' token would false-fail if
-      // clock-format copy like "times (HH:MM, 24h)" is ever added to the prompt.
       expect(prompts[locale], `${locale} prompt`).not.toMatch(
         /24h\s*[-–]\s*30d|between 24h and 30|de 24h a 30/,
       );
@@ -155,9 +137,6 @@ describe('buildInstallPrompt', () => {
         .find((line) => line.startsWith('5. '));
       expect(step5Line, `${locale} prompt step 5`).toBeDefined();
       expect(step5Line, `${locale} prompt step 5`).toContain('3h');
-      // The npx install command must pin @latest in both locales: npx
-      // reuses its cached copy without checking for updates, so an
-      // unpinned command silently serves a stale server version.
       const commandLine = prompts[locale]
         .split('\n')
         .find((line) => line.includes('"command":') && line.includes('npx'));
@@ -199,7 +178,7 @@ const EXPECTED_EN_PROMPT: string[] = [
   '- personas: list (id, name, voice, language, niche), get, create (a face is required: avatarUrl, or avatarPath for a local photo; at least one publishing account), update (only the given fields change) and delete (without confirmToken it only previews what would be removed; send the confirmToken of that preview to delete).',
   '- persona_media: list_faces (stock avatar faces; pass a face url as avatarUrl to personas create), list_images, add_image (a local file, JPG/JPEG, PNG or WebP), update_image and remove_image for a persona\'s image library; pass an image id as imageId to generate_video to force that image.',
   '- voices: list (live catalog of house voices with descriptions; filter with gender, origin, search), preview (a short MP3 of a house voice), and clones: list_clones, create_clone (from an audio URL or a local audio file; needs explicit consent), get_clone (poll until ready), preview_clone, delete_clone.',
-  '- accounts: list (my connected social accounts with the names and ids to publish with), connect (OAuth link for youtube/instagram/linkedin/threads/facebook/pinterest/fanvue; direct connect for bluesky, 3speak and rumble), disconnect (by name or id), get_persona_publishing and set_persona_publishing (the accounts a persona publishes to by default), list_boards (Pinterest boards).',
+  '- accounts: list (my connected social accounts with the names and ids to publish with), connect (OAuth link for youtube/instagram/linkedin/threads/facebook/pinterest/fanvue; direct connect for bluesky, 3speak, rumble and telegram), disconnect (by name or id), get_persona_publishing and set_persona_publishing (the accounts a persona publishes to by default), list_boards (Pinterest boards).',
   '- tool_config: get (my saved search and stock tool configuration: which search tool and stock sources I have keys for — keys are never shown back in full) and save (replace the whole set, keys included, stored encrypted).',
   '- schedules: list, cancel (a whole schedule), get_slot, update_slot_title and delete_slot (one scheduled post).',
   '- posts: list (my upcoming and past posts; optional limit, default 20, max 500; each slot carries postUrl, the link to its detail page — send it in chat) and get (one post by slot id or generation id).',
@@ -253,7 +232,7 @@ const EXPECTED_PT_PROMPT: string[] = [
   '- personas: list (id, nome, voz, idioma, nicho), get, create (um rosto é obrigatório: avatarUrl, ou avatarPath para uma foto local; ao menos uma conta de publicação), update (só os campos enviados mudam) e delete (sem confirmToken só mostra o que seria removido; envie o confirmToken dessa prévia para apagar).',
   '- persona_media: list_faces (rostos de avatar padrão; use a url do rosto como avatarUrl no personas create), list_images, add_image (arquivo local JPG/JPEG, PNG ou WebP), update_image e remove_image da biblioteca de imagens de uma persona; passe o id de uma imagem como imageId no generate_video para forçar essa imagem.',
   '- voices: list (catálogo vivo de vozes da casa com descrições; filtre com gender, origin, search), preview (um MP3 curto de uma voz da casa) e clones: list_clones, create_clone (a partir de uma URL de áudio ou de um arquivo de áudio local; exige consentimento explícito), get_clone (consulte até ficar ready), preview_clone, delete_clone.',
-  '- accounts: list (minhas contas sociais conectadas com os nomes e ids para publicar), connect (link OAuth para youtube/instagram/linkedin/threads/facebook/pinterest/fanvue; conexão direta para bluesky, 3speak e rumble), disconnect (por nome ou id), get_persona_publishing e set_persona_publishing (as contas em que uma persona publica por padrão), list_boards (boards do Pinterest).',
+  '- accounts: list (minhas contas sociais conectadas com os nomes e ids para publicar), connect (link OAuth para youtube/instagram/linkedin/threads/facebook/pinterest/fanvue; conexão direta para bluesky, 3speak, rumble e telegram), disconnect (por nome ou id), get_persona_publishing e set_persona_publishing (as contas em que uma persona publica por padrão), list_boards (boards do Pinterest).',
   '- tool_config: get (minha configuração salva de pesquisa e stock: qual ferramenta de busca e fontes de stock tenho chaves — as chaves nunca são exibidas por inteiro) e save (substitui tudo, chaves incluídas, guardadas com criptografia).',
   '- schedules: list, cancel (um agendamento inteiro), get_slot, update_slot_title e delete_slot (um post agendado).',
   '- posts: list (meus posts futuros e passados; limit opcional, padrão 20, máx 500; cada slot traz postUrl, o link da página de detalhe — envie no chat) e get (um post por id de slot ou de geração).',

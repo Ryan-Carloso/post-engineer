@@ -3,11 +3,6 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// contracts shared-source guard: the MCP copies must be generated from
-// shared/contracts/*.ts (HEADER + shared, with endpoint.ts inlined into
-// the other contracts so webpack needs no relative import), never
-// hand-maintained. The sync runs on pretest, so a drift means the file
-// was edited by hand: run `node scripts/sync-contracts.mjs`.
 function findRepoRoot(fromUrl: string): string {
   let dir = dirname(fileURLToPath(fromUrl));
   for (;;) {
@@ -39,8 +34,6 @@ describe('contracts shared source', () => {
       expect(generated.startsWith(HEADER)).toBe(true);
       expect(generated.includes("from './endpoint.js'")).toBe(false);
       expect(generated).toBe(expected);
-      // The MCP copies keep the `.js` suffix on cross-contract imports:
-      // NodeNext requires it, and the web copies drop it for webpack.
       for (const match of shared.matchAll(/from '\.\/([a-z0-9-]+)\.js'/g)) {
         if (match[1] === 'endpoint') continue;
         expect(generated).toContain(`from './${match[1]}.js'`);

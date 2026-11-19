@@ -52,11 +52,6 @@ describe('loginRedirectTarget', () => {
   });
 });
 
-//---------------
-// Sync pin: the public paths accepted here must cover every path the
-// middleware treats as public (apps/web/middleware.ts), read from the real
-// middleware source so the two lists cannot drift.
-//---------------
 describe('PUBLIC_PATH_PREFIXES — middleware parity', () => {
   const middlewareSource = readFileSync(
     join(findRepoRoot(import.meta.url), 'apps/web', 'middleware.ts'),
@@ -87,24 +82,15 @@ describe('PUBLIC_PATH_PREFIXES — middleware parity', () => {
   });
 });
 
-//---------------
-// The full handler: react once to a 401, never on other failures. The module
-// keeps a "redirecting" latch, so each case needing a fresh latch re-imports
-// the module after vi.resetModules.
-//---------------
 describe('handleSessionExpiredError', () => {
   it('assigns /login?next=<current path> exactly once for 401s', async () => {
     const assign = vi.fn();
     stubWindowLocation('/dashboard', '', assign);
     vi.resetModules();
-    // The handler checks `instanceof HttpStatusError`: after resetModules that
-    // class must be the fresh copy this module graph re-imports, not the
-    // statically imported one at the top of this file.
     const { HttpStatusError } = await import('../errors');
     const { handleSessionExpiredError } = await import('../session-expiry');
 
     handleSessionExpiredError(new HttpStatusError('expired', 401));
-    // A second concurrent 401 must not fire a second navigation.
     handleSessionExpiredError(new HttpStatusError('expired-2', 401));
 
     expect(assign).toHaveBeenCalledTimes(1);
@@ -120,17 +106,12 @@ describe('handleSessionExpiredError', () => {
 
     handleSessionExpiredError(new HttpStatusError('Forbidden', 403));
     handleSessionExpiredError(new Error('no status'));
-    handleSessionExpiredError(new HttpStatusError('expired', 401)); // 401 but already on /login
+    handleSessionExpiredError(new HttpStatusError('expired', 401));
 
     expect(assign).not.toHaveBeenCalled();
   });
 });
 
-//---------------
-// Mutation fetchers swallow failures into { success: false } (see lib/api.ts),
-// so the 401 detection runs on the swallowed HTTP response instead. Each case
-// uses a fresh module graph (fresh latch) and stubs fetch.
-//---------------
 describe('notifyIfSessionExpired — swallowed mutation failures', () => {
   function response(status: number): Response {
     return { ok: status >= 200 && status < 300, status, json: async () => ({ success: false, error: 'nope' }) } as unknown as Response;
@@ -143,7 +124,6 @@ describe('notifyIfSessionExpired — swallowed mutation failures', () => {
     const { notifyIfSessionExpired } = await import('../session-expiry');
 
     notifyIfSessionExpired(response(401));
-    // A second concurrent swallow must not fire a second navigation.
     notifyIfSessionExpired(response(401));
 
     expect(assign).toHaveBeenCalledTimes(1);

@@ -52,7 +52,6 @@ def test_card_has_no_outline_of_its_own():
     layer = _layer()
     media_overlay.paint_card(layer, {"title": "Sushi Kinoshita"}, _font_for, SCALE, PANEL)
     left, top, width, _ = media_overlay.card_geometry(PANEL, SCALE)
-    # A white outline would show as a bright pixel on the card's top edge.
     edge = layer.getpixel((left + width // 2, top + 3))
     assert max(edge[:3]) < 120, f"the card edge must be the dark card fill, got {edge}"
 

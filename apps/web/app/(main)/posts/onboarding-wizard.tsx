@@ -20,16 +20,6 @@ import { whatsappUrl } from '@/lib/whatsapp';
 import { CREATE_POSTS_HREF } from './day-section';
 import { WizardStepTwo } from './onboarding-step2';
 
-//---------------
-// First-visit onboarding wizard (issue #573). Four steps with room to
-// explain: what the app is, connect an account, connect the agent, tokens.
-// It opens on its own once per account, on the first visit to the posts
-// calendar, and is marked seen as it opens (lib/onboarding-wizard.ts);
-// the header button reopens it from step 1. Step 2 connects inline, inside this dialog (issue #578): no
-// step-2 action navigates away, so the dialog never unmounts mid-connect.
-// Tokens are contact-only (WhatsApp / email, no billing UI).
-//---------------
-
 export function OnboardingWizardButton({ testId }: { testId?: string }) {
   const { t } = useI18n();
   const open = useOnboardingWizardStore((s) => s.open);
@@ -55,11 +45,7 @@ export function OnboardingWizard() {
   const open = useOnboardingWizardStore((s) => s.open);
   const close = useOnboardingWizardStore((s) => s.close);
 
-  // Mount-only check by design: the seen flag is read once, when the posts
-  // page mounts, so a later change (another tab) never reopens it
-  // mid-session. The cancel flag drops a late answer after unmount.
   useEffect(() => {
-    // The local flag answers without a network read on every later visit.
     if (readOnboardingWizardSeen()) return;
     let cancelled = false;
     const client = createSupabaseClient();

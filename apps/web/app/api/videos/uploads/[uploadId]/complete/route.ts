@@ -1,13 +1,3 @@
-//---------------
-// POST /api/videos/uploads/[uploadId]/complete — verify a signed video
-// upload (issue #561). The server downloads the object the caller PUT
-// through the signed URL and checks the real content (magic bytes via
-// lib/media/magic-bytes, through signed-upload.ts) plus the size
-// ceiling before marking the row `ready`. Only the owner can complete
-// their own upload; a foreign or unknown id is a 404. Completing an
-// already-ready upload is an idempotent retry.
-//---------------
-
 import { NextResponse } from 'next/server';
 
 import { apiErrorResponse } from '@/lib/api-error';

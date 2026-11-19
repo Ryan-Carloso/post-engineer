@@ -2,11 +2,6 @@ import { useQuery } from '@tanstack/react-query';
 import { HttpStatusError } from '@/lib/errors';
 import { fetchScheduleStatus, mapSlot, type ScheduledSlot, type SlotRow } from '@/lib/api';
 
-// Range read of GET /api/schedule/status (?from=&to=) for the posts calendar:
-// every slot in [from, to), never cut by the list view's POSTS_LIMIT.
-
-// Mirrors RANGE_MAX_SLOTS in shared/contracts/schedule.ts (pinned by a
-// file-parsing sync test).
 export const RANGE_MAX_SLOTS = 1000;
 
 export interface ScheduleRange {
@@ -30,8 +25,6 @@ export async function fetchScheduleRange(from: string, to: string): Promise<Sche
   return { slots: data.slots.map(mapSlot), truncated: data.truncated === true };
 }
 
-// `monthKey` + the grid bounds identify the cache entry; refetching every
-// minute mirrors the list view so progress and statuses stay current.
 export function useScheduleRangeQuery(monthKey: string, from: string, to: string, enabled: boolean) {
   return useQuery<ScheduleRange>({
     queryKey: ['fill-schedule-range', monthKey, from, to],
@@ -41,12 +34,6 @@ export function useScheduleRangeQuery(monthKey: string, from: string, to: string
   });
 }
 
-// Whether the account has any post at all, in any month: one row of the
-// upcoming/recent read (GET /api/schedule/status?limit=1). The calendar
-// asks only when the month it opens on is empty, to tell "no posts this
-// month" from "no posts yet". The route's `hasAnyPost` answers it
-// directly — the lists alone cannot, because a past pending/ready slot
-// (or a publishing slot without a user notice) is in neither list.
 export function useHasAnyPostQuery(enabled: boolean) {
   return useQuery<boolean>({
     queryKey: ['fill-schedule-has-any-post'],

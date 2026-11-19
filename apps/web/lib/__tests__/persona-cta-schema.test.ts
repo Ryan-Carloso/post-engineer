@@ -2,14 +2,6 @@ import { describe, it, expect } from 'vitest';
 
 import { parsePersonaCtaType, validateCtaCoherence } from '@/lib/persona-schema';
 
-//---------------
-// CTA intent coherence (issue #639): the persona stores a type plus
-// facts — a URL for link/buy, an instruction for other, nothing extra
-// for the rest. The combination is checked at create time (parsePersonaForm
-// calls validateCtaCoherence) and on PATCH against the merged row
-// (resolveMergedCta in the persona patch route).
-//---------------
-
 describe('validateCtaCoherence', () => {
   it('accepts each type with its facts and nothing extra', () => {
     expect(validateCtaCoherence('follow', null, null)).toBeNull();
@@ -62,8 +54,6 @@ describe('parsePersonaCtaType', () => {
   });
 
   it('defaults legacy, absent and unknown values to follow', () => {
-    // Rows predating the migration carry no cta_type; a value the enum no
-    // longer knows must not crash the edit screen.
     expect(parsePersonaCtaType(null)).toBe('follow');
     expect(parsePersonaCtaType(undefined)).toBe('follow');
     expect(parsePersonaCtaType('')).toBe('follow');

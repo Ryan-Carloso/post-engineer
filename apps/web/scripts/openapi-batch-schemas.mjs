@@ -1,15 +1,9 @@
-// Request/response schema of POST /api/videos/batch-discount (issue #487)
-// for generate-openapi.mjs. Reached through openapi-metrics-schemas.mjs
-// because openapi-schemas.mjs is over the file-size cap. The helpers come in
-// as arguments so this module has no import cycle with openapi-schemas.mjs.
-
 export function batchOperationSchemas({ success, object, str }) {
   const freeVideo = object(
     { scheduleId: str, slotId: str, discountTokens: { type: 'integer', minimum: 1 } },
     ['scheduleId', 'slotId', 'discountTokens'],
   );
   return {
-    // apps/web/app/api/videos/batch-discount/route.ts (BodySchema)
     'POST /api/videos/batch-discount': {
       extraResponses: {
         404: 'SCHEDULE_NOT_FOUND: a schedule does not exist, is not yours, or has no video.',

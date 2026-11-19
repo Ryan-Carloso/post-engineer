@@ -56,9 +56,6 @@ def build_subtitle(task_id, params, video_script, sub_maker, audio_file) -> str:
     logger.info(f"\n\n## generating subtitle, provider: {provider}")
 
     if sub_maker is None and provider != "whisper":
-        # Custom audio never goes through TTS, so there is no TTS timeline.
-        # Only Whisper can transcribe subtitles directly from the audio file;
-        # other providers are skipped rather than writing a wrong timeline.
         logger.warning(
             f"subtitle maker is missing, skip subtitle generation for provider: {provider}"
         )
@@ -79,10 +76,6 @@ def build_subtitle(task_id, params, video_script, sub_maker, audio_file) -> str:
     if not ok:
         logger.error(f"no subtitle provider produced cues (provider: {provider})")
         return ""
-    # Both providers write the script's punctuation into the cues; the
-    # renderer burns the SRT file verbatim, so the cleanup runs here, on
-    # the one path every provider funnels through, before the path is
-    # handed to any consumer.
     if not subtitle_cleanup.clean_subtitle_file(subtitle_path):
         logger.error("subtitle cleanup failed; shipping no subtitles")
         return ""

@@ -1,12 +1,3 @@
-//---------------
-// Publish-existing request schema (issue #384): publish or schedule media
-// that already exists — a finished engine video (task id), a ready signed
-// video upload (upload id), or a plain image (inline bytes). No generation
-// runs on this path, so there is no script, no video type, and no token
-// charge; title + description stay required (issue #542), and the
-// publishing shape mirrors generate-and-schedule (ASAP or scheduled).
-//---------------
-
 import { z } from 'zod';
 
 import { detectMagicMimeType } from '@/lib/media/magic-bytes';
@@ -24,20 +15,14 @@ import {
   type ValidationIssue,
 } from '@/app/api/videos/generate-and-schedule/validation-issues';
 
-/** Inline image bytes ride in the JSON body, like the MCP media tool. */
 export const IMAGE_MAX_BYTES = MAX_IMAGE_UPLOAD_BYTES;
 
-/** The `scheduled_posts.media_kind` values this flow writes (migration 063):
- *  'upload' for a ready signed video upload, 'image' for stored image bytes.
- *  A task-born slot leaves the column NULL. */
 export const SCHEDULED_MEDIA_KINDS = ['upload', 'image'] as const;
 export type ScheduledMediaKind = (typeof SCHEDULED_MEDIA_KINDS)[number];
 
 export const IMAGE_CONTENT_TYPES = ['image/jpeg', 'image/png'] as const;
 export type ImageContentType = (typeof IMAGE_CONTENT_TYPES)[number];
 
-/** A task id is engine-minted; the engine 404s an unknown one, so the
- *  schema only requires a non-empty string instead of a UUID shape. */
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const MediaSchema = z.discriminatedUnion('kind', [
@@ -52,8 +37,6 @@ const MediaSchema = z.discriminatedUnion('kind', [
     .strict(),
 ]);
 
-/** One post at one moment: existing media is published once, so the
- *  schedule is a single instant, never a list of daily times. */
 const PublishingScheduleSchema = z
   .object({
     publishAt: z.string().min(1, 'publishing.schedule.publishAt is required.'),
@@ -63,8 +46,6 @@ const PublishingScheduleSchema = z
 
 const PublishingSchema = z
   .object({
-    // Required: a publish tool that silently defaults to "later" (or to
-    // "now") surprises one caller or the other.
     mode: z.enum(['scheduled', 'asap']),
     providers: z.array(z.string()).min(1).max(10),
     accounts: z.record(z.string(), z.array(z.string())).optional(),
@@ -101,11 +82,8 @@ export interface PublishExistingRequest {
     schedule: { publishAt: string; timezone: string } | undefined;
     pinterestBoardId: string | null;
   };
-  /** YouTube tags / privacy, required for ASAP (the handlers demand them);
-   *  scheduled YouTube derives tags from the title like the engine does. */
   tags: string[] | undefined;
   privacyStatus: string | undefined;
-  /** Publish copy override; defaults to the description at dispatch. */
   caption: string | undefined;
   idempotencyKey: string | undefined;
 }
@@ -118,18 +96,10 @@ function toIssues(error: z.ZodError): ValidationIssue[] {
   return error.issues.map((issue) => invalid(issue.message, issue.path.join('.') || undefined));
 }
 
-/**
- * Shape check only: unknown keys, wrong types, over-long title/description.
- * Cross-field rules (providers, mode/schedule, image providers, YouTube
- * fields) live in checkPublishExistingSemantics, which runs on the parsed
- * value like generate-and-schedule's checkSemantics.
- */
 export function parsePublishExistingBody(body: unknown): Checked<z.infer<typeof BodySchema>> {
   if (!isRecord(body)) {
     return { ok: false, issues: [invalid('A JSON body is required.', undefined)] };
   }
-  // The discriminated union reports a bad kind at the union path; name the
-  // field the caller actually got wrong instead of the whole media object.
   if (isRecord(body.media) && typeof body.media.kind === 'string') {
     const kind = body.media.kind;
     if (kind !== 'task' && kind !== 'upload' && kind !== 'image') {
@@ -177,17 +147,11 @@ export function checkPublishExistingSemantics(
     issues.push(invalid("publishing.schedule is required when publishing.mode is 'scheduled'.", 'publishing.schedule'));
   }
 
-  // Images post only where a handler accepts them (IMAGE_PROVIDERS):
-  // YouTube, Rumble and 3Speak are video-only, Fanvue's upload is wired
-  // for video only.
   if (input.media.kind === 'image' && providers.ok) {
     const issue = imageProvidersIssue(providers.value);
     if (issue !== null) issues.push(issue);
   }
 
-  // ASAP dispatches straight to the provider handlers, which require
-  // YouTube tags + privacy; scheduled YouTube derives both from the title
-  // in the engine (metadata_for), so they stay optional there.
   if (mode === 'asap' && providers.ok && providers.value.includes('youtube')) {
     if (input.tags === undefined || input.tags.length === 0) {
       issues.push(invalid('Video tags are required', 'tags'));
@@ -222,13 +186,6 @@ export function checkPublishExistingSemantics(
   };
 }
 
-/**
- * Decode inline image bytes: strict base64, 8 MB cap, and magic bytes that
- * match the declared type — the same real-content rule the upload handlers
- * apply, before the bytes ever reach a provider. Base64 strictness is a
- * length + round-trip check, never a regex: the alphabet pattern
- * backtracks catastrophically on multi-megabyte input.
- */
 export function decodeImageMedia(media: {
   imageData: string;
   contentType: ImageContentType;
@@ -258,7 +215,6 @@ export function decodeImageMedia(media: {
   return { ok: true, value: { buffer, contentType } };
 }
 
-/** The 400 for an image sent to a network that posts no image, or null. */
 export function imageProvidersIssue(providers: readonly string[]): ValidationIssue | null {
   const videoOnly = providers.filter((provider) => !isImageProvider(provider));
   if (videoOnly.length === 0) return null;

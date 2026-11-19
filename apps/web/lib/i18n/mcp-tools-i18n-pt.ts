@@ -1,5 +1,3 @@
-// apiKeys descriptions of the 17 MCP intent tools (issue #566), shown on the
-// MCP docs card. Split out of pt.ts, which is over the file-size cap and may not grow.
 export const mcpToolDescPt = {
   toolDescGenerateVideo: 'Gere e agende um vídeo ou um lote (a cada 6 vídeos com rosto, o mais barato sai de graça)',
   toolDescVideoTasks: 'Acompanhe seus vídeos: status, espera, histórico',

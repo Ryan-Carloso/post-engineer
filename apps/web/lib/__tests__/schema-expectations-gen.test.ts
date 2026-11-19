@@ -7,12 +7,6 @@ import { REQUIRED_COLUMNS } from '../schema-expectations.gen';
 
 const root = findRepoRoot(import.meta.url);
 
-//---------------
-// The committed schema-expectations.gen.ts must match what the generator
-// derives from supabase/migrations today. A migration that adds a column
-// without regenerating the file fails here, so the boot check (#308) can
-// never silently miss a new column.
-//---------------
 describe('schema-expectations.gen.ts', () => {
   it('matches the generator output for the current migrations', async () => {
     const generator = await import(join(root, 'apps/web/scripts/generate-schema-expectations.mjs'));

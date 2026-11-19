@@ -33,13 +33,9 @@ from app.services.fill_schedule.constants import (
     SLOT_READY,
 )
 
-# Decisions returned by classify_orphan().
 REQUEUE = "requeue"
 FAIL = "fail"
 
-# Pipeline phases (task.py _mark) whose GPU work can simply restart from
-# zero. ``custom_audio``/``download`` never come from _mark (they are
-# failure-only stages) but are pre-publish phases all the same.
 GENERATION_STAGES = frozenset(
     {
         "script",
@@ -53,14 +49,8 @@ GENERATION_STAGES = frozenset(
     }
 )
 
-# Slot states whose ownership belongs to the tick, never to the triage:
-# failing+refunding one of these would race the scheduler.
 _TICK_OWNED_SLOT_STATES = frozenset({SLOT_PENDING, SLOT_READY})
 
-# After this many boot requeues, a task is assumed to deterministically
-# crash the process (e.g. OOM at render): stop regenerating it on every
-# boot and let the fail+refund path settle it (the batch reconciler fails
-# the slot and refunds the prepaid cost).
 MAX_AUTO_REQUEUES = 3
 
 
@@ -110,7 +100,6 @@ def triage_requeue(state: Any, slot_store: Any, task_id: str, data: dict[str, An
         return False
     status = slot.get("status")
     if status == SLOT_GENERATING:
-        # Only generation-stage orphans restart from zero.
         if data.get("stage") not in GENERATION_STAGES:
             return False
         requeue_count = int(data.get("requeue_count") or 0) + 1
@@ -132,7 +121,6 @@ def triage_requeue(state: Any, slot_store: Any, task_id: str, data: dict[str, An
         )
         return True
     if status in _TICK_OWNED_SLOT_STATES:
-        # Already pending/ready: the tick owns it now; never fail+refund.
         return True
     return False
 
@@ -149,9 +137,6 @@ def triage_orphan(
     """
     if triage_requeue(state, slot_store, task_id, data):
         return True
-    # Lazy on purpose: direct_redispatch imports this module's stage
-    # constants, so a top-level import would cycle while this module
-    # is still loading. The import does not pull in the pipeline.
     from app.services.direct_redispatch import triage_redispatch_direct
 
     if triage_redispatch_direct(state, task_id, data):

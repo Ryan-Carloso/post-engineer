@@ -24,12 +24,8 @@ from app.services.voice_providers import (
 from app.utils import utils
 
 NO_VOICE_NAME = "no-voice"
-# `none` was the no-voice sentinel used on PR #981's branch. Keep it as a
-# short-term alias so API users who called that branch directly don't break
-# on upgrade; the WebUI and new code use the clearer `no-voice`.
 _NO_VOICE_ALIASES = {NO_VOICE_NAME, "none"}
 
-# 100-nanosecond units per second; `mktimestamp` is integer-based on it.
 SUB_TIME_UNITS_PER_SECOND = 10000000
 
 
@@ -73,9 +69,6 @@ def get_elevenlabs_voices(api_key: str) -> list[str]:
 
 
 def parse_voice_name(name: str):
-    # zh-CN-XiaoyiNeural-Female
-    # zh-CN-YunxiNeural-Male
-    # zh-CN-XiaoxiaoMultilingualNeural-V2-Female
     name = name.replace("-Female", "").replace("-Male", "").strip()
     return name
 
@@ -84,7 +77,6 @@ def is_elevenlabs_voice(voice_name: str) -> bool:
 
 
 def is_chatterbox_voice(voice_name: str) -> bool:
-    # New clones are chatterbox_nano:<key>; legacy chatterbox: stays valid.
     return (voice_name or "").startswith(("chatterbox:", "chatterbox_nano:"))
 
 
@@ -120,10 +112,6 @@ def estimate_no_voice_duration(text: str) -> float:
     ascii_word_chars = sum(len(word) for word in re.findall(r"[A-Za-z0-9]+", normalized_text))
     other_text_chars = 0
     for char in normalized_text:
-        # A Unicode category starting with L means a letter in some language,
-        # N means a digit. CJK and ASCII words were already counted above,
-        # so only the remaining text is counted here to avoid double-counting
-        # English.
         category = unicodedata.category(char)
         if category.startswith(("L", "N")):
             other_text_chars += 1
@@ -215,7 +203,6 @@ def tts(
         )
 
     if is_elevenlabs_voice(voice_name):
-        # Format: elevenlabs:<voice_id>
         parts = voice_name.split(":", 1)
         if len(parts) >= 2 and parts[1].strip():
             return elevenlabs_tts(text, parts[1].strip(), voice_file, voice_rate, voice_volume)
@@ -224,8 +211,6 @@ def tts(
             error="invalid ElevenLabs voice name (expected 'elevenlabs:<voice_id>')"
         )
     if is_chatterbox_voice(voice_name):
-        # Format: chatterbox:<voice> or chatterbox_nano:<voice>, optionally
-        # with a display-only -Female/-Male suffix.
         parts = voice_name.split(":", 1)
         if len(parts) < 2 or not parts[1].strip():
             logger.error(f"Invalid chatterbox voice name format: {voice_name}")
@@ -235,7 +220,6 @@ def tts(
         chatterbox_voice = parts[1].strip()
         if chatterbox_voice.endswith(("-Female", "-Male")):
             chatterbox_voice = chatterbox_voice.rsplit("-", 1)[0]
-        # Ownership guard moved here from the deleted fallback wrapper.
         from app.services.cloned_voices.ownership import chatterbox_voice_allowed_for_user
         if not chatterbox_voice_allowed_for_user(user_id, chatterbox_voice):
             return TtsResult(error="cloned voice is not available for this user")
@@ -247,9 +231,6 @@ def tts(
     if routed is not None:
         return routed
 
-    # An unrecognised voice id used to fall through to Azure, turning typos
-    # into silent network failures. Fail loud: the caller picked a voice
-    # that no longer exists.
     logger.error(
         f"unknown voice: {voice_name!r}. Providers are ElevenLabs (`elevenlabs:<id>`), "
         "Chatterbox (`chatterbox:<name>`) and OpenRouter (`openrouter:<model>:<voice>`); "
@@ -299,9 +280,6 @@ def _build_subtitle_formatter():
     return formatter
 
 
-# Arabic diacritics and Tatweel elongation marks can appear in TTS-returned
-# text. They carry no meaning but break exact matching between script text
-# and subtitle cue strings.
 _ARABIC_DIACRITICS = re.compile("[\u0610-\u061A\u064B-\u065F\u0670\u0640\u06D6-\u06ED]")
 
 
@@ -350,9 +328,6 @@ def _match_script_line(script_lines: list[str], current_text: str, sub_index: in
     if current_text_normalized == target_line_normalized:
         return target_line.strip()
 
-    # Last-resort Arabic tolerance: the letter forms, diacritics, or Tatweel
-    # in TTS-returned text may differ from the script. Normalize and compare
-    # only after plain matching failed; non-Arabic text is unaffected.
     current_ar = re.sub(r"[_\W]+", "", _normalize_arabic(current_text))
     target_ar = re.sub(r"[_\W]+", "", _normalize_arabic(target_line))
     if current_ar and current_ar == target_ar:
@@ -473,13 +448,12 @@ def _get_audio_duration_from_file(audio_file: str) -> float:
 
     try:
         with AudioFileClip(audio_file) as audio:
-            return audio.duration  # Duration in seconds
+            return audio.duration
     except Exception as e:
         logger.error(f"Failed to get audio duration from {audio_file}: {str(e)}")
         return 0.0
 
 
-# Back-compat alias: the reader never was MP3-specific.
 _get_audio_duration_from_mp3 = _get_audio_duration_from_file
 
 

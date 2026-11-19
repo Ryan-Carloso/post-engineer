@@ -4,9 +4,6 @@ import { usePersonaStore } from '@/lib/store';
 import { useI18n } from '@/lib/i18n/provider';
 import { AlertIcon } from '@/lib/ui';
 
-//---------------
-// PersonaErrorDialog — create/update error in a modal (not a box at the page bottom), so the message is not lost.
-//---------------
 export const PersonaErrorDialog = () => {
   const result = usePersonaStore((s) => s.result);
   const { t } = useI18n();

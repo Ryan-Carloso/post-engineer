@@ -1,18 +1,10 @@
 'use client';
 
-//---------------
-// Constantes visuais compartilhadas
-//---------------
-
 export const INPUT_CLASS =
   'mt-1.5 w-full rounded-lg border border-line bg-card px-3.5 py-2.5 text-sm text-ink placeholder:text-faint transition-colors focus:border-ink focus:outline-none focus:ring-2 focus:ring-ink/10';
 
 export const SECTION_LABEL_CLASS =
   'text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-text';
-
-//---------------
-// Helpers puros
-//---------------
 
 export function formatCount(count?: string): string {
   if (!count) return '0';
@@ -28,10 +20,6 @@ export function formatFileSize(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
-
-//---------------
-// Icons (inline SVG)
-//---------------
 
 export const PlayIcon = () => (
   <svg viewBox="0 0 24 24" fill="currentColor" className="size-3.5" aria-hidden="true">
@@ -230,10 +218,6 @@ export const GlobeIcon = () => (
   </svg>
 );
 
-//---------------
-// Sidebar icons (Arc style)
-//---------------
-
 export const SparklesIcon = () => (
   <svg
     viewBox="0 0 24 24"
@@ -407,9 +391,6 @@ export const CoinsIcon = () => (
   </svg>
 );
 
-//---------------
-// ProfileIcon — person silhouette for the Perfil/Profile account area.
-//---------------
 export const ProfileIcon = () => (
   <svg
     viewBox="0 0 24 24"

@@ -1,7 +1,3 @@
-//---------------
-// idempotency — deterministic schedule ids for retried requests.
-//---------------
-
 import { describe, expect, it } from 'vitest';
 
 import { IDEMPOTENCY_NAMESPACE, deterministicUuid, resolveIdempotency } from '../idempotency';
@@ -18,7 +14,6 @@ describe('deterministicUuid', () => {
     const b = deterministicUuid('ns', 'user-1:key-1');
     expect(a).toBe(b);
     expect(a).toMatch(UUID_RE);
-    // Version 5 + RFC 4122 variant bits.
     expect(a[14]).toBe('5');
     expect('89ab').toContain(a[19]);
   });
@@ -36,7 +31,6 @@ describe('resolveIdempotency', () => {
     expect(resolved.clientSupplied).toBe(true);
     expect(resolved.key).toBe('key-1');
     expect(resolved.scheduleId).toBe(deterministicUuid(IDEMPOTENCY_NAMESPACE, 'user-1:key-1'));
-    // batch: prefix = the engine reconciler's prepaid-batch convention.
     expect(resolved.generationId).toBe(`batch:${resolved.scheduleId}`);
   });
 

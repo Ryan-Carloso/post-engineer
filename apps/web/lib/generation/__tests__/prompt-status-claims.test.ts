@@ -2,16 +2,6 @@
  * @vitest-environment node
  */
 
-// Prompt status claims and tool-name guard: a served prompt must never
-// state that a provider is broken, being fixed, or blocked by a tracked
-// issue, and must never name a tool the MCP does not register. A stale
-// status claim makes the agent skip that provider by default, and it goes
-// stale the moment the fix lands: the prompt keeps saying "broken" long
-// after publishing works again (Bluesky, issue #327, fixed by PR #332, is
-// the case that motivated this guard). Provider availability is per
-// account, never a blanket claim in prompt text. The same rule covers the
-// full-setup recipe doc, which used to hand-repeat the prompt steps and
-// the Bluesky warning instead of pointing at the hub.
 import { describe, expect, it } from 'vitest';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -21,12 +11,6 @@ import * as promptBase from '../prompt-base';
 
 const STALE_STATUS_PHRASES = ['currently being fixed', 'being fixed', 'issue #', 'is broken'];
 
-// snake_case values in prompt text that are not tool calls:
-// retention_evidence is an output field the viral-shorts prompt asks the
-// agent to print ('unavailable' for another creator's video), not a tool.
-// full_lipsync / hook_lipsync are video_type enum values and very_good is
-// a face-quality value from the video-type cost line (issue #542
-// follow-up), never tools.
 const NON_TOOL_TOKENS = new Set(['retention_evidence', 'full_lipsync', 'hook_lipsync', 'very_good']);
 
 function servedPromptTexts(): Array<{ name: string; text: string }> {
@@ -55,13 +39,6 @@ function collectSourceFiles(dir: string): string[] {
   return out.sort();
 }
 
-//---------------
-// The MCP's tools and their actions, read from its sources as syntax trees:
-// every `server.tool('name', …)` registration, and for an action tool the
-// keys of the `byAction({ key: handler, … })` object literal in its callback.
-// A prompt may name a tool, or `tool (action: x)` with an action that tool
-// really has; the MCP sources are the one source of truth (issue #566).
-//---------------
 function registeredTools(): Map<string, Set<string>> {
   const root = findRepoRoot(import.meta.url);
   const srcDir = join(root, 'apps', 'mcp', 'src');
@@ -107,7 +84,6 @@ function registeredTools(): Map<string, Set<string>> {
 
 const ACTION_PAIR = /([a-z][a-z0-9_]*) \(action: ([a-z][a-z0-9_]*)\)/g;
 
-/** `tool (action: x)` pairs the served prompts name. */
 function mentionedActions(): Array<{ tool: string; action: string }> {
   const pairs = new Map<string, { tool: string; action: string }>();
   for (const { text } of servedPromptTexts()) {
@@ -122,7 +98,6 @@ function mentionedActions(): Array<{ tool: string; action: string }> {
 function mentionedToolNames(): string[] {
   const mentioned = new Set<string>();
   for (const { text } of servedPromptTexts()) {
-    // The action of a `tool (action: x)` pair is checked against the tool's own actions below.
     for (const match of text.replace(ACTION_PAIR, '$1').matchAll(/[a-z][a-z0-9]*(?:_[a-z0-9]+)+/g)) {
       const token = match[0];
       if (!NON_TOOL_TOKENS.has(token)) {

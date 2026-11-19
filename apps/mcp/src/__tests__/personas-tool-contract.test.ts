@@ -12,12 +12,6 @@ import {
   UpdatePersonaSchema,
 } from '../tools.js';
 
-// personas · tool schema vs shared contract — the tool is the agent-facing
-// shape, the contract is the web route's shape. They agree on the values
-// that reach the server; where they differ on purpose (tool defaults, tool
-// types vs form-field strings, route-only rules) the difference is pinned
-// here so neither side can drift silently.
-
 const validCreateTool = {
   name: 'Ava',
   avatarUrl: 'https://example.com/avatar.png',
@@ -73,8 +67,6 @@ describe('personas · create: tool vs contract', () => {
   });
 
   it('paragraphNumber is a number in the tool and a digit string in the contract (deliberate)', () => {
-    // The client sends it as a form field, so the contract takes the string;
-    // the tool takes the number the agent provides.
     expect(CreatePersonaSchema.safeParse({ ...validCreateTool, paragraphNumber: '3' }).success).toBe(false);
     expect(CreatePersonaBodySchema.safeParse({ ...validCreateContract, paragraphNumber: 3 }).success).toBe(true);
   });
@@ -91,8 +83,6 @@ describe('personas · create: tool vs contract', () => {
   });
 
   it('the tool rejects a non-English language while the contract accepts any short string (deliberate)', () => {
-    // The English-only gate lives in the route (and the tool refine), not in
-    // the contract body: the contract only caps the BCP 47 length.
     expect(CreatePersonaSchema.safeParse({ ...validCreateTool, language: 'pt-BR' }).success).toBe(false);
     expect(CreatePersonaBodySchema.safeParse({ ...validCreateContract, language: 'pt-BR' }).success).toBe(true);
     expect(CreatePersonaBodySchema.safeParse({ ...validCreateContract, language: 'x'.repeat(36) }).success).toBe(false);
@@ -105,9 +95,6 @@ describe('personas · create: tool vs contract', () => {
   });
 
   it('the tool and the contract both accept the CTA intent, and both drop the legacy stored text', () => {
-    // Issue #639: the CTA is an intent (type plus facts), set at creation
-    // — the old stored-text ctaText is gone on both sides. A legacy key is
-    // stripped by zod on both sides, never rejected and never stored.
     const cta = { type: 'link', url: 'https://example.com/course' };
     expect(CreatePersonaSchema.safeParse({ ...validCreateTool, cta }).success).toBe(true);
     expect(CreatePersonaBodySchema.safeParse({ ...validCreateContract, ctaType: 'link', ctaUrl: 'https://example.com/course' }).success).toBe(true);
@@ -118,11 +105,6 @@ describe('personas · create: tool vs contract', () => {
   });
 
   it('the tool rejects an incoherent CTA; the contract carries no cross-field rule', () => {
-    // The tool fails fast locally on a link without a URL, an other
-    // without an instruction, and facts on a type that takes none. The
-    // create contract takes the flat fields independently — coherence is
-    // enforced by the web form parser (parsePersonaForm) and by the tool,
-    // not by this schema.
     expect(CreatePersonaSchema.safeParse({ ...validCreateTool, cta: { type: 'link' } }).success).toBe(false);
     expect(CreatePersonaSchema.safeParse({ ...validCreateTool, cta: { type: 'other' } }).success).toBe(false);
     expect(CreatePersonaSchema.safeParse({ ...validCreateTool, cta: { type: 'follow', url: 'https://example.com/x' } }).success).toBe(false);
@@ -140,9 +122,6 @@ describe('personas · update: tool vs contract', () => {
   });
 
   it('the tool and the contract both accept the CTA intent; the legacy key is stripped by the tool and rejected by the contract', () => {
-    // Issue #639: the CTA is an intent (type plus facts). A legacy ctaText
-    // key is stripped by the tool's zod parse, never stored; a body with
-    // only that key fails the contract's "Nothing to update" refine.
     expect(UpdatePersonaSchema.safeParse({ personaId: 'p1', cta: { type: 'comment' } }).success).toBe(true);
     expect(UpdatePersonaBodySchema.safeParse({ ctaType: 'comment' }).success).toBe(true);
     const parsed = UpdatePersonaSchema.safeParse({ personaId: 'p1', ctaText: 'Buy now' });
@@ -171,8 +150,6 @@ describe('personas · images: tool vs contract', () => {
   });
 
   it('the add tool takes a boolean isPrimary while the contract takes the form strings (deliberate)', () => {
-    // POST is multipart: the route reads 'true'/'false' strings. The tool
-    // only ever marks an image primary, so it takes the boolean true.
     expect(AddPersonaImageSchema.safeParse({ personaId: 'p1', path: '/tmp/a.jpg', isPrimary: true }).success).toBe(true);
     expect(AddPersonaImageSchema.safeParse({ personaId: 'p1', path: '/tmp/a.jpg', isPrimary: false }).success).toBe(false);
     expect(AddPersonaImageBodySchema.safeParse({ personaId: 'p1', isPrimary: 'true' }).success).toBe(true);

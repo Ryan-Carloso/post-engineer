@@ -44,7 +44,6 @@ describe('POST /api/billing/checkout', () => {
   beforeEach(() => {
     vi.mocked(createSupabaseServerClient).mockReset();
     mockStripeCreate.mockClear();
-    // Set env vars for stripe price IDs
     process.env.STRIPE_SECRET_KEY = 'sk_test_key';
     process.env.NEXT_PUBLIC_APP_URL = 'http://localhost:3434';
     process.env.STRIPE_PRICE_PACK_10 = 'price_pack_10_test';
@@ -99,7 +98,6 @@ describe('POST /api/billing/checkout', () => {
       }),
     } as never);
 
-    // MockStripe já está configurado no topo do arquivo
     const res = await POST(makePostRequest({ packId: 'pack_50' }));
     expect(res.status).toBe(200);
     const body = await res.json() as { url: string };

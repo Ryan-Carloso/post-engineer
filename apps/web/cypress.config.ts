@@ -26,10 +26,6 @@ export default defineConfig({
     supportFile: 'cypress/support/e2e.ts',
     specPattern: 'cypress/e2e/**/*.cy.ts',
     video: false,
-    // CI quarantine for intermittent app-side failures (React hydration error
-    // #418 in a `before each` hook hits a different spec on every run, issue
-    // #199): a failed test is re-run up to twice in `cypress run`. Interactive
-    // `cypress open` never retries, so a real failure stays visible locally.
     retries: { runMode: 2, openMode: 0 },
     screenshotOnRunFailure: true,
     env: {
@@ -55,8 +51,6 @@ export default defineConfig({
     setupNodeEvents(on, config) {
       registerCodeCoverageTasks(on, config);
       on('task', {
-        // One line per real password grant. Cached cy.session restores do
-        // not call this, so a run log's count is the token-request count.
         logE2EPasswordGrant(attempt: unknown): null {
           if (typeof attempt !== 'number' || !Number.isInteger(attempt) || attempt < 1) {
             throw new Error('logE2EPasswordGrant expected a positive attempt number');
@@ -64,11 +58,6 @@ export default defineConfig({
           process.stdout.write(`[e2e] supabase password grant attempt ${attempt}\n`);
           return null;
         },
-        //---------------
-        // saveDownloadedVideo — persists the MP4 downloaded through the
-        // app's authenticated route and validates: video content-type,
-        // minimum size, and MP4 signature ('ftyp' box at offset 4).
-        //---------------
         async saveDownloadedVideo({ filename, base64, contentType }: SaveDownloadedVideoTask): Promise<SavedVideoInfo> {
           if (!/^video\//i.test(contentType)) {
             throw new Error(`Unexpected video content type: ${contentType}`);

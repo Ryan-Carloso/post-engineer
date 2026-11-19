@@ -1,9 +1,3 @@
-// personas (action: create): shape and schema.
-//
-// Extracted from tools.ts so tools.ts stays under the file-size ratchet.
-// Re-exported from tools.ts, so existing import sites (`./tools.js`) keep
-// working, including the personas registration (intent-*.ts) and the
-// remote shapes (remote-shapes.ts).
 import { z } from 'zod';
 
 import { createPersonaAccountsField } from './account-shapes.js';
@@ -20,20 +14,16 @@ import { CreatePersonaAvatarFields, refinePersonaAvatar } from './persona-avatar
 import { PersonaCtaShape } from './persona-cta-shape.js';
 import { personaVoiceField } from './voice-filters.js';
 
-// Image path/tag/description limits are shared by create-persona and persona_media (action: add_image).
 export const LibraryImageFields = {
   path: z.string().min(1).describe(`Local file path to the image (JPG/JPEG, PNG, or WebP, max ${MAX_LIBRARY_IMAGE_MB}MB)`),
   tag: z.string().max(MAX_LIBRARY_TAG_LENGTH).optional().describe('Short tag for deterministic per-video matching (e.g. casual, formal, gym)'),
   description: z.string().max(MAX_LIBRARY_DESCRIPTION_LENGTH).optional().describe('Description of the photo for tag/keyword matching (e.g. smiling at the beach at sunset)'),
 };
 
-// Single source of truth: the intent-*.ts modules build the advertised shapes from these
-// ones, so field definitions (and their descriptions) live here only.
 const PersonaLibraryImageInputShape = z.object(LibraryImageFields);
 
 export const CreatePersonaShape = {
   name: z.string().min(1, 'Name is required').describe('Name of the persona'),
-  // Every persona has a face (avatarUrl or avatarPath); faceless is a per-video mode (options.videoType).
   ...CreatePersonaAvatarFields,
   voiceId: personaVoiceField('voiceId is required').describe('id or label from voices (action: list). Never type a provider prefix.'),
   language: z
@@ -52,10 +42,6 @@ export const CreatePersonaShape = {
   paragraphNumber: z.number().int().min(1).max(10).default(1).describe('Number of paragraphs'),
   niche: z.string().optional().default('General').describe('Content niche'),
   faceQuality: z.enum(FACE_QUALITIES).default('very_good').describe('Face resolution of the rendered videos: ok (480p, 2 tokens/video) or very_good (720p, 3 tokens/video)'),
-  // Call to action for this persona's videos (issue #639): the intent
-  // only — a type plus a URL (link/buy) or an instruction (other). The
-  // agent writes the CTA words per video from the story; no wording is
-  // stored. Omit for the default follow.
   cta: PersonaCtaShape.optional(),
   accounts: createPersonaAccountsField,
   images: z.array(PersonaLibraryImageInputShape).max(MAX_LIBRARY_IMAGES).optional().describe(`Up to ${MAX_LIBRARY_IMAGES} local image files of the same person for the persona image library. Each video deterministically picks the best-matching image by tag.`),

@@ -1,10 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 
-//---------------
-// Tests for personaStore (Zustand). Observed behavior
-// through the store's public interface — no internal mocks.
-//---------------
-
 import { usePersonaStore } from '@/lib/store';
 import { emptyPersonaDefaultAccounts } from '@/lib/persona-publishing-accounts';
 
@@ -113,12 +108,6 @@ describe('usePersonaStore', () => {
     expect(formData.has('photo')).toBe(false);
   });
 
-  //---------------
-  // Personas are always faced: the store carries no faceless mode and no face
-  // mix. "No face" is a per-post choice (NewPostState.faceless). The keys are
-  // pinned absent so a future form cannot reintroduce dead state nobody reads.
-  //---------------
-
   it('holds no faceless mode and no face mix', () => {
     const state = usePersonaStore.getState() as unknown as Record<string, unknown>;
     for (const key of [
@@ -152,8 +141,6 @@ describe('usePersonaStore', () => {
     s.setAvatarUrl('data:image/png;base64,IA');
     s.setVoiceId('calm');
 
-    // Exactly one visual identity: the staged photo wins over a character the
-    // user may have picked earlier (same rule the server enforces).
     const formData = usePersonaStore.getState().buildPersonaFormData();
     expect(formData.get('photo')).toBe(photo);
     expect(formData.has('avatarUrl')).toBe(false);
@@ -170,11 +157,6 @@ describe('usePersonaStore', () => {
     expect(reset.name).toBe('');
     expect(reset.result).toBeNull();
   });
-
-  //---------------
-  // Face quality — the persona's only face-related choice (the face itself is
-  // always there). Token prices live in lib/tokens (computeVideoTokens).
-  //---------------
 
   it('starts with ok quality', () => {
     expect(usePersonaStore.getState().faceQuality).toBe('ok');
@@ -256,11 +238,6 @@ describe('usePersonaStore', () => {
     expect(formData.has('videoLayout')).toBe(false);
   });
 
-  //---------------
-  // Scheduling has no screen of its own, so the persona store keeps no
-  // scheduling state. These keys are pinned so a future scheduling form
-  // does not silently reintroduce dead state nobody reads.
-  //---------------
   it('holds no scheduling state', () => {
     const state = usePersonaStore.getState() as unknown as Record<string, unknown>;
     for (const key of [
@@ -274,14 +251,6 @@ describe('usePersonaStore', () => {
       expect(state).not.toHaveProperty(key);
     }
   });
-
-  //---------------
-  // Issue #572 — the persona is born bound to at least one publishing
-  // account. The binding lives in the store so the create picker and the
-  // submit share it, and buildPersonaFormData sends it as the
-  // `publishingAccounts` JSON field the server requires (create mode
-  // rejects a missing/empty binding with a 400, nothing written).
-  //---------------
 
   it('starts with no bound publishing accounts', () => {
     expect(usePersonaStore.getState().publishingAccounts).toEqual(emptyPersonaDefaultAccounts());
@@ -320,9 +289,6 @@ describe('usePersonaStore', () => {
     expect(JSON.parse(String(formData.get('publishingAccounts')))).toEqual(emptyPersonaDefaultAccounts());
   });
 
-  //---------------
-  // Multi-photo staging: first = avatar, the rest = creation-time library.
-  //---------------
   describe('photo staging', () => {
     const png = (name: string) => new File(['x'], name, { type: 'image/png' });
 

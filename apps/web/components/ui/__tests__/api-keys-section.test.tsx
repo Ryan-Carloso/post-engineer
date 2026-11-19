@@ -107,7 +107,6 @@ describe('ApiKeysSection', () => {
     } as never);
     renderSection();
 
-    // Each key renders once in the table and once in the compact card twin.
     const active = screen.getAllByText('Active');
     const revoked = screen.getAllByText('Revoked');
     expect(active).toHaveLength(2);
@@ -160,7 +159,6 @@ describe('ApiKeysSection', () => {
 
     fireEvent.click(screen.getByTestId('generate-api-key-btn'));
     expect(screen.getByTestId('api-key-name-input')).toBeInTheDocument();
-    // Persona scoping was removed from the UI; the API still accepts it.
     expect(screen.queryByTestId('api-key-scope-all')).not.toBeInTheDocument();
     expect(screen.queryByTestId('api-key-scope-specific')).not.toBeInTheDocument();
   });
@@ -205,7 +203,6 @@ describe('ApiKeysSection', () => {
       expect(mutateAsync).toHaveBeenCalledWith({ name: 'CI Agent', personaIds: null });
     });
     expect(await screen.findByTestId('api-key-created-banner')).toBeInTheDocument();
-    // The hub receives the raw key once, to fill it into the install prompt.
     expect(onKeyCreated).toHaveBeenCalledExactlyOnceWith('pe_live_abcdef1234567890abcdef1234567890');
     expect(screen.getByTestId('raw-api-key-value')).toHaveValue(
       'pe_live_abcdef1234567890abcdef1234567890',
@@ -269,8 +266,6 @@ describe('ApiKeysSection', () => {
     window.confirm = vi.fn(() => true);
     renderSection();
 
-    // jsdom renders the table twin and the compact hidden mobile twin; the
-    // card's button comes after the table in the DOM.
     const revokeButtons = screen.getAllByRole('button', { name: 'Revoke' });
     expect(revokeButtons).toHaveLength(2);
     fireEvent.click(revokeButtons[revokeButtons.length - 1]);
@@ -358,7 +353,6 @@ describe('ApiKeysSection', () => {
     renderSection();
 
     const usedDate = new Date(usedAt).toLocaleDateString();
-    // Table and mobile card both render the date, so each key shows it at least once.
     expect(screen.getAllByText(usedDate).length).toBeGreaterThan(0);
     expect(screen.getAllByText(`Last used: ${usedDate}`).length).toBeGreaterThan(0);
     expect(screen.getAllByText('Never used').length).toBeGreaterThan(0);
@@ -398,9 +392,6 @@ describe('ApiKeysSection', () => {
           lastUsedAt: null,
           revokedAt: null,
         },
-        // Scoped keys can only exist from before scoping was removed from
-        // the UI; the server still enforces their restriction, but the hub
-        // no longer surfaces it.
         {
           id: 'key-2',
           name: 'Scoped',
@@ -429,7 +420,6 @@ describe('ApiKeysSection', () => {
     } as never);
     renderSection();
 
-    // Only the first four keys are visible before expanding.
     expect(screen.getByTestId('api-key-row-key-4')).toBeInTheDocument();
     expect(screen.queryByTestId('api-key-row-key-5')).not.toBeInTheDocument();
     expect(screen.getByTestId('api-keys-show-all-toggle')).toHaveTextContent('Show all 6 keys');
@@ -475,8 +465,6 @@ describe('ApiKeysSection', () => {
     fireEvent.click(screen.getByTestId('api-keys-show-all-toggle'));
     expect(screen.getByTestId('api-key-row-key-5')).toBeInTheDocument();
 
-    // Creating a key shows the one-time banner; the list is ordered newest
-    // first, so the banner being open must not desync the toggle.
     fireEvent.click(screen.getByTestId('generate-api-key-btn'));
     fireEvent.change(screen.getByTestId('api-key-name-input'), { target: { value: 'New Agent' } });
     fireEvent.click(screen.getByTestId('submit-create-key-btn'));

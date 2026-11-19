@@ -38,10 +38,6 @@ from app.services.music_mood import validate_music_mood
 from app.services.upload_filenames import sanitize_upload_filename as _sanitize_upload_filename
 from app.utils import file_security, upload_limits, utils
 
-# Operator-private task fields (cost_usd, cost_missing_reason, total cost): persisted
-# on the task row for server-side PostHog unit economics, but never
-# exposed through the API. The web forwards task bodies to browsers
-# wholesale — strip via _public_task_view on every serializing endpoint.
 PRIVATE_TASK_FIELDS = frozenset({"cost_usd", "cost_missing_reason", "total_cost_usd", "total_cost_label", "container_cost_usd", "container_overhead_usd", "container_uptime_s", "container_id", "jobs_served_in_container", "scaledown_cost_usd", "videos_per_container"})
 
 
@@ -50,12 +46,7 @@ def _public_task_view(task: dict[str, object]) -> dict[str, object]:
     return {key: value for key, value in task.items() if key not in PRIVATE_TASK_FIELDS}
 
 
-# Upload size caps: the handlers stream uploads in chunks instead of
-# buffering the whole body in RAM.
-_BGM_MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
-
-# Auth dependency
-# router = new_router(dependencies=[Depends(base.verify_token)])
+_BGM_MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 router = new_router()
 
 _enable_redis = config.app.get("enable_redis", False)
@@ -67,7 +58,6 @@ _max_concurrent_tasks = config.app.get("max_concurrent_tasks", 5)
 _max_queued_tasks = config.app.get("max_queued_tasks", 100)
 
 redis_url = f"redis://:{_redis_password}@{_redis_host}:{_redis_port}/{_redis_db}"
-# Select the task manager according to the configuration
 if _enable_redis:
     task_manager = RedisTaskManager(
         max_concurrent_tasks=_max_concurrent_tasks,
@@ -226,9 +216,6 @@ def _task_file_to_uri(file: str, endpoint: str, task_dir: str, request_id: str) 
     try:
         file_security.resolve_path_within_directory(task_dir, file)
     except ValueError as exc:
-        # Task state should only ever hold artifact paths inside the task
-        # directory. Don't build a URL from an abnormal path here — keep the
-        # original value so historic bad data stays debuggable.
         logger.warning(
             f"skip unsafe task output path, request_id: {request_id}, path: {file}, "
             f"error: {str(exc)}"
@@ -344,8 +331,6 @@ def create_task(
     task_id = utils.get_uuid()
     request_id = base.get_task_id(request)
     auth = base.get_auth_context(request)
-    # English-only launch: a direct job in any other language is rejected
-    # before the task row exists (web/MCP enforce the same rule upstream).
     ensure_english_video_language(body, request_id, task_id)
     try:
         task = {
@@ -354,22 +339,14 @@ def create_task(
             "params": body.model_dump(),
             "user_id": auth.user_id,
         }
-        # Unknown BGM mood is a 400, before the task row exists ("none"/omitted pass).
         validate_music_mood(getattr(body, "music_mood", None))
         sm.state.update_task(
             task_id, user_id=auth.user_id, flow="direct", pipeline=stop_at,
-            # New tasks start at explicit 0/PROCESSING (update_task only
-            # overwrites state/progress when passed, so no relying on defaults).
             state=const.TASK_STATE_PROCESSING,
             progress=0,
-            # Identity for PostHog: the lifecycle events (started/progress/
-            # failed/generated) read persona_id from the task row, so the
-            # funnel can be broken down per persona instead of "unknown".
             **_persona_tracking_kwargs(body),
             **_tracking_kwargs(body),
         )
-        # Funnel entry: requested fires from on_accepted once the task is
-        # ACCEPTED — strictly before the worker starts, never on a 429.
         task_manager.add_task(
             tm.start,
             task_id=task_id,
@@ -439,14 +416,9 @@ def get_task(
             ]
         final_videos = task.get("videos") or []
         if final_videos:
-            # The authoritative finished render. Consumers must never guess
-            # the filename (the web used to hardcode final-1.mp4); the key
-            # is absent (not null) when the task has no finished videos.
             response_task["final_video"] = _task_file_to_uri(
                 final_videos[0], endpoint, task_dir, request_id
             )
-        # Whether a durable R2 archive exists (restart-proof
-        # playback even after the ephemeral disk is wiped).
         response_task["has_archive"] = bool(task.get("video_storage_path"))
         return utils.get_response(200, response_task)
 
@@ -537,9 +509,6 @@ def delete_video(request: Request, task_id: str = Path(..., description="Task ID
     auth = base.get_auth_context(request)
     task = sm.state.get_task(task_id, user_id=auth.user_id)
     if task:
-        # Cancel the row before removing the directory so a worker that
-        # loses its files aborts; removal failure is logged, not raised,
-        # because the delete is already committed (see task_cleanup).
         sm.state.delete_task(task_id)
         remove_task_directory(task_id)
         logger.success(f"video deleted: task_id={task_id}")
@@ -567,9 +536,6 @@ def get_bgm_list(request: Request):
             {
                 "name": filename,
                 "size": os.path.getsize(file),
-                # Return only the filename — never expose the server's absolute
-                # path to callers. The server resolves it back into the songs
-                # allowlist directory when creating a task.
                 "file": filename,
             }
         )
@@ -585,12 +551,9 @@ def get_bgm_list(request: Request):
 def upload_bgm_file(request: Request, file: UploadFile = File(...)):
     request_id = base.get_task_id(request)
     safe_filename = _sanitize_upload_filename(file.filename, request_id)
-    # check file ext
     if safe_filename.lower().endswith("mp3"):
         song_dir = utils.song_dir()
         save_path = os.path.join(song_dir, safe_filename)
-        # Stream the upload with a 50 MB cap instead of buffering the whole
-        # body in RAM; over-limit uploads get 413 and leave no partial file.
         try:
             upload_limits.save_upload_stream(
                 file, save_path, max_bytes=_BGM_MAX_UPLOAD_BYTES
@@ -612,17 +575,11 @@ async def stream_video(request: Request, file_path: str):
     request_id = base.get_task_id(request)
     tasks_dir = utils.task_dir()
     auth = base.get_auth_context(request)
-    # R2 is the source of truth: the archived, size-verified object is served
-    # and the ephemeral local disk is never consulted. The local path is only
-    # resolved as a way to VALIDATE the request shape (task id + filename),
-    # not as a file to read.
     task_id = _validate_request_shape(tasks_dir, file_path, request_id, auth.user_id)
     _finished_task(task_id, auth.user_id, request_id)
     redirect = _storage_redirect_if_archived(request, task_id, request_id)
     if redirect is not None:
         return redirect
-    # No verified archive: the upload/verify step failed, so there is
-    # intentionally nothing to serve. The task carries video_storage_error.
     raise HttpException(
         request_id,
         status_code=404,

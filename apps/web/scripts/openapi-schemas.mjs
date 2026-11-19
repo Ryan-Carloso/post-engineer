@@ -1,6 +1,3 @@
-// Hand-written request/response schemas for generate-openapi.mjs, keyed by
-// "METHOD /api/path". Each entry mirrors the route's own validation (cited in
-// the comment); endpoints without an entry keep the generic responses.
 import { experimentLinkSchema, metricsOperationSchemas } from './openapi-metrics-schemas.mjs'; import { videoOperationSchemas } from './openapi-videos-schemas.mjs'; import { OAUTH_CONNECT_PROVIDERS, SCHEDULE_ACCOUNT_COLUMNS, SOCIAL_PROVIDERS as providers } from '../../../shared/contracts/providers.ts';
 
 const object = (properties, required = []) => ({
@@ -11,7 +8,6 @@ const object = (properties, required = []) => ({
 const str = { type: 'string' };
 const strArray = { type: 'array', items: str };
 const int = { type: 'integer' };
-// The same schema for each named field, e.g. fields(int, ['a', 'b']).
 const fields = (schema, names) => Object.fromEntries(names.map((name) => [name, schema]));
 
 export const componentSchemas = {
@@ -75,7 +71,6 @@ const slotResult = object({
   status: str,
 });
 
-// apps/web/app/api/videos/generate-and-schedule/route.ts (BodySchema)
 const generateBody = object(
   {
     personaId: { type: 'string', description: 'Optional: a faceless post needs no persona.' },
@@ -85,7 +80,6 @@ const generateBody = object(
         mode: { type: 'string', enum: ['scheduled', 'asap'], default: 'scheduled' },
         providers: { ...strArray, maxItems: 20 },
         accounts: { type: 'object', additionalProperties: strArray },
-        // OpenAPI 3.0 cannot express "required unless mode is asap" (the route 400s).
         schedule: {
           ...object({ startAt: str, times: strArray, timezone: str }, ['startAt', 'times', 'timezone']),
           description: "Required when mode is 'scheduled' (the default); forbidden when mode is 'asap'.",
@@ -111,7 +105,7 @@ const generateBody = object(
       paragraphNumber: { type: 'integer', minimum: 1, maximum: 10 },
       language: str,
       niche: str,
-    }, ['segments']), // segments-validation.ts: 400 without them
+    }, ['segments']),
     experiment: experimentLinkSchema,
     idempotencyKey: str,
     cta: {
@@ -173,14 +167,11 @@ const scheduleSummary = object({
 });
 
 const anyObject = { type: 'object', additionalProperties: true };
-// Engine-backed routes proxy the engine response, wrapped as BaseResponse.
 const engineEnvelope = object({
   status: { type: 'integer' },
   message: str,
   body: { ...anyObject, description: 'Task record. state: -1 failed, 1 complete, 3 queued, 4 processing.' },
 });
-// Responses return the DB row shape (snake_case), even though the POST
-// form field and the PATCH body take isPrimary.
 const imageSchema = object({
   id: str,
   tag: { type: 'string', maxLength: 100, nullable: true },
@@ -196,9 +187,6 @@ const clonedVoice = { ...anyObject, description: 'Cloned voice record.' };
 const slotIdPath = 'slotId is the slot id returned by generate-and-schedule.';
 const ok = success({});
 
-// apps/web/app/api/tool-config/route.ts (GetToolConfigResponseSchema):
-// presence only — never a key value. PUT returns the same shape with
-// configured always true.
 const toolConfigPresence = {
   configured: { type: 'boolean' },
   searchTool: { type: 'string', enum: ['tavily', 'exa'], nullable: true },
@@ -228,7 +216,6 @@ export const operationSchemas = {
       warnings: { type: 'array', items: object({ code: str }) },
     }),
   },
-  // apps/web/app/api/videos/validate-script/route.ts
   'POST /api/videos/validate-script': {
     request: segmentsBody,
     response: success({
@@ -240,7 +227,6 @@ export const operationSchemas = {
       measuredReason: str,
     }),
   },
-  // apps/web/app/api/videos/score-draft/route.ts (parseBody)
   'POST /api/videos/score-draft': {
     request: object(
       {
@@ -251,7 +237,6 @@ export const operationSchemas = {
       },
       ['draft'],
     ),
-    // apps/web/lib/draft-scoring.ts (DraftScore), spread next to success.
     response: success({
       score: { type: 'integer' },
       reasons: { type: 'array', items: object({ rule: str, detail: str, points: { type: 'integer' } }) },
@@ -274,14 +259,12 @@ export const operationSchemas = {
       },
     }),
   },
-  // apps/web/app/api/billing/tokens/route.ts
   'GET /api/billing/tokens': {
     response: success({
       balance: { type: 'number', description: 'Paid plus free tokens.' },
       free: { type: 'number' },
     }),
   },
-  // apps/web/app/api/persona/route.ts (postHandler: FormData via parsePersonaForm)
   'POST /api/persona': {
     contentType: multipart,
     request: object(personaFields, ['name']),
@@ -291,23 +274,19 @@ export const operationSchemas = {
       warnings: { type: 'array', items: object({ code: str }) },
     }),
   },
-  // patchHandler: personaId in the query, FormData body, every field optional
   'PATCH /api/persona': {
     query: personaIdQuery,
     contentType: multipart,
     request: object(personaFields),
     response: ok,
   },
-  // deleteHandler: personaId in the query
   'DELETE /api/persona': { query: personaIdQuery, response: ok },
-  // apps/web/app/api/persona/list/route.ts
   'GET /api/persona/list': {
     response: object({
       authenticated: { type: 'boolean' },
       personas: { type: 'array', items: personaSummary },
     }),
   },
-  // apps/web/app/api/schedule/route.ts
   'GET /api/schedule': {
     response: success({ schedules: { type: 'array', items: scheduleSummary } }),
   },
@@ -318,7 +297,6 @@ export const operationSchemas = {
       refunds: { description: 'Token refunds issued for cancelled slots.' },
     }),
   },
-  // apps/web/app/api/schedule/slots/[slotId]/route.ts
   'GET /api/schedule/slots/[slotId]': {
     description: `${slotIdPath} The slot post detail fields are returned at the top level next to success.`,
     response: success({}),
@@ -328,7 +306,6 @@ export const operationSchemas = {
     response: success({ title: str }),
   },
   'DELETE /api/schedule/slots/[slotId]': { response: ok },
-  // apps/web/app/api/account/route.ts
   'GET /api/account': {
     response: object({
       authenticated: { type: 'boolean' },
@@ -336,7 +313,6 @@ export const operationSchemas = {
       message: str,
     }),
   },
-  // apps/web/app/api/tool-config/route.ts (SaveToolConfigBodySchema)
   'GET /api/tool-config': {
     response: success(toolConfigPresence),
   },
@@ -351,7 +327,6 @@ export const operationSchemas = {
     ),
     response: success({ ...toolConfigPresence, configured: { type: 'boolean', enum: [true] } }),
   },
-  // apps/web/app/api/pinterest/boards/route.ts
   'GET /api/pinterest/boards': {
     query: [{ name: 'accountId', required: true, description: 'Pinterest user id stored at OAuth connect.' }],
     response: success({
@@ -375,29 +350,40 @@ export const operationSchemas = {
     ],
     response: ok,
   },
-  // apps/web/app/api/account/connect-url/route.ts
   'POST /api/account/connect-url': {
     request: object({ provider: { type: 'string', enum: [...OAUTH_CONNECT_PROVIDERS] } }, ['provider']),
     response: success({ auth_url: { type: 'string', format: 'uri', description: 'https URL to open in a browser.' } }),
   },
-  // apps/web/app/api/bluesky-connect/route.ts (JSON or form body)
   'POST /api/bluesky-connect': {
     request: object({ handle: str, appPassword: str }, ['handle', 'appPassword']),
     response: success({ accountId: str, did: str }),
     extraResponses: { 422: 'Bluesky rejected the handle or app password (code BLUESKY_CREDENTIAL_REJECTED).' },
   },
-  // apps/web/app/api/threespeak-connect/route.ts (JSON or form body)
   'POST /api/threespeak-connect': {
     request: object({ username: str, postingKey: str }, ['username', 'postingKey']),
     response: success({ accountId: str, username: str }),
     extraResponses: { 422: '3Speak rejected the username or posting key (code THREESPEAK_CREDENTIAL_REJECTED).' },
   },
-  // apps/web/app/api/rumble-connect/route.ts (JSON or form body)
   'POST /api/rumble-connect': {
     request: object({ channelId: str, accessToken: str }, ['channelId', 'accessToken']),
     response: success({ accountId: str, channelId: str }),
   },
-  // apps/web/app/api/persona/faces/route.ts
+  'POST /api/telegram-connect': {
+    request: object(
+      {
+        botToken: { type: 'string', description: 'Bot token issued by @BotFather.' },
+        chatId: { type: 'string', description: 'Public @username or numeric chat ID of the channel or group.' },
+        chatType: { type: 'string', enum: ['channel', 'group'], description: 'The destination kind; checked against the real chat.' },
+      },
+      ['botToken', 'chatId', 'chatType'],
+    ),
+    response: success({ accountId: str, chatId: str, chatType: { type: 'string', enum: ['channel', 'group', 'supergroup'] }, title: str }),
+    extraResponses: {
+      403: 'The bot is not in the chat or cannot post there (code TELEGRAM_BOT_NOT_MEMBER or TELEGRAM_BOT_CANNOT_POST).',
+      404: 'Telegram could not find the chat (code TELEGRAM_CHAT_NOT_FOUND).',
+      422: 'Telegram rejected the bot token (code TELEGRAM_TOKEN_REJECTED).',
+    },
+  },
   'GET /api/persona/faces': {
     response: object({
       faces: {
@@ -408,7 +394,6 @@ export const operationSchemas = {
       },
     }),
   },
-  // apps/web/app/api/persona/images/route.ts
   'GET /api/persona/images': {
     query: personaIdQuery,
     response: success({ images: { type: 'array', items: imageSchema } }),
@@ -440,16 +425,11 @@ export const operationSchemas = {
     response: success({ image: { ...imageSchema, nullable: true }, warnings: imageWarnings }),
   },
   'DELETE /api/persona/images': { query: [{ name: 'id', required: true }], response: ok },
-  // apps/web/app/api/media/upload/route.ts
   'POST /api/media/upload': {
     contentType: multipart,
     request: object({ file: { type: 'string', format: 'binary', description: 'JPG, PNG or WebP.' } }, ['file']),
     response: success({ mediaId: str, expiresInSeconds: { type: 'integer' } }),
   },
-  // apps/web/app/api/media/publish-existing/route.ts (BodySchema). No
-  // generation runs here, so there is no token charge; the 200 shape
-  // depends on publishing.mode: scheduled returns schedule + slots, asap
-  // returns publishes + logId.
   'POST /api/media/publish-existing': {
     request: object(
       {
@@ -524,22 +504,18 @@ export const operationSchemas = {
       502: 'The video service is unavailable.',
     },
   },
-  // apps/web/app/api/media/check/route.ts
   'POST /api/media/check': {
     request: object({ url: { type: 'string', format: 'uri', description: 'http(s) URL.' } }, ['url']),
     response: success({ code: str }),
   },
   ...metricsOperationSchemas({ success, object, anyObject, str }), ...videoOperationSchemas({ success, object, str }),
-  // apps/web/app/api/posts/[id]/route.ts
   'GET /api/posts/[id]': {
     response: success({
       kind: { type: 'string', enum: ['generation', 'slot'] },
       generation: anyObject,
     }),
   },
-  // apps/web/app/api/persona/voices/route.ts
   'GET /api/persona/voices': {
-    // Verified live: 65 voices, each with these keys.
     response: object({
       voices: {
         type: 'array',
@@ -547,7 +523,6 @@ export const operationSchemas = {
       },
     }),
   },
-  // apps/web/app/api/persona/cloned-voices/**
   'GET /api/persona/cloned-voices': {
     response: success({ voices: { type: 'array', items: clonedVoice } }),
   },
@@ -572,19 +547,14 @@ export const operationSchemas = {
     responseContent: 'audio/mpeg',
     response: { type: 'string', format: 'binary' },
   },
-  // apps/web/app/api/persona/voices/[voiceId]/preview/route.ts
   'POST /api/persona/voices/[voiceId]/preview': {
     request: object({ text: { type: 'string', description: 'Optional preview text.' } }),
     responseContent: 'audio/mpeg',
     response: { type: 'string', format: 'binary' },
   },
-  // apps/web/app/api/prompts/route.ts and prompts/[slug]/route.ts
   'GET /api/prompts': { response: success({ prompts: { type: 'array', items: object(fields(str, ['slug', 'title', 'description'])) } }) },
   'GET /api/prompts/[slug]': { response: success({ prompt: object(fields(str, ['slug', 'title', 'description', 'prompt'])) }) },
-  // apps/web/app/api/schedule/status/route.ts
   'GET /api/schedule/status': {
-    // ?from=&to= (ISO-8601, together, not with limit) switches to range mode:
-    // `slots` + `truncated` instead of `upcoming` + `recent`.
     query: [{ name: 'limit', required: false }, { name: 'from', required: false }, { name: 'to', required: false }],
     response: success({
       upcoming: { type: 'array', items: anyObject },
@@ -593,7 +563,6 @@ export const operationSchemas = {
       truncated: { type: 'boolean', description: 'Range mode only: true when the slot cap was hit.' },
     }),
   },
-  // apps/web/app/api/persona/delete-preview/route.ts
   'GET /api/persona/delete-preview': {
     query: personaIdQuery,
     response: success({
@@ -606,7 +575,6 @@ export const operationSchemas = {
       linksIncomplete: { type: 'boolean' },
     }),
   },
-  // apps/web/app/api/persona/publishing-accounts/route.ts
   'GET /api/persona/publishing-accounts': {
     query: personaIdQuery,
     response: success({ defaults: anyObject }),
@@ -618,7 +586,6 @@ export const operationSchemas = {
     }, ['accounts']),
     response: success({ defaults: anyObject }),
   },
-  // apps/web/app/api/persona/video-generations/**
   'GET /api/persona/video-generations': {
     query: [{ name: 'limit', required: false }],
     response: success({ generations: { type: 'array', items: anyObject } }),
@@ -632,7 +599,6 @@ export const operationSchemas = {
       }),
     }),
   },
-  // apps/web/app/api/persona/video-status|video-task: engine proxies
   'GET /api/persona/video-status/[taskId]': {
     response: engineEnvelope,
     extraResponses: {
@@ -644,7 +610,6 @@ export const operationSchemas = {
     response: engineEnvelope,
     extraResponses: { 502: 'Engine unavailable; retry with backoff.' },
   },
-  // apps/web/app/api/billing/transactions/route.ts
   'GET /api/billing/transactions': {
     query: [{ name: 'limit', required: false }, { name: 'offset', required: false }],
     response: success({
@@ -652,7 +617,6 @@ export const operationSchemas = {
       ...fields(int, ['total', 'limit', 'offset']),
     }),
   },
-  // apps/web/app/api/upload-content/route.ts
   'POST /api/upload-content': {
     contentType: multipart,
     description: 'Provider-specific form fields (video file, title, caption) are read by the provider handler; see the MCP publish_video (action: from_file) tool.',

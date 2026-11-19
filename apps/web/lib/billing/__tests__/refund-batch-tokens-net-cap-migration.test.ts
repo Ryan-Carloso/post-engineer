@@ -3,21 +3,6 @@ import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { findRepoRoot } from '@/test/repo-root';
 
-//---------------
-// supabase/migrations/044_refund-batch-tokens-net-cap.sql — the refund cap
-// counts TOTAL charges, not the oldest spend row.
-//
-// 017/018 capped total refunds at the oldest video_generation row: the batch
-// was prepaid as ONE spend row, so the oldest row WAS the charge. The
-// generate-and-schedule read-your-ledger check went net-based, so a
-// fully-refunded attempt re-charges under the SAME generation_id and the
-// ledger holds two spend rows. Under the old cap the retry's per-slot refund
-// saw total refunds already equal to the first charge and answered
-// `nothing_to_refund`, so the retry's fresh charge was never returned — the
-// user paid for a failed video. These assertions pin the net-aware cap and
-// the parts of the 018 contract this migration must not regress.
-//---------------
-
 const repoRoot = findRepoRoot(import.meta.url);
 const migrationPath = join(
   repoRoot,
@@ -51,11 +36,8 @@ describe('supabase/migrations/044_refund-batch-tokens-net-cap.sql', () => {
 
   it('caps refunds at total charges, not the oldest spend row', () => {
     const sql = readSql();
-    // Every spend row under the generation_id counts toward the charge:
-    // a re-charged retry leaves two video_generation rows behind.
     expect(sql).toContain('sum(abs(amount))');
     expect(sql).toContain("type = 'video_generation'");
-    // The oldest-row lookup the cap used to rely on must be gone.
     expect(sql).not.toContain('order by created_at asc');
     expect(sql).not.toContain('limit 1');
     expect(sql).toContain('missing_charge');
@@ -64,8 +46,6 @@ describe('supabase/migrations/044_refund-batch-tokens-net-cap.sql', () => {
 
   it('sums free_amount over every spend row for the free/paid restore', () => {
     const sql = readSql();
-    // The re-charge spends free tokens again, so the free pool is the sum
-    // across spend rows, not the oldest row's share alone.
     expect(sql).toContain('sum(coalesce(free_amount, 0))');
     expect(sql).toContain('free_tokens_balance');
     expect(sql).toContain('tokens_balance');

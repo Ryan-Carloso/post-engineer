@@ -3,14 +3,6 @@ import { describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import type { VideoGeneration } from '@/lib/api';
 
-//---------------
-// Tests for the shared posts-list pieces in post-card.tsx: the date/time
-// formatters, the slot-account resolution and the standalone generation
-// row. i18n echoes keys. The fallbacks here are the defensive branches
-// (unknown status / unmapped error code / no schedule), so each test pins
-// the branch the happy-path fixtures never take.
-//---------------
-
 vi.mock('@/lib/i18n/provider', () => ({
   useI18n: () => ({ locale: 'en', t: (key: string) => key }),
 }));
@@ -37,9 +29,6 @@ function renderCard(generation: Partial<VideoGeneration> = {}) {
 
 describe('formatDate and formatTime', () => {
   it('formats pt-BR dates with the month name in Portuguese', () => {
-    // Zone-agnostic: the month name and year survive any viewer timezone
-    // (the day can shift by one at the zone edges), and the time pins only
-    // its HH:MM shape, never the wall clock of a UTC instant.
     expect(formatDate('2026-09-23T10:00:00.000Z', 'pt')).toMatch(/de set\. de 2026/);
     expect(formatTime('2026-09-23T10:00:00.000Z', 'pt')).toMatch(/^\d{1,2}:\d{2}$/);
   });
@@ -60,7 +49,6 @@ describe('GenerationCard thumbnail and failure state', () => {
     const video = container.querySelector('video');
     expect(video).not.toBeNull();
     expect(video?.getAttribute('src')).toBe('/api/persona/video-download/task-1/final-1.mp4#t=0.1');
-    // A completed card carries no failure line and no destructive border.
     expect(container.querySelector('[data-generation-error]')).toBeNull();
     const card = screen.getByRole('link').firstElementChild as HTMLElement;
     expect(card.className.split(/\s+/)).not.toContain('border-destructive/35');

@@ -1,5 +1,3 @@
-/** Client/server guards for voice-clone reference uploads (engine enforces duration). */
-
 export const MAX_CLONE_REFERENCE_BYTES = 20 * 1024 * 1024;
 export const MAX_CLONE_REFERENCE_SECONDS = 60;
 export const MIN_CLONE_REFERENCE_SECONDS = 1;
@@ -27,7 +25,6 @@ function byteAt(buffer: ByteSource, index: number): number {
   return buffer[index] ?? 0;
 }
 
-/** Detect audio container from magic bytes (declared MIME is not trusted). */
 export function detectCloneReferenceMime(buffer: ByteSource): AllowedCloneReferenceMime | null {
   if (buffer.length < 12) {
     return null;

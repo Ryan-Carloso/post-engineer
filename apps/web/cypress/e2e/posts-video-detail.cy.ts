@@ -1,19 +1,3 @@
-//---------------
-// Posts video detail E2E — a history post's detail page must load its
-// video through the download proxy without 404s. This is the regression
-// test for the user-reported black player: the video exists in the engine
-// but the guessed file name (final-1.mp4) 404'd, and the proxy's fallback
-// redirect must resolve it.
-//
-// Everything the page needs is mocked at the network level (the suite
-// never depends on the E2E user owning real history posts): the schedule
-// list, the status list with one published slot, the slot detail, and the
-// finished render served as a fixture through the download proxy path.
-// The proxy fallback itself is pinned by unit tests
-// (video-download route.test.ts); here the page must request the video
-// and the bytes must decode (loadedmetadata fires).
-//---------------
-
 const DETAIL_SCHEDULE_ID = 'sched-detail-1';
 const DETAIL_SLOT_ID = 'slot-detail-1';
 const DETAIL_TASK_ID = 'task-detail-1';
@@ -93,8 +77,6 @@ describe('Posts video detail', () => {
   beforeEach(() => {
     cy.loginE2EUser();
 
-    // /posts list dependencies: the schedule must exist or the status
-    // query's slots are dropped (the page filters by schedule id).
     cy.intercept('GET', '/api/schedule', {
       statusCode: 200,
       body: { success: true, schedules: [detailScheduleRow()] },
@@ -110,10 +92,6 @@ describe('Posts video detail', () => {
         personas: [{ id: DETAIL_PERSONA_ID, name: DETAIL_PERSONA_NAME }],
       },
     });
-    // The history page's join hooks read the connected accounts. Stub them
-    // so the spec never depends on the shared Supabase schema: a live
-    // /api/account fails on any database that has not applied the newest
-    // migration yet, which turns the whole history list into a load error.
     cy.intercept('GET', '/api/account', {
       statusCode: 200,
       body: { authenticated: true, accounts: [] },
@@ -123,48 +101,32 @@ describe('Posts video detail', () => {
       body: { success: true, generations: [] },
     });
 
-    // Detail page: the unified endpoint resolves the slot.
     cy.intercept('GET', `/api/posts/${DETAIL_SLOT_ID}`, {
       statusCode: 200,
       body: { ...detailSlotPayload(), kind: 'slot' },
     }).as('slotDetail');
 
-    // The finished render, served through the download proxy path. The
-    // ',null' encoding suffix is load-bearing: .mp4 is not in Cypress's
-    // binary fixture extension list, so without it the file is read as
-    // UTF-8 and the bytes are corrupted — the player then fails with
-    // MEDIA_ERR_SRC_NOT_SUPPORTED even though the file is valid. 'null'
-    // makes the server return a Buffer, which streams byte-identical
-    // (the same path .png/.jpg/.zip fixtures take).
     cy.intercept('GET', `/api/persona/video-download/${DETAIL_TASK_ID}/final-1.mp4`, {
       fixture: 'e2e-generated.mp4,null',
     }).as('videoDownload');
   });
 
   it('opens a history post detail and loads its video without 404s', () => {
-    // The history page holds published posts and manual generations.
     cy.visit('/posts/history');
 
-    // Open the post card by exact href — a bare `a[href^="/posts/"]`
-    // would also match the list page itself.
     cy.get(`a[href="/posts/${DETAIL_SLOT_ID}"]`).first().click();
     cy.url().should('match', new RegExp(`/posts/${DETAIL_SLOT_ID}$`));
 
-    // The detail page must resolve its entity by id, and neither the
-    // detail fetch nor the video download may 404.
     cy.wait('@slotDetail').then((interception) => {
       expect(interception.response?.statusCode, 'slot detail must not 404').to.not.eq(404);
     });
 
-    // The video element points at the download proxy...
     cy.get('video').should(
       'have.attr',
       'src',
       `/api/persona/video-download/${DETAIL_TASK_ID}/final-1.mp4`,
     );
 
-    // ...and the bytes actually decode: the debug line switches from
-    // "loading…" to the resolved dimensions once loadedmetadata fires.
     cy.get('[data-testid="video-debug"]', { timeout: 30_000 })
       .invoke('text')
       .should('match', /\d+×\d+/);

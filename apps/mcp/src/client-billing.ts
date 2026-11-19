@@ -7,18 +7,6 @@ import {
 } from './contracts/billing.js';
 import type { ResponseOf } from './contracts/endpoint.js';
 
-//---------------
-// Billing (GET /api/billing/tokens, GET /api/billing/transactions) —
-// standalone functions because client.ts is grandfathered over the
-// 500-line cap and may not grow. Inputs and responses are typed from the
-// shared contract (shared/contracts/billing.ts), so a renamed contract
-// field fails typecheck here and in the web route together. The request
-// sites stay literal for the parity gate. The client keeps its fail-fast
-// paging validation: the server silently falls back to its defaults on
-// invalid paging, so the client names the bad field instead of sending a
-// value the caller never meant.
-//---------------
-
 export async function getTokenBalance(
   client: PostEngineerClient,
 ): Promise<ResponseOf<typeof getTokenBalanceContract>> {

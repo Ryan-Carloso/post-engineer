@@ -66,8 +66,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
   }
   const body = parsed.value;
 
-  // English-only launch: a persona's language is its videos' language, so
-  // a non-English persona cannot be created until the lock lifts.
   if (
     body.values.language !== null &&
     body.values.language !== undefined &&
@@ -89,21 +87,11 @@ async function postHandler(request: Request): Promise<NextResponse> {
     return personaValidationError(voiceError, 'POST /api/persona', personaVoiceRejectionOptions(body.values.voiceId));
   }
 
-  // Optional image library at creation: `images` (files) with parallel
-  // `imageTags` / `imageDescriptions` JSON arrays and an optional
-  // `imagePrimaryIndex`. Pre-validated here so a bad file fails before any
-  // upload or insert happens.
-  // Keep every file-like entry (even empty ones): validateImageFile rejects
-  // size-0 files with a clear error. Dropping entries here would shift the
-  // index-aligned imageTags/imageDescriptions onto the wrong images, so a
-  // non-file entry is a hard 400, not a silent filter.
   const allImageEntries = formData.getAll('images');
   if (allImageEntries.some((value) => !isFileLike(value))) {
     return personaValidationError('images must be a list of image files.', 'POST /api/persona', { field: 'images' });
   }
   const libraryFiles = allImageEntries.filter((value): value is File => isFileLike(value));
-  // Parsed once: parseJsonStringArray is pure JSON parsing, no need to
-  // re-parse per file inside the map below. Malformed JSON is a 400 here.
   let imageTags: string[];
   let imageDescriptions: string[];
   try {
@@ -112,8 +100,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
   } catch (error) {
     return personaValidationError(error instanceof Error ? error.message : 'Invalid imageTags/imageDescriptions.', 'POST /api/persona', { field: 'imageTags' });
   }
-  // Tags/descriptions are matched to files by index: a non-empty array that
-  // does not cover every file is a client bug, not a silent default.
   if (
     (imageTags.length > 0 && imageTags.length !== libraryFiles.length) ||
     (imageDescriptions.length > 0 && imageDescriptions.length !== libraryFiles.length)
@@ -125,9 +111,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
     tag: imageTags[index] ?? '',
     description: imageDescriptions[index] ?? '',
   }));
-  // Cheap checks first: parsePrimaryIndex and the range check run before
-  // validateLibraryInputs reads every file's bytes, so a malformed index
-  // fails fast without the expensive per-file content validation.
   let primaryIndex: number | null;
   try {
     primaryIndex = parsePrimaryIndex(formData.get('imagePrimaryIndex'));
@@ -147,8 +130,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
   }
   const validatedLibraryInputs = libraryValidation.inputs;
 
-  // Persona id first so the photo lands in {userId}/{personaId}/photo.{ext}.
-  // Upload before insert so a failed insert can roll the file back by path.
   const personaId = randomUUID();
   const photoPath =
     body.photo && body.photoExtension
@@ -169,12 +150,9 @@ async function postHandler(request: Request): Promise<NextResponse> {
     avatarUrl = resolved.avatarUrl;
   }
 
-  // Service role bypasses RLS. user.id is the authenticated owner. A cookie
-  // JWT must not write coerced columns (language, face_quality, recent_image_ids).
   const { data: persona, error: insertError } = await createSupabaseServiceClient()
     .from('personas')
     .insert({
-      // Explicit id so the storage folder is known before the row exists.
       id: personaId,
       user_id: user.id,
       name: (body.values.name ?? '').trim(),
@@ -188,30 +166,19 @@ async function postHandler(request: Request): Promise<NextResponse> {
       cta_type: body.values.ctaType, cta_url: body.values.ctaUrl, cta_instruction: body.values.ctaInstruction,
       paragraph_number: body.values.paragraphNumber,
       niche: body.values.niche,
-      // face_quality is the persona's only face-related choice: the face itself is
-      // always present (a video without one is a per-post choice,
-      // options.faceless).
       face_quality: body.values.faceQuality,
-      // Supplied explicitly so creation works regardless of the DB default:
-      // fresh installs get `default '{}'` from the canonical schema, but DBs
-      // created from the pre-fix consolidated schema may have none — omitting
-      // it made PostgreSQL reject the insert (23502).
       recent_image_ids: [],
     })
     .select('id')
     .single();
 
   if (insertError || !persona) {
-    // Insert never landed: remove the ingested object so it does not orphan.
     await rollbackStoragePath(supabase, photoPathToRollback);
     return errorResponse(500, 'Failed to create persona.', 'POST /api/persona', {
       cause: insertError,
     });
   }
 
-  // Issue #572: bind the persona's publishing accounts now, before any
-  // library work — a persona with zero bound accounts must not exist, and
-  // a failed binding rolls the whole creation back (row + photo).
   const binding = await savePersonaBinding(
     supabase,
     user.id,
@@ -226,17 +193,11 @@ async function postHandler(request: Request): Promise<NextResponse> {
   let libraryImageIds: string[] = [];
   const warnings: string[] = [];
   if (validatedLibraryInputs.length > 0) {
-    // Storage folder uses the minted id that went into the row.
     const added = await addLibraryImages(supabase, user.id, personaId, validatedLibraryInputs);
     if ('error' in added) {
       return rollbackLibraryCreation(supabase, user.id, persona.id, photoPathToRollback, added);
     }
     libraryImageIds = added.images.map((image) => image.id);
-    // Defensive: addLibraryImages rolls back partial work and returns exactly
-    // one row per input, so the up-front range check guarantees this index is
-    // in range — there is no partial-success path to skip here.
-    // A failed primary swap is surfaced as a warning, not a 500: the persona
-    // and its images are already committed.
     if (primaryIndex !== null && primaryIndex < added.images.length) {
       const primaryError = await setPrimaryLibraryImage(
         supabase,
@@ -246,16 +207,11 @@ async function postHandler(request: Request): Promise<NextResponse> {
       );
       if (primaryError) {
         logger.error('[api/persona] set primary library image failed', primaryError.error);
-        // Stable code, not English copy: the UI maps it through i18n,
-        // consistent with the /api/persona/images warnings contract.
         warnings.push(PERSONA_IMAGE_WARNING_CODES.PRIMARY_SWAP_FAILED);
       }
     }
   }
 
-  // The web UI never sends images[] at creation (the library is edit-only),
-  // so warnings only reach direct API-key callers — but the response shape
-  // is shared, and the web CreatePersonaResult type describes it.
   trackApiEvent('persona_created', { personaId: persona.id });
   return NextResponse.json({
     success: true,
@@ -312,11 +268,6 @@ async function patchHandler(request: Request): Promise<NextResponse> {
     return personaValidationError(voicePatchError, 'PATCH /api/persona', personaVoiceRejectionOptions(patch.voiceId));
   }
 
-  // The merged CTA row is validated against the stored persona (see
-  // patch-updates.ts): a type-only patch clears the stored facts the new
-  // type cannot carry, and a fact-only patch is checked against the type
-  // already stored. It runs before the photo/avatar block on purpose: a
-  // 400 here must not leave an uploaded replacement photo behind.
   const ctaError = applyPersonaPatchFields(patch, updates, persona);
   if (ctaError) return personaValidationError(ctaError, 'PATCH /api/persona', { field: 'ctaType' });
 
@@ -352,7 +303,6 @@ async function patchHandler(request: Request): Promise<NextResponse> {
     return personaValidationError('Nothing to update.', 'PATCH /api/persona');
   }
 
-  // Service role bypasses RLS. The select above proved user.id owns this row.
   const { error: updateError } = await createSupabaseServiceClient()
     .from('personas')
     .update(updates)
@@ -376,8 +326,6 @@ async function patchHandler(request: Request): Promise<NextResponse> {
   return NextResponse.json({ success: true });
 }
 
-//---------------
-
 async function deleteHandler(request: Request): Promise<NextResponse> {
   const ROUTE = 'DELETE /api/persona';
   const { auth, error: authError } = await requireSupabaseSession(request);
@@ -385,9 +333,6 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
   const limited = await applyRateLimit(request, RATE_LIMITS.personaDelete, auth.userId);
   if (limited) return limited;
   const user = { id: auth.userId };
-  // Service-role bypasses RLS: every query below is re-scoped by user_id,
-  // and the persona row itself is the ownership proof. OAuth callers have
-  // no cookie session, so they get the service client like API keys.
   const supabase = auth.isApiKey === true || auth.isOAuth === true
     ? createSupabaseServiceClient()
     : await createSupabaseServerClient();
@@ -416,8 +361,6 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
     .eq('user_id', user.id)
     .single();
   if (selectError || !persona) {
-    // PGRST116 = zero rows: missing or belongs to someone else. Any other
-    // error is a real DB failure — a bare 404 would hide it.
     if (selectError?.code === 'PGRST116') {
       return apiErrorResponse(404, 'Persona not found.', {
         route: ROUTE,
@@ -440,11 +383,6 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
     });
   }
 
-  // Service role bypasses RLS. The select above proved this persona belongs
-  // to user.id. Deletes run here so a cookie JWT cannot drop published slots
-  // and make find_zombie_schedule_candidates refund the batch. No token
-  // refunds: pending work is forfeited. PostgREST has no transaction;
-  // completedSteps names what already went through.
   const service = createSupabaseServiceClient();
   const completedSteps: string[] = [];
   const cascadeFail = (step: string, error: unknown): NextResponse => {
@@ -458,8 +396,6 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
     });
   };
 
-  // Schedules are posting configs (handful per persona), not per-video
-  // rows — intentionally unbounded here; the delete needs every id.
   const { data: scheduleRows, error: schedulesError } = await supabase
     .from('schedules')
     .select('id')
@@ -472,10 +408,6 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
 
   let slotsDeleted = 0;
   if (scheduleIds.length > 0) {
-    // Slots are deleted from the snapshot select above; a schedule created
-    // concurrently (another tab racing the delete) would leave its slots
-    // behind. The persona-scoped schedules delete below catches the schedule
-    // row itself; the residual slot race is noted, not solved, here.
     const { error: slotsError, count: slotsCount } = await service
       .from('scheduled_posts')
       .delete({ count: 'exact' })
@@ -494,10 +426,6 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
   if (schedulesDeleteError) return cascadeFail('schedules', schedulesDeleteError);
   completedSteps.push('schedules');
 
-  // Engine task ids are collected before the generation rows die, so the
-  // engine's task directories can be cleaned up best-effort below. Capped:
-  // the cleanup loop has its own budget/skip machinery, and a persona with
-  // thousands of generations must not load them all into serverless memory.
   const ENGINE_TASK_ID_CAP = 500;
   const { data: generationRows, error: generationsSelectError, count: generationRowsCount } = await supabase
     .from('video_generations')
@@ -527,10 +455,6 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
   if (generationsError) return cascadeFail('video_generations', generationsError);
   completedSteps.push('video_generations');
 
-  // Row first, storage second: if the row delete fails, nothing is lost; if
-  // the storage remove fails afterwards, the persona is already gone and the
-  // orphaned files are cleanable — never destroy data still referenced by a
-  // surviving row.
   const { error: deleteError } = await service
     .from('personas')
     .delete()
@@ -541,32 +465,15 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
   }
   completedSteps.push('personas');
 
-  // Row first, storage second: if the row delete fails, nothing is lost; if
-  // the storage remove fails afterwards, the persona is already gone and the
-  // orphaned files are cleanable — never destroy data still referenced by a
-  // surviving row. Cleanup runs after() the response: the DB delete is
-  // committed, and a hung Supabase storage call must not turn a successful
-  // delete into a client-side timeout.
   const imagePaths = paths.length > 0 ? [...paths] : null;
   const engineTaskIdsForCleanup = engineTaskIds.length > 0 ? [...engineTaskIds] : null;
 
-  // Engine task directories would orphan on the engine host now that their
-  // generation rows are gone. This runs after() the response is sent: the
-  // DB delete is already committed, and a slow or down engine must not
-  // turn a successful delete into a client-side timeout (the UI would
-  // report failure for a delete that happened). Sequential on purpose —
-  // one small DELETE in flight at a time — with a per-call timeout and an
-  // aggregate budget: after() has no deadline of its own, so an unbounded
-  // loop would orphan the tail silently when the function is cut off.
-  // Skipped ids are logged loudly, never dropped quietly.
   const engineBaseUrl = process.env.MONEYPRINT_API_URL;
   if (!engineBaseUrl && engineTaskIds.length > 0) {
     logger.warn('[api/persona] MONEYPRINT_API_URL is not set; engine task dirs will orphan');
   }
   after(() => {
     void (async () => {
-      // Storage cleanup first (persona images), then engine task dirs —
-      // both best-effort, both after the committed delete.
       if (imagePaths) {
         const { error: storageError } = await supabase.storage.from(IMAGE_BUCKET).remove(imagePaths);
         if (storageError) {
@@ -578,9 +485,6 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
       if (!engineBaseUrl || !engineTaskIdsForCleanup) return;
       const taskIds = engineTaskIdsForCleanup;
       const userId = user.id;
-      // engineAuthHeaders throws on missing MONEYPRINT_API_SECRET: a config
-      // error, not a transient failure. Hoist it out of the loop so the
-      // catch below only sees fetch/abort/network errors.
       let authHeaders: Record<string, string>;
       try {
         authHeaders = engineAuthHeaders(userId);
@@ -641,9 +545,6 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
 }
 
 
-//---------------
-// 5xx reporting: handled server errors reach PostHog error tracking.
-//---------------
 export const POST = withApiErrorReporting('POST /api/persona', postHandler, { getUserId: resolveReportingUserId });
 export const DELETE = withApiErrorReporting('DELETE /api/persona', deleteHandler, { getUserId: resolveReportingUserId });
 export const PATCH = withApiErrorReporting('PATCH /api/persona', patchHandler, { getUserId: resolveReportingUserId });

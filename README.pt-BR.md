@@ -28,7 +28,8 @@ seu agente de IA operar pelo servidor MCP — tudo neste único monorepo.
   roteiro (LLM), narração (TTS), legendas, vídeos de banco de imagens e música
   de fundo, montados em um vídeo finalizado.
 - **Agendamento e publicação** — agende posts para YouTube, Instagram, LinkedIn,
-  Bluesky, Threads, Facebook, Pinterest, 3Speak, Rumble e Fanvue; acompanhe
+  Bluesky, Threads, Facebook, Pinterest, 3Speak, Rumble, Fanvue e Telegram
+  (canais e grupos); acompanhe
   posts futuros e passados com status por conta.
 - **Painel web** — personas, histórico de posts, contas sociais conectadas,
   chaves de API e cobrança por tokens em um único app Next.js.
@@ -151,6 +152,12 @@ OAuth cujos **redirect URIs correspondam exatamente** aos valores em
 - **Rumble** usa um token de acesso manual de 40 caracteres da Simple Upload API
   (pedido por email para bd@rumble.com), inserido no painel com o ID do canal
   — sem OAuth, sem registro de app, sem variáveis de ambiente.
+- **Telegram** publica pelo bot do próprio usuário: crie-o no @BotFather,
+  adicione-o a um canal (como administrador que pode publicar) ou a um grupo
+  (como membro que pode enviar mensagens) e cole o token do bot e o ID ou
+  @usuário do chat no painel (criptografado em repouso). A conexão confere a
+  permissão do bot nesse chat. Sem OAuth, sem variáveis de ambiente. A Bot API
+  em nuvem limita uploads a 50 MB e legendas a 1.024 caracteres.
 
 ### 5. Configuração do Stripe (cobrança por tokens)
 

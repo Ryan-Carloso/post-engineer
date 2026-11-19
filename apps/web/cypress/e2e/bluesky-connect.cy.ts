@@ -1,12 +1,5 @@
-//---------------
-// Bluesky connect — e2e da seção Bluesky na página de contas.
-// Sem OAuth: formulário handle + app password chama /api/bluesky-connect.
-//---------------
-
 describe('Bluesky — conectar conta na página de contas', () => {
   beforeEach(() => {
-    // Sessão REAL no Supabase (usuário de teste do repo): o middleware
-    // valida o cookie server-side, intercepts não bastam.
     cy.loginE2EUser();
 
     cy.intercept('GET', '/api/account', {
@@ -15,13 +8,6 @@ describe('Bluesky — conectar conta na página de contas', () => {
     }).as('getAccounts');
   });
 
-  //---------------
-  // openConnectDialog — o formulário de conexão vive num dialog agora
-  // (BlueskyConnectDialog), aberto pelo botão da seção Bluesky.
-  //---------------
-  // The connect button reads "Conectar uma conta" while the section is empty
-  // and "+ Conectar outra conta" once an account exists (accounts/page.tsx
-  // picks the label from the account count).
   function openConnectDialog(accountsConnected = false): void {
     const label = accountsConnected ? '+ Conectar outra conta' : 'Conectar uma conta';
     cy.visit('/accounts');
@@ -38,7 +24,6 @@ describe('Bluesky — conectar conta na página de contas', () => {
     cy.get('[data-testid="bluesky-handle-input"]').should('be.visible');
     cy.get('[data-testid="bluesky-password-input"]').should('be.visible');
     cy.get('[data-testid="bluesky-connect-button"]').should('be.visible');
-    // aviso de segurança: app password equivale à senha
     cy.contains('app password').should('exist');
   });
 

@@ -4,15 +4,6 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 
-//---------------
-// Tests for the persona CTA section via its public interface.
-// Uses the REAL store (zustand is an internal collaborator, not a
-// boundary); the i18n `t` returns the key, like page.test.tsx.
-//---------------
-//
-// Radix Select calls hasPointerCapture on pointerdown; jsdom has none,
-// so the trigger never opens without these stubs. It also scrolls the
-// selected item into view when the content opens.
 window.HTMLElement.prototype.scrollIntoView = vi.fn();
 window.HTMLElement.prototype.hasPointerCapture = () => false;
 window.HTMLElement.prototype.setPointerCapture = () => {};
@@ -56,6 +47,7 @@ const CTA_LINK_WHAT_KEYS = [
   'personas.ctaLinkThreespeak',
   'personas.ctaLinkRumble',
   'personas.ctaLinkFanvue',
+  'personas.ctaLinkTelegram',
 ];
 
 function renderSection() {
@@ -107,10 +99,8 @@ describe('PersonaCtaSection', () => {
     for (const key of CTA_LINK_WHAT_KEYS) {
       expect(screen.getByText(key)).toBeInTheDocument();
     }
-    // Header row + one row per provider.
-    expect(screen.getAllByRole('row')).toHaveLength(11);
-    // Eight networks take a clickable link; Instagram and Pinterest do not.
-    expect(screen.getAllByText('personas.ctaLinkYes')).toHaveLength(8);
+    expect(screen.getAllByRole('row')).toHaveLength(12);
+    expect(screen.getAllByText('personas.ctaLinkYes')).toHaveLength(9);
     expect(screen.getAllByText('personas.ctaLinkNo')).toHaveLength(2);
   });
 

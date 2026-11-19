@@ -57,8 +57,6 @@ vi.mock('@/lib/i18n/provider', () => {
   };
 });
 
-// The key manager is a React Query component with its own suite; here it
-// only has to hand a created key to the hub.
 vi.mock('@/components/ui/api-keys-section', () => ({
   default: ({ onKeyCreated }: { onKeyCreated?: (key: string) => void }) => (
     <button type="button" data-testid="api-keys-section" onClick={() => onKeyCreated?.(CREATED_KEY)}>
@@ -109,8 +107,6 @@ describe('/recipes prompts hub', () => {
     expect(screen.getByText('Say it once, the agent repeats it.')).toBeInTheDocument();
     expect(screen.getByText('Automation')).toBeInTheDocument();
     expect(screen.getByText('Ask your agent, the post shows up.')).toBeInTheDocument();
-    // The section sits after the hero and before the first numbered step,
-    // and it is not a fourth numbered step.
     const hero = screen.getByRole('heading', { level: 1 });
     const step1 = screen.getByRole('heading', { name: 'Create your API key' });
     expect(hero.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -228,7 +224,6 @@ describe('/recipes prompts hub', () => {
     expect(link).toHaveAttribute('rel', 'noopener noreferrer');
     const grid = container.querySelector('ul');
     if (!grid) throw new Error('prompt grid not rendered');
-    // The link sits outside and after the card grid, never inside it.
     expect(grid.contains(link)).toBe(false);
     expect(
       grid.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING,

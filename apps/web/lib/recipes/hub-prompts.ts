@@ -1,15 +1,6 @@
 import { PROMPTS } from '@/app/recipes/prompts';
 import { recipesI18nEn } from '@/lib/i18n/recipes-i18n-en';
 
-//---------------
-// Recipe prompts served to the MCP over GET /api/prompts and
-// GET /api/prompts/[slug]. The single source is the web hub: PROMPTS
-// (slug + prompt text) and the English recipes copy (title = titleKey,
-// description = objectiveKey). Agents generate in English, so the MCP
-// always gets the English copy. Editing a recipe here reaches every MCP
-// install on the next call, with no package release.
-//---------------
-
 export interface HubPromptSummary {
   slug: string;
   title: string;

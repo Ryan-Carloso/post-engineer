@@ -2,11 +2,6 @@ import '@testing-library/jest-dom/vitest';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 
-//---------------
-// Testes do badge de tokens na sidebar.
-// Agora usa fetchTokenBalance (API real) em vez do mock useTokenStore.
-//---------------
-
 vi.mock('@/lib/i18n/provider', () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const react = require('react') as typeof import('react');
@@ -31,8 +26,6 @@ vi.mock('next/link', () => ({
 const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);
 
-// Only notifyIfSessionExpired is doubled; the module's redirect behavior is
-// pinned in lib/__tests__/session-expiry.test.tsx.
 vi.mock('@/lib/session-expiry', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/session-expiry')>();
   return {
@@ -91,7 +84,6 @@ describe('TokenBalance', () => {
 
     render(<TokenBalance />);
 
-    // Zero balance (fail-safe contract) while the session handler runs.
     await waitFor(() => expect(notifyIfSessionExpired).toHaveBeenCalledTimes(1));
     const response = vi.mocked(notifyIfSessionExpired).mock.calls[0]?.[0];
     expect((response as Response).status).toBe(401);

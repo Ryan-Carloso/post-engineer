@@ -1,5 +1,3 @@
-// en-US dictionary — mirrors the pt Dictionary key structure.
-
 import type { Dictionary } from './pt';
 import { personaVoiceCloneEn } from './voice-clone-i18n-en';
 import { mcpToolDescEn } from './mcp-tools-i18n-en';
@@ -27,9 +25,7 @@ export const enDictionary: Dictionary = {
     primaryNavigation: 'Primary navigation',
     profile: 'Profile',
   },
-  // Account area — Profile page (mobile header avatar + /account route)
   account: { ...accountI18nEn },
-  // Posts page — history + upcoming posts from all accounts
   posts: {
     title: 'Posts',
     subtitle: 'Calendar of posts across all accounts. Select a day to see its posts.',
@@ -113,7 +109,6 @@ export const enDictionary: Dictionary = {
     mustSelectAccount: 'Select at least one account to publish to.',
   },
   accounts: { ...accountsI18nEn },
-  // Login
   login: {
     title: 'Welcome back',
     subtitle: 'Connect your accounts and keep creating, scheduling and publishing AI content.',
@@ -138,14 +133,12 @@ export const enDictionary: Dictionary = {
     agreePrefix: 'By continuing, you agree to our',
     agreeAnd: 'and',
   },
-  // OAuth
   oauth: {
     startFailed: 'Could not start OAuth.',
     popupBlocked: 'Could not open the OAuth window. Allow popups for this site.',
     popupClosed: 'The OAuth window was closed before completing.',
     failed: 'OAuth authentication failed.',
   },
-  // API Keys
   apiKeys: {
     title: 'API Keys',
     subtitle: 'Generate API keys to connect AI agents, OpenCode CLI, and MCP servers to your account.',
@@ -186,7 +179,6 @@ export const enDictionary: Dictionary = {
     toolsSubtitle: 'Here are the tools your AI agent gets access to after connecting.',
     ...mcpToolDescEn,
   },
-  // App API Key
   persona: {
     title: 'Create persona',
     subtitle: 'Define the visual identity and voice of your persona.',
@@ -225,8 +217,6 @@ export const enDictionary: Dictionary = {
       'The primary image was updated, but the latest state could not be confirmed. Refresh the library to see the current state.',
     libraryUpdateError: 'Could not save the changes.',
     libraryDeleteError: 'Could not remove the image.',
-    // Specific server failure classes, so the UI never renders the raw
-    // English server string (mapPersonaImageError).
     libraryErrorFull: 'The image library is full. Remove one to add another.',
     libraryErrorFaceless: 'Faceless personas cannot have library images.',
     libraryErrorContentMismatch: 'The image content does not match its file type.',
@@ -333,7 +323,6 @@ export const enDictionary: Dictionary = {
     details: 'View details',
     createdAt: 'Created on',
   },
-  // Tokens / face quality (price per video)
   tokens: {
     balance: 'Token balance',
     available: 'Available to use',
@@ -347,7 +336,6 @@ export const enDictionary: Dictionary = {
     buyMore: 'Buy more tokens',
     whatsappCta: 'WhatsApp us',
   },
-  // Pricing / prepaid tokens
   pricing: {
     heroEyebrow: 'TOKENS',
     proAudience: 'For professional creators',
@@ -425,7 +413,6 @@ export const enDictionary: Dictionary = {
     historyShowing: 'Showing {shown} of {total}',
   },
 
-  // Public landing page
   landing: {
     signIn: 'Sign in',
     menuOpen: 'Open menu',
@@ -493,15 +480,12 @@ export const enDictionary: Dictionary = {
     ctaFinalNote: 'No credit card required · Cancel anytime',
   },
 
-  // Public footer
   footer: {
     privacy: 'Privacy Policy',
     terms: 'Terms of Service',
     support: 'Support',
     rights: '© {year} Post Engineer. All rights reserved.',
   },
-  // Recipes list page — initial version, user will improve later
   recipes: { ...recipesI18nEn },
-  // Legal pages
   legal: { ...legalI18nEn },
 };

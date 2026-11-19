@@ -11,13 +11,6 @@ import type {
   TokenRefreshStore,
 } from '@/lib/social-token-refresh';
 
-//---------------
-// createTokenRefreshStore — the Supabase side of the token-refresh job.
-// Service role bypasses RLS: this is a system job acting on every user's
-// accounts, and every write re-checks the row's id, user_id and updated_at,
-// so it only ever replaces the exact token it read.
-//---------------
-
 const CANDIDATE_COLUMNS = 'id, user_id, provider, provider_account_id, encrypted_tokens, updated_at';
 
 function isRefreshProvider(
@@ -55,8 +48,6 @@ export function createTokenRefreshStore(supabase: SupabaseClient<Database>): Tok
             updatedAt: row.updated_at,
           });
         } catch (decryptError) {
-          // One unreadable row must not stop the run. The publish path
-          // reports it to the owner as token_undecryptable.
           logger.error('[token-refresh] stored token could not be decrypted', decryptError, {
             provider: row.provider,
             accountId: row.provider_account_id,
@@ -76,8 +67,6 @@ export function createTokenRefreshStore(supabase: SupabaseClient<Database>): Tok
         })
         .eq('id', candidate.id)
         .eq('user_id', candidate.userId)
-        // Check-then-act: a reconnect during the run bumps updated_at, and
-        // its newer token must win over this refresh.
         .eq('updated_at', candidate.updatedAt)
         .select('id');
       if (error) {

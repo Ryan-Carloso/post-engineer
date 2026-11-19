@@ -20,7 +20,6 @@ def check_repeat(item: Any, seen: set[tuple[str, str]]) -> tuple[str, str] | Non
     """
     if not isinstance(item, dict):
         return None
-    # Lazy: schema.py imports script_segments; a top-level import would cycle via media_aspect.
     from app.services import segment_video
 
     for name in ("mediaId", "url"):

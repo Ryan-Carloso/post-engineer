@@ -13,9 +13,6 @@ import tomllib
 import unittest
 from pathlib import Path
 
-# Canonical mypy override pattern: a literal module path, optionally with
-# a trailing ".*" or "*" (fnmatch). Anything else (e.g. bare "*", "a?",
-# "[ab]c") is rejected — it could silently match first-party modules.
 _CANONICAL_PATTERN = re.compile(r"[A-Za-z_][\w.]*\*?")
 
 
@@ -61,7 +58,6 @@ def _load_ci_smoke_test_imports() -> set:
     for line in ci_yml.read_text().splitlines():
         stripped = line.strip()
         if 'run: uv run python -c "import ' in stripped:
-            # Extract between the quotes: import main; from app import asgi; ...
             start = stripped.index('"') + 1
             end = stripped.rindex('"')
             code = stripped[start:end]
@@ -84,8 +80,6 @@ def _load_ci_mypy_targets() -> tuple:
     test reads .github/workflows/ci.yml instead of hardcoding it.
     """
     args = _load_ci_mypy_command()
-    # Map file targets to module names: "main.py" -> "main".
-    # Skip flags (e.g. --strict) — only bare targets count.
     return tuple(
         a[:-3] if a.endswith(".py") else a for a in args if not a.startswith("-")
     )
@@ -108,18 +102,11 @@ class MypyConfigPinTests(unittest.TestCase):
         self.assertNotIn("import-untyped", disabled)
 
     def test_ci_mypy_command_does_not_silence_imports(self):
-        # The contract is enforced by the CI invocation itself — assert the
-        # command contains NO flags at all. Any added flag (e.g.
-        # --ignore-missing-imports, --config-file ci-lenient.toml) then fails
-        # the pin consciously instead of being enumerated case-by-case.
         args = _load_ci_mypy_command()
         self.assertFalse(
             any(a.startswith("-") for a in args),
             f"CI mypy step must not add flags (would silently weaken the gate): {args}",
         )
-        # And the targets must match the derived first-party set (compare as
-        # module names: "main.py" -> "main", so a future file target like
-        # "scripts.py" round-trips without hardcoding).
         arg_modules = tuple(a[:-3] if a.endswith(".py") else a for a in args)
         self.assertEqual(
             arg_modules,
@@ -128,9 +115,6 @@ class MypyConfigPinTests(unittest.TestCase):
         )
 
     def test_smoke_test_covers_mypy_targets(self):
-        # The smoke test is the only step that *executes* imports — it must
-        # cover the same first-party targets as mypy, or a new target with
-        # a stub-overridden dep could go untested at runtime.
         targets = set(_load_ci_mypy_targets())
         smoke_imports = _load_ci_smoke_test_imports()
         self.assertEqual(
@@ -140,13 +124,8 @@ class MypyConfigPinTests(unittest.TestCase):
         )
 
     def test_no_app_override(self):
-        # Parse the TOML structure (not regex) so string-form modules and
-        # quoting variants are all covered. The first-party set is derived
-        # from the CI workflow so it can't drift from what CI type-checks.
         config = _load_mypy_config()
         overrides = config.get("overrides", [])
-        # The overrides section must exist and be non-empty — a deleted
-        # section would pass vacuously while CI goes red on stub-less deps.
         self.assertTrue(
             overrides,
             "mypy overrides section must exist with stub-less third-party modules.",
@@ -157,12 +136,9 @@ class MypyConfigPinTests(unittest.TestCase):
         )
         for override in overrides:
             modules = override.get("module", [])
-            # Normalize: module can be a string or a list of strings.
             if isinstance(modules, str):
                 modules = [modules]
             for mod in modules:
-                # Reject non-canonical fnmatch patterns — a bare "*" would
-                # silence every module including first-party.
                 self.assertIsNotNone(
                     _CANONICAL_PATTERN.fullmatch(mod),
                     f"Override module pattern is not a literal or literal.* form: {mod}",

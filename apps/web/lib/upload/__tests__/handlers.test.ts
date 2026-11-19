@@ -10,10 +10,6 @@ import { markAccountNeedsReconnect } from '@/lib/account-needs-reconnect';
 import { TokenDecryptError } from '@/lib/token-crypto';
 import { AccountNotFoundError } from '@/lib/errors';
 
-//---------------
-// Upload handlers — unit tests
-//---------------
-
 vi.mock('@/lib/analytics', () => ({ trackApiEvent: vi.fn() }));
 vi.mock('@/lib/account-needs-reconnect', () => ({ markAccountNeedsReconnect: vi.fn(async () => undefined) }));
 
@@ -132,10 +128,6 @@ vi.mock('crypto', async () => {
   return { ...actual, default: { ...actual, randomBytes: vi.fn(() => ({ toString: () => 'abc123' })) } };
 });
 
-//---------------
-// buildUploadErrorResponse
-//---------------
-
 describe('buildUploadErrorResponse', () => {
   const startTime = Date.now() - 1000;
 
@@ -209,10 +201,6 @@ describe('buildUploadErrorResponse', () => {
     expect(typeof body.metadata.duration).toBe('number');
   });
 });
-
-//---------------
-// handleInstagramUpload
-//---------------
 
 describe('handleInstagramUpload', () => {
   const logId = 'ig-log-1';
@@ -512,9 +500,6 @@ describe('handleYoutubeUpload', () => {
     });
   });
 
-  // getAuthenticatedClient wraps token-load and refresh failures in an
-  // AuthError, which classifyAccountBreak does not recognise, so a dead
-  // YouTube login is flagged here, where the real cause is still known.
   describe('dead login before the upload', () => {
     async function upload() {
       const file = new File([new Uint8Array(100)], 'video.mp4', { type: 'video/mp4' });

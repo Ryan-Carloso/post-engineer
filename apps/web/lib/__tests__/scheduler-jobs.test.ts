@@ -1,10 +1,3 @@
-//---------------
-// scheduler env-gate tests — the scheduler defaults ON only in
-// production; SCHEDULER_ENABLED=true opts in anywhere, =false forces
-// off. Kept in its own file so the NODE_ENV mutation cannot leak into
-// the other scheduler tests.
-//---------------
-
 import { describe, it, expect, vi, afterEach } from 'vitest';
 
 vi.mock('@/lib/supabase/service', () => ({

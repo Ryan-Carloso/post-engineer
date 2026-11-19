@@ -45,9 +45,6 @@ describe('POST /api/logout — auth required', () => {
     expect(response.status).toBe(200);
     const body = await response.json();
     expect(body.success).toBe(true);
-    // scope: 'local' — the route ends only the requesting session; the
-    // auth-js default 'global' would also sign the user out on every
-    // other device.
     expect(client.auth.signOut).toHaveBeenCalledWith({ scope: 'local' });
   });
 

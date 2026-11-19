@@ -22,8 +22,6 @@ interface Calls {
   [method: string]: unknown[][];
 }
 
-// A PostgREST builder double: every chained method is recorded, and the
-// chain resolves to `result` when awaited (like the real thenable builder).
 function builder(result: { data: unknown; error: unknown }) {
   const calls: Calls = {};
   const chain: Record<string, unknown> = {};

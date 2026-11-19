@@ -1,6 +1,3 @@
-// Per-persona CTA intent shape (issue #639): the MCP tool shape and the
-// shared contract must accept/reject the same intent values, and the
-// client flattens the nested object to the route's flat FormData fields.
 import { describe, expect, it } from 'vitest';
 import { PersonaCtaSchema } from '../contracts/personas.js';
 import { PERSONA_CTA_TYPES } from '../limits.js';
@@ -34,9 +31,6 @@ describe('persona CTA shape (issue #639)', () => {
   });
 
   it('agrees with the shared contract schema on every case', () => {
-    // The tool fails fast locally with the same rule the server enforces:
-    // a case the tool accepts must pass the contract, and one it rejects
-    // must fail there too.
     for (const { cta, accepts } of CASES) {
       expect(PersonaCtaSchema.safeParse(cta).success, JSON.stringify(cta)).toBe(accepts);
     }
@@ -60,8 +54,6 @@ describe('persona CTA shape (issue #639)', () => {
     appendPersonaCtaFields(update, { type: 'other', instruction: 'Invite to the WhatsApp group' });
     expect(update.get('ctaType')).toBe('other');
     expect(update.get('ctaInstruction')).toBe('Invite to the WhatsApp group');
-    // An absent fact sends nothing, so an update never clears a fact the
-    // caller did not mention.
     expect(update.has('ctaUrl')).toBe(false);
   });
 });

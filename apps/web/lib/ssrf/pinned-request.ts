@@ -1,7 +1,3 @@
-// Connect to a URL using only the addresses a prior public-IP check accepted.
-// A second DNS answer (rebinding to 127.0.0.1 or link-local) cannot move the
-// socket. Callers pass the validated list; this module does not re-resolve.
-
 import http from 'node:http';
 import type { IncomingMessage } from 'node:http';
 import https from 'node:https';
@@ -10,7 +6,6 @@ export interface PinnedRequestOptions {
   method?: string;
   headers?: Readonly<Record<string, string>>;
   timeoutMs: number;
-  /** When set, a body larger than this resolves as HTTP 413 instead of buffering. */
   maxBytes?: number;
 }
 
@@ -18,9 +13,6 @@ type PinnedLookup = NonNullable<http.RequestOptions['lookup']>;
 
 function pinnedLookup(addresses: readonly string[]): PinnedLookup {
   return (_hostname, options, callback) => {
-    // Node 20+ connects with autoSelectFamily, which calls lookup with
-    // { all: true } and expects an address array; the single-address form
-    // then fails every hostname URL with ERR_INVALID_IP_ADDRESS.
     const pinned = addresses.map((address) => ({
       address,
       family: address.includes(':') ? 6 : 4,
@@ -62,10 +54,6 @@ export function requestPinned(
   const method = options.method ?? 'GET';
   return new Promise((resolve, reject) => {
     // codeql[js/request-forgery]: false positive — `addresses` is the set a
-    // public-IP check already accepted for this hop. The lookup below ignores
-    // DNS and returns only that set, so the socket cannot rebind. Redirects
-    // are not followed: a 3xx is returned to the caller (redirect: 'error' /
-    // manual handling). https and the timeout are the caller's options.
     const req = transport.request(
       parsed,
       {
@@ -75,8 +63,6 @@ export function requestPinned(
       },
       (incoming) => {
         const status = incoming.statusCode;
-        // A fresh IncomingMessage has statusCode null. Response rejects
-        // status 0, so a missing status is a failed request, not an HTTP code.
         if (typeof status !== 'number') {
           incoming.resume();
           reject(new Error('response had no status'));

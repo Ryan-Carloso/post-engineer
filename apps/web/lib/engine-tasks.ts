@@ -1,46 +1,13 @@
 import { engineAuthHeaders } from '@/lib/request-auth';
 import { SAFE_TASK_ID } from './video-urls';
 
-//---------------
-// engine-tasks — engine task lookups that only read task state.
-//
-// Unlike GET /api/persona/video-status/[taskId] — which advances the
-// video_generations history row and refunds on terminal states — these
-// helpers never touch billing or history state. The one deliberate write
-// is cancelEngineTask (DELETE, issue #447): it marks a running engine
-// task cancelled so a cancelled slot's worker stops instead of finishing
-// (and potentially publishing) after the charge is gone.
-//---------------
-
-//---------------
-// ENGINE_TASK_PROGRESS_TIMEOUT_MS — the status list is read live while
-// the user watches video progress; a hung engine must degrade the slot
-// to 0 (caught by the caller) instead of blocking the whole request.
-//---------------
 export const ENGINE_TASK_PROGRESS_TIMEOUT_MS = 10_000;
 
-//---------------
-// ENGINE_CANCEL_TIMEOUT_MS / ENGINE_CANCEL_BUDGET_MS — a schedule cancel
-// runs before the refunds, on the request path: a hung engine must not
-// delay the refund. Cancels run concurrently, each capped by the per-call
-// timeout, and the caller never waits past the aggregate budget (mirrors
-// ENGINE_CLEANUP_BUDGET_MS in apps/web/app/api/persona/route.ts).
-//---------------
 export const ENGINE_CANCEL_TIMEOUT_MS = 3_000;
 export const ENGINE_CANCEL_BUDGET_MS = 5_000;
 
-//---------------
-// TASK_STATE_FAILED — the engine's numeric failed state (const.py). A gone
-// task is reported with it so every consumer can treat "engine forgot the
-// task" and "engine says the task failed" through one terminal branch.
-//---------------
 export const TASK_STATE_FAILED = -1;
 
-//---------------
-// clampProgress — engine progress is documented 0–100 (state.py clamps on
-// write); clamp again defensively and coerce non-numeric payloads to 0 so
-// a malformed engine response can never surface as 137% or NaN.
-//---------------
 export function clampProgress(value: unknown): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return 0;
   return Math.min(100, Math.max(0, Math.round(value)));
@@ -50,26 +17,10 @@ export interface EngineTaskProgress {
   progress: number;
   stage: string | null;
   state: number | null;
-  // The script angle recorded on the same task record, carried here so a
-  // caller that already paid for this read never fetches the record again
-  // just for the angle. Null when the engine recorded none.
   scriptAngle: string | null;
-  //---------------
-  // gone — the engine answered 404: it no longer knows this task (an engine
-  // restart dropped it, or the state backend lost it). This is TERMINAL,
-  // unlike every other lookup failure: polling again can only 404 forever.
-  // The caller must stop polling AND settle the generation row, or the
-  // history shows a task that will never finish. A 5xx/abort/network error
-  // stays a throw — that one is transient and must be retried.
-  //---------------
   gone: boolean;
 }
 
-//---------------
-// taskPayload — the engine wraps the task record under `body`; some
-// shapes return it unwrapped. Mirrors the video-status route's parsing
-// (read-only subset: no terminal-state detection here).
-//---------------
 function taskPayload(value: unknown): Record<string, unknown> | null {
   if (typeof value !== 'object' || value === null) return null;
   const record = value as Record<string, unknown>;
@@ -90,19 +41,10 @@ function taskState(task: Record<string, unknown>): number | null {
   return null;
 }
 
-//---------------
-// taskStage — the engine reports the current pipeline stage as a string
-// (e.g. "lipsync"); repass non-empty strings as-is, null otherwise.
-//---------------
 function taskStage(value: unknown): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null;
 }
 
-//---------------
-// EngineTaskLookupError — a non-ok, non-404 engine answer to a task lookup.
-// Carries the status so callers can tell an unreachable engine (502/503/504)
-// from a failure tied to one task.
-//---------------
 export class EngineTaskLookupError extends Error {
   readonly status: number;
 
@@ -113,15 +55,6 @@ export class EngineTaskLookupError extends Error {
   }
 }
 
-//---------------
-// fetchEngineTaskProgress — GET {MONEYPRINT_API_URL}/api/v1/tasks/{taskId}
-// with the engine auth headers. Strictly a read: no refunds, no history
-// writes, no video URL rewriting.
-//
-// Throws when the task id is unsafe, the engine is unconfigured, or the
-// lookup fails — the caller decides the fallback (the status list degrades
-// a single slot to progress 0 instead of failing the whole request).
-//---------------
 export async function fetchEngineTaskProgress(
   taskId: string,
   userId: string,
@@ -144,9 +77,6 @@ export async function fetchEngineTaskProgress(
         signal: controller.signal,
       },
     );
-    // A 404 is a terminal answer, not a transport failure: the engine
-    // forgot the task. Report it as gone (state -1) so callers stop
-    // polling instead of retrying a resource that can never come back.
     if (response.status === 404) {
       return { progress: 0, stage: null, state: TASK_STATE_FAILED, gone: true, scriptAngle: null };
     }
@@ -167,18 +97,6 @@ export async function fetchEngineTaskProgress(
   }
 }
 
-//---------------
-// fetchEnginePublishResults — read the raw publish_results array the engine
-// recorded for a task (one entry per provider it published to).
-//
-// Kept separate from fetchEngineTaskProgress on purpose: the returned
-// payload is handed straight to resolvePublishLinks, which owns the
-// per-provider URL derivation and the validation of every field. This
-// function only fetches; it never interprets.
-//
-// Throws on the same conditions as fetchEngineTaskProgress (unsafe id,
-// unconfigured engine, failed lookup) — the caller decides the fallback.
-//---------------
 export async function fetchEnginePublishResults(
   taskId: string,
   userId: string,
@@ -188,14 +106,6 @@ export async function fetchEnginePublishResults(
   return Array.isArray(results) ? results : [];
 }
 
-//---------------
-// fetchEngineScriptAngle — the angle the engine picked for the video subject before
-// scripting (task record `script_angle`). Null when the engine recorded none
-// (angle generation fell back to the bare subject, or the task predates it).
-//
-// Throws on the same conditions as fetchEngineTaskProgress (unsafe id,
-// unconfigured engine, failed lookup) — the caller decides the fallback.
-//---------------
 export async function fetchEngineScriptAngle(
   taskId: string,
   userId: string,
@@ -204,11 +114,6 @@ export async function fetchEngineScriptAngle(
   return task ? scriptAngleFromTask(task) : null;
 }
 
-//---------------
-// scriptAngleFromTask — the angle on a raw task record: the trimmed string,
-// or null when absent, not a string, or blank (angle generation fell back
-// to the bare subject). The one parsing every task-record reader shares.
-//---------------
 function scriptAngleFromTask(task: Record<string, unknown>): string | null {
   const angle = task.script_angle;
   if (typeof angle !== 'string') return null;
@@ -216,11 +121,6 @@ function scriptAngleFromTask(task: Record<string, unknown>): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
-//---------------
-// fetchEngineTaskRecord — GET the raw engine task record (unwrapped from the
-// `body` envelope). Shared by the read helpers that only need one field and
-// treat any non-2xx (404 included) as a failed lookup.
-//---------------
 async function fetchEngineTaskRecord(
   taskId: string,
   userId: string,
@@ -253,12 +153,6 @@ async function fetchEngineTaskRecord(
   }
 }
 
-//---------------
-// fetchEnginePostMetricsSource — publish_results and script_angle from ONE
-// task read: the post-metrics collector needs both per post and must not
-// double its engine reads. Same parsing as fetchEnginePublishResults and
-// fetchEngineScriptAngle; throws on the same conditions.
-//---------------
 export async function fetchEnginePostMetricsSource(
   taskId: string,
   userId: string,
@@ -272,15 +166,6 @@ export async function fetchEnginePostMetricsSource(
   };
 }
 
-//---------------
-// cancelEngineTask — DELETE {MONEYPRINT_API_URL}/api/v1/tasks/{taskId}
-// (issue #447). The engine's delete marks the task cancelled before
-// removing the row, so a running worker detaches at its next stage
-// boundary instead of finishing (and potentially publishing) after the
-// caller was refunded. A 404 is benign (the task is already gone) and
-// resolves; any other non-ok / network / unconfigured failure is a throw
-// so the caller can log it loudly and continue the cancel.
-//---------------
 export async function cancelEngineTask(
   taskId: string,
   userId: string,

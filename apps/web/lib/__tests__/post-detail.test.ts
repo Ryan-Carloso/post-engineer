@@ -121,13 +121,11 @@ describe('getSlotPost', () => {
     });
     const detail = await getSlotPost(supabase, 'slot-1', 'user-1', null);
     expect(detail?.slot.id).toBe('slot-1');
-    // Pin the query shape: the select column list is load-bearing for the
-    // camelCase mapping below.
     expect(chains['scheduled_posts'].select).toHaveBeenCalledWith(
       'id, schedule_id, slot_at, status, title, error, published_at, task_id, faceless, publish_outcomes, segments'
     );
     expect(chains['schedules'].select).toHaveBeenCalledWith(
-      'id, persona_id, providers, youtube_account_ids, instagram_account_ids, linkedin_account_ids, bluesky_account_ids, threads_account_ids, facebook_account_ids, pinterest_account_ids, pinterest_board_id, threespeak_account_ids, rumble_account_ids, fanvue_account_ids, timezone, post_language, post_voice_id, post_video_aspect, post_video_layout, post_niche, post_paragraph_number, post_face_quality, publish_mode'
+      'id, persona_id, providers, youtube_account_ids, instagram_account_ids, linkedin_account_ids, bluesky_account_ids, threads_account_ids, facebook_account_ids, pinterest_account_ids, pinterest_board_id, threespeak_account_ids, rumble_account_ids, fanvue_account_ids, telegram_account_ids, timezone, post_language, post_voice_id, post_video_aspect, post_video_layout, post_niche, post_paragraph_number, post_face_quality, publish_mode'
     );
     expect(detail?.slot.progress).toBe(42);
     expect(detail?.slot.stage).toBe('video');
@@ -289,7 +287,6 @@ describe('getSlotPost', () => {
       scheduled_post_progress_history: { data: [], error: null },
     });
     const detail = await getSlotPost(supabase, 'slot-1', 'user-1', null);
-    // The generating slot's angle rides the progress read — no second lookup.
     expect(fetchEngineScriptAngle).not.toHaveBeenCalled();
     expect(detail?.slot.scriptAngle).toBe('The myth that keeps coming back');
   });
@@ -329,7 +326,6 @@ describe('getSlotPost', () => {
     const detail = await getSlotPost(supabase, 'slot-1', 'user-1', null);
     expect(fetchEngineTaskProgress).toHaveBeenCalledTimes(1);
     expect(fetchEngineScriptAngle).not.toHaveBeenCalled();
-    // The prefetched progress is handed to enrichSlot so it does not fetch again.
     expect(vi.mocked(enrichSlot).mock.calls[0]?.[3]).toEqual({
       task: expect.objectContaining({ scriptAngle: 'The myth that keeps coming back' }),
     });
@@ -351,8 +347,6 @@ describe('getSlotPost', () => {
   it('degrades the slot angle to null and warns when the engine lookup throws', async () => {
     const { fetchEngineScriptAngle, fetchEngineTaskProgress } = await import('../engine-tasks');
     const { logger } = await import('../logger');
-    // The one read of the task record fails: no second read is issued for
-    // the angle — it degrades to null off the same failure.
     vi.mocked(fetchEngineTaskProgress).mockRejectedValueOnce(new Error('engine down'));
     const { supabase } = mockSupabase({
       scheduled_posts: { data: SLOT_ROW, error: null },
@@ -507,8 +501,6 @@ describe('getGenerationPost', () => {
     const detail = await getGenerationPost(supabase, 'gen-1:slot:slot-1', 'user-1', null);
     expect(detail?.progress).toBe(0);
     expect(detail?.stage).toBeNull();
-    // The failed progress read was the view's one task-record read: the
-    // angle degrades to null instead of issuing a second read.
     expect(fetchEngineScriptAngle).not.toHaveBeenCalled();
     expect(detail?.scriptAngle).toBeNull();
   });

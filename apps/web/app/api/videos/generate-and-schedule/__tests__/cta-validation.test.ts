@@ -2,15 +2,6 @@ import { describe, it, expect } from 'vitest';
 
 import { resolveEffectiveCta, validateCtaTake, type ResolvedCta } from '../cta-validation';
 
-//---------------
-// CTA resolution + pre-charge validation (issue #639).
-//
-// The route resolves the effective CTA before any token is charged and
-// requires the marked take there, so a missing marker or a comment take
-// without '?' is a 400 — never a charge-then-refund. The engine re-checks
-// the same rule at dispatch; these tests pin the web side.
-//---------------
-
 const FOLLOW: ResolvedCta = { type: 'follow', url: null, instruction: null };
 const COMMENT: ResolvedCta = { type: 'comment', url: null, instruction: null };
 

@@ -5,12 +5,6 @@ import { useI18n } from '@/lib/i18n/provider';
 import { useUpgradeDialogStore } from '@/lib/upgrade-dialog-store';
 import { whatsappUrl } from '@/lib/whatsapp';
 
-//---------------
-// InsufficientTokensDialog — global dialog shown when any flow receives 402
-// (insufficient tokens). State comes from useUpgradeDialogStore; the CTA
-// goes to /billing (plans/upgrade page).
-// "free" variant: free tokens exhausted — own copy + WhatsApp.
-//---------------
 export function InsufficientTokensDialog() {
   const { t } = useI18n();
   const router = useRouter();

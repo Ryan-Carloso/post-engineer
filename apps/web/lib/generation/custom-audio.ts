@@ -1,13 +1,3 @@
-//---------------
-// custom-audio — SSRF-safe verification for per-video custom audio URLs.
-//
-// Moved here from app/api/persona/video-job/route.ts so the unified
-// generate-and-schedule route reuses the exact same check. The audio URL
-// is fetched server-side, so it must point to a public address: blocks
-// private literal IPs, hostnames resolving to private IPs, and redirects
-// to those destinations. Fail closed.
-//---------------
-
 import { lookup } from 'node:dns/promises';
 
 import { logger } from '@/lib/logger';
@@ -16,7 +6,7 @@ import { resolvePublicHost } from '@/lib/ssrf/resolve-public-host';
 
 export { isPublicIp, unbracketIpLiteral } from '@/lib/ssrf/public-ip';
 
-export const MAX_CUSTOM_AUDIO_BYTES = 20 * 1024 * 1024; // 20 MB — fits 1 min of uncompressed audio
+export const MAX_CUSTOM_AUDIO_BYTES = 20 * 1024 * 1024;
 export const CUSTOM_AUDIO_HEAD_TIMEOUT_MS = 10_000;
 export const SSRF_MAX_REDIRECTS = 5;
 
@@ -54,9 +44,6 @@ async function checkUrlIsPublic(
   return { ok: true, addresses: safety.addresses };
 }
 
-// audio_url is commonly a pre-signed URL (?X-Amz-Signature=..., ?token=...).
-// The query string carries credentials, so it must never land in server logs;
-// origin + path stay so the log remains useful for debugging.
 function redactUrlForLog(url: string): string {
   try {
     const parsed = new URL(url);
@@ -67,9 +54,6 @@ function redactUrlForLog(url: string): string {
   }
 }
 
-// Custom per-video audio: real audio files only. The max duration (60s,
-// temporary product limit) is verified in the engine with ffprobe — here
-// HEAD only guarantees type + size, before any token charge.
 export async function checkCustomAudioUrl(url: string): Promise<CustomAudioCheck> {
   let current = url;
   for (let hop = 0; hop <= SSRF_MAX_REDIRECTS; hop++) {
@@ -78,8 +62,6 @@ export async function checkCustomAudioUrl(url: string): Promise<CustomAudioCheck
 
     let head: Response;
     try {
-      // HEAD is pinned to safety.addresses. Redirects come back as 3xx
-      // (not followed) so the next loop iteration checks the target.
       head = await requestPinned(current, safety.addresses, {
         method: 'HEAD',
         timeoutMs: CUSTOM_AUDIO_HEAD_TIMEOUT_MS,

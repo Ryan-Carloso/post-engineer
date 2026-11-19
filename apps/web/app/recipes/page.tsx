@@ -12,20 +12,6 @@ import SignInCta from './components/sign-in-cta';
 import PromptCard from './components/prompt-card';
 import AddPromptLink from './components/add-prompt-link';
 
-//---------------
-// Prompts hub — the one place to start with the Post Engineer MCP
-// server: a short why-MCP-first note, then three numbered steps:
-// 1) your API key (the key manager when signed in, a sign-in call to
-// action otherwise), 2) the setup prompt to paste into your agent (a
-// key created in step 1 is filled into it; the key lives only in this
-// page's state, never persisted), 3) the recipe prompts, each copyable
-// from its card or readable on its detail page. Rendered inside the
-// AppShell for signed-in users and the public frame otherwise (see
-// layout.tsx). Route stays /recipes; the old /api-keys page redirects
-// here (next.config.ts). To add a prompt, add one entry to PROMPTS in
-// prompts.ts.
-//---------------
-
 export default function RecipesPage() {
   const { t } = useI18n();
   const signedIn = useSignedIn();

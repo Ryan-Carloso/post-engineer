@@ -14,30 +14,15 @@ import { cn } from '@/lib/utils';
 import { INTL_TAG, dayKey } from './calendar-days';
 import type { PersonaCalendar } from './persona-filter';
 
-//---------------
-// PostsSidebar — the /posts left sidebar, the CalendarCN demo sidebar's
-// shape (mini calendar, calendar toggles, views, second time zone) with
-// this page's data: the mini calendar navigates the month and picks the
-// day, the toggles filter by persona, the views row lists only the month
-// view (week/day/year do not exist yet), and the second-timezone box only
-// displays the viewer's zone and Lisbon. A desktop layout element: hidden
-// below lg, so smaller screens keep the month grid and the day list below
-// it unchanged. No logo here: the app shell already carries the brand.
-//---------------
-
-// The second time zone shown beside the viewer's own (read by the week
-// view from its stored setting; here it is display only).
 const SECOND_TIME_ZONE = 'Europe/Lisbon';
 
 export interface PostsSidebarProps {
   calendars: PersonaCalendar[];
   hiddenIds: ReadonlySet<string | null>;
   onTogglePersona: (id: string | null) => void;
-  /** First day of the shown month, owned by the page. */
   currentDate: Date;
   weekStartsOn: 0 | 1;
   locale: Locale;
-  /** A day was picked in the mini calendar: the page lists its posts. */
   onSelectDay: (key: string) => void;
   className?: string;
 }
@@ -58,11 +43,6 @@ export function PostsSidebar({
 }: PostsSidebarProps) {
   const { t } = useI18n();
   const viewerTimeZone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []);
-  // The shared clock: null during server rendering and hydration, the real
-  // time right after. The box renders a dash until the time is known, so
-  // the server markup matches the first client render — a live `new Date()`
-  // here renders a different minute whenever hydration straddles the
-  // boundary, and React fails the page with error #418.
   const now = useNow();
   const localeTag = INTL_TAG[locale];
   const viewerLabel = getTimeZoneCity(viewerTimeZone) || viewerTimeZone;
@@ -70,9 +50,6 @@ export function PostsSidebar({
   return (
     <aside data-testid="posts-sidebar" className={cn('hidden w-60 shrink-0 lg:block', className)}>
       <div className="sticky top-0">
-        {/* The mini calendar's tooltips need a provider: the app has none
-            at the root, so the sidebar provides one for its own subtree,
-            like the vendored header does for its tooltips. */}
         <TooltipProvider>
           <MiniCalendar
             currentDate={currentDate}

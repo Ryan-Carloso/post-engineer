@@ -59,7 +59,6 @@ class PublishFanvueModuleTest(unittest.TestCase):
             validate(
                 publish_fanvue.FanvueMetadata(title="t", description="a" * 801, account_ids=("1",))
             )
-        # At the limits is valid.
         validate(
             publish_fanvue.FanvueMetadata(
                 title="a" * 100, description="a" * 800, account_ids=("1",)

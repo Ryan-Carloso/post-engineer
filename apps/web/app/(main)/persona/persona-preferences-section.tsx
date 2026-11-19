@@ -7,19 +7,6 @@ import { usePersonaStore } from '@/lib/store';
 import { useI18n } from '@/lib/i18n/provider';
 import { InlineFieldError, SectionDivider } from './persona-section-parts';
 
-//---------------
-// PersonaPreferencesSection — optional persona content defaults: video format,
-// opening layout, niche and script style.
-//---------------
-
-//---------------
-// PersonaLayoutFieldset — how the persona meets the video material in the
-// opening. 'standard' fills the frame with the avatar; 'react' splits it,
-// avatar on top and the material chosen per post (real clips, drawings, or
-// the post's own images) below. The list comes from VIDEO_LAYOUTS, the same constant
-// the API validates against, so a new layout can never appear in the UI
-// without the server accepting it.
-//---------------
 const PersonaLayoutFieldset = () => {
   const videoLayout = usePersonaStore((s) => s.videoLayout);
   const { t } = useI18n();

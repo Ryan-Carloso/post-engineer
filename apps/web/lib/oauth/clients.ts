@@ -8,16 +8,6 @@ import { requestPinned } from '@/lib/ssrf/pinned-request';
 import { isPublicIp } from '@/lib/ssrf/public-ip';
 import { resolvePublicHost } from '@/lib/ssrf/resolve-public-host';
 
-//---------------
-// OAuth clients (RFC 7591 DCR + Client ID Metadata Documents).
-//
-// Two `client_id` formats:
-// - `mcp_client_<hex>` — registered via POST /oauth/register, persisted in
-//   the database (mcp_oauth_clients table).
-// - https URL — Client ID Metadata Document (draft-ietf-oauth-cimd): no
-//   state on the server, the document is fetched and `redirect_uris` validated.
-//---------------
-
 export interface ValidDcrMetadata {
   ok: true;
   redirectUris: string[];
@@ -87,14 +77,6 @@ export interface CimdDocument {
   redirect_uris: string[];
 }
 
-//---------------
-// SSRF guard for outbound fetches to attacker-controlled URLs (CodeQL #17).
-// Threat model: GET /oauth/authorize takes `client_id` from unauthenticated
-// query params and fetchCimdDocument retrieves it server-side, so the
-// document fetch must never reach non-public IPs: cloud metadata
-// (169.254.169.254), loopback, private ranges, or anything similar.
-//---------------
-
 type DnsLookup = (hostname: string) => Promise<LookupAddress[]>;
 
 const defaultLookup: DnsLookup = (hostname) =>
@@ -103,8 +85,6 @@ const defaultLookup: DnsLookup = (hostname) =>
 const CIMD_FETCH_TIMEOUT_MS = 8000;
 const CIMD_MAX_BYTES = 1024 * 1024;
 
-// True when the address is not a public IP. The table is isPublicIp, the
-// same classifier custom-audio and the MCP copy use.
 export function isBlockedIpAddress(address: string): boolean {
   return !isPublicIp(address);
 }
@@ -121,15 +101,10 @@ export async function fetchCimdDocument(
     return null;
   }
   if (parsed.protocol !== 'https:') return null;
-  // Reject URL forms that are unnecessary for CIMD discovery and increase SSRF surface.
   if (parsed.username || parsed.password) return null;
   if (parsed.hash) return null;
   if (parsed.port && parsed.port !== '443') return null;
 
-  // Resolve the host and refuse non-public IPs before connecting (fail
-  // closed when the host does not resolve). The default path then pins the
-  // socket to those addresses. fetchImpl is the test seam and still refuses
-  // redirects; production callers omit it.
   const safety = await resolvePublicHost(parsed.hostname, (hostname) => lookupImpl(hostname));
   if (!safety.ok) return null;
 
@@ -138,16 +113,12 @@ export async function fetchCimdDocument(
   try {
     if (fetchImpl) {
       // codeql[js/request-forgery]: false positive on the injected fetch — the
-      // host already passed resolvePublicHost, and redirect is 'error'.
       response = await fetchImpl(fetchUrl, {
         headers: { Accept: 'application/json' },
-        // Never follow redirects: a 3xx to an internal URL would otherwise be
-        // fetched with the server's network privileges (SSRF).
         redirect: 'error',
         signal: AbortSignal.timeout(CIMD_FETCH_TIMEOUT_MS),
       });
     } else {
-      // Production path: connect only to the addresses already accepted.
       response = await requestPinned(fetchUrl, safety.addresses, {
         headers: { Accept: 'application/json' },
         timeoutMs: CIMD_FETCH_TIMEOUT_MS,

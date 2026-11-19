@@ -1,18 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from './logger';
 
-//---------------
-// schedule-progress-history — persistent per-post (progress, stage)
-// observation log over public.scheduled_post_progress_history.
-//
-// Generation progress is read live from the engine task, so without this
-// log a regression (e.g. 40% -> 0%) leaves no trace. GET
-// /api/schedule/status records one row per post only when the observed
-// (progress, stage) differs from the last recorded one — change-only, so a
-// generation leaves ~10-15 rows instead of one per poll. Rows die with
-// their post (ON DELETE CASCADE).
-//---------------
-
 export interface ProgressSample {
   postId: string;
   progress: number;
@@ -32,10 +20,6 @@ interface HistoryInsert {
   stage: string | null;
 }
 
-//---------------
-// latestByPost — the history select returns newest-first; keep the first
-// row seen per post_id. Malformed rows are skipped.
-//---------------
 function latestByPost(rows: HistoryRow[]): Map<string, HistoryRow> {
   const latest = new Map<string, HistoryRow>();
   for (const row of rows) {
@@ -46,25 +30,16 @@ function latestByPost(rows: HistoryRow[]): Map<string, HistoryRow> {
   return latest;
 }
 
-//---------------
-// sampleChanged — a sample is only recorded when it differs from the last
-// recorded one; only real transitions append rows.
-//---------------
 function sampleChanged(sample: ProgressSample, last: HistoryRow | undefined): boolean {
   if (!last) return true;
   return last.progress !== sample.progress || (last.stage ?? null) !== sample.stage;
 }
 
-//---------------
-// recordProgressHistory — best-effort, never throws: a history write must
-// not fail the status request it rides on. Malformed samples are skipped.
-//---------------
 export async function recordProgressHistory(
   supabase: SupabaseClient,
   userId: string,
   samples: ProgressSample[],
 ): Promise<void> {
-  // Dedupe by post, keeping the last sample per post (callers pass list order).
   const byPost = new Map<string, ProgressSample>();
   for (const sample of samples) {
     if (typeof sample.postId !== 'string' || sample.postId.length === 0) continue;

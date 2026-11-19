@@ -32,8 +32,6 @@ describe('assignShards', () => {
   });
 
   it('gives an unknown file the lower median duration', () => {
-    // Known durations 10 and 30. Lower median is 10, so the unknown file
-    // shares a shard with the 10ms file and the 30ms file sits alone.
     const bins = assignShards(['a.test.ts', 'b.test.ts', 'c.test.ts'], {
       files: { 'a.test.ts': 10, 'b.test.ts': 30 },
     }, 2);

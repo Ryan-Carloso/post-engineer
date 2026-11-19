@@ -1,10 +1,3 @@
-//---------------
-// apiErrorResponse — shared API error responder.
-//
-// Every Web API error (4xx and 5xx) flows through here so PostHog gets
-// enough context to debug, while clients only see safe messages.
-//---------------
-
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { logger } from '@/lib/logger';
 import { apiErrorResponse } from '@/lib/api-error';
@@ -29,13 +22,9 @@ describe('apiErrorResponse', () => {
       });
 
       expect(res.status).toBe(401);
-      // Bypasses logger.warn/error entirely — no billable PostHog volume
-      // from unauthenticated scanner traffic.
       expect(logger.warn).not.toHaveBeenCalled();
       expect(logger.error).not.toHaveBeenCalled();
-      // Console warning still emitted for Vercel logs.
       expect(consoleWarn).toHaveBeenCalledTimes(1);
-      // Response shape unchanged: errorId is a fallback string.
       const body = await res.json();
       expect(typeof body.errorId).toBe('string');
       expect(body.errorId.length).toBeGreaterThan(0);
@@ -77,7 +66,6 @@ describe('apiErrorResponse', () => {
     expect(logger.error).toHaveBeenCalledTimes(1);
     expect(logger.warn).not.toHaveBeenCalled();
 
-    // The cause reaches the logger so PostHog captures the real failure.
     const errorCall = vi.mocked(logger.error).mock.calls[0];
     expect(errorCall[1]).toBe(cause);
 
@@ -98,8 +86,6 @@ describe('apiErrorResponse', () => {
   });
 
   it('redacts secret-bearing metadata keys instead of logging them raw', () => {
-    // Note: 401/403 are console-only (no PostHog) by design — use 400 here
-    // to exercise the PostHog warning path.
     apiErrorResponse(400, 'Bad request.', {
       route: 'GET /api/account',
       metadata: {
@@ -119,10 +105,8 @@ describe('apiErrorResponse', () => {
     expect(loggedMetadata['appPassword']).toBe('[redacted]');
     expect(loggedMetadata['apiKey']).toBe('[redacted]');
 
-    // Safe keys pass through untouched.
     expect(loggedMetadata['userId']).toBe('user-789');
 
-    // The raw secrets appear nowhere in the logged arguments.
     const serialized = JSON.stringify(warnCall);
     expect(serialized).not.toContain('super-secret-token');
     expect(serialized).not.toContain('hunter2');
@@ -171,7 +155,6 @@ describe('apiErrorResponse', () => {
       need: 50,
     });
 
-    // Extra fields are also logged for debugging.
     const warnCall = vi.mocked(logger.warn).mock.calls[0];
     expect(warnCall[1]).toMatchObject({ code: 'INSUFFICIENT', have: 10, need: 50 });
   });
@@ -209,9 +192,6 @@ describe('apiErrorResponse', () => {
   });
 
   it('logs a stable logMessage instead of the user-facing error when provided', async () => {
-    // User input embedded in the public message would create a distinct
-    // PostHog issue per malformed value; the stable template keeps
-    // grouping bounded while metadata carries the raw value.
     const res = apiErrorResponse(400, 'times[2] ("garbage") is not a valid ISO datetime.', {
       route: 'POST /api/schedule',
       logMessage: 'times[i] is not a valid ISO datetime.',
@@ -220,13 +200,11 @@ describe('apiErrorResponse', () => {
 
     expect(res.status).toBe(400);
 
-    // PostHog sees the stable template, not the interpolated input.
     const warnCall = vi.mocked(logger.warn).mock.calls[0];
     expect(warnCall[0]).toContain('times[i] is not a valid ISO datetime.');
     expect(warnCall[0]).not.toContain('garbage');
     expect(warnCall[1]).toMatchObject({ index: 2, value: 'garbage' });
 
-    // The client still gets the helpful detailed message.
     const body = await res.json();
     expect(body.error).toBe('times[2] ("garbage") is not a valid ISO datetime.');
   });
@@ -260,9 +238,6 @@ describe('apiErrorResponse', () => {
   });
 
   it('includes a 4xx cause in warning metadata instead of dropping it', () => {
-    // Security-relevant 4xx (e.g. Stripe signature verification failure)
-    // must keep their cause: logger.warn has no cause parameter, so the
-    // responder serializes it into metadata.
     const cause = new Error('No signatures found matching the expected signature');
 
     apiErrorResponse(400, 'Invalid signature.', {

@@ -43,10 +43,6 @@ def persona_for(schedule: dict[str, Any]) -> dict[str, Any]:
     return persona
 
 
-# Snapshot columns on ``schedules`` holding what the persona used to supply
-# alone. The engine reads them through ``post_identity`` so a schedule created
-# before migration 012 (no snapshot, persona present) and one created after it
-# (snapshot present) reach the same job payload.
 _SNAPSHOT_FIELDS = (
     ("voice_id", "post_voice_id"),
     ("voice_audio_url", "post_voice_audio_url"),
@@ -72,7 +68,7 @@ def post_identity(schedule: dict[str, Any]) -> dict[str, Any]:
     that may be deleted later.
 
     One field breaks the fallback rule: ``post_cta_type``. A NULL snapshot
-    there means "no CTA on this post" (migration 072), not "no snapshot" —
+    there means "no CTA on this post" (migration 073), not "no snapshot" —
     so it must not fall back to the persona's CTA, or a faceless or
     ``cta: null`` post would inherit one.
 
@@ -88,19 +84,12 @@ def post_identity(schedule: dict[str, Any]) -> dict[str, Any]:
     for persona_field, snapshot_field in _SNAPSHOT_FIELDS:
         value = schedule.get(snapshot_field)
         if value is None or value == "":
-            # A present-but-NULL post_cta_type means "no CTA" (migration
-            # 072), not "no snapshot": it must not fall back to the
-            # persona's CTA. Other fields keep the fallback — NULL there
-            # means "not provided". A missing key means no snapshot was
-            # ever written (pre-migration row), so the embed still wins.
             if (
                 persona_field == "cta_type"
                 and snapshot_field in schedule
             ):
                 identity.pop(persona_field, None)
             continue
-        # The snapshot wins over the embed: it is the value the web resolved
-        # and charged for when the post was created.
         identity[persona_field] = value
 
     if not identity:
@@ -191,8 +180,6 @@ def build_persona_params(
     with the web's direct dispatch of the same slot.
     """
     params: dict[str, Any] = {"name": persona.get("name") or "Persona"}
-    # The niche is editorial context, not visual identity: it rides even for
-    # faceless posts, because the script angle is generated from it.
     if persona.get("niche"):
         params["niche"] = persona["niche"]
     if video_type != "faceless":
@@ -203,8 +190,6 @@ def build_persona_params(
     if persona.get("voice_id"):
         params["voice_id"] = persona["voice_id"]
     elif persona.get("voice_audio_url"):
-        # Persona-less audio post: the web validated the URL and stored it in
-        # the schedule snapshot; pass it through untouched (no signing needed).
         params["voice_audio_url"] = persona["voice_audio_url"]
     elif persona.get("voice_audio_path"):
         params["voice_audio_url"] = store.signed_url("personas", persona["voice_audio_path"])

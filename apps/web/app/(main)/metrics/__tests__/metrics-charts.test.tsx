@@ -3,17 +3,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 
-//---------------
-// Tests for the /metrics chart cards: each card renders its loading,
-// error and empty state, the donut appears only with five or fewer
-// groups, the top-videos bars report clicks, and captions state the
-// rows excluded from the sums. Recharts is replaced with data-driven
-// stand-ins (jsdom has no layout, so the real charts render nothing)
-// that still exercise the metric/grouping toggles, the click wiring,
-// the axis tick formatters, the tooltip formatters and the donut palette.
-// The locale-flipped pt-BR tests cover the number/date branches.
-//---------------
-
 vi.mock('recharts', async () => {
   const { Children, cloneElement, isValidElement } = await vi.importActual<typeof import('react')>('react');
   function DatumButtons({ data, onClick }: { data?: Array<Record<string, unknown>>; onClick?: (data: unknown, index: number) => void }): ReactNode {
@@ -37,10 +26,6 @@ vi.mock('recharts', async () => {
     AreaChart: ({ data, children }: { data?: Array<Record<string, unknown>>; children?: ReactNode }) => (
       <div data-testid="area-chart"><DatumButtons data={data} />{children}</div>
     ),
-    // Mirrors Recharts: the series (<Bar>) gets (datum, index, event) on
-    // click; the chart-level BarChart onClick gets (chartState, event) and
-    // is never a per-bar handler, so the stand-in ignores it. BarChart
-    // hands its data to the series the way the real chart does.
     Bar: ({ chartData, onClick }: { chartData?: Array<Record<string, unknown>>; onClick?: (data: unknown, index: number) => void }) => (
       <DatumButtons data={chartData} onClick={onClick} />
     ),
@@ -59,10 +44,6 @@ vi.mock('recharts', async () => {
     ),
     ResponsiveContainer: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
     Tooltip: nullComponent,
-    // Render the axis tick formatter so the locale, compact-notation
-    // and truncation behaviour is observable without a real layout:
-    // the day axis gets a fixed day, numeric axes a fixed value, and
-    // the top-videos label axis fixed long/short labels.
     XAxis: ({ dataKey, tickFormatter }: { dataKey?: string; tickFormatter?: (value: never) => ReactNode }) => (
       <span data-testid="x-tick">{tickFormatter?.(dataKey === 'day' ? ('2026-10-21' as never) : (1500 as never))}</span>
     ),
@@ -89,8 +70,6 @@ vi.mock('@/components/ui/chart', () => ({
 }));
 
 vi.mock('@/lib/i18n/provider', () => ({
-  // Settable locale (same pattern as page.test.tsx): the charts use
-  // the locale to pick the number/date formats.
   useI18n: vi.fn(() => ({
     t: (key: string, vars?: Record<string, unknown>) => (vars === undefined ? key : `${key} ${JSON.stringify(vars)}`),
     locale: 'en',
@@ -108,8 +87,6 @@ import { MetricsCharts, MetricsViewToggle, readMetricsView, rowElementId, withou
 import { useI18n } from '@/lib/i18n/provider';
 import type { MetricsRowView } from '@/lib/metrics/metrics-query';
 
-// The i18n mock defaults to 'en'; tests needing the pt-BR number/date
-// branches flip it (same pattern as page.test.tsx).
 function setLocale(locale: 'en' | 'pt'): void {
   vi.mocked(useI18n).mockReturnValue({
     t: (key: string, vars?: Record<string, unknown>) => (vars === undefined ? key : `${key} ${JSON.stringify(vars)}`),
@@ -147,7 +124,6 @@ function renderCharts(rows: MetricsRowView[], props: Partial<typeof BASE_PROPS> 
   render(<MetricsCharts rows={rows} {...BASE_PROPS} {...props} />);
 }
 
-// Radix Tabs activates on mousedown, not on click alone in jsdom.
 function activateTab(label: string): void {
   const trigger = screen.getByText(label);
   fireEvent.mouseDown(trigger);
@@ -181,7 +157,6 @@ describe('MetricsCharts', () => {
 
   it('plots the over-time totals and re-plots on metric toggle', () => {
     renderCharts([row({ views: 100, likes: 10, comments: 3, saves: 1 })]);
-    // Views: 100; engagement: 10 + 3 + 1 = 14.
     const area = () => within(screen.getByTestId('area-chart'));
     expect(screen.getByTestId('area-chart')).toBeInTheDocument();
     expect(area().getByRole('button', { name: /100/ })).toBeInTheDocument();
@@ -197,7 +172,6 @@ describe('MetricsCharts', () => {
       row({ postId: 'b', provider: 'instagram', views: 30 }),
     ]);
     expect(screen.getByTestId('pie-chart')).toBeInTheDocument();
-    // Only the top-videos chart is a bar chart in this case.
     expect(screen.getAllByTestId('bar-chart')).toHaveLength(1);
   });
 
@@ -211,10 +185,7 @@ describe('MetricsCharts', () => {
       row({ postId: 'f', provider: 'facebook', views: 60 }),
     ]);
     expect(screen.queryByTestId('pie-chart')).not.toBeInTheDocument();
-    // The breakdown bars plus the top-videos chart.
     expect(screen.getAllByTestId('bar-chart')).toHaveLength(2);
-    // Both bar layouts format their numeric axes compact and show the
-    // metric tooltip (over-time value axis, breakdown axis, top axis).
     expect(screen.getAllByText('1.5K')).toHaveLength(3);
     expect(screen.getAllByText('metrics.chartsMetricViews: 1,500')).toHaveLength(3);
   });
@@ -268,7 +239,6 @@ describe('MetricsCharts', () => {
       row({ postId: 'b', publishedAt: '', views: 9 }),
       row({ postId: 'c', views: 4 }),
     ], { truncated: true });
-    // Stated on both charts that sum views — singular copy for count 1.
     expect(screen.getAllByText('metrics.chartsWithoutView {"count":1}')).toHaveLength(2);
     expect(screen.getByText('metrics.chartsWithoutPublishDateOne {"count":1}')).toBeInTheDocument();
     expect(screen.getAllByText('metrics.chartsTruncated {"limit":500}')).toHaveLength(3);
@@ -326,8 +296,6 @@ describe('MetricsCharts', () => {
     expect(cells).toHaveLength(2);
     expect(cells[0]).toHaveAttribute('data-fill', 'var(--chart-1)');
     expect(cells[1]).toHaveAttribute('data-fill', 'var(--chart-2)');
-    // The breakdown sorts by views descending: Instagram (30) is
-    // first, YouTube (10) second, and the palette follows that order.
     const youtube = screen.getByText('YouTube · 10').closest('li');
     const instagram = screen.getByText('Instagram · 30').closest('li');
     expect(youtube?.querySelector('span')?.style.backgroundColor).toBe('var(--chart-2)');
@@ -336,7 +304,6 @@ describe('MetricsCharts', () => {
 
   it('shows metric labels and grouped values in the chart tooltips', () => {
     renderCharts([row({ views: 100 })]);
-    // One tooltip per chart (over-time, breakdown, top videos).
     expect(screen.getAllByText('metrics.chartsMetricViews: 1,500')).toHaveLength(3);
   });
 
@@ -369,8 +336,6 @@ describe('MetricsCharts', () => {
   it('truncates long top-video labels on the axis and leaves short ones untouched', () => {
     renderCharts([row({ views: 100 })]);
     const ticks = screen.getAllByTestId('y-tick').map((el) => el.textContent ?? '');
-    // The label axis renders its formatter over 25/21/20-char labels:
-    // 25 and 21 exceed the 20-char cap (cut at 19 + ellipsis), 20 fits.
     expect(ticks).toContain(`${'a'.repeat(19)}…|${'a'.repeat(19)}…|${'a'.repeat(20)}`);
   });
 

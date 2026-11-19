@@ -1,5 +1,4 @@
 // @vitest-environment node
-// The API handler uses native fetch/undici (upload to video.bsky.app).
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const mockFetch = vi.fn();
@@ -156,9 +155,7 @@ describe('handleBlueskyUpload', () => {
     const res = await handleBlueskyUpload(formData(), USER_ID);
 
     expect(res.success).toBe(true);
-    // fetched the app password for the right account, of the right user
     expect(getSocialAccountTokens).toHaveBeenCalledWith(expect.anything(), USER_ID, 'bluesky', DID);
-    // marked last_used_at
     expect(touchSocialAccount).toHaveBeenCalledWith(expect.anything(), USER_ID, 'bluesky', DID);
 
     const body = (res as { results?: Array<{ success: boolean; postId?: string; error?: string }> }).results ?? [];
@@ -331,7 +328,7 @@ describe('handleBlueskyUpload', () => {
     vi.mocked(getSocialAccountTokens).mockRejectedValueOnce(new Error('Social account not found for bluesky/did:plc:abc'));
 
     const res = await handleBlueskyUpload(formData({ did: [DID, 'did:plc:other'] }), USER_ID);
-    expect(res.success).toBe(true); // request ok; failure is per account
+    expect(res.success).toBe(true);
     const results = (res as { results?: Array<{ success: boolean; accountId: string }> }).results ?? [];
     expect(results[0]?.success).toBe(false);
     expect(results[1]?.success).toBe(true);

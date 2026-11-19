@@ -1,16 +1,3 @@
-//---------------
-// persona-cta — per-persona call to action, intent only (issue #639).
-// The persona stores the CTA type + facts (URL, or the "other"
-// instruction); the agent writes the CTA words per video from the
-// story and the topic. The old stored-text CTA (ctaText) is deleted
-// with this change — beta rule: delete the old path, never keep both.
-//
-// The en/pt dictionaries are grandfathered over the 500-line file-size cap
-// and may not grow a single line, so this feature's copy lives here. It is
-// merged into the dictionaries in ./index.ts, which also extends the
-// Dictionary/TranslationKey contract — en.ts and pt.ts stay the same size.
-//---------------
-
 export const personaCtaStrings = {
   en: {
     personas: {
@@ -58,6 +45,7 @@ export const personaCtaStrings = {
         'The link in the post text is clickable — the Hive post body renders markdown links.',
       ctaLinkRumble: '“Link in the description” — the URL goes to the video description.',
       ctaLinkFanvue: 'The link in the post text is clickable — the URL goes into the post text.',
+      ctaLinkTelegram: 'The link in the message is clickable — the URL goes into the message text.',
     },
   },
   pt: {
@@ -104,6 +92,7 @@ export const personaCtaStrings = {
       ctaLinkThreespeak: 'Link no texto do post é clicável — o corpo do post Hive mostra links markdown.',
       ctaLinkRumble: '“Link na descrição” — a URL vai para a descrição do vídeo.',
       ctaLinkFanvue: 'Link no texto do post é clicável — a URL vai para o texto do post.',
+      ctaLinkTelegram: 'Link na mensagem é clicável — a URL vai para o texto da mensagem.',
     },
   },
 };

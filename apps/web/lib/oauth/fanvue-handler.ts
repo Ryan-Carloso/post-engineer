@@ -2,9 +2,6 @@
 
 import { useOAuthFlow } from './oauth-flow';
 
-//---------------
-// useFanvueOAuth — Fanvue OAuth flow.
-//---------------
 export function useFanvueOAuth() {
   return useOAuthFlow({
     startUrl: '/api/fanvue-auth/start',

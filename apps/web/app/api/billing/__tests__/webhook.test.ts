@@ -36,7 +36,6 @@ describe('POST /api/billing/webhook', () => {
   });
 
   it('retorna 500 quando STRIPE_WEBHOOK_SECRET não está configurado', async () => {
-    // Sem env var, deve retornar erro
     const original = process.env.STRIPE_WEBHOOK_SECRET;
     delete process.env.STRIPE_WEBHOOK_SECRET;
     try {
@@ -65,7 +64,6 @@ describe('POST /api/billing/webhook', () => {
         throw new Error('Invalid signature');
       });
       const res = await POST(makeWebhookRequest('{}', 'sig_invalid'));
-      // Pode retornar 400 (assinatura inválida) ou 500 (se Stripe init falhar)
       expect([400, 500]).toContain(res.status);
     } finally {
       delete process.env.STRIPE_WEBHOOK_SECRET;

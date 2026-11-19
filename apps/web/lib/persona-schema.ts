@@ -21,35 +21,13 @@ export const PHOTO_EXTENSIONS: Record<string, string> = {
   'image/webp': 'webp',
 };
 
-//---------------
-// optionalText — an empty FormData string becomes a missing field (undefined),
-// preserving the form's "not provided" semantics.
-//---------------
 const optionalText = <T extends z.ZodType>(schema: T) =>
   z.preprocess((v) => (typeof v === 'string' && v.trim() === '' ? undefined : v), schema.optional());
 
-//---------------
-// personaFormSchema — non-strict on purpose: a persona used to accept a
-// faceless mode and a face-mix percentage, and both keys are now IGNORED
-// (zod strips unknown keys). Every persona is faced — creation requires
-// exactly one image source (validateVisualCues) — and "no face" is a per-post
-// choice (options.videoType: 'faceless'), so there is nothing for a caller to configure
-// here. A stale client sending personaMode=faceless still gets a faced
-// persona, which is the only persona this product makes.
-//---------------
-//---------------
-// Zod schema for the persona form — the SINGLE source of validation.
-// Used by POST /api/persona, by the video-job debug branch, and by the
-// client (fails before the POST). The field caps and enums live in the
-// shared personas contract; this schema keeps the form's mode rules.
-//---------------
 export const personaFormSchema = z.object({
   name: z.string().trim().min(1).optional(),
   avatarUrl: optionalText(z.string()),
   voiceId: optionalText(z.string()),
-  // Unbounded in the DB (text column), so cap it at the API boundary: 35 is
-  // the BCP 47 max tag length. Applied to the JSON video-job flow
-  // (route guard), the debug flow, and persona creation alike.
   language: optionalText(z.string().max(35)),
   videoAspect: optionalText(z.enum(VALID_VIDEO_ASPECTS)),
   videoLayout: optionalText(z.enum(VIDEO_LAYOUTS)),
@@ -60,17 +38,9 @@ export const personaFormSchema = z.object({
   niche: optionalText(z.string().max(300)),
   paragraphNumber: optionalText(z.coerce.number().int().min(1).max(10)),
   faceQuality: optionalText(z.enum(FACE_QUALITIES)),
-  // The JSON video-job flow caps video_subject at 300 (multi-megabyte
-  // subjects would be fed into LLM prompts); the debug flow shares this
-  // schema, so the cap applies to both branches — and to persona creation,
-  // where niche (the subject's default source) is already capped at 300.
   video_subject: optionalText(z.string().max(300)),
 });
 
-//---------------
-// FIELD_ERRORS — per-field messages, preserving the original 400 errors
-// from the routes (contract already consumed by tests/client).
-//---------------
 const FIELD_ERRORS: Record<string, (value: unknown) => string> = {
   videoAspect: (value) => `Invalid videoAspect: ${String(value)}. Use one of ${VALID_VIDEO_ASPECTS.join(', ')}.`,
   videoLayout: (value) => `Invalid videoLayout: ${String(value)}. Use one of ${VIDEO_LAYOUTS.join(', ')}.`,
@@ -116,11 +86,6 @@ export type ParsedPersonaForm = {
     niche: string | null;
     faceQuality: (typeof FACE_QUALITIES)[number] | null;
     videoSubject: string | null;
-    // The persona's bound publishing accounts (issue #572): at least one
-    // account, owned by the caller. Parsed from the `publishingAccounts`
-    // form field (JSON map provider -> account ids); create mode rejects a
-    // missing/empty/malformed binding, debug mode ignores it (the debug
-    // flow reuses an existing persona and never creates one).
     publishingAccounts: PersonaDefaultAccounts;
   };
   photo: File | null;
@@ -135,10 +100,6 @@ function extensionFor(file: File, extensionByType: Record<string, string>): stri
   return extensionByType[file.type] ?? null;
 }
 
-//---------------
-// photoExtensionOf — accepted extension for the file
-// (null = unsupported format). Used in validation and upload.
-//---------------
 export function photoExtensionOf(photo: File | null): string | null {
   return photo ? extensionFor(photo, PHOTO_EXTENSIONS) : null;
 }
@@ -155,14 +116,6 @@ function fileFrom(formData: FormData, key: string): File | null {
   return value instanceof File ? value : null;
 }
 
-//---------------
-// parsePersonaForm — validates a persona FormData (normal creation or
-// debug generation). Files are checked by type/accept; strings and
-// numbers by the zod schema. Per-mode rules:
-//  - create: name is required.
-//  - debug: video_subject is required (direct field, niche, or script).
-//---------------
-
 export function parsePersonaForm(formData: FormData, mode: PersonaFormMode): ParsePersonaFormResult {
   const entries = Object.fromEntries(
     Array.from(formData.entries()).filter(([, value]) => typeof value === 'string'),
@@ -173,10 +126,6 @@ export function parsePersonaForm(formData: FormData, mode: PersonaFormMode): Par
   }
   const values = parsed.data;
 
-  // CTA intent coherence (issue #639): link/buy need a URL, other needs
-  // an instruction, and the other types carry no facts. The schema caps
-  // each field alone; only the combination is checked here. An absent type
-  // means follow, so a URL or instruction without a type is incoherent too.
   const ctaError = validateCtaCoherence(values.ctaType ?? null, values.ctaUrl ?? null, values.ctaInstruction ?? null);
   if (ctaError) {
     return { ok: false, error: ctaError };
@@ -201,19 +150,9 @@ export function parsePersonaForm(formData: FormData, mode: PersonaFormMode): Par
   if (mode === 'debug' && !videoSubject) {
     return { ok: false, error: 'video_subject is required.' };
   }
-  // The direct field and niche are zod-capped at 300, but the scriptPrompt
-  // fallback (capped at 2000) could yield a subject that bypasses the cap
-  // the JSON flow enforces. Reject it the same way instead of letting a
-  // multi-hundred-char subject into the prompts. (Create mode ignores the
-  // subject — it is not persisted — so the check only applies to debug.)
   if (mode === 'debug' && videoSubject && videoSubject.length > 300) {
     return { ok: false, error: 'Invalid video_subject: use at most 300 characters.' };
   }
-  // Issue #572: a persona is born bound to at least one publishing
-  // account — a persona with zero accounts selected must not exist. The
-  // binding is parsed here (not in the route) so every create caller —
-  // web, MCP, direct API — gets the same 400, and nothing is written
-  // before it passes.
   const binding = parsePublishingAccountsField(formData.get('publishingAccounts'));
   if (mode === 'create' && !binding.ok) {
     return { ok: false, error: binding.error };
@@ -245,11 +184,6 @@ export function parsePersonaForm(formData: FormData, mode: PersonaFormMode): Par
   };
 }
 
-//---------------
-// validateCtaCoherence — the CTA type and its facts must agree: link/buy
-// need a URL, other needs an instruction, the rest carry no facts.
-// Returns the error message, or null when coherent.
-//---------------
 export function validateCtaCoherence(
   type: (typeof PERSONA_CTA_TYPES)[number] | null,
   url: string | null,
@@ -269,20 +203,12 @@ export function validateCtaCoherence(
   return null;
 }
 
-/** The CTA type a stored record carries, defaulting to follow for a legacy or absent value. */
 export function parsePersonaCtaType(value: string | null | undefined): (typeof PERSONA_CTA_TYPES)[number] {
   return (PERSONA_CTA_TYPES as readonly string[]).includes(value ?? '')
     ? (value as (typeof PERSONA_CTA_TYPES)[number])
     : 'follow';
 }
 
-//---------------
-// validateVisualCues — persona visual-identity rule: every persona is faced,
-// so creation requires EXACTLY one image source (photo file or avatarUrl).
-// Both or neither is a 400 — the faceless exception (no image at all) is
-// gone; "no face" is chosen per video, at post creation.
-// Returns the error message, or null when valid.
-//---------------
 export function validateVisualCues(hasPhoto: boolean, hasAvatarUrl: boolean): string | null {
   if (hasPhoto === hasAvatarUrl) {
     return 'Provide exactly one of: photo file or avatarUrl.';
@@ -290,9 +216,6 @@ export function validateVisualCues(hasPhoto: boolean, hasAvatarUrl: boolean): st
   return null;
 }
 
-//---------------
-// validateVoiceSource — the creation flow requires the house voice (voiceId).
-//---------------
 export function validateVoiceSource(voiceId: string | null): string | null {
   if (!voiceId) {
     return 'Provide voiceId.';

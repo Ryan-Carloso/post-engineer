@@ -48,23 +48,11 @@ from app.services.notify import safe_reason, send_discord, task_failed_msg
 from app.services.owner_alert import alert_failed_task
 from app.utils import file_security, ssrf, utils
 
-#---------------
-# _fail_task — marks a task FAILED and sends one Discord alert per task.
-# Failure sites are scattered, so recent-ids dedupes to one alert per task;
-# the bounded deque only evicts after MAX_FAILED_ALERTS *other distinct*
-# failures. Check-and-add holds a lock so concurrent failures dedupe.
-#---------------
 MAX_FAILED_ALERTS = 1000
-# The critical section is microseconds; the timeout only matters if a
-# thread dies while holding the lock.
 _ALERT_LOCK_TIMEOUT_SECONDS = 0.5
 _discord_notified_failed_tasks: deque[str] = deque(maxlen=MAX_FAILED_ALERTS)
 _discord_notified_failed_tasks_lock = Lock()
 
-#---------------
-# Terminal-event emission dedup: the FIRST _fail_task notice for a task
-# always emits video_generation_failed; later notices stay deduped.
-#---------------
 MAX_FAILED_EVENT_IDS = 1000
 _failed_event_emitted_tasks: deque[str] = deque(maxlen=MAX_FAILED_EVENT_IDS)
 _failed_event_emitted_tasks_lock = Lock()
@@ -88,15 +76,6 @@ def _should_emit_failed_event(task_id: str) -> bool:
         _failed_event_emitted_tasks_lock.release()
 
 
-#---------------
-# Dispatch-failure emission dedup: the batch dispatch-failure path emits
-# video_generation_failed for incidents that never started a task, so it
-# must NOT share the pipeline terminal guard above — a transient dispatch
-# failure and a later genuine pipeline failure are two real incidents for
-# one deterministic id, and both must emit. Trade-off, named:
-# video_generation_requested stays deduped for the re-dispatched id, so
-# the failure % can briefly exceed 100% in this window.
-#---------------
 MAX_DISPATCH_FAILED_EVENT_IDS = 1000
 _dispatch_failed_event_emitted_tasks: deque[str] = deque(maxlen=MAX_DISPATCH_FAILED_EVENT_IDS)
 _dispatch_failed_event_emitted_tasks_lock = Lock()
@@ -119,7 +98,6 @@ def _should_emit_dispatch_failed_event(task_id: str) -> bool:
         _dispatch_failed_event_emitted_tasks_lock.release()
 
 
-#---------------
 MAX_REQUESTED_EVENT_IDS = 1000
 _requested_event_emitted_tasks: deque[str] = deque(maxlen=MAX_REQUESTED_EVENT_IDS)
 _requested_event_emitted_tasks_lock = Lock()
@@ -182,7 +160,7 @@ def _release_failure_alert(task_id: str) -> None:
         try:
             _discord_notified_failed_tasks.remove(task_id)
         except ValueError:
-            pass  # already aged out of the bounded cache
+            pass
     finally:
         _discord_notified_failed_tasks_lock.release()
 
@@ -200,18 +178,6 @@ def _task_already_failed(task_id: str) -> bool:
     return bool(task) and task.get("state") == const.TASK_STATE_FAILED
 
 
-#---------------
-# PostHog lifecycle funnel: video_generation_requested (at acceptance,
-# BEFORE the pipeline starts) -> video_generation_started ->
-# video_generation_progress (50%/70% only) -> video_generation_failed /
-# video_generated. track_event never raises, so telemetry can't break the
-# pipeline; task-state reads below degrade to "unknown" instead.
-#---------------
-# Progress milestones already reported per task. Process-local: direct
-# ids are uuid4 (never reused); batch ids are uuid5 and CAN be
-# re-dispatched after a crash (see generate.py new_task_id), so emission
-# is deduped per process by the bounded guards above and terminal
-# transitions pop the entry — no double-report in one process lifetime.
 PROGRESS_MILESTONES = (50, 70)
 _progress_milestones: dict[str, int] = {}
 
@@ -237,8 +203,6 @@ def _task_tracking_context(task_id: str) -> dict[str, object]:
         task = {}
     context: dict[str, object] = {
         "task_id": task_id,
-        # `or` (not a get-default): a row that stored an explicit None
-        # must degrade to the sentinel too, never a null prop in PostHog.
         "user_id": task.get("user_id") or "unknown",
         "flow": task.get("flow") or "unknown",
         "pipeline": task.get("pipeline") or "unknown",
@@ -323,19 +287,12 @@ def _complete_task(
     **kwargs: object,
 ) -> None:
     """Mark a task COMPLETE and fire the terminal webhook (once per task)."""
-    # Resilient write: with a network state backend the terminal update can
-    # fail, and a lost COMPLETE would leave the row PROCESSING forever.
     sm.persist_state_update(
         sm.state, task_id, state=const.TASK_STATE_COMPLETE, progress=100, **kwargs
     )
     _progress_milestones.pop(task_id, None)
     context = _task_tracking_context(task_id)
-    # Batch completions are reported by the fill_schedule reconciler (which
-    # also attaches cost_usd). Only a CONFIRMED direct flow reports here: a
-    # degraded context (flow "unknown", e.g. the row was deleted mid-flight)
-    # may be a batch task, and reporting it too would double count.
     if context.get("flow") == "direct":
-        # Private unit-economics metric: PostHog event only, never the API.
         context.update(cost_event_props(kwargs))
         context["music_mood"] = kwargs.get("music_mood") or "unknown"
         track_event("video_generated", context)
@@ -371,36 +328,23 @@ def _fail_task(
     """
     failed_stage = stage or "unknown"
     error_type = type(exc).__name__ if exc is not None else "TaskError"
-    # Bind only safe identifiers: never params, headers, tokens or URLs.
     logger.bind(task_id=task_id, stage=failed_stage, error_type=error_type).error(
         "video task failed at stage {stage}: {error}",
         stage=failed_stage,
         error=error,
     )
     if _task_already_failed(task_id):
-        # Resilient write (see _complete_task): a lost FAILED update leaves
-        # the row PROCESSING with no failure recorded and no refund.
         sm.persist_state_update(sm.state, task_id, state=const.TASK_STATE_FAILED, **kwargs)
     else:
         sm.persist_state_update(
             sm.state, task_id, state=const.TASK_STATE_FAILED, error=error, **kwargs
         )
-    # Terminal either way: drop the milestone cache on every failure
-    # notice, including repeats for an already-FAILED task.
     _progress_milestones.pop(task_id, None)
-    # The first _fail_task notice always emits the terminal funnel event,
-    # even when the state was already FAILED — dedup is by notice, not by
-    # state, so no failure is lost from the funnel.
     if _should_emit_failed_event(task_id):
         context = _task_tracking_context(task_id)
         context["stage"] = failed_stage
-        # Keep the diagnostic tail and strip local paths; the helper
-        # scrubs the full message before truncating so a mid-key cut
-        # cannot leave a fragment the pattern can no longer match.
         context["reason"] = nonempty_error_reason(str(error), error_type, max_chars=200)
         track_event("video_generation_failed", context)
-    # Terminal webhook (at most once per task, deduped inside): a failing
-    # delivery only logs, it never changes the task outcome.
     task_webhook.notify_terminal_task(
         task_id,
         status="failed",
@@ -413,13 +357,6 @@ def _fail_task(
     )
 
 
-# Product-fixed persona pacing ("always this way"): the lip-sync hook
-# opens the video. Deliberately NOT config-driven — validated against GPU
-# intro cost and lipsync quality windows; tunable knobs reopen those
-# failure modes. Hook pacing (PERSONA_HOOK_*) lives in persona_hook.py.
-# GPU ceiling, not product ceiling: LongCat MAX_SEGMENTS=5 renders 16.52s,
-# but a 5-segment render SIGKILLed inside the Modal container on the first
-# real run; 12s is the highest segment count observed to survive there.
 PERSONA_LIPSYNC_MAX_SECONDS = 12.0
 
 
@@ -450,15 +387,10 @@ def generate_script(task_id, params):
     logger.info("\n\n## generating video script")
     video_script = params.video_script.strip()
     if not video_script:
-        # The script arrives with the job (segments joined by the caller);
-        # there is no LLM fallback here. An empty script fails the task
-        # loudly, before any generation or token spend.
         fail_or_stop(task_id, "failed to generate video script", params, stage="script")
         logger.error("failed to generate video script.")
         return None
 
-    # Log only the size — the script itself is user content and must not
-    # reach the logs.
     logger.debug(f"video script received: {len(video_script)} characters")
 
     if persona_lipsync_active(params):
@@ -469,10 +401,6 @@ def generate_script(task_id, params):
             if paragraph.strip()
         ]
         if len(paragraphs) < 2 or not re.search(r"[.!?。！？]$", paragraphs[0]):
-            # The script already passed mechanical segment validation
-            # upstream; a missing hook is bad input, not a reason to
-            # regenerate by LLM. Fail loudly — the task runner turns the
-            # raise into a failed task.
             raise ValueError("persona script has no valid hook")
 
     return video_script
@@ -501,9 +429,6 @@ def resolve_custom_audio_file(task_id: str, custom_audio_file: str | None) -> st
     if not requested_file:
         return ""
 
-    # Absolute paths are never accepted, even when they happen to land
-    # inside an allowed directory: the API contract is basename-only, so a
-    # host path must never be echoed back or resolved.
     if os.path.isabs(requested_file):
         raise ValueError(
             f"custom audio file '{requested_file}' must be a file name, not an "
@@ -523,8 +448,6 @@ def resolve_custom_audio_file(task_id: str, custom_audio_file: str | None) -> st
                 requested_file,
             )
         except ValueError as exc:
-            # file_security reports a missing file with "does not exist";
-            # keep that distinction so the failure message stays helpful.
             if "does not exist" in str(exc):
                 not_found = True
             continue
@@ -536,9 +459,6 @@ def resolve_custom_audio_file(task_id: str, custom_audio_file: str | None) -> st
     )
 
 
-# cleanup_task_intermediates lives in task_cleanup.py (extracted so this
-# file stays under the size ratchet) and is re-exported here for existing
-# callers and tests that import it as ``task.cleanup_task_intermediates``.
 from app.services.task_cleanup import cleanup_task_intermediates  # noqa: F401,E402
 
 
@@ -558,10 +478,6 @@ def resolve_persona_audio(params: VideoParams) -> tuple[str, str | None]:
         return params.voice_name, persona.voice_audio_url
 
     if persona.voice_id:
-        # Return the RAW house id: generate_audio resolves it through
-        # resolve_house_voice_name(name, params.video_language), which is the
-        # only place that knows the per-language Neural voice. Expanding it
-        # here with HOUSE_VOICE_NAMES pinned every persona to en-US.
         return persona.voice_id, None
 
     return params.voice_name, None
@@ -579,8 +495,6 @@ def generate_audio(task_id, params, video_script):
         - sub_maker: subtitle maker object if TTS is used, None otherwise
     '''
     logger.info("\n\n## generating audio")
-    # The /audio and /subtitle request models don't include custom_audio_file;
-    # read it defensively here so direct calls don't raise AttributeError.
     requested_custom_audio_file = getattr(params, "custom_audio_file", None)
     try:
         custom_audio_file = resolve_custom_audio_file(
@@ -597,8 +511,6 @@ def generate_audio(task_id, params, video_script):
         )
         return None, None, None
 
-    # Persona inline: the house voice overrides voice_name; the user's voice
-    # sample becomes custom audio (ignores TTS).
     persona_voice_name, persona_voice_audio = resolve_persona_audio(params)
     if persona_voice_audio and not custom_audio_file:
         try:
@@ -610,10 +522,6 @@ def generate_audio(task_id, params, video_script):
     if not custom_audio_file:
         logger.info("no custom audio file provided, using TTS to generate audio.")
         audio_file = path.join(utils.task_dir(task_id), "audio.mp3")
-        # Fail fast when nothing resolved to a usable voice name. An empty
-        # voice_name (or empty-string persona voice_id) would otherwise reach
-        # the provider and burn its retries before dying with a cryptic
-        # "voice/subtitle mismatch".
         if not (persona_voice_name or "").strip():
             fail_or_stop(
                 task_id,
@@ -627,10 +535,6 @@ def generate_audio(task_id, params, video_script):
                 "(empty voice name)"
             )
             return None, None, None
-        # The voice id goes straight to voice.tts, which routes it to
-        # ElevenLabs (`elevenlabs:<id>`) or Chatterbox (`chatterbox:<name>`)
-        # and fails loudly on anything else. There is no house-voice
-        # resolution step left: the catalog is the provider's own voice list.
         result = voice.tts(
             text=video_script,
             voice_name=voice.parse_voice_name(persona_voice_name),
@@ -639,14 +543,13 @@ def generate_audio(task_id, params, video_script):
             user_id=str((sm.state.get_task(task_id) or {}).get("user_id") or ""), task_id=task_id,
         )
         if not result.ok:
-            # Forward the real TTS failure cause to _fail_task (stored error + PostHog reason).
             reason = result.error or "unknown TTS failure"
             fail_or_stop(task_id, f"failed to generate audio: {reason}", params, stage="audio")
             logger.error(f"failed to generate audio: {reason} "
                          "(check voice name, provider API key, network)")
             return None, None, None
         sub_maker = result.sub_maker
-        audio_trim.trim_trailing_silence(audio_file)  # the video is cut to the file's length
+        audio_trim.trim_trailing_silence(audio_file)
         audio_duration = math.ceil(voice.get_audio_duration(sub_maker))
         if audio_duration == 0:
             fail_or_stop(task_id, "failed to get audio duration", params, stage="audio")
@@ -673,8 +576,6 @@ def generate_subtitle(task_id, params, video_script, sub_maker, audio_file):
 
 
 def get_video_materials(task_id, params, audio_duration):
-    # Images mode: only a neutral canvas. The agent's segment photos cover
-    # it full frame (image_coverage); it never ships on its own.
     return faceless_material.images_canvas(utils.task_dir(task_id), audio_duration, params.video_aspect) or None
 
 
@@ -688,7 +589,6 @@ def generate_final_videos(
     final_video_paths = []
     combined_video_paths = []
     intro_report = IntroCostReport(ran=False, cost_usd=None, job_id=None)
-    # Single output per task, concatenated in the configured mode.
     video_concat_mode = params.video_concat_mode
     video_transition_mode = params.video_transition_mode
     task = sm.state.get_task(task_id)
@@ -711,7 +611,6 @@ def generate_final_videos(
 
     video_for_render = combined_video_path
     if params.video_type == "full_lipsync":
-        # Full mode renders every window as talking head; failures fail the task, never falling through to the intro path.
         if not persona_lipsync_active(params):
             raise ValueError(
                 "full_lipsync requires a persona with a photo"
@@ -734,8 +633,6 @@ def generate_final_videos(
             job_id=full_job_ids[0] if full_job_ids else None,
         )
     elif params.video_type == "hook_lipsync" and not persona_lipsync_active(params):
-        # Hook needs a face too: fail loudly instead of silently rendering
-        # images-only for a face mode (full_lipsync raises above).
         raise ValueError("hook_lipsync requires a persona with a photo")
     elif persona_lipsync_active(params):
         logger.info("generating persona lip-sync intro")
@@ -748,12 +645,10 @@ def generate_final_videos(
             video_script=video_script,
             subtitle_path=subtitle_path,
         )
-        # None: no intro (already reported); the normal video ships.
         if intro is not None:
             video_for_render, intro_cost_usd, intro_job_id, intro_job_cost = intro
             intro_report = report_from_job_cost(intro_cost_usd, intro_job_id, intro_job_cost)
 
-    # Segment photos: panels over the video, before the subtitles are burned in.
     video_for_render = segment_panels.overlay_onto(task_id, video_for_render, _update_task)
 
     _update_task(task_id, progress=75, music_mood=music_mood)
@@ -809,13 +704,6 @@ def archive_final_videos(
         if stored:
             _update_task(task_id, video_storage_path=stored)
         else:
-            # Loud and persisted: the video exists only on ephemeral local disk.
-            # Edge case: if a run archives more than one final video and some
-            # succeed, the task row ends up with BOTH video_storage_path and
-            # video_storage_error set. /stream/ + /download/ prefer the
-            # archived copy; the error records which object failed to verify.
-            # Normal workflows produce exactly one final video, so this is
-            # informational, not actionable.
             logger.error(
                 f"archive_final_videos: no verified archive for task {task_id} "
                 f"(candidate={object_path}); video is NOT servable from storage"
@@ -839,9 +727,6 @@ def prepare_persona_lipsync_video(
     fields for an older backend). Returns None, before any GPU work, when
     the hook end can be neither measured nor estimated (resolve_lipsync_window).
     """
-    # Measured from the subtitles, else estimated from the audio length;
-    # capped at the GPU ceiling so the Modal container never sees a render
-    # past the LongCat segment ceiling (the rest of the hook plays as voice).
     hook_duration = persona_hook.resolve_lipsync_window(
         task_id, video_script, subtitle.file_to_subtitles(subtitle_path),
         voice.get_audio_duration(audio_file), PERSONA_LIPSYNC_MAX_SECONDS,
@@ -849,7 +734,6 @@ def prepare_persona_lipsync_video(
     )
     if hook_duration is None:
         return None
-    # Shared with full lip-sync: one SSRF-safe download for both paths.
     task_dir = utils.task_dir(task_id)
     image_path = full_lipsync.resolve_persona_image(task_id, params, _PERSONA_IMAGE_MAX_BYTES)
 
@@ -878,9 +762,6 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
     logger.info(f"start task: {task_id}, stop_at: {stop_at}")
     music_mood = "pending"
     final_video_paths: list[str] = []
-    # Phase tracking lives in app/services/pipeline_stage.py (this file is
-    # grandfathered and must not grow): the tracker separates the current
-    # phase (failure attribution) from the last completed phase (progress).
     phases = PhaseTracker(
         task_id, persist=lambda phase: sm.state.update_task(task_id, stage=phase)
     )
@@ -889,13 +770,10 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
         if stop_at == "video":
             video_storage.require_r2_configuration()
         start_preflight.run(phases, task_id, params, _PERSONA_IMAGE_MAX_BYTES, stop_at)
-        # Cancel (issue #447): before PROCESSING/started, so a task cancelled
-        # while queued emits no dangling video_generation_started.
         if abort_if_cancelled(task_id, "script", _forget_milestone):
             return
         _update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=5)
         track_generation_started(task_id)
-        # 1. Generate script
         phases.begin("script")
         video_script = generate_script(task_id, params)
         phases.complete("script")
@@ -915,10 +793,8 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
 
         _update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=20)
 
-        # Cancel (issue #447): stop before the next paid stage.
         if abort_if_cancelled(task_id, "audio", _forget_milestone):
             return
-        # 3. Generate audio
         phases.begin("audio")
         audio_file, audio_duration, sub_maker = generate_audio(
             task_id, params, video_script
@@ -938,7 +814,6 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
                 video_url=_first_http_url([audio_file]), audio_file=audio_file,
             )
 
-        # Fail loudly: cutting the tail would drop the CTA (#534).
         max_duration = lip_sync_cap_seconds(params)
         if (
             stop_at == "video" and persona_lipsync_active(params)
@@ -952,10 +827,8 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
             cleanup_task_intermediates(task_id, ())
             return
 
-        # Cancel (issue #447): stop before the next paid stage.
         if abort_if_cancelled(task_id, "subtitle", _forget_milestone):
             return
-        # 4. Generate subtitle
         phases.begin("subtitle")
         subtitle_path = generate_subtitle(
             task_id, params, video_script, sub_maker, audio_file
@@ -969,7 +842,7 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
             )
 
         task_local = audio_trim.task_local_copy(audio_file, utils.task_dir(task_id))
-        if task_local is not None:  # None: copy failed; skip the trim, never cut shared
+        if task_local is not None:
             audio_file = task_local
             trimmed_seconds = audio_trim.trim_after_last_word(
                 audio_file, subtitle.file_to_words(subtitle_path), video_script
@@ -977,8 +850,6 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
             if trimmed_seconds is not None:
                 audio_duration = math.ceil(trimmed_seconds)
 
-        # 4b. Persona hook guard: measures the hook before the expensive
-        # material stages; an off-window hook is reported, never regenerated.
         script_before_hook_guard = video_script
         (
             video_script,
@@ -999,11 +870,8 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
 
         _update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=40)
 
-        # Cancel (issue #447): stop before the next paid stage.
         if abort_if_cancelled(task_id, "materials", _forget_milestone):
             return
-        # 5. Get video materials: the neutral canvas the agent's segment
-        # photos cover (image_coverage).
         phases.begin("materials")
         downloaded_videos = get_video_materials(task_id, params, audio_duration)
         phases.complete("materials")
@@ -1012,10 +880,9 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
             cleanup_task_intermediates(task_id, ())
             return
 
-        # Segment photos become panels over the final video; in the images modes the task fails when a photo is skipped, none survive, or the photos run out (full lip sync only warns).
         try:
             media_warnings = user_media.prepare_segment_panels(task_id, params, subtitle_path, audio_duration)
-        except image_coverage.ImagesDoNotCoverAudio as exc:  # images material: a photo was skipped, none survived, or the photos ran out
+        except image_coverage.ImagesDoNotCoverAudio as exc:
             fail_or_stop(task_id, str(exc), params, stage="materials", exc=exc)
             cleanup_task_intermediates(task_id, ())
             return
@@ -1030,23 +897,16 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
 
         _update_task(task_id, state=const.TASK_STATE_PROCESSING, progress=50)
 
-        # Phase 5: the BGM mood comes with the request (VideoParams.music_mood;
-        # default: first catalogued mood) — never a silent fallback to none.
         phases.begin("music_mood")
         music_mood = resolve_music_mood(params)
         sm.state.update_task(task_id, music_mood=music_mood)
         phases.complete("music_mood")
 
-        # Only the full video pipeline needs the video concat mode handling;
-        # this keeps /subtitle and /audio style requests from touching
-        # fields that don't exist.
         if type(params.video_concat_mode) is str:
             params.video_concat_mode = VideoConcatMode(params.video_concat_mode)
 
-        # Cancel (issue #447): stop before the next paid stage.
         if abort_if_cancelled(task_id, "render", _forget_milestone):
             return
-        # 6. Generate final videos (marked first: a crash reports stage=render)
         phases.begin("render")
         phases.complete("render")
         final_video_paths, combined_video_paths, intro_report = generate_final_videos(
@@ -1064,24 +924,15 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
             cleanup_task_intermediates(task_id, ())
             return
 
-        # Cancel (issue #447): a cancel landing mid-render must not run
-        # the tail — no archive, cross-post, or terminal webhook.
         if abort_if_cancelled(task_id, "archive", _forget_milestone):
             return
 
-        # Durable copy of the final video in R2 before
-        # publishing: local disk is ephemeral, a restart must not lose it.
         archive_final_videos(task_id, final_video_paths, params)
-
-        # Publishing now happens exclusively through the fill-schedule slot
-        # worker (apps/engine/app/services/fill_schedule/publish.py): the
-        # task completes here and the slot publisher posts at slot time.
 
         logger.success(
             f"task {task_id} finished, generated {len(final_video_paths)} videos."
         )
 
-        # 7. Cross-post to social platforms (if enabled)
         cross_post_results = []
         if upload_post.upload_post_service.is_configured() and upload_post.upload_post_service.auto_upload:
             platforms = upload_post.upload_post_service.platforms
@@ -1089,8 +940,6 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
 
             youtube_extra = None
             if any(p.startswith("youtube") for p in platforms):
-                # Title/description come from the agent; tags are empty
-                # (mechanical metadata died with video_subject — open decision).
                 youtube_extra = {
                     "youtube_title": params.video_title,
                     "youtube_description": params.video_description,
@@ -1132,11 +981,6 @@ def start(task_id, params: VideoParams, stop_at: str = "video"):
             "music_mood": music_mood,
             "cross_post_results": cross_post_results if cross_post_results else None,
         }
-        # Private unit-economics metric: persisted on the task row so the
-        # batch reconciler can attach it to the PostHog video_generated
-        # event (or record WHY it is missing). The API layer strips it from
-        # every response — it is never visible to users, only in the
-        # operator's PostHog.
         kwargs.update(completion_cost_kwargs(task_id, intro_report))
         if finish_or_stop(
             task_id, params, "complete", kwargs,
@@ -1177,12 +1021,8 @@ if __name__ == "__main__":
     start(task_id, params, stop_at="video")
 
 
-# Limits for the persona lipsync reference image downloaded by URL.
-_PERSONA_IMAGE_MAX_BYTES = 20 * 1024 * 1024  # 20 MB cap for the avatar/photo
-
-# Limits for the persona voice sample downloaded by URL (custom audio_url).
-# The 60s max duration is a temporary product limit ("for now").
-PERSONA_VOICE_MAX_BYTES = 20 * 1024 * 1024  # 20 MB — fits 1 min of uncompressed audio
+_PERSONA_IMAGE_MAX_BYTES = 20 * 1024 * 1024
+PERSONA_VOICE_MAX_BYTES = 20 * 1024 * 1024
 PERSONA_VOICE_MAX_SECONDS = 60
 
 

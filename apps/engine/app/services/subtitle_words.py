@@ -10,11 +10,7 @@ time from the nearest matched neighbours, split by character share.
 import difflib
 import re
 
-# Below this share of matched script words the transcript is not trusted to
-# time the cues, and callers fall back to character-share timing.
 MIN_MATCHED_SHARE = 0.5
-# A cue shorter than this was given no real time (words missing from the
-# transcript leave a zero-width window), so the transcript cannot time it.
 MIN_CUE_SECONDS = 0.1
 
 

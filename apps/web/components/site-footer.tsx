@@ -3,9 +3,6 @@
 import Link from 'next/link';
 import { useI18n } from '@/lib/i18n/provider';
 
-//---------------
-// SiteFooter — rodapé público com links legais e e-mail de suporte
-//---------------
 export default function SiteFooter() {
   const { t } = useI18n();
 

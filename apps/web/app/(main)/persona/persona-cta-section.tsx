@@ -18,16 +18,6 @@ import { PERSONA_CTA_TYPES, type PersonaCtaType } from '@/lib/contracts/personas
 import { usePersonaStore } from '@/lib/store';
 import { SectionDivider } from './persona-section-parts';
 
-//---------------
-// PersonaCtaSection — per-persona call to action, intent only.
-//
-// The persona stores the CTA type + facts (URL, or the "other"
-// instruction). The agent writes the CTA words per video from the
-// story and the topic; no wording is stored here. Writes the zustand
-// store directly (like the publishing-accounts section); the page
-// hydrates the store on edit.
-//---------------
-
 const CTA_TYPE_LABEL_KEYS: Record<PersonaCtaType, TranslationKey> = {
   follow: 'personas.ctaTypeFollow',
   comment: 'personas.ctaTypeComment',
@@ -48,10 +38,6 @@ const CTA_PREVIEW_KEYS: Record<PersonaCtaType, TranslationKey> = {
   other: 'personas.ctaPreviewOther',
 };
 
-// Link behaviour per network: where the URL goes when the CTA type is
-// "link" (or "buy"). Instagram and Pinterest have no clickable link in
-// the post text — the agent says "link in bio" / points at the pin's
-// destination URL instead.
 const CTA_LINK_KEYS: Record<SocialProvider, TranslationKey> = {
   youtube: 'personas.ctaLinkYoutube',
   instagram: 'personas.ctaLinkInstagram',
@@ -63,6 +49,7 @@ const CTA_LINK_KEYS: Record<SocialProvider, TranslationKey> = {
   '3speak': 'personas.ctaLinkThreespeak',
   rumble: 'personas.ctaLinkRumble',
   fanvue: 'personas.ctaLinkFanvue',
+  telegram: 'personas.ctaLinkTelegram',
 };
 
 const CTA_LINK_CLICKABLE: Record<SocialProvider, boolean> = {
@@ -76,6 +63,7 @@ const CTA_LINK_CLICKABLE: Record<SocialProvider, boolean> = {
   '3speak': true,
   rumble: true,
   fanvue: true,
+  telegram: true,
 };
 
 function CtaLinkTable() {
@@ -131,10 +119,6 @@ export function PersonaCtaSection() {
       <div className="mt-4 space-y-5 rounded-2xl border border-line bg-card p-5 shadow-sm sm:p-6">
         <div className="flex flex-col gap-1.5">
           <Label>{t('personas.ctaTypeLabel')}</Label>
-          {/* Switching type drops the previous type's facts: the URL and
-          instruction inputs are hidden unless the new type takes them, so
-          keeping a stale value would 400 on create (a hidden field the
-          user cannot see or clear) and store an incoherent CTA on edit. */}
           <Select
             value={ctaType}
             onValueChange={(value) => {

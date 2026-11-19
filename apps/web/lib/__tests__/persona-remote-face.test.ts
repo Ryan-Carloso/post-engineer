@@ -185,9 +185,6 @@ describe('resolvePersonaAvatar', () => {
     expect(uploaded[0]?.path).not.toBe('user-1/persona-1/photo.png');
   });
 
-  // Issue #448: anything that is neither a kept avatar (public asset path,
-  // data:image, our own asset URL) nor an http(s) URL for the DNS-pinned
-  // download is refused, so it never lands in personas.avatar_url.
   it.each([
     'not-a-url',
     '//169.254.169.254/latest/meta-data/iam/security-credentials/',

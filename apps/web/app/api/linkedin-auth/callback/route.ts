@@ -7,9 +7,6 @@ import { logger } from '@/lib/logger';
 import { withApiErrorReporting } from '@/lib/api-error-reporting';
 import { reportProfileFetched, reportProfileFetchFailed } from '@/lib/account-profile-telemetry';
 
-//---------------
-// getSessionUserId — session user_id or null
-//---------------
 async function getSessionUserId(): Promise<string | null> {
   const supabase = await createSupabaseServerClient();
   const {
@@ -21,13 +18,6 @@ async function getSessionUserId(): Promise<string | null> {
   return user.id;
 }
 
-//---------------
-// GET /api/linkedin-auth/callback — exchanges code for an access token (60d),
-// fetches the member profile AND the organization pages where they are admin,
-// and persists ALL of them as provider='linkedin' accounts (one row per account,
-// member and organizations separate — each is its own posting target).
-// ALWAYS returns the popup HTML (oauthPopupResponse).
-//---------------
 async function getHandler(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const code = searchParams.get('code');
@@ -35,7 +25,6 @@ async function getHandler(request: NextRequest) {
   const errorDescription = searchParams.get('error_description');
   const state = searchParams.get('state');
 
-  // Direct error from LinkedIn (e.g.: user denied permissions)
   if (error) {
     return oauthPopupResponse('linkedin-oauth-error', {
       error: `LinkedIn OAuth error: ${error}`,
@@ -49,14 +38,10 @@ async function getHandler(request: NextRequest) {
     });
   }
 
-  // Step 1+2: callback auth — web flow (session + httpOnly nonce cookie)
-  // or MCP fallback (state stored server-side via POST /api/account/connect-url).
   const callbackAuth = await resolveOAuthCallbackAuth(
     request,
     state,
     await getSessionUserId(),
-    // Service role only for the server-side oauth_states table; ownership is
-    // enforced by the user_id predicate on the consume (session user only).
     () => createSupabaseServiceClient(),
     'linkedin'
   );
@@ -65,7 +50,6 @@ async function getHandler(request: NextRequest) {
   }
   const userId = callbackAuth.userId;
 
-  // Step 3: exchange code for access token
   let accessToken: string;
   let expiresIn: number;
   try {
@@ -81,7 +65,6 @@ async function getHandler(request: NextRequest) {
     });
   }
 
-  // Step 4: member profile
   let memberId: string;
   let memberName: string | null;
   let memberPicture: string | null;
@@ -101,7 +84,6 @@ async function getHandler(request: NextRequest) {
     });
   }
 
-  // Step 5: admin organizations (failure is non-blocking: can connect just the profile)
   let organizations: Array<{ id: string; name: string | null }> = [];
   try {
     const { fetchLinkedInAdminOrganizations } = await import('@/lib/linkedin');
@@ -111,13 +93,9 @@ async function getHandler(request: NextRequest) {
     logger.error('[linkedin-auth/callback] orgs fetch failed (non-blocking)', msg);
   }
 
-  // Step 6: persist member + organizations
   const tokenExpiresAt = new Date(Date.now() + expiresIn * 1000);
 
   try {
-    // Both flows resolve to the signed-in session user (the connect-url
-    // fallback only accepts the state owner); upsertSocialAccount then writes
-    // with the service client (066 leaves the session client select-only).
     const supabase = await createSupabaseServerClient();
     const { upsertSocialAccount } = await import('@/lib/social-accounts');
 
@@ -165,7 +143,6 @@ async function getHandler(request: NextRequest) {
     });
   }
 
-  // Step 7: success — public data of the connected accounts
   return oauthPopupResponse('linkedin-oauth-success', {
     account: {
       memberId,
@@ -178,7 +155,4 @@ async function getHandler(request: NextRequest) {
   });
 }
 
-//---------------
-// 5xx reporting: handled server errors reach PostHog error tracking.
-//---------------
 export const GET = withApiErrorReporting('GET /api/linkedin-auth/callback', getHandler);

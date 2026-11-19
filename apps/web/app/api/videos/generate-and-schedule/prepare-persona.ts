@@ -1,12 +1,3 @@
-//---------------
-// Persona prep for a post WITH a persona (and the shared response
-// helpers). Extracted from route.ts so the route module stays under the
-// file-size ratchet; the voice fallback lives here too (issue #277): it is
-// the last validation step before any token is charged or any render/TTS
-// starts, and it is what turns a legacy persona's broken voice into a
-// working one instead of a mid-generation failure.
-//---------------
-
 import { NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
@@ -27,9 +18,6 @@ import {
   type VoiceResolution,
 } from '@/lib/voice-fallback';
 import { fetchPersonaVoiceCatalogIds } from '@/lib/voice-catalog-fetch';
-// cloneVoiceAvailable moved to lib/persona-voice-validate.ts for the persona
-// POST/PATCH voice validation (issue #353); re-exported so existing import
-// sites keep working.
 import { cloneVoiceAvailable, validatePersonaVoiceInput } from '@/lib/persona-voice-validate';
 export { cloneVoiceAvailable } from '@/lib/persona-voice-validate';
 import { signedUrl, resolvePostWithoutPersona, type PersonaPrep } from './persona-prep';
@@ -37,11 +25,8 @@ import { parsePersonaCtaType } from '@/lib/persona-schema';
 
 export const ROUTE = 'POST /api/videos/generate-and-schedule';
 
-/** Persona niche cap, mirroring the persona's own validation. Shared with
- *  route.ts's input validation so both spell one limit. */
 export const MAX_TITLE_CHARS = 300;
 
-/** Structured failure: stable code + human message + optional field. */
 export function coded(
   status: number,
   code: ErrorCode,
@@ -52,7 +37,6 @@ export function coded(
   return apiErrorResponse(status, message, { code, field, route: ROUTE, extra });
 }
 
-/** Track + return a validation failure. Nothing is charged on this path. */
 export function validationFailed(
   code: ErrorCode,
   message: string,
@@ -63,8 +47,6 @@ export function validationFailed(
   return coded(status, code, message, field);
 }
 
-/** Per-slot dispatch failure: marks the slot failed, refunds its prepaid
- * cost, and records history so the failure is never silent. */
 export class SlotDispatchError extends Error {
   readonly errorCode: string;
 
@@ -75,11 +57,6 @@ export class SlotDispatchError extends Error {
   }
 }
 
-/**
- * Load the persona (ownership enforced: service-role bypasses RLS, so the
- * user_id predicate is the trust boundary) and resolve the request-level
- * voice/photo inputs. Runs before any token is charged.
- */
 export async function preparePersona(
   supabase: SupabaseClient,
   userId: string,
@@ -106,8 +83,6 @@ export async function preparePersona(
     .single();
 
   if (personaError || !persona) {
-    // PGRST116 = zero rows (not found); anything else is a DB failure,
-    // which must not masquerade as "not found".
     if (personaError && personaError.code !== 'PGRST116') {
       logger.error('[generate-and-schedule] persona lookup failed', personaError, { userId });
       return coded(500, ERROR_CODES.INTERNAL_ERROR, formatErrorMessage(ERROR_CODES.INTERNAL_ERROR));
@@ -115,8 +90,6 @@ export async function preparePersona(
     return validationFailed(ERROR_CODES.PERSONA_NOT_FOUND, formatErrorMessage(ERROR_CODES.PERSONA_NOT_FOUND), 'personaId', 404);
   }
 
-  // Stored persona values reach the engine verbatim: validate the caps here,
-  // before the token gate, so a legacy row fails fast instead of opaque-502.
   const niche = (persona.niche as string | null) ?? null;
   if (niche && niche.trim().length > 0 && niche.length > MAX_TITLE_CHARS) {
     return validationFailed(ERROR_CODES.VALIDATION_FAILED, 'Persona niche must be at most 300 characters: update the persona.', 'personaId');
@@ -125,9 +98,6 @@ export async function preparePersona(
   if (language && language.trim().length > 0 && language.length > 35) {
     return validationFailed(ERROR_CODES.VALIDATION_FAILED, 'Persona language must be at most 35 characters: update the persona.', 'personaId');
   }
-  // English-only launch: the effective language (per-post override, else
-  // the persona's stored language) must be English — a legacy persona in
-  // another language cannot create videos until the lock lifts.
   const effectiveLanguage = opts.language ?? language;
   if (effectiveLanguage && effectiveLanguage.trim().length > 0 && !isEnglishLanguage(effectiveLanguage)) {
     return validationFailed(ERROR_CODES.VALIDATION_FAILED, ONLY_ENGLISH_VIDEOS_MESSAGE, 'personaId');
@@ -139,47 +109,20 @@ export async function preparePersona(
   ) {
     return validationFailed(ERROR_CODES.VALIDATION_FAILED, 'Persona paragraph_number must be an integer between 1 and 10: update the persona.', 'personaId');
   }
-  // Persona image: a faced post sends the stored avatar_url to the engine,
-  // which only discovers an unusable one at ~75% of the pipeline — after the
-  // charge ("persona image download rejected"). Fail fast here instead.
-  // Skipped for faceless posts (no photo is sent) and for a pinned library
-  // image, which replaces the persona photo and is checked separately below.
   const faceless = opts.videoType === 'faceless';
   const avatarUrl = (persona.avatar_url as string | null) ?? null;
   if (!faceless && !opts.imageId && avatarUrl && !isEngineUsablePersonaImageUrl(avatarUrl)) {
     return validationFailed(ERROR_CODES.VALIDATION_FAILED, 'Persona image URL must be a valid http(s) URL or a data:image/ URI: update the persona.', 'personaId');
   }
-  // Face modes need a photo on the persona (or a pinned library image):
-  // without one the engine filler fails the slot after the spend.
   const photoPath = (persona.photo_path as string | null) ?? null;
   if (!faceless && !opts.imageId && avatarUrl === null && photoPath === null) {
     return validationFailed(ERROR_CODES.VALIDATION_FAILED, `options.videoType ${opts.videoType} requires a persona with a photo.`, 'options.videoType');
   }
-  // Voice: custom per-request audio wins; otherwise the persona voice.
-  // The engine requires exactly one of voice_id / voice_audio_url.
   const voiceAudioUrl = opts.audioUrl ?? (await signedUrl(supabase, (persona.voice_audio_path as string | null) ?? null));
   let voiceIdValue = opts.audioUrl ? undefined : (opts.voiceId || (persona.voice_id as string | null) || undefined);
 
-  //---------------
-  // Voice fallback (issue #277): the persona's stored voice is validated
-  // BEFORE any charge or engine work, so a legacy/broken voice no longer
-  // burns render or TTS on a mid-generation "unknown voice" failure. An
-  // invalid (or absent) voice is swapped for the house default of the
-  // persona's language — its own gender when the stored id spells one —
-  // and the swap is persisted on the persona and reported to the user.
-  // An EXPLICIT per-request voice is never swapped: it is the caller's own
-  // choice, and the engine already fails loudly on one it cannot route.
-  // A clone's availability is per-user data, checked here; the engine's
-  // ownership guard stays the last line of defense.
-  //---------------
   let voiceFallback: VoiceFallbackInfo | undefined;
-  // A persona configured for AUDIO voice keeps the transient 503 when its
-  // audio cannot be signed — the fallback repairs only a persona with no
-  // usable voice configured at all.
   if (!voiceAudioUrl && opts.voiceId === undefined && !persona.voice_audio_path) {
-    // Catalog is only consulted for chatterbox / chatterbox_nano ids
-    // (retired house voices and clone rows). Sentinels, elevenlabs,
-    // openrouter, and bare ids never read it — skip the engine round-trip.
     const storedId = (voiceIdValue ?? '').trim();
     const needsCatalog =
       storedId.startsWith('chatterbox:') || storedId.startsWith('chatterbox_nano:');
@@ -197,8 +140,6 @@ export async function preparePersona(
       });
     }
     if (resolution.kind === 'unavailable') {
-      // No valid voice exists for the persona's language — fail before any
-      // spend instead of rendering a video with no usable voice.
       return validationFailed(
         ERROR_CODES.VOICE_UNAVAILABLE,
         formatErrorMessage(ERROR_CODES.VOICE_UNAVAILABLE),
@@ -208,8 +149,6 @@ export async function preparePersona(
     if (resolution.kind === 'fallback') {
       voiceFallback = { fromVoice: resolution.fromVoice, toVoice: resolution.toVoice, reason: resolution.reason };
       voiceIdValue = resolution.toVoice;
-      // Persist after the last route validation that can still 400, so a
-      // rejected request cannot silently rewrite personas.voice_id.
     }
   }
 
@@ -217,8 +156,6 @@ export async function preparePersona(
     if (persona.voice_audio_path) {
       return coded(503, ERROR_CODES.VALIDATION_FAILED, 'Voice audio is configured for this persona but could not be loaded. Please try again.');
     }
-    // Unreachable in practice (the resolution above always produces a voice
-    // for an English persona), kept as the fail-closed guard.
     return validationFailed(
       ERROR_CODES.VALIDATION_FAILED,
       'No voice available: the persona has no voice configured and no custom audio_url was provided.',
@@ -229,9 +166,6 @@ export async function preparePersona(
   const faceQuality: FaceQuality = persona.face_quality === 'very_good' ? 'very_good' : 'ok';
   return {
     personaName: (persona.name as string) ?? 'Persona',
-    // The per-post choice, carried through to pricing, the engine payload and
-    // the slot row (the engine's batch pipeline reads it from there). There
-    // is no persona-level mix anymore: a persona is always faced.
     faceless,
     faceQuality,
     voiceAudioUrl,
@@ -239,53 +173,27 @@ export async function preparePersona(
     voiceFallback,
     avatarUrl,
     photoPath,
-    // The persona's editorial definition, each overridable per post. These
-    // resolved values are snapshotted onto the schedule (not re-read at tick
-    // time), so a persona edited after this moment cannot rewrite this video.
     niche: opts.niche ?? niche,
     cta: {
       type: parsePersonaCtaType(persona.cta_type as string | null),
-      // `|| null`, not `?? null`: a fact cleared before the write-side
-      // fix is stored as '' (empty string), and '' must not reach the
-      // snapshot — the experiment pair check compares facts strictly,
-      // so '' != null would false-reject a valid pair.
       url: (persona.cta_url as string | null) || null,
       instruction: (persona.cta_instruction as string | null) || null,
     },
     language: effectiveLanguage,
     videoAspect: opts.videoAspect ?? ((persona.video_aspect as string | null) ?? null),
-    // Layout is snapshotted like aspect: a persona edited after this moment
-    // must not rewrite how this post was composed.
     videoLayout: opts.videoLayout ?? ((persona.video_layout as string | null) ?? null),
     paragraphNumber: opts.paragraphNumber ?? paragraphNumber,
-    // Every persona is faced, so a post WITH the face must resolve one; only a
-    // faceless post may proceed without any image.
     photoRequired: !faceless,
   };
 }
 
-// cloneVoiceAvailability has moved to lib/persona-voice-validate.ts.
-
-//---------------
-// persistVoiceSwap — writes the fallback voice onto the persona row and
-// fires the `voice_fallback_applied` PostHog event (from_voice/to_voice/
-// reason, voice ids only — no personal data). Never fails the dispatch:
-// the payload already carries the working voice, and a failed persist only
-// means the next post repeats the same swap.
-//---------------
 export async function persistVoiceSwap(
   supabase: SupabaseClient,
   userId: string,
   personaId: string,
   info: VoiceFallbackInfo,
 ): Promise<void> {
-  // GUARDED as a whole (review MINOR): a failed persist (DB throw, PostHog
-  // throw) must NEVER break the dispatch — the payload already carries the
-  // working voice for THIS request, and a failed persist only means the
-  // next post repeats the same swap. Errors are logged, never rethrown.
   try {
-    // The service-role client bypasses RLS: re-check ownership with the
-    // explicit user_id predicate.
     const { error } = await supabase
       .from('personas')
       .update({ voice_id: info.toVoice })
@@ -297,16 +205,10 @@ export async function persistVoiceSwap(
         userId,
       });
     }
-    // Voice ids can carry user-typed fragments or clone ids; scrub the same
-    // way trackApiEvent does (secret keys + credential fragments + 500 cap)
-    // while keeping captureAs so the event stays attributed to the user.
-    // scrubSecrets handles secret keys; redactCredentialFragments handles fragments inside values.
     const props = scrubSecrets({
       from_voice: info.fromVoice,
       to_voice: info.toVoice,
       reason: info.reason,
-      // The reason 'voice_missing' carries an empty from_voice: there was no
-      // stored voice to name.
       from_voice_present: info.reason !== VOICE_FALLBACK_REASONS.VOICE_MISSING,
     });
     for (const [k, v] of Object.entries(props)) {
@@ -321,16 +223,6 @@ export async function persistVoiceSwap(
   }
 }
 
-/**
- * Resolve what the video needs: the persona's editorial definition (voice,
- * aspect, niche, language) or — for a post created without one —
- * the request's own options. The resolved values are snapshotted onto the
- * schedule so the engine never has to re-derive them at tick time, and so
- * editing the persona later cannot rewrite an already-queued video.
- *
- * The persona lookup enforces ownership explicitly: the service client
- * bypasses RLS, so the user_id predicate is the trust boundary.
- */
 export async function preparePost(
   supabase: SupabaseClient,
   userId: string,
@@ -356,16 +248,6 @@ export async function preparePost(
   return validateExplicitVoice(supabase, userId, opts, prep);
 }
 
-/**
- * Explicit per-request voice (issue #353 follow-up): the stored-voice path
- * in preparePersona already falls back before any charge, but an explicit
- * options.voiceId used to pass straight to the engine, which only fails
- * loudly at TTS time, after the spend. Validate it with the same
- * persona-voice check (house catalog + the caller's own READY clones)
- * BEFORE any charge. An explicit choice is never silently swapped: it is
- * rejected with the same UNKNOWN_VOICE 400. Skipped when a custom audioUrl
- * wins (the voice is ignored then) and when no explicit voice was sent.
- */
 async function validateExplicitVoice(
   supabase: SupabaseClient,
   userId: string,

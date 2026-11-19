@@ -1,10 +1,3 @@
-//---------------
-// E2E: the /experiments A/B results page renders the paired results per
-// provider from the live detail read, with the API stubbed at the network
-// boundary so no real experiment data is needed. Also drives the window
-// toggle and the empty/error states.
-//---------------
-
 const EXPERIMENT_ID = '7b0e6c1e-0000-4000-8000-000000000001';
 
 const EXPERIMENT = {
@@ -106,19 +99,14 @@ describe('experiments results page', () => {
     cy.contains('Direct hook').should('be.visible');
     cy.contains('Indicativo').should('be.visible');
     cy.contains('YouTube').should('be.visible');
-    // Charts state the totals as text; the per-pair table is behind
-    // Show table, and no A/B variant letters appear anywhere.
     cy.contains('Comparação de variantes').should('be.visible');
     cy.contains('Calm question: 1.500').should('be.visible');
-    // Off-screen elements read as clipped to Cypress: scroll in first.
     cy.contains('Mostrar tabela').scrollIntoView().should('be.visible');
     cy.contains('button', 'Mostrar tabela').click();
-    // Per-pair views in the table.
     cy.contains('td', '500').scrollIntoView().should('be.visible');
     cy.contains('td', '250').should('be.visible');
     cy.contains(/variante a/i).should('not.exist');
     cy.contains(/variant a/i).should('not.exist');
-    // The winner stays unnamed while the label is indicative.
     cy.contains('Ainda sem vencedor').scrollIntoView().should('be.visible');
   });
 

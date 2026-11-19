@@ -61,8 +61,6 @@ class TestUploadPostYouTube(unittest.TestCase):
         uploaded_file = mock_post.call_args[1]["files"]["video"]
         self.assertEqual(uploaded_file[0], "v.mp4")
         self.assertEqual(uploaded_file[1].read(), b"fake")
-        # The multipart part must carry the mp4 content type; a None or
-        # mistyped content type would make the upstream reject the upload.
         self.assertEqual(uploaded_file[2], "video/mp4")
         self.assertEqual(_get(data, "youtube_title"), "Mi Short")
         self.assertEqual(_get(data, "youtube_description"), "Descripción")
@@ -73,8 +71,6 @@ class TestUploadPostYouTube(unittest.TestCase):
     @patch("app.services.upload_post.config.app", _CONFIG_BASE)
     @patch("app.services.upload_post.requests.post")
     def test_empty_bytes_are_rejected_without_uploading(self, mock_post):
-        # The bytes come from the R2 archive; empty bytes mean the archive
-        # read failed and must not reach the upstream as a 0-byte upload.
         svc = UploadPostService()
         result = svc.upload_video("/fake/v.mp4", "T", b"")
         self.assertFalse(result["success"])
@@ -146,9 +142,6 @@ class TestUploadPostYouTube(unittest.TestCase):
 
 
 class TestUploadPostErrorScrubbing(unittest.TestCase):
-    # The failure error dicts are persisted into client-visible task state
-    # (cross_post_results), so they get the scrub treatment like every
-    # other free-text error surface.
 
     @patch("app.services.upload_post.config.app", _CONFIG_BASE)
     @patch("app.services.upload_post.os.path.exists", return_value=True)
@@ -183,8 +176,6 @@ class TestUploadPostErrorScrubbing(unittest.TestCase):
         self.assertLessEqual(len(result["error"]), 500)
 
 
-    # The ERROR log lines sit one line above the scrubbed dicts: they go to
-    # the loguru ERROR+ sink, so they get the same scrub treatment.
     @patch("app.services.upload_post.config.app", _CONFIG_BASE)
     @patch("app.services.upload_post.os.path.exists", return_value=True)
     @patch("builtins.open", mock_open(read_data=b"fake"))

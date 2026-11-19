@@ -3,27 +3,6 @@ import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { findRepoRoot } from '@/test/repo-root';
 
-//---------------
-// supabase/migrations/033_mcp-refresh-tokens.sql — the invariant the
-// OAuth token route depends on for every offline_access grant.
-//
-// apps/web/app/oauth/token/route.ts calls two RPCs and fails closed
-// (500) when registration fails, but no versioned migration ever
-// created them: the route comment cited "migration 0026", yet 026 is
-// the post-metrics-dimensions migration and contains no refresh
-// token object. Until this migration, every offline_access grant
-// failed closed and no refresh token could ever be rotated.
-//
-// These assertions pin the two halves of the contract:
-//
-//   1. the SQL file declares the allowlist table and both functions
-//      with the exact signatures the route calls, plus the
-//      single-use rotation semantics the route's test mock mirrors
-//      (unknown / expired / already-consumed jti -> rotation
-//      returns false, which the route maps to invalid_grant), and
-//   2. the route passes exactly those p_ arguments to both RPCs.
-//---------------
-
 const repoRoot = findRepoRoot(import.meta.url);
 const migrationPath = join(
   repoRoot,
@@ -53,7 +32,6 @@ describe('supabase/migrations/033_mcp-refresh-tokens.sql', () => {
     expect(sql).toContain(
       'create table if not exists public.mcp_oauth_refresh_tokens',
     );
-    // Identifier only: the token value itself is never stored.
     expect(sql).toContain('jti text not null primary key');
     expect(sql).toContain('user_id uuid not null');
     expect(sql).toContain('client_id text not null');
@@ -65,12 +43,6 @@ describe('supabase/migrations/033_mcp-refresh-tokens.sql', () => {
 
   it('backfills missing columns as nullable so a populated pre-existing table survives', () => {
     const sql = readSql();
-    // A NOT NULL add without a default aborts on a table that already
-    // holds rows — exactly the out-of-band-with-rows case the backfill
-    // exists for. Only created_at keeps NOT NULL, because its default
-    // fills existing rows. Rows predating a backfilled column carry
-    // NULL there and fail the rotate predicate with invalid_grant
-    // (fail closed), never an error leak.
     for (const col of [
       'add column user_id uuid',
       'add column client_id text',
@@ -93,8 +65,6 @@ describe('supabase/migrations/033_mcp-refresh-tokens.sql', () => {
     expect(sql).toContain(
       'alter table public.mcp_oauth_refresh_tokens enable row level security',
     );
-    // No policy is created for this table anywhere in the migration:
-    // only the service-role RPCs below may read or write it.
     expect(sql).not.toContain('create policy');
   });
 
@@ -109,8 +79,6 @@ describe('supabase/migrations/033_mcp-refresh-tokens.sql', () => {
     expect(sql).toContain('p_resource text');
     expect(sql).toContain('p_scope text');
     expect(sql).toContain('p_expires_at timestamptz');
-    // The route checks only `error`, so registration answers void;
-    // a re-registration of the same jti is a no-op, never an error.
     expect(sql).toContain('returns void');
     expect(sql).toContain('on conflict (jti) do nothing');
   });
@@ -127,16 +95,11 @@ describe('supabase/migrations/033_mcp-refresh-tokens.sql', () => {
     expect(sql).toContain('p_resource text');
     expect(sql).toContain('p_scope text');
     expect(sql).toContain('p_expires_at timestamptz');
-    // The route treats `data === true` as accepted and anything else
-    // as invalid_grant, so rotation answers a boolean.
     expect(sql).toContain('returns boolean');
   });
 
   it('rotates atomically: consumes only a live jti, then registers the replacement', () => {
     const sql = readSql();
-    // Consume-once: the UPDATE predicate re-checks unconsumed and
-    // unexpired, so concurrent replays race on the row and all but
-    // one see zero rows and return false.
     expect(sql).toContain('consumed_at is null');
     expect(sql).toContain('expires_at > now()');
     expect(sql).toContain('set consumed_at = now()');
@@ -198,7 +161,7 @@ describe('oauth token route call sites', () => {
 
   it('fails closed when registration fails', () => {
     const src = readFileSync(tokenRoutePath, 'utf8');
-    expect(src).toContain('fail closed');
+    expect(src).toContain('if (!refreshClaims || !(await registerRefreshToken(refreshClaims))) {');
     expect(src).toContain("return NextResponse.json({ error: 'server_error' }, { status: 500 })");
   });
 });

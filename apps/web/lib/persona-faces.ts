@@ -1,28 +1,14 @@
-//---------------
-// Default house character/face catalog — same source as the picker in
-// app/(main)/persona/page.tsx (public/caracter-samples/file-N.png).
-// Exposed by GET /api/persona/faces for MCP and authenticated clients.
-// gender/age/ethnicity/hair/description exist because MCP cannot show photos.
-// age is a single integer (e.g. 23), never a range.
-// All metadata strings are English.
-//---------------
-
 export type PersonaFaceGender = 'female' | 'male';
 
 export interface PersonaFace {
   id: string;
   url: string;
   name: string;
-  /** Relative path served by Next (what the UI stores in avatar_url). */
   path: string;
   gender: PersonaFaceGender;
-  /** Apparent age estimate (single integer, not a range). */
   age: number;
-  /** Ethnicity / ancestry presentation for agents picking without the photo. */
   ethnicity: string;
-  /** Short hair description in English. */
   hair: string;
-  /** Appearance and vibe in English — for agents choosing without the photo. */
   description: string;
 }
 
@@ -34,7 +20,6 @@ interface PersonaFaceMeta {
   description: string;
 }
 
-/** PNG IDs under public/caracter-samples — keep aligned with the UI carousel. */
 export const DEFAULT_PERSONA_FACE_IDS = [
   'file-1',
   'file-2',
@@ -54,7 +39,6 @@ export const DEFAULT_PERSONA_FACE_IDS = [
 
 export type DefaultPersonaFaceId = (typeof DEFAULT_PERSONA_FACE_IDS)[number];
 
-/** Visual metadata per PNG — aligned with public/caracter-samples. */
 export const DEFAULT_PERSONA_FACE_META: Record<DefaultPersonaFaceId, PersonaFaceMeta> = {
   'file-1': {
     gender: 'female',

@@ -1,7 +1,3 @@
-// PATCH body parsing for the persona route.
-//
-// Extracted from route.ts so the route module stays under the file-size
-// ratchet. All fields are optional on edit; missing fields parse as null.
 import { FACE_QUALITIES, PERSONA_CTA_INSTRUCTION_MAX_LENGTH, PERSONA_CTA_TYPES, PERSONA_CTA_URL_MAX_LENGTH, photoExtensionOf, VALID_VIDEO_ASPECTS, VIDEO_LAYOUTS } from '@/lib/persona-schema';
 import { isEnglishLanguage, ONLY_ENGLISH_VIDEOS_MESSAGE } from '@/lib/language-gate';
 import { isFileLike } from '@/lib/persona-images';
@@ -10,9 +6,6 @@ function isVideoLayout(value: string): value is (typeof VIDEO_LAYOUTS)[number] {
   return (VIDEO_LAYOUTS as readonly string[]).includes(value);
 }
 
-// parsePatchBody — all fields are optional on edit; returns
-// null for the ones missing from the multipart body.
-//---------------
 export interface PersonaPatchBody {
   name: string | null;
   photo: File | null;
@@ -33,9 +26,6 @@ export interface PersonaPatchBody {
 
 type ParsePatchResult =
   | { ok: true; value: PersonaPatchBody }
-  // logMessage is set only where the error embeds user input: the body
-  // keeps the rejected value for the caller, the log line uses the stable
-  // template so PostHog groups by template, not one issue per input.
   | { ok: false; error: string; logMessage?: string };
 
 export async function parsePatchBody(request: Request): Promise<ParsePatchResult> {
@@ -88,12 +78,6 @@ export async function parsePatchBody(request: Request): Promise<ParsePatchResult
       logMessage: `Invalid ctaType. Use one of ${PERSONA_CTA_TYPES.join(', ')}.`,
     };
   }
-  // ctaUrl / ctaInstruction are the fields the user can clear: a present
-  // but blank value means "remove it" (stored as NULL), not "leave
-  // unchanged" — the generic optionalString blank-to-null mapping would
-  // silently drop the clear. The merged row (patched fields + stored
-  // columns) is validated by resolveMergedCta in patch-updates.ts; a type
-  // change clears the stored facts the new type cannot carry.
   const rawCtaUrl = formData.get('ctaUrl');
   const ctaUrl =
     typeof rawCtaUrl === 'string' ? (rawCtaUrl.trim().length === 0 ? '' : rawCtaUrl) : null;
@@ -166,9 +150,6 @@ function optionalString(value: FormDataEntryValue | null): string | null {
   return value;
 }
 
-// English-only launch gate for PATCH: same gate as persona creation —
-// the language cannot be switched away from English while the lock is
-// on. Returns the rejection message, or null when the patch keeps English.
 export function englishOnlyPatchError(patch: PersonaPatchBody): string | null {
   if (
     patch.language !== null

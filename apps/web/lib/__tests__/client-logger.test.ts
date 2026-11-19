@@ -1,13 +1,3 @@
-//---------------
-// client-logger — client-safe error reporter for "use client" components.
-//
-// The server logger (lib/logger.ts) uses posthog-node via
-// lib/posthog-server.ts. That module returns null in the browser (runtime
-// guard), so client components must not rely on it. This module mirrors the
-// server logger's error() call shape but reports to the browser
-// PostHog SDK (initialized by instrumentation-client.ts).
-//---------------
-
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 vi.mock('posthog-js', () => ({
@@ -45,8 +35,6 @@ describe('logClientError', () => {
     expect(props).toMatchObject({
       message: 'React render error (global-error boundary)',
       digest: 'abc',
-      // Origin tags: dashboards split web-client from web-server/MCP/engine
-      // and prod from dev. NODE_ENV is 'test' under vitest -> development.
       source: 'web-client',
       environment: 'development',
     });
@@ -55,7 +43,6 @@ describe('logClientError', () => {
   it('works without metadata or error', () => {
     logClientError('upload failed');
     expect(console.error).toHaveBeenCalled();
-    // No Error to capture: must not call captureException with garbage.
     expect(posthog.captureException).not.toHaveBeenCalled();
   });
 

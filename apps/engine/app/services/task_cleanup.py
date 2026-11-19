@@ -66,8 +66,6 @@ def remove_task_directory(task_id: str) -> None:
     try:
         shutil.rmtree(task_directory)
     except OSError as exc:
-        # str(exc) carries the full path; log only the directory basename
-        # and the typed errno so no machine-local path reaches the log.
         logger.error(
             f"failed to remove task directory {path.basename(task_directory)} "
             f"for deleted task {task_id}: {type(exc).__name__} (errno {exc.errno})"

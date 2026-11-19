@@ -114,8 +114,6 @@ describe('generate_persona_video tool', () => {
     expect(input.cta).toEqual({ type: 'save' });
     expect(input.options?.segments?.[2]).toMatchObject({ cta: true });
 
-    // Null disables the persona CTA for this video and must reach the
-    // client as null, not as an absence.
     await handleGeneratePersonaVideo(client, {
       personaId: 'persona-1',
       segments: marked,

@@ -44,13 +44,10 @@ def main() -> int:
     text = WORKFLOW.read_text()
     doc = yaml.safe_load(text)
 
-    # Triggers
-    # NOTE: in YAML 1.1 `on:` parses as boolean True
     triggers = doc.get(True, {}).get("pull_request", {}).get("types", [])
     for event in ("opened", "synchronize", "reopened", "ready_for_review"):
         check(f"trigger includes pull_request:{event}", event in triggers)
 
-    # No third-party OpenCode action wrapper; only first-party actions allowed
     uses = re.findall(r"^\s*uses:\s*(\S+)", text, re.M)
     check("no anomalyco/opencode action", not any("anomalyco/opencode" in u for u in uses))
     check(
@@ -59,9 +56,6 @@ def main() -> int:
         f"uses={uses}",
     )
 
-    # Pinned OpenCode install (H5): never the floating opencode.ai/install
-    # script — its download source is unpinned and has pointed at third-party
-    # forks. The release artifact must be checksum-verified before execution.
     check(
         "no floating opencode.ai/install script",
         "opencode.ai/install" not in text,
@@ -138,9 +132,6 @@ def main() -> int:
         "ZAI_FREE_MODEL_FALLBACK" not in text,
         "the second z.ai fallback was removed; no reference may remain",
     )
-    # glm-4.5-flash was dropped from the chain (poor review quality):
-    # it must not appear in any live workflow logic (historical notes in
-    # comments are fine — the removal reason lives in AGENTS.md).
     non_comment_lines = [
         line for line in text.splitlines() if not line.lstrip().startswith("#")
     ]
@@ -150,7 +141,6 @@ def main() -> int:
         "glm-4.5-flash was dropped from the review chain",
     )
 
-    # OpenRouter tiers: special router ids, one key for both tiers
     check(
         "OPENROUTER_FREE_MODEL default set",
         "OPENROUTER_FREE_MODEL: openrouter/free" in text,
@@ -201,9 +191,6 @@ def main() -> int:
         and text.find("Review attempt order:") < text.find("Attempting review with"),
     )
     max_chain = int(prefs.get("maxChainLength") or 8)
-    # Reviewer budget (raised 2026-11-14: 40 steps died on PR #586's 83-file
-    # review, and the attempt timeouts must cover the extra steps). These
-    # constants must match the workflow literals pinned below.
     check(
         "pass 1 first-attempt timeout is 30m",
         "limit=30m" in text,
@@ -240,9 +227,6 @@ def main() -> int:
         "free models only" in text,
     )
 
-    # The machine-checked finding format lives in the prompt file, not in
-    # the workflow. Absence of a guard is a finding: the prompt must not
-    # tell the model to skip issues it cannot quote.
     prompt_path = Path(__file__).resolve().parent.parent / "review" / "review-prompt.md"
     prompt = prompt_path.read_text()
     check(
@@ -310,8 +294,6 @@ def main() -> int:
         "pass 2 grounding receives the changed-file list",
         "pass2-raw.md pass2.md --context pr-context.md --files pr-files.txt" in text,
     )
-    # Idea C — mechanical checks outside the LLM (replaces the old
-    # TDD-coverage prompt bullet).
     check(
         "mechanical checks script invoked in workflow",
         "review-mechanical-checks.py" in text,
@@ -330,11 +312,6 @@ def main() -> int:
         "mechanical failures fail the job",
         "Fail job on mechanical check failure" in text,
     )
-    # skipped when its key is missing. Gating must not rely on secrets.*
-    # inside job/step `if:`.
-    # Two-key gating: the job runs if EITHER key is configured; each tier is
-    # skipped when its key is missing. Gating must not rely on secrets.*
-    # inside job/step `if:`.
     ifs = re.findall(r"^\s*if:\s*(.+)$", text, re.M)
     check(
         "no secrets.* in any `if:` condition",
@@ -355,7 +332,6 @@ def main() -> int:
         "the attempt list must be built from the keys actually present",
     )
 
-    # A new PR comment per push, never updated in place
     check("review marker defined", "<!-- opencode-review -->" in text)
     check(
         "posts a new comment per run",
@@ -371,9 +347,6 @@ def main() -> int:
         "github.event.pull_request.head.sha" in text,
     )
 
-    # Prompt-injection guard (H6): LLM output over attacker-controlled
-    # PR title/diff must be scrubbed of secret material before it becomes a
-    # permanent public PR comment. Both keys are masked in logs and scrubbed.
     check("secret scrub step exists", "Scrub secrets from review output" in text)
     check(
         "masks both keys in logs",
@@ -400,7 +373,6 @@ def main() -> int:
         "the scrub step must iterate over every provider key env var",
     )
 
-    # Concurrency + least-privilege permissions
     check("concurrency cancels superseded runs", "cancel-in-progress: true" in text)
     perms = doc["jobs"]["review"].get("permissions", {})
     check(
@@ -411,16 +383,10 @@ def main() -> int:
         f"permissions={perms}",
     )
 
-    # .env cleanup before the agent runs
     check("removes .env* before review", "-name '.env*'" in text)
 
-    # The PR diff must be built from the local checkout (git diff), never
-    # `gh pr diff`: the patch-diff CDN can serve a stale diff in the minutes
-    # after a push, which once failed the job on an already-fixed line.
     check("PR diff built locally, not via gh pr diff", "gh pr diff" not in text)
 
-    # Review script unit tests are wired into CI (TDD rule for the new
-    # parsing/security logic in the review scripts).
     ci_path = Path(__file__).resolve().parent.parent / "workflows" / "ci.yml"
     check(
         "review script unit tests run in CI",
@@ -428,7 +394,6 @@ def main() -> int:
         "the review-workflows job must run the script unit tests",
     )
 
-    # Reviewer agent, grounding failure, and the scripts that feed the model.
     check("review runs with the reviewer agent", "--agent reviewer" in text)
     check(
         "project config and root AGENTS.md are not loaded",

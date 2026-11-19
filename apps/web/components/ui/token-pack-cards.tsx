@@ -5,11 +5,6 @@ import { TOKEN_PACKS, type TokenPackId } from '@/lib/billing';
 import { useI18n } from '@/lib/i18n/provider';
 import { whatsappUrl } from '@/lib/whatsapp';
 
-//---------------
-// Token packs — same cards on the public landing and logged-in billing.
-// The only difference is the action: Stripe checkout (logged in) vs. link
-// to login.
-//---------------
 export type TokenPack = (typeof TOKEN_PACKS)[TokenPackId];
 
 interface PackActionState {
@@ -55,10 +50,6 @@ export function TokenPackCards({ renderAction }: TokenPackCardsProps): ReactNode
   );
 }
 
-//---------------
-// EnterpriseCard — human path for high volume (WhatsApp link). Renders
-// nothing when the support number is not configured.
-//---------------
 export function EnterpriseCard(): ReactNode {
   const { t } = useI18n();
   const href = whatsappUrl(t('pricing.whatsappEnterprise'));

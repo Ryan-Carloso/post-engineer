@@ -7,14 +7,6 @@ import { AccountNotFoundError } from '@/lib/errors';
 import type { SocialProvider } from '@/lib/providers/registry';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 
-//---------------
-// Social Accounts — OAuth account persistence in Supabase.
-// Tokens are always encrypted (AES-256-GCM) before going to the database.
-// Reads use the caller client (session RLS, or the caller's user_id filter).
-// Writes use the service client: a cookie JWT cannot store ciphertext.
-// The provider list lives in lib/providers/registry.ts (single source).
-//---------------
-
 export type { SocialProvider };
 
 export interface SocialTokenPayload {
@@ -22,8 +14,6 @@ export interface SocialTokenPayload {
   refresh_token?: string;
   token_type?: string;
   expiry_date?: number;
-  // Extra provider fields live inside the encrypted blob; the index
-  // signature allows storing them securely.
   [key: string]: unknown;
 }
 
@@ -41,10 +31,6 @@ export interface SocialAccountRecord {
   needsReconnect: boolean;
 }
 
-// Columns a session JWT may read. encrypted_tokens is omitted: 066 grants
-// no SELECT on that column, and PostgREST rejects a select list that asks
-// for it. Ciphertext is loaded with the service client after ownership
-// is proven (getSocialAccountTokens).
 export const SOCIAL_ACCOUNT_PUBLIC_COLUMNS =
   'id, user_id, provider, provider_account_id, account_name, account_metadata, token_expires_at, created_at, updated_at, last_used_at, needs_reconnect';
 
@@ -72,9 +58,6 @@ export interface UpsertSocialAccountParams {
   tokenExpiresAt?: Date | null;
 }
 
-//---------------
-// rowToRecord — converts a database row into a public record (no tokens)
-//---------------
 function rowToRecord(row: SocialAccountPublicRow): SocialAccountRecord {
   return {
     id: row.id,
@@ -91,9 +74,6 @@ function rowToRecord(row: SocialAccountPublicRow): SocialAccountRecord {
   };
 }
 
-//---------------
-// asRecord — guarantees an object (jsonb may come back as object or null)
-//---------------
 function asRecord(value: unknown): Record<string, unknown> {
   if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
     return value as Record<string, unknown>;
@@ -101,21 +81,11 @@ function asRecord(value: unknown): Record<string, unknown> {
   return {};
 }
 
-//---------------
-// isPlaceholderProviderAccountId — empty/sentinel ids a failed profile lookup
-// used to leave behind ('unknown'); never a valid provider identity.
-//---------------
 export function isPlaceholderProviderAccountId(id: string): boolean {
   const normalized = id.trim().toLowerCase();
   return normalized === '' || normalized === 'unknown';
 }
 
-//---------------
-// Service role bypasses RLS. Writes store ciphertext and identity columns
-// a cookie JWT must not set. Update, touch, and delete first prove the row
-// is visible to the caller client, then write with id and user_id. The
-// upsert's userId is the authenticated user the route already checked.
-//---------------
 function serviceSocial(): SupabaseClient<Database> {
   return createSupabaseServiceClient();
 }
@@ -140,17 +110,10 @@ async function ownedAccountId(
   return data.id;
 }
 
-//---------------
-// upsertSocialAccount — encrypts the tokens and upserts
-// (unique: user_id + provider + provider_account_id)
-//---------------
 export async function upsertSocialAccount(
   _supabase: SupabaseClient<Database>,
   params: UpsertSocialAccountParams,
 ): Promise<SocialAccountRecord> {
-  // A placeholder id poisons the row (every later publish targets a
-  // non-existent account and fails with a bare Unauthorized), so refuse to
-  // persist it no matter which callback produced it.
   if (isPlaceholderProviderAccountId(params.providerAccountId)) {
     throw new Error(
       `Refusing to save a ${params.provider} account without a real provider account id.`,
@@ -188,9 +151,6 @@ export async function upsertSocialAccount(
   return rowToRecord(asPublicRow(data));
 }
 
-//---------------
-// listSocialAccounts — lists a user's accounts (NO tokens)
-//---------------
 export async function listSocialAccounts(
   supabase: SupabaseClient<Database>,
   userId: string,
@@ -214,9 +174,6 @@ export async function listSocialAccounts(
   return (data ?? []).map((row) => rowToRecord(asPublicRow(row)));
 }
 
-//---------------
-// getSocialAccountTokens — fetches the account and decrypts the tokens
-//---------------
 export async function getSocialAccountTokens(
   supabase: SupabaseClient<Database>,
   userId: string,
@@ -243,10 +200,6 @@ export async function getSocialAccountTokens(
 
   const account = rowToRecord(asPublicRow(data));
 
-  // Service role bypasses RLS. The caller client just proved this row
-  // belongs to userId (session RLS, or that client's own user_id filter).
-  // Both predicates are required: a mismatched id must not return another
-  // user's ciphertext.
   const { data: secret, error: secretError } = await createSupabaseServiceClient()
     .from('social_accounts')
     .select('encrypted_tokens')
@@ -267,9 +220,6 @@ export async function getSocialAccountTokens(
   return { tokens: decryptTokens(encryptedTokensFrom(secret)), account };
 }
 
-//---------------
-// touchSocialAccount — records last_used_at after a successful publish
-//---------------
 export async function touchSocialAccount(
   supabase: SupabaseClient<Database>,
   userId: string,
@@ -289,9 +239,6 @@ export async function touchSocialAccount(
   }
 }
 
-//---------------
-// updateSocialAccountTokens — re-encrypts tokens after refresh
-//---------------
 export async function updateSocialAccountTokens(
   supabase: SupabaseClient<Database>,
   userId: string,
@@ -326,9 +273,6 @@ export async function updateSocialAccountTokens(
   }
 }
 
-//---------------
-// updateSocialAccountMetadata — updates the account's public data
-//---------------
 export async function updateSocialAccountMetadata(
   supabase: SupabaseClient<Database>,
   userId: string,
@@ -358,9 +302,6 @@ export async function updateSocialAccountMetadata(
   }
 }
 
-//---------------
-// deleteSocialAccount — removes an account from a user (logout)
-//---------------
 export async function deleteSocialAccount(
   supabase: SupabaseClient<Database>,
   userId: string,
@@ -380,9 +321,6 @@ export async function deleteSocialAccount(
   }
 }
 
-//---------------
-// asPublicRow — types supabase-js's generic return without using any
-//---------------
 function asPublicRow(data: unknown): SocialAccountPublicRow {
   if (typeof data !== 'object' || data === null) {
     throw new Error('Invalid social account row');

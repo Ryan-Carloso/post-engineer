@@ -10,14 +10,6 @@ import {
   YOUTUBE_VIDEO_ID,
 } from '../limits.js';
 
-// get_post_metrics validates its arguments locally with the same contract
-// GET /api/metrics enforces — now shared in shared/contracts/metrics.ts,
-// re-exported by apps/web/lib/metrics/metrics-query.ts and by limits.ts.
-// The tool schemas in tools-posts.ts stay hand-written (with their agent
-// descriptions); metrics-tool-contract.test.ts pins them against the
-// contract parsers. The window list still lives in metrics-query.ts too
-// (the dashboard imports it), pinned to the experiments contract by the
-// web contracts-shared test.
 const here = dirname(fileURLToPath(import.meta.url));
 const webLib = join(here, '..', '..', '..', 'web', 'lib');
 const metricsQuery = readFileSync(join(webLib, 'metrics', 'metrics-query.ts'), 'utf8');

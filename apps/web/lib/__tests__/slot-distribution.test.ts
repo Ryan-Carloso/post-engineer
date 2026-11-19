@@ -1,8 +1,3 @@
-//---------------
-// slot-distribution — the shared slot math used by the API route and the
-// UI preview. Both must agree, so the contract is pinned here.
-//---------------
-
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -31,10 +26,10 @@ describe('distributeSlots', () => {
       count: 4,
     });
     expect(slots.map((s) => s.slotAtISO)).toEqual([
-      '2026-10-02T17:00:00.000Z', // 02/10 18:00
-      '2026-10-02T20:00:00.000Z', // 02/10 21:00
-      '2026-10-03T17:00:00.000Z', // 03/10 18:00
-      '2026-10-03T20:00:00.000Z', // 03/10 21:00
+      '2026-10-02T17:00:00.000Z',
+      '2026-10-02T20:00:00.000Z',
+      '2026-10-03T17:00:00.000Z',
+      '2026-10-03T20:00:00.000Z',
     ]);
     expect(slots.map((s) => s.dayIndex)).toEqual([0, 0, 1, 1]);
     expect(slots.map((s) => s.timeIndex)).toEqual([0, 1, 0, 1]);
@@ -50,7 +45,6 @@ describe('distributeSlots', () => {
     expect(slots).toHaveLength(10);
     expect(slots.map((s) => s.dayIndex)).toEqual([0, 0, 0, 1, 1, 1, 2, 2, 2, 3]);
     expect(slots.map((s) => s.timeIndex)).toEqual([0, 1, 2, 0, 1, 2, 0, 1, 2, 0]);
-    // Strictly ascending instants.
     const instants = slots.map((s) => new Date(s.slotAtISO).getTime());
     for (let i = 1; i < instants.length; i += 1) {
       expect(instants[i]).toBeGreaterThan(instants[i - 1]);
@@ -77,8 +71,6 @@ describe('distributeSlots', () => {
       timezone: 'Europe/Lisbon',
       count: 2,
     });
-    // 02/10 18:00 is before startAt, so slot 1 takes 02/10 21:00 and
-    // slot 2 moves to the next day — no shared slots.
     expect(slots).toEqual([
       { slotAtISO: '2026-10-02T20:00:00.000Z', dayIndex: 0, timeIndex: 1 },
       { slotAtISO: '2026-10-03T17:00:00.000Z', dayIndex: 1, timeIndex: 0 },
@@ -113,7 +105,6 @@ describe('distributeSlots', () => {
   });
 
   it('keeps wall-clock times across the Europe/Lisbon DST transition', () => {
-    // DST ends 2026-10-25: 18:00 local stays 18:00, the UTC instant shifts.
     const slots = distributeSlots({
       startAtISO: '2026-10-24T18:00:00+01:00',
       times: ['18:00'],
@@ -121,14 +112,13 @@ describe('distributeSlots', () => {
       count: 3,
     });
     expect(slots.map((s) => s.slotAtISO)).toEqual([
-      '2026-10-24T17:00:00.000Z', // 18:00 WEST
-      '2026-10-25T18:00:00.000Z', // 18:00 WET
-      '2026-10-26T18:00:00.000Z', // 18:00 WET
+      '2026-10-24T17:00:00.000Z',
+      '2026-10-25T18:00:00.000Z',
+      '2026-10-26T18:00:00.000Z',
     ]);
   });
 
   it('keeps wall-clock times across a DST transition (America/New_York)', () => {
-    // DST ends 2026-11-01: 09:00 local stays 09:00, the UTC instant shifts.
     const slots = distributeSlots({
       startAtISO: '2026-10-31T08:00:00-04:00',
       times: ['09:00'],
@@ -136,9 +126,9 @@ describe('distributeSlots', () => {
       count: 3,
     });
     expect(slots.map((s) => s.slotAtISO)).toEqual([
-      '2026-10-31T13:00:00.000Z', // 09:00 EDT
-      '2026-11-01T14:00:00.000Z', // 09:00 EST
-      '2026-11-02T14:00:00.000Z', // 09:00 EST
+      '2026-10-31T13:00:00.000Z',
+      '2026-11-01T14:00:00.000Z',
+      '2026-11-02T14:00:00.000Z',
     ]);
   });
 
@@ -175,11 +165,6 @@ describe('distributeSlots', () => {
   });
 
   it('interprets a naive startAt as wall-clock in the timezone', () => {
-    // Regression: a naive "2026-10-07T20:00:00" with timezone Europe/Lisbon
-    // is 20:00 Lisbon (19:00Z). Parsing it as UTC pushed the cursor to
-    // 20:00Z, so today's 20:00 slot fell before the cursor and rolled to
-    // tomorrow — contradicting the MCP contract ("naive is wall-clock in
-    // timezone").
     const slots = distributeSlots({
       startAtISO: '2026-10-07T20:00:00',
       times: ['20:00'],
@@ -187,7 +172,7 @@ describe('distributeSlots', () => {
       count: 1,
     });
     expect(slots.map((s) => s.slotAtISO)).toEqual([
-      '2026-10-07T19:00:00.000Z', // 20:00 WEST today, not tomorrow
+      '2026-10-07T19:00:00.000Z',
     ]);
   });
 
@@ -199,7 +184,7 @@ describe('distributeSlots', () => {
       count: 1,
     });
     expect(slots.map((s) => s.slotAtISO)).toEqual([
-      '2026-10-31T13:00:00.000Z', // 09:00 EDT today
+      '2026-10-31T13:00:00.000Z',
     ]);
   });
 

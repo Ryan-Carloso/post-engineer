@@ -1,14 +1,3 @@
-//---------------
-// i18n — UI tests para o provider de internacionalização (lib/i18n/provider).
-// Testa troca de idioma via LocaleSwitcher da sidebar e persistência.
-//---------------
-
-//---------------
-// The first-visit wizard auto-opens on /posts ("/" redirects there) and
-// its dialog covers the page, so this spec visits as a returning user.
-// A Cypress spec cannot import the key from lib/onboarding-wizard.ts,
-// so the literal is pinned here (same as posts-create.cy.ts).
-//---------------
 function visitHomeAsReturningUser(): void {
   cy.visit('/', {
     onBeforeLoad(win) {
@@ -19,11 +8,6 @@ function visitHomeAsReturningUser(): void {
 
 describe('i18n — troca de idioma via UI', () => {
   beforeEach(() => {
-    // Real session cookie first: the middleware validates it server-side and
-    // bounces unauthenticated visitors to /landing, so without this the posts
-    // page never mounts and NO request ever fires (the wait below would time
-    // out with "No request ever occurred" regardless of which route it waits
-    // for). Every other app-page spec does the same.
     cy.loginE2EUser();
 
     cy.intercept('GET', '/api/account', {
@@ -36,9 +20,6 @@ describe('i18n — troca de idioma via UI', () => {
       body: { id: 'user-1', user_metadata: { name: 'Cypress', avatar_url: '' } },
     }).as('getSession');
 
-    // "/" redirects to the posts list, which loads the schedule on mount
-    // via useSchedulesQuery. No client code calls /api/health, so waiting
-    // for it would time out — wait for the request the page actually makes.
     cy.intercept('GET', '/api/schedule', {
       statusCode: 200,
       body: { success: true, schedules: [] },
@@ -59,31 +40,15 @@ describe('i18n — troca de idioma via UI', () => {
   });
 
   it('troca labels da sidebar de PT para EN e volta', () => {
-    // "Contas" translates to "Accounts" — assert on a label that actually
-    // differs, so the swap is proven rather than matching an identical word.
     cy.contains('a', 'Contas').should('be.visible');
 
-    // PT -> EN
     cy.contains('button', 'EN').click();
-    // Accounts (Contas→Accounts) and Sign out (Sair→Sign out) differ.
-    // The prompts tab differs too (Chave de API e MCP→API key and MCP).
-    // The footer link check proves the localized profile area rendered.
-    // (The API-keys footer row is hidden in the sidebar now — the billing
-    // row is the footer link that still renders.)
     cy.contains('a', 'Accounts').should('be.visible');
     cy.get('[data-testid=profile-billing-link]').should('exist');
-    // The sign-out button sits at the bottom of the sticky (non-scrolling)
-    // sidebar and falls below the fold at short viewport heights — assert
-    // the translated label exists rather than its visibility. Finding
-    // 'Sign out' (not 'Sair') is itself the proof the locale switched.
     cy.contains('button', 'Sign out').should('exist');
 
-    // EN -> PT
     cy.contains('button', 'PT').click();
     cy.contains('a', 'Contas').should('be.visible');
-    // Mirror of the EN assertion above: 'Sair' is the PT label for the same
-    // sign-out button ('Sign out' in EN). 'exist' rather than 'be.visible'
-    // for the same below-the-fold reason documented above.
     cy.contains('button', 'Sair').should('exist');
   });
 
@@ -118,9 +83,6 @@ describe('i18n — troca de idioma via UI', () => {
     cy.contains('h1', 'Contas').should('be.visible');
 
     cy.contains('button', 'EN').click();
-    // The locale switcher click can leave the scrollable main container
-    // scrolled (Cypress's pre-click scroll-into-view), clipping the header
-    // above the fold — scroll it back before asserting visibility.
     cy.contains('h1', 'Accounts').scrollIntoView().should('be.visible');
   });
 

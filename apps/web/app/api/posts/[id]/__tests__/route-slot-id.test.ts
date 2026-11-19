@@ -1,15 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
-//---------------
-// Slot-id normalization for GET /api/posts/[id].
-//
-// getSlotPost is the real helper (not mocked). The supabase double returns
-// Postgres 22P02 when a uuid column is filtered with a non-uuid, which is
-// what production does. A batch key, a percent-encoded key, or garbage
-// must therefore 404 (or resolve) without that 500 — mocking getSlotPost
-// would hide the regression from issue #201.
-//---------------
-
 vi.mock('@/lib/request-auth', () => ({
   requireSupabaseSession: vi.fn(),
 }));
@@ -72,7 +62,6 @@ const PERSONA_ID = '33333333-3333-4333-8333-333333333333';
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-// Columns PostgREST types as uuid. A non-uuid filter is 22P02 in Postgres.
 const UUID_COLUMNS: Record<string, readonly string[]> = {
   scheduled_posts: ['id'],
   schedules: ['id'],

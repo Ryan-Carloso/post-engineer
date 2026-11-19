@@ -26,6 +26,7 @@ application/x-www-form-urlencoded when ``videoStoragePath`` replaces it):
   ``rumbleAccountIds`` fields (see ``publish_rumble``).
 - Fanvue: ``provider=fanvue``, ``video`` (file), ``title``, ``description``,
   repeated ``fanvueAccountIds`` fields (see ``publish_fanvue``; validated by ``fill_schedule/metadata.py``).
+- Telegram: ``provider=telegram``, ``video`` (file), ``caption``, repeated ``telegramAccountIds`` fields (see ``publish_telegram``; validated by ``fill_schedule/metadata.py``).
 
 This module owns only types, validation and form-data part builders
 (multipart when a file part is sent, urlencoded when ``videoStoragePath``
@@ -50,21 +51,17 @@ from app.services.publish_facebook import (  # noqa: F401 - re-exported for call
 )
 from app.services.publish_pinterest import PINTEREST_DESCRIPTION_MAX_LENGTH, PINTEREST_PROVIDER, PINTEREST_TITLE_MAX_LENGTH, PinterestMetadata, pinterest_fields  # noqa: F401 - re-exported for callers
 from app.services.publish_fanvue import FANVUE_DESCRIPTION_MAX_LENGTH, FANVUE_PROVIDER, FANVUE_TITLE_MAX_LENGTH, FanvueMetadata, fanvue_fields  # noqa: F401 - re-exported for callers
+from app.services.publish_telegram import TELEGRAM_CAPTION_MAX_LENGTH, TELEGRAM_PROVIDER, TelegramMetadata, telegram_fields  # noqa: F401 - re-exported for callers
 from app.services.publish_threespeak import (  # noqa: F401 - re-exported for callers
     THREESPEAK_PROVIDER, ThreespeakMetadata,
     threespeak_fields, validate_threespeak_metadata,
 )
-from app.services.publish_rumble import (  # noqa: F401 - re-exported for callers
-    RUMBLE_PROVIDER, RUMBLE_TITLE_MAX_LENGTH, RumbleMetadata,
-    rumble_fields, validate_rumble_metadata,
-)
+from app.services.publish_rumble import RUMBLE_PROVIDER, RUMBLE_TITLE_MAX_LENGTH, RumbleMetadata, rumble_fields, validate_rumble_metadata  # noqa: F401 - re-exported for callers
 from app.services.upload_publisher_failure import application_failure_reason
 from app.providers import SOCIAL_PROVIDERS, URL_MEDIA_PROVIDERS
 
 VALID_PRIVACY_STATUSES: tuple[str, ...] = ("public", "private", "unlisted")
 
-# Environment variable names for the internal upload API. Used by the
-# fill-schedule publisher and persona image resolution.
 BASE_URL_ENV: str = "MPT_UPLOAD_API_BASE_URL"
 SERVICE_KEY_ENV: str = "MONEYPRINT_API_SECRET"
 INSTAGRAM_CAPTION_MAX_LENGTH: int = 2200
@@ -180,7 +177,7 @@ def validate_publish_metadata(
 
     Raises:
         ValueError: when providers are unknown/empty, or a selected provider other than
-            pinterest/fanvue (both gated in fill_schedule/metadata.py) has no metadata,
+            pinterest/fanvue/telegram (gated in fill_schedule/metadata.py) has no metadata,
             or metadata violates the contract.
     """
     if not providers:
@@ -203,8 +200,6 @@ def validate_publish_metadata(
             raise ValueError("youtube publish requires a non-empty title")
         if not youtube.description.strip():
             raise ValueError("youtube publish requires a non-empty description")
-        # The internal upload route 400s on empty tags ("Video tags are
-        # required"); fail here, before generation, instead of after it.
         if not youtube.tags:
             raise ValueError("youtube publish requires at least one tag")
     if INSTAGRAM_PROVIDER in providers:
@@ -344,10 +339,6 @@ class PublishError(Exception):
     ) -> None:
         super().__init__(message)
         self.status_code = status_code
-        # Upstream response body, for server logs only. Kept OUT of the
-        # message: the message reaches Discord alerts (a third-party
-        # service) via safe_reason, and the body is remote-controlled
-        # text that could echo sensitive data (e.g. an auth page).
         self.response_body = response_body
 
 
@@ -370,6 +361,7 @@ _PART_BUILDERS: _PartBuilders = {
     THREESPEAK_PROVIDER: (ThreespeakMetadata, lambda metadata: MultipartParts(fields=threespeak_fields(metadata))),
     RUMBLE_PROVIDER: (RumbleMetadata, lambda metadata: MultipartParts(fields=rumble_fields(metadata))),
     FANVUE_PROVIDER: (FanvueMetadata, lambda metadata: MultipartParts(fields=fanvue_fields(metadata))),
+    TELEGRAM_PROVIDER: (TelegramMetadata, lambda metadata: MultipartParts(fields=telegram_fields(metadata))),
 }
 
 
@@ -377,7 +369,7 @@ def publish_video(
     base_url: str,
     api_secret: str,
     owner_user_id: str,
-    metadata: YouTubeMetadata | InstagramMetadata | BlueskyMetadata | LinkedInMetadata | ThreadsMetadata | FacebookMetadata | PinterestMetadata | ThreespeakMetadata | RumbleMetadata | FanvueMetadata,
+    metadata: YouTubeMetadata | InstagramMetadata | BlueskyMetadata | LinkedInMetadata | ThreadsMetadata | FacebookMetadata | PinterestMetadata | ThreespeakMetadata | RumbleMetadata | FanvueMetadata | TelegramMetadata,
     video_path: str,
     video_bytes: bytes | None,
     content_type: str,
@@ -412,9 +404,6 @@ def publish_video(
         raise PublishError(f"unsupported publish metadata: {type(metadata).__name__}")
     parts.fields.append(("userId", owner_user_id))
     if publish_scope_key:
-        # Lets the web route recognise a retry of the same slot/video as
-        # the same publish (ledger key) instead of a new post. Callers
-        # without a key send nothing and keep today's behaviour.
         parts.fields.append(("publishScopeKey", publish_scope_key))
 
     if r2_object_path is not None and provider in URL_MEDIA_PROVIDERS:
@@ -455,16 +444,8 @@ def publish_video(
                 result: dict[str, Any] = response.json()
             except ValueError as exc:
                 raise PublishError("upload API returned invalid JSON") from exc
-            # HTTP 200 is not success. Bluesky/LinkedIn/Threads/Facebook/3Speak answer 200 with
-            # success:false (and often error/errorType). YouTube/Instagram
-            # keep success:true and put per-account outcomes in results.
-            # Either shape with nothing posted must raise: the message
-            # stays Discord-safe and the body is server logs only.
-            # Not retried — the request completed; the post did not.
             if isinstance(result, dict):
                 failure = application_failure_reason(result)
-                # Fill-schedule passes surface_application_failure so it can
-                # classify each account. Other callers still get the raise.
                 if failure is not None and not surface_application_failure:
                     raise PublishError(
                         failure,

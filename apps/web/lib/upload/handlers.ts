@@ -22,15 +22,8 @@ import { TokenDecryptError } from '@/lib/token-crypto';
 import { classifyUploadAccountError } from '@/lib/upload/account-error';
 import type { OAuth2Client } from 'google-auth-library';
 
-// Upload handlers — one account failing does not abort the others.
-
 import type { ContentUploadAccountResult, ContentUploadResponse } from './content-upload-result';
 
-//---------------
-// isRevokedGoogleGrant — Google answers a revoked or expired refresh token
-// with 400 invalid_grant (or 401). A 5xx or a network error is transient
-// and must not mark the account dead.
-//---------------
 function isRevokedGoogleGrant(error: unknown): boolean {
   const status = httpStatusOf(error);
   if (status === 401) return true;
@@ -41,10 +34,6 @@ function isRevokedGoogleGrant(error: unknown): boolean {
   return code === 'invalid_grant';
 }
 
-//---------------
-// getAuthenticatedClient — OAuth client with the account's valid tokens
-// (tokens decrypted from Supabase, owner = authenticated userId); also post-metrics
-//---------------
 export async function getAuthenticatedClient(
   ownerUserId: string,
   accountId: string,
@@ -56,9 +45,6 @@ export async function getAuthenticatedClient(
     const result = await getSocialAccountTokens(supabase, ownerUserId, 'youtube', accountId);
     tokens = result.tokens;
   } catch (error) {
-    // An undecryptable token is a dead login; a missing row is not (the
-    // account is gone, nothing to reconnect). The AuthError below hides the
-    // cause from classifyAccountBreak, so the flag is written here.
     if (error instanceof TokenDecryptError) rememberDeadCredential('youtube', accountId, ownerUserId);
     throw new AuthError(
       `Account ${accountId} not found for the API key owner. Start the OAuth flow first`,
@@ -74,8 +60,6 @@ export async function getAuthenticatedClient(
       const refreshed = await oauth2Client.refreshAccessToken();
       const newCredentials = refreshed.credentials;
       oauth2Client.setCredentials(newCredentials);
-      // Persist refreshed tokens so subsequent uploads do not need to
-      // re-refresh and users do not get spurious reconnect prompts.
       await updateSocialAccountTokens(supabase, ownerUserId, 'youtube', accountId, {
         access_token: newCredentials.access_token ?? tokens.access_token,
         refresh_token: newCredentials.refresh_token ?? tokens.refresh_token,
@@ -94,16 +78,10 @@ export async function getAuthenticatedClient(
   }
 }
 
-//---------------
-// parseAccountIds — reads repeated accountIds/igAccountIds FormData fields
-//---------------
 function parseAccountIds(formData: FormData, field: 'accountIds' | 'igAccountIds'): string[] {
   return getAccountIdsFromFormData(formData, field);
 }
 
-//---------------
-// handleYoutubeUpload — validates the video ONCE and uploads to each account
-//---------------
 export async function handleYoutubeUpload(
   formData: FormData,
   ownerUserId: string,
@@ -165,7 +143,6 @@ export async function handleYoutubeUpload(
   for (const accountId of accountIds) {
     const accountStart = Date.now();
     try {
-      // Ownership: getSocialAccountTokens only resolves the user's own accounts.
       const oauth2Client = await getAuthenticatedClient(ownerUserId, accountId);
 
       const uploadResult = await withUploadTimeout(
@@ -245,7 +222,6 @@ export async function handleInstagramUpload(
   let fileSize: number;
   let usedArchive = false;
   if (storagePathRaw !== null) {
-    // Engine-generated final: already verified in R2, presign it directly.
     if (typeof storagePathRaw !== 'string' || storagePathRaw.trim() === '') {
       throw new ValidationError('videoStoragePath must be a string', 'videoStoragePath');
     }
@@ -279,7 +255,6 @@ export async function handleInstagramUpload(
     }
     const validated = parsed;
     detectedType = validated.detectedType;
-    // Instagram fetches the media from a URL: store it on R2 (no egress fees).
     const timestamp = Date.now();
     const random = crypto.randomBytes(4).toString('hex');
     const extension = getExtension(detectedType);
@@ -305,7 +280,6 @@ export async function handleInstagramUpload(
 
   for (const igUserId of accountIds) {
     try {
-      // Ownership: getSocialAccountTokens only resolves the user's own accounts.
       const { tokens } = await getSocialAccountTokens(supabase, ownerUserId, 'instagram', igUserId);
 
       if (typeof tokens.access_token !== 'string' || tokens.access_token === '') {
@@ -344,7 +318,6 @@ export async function handleInstagramUpload(
     }
   }
 
-  // Archive presign created no temp copy, so there is nothing to clean.
   if (!usedArchive) {
     void cleanupPublishMedia('instagram');
   }
@@ -362,9 +335,6 @@ export async function handleInstagramUpload(
   return { success: true, provider: 'instagram', results, logId };
 }
 
-//---------------
-// buildUploadErrorResponse — maps errors to a stable HTTP response
-//---------------
 export function buildUploadErrorResponse(
   error: unknown,
   logId: string,

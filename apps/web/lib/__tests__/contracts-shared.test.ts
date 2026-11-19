@@ -2,11 +2,6 @@
  * @vitest-environment node
  */
 
-// contracts shared-source guard: the web copies must be generated from
-// shared/contracts/*.ts (HEADER + shared, with endpoint.ts inlined into
-// the other contracts so webpack needs no relative import), never
-// hand-maintained. The sync runs on pretest, so a drift means the file
-// was edited by hand: run `node scripts/sync-contracts.mjs`.
 import { describe, expect, it } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -34,9 +29,6 @@ describe('contracts shared source', () => {
     for (const file of files) {
       const shared = readFileSync(join(sharedDir, file), 'utf8');
       const generated = readFileSync(join(root, 'apps', 'web', 'lib', 'contracts', file), 'utf8');
-      // Webpack cannot resolve a `./name.js` import to `name.ts`, so the
-      // web copies drop the suffix on cross-contract imports (the sync
-      // does the same; the MCP copies keep it for NodeNext).
       const withoutEndpoint = file === 'endpoint.ts'
         ? shared
         : shared.replace(/import \{[^}]*\} from '\.\/endpoint\.js';\n/, endpointBody);
@@ -50,10 +42,6 @@ describe('contracts shared source', () => {
     }
   });
 
-  // The contract carries its own METRICS_WINDOWS copy (the route's
-  // `?window=` validation used to import it straight from
-  // metrics-query.ts). A one-sided edit would make the detail route 400 a
-  // window the metrics layer supports, so the copy is pinned here.
   it('pins the shared METRICS_WINDOWS to metrics-query.ts', () => {
     const root = findRepoRoot(import.meta.url);
     const metricsQuery = readFileSync(join(root, 'apps', 'web', 'lib', 'metrics', 'metrics-query.ts'), 'utf8');
@@ -61,20 +49,12 @@ describe('contracts shared source', () => {
     expect(metricsQuery).toContain(`export const METRICS_WINDOWS = [${list}] as const;`);
   });
 
-  // The metrics contract carries its own YOUTUBE_VIDEO_ID copy (the
-  // retention-curve route's `?video=` validation used to import VIDEO_ID
-  // straight from youtube-analytics.ts). A one-sided edit would make the
-  // contract reject a video id the Analytics call accepts, so the copy
-  // is pinned here.
   it('pins the shared YOUTUBE_VIDEO_ID to youtube-analytics.ts', () => {
     const root = findRepoRoot(import.meta.url);
     const youtubeAnalytics = readFileSync(join(root, 'apps', 'web', 'lib', 'youtube-analytics.ts'), 'utf8');
     expect(youtubeAnalytics).toContain(`export const VIDEO_ID = /${YOUTUBE_VIDEO_ID.source}/;`);
   });
 
-  // The query parsers moved into the contract; metrics-query.ts keeps
-  // the import paths working by re-exporting them. If the re-export is
-  // dropped, the routes and the dashboard lose their validator.
   it('pins metrics-query.ts to re-export the contract parsers', () => {
     const root = findRepoRoot(import.meta.url);
     const metricsQuery = readFileSync(join(root, 'apps', 'web', 'lib', 'metrics', 'metrics-query.ts'), 'utf8');
@@ -83,10 +63,6 @@ describe('contracts shared source', () => {
     expect(metricsQuery).toContain('parseRetentionCurveQuery,');
   });
 
-  // The media contract carries its own CHECK_MEDIA_CODES and
-  // VIDEO_ASPECTS copies (the check route validates against its own
-  // sets). A one-sided edit would make the contract reject a code or
-  // aspect the route accepts, so the copies are pinned here.
   it('pins the shared media check codes and aspects to the check route', () => {
     const root = findRepoRoot(import.meta.url);
     const checkRoute = readFileSync(join(root, 'apps', 'web', 'app', 'api', 'media', 'check', 'route.ts'), 'utf8');
@@ -98,20 +74,12 @@ describe('contracts shared source', () => {
     }
   });
 
-  // The media contract carries its own MEDIA_ID_PATTERN copy (the
-  // upload route 502s when the engine-minted id does not match it). A
-  // one-sided edit would make the MCP reject an id the route serves.
   it('pins the shared MEDIA_ID_PATTERN to the upload route', () => {
     const root = findRepoRoot(import.meta.url);
     const uploadRoute = readFileSync(join(root, 'apps', 'web', 'app', 'api', 'media', 'upload', 'route.ts'), 'utf8');
     expect(uploadRoute).toContain(`const MEDIA_ID_PATTERN = /${MEDIA_ID_PATTERN.source}/;`);
   });
 
-  // The accounts contract carries its own PublicAccountItem copy (the
-  // GET /api/account response). A one-sided edit would make the contract
-  // reject an account the route serves, so every variant in the
-  // registry's union must appear in the contract union with the same
-  // provider literal.
   it('pins the shared PublicAccountItem variants to the provider registry', () => {
     const root = findRepoRoot(import.meta.url);
     const registry = readFileSync(join(root, 'apps', 'web', 'lib', 'providers', 'registry.ts'), 'utf8');
@@ -119,16 +87,12 @@ describe('contracts shared source', () => {
       const provider = (variant.shape as { provider: { value: string } }).provider.value;
       expect(registry).toContain(`provider: '${provider}'`);
     }
-    expect(PublicAccountItemSchema.options).toHaveLength(10);
+    expect(PublicAccountItemSchema.options).toHaveLength(11);
     for (const name of ['AccountData', 'InstagramAccountData', 'BlueskyAccountData', 'LinkedinAccountData', 'ThreadsAccountData', 'FacebookAccountData', 'PinterestAccountData', 'ThreespeakAccountData', 'RumbleAccountData', 'FanvueAccountData']) {
       expect(registry).toContain(name);
     }
   });
 
-  // The schedule contract carries its own ScheduleRow copy (GET
-  // /api/schedule returns the raw Supabase rows). A one-sided edit would
-  // make the contract reject a column the route selects, so every row
-  // key must appear in the route's select list.
   it('pins the shared ScheduleRow keys to the schedule GET select', () => {
     const root = findRepoRoot(import.meta.url);
     const route = readFileSync(join(root, 'apps', 'web', 'app', 'api', 'schedule', 'route.ts'), 'utf8');
@@ -142,10 +106,6 @@ describe('contracts shared source', () => {
     expect(Object.keys(ScheduleRowSchema.shape)).toHaveLength(columns.length);
   });
 
-  // The schedule contract carries its own cancel-reason copy (the DELETE
-  // /api/schedule response). A one-sided edit would make the contract
-  // reject a reason the route returns, so every reason must appear in
-  // the route's CancelRefundReason union.
   it('pins the shared cancel reasons to the schedule route', () => {
     const root = findRepoRoot(import.meta.url);
     const route = readFileSync(join(root, 'apps', 'web', 'app', 'api', 'schedule', 'route.ts'), 'utf8');
@@ -154,10 +114,6 @@ describe('contracts shared source', () => {
     }
   });
 
-  // The schedule contract carries its own RANGE_STATUSES copy (the range
-  // query filters on it). A one-sided edit would make the contract
-  // reject a status the presentation layer maps, so every member must
-  // appear as a presentStatus case.
   it('pins the shared RANGE_STATUSES to the slot presentation', () => {
     const root = findRepoRoot(import.meta.url);
     const presentation = readFileSync(join(root, 'apps', 'web', 'lib', 'schedule-slot-presentation.ts'), 'utf8');
@@ -166,9 +122,6 @@ describe('contracts shared source', () => {
     }
   });
 
-  // The contract's hasExplicitOffset mirrors lib/timezone.ts (the PATCH
-  // slotAt rule). A one-sided edit would make the contract accept a
-  // slotAt the route rejects, so the offset regex must match.
   it('pins the shared hasExplicitOffset regex to timezone.ts', () => {
     const root = findRepoRoot(import.meta.url);
     const timezone = readFileSync(join(root, 'apps', 'web', 'lib', 'timezone.ts'), 'utf8');
@@ -178,10 +131,6 @@ describe('contracts shared source', () => {
     expect(scheduleContract).toContain((match as RegExpMatchArray)[1]);
   });
 
-  // The range parser and the limit parser moved into the contract; the
-  // status route imports them from there and range.ts keeps the old
-  // import path working by re-exporting. If either import is dropped,
-  // the route loses its validator or the range tests lose theirs.
   it('pins the status route and range.ts to the contract parsers', () => {
     const root = findRepoRoot(import.meta.url);
     const statusRoute = readFileSync(join(root, 'apps', 'web', 'app', 'api', 'schedule', 'status', 'route.ts'), 'utf8');
@@ -196,11 +145,6 @@ describe('contracts shared source', () => {
     expect(range).toContain('RANGE_STATUSES,');
   });
 
-  // The video-tasks contract carries its own VideoGenerationRow copy (the
-  // generations routes map the snake_case DB row to it). A one-sided edit
-  // would make the contract reject a column the route selects, so every
-  // row key must appear in the route's select list (snake_case mapped to
-  // camelCase).
   it('pins the shared VideoGenerationRow keys to the generations GET select', () => {
     const root = findRepoRoot(import.meta.url);
     const route = readFileSync(join(root, 'apps', 'web', 'app', 'api', 'persona', 'video-generations', 'route.ts'), 'utf8');
@@ -215,10 +159,6 @@ describe('contracts shared source', () => {
     expect(Object.keys(VideoGenerationRowSchema.shape)).toHaveLength(columns.length);
   });
 
-  // The generations limit parser moved into the contract; the list route
-  // imports it from there and re-exports it so the existing import path
-  // keeps working. If either is dropped, the route loses its validator or
-  // the parser tests lose theirs.
   it('pins the generations route to the contract limit parser', () => {
     const root = findRepoRoot(import.meta.url);
     const route = readFileSync(join(root, 'apps', 'web', 'app', 'api', 'persona', 'video-generations', 'route.ts'), 'utf8');
@@ -229,11 +169,6 @@ describe('contracts shared source', () => {
     expect(api).toContain("import type { VideoGenerationRow as VideoGeneration } from '@/lib/contracts/video-tasks';");
   });
 
-  // The voice catalog enums moved into the contract; voice-catalog.ts
-  // imports them from there and the cloned-voice row type is the
-  // contract's ClonedVoiceRow. A one-sided edit would make the contract
-  // reject a voice the picker serves, or the MCP reject a row the route
-  // serves.
   it('pins the voice catalog enums and cloned row type to the contract', () => {
     const root = findRepoRoot(import.meta.url);
     const catalog = readFileSync(join(root, 'apps', 'web', 'lib', 'voice-catalog.ts'), 'utf8');
@@ -248,11 +183,6 @@ describe('contracts shared source', () => {
     expect(types).toContain("import type { ClonedVoiceRow as ClonedVoicePublicRow } from '@/lib/contracts/voices';");
   });
 
-  // The persona constants moved into the contract; persona-schema.ts and
-  // persona-images.ts import them from there and re-export them so the
-  // existing import paths keep working. A one-sided edit would make the
-  // contract reject a value the form serves, or the form accept one the
-  // route rejects.
   it('pins the persona constants to the contract', () => {
     const root = findRepoRoot(import.meta.url);
     const schema = readFileSync(join(root, 'apps', 'web', 'lib', 'persona-schema.ts'), 'utf8');
@@ -276,9 +206,6 @@ describe('contracts shared source', () => {
     expect(MAX_DESCRIPTION_LENGTH).toBe(500);
   });
 
-  // Persona CTA intent (issue #639): the persona stores an intent plus
-  // facts, never wording. link/buy need a URL, other needs an
-  // instruction, and the other types carry no facts at all.
   it('pins the persona CTA intent shape to the contract', () => {
     expect(PersonaCtaSchema.safeParse({ type: 'follow' }).success).toBe(true);
     expect(PersonaCtaSchema.safeParse({ type: 'comment' }).success).toBe(true);
@@ -293,19 +220,11 @@ describe('contracts shared source', () => {
     expect(PersonaCtaSchema.safeParse({ type: 'link', url: 'not-a-url' }).success).toBe(false);
     expect(PersonaCtaSchema.safeParse({ type: 'subscribe' }).success).toBe(false);
     expect(PersonaCtaSchema.safeParse({ type: 'other', instruction: 'x'.repeat(501) }).success).toBe(false);
-    // An empty instruction is not an instruction: the refine only checks
-    // presence, so '' would parse and then false-reject an experiment
-    // pair against a partner whose instruction is null.
     expect(PersonaCtaSchema.safeParse({ type: 'other', instruction: '' }).success).toBe(false);
     expect(PersonaCtaSchema.safeParse({ type: 'link', url: `https://example.com/${'a'.repeat(2029)}` }).success).toBe(false);
     expect(PersonaCtaSchema.safeParse({ type: 'link', url: `https://example.com/${'a'.repeat(2028)}` }).success).toBe(true);
   });
 
-  // The warning codes are duplicated in the contract because
-  // persona-image-select.ts must stay dependency-free for the client
-  // bundle (it cannot import the contract or zod). A one-sided rename
-  // would make the contract reject a code the route serves, so the
-  // contract's literals are pinned here against the select module's.
   it('pins the persona image warning codes to persona-image-select.ts', () => {
     const root = findRepoRoot(import.meta.url);
     const select = readFileSync(join(root, 'apps', 'web', 'lib', 'persona-image-select.ts'), 'utf8');
@@ -319,9 +238,6 @@ describe('contracts shared source', () => {
     });
   });
 
-  // The persona routes use the contract query parsers; the route files
-  // keep their own error envelopes, so the pin is only that the parser
-  // comes from the contract.
   it('pins the persona routes to the contract query parsers', () => {
     const root = findRepoRoot(import.meta.url);
     const route = readFileSync(join(root, 'apps', 'web', 'app', 'api', 'persona', 'route.ts'), 'utf8');
@@ -336,11 +252,6 @@ describe('contracts shared source', () => {
     expect(preview).toContain('parsePersonaIdQuery');
   });
 
-  // The videos contract duplicates VIDEO_TYPES + the costs suffix from
-  // lib/tokens.ts (the video-type sync tests pin tokens.ts to the engine,
-  // and this pin keeps the contract's copy identical to it). A one-sided
-  // edit would make the contract reject a mode the route serves, or the
-  // route report costs the contract does not know.
   it('pins the videos type literals to lib/tokens.ts', () => {
     const root = findRepoRoot(import.meta.url);
     const tokens = readFileSync(join(root, 'apps', 'web', 'lib', 'tokens.ts'), 'utf8');
@@ -350,10 +261,6 @@ describe('contracts shared source', () => {
     expect(tokens).toContain("export const VIDEO_TYPE_ERROR_SUFFIX =\n  'use full_lipsync (8/15), hook_lipsync (2/3) or faceless (1)';");
   });
 
-  // The segments caps are duplicated in the contract because a synced
-  // contract cannot import the shared script-segments source (the two
-  // apps keep its generated copy at different depths). A one-sided edit
-  // would make the contract accept a script the validator rejects.
   it('pins the videos segment caps to the shared script-segments source', () => {
     const root = findRepoRoot(import.meta.url);
     const shared = readFileSync(join(root, 'shared', 'script-segments', 'script-segments.ts'), 'utf8');
@@ -375,10 +282,6 @@ describe('contracts shared source', () => {
     }
   });
 
-  // The batch, draft, upload and report constants moved into the videos
-  // contract; the old modules re-export them so existing import paths
-  // keep working. The generate route reads its body schema from the
-  // contract and the segments/experiment helpers re-export theirs.
   it('pins the videos constants to the contract re-exports', () => {
     const root = findRepoRoot(import.meta.url);
     const batch = readFileSync(join(root, 'apps', 'web', 'lib', 'billing', 'batch-discount.ts'), 'utf8');

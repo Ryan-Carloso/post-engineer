@@ -4,20 +4,8 @@ import { logger } from './logger';
 import { REQUIRED_COLUMNS } from './schema-expectations.gen';
 import { createSupabaseServiceClient } from './supabase/service';
 
-//---------------
-// Schema drift check (issue #308). A deploy whose migration was not applied
-// yet used to fail only at runtime ("column scheduled_posts.faceless_material
-// does not exist": 68 errors in 3 days). At boot we ask the database for every
-// column the migrations add (lib/schema-expectations.gen.ts) and report the
-// missing ones once, naming the table.column, so the pending migration is
-// obvious. It reports loudly but never blocks the boot: a strict check must
-// not take the app down for a database it merely could not reach.
-//---------------
-
 export interface SchemaDriftReport {
-  /** table -> columns the database does not have (or every column, if the table is missing). */
   missing: Record<string, string[]>;
-  /** Tables the probe could not verify (network, auth, ...): not drift. */
   unverified: string[];
 }
 
@@ -40,10 +28,6 @@ export async function checkSchemaDrift(
     if (MISSING_TABLE_CODES.has(code)) {
       report.missing[table] = [...columns];
     } else if (MISSING_COLUMN_CODES.has(code)) {
-      // One probe per column names exactly which ones are missing. Only a
-      // probe that confirms a missing column is drift: a failure that is
-      // not (connection, auth) leaves the table unverified, and a table
-      // whose columns all answer fine was a transient schema-cache blip.
       const absent: string[] = [];
       let unverifiable = false;
       for (const column of columns) {
@@ -67,10 +51,6 @@ export function describeDrift(missing: Record<string, string[]>): string {
     .join(', ');
 }
 
-//---------------
-// reportSchemaDrift — boot entry point (instrumentation.register). Never
-// throws: a failure to check is logged, not fatal.
-//---------------
 export async function reportSchemaDrift(): Promise<void> {
   try {
     const report = await checkSchemaDrift(createSupabaseServiceClient());

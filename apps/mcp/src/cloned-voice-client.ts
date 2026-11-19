@@ -31,12 +31,6 @@ export interface ClonedVoiceClientHost {
   readonly baseUrl: string;
 }
 
-/**
- * Read a fetch response body without buffering past `maxBytes`: stream the
- * chunks and cancel the stream as soon as the cap is exceeded, so a hostile
- * or broken server cannot exhaust memory with an oversized body. Falls back
- * to a capped arrayBuffer read when the response has no readable stream.
- */
 async function readBodyWithCap(
   response: Response,
   maxBytes: number,
@@ -70,16 +64,12 @@ async function readBodyWithCap(
 export type HostLookup = (hostname: string) => Promise<ReadonlyArray<{ address: string }>>;
 
 export interface CloneAudioFetchOptions {
-  /** Remote (hosted) server: https only, and every resolved address must be public. */
   readonly remote?: boolean;
-  /** DNS resolution, injectable for tests; defaults to node:dns/promises lookup(all). */
   readonly lookup?: HostLookup;
 }
 
 const defaultLookup: HostLookup = (hostname) => lookup(hostname, { all: true });
 
-// Fail closed: a resolution error, no address, or any non-public address rejects.
-// Returns the validated addresses so the fetch pins to them (see below).
 async function assertPublicHost(
   hostname: string,
   resolve: HostLookup,
@@ -97,13 +87,6 @@ async function assertPublicHost(
   return addresses;
 }
 
-// A lookup that answers only with the addresses the SSRF check validated:
-// the TLS connection can only go to a validated public address, so a second
-// DNS answer (DNS rebinding: the check sees a public address, the fetch
-// sees 169.254.169.254 / 127.0.0.1) cannot diverge from the first. The
-// hostname argument is ignored on purpose — the validated set is the only
-// source of truth. A family the validated set cannot serve fails closed
-// instead of falling back to a fresh resolution.
 function pinnedLookup(addresses: ReadonlyArray<{ address: string }>): LookupFunction {
   return (hostname, options, callback) => {
     const wantedFamily = typeof options.family === 'number' ? options.family : 0;
@@ -131,10 +114,6 @@ function pinnedLookup(addresses: ReadonlyArray<{ address: string }>): LookupFunc
   };
 }
 
-// Download over pinned DNS: the https request resolves through pinnedLookup,
-// so the socket connects to a validated public address with the original
-// hostname as SNI (the certificate is still verified against the hostname).
-// Redirects are rejected, exactly like redirect: 'error' on the fetch path.
 async function fetchRemoteAudioPinned(
   parsed: URL,
   addresses: ReadonlyArray<{ address: string }>,
@@ -169,8 +148,6 @@ async function fetchRemoteAudioPinned(
   return { buffer, contentType };
 }
 
-// Stream a Node response body without buffering past maxBytes: cancel the
-// stream as soon as the cap is exceeded, mirroring readBodyWithCap.
 async function readNodeBodyWithCap(response: IncomingMessage, maxBytes: number): Promise<Buffer> {
   const chunks: Buffer[] = [];
   let total = 0;
@@ -205,9 +182,6 @@ export async function fetchCloneReferenceAudio(
     if (parsed.protocol !== 'https:') {
       throw new Error('audioUrl must use https');
     }
-    // The fetch pins DNS to the addresses this check validated (pinnedLookup
-    // in fetchRemoteAudioPinned): a second resolution cannot rebind the host
-    // to a private address after the check passed.
     const addresses = await assertPublicHost(parsed.hostname, options.lookup ?? defaultLookup);
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
@@ -251,8 +225,6 @@ export async function fetchCloneReferenceAudio(
   }
 }
 
-// Accepted local reference extensions and the MIME type each is sent with.
-// The web route re-validates the real content; this only fails fast.
 const CLONE_AUDIO_MIME_TYPES: ReadonlyMap<string, string> = new Map([
   ['.mp3', 'audio/mpeg'],
   ['.wav', 'audio/wav'],
@@ -266,12 +238,6 @@ function assertCloneAudioSize(bytes: number, name: string): void {
   }
 }
 
-/**
- * Read a local reference recording for a voice clone. Extension and stat()
- * size are checked before the file is read (bounded memory), the size is
- * re-checked after the read, and errors carry only the file's basename,
- * never the full local path.
- */
 export async function readCloneReferenceFile(
   path: string,
 ): Promise<{ blob: Blob; filename: string }> {
@@ -395,22 +361,15 @@ export async function previewClonedVoice(
   const suffix =
     language && language.trim() ? `?language=${encodeURIComponent(language.trim())}` : '';
   const path = `/api/persona/cloned-voices/${encodeURIComponent(cloneId)}/preview${suffix}`;
-  // The preview route answers with raw audio bytes, not JSON, so it cannot
-  // go through the client's JSON request path: fetch the bytes here and
-  // surface them as base64 (same own-fetch pattern as the download above).
-  // The upload timeout applies: preview synthesis can cold-start the local TTS server.
   const response = await fetch(`${client.baseUrl}${path}`, {
     method: 'POST',
     headers: client.getHeaders(),
-    // Caller text travels in the JSON body, never the URL.
     ...(text === undefined ? {} : { body: JSON.stringify({ text }) }),
     redirect: 'error',
     signal: AbortSignal.timeout(UPLOAD_TIMEOUT_MS),
   });
   if (!response.ok) {
     const errorText = await response.text();
-    // Same contract as client.request: structured `error`, and every
-    // message in an `errors` list, capped inside readApiFailure.
     const failure = readApiFailure(errorText);
     throw new Error(`Failed to preview cloned voice: ${response.status} ${failure.detail}`);
   }
@@ -426,31 +385,21 @@ export async function previewClonedVoice(
   };
 }
 
-// House-voice preview: same own-fetch pattern as previewClonedVoice, but
-// the voice is a catalog id (`chatterbox:<name>`) and there is no language
-// override — house voices are English-only.
 export async function previewHouseVoice(
   client: ClonedVoiceClientHost,
   voiceId: string,
   text?: string,
 ): Promise<unknown> {
   const path = `/api/persona/voices/${encodeURIComponent(voiceId)}/preview`;
-  // The preview route answers with raw audio bytes, not JSON, so it cannot
-  // go through the client's JSON request path: fetch the bytes here and
-  // surface them as base64 (same own-fetch pattern as the download above).
-  // The upload timeout applies: preview synthesis can cold-start the local TTS server.
   const response = await fetch(`${client.baseUrl}${path}`, {
     method: 'POST',
     headers: client.getHeaders(),
-    // Caller text travels in the JSON body, never the URL.
     ...(text === undefined ? {} : { body: JSON.stringify({ text }) }),
     redirect: 'error',
     signal: AbortSignal.timeout(UPLOAD_TIMEOUT_MS),
   });
   if (!response.ok) {
     const errorText = await response.text();
-    // Same contract as client.request: structured `error`, and every
-    // message in an `errors` list, capped inside readApiFailure.
     const failure = readApiFailure(errorText);
     throw new Error(`Failed to preview house voice: ${response.status} ${failure.detail}`);
   }

@@ -1,16 +1,3 @@
-//---------------
-// api-telemetry-names — unit tests for the semantic event-name lookup.
-//
-// withApiErrorReporting used to report every 2xx as a generic
-// `server_success` and every 4xx as `server_warning`. The mapping table
-// gives each route label a deliberate semantic name (noun + past-tense
-// verb, matching the repo's existing PostHog names like video_generated);
-// these tests pin the lookup contract: exact-label match, the 4xx
-// `_rejected` derivation, and the undefined fallback for unmapped
-// labels (the wrapper falls back to the generic names — telemetry must
-// never break on a missing entry).
-//---------------
-
 import { describe, it, expect } from 'vitest';
 import {
   API_TELEMETRY_NAMES,
@@ -54,7 +41,6 @@ describe('api-telemetry-names', () => {
     expect(successEventName('GET /api/persona/video-status/[taskId]')).toBe(
       'video_status_fetched',
     );
-    // A label with the segment filled in is a different string: no match.
     expect(successEventName('GET /api/persona/video-status/abc123')).toBeUndefined();
   });
 

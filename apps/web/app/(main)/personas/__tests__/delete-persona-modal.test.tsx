@@ -3,12 +3,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 
-//---------------
-// DeletePersonaModal behavioral tests.
-// Network (lib/api) is mocked; the component owns loading, preview,
-// type-to-confirm, delete, and error states.
-//---------------
-
 vi.mock('@/lib/api', () => ({
   fetchDeletePreview: vi.fn(),
   deletePersona: vi.fn(),
@@ -69,7 +63,6 @@ describe('DeletePersonaModal', () => {
     renderModal();
     await waitFor(() => expect(fetchDeletePreview).toHaveBeenCalledWith('persona-1'));
     expect(await screen.findByText('personas.deleteDialogNoRefund')).toBeInTheDocument();
-    // Counts render as <strong> values next to the (mocked) i18n keys.
     expect(screen.getAllByText('2').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('3')).toBeInTheDocument();
   });
@@ -141,7 +134,6 @@ describe('DeletePersonaModal', () => {
     vi.mocked(fetchDeletePreview).mockRejectedValue(new Error('network down'));
     renderModal();
     expect(await screen.findByText('personas.deleteDialogLoadError')).toBeInTheDocument();
-    // Retry is offered — the dialog is not wedged in 'loading'.
     expect(screen.getByRole('button', { name: 'personas.tryAgain' })).toBeEnabled();
   });
 
@@ -157,7 +149,6 @@ describe('DeletePersonaModal', () => {
 
     expect(await screen.findByText('personas.deleteDialogDeleteError')).toBeInTheDocument();
     expect(onClose).not.toHaveBeenCalled();
-    // Cancel is re-enabled — the user is not trapped in 'deleting'.
     expect(screen.getByRole('button', { name: 'personas.cancel' })).toBeEnabled();
   });
 
@@ -191,7 +182,6 @@ describe('DeletePersonaModal', () => {
       counts: { schedules: 0, upcomingSlots: 0, publishedSlots: 0, failedSlots: 0, generatedVideos: 25, personaImages: 0 },
       videosTruncated: true,
     });
-    // The t mock returns the key; assert the key renders with interpolation params.
     const { container } = renderModal();
     await screen.findByText('personas.deleteDialogVideosTruncated');
     expect(container.textContent).toContain('personas.deleteDialogVideosTruncated');
@@ -210,17 +200,14 @@ describe('DeletePersonaModal', () => {
 
   it('disables the links-incomplete retry while a delete is in flight', async () => {
     vi.mocked(fetchDeletePreview).mockResolvedValue({ ...PREVIEW, linksIncomplete: true });
-    // Delete hangs so the dialog stays in 'deleting'.
     vi.mocked(deletePersona).mockImplementation(() => new Promise(() => {}));
     renderModal();
     await screen.findByText('personas.deleteDialogLinksIncomplete');
-    // Arm the confirm gate and start the delete.
     fireEvent.change(screen.getByLabelText('personas.deleteDialogTypeName'), {
       target: { value: 'Ryan' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'personas.deleteConfirm' }));
     await waitFor(() => expect(deletePersona).toHaveBeenCalled());
-    // The retry must not fire a preview refresh mid-delete.
     const retry = screen.getByRole('button', { name: 'personas.tryAgain' });
     expect(retry).toBeDisabled();
     fireEvent.click(retry);
@@ -228,10 +215,6 @@ describe('DeletePersonaModal', () => {
   });
 
   it('keeps the Delete label on the destructive button while deleting', async () => {
-    // Regression pin: the button rendered t('personas.delete') — the card
-    // button's aria-label copy ("Delete persona") — during the deleting
-    // phase, visibly mutating from "Delete" to "Delete persona" mid-flight.
-    // Delete hangs so the dialog stays in 'deleting'.
     vi.mocked(deletePersona).mockImplementation(() => new Promise(() => {}));
     renderModal();
     await screen.findByText('personas.deleteDialogNoRefund');
@@ -240,7 +223,6 @@ describe('DeletePersonaModal', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: 'personas.deleteConfirm' }));
     await waitFor(() => expect(deletePersona).toHaveBeenCalled());
-    // Still "Delete", disabled — no label mutation while the request is in flight.
     const button = screen.getByRole('button', { name: 'personas.deleteConfirm' });
     expect(button).toBeDisabled();
   });
@@ -256,7 +238,6 @@ describe('DeletePersonaModal', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: 'personas.tryAgain' }));
     await waitFor(() => expect(fetchDeletePreview).toHaveBeenCalledTimes(2));
-    // The confirmation name survives the link refresh.
     expect(screen.getByLabelText('personas.deleteDialogTypeName')).toHaveValue('Ryan');
     expect(screen.getByRole('button', { name: 'personas.deleteConfirm' })).toBeEnabled();
   });
@@ -269,7 +250,6 @@ describe('DeletePersonaModal', () => {
     });
     expect(screen.getByRole('button', { name: 'personas.deleteConfirm' })).toBeEnabled();
 
-    // Close (persona -> null) and reopen the same persona.
     rerender(
       <DeletePersonaModal persona={null} onClose={vi.fn()} onDeleted={vi.fn()} />,
     );
@@ -279,7 +259,6 @@ describe('DeletePersonaModal', () => {
     );
 
     await screen.findByText('personas.deleteDialogNoRefund');
-    // The gate is re-armed: the name field is empty and Delete is disabled.
     expect(screen.getByLabelText('personas.deleteDialogTypeName')).toHaveValue('');
     expect(screen.getByRole('button', { name: 'personas.deleteConfirm' })).toBeDisabled();
   });
@@ -320,7 +299,6 @@ describe('DeletePersonaModal', () => {
       code: 'PERSONA_NOT_FOUND',
     });
     renderModal({ onClose, onDeleted });
-    // No retry loop for a permanent failure: close and refetch.
     await waitFor(() => expect(onDeleted).toHaveBeenCalledTimes(1));
     expect(onClose).toHaveBeenCalledTimes(1);
   });

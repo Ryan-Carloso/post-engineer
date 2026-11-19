@@ -48,8 +48,6 @@ describe('GET /api/linkedin-auth/start', () => {
       'log-1',
       expect.objectContaining({ message: expect.stringContaining('li secret misconfigured') }),
     );
-    // The logged cause is already reported to PostHog, so the response is
-    // marked so the wrapper does not report a second synthetic exception.
     expect(markApiErrorReported).toHaveBeenCalledWith(res);
   });
 
@@ -59,9 +57,6 @@ describe('GET /api/linkedin-auth/start', () => {
     expect(res.status).toBe(500);
     const body = (await res.json()) as { error: string };
     expect(body.error).toContain('LINKEDIN_CLIENT_ID');
-    // The missing-credentials cause is logged so PostHog shows the reason
-    // instead of only the wrapper's generic "[route] 500", and the response
-    // is marked so the wrapper does not report a second synthetic exception.
     expect(logger.logOAuthError).toHaveBeenCalledWith(
       'log-1',
       expect.objectContaining({ message: expect.stringContaining('LINKEDIN_CLIENT_ID') }),

@@ -2,15 +2,6 @@ import { describe, expect, it, vi } from 'vitest';
 import type { PostEngineerClient } from '../client.js';
 import { getTokenBalance, listTokenTransactions } from '../client-billing.js';
 
-//---------------
-// Billing client (GET /api/billing/tokens, GET /api/billing/transactions):
-// the request sites stay literal for the parity gate and the responses
-// parse against the shared contract (shared/contracts/billing.ts), so a
-// malformed 200 is an error, never a silent success. Query building and
-// the fail-fast paging validation are covered by client.test.ts through
-// the PostEngineerClient methods, which delegate here.
-//---------------
-
 function mockClient(payload: unknown): PostEngineerClient {
   return {
     request: vi.fn(async () => payload),

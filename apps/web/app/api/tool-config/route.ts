@@ -14,24 +14,6 @@ import {
 } from '@/lib/tool-config';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
-//---------------
-// /api/tool-config — per-user research/stock tool configuration
-// (issue #669).
-//
-// GET and PUT both return presence only: which search tool and stock
-// sources are configured, each key as present + its last 4 characters —
-// never a key value. The keys are stored encrypted as the vault of record;
-// what a later session needs to know is which tools are configured, and
-// the agent calls those APIs with the keys from its own environment.
-//
-// Auth = Supabase session (cookie) OR personal API key (Bearer/x-api-key,
-// MCP). The table is service-role-only (migration 070: RLS on, no policies,
-// revoked from anon/authenticated), so every caller — session included —
-// takes the service client here; ownership is the authenticated userId and
-// every query below is re-scoped by it. A persona-scoped API key belongs
-// to the account, so it reads and writes the account's configuration.
-//---------------
-
 const ROUTE = 'GET /api/tool-config';
 const PUT_ROUTE = 'PUT /api/tool-config';
 
@@ -48,11 +30,6 @@ async function resolveContext(
   return { userId: session.auth.userId };
 }
 
-// A validation error is the caller's mistake (400, with the field); an
-// unreadable stored blob is a broken row the user repairs by saving again
-// (500, generic message — never the crypto detail). Anything else is a
-// server fault: logged and answered as a generic 500, never with the raw
-// DB message.
 function libErrorToResponse(route: string, error: unknown): NextResponse {
   if (error instanceof ToolConfigValidationError) {
     return apiErrorResponse(400, error.message, {

@@ -1,13 +1,3 @@
-#---------------
-# Fit the clip to the canvas — without cropping content:
-#   1. exact ratio -> resize to the canvas (zero bars)
-#   2. horizontal bars (top/bottom) <= MAX_LETTERBOX_BARS (35%)
-#      -> letterbox with the clip maximized
-#   3. side bars (pillarbox) -> None (clip always discarded)
-#   4. horizontal bars > 35% -> None (clip discarded)
-# Applies to all three formats: 9:16 (TikTok/Shorts), 16:9 (YouTube), 1:1.
-#---------------
-
 import sys
 import unittest
 from pathlib import Path
@@ -51,7 +41,6 @@ class TestFitClipToCanvas(unittest.TestCase):
         clip = ColorClip(size=(144, 192), color=(255, 0, 0)).with_duration(0.5)
         fitted = vd._fit_clip_to_canvas(clip, 108, 192)
         self.assertIsNotNone(fitted)
-        # Canvas inteiro (fundo preto), clipe cabendo por inteiro dentro.
         self.assertEqual(tuple(fitted.size), (108, 192))
 
     def test_tall_clip_returns_none_for_portrait_canvas(self):

@@ -76,9 +76,6 @@ function makeRequest(query: string): NextRequest {
   return new NextRequest(`http://localhost/api/instagram-auth/callback${query}`);
 }
 
-// Connect-url (MCP) flow: the service client only serves oauth_states,
-// backed by the shared fake that applies every filter of the real chain.
-// The mocked decodeOAuthState (beforeEach) yields provider 'instagram', nonce 'n'.
 function connectUrlState(ownerId: string): { store: FakeOAuthStateStore; hash: string } {
   const store = makeOAuthStateStore();
   const hash = hashOAuthState('s');
@@ -200,7 +197,6 @@ describe('/api/instagram-auth/callback', () => {
       'instagram-oauth-error',
       expect.objectContaining({ error: expect.stringContaining('redirect') }),
     );
-    // the code exchange never happens with an invalid redirect_uri
     expect(exchangeCodeForLongLivedToken).not.toHaveBeenCalled();
   });
 
@@ -326,7 +322,6 @@ describe('/api/instagram-auth/callback', () => {
       followersCount: 5,
       mediaCount: 2,
     });
-    // the previous test sets mockRejectedValue; clearAllMocks does not reset the implementation
     vi.mocked(upsertSocialAccount).mockResolvedValue({} as never);
     const res = await GET(makeRequest('?code=c&state=s'));
     expect(await res.text()).toBe('popup');
@@ -335,12 +330,10 @@ describe('/api/instagram-auth/callback', () => {
       expect.objectContaining({ account: expect.objectContaining({ igUserId: 'ig-1' }) }),
     );
     expect(store.rows.has(hash)).toBe(false);
-    // persisted under the signed-in owner through the RLS-bound session client
     expect(upsertSocialAccount).toHaveBeenCalledWith(
       sessionClient,
       expect.objectContaining({ userId: 'api-key-owner', provider: 'instagram' }),
     );
-    // the service role only ever touched oauth_states
     expect(store.tables).toEqual(['oauth_states']);
   });
 
@@ -374,9 +367,6 @@ describe('/api/instagram-auth/callback', () => {
 });
 
 describe('instagram callback logging', () => {
-  // Self-contained setup: this describe is a sibling of the outer suite, so the
-  // outer beforeEach (env vars, service constructor mock, mock clearing) does
-  // not apply here. Every test starts from a clean, fully-wired slate.
   const REDIRECT_URI = 'https://post-engineer.com/api/instagram-auth/callback';
 
   beforeEach(() => {
@@ -453,11 +443,9 @@ describe('instagram callback logging', () => {
     const calls = allLogCalls();
     expect(calls.length).toBeGreaterThan(0);
     const serialized = JSON.stringify(calls);
-    // step markers are present ...
     expect(serialized).toMatch(/received/);
     expect(serialized).toMatch(/auth ok/);
     expect(serialized).toMatch(/profile/i);
-    // ... but the raw code, state and access token never hit the logs
     expect(serialized).not.toContain(CODE);
     expect(serialized).not.toContain(STATE);
     expect(serialized).not.toContain(TOKEN);

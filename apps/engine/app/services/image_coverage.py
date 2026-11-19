@@ -62,14 +62,8 @@ from app.services.segment_photo_duration import photo_cap
 IMAGES_DO_NOT_COVER_AUDIO = "images_do_not_cover_audio"
 MOTION_IN = "in"
 MOTION_OUT = "out"
-# A full-frame photo never stays on screen longer than this. A longer
-# segment needs more photos; a photo is never stretched past it.
 MAX_PHOTO_SECONDS = 2.0
-# A layout that ends this far short of the audio is a float rounding
-# artifact, not a missing photo.
 _COVERAGE_EPSILON_SECONDS = 0.01
-# A skip line records a photo that never became a panel; an overlay line
-# records only a dropped info card on a photo that survived.
 _SKIP_MARKER = " media skipped: "
 
 
@@ -190,13 +184,8 @@ def extend_over_gaps(
     for position, panel in enumerate(full):
         start = cursor
         if panel.clip_seconds is not None:
-            # A clip loops to fill its slice (at most MAX_CLIP_LOOPS
-            # plays): it covers its take, not the 2s photo cap, and it
-            # never zooms — it already moves.
             limit = full[position + 1].start if position + 1 < len(full) else audio_duration
             if limit <= start:
-                # The bound is already spent: an earlier requested photo
-                # ran past it, so the clip just runs its own loops.
                 limit = audio_duration
             cap = min(panel.end - panel.start, segment_video.MAX_CLIP_LOOPS * panel.clip_seconds)
             end = min(limit, start + cap)
@@ -204,32 +193,20 @@ def extend_over_gaps(
         else:
             cap = photo_cap(panel.requested_duration, MAX_PHOTO_SECONDS)
             if panel.requested_duration is not None:
-                # A requested duration is honored absolutely: the photo runs
-                # its seconds even past the next photo's original slice start.
                 end = min(audio_duration, start + cap)
             else:
                 limit = full[position + 1].start if position + 1 < len(full) else audio_duration
                 own_slice = panel.end - panel.start
                 if own_slice >= MAX_PHOTO_SECONDS:
-                    # The split gave this photo its full cap, so the next
-                    # photo's start no longer paces it: a requested photo
-                    # before it may have shifted the grid, and clipping here
-                    # would fail a request whose caps cover the audio.
                     limit = audio_duration
                 elif limit <= start:
-                    # The bound is already spent: an earlier requested photo
-                    # ran past it, so this photo just runs its own cap.
                     limit = audio_duration
                 end = min(limit, start + cap)
             if end <= start:
-                # A photo with no seconds is a dropped photo: fail naming it
-                # instead of shipping a video without it.
                 raise ImagesDoNotCoverAudio(
                     "requested durations leave no time for "
                     f"photo {position + 1} of {len(full)} (segment {panel.index})"
                 )
-            # Photos alternate in/out among themselves: a clip between
-            # two photos breaks the sequence, so the count skips clips.
             motion = MOTION_IN if photo_position % 2 == 0 else MOTION_OUT
             photo_position += 1
         covered.append(replace(panel, start=start, end=end, motion=motion))

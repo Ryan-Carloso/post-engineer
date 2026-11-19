@@ -63,10 +63,6 @@ def list_house_voices_endpoint(request: Request):
     summary="Languages available for voice samples",
 )
 def list_sample_languages_endpoint():
-    # Voice previews died with the per-language house voices: Chatterbox is
-    # zero-shot cloning with a single voice list, so there is no per-language
-    # sample matrix to expose. Answer with the one language the voices speak
-    # instead of failing, so the UI's language picker keeps working.
     return BaseResponse(body=[{"code": "en", "label": "English"}])
 
 
@@ -75,9 +71,6 @@ def list_sample_languages_endpoint():
     summary="Short TTS sample for a house voice (audio/mpeg)",
 )
 def voice_sample_endpoint(voice_id: str, language: str = "pt"):
-    # Explicit 501, not a silent degradation: the preview used to come from the
-    # Azure house-voice matrix, which no longer exists. Returning silence or a
-    # redirect would let the UI render a "sample" the user never asked for.
     return JSONResponse(
         status_code=501,
         content=utils.get_response(
@@ -103,10 +96,6 @@ class HouseVoicePreviewRequest(BaseModel):
 @persona_router.post(
     "/personas/voices/{voice_id}/preview",
     summary="TTS preview for a house voice (audio/mpeg)",
-    # Plain Response (no media type): the handler always returns an
-    # explicit Response/JSONResponse, so this only stops FastAPI from
-    # auto-documenting a 200 application/json — the 200 content below
-    # is then exactly audio/mpeg.
     response_class=Response,
     responses={
         200: {

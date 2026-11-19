@@ -1,27 +1,4 @@
 #!/usr/bin/env node
-//---------------
-// provider-lists — one list of social networks, and no network left
-// without its logic.
-//
-// shared/contracts/providers.ts is the one list (SOCIAL_PROVIDERS) and the
-// home of every named subset. This lint reads the production sources of
-// the web, the MCP, the shared contracts, the scripts, the Apify Actor and
-// the engine, and fails on:
-//   - a hand-typed list of providers (a copy drifts the moment a network
-//     is added: each of fanvue, 3speak and rumble once needed edits in
-//     about 25 copies, and the /posts network filter, the Apify Actor and
-//     the schedules list response each silently missed a network);
-//   - a per-provider ternary/if/switch chain (a new provider silently
-//     takes the default branch);
-//   - a per-provider map or select string that skips a provider.
-// See rules.mjs for the exact rules and MIN_PROVIDERS.
-//
-// Mirrors: a source that cannot import the TypeScript list (the Python
-// engine, the stand-alone Apify Actor) keeps one copy, and this lint
-// checks that copy equals SOCIAL_PROVIDERS.
-//
-// Usage: node .github/scripts/provider-lists/check.mjs   (from anywhere)
-//---------------
 
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -40,7 +17,6 @@ const TS_SOURCE = /\.(ts|tsx|mts|mjs|js|cjs)$/;
 const PY_ROOTS = ['apps/engine/app/'];
 const NOT_PRODUCTION = /(^|\/)(__tests__|test|tests|cypress|node_modules)\/|\.(test|spec|cy)\.[a-z]+$|\.gen\.[a-z]+$/;
 
-/** Production sources this lint reads, from a list of repo paths. */
 export function selectSources(paths) {
   const production = paths.filter((path) => !NOT_PRODUCTION.test(path));
   return {
@@ -49,7 +25,6 @@ export function selectSources(paths) {
   };
 }
 
-/** SOCIAL_PROVIDERS, its named subsets and the column map, from the home file. */
 export async function loadProviders(root) {
   const module = await import(pathToFileURL(join(root, HOME)).href);
   const providers = module.SOCIAL_PROVIDERS;
@@ -75,14 +50,12 @@ export function scanPython(root, files, index) {
   }
 }
 
-/** Every violation in the given groups, plus mirrors that drifted. */
 export function findViolations(groups, { providers, subsets }, mirrors = MIRRORS) {
   const violations = [];
   const seen = new Set();
   for (const group of groups) {
     const home = group.file === HOME || mirrors.includes(group.file);
     const message = violationOf(group, { providers, subsets, home });
-    // One node can be two groups (Python's Literal[...] and its tuple).
     const key = `${group.file}:${group.line}:${message}`;
     if (message !== null && !seen.has(key)) {
       seen.add(key);

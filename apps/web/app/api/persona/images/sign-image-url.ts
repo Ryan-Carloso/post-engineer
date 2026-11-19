@@ -3,7 +3,6 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
 import { IMAGE_BUCKET, IMAGE_URL_TTL_SECONDS } from '@/lib/persona-images';
 
-/** Signs one library image path; null when signing fails (never throws). */
 export async function signImageUrl(
   supabase: SupabaseClient,
   imagePath: string,

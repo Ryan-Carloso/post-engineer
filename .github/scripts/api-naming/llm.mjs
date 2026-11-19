@@ -1,16 +1,4 @@
 /**
- * LLM review layer: second pass over new names that clear the denylist.
- *
- * Sends each name plus its code context to an OpenAI-compatible
- * chat-completions endpoint. The model judges whether the name is
- * self-explanatory to an API consumer with no access to code or comments.
- *
- * Never blocks on infrastructure: missing API key, HTTP errors, timeouts
- * and malformed model output all degrade to warnings, never findings.
- * The deterministic denylist layer always runs regardless.
- */
-
-/**
  * @param {{ file: string, line: number, name: string, context: string }} c
  * @returns {string}
  */

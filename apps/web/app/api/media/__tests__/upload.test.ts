@@ -1,12 +1,4 @@
 // @vitest-environment node
-//---------------
-// Tests for POST /api/media/upload (MCP media (action: upload)).
-//
-// The route authenticates the caller, validates the real image type and
-// the 8MB engine photo limit, then hands the bytes to the engine's
-// existing temp_assets flow server-side. It returns only the mediaId:
-// the temp asset URL is a capability and never leaves the server.
-//---------------
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NextResponse } from 'next/server';
@@ -56,7 +48,6 @@ describe('POST /api/media/upload', () => {
     expect(payload.success).toBe(true);
     expect(payload.mediaId).toBe('aabbccddeeff00112233445566778899.png');
     expect(payload.expiresInSeconds).toBe(3600);
-    // The 200 body parses against the shared contract the MCP reads.
     expect(UploadMediaResponseSchema.safeParse(payload).success).toBe(true);
     expect(payload).not.toHaveProperty('url');
     expect(JSON.stringify(payload)).not.toContain('temp_assets');

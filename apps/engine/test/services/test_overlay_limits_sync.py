@@ -12,8 +12,6 @@ from app.services import script_segments
 
 
 def _shared_ts() -> Path:
-    # Walk up instead of counting parents: mutmut runs the suite from a
-    # copied tree (mutants/), which shifts every fixed parent index.
     for parent in Path(__file__).resolve().parents:
         candidate = parent / "shared" / "script-segments" / "script-segments.ts"
         if candidate.is_file():
@@ -46,8 +44,6 @@ def test_badge_limit_matches_the_shared_validator():
 
 
 def test_a_realistic_card_at_every_limit_fits_the_card():
-    # The longest text each field allows must still lay out: a limit the
-    # renderer refuses would turn a validated script into a dropped card.
     from PIL import ImageFont
 
     from app.services import media_overlay

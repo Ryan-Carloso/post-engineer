@@ -17,15 +17,9 @@ interface SupabaseSessionAuth {
   isOAuth?: boolean;
   keyId?: string;
   personaIds?: string[] | null;
-  // Best-effort display name from the session's user_metadata
-  // (full_name/name/display_name/user_name). Undefined for API-key and
-  // OAuth callers, which carry no user profile.
   displayName?: string;
 }
 
-// Best-effort display name from a Supabase user_metadata object. OAuth
-// providers populate different keys (Google: full_name/name, GitHub:
-// full_name/user_name), so the common ones are checked in order.
 function displayNameFromUserMetadata(userMetadata: unknown): string | undefined {
   if (userMetadata === null || typeof userMetadata !== 'object' || Array.isArray(userMetadata)) {
     return undefined;
@@ -46,8 +40,6 @@ export type SupabaseSessionAuthResult =
 
 export async function requireSupabaseSession(request?: Request): Promise<SupabaseSessionAuthResult> {
   if (request) {
-    // A request from an MCP whose version differs from the one this deploy
-    // requires is refused before any credential lookup (mcp-version-gate.ts).
     const versionMismatch = checkMcpVersion(request);
     if (versionMismatch !== null) return { auth: null, error: versionMismatch };
 
@@ -122,12 +114,6 @@ export async function requireSupabaseSession(request?: Request): Promise<Supabas
   };
 }
 
-//---------------
-// OAuth (MCP) — access JWT issued by our own authorization server
-// (/oauth/token). Full scope (no persona restriction); a verification
-// failure falls through to the cookie-session flow below without changing
-// legacy behavior.
-//---------------
 function looksLikeJwt(value: string): boolean {
   return value.split('.').length === 3;
 }
@@ -138,8 +124,6 @@ async function resolveOAuthAccessToken(
   try {
     const keys = await getOAuthKeys();
     const claims = await verifyAccessToken(keys, candidateKey, { resource: getMcpResource() });
-    // OAuth callers have no cookie session either, so routes must treat
-    // them like API keys (service client), not like web sessions.
     return { userId: claims.sub, accessToken: candidateKey, isOAuth: true };
   } catch {
     return null;

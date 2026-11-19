@@ -42,8 +42,6 @@ class PreviewHouseVoiceTests(unittest.TestCase):
         self.assertEqual(call.args[2], 1.0)
         self.assertEqual(call.kwargs.get("language"), "en")
         self.assertEqual(call.kwargs.get("user_id"), "user-1")
-        # A preview samples the voice, it does not ship a video: the
-        # narration check (and its Whisper transcription) is skipped.
         self.assertEqual(call.kwargs.get("validate"), False)
 
     def test_bare_catalog_name_is_accepted(self):
@@ -56,8 +54,6 @@ class PreviewHouseVoiceTests(unittest.TestCase):
             persona_service.preview_house_voice_mp3(
                 "user-1", "chatterbox:en_us_male_01", text="Hello world"
             )
-        # The alias still renders under the caller's id: the TTS path, not
-        # the catalog, owns the final name resolution.
         self.assertEqual(mock_tts.call_args.args[1], "chatterbox:en_us_male_01")
 
     def test_no_text_renders_fixed_english_sample(self):

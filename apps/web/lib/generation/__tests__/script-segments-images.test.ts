@@ -10,8 +10,6 @@ import {
   validateSegments,
 } from '@/lib/generation/script-segments';
 
-// The images material: every segment carries a list of photos, about one
-// per ~3s of speech. Mirrors validate_segments(segments, "images").
 const hook =
   'Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is still waiting nearby for you today.';
 const content =
@@ -126,10 +124,6 @@ describe('validateSegments with the images material', () => {
   });
 
   it('names the merge escape when the per-segment minimums exceed the 30-photo cap', () => {
-    // Hook 25 words + six 25-word content segments + a 20-word content take = 195 words.
-    // Every segment meets its density minimum (4, 4x6, 3 = 31 photos) yet the
-    // 30-photo cap fires, and removing any photo re-triggers density — so the
-    // cap fix must name merging segments as the way out.
     const segments = [
       { kind: 'hook', text: `${Array(25).fill('hook').join(' ')}.`, media: photos(4, 'h') },
       ...Array.from({ length: 6 }, (_, i) => ({
@@ -202,10 +196,6 @@ describe('validateSegments with the images material', () => {
   });
 
   it('one clip per take passes the density minimum', () => {
-    // A clip covers ~12s of speech, not one 3s photo slot: the engine
-    // credits it as 4 items for the minimum (segment_video
-    // CLIP_DENSITY_ITEMS), so a 25-word hook passes with one clip and a
-    // 42-word take with two. The raw media count stays 4.
     const result = validateSegments([
       { kind: 'hook', text: hook, media: clips(1, 'h') },
       { kind: 'content', text: content, media: clips(2, 'b') },
@@ -233,8 +223,6 @@ describe('validateSegments with the images material', () => {
   });
 
   it('the density maximum counts clips one for one', () => {
-    // A clip must not inflate the flicker cap: 1 clip + 2 photos in a
-    // 5-word take is 3 items against a max of 1, clip credit or not.
     const segments = [
       { kind: 'hook', text: hook, media: clips(1, 'h') },
       { kind: 'content', text: content, media: clips(2, 'b') },

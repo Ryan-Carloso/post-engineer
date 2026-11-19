@@ -3,9 +3,6 @@
 import { useI18n } from '@/lib/i18n/provider';
 import { LOCALES } from '@/lib/i18n';
 
-//---------------
-// HeaderLocaleSwitcher — seletor PT/EN do header
-//---------------
 export default function HeaderLocaleSwitcher() {
   const { locale, setLocale } = useI18n();
   return (

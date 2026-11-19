@@ -82,8 +82,6 @@ def test_unique_migration_numbers_pass(checks, tmp_path, monkeypatch, capsys):
 
 
 def test_secret_values_are_never_printed(checks, tmp_path, monkeypatch, capsys):
-    # Build the fake key at runtime: a literal sk-... value in this file
-    # would trip the workflow's own mechanical secret scan on the PR diff.
     secret = "sk-" + "abcdefghij1234567890" + "XYZ"
     diff = (
         "diff --git a/apps/web/lib/x.ts b/apps/web/lib/x.ts\n"
@@ -98,15 +96,10 @@ def test_secret_values_are_never_printed(checks, tmp_path, monkeypatch, capsys):
     assert "FAIL" in out
     assert "OpenAI-style sk- key" in out
     assert "apps/web/lib/x.ts" in out
-    # The value itself must never appear in the report.
     assert secret not in out
 
 
 def test_synthetic_sequential_key_does_not_fail(checks, tmp_path, monkeypatch, capsys):
-    # The telemetry scrubber test uses an alphabet-sequence fixture:
-    # provably not a random key, so the mechanical scan must not fail on it.
-    # Built at runtime, like the real-key test below, to keep the literal
-    # out of this file's own diff.
     secret = "sk-" + "".join(chr(ord("a") + i) for i in range(26))
     diff = (
         "diff --git a/apps/web/lib/__tests__/x.test.ts b/apps/web/lib/__tests__/x.test.ts\n"

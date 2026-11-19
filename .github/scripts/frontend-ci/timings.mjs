@@ -1,12 +1,3 @@
-//---------------
-// timings — vitest JSON reporter durations, merged across shards.
-//
-// The reporter records each file's startTime/endTime as epoch milliseconds.
-// Paths are stored relative to apps/web so a later CI runner can reuse them.
-// A merge keeps every file from the previous cache and overwrites only the
-// files this run actually executed.
-//---------------
-
 import path from 'node:path';
 
 /**

@@ -15,13 +15,7 @@ import {
   type PersonaDefaultAccounts,
 } from '@/lib/persona-publishing-accounts';
 
-//---------------
-// GET /api/persona/list — the logged-in user's personas.
-// Auth = Supabase session (cookie) OR personal API key (Bearer/x-api-key, MCP).
-// Foto e amostra de voz saem como signed URLs (bucket privado).
-//---------------
-
-const SIGNED_URL_EXPIRES_SECONDS = 60 * 60; // 1h
+const SIGNED_URL_EXPIRES_SECONDS = 60 * 60;
 
 async function getHandler(request: Request): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);
@@ -40,7 +34,6 @@ async function getHandler(request: Request): Promise<NextResponse> {
     )
     .eq('user_id', auth.userId);
 
-  // A key with explicit scope only sees the authorized personas.
   const scopedIds = auth.personaIds;
   if (isScopedApiKey(auth) && scopedIds) {
     query = query.in('id', scopedIds);
@@ -75,10 +68,6 @@ async function getHandler(request: Request): Promise<NextResponse> {
     libraryRows = (images ?? []) as LibraryDisplayImage[];
   }
 
-  // Issue #572 — each persona's bound publishing accounts, so the card
-  // can show where the persona publishes and warn when it binds nothing.
-  // The table carries no user_id: the scope is the listed persona ids,
-  // which the route already filtered to the caller.
   let bindingsByPersona: Map<string, PersonaDefaultAccounts> = new Map();
   if (personaIds.length > 0) {
     try {
@@ -101,9 +90,6 @@ async function getHandler(request: Request): Promise<NextResponse> {
       const libraryUrl = chosen
         ? await signedLibraryUrl(supabase, chosen.image_path, record.id as string)
         : undefined;
-      // Named locals so Istanbul and V8 both record the optional-field
-      // lines (Codecov merged the Cypress 0-hit map onto the object
-      // literal and treated these as uncovered).
       const avatarUrl = toSameOriginAssetPath(record.avatar_url as string | null) ?? undefined;
       const photoUrl = await signedUrl(supabase, record.photo_path as string | null, 'photo');
       const voiceId = (record.voice_id as string | null) ?? undefined;
@@ -124,11 +110,6 @@ async function getHandler(request: Request): Promise<NextResponse> {
         id: record.id as string,
         name: record.name as string,
         createdAt: record.created_at as string,
-        // Normalized to same-origin: rows created before this fix stored the
-        // absolute production URL (the faces API hands out `${APP_URL}/...`),
-        // so local dev fetched production — and an unauthenticated fetch of a
-        // public asset is bounced to /landing by the middleware, i.e. HTML
-        // where an image is expected. Third-party URLs stay untouched.
         avatarUrl,
         photoUrl,
         libraryUrl,
@@ -149,12 +130,6 @@ async function getHandler(request: Request): Promise<NextResponse> {
     }),
   );
 
-  //---------------
-  // Avatar diagnostics. A missing face used to be invisible: the list answers
-  // with no avatarUrl, the UI silently draws initials, and nobody can tell a
-  // NULL column from a dead upstream URL. Logged per persona (redacted — the
-  // storage signature lives in the query string) plus a one-line summary.
-  //---------------
   for (const persona of personas) {
     const avatarSource = describeImageSource(persona.avatarUrl);
     const hasPhoto = persona.photoUrl !== undefined;
@@ -217,7 +192,4 @@ async function signedLibraryUrl(
   return signedUrl(supabase, path, 'library', { personaId });
 }
 
-//---------------
-// 5xx reporting: handled server errors reach PostHog error tracking.
-//---------------
 export const GET = withApiErrorReporting('GET /api/persona/list', getHandler, { getUserId: resolveReportingUserId });

@@ -66,11 +66,6 @@ import modal
 from fastapi import File, Form, Request, UploadFile
 from fastapi.responses import JSONResponse, Response
 
-# The container image, the weights layout, the GPU/rate literals and the
-# torchrun call itself live in modal_longcat_gpu.py. Everything Modal-decorated
-# stays HERE so `modal deploy modal_longcat.py` and
-# `modal run modal_longcat.py::download_weights` keep resolving against this
-# module.
 from modal_longcat_cost import TRACKER, scaledown_cost_usd
 from modal_longcat_gpu import (
     AVATAR_WEIGHTS_DIR,
@@ -90,29 +85,16 @@ from modal_longcat_gpu import (
 RESULTS_VOLUME = modal.Volume.from_name("longcat-results", create_if_missing=True)
 JOB_STATUS = modal.Dict.from_name("longcat-job-status", create_if_missing=True)
 
-# LipSyncQuality -> the resolution rendered here. Mirrored by
-# QUALITY_RESOLUTIONS in app/services/longcat.py, which is what the client
-# validates against; an unknown quality is rejected on both sides so a typo
-# never silently bills a 720p render nobody asked for.
 QUALITY_PRESETS: dict[str, str] = {
     "ok": "480p",
     "very-good": "720p",
 }
 
-# Shared bearer secret required by every HTTP endpoint below. Without it the
-# public Modal URLs would let anyone submit H200 GPU jobs (direct spend) and
-# read any job's result. Set it via `modal secret create longcat-http
-# LONGCAT_HTTP_SECRET=...` and attach the secret to the endpoint functions with
-# `secret=modal.Secret.from_name("longcat-http")`.
 LONGCAT_HTTP_SECRET = os.environ.get("LONGCAT_HTTP_SECRET", "")
 
-# Upload caps (bytes) mirroring the engine's persona media limits.
 MAX_UPLOAD_BYTES = 20 * 1024 * 1024
 _JOB_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 
-# Modal account/app prefix for the deployed HTTP endpoints. Set
-# LONGCAT_MODAL_APP_NAME in the environment (see apps/engine/.env.example);
-# there is no default -- the endpoint URLs cannot be built without it.
 _MODAL_APP_NAME = os.environ.get("LONGCAT_MODAL_APP_NAME")
 if not _MODAL_APP_NAME:
     raise RuntimeError(
@@ -122,9 +104,6 @@ if not _MODAL_APP_NAME:
 STATUS_ENDPOINT = f"https://{_MODAL_APP_NAME}--longcat-http-server-status.modal.run"
 DOWNLOAD_ENDPOINT = f"https://{_MODAL_APP_NAME}--longcat-http-server-download.modal.run"
 
-# Approximate container boot (module import). Modal bills the GPU from here, so
-# this is the baseline the reported cost_usd is measured against -- NOT the
-# handler start, which would hide the ~54 GB weight load.
 _CONTAINER_START = time.monotonic()
 
 
@@ -201,30 +180,15 @@ async def _write_job_status_async(
     await JOB_STATUS.put.aio(job_id, record)
 
 
-# One Modal app per GPU candidate, so an H100 deployment and an A100 deployment
-# can sit side by side and be tested without one clobbering the other's URLs.
-# Modal derives the endpoint host from this name, so it has to differ per GPU.
 _GPU_SLUG = os.environ.get("LONGCAT_GPU", "").lower().replace("-80gb", "80")
 app = modal.App(f"moneyprint-longcat-{_GPU_SLUG}" if _GPU_SLUG else "moneyprint-longcat")
 
-# The three HTTP endpoints only authenticate, touch a Modal Dict and move MP4
-# bytes -- none of that needs the ~20GB torch/flash-attn GPU image. Running them
-# on LONGCAT_IMAGE meant every submit/status call paid that image's cold start,
-# so with the client's 120s submit timeout a fresh container never answered.
 _HERE = Path(__file__).resolve().parent
 LONGCAT_API_IMAGE = (
     modal.Image.debian_slim(python_version="3.11")
     .pip_install("fastapi[standard]", "loguru")
-    # modal_longcat.py imports modal_longcat_gpu at module scope, so both
-    # modules must exist in every image that hosts this one -- including the
-    # slim API image, whose endpoints never call the renderer.
     .add_local_file(_HERE / "modal_longcat_gpu.py", "/root/modal_longcat_gpu.py", copy=True)
     .add_local_file(_HERE / "modal_longcat_cost.py", "/root/modal_longcat_cost.py", copy=True)
-    # _MODAL_APP_NAME is read at module scope, which Modal evaluates when it
-    # hydrates this module INSIDE the container -- a deploy-time shell variable
-    # is not visible there, so every endpoint crash-looped with
-    # "LONGCAT_MODAL_APP_NAME is not set". Baking it into both images is what
-    # makes it reach the runtime.
     .env({"LONGCAT_MODAL_APP_NAME": _MODAL_APP_NAME})
 )
 
@@ -260,11 +224,7 @@ def download_weights() -> str:
     volumes={WEIGHTS_DIR: WEIGHTS_VOLUME, "/results": RESULTS_VOLUME},
     secrets=[modal.Secret.from_name("huggingface")],
     timeout=14400,
-    # A longer window bills idle H200 time at ~$0.0013/s for nothing: 300s of
-    # idle hold costs ~$0.38 per invocation versus ~$0.08 at 60s.
     scaledown_window=60,
-    # One container only: the model is a single 141GB H200 allocation, and a
-    # second container cannot fit alongside it anyway.
     max_containers=1,
 )
 class GenerateAvatar:
@@ -322,11 +282,7 @@ class GenerateAvatar:
             output_path.parent.mkdir(parents=True, exist_ok=True)
             output_path.write_bytes(video_bytes)
             RESULTS_VOLUME.commit()
-            # Per-clip span: this handler call only, never the container's
-            # whole life. See the docstring for why the two must not be merged.
             job_gpu_s = time.monotonic() - handler_started
-            # Container-to-date, so the amortised spend stays observable. On the
-            # first job after a scale-down this is the cold-start weight load.
             uptime_s = time.monotonic() - _CONTAINER_START
             timings: dict[str, float | None] = {
                 "inference_s": phase_timings["inference_s"],
@@ -344,9 +300,6 @@ class GenerateAvatar:
                     "resolution": resolution,
                     "num_segments": num_segments,
                     "timings": timings,
-                    # Priced on the GPU the container ACTUALLY got. With a
-                    # fallback list that is not always the first preference,
-                    # and Modal bills each card at its own rate.
                     "gpu": active_gpu_name() or GPU_PREFERENCE[0],
                     "cost_usd": round(job_gpu_s * _rate(), 4), "container_cost_usd": round(uptime_s * _rate(), 4),
                     "container_id": TRACKER.container_id, "jobs_served_in_container": TRACKER.note_job(round(job_gpu_s * _rate(), 4)),
@@ -416,9 +369,6 @@ async def submit_generation(
             "phase": "queued",
         },
     )
-    # ``spawn`` returns immediately with a FunctionCall. Using ``spawn.aio``
-    # here makes the web handler await the remote result and can end in HTTP
-    # 500 after the GPU job has already completed.
     call = GenerateAvatar().generate_bytes.spawn(
         job_id, image_bytes, audio_bytes, resolution, segments
     )

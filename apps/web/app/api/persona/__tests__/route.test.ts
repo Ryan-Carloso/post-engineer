@@ -1,19 +1,10 @@
 // @vitest-environment node
-// API routes use native Request/FormData (undici); jsdom mixes
-// implementations and locks up `request.formData()`. UI tests stay in jsdom.
 import '@testing-library/jest-dom/vitest';
 import { NextResponse } from 'next/server';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { findRepoRoot } from '@/test/repo-root';
 
-//---------------
-// POST /api/persona tests (real contract).
-// The external boundary (Supabase) is mocked; everything else is real:
-// formData parsing, validations, path assembly, and payload.
-//---------------
-
 vi.mock('next/server', async (importOriginal) => {
-  // after() needs a request scope; in tests the callback runs inline.
   const actual = await importOriginal<typeof import('next/server')>();
   return {
     ...actual,
@@ -44,8 +35,6 @@ vi.mock('@/lib/rate-limit', async (importOriginal) => {
 vi.mock('@/lib/voice-catalog-fetch', () => ({
   fetchPersonaVoiceCatalogIds: vi.fn(async () => undefined),
 }));
-// PostHog capture seam: the route's 4xx reports via logger.warn →
-// server_warning; these asserts pin the UNKNOWN_VOICE rejection capture.
 const posthogMock = vi.hoisted(() => ({
   capture: vi.fn(),
   captureAs: vi.fn(),
@@ -67,9 +56,6 @@ import { logger } from '@/lib/logger';
 import { restorePinnedHttp, stubPinnedHttp } from '@/test/stub-pinned-http';
 import { REMOTE_FACE_ERROR } from '@/lib/persona-remote-face';
 
-// The 400 log line pins the route string and the stable template: without
-// it, blanking either string in the response call changes nothing any test
-// observes (the body carries neither).
 const warnSpy = vi.spyOn(logger, 'warn');
 const errorSpy = vi.spyOn(logger, 'error');
 function loggedWarnings(): string[] {
@@ -82,11 +68,7 @@ function mockSupabase(overrides: {
   user?: { id: string } | null;
   uploadError?: { message: string } | null;
   insertError?: { message: string } | null;
-  // Connected accounts the binding ownership check sees (issue #572).
-  // Default: the youtube account every create test binds.
   socialAccounts?: Array<{ provider: string; provider_account_id: string }>;
-  // Persona_default_accounts insert failure: the binding save fails and
-  // the whole creation rolls back.
   bindingError?: { message: string } | null;
 } = {}) {
   const uploaded: Array<{ path: string; options: { contentType: string } }> = [];
@@ -113,7 +95,6 @@ function mockSupabase(overrides: {
         })),
       };
     }),
-    // The binding save checks persona ownership (setPersonaDefaultAccounts).
     select: vi.fn(() => ({
       eq: vi.fn(() => ({
         eq: vi.fn(() => ({
@@ -121,7 +102,6 @@ function mockSupabase(overrides: {
         })),
       })),
     })),
-    // Creation rollbacks (binding save / library save) delete the persona.
     delete: vi.fn(() => ({
       eq: vi.fn(() => ({
         eq: vi.fn(async () => ({ error: null })),
@@ -148,8 +128,6 @@ function mockSupabase(overrides: {
     }),
   };
 
-  // Any other table keeps the old insert-only shape (persona_images via
-  // addLibraryImages).
   const defaultFrom = {
     insert: personasFrom.insert,
   };
@@ -181,8 +159,6 @@ function mockSupabase(overrides: {
 
 function formRequest(fields: Record<string, string>, files: File[] = [], opts: { omitBinding?: boolean } = {}): Request {
   const formData = new FormData();
-  // Every create carries a binding by default (issue #572): the youtube
-  // account the mock connects. Tests for the binding itself opt out.
   const withBinding = opts.omitBinding
     ? fields
     : { publishingAccounts: JSON.stringify({ youtube: ['acct-1'] }), ...fields };
@@ -245,12 +221,6 @@ describe('POST /api/persona — toda persona tem rosto', () => {
   });
 
   it('never stores a face mix (the column was dropped in migration 007)', async () => {
-    // Regression guard on our own insert shape: a stray key is a
-    // phantom-column 400 from PostgREST on every persona creation. A stale
-    // client payload carrying the removed fields is a no-op by design (zod
-    // strips unknown keys), so it is not exercised here;
-    // lib/__tests__/face-mix-removed.test.ts pins the removal at the source
-    // level across the web app and the engine.
     const { inserted } = mockSupabase();
 
     const res = await POST(
@@ -277,11 +247,6 @@ describe('POST /api/persona — toda persona tem rosto', () => {
   });
 
   it('includes recent_image_ids in the insert (supplies the NOT NULL column explicitly, independent of the DB default)', async () => {
-    // Regression: the personas.recent_image_ids column is NOT NULL, and DBs
-    // created from the pre-fix consolidated schema have no DEFAULT for it —
-    // omitting it from the insert makes PostgreSQL reject every persona
-    // creation with a 23502 violation (500). The insert supplies the column
-    // explicitly so creation works regardless of the DB default.
     const { inserted } = mockSupabase();
 
     const res = await POST(
@@ -298,13 +263,6 @@ describe('POST /api/persona — toda persona tem rosto', () => {
   });
 
   it('persona insert payload stays in sync with public.personas (both directions)', async () => {
-    // Schema-sync test (mirrors the generate-and-schedule phantom-key pin):
-    // the supabase-js mock records any payload key, so a speculative key
-    // would sail through tests but be rejected by PostgREST in production
-    // (cf. PR #55's kind='batch'); conversely a NOT NULL-without-DEFAULT
-    // column missing from the payload 500s every call (this PR's 500). Assert
-    // both directions so the next column addition fails CI instead of
-    // production.
     const { readFileSync, readdirSync } = await import('node:fs');
     const { join } = await import('node:path');
     const migrationsDir = join(findRepoRoot(import.meta.url), 'supabase', 'migrations');
@@ -314,9 +272,6 @@ describe('POST /api/persona — toda persona tem rosto', () => {
     );
     expect(tableMatch).not.toBeNull();
     const columnBlock = tableMatch?.[1] ?? '';
-    // Table-level constraints (e.g. `unique (user_id, persona_id),`) start
-    // with a keyword, not a column name — filter them so a future phantom
-    // key named like a SQL keyword can't false-pass.
     const constraintKeywords = new Set([
       'primary',
       'unique',
@@ -325,12 +280,6 @@ describe('POST /api/persona — toda persona tem rosto', () => {
       'constraint',
       'exclude',
     ]);
-    // Column name -> true when the column is NOT NULL with no DEFAULT (the
-    // insert MUST supply it) — e.g. `user_id uuid not null` vs
-    // `created_at timestam not null default now()`.
-    // Assumes one column per physical line: a wrapped definition (e.g. the
-    // `default` on its own continuation line) would misparse — fail-closed,
-    // but join continuation lines before changing the format.
     const columns = new Map<string, boolean>();
     for (const line of columnBlock.split('\n')) {
       const trimmed = line.trim();
@@ -338,30 +287,12 @@ describe('POST /api/persona — toda persona tem rosto', () => {
       if (!name || name.startsWith('--') || constraintKeywords.has(name)) {
         continue;
       }
-      // Match whole words on the comment-stripped definition: a bare
-      // substring match would silently drop a genuinely required column —
-      // e.g. `default_topic text not null` or a trailing comment mentioning
-      // "default" — and that is exactly the production-500 class this test
-      // exists to catch. Column-level PRIMARY KEY is implicitly NOT NULL in
-      // PostgreSQL, so it counts even without an explicit `not null`.
       const definition = trimmed.replace(/--.*$/, '');
       const notNull =
         /\bnot null\b/i.test(definition) ||
         /\bprimary key\b/i.test(definition);
       columns.set(name, notNull && !/\bdefault\b/i.test(definition));
     }
-    // Columns added AFTER 001 are invisible to a 001-only parse, which would
-    // report every insert key from a later migration as a phantom column —
-    // i.e. this test would fail the moment a migration adds a column, and the
-    // obvious "fix" (editing 001) breaks `supabase db push` for every
-    // self-hoster who already applied it. Migrations are append-only, so the
-    // chain is the truth: union the ALTER TABLE ADD COLUMN statements from
-    // every numbered migration, in apply order.
-    //
-    // Later additions are nullable-or-defaulted by construction here, so they
-    // land as "not required" — which is the direction that matters (a column
-    // the insert omits). A NOT NULL addition without a default would fail at
-    // runtime, and that is caught by migration application in CI, not here.
     for (const file of readdirSync(migrationsDir).sort()) {
       if (!file.endsWith('.sql') || file === '001_schema.sql') continue;
       const later = readFileSync(join(migrationsDir, file), 'utf8');
@@ -373,12 +304,9 @@ describe('POST /api/persona — toda persona tem rosto', () => {
         if (name) columns.set(name, false);
       }
     }
-    // Sentinels: guard against a degraded parse passing vacuously.
     expect(columns.has('recent_image_ids')).toBe(true);
     expect(columns.get('user_id')).toBe(true);
     expect(columns.get('created_at')).toBe(false);
-    // Pins the DEFAULT this PR restores: dropping `default '{}'` from
-    // 001_schema.sql must fail CI, not just leave the insert pin green.
     expect(columns.get('recent_image_ids')).toBe(false);
 
     const { inserted } = mockSupabase();
@@ -394,14 +322,12 @@ describe('POST /api/persona — toda persona tem rosto', () => {
     const payload = inserted[0];
     expect(payload).toBeDefined();
 
-    // Direction 1: every insert key is a real public.personas column.
     for (const key of Object.keys(payload)) {
       expect(
         columns.has(key),
         `insert key "${key}" is not a public.personas column`,
       ).toBe(true);
     }
-    // Direction 2: every NOT NULL-without-DEFAULT column is supplied.
     for (const [name, required] of columns) {
       if (required) {
         expect(payload).toHaveProperty(name);
@@ -410,12 +336,6 @@ describe('POST /api/persona — toda persona tem rosto', () => {
   });
 
   it("keeps the recent_image_ids '{}' default literal in sync across SQL files", async () => {
-    // The restored default literal now lives in three SQL files (two in
-    // supabase/migrations/, plus the deployed-DB fix script at the
-    // supabase/ root); a value drift between them would diverge the
-    // migration chain, the canonical schema, and the deployed-DB fix
-    // script silently. Static `includes` checks only — no dynamic RegExp
-    // (CodeQL rule).
     const { readFileSync } = await import('node:fs');
     const { join } = await import('node:path');
     const supabaseDir = join(findRepoRoot(import.meta.url), 'supabase');
@@ -510,8 +430,6 @@ describe('POST /api/persona — account binding (issue #572)', () => {
     mockSupabase({ socialAccounts: [] });
     const res = await POST(formRequest(validFields));
     const body = (await res.json()) as { error?: string; code?: string };
-    // The binding save fails the ownership check: the persona row is
-    // rolled back and the caller gets the lib's coded 400, not a 500.
     expect(res.status).toBe(400);
     expect(body.code).toBe('INVALID_PROVIDER_ACCOUNT');
     expect(body.error).toBe('Account acct-1 is not a connected youtube account of this user.');
@@ -523,7 +441,6 @@ describe('POST /api/persona — account binding (issue #572)', () => {
     const body = (await res.json()) as { error?: string };
     expect(res.status).toBe(500);
     expect(body.error).toBe('Failed to bind publishing accounts to the persona.');
-    // The rollback deleted the persona row.
     expect(client.from).toHaveBeenCalledWith('personas');
   });
 });
@@ -557,7 +474,6 @@ describe('POST /api/persona', () => {
     expect(body.success).toBe(false);
     expect(body.error).toBe('Persona name is required.');
     expect(body.code).toBe('VALIDATION_FAILED');
-    // parsePersonaForm returns no field, and the route forwards none.
     expect(body.field).toBeUndefined();
     expect(loggedWarnings()).toContain('[POST /api/persona] 400 Persona name is required.');
   });
@@ -571,7 +487,6 @@ describe('POST /api/persona', () => {
     const body = (await res.json()) as { error: string; code?: string; field?: string };
     expect(body.error).toBe('Provide exactly one of: photo file or avatarUrl.');
     expect(body.code).toBe('VALIDATION_FAILED');
-    // parsePersonaForm returns no field, and the route forwards none.
     expect(body.field).toBeUndefined();
     expect(loggedWarnings()).toContain(
       '[POST /api/persona] 400 Provide exactly one of: photo file or avatarUrl.',
@@ -602,7 +517,6 @@ describe('POST /api/persona', () => {
     const body = (await res.json()) as { error: string; code?: string; field?: string };
     expect(body.error).toBe('Provide voiceId.');
     expect(body.code).toBe('VALIDATION_FAILED');
-    // parsePersonaForm returns no field, and the route forwards none.
     expect(body.field).toBeUndefined();
     expect(loggedWarnings()).toContain('[POST /api/persona] 400 Provide voiceId.');
   });
@@ -623,9 +537,6 @@ describe('POST /api/persona', () => {
     expect(body.code).toBe('UNKNOWN_VOICE');
     expect(uploaded).toEqual([]);
     expect(inserted).toEqual([]);
-    // Rejection telemetry: exactly ONE event — the wrapper's semantic
-    // `_rejected` (not the logger's server_warning), with the stable code
-    // and the attempted voice (#301, #353). Fire-and-forget, so wait.
     await vi.waitFor(() => expect(posthogMock.captureAs).toHaveBeenCalledTimes(1));
     const [userId, event, properties] = posthogMock.captureAs.mock.calls[0] as [
       string,
@@ -654,7 +565,6 @@ describe('POST /api/persona', () => {
     const body = (await res.json()) as { error: string; code?: string; field?: string };
     expect(body.error).toBe('Unsupported photo format: image/gif');
     expect(body.code).toBe('VALIDATION_FAILED');
-    // parsePersonaForm returns no field, and the route forwards none.
     expect(body.field).toBeUndefined();
     expect(loggedWarnings()).toContain('[POST /api/persona] 400 Unsupported photo format: image/gif');
   });
@@ -667,18 +577,11 @@ describe('POST /api/persona', () => {
 
     expect(res.status).toBe(200);
     expect(body.success).toBe(true);
-    // The route generates the persona id before the upload (the storage folder
-    // is {userId}/{personaId}/), so the response id is a fresh UUID — not the
-    // fixture's.
     expect(body.personaId).toMatch(/^[0-9a-f-]{36}$/);
     expect(uploaded).toHaveLength(1);
-    // Pinned layout: {userId}/{personaId}/photo.png — the folder says whose
-    // file it is in the Supabase dashboard.
     expect(uploaded[0].path).toBe(`${USER_ID}/${body.personaId}/photo.png`);
     expect(uploaded[0].options.contentType).toBe('image/png');
     expect(inserted[0]).toMatchObject({
-      // The route generates the id before the upload, so the folder is known
-      // before the row exists (personas.id defaults to gen_random_uuid()).
       id: body.personaId,
       user_id: USER_ID,
       name: 'Ana',
@@ -717,7 +620,6 @@ describe('POST /api/persona', () => {
 
     expect(res.status).toBe(200);
     expect(body.success).toBe(true);
-    // The event must carry the id the route actually used.
     expect(trackApiEvent).toHaveBeenCalledWith(
       'persona_created',
       expect.objectContaining({ personaId: body.personaId }),
@@ -742,9 +644,6 @@ describe('POST /api/persona', () => {
     const body = (await res.json()) as { success: boolean; error: string };
     expect(body.success).toBe(false);
     expect(body.error).toBeTruthy();
-    // The storage failure is logged with the bucket error and the exact
-    // path, so a silent upload drop shows up in the logs, not as a
-    // mysterious 500. Pins upload-photo.ts:26 (message + path mutants).
     expect(errorSpy).toHaveBeenCalledWith(
       '[api/persona] storage upload failed',
       expect.objectContaining({ message: 'bucket down' }),
@@ -761,12 +660,6 @@ describe('POST /api/persona', () => {
     const body = (await res.json()) as { success: boolean; error: string };
     expect(body.success).toBe(false);
   });
-
-  //---------------
-  // Content preferences (optional): language, videoAspect,
-  // scriptPrompt, paragraphNumber. Persisted on the persona and applied
-  // as defaults in the video job.
-  //---------------
 
   it('creates a persona with full content preferences', async () => {
     const { inserted } = mockSupabase();
@@ -1027,8 +920,6 @@ describe('POST /api/persona — face quality (no mix, no mode)', () => {
     vi.unstubAllGlobals();
   });
 
-  // Issue #448: an authority-relative avatarUrl would be resolved against
-  // the app origin at dispatch and fetched server-side; it is a 400 here.
   it.each([
     '//169.254.169.254/latest/meta-data/',
     '/\\169.254.169.254/x',
@@ -1065,12 +956,6 @@ describe('POST /api/persona — face quality (no mix, no mode)', () => {
   });
 });
 
-//---------------
-// PATCH — edit an existing persona. All fields optional;
-// at least one must be sent. Replaced files are removed
-// from Storage.
-//---------------
-
 interface PatchOverrides {
   user?: { id: string } | null;
   existing?: Record<string, unknown> | null;
@@ -1099,8 +984,6 @@ function mockSupabaseForDelete(deleteError: { code?: string; message: string } |
               data: { id: 'persona-uuid-1', photo_path: null, voice_audio_path: null },
               error: null,
             })),
-            // Thenable for list selects (schedules, generations): resolves
-            // to an empty list so the cascade degenerates cleanly.
             then: (resolve: (v: unknown) => void) => {
               resolve({ data: [], error: null });
             },
@@ -1311,11 +1194,8 @@ describe('PATCH /api/persona', () => {
 
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: string; code?: string; field?: string };
-    // The body keeps the rejected value (client bug, shown to the caller);
-    // the log line must use the stable template — no user value in PostHog.
     expect(body.error).toBe("Invalid videoLayout: cinematic. Use one of standard, react.");
     expect(body.code).toBe('VALIDATION_FAILED');
-    // parsePatchBody returns no field, and the route forwards none.
     expect(body.field).toBeUndefined();
     expect(loggedWarnings()).toContain(
       '[PATCH /api/persona] 400 Invalid videoLayout. Use one of standard, react.',
@@ -1328,7 +1208,6 @@ describe('PATCH /api/persona', () => {
     const res = await PATCH(patchRequest('persona-uuid-1', { name: 'Com Foto' }, [photo()]));
 
     expect(res.status).toBe(200);
-    // Pinned layout, PATCH writer: {userId}/{personaId}/photo.png
     expect(uploaded[0].path).toBe(`${USER_ID}/persona-uuid-1/photo.png`);
     expect(updated[0]).toMatchObject({ photo_path: uploaded[0].path });
     expect(removed).toContain(`${USER_ID}/foto-antiga.png`);
@@ -1346,12 +1225,6 @@ describe('PATCH /api/persona', () => {
     expect(updated).toEqual([]);
   });
 
-  //---------------
-  // personas_visual_identity_check: photo_path + avatar_url = at most one.
-  // Setting avatar_url without clearing photo_path left the row with BOTH,
-  // the check rejected the update (500 on every save) and, without the
-  // check, the UI would silently prefer the wrong face.
-  //---------------
   it('trocar de foto para personagem limpa photo_path no MESMO update', async () => {
     const { updated, removed } = mockSupabaseForPatch({
       existing: {
@@ -1370,7 +1243,6 @@ describe('PATCH /api/persona', () => {
     );
 
     expect(res.status).toBe(200);
-    // The single update carries the swap; a separate clear would race.
     expect(updated[0]).toMatchObject({
       avatar_url: '/caracter-samples/file-3.png',
       photo_path: null,
@@ -1464,8 +1336,6 @@ describe('PATCH /api/persona', () => {
       'Unknown voice "energetic". Not a house voice and not one of your clones. Pick one from GET /api/persona/voices.',
     );
     expect(body.code).toBe('UNKNOWN_VOICE');
-    // Rejection telemetry: the wrapper's semantic _rejected event with the
-    // code and attempted voice (#353).
     await vi.waitFor(() => expect(posthogMock.captureAs).toHaveBeenCalledTimes(1));
     const [userId, event, properties] = posthogMock.captureAs.mock.calls[0] as [
       string,
@@ -1515,11 +1385,8 @@ describe('PATCH /api/persona', () => {
 
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: string; code?: string; field?: string };
-    // The body keeps the rejected MIME type; the log line must use the
-    // stable template — no user value in PostHog.
     expect(body.error).toBe('Unsupported photo format: image/gif');
     expect(body.code).toBe('VALIDATION_FAILED');
-    // parsePatchBody returns no field, and the route forwards none.
     expect(body.field).toBeUndefined();
     expect(loggedWarnings()).toContain('[PATCH /api/persona] 400 Unsupported photo format.');
   });
@@ -1531,12 +1398,6 @@ describe('PATCH /api/persona', () => {
 
     expect(res.status).toBe(500);
   });
-
-  //---------------
-  // Preservation — what was not edited must stay exactly
-  // as it was: the update may only cite changed fields and the
-  // Storage cleanup may only remove replaced files.
-  //---------------
 
   describe('preservação de dados não editados', () => {
     const PERSONA_COMPLETA = {
@@ -1675,9 +1536,6 @@ describe('PATCH /api/persona', () => {
     });
 
     it('ctaType: an incoherent CTA with a photo returns 400 and uploads nothing', async () => {
-      // The merged-CTA check runs before the photo block on purpose: a
-      // 400 here must not leave an uploaded replacement photo behind with
-      // no DB row pointing at it.
       const { updated, uploaded } = mockSupabaseForPatch({
         existing: { ...PERSONA_COMPLETA, cta_type: 'follow', cta_url: null, cta_instruction: null },
       });
@@ -1834,11 +1692,8 @@ describe('PATCH /api/persona', () => {
 
       expect(res.status).toBe(400);
       const body = (await res.json()) as { error: string; code?: string; field?: string };
-      // The body keeps the rejected value; the log line must use the stable
-      // template — no user value in PostHog.
       expect(body.error).toBe('Invalid videoAspect: 21:9. Use one of 9:16, 16:9, 1:1.');
       expect(body.code).toBe('VALIDATION_FAILED');
-      // parsePatchBody returns no field, and the route forwards none.
       expect(body.field).toBeUndefined();
       expect(loggedWarnings()).toContain(
         '[PATCH /api/persona] 400 Invalid videoAspect. Use one of 9:16, 16:9, 1:1.',
@@ -1890,8 +1745,6 @@ describe('DELETE /api/persona', () => {
         })),
       },
       from: vi.fn((table: string) => {
-        // The library rows vanish via on delete cascade, but their storage
-        // objects must be collected BEFORE the persona row is deleted.
         if (table === 'persona_images') {
           return {
             select: vi.fn(() => ({

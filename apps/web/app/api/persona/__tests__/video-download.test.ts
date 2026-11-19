@@ -17,11 +17,6 @@ vi.mock('@/lib/api-keys', async (importOriginal) => {
   };
 });
 
-//---------------
-// Tests for GET /api/persona/video-download/:taskId/*path — authenticated
-// binary proxy. Auth = Supabase session.
-//---------------
-
 import { GET } from '../video-download/[taskId]/[...path]/route';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
@@ -151,8 +146,6 @@ describe('GET /api/persona/video-download/:taskId/*path', () => {
   });
 
   it('accepts an API key via x-api-key without a web session', async () => {
-    // Regression: the route called requireSupabaseSession() without the
-    // request, so the API-key path never ran and API callers got 401.
     mockSession({ noSession: true });
     vi.mocked(createSupabaseServiceClient).mockReturnValue({} as never);
     vi.mocked(resolveApiKey).mockResolvedValue({

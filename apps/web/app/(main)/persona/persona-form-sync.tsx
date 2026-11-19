@@ -4,12 +4,6 @@ import { useEffect } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import { usePersonaStore } from '@/lib/store';
 
-//---------------
-// PersonaFormSync — mirrors RHF fields into the zustand store
-// (only when the field is dirty, so the store is not overwritten
-// on mount or in the edit flow). The CTA section writes the store
-// directly, so it has no RHF field to sync.
-//---------------
 export const PersonaFormSync = () => {
   const { formState: { dirtyFields } } = useFormContext();
   const name = useWatch({ name: 'name' });

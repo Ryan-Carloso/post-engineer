@@ -4,8 +4,6 @@ import { NextResponse } from 'next/server';
 
 vi.mock('@/lib/request-auth', () => ({
   requireSupabaseSession: vi.fn(),
-  // The slot presentation lib reads live engine progress with these
-  // headers — the module mock must keep them available.
   engineAuthHeaders: (userId: string) => ({ 'x-user-id': userId }),
 }));
 vi.mock('@/lib/logger', () => ({
@@ -28,17 +26,8 @@ import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 
-//---------------
-// DELETE /api/schedule/slots/:slotId — a user can delete a single slot of
-// their own schedule. Published posts can never be deleted; failed slots
-// can (cleanup of a dead row).
-//---------------
-
 const USER_ID = 'user-1';
 
-// The slot route resolves the URL param into a real slot uuid before it
-// ever reaches PostgREST — fixtures use a genuine uuid for the same
-// reason (a non-uuid param must 404, not 22P02).
 const SLOT_ID = '872827cb-6345-45b8-8153-60924092a648';
 const BATCH_ID = 'aad196b2-380d-560d-a506-d6ee93c980ae';
 
@@ -48,17 +37,10 @@ interface ChainCall {
   args: unknown[];
 }
 
-//---------------
-// mockSlotsClient — records every (table, op) call so tests assert the
-// delete is scoped by user_id, and resolves the slot/schedule/persona
-// fixtures per table (posts: single → slot; schedules: maybeSingle →
-// schedule; personas: single → persona).
-//---------------
 function mockSlotsClient(options: {
   slot?: unknown;
   schedule?: unknown;
   persona?: unknown;
-  /** Makes the personas single() resolve with a DB error instead of a row. */
   personaError?: unknown;
   remaining?: unknown[];
   history?: unknown[];
@@ -82,9 +64,6 @@ function mockSlotsClient(options: {
       neq: track('neq'),
       in: track('in'),
       single: vi.fn(async () => {
-        // PATCH's UPDATE ... .select('id').single() runs after an update()
-        // call; updateConflict simulates the row dispatching (pending →
-        // generating) between the status check and the write.
         const sawUpdate = calls.some((c) => c.table === table && c.op === 'update');
         if (sawUpdate && options.updateConflict) {
           return { data: null, error: { code: 'PGRST116' } };
@@ -108,8 +87,6 @@ function mockSlotsClient(options: {
   const schedulesChain = makeChain('schedules');
   const personasChain = makeChain('personas');
   const historyChain = makeChain('scheduled_post_progress_history');
-  // The progress-history select ends in .order() (not .single()); resolve
-  // the fixture rows there.
   (historyChain as Record<string, unknown>).order = vi.fn(async () => ({
     data: options.historyError ? null : (options.history ?? []),
     error: options.historyError ?? null,
@@ -169,7 +146,6 @@ describe('DELETE /api/schedule/slots/[slotId]', () => {
     expect(response.status).toBe(200);    const body = (await response.json()) as { success: boolean };
     expect(DeleteSlotResponseSchema.safeParse(body).success).toBe(true);
     expect(body.success).toBe(true);
-    // The atomic RPC scopes the delete to the slot id AND the owner.
     expect(client.rpc).toHaveBeenCalledWith('delete_slot_if_not_last', {
       p_slot_id: 'slot-1',
       p_user_id: USER_ID,
@@ -213,7 +189,6 @@ describe('DELETE /api/schedule/slots/[slotId]', () => {
     const response = await deleteSlot(SLOT_ID);
 
     expect(response.status).toBe(200);
-    // Ownership is read with the session client; only the RPC moves.
     expect(sessionClient.from).toHaveBeenCalled();
     expect(sessionClient.rpc).not.toHaveBeenCalled();
     expect(serviceClient.rpc).toHaveBeenCalledWith('delete_slot_if_not_last', {
@@ -301,9 +276,6 @@ describe('DELETE /api/schedule/slots/[slotId]', () => {
   });
 
   it('deletes a ready slot owned by the user', async () => {
-    // Ready is generated but not yet dispatched: deleting its row removes
-    // the target the publisher claims, so it can never publish. No refund:
-    // a user-initiated delete never refunds tokens.
     const client = mockSlotsClient({
       slot: { id: 'slot-1', schedule_id: 's1', status: 'ready', title: 'T' },
       schedule: { id: 's1', user_id: USER_ID },
@@ -354,12 +326,6 @@ describe('DELETE /api/schedule/slots/[slotId]', () => {
   });
 });
 
-//---------------
-// PATCH /api/schedule/slots/:slotId — the title of a slot that has not
-// been dispatched to the engine yet can be edited; the video script comes
-// from the stored segments, so this is the "edit the label" action.
-//---------------
-
 async function patchSlot(slotId: string, body: unknown): Promise<Response> {
   return PATCH(new Request(`https://example.com/api/schedule/slots/${slotId}`, {
     method: 'PATCH',
@@ -392,8 +358,6 @@ describe('PATCH /api/schedule/slots/[slotId]', () => {
     const updateCall = client.calls.find((c) => c.op === 'update');
     expect(updateCall).toBeDefined();
     expect(updateCall?.args?.[0]).toEqual({ title: 'Novo tema' });
-    // The status guard is re-checked in the UPDATE predicate itself, over
-    // both editable statuses.
     const inCall = client.calls.find((c) => c.op === 'in');
     expect(inCall?.args?.[0]).toBe('status');
     expect(inCall?.args?.[1]).toEqual(['pending', 'ready']);
@@ -511,9 +475,6 @@ describe('PATCH /api/schedule/slots/[slotId]', () => {
   });
 
   it('returns 400 for a naive slotAt without a timezone offset', async () => {
-    // In-window (now + 24h) but naive: without Z or ±hh:mm `new Date`
-    // would silently read it as UTC, so the route rejects it before the
-    // window check — the offset check, not the window, must reject it.
     const naiveSlotAt = new Date(Date.now() + 24 * 60 * 60 * 1000)
       .toISOString()
       .replace(/Z$/, '');
@@ -648,13 +609,6 @@ describe('PATCH /api/schedule/slots/[slotId]', () => {
   });
 });
 
-//---------------
-// GET /api/schedule/slots/[slotId] — one post's full detail (slot +
-// schedule + persona) with the same presentation contract as
-// /api/schedule/status (pending→awaiting, live engine progress). A
-// 404 covers unknown ids AND other users' slots.
-//---------------
-
 const SLOT_DETAIL_ROW = {
   id: 'slot-1',
   schedule_id: 's1',
@@ -748,8 +702,6 @@ describe('GET /api/schedule/slots/[slotId]', () => {
   });
 
   it('narrows a missing publish mode to scheduled', async () => {
-    // Pre-015 rows have no column value: they are scheduled posts by
-    // construction, so the payload must read 'scheduled', not null.
     const { publish_mode: _dropped, ...rowWithoutMode } = SCHEDULE_ROW;
     const client = mockSlotsClient({
       slot: SLOT_DETAIL_ROW,
@@ -770,9 +722,6 @@ describe('GET /api/schedule/slots/[slotId]', () => {
   });
 
   it('skips the persona lookup for a slot on a persona-less schedule', async () => {
-    // No persona is a real state (a post created without one, migration
-    // 012): the route must not issue `.eq('id', null)` and log a spurious
-    // failure on every request.
     const client = mockSlotsClient({
       slot: SLOT_DETAIL_ROW,
       schedule: { ...SCHEDULE_ROW, persona_id: null },
@@ -798,8 +747,6 @@ describe('GET /api/schedule/slots/[slotId]', () => {
   });
 
   it('degrades to a null persona but logs when the persona lookup hits a DB error', async () => {
-    // The persona name is cosmetic on the detail page: a failed lookup
-    // degrades to null, but never silently.
     const { logger } = await import('@/lib/logger');
     const client = mockSlotsClient({
       slot: SLOT_DETAIL_ROW,
@@ -879,8 +826,6 @@ describe('GET /api/schedule/slots/[slotId]', () => {
   });
 
   it('returns 404 for another user’s slot without leaking the row', async () => {
-    // The ownership probe reads the slot by (id, user_id); a foreign slot
-    // resolves no schedule row the caller owns → 404, never the row.
     const client = mockSlotsClient({
       slot: { ...SLOT_DETAIL_ROW, user_id: 'someone-else' },
       schedule: null,
@@ -937,13 +882,11 @@ describe('GET /api/schedule/slots/[slotId]', () => {
       { progress: 40, stage: 'subtitle', recordedAt: '2026-10-05T22:10:00.000Z' },
       { progress: 50, stage: 'materials', recordedAt: '2026-10-05T22:12:00.000Z' },
     ]);
-    // The history lookup is scoped to the slot and its owner.
     const historyCalls = client.calls.filter((c) => c.table === 'scheduled_post_progress_history');
     expect(historyCalls.filter((c) => c.op === 'eq').map((c) => c.args)).toEqual([
       ['post_id', SLOT_ID],
       ['user_id', USER_ID],
     ]);
-    // A clean lookup must not trip the failure branch.
     const { logger } = await import('@/lib/logger');
     expect(logger.warn).not.toHaveBeenCalledWith(
       '[api/schedule/slots] progress history lookup failed',
@@ -987,10 +930,6 @@ describe('GET /api/schedule/slots/[slotId]', () => {
     expect(response.status).toBe(200);
     const body = (await response.json()) as { slot: { progressHistory: unknown[] } };
     expect(body.slot.progressHistory).toEqual([]);
-    // The failed lookup is loud: exact message and metadata pin the
-    // historyError branch against mutation. The message comes from the
-    // shared getSlotPost builder (used by both the slot route and the
-    // unified /api/posts/[id] endpoint).
     expect(logger.warn).toHaveBeenCalledWith('[post-detail] progress history lookup failed', {
       slotId: SLOT_ID,
       error: { message: 'db down' },
@@ -998,22 +937,12 @@ describe('GET /api/schedule/slots/[slotId]', () => {
   });
 });
 
-//---------------
-// Generation facts — the read-only record of what the post was generated
-// with. The facts live in the DB (scheduled_posts.faceless, the schedules
-// post_* snapshot columns) and the route must put them on the wire: the
-// detail page cannot render what the API does not select.
-//---------------
-
 describe('GET /api/schedule/slots/[slotId] generation facts', () => {
   const SNAPSHOT_SCHEDULE_ROW = {
     ...SCHEDULE_ROW,
     post_language: 'pt-BR',
     post_voice_id: 'ana_neural',
     post_video_aspect: '9:16',
-    // 'react' and not the default 'standard': this fixture must prove a
-    // real layout flows through, which 'standard' could not distinguish from
-    // the NULL fallback below.
     post_video_layout: 'react',
     post_niche: 'cooking',
     post_paragraph_number: 5,
@@ -1064,9 +993,6 @@ describe('GET /api/schedule/slots/[slotId] generation facts', () => {
   });
 
   it('reports faceless as true only for the literal true', async () => {
-    // Only the literal true counts (the derived flag slot-rows.ts
-    // writes from the stored video_type), so a legacy NULL row — or a
-    // stray string — is never misread as faceless.
     for (const faceless of [true, false, null, 'true', 1]) {
       const generation = await getGeneration({ ...SLOT_DETAIL_ROW, faceless }, SCHEDULE_ROW);
       expect(generation.faceless).toBe(faceless === true);
@@ -1074,9 +1000,6 @@ describe('GET /api/schedule/slots/[slotId] generation facts', () => {
   });
 
   it('omits nothing when the snapshot columns are null', async () => {
-    // A schedule created before migration 012 has every post_* NULL — the
-    // object keeps all keys with null leaves (never undefined), so the UI
-    // never has to feature-detect.
     const generation = await getGeneration(SLOT_DETAIL_ROW, SCHEDULE_ROW);
     expect(generation).toEqual({
       faceless: false,
@@ -1110,13 +1033,6 @@ describe('GET /api/schedule/slots/[slotId] generation facts', () => {
     expect(body.generation.faceless).toBe(false);
   });
 });
-
-//---------------
-// Published links — the engine records one publish_results entry per
-// (provider, video) it published; the detail endpoint surfaces them so the
-// user can open where the post actually went. Only a published slot is
-// worth the engine round-trip: everything earlier has nothing to link to.
-//---------------
 
 describe('GET /api/schedule/slots/[slotId] published links', () => {
   const PUBLISHED_ROW = { ...SLOT_DETAIL_ROW, status: 'published', task_id: 'task-1' };
@@ -1191,8 +1107,6 @@ describe('GET /api/schedule/slots/[slotId] published links', () => {
     expect(body.slot.publishLinks).toEqual([]);
   });
 
-  // A slot that never reached published has nothing to link to — the engine
-  // round-trip would be a wasted request on every detail view.
   it('does not call the engine for a slot that is not published', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
@@ -1208,8 +1122,6 @@ describe('GET /api/schedule/slots/[slotId] published links', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  // The post itself is already loaded and renderable — a failed engine
-  // lookup must degrade to "no links", never a 404/500 on the detail page.
   it('degrades to no links when the engine lookup fails', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('engine down'); }));
     const client = mockSlotsClient({
@@ -1238,12 +1150,6 @@ describe('GET /api/schedule/slots/[slotId] published links', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
-
-//---------------
-// GET failure logging — a DB outage must NEVER masquerade as "not
-// found": PGRST116 (zero rows) is the only 404; anything else is a loud
-// logger.error with the real error and a 500.
-//---------------
 
 describe('GET /api/schedule/slots/[slotId] failure logging', () => {
   beforeEach(() => {
@@ -1322,15 +1228,6 @@ describe('GET /api/schedule/slots/[slotId] failure logging', () => {
   });
 });
 
-//---------------
-// Slot id normalization — the :slotId param is a scheduled_posts uuid,
-// but callers sometimes send the engine generation key
-// `batch:<scheduleId>:slot:<slotId>` instead. The route resolves the
-// real slot uuid before any uuid-typed PostgREST filter; anything else
-// 404s without touching the database (Postgres 22P02 must never escape
-// as a 500).
-//---------------
-
 describe('slot id normalization', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -1359,7 +1256,6 @@ describe('slot id normalization', () => {
     });
 
     expect(response.status).toBe(200);
-    // The raw composite value must never reach a uuid-typed filter.
     expect(slotIdEqCalls(client, 'scheduled_posts')).toEqual([SLOT_ID]);
     expect(
       client.calls

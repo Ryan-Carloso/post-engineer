@@ -16,8 +16,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 PINTEREST_PROVIDER: str = "pinterest"
-# Pinterest PinCreate ceilings; the web draft scorer (lib/draft-scoring.ts)
-# and lib/pinterest.ts pin the same values.
 PINTEREST_TITLE_MAX_LENGTH: int = 100
 PINTEREST_DESCRIPTION_MAX_LENGTH: int = 800
 

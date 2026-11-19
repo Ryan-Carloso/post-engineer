@@ -17,8 +17,6 @@ import {
 
 const { httpsRequestMock } = vi.hoisted(() => ({ httpsRequestMock: vi.fn() }));
 
-// The remote download goes through node:https with a pinned lookup, not the
-// global fetch: the mock below stands in for the socket.
 vi.mock('node:https', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:https')>();
   return { ...actual, request: httpsRequestMock };
@@ -33,7 +31,6 @@ vi.mock('../analytics.js', () => ({
   },
 }));
 
-// Actions that read a file from the disk: offered on stdio only.
 const FILE_ONLY_ACTIONS: Array<[string, string]> = [['media', 'upload'], ['persona_media', 'add_image'], ['publish_video', 'from_file']];
 const PERSONA = '11111111-1111-4111-8111-111111111111';
 
@@ -108,9 +105,6 @@ describe('remote schemas reject local paths', () => {
   });
 
   it('persona remote schemas accept the CTA intent and reject an incoherent one (issue #639)', () => {
-    // The remote (http) surface offers the same nested cta object as the
-    // stdio tools: the CTA is set at creation and on update over both
-    // transports, and the coherence rule applies on both.
     const base = { name: 'Ava', avatarUrl: 'https://example.com/face.png', voiceId: 'alloy', accounts: { youtube: ['UC-1'] } };
     expect(CreatePersonaRemoteSchema.safeParse({ ...base, cta: { type: 'link', url: 'https://example.com/course' } }).success).toBe(true);
     expect(CreatePersonaRemoteSchema.safeParse({ ...base, cta: { type: 'link' } }).success).toBe(false);
@@ -184,10 +178,6 @@ describe('remote schemas reject local paths', () => {
 });
 
 describe('remote smuggled paths are dropped by the SDK, never read', () => {
-  // The SDK parses tool args with the registered raw shape, which strips
-  // unknown keys before the handler runs — so a smuggled path is dropped
-  // (never read), not loudly rejected. These tests pin the actual outcome
-  // at the transport boundary, through tools/call, not through safeParse.
   const realFetch = global.fetch;
 
   afterEach(() => {
@@ -195,8 +185,6 @@ describe('remote smuggled paths are dropped by the SDK, never read', () => {
     httpsRequestMock.mockClear();
   });
 
-  // Fake IncomingMessage for the pinned remote download: an async-iterable
-  // body plus the status, headers and stream controls the download reads.
   function armHttpsAudio(bytes: number[]): void {
     httpsRequestMock.mockImplementation(
       (_url: unknown, _options: unknown, callback: (res: unknown) => void) => {
@@ -307,8 +295,6 @@ describe('remote smuggled paths are dropped by the SDK, never read', () => {
 
   it('voices create_clone over HTTP with a smuggled audioPath clones from the URL', async () => {
     const { client, request } = stubClient();
-    // Literal public IP: the SSRF check validates it without a DNS lookup,
-    // so the test stays hermetic.
     armHttpsAudio([1, 2, 3]);
     const result = await callRemoteTool(client, 'voices', {
       action: 'create_clone',

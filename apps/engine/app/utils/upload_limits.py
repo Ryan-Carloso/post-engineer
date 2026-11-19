@@ -10,7 +10,6 @@ rejected or interrupted upload never leaves a partial file behind.
 import os
 import tempfile
 
-# Size of each read from the incoming upload stream.
 CHUNK_SIZE = 256 * 1024
 
 
@@ -39,8 +38,6 @@ def save_upload_stream(upload_file, dest_path: str, *, max_bytes: int,
         try:
             upload_file.file.seek(0)
         except OSError:
-            # Non-seekable streams (e.g. a raw socket file) start at the
-            # current position; nothing to rewind.
             pass
         with os.fdopen(fd, "wb") as out:
             while True:

@@ -69,7 +69,6 @@ describe('GET /api/metrics/retention-curve', () => {
     expect(queryRetentionCurve).toHaveBeenCalledWith('client', expect.objectContaining({ videoId: 'vid_1', startDate: '2026-10-01' }));
     const body: unknown = await response.json();
     expect(body).toMatchObject({ success: true, points: POINTS, startDate: '2026-10-01', provisional: true });
-    // The 200 body parses against the shared contract the MCP reads.
     expect(RetentionCurveResponseSchema.safeParse(body).success).toBe(true);
   });
 

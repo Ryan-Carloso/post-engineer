@@ -17,27 +17,8 @@ import { loadLiveExperimentResults } from '@/lib/experiments/live';
 import { fetchEnginePostMetricsSource } from '@/lib/engine-tasks';
 import { fetchProviderCounters } from '@/lib/metrics/provider-counters';
 
-//---------------
-// GET /api/experiments/[id]?window=7d — one experiment, its videos by pair
-// and the paired results per provider (lib/experiments/results.ts): wins,
-// sign-test p-value and the pending / indicative / clear label.
-//
-// ?live=1 (issue #532) re-reads the live provider counters for videos
-// still inside their window instead of the snapshots, cached 5 minutes
-// per experiment + window; a failed provider read keeps the snapshot
-// fact and is reported in liveFailures. Live mode only covers the 24h
-// and 7d windows — the 28d window is snapshot-only. Without ?live=1 the
-// response is byte-identical to before, so the MCP experiments (action: results)
-// tool (snapshot mode) is unchanged.
-//
-// Service role bypasses RLS: every read filters by the caller's user id; an
-// unknown, foreign or out-of-scope experiment is a 404.
-//---------------
-
 const ROUTE = 'GET /api/experiments/[id]';
 
-// The wrapper names the 2xx event experiment_results_fetched. Pair counts
-// and the label per provider ride on that event. Codes only.
 function jsonDetail<T extends { results: ExperimentResults }>(body: T): NextResponse {
   const response = NextResponse.json({ success: true, ...body });
   attachApiErrorProperties(response, experimentResultsTelemetry(body.results));

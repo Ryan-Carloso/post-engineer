@@ -1,21 +1,8 @@
-//---------------
-// One schedulable slot per signed upload (migration 067). A signed upload
-// is single-use: the engine claims it when its slot publishes. A second
-// schedule of the same upload id would answer "scheduled" and then fail
-// at publish time, and an immediate publish of an upload a slot already
-// holds would steal it from that slot. Both callers check here first,
-// against any slot that is not failed; the partial unique index
-// `scheduled_posts_upload_media_ref_key` is the race-proof backstop, and it
-// covers the rows a new call can insert (pending, ready) so it never has to
-// touch a publishing or published row.
-//---------------
-
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { ERROR_CODES, formatErrorMessage } from '@/lib/error-codes';
 import { VideoUploadError } from '@/lib/videos/signed-upload';
 
-/** The partial unique index from migration 067. */
 export const UPLOAD_SLOT_REFERENCE_INDEX = 'scheduled_posts_upload_media_ref_key';
 
 export function uploadAlreadyScheduledError(): VideoUploadError {
@@ -26,17 +13,11 @@ export function uploadAlreadyScheduledError(): VideoUploadError {
   );
 }
 
-/**
- * Throws VideoUploadError 409 VIDEO_UPLOAD_SCHEDULED when a live (not
- * failed) slot of this user already references the upload. A failed read
- * throws a plain Error: the caller answers 500 instead of publishing blind.
- */
 export async function assertUploadNotScheduled(
   supabase: SupabaseClient,
   userId: string,
   uploadId: string,
 ): Promise<void> {
-  // Service role bypasses RLS: the user_id filter re-checks ownership.
   const { data, error } = await supabase
     .from('scheduled_posts')
     .select('id')

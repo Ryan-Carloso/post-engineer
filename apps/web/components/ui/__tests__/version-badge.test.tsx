@@ -11,7 +11,6 @@ describe('VersionBadge', () => {
   });
 
   it('renders BETA - <version> (#<pr>) from /api/version', async () => {
-    // The shape the VPS deploy produces: version is MAJOR.MINOR.PR.
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => ({
@@ -62,7 +61,6 @@ describe('VersionBadge', () => {
       }),
     );
     render(<VersionBadge />);
-    // Renders BETA immediately (no layout shift) and stays there on error.
     expect(screen.getByTestId('version-badge')).toHaveTextContent('BETA');
     await waitFor(() => {
       expect(screen.getByTestId('version-badge')).toHaveTextContent(/^BETA$/);
@@ -81,8 +79,6 @@ describe('VersionBadge', () => {
   });
 
   it('fetches /api/version with no-store cache', async () => {
-    // Pins the fetch contract: unguessable-URL and cache-option mutants
-    // must not survive unnoticed.
     const fetchMock = vi.fn(async () => ({
       ok: true,
       json: async () => ({ version: '1.28', pr: null, build: null, commit: null }),
@@ -95,8 +91,6 @@ describe('VersionBadge', () => {
   });
 
   it('ignores a late resolve after unmount (cancellation)', async () => {
-    // The cancelled guard must drop the response when the component is
-    // gone: without it, setLabel fires on an unmounted component.
     const parseSpy = vi.spyOn(versionLib, 'parseBuildInfo');
     let resolveJson!: (value: unknown) => void;
     const jsonPromise = new Promise<unknown>((resolve) => {
@@ -116,10 +110,6 @@ describe('VersionBadge', () => {
   });
 
   it('one request is shared by every badge copy mounted together', async () => {
-    // Three copies mount per page (desktop sidebar, mobile header,
-    // /account); each used to fire its own /api/version read, and each
-    // web-side read re-asked the engine. The shared in-flight request
-    // must collapse them into one.
     const fetchMock = vi.fn(async () => ({
       ok: true,
       json: async () => ({ version: '1.28.152', pr: 152, build: 152, commit: '8f31abc' }),
@@ -163,10 +153,6 @@ describe('VersionBadge', () => {
   });
 
   it('the shared request is dropped after settling so a later mount can retry', async () => {
-    // Only the in-flight request is shared. Once it settles, a badge
-    // mounted later by a navigation must fetch again — a permanently
-    // cached promise would stick every future copy on a stale (or
-    // failed) response for the whole session.
     const fetchMock = vi.fn(async () => ({
       ok: true,
       json: async () => ({ version: '1.28', pr: null, build: null, commit: null }),

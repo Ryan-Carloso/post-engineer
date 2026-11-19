@@ -1,9 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-//---------------
-// Mocks
-//---------------
-
 const mockPost = vi.fn();
 const mockGet = vi.fn();
 const mockFetch = vi.fn();
@@ -20,7 +16,6 @@ vi.mock('axios', () => ({
 
 vi.stubGlobal('fetch', mockFetch);
 
-// Re-stub for each test: vi.unstubAllGlobals() in afterEach removes the stub.
 beforeEach(() => {
   vi.stubGlobal('fetch', mockFetch);
 });
@@ -38,10 +33,6 @@ vi.mock('@/lib/logger', () => ({
 import { InstagramService } from '@/lib/instagram';
 import { InstagramApiError } from '@/lib/errors';
 import { logger } from '@/lib/logger';
-
-//---------------
-// InstagramService — unit tests
-//---------------
 
 describe('InstagramService', () => {
   const envBackup = { ...process.env };
@@ -154,7 +145,6 @@ describe('InstagramService', () => {
       expect(params.get('redirect_uri')).toBe('https://test.com/callback');
       expect(params.get('code')).toBe('auth-code');
 
-      // Step 2 continua sendo GET no graph.instagram.com
       expect(mockGet).toHaveBeenCalledWith(
         'https://graph.instagram.com/access_token',
         expect.objectContaining({
@@ -554,7 +544,6 @@ describe('InstagramService', () => {
         .mockResolvedValueOnce({ data: { id: 'c1' } })
         .mockResolvedValueOnce({ data: { id: 'p1' } });
 
-      // Return PROCESSING for all poll attempts
       mockGet.mockResolvedValue({ data: { status_code: 'PROCESSING' } });
 
       const service = new InstagramService();
@@ -563,7 +552,6 @@ describe('InstagramService', () => {
         service.publishMedia('user', 'tok', 'cap', 'https://example.com/img.jpg', false),
       ).rejects.toThrow();
 
-      // waitForContainer does 30 attempts x 2000ms internal sleep
       await vi.advanceTimersByTimeAsync(30 * 30 * 2000 + 1000);
 
       await pending;
@@ -619,8 +607,6 @@ describe('InstagramService', () => {
       expect((error as InstagramApiError).statusCode).toBe(400);
       expect((error as InstagramApiError).providerCode).toBe(190);
       expect((error as InstagramApiError).message).toContain('Error validating access token');
-      // The collector logs one warning per failed snapshot: the conversion
-      // itself must not add two error events on every hourly retry.
       expect(logger.error).not.toHaveBeenCalled();
     });
   });

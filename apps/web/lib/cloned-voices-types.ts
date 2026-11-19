@@ -1,5 +1,3 @@
-// The public row is the shared contract's ClonedVoiceRow; the alias keeps
-// the existing import sites working.
 import type { ClonedVoiceRow as ClonedVoicePublicRow } from '@/lib/contracts/voices';
 
 export type { ClonedVoicePublicRow };

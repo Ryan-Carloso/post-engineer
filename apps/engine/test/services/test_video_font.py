@@ -10,9 +10,6 @@ from app.services.video import DEFAULT_SUBTITLE_FONT, _resolve_font_path
 
 class TestResolveFontPath:
     def test_default_font_missing_raises(self):
-        # No font is bundled with the repo (resource/fonts/ is gitignored):
-        # resolving the default name fails loudly instead of rendering
-        # without a font.
         with pytest.raises(ValueError):
             _resolve_font_path(DEFAULT_SUBTITLE_FONT)
 

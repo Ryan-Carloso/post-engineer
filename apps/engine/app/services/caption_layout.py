@@ -6,10 +6,8 @@ overlap counts and the tightest band wins.
 
 from typing import Optional, Sequence
 
-# Keep at least this many pixels between the caption block and the frame edge.
 MIN_MARGIN = 10
 
-# (first second, last second, lowest pixel the caption block may reach).
 CaptionBand = tuple[float, float, int]
 
 
@@ -37,7 +35,6 @@ def caption_y(
     if position == "bottom":
         return video_height * 0.95 - clip_height
     if position == "custom":
-        # Keep the subtitle fully within the screen bounds.
         max_y = video_height - clip_height - MIN_MARGIN
         custom_y = (video_height - clip_height) * (custom_position / 100)
         return max(MIN_MARGIN, min(custom_y, max_y))

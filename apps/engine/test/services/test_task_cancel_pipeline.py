@@ -109,7 +109,6 @@ def test_cancel_between_stages_stops_pipeline_and_row_not_recreated(monkeypatch)
 
     assert result is None
     assert entered == ["script", "audio"]
-    # The row deleted by the cancel is never recreated by later writes.
     assert sm.state.get_task(task_id) is None
 
 
@@ -128,8 +127,6 @@ def test_cancel_before_start_runs_no_stage(monkeypatch):
     assert result is None
     assert entered == []
     assert sm.state.get_task(task_id) is None
-    # A task cancelled while still queued never began executing: no
-    # video_generation_started event (it would dangle with no terminal).
     assert started == []
 
 
@@ -140,17 +137,12 @@ def test_cancel_before_start_runs_no_stage(monkeypatch):
         ("audio", ["script", "audio"]),
         ("subtitle", ["script", "audio", "subtitle"]),
         ("materials", ["script", "audio", "subtitle", "materials"]),
-        # The post-render boundary (before archive): render itself ran
-        # because the cancel landed while it was executing.
         ("render", ["script", "audio", "subtitle", "materials", "render"]),
     ],
 )
 def test_cancel_at_each_stage_boundary_stops_before_next_stage(
     monkeypatch, cancel_after, expected_entered
 ):
-    # Every abort_if_cancelled boundary (script, audio, subtitle,
-    # materials, render, post-render/archive): a cancel landing after
-    # stage N must stop the pipeline before stage N+1 runs.
     task_id = f"cancel-stage-{cancel_after}"
     sm.state.update_task(
         task_id, user_id="u-1", flow="batch", state=const.TASK_STATE_PROCESSING, progress=0
@@ -170,10 +162,6 @@ def test_cancel_at_each_stage_boundary_stops_before_next_stage(
     ["script", "audio", "subtitle", "materials", "render"],
 )
 def test_abort_pops_progress_milestones(monkeypatch, cancel_after):
-    # The milestone cache is popped only by the terminal transitions
-    # (_complete_task/_fail_task); every abort boundary must pop it too
-    # or the process-local entry leaks. Pre-seed an entry because the
-    # early boundaries abort before progress crosses 50.
     task_id = f"cancel-milestone-{cancel_after}"
     sm.state.update_task(
         task_id, user_id="u-1", flow="batch", state=const.TASK_STATE_PROCESSING, progress=0
@@ -222,7 +210,6 @@ def test_cancel_during_render_skips_archive_cross_post_and_terminal_webhook(monk
 
     assert result is None
     assert entered == ["script", "audio", "subtitle", "materials", "render"]
-    # No R2 write, no cross-post, no terminal webhook, no recreated row.
     assert webhook_calls == []
     assert cross_post_calls == []
     assert sm.state.get_task(task_id) is None
@@ -271,7 +258,6 @@ def test_cancelled_row_is_never_recreated_by_delete_then_write(monkeypatch):
     request_cancel(task_id)
     state.update_task(task_id, user_id="u-1", state=const.TASK_STATE_PROCESSING, progress=20)
     state.delete_task(task_id)
-    # A late progress write from the doomed worker must not resurrect it.
     state.update_task(task_id, state=const.TASK_STATE_COMPLETE, progress=100)
     assert state.get_task(task_id) is None
     state.delete_task(task_id)

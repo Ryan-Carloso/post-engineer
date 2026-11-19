@@ -12,12 +12,6 @@ import { cancelRemovedEngineTasks } from '../cancel-engine-tasks';
 import { cancelEngineTask } from '@/lib/engine-tasks';
 import type { ScheduleCancelSlot } from '../cancel-slots';
 
-//---------------
-// cancelRemovedEngineTasks — which removed slots get an engine cancel.
-// Only slots that may still be running are signalled: a slot with no task
-// id never reached the engine, and a ready slot's task already finished.
-//---------------
-
 function slot(id: string, status: string, taskId: string | null): ScheduleCancelSlot {
   return { id, status, chargedTokens: 2, batchId: null, taskId, mediaKind: null, mediaRef: null };
 }

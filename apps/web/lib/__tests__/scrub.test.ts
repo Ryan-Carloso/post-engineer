@@ -1,13 +1,3 @@
-//---------------
-// scrub — shared secret-scrubbing for PostHog-bound metadata.
-//
-// One policy for every reporter: keys that look secret-bearing
-// (tokens, passwords, auth headers, ...) are redacted before logging.
-// The scrub is recursive (depth-capped) so nested objects and arrays
-// are redacted too. The value is replaced, the key is kept, so the
-// presence of the field stays visible for debugging.
-//---------------
-
 import { describe, it, expect } from 'vitest';
 import { scrubSecrets } from '@/lib/scrub';
 
@@ -46,9 +36,6 @@ describe('scrubSecrets', () => {
   });
 
   it('redacts credential fragments inside nested message strings', () => {
-    // A validation `errors` list echoes caller text. Key-name scrubbing
-    // leaves `message` alone, so a pasted token must be fragment-redacted
-    // before the list reaches PostHog.
     const token = 'sk-' + 'a'.repeat(24);
     const out = scrubSecrets({
       errors: [
@@ -62,8 +49,6 @@ describe('scrubSecrets', () => {
       notes: [`leaked Bearer ${token} here`],
     });
     const errors = out['errors'] as Array<Record<string, unknown>>;
-    // The fragment regex consumes the trailing non-space characters (the
-    // closing quote), which is the existing Bearer rule, not a new one.
     expect(errors[0]['message']).toBe('Invalid provider: "Bearer [redacted]');
     expect(errors[0]['message']).not.toContain(token);
     expect(errors[1]['message']).toBe('Invalid provider: "myspace".');

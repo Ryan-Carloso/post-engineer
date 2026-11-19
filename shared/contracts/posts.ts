@@ -1,16 +1,3 @@
-// Post detail contract: the single source of truth for GET /api/posts/[id].
-// Both apps generate a copy of this file (see scripts/sync-contracts.mjs);
-// never edit a generated copy by hand.
-//
-// One endpoint, two kinds: a scheduled slot (scheduled_posts id) or a
-// direct video generation (video_generations generation_id). The route
-// returns `{success: true, kind: 'generation', generation}` or
-// `{success: true, kind: 'slot', ...slotDetail}`; a miss is a 404, never a
-// 200, so the response schema below covers the 200 shape only. The detail
-// shapes mirror apps/web/lib/post-detail.ts (SlotPostDetail,
-// GenerationPostDetail) and the publish-link/notice shapes of
-// apps/web/lib/publish-links.ts and publish-user-notice.ts. `success` is a
-// literal `true`: the route never returns success:false with a 200.
 import { z } from 'zod';
 
 import { defineEndpoint } from './endpoint.js';
@@ -80,6 +67,7 @@ export const SlotScheduleSchema = z.object({
   threespeakAccountIds: z.array(z.string()),
   rumbleAccountIds: z.array(z.string()),
   fanvueAccountIds: z.array(z.string()),
+  telegramAccountIds: z.array(z.string()),
   timezone: z.string(),
   publishMode: z.enum(['scheduled', 'asap']),
 });

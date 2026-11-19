@@ -69,8 +69,6 @@ describe('app/login/page — Login', () => {
   });
 
   it('renders the brand logo (not the legacy bolt mark)', () => {
-    // Pins the AppLogo usages: a silent revert to the old brand mark on
-    // the login surface would otherwise pass CI.
     render(<Login />, { wrapper: createWrapper() });
     expect(screen.getAllByTestId('app-logo')).toHaveLength(2);
   });
@@ -82,7 +80,6 @@ describe('app/login/page — Login', () => {
 
   it('renders terms text', () => {
     render(<Login />, { wrapper: createWrapper() });
-    // agreePrefix/agreeAnd are bare text nodes inside the agree note <p>.
     const note = screen.getAllByRole('link', { name: 'footer.terms' })[0].closest('p');
     expect(note?.textContent).toContain('login.agreePrefix');
     expect(note?.textContent).toContain('login.agreeAnd');
@@ -122,7 +119,6 @@ describe('app/login/page — Login', () => {
 
   it('terms and privacy are links', () => {
     render(<Login />, { wrapper: createWrapper() });
-    // Both the agree note and the bottom bar link to the legal pages.
     const termsLinks = screen.getAllByRole('link', { name: 'footer.terms' });
     expect(termsLinks).toHaveLength(2);
     for (const link of termsLinks) expect(link).toHaveAttribute('href', '/terms');
@@ -261,9 +257,6 @@ describe('app/login/page — hydration', () => {
     const container = document.createElement('div');
     container.innerHTML = renderToString(<Login />);
     document.body.appendChild(container);
-    // The container is appended manually, outside Testing Library cleanup:
-    // unmount and remove it in a finally so a failed assertion cannot leak
-    // a second Login instance into later tests.
     let root: { unmount: () => void } | undefined;
     try {
       expect(container.querySelector('[data-testid="oauth-redirect-debug"]')).toBeNull();
@@ -276,7 +269,6 @@ describe('app/login/page — hydration', () => {
       );
 
       expect(recoverableErrors).toEqual([]);
-      // After hydration React re-renders with the browser hostname (localhost).
       expect(screen.getByTestId('oauth-redirect-debug').textContent).toContain(
         encodeURIComponent('http://localhost:3434/auth/callback'),
       );

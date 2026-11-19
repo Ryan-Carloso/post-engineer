@@ -1,10 +1,5 @@
 import { ComposeIcon } from '@/lib/ui';
 
-//---------------
-// PromptsHero — hub header in the same shape as every dashboard
-// page header (dark icon tile, h1, muted subtitle). Presentational.
-//---------------
-
 export default function PromptsHero({ title, subtitle }: { title: string; subtitle: string }) {
   return (
     <header className="flex items-center gap-4 py-1 lg:py-2">

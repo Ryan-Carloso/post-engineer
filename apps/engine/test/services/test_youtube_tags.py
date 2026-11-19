@@ -32,7 +32,6 @@ class DeriveTagsFromTitleTest(unittest.TestCase):
         self.assertIn("porto", tags)
         self.assertIn("locais", tags)
         self.assertIn("comem", tags)
-        # short stopwords are dropped, every tag stays Portuguese
         self.assertNotIn("os", tags)
         self.assertNotIn("no", tags)
         for tag in tags:
@@ -48,7 +47,6 @@ class DeriveTagsFromTitleTest(unittest.TestCase):
         tags = derive_tags_from_title("पोर्टो में स्थानीय लोग कहाँ खाते हैं")
         self.assertIn("पोर्टो", tags)
         self.assertIn("स्थानीय", tags)
-        # no latin-script tag may sneak into a Hindi title
         for tag in tags:
             self.assertFalse(tag.isascii())
 
@@ -76,8 +74,6 @@ class DeriveTagsFromTitleTest(unittest.TestCase):
         self.assertEqual(derive_tags_from_title("!!! ???"), ())
 
     def test_falls_back_to_cut_title_when_strict_yields_nothing(self) -> None:
-        # "AI" is too short for the strict pass, so the fallback cuts the
-        # title into raw words instead of failing the slot over tags.
         self.assertEqual(derive_tags_from_title("AI"), ("ai",))
         self.assertEqual(derive_tags_from_title("U2"), ("u2",))
 
@@ -140,7 +136,6 @@ class ValidatePublishPlanTagsTest(unittest.TestCase):
 
     def test_accepts_title_with_tags(self) -> None:
         schedule = {"providers": ["youtube"], "youtube_account_ids": ["yt-1"]}
-        # does not raise: the slot may proceed to generation
         fs_metadata.validate_publish_plan(schedule, "Onde os locais comem no Porto", "Agent description.")
 
 

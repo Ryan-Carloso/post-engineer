@@ -126,8 +126,6 @@ def _have_commit(sha: str) -> bool:
 
 @pytest.mark.skipif(not _have_commit(PR224), reason="PR #224 commit is not in this clone")
 def test_pr224_diff_flags_telemetry_empty_aggregate_and_dead_mocks(heuristics, tmp_path: Path) -> None:
-    # Triple-dot against main: f470bb9 itself is a diagram commit. The
-    # telemetry and the dead mocks landed in earlier commits on the PR.
     base = subprocess.run(
         ["git", "rev-parse", "--verify", "origin/main"],
         cwd=REPO_ROOT,

@@ -43,15 +43,10 @@ class TestPersonaPreferences(unittest.TestCase):
         self.assertIsNone(request.paragraph_number)
 
     def test_script_prompt_fields_are_gone_from_the_generation_request(self):
-        # Phase 5-4: scripts come from segments only. The generation
-        # request no longer carries a script prompt or a system prompt.
         self.assertNotIn("video_script_prompt", TaskVideoRequest.model_fields)
         self.assertNotIn("custom_system_prompt", TaskVideoRequest.model_fields)
 
     def test_stale_script_prompt_fields_are_ignored_not_rejected(self):
-        # A direct engine caller that still sends the removed fields must
-        # not break the segments pipeline: pydantic's default extra
-        # behaviour drops them instead of failing the request.
         request = TaskVideoRequest(
             video_title="Morning in Lisbon",
             video_description="Test description.",

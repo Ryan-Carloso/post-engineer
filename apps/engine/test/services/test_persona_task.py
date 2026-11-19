@@ -156,9 +156,6 @@ class TestPersonaHookBoundary:
 
         commands = [call.args[0] for call in run.call_args_list]
         assert result == "output.mp4"
-        # The hook boundary now drives two separate ffmpeg passes instead of
-        # one filter_complex concat: the intro is trimmed to the exact hook
-        # length, and the tail starts at that same boundary.
         intro = next(c for c in commands if "-vf" in c)
         tail = next(c for c in commands if "-ss" in c)
         assert intro[commands.index(intro) + intro.index("-t") + 1] == "5.6"
@@ -215,8 +212,6 @@ class TestPersonaHookFits:
     branch, and only logs/tracks when the spoken hook falls outside the
     8-12 second window."""
 
-    # An overshooting hook is LONG by construction: it must speak past the
-    # 12 second ceiling to exercise the outside-window branch.
     _LONG_HOOK = (
         "This is a much longer hook paragraph written purely for testing "
         "purposes, dragging on well past the sixteen second ceiling that the "
@@ -273,7 +268,7 @@ class TestPersonaHookFits:
     def test_lipsync_inactive_passes_through_unchanged(self):
         from app.services.task import _ensure_persona_hook_fits
 
-        params = _params()  # no persona: faceless
+        params = _params()
         script = self._script(self._LONG_HOOK)
         result = _ensure_persona_hook_fits(
             "task-1", params, script, "audio.mp3", 40, object(), "subtitle.srt"
@@ -388,9 +383,6 @@ class TestLipSyncDurationCap:
         complete_task.assert_called_once()
 
     def test_narration_at_the_cap_continues(self):
-        # Runs the full video pipeline: the cap comparison is evaluated
-        # (stop_at="video") and the run completes, so the boundary is
-        # really pinned — a ">=" mutant would fail this test.
         fail_task, _cleanup, gen_subtitle, trim_audio, complete_task = self._start(
             10.0, stop_at="video"
         )
@@ -401,8 +393,6 @@ class TestLipSyncDurationCap:
         complete_task.assert_called_once()
 
     def test_full_lipsync_narration_up_to_sixty_seconds_continues(self):
-        # Full mode renders up to 60s of narration; a 45s narration is
-        # valid there even though it exceeds the 40s hook cap.
         params = _params(name="Ana", voice_id="calm").model_copy(
             update={"video_type": "full_lipsync"}
         )

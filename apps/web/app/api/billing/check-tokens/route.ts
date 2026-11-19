@@ -7,19 +7,6 @@ import { logger } from '@/lib/logger';
 import { isVideoType, unknownVideoTypeMessage, type FaceQuality, type VideoType } from '@/lib/tokens';
 import { withApiErrorReporting } from '@/lib/api-error-reporting';
 
-//---------------
-// POST /api/billing/check-tokens — checks and deducts tokens.
-// Authentication: MONEYPRINT_API_SECRET in the x-engine-secret header
-// (compared in constant time — never a plain === on secrets).
-//---------------
-
-//---------------
-// Body contract: { userId, generationId?, videoType?, faceQuality? }.
-// videoType is the one video mode (issue #542 follow-up); absent means
-// hook_lipsync (the old default: a faced video). An unknown mode is a 400
-// naming every mode with its cost, never silently priced as another mode.
-//---------------
-
 function getEngineSecret(): string {
   const secret = process.env.MONEYPRINT_API_SECRET;
   if (!secret) throw new Error('MONEYPRINT_API_SECRET is not defined');
@@ -27,7 +14,6 @@ function getEngineSecret(): string {
 }
 
 async function postHandler(request: Request): Promise<NextResponse> {
-  // Authentication via the engine shared secret
   let engineSecret: string;
   try {
     engineSecret = getEngineSecret();
@@ -101,7 +87,4 @@ async function postHandler(request: Request): Promise<NextResponse> {
   return NextResponse.json({ success: true, cost: result.cost, generationId });
 }
 
-//---------------
-// 5xx reporting: handled server errors reach PostHog error tracking.
-//---------------
 export const POST = withApiErrorReporting('POST /api/billing/check-tokens', postHandler);

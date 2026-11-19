@@ -62,8 +62,6 @@ class MergePriorPublishedTests(TestCase):
         self.assertEqual(merged[0]["url"], "https://youtube.invalid/new")
 
     def test_entries_without_an_account_still_dedupe_by_provider_and_video(self) -> None:
-        # Top-level link bodies carry no accountId: two such entries for
-        # the same provider/video are the same post, not two accounts.
         existing = [
             {
                 "provider": "youtube",

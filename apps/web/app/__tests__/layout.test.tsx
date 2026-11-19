@@ -78,9 +78,6 @@ describe('app/layout — RootLayout', () => {
 
 describe('root layout metadata icons', () => {
   it('declares every icon role in config (config icons do not merge with file-convention icons)', async () => {
-    // Next.js 15 skips file-convention icons entirely once any config
-    // `icons` object exists — omitting `apple:` here once silently dropped
-    // the apple-touch-icon link with zero CI signal.
     const { metadata } = await import('../layout');
     expect(metadata.icons).toEqual({ icon: '/icon-128.png', apple: '/apple-icon.png' });
   });

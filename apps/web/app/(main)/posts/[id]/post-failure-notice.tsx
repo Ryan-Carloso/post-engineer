@@ -9,12 +9,6 @@ import type { PublishUserNotice } from '@/lib/publish-user-notice';
 import { CREATE_POSTS_HREF } from '../day-section';
 import { PublishAccountNotices } from '../publish-user-notice';
 
-//---------------
-// PostFailureNotice — why a post failed, placed directly under the player.
-// The visible line is translated and generic; the engine's raw message stays
-// behind a disclosure for support instead of being the first thing a reader
-// sees. The provider notices (email not verified, reconnect) sit below it.
-//---------------
 export function PostFailureNotice({
   status,
   error,

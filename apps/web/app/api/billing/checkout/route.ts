@@ -6,16 +6,9 @@ import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { logger } from '@/lib/logger';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
-//---------------
-// POST /api/billing/checkout — creates a one-time Checkout Session for a pack.
-// Body: { packId: 'pack_50' }. The server controls the token amount.
-// Returns: { url } — redirects the user to the Stripe checkout.
-//---------------
-
 function getStripe() {
   const key = process.env.STRIPE_SECRET_KEY;
   if (!key) throw new Error('STRIPE_SECRET_KEY is not defined');
-  // Dynamic import so environments without Stripe do not break
   return import('stripe').then((mod) => new mod.default(key));
 }
 
@@ -75,7 +68,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
     );
   }
 
-  // Busca ou cria o customer no Stripe
   const { data: profile } = await supabase
     .from('user_profiles')
     .select('stripe_customer_id')
@@ -92,8 +84,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
       });
       customerId = customer.id;
 
-      // Billing metadata is written server-side because the user-facing client
-      // intentionally has no INSERT policy for this protected column set.
       const { error: upsertError } = await createSupabaseServiceClient()
         .from('user_profiles')
         .upsert(
@@ -154,7 +144,4 @@ async function postHandler(request: Request): Promise<NextResponse> {
   }
 }
 
-//---------------
-// 5xx reporting: handled server errors reach PostHog error tracking.
-//---------------
 export const POST = withApiErrorReporting('POST /api/billing/checkout', postHandler, { getUserId: resolveReportingUserId });

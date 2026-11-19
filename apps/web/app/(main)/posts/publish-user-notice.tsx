@@ -11,7 +11,6 @@ export function PublishAccountNotices({
   compact?: boolean;
 }) {
   const { t } = useI18n();
-  // compact: the line sits under a dense post row, not under a card block.
   const tone = compact ? 'mt-2 text-xs text-destructive' : 'mt-6 text-sm text-destructive';
   return (
     <>

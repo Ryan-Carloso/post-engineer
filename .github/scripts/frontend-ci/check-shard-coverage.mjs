@@ -1,12 +1,3 @@
-//---------------
-// check-shard-coverage — a shard that selected tests must upload coverage.
-//
-// An empty merged report is valid only when every shard selected zero files
-// (a docs-only pull request). A missing cobertura file for a shard that
-// ran tests is a lost measurement, and the report job must fail instead of
-// publishing an empty report that the UI gate treats as "not applicable".
-//---------------
-
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';

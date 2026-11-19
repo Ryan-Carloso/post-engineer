@@ -1,11 +1,3 @@
-// Contract test for the shared musicMood field schema (MCP copy, Zod 3).
-// The web copy runs the same payload table in
-// apps/web/lib/generation/__tests__/music-mood-field.test.ts (Zod 4):
-// both copies must accept and reject exactly the same values, or the MCP
-// would strip or pass through a mood the web route then rejects after
-// parsing. This pins the shape only (a 1-64 char string, optional); the
-// catalog check (calm/energetic/inspiring/upbeat or "none") is a
-// separate layer.
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { musicMoodField } from '../music-mood-field.js';

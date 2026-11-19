@@ -37,17 +37,11 @@ class SegmentOverlay(BaseModel):
 class SegmentMedia(BaseModel):
     """Media reference shape for a segment's photo (media (action: upload) uploads it, media (action: check) verifies it)."""
 
-    # Unknown keys are forbidden, not stripped: the unknown-field guard in
-    # validate_segments runs on model_dump output, so extra='ignore' would
-    # silently drop a key like voice on the request path before the guard
-    # ever sees it.
     model_config = ConfigDict(extra="forbid")
 
     mediaId: Optional[str] = None
     url: Optional[str] = None
     overlay: Optional["SegmentOverlay"] = None
-    # Requested on-screen seconds for a full-frame photo: hold the
-    # turning point longer, flash one briefly. Absent = default 2s pace.
     duration: Optional[float] = Field(
         default=None, ge=MIN_REQUESTED_PHOTO_SECONDS, le=MAX_REQUESTED_PHOTO_SECONDS
     )
@@ -55,7 +49,6 @@ class SegmentMedia(BaseModel):
     @field_validator("duration", mode="before")
     @classmethod
     def _validate_duration(cls, value: Any) -> Any:
-        # Reject coerced values (strings, bools, NaN, inf) with the shared rule.
         error = duration_error(value)
         if error is not None:
             raise ValueError(error[0])
@@ -63,14 +56,9 @@ class SegmentMedia(BaseModel):
 
 
 class ScriptSegment(BaseModel):
-    # Same reason as SegmentMedia: forbid so unknown segment keys fail
-    # request validation instead of being dropped before validation.
     model_config = ConfigDict(extra="forbid")
 
-    # Takes (issue #577): hook first, content after; a CTA is a content take.
     kind: Literal["hook", "content"]
     text: str
-    # Marks the take that performs this video's CTA (issue #639): at
-    # least one marked content take is required when a CTA applies.
     cta: bool = False
     media: Optional[list[SegmentMedia]] = Field(None, max_length=MAX_IMAGES_MODE_MEDIAS)

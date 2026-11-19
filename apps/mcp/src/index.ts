@@ -17,24 +17,11 @@ import { parseHttpAuthOptions } from './http-auth.js';
 import { SERVER_INSTRUCTIONS, registerPromptTools, type McpTransportKind } from './tools-prompts.js';
 import { registerRemotePrompts } from './prompts.js';
 
-// The server advertises the package version: import it so a version bump in
-// package.json flows through without touching this file.
 const { default: pkg } = await import('../package.json', { with: { type: 'json' } });
 
-// The web's hosted /mcp route (issue #561) builds the remote server from
-// this package: the Web Standard request handler plus the client it feeds
-// the verified bearer to. Re-exported here so the package entry stays the
-// single public surface.
 export { PostEngineerClient };
 export { handleMcpWebRequest } from './http-web.js';
 
-//---------------
-// The tools are intent tools (issue #566), not one tool per endpoint: 17
-// tools, most with an `action`. Each tools module registers its own, next to
-// its shapes and handlers; tools that read a file from the disk offer those
-// actions only on the stdio server, where the disk is the agent's own
-// machine (a path served over HTTP would resolve on the MCP server's host).
-//---------------
 export function createPostEngineerMcpServer(client?: PostEngineerClient, transport: McpTransportKind = 'stdio'): McpServer {
   const apiClient = client ?? new PostEngineerClient({ apiKey: requireApiKey() });
   const server = new McpServer(
@@ -64,9 +51,6 @@ export function isMainModule(): boolean {
   const entry = process.argv[1];
   if (!entry) return false;
   try {
-    // Realpath both sides: the published bin is launched through a symlinked
-    // .bin entry, and Node may keep the symlink path in either argv[1] or
-    // import.meta.url — realpathing both makes the comparison robust either way.
     return realpathSync(entry) === realpathSync(fileURLToPath(import.meta.url));
   } catch {
     return false;
@@ -74,13 +58,9 @@ export function isMainModule(): boolean {
 }
 
 export async function main() {
-  // Without --http-transport the server stays on stdio, no port; with OAuth, HTTP requests authenticate, else loopback only.
   const httpOptions = parseHttpTransportOptions(process.argv.slice(2), process.env);
   if (httpOptions !== null) {
-    // HTTP-only parse: stdio startup must never fail on a malformed HTTP limit.
     const authOptions = parseHttpAuthOptions(process.env);
-    // OAuth mode needs no local key; loopback mode still fails fast without one.
-    // Fresh server per request; the bearer is forwarded as this request's web API credential.
     const apiKey = authOptions !== null ? process.env.POST_ENGINEER_API_KEY : requireApiKey();
     await serveHttpTransport(
       (auth) => createPostEngineerMcpServer(new PostEngineerClient({ apiKey: auth?.bearer ?? apiKey, suppressVersionHeader: true }), 'http'),

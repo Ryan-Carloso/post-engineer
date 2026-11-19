@@ -18,12 +18,6 @@ import { GET } from '../route';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 
-//---------------
-// GET /api/persona/video-generations/[generationId] — one generation's
-// detail, same shape as the list route's rows. Unknown id or another
-// user's row → 404.
-//---------------
-
 const USER_ID = 'user-1';
 
 const GENERATION_ROW = {
@@ -89,7 +83,6 @@ describe('GET /api/persona/video-generations/[generationId]', () => {
       createdAt: '2026-09-23T12:00:00.000Z',
       completedAt: '2026-09-23T12:02:00.000Z',
     });
-    // Scoped by the caller's user id AND the id param.
     expect(client.chain.eq).toHaveBeenCalledWith('user_id', USER_ID);
     expect(client.chain.eq).toHaveBeenCalledWith('generation_id', 'gen-3');
   });

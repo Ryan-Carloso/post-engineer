@@ -3,12 +3,6 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { KeyConnectDialog } from '@/components/ui/social-accounts-section';
 
-//---------------
-// KeyConnectDialog — the shared connect dialog for key-based providers
-// (Bluesky app password, 3Speak Hive posting key). Pins the submit-button
-// disabled logic (both fields non-blank, not pending), the idPrefix
-// scoping of the dialog title/testids, and the error display.
-//---------------
 function renderDialog(overrides: Partial<React.ComponentProps<typeof KeyConnectDialog>> = {}) {
   const props: React.ComponentProps<typeof KeyConnectDialog> = {
     title: 'Connect your account',

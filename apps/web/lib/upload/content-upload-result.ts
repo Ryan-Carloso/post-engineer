@@ -1,11 +1,5 @@
 import type { SocialProvider } from '@/lib/types';
 
-//---------------
-// Upload result shapes — the per-account outcome of one upload-content
-// call. Extracted from lib/upload/handlers.ts (file-size ratchet); the
-// handlers import these types back.
-//---------------
-
 export interface ContentUploadAccountResult {
   accountId: string;
   success: boolean;
@@ -16,15 +10,6 @@ export interface ContentUploadAccountResult {
   mediaId?: string;
   permalink?: string;
   error?: string;
-  // Stable per-account failure code from classifyUploadAccountError
-  // (#504): 'transient' | 'token_expired' | 'disconnected' |
-  // 'publish_rejected' | 'email_not_verified' | 'publish_in_progress' |
-  // 'publish_unknown' (ledger-parked: the post may already be live —
-  // never retried, the engine fails the account and keeps the token
-  // charged until a human checks the provider).
-  // The retry loop and the user notice read this, never the free-text
-  // error. 'publish_in_progress' is not a failure: the account is still
-  // publishing under an earlier request, so the engine waits and re-asks.
   errorCode?: string;
 }
 

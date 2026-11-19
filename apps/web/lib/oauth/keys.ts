@@ -11,12 +11,6 @@ import {
 import { getIssuer, getPrivateKeyPem } from './config';
 import type { OAuthKeyMaterial } from './tokens';
 
-//---------------
-// Authorization server ES256 keys. The private key lives only in deploy
-// env; the public key is derived at runtime and published in the JWKS. The `kid` is
-// the key thumbprint (derived, not configured).
-//---------------
-
 let cached: OAuthKeyMaterial | null = null;
 
 export async function getOAuthKeys(): Promise<OAuthKeyMaterial> {

@@ -13,9 +13,6 @@ vi.mock('@/lib/logger', () => ({
   logger: { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
-// lookup() is overloaded; the source calls it with { all: true }, which
-// resolves LookupAddress[]. Re-type the mock to that overload so
-// mockResolvedValue accepts address arrays.
 const mockLookup = vi.mocked(
   lookup as unknown as (hostname: string, options: { all: true }) => Promise<LookupAddress[]>,
 );
@@ -250,8 +247,6 @@ describe('checkCustomAudioUrl — private IPv4 ranges', () => {
     'http://8.20.0.1/a.mp3',
     'http://1.25.0.1/a.mp3',
   ])('treats %s as public — 172.16/12 needs the 172 first octet', async (url) => {
-    // Regression: the b>=16 && b<=31 range check must not fire without
-    // a===172, or whole public /8s would be rejected.
     stubHead([audioHead()]);
     const result = await checkCustomAudioUrl(url);
     expect(result).toEqual({ ok: true });
@@ -269,8 +264,6 @@ describe('checkCustomAudioUrl — IPv6', () => {
     vi.restoreAllMocks();
   });
 
-  // IPv6 branches of isPublicIp are exercised through DNS-resolved
-  // addresses and through bracketed literals (URL.hostname keeps the brackets).
   it.each([
     ['::1', 'loopback'],
     ['::', 'unspecified'],

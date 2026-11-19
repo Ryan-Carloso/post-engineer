@@ -50,11 +50,6 @@ export default function PersonaPage() {
   );
 }
 
-//---------------
-// resolveEditingPersonaId — the persona id being edited comes from ?edit=
-// (current route) or the legacy /personas/<id>/edit path. Shared by
-// PersonaPageContent and PersonaSubmit so the two cannot drift.
-//---------------
 function resolveEditingPersonaId(pathname: string, editId: string | null): string | null {
   const editMatch = pathname.match(/^\/personas\/([^/]+)\/edit$/);
   return editMatch?.[1] ?? editId;
@@ -64,22 +59,14 @@ const PersonaPageContent = () => {
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const editId = searchParams.get('edit');
-  // Same edit-id resolution as PersonaSubmit: ?edit= or the legacy
-  // /personas/<id>/edit path. The image library needs a persisted persona.
   const editingPersonaId = resolveEditingPersonaId(pathname, editId);
   const personasQuery = usePersonaListQuery();
-  // Derived from the resolved id (not the raw ?edit= param): on the legacy
-  // /personas/<id>/edit path the old derivation left editingPersona undefined, so
-  // the form never loaded its saved fields and the language fell back to default.
   const editingPersona = useMemo(
     () => (editingPersonaId ? personasQuery.data?.find((item) => item.id === editingPersonaId) : undefined),
     [editingPersonaId, personasQuery.data],
   );
   const voicesQuery = useVoicesQuery();
 
-  // RHF: text fields validate onBlur with the SAME server zod schema
-  // (lib/persona-schema.ts) and block submit. Zustand remains
-  // the persistence layer (buildPersonaFormData reads from the store).
   const methods = useForm({
     mode: 'onBlur',
     resolver: zodResolver(personaFormSchema),
@@ -95,17 +82,12 @@ const PersonaPageContent = () => {
     if (!persona) return;
     const store = usePersonaStore.getState();
     store.setName(persona.name);
-    // avatarUrl is a chosen character; photoUrl is a 1h signed upload link
-    // and must not be written back as avatarUrl.
     store.setAvatarUrl(persona.avatarUrl ?? null);
     store.setStoredPhotoUrl(persona.photoUrl ?? null);
     store.setVoiceId(persona.voiceId ?? null);
     store.setLanguage(persona.language ?? null);
     store.setVideoAspect(persona.videoAspect ?? '9:16');
-    // Nullable layout (migration 018): older personas rendered standard.
     store.setVideoLayout(persona.videoLayout ?? 'standard');
-    // Load the stored quality so the picker shows what the persona really
-    // renders at — without this it always opened on the 'ok' default.
     store.setFaceQuality(persona.faceQuality === 'very_good' ? 'very_good' : 'ok');
     store.setScriptPrompt(persona.scriptPrompt ?? '');
     store.setCta({
@@ -120,9 +102,6 @@ const PersonaPageContent = () => {
     methods.setValue('niche', persona.niche ?? '');
   }, [editingPersona, methods]);
 
-  // The error page must NOT subscribe to these queries: mounting it adds a
-  // second observer, refetchOnMount refetches the errored query, and the
-  // error page unmounts again — an infinite loop. Retry lives here instead.
   const retryFailedQueries = async (): Promise<void> => {
     const failed = [voicesQuery, personasQuery].filter((query) => query.isError);
     await Promise.all(failed.map((query) => query.refetch()));
@@ -147,11 +126,9 @@ const PersonaPageContent = () => {
           <section className="space-y-6 rounded-2xl border border-line bg-card p-5 shadow-sm sm:p-6">
             <PersonaNameField />
             <PersonaAvatarSection />
-            {/* Library needs a persisted, loaded persona (no fetch flash). */}
             {editingPersonaId && editingPersona !== undefined ? (
               <PersonaImageLibrarySection personaId={editingPersonaId} />
             ) : null}
-            {/* Face quality + estimated cost per video. */}
             <PersonaTokensSection />
           </section>
           <section className="rounded-2xl border border-line bg-card p-5 shadow-sm sm:p-6">
@@ -167,9 +144,6 @@ const PersonaPageContent = () => {
           <section className="rounded-2xl border border-line bg-card p-5 shadow-sm sm:p-6">
             <PersonaCtaSection />
           </section>
-          {/* The binding picker renders in both modes: while creating, the
-              selection lives in the store (draft mode, no personaId yet);
-              while editing, it loads and saves the persisted binding. */}
           <PersonaPublishingAccountsSection personaId={editingPersonaId ?? undefined} />
           <PersonaSubmit editId={editId} />
           <PersonaFeedback />
@@ -179,13 +153,6 @@ const PersonaPageContent = () => {
   );
 }
 
-/* -----------------
-   Local Components
------------------- */
-
-//---------------
-// PersonaPageError explains the unavailable dependency and offers recovery.
-//---------------
 type PersonaPageErrorProps = { onRetry: () => Promise<void>; isRetrying: boolean };
 
 const PersonaPageError = ({ onRetry, isRetrying }: PersonaPageErrorProps) => {
@@ -220,10 +187,6 @@ const PersonaPageError = ({ onRetry, isRetrying }: PersonaPageErrorProps) => {
   );
 };
 
-//---------------
-// PersonaHeader — persona screen title and subtitle (edit copy in edit
-// mode), with a debug mode badge when unlocked (10 clicks on the logo).
-//---------------
 const PersonaHeader = ({ editing }: { editing: boolean }) => {
   const { t } = useI18n();
   return (
@@ -241,11 +204,6 @@ const PersonaHeader = ({ editing }: { editing: boolean }) => {
   );
 };
 
-//---------------
-// PersonaAvatarSection — visual identity choice: AI-generated or photo
-// upload. Always rendered (every persona has a face); "no face" is a
-// per-post choice (set on the post at creation, via MCP).
-//---------------
 const PersonaAvatarSection = () => {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -254,11 +212,7 @@ const PersonaAvatarSection = () => {
   const editingAvatarUrl = editingPersonaId
     ? personasQuery.data?.find((persona) => persona.id === editingPersonaId)?.avatarUrl
     : undefined;
-  // Upload leads; an edited persona that picked a house character opens on
-  // the character tab so its current choice stays visible.
   const [source, setSource] = useState<'characters' | 'upload'>(editingAvatarUrl ? 'characters' : 'upload');
-  // The persona list may resolve after mount: follow it once it reports a
-  // house-character avatar.
   useEffect(() => {
     if (editingAvatarUrl) setSource('characters');
   }, [editingAvatarUrl]);
@@ -295,9 +249,6 @@ const PersonaAvatarSection = () => {
   );
 };
 
-//---------------
-// SourceTab — photo source tab button (AI or upload)
-//---------------
 const SourceTab = ({
   active,
   label,
@@ -323,9 +274,6 @@ const SourceTab = ({
   </button>
 );
 
-//---------------
-// PersonaCharacterPicker — ready-made character selection
-//---------------
 const PersonaCharacterPicker = () => {
   const avatarUrl = usePersonaStore((s) => s.avatarUrl);
   const searchParams = useSearchParams();
@@ -335,9 +283,6 @@ const PersonaCharacterPicker = () => {
     ? personasQuery.data?.find((persona) => persona.id === editId)?.avatarUrl
     : undefined;
   const selectedAvatarUrl = avatarUrl ?? editingAvatarUrl ?? null;
-  // Fixed start index (mount only): changing `opts` would recreate the
-  // carousel and restart autoplay, undoing the stop() on selection. The
-  // carousel stays where the user left it — no position reset.
   const startIndexRef = useRef(getCharacterIndex(avatarUrl ?? editingAvatarUrl ?? null));
   const autoplay = useRef(Autoplay({ delay: editId ? 1_000_000 : 5000, stopOnInteraction: true }));
   const { t } = useI18n();
@@ -399,9 +344,6 @@ const PersonaCharacterPicker = () => {
   );
 };
 
-//---------------
-// PersonaNameField — nome da persona (RHF: valida no onBlur)
-//---------------
 const PersonaNameField = () => {
   const { register, formState: { errors } } = useFormContext();
   const result = usePersonaStore((s) => s.result);
@@ -430,11 +372,6 @@ const PersonaNameField = () => {
   );
 };
 
-//---------------
-// PersonaSubmit — persona validation and submit (create/edit).
-// Create: POST /api/persona. Success → /posts, the app's home. In edit
-// mode the button shows the save copy instead of the create copy.
-//---------------
 const PersonaSubmit = ({ editId }: { editId: string | null }) => {
   const { t, locale } = useI18n();
   const pathname = usePathname();
@@ -444,8 +381,6 @@ const PersonaSubmit = ({ editId }: { editId: string | null }) => {
   const { handleSubmit: validateForm } = useFormContext();
   const [isPending, setIsPending] = useState(false);
 
-  // Same page serves create and edit: the id comes from ?edit= (current route)
-  // or the legacy /personas/<id>/edit.
   const editingPersonaId = resolveEditingPersonaId(pathname, editId);
   const isEditing = Boolean(editingPersonaId);
 
@@ -456,9 +391,6 @@ const PersonaSubmit = ({ editId }: { editId: string | null }) => {
       scrollToErrorField('name');
       return;
     }
-    // storedPhotoUrl: the persona already has an uploaded photo (photo_path),
-    // so editing it needs no new file and no character. Without this the
-    // "pick a face" validation blocked every save of a photo persona.
     if (!state.photo && !state.avatarUrl && !state.storedPhotoUrl) {
       state.setResult({ success: false, error: t('persona.errAvatar') });
       scrollToErrorField('avatar');
@@ -469,9 +401,6 @@ const PersonaSubmit = ({ editId }: { editId: string | null }) => {
       scrollToErrorField('voice');
       return;
     }
-    // Issue #572: a persona is born bound to at least one publishing
-    // account. Edit mode skips this — the binding already exists there
-    // and the section guards it (Save disables at zero).
     if (!isEditing && totalBoundAccounts(state.publishingAccounts) === 0) {
       state.setResult({ success: false, error: t('publishing.mustSelectAccount') });
       scrollToErrorField('accounts');
@@ -499,8 +428,6 @@ const PersonaSubmit = ({ editId }: { editId: string | null }) => {
         usePersonaStore.getState().setResult(result);
         if (result.success) {
           await queryClient.invalidateQueries({ queryKey: ['persona-list'] });
-          // Creating a persona lands on the personas list, so the user
-          // immediately sees the persona they just created.
           router.push('/personas');
         } else if (result.error === 'prompt_rejected') {
           scrollToErrorField('script');
@@ -537,9 +464,6 @@ const PersonaSubmit = ({ editId }: { editId: string | null }) => {
   );
 };
 
-//---------------
-// PersonaFeedback — creation result (success or error)
-//---------------
 const PersonaFeedback = () => {
   const result = usePersonaStore((s) => s.result);
   const { t } = useI18n();
@@ -551,8 +475,6 @@ const PersonaFeedback = () => {
 
   if (!result) return null;
 
-  // Clears the store AND the RHF fields: without reset() the inputs keep
-  // showing the old text while the store is already empty.
   const handleCreateAnother = () => {
     reset({ name: '', niche: '', scriptPrompt: '' });
     usePersonaStore.getState().resetForm();
@@ -603,10 +525,6 @@ const PersonaFeedback = () => {
   return <PersonaErrorDialog />;
 };
 
-//---------------
-// getCharacterIndex — finds the saved avatar in the carousel. First item
-// when the image is not an available character.
-//---------------
 const getCharacterIndex = (avatarUrl: string | null): number => {
   const match = avatarUrl?.match(/\/file-(\d+)\.png$/);
   const index = match ? Number(match[1]) - 1 : 0;

@@ -17,9 +17,6 @@ ENGLISH_ONLY_VIDEO_MESSAGE = "Only English videos are supported for now"
 ENGLISH_ONLY_CLONE_MESSAGE = "Voice cloning is only available in English for now"
 
 
-# Personas may store a language name instead of a code ("English"); the
-# edge-tts voice selection has always accepted that form, so the gate
-# must too, or legacy personas get rejected for being English.
 _ENGLISH_LANGUAGE_NAMES = {"english", "inglês", "ingles"}
 
 

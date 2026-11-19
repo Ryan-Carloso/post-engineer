@@ -390,7 +390,8 @@
                 "pinterest",
                 "3speak",
                 "rumble",
-                "fanvue"
+                "fanvue",
+                "telegram"
               ]
             }
           },
@@ -817,6 +818,153 @@
                 "required": [
                   "channelId",
                   "accessToken"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/telegram-connect": {
+      "post": {
+        "operationId": "post_accounts_connect_telegram_connect",
+        "summary": "accounts connect",
+        "tags": [
+          "telegram-connect"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "accountId": {
+                      "type": "string"
+                    },
+                    "chatId": {
+                      "type": "string"
+                    },
+                    "chatType": {
+                      "type": "string",
+                      "enum": [
+                        "channel",
+                        "group",
+                        "supergroup"
+                      ]
+                    },
+                    "title": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "success"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The bot is not in the chat or cannot post there (code TELEGRAM_BOT_NOT_MEMBER or TELEGRAM_BOT_CANNOT_POST).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Telegram could not find the chat (code TELEGRAM_CHAT_NOT_FOUND).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Telegram rejected the bot token (code TELEGRAM_TOKEN_REJECTED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "botToken": {
+                    "type": "string",
+                    "description": "Bot token issued by @BotFather."
+                  },
+                  "chatId": {
+                    "type": "string",
+                    "description": "Public @username or numeric chat ID of the channel or group."
+                  },
+                  "chatType": {
+                    "type": "string",
+                    "enum": [
+                      "channel",
+                      "group"
+                    ],
+                    "description": "The destination kind; checked against the real chat."
+                  }
+                },
+                "required": [
+                  "botToken",
+                  "chatId",
+                  "chatType"
                 ]
               }
             }
@@ -3934,6 +4082,12 @@
                               "type": "string"
                             }
                           },
+                          "telegram_account_ids": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
                           "days_of_week": {
                             "type": "array",
                             "items": {
@@ -5753,7 +5907,8 @@
                       "pinterest",
                       "3speak",
                       "rumble",
-                      "fanvue"
+                      "fanvue",
+                      "telegram"
                     ]
                   },
                   "userId": {
@@ -6093,7 +6248,8 @@
                         "pinterest",
                         "3speak",
                         "rumble",
-                        "fanvue"
+                        "fanvue",
+                        "telegram"
                       ]
                     },
                     "results": {
@@ -6221,7 +6377,8 @@
                       "pinterest",
                       "3speak",
                       "rumble",
-                      "fanvue"
+                      "fanvue",
+                      "telegram"
                     ]
                   },
                   "accountIds": {
@@ -7150,7 +7307,8 @@
                       "pinterest",
                       "3speak",
                       "rumble",
-                      "fanvue"
+                      "fanvue",
+                      "telegram"
                     ]
                   },
                   "personaId": {

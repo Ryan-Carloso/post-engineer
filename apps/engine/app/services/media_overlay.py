@@ -18,7 +18,6 @@ from PIL import Image, ImageDraw, ImageFont
 
 FontFor = Callable[[int], ImageFont.FreeTypeFont]
 
-# Layout constants are for a 1080-pixel short edge and scale with it.
 INSET = 24
 MAX_HEIGHT_FRACTION = 0.55
 PADDING = 30

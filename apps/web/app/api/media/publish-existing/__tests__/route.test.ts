@@ -93,8 +93,6 @@ function jsonRequest(body: unknown): Request {
 }
 
 function futurePublishAt(hoursAhead: number): string {
-  // Whole minutes: the slot lands on publishAt's minute, so a test can
-  // compare the slot time with the instant it sent.
   const at = new Date(Date.now() + hoursAhead * 60 * 60 * 1000);
   at.setUTCSeconds(0, 0);
   return at.toISOString();
@@ -116,8 +114,6 @@ function taskEnvelope(overrides: Record<string, unknown> = {}): Record<string, u
 
 interface FakeConfig {
   personaRow?: Record<string, unknown> | null;
-  // Successive personas maybeSingle() answers; falls back to personaRow
-  // once exhausted (a persona deleted or a DB error between two reads).
   personaReads?: { data: unknown; error: unknown }[];
   socialRows?: Record<string, unknown>[];
   boundRows?: Record<string, unknown>[];
@@ -127,16 +123,13 @@ interface FakeConfig {
   existingSlots?: Record<string, unknown>[];
   scheduleInsertError?: unknown;
   storageRemoveError?: unknown;
-  /** The schedule row is invisible until a schedule insert was attempted (a concurrent winner). */
   raceWinner?: boolean;
   slotInsertError?: unknown;
   slotInsertRows?: Record<string, unknown>[];
   storageUpload?: { data: { path: string } | null; error: { message: string } | null };
   uploadRow?: Record<string, unknown> | null;
-  /** Live slots already holding the upload (the migration 067 guard read). */
   liveUploadSlots?: Record<string, unknown>[];
   liveUploadSlotsError?: unknown;
-  /** claim_publish_ledger outcome per account id (default: claimed). */
   ledgerClaims?: Record<string, Record<string, unknown>>;
   ledgerClaimError?: unknown;
 }
@@ -335,9 +328,6 @@ function uploadRow(overrides: Record<string, unknown> = {}): Record<string, unkn
     detected_content_type: 'video/mp4',
     size_bytes: 3,
     status: 'ready',
-    // Relative to now: a fixed date turns into an expired upload once the
-    // clock passes it (410 VIDEO_UPLOAD_EXPIRED) and breaks every test
-    // below that publishes a ready upload.
     expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
     created_at: '2026-11-14T11:00:00Z',
     consumed_at: null,
@@ -349,7 +339,6 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.stubEnv('MONEYPRINT_API_URL', 'https://engine.example.com');
   vi.stubEnv('MONEYPRINT_API_SECRET', 'secret-1');
-  // clearAllMocks keeps implementations: undo the 429 test's limiter.
   vi.mocked(applyRateLimit).mockResolvedValue(null);
   authAs();
 });
@@ -420,9 +409,7 @@ describe('POST /api/media/publish-existing', () => {
     expect(response.status).toBe(200);
     expect(body.success).toBe(true);
     expect(vi.mocked(dispatchPublish)).toHaveBeenCalledTimes(2);
-    // Claimed exactly once for all providers, then the bytes are removed.
     expect(vi.mocked(claimUploadForPublish)).toHaveBeenCalledTimes(1);
-    // The claim re-checks the networks (an image upload never reaches a video-only one).
     expect(vi.mocked(claimUploadForPublish).mock.calls[0]?.[5]).toEqual(['youtube', 'instagram']);
     expect(storage.remove).toHaveBeenCalledWith([`${USER_ID}/direct-uploads/${UPLOAD_ID}.mp4`]);
   });
@@ -499,7 +486,6 @@ describe('POST /api/media/publish-existing', () => {
         success: false,
         results: [{ accountId: 'ig-1', success: false, error: 'instagram down', errorCode: 'transient' }],
       });
-      // The single-use upload was still cleaned up after dispatch.
       expect(storage.remove).toHaveBeenCalledWith([`${USER_ID}/direct-uploads/${UPLOAD_ID}.mp4`]);
     } finally {
       if (originalImplementation !== undefined) {
@@ -603,9 +589,6 @@ describe('POST /api/media/publish-existing', () => {
   });
 
   it('reports an all-failed handler result as a failed publish instead of trusting the handler flag', async () => {
-    // YouTube/Instagram handlers return success: true even when every
-    // account failed; the route must derive the outcome from results, or
-    // the MCP summary claims a publish that never happened.
     const client = fakeSupabase({
       socialRows: [{ provider: 'instagram', provider_account_id: 'ig-1' }],
     });
@@ -675,9 +658,6 @@ describe('POST /api/media/publish-existing', () => {
     expect(body.schedule.id).toBe(deterministicUuid('publish-existing/v1', `${USER_ID}:key-1`));
     expect(client.__insertedSchedules).toHaveLength(1);
     expect(client.__insertedSchedules[0]?.publish_mode).toBe('scheduled');
-    // The CTA snapshot columns are NULL: existing media carries no
-    // generation identity, and post_cta_type must not inherit the
-    // migration 071 default 'follow' by omission (issue #639).
     expect(client.__insertedSchedules[0]?.post_cta_type).toBeNull();
     expect(client.__insertedSchedules[0]?.post_cta_url).toBeNull();
     expect(client.__insertedSchedules[0]?.post_cta_instruction).toBeNull();
@@ -687,7 +667,6 @@ describe('POST /api/media/publish-existing', () => {
     expect(slot.task_id).toBe(TASK_ID);
     expect(slot.charged_tokens).toBe(0);
     expect(slot.media_kind).toBeNull();
-    // One post at publishAt itself, and the schedule row names its time.
     expect(slot.slot_at).toBe(publishAt);
     expect(client.__insertedSchedules[0]?.times).toEqual([publishAt.slice(11, 16)]);
     expect(vi.mocked(dispatchPublish)).not.toHaveBeenCalled();
@@ -1360,8 +1339,6 @@ describe('POST /api/media/publish-existing', () => {
       const client = fakeSupabase({ socialRows: [{ provider: 'youtube', provider_account_id: 'UC1' }] });
       vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
       const at = new Date(Date.now() + 48 * 60 * 60 * 1000);
-      // A naive local time in Sao Paulo (UTC-3, no DST) with seconds: the
-      // seconds are dropped, never rolled to the next day.
       const local = new Date(at.getTime() - 3 * 60 * 60 * 1000).toISOString().slice(0, 16);
       const response = await POST(jsonRequest(scheduledTaskBody({ publishAt: `${local}:42`, timezone: 'America/Sao_Paulo' })));
       expect(response.status).toBe(200);
@@ -1493,7 +1470,6 @@ describe('POST /api/media/publish-existing', () => {
     it('replays a retry whose accounts all published, without loading or claiming the upload', async () => {
       const client = fakeSupabase({
         socialRows: socialRows(),
-        // The first call consumed the upload: loading it now would 409.
         uploadRow: uploadRow({ status: 'consumed' }),
         ledgerClaims: {
           UC1: { outcome: 'published', result: recordedYoutube },
@@ -1513,7 +1489,6 @@ describe('POST /api/media/publish-existing', () => {
       ]);
       expect(vi.mocked(claimUploadForPublish)).not.toHaveBeenCalled();
       expect(vi.mocked(dispatchPublish)).not.toHaveBeenCalled();
-      // The scope key is user-bound through the deterministic id.
       const scopeId = deterministicUuid('publish-existing/v1', `${USER_ID}:asap-key-1`);
       expect(client.__rpcCalls[0]?.args.p_key).toBe(`publish:direct:existing:${scopeId}:youtube:UC1`);
     });

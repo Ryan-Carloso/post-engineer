@@ -1,5 +1,3 @@
-// pt-BR dictionary — defines the typed contract (Dictionary).
-
 import { personaVoiceClonePt } from './voice-clone-i18n-pt';
 import { mcpToolDescPt } from './mcp-tools-i18n-pt';
 import { accountI18nPt } from './account-i18n-pt';
@@ -7,7 +5,6 @@ import { accountsI18nPt } from './accounts-i18n-pt';
 import { recipesI18nPt } from './recipes-i18n-pt';
 import { legalI18nPt } from './legal-i18n-pt';
 export const ptDictionary = {
-  // Sidebar / navigation
   nav: {
     brand: 'Post Engineer',
     brandSubtitle: 'Vídeos com IA para redes',
@@ -27,9 +24,7 @@ export const ptDictionary = {
     primaryNavigation: 'Navegação principal',
     profile: 'Perfil',
   },
-  // Account area — Perfil page (mobile header avatar + /account route)
   account: { ...accountI18nPt },
-  // Posts page — history + upcoming posts from all accounts
   posts: {
     title: 'Publicações',
     subtitle: 'Calendário com os posts de todas as contas. Selecione um dia para ver os posts.',
@@ -109,13 +104,10 @@ export const ptDictionary = {
     videoLoadError: 'Não foi possível carregar o vídeo.',
     detailLoadError: 'Não foi possível carregar este post. Tente novamente.',
   },
-  // Home / dashboard
   publishing: {
     mustSelectAccount: 'Selecione pelo menos uma conta para publicar.',
   },
-  // Accounts
   accounts: { ...accountsI18nPt },
-  // Login
   login: {
     title: 'Bem-vindo de volta',
     subtitle: 'Conecte suas contas e continue a criar, agendar e publicar conteúdo com IA.',
@@ -140,14 +132,12 @@ export const ptDictionary = {
     agreePrefix: 'Ao continuar, você concorda com os nossos',
     agreeAnd: 'e',
   },
-  // OAuth
   oauth: {
     startFailed: 'Não foi possível iniciar o OAuth.',
     popupBlocked: 'Não foi possível abrir a janela do OAuth. Permita popups para este site.',
     popupClosed: 'A janela do OAuth foi fechada antes de concluir.',
     failed: 'Falha na autenticação OAuth.',
   },
-  // API Keys
   apiKeys: {
     title: 'API Keys',
     subtitle: 'Gere chaves de API para integrar agentes de IA, OpenCode CLI e servidores MCP à sua conta.',
@@ -188,7 +178,6 @@ export const ptDictionary = {
     toolsSubtitle: 'Estas são as tools que seu agente de IA recebe acesso após conectar.',
     ...mcpToolDescPt,
   },
-  // App API Key
   persona: {
     title: 'Criar persona',
     subtitle: 'Defina identidade visual e voz para a sua persona.',
@@ -333,7 +322,6 @@ export const ptDictionary = {
     details: 'Ver detalhes',
     createdAt: 'Criada em',
   },
-  // Tokens / face quality (price per video)
   tokens: {
     balance: 'Saldo de tokens',
     available: 'Disponível para uso',
@@ -347,7 +335,6 @@ export const ptDictionary = {
     buyMore: 'Comprar mais tokens',
     whatsappCta: 'Chamar no WhatsApp',
   },
-  // Pricing / prepaid tokens
   pricing: {
     heroEyebrow: 'TOKENS',
     proAudience: 'Para criadores profissionais',
@@ -430,7 +417,6 @@ export const ptDictionary = {
     historyRetry: 'Tentar novamente',
     historyShowing: 'Mostrando {shown} de {total}',
   },
-  // Public landing page
   landing: {
     signIn: 'Entrar',
     menuOpen: 'Abrir menu',
@@ -498,22 +484,16 @@ export const ptDictionary = {
     ctaFinalNote: 'Sem cartão de crédito · Cancele quando quiser',
   },
 
-  // Public footer
   footer: {
     privacy: 'Política de Privacidade',
     terms: 'Termos de Serviço',
     support: 'Suporte',
     rights: '© {year} Post Engineer. Todos os direitos reservados.',
   },
-  // Recipes list page — initial version, user will improve later
   recipes: { ...recipesI18nPt },
-  // Legal pages
   legal: { ...legalI18nPt },
 } as const;
 
-//---------------
-// Dictionary — typed contract derived from PT (free values, fixed keys)
-//---------------
 export type Dictionary = {
   [Section in keyof typeof ptDictionary]: {
     [Key in keyof (typeof ptDictionary)[Section]]: string;

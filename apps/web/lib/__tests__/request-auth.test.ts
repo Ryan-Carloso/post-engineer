@@ -44,7 +44,6 @@ describe('requireSupabaseSession', () => {
     expect(result.auth?.userId).toBe('user-api-key-123');
     expect(result.auth?.isApiKey).toBe(true);
     expect(result.auth?.personaIds).toBeNull();
-    // The key's user is noted for the later mcp_tool_called capture.
     expect(noteMcpToolCaller).toHaveBeenCalledWith(request, 'user-api-key-123', 'api_key');
   });
 
@@ -230,8 +229,6 @@ describe('requireSupabaseSession with OAuth access tokens', () => {
     const result = await requireSupabaseSession(request);
     expect(result.error).toBeNull();
     expect(result.auth?.userId).toBe('user-oauth-789');
-    // The flag is what routes use to pick the service client for OAuth
-    // callers (no cookie session); pin the producer-side contract.
     expect(result.auth?.isOAuth).toBe(true);
     expect(noteMcpToolCaller).toHaveBeenCalledWith(request, 'user-oauth-789', 'oauth');
   });

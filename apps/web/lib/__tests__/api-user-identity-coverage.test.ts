@@ -1,20 +1,3 @@
-//---------------
-// API user-identity coverage — every authenticated route must opt in to
-// per-user PostHog attribution, and anonymous routes must not.
-//
-// withApiErrorReporting attributes events to the shared
-// post-engineer-server identity unless the route passes getUserId (the
-// shared resolveReportingUserId in lib/api-error-reporting.ts). Without
-// this pin, a new authenticated route silently reports real users'
-// traffic as the server again — the identity gap this test guards.
-//
-// The anonymous allowlist below is deliberate: those routes have no user
-// session by design (service-to-service secrets, provider webhooks,
-// OAuth flows that run before login, public endpoints), so identifying
-// their traffic would corrupt PostHog persons. Adding a route there is a
-// product decision, not a drive-by.
-//---------------
-
 import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
@@ -23,17 +6,10 @@ import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 const apiDir = join(here, '..', '..', 'app', 'api');
 
-// Routes with no user session by design. Every other route.ts under
-// app/api that wraps a handler with withApiErrorReporting must pass
-// getUserId.
 const ANONYMOUS_ROUTES = new Set([
-  // Engine service-to-service: shared-secret auth, user id rides in the body.
   'billing/check-tokens/route.ts',
-  // Stripe webhook: provider-signature auth, no user session.
   'billing/webhook/route.ts',
-  // Cypress backend coverage endpoint: test infrastructure.
   'coverage/route.ts',
-  // OAuth flows: run before the user has a session.
   'google-oauth/callback/route.ts',
   'google-oauth/start/route.ts',
   'instagram-auth/callback/route.ts',
@@ -48,7 +24,6 @@ const ANONYMOUS_ROUTES = new Set([
   'fanvue-auth/start/route.ts',
   'pinterest-auth/callback/route.ts',
   'pinterest-auth/start/route.ts',
-  // Public version endpoint: no auth required.
   'version/route.ts',
 ]);
 
@@ -65,8 +40,6 @@ function collectRouteFiles(dir: string): string[] {
   return out.sort();
 }
 
-// Extract each withApiErrorReporting(...) call's full argument text
-// (paren-balanced) so multi-line options objects are covered.
 function extractWrapperCalls(content: string): string[] {
   const calls: string[] = [];
   const marker = 'withApiErrorReporting(';

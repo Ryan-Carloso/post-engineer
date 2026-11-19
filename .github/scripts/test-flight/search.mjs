@@ -1,16 +1,4 @@
 #!/usr/bin/env node
-//---------------
-// Web search grounding for the test-flight script writer.
-//
-// Tavily is the primary provider, Exa is the reserve — never both at
-// once, and never as a cross-check: two providers returning the same
-// snippet would not prove it true, it would only double the cost.
-// Order: try Tavily when its key is set, otherwise Exa; if the primary
-// fails (HTTP error, timeout, or zero usable results), try the reserve
-// when its key is set. If both fail, or no key is set at all, throw:
-// the job fails loudly instead of publishing an ungrounded script.
-// Keys are never logged and never appear in the returned facts.
-//---------------
 
 export class SearchError extends Error {}
 

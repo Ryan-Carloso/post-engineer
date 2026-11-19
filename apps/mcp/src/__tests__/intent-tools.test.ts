@@ -4,10 +4,6 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { createPostEngineerMcpServer } from '../index.js';
 import { PostEngineerClient } from '../client.js';
 
-// The intent tools end to end through a real MCP client, with a stubbed
-// `fetch` standing in for the web API: names resolve to ids, an ambiguous
-// reference does nothing, and each action sends the request its mapping says.
-
 const MARIA = '11111111-1111-4111-8111-111111111111';
 const BASE = 'https://api.example.test';
 
@@ -48,14 +44,14 @@ function setup(routes: Record<string, unknown>): { call: (name: string, args: Re
   };
 }
 
-const PERSONAS = { authenticated: true, personas: [{ id: MARIA, name: 'Maria', createdAt: '2026-01-01T00:00:00Z', boundAccounts: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [] }, niche: 'cooking' }] };
+const PERSONAS = { authenticated: true, personas: [{ id: MARIA, name: 'Maria', createdAt: '2026-01-01T00:00:00Z', boundAccounts: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [], telegram: [] }, niche: 'cooking' }] };
 
 describe('personas get', () => {
   it('joins the persona, its library size and its bound accounts in one call', async () => {
     const { call, seen } = setup({
       'GET /api/persona/list': PERSONAS,
       'GET /api/persona/images': { success: true, images: [{ id: 'i1', tag: 'casual', description: '', is_primary: false, created_at: '2026-01-01T00:00:00Z', image_url: null }, { id: 'i2', tag: 'formal', description: '', is_primary: false, created_at: '2026-01-01T00:00:00Z', image_url: null }] },
-      'GET /api/persona/publishing-accounts': { success: true, defaults: { youtube: ['UC1'], instagram: [], bluesky: ['did:plc:abc'], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [] } },
+      'GET /api/persona/publishing-accounts': { success: true, defaults: { youtube: ['UC1'], instagram: [], bluesky: ['did:plc:abc'], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [], telegram: [] } },
     });
     const result = await call('personas', { action: 'get', persona: 'maria' });
     expect(result.isError).toBe(false);
@@ -65,7 +61,7 @@ describe('personas get', () => {
   });
 
   it('says there is no persona with that id instead of returning an empty record', async () => {
-    const { call } = setup({ 'GET /api/persona/list': PERSONAS, 'GET /api/persona/images': { success: true, images: [] }, 'GET /api/persona/publishing-accounts': { success: true, defaults: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [] } } });
+    const { call } = setup({ 'GET /api/persona/list': PERSONAS, 'GET /api/persona/images': { success: true, images: [] }, 'GET /api/persona/publishing-accounts': { success: true, defaults: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [], telegram: [] } } });
     const result = await call('personas', { action: 'get', persona: '99999999-9999-4999-8999-999999999999' });
     expect(result.isError).toBe(true);
     expect(result.text).toContain('No persona with id');
@@ -140,7 +136,6 @@ describe('accounts', () => {
     await Promise.all([server.connect(b), client.connect(a)]);
     try {
       expect((await client.callTool({ name: 'accounts', arguments: { action: 'disconnect', account: 'Maria' } })).isError).not.toBe(true);
-      // The user reconnects another account; the same server must see it.
       accounts = {
         authenticated: true,
         accounts: [{ provider: 'instagram', recordId: 'rec-2', igUserId: '9', username: 'new.account', connectedAt: 1700000000000, lastUsed: 1700000000000 }],
@@ -173,7 +168,6 @@ describe('accounts', () => {
 
   it('keeps the whole listing when the provider filter is not given', async () => {
     const { call } = setup({ 'GET /api/account': ACCOUNTS });
-    // The first block is the listing; a recipe nudge may follow it as its own block.
     const first = (text: string): unknown => JSON.parse(text.slice(0, text.indexOf('\nNext step') === -1 ? undefined : text.indexOf('\nNext step')));
     const all = first((await call('accounts', { action: 'list' })).text) as { accounts: unknown[] };
     expect(all.accounts).toHaveLength(3);
@@ -263,7 +257,7 @@ describe('malformed API payloads are reported, not turned into empty results', (
   });
 
   it('personas get reports a malformed listing as an error instead of "no persona"', async () => {
-    const { call } = setup({ 'GET /api/persona/list': { personas: 'nope' }, 'GET /api/persona/images': { success: true, images: [] }, 'GET /api/persona/publishing-accounts': { success: true, defaults: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [] } } });
+    const { call } = setup({ 'GET /api/persona/list': { personas: 'nope' }, 'GET /api/persona/images': { success: true, images: [] }, 'GET /api/persona/publishing-accounts': { success: true, defaults: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [], telegram: [] } } });
     const result = await call('personas', { action: 'get', persona: MARIA });
     expect(result.isError).toBe(true);
     expect(result.text).toContain('Malformed response from GET /api/persona/list');

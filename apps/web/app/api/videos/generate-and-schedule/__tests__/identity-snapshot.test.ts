@@ -3,12 +3,6 @@ import { describe, it, expect } from 'vitest';
 import { buildIdentitySnapshot } from '../identity-snapshot';
 import type { PersonaPrep } from '../persona-prep';
 
-//---------------
-// buildIdentitySnapshot — the priced identity written onto the schedule
-// row. The CTA rides as its intent (issue #639): a later persona edit
-// must not rewrite what the video was scheduled with.
-//---------------
-
 const PREP = {
   voiceIdValue: 'kokoro:af_heart',
   niche: 'fitness',

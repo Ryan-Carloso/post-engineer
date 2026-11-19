@@ -5,18 +5,6 @@ import type { ReactNode } from 'react';
 import type { HookPhoto } from '@/lib/hook-photo';
 import { useI18n } from '@/lib/i18n/provider';
 
-//---------------
-// HookPhotoSection — the first photo of the video (issue #589). Read-only.
-// The copy never claims the hook used this photo: videos generated before
-// #589 opened the hook with the persona avatar, so a hook-usage claim
-// would be false for every historical slot. On videos generated with the
-// current behavior the first photo IS the hook photo. A URL photo renders;
-// an upload (an engine temp asset, 1h TTL) or a persona fallback has no
-// durable URL and renders an explanatory note instead — never the avatar,
-// because dispatch may have used a library pick that is not stored on
-// the slot. Faceless videos never show a face: the section renders
-// nothing.
-//---------------
 export const HookPhotoSection = ({
   hookPhoto,
   faceless,

@@ -1,18 +1,6 @@
-//---------------
-// select-tests — which vitest files a PR shard runs.
-//
-// Push to main (and any non-PR event) runs the whole suite. A pull request
-// runs `vitest --changed` against the base commit, unless the diff touches
-// something that module graph cannot see (the vitest config, setup files,
-// the lockfile, a workflow, or a non-module file under apps/web or shared).
-// An empty changed-list for a real source edit falls back to the full suite
-// so a missed graph edge cannot skip the tests for that edit.
-//---------------
-
 import { readdir } from 'node:fs/promises';
 import path from 'node:path';
 
-// Pinned to apps/web/vitest.config.ts `test.include` by select-tests.test.mjs.
 export const WEB_VITEST_INCLUDE = '**/__tests__/**/*.test.{ts,tsx}';
 
 const WEB_TEST_FILE = /\/__tests__\/.*\.test\.tsx?$/;
@@ -24,12 +12,6 @@ const RUN_ALL_PREFIXES = [
   '.github/scripts/frontend-ci/',
   '.github/workflows/',
   '.github/actions/',
-  // Web tests read these from disk. vitest --changed only follows imports,
-  // so a migration-only, engine-only, or MCP-only diff would otherwise
-  // select nothing: the web app imports the MCP package through the
-  // gitignored apps/mcp/dist, and sync tests read apps/mcp/src via
-  // readFileSync. Recipe docs are pinned the same way by
-  // prompt-status-claims.test.ts.
   'supabase/',
   'apps/engine/',
   'apps/mcp/',
@@ -49,8 +31,6 @@ const RUN_ALL_FILES = new Set([
   'tsconfig.base.json',
 ]);
 
-// Top-level output directories only. `app/api/coverage` is a real route, and
-// `cypress/support/__tests__` is part of the vitest include.
 const ROOT_OUTPUT_DIRS = new Set(['coverage', 'coverage-unit']);
 const SKIP_DIRS = new Set(['node_modules', '.next', 'dist']);
 
@@ -69,8 +49,6 @@ export function shouldRunAll(changedPaths) {
     if (RUN_ALL_FILES.has(file)) return true;
     if (RUN_ALL_PREFIXES.some((prefix) => file.startsWith(prefix))) return true;
     if (file.startsWith('apps/web/cypress/')) continue;
-    // JSON, CSS, SQL, and other files tests read from disk are invisible to
-    // vitest --changed, which only follows the import graph.
     if ((file.startsWith('apps/web/') || file.startsWith('shared/')) && !MODULE_FILE.test(file)) return true;
   }
   return false;

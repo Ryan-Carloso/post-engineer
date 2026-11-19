@@ -9,17 +9,6 @@ import { engineAuthHeaders, requireSupabaseSession } from '@/lib/request-auth';
 
 const POST_ROUTE = 'POST /api/persona/cloned-voices/denoise-preview';
 
-//---------------
-// POST /api/persona/cloned-voices/denoise-preview — returns the cleaned
-// (denoised) WAV of a reference recording so the user can compare it with
-// the original before cloning. Nothing is stored. Rate-limited: each call
-// runs an ffmpeg pass on the engine.
-//
-// Session-only: a UI-only A/B listen (agents pass `denoise` to
-// voices (action: create_clone) instead). requireSupabaseSession() is called without
-// the request, so API-key and OAuth bearer headers are never resolved and
-// only the browser's cookie session authenticates.
-//---------------
 async function postHandler(request: Request): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession();
   if (authError || !auth) {

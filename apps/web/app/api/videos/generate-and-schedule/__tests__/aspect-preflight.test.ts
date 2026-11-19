@@ -40,8 +40,6 @@ function stubFetch(responses: Array<Response | Error>): Array<{ url: string; ini
       const response = responses[Math.min(index, responses.length - 1)];
       index += 1;
       if (response instanceof Error) throw response;
-      // A Response body reads once: clone it so the same stubbed answer
-      // can serve every sequential check.
       return response.clone();
     }),
   );
@@ -108,9 +106,6 @@ describe('checkSegmentMediaAspect', () => {
   });
 
   it('passes text-only segments without an engine URL and never calls the engine', async () => {
-    // The route runs this preflight for every segmented request, and
-    // text-only segments never touch the engine — the env gate must not
-    // 502 them (the route tests run without engine env vars).
     vi.stubEnv('MONEYPRINT_API_URL', undefined);
     vi.stubEnv('MONEYPRINT_API_SECRET', undefined);
     const calls = stubFetch([engineBody('ok')]);
@@ -165,7 +160,6 @@ describe('checkSegmentMediaAspect', () => {
     const calls = stubFetch([engineBody('ok')]);
     const result = await checkSegmentMediaAspect({ ...INPUT, hasFace: true });
     expect(result).toBeNull();
-    // Hook (segment 0) is a panel over the face: only content takes are checked.
     expect(calls).toHaveLength(2);
     expect(JSON.parse(calls[0].init.body as string)).toEqual({
       url: 'https://e.com/body.jpg',
@@ -466,9 +460,6 @@ describe('checkFirstPhotoFace', () => {
   ])(
     'rejects a mechanically rejected first photo with a 400 naming the real reason (%s)',
     async (code, reason) => {
-      // The engine reports has_face null for a rejected file (its verdict
-      // is meaningless), so the code — not the face — must block the
-      // charge, with the real reason instead of "no face was detected".
       stubFetch([engineBody(code, 1080, 1920)]);
       const result = await checkFirstPhotoFace(INPUT);
       expect(result).toBeInstanceOf(NextResponse);
@@ -489,10 +480,6 @@ describe('checkFirstPhotoFace', () => {
   it.each(['blocked_403', 'timeout', 'media_expired'])(
     'rejects an unloadable first photo with a 400 naming the code (%s)',
     async (code) => {
-      // The engine gate fails the task on any resolve_first_segment_photo
-      // reason except no_segment_media, so a blocked, timed-out, or
-      // expired first photo must block the charge too — otherwise the
-      // route charges and the engine fails the task and refunds it.
       stubFetch([engineBody(code)]);
       const result = await checkFirstPhotoFace(INPUT);
       expect(result).toBeInstanceOf(NextResponse);
@@ -531,10 +518,6 @@ describe('checkFirstPhotoFace', () => {
   it.each(['too_small', 'too_large'])(
     'passes a %s persona avatar: the engine applies no size bounds to the fallback',
     async (code) => {
-      // The engine's persona fallback enforces only the 20 MB SSRF
-      // download cap and image/* — a small or over-cap avatar still
-      // renders, so the pre-charge check must not be stricter than the
-      // gate it mirrors. Only an unreadable file stays a 400.
       stubFetch([engineBody(code)]);
       const result = await checkFirstPhotoFace({
         ...INPUT,
@@ -560,9 +543,6 @@ describe('checkFirstPhotoFace', () => {
   );
 
   it('checks the stored persona photo when the avatar is null and a photo path was signed', async () => {
-    // Uploaded/https personas store photo_path with avatar_url null, and
-    // dispatch signs photoPath as the persona fallback: a faceless stored
-    // photo must block the charge here, not after it in the engine.
     const calls = stubFetch([engineBody('ok', 1080, 1920, false)]);
     const result = await checkFirstPhotoFace({
       ...INPUT,
@@ -599,8 +579,6 @@ describe('checkFirstPhotoFace', () => {
   });
 
   it('checks the avatar, not the stored photo, when an avatar URL is set', async () => {
-    // Dispatch prefers the hosted avatar over the signed photo path, so
-    // the pre-charge check must validate the same file.
     const calls = stubFetch([engineBody('ok', 1080, 1920, true)]);
     const result = await checkFirstPhotoFace({
       ...INPUT,
@@ -616,9 +594,6 @@ describe('checkFirstPhotoFace', () => {
     });
   });
   it('checks the picked library photo, not the stored avatar, when one was picked', async () => {
-    // The engine's persona fallback is the library image dispatch will
-    // sign: a faceless stored avatar must not block a faced library
-    // photo, and a faced avatar must not wave through a faceless one.
     const calls = stubFetch([engineBody('ok', 1080, 1920, false)]);
     const result = await checkFirstPhotoFace({
       ...INPUT,
@@ -644,8 +619,6 @@ describe('checkFirstPhotoFace', () => {
   });
 
   it('passes when the picked library photo has a face even if the stored avatar does not', async () => {
-    // The stored avatar is never the hook image when a library photo was
-    // picked, so its face is irrelevant here.
     const calls = stubFetch([engineBody('ok', 1080, 1920, true)]);
     const result = await checkFirstPhotoFace({
       ...INPUT,
@@ -732,8 +705,6 @@ describe('checkPreChargePreflights', () => {
     });
     expect(result).toBeNull();
     expect(checkFullLipsyncNarration).toHaveBeenCalledTimes(1);
-    // A full lip-sync face fills the whole video, so no photo is aspect-
-    // gated; the single call is the first-photo face check.
     expect(calls).toHaveLength(1);
   });
 
@@ -743,7 +714,6 @@ describe('checkPreChargePreflights', () => {
     const result = await checkPreChargePreflights(COMBINED);
     expect(result).toBeNull();
     expect(checkFullLipsyncNarration).not.toHaveBeenCalled();
-    // Three aspect checks plus the first-photo face check.
     expect(calls).toHaveLength(4);
   });
 
@@ -776,7 +746,6 @@ describe('checkPreChargePreflights', () => {
     expect(payload.error).toContain('Segment 0 image 0');
     expect(payload.error).toContain('no face was detected');
     expect(checkFullLipsyncNarration).not.toHaveBeenCalled();
-    // Three aspect checks plus the first-photo face check.
     expect(calls).toHaveLength(4);
   });
 
@@ -803,7 +772,6 @@ describe('checkPreChargePreflights', () => {
       prep: { ...PREP, videoAspect: '16:9' },
     });
     expect(result).toBeNull();
-    // Three aspect checks plus the first-photo face check, all against 16:9.
     expect(calls).toHaveLength(4);
     expect(
       calls.every(
@@ -837,8 +805,6 @@ describe('checkPreChargePreflights', () => {
     });
     expect(result).toBeNull();
     expect(checkFullLipsyncNarration).not.toHaveBeenCalled();
-    // The hook photo is a panel over the face: only the two content photos
-    // are aspect-checked, plus the first-photo face check.
     expect(calls).toHaveLength(3);
     expect(JSON.parse(calls[0].init.body as string)).toEqual({
       url: 'https://e.com/body.jpg',
@@ -891,7 +857,6 @@ describe('checkPreChargePreflights', () => {
     expect(payload.error).toContain('Segment 0 image 0');
     expect(payload.error).toContain('1920x1080 (16:9)');
     expect(checkFullLipsyncNarration).not.toHaveBeenCalled();
-    // The aspect failure short-circuits: the first-photo face check never runs.
     expect(calls).toHaveLength(1);
   });
 

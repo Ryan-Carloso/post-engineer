@@ -43,8 +43,6 @@ test('validateScript rejects a hook that is too short and content that is too sh
 });
 
 test('validateScript accepts short and long content takes: there is no CTA word range', () => {
-  // Issue #577: a two-word content take and a 21-word content take
-  // both pass — the old 5-20 CTA range does not apply to content takes.
   assert.equal(validateScript(goodScript({ segments: [
     { kind: 'hook', text: 'You have one day in Porto, so do not try to see everything, see the river, the old town, and one port cellar properly today.' },
     { kind: 'content', text: 'Start in Ribeira in the morning, walk along the water, cross the Dom Luis I bridge on the lower deck, and look back at the coloured houses from the Gaia side.' },
@@ -59,9 +57,6 @@ test('validateScript accepts short and long content takes: there is no CTA word 
 });
 
 test('validateScript accepts a CTA take in the middle of the video', () => {
-  // Issue #577: a CTA is just a content take, so it may sit anywhere
-  // after the hook — here in the middle — and the video still renders
-  // in take order.
   assert.equal(validateScript(goodScript({ segments: [
     { kind: 'hook', text: 'You have one day in Porto, so do not try to see everything, see the river, the old town, and one port cellar properly today.' },
     { kind: 'content', text: 'Save this one day plan and tell me which stop you would skip first.' },
@@ -446,8 +441,6 @@ test('generateScript aborts on stream silence, not on total elapsed time alone',
 });
 
 test('generateScript aborts on the total cap even when chunks keep arriving', async () => {
-  // A never-closing stream: chunks keep arriving, so only the total cap
-  // can stop it.
   const neverClosing = async () => ({
     ok: true,
     body: new ReadableStream({

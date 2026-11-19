@@ -16,10 +16,6 @@ import {
 import { HttpStatusError } from '../errors';
 import { handleSessionExpiredError } from '../session-expiry';
 
-// Only the redirect handler is doubled (same pattern as app/providers tests):
-// the real window-level redirect behavior is pinned in
-// lib/__tests__/session-expiry.test.tsx; here we prove the shared QueryCache
-// wiring routes the billing fetchers' 401 through the handler.
 vi.mock('../session-expiry', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../session-expiry')>();
   return {
@@ -111,10 +107,6 @@ describe('api-keys-client — fetchers', () => {
   });
 });
 
-//---------------
-// Dead-session reaction: the shared QueryCache wiring routes the billing
-// fetchers' 401 through handleSessionExpiredError, exactly like Providers.
-//---------------
 describe('api-keys-client — session-expiry wiring', () => {
 
   it('a 401 on useApiKeysQuery calls the handler with an HttpStatusError(401)', async () => {

@@ -10,7 +10,6 @@ from app.models import publish as publish_models
 from app.models.cta import CtaType
 from app.models.segments import ScriptSegment, SegmentMedia, SegmentOverlay  # noqa: F401 — re-exported for existing import sites
 
-# Ignore specific Pydantic warnings
 warnings.filterwarnings(
     "ignore",
     category=UserWarning,
@@ -82,12 +81,6 @@ class VideoType(str, Enum):
     faceless = "faceless"
 
 
-# The invalid-value message lists every valid type WITH its token cost, so
-# the agent can choose knowing the price (issue #542 follow-up). It is kept
-# short on purpose: the MCP caps upstream error bodies at 200 chars
-# (apps/mcp/src/errors.ts MAX_ERROR_BODY_CHARS), so a long message would
-# arrive truncated. Costs mirror web lib/tokens.ts — the only price table —
-# and the web sync test pins the two together.
 VIDEO_TYPE_ERROR_SUFFIX = "use full_lipsync (8/15), hook_lipsync (2/3) or faceless (1)"
 
 
@@ -152,11 +145,6 @@ class VideoParams(BaseModel):
     }
     """
 
-    # Agent-supplied publish copy (issue #542 follow-up): the video title
-    # and description the agent sends with the segments. REQUIRED — a
-    # request without them fails validation loudly, like an empty script.
-    # Lengths are YouTube's limits; over-long values fail loudly, never
-    # silently truncate.
     video_title: str = Field(min_length=1, max_length=100)
     video_description: str = Field(min_length=1, max_length=5000)
 
@@ -166,11 +154,6 @@ class VideoParams(BaseModel):
         """Measure the trimmed text, like the overlay validator below."""
         return value.strip() if isinstance(value, str) else value
 
-    # The one video mode (issue #542 follow-up): REQUIRED, no default —
-    # the mode decides the render path AND the price, so a caller that
-    # omits it must fail loudly instead of silently getting a mode it did
-    # not ask for. Replaces the faceless / full_lipsync / lipsync_enabled
-    # boolean combination.
     video_type: VideoType
 
     @field_validator("video_type", mode="before")
@@ -184,39 +167,23 @@ class VideoParams(BaseModel):
         except (ValueError, TypeError):
             raise ValueError(unknown_video_type_message(value)) from None
 
-    video_script: str = Field(default="", max_length=20000)  # Script used to generate the video
+    video_script: str = Field(default="", max_length=20000)
     video_aspect: Optional[VideoAspect] = VideoAspect.portrait.value
     video_concat_mode: Optional[VideoConcatMode] = VideoConcatMode.random.value
-    # How the persona meets the video material during the hook. "standard"
-    # fills the frame with the avatar; "react" splits the frame in half
-    # (avatar on top, the post's material below: the agent's images).
-    # Per-request only, never config.toml: an editorial choice
-    # per post, not a site-wide rendering default. The default is the enum's
-    # own first member so a caller that omits the field gets the behaviour
-    # every pre-existing video already had.
     video_layout: VideoLayout = VideoLayout.standard
     video_transition_mode: Optional[VideoTransitionMode] = None
     video_clip_duration: Optional[int] = Field(default=2, ge=1, le=60)
 
-    custom_audio_file: Optional[str] = None  # Custom audio file path, will ignore TTS and can still use Whisper subtitles
-    video_language: Optional[str] = ""  # auto detect
+    custom_audio_file: Optional[str] = None
+    video_language: Optional[str] = ""
 
-    persona: Optional[PersonaParams] = None  # Inline persona (stateless, caller-resolved refs)
-    # Hook/modal pacing is product-fixed in app/services/task.py
-    # (PERSONA_HOOK_* constants) — intentionally NOT
-    # config-driven: the values were validated against GPU intro cost and
-    # lipsync quality windows, and tunable knobs reopen those failure modes.
+    persona: Optional[PersonaParams] = None
     video_quality: LipSyncQuality = LipSyncQuality.ok
     platform_ids: list[str] = Field(default_factory=list)
     voice_name: Optional[str] = Field(default="", max_length=200)
     voice_volume: Optional[float] = Field(default=1.0, ge=0, le=5.0)
     voice_rate: Optional[float] = Field(default=1.0, ge=0.1, le=5.0)
     bgm_volume: Optional[float] = Field(default=0.09, ge=0, le=2.0)
-    # Background-music mood for this video, agent-supplied (issue #489).
-    # Per-request only, never config.toml (like video_layout): None (the
-    # default) lets the pipeline pick the first catalogued mood, "none"
-    # is an explicit no-music choice, and any other value must name a
-    # catalogued mood — the API rejects unknown moods with 400.
     music_mood: Optional[str] = Field(default=None, max_length=64)
 
     subtitle_enabled: Optional[bool] = True
@@ -244,9 +211,6 @@ class VideoParams(BaseModel):
     stroke_width: float = Field(default=config.ui.get("stroke_width", 1.5), ge=0, le=20)
     n_threads: Optional[int] = Field(default=2, ge=1, le=64)
     paragraph_number: Optional[int] = Field(default=None, ge=1, le=10)
-    # Phase 5-5: the /scripts controller is deleted, so no script prompt
-    # fields remain anywhere in the request models — scripts come from
-    # segments only.
 
 
 class SubtitleRequest(BaseModel):
@@ -296,25 +260,11 @@ def _validate_webhook_url(value: Optional[str]) -> Optional[str]:
 
 
 class TaskVideoRequest(VideoParams, BaseModel):
-    # Optional callback fired once when the task reaches a terminal state
-    # (completed/failed). Must be a public https URL; delivery is best-effort.
     webhook_url: Optional[str] = None
-    # Segments contract (MCP first, Phase 1): one call = one video. When
-    # present, segments are mechanically validated and joined into
-    # video_script before the task is created; a supplied video_script
-    # that differs from the joined segments is rejected, never coerced.
     segments: Optional[list[ScriptSegment]] = None
-    # Effective CTA intent for this video (issue #639): the persona's
-    # cta_type, or a per-video override resolved by the web before
-    # dispatch. None = no CTA applies (legacy/script-only rows): the
-    # CTA-take rule does not run. A faceless video can still carry one.
     cta_type: Optional[CtaType] = None
-    # Web-side correlation id (video_generations.generation_id). Carried
-    # through the task row into PostHog events so a generation can be
-    # traced end-to-end without a database lookup. Never used as the task
-    # id itself — the engine keeps minting its own task ids.
     generation_id: Optional[str] = None
-    slot_id: Optional[str] = None  # Web-side slot id; lets boot orphan triage requeue web tasks.
+    slot_id: Optional[str] = None
 
     @field_validator("webhook_url")
     @classmethod
@@ -323,9 +273,6 @@ class TaskVideoRequest(VideoParams, BaseModel):
 
     @model_validator(mode="after")
     def _validate_video_type_persona(self) -> "TaskVideoRequest":
-        # full_lipsync and hook_lipsync render a face: without a persona
-        # there is nothing to lip-sync. Faceless is the only mode that
-        # runs persona-less. Fails here, before the task is created.
         if self.video_type in (VideoType.full_lipsync, VideoType.hook_lipsync) and self.persona is None:
             raise ValueError(f"{self.video_type.value} requires a persona with a photo")
         return self
@@ -333,9 +280,6 @@ class TaskVideoRequest(VideoParams, BaseModel):
     @model_validator(mode="after")
     def _validate_segments_into_script(self) -> "TaskVideoRequest":
         if self.segments is None:
-            # Script-only direct API calls keep working: the script is used
-            # as-is, with no segment panels. Web, MCP and the batch pipeline
-            # always send segments, and validate media there before charging.
             return self
         from app.services import script_segments
 
@@ -344,8 +288,6 @@ class TaskVideoRequest(VideoParams, BaseModel):
             dumped,
             video_type=self.video_type,
         )
-        # Pydantic v2 does not re-validate on assignment: enforce the
-        # video_script cap from the field metadata, not a hardcoded value.
         max_chars = next((c.max_length for c in TaskVideoRequest.model_fields["video_script"].metadata if hasattr(c, "max_length")), None)
         if max_chars is not None and len(joined) > max_chars:
             raise ValueError(f"segments join to a script longer than video_script allows ({max_chars} characters)")
@@ -374,10 +316,6 @@ class TaskQueryRequest(BaseModel):
     pass
 
 
-######################################################################################################
-######################################################################################################
-######################################################################################################
-######################################################################################################
 class TaskResponse(BaseResponse):
     class TaskResponseBody(BaseModel):
         task_id: str
@@ -434,8 +372,6 @@ class TaskDeletionResponse(BaseResponse):
         }
 
 
-# Re-exported from app/models/media_responses.py (same envelope fields as
-# BaseResponse); moved so this file stays under the 500-line ratchet.
 from app.models.media_responses import (  # noqa: E402,F401
     BgmRetrieveResponse,
     BgmUploadResponse,

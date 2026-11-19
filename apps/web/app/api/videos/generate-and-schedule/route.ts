@@ -1,18 +1,3 @@
-//---------------
-// POST /api/videos/generate-and-schedule — the single generate+schedule operation.
-//
-// Product rule: a video and its publishing schedule are always born together.
-// One request carries a title, a complete segments script, a persona and a
-// publish-time plan. The API validates everything, charges the single video,
-// creates the schedule + its one slot and dispatches one engine generation.
-// The topics input is rejected with a 400 naming the field — never mapped.
-//
-// Backend flow: validate input -> auth -> rate limit -> persona scope +
-// ownership -> providers + accounts -> distribute slots -> window check
-// -> cost -> idempotency pre-checks -> ONE atomic spend_tokens -> insert
-// schedule -> insert slot -> dispatch engine task.
-//---------------
-
 import { NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
@@ -73,36 +58,16 @@ interface SlotResult {
   title: string;
   taskId: string | null;
   status: string;
-  /** Machine code for a failed slot (image_sign_failed, engine_rejected, ...). */
   errorCode?: string;
-  /** Whether the prepaid cost was returned after a failed dispatch. */
   tokensRefunded?: boolean;
 }
 
-//---------------
-// Small helpers
-//---------------
-
-//---------------
-// Validation helpers — all run BEFORE any token is charged. Slot
-// validation lives in slot-validation.ts (extracted for the ratchet).
-//---------------
-
-//---------------
-// Publish-mode resolution. 'scheduled' (default) keeps the existing
-// contract: a schedule plan with distributed, window-checked slots.
-// 'asap' publishes each video the moment generation finishes: no schedule
-// plan is accepted (a stray one would be silently ignored, so it is a 400),
-// and every slot lands at the request time.
-//---------------
 type PublishMode = 'scheduled' | 'asap';
 
 interface ResolvedPublishPlan {
   mode: PublishMode;
   slots: DistributedSlot[];
-  /** Sorted, deduped daily times (empty for asap). */
   times: string[];
-  /** IANA zone stored on the schedule row (display only for asap). */
   timezone: string;
 }
 
@@ -150,31 +115,20 @@ function validatePublishMode(
   };
 }
 
-//---------------
-// Social account validation lives in validate-accounts.ts (extracted so
-// the route module stays under the file-size ratchet).
-//---------------
-
 async function postHandler(request: Request): Promise<NextResponse> {
   const startedAt = Date.now();
 
-  // 1. Validate input shape + semantics (no DB, no charge).
   let body: unknown;
   try {
     body = await request.json();
   } catch {
     return validationFailed(ERROR_CODES.VALIDATION_FAILED, 'Invalid JSON payload.');
   }
-  // Shape, title, segments, providers, options and persona-less rules: all
-  // collected, then one 400 with every problem (see request-validation.ts).
   const rawIssues = rawKeyIssues(body);
   const parsed = GenerateAndScheduleBodySchema.safeParse(body);
   if (!parsed.success) return rejectInvalidRequest([...rawIssues, ...shapeIssues(parsed.error)]);
   const { publishing, options, idempotencyKey, experiment, cta: ctaOverride } = parsed.data;
 
-  // A blank/absent personaId means "post without a persona" (migration 012).
-  // Null is the only accepted spelling so a caller cannot half-intend a
-  // persona by sending an empty string.
   const personaId = parsed.data.personaId?.trim() || null;
   const checked = checkSemantics({
     title: parsed.data.title,
@@ -189,17 +143,10 @@ async function postHandler(request: Request): Promise<NextResponse> {
   }
   const { title, description, script: segmentsScript, providers, options: validatedOptions, pinterestBoardId } = checked.value;
 
-  // Publish mode: scheduled (default) distributes slots across the plan's
-  // times; asap skips the schedule entirely and lands every slot at the
-  // request time, so the engine's tick publishes each video the moment its
-  // generation finishes.
   const plan = validatePublishMode(publishing, new Date());
   if (plan instanceof NextResponse) return plan;
   const { mode, slots, times, timezone } = plan;
 
-  // Custom audio SSRF check before auth: fail fast on a hostile URL without
-  // spending an auth lookup. (The HEAD check itself is the expensive part;
-  // it runs once per request, before any charge.)
   if (validatedOptions.audioUrl !== undefined) {
     const audioCheck = await checkCustomAudioUrl(validatedOptions.audioUrl);
     if (!audioCheck.ok) {
@@ -207,12 +154,10 @@ async function postHandler(request: Request): Promise<NextResponse> {
     }
   }
 
-  // 2. Auth.
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
   const userId = auth.userId;
 
-  // 3. Rate limit: one call mints one video, keyed by user id.
   const limited = await applyRateLimit(request, RATE_LIMITS.generateAndSchedule, userId);
   if (limited) {
     const retryAfter = limited.headers.get('Retry-After') ?? '60';
@@ -224,8 +169,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
     return response;
   }
 
-  // Service-role bypasses RLS: every query below re-checks ownership with an
-  // explicit .eq('user_id', userId) predicate.
   const supabase: SupabaseClient = createSupabaseServiceClient();
 
   trackApiEvent('video_creation_started', {
@@ -236,8 +179,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
     videoType: validatedOptions.videoType,
   });
 
-  // 4. Persona scope (API keys) + ownership. A persona-less post has nothing
-  // to scope against, so the scope check only applies when one is named.
   if (personaId !== null && !isPersonaAllowed(auth.personaIds, personaId)) {
     return validationFailed(ERROR_CODES.PERSONA_SCOPE_DENIED, formatErrorMessage(ERROR_CODES.PERSONA_SCOPE_DENIED), 'personaId', 403);
   }
@@ -254,19 +195,12 @@ async function postHandler(request: Request): Promise<NextResponse> {
   });
   if (prep instanceof NextResponse) return prep;
 
-  // CTA (issue #639): resolve the effective CTA before any charge, then
-  // require the marked take — a missing marker or a comment take without
-  // '?' is a 400 here, never a charge-then-refund.
   const effectiveCta = resolveEffectiveCta(ctaOverride, prep.cta);
   const ctaCheck = validateCtaTake(effectiveCta, options?.segments);
   if (!ctaCheck.ok) {
     return validationFailed(ERROR_CODES.VALIDATION_FAILED, ctaCheck.message, ctaCheck.field);
   }
 
-  // 5. Providers + social accounts (fail fast: never charge for a bad selection).
-  // The binding is loaded once here: resolvePublishingAccounts falls back
-  // to it when accounts are omitted, and validateAccounts proves every
-  // requested id is bound to the persona (issue #572).
   const bound = await loadBoundPublishingAccounts(supabase, personaId, userId);
   if (bound instanceof NextResponse) return bound;
   const validatedAccounts = await validateAccounts(
@@ -280,8 +214,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
   const { accountIds, reconnectWarning } = validatedAccounts;
   const warnings = scheduleWarnings(prep.voiceFallback, reconnectWarning);
 
-  // Pinned library image: fail fast when the id does not resolve, before any charge.
-  // The fallback photo is resolved once here, pre-charge: the engine face-gates the library image dispatch signs, not the avatar.
   const requestedImageId =
     personaId !== null ? (validatedOptions.imageId?.trim() || null) : null;
   const fallbackPhotos = await resolvePreChargeFallbackPhotos(supabase, {
@@ -295,9 +227,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
   });
   if (fallbackPhotos instanceof NextResponse) return fallbackPhotos;
 
-  // Pre-charge preflights: full lip-sync narration (>60s), segment-media aspect
-  // (issue #538) and first-photo face (issue #589) — all reject before charging.
-  // Runs after all other pre-charge validation, before cost/spend below.
   const preflight = await checkPreChargePreflights({
     userId,
     script: segmentsScript,
@@ -309,8 +238,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
   });
   if (preflight instanceof NextResponse) return preflight;
 
-  // Idempotency anchor, resolved once: the experiment check below needs the
-  // same schedule id step 7 uses to tell a replay from a duplicate.
   const idem = resolveIdempotency(userId, idempotencyKey, request);
   const pairFacts = buildPairFacts({ providers, accountIds, pinterestBoardId, prep, title, segments: options?.segments, videoType: validatedOptions.videoType, audioUrl: validatedOptions.audioUrl, cta: effectiveCta });
   if (experiment !== undefined) {
@@ -319,7 +246,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
     if (!link.ok) return validationFailed(ERROR_CODES.VALIDATION_FAILED, link.message, link.field, link.status);
   }
 
-  // 6. Cost for the single video, computed BEFORE the charge from the video mode.
   const perVideoCost = computeVideoTokens(validatedOptions.videoType, prep.faceQuality);
   trackApiEvent('video_creation_validated', {
     userId,
@@ -336,17 +262,12 @@ async function postHandler(request: Request): Promise<NextResponse> {
     tokenCost: perVideoCost,
   });
 
-  // 7. Idempotency: the schedule id is deterministic in (user, key), so a
-  // retry addresses the same schedule row instead of creating a duplicate.
-  // A 0-slot row is a zombie and is deleted below so the operation runs
-  // fresh instead of being replayed empty.
   const { data: existingSchedule, error: scheduleLookupError } = await supabase
     .from('schedules')
     .select('id')
     .eq('id', idem.scheduleId)
     .eq('user_id', userId)
     .maybeSingle();
-  // Fail closed: a blind schedule lookup must never lead to a second charge.
   if (scheduleLookupError) {
     logger.error('[generate-and-schedule] idempotency schedule lookup failed', scheduleLookupError, {
       scheduleId: idem.scheduleId,
@@ -355,16 +276,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
     return coded(500, ERROR_CODES.INTERNAL_ERROR, formatErrorMessage(ERROR_CODES.INTERNAL_ERROR));
   }
   if (existingSchedule) {
-    // A schedule with zero slots is a zombie from an attempt that died
-    // between the schedule insert and the slot insert (crash, timeout): it
-    // can never produce videos, so for replay purposes it is treated as
-    // non-existent at ANY age — delete it and run the operation fresh. This
-    // is safe because no live request can be stalled "between" the two
-    // inserts: only the synchronous trackApiEvent call sits there, with no
-    // await, so a 0-slot row is never being worked on. (An age TTL here
-    // used to let a fresh zombie get replayed empty: "0 publish slot(s)".)
-    // The ledger check below prevents a second charge for the same
-    // generation_id.
     const { count: slotCount, error: slotCountError } = await supabase
       .from('scheduled_posts')
       .select('id', { count: 'exact', head: true })
@@ -389,13 +300,10 @@ async function postHandler(request: Request): Promise<NextResponse> {
       if (replayed) return replayed;
     }
   }
-  // Read-your-ledger, net-based: the generation counts as already spent only
-  // while its spends exceed its refunds (see netLedgerSpent in lib/tokens).
   const { data: ledgerRows, error: ledgerError } = await supabase
     .from('token_transactions')
     .select('type, amount')
     .eq('generation_id', idem.generationId);
-  // Fail closed: charging blind after a failed ledger read risks a double spend.
   if (ledgerError) {
     logger.error('[generate-and-schedule] spend ledger lookup failed', ledgerError, {
       generationId: idem.generationId,
@@ -411,13 +319,10 @@ async function postHandler(request: Request): Promise<NextResponse> {
     });
   }
 
-  // 8. ONE atomic spend for the whole operation. Never partial.
   if (!alreadySpent) {
-    // Lazy one-time signup bonus, same best-effort grant as other flows.
     try {
       await supabase.rpc('grant_signup_bonus', { p_user_id: userId });
     } catch {
-      // Best-effort: the spend below is the real gate.
     }
     const { data: spendData, error: spendError } = await supabase.rpc('spend_tokens', {
       p_user_id: userId,
@@ -427,8 +332,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
     });
     if (spendError) {
       if (violatedConstraint(spendError) !== null) {
-        // A concurrent duplicate spent under the same generation_id first:
-        // replay instead of double-charging.
         const replayed = await fetchReplay(supabase, userId, idem.scheduleId, warnings);
         if (replayed) {
           trackApiEvent('video_creation_replayed', { userId, scheduleId: idem.scheduleId });
@@ -462,23 +365,14 @@ async function postHandler(request: Request): Promise<NextResponse> {
     generationId: idem.generationId,
   });
 
-  // Persist a voice swap only after a successful spend (or a ledger hit
-  // that already charged): a 402 / failed lookup must not rewrite
-  // personas.voice_id. Slot dispatch still sees the swapped id on prep.
   if (prep.voiceFallback !== undefined && personaId !== null) {
     await persistVoiceSwap(supabase, userId, personaId, prep.voiceFallback);
   }
 
-  // 9. Insert the schedule. The id is deterministic (idempotency anchor).
-  // scheduled_at stays NULL during dispatch, so the engine's immediate
-  // one-off path cannot race us and double-generate.
-  // NOTE: do not add keys here that are not columns on public.schedules —
-  // PostgREST rejects the whole insert on an unknown key (every call 500s).
   const sortedTimes = [...new Set(times.map((t) => t.trim()))].sort();
   const { error: scheduleError } = await supabase.from('schedules').insert({
     id: idem.scheduleId,
     user_id: userId,
-    // NULL for a post created without one (migration 012).
     persona_id: personaId,
     providers,
     ...scheduleAccountColumns(accountIds), pinterest_board_id: pinterestBoardId,
@@ -488,24 +382,12 @@ async function postHandler(request: Request): Promise<NextResponse> {
     timezone,
     scheduled_at: null,
     active: true,
-    // Publish mode (migration 015): 'scheduled' publishes at the slot
-    // times, 'asap' publishes each video the moment generation finishes.
     publish_mode: mode,
-    // Identity snapshot (migration 012): the priced identity, spread from
-    // its builder — the engine reads it at tick time through post_identity.
     ...buildIdentitySnapshot(prep, validatedOptions.audioUrl, effectiveCta),
   });
   if (scheduleError) {
     const constraint = violatedConstraint(scheduleError);
     if (constraint === SCHEDULES_PERSONA_OWNER_CONSTRAINT) {
-      // The persona already owns a schedule row and this database still
-      // enforces one-schedule-per-persona (migration 011 has not been applied
-      // here). Nothing was inserted under our schedule id, so there is no
-      // winner to replay: answering `{slots: [], replayed: true}` would tell
-      // the caller a batch of videos is scheduled when not a single one is.
-      // Our own spend is redundant either way — refund it, then report the
-      // conflict honestly. When the spend was skipped (alreadySpent) there is
-      // nothing of ours to undo, and refunding would steal the prior spend.
       logger.error('[generate-and-schedule] persona already has a schedule; refunding redundant spend', scheduleError, {
         scheduleId: idem.scheduleId,
         userId,
@@ -540,7 +422,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
         warnings,
       });
     }
-    // Real DB failure after the spend: refund the whole generation loudly.
     logger.error('[generate-and-schedule] schedule insert failed after spend; refunding', scheduleError, {
       scheduleId: idem.scheduleId,
       userId,
@@ -564,7 +445,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
     publishMode: mode,
   });
 
-  // 10. Insert the slot (pending); see slot-rows.ts for the row shape.
   const { data: slotRows, error: slotsError } = await supabase
     .from('scheduled_posts')
     .insert(
@@ -583,8 +463,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
     )
     .select('id, slot_at, title');
   if (slotsError || !slotRows || slotRows.length !== 1) {
-    // Compensating rollback: nothing may survive half-created. Loud logs;
-    // the refund makes the user whole.
     logger.error('[generate-and-schedule] slot insert failed; rolling back schedule', slotsError, {
       scheduleId: idem.scheduleId,
       userId,
@@ -602,7 +480,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
   }
   trackApiEvent('video_slots_created', { userId, scheduleId: idem.scheduleId, numberOfVideos: 1 });
   if (experiment !== undefined) {
-    // Race guard: the partner may have committed since the pre-charge check.
     const recheck = await verifyExperimentPairAfterInsert(supabase, { link: experiment, userId, facts: pairFacts });
     if (!recheck.ok) {
       logger.error('[generate-and-schedule] experiment pair re-check failed after insert; rolling back', undefined, { scheduleId: idem.scheduleId, userId, field: recheck.field });
@@ -620,9 +497,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
     }
   }
 
-  // 11. Dispatch the one engine generation and bind the task_id.
-  // A failed slot is an explicit terminal state (failed + refunded), never
-  // an orphan.
   const results: SlotResult[] = [];
   let accepted = 0;
   let failed = 0;
@@ -631,16 +505,12 @@ async function postHandler(request: Request): Promise<NextResponse> {
     const slot = slotRows[i] as { id: string; slot_at: string; title: string };
     const slotGenerationId = `${idem.generationId}:slot:${slot.id}`;
     try {
-      // Photo for this video: pinned override or library selection matched
-      // to its title (faceless skips the face entirely).
       let photoUrl: string | undefined;
       let pickedImageId: string | null = null;
       if (validatedOptions.videoType !== 'faceless' && personaId !== null) {
         const selection = await resolveVideoImage(supabase, personaId, userId, recentIds, {
           title,
           niche: prep.niche,
-          // Image keyword matching uses the actual segments script now, not
-          // the removed prompt: the prompt was only ever a proxy for it.
           script: segmentsScript,
           imageId: requestedImageId,
         });
@@ -655,11 +525,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
           photoUrl = libraryUrl;
           if (!requestedImageId) pickedImageId = selection.image.id;
         } else {
-          // A house character is stored as a relative path to our own static
-          // asset. The engine fetches the image over HTTP behind an SSRF guard
-          // that rejects loopback, so a relative path — and even an origin-
-          // prefixed one in local dev — cannot be downloaded. Re-host it in
-          // the personas bucket first.
           const hosted = await ensureEngineImageUrl(prep.avatarUrl, {
             supabase,
             userId,
@@ -694,22 +559,16 @@ async function postHandler(request: Request): Promise<NextResponse> {
         video_type: validatedOptions.videoType,
         video_script: segmentsScript,
         webhook_url: validatedOptions.webhookUrl,
-        // The resolved CTA type rides as a request field (issue #639): the
-        // engine enforces the marked-take rule from it. Null (no CTA)
-        // is deleted by the payload's null pass, so the key is absent.
         cta_type: effectiveCta?.type ?? null,
-        // generation_id: web-side correlation id for PostHog event joins;
-        // slot_id: lets boot orphan triage requeue (not fail) on engine restart.
         generation_id: slotGenerationId,
         slot_id: slot.id,
         music_mood: validatedOptions.musicMood,
-        segments: options?.segments, // Segment media rides to the engine here, next to the joined script.
+        segments: options?.segments,
       });
       if (!hasNonEmptyString(payload.video_title)) {
         throw new SlotDispatchError('empty_title', 'Video title is empty.');
       }
 
-      // History snapshot (+ full engine payload for the boot rebuild, #205).
       await recordGenerationStart({
         supabase,
         userId,
@@ -730,16 +589,12 @@ async function postHandler(request: Request): Promise<NextResponse> {
         throw new SlotDispatchError(errorCode, 'Video service is unavailable. Please try again later.');
       }
 
-      // Slot -> generating WITH the task_id in one update: the invariant
-      // "no slot without a task" holds from this write on.
       const { error: bindError } = await supabase
         .from('scheduled_posts')
         .update({ status: 'generating', task_id: engineTask.taskId })
         .eq('id', slot.id)
         .eq('user_id', userId);
       if (bindError) {
-        // The engine accepted the task but the bind failed: preserve the
-        // taskId for recovery instead of orphaning it.
         logger.error('[generate-and-schedule] task_id bind failed after engine accept', bindError, {
           slotId: slot.id,
           taskId: engineTask.taskId,
@@ -754,9 +609,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
         status: 'running',
         engineTaskId: engineTask.taskId,
       });
-      // Anti-repeat history is committed only after the engine accepts the
-      // job: a failed (refunded) dispatch must not burn a rotation slot.
-      // pickedImageId is only ever set on the persona branch above.
       if (pickedImageId && personaId !== null) {
         await recordRecentImageId(supabase, personaId, pickedImageId, userId);
         recentIds.push(pickedImageId);
@@ -766,8 +618,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
       accepted += 1;
     } catch (error) {
       const dispatchError = error instanceof SlotDispatchError ? error : new SlotDispatchError('slot_failed', 'Video generation failed for this slot.');
-      // Explicit terminal state + per-slot refund of this video's prepaid
-      // cost (the engine's batch refund convention). Siblings continue.
       await supabase.from('scheduled_posts').update({ status: 'failed' }).eq('id', slot.id).eq('user_id', userId);
       const { refunded, error: refundError } = await refundSlotTokens({
         supabase,
@@ -820,8 +670,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
     ...(warnings.length > 0 ? { warnings } : {}),
   };
   if (failed > 0 && accepted === 0) {
-    // Every video failed (each already refunded): report the operation as
-    // failed, keeping the per-slot detail so callers can see what happened.
     const engineOutage = results.every((r) =>
       ['engine_rejected', 'engine_unavailable', 'no_task_id'].includes(r.errorCode ?? ''),
     );
@@ -834,7 +682,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
       failureStage: 'dispatch',
       numberOfVideos: 1,
       durationMs,
-      // Scrub-safe key: trackApiEvent redacts every `token*` key.
       refunded: results.every((r) => r.status !== 'failed' || r.tokensRefunded === true),
     });
     return NextResponse.json(
@@ -857,8 +704,4 @@ async function postHandler(request: Request): Promise<NextResponse> {
   return NextResponse.json({ success: true, ...envelope });
 }
 
-//---------------
-// 5xx reporting: handled server errors reach PostHog error tracking.
-// The user id is resolved lazily, only when a 5xx is actually reported.
-//---------------
 export const POST = withApiErrorReporting(ROUTE, postHandler, { getUserId: resolveReportingUserId });

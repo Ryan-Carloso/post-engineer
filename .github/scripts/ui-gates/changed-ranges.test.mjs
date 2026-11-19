@@ -1,9 +1,3 @@
-//---------------
-// changed-ranges tests — the diff→line-range extractor that scopes the
-// web/mcp Stryker runs to the PR's changed lines (mutation.yml and the
-// ui-coverage-gates Stryker step).
-//---------------
-
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
@@ -61,7 +55,6 @@ index 1111111..2222222 100644
 +const d = 4;
 `;
     const entries = parseChangedRanges(diff, { mergeGap: 3 });
-    // 11-12, 43 and 94 are 30+ lines apart: never merged.
     assert.deepEqual(entries[0].ranges, [[11, 12], [43, 43], [94, 94]]);
   });
 
@@ -75,7 +68,6 @@ index 1111111..2222222 100644
 @@ -13,0 +14,1 @@
 +const b = 2;
 `;
-    // Line 14 is adjacent to 11: one merged range.
     const entries = parseChangedRanges(diff, { mergeGap: 3 });
     assert.deepEqual(entries[0].ranges, [[11, 14]]);
   });
@@ -229,7 +221,6 @@ describe('changedMutateArgument', () => {
     assert.ok(calls[0].includes('diff'));
     assert.ok(calls[0].includes('-U0'));
     assert.ok(calls[0].includes('origin/main...HEAD'));
-    // lib/voices.ts does not start with apps/web/ — filtered out.
     assert.equal(result, '');
   });
 

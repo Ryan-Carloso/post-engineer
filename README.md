@@ -38,7 +38,8 @@ by Modal.
   voiceover (TTS), subtitles, stock footage, and background music, assembled
   into a finished video.
 - **Scheduling & publishing** — queue posts for YouTube, Instagram, LinkedIn,
-  Bluesky, Threads, Facebook, Pinterest, 3Speak, Rumble, and Fanvue; track
+  Bluesky, Threads, Facebook, Pinterest, 3Speak, Rumble, Fanvue, and Telegram
+  (channels and groups); track
   upcoming and past posts with per-account status.
 - **Dashboard** — personas, posts history, connected social accounts, API keys,
   and token billing in one Next.js app.
@@ -158,6 +159,12 @@ To connect YouTube, Instagram, or LinkedIn accounts you need OAuth apps whose
 - **Rumble** uses a manually issued 40-character Simple Upload API access
   token (request it by emailing bd@rumble.com), entered in the dashboard
   with the channel ID — no OAuth, no app registration, no env vars.
+- **Telegram** publishes through the user's own bot: create it with
+  @BotFather, add it to a channel (as an administrator who can post) or a
+  group (as a member allowed to send), then paste the bot token and the chat
+  ID or @username in the dashboard (encrypted at rest). The connect checks the
+  bot's permission in that chat. No OAuth, no env vars. The cloud Bot API
+  caps uploads at 50 MB and captions at 1,024 characters.
 
 ### 5. Stripe setup (token billing)
 

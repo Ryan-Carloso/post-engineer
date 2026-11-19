@@ -1,9 +1,3 @@
-//---------------
-// buildSlotRows — the scheduled_posts insert rows. The extraction from
-// route.ts (file-size ratchet) must not drop a field: every row carries
-// the per-post choices the engine batch pipeline reads back.
-//---------------
-
 import { describe, it, expect } from 'vitest';
 import { buildSlotRows } from '../slot-rows';
 

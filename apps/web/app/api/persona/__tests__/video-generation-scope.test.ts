@@ -1,15 +1,6 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-//---------------
-// Persona scope on the generation history reads (issue #449).
-// A scoped API key may see its own personas plus a persona-less
-// generation (stored null persona_id is faceless at dispatch). Another
-// persona's subject must not come back. The mock applies .or() / .is()
-// the way PostgREST would, so a route that never filters still returns
-// every row.
-//---------------
-
 vi.mock('@/lib/request-auth', () => ({
   requireSupabaseSession: vi.fn(),
 }));
@@ -62,7 +53,6 @@ const OTHER = row({ persona_id: PERSONA_B, video_subject: 'secret-other-persona'
 const FACELESS = row({ persona_id: null, video_subject: 'faceless-subject', generation_id: 'gen-f' });
 
 function personaVisible(personaId: string | null, filter: string | null, nullOnly: boolean): boolean {
-  // No scope predicate: every row is visible. That is the bug these tests pin.
   if (filter === null && !nullOnly) return true;
   if (nullOnly && filter === null) return personaId === null;
   if (filter === null) return false;

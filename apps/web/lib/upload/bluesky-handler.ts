@@ -12,23 +12,10 @@ import {
 import { rememberDeadCredential, reportAccountUnauthorized } from '@/lib/upload/account-unauthorized';
 import { sniffPublishMedia } from '@/lib/upload/publish-media-file';
 
-//---------------
-// handleBlueskyUpload — publishes the video or image to the user's Bluesky
-// account. AT Protocol flow for a video: service auth → upload to
-// video.bsky.app → poll the job up to the BlobRef → post with a video
-// embed. An image (JPEG/PNG, told apart by its bytes) is one
-// com.atproto.repo.uploadBlob call → post with an images embed. The app
-// password comes encrypted blob in social_accounts (encrypted_tokens).
-// FormData (multipart, coming from the engine or the UI):
-//   provider=bluesky, video (File: mp4, or a JPEG/PNG image), caption, did (repeated),
-//   userId (internal engine call only).
-//---------------
-
 const VIDEO_SERVICE = 'https://video.bsky.app';
 const BSKY_SERVICE = 'https://bsky.social';
 const POLL_INTERVAL_MS = 1_000;
 const POLL_MAX_MS = 60_000;
-/** Bluesky's per-image blob cap (app.bsky.embed.images: maxSize 1000000). */
 export const BLUESKY_IMAGE_MAX_BYTES = 1_000_000;
 
 interface BlueskyAccountResult {
@@ -44,9 +31,6 @@ export interface BlueskyUploadResponse {
   results: BlueskyAccountResult[];
 }
 
-//---------------
-// minimal shape of the post body (app.bsky.feed.post)
-//---------------
 interface BlueskyPostRecord {
   $type: 'app.bsky.feed.post';
   text: string;
@@ -90,8 +74,6 @@ export async function handleBlueskyUpload(
   }
   const validation = image !== null ? { ok: true as const } : validateVideoForBluesky({
     sizeBytes: buffer.length,
-    // duration cannot be inferred from the buffer without decoding; the engine
-    // validates it before calling. Here we only enforce the static limits.
     durationSeconds: Number(formData.get('durationSeconds') ?? 0),
     mimeType: rawFile.type || 'video/mp4',
   });
@@ -106,7 +88,6 @@ export async function handleBlueskyUpload(
 
   for (const did of dids) {
     try {
-      // Ownership: resolves only the user's own accounts.
       const { tokens } = await getSocialAccountTokens(supabase, ownerUserId, 'bluesky', did);
       const appPassword = tokens.access_token;
       const handle = typeof tokens.handle === 'string' ? tokens.handle : did;
@@ -137,9 +118,6 @@ export async function handleBlueskyUpload(
   return { success: results.some((result) => result.success), results };
 }
 
-//---------------
-// getServiceToken — short-lived token (aud=did:web:<pds>) for the upload
-//---------------
 async function getServiceToken(accessJwt: string, pdsHost: string): Promise<string> {
   const url = new URL(`${BSKY_SERVICE}/xrpc/com.atproto.server.getServiceAuth`);
   url.searchParams.set('aud', `did:web:${pdsHost}`);
@@ -154,10 +132,6 @@ async function getServiceToken(accessJwt: string, pdsHost: string): Promise<stri
   return body.token;
 }
 
-//---------------
-// uploadVideoBlob — uploads the MP4 to video.bsky.app and polls the job
-// until the BlobRef is ready. already_exists returns the previous blob.
-//---------------
 async function uploadVideoBlob(
   args: {
     accessJwt: string;
@@ -217,10 +191,6 @@ async function uploadVideoBlob(
   throw new Error('Bluesky video processing timed out');
 }
 
-//---------------
-// uploadImageBlob — one com.atproto.repo.uploadBlob call; the blob ref is
-// what the images embed carries.
-//---------------
 async function uploadImageBlob(accessJwt: string, buffer: Buffer, mimeType: string): Promise<unknown> {
   const response = await fetch(`${BSKY_SERVICE}/xrpc/com.atproto.repo.uploadBlob`, {
     method: 'POST',
@@ -241,9 +211,6 @@ async function uploadImageBlob(accessJwt: string, buffer: Buffer, mimeType: stri
   return body.blob;
 }
 
-//---------------
-// publishToBluesky — orchestrates session → upload → post
-//---------------
 async function publishToBluesky(args: {
   appPassword: string;
   handle: string;

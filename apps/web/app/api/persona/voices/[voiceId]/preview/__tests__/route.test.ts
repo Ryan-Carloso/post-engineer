@@ -315,7 +315,6 @@ describe('POST /api/persona/voices/:voiceId/preview caller text', () => {
     expect(url).toBe(ENGINE_PREVIEW_URL);
     expect(init?.body).toBe(JSON.stringify({ text: 'say this' }));
     expect(new Headers(init?.headers).get('content-type')).toBe('application/json');
-    // The text never travels in the URL.
     expect(String(url).includes('say')).toBe(false);
   });
 

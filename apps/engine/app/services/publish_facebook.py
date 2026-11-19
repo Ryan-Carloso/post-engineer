@@ -14,8 +14,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 FACEBOOK_PROVIDER: str = "facebook"
-# Facebook's documented feed-post ceiling; the web draft scorer
-# (lib/draft-scoring.ts) and lib/facebook.ts pin the same value.
 FACEBOOK_CAPTION_MAX_LENGTH: int = 63206
 
 

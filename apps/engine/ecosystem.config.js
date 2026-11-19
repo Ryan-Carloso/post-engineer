@@ -1,14 +1,3 @@
-/**
- * PM2 process definition for the Post Engineer API.
- *
- * The automatic fill schedule runs IN-PROCESS inside the engine (thread
- * "fill-schedule-scheduler", started with the app when the Supabase env
- * vars are present) — there is no external cron/scheduler anymore.
- *
- * Usage:
- *   pm2 start ecosystem.config.js
- *   pm2 logs mpt-api
- */
 module.exports = {
   apps: [
     {

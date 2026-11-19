@@ -1,30 +1,9 @@
-// Shared segments validation: single source of truth for the web app and
-// the MCP server, for the segments script contract (MCP first, Phase 1).
-// DO NOT EDIT this copy directly in apps/web or apps/mcp: the files at
-// apps/web/lib/generation/script-segments.ts and
-// apps/mcp/src/script-segments.ts are generated copies of this file.
-// Edit here, then run `node scripts/sync-script-segments.mjs` from the
-// repo root (both apps also run it from their prebuild/pretest scripts).
-// Mirrors apps/engine/app/services/script_segments.py: same limits,
-// same accepted inputs, same field/rule/fix shape, with one documented
-// exception in normalize() in segment-text.ts (Python casefold vs JS
-// toLowerCase).
-// No LLM, no network, no TTS: the hook word guard runs here; measured TTS
-// duration is checked by the engine when a hook-only TTS endpoint exists
-// (Phase 1 gap, see check_script (action: validate)).
-
 import { clipDensityMinCount, isVideoRef } from './segment-media.js';
 import { hasForbiddenContent, normalize } from './segment-text.js';
 
 export { CLIP_DENSITY_ITEMS } from './segment-media.js';
 
 export const MAX_SEGMENTS = 12;
-// Full lip sync renders the persona's face over the whole video, so media
-// is optional there: at most 6 photos for the whole video. The images
-// mode is the only other mode left: the agent's photos are the whole
-// picture. One photo per ~3s of speech (8 words), each photo on screen at
-// least ~1s (3 words), at most 30 photos per video. Same numbers as
-// image_density.py.
 export const MAX_MEDIAS = 6;
 export const WORDS_PER_IMAGE = 8;
 export const MIN_WORDS_PER_IMAGE = 3;
@@ -34,8 +13,6 @@ export const MAX_TOTAL_WORDS = 200;
 export const MIN_CONTENT_WORDS = 30;
 export const MIN_HOOK_WORDS = 25;
 export const MAX_HOOK_WORDS = 40;
-// The info card painted inside a segment photo's panel (engine media_overlay):
-// same numbers as MAX_OVERLAY_*_CHARS in apps/engine/app/services/script_segments.py, pinned by an engine sync test.
 export const MAX_OVERLAY_TITLE_CHARS = 60;
 export const MAX_OVERLAY_SUBTITLE_CHARS = 80;
 export const MAX_OVERLAY_BADGE_CHARS = 30;
@@ -44,12 +21,8 @@ const OVERLAY_LIMITS: Record<string, number> = {
   subtitle: MAX_OVERLAY_SUBTITLE_CHARS,
   badge: MAX_OVERLAY_BADGE_CHARS,
 };
-// Hook window from the engine persona_hook constants (8-12 seconds).
 export const HOOK_MIN_SECONDS = 8;
 export const HOOK_MAX_SECONDS = 12;
-// Requested on-screen seconds for one full-frame photo (segment pacing):
-// hold the turning-point photo longer, flash one briefly. Absent means
-// the default 2s pace; framed panels over the face ignore it.
 export const MIN_REQUESTED_PHOTO_SECONDS = 0.5;
 export const MAX_REQUESTED_PHOTO_SECONDS = 6;
 
@@ -71,7 +44,6 @@ export type SegmentMedia = {
 export type ScriptSegment = {
   kind: SegmentKind;
   text: string;
-  // Marks the take that performs this video's CTA (issue #639).
   cta?: boolean;
   media?: SegmentMedia[];
 };
@@ -100,7 +72,6 @@ function fail(field: string, rule: string, fix: string): SegmentsResult {
   return { ok: false, error: { field, rule, fix } };
 }
 
-// Half-up seconds, matching image_density.spoken_seconds.
 function spokenSeconds(words: number): number {
   return Math.floor((words * 3 + Math.floor(WORDS_PER_IMAGE / 2)) / WORDS_PER_IMAGE);
 }
@@ -113,11 +84,6 @@ function imageDensityError(
   const low = Math.ceil(words / WORDS_PER_IMAGE);
   const high = Math.max(1, Math.floor(words / MIN_WORDS_PER_IMAGE));
   const seconds = spokenSeconds(words);
-  // minCount, when given, is what the minimum is measured against: a
-  // video clip covers more than one photo slot (CLIP_DENSITY_ITEMS), so
-  // a take carried by clips meets its minimum with fewer items. The
-  // maximum still counts items one for one: a clip flickers like a
-  // photo when the take is crowded. Mirrors image_density.density_error.
   const effective = minCount ?? count;
   if (effective < low) {
     const missing = low - effective;
@@ -138,8 +104,6 @@ function imageDensityError(
   return null;
 }
 
-// Mirrors _check_overlay in the engine: an object with a non-empty title and
-// optional non-empty subtitle/badge, nothing else, each within its limit.
 function checkOverlay(overlay: unknown, field: string): SegmentsResult | null {
   if (typeof overlay !== 'object' || Array.isArray(overlay)) {
     return fail(field, 'Overlay must be an object.', 'Send overlay as { title, subtitle?, badge? }.');
@@ -217,9 +181,6 @@ function checkMediaItem(media: unknown, field: string): SegmentsResult | null {
   return null;
 }
 
-// The same photo twice in one video is rejected on the second item.
-// mediaId and url are different identities: the same characters in both
-// fields are not the same photo. Comparison uses the trimmed value.
 function repeatedPhoto(media: unknown, field: string, seen: Set<string>): SegmentsResult | null {
   if (typeof media !== 'object' || media === null || Array.isArray(media)) return null;
   const record = media as Record<string, unknown>;
@@ -243,20 +204,10 @@ export function countWords(text: string): number {
   return text.trim().split(/\s+/).filter((word) => word.length > 0).length;
 }
 
-// True when the text carries a spoken word: a Unicode letter or digit.
-// Mirrors the engine's images-mode check (the inline
-// re.search(r"[^\W_]", text) in script_segments.validate_segments, the
-// same [^\W_] class user_media._tokens uses): punctuation-only text
-// has no spoken words, so its photo gets no seconds at render.
 export function hasSpokenWords(text: string): boolean {
   return /[\p{L}\p{N}]/u.test(text);
 }
 
-/** The one video mode (issue #542 follow-up). Defined here so the shared
- *  file depends only on its sibling helper modules and cannot import
- *  either app's VideoType. Structurally identical to the VideoType in
- *  web lib/tokens.ts and MCP video-type.ts; the literal values are
- *  pinned together by the video-type sync tests. */
 export type VideoType = 'full_lipsync' | 'hook_lipsync' | 'faceless';
 
 export function validateSegments(input: unknown, videoType: VideoType = 'hook_lipsync'): SegmentsResult {
@@ -287,9 +238,6 @@ export function validateSegments(input: unknown, videoType: VideoType = 'hook_li
         'Write the spoken text for this segment.',
       );
     }
-    // The engine rejects unknown segment keys: this check must not hide
-    // behind the media loop below, or a media-less segment with an
-    // unknown key passes here while the engine rejects it.
     const unknown = Object.keys(segment)
       .filter((key) => key !== 'kind' && key !== 'text' && key !== 'media' && key !== 'cta')
       .sort();
@@ -381,9 +329,6 @@ export function validateSegments(input: unknown, videoType: VideoType = 'hook_li
   const seenPhotos = new Set<string>();
   for (let i = 0; i < segments.length; i += 1) {
     const media = segments[i].media;
-    // Null, missing, and an empty array are absent. A blank string on an
-    // item still counts as present and fails the blank check. Images mode
-    // has nothing to top a segment up with, so absence is rejected.
     const absent = media === undefined || media === null || (Array.isArray(media) && media.length === 0);
     if (absent) {
       if (imagesMode) {
@@ -446,10 +391,6 @@ export function joinSegments(input: unknown, videoType: VideoType = 'hook_lipsyn
   if (!result.ok) {
     throw new Error(`${result.error.field}: ${result.error.rule} Fix: ${result.error.fix}`);
   }
-  // The engine's segments_to_script strips each text before joining, and
-  // TaskVideoRequest rejects a supplied script that differs from that
-  // join — so a padded segment must join stripped here, or the
-  // generation fails validation on a script the caller never mistyped.
   return [result.value.hookText.trim(), ...result.value.contentTexts.map((text) => text.trim())].join(
     '\n\n',
   );

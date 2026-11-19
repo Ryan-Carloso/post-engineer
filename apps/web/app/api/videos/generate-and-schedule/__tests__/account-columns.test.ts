@@ -18,9 +18,6 @@ describe('account-columns', () => {
   it('maps every schedule provider to its own <provider>_account_ids column', () => {
     expect(Object.keys(PROVIDER_ACCOUNT_COLUMNS).sort()).toEqual([...SOCIAL_PROVIDERS].sort());
     for (const [provider, column] of Object.entries(PROVIDER_ACCOUNT_COLUMNS)) {
-      // 3Speak's column spells the name out: a bare column name cannot
-      // start with a digit, so `3speak_account_ids` is not a valid
-      // unquoted identifier.
       expect(column).toBe(provider === '3speak' ? 'threespeak_account_ids' : `${provider}_account_ids`);
     }
   });
@@ -43,6 +40,7 @@ describe('account-columns', () => {
       pinterest_account_ids: [],
       threespeak_account_ids: [],
       fanvue_account_ids: [],
+      telegram_account_ids: [],
     });
   });
 

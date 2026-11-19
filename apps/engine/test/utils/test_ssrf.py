@@ -30,14 +30,11 @@ from app.utils import ssrf
 
 PUBLIC_IP = [ipaddress.ip_address("93.184.215.14")]
 
-# Private host before a backslash, public literal after it: urlparse sees the
-# public literal, urllib3 dials the private host and port.
 PARSER_DIFFERENTIAL_URLS = [
     "http://127.0.0.1:8081\\@1.1.1.1/secret",
     "http://169.254.169.254\\@1.1.1.1:9000/latest/meta-data/",
     "http://1.1.1.1\\@127.0.0.1:8081/secret",
     "https://10.0.0.5\\@example.com/a.jpg",
-    # urlparse strips tab/newline, urllib3 keeps them in the host.
     "http://example.com\t.evil/x",
     "http://example.com\n.evil/x",
     "http://exa mple.com/x",
@@ -202,8 +199,6 @@ def test_a_raw_backslash_or_control_char_is_rejected_even_when_hosts_agree(url):
     ids=["host", "port", "scheme"],
 )
 def test_any_other_parser_disagreement_is_rejected(wire):
-    # A future divergence the character filter does not know about: the
-    # client's parser reads a different host, port or scheme.
     with patch.object(ssrf, "parse_url", return_value=wire), patch.object(
         ssrf, "_resolve_global_ips", return_value=PUBLIC_IP
     ):
@@ -222,7 +217,6 @@ def test_a_url_the_client_parser_cannot_read_is_rejected():
 CHECKED_IP = "93.184.215.14"
 SECOND_IP = "8.8.8.8"
 
-# CPython is_global is true for these. The engine still rejects them.
 EXTRA_BLOCKED = [
     "192.88.99.0",
     "192.88.99.255",
@@ -238,8 +232,6 @@ EXTRA_BLOCKED = [
     "5f00:ffff:ffff:ffff:ffff:ffff:ffff:ffff",
 ]
 
-# First address outside each extra block, plus the anycast and NAT64
-# exceptions the engine must keep.
 EXTRA_ALLOWED = [
     "192.88.98.255",
     "192.88.100.0",
@@ -535,8 +527,6 @@ def test_assert_public_url_allows_the_boundary_neighbors(url):
 
 
 def _repo_root():
-    # Walk up instead of counting parents: mutmut copies the tree and
-    # shifts every fixed parent index.
     for parent in Path(__file__).resolve().parents:
         if (parent / "pnpm-workspace.yaml").is_file():
             return parent
@@ -545,8 +535,6 @@ def _repo_root():
 
 def test_engine_public_ip_matches_the_shared_cases():
     raw = json.loads((_repo_root() / "shared/ssrf/public-ip-cases.json").read_text())
-    # URL-host literals keep their brackets ("[::1]"); ipaddress cannot parse
-    # that form, so drop the brackets before classifying.
     def unbracket(given):
         return given[1:-1] if given.startswith("[") and given.endswith("]") else given
 
@@ -554,7 +542,6 @@ def test_engine_public_ip_matches_the_shared_cases():
         assert ssrf.is_public_ip(ipaddress.ip_address(unbracket(ip))) is False, ip
     for ip in raw["allowed"]:
         assert ssrf.is_public_ip(ipaddress.ip_address(unbracket(ip))) is True, ip
-    # Multicast stays reachable on the engine. The web blocks it.
     for ip in raw["blockedBeyondPython"]:
         assert ssrf.is_public_ip(ipaddress.ip_address(unbracket(ip))) is True, ip
 
@@ -564,8 +551,6 @@ def _dns_down():
 
 
 def test_shape_only_validation_accepts_a_hostname_without_dns():
-    # Schedule-time webhook validation must not block on DNS: the name is
-    # resolved and pinned on the delivery path instead.
     with patch.object(ssrf.socket, "getaddrinfo", side_effect=_dns_down):
         ssrf.assert_public_url("https://example.com/hook", what="webhook_url", https_only=True, resolve_host=False)
 
@@ -614,8 +599,6 @@ def test_shape_only_validation_still_rejects_http_and_malformed(url):
 
 
 def test_engine_webhook_url_matches_the_shared_cases():
-    # The engine schema validator (shape-only, no DNS) must agree with the
-    # shared webhook-URL table the web and MCP validators pin.
     raw = json.loads((_repo_root() / "shared/ssrf/webhook-url-cases.json").read_text())
     with patch.object(ssrf.socket, "getaddrinfo", side_effect=_dns_down):
         for url in raw["accepted"]:

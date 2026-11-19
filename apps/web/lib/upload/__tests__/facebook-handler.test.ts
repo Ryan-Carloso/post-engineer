@@ -50,7 +50,6 @@ describe('handleFacebookUpload', () => {
     ['JPEG', new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0x10]), 'image/jpeg', 'jpg'],
     ['PNG', new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0]), 'image/png', 'png'],
   ])('publishes a %s image: stored on R2 by its sniffed type, posted as an image', async (_name, bytes, contentType, extension) => {
-    // The declared type lies on purpose: the bytes decide.
     const image = new File([bytes], 'photo.bin', { type: 'application/octet-stream' });
     const result = await handleFacebookUpload(formData({ video: image }), 'user-1');
     expect(result.success).toBe(true);

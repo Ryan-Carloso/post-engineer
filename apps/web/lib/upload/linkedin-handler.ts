@@ -13,16 +13,6 @@ import { rememberDeadCredential, reportAccountUnauthorized } from '@/lib/upload/
 import { getAccountIdsFromFormData } from '@/lib/upload/account-utils';
 import { MAX_IMAGE_UPLOAD_BYTES, sniffPublishMedia } from '@/lib/upload/publish-media-file';
 
-//---------------
-// handleLinkedinUpload — publishes the video or image to the user's LinkedIn accounts
-// (profile and/or organization pages). The target comes from linkedinAccountIds
-// (repeated): if the value starts with "urn:li:organization:" it is a page
-// post; otherwise it is a post on the member's profile.
-// FormData (multipart, coming from the engine or the UI):
-//   provider=linkedin, video (File: a video, or a JPEG/PNG image), caption, linkedinAccountIds (repeated),
-//   userId (internal engine call only).
-//---------------
-
 const ORG_URN_PREFIX = 'urn:li:organization:';
 
 interface LinkedinAccountResult {
@@ -57,8 +47,6 @@ export async function handleLinkedinUpload(
   }
 
   const buffer = new Uint8Array(await rawFile.arrayBuffer());
-  // An image (JPEG/PNG, told apart by its bytes) goes through the Images
-  // API; anything else keeps the video path, which LinkedIn validates.
   const sniffed = sniffPublishMedia(Buffer.from(buffer), rawFile.type);
   const isImage = sniffed !== null && sniffed.kind === 'image';
   if (isImage && buffer.length > MAX_IMAGE_UPLOAD_BYTES) {
@@ -69,7 +57,6 @@ export async function handleLinkedinUpload(
 
   for (const accountId of accountIds) {
     try {
-      // Ownership: resolves only the user's own accounts.
       const { tokens } = await getSocialAccountTokens(supabase, ownerUserId, 'linkedin', accountId);
       const accessToken = tokens.access_token;
 
@@ -91,7 +78,6 @@ export async function handleLinkedinUpload(
       if (isImage) {
         mediaUrn = await uploadLinkedInImage(accessToken, ownerUrn, buffer);
       } else {
-        // Video: initialize (owner = post target) → parts → finalize
         const upload = await initializeLinkedInVideoUpload(accessToken, ownerUrn, buffer.length, rawFile.type || 'video/mp4');
         await uploadLinkedInVideoParts(accessToken, upload.uploadInstructions, [buffer]);
         await finalizeLinkedInVideoUpload(accessToken, upload.video, upload.uploadToken);

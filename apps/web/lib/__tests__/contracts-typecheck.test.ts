@@ -14,12 +14,7 @@ import { addPersonaImage, createPersona, deletePersona, deletePersonaImage, getP
 import { applyBatchDiscount, completeVideoUpload, generateAndSchedule, mintVideoUpload, publishUploadedVideo, scoreDraft, validateScript } from '@/lib/contracts/videos';
 import type { BodyOf, ResponseOf } from '@/lib/contracts/endpoint';
 
-//---------------
-// Type-level pins for the shared contracts (web side, mirroring
-// apps/mcp/src/__tests__/contracts-typecheck.test.ts): renaming a
 // contract field makes this file fail typecheck. The @ts-expect-error
-// pins must stay errors.
-//---------------
 
 type CreateBody = BodyOf<typeof createExperiment>;
 type CreateResponse = ResponseOf<typeof createExperiment>;
@@ -262,7 +257,7 @@ describe('contracts typecheck', () => {
     expect(body.app_password).toBeUndefined();
     const publishing: PublishingAccountsResponse = {
       success: true,
-      defaults: { youtube: ['UC-1'], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [] },
+      defaults: { youtube: ['UC-1'], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [], telegram: [] },
     };
     expect(publishing.defaults.youtube).toEqual(['UC-1']);
     // @ts-expect-error -- the defaults field is `youtube`, not `youtube_id`
@@ -278,7 +273,7 @@ describe('contracts typecheck', () => {
           youtube_account_ids: [], instagram_account_ids: [], linkedin_account_ids: [],
           bluesky_account_ids: [], threads_account_ids: [], facebook_account_ids: [],
           pinterest_account_ids: [], pinterest_board_id: null, threespeak_account_ids: [],
-          rumble_account_ids: [], fanvue_account_ids: [], days_of_week: [1], start_hour: 9, end_hour: 17,
+          rumble_account_ids: [], fanvue_account_ids: [], telegram_account_ids: [], days_of_week: [1], start_hour: 9, end_hour: 17,
           posts_per_day: 1, timezone: 'UTC', active: true, created_at: '2026-10-01T00:00:00Z',
           publish_mode: 'scheduled',
         },
@@ -310,7 +305,7 @@ describe('contracts typecheck', () => {
         instagramAccountIds: [], linkedinAccountIds: [], blueskyAccountIds: [],
         threadsAccountIds: [], facebookAccountIds: [], pinterestAccountIds: [],
         pinterestBoardId: null, threespeakAccountIds: [], rumbleAccountIds: [],
-        fanvueAccountIds: [], timezone: 'UTC', publishMode: 'scheduled',
+        fanvueAccountIds: [], telegramAccountIds: [], timezone: 'UTC', publishMode: 'scheduled',
       },
       persona: null,
       generation: {
@@ -440,7 +435,7 @@ describe('contracts typecheck', () => {
           createdAt: '2026-01-01T00:00:00Z',
           boundAccounts: {
             youtube: ['acct-1'], instagram: [], bluesky: [], linkedin: [], threads: [],
-            facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [],
+            facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [], telegram: [],
           },
         },
       ],
