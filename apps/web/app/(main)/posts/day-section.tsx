@@ -2,10 +2,21 @@
 
 import Link from 'next/link';
 import { CalendarPlus, CalendarX2, Filter, FilterX } from 'lucide-react';
+import type { ScheduledSlot } from '@/lib/api';
 import { useI18n } from '@/lib/i18n/provider';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
 import { cn } from '@/lib/utils';
+import { StatusBadge, formatTime } from './post-card';
+import { SLOT_PROGRESS_STATUSES } from './post-row';
+import type { PostJoins } from './post-joins';
+import {
+  CALENDAR_GROUP_KEY,
+  CALENDAR_GROUP_PILL,
+  STATUS_KEY,
+  STATUS_STYLE,
+  calendarGroupOf,
+} from './status';
 
 // The shared empty-state block lives in components/ui (one definition for
 // every list and panel); re-exported here so the posts screens keep their
@@ -53,6 +64,50 @@ export function AccountEmptyState() {
       description={t('posts.accountEmptyHint')}
       action={<NewPostButton />}
     />
+  );
+}
+
+//---------------
+// DayListRow — one post as a single summarized line for the mobile week
+// panel (Alternative A): time, persona, title and the status chip, no
+// thumbnail, no progress bar — the chip carries the progress
+// ("Generating video · 62%"). The whole row opens the post detail, like
+// PostRow's card. The desktop day list keeps PostRow's card.
+//---------------
+
+export function DayListRow({ slot, joins }: { slot: ScheduledSlot; joins: PostJoins }) {
+  const { t, locale } = useI18n();
+  const schedule = joins.scheduleById.get(slot.scheduleId);
+  // Same persona fallback as SlotCard: a post without a persona never had
+  // one, a missing name is a removed one.
+  const personaId = schedule?.personaId ?? null;
+  const personaName = personaId === null ? t('posts.noPersona') : joins.personaNameById.get(personaId) ?? t('posts.personaFallback');
+  // A published or failed post shows when it actually went out, like PostRow.
+  const isHistory = slot.status === 'published' || slot.status === 'failed';
+  const shownAt = isHistory && slot.publishedAt ? slot.publishedAt : slot.slotAt;
+  const group = calendarGroupOf(slot.status);
+  const showProgress = SLOT_PROGRESS_STATUSES.has(slot.status);
+  const chipLabel = showProgress
+    ? `${t(STATUS_KEY[slot.status] ?? 'posts.groupInProgress')} · ${slot.progress}%`
+    : t(CALENDAR_GROUP_KEY[group]);
+  const displayTitle = slot.title ?? t('posts.unknownTitle');
+  return (
+    <Link
+      href={`/posts/${slot.id}`}
+      aria-label={t('posts.cardOpenDetail', { title: displayTitle })}
+      className="group/row flex items-center gap-3 py-2.5 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+    >
+      <span className="w-11 shrink-0 text-xs font-medium text-muted-foreground tabular-nums">{formatTime(shownAt, locale)}</span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">{personaName}</span>
+        <span className="block truncate text-sm font-semibold text-primary">{displayTitle}</span>
+      </span>
+      <StatusBadge
+        status={slot.status}
+        label={chipLabel}
+        style={STATUS_STYLE[slot.status] ?? CALENDAR_GROUP_PILL[group]}
+      />
+    </Link>
   );
 }
 

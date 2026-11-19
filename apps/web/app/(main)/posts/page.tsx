@@ -25,7 +25,7 @@ import {
   weekRange,
   weekStart,
 } from './calendar-days';
-import { AccountEmptyState, DayEmptyState, NewPostButton } from './day-section';
+import { AccountEmptyState, DayEmptyState, DayListRow, NewPostButton } from './day-section';
 import { CALENDAR_LAYOUT_CLASS, CalendarLoadingSkeleton } from './loading-skeleton';
 import { PostFiltersBar, SlotCard, usePostFilters, usePostJoins } from './post-joins';
 import { usePersonaFilter } from './persona-filter';
@@ -37,17 +37,15 @@ import { OnboardingWizard, OnboardingWizardButton } from './onboarding-wizard';
 //---------------
 // PostsPage — calendar of every post (past and upcoming) across all
 // connected accounts: the month grid on wide screens, the week view below
-// the `md` breakpoint (day panel above the grid). Read-only: the visible
-// days are one from/to range read of GET /api/schedule/status (the union of
-// the month grid and the shown week). Selecting a day lists its posts
-// beside the calendar on wide screens (so they show without scrolling) and
-// above it on mobile; today is selected on open. Past posts and video
-// generations as a list live on /posts/history.
+// the `md` breakpoint (one time axis, dots instead of chips, day panel
+// below the grid and only after a tap). Read-only: the visible days are
+// one from/to range read of GET /api/schedule/status (the union of the
+// month grid and the shown week). Selecting a day lists its posts beside
+// the calendar on wide screens (so they show without scrolling) and below
+// it on a phone, once tapped; today is selected on open but its panel
+// stays hidden until tapped. Past posts and video generations as a list
+// live on /posts/history.
 //---------------
-
-// Below Tailwind's `sm` breakpoint the day list starts under the fold, so
-// picking a day scrolls it into view there.
-const NARROW_SCREEN_QUERY = '(max-width: 639px)';
 
 // Below Tailwind's `md` breakpoint the calendar is the week view only:
 // seven columns fit a phone, a month grid does not.
@@ -86,9 +84,11 @@ export default function PostsPage() {
   // Anchor of the shown week (any day in it); the provider draws from the
   // week start, the page keeps the anchor so switching views keeps context.
   const [weekDate, setWeekDate] = useState(() => new Date());
-  // On mobile the day panel sits above the week grid (the mockup's layout);
-  // a pick scrolls it into view.
-  const panelOnTop = isMobile && view === 'week';
+  // On a phone the day panel sits below the week grid and only opens on a
+  // tap (Alternative A): nothing below the grid until the user taps a day,
+  // a second tap on the same day collapses it again.
+  const mobileWeek = isMobile && view === 'week';
+  const [mobilePanelOpen, setMobilePanelOpen] = useState(false);
   const daySectionRef = useRef<HTMLElement>(null);
   const joins = usePostJoins();
   const filters = usePostFilters(joins);
@@ -160,12 +160,18 @@ export default function PostsPage() {
   // pick from outside it — the sidebar mini calendar can name any day —
   // moves the anchor (and the month cursor with it), so the read covers the
   // picked day and the panel never names a day outside the read.
-  // On a narrow screen the pick scrolls the day panel into view in both
-  // views: the panel sits above the grid, but the grid can be scrolled
-  // into view when the pick happens.
+  // On a narrow screen the pick scrolls the day panel into view: the panel
+  // sits below the grid, so the scroll brings it up from under the fold.
   const handleSelect = useCallback(
     (key: string) => {
       setPickedKey(key);
+      // On a phone the panel opens on a tap and collapses on a second tap
+      // of the same day; another day switches it. The open day is the
+      // selected day, so a week move follows the new default day instead
+      // of naming a day outside the read.
+      if (mobileWeek) {
+        setMobilePanelOpen((wasOpen) => (selectedKey === key ? !wasOpen : true));
+      }
       const date = dateFromKey(key);
       if (view === 'month') {
         setCursor({ year: date.getFullYear(), month: date.getMonth() });
@@ -176,13 +182,19 @@ export default function PostsPage() {
         setWeekDate(date);
         setCursor({ year: date.getFullYear(), month: date.getMonth() });
       }
-      const section = daySectionRef.current;
-      if (section === null || typeof window.matchMedia !== 'function' || !window.matchMedia(NARROW_SCREEN_QUERY).matches) return;
+      // The section mounts on the tap that opens it, so its ref is only
+      // set after this commit: read it inside the frame, not here.
+      // Same breakpoint as mobileWeek: throughout the mobile week range
+      // the panel is below the 600px grid and hidden until this tap, so
+      // it needs bringing into view — at 640-767px it would open
+      // off-screen and the tap would look like it did nothing.
+      if (typeof window.matchMedia !== 'function' || !window.matchMedia(MOBILE_QUERY).matches) return;
       requestAnimationFrame(() => {
-        section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        const section = daySectionRef.current;
+        if (section !== null) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
       });
     },
-    [view, firstWeekday, weekDate],
+    [view, firstWeekday, weekDate, mobileWeek, selectedKey],
   );
   const handleMonthNavigate = useCallback((year: number, month: number) => {
     setCursor({ year, month });
@@ -223,7 +235,9 @@ export default function PostsPage() {
       setCursor({ year: now.getFullYear(), month: now.getMonth() });
     }
     handleSelect(todayKey);
-  }, [handleSelect, todayKey, view]);
+    // "Hoje" always opens today's panel on a phone, never toggles it shut.
+    if (mobileWeek) setMobilePanelOpen(true);
+  }, [handleSelect, todayKey, view, mobileWeek]);
   // The grid's date hints (a day click, grid scroll): a hint inside the
   // shown month is just the page's own cursor; one outside it moves the
   // month and clears the pick, like the toolbar buttons above. In week
@@ -276,6 +290,20 @@ export default function PostsPage() {
     personaFilter.clear();
   }, [filters, personaFilter]);
   const emptyReason = hasActiveFilter ? 'filter' : !monthIsEmpty ? 'day' : 'month';
+  // Mobile week panel heading: "Saturday, Jun 1 · 1 post" — long weekday,
+  // day and short month on one line with the count, like the mockup.
+  const mobileDayFormat = new Intl.DateTimeFormat(INTL_TAG[locale], { weekday: 'long', day: 'numeric', month: 'short' });
+  const mobileDayDate = selectedKey === null ? monthLabel : mobileDayFormat.format(dateFromKey(selectedKey));
+  const mobileDayHeading = mobileDayDate.charAt(0).toUpperCase() + mobileDayDate.slice(1);
+  const mobileDayCount =
+    selectedSlots.length === 1
+      ? t('posts.calendarDayPostCountOne')
+      : t('posts.calendarDayPostCountMany', { count: selectedSlots.length });
+  // The panel is hidden on a phone until a day is tapped; everywhere else
+  // it always shows. Account empty is not a tappable day — the calendar is
+  // muted and the sidebar mini calendar is desktop-only, so no tap could
+  // ever open it: its panel shows on a phone too.
+  const showDaySection = !mobileWeek || mobilePanelOpen || isAccountEmpty;
   // Only the weeks the month spans, like the calendar itself.
   const monthWeeks = gridDays.filter((week) => week.some((day) => day.inMonth)).length;
 
@@ -329,7 +357,6 @@ export default function PostsPage() {
               <div
                 className={cn(
                   'min-w-0 xl:col-start-1 xl:row-start-1',
-                  panelOnTop && 'order-2 max-xl:pb-24',
                   isError && loadErrorKey === 'posts.loadErrorCalendar' && 'xl:col-span-2',
                 )}
               >
@@ -350,6 +377,7 @@ export default function PostsPage() {
                     events={calendarEvents}
                     date={view === 'week' ? weekStart(weekDate, firstWeekday) : new Date(cursor.year, cursor.month, 1)}
                     view={view}
+                    mobileWeek={mobileWeek}
                     showViewSwitcher={!isMobile}
                     weekStartsOn={firstWeekday}
                     locale={locale}
@@ -376,14 +404,11 @@ export default function PostsPage() {
                     <span>{t('posts.loadErrorSideQuiet')}</span>
                   </p>
                 </section>
-              ) : !isError ? (
+              ) : !isError && showDaySection ? (
                 <section
                   ref={daySectionRef}
                   aria-live="polite"
-                  className={cn(
-                    'min-w-0 scroll-mt-4 xl:col-start-2 xl:row-start-1 xl:mt-0 xl:pt-4',
-                    panelOnTop ? 'order-1 mt-0' : 'order-2 mt-4 max-xl:pb-24',
-                  )}
+                  className="order-2 mt-4 min-w-0 scroll-mt-4 max-xl:pb-24 xl:col-start-2 xl:row-start-1 xl:mt-0 xl:pt-4"
                 >
                   {isAccountEmpty ? (
                     <>
@@ -393,6 +418,33 @@ export default function PostsPage() {
                       <div className="mt-3">
                         <AccountEmptyState />
                       </div>
+                    </>
+                  ) : mobileWeek ? (
+                    <>
+                      <h2 className="flex min-h-10 items-center gap-2 text-base font-bold tracking-[-0.01em] text-primary">
+                        <span className="truncate">{mobileDayHeading}</span>
+                        {selectedSlots.length > 0 && (
+                          <span className="shrink-0 text-sm font-semibold text-muted-foreground"> · {mobileDayCount}</span>
+                        )}
+                      </h2>
+                      <div className="mt-3">
+                        {selectedSlots.length === 0 ? (
+                          <DayEmptyState
+                            reason={emptyReason}
+                            monthLabel={monthLabel}
+                            onClearFilters={handleClearFilters}
+                          />
+                        ) : (
+                          // One bordered card, one summarized line per video:
+                          // a full day fits without scroll, no big cards.
+                          <div className="divide-y divide-line rounded-xl border border-line bg-card px-3">
+                            {selectedSlots.map((slot) => (
+                              <DayListRow key={slot.id} slot={slot} joins={joins} />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <p className="mt-3 text-center text-xs text-muted-foreground">{t('posts.dayPanelSwitchHint')}</p>
                     </>
                   ) : (
                     <>

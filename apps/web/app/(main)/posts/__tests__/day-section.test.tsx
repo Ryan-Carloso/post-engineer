@@ -20,7 +20,87 @@ vi.mock('@/lib/i18n/provider', () => {
   return { useI18n, I18nProvider };
 });
 
-import { AccountEmptyState, DayEmptyState, EmptyState } from '../day-section';
+import { AccountEmptyState, DayEmptyState, DayListRow, EmptyState } from '../day-section';
+import type { PostJoins } from '../post-joins';
+import type { ScheduledSlot } from '@/lib/api';
+import type { ScheduleConfig } from '@/lib/api';
+
+const rowJoins: PostJoins = {
+  scheduleById: new Map([['s1', { id: 's1', personaId: 'p1' } as ScheduleConfig]]),
+  personaNameById: new Map([['p1', 'Viva Leve']]),
+  personaPhotoById: new Map(),
+  accountOptions: [],
+  isLoading: false,
+  isError: false,
+  refetch: () => {},
+};
+
+const rowSlot: ScheduledSlot = {
+  id: 'u1',
+  scheduleId: 's1',
+  slotAt: '2030-06-01T10:00:00.000Z',
+  status: 'awaiting',
+  title: 'Upcoming topic',
+  progress: 0,
+  stage: null,
+  queuePosition: null,
+  queueTotal: null,
+  retryable: null,
+};
+
+describe('DayListRow', () => {
+  it('renders one summarized line: time, persona, title and the group chip', () => {
+    render(<DayListRow slot={rowSlot} joins={rowJoins} />);
+
+    expect(screen.getByText('10:00 AM')).toBeInTheDocument();
+    const persona = screen.getByText('Viva Leve');
+    expect(persona.className).toContain('uppercase');
+    expect(screen.getByText('Upcoming topic')).toBeInTheDocument();
+    expect(screen.getByText('posts.groupScheduled')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'posts.cardOpenDetail' })).toHaveAttribute('href', '/posts/u1');
+  });
+
+  it('shows the generating stage with its progress in the chip', () => {
+    render(<DayListRow slot={{ ...rowSlot, status: 'generating', progress: 62 }} joins={rowJoins} />);
+
+    expect(screen.getByText('posts.statusGenerating · 62%')).toBeInTheDocument();
+  });
+
+  it('shows the unknown-title fallback on a slot with no title', () => {
+    render(<DayListRow slot={{ ...rowSlot, title: null }} joins={rowJoins} />);
+
+    expect(screen.getByText('posts.unknownTitle')).toBeInTheDocument();
+  });
+
+  it('shows the no-persona fallback when the schedule has no persona', () => {
+    const facelessJoins: PostJoins = {
+      ...rowJoins,
+      scheduleById: new Map([['s1', { id: 's1', personaId: null } as ScheduleConfig]]),
+    };
+    render(<DayListRow slot={rowSlot} joins={facelessJoins} />);
+
+    expect(screen.getByText('posts.noPersona')).toBeInTheDocument();
+  });
+
+  it('shows the removed-persona fallback when the schedule names a persona that is gone', () => {
+    const removedJoins: PostJoins = {
+      ...rowJoins,
+      personaNameById: new Map(),
+    };
+    render(<DayListRow slot={rowSlot} joins={removedJoins} />);
+
+    expect(screen.getByText('posts.personaFallback')).toBeInTheDocument();
+  });
+
+  it('renders no thumbnail video: a summarized row, not a card', () => {
+    const { container } = render(
+      <DayListRow slot={{ ...rowSlot, status: 'published', publishedAt: '2030-06-01T10:05:00.000Z', taskId: 'task-9' }} joins={rowJoins} />,
+    );
+
+    expect(container.querySelector('video')).toBeNull();
+    expect(screen.getByText('posts.groupPublished')).toBeInTheDocument();
+  });
+});
 
 describe('EmptyState', () => {
   it('renders the roomy layout without an action by default', () => {

@@ -34,7 +34,7 @@ import { PublishAccountNotices } from './publish-user-notice';
 const SLOT_VIDEO_STATUSES = new Set<ScheduledSlot['status']>(['ready', 'publishing', 'published']);
 // Progress is live data only while work runs: an awaiting post at 0% looks
 // stuck, and a ready video has nothing left to fill.
-const SLOT_PROGRESS_STATUSES = new Set<ScheduledSlot['status']>(['generating', 'publishing']);
+export const SLOT_PROGRESS_STATUSES = new Set<ScheduledSlot['status']>(['generating', 'publishing']);
 const MAX_STATUS_ICONS = 3;
 
 export function PostRow({
