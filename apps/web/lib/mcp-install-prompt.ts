@@ -1,21 +1,9 @@
 import { DIRECT_CONNECT_PROVIDERS, OAUTH_CONNECT_PROVIDERS } from '@/lib/contracts/providers';
 import type { Locale } from '@/lib/i18n/types';
 
-// The connect line names the networks from the one provider list, so a new
-// network reaches the agent's instructions without a hand edit.
 const OAUTH_NETWORKS = OAUTH_CONNECT_PROVIDERS.join('/');
 const DIRECT_NETWORKS = DIRECT_CONNECT_PROVIDERS.slice(0, -1).join(', ');
 const LAST_DIRECT_NETWORK = DIRECT_CONNECT_PROVIDERS[DIRECT_CONNECT_PROVIDERS.length - 1];
-
-//---------------
-// MCP install prompt — the text the user pastes into their AI agent to
-// install the Post Engineer MCP server and learn how to use it. It is the
-// agent's source of truth for the server's tools, pinned line by line in
-// __tests__/mcp-install-prompt.test.ts. Pure: the prompts hub passes the
-// key it just created (or null) and gets the prompt back; with a key the
-// config already carries it, without one the placeholder stays and the
-// prompt tells the agent to replace it.
-//---------------
 
 interface InstallPromptCopy {
   lines: readonly string[];

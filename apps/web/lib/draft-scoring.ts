@@ -1,20 +1,3 @@
-//---------------
-// draft-scoring — mechanical draft scoring.
-//
-// No LLM, no paid service, no external call: every signal is computed
-// from the draft text itself plus the caller's own stored post metrics.
-// The score is never a bare number: every rule that moves it appears in
-// `reasons` with the exact detail that fired, so the caller can fix the
-// draft instead of guessing what the number means. The per-network
-// publish gate lives in lib/publish-checks.ts and is re-exported here.
-//
-// Baseline honesty: post_metrics rows carry counters and script angles,
-// never the post text, so theme adherence is token overlap between the
-// draft and the user's top angles — a soft signal, not a claim that the
-// draft copies a past post. When the user has no measured posts yet,
-// the theme bucket scores 0 and says so; it never invents a baseline.
-//---------------
-
 import type { PublishNetwork } from '@/lib/contracts/videos';
 
 export type { PublishNetwork };
@@ -39,9 +22,6 @@ export {
   YOUTUBE_DESCRIPTION_MAX_CHARS,
 } from './publish-checks';
 export type { PublishCheck } from './publish-checks';
-// The route rejects drafts over this input cap with a 400 instead of
-// silently truncating (repo rule: never silently truncate/coerce).
-// Bound the baseline fan-out: one capped metrics read per score call.
 export const BASELINE_ROW_LIMIT = 200;
 
 export const SLOP_MARKERS = [
@@ -220,15 +200,6 @@ export function summarizeBaseline(rows: BaselineRow[], truncated: boolean): Draf
   };
 }
 
-//---------------
-// scoreDraft — 0-100 from mechanical signals, every point explained.
-//
-// Post buckets: hook 20, length 15, hashtags 15, slop-free 20, links 10,
-// top-theme match 15, call to action 5. Script buckets: hook 25, length 20,
-// slop-free 25, links 10, top-theme match 15, call to action 5. Each bucket emits exactly one
-// reason inside its own range, so the reasons always sum to the score and
-// the score cannot leave 0-100.
-//---------------
 export function scoreDraft(
   draft: string,
   baseline: DraftBaseline,

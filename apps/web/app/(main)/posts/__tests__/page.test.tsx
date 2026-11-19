@@ -471,8 +471,6 @@ describe('PostsPage', () => {
   });
 
   it('shows the error state when an account query fails', () => {
-    // A failed account fetch must not silently render empty filter
-    // dropdowns — the error state covers it, same as the other queries.
     vi.mocked(useSocialAccountsQuery).mockReturnValue({
       data: undefined,
       isLoading: false,
@@ -687,8 +685,6 @@ describe('PostsPage fallbacks', () => {
     const options = within(providerSelect)
       .getAllByRole('option')
       .map((option) => option.textContent);
-    // Every network of SOCIAL_PROVIDERS, in its order: the filter once
-    // listed only seven and hid Pinterest, 3Speak and Fanvue posts.
     expect(options).toEqual(['posts.allProviders', 'YouTube', 'Instagram', 'Bluesky', 'LinkedIn', 'Threads', 'Facebook', 'Pinterest', '3Speak', 'Rumble', 'Fanvue']);
   });
 

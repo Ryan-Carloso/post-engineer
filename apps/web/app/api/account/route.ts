@@ -66,13 +66,6 @@ async function getHandler(request?: Request) {
   }
 }
 
-//---------------
-// DELETE /api/account — disconnects (removes) a social account of the logged-in user.
-// Query params: provider (any SOCIAL_PROVIDERS entry) and providerAccountId.
-// Auth = Supabase session (cookie) OR personal API key (Bearer/x-api-key, MCP),
-// same as GET.
-//---------------
-
 async function deleteHandler(request: Request): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) {

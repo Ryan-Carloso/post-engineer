@@ -1,7 +1,3 @@
-//---------------
-// schedule-row — the /api/schedule row shape and its client mapping.
-//---------------
-
 export interface ScheduleRow {
   id: string;
   persona_id: string | null;
@@ -26,11 +22,8 @@ export interface ScheduleRow {
   publish_mode: string | null;
 }
 
-// A schedule as the dashboard reads it (re-exported by lib/api.ts).
 export interface ScheduleConfig {
   id: string;
-  /** Null for a schedule created without a persona (migration 012): the post
-      is faceless and carries its own voice. */
   personaId: string | null;
   providers: string[];
   youtubeAccountIds: string[];
@@ -50,8 +43,6 @@ export interface ScheduleConfig {
   postsPerDay: number;
   timezone: string;
   active: boolean;
-  /** How the post publishes (migration 015): at the slot times, or ASAP —
-      the moment generation finishes, with no scheduled time. */
   publishMode: 'scheduled' | 'asap';
 }
 

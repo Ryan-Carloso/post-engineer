@@ -31,13 +31,6 @@ export async function handleConnectAccount(
   client: PostEngineerClient,
   args: z.infer<typeof ConnectAccountSchema>
 ): Promise<McpToolResponse> {
-  // One handler per direct-connect network (a record, not a chain): a new
-  // direct-connect network fails the typecheck until it has a handler,
-  // instead of falling through to the OAuth URL path. Bluesky and 3Speak
-  // project the upstream response to named fields; Rumble shares
-  // handleLibraryCall, which renders the same success/error text. Built
-  // inside the handler so the parity check, which follows calls from the
-  // action's own body, sees each network's client call.
   const DIRECT_CONNECT_HANDLERS: Record<DirectConnectProvider, DirectConnectHandler> = {
     bluesky: async (client, args) => {
       if (!args.handle || !args.appPassword) {
@@ -53,8 +46,6 @@ export async function handleConnectAccount(
       }
       try {
         const result = await client.connectBlueskyAccount(args.handle, args.appPassword);
-        // Project the upstream response to named fields: stringifying the
-        // whole body would surface any field the route adds later.
         const { accountId, did } = result;
         return {
           content: [
@@ -90,8 +81,6 @@ export async function handleConnectAccount(
       }
       try {
         const result = await client.connectThreespeakAccount(args.username, args.postingKey);
-        // Project the upstream response to named fields: stringifying the
-        // whole body would surface any field the route adds later.
         const { accountId, username } = result;
         return {
           content: [

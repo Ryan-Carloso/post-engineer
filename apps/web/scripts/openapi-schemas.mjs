@@ -1,6 +1,3 @@
-// Hand-written request/response schemas for generate-openapi.mjs, keyed by
-// "METHOD /api/path". Each entry mirrors the route's own validation (cited in
-// the comment); endpoints without an entry keep the generic responses.
 import { experimentLinkSchema, metricsOperationSchemas } from './openapi-metrics-schemas.mjs'; import { videoOperationSchemas } from './openapi-videos-schemas.mjs'; import { OAUTH_CONNECT_PROVIDERS, SCHEDULE_ACCOUNT_COLUMNS, SOCIAL_PROVIDERS as providers } from '../../../shared/contracts/providers.ts';
 
 const object = (properties, required = []) => ({

@@ -24,9 +24,6 @@ def _youtube_metadata(title: str, schedule: dict[str, Any], copy: str):
     return upload_publisher.YouTubeMetadata(
         title=title[:100],
         description=copy,
-        # Tags come from the title text itself, so they are always in
-        # the video's own language. Never empty for a real title; the
-        # pre-flight rejects degenerate titles before GPU is spent.
         tags=derive_tags_from_title(title),
         privacy_status="public",
         account_ids=tuple(str(value) for value in schedule.get("youtube_account_ids", [])),
@@ -73,8 +70,6 @@ def _fanvue_metadata(title: str, schedule: dict[str, Any], copy: str):
 
 def _threespeak_metadata(title: str, schedule: dict[str, Any], copy: str):
     return upload_publisher.ThreespeakMetadata(
-        # No documented caption cap on 3Speak: the whole copy is the
-        # caption, and the web route takes the title from its first line.
         caption=copy,
         account_ids=tuple(str(value) for value in schedule.get("threespeak_account_ids", [])),
     )
@@ -102,9 +97,6 @@ def _bluesky_metadata(title: str, schedule: dict[str, Any], copy: str):
     )
 
 
-# One builder per provider (a dispatch dict, not an if chain): a new
-# provider fails here instead of falling through to another network's
-# metadata shape.
 _METADATA_BUILDERS: dict[str, Any] = {
     upload_publisher.YOUTUBE_PROVIDER: _youtube_metadata,
     upload_publisher.LINKEDIN_PROVIDER: _linkedin_metadata,

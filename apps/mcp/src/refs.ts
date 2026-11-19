@@ -74,8 +74,6 @@ async function resolvePersona(listPersonas: Listing, ref: string): Promise<RefOu
   return { kind: 'ok', value: { id: matches[0].id, name: matches[0].name } };
 }
 
-// The field that carries a listed account's id, by provider (the fields of
-// the web registry's toPublicAccount: apps/web/lib/providers/registry.ts).
 const ACCOUNT_ID_FIELDS: Record<SocialProvider, string> = {
   youtube: 'channelId',
   instagram: 'igUserId',
@@ -89,8 +87,6 @@ const ACCOUNT_ID_FIELDS: Record<SocialProvider, string> = {
   fanvue: 'providerAccountId',
 };
 
-// The id and the names of one listed account, by provider (the fields of the
-// web registry's toPublicAccount: apps/web/lib/providers/registry.ts).
 function accountOf(entry: unknown): { provider: string; id: string; names: string[]; label: string } | null {
   const item = record(entry);
   const provider = text(item?.provider);

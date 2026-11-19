@@ -478,13 +478,6 @@ export function useVoicesQuery() {
 }
 
 
-//---------------
-// Fill Schedule — video publishing timetables (days + time window + posts/day).
-// Created by POST /api/videos/generate-and-schedule (one video + slot +
-// task per call); the engine does generation per slot, then publishing at
-// each slot's time via /api/upload-content.
-//---------------
-
 export type { ScheduleConfig };
 
 async function fetchSchedules(): Promise<ScheduleConfig[]> {
@@ -624,8 +617,6 @@ export interface SlotDetailPayload {
     threespeakAccountIds: string[];
     rumbleAccountIds: string[];
     fanvueAccountIds: string[];
-    // The schedule's IANA timezone — the detail page renders the slot time
-    // in this zone so "10:00" is never ambiguous about whose 10:00 it is.
     timezone: string;
     publishMode: 'scheduled' | 'asap';
   };

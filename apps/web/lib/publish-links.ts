@@ -1,37 +1,3 @@
-//---------------
-// publish-links — turn the engine's publish_results into clickable links.
-//
-// The engine's fill-schedule publisher (fill_schedule/publish.py, via
-// fill_schedule/publish_results.py) records one entry per (provider,
-// video) it published, and each entry carries whatever the provider
-// handed back:
-//
-//   youtube   → videoUrl   ready-made watch URL
-//   instagram → permalink  ready-made post URL
-//   bluesky   → postId     at://<did>/app.bsky.feed.post/<rkey>
-//   linkedin  → postId     urn:li:share:<id>  (no public URL is returned)
-//   threads   → permalink  ready-made post URL (best-effort; no URL can be derived from the id)
-//   facebook  → permalink  ready-made post URL (best-effort; no URL can be derived from the id)
-//   pinterest → permalink  ready-made pin URL; a bare numeric pin id derives
-//              https://www.pinterest.com/pin/<id>/
-//   3speak    → permalink  ready-made watch URL (best-effort; the video id alone builds no URL)
-//   rumble    → permalink  the monetized URL from the upload response (best-effort; no URL can be derived from the id)
-//   fanvue    → permalink  ready-made post URL (best-effort; no URL can be derived from the id —
-//              the Fanvue post-URL format is unknown, so no derivation is attempted)
-//
-// So eight of the ten arrive with a ready-made URL, and the three that can
-// fall back to a bare post id have a derivation: Bluesky and LinkedIn
-// always (they carry no URL), Pinterest only when the entry has no
-// permalink. A provider entry with neither is omitted rather than rendered
-// as a dead link.
-// An entry whose status is "failed" is omitted even when it also carries
-// a URL: that publish did not happen.
-//
-// Dependency-free on purpose (the one import is the dependency-free
-// provider list): the detail page and the card both read this, and it
-// must stay safe to import from a client component.
-//---------------
-
 import { SOCIAL_PROVIDERS, type SocialProvider } from '@/lib/contracts/providers';
 
 export type PublishProvider = SocialProvider;
@@ -74,12 +40,6 @@ function pinterestPostUrl(postId: string): string | null {
   return `https://www.pinterest.com/pin/${postId}/`;
 }
 
-//---------------
-// POST_URL_FROM_ID — the derivation from a bare post id, per network; null
-// where the network only links through its own URL. Fanvue has none on
-// purpose: the post-URL format is unknown, so only a provider-supplied
-// permalink ever links.
-//---------------
 const POST_URL_FROM_ID: Record<SocialProvider, ((postId: string) => string | null) | null> = {
   youtube: null,
   instagram: null,
@@ -93,11 +53,6 @@ const POST_URL_FROM_ID: Record<SocialProvider, ((postId: string) => string | nul
   fanvue: null,
 };
 
-//---------------
-// resolvePublishLinks — map the engine's raw entries to links, dropping
-// anything malformed. Returns [] rather than throwing: this runs during
-// render and must never take the post detail page down.
-//---------------
 export function resolvePublishLinks(
   publishResults: unknown,
 ): PublishLink[] {

@@ -50,11 +50,6 @@ export function formatSocialHandle(handle: string): string {
   return `@${trimmed}`;
 }
 
-// One builder per network (a record, not a chain): a new provider fails
-// the typecheck until it has a builder, instead of falling through to
-// another network's id or label. Each builder is called through its own
-// key, so the provider check below only guards the builder contract and
-// narrows the discriminated union to the provider's own shape.
 const ACCOUNT_OPTION_BUILDERS: Record<SocialProvider, (account: PublicAccountItem) => AccountOption> = {
   youtube: (account) => {
     if (account.provider !== 'youtube') throw new Error(`accountOption: youtube builder got a ${account.provider} account`);

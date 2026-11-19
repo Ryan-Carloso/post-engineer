@@ -92,7 +92,6 @@ export function facebookCounters(insights: Record<string, number>): MetricsCount
   };
 }
 
-// Ownership: getSocialAccountTokens only resolves the user's own accounts.
 async function ownerAccessToken(userId: string, provider: MeasuredProvider, accountId: string): Promise<string> {
   const label = PROVIDER_LABELS[provider];
   const { tokens } = await getSocialAccountTokens(createSupabaseServiceClient(), userId, provider, accountId);

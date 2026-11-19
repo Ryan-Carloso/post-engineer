@@ -148,10 +148,6 @@ export type BuildOAuthConnectUrlResult =
 
 type OAuthConnectUrlBuilder = (redirectUri: string) => Promise<BuildOAuthConnectUrlResult>;
 
-// One builder per OAuth network (a record, not a chain): a new OAuth
-// network fails the typecheck until it has a builder, instead of falling
-// through to another network's credentials. Reuses the builders already
-// used by the web app /start routes.
 const OAUTH_CONNECT_URL_BUILDERS: Record<OAuthConnectProvider, OAuthConnectUrlBuilder> = {
   instagram: async (redirectUri) => {
     if (!process.env.INSTAGRAM_CLIENT_ID || !process.env.INSTAGRAM_CLIENT_SECRET) {
@@ -230,14 +226,10 @@ const OAUTH_CONNECT_URL_BUILDERS: Record<OAuthConnectProvider, OAuthConnectUrlBu
     const { buildFanvueAuthUrl } = await import('./fanvue');
     const { state, nonce } = createOAuthState({ provider: 'fanvue', redirectUri });
     const { authUrl, codeVerifier } = buildFanvueAuthUrl(state, redirectUri);
-    // The verifier is returned alongside the URL so the caller can
-    // store it server-side (oauth_states.code_verifier); it must never
-    // be embedded in the client-visible state.
     return { ok: true, authUrl, state, nonce, codeVerifier };
   },
 };
 
-// Generates the OAuth auth URL for a provider, without depending on a session.
 export async function buildOAuthConnectUrl(
   provider: OAuthConnectProvider,
   redirectUri: string

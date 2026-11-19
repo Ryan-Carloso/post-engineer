@@ -4,10 +4,6 @@ export const ACCOUNT_CARD_DISPLAY_EVENT = 'account_card_displayed';
 export const ACCOUNT_DISCONNECT_FAILED_EVENT = 'account_disconnect_failed';
 export const ACCOUNT_LIST_FAILED_EVENT = 'account_list_failed';
 
-// Fallback labels written by lib/providers/registry.ts when accountName is
-// empty; null for a network that shows the account id instead. The card
-// receives the already-substituted string. A source test pins these
-// literals to that file.
 export const ACCOUNT_NAME_FALLBACKS = {
   youtube: 'YouTube Account',
   instagram: 'instagram_user',
@@ -130,7 +126,6 @@ function isTruncated(el: ElementBox | null | undefined): boolean {
 function nameIsFallback(provider: AccountProvider, shown: string): boolean {
   const fallback = ACCOUNT_NAME_FALLBACKS[provider];
   if (fallback === null) return false;
-  // Instagram's card shows the username as a handle (@instagram_user).
   return shown === fallback || (provider === 'instagram' && shown === `@${fallback}`);
 }
 

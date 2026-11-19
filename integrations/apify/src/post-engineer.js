@@ -1,6 +1,4 @@
 export const DEFAULT_API_URL = 'https://post-engineer.com';
-// Mirror of SOCIAL_PROVIDERS (shared/contracts/providers.ts): the Actor builds
-// on its own, so it keeps one copy, checked by .github/scripts/provider-lists.
 export const PROVIDERS = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'pinterest', '3speak', 'rumble', 'fanvue'];
 export const MODES = ['asap', 'scheduled'];
 export const MAX_SEGMENTS = 12;

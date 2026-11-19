@@ -89,7 +89,6 @@ export function buildDirectPublishForm(
     }
   } else {
     formData.append('video', videoBlob, filename);
-    // Rumble and Fanvue take title + description, not a caption.
     if (isTitleProvider(input.provider)) {
       formData.append('title', fields.title);
       formData.append('description', fields.description);

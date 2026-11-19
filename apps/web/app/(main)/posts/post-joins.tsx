@@ -13,12 +13,6 @@ import { resolveSlotAccounts } from './post-card';
 import { PostRow } from './post-row';
 import type { PersonaPhoto } from './calendar-days';
 
-//---------------
-// Shared by the posts calendar (/posts) and the post history
-// (/posts/history): the joins every slot card needs (schedule, persona,
-// publishing accounts), the network/account filters and the card itself.
-//---------------
-
 export type ProviderFilter = 'all' | SocialProvider;
 
 function resolveAccountFilter(accountId: string, provider: ProviderFilter, accounts: AccountOption[]): string {
@@ -42,7 +36,6 @@ export interface PostJoins {
 export function usePostJoins(): PostJoins {
   const schedulesQuery = useSchedulesQuery();
   const personasQuery = usePersonaListQuery();
-  // Every network's accounts, from the one shared social-accounts query.
   const accountsQuery = useSocialAccountsQuery();
 
   const scheduleById = useMemo(

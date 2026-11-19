@@ -98,15 +98,7 @@ async function postHandler(request: NextRequest) {
       partition = await partitionPublishAccounts(ledgerClient, scopeKey, provider, userId, formData);
     }
 
-    // The ledger branches recompute successCount from the merged results,
-    // so a replayed success is counted (the handler's count only covers
-    // fresh publishes).
     type UploadDispatchResult = PublishHandlerResponse;
-    // Heartbeat: while this request publishes, it renews its claims, so
-    // a publish longer than the lease is never taken over while alive.
-    // Stopped in the finally once the handler finished and the outcomes
-    // are recorded — including the handler-throw path, which records the
-    // claims as failed before rethrowing.
     const stopHeartbeat =
       partition !== null && partition.granted.length > 0 && ledgerClient !== null
         ? startLedgerHeartbeat(ledgerClient, partition)

@@ -35,9 +35,6 @@ export function isImageProvider(value: unknown): value is ImageProvider {
   return typeof value === 'string' && (IMAGE_PROVIDERS as readonly string[]).includes(value);
 }
 
-/** Networks whose publish takes a title and a description instead of a
- * caption. Every other network takes a caption (Pinterest also takes an
- * optional pin title next to it). */
 export const TITLE_PROVIDERS = ['youtube', 'rumble', 'fanvue'] as const satisfies readonly SocialProvider[];
 export type TitleProvider = (typeof TITLE_PROVIDERS)[number];
 
@@ -45,9 +42,6 @@ export function isTitleProvider(value: unknown): value is TitleProvider {
   return typeof value === 'string' && (TITLE_PROVIDERS as readonly string[]).includes(value);
 }
 
-/** The multipart field each network's account ids arrive under in
- * POST /api/upload-content. The web handlers read it, and the web
- * publish paths and the MCP direct publish write it. */
 export const PUBLISH_ACCOUNT_FIELDS: Record<SocialProvider, string> = {
   youtube: 'accountIds',
   instagram: 'igAccountIds',
@@ -61,7 +55,6 @@ export const PUBLISH_ACCOUNT_FIELDS: Record<SocialProvider, string> = {
   fanvue: 'fanvueAccountIds',
 };
 
-/** The account-id column of each network in public.schedules. */
 export const SCHEDULE_ACCOUNT_COLUMNS = {
   youtube: 'youtube_account_ids',
   instagram: 'instagram_account_ids',
