@@ -47,10 +47,6 @@ import { OnboardingWizard, OnboardingWizardButton } from './onboarding-wizard';
 // live on /posts/history.
 //---------------
 
-// Below Tailwind's `sm` breakpoint the day list starts under the fold, so
-// picking a day scrolls it into view there.
-const NARROW_SCREEN_QUERY = '(max-width: 639px)';
-
 // Below Tailwind's `md` breakpoint the calendar is the week view only:
 // seven columns fit a phone, a month grid does not.
 const MOBILE_QUERY = '(max-width: 767px)';
@@ -188,7 +184,11 @@ export default function PostsPage() {
       }
       // The section mounts on the tap that opens it, so its ref is only
       // set after this commit: read it inside the frame, not here.
-      if (typeof window.matchMedia !== 'function' || !window.matchMedia(NARROW_SCREEN_QUERY).matches) return;
+      // Same breakpoint as mobileWeek: throughout the mobile week range
+      // the panel is below the 600px grid and hidden until this tap, so
+      // it needs bringing into view — at 640-767px it would open
+      // off-screen and the tap would look like it did nothing.
+      if (typeof window.matchMedia !== 'function' || !window.matchMedia(MOBILE_QUERY).matches) return;
       requestAnimationFrame(() => {
         const section = daySectionRef.current;
         if (section !== null) section.scrollIntoView({ behavior: 'smooth', block: 'start' });

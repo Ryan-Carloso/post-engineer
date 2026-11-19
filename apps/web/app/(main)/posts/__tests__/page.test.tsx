@@ -1138,8 +1138,6 @@ describe('PostsPage day pick on a phone', () => {
   beforeEach(() => {
     scrollIntoView = vi.fn();
     Object.defineProperty(Element.prototype, 'scrollIntoView', { configurable: true, value: scrollIntoView });
-    // The day list sits below the fold.
-    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({ top: 5000 } as DOMRect);
   });
 
   afterEach(() => {
@@ -1152,18 +1150,6 @@ describe('PostsPage day pick on a phone', () => {
     const day5 = screen.getByRole('button', { name: 'Wednesday, June 5' });
     await user.click(day5);
   };
-
-  it('scrolls the day list into view after a day pick on a narrow screen', async () => {
-    // The stub also answers the calendar lib's media query (its hook
-    // subscribes through addEventListener), not just the page's width check.
-    vi.stubGlobal('matchMedia', vi.fn((query: string) => ({ matches: query === '(max-width: 639px)', addEventListener: () => undefined, removeEventListener: () => undefined })));
-    mockQueries({ range: rangeSlots });
-    render(<PostsPage />);
-
-    await pickDay5();
-    expect(dayPanelCardText('Phone pick')).toBeInTheDocument();
-    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });
-  });
 
   it('does not scroll on a wide screen', async () => {
     vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener: () => undefined, removeEventListener: () => undefined })));
@@ -1510,6 +1496,26 @@ describe('PostsPage week view', () => {
     const user = userEvent.setup();
     await user.click(columns[0]);
     expect(screen.getByText('posts.calendarDayNone')).toBeInTheDocument();
+    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });
+  });
+
+  it('scrolls the day panel into view after a column pick at 700px, where only the mobile query matches', async () => {
+    // 700px is inside the mobile week range (767px) but outside the old
+    // 639px scroll range: the panel sits below the 600px grid, so the tap
+    // must still bring it into view or it opens off-screen.
+    vi.stubGlobal('matchMedia', vi.fn(mobileMatchMedia));
+    render(<PostsPage />);
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'posts.calendarPrevWeek' })).toBeInTheDocument(),
+    );
+    const grid = document.querySelector('[data-posts-calendar-week]');
+    if (grid === null) throw new Error('week grid not rendered');
+    const columns = grid.querySelectorAll('[role="group"][aria-label]:not([inert])');
+    expect(columns).toHaveLength(7);
+    const user = userEvent.setup();
+    await user.click(columns[6]);
+    expect(dayPanelCardText('Upcoming topic')).toBeInTheDocument();
     expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });
   });
 });
