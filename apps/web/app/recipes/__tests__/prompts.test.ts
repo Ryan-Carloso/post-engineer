@@ -931,4 +931,28 @@ describe('prompts hub data', () => {
     expect(text).toContain('12 words over 2 photos');
     expect(text).toContain('The turning-point object appears only at the turn, never before');
   });
+
+  it('carries the 10/10-loop lessons (v16-v24): in-sentence pace, chart-only study page, payoff windows from measured audio', () => {
+    // The loop lessons were verified on real rendered videos (v16-v24):
+    // a take-span pace hides a rushed line (v23 CTA: 216 wpm on span,
+    // 306 wpm inside the sentence), a study paper with fake text columns
+    // reads fake on pause (v23 chart-only page fixed it by construction),
+    // and payoff windows re-tuned from measured audio ends land exact
+    // (v21 dance 1.01s early, v22-v24 exact at 0.02-0.08s). Pins are
+    // single-line fragments: the composed prompt joins source lines
+    // with '\n', so a needle spanning a source-line break never matches.
+    const fullText = getPrompt('story-first-reels')?.prompt ?? '';
+    const baseText = SHARED_PROMPT_BASE.join('\n');
+    expect(fullText.startsWith(baseText)).toBe(true);
+    const text = fullText.slice(baseText.length + 2);
+    expect(text).toContain('Measure pace inside the sentence');
+    expect(text).toContain('never across the take');
+    expect(text).toContain('a pause between sentences hides a rushed line');
+    expect(text).toContain('chart-only: one line chart');
+    expect(text).toContain('zero text columns');
+    expect(text).toContain('Fake text reads fake on pause');
+    expect(text).toContain('re-tune the photo windows');
+    expect(text).toContain('measured audio ends');
+    expect(text).toContain('never re-estimate');
+  });
 });

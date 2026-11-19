@@ -53,8 +53,12 @@ rhythm varies take by take, every segment is one beat and gets its own
 image, and every image is sharp, well-lit, and on-topic. Photos pace
 with SegmentMedia.duration — the low point holds, the study runs fast,
 the payoff holds. Every take has image for all its audio, the payoff
-enters only with its words, and the last frame is the payoff. A study
-gets a literal image, the notebook enters only on its sentence, and
+enters only with its words, and the last frame is the payoff. Pace is
+measured inside each sentence, not across the take. A study paper on
+screen is chart-only — one line chart, no text columns. If the payoff
+enters early or late, the photo windows are re-tuned from the last
+render's measured audio ends, never re-estimated from the script.
+A study gets a literal image, the notebook enters only on its sentence, and
 the CTA is 12 words over 2 photos. The turning-point object appears
 only at the turn, never before.
 
