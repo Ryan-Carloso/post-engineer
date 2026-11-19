@@ -768,7 +768,7 @@ describe('PostsPage fallbacks', () => {
       .map((option) => option.textContent);
     // Every network of SOCIAL_PROVIDERS, in its order: the filter once
     // listed only seven and hid Pinterest, 3Speak and Fanvue posts.
-    expect(options).toEqual(['posts.allProviders', 'YouTube', 'Instagram', 'Bluesky', 'LinkedIn', 'Threads', 'Facebook', 'Pinterest', '3Speak', 'Rumble', 'Fanvue']);
+    expect(options).toEqual(['posts.allProviders', 'YouTube', 'Instagram', 'Bluesky', 'LinkedIn', 'Threads', 'Facebook', 'Pinterest', '3Speak', 'Rumble', 'Fanvue', 'Telegram']);
   });
 
 });
