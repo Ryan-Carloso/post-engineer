@@ -40,3 +40,14 @@ test('comment-like text inside a regex is code', () => {
 test('removing a statement is a code change', () => {
   assert.equal(sameCode('f();\ng();\n', 'f();\n', 'a.ts'), false);
 });
+
+test('a line break that changes automatic semicolon insertion is a code change', () => {
+  assert.equal(sameCode('function f() {\n  return value;\n}\n', 'function f() {\n  return\n  value;\n}\n', 'a.ts'), false);
+  assert.equal(sameCode('a\n++b\n', 'a++\nb\n', 'a.ts'), false);
+});
+
+test('a rendered space between JSX elements is a code change, newline indentation is not', () => {
+  assert.equal(sameCode('const el = <p><b>a</b> <b>b</b></p>;\n', 'const el = <p><b>a</b><b>b</b></p>;\n', 'a.tsx'), false);
+  assert.equal(sameCode('const el = <p>\n  <b>a</b>\n  <b>b</b>\n</p>;\n', 'const el = <p><b>a</b><b>b</b></p>;\n', 'a.tsx'), true);
+  assert.equal(sameCode('const el = <p>\n  hello\n  world\n</p>;\n', 'const el = <p>hello world</p>;\n', 'a.tsx'), true);
+});

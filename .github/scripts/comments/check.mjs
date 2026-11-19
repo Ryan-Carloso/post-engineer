@@ -6,6 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { isVendoredCalendarCN } from '../file-size/vendored-calendarcn.mjs';
 import { findComments, lineOf } from './scan.mjs';
 import { stripComments } from './strip.mjs';
+import { sameCode } from './code-tokens.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(HERE, '../../..');
@@ -55,6 +56,7 @@ export function run(argv, root = REPO_ROOT, log = console.log) {
   const targets = files.length > 0 ? files.filter((f) => SOURCE.test(f) && !isExempt(f)) : trackedFiles(root);
   let found = 0;
   let fixedFiles = 0;
+  let refused = 0;
   for (const file of targets) {
     const abs = path.join(root, file);
     if (!fs.existsSync(abs)) continue;
@@ -63,7 +65,13 @@ export function run(argv, root = REPO_ROOT, log = console.log) {
     const comments = all.filter((c) => !c.directive);
     if (comments.length === 0) continue;
     if (fix) {
-      fs.writeFileSync(abs, stripComments(text, all));
+      const stripped = stripComments(text, all);
+      if (!file.endsWith('.py') && !sameCode(text, stripped, file)) {
+        refused++;
+        log(`${file}: not fixed, stripping would change the code; remove these comments by hand`);
+        continue;
+      }
+      fs.writeFileSync(abs, stripped);
       fixedFiles++;
       continue;
     }
@@ -76,7 +84,7 @@ export function run(argv, root = REPO_ROOT, log = console.log) {
   }
   if (fix) {
     log(`comments: stripped comments from ${fixedFiles} file(s)`);
-    return 0;
+    return refused > 0 ? 1 : 0;
   }
   if (found > 0) {
     log(`comments: ${found} comment(s) found. Remove them, or run: node .github/scripts/comments/check.mjs --fix`);
