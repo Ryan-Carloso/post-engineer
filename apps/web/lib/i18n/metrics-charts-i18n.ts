@@ -1,0 +1,58 @@
+//---------------
+// metrics-charts-i18n — copy for the /metrics chart cards (over-time,
+// breakdown and top videos) and the Chart/List view toggle. Merged
+// into `metrics` in ./index.ts.
+//---------------
+
+export const metricsChartsStrings = {
+  en: {
+    metrics: {
+      viewChart: 'Charts',
+      viewList: 'List',
+      chartsOverTimeTitle: 'Over time',
+      chartsMetricViews: 'Views',
+      chartsMetricEngagement: 'Engagement',
+      chartsMetricLikes: 'Likes',
+      chartsMetricComments: 'Comments',
+      chartsBreakdownTitle: 'Breakdown by views',
+      chartsByNetwork: 'By network',
+      chartsByPersona: 'By persona',
+      chartsTopTitle: 'Top videos',
+      chartsEmpty: 'No data in this window yet.',
+      chartsLoading: 'Loading charts…',
+      chartsTruncated: 'Charts only cover the {limit} most recent measurements.',
+      chartsWithoutViews: '{count} videos without views data',
+      chartsWithoutView: '{count} video without views data',
+      chartsWithoutPublishDate: '{count} videos without a publish date',
+      chartsWithoutPublishDateOne: '{count} video without a publish date',
+      chartsWithoutMetric: '{count} videos without {metric} data',
+      chartsWithoutMetricOne: '{count} video without {metric} data',
+      chartsPublishedOn: 'Published {date}',
+    },
+  },
+  pt: {
+    metrics: {
+      viewChart: 'Gráficos',
+      viewList: 'Lista',
+      chartsOverTimeTitle: 'Ao longo do tempo',
+      chartsMetricViews: 'Views',
+      chartsMetricEngagement: 'Engajamento',
+      chartsMetricLikes: 'Curtidas',
+      chartsMetricComments: 'Comentários',
+      chartsBreakdownTitle: 'Distribuição de views',
+      chartsByNetwork: 'Por rede',
+      chartsByPersona: 'Por persona',
+      chartsTopTitle: 'Vídeos mais vistos',
+      chartsEmpty: 'Sem dados nesta janela ainda.',
+      chartsLoading: 'Carregando os gráficos…',
+      chartsTruncated: 'Os gráficos cobrem só as {limit} medições mais recentes.',
+      chartsWithoutViews: '{count} vídeos sem dados de views',
+      chartsWithoutView: '{count} vídeo sem dados de views',
+      chartsWithoutPublishDate: '{count} vídeos sem data de publicação',
+      chartsWithoutPublishDateOne: '{count} vídeo sem data de publicação',
+      chartsWithoutMetric: '{count} vídeos sem dados de {metric}',
+      chartsWithoutMetricOne: '{count} vídeo sem dados de {metric}',
+      chartsPublishedOn: 'Publicado em {date}',
+    },
+  },
+};

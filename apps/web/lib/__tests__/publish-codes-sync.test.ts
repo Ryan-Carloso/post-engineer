@@ -34,7 +34,7 @@ describe('publish code sync (web ↔ engine)', () => {
   });
 
   it('engine provider labels match PROVIDER_LABELS', () => {
-    const body = block(outcomes, '_LABELS = {', '}');
+    const body = block(read('apps/engine/app/providers.py'), 'PROVIDER_LABELS: dict[str, str] = {', '}');
     const labels = Object.fromEntries(
       // Provider keys are lowercase letters, except '3speak' which starts
       // with a digit — the class must allow it or the entry is invisible.

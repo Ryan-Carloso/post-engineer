@@ -5,20 +5,12 @@
 // one-line change here instead of a hand-written key in each file.
 //---------------
 
+import { SCHEDULE_ACCOUNT_COLUMNS } from '@/lib/contracts/providers';
 import type { Provider } from './providers-validation';
 
-export const PROVIDER_ACCOUNT_COLUMNS = {
-  youtube: 'youtube_account_ids',
-  instagram: 'instagram_account_ids',
-  linkedin: 'linkedin_account_ids',
-  bluesky: 'bluesky_account_ids',
-  threads: 'threads_account_ids',
-  facebook: 'facebook_account_ids',
-  pinterest: 'pinterest_account_ids',
-  '3speak': 'threespeak_account_ids',
-  rumble: 'rumble_account_ids',
-  fanvue: 'fanvue_account_ids',
-} as const satisfies Record<Provider, string>;
+// The column map itself is a shared provider fact (the OpenAPI generator
+// reads it too): shared/contracts/providers.ts.
+export const PROVIDER_ACCOUNT_COLUMNS = SCHEDULE_ACCOUNT_COLUMNS;
 
 export type ScheduleAccountColumns = {
   [P in Provider as (typeof PROVIDER_ACCOUNT_COLUMNS)[P]]: string[];

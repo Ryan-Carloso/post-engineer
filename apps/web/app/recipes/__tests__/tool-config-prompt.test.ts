@@ -16,12 +16,12 @@ describe('tool-config prompt', () => {
     const base = SHARED_PROMPT_BASE.join('\n');
     expect(base).toContain('First check the saved tool configuration with tool_config');
     expect(base).toContain('tool_config (action: get)');
-    expect(base).toContain('ask me once which search tool you already have');
+    expect(base).toContain('Ask me once which search tool you already have');
     expect(base).toContain('tool_config (action: save)');
     expect(base).toContain('so the next conversation does not ask again');
     // The saved check comes before the ask in the base text.
     expect(base.indexOf('tool_config (action: get)')).toBeLessThan(
-      base.indexOf('ask me once which search tool'),
+      base.indexOf('Ask me once which search tool'),
     );
   });
 
