@@ -119,6 +119,27 @@ def test_transcribe_text_reuses_the_loaded_model(
     assert len(created) == 1
 
 
+def test_model_downloads_into_the_persisted_models_dir(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The compose volume mounts /app/models: a download must land there.
+
+    Without download_root faster-whisper writes to the HuggingFace cache in
+    the container home, which the volume does not cover, so every redeploy
+    re-downloads the model.
+    """
+    captured: dict[str, Any] = {}
+
+    class _CapturingModel(_FakeModel):
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            super().__init__(*args, **kwargs)
+            captured.update(kwargs)
+
+    _install_fake_model(monkeypatch, _CapturingModel)
+    assert subtitle.transcribe_text("/tmp/audio.mp3") == "hello world"
+    assert captured["download_root"] == f"{subtitle.utils.root_dir()}/models"
+
+
 def test_create_still_returns_empty_when_library_missing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

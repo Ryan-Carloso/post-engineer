@@ -37,7 +37,10 @@ def _load_whisper_model() -> Any:
     logger.info(f"loading model: {model_path}, device: {device}, compute_type: {compute_type}")
     try:
         model = WhisperModel(
-            model_size_or_path=model_path, device=device, compute_type=compute_type
+            model_size_or_path=model_path,
+            device=device,
+            compute_type=compute_type,
+            download_root=f"{utils.root_dir()}/models",
         )
     except Exception as e:
         logger.error(

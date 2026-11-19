@@ -47,7 +47,7 @@ RUN date -u +"%Y-%m-%dT%H:%M:%SZ" > /app/BUILT_AT
 
 # Non-root runtime user; storage must be writable for tasks/ and caches.
 RUN useradd --create-home --uid 10001 engine \
-    && mkdir -p /app/storage /app/logs \
+    && mkdir -p /app/storage /app/logs /app/models \
     && chown -R engine:engine /app
 USER engine
 
