@@ -6,8 +6,9 @@ name: release-mcp
 # (org Ryan-Carloso, repo post-engineer, workflow release-mcp.yml).
 #
 # VERSION — generated, never committed (.github/scripts/mcp-release-version.sh):
-#   MAJOR.MINOR from the repo-root VERSION file + the number of the merged PR that
-#   introduced the last commit touching apps/mcp/ (e.g. 1.52.560). No
+#   MAJOR.MINOR from the repo-root VERSION file + the ordinal of the last commit
+#   touching apps/mcp/ in main's history (e.g. 1.53.219), so the patch follows
+#   merge order and can never drop below the version npm already serves. No
 #   version-bump commit, no bump PR, no manual tag. The publish job stamps the
 #   version into package.json/server.json in its own workspace only.
 #
@@ -19,12 +20,13 @@ name: release-mcp
 # locking every agent out.
 #
 # SELF-HEALING — the run is level-triggered, like the deploy's .deploy-state:
-# on every push to main that touches apps/mcp/, every 10 minutes, and on
-# demand, it computes the version for main's HEAD and asks npm whether it
+# on every push to main that touches apps/mcp/, on a best-effort schedule and
+# on demand, it computes the version for main's HEAD and asks npm whether it
 # already exists. Present: the run ends in seconds. Missing: build, test,
-# publish. A transient npm or GitHub failure is retried by the next tick
-# without anyone re-running anything; only a real breakage needs a human,
-# and the deploy reports that wait on Discord.
+# publish. GitHub throttles frequent schedules — observed ticks are hours
+# apart, not the 10-minute cron — so a publish that never happened needs a
+# merge touching apps/mcp/ or `gh workflow run release-mcp.yml`; the deploy
+# reports that wait on Discord.
 #
 # The MCP Registry (metadata only) runs in its own job after npm and never
 # affects the deploy. If it fails, re-run it with Run workflow ->
@@ -61,7 +63,6 @@ jobs:
     permissions:
       contents: write # push the mcp-v<version> tag
       id-token: write # npm trusted publishing / provenance
-      pull-requests: read # commits/{sha}/pulls in mcp-release-version.sh
     outputs:
       version: ${{ steps.version.outputs.version }}
       published_now: ${{ steps.published.outputs.published_now }}
@@ -76,8 +77,6 @@ jobs:
 
       - name: Resolve the release version
         id: version
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           VERSION="$(bash .github/scripts/mcp-release-version.sh)"
