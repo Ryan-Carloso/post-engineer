@@ -566,6 +566,37 @@ describe('PostsCalendar week view', () => {
     expect(screen.getByLabelText(/Lisbon time zone/)).toBeInTheDocument();
   });
 
+  // Alternative A on a phone: one time axis only (the viewer's) — the two
+  // Lisbon + viewer columns ate ~40% of a 390px screen and cut the chips
+  // to a single letter. Events render as dots instead of chips (CSS, see
+  // globals.css `[data-mobile-week]`), so the grid only needs the marker.
+  it('shows no secondary time zone axis on a mobile week', () => {
+    renderWeek({ mobileWeek: true });
+    expect(screen.queryByLabelText(/Lisbon time zone/)).not.toBeInTheDocument();
+  });
+
+  it('marks the mobile week grid for the dot rendering', () => {
+    renderWeek({ mobileWeek: true });
+    expect(document.querySelector('[data-mobile-week]')).not.toBeNull();
+  });
+
+  it('does not mark the desktop week grid for the dot rendering', () => {
+    renderWeek();
+    expect(document.querySelector('[data-mobile-week]')).toBeNull();
+  });
+
+  it('names the viewer zone in the week subtitle on a mobile week', () => {
+    vi.mocked(useI18n).mockReturnValue({ t: realT('pt'), locale: 'pt', setLocale: vi.fn() });
+    renderWeek({ mobileWeek: true, locale: 'pt' });
+    expect(screen.getByText(/Semana 2 – 8 Jun · \S+/)).toBeInTheDocument();
+  });
+
+  it('keeps the plain week subtitle on a desktop week', () => {
+    vi.mocked(useI18n).mockReturnValue({ t: realT('pt'), locale: 'pt', setLocale: vi.fn() });
+    renderWeek({ locale: 'pt' });
+    expect(screen.getByText('Semana 2 – 8 Jun')).toBeInTheDocument();
+  });
+
   it('does not create an event when empty space is clicked', () => {
     renderWeek();
     fireEvent.click(visibleColumns()[2]);

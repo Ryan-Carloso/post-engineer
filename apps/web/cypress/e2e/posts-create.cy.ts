@@ -1,5 +1,16 @@
+//---------------
+// Posts list progress — creation happens through the API/MCP now (the
+// /posts/new screen was removed in Phase 4), so this spec covers what the
+// list page still does: the New post link to the recipes hub, and rendering
+// live progress on its cards. Every app-page spec logs in for real (the
+// middleware bounces unauthenticated visits to /landing).
+//---------------
+
 const NEW_POST_SCHEDULE_ID = 'sched-e2e-new';
 
+// The first-visit onboarding wizard auto-opens on /posts and hides the
+// page behind it; these specs cover the list, not the wizard, so every
+// visit starts seen. The key lives in lib/onboarding-wizard.ts.
 function visitPosts() {
   cy.visit('/posts', {
     onBeforeLoad(win) {
@@ -8,6 +19,9 @@ function visitPosts() {
   });
 }
 
+// Day 15 is always in the shown month, so the same test works on any
+// day; the button's aria-label is the CalendarCN full date (weekday,
+// month, day — no year) in the pt-BR locale the app defaults to.
 function day15FullDate(): string {
   const target = new Date();
   target.setDate(15);
@@ -20,6 +34,8 @@ function day15ShortDate(): string {
   return shortDate(target);
 }
 
+// Short day heading the side panel renders ("qui., 12 de nov."): the
+// same Intl options the page uses for its day headings.
 function shortDate(date: Date): string {
   return new Intl.DateTimeFormat('pt-BR', { weekday: 'short', day: 'numeric', month: 'short' }).format(date);
 }
@@ -91,6 +107,8 @@ describe('Posts list progress', () => {
         },
       ],
     }).as('schedules');
+    // Today, so the calendar (which opens on today) lists the card; the
+    // same intercept answers the calendar's range read (`slots`).
     const generatingSlot = {
       id: 'slot-e2e-gen',
       schedule_id: NEW_POST_SCHEDULE_ID,
@@ -121,6 +139,7 @@ describe('Posts list progress', () => {
 
   it('shows the live progress percent on the calendar day card', () => {
     visitPosts();
+    // Today's posts render below the calendar, inside the scrolling <main>.
     cy.contains('E2E generating topic').scrollIntoView().should('be.visible');
     cy.contains('42%').should('be.visible');
     cy.get('[role="progressbar"]').should('have.attr', 'aria-valuenow', '42');
@@ -128,15 +147,27 @@ describe('Posts list progress', () => {
 
   it('drives the calendar: pick a day, change month, go to today, refresh', () => {
     visitPosts();
+    // Pick a day: the day panel names the 15th.
     cy.get('[data-calendar-card]').find(`button[aria-label^="${day15FullDate()}"]`).click();
+    // The CalendarCN grid is taller than the old one, so in a month that
+    // spans six weeks the day panel sits below the fold at the default
+    // viewport and the heading is clipped by the scrolling shell: what
+    // is under test here is the panel syncing to the picked day, not
+    // the scroll position, so scroll it into view first (the same
+    // pattern the refresh step below already uses).
     cy.contains(`Publicações de ${day15ShortDate()}`).scrollIntoView().should('be.visible');
+    // Next month: the panel moves to the next month.
     const nextMonth = new Date();
+    // Pin the day first: setMonth(+1) on a day the next month lacks rolls
+    // two months forward (Aug 31 -> Oct 1), naming the wrong month.
     nextMonth.setDate(1);
     nextMonth.setMonth(nextMonth.getMonth() + 1);
     cy.get('[data-calendar-card]').find('button[aria-label="Próximo mês"]').click();
     cy.contains(`Publicações de ${monthLong(nextMonth)}`).scrollIntoView().should('be.visible');
+    // Go to today: the day panel names today again.
     cy.get('[data-calendar-card]').contains('Ir para hoje').click();
     cy.contains(`Publicações de ${shortDate(new Date())}`).scrollIntoView().should('be.visible');
+    // Refresh: the generating card is still there after the refetch.
     cy.get('button[aria-label="Atualizar"]').click();
     cy.contains('E2E generating topic').scrollIntoView().should('be.visible');
   });
@@ -144,12 +175,30 @@ describe('Posts list progress', () => {
   it('scrolls the day panel into view when picking a day on a narrow screen', () => {
     cy.viewport(390, 844);
     visitPosts();
+    // A narrow screen shows the week view, not the month grid: the days are
+    // columns (role="group", full-date label), not day buttons. Move a week
+    // forward so the pick is a day other than today, proving the panel
+    // follows the pick — and the pick scrolls the panel (below the grid)
+    // into view, as the month view does.
     cy.get('[data-calendar-card]').find('button[aria-label="Próxima semana"]').click();
     const nextSunday = new Date();
     nextSunday.setDate(nextSunday.getDate() - nextSunday.getDay() + 7);
     const label = new Intl.DateTimeFormat('pt-BR', { weekday: 'long', month: 'long', day: 'numeric' }).format(nextSunday);
+    // The column spans the full grid height, so its center can sit below
+    // the fold; the top of the column is always visible, just under the day
+    // header, and a tap there is the same day pick.
     cy.get('[data-posts-calendar-week]').find(`[role="group"][aria-label^="${label}"]`).click('top');
-    cy.contains(`Publicações de ${shortDate(nextSunday)}`).should('be.visible');
+    // Mobile week panel heading: long weekday, day, short month
+    // ("Domingo, 22 de nov.") — the count suffix only shows when the day
+    // has posts, and this Sunday has none, so the heading is the date alone.
+    // This is not the month view's "Publicações de ..." heading.
+    const mobileWeekHeading = new Intl.DateTimeFormat('pt-BR', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'short',
+    }).format(nextSunday);
+    const heading = mobileWeekHeading.charAt(0).toUpperCase() + mobileWeekHeading.slice(1);
+    cy.contains(heading).should('be.visible');
   });
 });
 
