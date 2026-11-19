@@ -1273,6 +1273,25 @@ describe('PostsPage week view', () => {
     expect(document.querySelector('section[aria-live="polite"]')).not.toBeInTheDocument();
   });
 
+  it('keeps today\'s day panel open from the Hoje button on a narrow screen, never toggling it shut', async () => {
+    vi.stubGlobal('matchMedia', vi.fn(mobileMatchMedia));
+    render(<PostsPage />);
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'posts.calendarPrevWeek' })).toBeInTheDocument(),
+    );
+    // Open today's panel first: June 1 is the Saturday column (index 6).
+    const grid = document.querySelector('[data-posts-calendar-week]');
+    if (grid === null) throw new Error('week grid not rendered');
+    const columns = grid.querySelectorAll('[role="group"][aria-label]:not([inert])');
+    fireEvent.click(columns[6]);
+    expect(dayPanelCardText('Upcoming topic')).toBeInTheDocument();
+    // "Hoje" re-selects today, which a plain select would toggle shut;
+    // on a phone it always opens today's panel instead.
+    fireEvent.click(screen.getByRole('button', { name: 'posts.calendarGoToToday' }));
+    expect(dayPanelCardText('Upcoming topic')).toBeInTheDocument();
+  });
+
   it('switches the day panel to another day on tap', async () => {
     const maySlot = { ...UPCOMING_SLOT, id: 'u2', slotAt: '2030-05-28T10:00:00.000Z', title: 'May topic' };
     mockQueries({ range: [UPCOMING_SLOT, maySlot] });

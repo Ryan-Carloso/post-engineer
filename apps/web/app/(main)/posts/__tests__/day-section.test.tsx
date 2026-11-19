@@ -82,6 +82,16 @@ describe('DayListRow', () => {
     expect(screen.getByText('posts.noPersona')).toBeInTheDocument();
   });
 
+  it('shows the removed-persona fallback when the schedule names a persona that is gone', () => {
+    const removedJoins: PostJoins = {
+      ...rowJoins,
+      personaNameById: new Map(),
+    };
+    render(<DayListRow slot={rowSlot} joins={removedJoins} />);
+
+    expect(screen.getByText('posts.personaFallback')).toBeInTheDocument();
+  });
+
   it('renders no thumbnail video: a summarized row, not a card', () => {
     const { container } = render(
       <DayListRow slot={{ ...rowSlot, status: 'published', publishedAt: '2030-06-01T10:05:00.000Z', taskId: 'task-9' }} joins={rowJoins} />,
