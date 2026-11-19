@@ -4,7 +4,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/supabase/database.gen';
 import { encryptJson, decryptJson, TokenDecryptError } from '@/lib/token-crypto';
 
-export const TOOL_CONFIG_SEARCH_TOOLS = ['tavily', 'exa'] as const;
+export const TOOL_CONFIG_SEARCH_TOOLS = ['tavily', 'exa', 'own'] as const;
 export type ToolConfigSearchTool = (typeof TOOL_CONFIG_SEARCH_TOOLS)[number];
 
 export const TOOL_CONFIG_STOCK_SOURCES = ['pexels', 'pixabay', 'coverr'] as const;
@@ -101,10 +101,10 @@ export function validateToolConfigInput(value: unknown): ToolConfigInput {
   }
 
   const searchTool = value.searchTool;
-  if (searchTool !== null && searchTool !== 'tavily' && searchTool !== 'exa') {
+  if (searchTool !== null && searchTool !== 'tavily' && searchTool !== 'exa' && searchTool !== 'own') {
     throw new ToolConfigValidationError(
       'searchTool',
-      'searchTool must be "tavily", "exa", or null',
+      'searchTool must be "tavily", "exa", "own", or null',
     );
   }
 
@@ -212,7 +212,9 @@ export async function getToolConfig(
   }
 
   const searchTool =
-    data.search_tool === 'tavily' || data.search_tool === 'exa' ? data.search_tool : null;
+    data.search_tool === 'tavily' || data.search_tool === 'exa' || data.search_tool === 'own'
+      ? data.search_tool
+      : null;
   const stockSources = (Array.isArray(data.stock_sources) ? data.stock_sources : []).filter(
     (source): source is ToolConfigStockSource =>
       source === 'pexels' || source === 'pixabay' || source === 'coverr',

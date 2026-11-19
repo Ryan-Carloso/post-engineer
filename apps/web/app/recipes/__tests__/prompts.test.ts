@@ -717,8 +717,8 @@ describe('prompts hub data', () => {
       'discarded,',
       'never forced in',
       'the base lines about material do not apply here',
-      'Match text to image per SENTENCE, not per segment',
-      'gets an image that shows what the sentence says',
+      'One segment is one beat',
+      'never the next sentence',
       'Image quality, no exceptions',
       'No neutral filler photo',
       'One consistent persona',
@@ -749,6 +749,9 @@ describe('prompts hub data', () => {
     expect(text).toContain('provocative');
     expect(text).toContain('One archetype only');
     expect(text).toContain('adds nothing to the viewer');
+    expect(text).toContain('The archetype must be OBVIOUS');
+    expect(text).toContain('without thinking');
+    expect(text).toContain('it is none of them');
     expect(text).toContain('the day it happened to me');
     expect(text).toContain('one valid form, not the only one');
     expect(text).toContain('the first time I');
@@ -798,8 +801,8 @@ describe('prompts hub data', () => {
     expect(text).toContain('An invisible beat is a failure');
     expect(text).toContain('Vary the rhythm deliberately');
     expect(text).toContain('pace changes from take to take');
-    expect(text).toContain('Match text to image per SENTENCE, not per segment');
-    expect(text).toContain('gets an image that shows what the sentence says');
+    expect(text).toContain('One segment is one beat');
+    expect(text).toContain('never the next sentence');
     expect(text).toContain('Image quality, no exceptions');
     expect(text).toContain('No neutral filler photo');
     expect(text).toContain('no repeated compositions');
@@ -813,5 +816,55 @@ describe('prompts hub data', () => {
     expect(text).not.toContain('why you regain weight after a diet');
     expect(text).not.toContain('Mara');
     expect(text).not.toContain('issue #');
+  });
+
+  it('carries the 10/10-loop lessons (v7-v15): one beat per segment, two body states, duration contrast, matching clips, covered takes, literal study, 12-word CTA', () => {
+    const fullText = getPrompt('story-first-reels')?.prompt ?? '';
+    const baseText = SHARED_PROMPT_BASE.join('\n');
+    expect(fullText.startsWith(baseText)).toBe(true);
+    const text = fullText.slice(baseText.length + 2);
+    expect(text).toContain('One segment is one beat');
+    expect(text).toContain('never the next sentence');
+    expect(text).toContain('TWO body states');
+    expect(text).toContain('visible IN THE BODY');
+    expect(text).toContain('checking its body matches the phase');
+    expect(text).toContain('SegmentMedia.duration (0.5-6s)');
+    expect(text).toContain('never more than 2');
+    expect(text).toContain('hold the low point 3.5-5s');
+    expect(text).toContain('fast at 1-1.5s');
+    expect(text).toContain('the payoff 4-6s');
+    expect(text).toContain('One photo is one beat, never two');
+    expect(text).toContain('same persona even');
+    expect(text).toContain('same hair, same clothes, same setting');
+    expect(text).toContain('"No visible face"');
+    expect(text).toContain('is NOT enough');
+    expect(text).toContain('Re-encode every clip to 30 fps');
+    expect(text).toContain('verify the PLAYED');
+    expect(text).toContain('rendered cut list');
+    expect(text).toContain('Every take must have image for ALL its audio');
+    expect(text).toContain('the last frame is the payoff');
+    expect(text).toContain('A study gets a literal image');
+    expect(text).toContain('labeled chart');
+    expect(text).toContain('The notebook enters only on its sentence');
+    expect(text).toContain('a chart holds 2s or more');
+    expect(text).toContain('12 words over 2 photos');
+    expect(text).toContain('The turning-point object appears only at the turn, never before');
+  });
+
+  it('carries the 10/10-loop lessons (v16-v24): in-sentence pace, chart-only study page, payoff windows from measured audio', () => {
+    const fullText = getPrompt('story-first-reels')?.prompt ?? '';
+    const baseText = SHARED_PROMPT_BASE.join('\n');
+    expect(fullText.startsWith(baseText)).toBe(true);
+    const text = fullText.slice(baseText.length + 2);
+    expect(text).toContain('Measure pace inside the sentence');
+    expect(text).toContain('never across the take');
+    expect(text).toContain('a pause between sentences hides a rushed line');
+    expect(text).toContain('chart-only: one line chart');
+    expect(text).toContain('zero text columns');
+    expect(text).toContain('Fake text reads fake on pause');
+    expect(text).toContain('re-tune the photo windows');
+    expect(text).toContain('measured audio ends');
+    expect(text).toContain('never re-estimate');
+    expect(text).toContain('The study is fast except for its chart');
   });
 });

@@ -145,7 +145,7 @@ describe('PUT /api/tool-config', () => {
   it('returns 400 with the field on a validation error', async () => {
     authed();
     vi.mocked(saveToolConfig).mockRejectedValue(
-      new ToolConfigValidationError('searchTool', 'searchTool must be "tavily", "exa", or null'),
+      new ToolConfigValidationError('searchTool', 'searchTool must be "tavily", "exa", "own", or null'),
     );
     const res = await PUT(
       new Request(URL, {

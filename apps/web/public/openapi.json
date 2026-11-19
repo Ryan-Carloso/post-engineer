@@ -5045,7 +5045,8 @@
                       "type": "string",
                       "enum": [
                         "tavily",
-                        "exa"
+                        "exa",
+                        "own"
                       ],
                       "nullable": true
                     },
@@ -5204,7 +5205,8 @@
                       "type": "string",
                       "enum": [
                         "tavily",
-                        "exa"
+                        "exa",
+                        "own"
                       ],
                       "nullable": true
                     },
@@ -5338,7 +5340,8 @@
                     "type": "string",
                     "enum": [
                       "tavily",
-                      "exa"
+                      "exa",
+                      "own"
                     ],
                     "nullable": true
                   },

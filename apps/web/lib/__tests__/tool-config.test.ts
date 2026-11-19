@@ -110,6 +110,14 @@ describe('validateToolConfigInput', () => {
     });
   });
 
+  it("accepts 'own' as the search tool: the agent's own search needs no key", () => {
+    expect(validateToolConfigInput({ searchTool: 'own', stockSources: [], keys: {} })).toEqual({
+      searchTool: 'own',
+      stockSources: [],
+      keys: {},
+    });
+  });
+
   it('trims key whitespace and dedupes stock sources', () => {
     const input = validateToolConfigInput({
       searchTool: 'exa',
@@ -125,6 +133,7 @@ describe('validateToolConfigInput', () => {
     ['tavily', 'config'],
     [[], 'config'],
     [{ searchTool: 'google', stockSources: [], keys: {} }, 'searchTool'],
+    [{ searchTool: 'own', stockSources: [], keys: { tavily: 'x' } }, 'keys.tavily'],
     [{ searchTool: 'tavily', stockSources: 'pexels', keys: {} }, 'stockSources'],
     [{ searchTool: 'tavily', stockSources: ['unsplash'], keys: {} }, 'stockSources'],
     [{ searchTool: 'tavily', stockSources: [], keys: 'nope' }, 'keys'],
@@ -187,6 +196,16 @@ describe('getToolConfig', () => {
       searchTool: 'tavily',
       stockSources: ['pexels'],
       keys: { tavily: 'tvly-fake-key-1234', pexels: 'pxls-fake-key-5678' },
+    });
+  });
+
+  it("returns 'own' as the saved search tool", async () => {
+    const row = { search_tool: 'own', stock_sources: [], encrypted_keys: null };
+    const { client } = mockSupabase(row);
+    expect(await getToolConfig(client, 'u1')).toEqual({
+      searchTool: 'own',
+      stockSources: [],
+      keys: {},
     });
   });
 
