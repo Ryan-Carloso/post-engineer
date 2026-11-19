@@ -1674,6 +1674,21 @@ describe('PATCH /api/persona', () => {
       expect(updated).toHaveLength(0);
     });
 
+    it('ctaType: an incoherent CTA with a photo returns 400 and uploads nothing', async () => {
+      // The merged-CTA check runs before the photo block on purpose: a
+      // 400 here must not leave an uploaded replacement photo behind with
+      // no DB row pointing at it.
+      const { updated, uploaded } = mockSupabaseForPatch({
+        existing: { ...PERSONA_COMPLETA, cta_type: 'follow', cta_url: null, cta_instruction: null },
+      });
+
+      const res = await PATCH(patchRequest('persona-uuid-1', { ctaType: 'link' }, [photo()]));
+
+      expect(res.status).toBe(400);
+      expect(updated).toHaveLength(0);
+      expect(uploaded).toHaveLength(0);
+    });
+
     it('ctaType: switching link to buy keeps the stored URL', async () => {
       const { updated } = mockSupabaseForPatch({
         existing: { ...PERSONA_COMPLETA, cta_type: 'link', cta_url: 'https://example.com/course', cta_instruction: null },

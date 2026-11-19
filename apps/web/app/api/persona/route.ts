@@ -312,6 +312,14 @@ async function patchHandler(request: Request): Promise<NextResponse> {
     return personaValidationError(voicePatchError, 'PATCH /api/persona', personaVoiceRejectionOptions(patch.voiceId));
   }
 
+  // The merged CTA row is validated against the stored persona (see
+  // patch-updates.ts): a type-only patch clears the stored facts the new
+  // type cannot carry, and a fact-only patch is checked against the type
+  // already stored. It runs before the photo/avatar block on purpose: a
+  // 400 here must not leave an uploaded replacement photo behind.
+  const ctaError = applyPersonaPatchFields(patch, updates, persona);
+  if (ctaError) return personaValidationError(ctaError, 'PATCH /api/persona', { field: 'ctaType' });
+
   if (patch.photo && patch.photoExtension) {
     const photoPath = await uploadFile(supabase, user.id, personaId, patch.photo, patch.photoExtension);
     if (!photoPath) return errorResponse(500, 'Failed to upload photo.', 'PATCH /api/persona');
@@ -339,13 +347,6 @@ async function patchHandler(request: Request): Promise<NextResponse> {
       stalePaths.push(persona.photo_path);
     }
   }
-
-  // The merged CTA row is validated against the stored persona (see
-  // patch-updates.ts): a type-only patch clears the stored facts the new
-  // type cannot carry, and a fact-only patch is checked against the type
-  // already stored.
-  const ctaError = applyPersonaPatchFields(patch, updates, persona);
-  if (ctaError) return personaValidationError(ctaError, 'PATCH /api/persona', { field: 'ctaType' });
 
   if (Object.keys(updates).length === 0) {
     return personaValidationError('Nothing to update.', 'PATCH /api/persona');
