@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { connectTelegramAccount } from '../client-telegram.js';
 import {
   PostEngineerClient,
   assertImageSize,
@@ -229,6 +230,7 @@ describe('PostEngineerClient', () => {
       '3speak': [],
       rumble: [],
       fanvue: [],
+      telegram: [],
     };
     const mockList = {
       authenticated: true,
@@ -509,6 +511,7 @@ describe('PostEngineerClient', () => {
           threespeak_account_ids: [],
           rumble_account_ids: [],
           fanvue_account_ids: [],
+          telegram_account_ids: [],
           days_of_week: [1, 3, 5],
           start_hour: 9,
           end_hour: 17,
@@ -679,6 +682,7 @@ describe('PostEngineerClient', () => {
         threespeakAccountIds: [],
         rumbleAccountIds: [],
         fanvueAccountIds: [],
+        telegramAccountIds: [],
         timezone: 'UTC',
         publishMode: 'scheduled',
       },
@@ -1625,6 +1629,50 @@ describe('generate and schedule video client', () => {
     await expect(
       client.connectRumbleAccount('chan-1', 'wrong')
     ).rejects.toThrow(/Failed to connect Rumble account: 400/);
+  });
+
+  it('connects a Telegram account with botToken + chatId + chatType', async () => {
+    const mockResponse = {
+      success: true,
+      accountId: 'acc-tg',
+      chatId: '-1001234567890',
+      chatType: 'group',
+      title: 'Maria Group',
+    };
+
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify(mockResponse),
+    });
+
+    const botToken = '123456789:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+    const result = await connectTelegramAccount(client, botToken, '-1001234567890', 'group');
+    expect(global.fetch).toHaveBeenCalledWith(
+      `${baseUrl}/api/telegram-connect`,
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          'Content-Type': 'application/json',
+        }),
+        body: JSON.stringify({ botToken, chatId: '-1001234567890', chatType: 'group' }),
+      })
+    );
+    expect(result).toEqual(mockResponse);
+  });
+
+  it('redacts the bot token from a Telegram connect failure', async () => {
+    const botToken = '123456789:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 422,
+      text: async () => `Telegram rejected the bot token ${botToken}.`,
+    });
+
+    const error = await connectTelegramAccount(client, botToken, '-1001234567890', 'channel').catch((e) => e);
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toContain('Failed to connect Telegram account: 422');
+    expect((error as Error).message).not.toContain(botToken);
   });
 });
 

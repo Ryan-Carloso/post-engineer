@@ -22,6 +22,7 @@ SocialProvider = Literal[
     "3speak",
     "rumble",
     "fanvue",
+    "telegram",
 ]
 SOCIAL_PROVIDERS: tuple[str, ...] = get_args(SocialProvider)
 
@@ -38,6 +39,7 @@ PROVIDER_LABELS: dict[str, str] = {
     "3speak": "3Speak",
     "rumble": "Rumble",
     "fanvue": "Fanvue",
+    "telegram": "Telegram",
 }
 
 # The account-id column of each network in public.schedules, the same as
@@ -53,6 +55,7 @@ SCHEDULE_ACCOUNT_COLUMNS: dict[str, str] = {
     "3speak": "threespeak_account_ids",
     "rumble": "rumble_account_ids",
     "fanvue": "fanvue_account_ids",
+    "telegram": "telegram_account_ids",
 }
 
 # Networks whose publish can send the video as a storage path the web

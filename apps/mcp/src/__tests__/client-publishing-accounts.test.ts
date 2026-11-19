@@ -20,6 +20,7 @@ const FULL_DEFAULTS = {
   '3speak': [],
   rumble: [],
   fanvue: [],
+  telegram: [],
 };
 
 function mockClient(payload: unknown): PostEngineerClient {

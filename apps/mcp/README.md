@@ -19,8 +19,7 @@ credits is billed by Modal.
 - Create an account and log in.
 - Create AI personas (avatar, voice, language, niche).
 - Generate videos with those personas.
-- Connect YouTube / Instagram / LinkedIn / Threads / Facebook Pages / 3Speak accounts.
-- Connect YouTube / Instagram / LinkedIn / Threads / Facebook Pages / Bluesky / Rumble accounts.
+- Connect YouTube / Instagram / LinkedIn / Threads / Facebook Pages / Bluesky / 3Speak / Rumble / Fanvue / Pinterest / Telegram accounts.
 - Schedule automated posting.
 - Generate and manage API keys at [https://post-engineer.com/recipes](https://post-engineer.com/recipes).
 

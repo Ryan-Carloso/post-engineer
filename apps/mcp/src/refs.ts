@@ -106,6 +106,7 @@ const ACCOUNT_ID_FIELDS: Record<SocialProvider, string> = {
   '3speak': 'providerAccountId',
   rumble: 'providerAccountId',
   fanvue: 'providerAccountId',
+  telegram: 'providerAccountId',
 };
 
 // The id and the names of one listed account, by provider (the fields of the

@@ -54,6 +54,7 @@ const BINDING: PersonaDefaultAccounts = {
   '3speak': [],
   rumble: [],
   fanvue: [],
+  telegram: [],
 };
 
 describe('savePersonaBinding', () => {

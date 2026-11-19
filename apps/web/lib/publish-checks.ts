@@ -24,6 +24,7 @@ import {
   THREADS_POST_MAX_CHARS,
 } from './draft-ceilings';
 import { countChars, extractHashtags, extractLinks } from './draft-text';
+import { TELEGRAM_CAPTION_MAX_LENGTH } from './telegram';
 
 // Rumble has no documented description ceiling, so the publish check has
 // no failure branch for it — the 100-character title ceiling lives at the
@@ -124,6 +125,13 @@ const PUBLISH_CHECKS: Record<PublishNetwork, PublishCheckRun> = {
   '3speak': () => {},
   rumble: () => {},
   fanvue: () => {},
+  // The Bot API rejects a longer media caption, and the publish handler
+  // refuses it before sending, so it fails here too.
+  telegram: (_draft, chars, failures) => {
+    if (chars > TELEGRAM_CAPTION_MAX_LENGTH) {
+      failures.push(`Draft is ${chars} characters, over the Telegram ${TELEGRAM_CAPTION_MAX_LENGTH}-character caption limit.`);
+    }
+  },
 };
 
 export function checkPublish(draft: string, network: PublishNetwork): PublishCheck {

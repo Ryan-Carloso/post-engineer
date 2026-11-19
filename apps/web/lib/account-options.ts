@@ -19,6 +19,7 @@ export const PROVIDER_LABELS: Record<SocialProvider, string> = {
   '3speak': '3Speak',
   rumble: 'Rumble',
   fanvue: 'Fanvue',
+  telegram: 'Telegram',
 };
 
 // Every account a schedule targets, across all networks.
@@ -33,6 +34,7 @@ export function scheduleAccountIds(schedule: {
   threespeakAccountIds?: string[];
   rumbleAccountIds?: string[];
   fanvueAccountIds?: string[];
+  telegramAccountIds?: string[];
 }): string[] {
   return [
     ...(schedule.youtubeAccountIds ?? []),
@@ -45,6 +47,7 @@ export function scheduleAccountIds(schedule: {
     ...(schedule.threespeakAccountIds ?? []),
     ...(schedule.rumbleAccountIds ?? []),
     ...(schedule.fanvueAccountIds ?? []),
+    ...(schedule.telegramAccountIds ?? []),
   ];
 }
 
@@ -108,6 +111,10 @@ const ACCOUNT_OPTION_BUILDERS: Record<SocialProvider, (account: PublicAccountIte
   fanvue: (account) => {
     if (account.provider !== 'fanvue') throw new Error(`accountOption: fanvue builder got a ${account.provider} account`);
     return { id: account.providerAccountId, provider: 'fanvue', label: account.accountName ?? account.providerAccountId };
+  },
+  telegram: (account) => {
+    if (account.provider !== 'telegram') throw new Error(`accountOption: telegram builder got a ${account.provider} account`);
+    return { id: account.providerAccountId, provider: 'telegram', label: account.accountName ?? account.providerAccountId };
   },
 };
 

@@ -6,7 +6,7 @@
 export const DEFAULT_API_URL = 'https://post-engineer.com';
 // Mirror of SOCIAL_PROVIDERS (shared/contracts/providers.ts): the Actor builds
 // on its own, so it keeps one copy, checked by .github/scripts/provider-lists.
-export const PROVIDERS = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'pinterest', '3speak', 'rumble', 'fanvue'];
+export const PROVIDERS = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'pinterest', '3speak', 'rumble', 'fanvue', 'telegram'];
 export const MODES = ['asap', 'scheduled'];
 // Every video renders only the images given here. About one image per
 // 3 seconds of speech (8 words), each image on screen at least about 1

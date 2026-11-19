@@ -31,7 +31,7 @@ function schedule(id: string, personaId: string | null): ScheduleConfig {
     pinterestBoardId: null,
     threespeakAccountIds: [],
     rumbleAccountIds: [],
-    fanvueAccountIds: [],
+    fanvueAccountIds: [], telegramAccountIds: [],
     daysOfWeek: [1],
     startHour: 9,
     endHour: 17,

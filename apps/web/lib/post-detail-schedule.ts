@@ -21,6 +21,7 @@ export interface ScheduleDetailRow {
     threespeak_account_ids: string[] | null;
     rumble_account_ids: string[] | null;
     fanvue_account_ids: string[] | null;
+    telegram_account_ids: string[] | null;
     timezone: string;
     post_language: string | null;
     post_voice_id: string | null;
@@ -47,6 +48,7 @@ export function buildScheduleDetail(scheduleRow: ScheduleDetailRow) {
   const threespeakAccountIdsOut = scheduleRow.threespeak_account_ids ?? [];
   const rumbleAccountIdsOut = scheduleRow.rumble_account_ids ?? [];
   const fanvueAccountIdsOut = scheduleRow.fanvue_account_ids ?? [];
+  const telegramAccountIdsOut = scheduleRow.telegram_account_ids ?? [];
   const timezoneOut = scheduleRow.timezone;
   const publishModeOut: 'asap' | 'scheduled' = scheduleRow.publish_mode === 'asap' ? 'asap' : 'scheduled';
   return {
@@ -64,6 +66,7 @@ export function buildScheduleDetail(scheduleRow: ScheduleDetailRow) {
     threespeakAccountIds: threespeakAccountIdsOut,
     rumbleAccountIds: rumbleAccountIdsOut,
     fanvueAccountIds: fanvueAccountIdsOut,
+    telegramAccountIds: telegramAccountIdsOut,
     timezone: timezoneOut,
     publishMode: publishModeOut,
   };

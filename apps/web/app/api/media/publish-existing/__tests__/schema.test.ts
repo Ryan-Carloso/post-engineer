@@ -183,7 +183,7 @@ describe('checkPublishExistingSemantics', () => {
       if (!checked.ok) {
         expect(checked.issues[0]?.field).toBe('publishing.providers');
         expect(checked.issues[0]?.message).toBe(
-          'Images can be published to instagram, bluesky, linkedin, threads, facebook, pinterest only; youtube takes video.',
+          'Images can be published to instagram, bluesky, linkedin, threads, facebook, pinterest, telegram only; youtube takes video.',
         );
       }
     }

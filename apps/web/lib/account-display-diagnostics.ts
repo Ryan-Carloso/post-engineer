@@ -26,6 +26,7 @@ export const ACCOUNT_NAME_FALLBACKS = {
   '3speak': null,
   rumble: null,
   fanvue: null,
+  telegram: null,
 } as const satisfies Record<SocialProvider, string | null>;
 
 // Hosts next/image is allowed to load. next.config.ts is the other copy;

@@ -13,6 +13,7 @@ import {
   type OAuthConnectProvider,
 } from '@/lib/oauth-connect';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
+import { DIRECT_CONNECT_PROVIDERS, type DirectConnectProvider } from '@/lib/contracts/providers';
 
 //---------------
 // POST /api/account/connect-url — generates the OAuth auth URL to connect
@@ -22,6 +23,7 @@ import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-r
 // consumes it as a fallback. Body: { provider: one of OAUTH_CONNECT_PROVIDERS (shared/contracts/providers.ts) }.
 // Bluesky uses an app password: POST /api/bluesky-connect.
 // Rumble uses a manual access token: POST /api/rumble-connect.
+// Telegram uses a @BotFather bot token: POST /api/telegram-connect.
 //
 // Error contract (agent/MCP-consumed API): failures return
 //   { success: false, error: '<stable-code>' }
@@ -36,6 +38,7 @@ export const CONNECT_URL_ERRORS = {
   INVALID_JSON_BODY: 'invalid_json_body',
   BLUESKY_REQUIRES_APP_PASSWORD: 'bluesky_requires_app_password',
   RUMBLE_REQUIRES_ACCESS_TOKEN: 'rumble_requires_access_token',
+  TELEGRAM_REQUIRES_BOT_TOKEN: 'telegram_requires_bot_token',
   INVALID_PROVIDER: 'invalid_provider',
   REDIRECT_URI_UNAVAILABLE: 'redirect_uri_unavailable',
   PROVIDER_NOT_CONFIGURED: 'provider_not_configured',
@@ -45,6 +48,20 @@ export const CONNECT_URL_ERRORS = {
 
 export type ConnectUrlErrorCode =
   (typeof CONNECT_URL_ERRORS)[keyof typeof CONNECT_URL_ERRORS];
+
+// A network that connects directly has no OAuth URL: each answers with the
+// code naming its own connect route. 3Speak has no dedicated code and keeps
+// answering invalid_provider.
+const DIRECT_CONNECT_ERRORS: Record<DirectConnectProvider, ConnectUrlErrorCode> = {
+  bluesky: CONNECT_URL_ERRORS.BLUESKY_REQUIRES_APP_PASSWORD,
+  '3speak': CONNECT_URL_ERRORS.INVALID_PROVIDER,
+  rumble: CONNECT_URL_ERRORS.RUMBLE_REQUIRES_ACCESS_TOKEN,
+  telegram: CONNECT_URL_ERRORS.TELEGRAM_REQUIRES_BOT_TOKEN,
+};
+
+function isDirectConnectProvider(value: unknown): value is DirectConnectProvider {
+  return typeof value === 'string' && (DIRECT_CONNECT_PROVIDERS as readonly string[]).includes(value);
+}
 
 function errorResponse(
   status: number,
@@ -86,11 +103,8 @@ async function postHandler(request: NextRequest): Promise<NextResponse> {
       return errorResponse(400, CONNECT_URL_ERRORS.INVALID_JSON_BODY, 'POST /api/account/connect-url');
     }
 
-    if (provider === 'bluesky') {
-      return errorResponse(400, CONNECT_URL_ERRORS.BLUESKY_REQUIRES_APP_PASSWORD, 'POST /api/account/connect-url');
-    }
-    if (provider === 'rumble') {
-      return errorResponse(400, CONNECT_URL_ERRORS.RUMBLE_REQUIRES_ACCESS_TOKEN, 'POST /api/account/connect-url');
+    if (isDirectConnectProvider(provider)) {
+      return errorResponse(400, DIRECT_CONNECT_ERRORS[provider], 'POST /api/account/connect-url');
     }
     if (!isOAuthConnectProvider(provider)) {
       return errorResponse(400, CONNECT_URL_ERRORS.INVALID_PROVIDER, 'POST /api/account/connect-url');

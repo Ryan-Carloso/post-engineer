@@ -382,6 +382,23 @@ export const operationSchemas = {
     request: object({ channelId: str, accessToken: str }, ['channelId', 'accessToken']),
     response: success({ accountId: str, channelId: str }),
   },
+  // apps/web/app/api/telegram-connect/route.ts (JSON or form body)
+  'POST /api/telegram-connect': {
+    request: object(
+      {
+        botToken: { type: 'string', description: 'Bot token issued by @BotFather.' },
+        chatId: { type: 'string', description: 'Public @username or numeric chat ID of the channel or group.' },
+        chatType: { type: 'string', enum: ['channel', 'group'], description: 'The destination kind; checked against the real chat.' },
+      },
+      ['botToken', 'chatId', 'chatType'],
+    ),
+    response: success({ accountId: str, chatId: str, chatType: { type: 'string', enum: ['channel', 'group', 'supergroup'] }, title: str }),
+    extraResponses: {
+      403: 'The bot is not in the chat or cannot post there (code TELEGRAM_BOT_NOT_MEMBER or TELEGRAM_BOT_CANNOT_POST).',
+      404: 'Telegram could not find the chat (code TELEGRAM_CHAT_NOT_FOUND).',
+      422: 'Telegram rejected the bot token (code TELEGRAM_TOKEN_REJECTED).',
+    },
+  },
   // apps/web/app/api/persona/faces/route.ts
   'GET /api/persona/faces': {
     response: object({

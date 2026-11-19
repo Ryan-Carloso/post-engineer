@@ -94,6 +94,7 @@ export interface GeneratePersonaVideoInput {
   fanvueAccountIds?: string[];
   threespeakAccountIds?: string[];
   rumbleAccountIds?: string[];
+  telegramAccountIds?: string[];
   /**
    * Publish mode. 'scheduled' (default) slots the video at startAt + times;
    * 'asap' publishes it the moment generation finishes, with no scheduled

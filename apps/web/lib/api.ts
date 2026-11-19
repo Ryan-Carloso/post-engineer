@@ -736,8 +736,8 @@ export interface SlotDetailPayload {
     threespeakAccountIds: string[];
     rumbleAccountIds: string[];
     fanvueAccountIds: string[];
-    // The schedule's IANA timezone — the detail page renders the slot time
-    // in this zone so "10:00" is never ambiguous about whose 10:00 it is.
+    telegramAccountIds: string[];
+    // IANA timezone: the detail page renders the slot time in this zone.
     timezone: string;
     // How the post publishes (migration 015). Narrowed defensively at the
     // fetch boundary: only the literal 'asap' counts.

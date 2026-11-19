@@ -104,6 +104,21 @@ export interface RumbleAccountData {
   status?: AccountSyncStatus;
 }
 
+export interface TelegramAccountData {
+  provider: 'telegram';
+  recordId: string;
+  providerAccountId: string;
+  accountName: string | null;
+  // 'channel' posts as an admin broadcast, 'group'/'supergroup' as a
+  // member message: same provider, different connect validation.
+  chatType?: 'channel' | 'group' | 'supergroup';
+  username?: string;
+  botUsername?: string;
+  connectedAt: number;
+  lastUsed: number;
+  status?: AccountSyncStatus;
+}
+
 export interface FanvueAccountData {
   provider: 'fanvue';
   recordId: string;
@@ -125,7 +140,8 @@ export type PublicAccountItem =
   | PinterestAccountData
   | ThreespeakAccountData
   | RumbleAccountData
-  | FanvueAccountData;
+  | FanvueAccountData
+  | TelegramAccountData;
 
 //---------------
 // ProviderDef — contract every provider must implement.
@@ -359,6 +375,31 @@ const fanvueDef: ProviderDef<true> = {
 };
 
 //---------------
+// Telegram has no OAuth: the @BotFather bot token connects the account
+// (like the Bluesky app password). One account is one destination chat;
+// its kind (channel vs group/supergroup) is metadata, not a provider.
+const telegramDef: ProviderDef<false> = {
+  supportsOAuthCallback: false,
+  toPublicAccount(record) {
+    const metadata = record.accountMetadata;
+    const chatType =
+      metadata.chatType === 'channel' || metadata.chatType === 'group' || metadata.chatType === 'supergroup'
+        ? metadata.chatType
+        : undefined;
+    return {
+      provider: 'telegram',
+      recordId: record.id,
+      providerAccountId: record.providerAccountId,
+      accountName: record.accountName,
+      chatType,
+      username: asOptionalString(metadata.username),
+      botUsername: asOptionalString(metadata.botUsername),
+      connectedAt: createdAtTimestamp(record),
+      lastUsed: lastUsedTimestamp(record),
+    };
+  },
+};
+
 // PROVIDER_REGISTRY — exhaustive by construction: a provider in the union without
 // an entry here (or vice versa) = compile error.
 //---------------
@@ -374,6 +415,7 @@ export const PROVIDER_REGISTRY = {
   '3speak': threespeakDef,
   rumble: rumbleDef,
   fanvue: fanvueDef,
+  telegram: telegramDef,
 } satisfies Record<SocialProvider, ProviderDef>;
 
 // OAuthProvider — derived from the registry: whoever has supportsOAuthCallback: true.

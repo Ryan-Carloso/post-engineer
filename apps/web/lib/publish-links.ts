@@ -105,7 +105,9 @@ function pinterestPostUrl(postId: string): string | null {
 // POST_URL_FROM_ID — the derivation from a bare post id, per network; null
 // where the network only links through its own URL. Fanvue has none on
 // purpose: the post-URL format is unknown, so only a provider-supplied
-// permalink ever links.
+// permalink ever links. Telegram has none either: a message id links only
+// in a public chat (t.me/<username>/<id>), so the handler supplies the
+// permalink when there is one.
 //---------------
 const POST_URL_FROM_ID: Record<SocialProvider, ((postId: string) => string | null) | null> = {
   youtube: null,
@@ -118,6 +120,7 @@ const POST_URL_FROM_ID: Record<SocialProvider, ((postId: string) => string | nul
   '3speak': null,
   rumble: null,
   fanvue: null,
+  telegram: null,
 };
 
 //---------------

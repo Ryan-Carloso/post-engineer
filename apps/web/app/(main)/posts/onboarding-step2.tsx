@@ -24,6 +24,7 @@ import { notifyIfSessionExpired } from '@/lib/session-expiry';
 import { useSocialAccountsQuery } from '@/lib/social-accounts-queries';
 import { INPUT_CLASS } from '@/lib/ui';
 import { PROVIDER_LABELS } from '@/lib/account-options';
+import { TelegramSetupGuide, telegramConnectErrorKey, type TelegramChatKind } from '@/components/telegram-setup-guide';
 
 //---------------
 // Onboarding wizard step 2 — inline connect (issue #578, refs #573).
@@ -56,6 +57,7 @@ const PROVIDER_DESCRIPTIONS: Record<SocialProvider, TranslationKey> = {
   fanvue: 'accounts.fanvueDescription',
   '3speak': 'accounts.threespeakDescription',
   rumble: 'accounts.rumbleDescription',
+  telegram: 'accounts.telegramDescription',
 };
 
 //---------------
@@ -184,6 +186,18 @@ const CREDENTIAL_CONFIG: Record<CredentialProvider, CredentialConnectConfig> = {
     submitLabelKey: 'accounts.rumbleConnect',
     securityHintKey: 'accounts.rumbleSecurityHint',
     errorKey: 'accounts.rumbleConnectError',
+  },
+  telegram: {
+    endpoint: '/api/telegram-connect',
+    handleField: 'chatId',
+    passwordField: 'botToken',
+    titleKey: 'accounts.telegramConnectTitle',
+    hintKey: 'accounts.telegramConnectHint',
+    handleLabelKey: 'accounts.telegramChatLabel',
+    passwordLabelKey: 'accounts.telegramTokenLabel',
+    submitLabelKey: 'accounts.telegramConnect',
+    securityHintKey: 'accounts.telegramSecurityHint',
+    errorKey: 'accounts.telegramConnectError',
   },
 };
 
@@ -348,6 +362,9 @@ function useCredentialConnect(provider: CredentialProvider) {
   const config = CREDENTIAL_CONFIG[provider];
   const [handle, setHandle] = useState('');
   const [appPassword, setAppPassword] = useState('');
+  // Telegram only: which destination the setup guide validates (a
+  // channel bot must be an admin who can post, a group bot a member).
+  const [chatKind, setChatKind] = useState<TelegramChatKind>('channel');
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -359,13 +376,20 @@ function useCredentialConnect(provider: CredentialProvider) {
       const formData = new FormData();
       formData.append(config.handleField, handle.trim());
       formData.append(config.passwordField, appPassword);
+      if (provider === 'telegram') formData.append('chatType', chatKind);
       const response = await fetch(config.endpoint, { method: 'POST', body: formData });
       if (!response.ok) {
         // 401 here means a dead hub session (a rejected credential is 422
         // for Bluesky/3Speak, 400 for Rumble — format-only validation), so
         // it triggers the host-wide session-expiry redirect.
         notifyIfSessionExpired(response);
-        if (config.credentialRejectedKey) {
+        if (provider === 'telegram') {
+          // Each Telegram rejection carries its own TELEGRAM_* code: name
+          // the step the user must fix (token, chat, kind, permission).
+          const body: unknown = await response.json().catch(() => null);
+          const code = typeof body === 'object' && body !== null && 'code' in body ? body.code : undefined;
+          setError(t(telegramConnectErrorKey(code, chatKind)));
+        } else if (config.credentialRejectedKey) {
           // A rejected credential is 422 THREESPEAK_CREDENTIAL_REJECTED:
           // name it, so the user knows the username/key pair is what
           // 3Speak refused.
@@ -395,16 +419,17 @@ function useCredentialConnect(provider: CredentialProvider) {
     }
   };
 
-  return { config, handle, appPassword, pending, error, setHandle, setAppPassword, connect };
+  return { config, handle, appPassword, pending, error, setHandle, setAppPassword, connect, chatKind, setChatKind };
 }
 
 function CredentialConnectView({ provider, connected }: { provider: CredentialProvider; connected: boolean }) {
   const { t } = useI18n();
-  const { config, handle, appPassword, pending, error, setHandle, setAppPassword, connect } =
+  const { config, handle, appPassword, pending, error, setHandle, setAppPassword, connect, chatKind, setChatKind } =
     useCredentialConnect(provider);
   return (
     <div className="grid gap-4">
       <p className="text-sm leading-5 text-muted-text">{t(config.hintKey)}</p>
+      {provider === 'telegram' ? <TelegramSetupGuide kind={chatKind} onKindChange={setChatKind} /> : null}
       <label className="text-sm font-medium text-ink-soft">
         {t(config.handleLabelKey)}
         <input

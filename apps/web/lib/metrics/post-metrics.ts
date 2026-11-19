@@ -180,6 +180,8 @@ const TARGET_EXTRACTORS: Record<MeasuredProvider, (record: Record<string, unknow
   // Same shape as the other non-YouTube providers: the publish result
   // stores the video id as postId.
   fanvue: (record) => readString(record, 'postId'),
+  // The Telegram publish result stores the message id as postId.
+  telegram: (record) => readString(record, 'postId'),
 };
 
 function isMeasuredProvider(value: unknown): value is MeasuredProvider {
