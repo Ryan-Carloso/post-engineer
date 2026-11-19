@@ -222,6 +222,27 @@ describe('PostsPage', () => {
     expect(screen.queryByText('posts.sidebarCalendars')).not.toBeInTheDocument();
   });
 
+  it('keeps every persona’s posts on the one calendar, with no persona toggles to switch off', () => {
+    mockQueries({
+      range: [
+        UPCOMING_SLOT,
+        { ...UPCOMING_SLOT, id: 'u2', scheduleId: 's2', slotAt: '2030-06-01T14:00:00.000Z', title: 'Second topic' },
+      ],
+      schedules: [SCHEDULE, { ...SCHEDULE, id: 's2', personaId: 'p2' }],
+      personas: [
+        { id: 'p1', name: 'Viva Leve', avatarUrl: 'https://example.test/viva.jpg' },
+        { id: 'p2', name: 'Daily Dose', avatarUrl: 'https://example.test/daily.jpg' },
+      ],
+    });
+    render(<PostsPage />);
+
+    expect(dayPanelCardText('Upcoming topic')).toBeInTheDocument();
+    expect(dayPanelCardText('Second topic')).toBeInTheDocument();
+    expect(dayPanelCardText('Viva Leve')).toBeInTheDocument();
+    expect(dayPanelCardText('Daily Dose')).toBeInTheDocument();
+    expect(screen.queryAllByRole('switch')).toHaveLength(0);
+  });
+
   it('reads title first, then persona, time and networks, with the status chip last', () => {
     render(<PostsPage />);
 
