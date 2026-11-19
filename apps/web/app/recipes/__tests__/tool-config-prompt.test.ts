@@ -10,6 +10,11 @@ describe('tool-config prompt', () => {
     expect(base).toContain('Ask me once which search tool you already have');
     expect(base).toContain('tool_config (action: save)');
     expect(base).toContain('so the next conversation does not ask again');
+    expect(base).toContain('save the COMPLETE configuration with tool_config');
+    expect(base).toContain('never save a partial configuration');
+    expect(base).toContain('if a stored key is missing from your own environment, do not save at all');
+    expect(base).toContain('every key for the selected search tool and stock sources');
+    expect(base).not.toContain('every key from your own environment');
     expect(base.indexOf('tool_config (action: get)')).toBeLessThan(
       base.indexOf('Ask me once which search tool'),
     );
@@ -25,6 +30,11 @@ describe('tool-config prompt', () => {
     expect(text).toContain('tool_config (action: save)');
     expect(text).toContain('are stored encrypted and are never shown back in full');
     expect(text).toContain('a later session reuses them instead of asking again');
+    expect(text).toContain('Save the COMPLETE configuration with tool_config');
+    expect(text).toContain('never save a partial configuration');
+    expect(text).toContain('do not save at all');
+    expect(text).toContain('every key for the selected search tool and stock sources');
+    expect(text).not.toContain('every key from your own environment');
     expect(text.indexOf('tool_config (action: get)')).toBeLessThan(
       text.indexOf('tool_config (action: save)'),
     );

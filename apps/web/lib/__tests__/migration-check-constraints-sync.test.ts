@@ -11,7 +11,7 @@ import { VIDEO_TYPES } from '@/lib/tokens';
 import { VIDEO_UPLOAD_STATUSES } from '@/lib/videos/signed-upload';
 import { UPLOAD_CONTENT_TYPES } from '@/lib/contracts/videos';
 import { SCHEDULED_MEDIA_KINDS } from '@/app/api/media/publish-existing/schema';
-import { TOOL_CONFIG_SEARCH_TOOLS } from '@/lib/tool-config';
+import { TOOL_CONFIG_SEARCH_TOOLS, TOOL_CONFIG_STOCK_SOURCES } from '@/lib/tool-config';
 
 interface SnapshotTable {
   constraints: Record<string, string>;
@@ -39,6 +39,12 @@ function parseEnumChecks(): Map<string, EnumCheck> {
       if (list !== null) {
         const values = [...list[2].matchAll(/'([^']*)'::text/g)].map((value) => value[1]);
         checks.set(name, { table, column: list[1], values });
+        continue;
+      }
+      const contains = /(\w+) <@ ARRAY\[([^\]]*)\]/.exec(text);
+      if (contains !== null) {
+        const values = [...contains[2].matchAll(/'([^']*)'::text/g)].map((value) => value[1]);
+        checks.set(name, { table, column: contains[1], values });
         continue;
       }
       const single = /(\w+) = '([^']*)'::text/.exec(text);
@@ -69,6 +75,7 @@ const EXPECTED: Record<string, readonly string[]> = {
   video_uploads_detected_content_type_check: UPLOAD_CONTENT_TYPES,
   scheduled_posts_media_kind_check: SCHEDULED_MEDIA_KINDS,
   user_tool_configs_search_tool_check: TOOL_CONFIG_SEARCH_TOOLS,
+  user_tool_configs_stock_sources_check: TOOL_CONFIG_STOCK_SOURCES,
 };
 
 describe('database enum checks match the code', () => {

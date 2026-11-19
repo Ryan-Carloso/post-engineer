@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { defineEndpoint } from './endpoint.js';
 
-export const ToolConfigSearchToolSchema = z.enum(['tavily', 'exa']);
+export const ToolConfigSearchToolSchema = z.enum(['tavily', 'exa', 'own']);
 export type ToolConfigSearchTool = z.infer<typeof ToolConfigSearchToolSchema>;
 
 export const ToolConfigStockSourceSchema = z.enum(['pexels', 'pixabay', 'coverr']);

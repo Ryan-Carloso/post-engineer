@@ -51,14 +51,16 @@ never a blocker.
   details (name, face pick, voice pick, language English-only, niche).
 - Which tools the user already has: the agent checks the saved tool
   configuration first (`tool_config` `get`), asks once at setup for what
-  is missing, and saves the answers (`tool_config` `save`, keys included,
-  stored encrypted, never shown back in full) so a later conversation
-  reuses them instead of asking again: the licensed stock video sources
-  (Pexels, Pixabay, Coverr, or none), asked in order, best match first,
-  falling back to the next configured source on failure. The search tool
-  for facts (Tavily, Exa, or the agent's own web or MCP search tool) is
-  asked once in the base prompt and reused the same way. The keys live
-  in the agent's own environment as `YOUR_TAVILY_API_KEY`,
+  is missing, and saves the complete configuration (`tool_config` `save`,
+  search tool, stock sources, and every key for the selected search tool
+  and stock sources, stored encrypted, never shown back in full) so a later
+  conversation reuses them instead of asking again: a save replaces everything, so a partial save is never made — a
+  stored key the agent cannot resend blocks the save. The licensed stock
+  video sources (Pexels, Pixabay, Coverr, or none), asked in order, best
+  match first, falling back to the next configured source on failure. The
+  search tool for facts (Tavily, Exa, or the agent's own web or MCP search
+  tool) is asked once in the base prompt and reused the same way. The keys
+  live in the agent's own environment as `YOUR_TAVILY_API_KEY`,
   `YOUR_EXA_API_KEY`, `YOUR_PEXELS_API_KEY`, `YOUR_PIXABAY_API_KEY`, or
   `YOUR_COVERR_API_KEY`; never paste one in chat, in a prompt, or in
   this repo.

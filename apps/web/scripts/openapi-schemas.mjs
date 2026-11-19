@@ -174,7 +174,7 @@ const ok = success({});
 
 const toolConfigPresence = {
   configured: { type: 'boolean' },
-  searchTool: { type: 'string', enum: ['tavily', 'exa'], nullable: true },
+  searchTool: { type: 'string', enum: ['tavily', 'exa', 'own'], nullable: true },
   stockSources: { type: 'array', items: { type: 'string', enum: ['pexels', 'pixabay', 'coverr'] } },
   keysPresent: object(
     fields({ type: 'boolean' }, ['tavily', 'exa', 'pexels', 'pixabay', 'coverr']),
@@ -304,7 +304,7 @@ export const operationSchemas = {
   'PUT /api/tool-config': {
     request: object(
       {
-        searchTool: { type: 'string', enum: ['tavily', 'exa'], nullable: true },
+        searchTool: { type: 'string', enum: ['tavily', 'exa', 'own'], nullable: true },
         stockSources: { type: 'array', items: { type: 'string', enum: ['pexels', 'pixabay', 'coverr'] } },
         keys: object(fields({ ...str, minLength: 1, maxLength: 512 }, ['tavily', 'exa', 'pexels', 'pixabay', 'coverr'])),
       },
