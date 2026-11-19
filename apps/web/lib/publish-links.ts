@@ -18,8 +18,10 @@
 //   rumble    → permalink  the monetized URL from the upload response (best-effort; no URL can be derived from the id)
 //   fanvue    → permalink  ready-made post URL (best-effort; no URL can be derived from the id —
 //              the Fanvue post-URL format is unknown, so no derivation is attempted)
+//   telegram  → permalink  t.me/<username>/<message_id> (public chats only;
+//              a private chat has no URL and no derivation)
 //
-// So eight of the ten arrive with a ready-made URL, and the three that can
+// So nine of the eleven arrive with a ready-made URL, and the three that can
 // fall back to a bare post id have a derivation: Bluesky and LinkedIn
 // always (they carry no URL), Pinterest only when the entry has no
 // permalink. A provider entry with neither is omitted rather than rendered
