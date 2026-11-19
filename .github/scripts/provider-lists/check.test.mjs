@@ -19,8 +19,8 @@ const tsViolations = (text, file = 'apps/web/lib/x.ts') => findViolations(scanTs
 
 describe('loadProviders', () => {
   it('reads the list and the named subsets from the home file', () => {
-    assert.equal(providers.length, 10);
-    assert.deepEqual([...subsets.DIRECT_CONNECT_PROVIDERS], ['bluesky', '3speak', 'rumble']);
+    assert.equal(providers.length, 11);
+    assert.deepEqual([...subsets.DIRECT_CONNECT_PROVIDERS], ['bluesky', '3speak', 'rumble', 'telegram']);
     assert.ok('OAUTH_CONNECT_PROVIDERS' in subsets);
     assert.ok('IMAGE_PROVIDERS' in subsets);
     assert.ok('TITLE_PROVIDERS' in subsets);
@@ -52,19 +52,19 @@ describe('violationOf', () => {
   });
   it('allows a map or string that names every provider or exactly a named subset', () => {
     assert.equal(at('map', [...providers]), null);
-    assert.equal(at('map', ['bluesky', '3speak', 'rumble']), null);
+    assert.equal(at('map', [...subsets.DIRECT_CONNECT_PROVIDERS]), null);
     assert.equal(at('text', [...subsets.OAUTH_CONNECT_PROVIDERS]), null);
   });
   it('flags a map or string that skips a provider and names the missing ones', () => {
-    assert.match(at('map', providers.filter((provider) => provider !== 'fanvue')), /per-provider map names 9 of 10 providers, missing: fanvue/);
-    assert.match(at('text', ['youtube', 'instagram', 'bluesky']), /string names 3 of 10/);
+    assert.match(at('map', providers.filter((provider) => provider !== 'fanvue')), /per-provider map names 10 of 11 providers, missing: fanvue/);
+    assert.match(at('text', ['youtube', 'instagram', 'bluesky']), /string names 3 of 11/);
     assert.match(at('map', providers.filter((provider) => provider !== 'fanvue'), true), /missing: fanvue/);
   });
 });
 
 describe('scanTs', () => {
   it('finds arrays and string unions', () => {
-    assert.deepEqual(tsKinds(`const a = [${ALL}];`), [['list', 10]]);
+    assert.deepEqual(tsKinds(`const a = [${ALL}];`), [['list', 11]]);
     assert.deepEqual(tsKinds("type P = 'youtube' | 'instagram' | 'linkedin';"), [['list', 3]]);
   });
   it('finds object maps with quoted, unquoted and computed keys, and interface members', () => {
