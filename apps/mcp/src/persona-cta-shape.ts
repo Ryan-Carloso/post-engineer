@@ -27,7 +27,7 @@ export const PersonaCtaShape = z
     // a key the server strips is stripped here as well.
     type: z.enum(PERSONA_CTA_TYPES),
     url: z.string().url().max(PERSONA_CTA_URL_MAX_LENGTH).optional(),
-    instruction: z.string().max(PERSONA_CTA_INSTRUCTION_MAX_LENGTH).optional(),
+    instruction: z.string().min(1).max(PERSONA_CTA_INSTRUCTION_MAX_LENGTH).optional(),
   })
   .superRefine((value, ctx) => {
     if (value.type === 'link' || value.type === 'buy') {
@@ -63,7 +63,8 @@ export type PersonaCtaInput = z.infer<typeof PersonaCtaShape>;
  * Flatten a CTA intent onto persona FormData (create/PATCH): the web
  * route reads flat ctaType/ctaUrl/ctaInstruction fields. Only provided
  * facts are sent — an absent fact leaves the stored value untouched on
- * update, and an absent cta sends nothing at all.
+ * update, except on a type change: a fact the new type cannot carry is
+ * cleared server-side. An absent cta sends nothing at all.
  */
 export function appendPersonaCtaFields(
   formData: FormData,

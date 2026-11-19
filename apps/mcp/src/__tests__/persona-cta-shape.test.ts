@@ -22,6 +22,7 @@ const CASES: Array<{ cta: unknown; accepts: boolean }> = [
   { cta: { type: 'link', url: 'not-a-url' }, accepts: false },
   { cta: { type: 'link', url: `https://example.com/${'x'.repeat(2048)}` }, accepts: false },
   { cta: { type: 'other', instruction: 'x'.repeat(501) }, accepts: false },
+  { cta: { type: 'other', instruction: '' }, accepts: false },
   { cta: { type: 'shout' }, accepts: false },
 ];
 

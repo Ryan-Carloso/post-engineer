@@ -49,7 +49,7 @@ export const PersonaCtaSchema = z
   .object({
     type: z.enum(PERSONA_CTA_TYPES),
     url: z.string().url().max(PERSONA_CTA_URL_MAX_LENGTH).optional(),
-    instruction: z.string().max(PERSONA_CTA_INSTRUCTION_MAX_LENGTH).optional(),
+    instruction: z.string().min(1).max(PERSONA_CTA_INSTRUCTION_MAX_LENGTH).optional(),
   })
   .refine(
     (cta) =>

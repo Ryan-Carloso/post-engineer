@@ -70,7 +70,7 @@ class ScriptSegment(BaseModel):
     # Takes (issue #577): hook first, content after; a CTA is a content take.
     kind: Literal["hook", "content"]
     text: str
-    # Marks the take that performs this video's CTA (issue #639): the
-    # agent sets it on exactly the content take that fulfills the CTA.
+    # Marks the take that performs this video's CTA (issue #639): at
+    # least one marked content take is required when a CTA applies.
     cta: bool = False
     media: Optional[list[SegmentMedia]] = Field(None, max_length=MAX_IMAGES_MODE_MEDIAS)

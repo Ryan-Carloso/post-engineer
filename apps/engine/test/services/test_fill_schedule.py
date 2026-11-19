@@ -3302,6 +3302,25 @@ class PostIdentityTests(unittest.TestCase):
         # Phase 5-4: the script prompt no longer rides the identity select.
         self.assertNotIn("script_prompt", ScheduleStore.SLOT_IDENTITY_SELECT)
 
+    def test_a_null_cta_snapshot_does_not_fall_back_to_the_persona(self):
+        # The exception to the NULL-falls-back rule above: a NULL
+        # post_cta_type means "no CTA on this post" (migration 072), not
+        # "not provided". A faceless or cta: null post must not inherit
+        # the persona's CTA — the marker gate in generate.py masks it
+        # today, but post_identity's output must already say "no CTA".
+        identity = fs.post_identity(
+            {
+                "id": "sched-cta-null",
+                "personas": {"voice_id": "calm", "cta_type": "follow"},
+                "post_voice_id": None,
+                "post_cta_type": None,
+            }
+        )
+        self.assertNotIn("cta_type", identity)
+        # The other fields keep the fallback: NULL voice still reads the
+        # persona.
+        self.assertEqual(identity["voice_id"], "calm")
+
     def test_a_null_snapshot_column_does_not_erase_the_persona_value(self):
         # NULL on a snapshot means "not provided", never "inherit blank":
         # the migration leaves every pre-existing row that way.

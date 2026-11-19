@@ -71,6 +71,11 @@ def post_identity(schedule: dict[str, Any]) -> dict[str, Any]:
     which is what makes the post reproducible instead of depending on a row
     that may be deleted later.
 
+    One field breaks the fallback rule: ``post_cta_type``. A NULL snapshot
+    there means "no CTA on this post" (migration 072), not "no snapshot" —
+    so it must not fall back to the persona's CTA, or a faceless or
+    ``cta: null`` post would inherit one.
+
     Raises ``RuntimeError`` when NEITHER source can supply the definition: the
     engine's ``PersonaParams`` rejects a job with no voice, so failing here
     (a slot-level failure, before any dispatch) beats dispatching a request
@@ -83,6 +88,16 @@ def post_identity(schedule: dict[str, Any]) -> dict[str, Any]:
     for persona_field, snapshot_field in _SNAPSHOT_FIELDS:
         value = schedule.get(snapshot_field)
         if value is None or value == "":
+            # A present-but-NULL post_cta_type means "no CTA" (migration
+            # 072), not "no snapshot": it must not fall back to the
+            # persona's CTA. Other fields keep the fallback — NULL there
+            # means "not provided". A missing key means no snapshot was
+            # ever written (pre-migration row), so the embed still wins.
+            if (
+                persona_field == "cta_type"
+                and snapshot_field in schedule
+            ):
+                identity.pop(persona_field, None)
             continue
         # The snapshot wins over the embed: it is the value the web resolved
         # and charged for when the post was created.

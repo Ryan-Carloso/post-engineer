@@ -293,6 +293,10 @@ describe('contracts shared source', () => {
     expect(PersonaCtaSchema.safeParse({ type: 'link', url: 'not-a-url' }).success).toBe(false);
     expect(PersonaCtaSchema.safeParse({ type: 'subscribe' }).success).toBe(false);
     expect(PersonaCtaSchema.safeParse({ type: 'other', instruction: 'x'.repeat(501) }).success).toBe(false);
+    // An empty instruction is not an instruction: the refine only checks
+    // presence, so '' would parse and then false-reject an experiment
+    // pair against a partner whose instruction is null.
+    expect(PersonaCtaSchema.safeParse({ type: 'other', instruction: '' }).success).toBe(false);
     expect(PersonaCtaSchema.safeParse({ type: 'link', url: `https://example.com/${'a'.repeat(2029)}` }).success).toBe(false);
     expect(PersonaCtaSchema.safeParse({ type: 'link', url: `https://example.com/${'a'.repeat(2028)}` }).success).toBe(true);
   });

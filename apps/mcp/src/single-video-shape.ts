@@ -31,7 +31,7 @@ export const ScriptSegmentShape = {
   kind: z.enum(['hook', 'content']).describe('Segment role: hook first, content after. Exactly one hook; a CTA is just a content take, placed anywhere.'),
   text: z.string().min(1, 'Each segment text must be non-empty').describe('Spoken text only: no placeholders, links, markdown, emoji or stage directions.'),
   // Marks the content take that performs this video's CTA (issue #639):
-  // exactly one marked content take is required when a CTA applies; a
+  // at least one marked content take is required when a CTA applies; a
   // comment CTA must ask a question about this video's topic. The hook
   // can never be the CTA take.
   cta: z.boolean().optional(),

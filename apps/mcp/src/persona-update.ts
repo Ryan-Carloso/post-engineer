@@ -34,8 +34,8 @@ export const UpdatePersonaShape = {
     .optional()
     .describe('New face resolution of the rendered videos: ok (480p, 2 tokens/video) or very_good (720p, 3 tokens/video). Future videos price at the new quality; already-scheduled posts keep the quality they were charged for.'),
   // New call to action intent (issue #639): a type plus a URL (link/buy)
-  // or an instruction (other). Only provided facts change: omitting url or
-  // instruction leaves the stored fact untouched.
+  // or an instruction (other). A fact the new type cannot carry is cleared
+  // on a type change; otherwise an omitted fact is left untouched.
   cta: PersonaCtaShape.optional(),
 };
 
