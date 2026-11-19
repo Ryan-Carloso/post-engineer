@@ -4,8 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('@/lib/upload/handlers', () => ({
   handleYoutubeUpload: vi.fn(),
   handleInstagramUpload: vi.fn(),
-  handleBlueskyUpload: vi.fn(),
 }));
+vi.mock('@/lib/upload/bluesky-handler', () => ({ handleBlueskyUpload: vi.fn() }));
 vi.mock('@/lib/upload/facebook-handler', () => ({ handleFacebookUpload: vi.fn() }));
 vi.mock('@/lib/upload/fanvue-handler', () => ({ handleFanvueUpload: vi.fn() }));
 vi.mock('@/lib/upload/linkedin-handler', () => ({ handleLinkedinUpload: vi.fn() }));
@@ -16,17 +16,19 @@ vi.mock('@/lib/upload/threespeak-handler', () => ({ handleThreespeakUpload: vi.f
 vi.mock('@/lib/upload/telegram-handler', () => ({ handleTelegramUpload: vi.fn() }));
 
 import { ValidationError } from '@/lib/errors';
-import { handleBlueskyUpload, handleInstagramUpload, handleYoutubeUpload } from '@/lib/upload/handlers';
+import { handleBlueskyUpload } from '@/lib/upload/bluesky-handler';
+import { handleInstagramUpload, handleYoutubeUpload } from '@/lib/upload/handlers';
 import { handleFacebookUpload } from '@/lib/upload/facebook-handler';
 import { handleFanvueUpload } from '@/lib/upload/fanvue-handler';
 import { handleLinkedinUpload } from '@/lib/upload/linkedin-handler';
 import { handlePinterestUpload } from '@/lib/upload/pinterest-handler';
 import { handleRumbleUpload } from '@/lib/upload/rumble-handler';
+import { handleTelegramUpload } from '@/lib/upload/telegram-handler';
 import { handleThreadsUpload } from '@/lib/upload/threads-handler';
 import { handleThreespeakUpload } from '@/lib/upload/threespeak-handler';
-import { handleTelegramUpload } from '@/lib/upload/telegram-handler';
+import { PUBLISH_ACCOUNT_FIELDS } from '@/lib/contracts/providers';
 import { SOCIAL_PROVIDERS, type SocialProvider } from '@/lib/providers/registry';
-import { buildPublishForm, parsePublishBody, publishUploadedVideo, type PublishUploadedInput } from '../publish-uploaded';
+import { buildPublishForm, parsePublishBody, publishUploadedVideo } from '../publish-uploaded';
 import type {
   VideoUploadRow,
   VideoUploadStatus,
@@ -421,19 +423,18 @@ describe('buildPublishForm', () => {
     );
     expect(threespeak.get('caption')).toBe('');
     expect(threespeak.getAll('threespeakAccountIds')).toEqual(['sp-1']);
+  });
 
-    const fallback = buildPublishForm(
-      {
-        uploadId: UPLOAD_ID,
-        provider: 'missing' as PublishUploadedInput['provider'],
-        accountIds: ['t1'],
-        caption: 'c',
-      },
-      MP4,
-      'video/mp4',
-    );
-    expect(fallback.getAll('accountIds')).toEqual(['t1']);
-    expect(fallback.get('caption')).toBe('c');
+  it("appends every network's ids under its own account field only", () => {
+    for (const provider of SOCIAL_PROVIDERS) {
+      const form = buildPublishForm({ uploadId: UPLOAD_ID, provider, accountIds: ['a1'] }, MP4, 'video/mp4');
+      expect(form.get('provider')).toBe(provider);
+      expect(form.getAll(PUBLISH_ACCOUNT_FIELDS[provider])).toEqual(['a1']);
+      for (const other of SOCIAL_PROVIDERS) {
+        if (other === provider) continue;
+        expect(form.getAll(PUBLISH_ACCOUNT_FIELDS[other])).toEqual([]);
+      }
+    }
   });
 });
 

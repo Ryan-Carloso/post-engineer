@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
+import { PUBLISH_ACCOUNT_FIELDS } from '@/lib/contracts/providers';
 import type { SocialProvider } from '@/lib/providers/registry';
 import { accountFailure } from '@/lib/upload/account-error';
 import { getAccountIdsFromFormData } from '@/lib/upload/account-utils';
@@ -73,22 +74,10 @@ export function isValidPublishScopeKey(value: unknown): value is string {
   return typeof value === 'string' && value.length <= 200 && SCOPE_KEY_PATTERN.test(value);
 }
 
-// The multipart field each provider's accounts arrive under. Pinned to the
+// The multipart field each provider's accounts arrive under
+// (PUBLISH_ACCOUNT_FIELDS, shared/contracts/providers.ts). Pinned to the
 // handlers by publish-ledger.test.ts — a rename in a handler without a
-// rename here would silently skip the ledger for that provider.
-export const PUBLISH_ACCOUNT_FIELDS: Record<SocialProvider, string> = {
-  youtube: 'accountIds',
-  instagram: 'igAccountIds',
-  bluesky: 'did',
-  linkedin: 'linkedinAccountIds',
-  threads: 'threadsAccountIds',
-  facebook: 'facebookAccountIds',
-  pinterest: 'pinterestAccountIds',
-  fanvue: 'fanvueAccountIds',
-  '3speak': 'threespeakAccountIds',
-  rumble: 'rumbleAccountIds',
-  telegram: 'telegramAccountIds',
-};
+// rename there would silently skip the ledger for that provider.
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);

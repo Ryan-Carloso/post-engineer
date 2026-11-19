@@ -1,5 +1,3 @@
-import type { ScheduleConfig } from '@/lib/api';
-
 //---------------
 // schedule-row — the /api/schedule row shape and its client mapping.
 //---------------
@@ -32,11 +30,37 @@ export interface ScheduleRow {
   publish_mode: string | null;
 }
 
-// The fanvue ids ride an intersection, not ScheduleConfig itself:
-// lib/api.ts is grandfathered over the 500-line cap and may not grow, so
-// its ScheduleConfig cannot gain the field here — the extraction that
-// moves the schedule shapes out of lib/api.ts adds it there.
-export function mapSchedule(row: ScheduleRow): ScheduleConfig & { fanvueAccountIds: string[]; telegramAccountIds: string[] } {
+// A schedule as the dashboard reads it (re-exported by lib/api.ts).
+export interface ScheduleConfig {
+  id: string;
+  /** Null for a schedule created without a persona (migration 012): the post
+      is faceless and carries its own voice. */
+  personaId: string | null;
+  providers: string[];
+  youtubeAccountIds: string[];
+  instagramAccountIds: string[];
+  linkedinAccountIds: string[];
+  blueskyAccountIds: string[];
+  threadsAccountIds: string[];
+  facebookAccountIds: string[];
+  pinterestAccountIds: string[];
+  pinterestBoardId: string | null;
+  threespeakAccountIds: string[];
+  rumbleAccountIds: string[];
+  fanvueAccountIds: string[];
+  telegramAccountIds: string[];
+  daysOfWeek: number[];
+  startHour: number | null;
+  endHour: number | null;
+  postsPerDay: number;
+  timezone: string;
+  active: boolean;
+  /** How the post publishes (migration 015): at the slot times, or ASAP —
+      the moment generation finishes, with no scheduled time. */
+  publishMode: 'scheduled' | 'asap';
+}
+
+export function mapSchedule(row: ScheduleRow): ScheduleConfig {
   return {
     id: row.id,
     personaId: row.persona_id,

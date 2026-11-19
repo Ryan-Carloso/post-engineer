@@ -9,6 +9,7 @@ import unittest
 
 from pydantic import ValidationError
 
+from app.providers import SOCIAL_PROVIDERS
 from app.models.publish import PublishParams, RumblePublish
 from app.services import publish_rumble, upload_publisher
 from app.services.fill_schedule.metadata import metadata_for, validate_publish_plan
@@ -83,7 +84,7 @@ class RumblePublisherWiringTest(unittest.TestCase):
         self.assertIs(result.rumble, metadata)
 
     def test_provider_and_part_builder_are_registered(self) -> None:
-        self.assertIn("rumble", upload_publisher.VALID_PROVIDERS)
+        self.assertIn("rumble", SOCIAL_PROVIDERS)
         metadata_type, build = upload_publisher._PART_BUILDERS["rumble"]
         self.assertIs(metadata_type, upload_publisher.RumbleMetadata)
         parts = build(upload_publisher.RumbleMetadata(title="post", description="desc", account_ids=("9",)))

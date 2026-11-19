@@ -12,9 +12,9 @@ application/x-www-form-urlencoded when ``videoStoragePath`` replaces it):
 - Instagram: ``provider=instagram``, ``file`` xor ``videoStoragePath`` (R2 key),
   ``caption``, repeated ``igAccountIds`` fields.
 - Bluesky: ``provider=bluesky``, ``file`` (file), ``caption``,
-  repeated ``accountIds`` fields.
+  repeated ``did`` fields.
 - LinkedIn: ``provider=linkedin``, ``video`` (file), ``caption``,
-  repeated ``accountIds`` fields.
+  repeated ``linkedinAccountIds`` fields.
 - Threads: ``provider=threads``, ``video`` xor ``videoStoragePath``, ``caption``,
   repeated ``threadsAccountIds`` fields.
 - Facebook: ``provider=facebook``, ``video`` xor ``videoStoragePath``, ``caption``,
@@ -58,6 +58,7 @@ from app.services.publish_threespeak import (  # noqa: F401 - re-exported for ca
 )
 from app.services.publish_rumble import RUMBLE_PROVIDER, RUMBLE_TITLE_MAX_LENGTH, RumbleMetadata, rumble_fields, validate_rumble_metadata  # noqa: F401 - re-exported for callers
 from app.services.upload_publisher_failure import application_failure_reason
+from app.providers import SOCIAL_PROVIDERS, URL_MEDIA_PROVIDERS
 
 VALID_PRIVACY_STATUSES: tuple[str, ...] = ("public", "private", "unlisted")
 
@@ -74,19 +75,6 @@ INSTAGRAM_PROVIDER: str = "instagram"
 BLUESKY_PROVIDER: str = "bluesky"
 LINKEDIN_PROVIDER: str = "linkedin"
 THREADS_PROVIDER: str = "threads"
-VALID_PROVIDERS: tuple[str, ...] = (
-    YOUTUBE_PROVIDER,
-    INSTAGRAM_PROVIDER,
-    BLUESKY_PROVIDER,
-    LINKEDIN_PROVIDER,
-    THREADS_PROVIDER,
-    FACEBOOK_PROVIDER,
-    PINTEREST_PROVIDER,
-    THREESPEAK_PROVIDER,
-    RUMBLE_PROVIDER,
-    FANVUE_PROVIDER, TELEGRAM_PROVIDER,
-)
-_URL_PROVIDERS = frozenset({INSTAGRAM_PROVIDER, THREADS_PROVIDER, FACEBOOK_PROVIDER})
 
 
 @dataclass
@@ -197,7 +185,7 @@ def validate_publish_metadata(
     if not providers:
         raise ValueError("at least one publish provider is required")
     for provider in providers:
-        if provider not in VALID_PROVIDERS:
+        if provider not in SOCIAL_PROVIDERS:
             raise ValueError(f"unsupported publish provider: {provider}")
 
     if YOUTUBE_PROVIDER in providers:
@@ -429,7 +417,7 @@ def publish_video(
         # without a key send nothing and keep today's behaviour.
         parts.fields.append(("publishScopeKey", publish_scope_key))
 
-    if r2_object_path is not None and provider in _URL_PROVIDERS:
+    if r2_object_path is not None and provider in URL_MEDIA_PROVIDERS:
         parts.fields.append(("videoStoragePath", r2_object_path))
         file_field, fileobj, file_content_type = "", None, ""
     elif video_bytes is None:

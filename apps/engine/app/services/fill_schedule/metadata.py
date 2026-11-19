@@ -21,6 +21,113 @@ class AccountNotBoundError(RuntimeError):
     """
 
 
+def _youtube_metadata(title: str, schedule: dict[str, Any], copy: str):
+    return upload_publisher.YouTubeMetadata(
+        title=title[:100],
+        description=copy,
+        # Tags come from the title text itself, so they are always in
+        # the video's own language. Never empty for a real title; the
+        # pre-flight rejects degenerate titles before GPU is spent.
+        tags=derive_tags_from_title(title),
+        privacy_status="public",
+        account_ids=tuple(str(value) for value in schedule.get("youtube_account_ids", [])),
+    )
+
+
+def _linkedin_metadata(title: str, schedule: dict[str, Any], copy: str):
+    return upload_publisher.LinkedInMetadata(
+        caption=copy[: upload_publisher.LINKEDIN_CAPTION_MAX_LENGTH],
+        account_ids=tuple(str(value) for value in schedule.get("linkedin_account_ids", [])),
+    )
+
+
+def _threads_metadata(title: str, schedule: dict[str, Any], copy: str):
+    return upload_publisher.ThreadsMetadata(
+        caption=copy[: upload_publisher.THREADS_CAPTION_MAX_LENGTH],
+        account_ids=tuple(str(value) for value in schedule.get("threads_account_ids", [])),
+    )
+
+
+def _facebook_metadata(title: str, schedule: dict[str, Any], copy: str):
+    return upload_publisher.FacebookMetadata(
+        caption=copy[: upload_publisher.FACEBOOK_CAPTION_MAX_LENGTH],
+        account_ids=tuple(str(value) for value in schedule.get("facebook_account_ids", [])),
+    )
+
+
+def _pinterest_metadata(title: str, schedule: dict[str, Any], copy: str):
+    return upload_publisher.PinterestMetadata(
+        title=title[: upload_publisher.PINTEREST_TITLE_MAX_LENGTH],
+        description=copy[: upload_publisher.PINTEREST_DESCRIPTION_MAX_LENGTH],
+        board_id=str(schedule.get("pinterest_board_id") or ""),
+        account_ids=tuple(str(value) for value in schedule.get("pinterest_account_ids", [])),
+    )
+
+
+def _fanvue_metadata(title: str, schedule: dict[str, Any], copy: str):
+    return upload_publisher.FanvueMetadata(
+        title=title[: upload_publisher.FANVUE_TITLE_MAX_LENGTH],
+        description=copy[: upload_publisher.FANVUE_DESCRIPTION_MAX_LENGTH],
+        account_ids=tuple(str(value) for value in schedule.get("fanvue_account_ids", [])),
+    )
+
+
+def _telegram_metadata(title: str, schedule: dict[str, Any], copy: str):
+    return upload_publisher.TelegramMetadata(
+        caption=copy[: upload_publisher.TELEGRAM_CAPTION_MAX_LENGTH],
+        account_ids=tuple(str(value) for value in schedule.get("telegram_account_ids", [])),
+    )
+
+
+def _threespeak_metadata(title: str, schedule: dict[str, Any], copy: str):
+    return upload_publisher.ThreespeakMetadata(
+        # No documented caption cap on 3Speak: the whole copy is the
+        # caption, and the web route takes the title from its first line.
+        caption=copy,
+        account_ids=tuple(str(value) for value in schedule.get("threespeak_account_ids", [])),
+    )
+
+
+def _rumble_metadata(title: str, schedule: dict[str, Any], copy: str):
+    return upload_publisher.RumbleMetadata(
+        title=title[: upload_publisher.RUMBLE_TITLE_MAX_LENGTH],
+        description=copy,
+        account_ids=tuple(str(value) for value in schedule.get("rumble_account_ids", [])),
+    )
+
+
+def _instagram_metadata(title: str, schedule: dict[str, Any], copy: str):
+    return upload_publisher.InstagramMetadata(
+        caption=copy[:2200],
+        account_ids=tuple(str(value) for value in schedule.get("instagram_account_ids", [])),
+    )
+
+
+def _bluesky_metadata(title: str, schedule: dict[str, Any], copy: str):
+    return upload_publisher.BlueskyMetadata(
+        caption=upload_publisher.truncate_bluesky_caption(copy),
+        account_ids=tuple(str(value) for value in schedule.get("bluesky_account_ids", [])),
+    )
+
+
+# One builder per provider (a dispatch dict, not an if chain): a new
+# provider fails here instead of falling through to another network's
+# metadata shape.
+_METADATA_BUILDERS: dict[str, Any] = {
+    upload_publisher.YOUTUBE_PROVIDER: _youtube_metadata,
+    upload_publisher.LINKEDIN_PROVIDER: _linkedin_metadata,
+    upload_publisher.THREADS_PROVIDER: _threads_metadata,
+    upload_publisher.FACEBOOK_PROVIDER: _facebook_metadata,
+    upload_publisher.PINTEREST_PROVIDER: _pinterest_metadata,
+    upload_publisher.FANVUE_PROVIDER: _fanvue_metadata,
+    upload_publisher.TELEGRAM_PROVIDER: _telegram_metadata,
+    upload_publisher.THREESPEAK_PROVIDER: _threespeak_metadata,
+    upload_publisher.RUMBLE_PROVIDER: _rumble_metadata,
+    upload_publisher.INSTAGRAM_PROVIDER: _instagram_metadata,
+    upload_publisher.BLUESKY_PROVIDER: _bluesky_metadata,
+}
+
+
 def metadata_for(provider: str, title: str, schedule: dict[str, Any], description: str):
     """Build the provider metadata for a slot's title and schedule.
 
@@ -31,74 +138,10 @@ def metadata_for(provider: str, title: str, schedule: dict[str, Any], descriptio
     copy = (description or "").strip()
     if not copy:
         raise RuntimeError("slot has no video description: the agent must send one")
-    if provider == upload_publisher.YOUTUBE_PROVIDER:
-        return upload_publisher.YouTubeMetadata(
-            title=title[:100],
-            description=copy,
-            # Tags come from the title text itself, so they are always in
-            # the video's own language. Never empty for a real title; the
-            # pre-flight rejects degenerate titles before GPU is spent.
-            tags=derive_tags_from_title(title),
-            privacy_status="public",
-            account_ids=tuple(str(value) for value in schedule.get("youtube_account_ids", [])),
-        )
-    if provider == upload_publisher.LINKEDIN_PROVIDER:
-        return upload_publisher.LinkedInMetadata(
-            caption=copy[: upload_publisher.LINKEDIN_CAPTION_MAX_LENGTH],
-            account_ids=tuple(str(value) for value in schedule.get("linkedin_account_ids", [])),
-        )
-    if provider == upload_publisher.THREADS_PROVIDER:
-        return upload_publisher.ThreadsMetadata(
-            caption=copy[: upload_publisher.THREADS_CAPTION_MAX_LENGTH],
-            account_ids=tuple(str(value) for value in schedule.get("threads_account_ids", [])),
-        )
-    if provider == upload_publisher.FACEBOOK_PROVIDER:
-        return upload_publisher.FacebookMetadata(
-            caption=copy[: upload_publisher.FACEBOOK_CAPTION_MAX_LENGTH],
-            account_ids=tuple(str(value) for value in schedule.get("facebook_account_ids", [])),
-        )
-    if provider == upload_publisher.PINTEREST_PROVIDER:
-        return upload_publisher.PinterestMetadata(
-            title=title[: upload_publisher.PINTEREST_TITLE_MAX_LENGTH],
-            description=copy[: upload_publisher.PINTEREST_DESCRIPTION_MAX_LENGTH],
-            board_id=str(schedule.get("pinterest_board_id") or ""),
-            account_ids=tuple(str(value) for value in schedule.get("pinterest_account_ids", [])),
-        )
-    if provider == upload_publisher.FANVUE_PROVIDER:
-        return upload_publisher.FanvueMetadata(
-            title=title[: upload_publisher.FANVUE_TITLE_MAX_LENGTH],
-            description=copy[: upload_publisher.FANVUE_DESCRIPTION_MAX_LENGTH],
-            account_ids=tuple(str(value) for value in schedule.get("fanvue_account_ids", [])),
-        )
-    if provider == upload_publisher.TELEGRAM_PROVIDER:
-        return upload_publisher.TelegramMetadata(
-            caption=copy[: upload_publisher.TELEGRAM_CAPTION_MAX_LENGTH],
-            account_ids=tuple(str(value) for value in schedule.get("telegram_account_ids", [])),
-        )
-    if provider == upload_publisher.THREESPEAK_PROVIDER:
-        return upload_publisher.ThreespeakMetadata(
-            # No documented caption cap on 3Speak: the whole copy is the
-            # caption, and the web route takes the title from its first line.
-            caption=copy,
-            account_ids=tuple(str(value) for value in schedule.get("threespeak_account_ids", [])),
-        )
-    if provider == upload_publisher.RUMBLE_PROVIDER:
-        return upload_publisher.RumbleMetadata(
-            title=title[: upload_publisher.RUMBLE_TITLE_MAX_LENGTH],
-            description=copy,
-            account_ids=tuple(str(value) for value in schedule.get("rumble_account_ids", [])),
-        )
-    if provider == upload_publisher.INSTAGRAM_PROVIDER:
-        return upload_publisher.InstagramMetadata(
-            caption=copy[:2200],
-            account_ids=tuple(str(value) for value in schedule.get("instagram_account_ids", [])),
-        )
-    if provider == upload_publisher.BLUESKY_PROVIDER:
-        return upload_publisher.BlueskyMetadata(
-            caption=upload_publisher.truncate_bluesky_caption(copy),
-            account_ids=tuple(str(value) for value in schedule.get("bluesky_account_ids", [])),
-        )
-    raise RuntimeError(f"unsupported schedule provider: {provider}")
+    builder = _METADATA_BUILDERS.get(provider)
+    if builder is None:
+        raise RuntimeError(f"unsupported schedule provider: {provider}")
+    return builder(title, schedule, copy)
 
 
 def validate_publish_plan(

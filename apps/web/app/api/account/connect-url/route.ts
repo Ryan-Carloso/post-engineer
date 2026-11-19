@@ -13,6 +13,7 @@ import {
   type OAuthConnectProvider,
 } from '@/lib/oauth-connect';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
+import { DIRECT_CONNECT_PROVIDERS, type DirectConnectProvider } from '@/lib/contracts/providers';
 
 //---------------
 // POST /api/account/connect-url — generates the OAuth auth URL to connect
@@ -47,6 +48,20 @@ export const CONNECT_URL_ERRORS = {
 
 export type ConnectUrlErrorCode =
   (typeof CONNECT_URL_ERRORS)[keyof typeof CONNECT_URL_ERRORS];
+
+// A network that connects directly has no OAuth URL: each answers with the
+// code naming its own connect route. 3Speak has no dedicated code and keeps
+// answering invalid_provider.
+const DIRECT_CONNECT_ERRORS: Record<DirectConnectProvider, ConnectUrlErrorCode> = {
+  bluesky: CONNECT_URL_ERRORS.BLUESKY_REQUIRES_APP_PASSWORD,
+  '3speak': CONNECT_URL_ERRORS.INVALID_PROVIDER,
+  rumble: CONNECT_URL_ERRORS.RUMBLE_REQUIRES_ACCESS_TOKEN,
+  telegram: CONNECT_URL_ERRORS.TELEGRAM_REQUIRES_BOT_TOKEN,
+};
+
+function isDirectConnectProvider(value: unknown): value is DirectConnectProvider {
+  return typeof value === 'string' && (DIRECT_CONNECT_PROVIDERS as readonly string[]).includes(value);
+}
 
 function errorResponse(
   status: number,
@@ -88,14 +103,8 @@ async function postHandler(request: NextRequest): Promise<NextResponse> {
       return errorResponse(400, CONNECT_URL_ERRORS.INVALID_JSON_BODY, 'POST /api/account/connect-url');
     }
 
-    if (provider === 'bluesky') {
-      return errorResponse(400, CONNECT_URL_ERRORS.BLUESKY_REQUIRES_APP_PASSWORD, 'POST /api/account/connect-url');
-    }
-    if (provider === 'rumble') {
-      return errorResponse(400, CONNECT_URL_ERRORS.RUMBLE_REQUIRES_ACCESS_TOKEN, 'POST /api/account/connect-url');
-    }
-    if (provider === 'telegram') {
-      return errorResponse(400, CONNECT_URL_ERRORS.TELEGRAM_REQUIRES_BOT_TOKEN, 'POST /api/account/connect-url');
+    if (isDirectConnectProvider(provider)) {
+      return errorResponse(400, DIRECT_CONNECT_ERRORS[provider], 'POST /api/account/connect-url');
     }
     if (!isOAuthConnectProvider(provider)) {
       return errorResponse(400, CONNECT_URL_ERRORS.INVALID_PROVIDER, 'POST /api/account/connect-url');

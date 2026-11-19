@@ -278,7 +278,7 @@ describe('contracts typecheck', () => {
           youtube_account_ids: [], instagram_account_ids: [], linkedin_account_ids: [],
           bluesky_account_ids: [], threads_account_ids: [], facebook_account_ids: [],
           pinterest_account_ids: [], pinterest_board_id: null, threespeak_account_ids: [],
-          rumble_account_ids: [], telegram_account_ids: [], days_of_week: [1], start_hour: 9, end_hour: 17,
+          rumble_account_ids: [], fanvue_account_ids: [], telegram_account_ids: [], days_of_week: [1], start_hour: 9, end_hour: 17,
           posts_per_day: 1, timezone: 'UTC', active: true, created_at: '2026-10-01T00:00:00Z',
           publish_mode: 'scheduled',
         },

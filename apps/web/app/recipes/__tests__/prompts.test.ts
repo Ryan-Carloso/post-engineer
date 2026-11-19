@@ -219,7 +219,7 @@ describe('prompts hub data', () => {
     );
   });
 
-  it('orders the full-setup flow: accounts, app password, persona, balance/validate, confirm publish, generate', () => {
+  it('orders the full-setup flow: accounts, app password, persona, tools config, balance/validate, confirm publish, generate', () => {
     // The composed prompt starts with the shared base, which already
     // mentions check_script (action: validate) and the 3h-30d window; the flow order
     // below is checked on the specific part only, after stripping that
@@ -239,6 +239,29 @@ describe('prompts hub data', () => {
       'voiceId',
       'language "en-US"',
       'Remember the persona name',
+      'Ask which licensed stock video sources I have keys for, in order',
+      'The search tool was',
+      'already asked above',
+      'if only one is',
+      'configured, use it without asking which',
+      'Reuse the stock answers',
+      'for later videos in this',
+      'conversation',
+      'uses images only',
+      'There is no saved',
+      'tool or source configuration',
+      'never claim the answers were saved',
+      'YOUR_TAVILY_API_KEY',
+      'YOUR_EXA_API_KEY',
+      'YOUR_PEXELS_API_KEY',
+      'YOUR_PIXABAY_API_KEY',
+      'YOUR_COVERR_API_KEY',
+      'never ask me to paste one in chat',
+      'never use a source with no key',
+      'If a source fails - timeout, no results, or',
+      'error - use the next configured source',
+      'try the best-matching',
+      'source first and never stop at the first failure',
       'billing (action: balance)',
       'check_script (action: validate)',
       'confirm the providers/accounts and the mode (scheduled|asap)',
@@ -252,7 +275,50 @@ describe('prompts hub data', () => {
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);
     expect(text).toContain('never the main password');
     expect(text).toContain('Bluesky is optional');
+    expect(text).toContain('Pexels');
+    expect(text).toContain('Pixabay');
+    expect(text).toContain('Coverr');
+    expect(text).toContain('Reuse the stock answers');
+    expect(text).toContain('never claim the answers were saved');
+    // The search-tool ask lives in the base; step 4 must not repeat it,
+    // so the composed prompt asks it exactly once.
+    expect(fullText.split('Ask me once which search tool you already have').length - 1).toBe(1);
     expect(text).not.toContain('issue #');
+  });
+
+  it('never claims the setup answers are saved, and scopes them to this conversation', () => {
+    const fullText = getPrompt('full-setup')?.prompt ?? '';
+    const baseText = SHARED_PROMPT_BASE.join('\n');
+    expect(fullText.startsWith(baseText)).toBe(true);
+    const text = fullText.slice(baseText.length + 2);
+    expect(text).toContain('later videos in this conversation');
+    expect(text).toContain('the first video in this setup follows the base and');
+    expect(text).toContain('uses images only');
+    expect(text).toContain('There is no saved tool or source configuration');
+    expect(text).toContain('never claim the answers were saved');
+    expect(text).toContain('If a key is missing, tell');
+    expect(text).toContain('me to set it and keep going with the sources that are configured');
+    // This phrase really spans a line break.
+    expect(text).toMatch(/never print them,\s+never paste them anywhere else, never log them/);
+    expect(text).not.toContain('standing configuration for this account');
+    expect(text).not.toContain('save the answers as the');
+  });
+
+  it('falls back to the next configured stock source when one fails', () => {
+    const fullText = getPrompt('full-setup')?.prompt ?? '';
+    const baseText = SHARED_PROMPT_BASE.join('\n');
+    expect(fullText.startsWith(baseText)).toBe(true);
+    const text = fullText.slice(baseText.length + 2);
+    expect(text).toContain('Ask which licensed stock video sources I have keys for, in order');
+    // The fallback phrase spans a line break, so pin it with a regex.
+    expect(text).toMatch(/If a source fails - timeout, no results, or\s+error - use the next configured source/);
+    expect(text).toContain('try the best-matching');
+    expect(text).toContain('source first and never stop at the first failure');
+    // Terminal case: if every configured source fails, nothing is left
+    // to try — photos only.
+    expect(text).toMatch(/If every configured\s+source fails, use photos only/);
+    // Step 4 asks stock sources only; the search tool lives in the base.
+    expect(text).not.toContain('which search tool');
   });
 
   it('says images is the only material and names the video types with the full-lip-sync media cap', () => {
@@ -666,10 +732,25 @@ describe('prompts hub data', () => {
       'licensed',
       'stock photos from an image library',
       'without a licence',
-      'Photos only',
-      'it cannot use',
-      'video (b-roll) as segment media',
-      'never attach a video URL',
+      'Licensed stock VIDEO (b-roll) is allowed on faceless videos and',
+      'on the non-hook takes of hook_lipsync videos',
+      'from the stock sources configured for this video (Pexels, Pixabay,',
+      'Coverr)',
+      'On full_lipsync the face fills the frame, so photos',
+      'only - never a clip',
+      'Never put a clip in the hook window',
+      'a skipped clip fails the render',
+      'If no stock source is configured,',
+      'photos only. A clip is full-frame',
+      'If a source fails - timeout, no results, or',
+      'error - use the next configured source',
+      'try the best-matching',
+      'source first and never stop at the first failure',
+      'extract frames',
+      'same subject,',
+      'same action, same mood',
+      'discarded,',
+      'never forced in',
       'the base lines about material do not apply here',
       'Match text to image per SENTENCE, not per segment',
       'gets an image that shows what the sentence says',
@@ -733,27 +814,56 @@ describe('prompts hub data', () => {
     expect(text).toContain('Never invent a fact');
     expect(text).toContain('Tavily');
     expect(text).toContain('Exa');
+    // The fallback phrase spans a line break, so pin it with a regex.
+    expect(text).toMatch(/If\s+that tool fails - timeout, out of tokens, or error - try the next/);
+    expect(text).toContain('configured search tool');
     expect(text).toContain('cut it from the script');
     expect(text).toContain('unconfirmed fact never enters');
     // Step 7 overrides the base's material lines for this prompt only:
-    // licensed stock photos are allowed here, and real photos are welcome
-    // — the base's "images only, your own real photos, no stock footage"
-    // rule does not apply to this prompt. Photos only: the engine renders
-    // segment media as photos and cannot use video (b-roll) as segment
-    // media, so the prompt must never promise it.
+    // licensed stock photos and licensed stock video are allowed here,
+    // and real photos are welcome — the base's "images only, your own
+    // real photos, no stock footage" rule does not apply to this prompt.
+    // Clips come only from the stock sources configured for this video,
+    // and only after a frame check proves they fit the segment sentence.
+    // Clips are scoped to where the engine can play them: faceless and
+    // the non-hook takes of hook_lipsync — never full_lipsync, never
+    // in the hook window, where a skipped clip fails the render.
     // (The story-rule PR's step-6 assertions — "do not search for images",
     // "the base lines about searching images", "about your own real photos"
     // — pinned the AI-only step 6 this PR replaces, so they do not carry
     // over: this prompt searches licensed libraries for real photos.)
     expect(text).toContain('the base lines about material do not apply here');
-    expect(text).toContain('licensed stock photos are allowed');
+    expect(text).toContain('licensed stock photos and licensed stock video are allowed');
     expect(text).toContain('real photos are welcome');
     expect(text).toContain('without a licence');
-    expect(text).toContain('Photos only');
-    expect(text).toContain('it cannot use');
-    expect(text).toContain('never attach a video URL');
-    expect(text).not.toContain('licensed stock video');
-    expect(text).not.toContain('stock video (b-roll)');
+    expect(text).toContain('Licensed stock VIDEO (b-roll) is allowed on faceless videos and');
+    expect(text).toContain('on the non-hook takes of hook_lipsync videos');
+    expect(text).toContain('from the stock sources configured for this video');
+    expect(text).toContain('On full_lipsync the face fills the frame, so photos');
+    expect(text).toContain('only - never a clip');
+    expect(text).toContain('Never put a clip in the hook window');
+    expect(text).toContain('a skipped clip fails the render');
+    expect(text).toContain('If no stock source is configured,');
+    // "never AI photos only" appears earlier in step 7, so pin the
+    // fallback occurrence with its following words, not the bare phrase.
+    expect(text).toContain('photos only. A clip is full-frame');
+    // "clip audio is discarded" spans a line break, so pin it with a regex.
+    expect(text).toMatch(/clip\s+audio is discarded/);
+    // If a stock source fails, the agent tries the next configured one —
+    // best match first, never stopping at the first failure.
+    expect(text).toContain('If a source fails - timeout, no results, or');
+    expect(text).toContain('error - use the next configured source');
+    expect(text).toContain('try the best-matching');
+    expect(text).toContain('source first and never stop at the first failure');
+    // Terminal case: if every configured source fails, nothing is left
+    // to try — photos only.
+    expect(text).toMatch(/If every configured\s+source fails, use photos only/);
+    expect(text).toContain('extract frames');
+    expect(text).toContain('same subject,');
+    expect(text).toContain('same action, same mood');
+    expect(text).toContain('never forced in');
+    expect(text).not.toContain('it cannot use');
+    expect(text).not.toContain('never attach a video URL');
     // v3/v4 lessons, for a 10/10 video: every emotional beat is visible
     // in the image, the rhythm varies take by take, every sentence gets
     // its own image, and every image is sharp, well-lit, and on-topic.

@@ -3992,13 +3992,13 @@
                               "type": "string"
                             }
                           },
-                          "linkedin_account_ids": {
+                          "bluesky_account_ids": {
                             "type": "array",
                             "items": {
                               "type": "string"
                             }
                           },
-                          "bluesky_account_ids": {
+                          "linkedin_account_ids": {
                             "type": "array",
                             "items": {
                               "type": "string"
@@ -4011,6 +4011,36 @@
                             }
                           },
                           "facebook_account_ids": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "pinterest_account_ids": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "threespeak_account_ids": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "rumble_account_ids": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "fanvue_account_ids": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "telegram_account_ids": {
                             "type": "array",
                             "items": {
                               "type": "string"

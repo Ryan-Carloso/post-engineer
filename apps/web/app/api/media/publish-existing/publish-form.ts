@@ -6,6 +6,7 @@
 // or inline image bytes) instead of a signed-upload row.
 //---------------
 
+import { PUBLISH_ACCOUNT_FIELDS, isTitleProvider } from '@/lib/contracts/providers';
 import type { SocialProvider } from '@/lib/providers/registry';
 
 export interface ExistingMediaFormFields {
@@ -17,18 +18,6 @@ export interface ExistingMediaFormFields {
   boardId: string;
   accountIds: string[];
 }
-
-const ACCOUNT_FIELD: Partial<Record<SocialProvider, string>> = {
-  bluesky: 'did',
-  linkedin: 'linkedinAccountIds',
-  threads: 'threadsAccountIds',
-  facebook: 'facebookAccountIds',
-  pinterest: 'pinterestAccountIds',
-  fanvue: 'fanvueAccountIds',
-  '3speak': 'threespeakAccountIds',
-  rumble: 'rumbleAccountIds',
-  telegram: 'telegramAccountIds',
-};
 
 function fileName(contentType: string): string {
   if (contentType === 'image/png') return 'image.png';
@@ -52,17 +41,17 @@ export function buildExistingMediaForm(
     formData.append('description', fields.description.trim());
     formData.append('tags', fields.tags.join(','));
     formData.append('privacyStatus', fields.privacyStatus);
-    for (const accountId of fields.accountIds) formData.append('accountIds', accountId);
+    for (const accountId of fields.accountIds) formData.append(PUBLISH_ACCOUNT_FIELDS.youtube, accountId);
     return formData;
   }
   if (provider === 'instagram') {
     formData.append('file', file);
     formData.append('caption', fields.caption.trim());
-    for (const accountId of fields.accountIds) formData.append('igAccountIds', accountId);
+    for (const accountId of fields.accountIds) formData.append(PUBLISH_ACCOUNT_FIELDS.instagram, accountId);
     return formData;
   }
   formData.append('video', file);
-  if (provider === 'rumble' || provider === 'fanvue') {
+  if (isTitleProvider(provider)) {
     formData.append('title', fields.title.trim());
     formData.append('description', fields.description.trim());
   } else {
@@ -73,7 +62,6 @@ export function buildExistingMediaForm(
       formData.append('boardId', fields.boardId.trim());
     }
   }
-  const accountField = ACCOUNT_FIELD[provider] ?? 'accountIds';
-  for (const accountId of fields.accountIds) formData.append(accountField, accountId);
+  for (const accountId of fields.accountIds) formData.append(PUBLISH_ACCOUNT_FIELDS[provider], accountId);
   return formData;
 }

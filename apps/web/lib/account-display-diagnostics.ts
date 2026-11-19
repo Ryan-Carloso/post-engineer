@@ -12,13 +12,22 @@ export const ACCOUNT_DISCONNECT_FAILED_EVENT = 'account_disconnect_failed';
 export const ACCOUNT_LIST_FAILED_EVENT = 'account_list_failed';
 
 // Fallback labels written by lib/providers/registry.ts when accountName is
-// empty. The card receives the already-substituted string. A source test
-// pins these literals to that file.
+// empty; null for a network that shows the account id instead. The card
+// receives the already-substituted string. A source test pins these
+// literals to that file.
 export const ACCOUNT_NAME_FALLBACKS = {
   youtube: 'YouTube Account',
   instagram: 'instagram_user',
   bluesky: 'bluesky.user',
-} as const;
+  linkedin: null,
+  threads: null,
+  facebook: null,
+  pinterest: null,
+  '3speak': null,
+  rumble: null,
+  fanvue: null,
+  telegram: null,
+} as const satisfies Record<SocialProvider, string | null>;
 
 // Hosts next/image is allowed to load. next.config.ts is the other copy;
 // a source test fails if they diverge. `**.cdninstagram.com` is the suffix.
@@ -134,12 +143,10 @@ function isTruncated(el: ElementBox | null | undefined): boolean {
 }
 
 function nameIsFallback(provider: AccountProvider, shown: string): boolean {
-  if (provider === 'youtube') return shown === ACCOUNT_NAME_FALLBACKS.youtube;
-  if (provider === 'instagram') {
-    return shown === ACCOUNT_NAME_FALLBACKS.instagram || shown === `@${ACCOUNT_NAME_FALLBACKS.instagram}`;
-  }
-  if (provider === 'bluesky') return shown === ACCOUNT_NAME_FALLBACKS.bluesky;
-  return false;
+  const fallback = ACCOUNT_NAME_FALLBACKS[provider];
+  if (fallback === null) return false;
+  // Instagram's card shows the username as a handle (@instagram_user).
+  return shown === fallback || (provider === 'instagram' && shown === `@${fallback}`);
 }
 
 export function buildAccountCardDisplayReport(input: AccountCardDisplayInput): AccountCardDisplayReport {

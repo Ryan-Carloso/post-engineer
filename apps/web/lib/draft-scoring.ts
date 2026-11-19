@@ -1,11 +1,12 @@
 //---------------
-// draft-scoring — mechanical draft scoring + multi-network publish check.
+// draft-scoring — mechanical draft scoring.
 //
 // No LLM, no paid service, no external call: every signal is computed
 // from the draft text itself plus the caller's own stored post metrics.
 // The score is never a bare number: every rule that moves it appears in
 // `reasons` with the exact detail that fired, so the caller can fix the
-// draft instead of guessing what the number means.
+// draft instead of guessing what the number means. The per-network
+// publish gate lives in lib/publish-checks.ts and is re-exported here.
 //
 // Baseline honesty: post_metrics rows carry counters and script angles,
 // never the post text, so theme adherence is token overlap between the
@@ -14,7 +15,6 @@
 // the theme bucket scores 0 and says so; it never invents a baseline.
 //---------------
 
-import { BLUESKY_CAPTION_MAX_GRAPHEMES, countBlueskyGraphemes } from './bluesky';
 import type { PublishNetwork } from '@/lib/contracts/videos';
 
 // The networks Post Engineer publishes to (post_metrics.provider
@@ -37,25 +37,18 @@ const SCORE_PROFILES = {
 } as const;
 
 
-import { LINKEDIN_POST_MAX_CHARS, THREADS_POST_MAX_CHARS, FACEBOOK_POST_MAX_CHARS, PINTEREST_DESCRIPTION_MAX_CHARS } from './draft-ceilings';
+import { countChars, extractHashtags, extractLinks } from './draft-text';
+import { checkPublish } from './publish-checks';
+import type { PublishCheck } from './publish-checks';
 export { DRAFT_KINDS, DRAFT_MAX_INPUT_CHARS, PUBLISH_NETWORKS } from '@/lib/contracts/videos';
-export { LINKEDIN_POST_MAX_CHARS, THREADS_POST_MAX_CHARS, FACEBOOK_POST_MAX_CHARS, PINTEREST_DESCRIPTION_MAX_CHARS };
-// Rumble has no documented description ceiling, so the publish check has
-// no failure branch for it — the 100-character title ceiling lives at the
-// publish boundary instead (lib/rumble.ts, publish_rumble.py). Fanvue has
-// no documented caption ceiling either, so it also takes the default
-// branch: no failure branch, nothing invented.
-// The feed shows roughly the first 210 characters on desktop (~140 on
-// mobile) before the "see more" fold: a first line longer than this is
-// a warning, never a failure — the fold is a display cut, not a cap.
-export const LINKEDIN_SEE_MORE_FOLD_CHARS = 210;
-// YouTube and Instagram have no text cap in this repo's publishing
-// code, so their ceilings below are the platforms' documented limits
-// (YouTube video descriptions, Instagram captions) and are warnings
-// only — never invented blocks. Only caps with in-repo evidence
-// (LinkedIn, Bluesky, Threads, Facebook, Pinterest) fail the check; 3Speak and Fanvue have no documented post-body cap, so they have no case here.
-export const YOUTUBE_DESCRIPTION_MAX_CHARS = 5000;
-export const INSTAGRAM_CAPTION_MAX_CHARS = 2200;
+export { LINKEDIN_POST_MAX_CHARS, THREADS_POST_MAX_CHARS, FACEBOOK_POST_MAX_CHARS, PINTEREST_DESCRIPTION_MAX_CHARS } from './draft-ceilings';
+export {
+  checkPublish,
+  INSTAGRAM_CAPTION_MAX_CHARS,
+  LINKEDIN_SEE_MORE_FOLD_CHARS,
+  YOUTUBE_DESCRIPTION_MAX_CHARS,
+} from './publish-checks';
+export type { PublishCheck } from './publish-checks';
 // The route rejects drafts over this input cap with a 400 instead of
 // silently truncating (repo rule: never silently truncate/coerce).
 // Bound the baseline fan-out: one capped metrics read per score call.
@@ -120,13 +113,6 @@ export interface BaselineRow {
   saves: number | null;
 }
 
-export interface PublishCheck {
-  network: PublishNetwork;
-  ok: boolean;
-  failures: string[];
-  warnings: string[];
-}
-
 export interface DraftCounts {
   chars: number;
   words: number;
@@ -146,31 +132,9 @@ export interface DraftScore {
   publishCheck: PublishCheck | null;
 }
 
-function countChars(text: string): number {
-  // Code points, not UTF-16 units: an emoji counts as one character,
-  // matching how the LinkedIn editor counts it closely enough for a
-  // pre-publish gate (the platform is the final arbiter).
-  return Array.from(text).length;
-}
-
 function countWords(text: string): number {
   const words = text.trim().split(/\s+/).filter((word) => word.length > 0);
   return text.trim().length === 0 ? 0 : words.length;
-}
-
-// A # glued to a preceding word or path is a URL fragment or "C#", never a
-// hashtag ("example.com/guide#setup" must not count).
-function extractHashtags(text: string): string[] {
-  return text.match(/(?<![\p{L}\p{N}_/])#[\p{L}\p{N}_]+/gu) ?? [];
-}
-
-// Any scheme casing, www., or a bare domain on a known TLD. The TLD list is
-// closed so "Node.js" or "e.g." never count, and the lookbehind skips email
-// addresses.
-function extractLinks(text: string): string[] {
-  return text.match(
-    /(?<![@\p{L}\p{N}.-])(?:https?:\/\/[^\s]+|www\.[^\s]+|(?:[a-z0-9-]+\.)+(?:com|org|net|io|co|ai|dev|app|br|pt)(?![\p{L}\p{N}-])(?:\/[^\s]*)?)/giu,
-  ) ?? [];
 }
 
 const STOPWORDS = new Set([
@@ -290,84 +254,6 @@ export function summarizeBaseline(rows: BaselineRow[], truncated: boolean): Draf
     bestEngagement: sorted.length === 0 ? null : sorted[sorted.length - 1],
     truncated,
   };
-}
-
-//---------------
-// checkPublish — the blocking gate, per network.
-//
-// Only platform-enforced facts block: an empty draft everywhere, plus
-// the network's own ceiling where this repo has evidence for it
-// (LinkedIn 3000 chars, Threads 500 chars, Bluesky 300 graphemes — the Bluesky publisher
-// truncates past its cap, so an over-long draft would be cut, not
-// posted whole). Everything else is a warning: real guidance, but the
-// platform accepts the post, so the gate must not pretend otherwise.
-// YouTube/Instagram ceilings are warnings only: no in-repo publisher
-// cap exists for them, so a block would be invented.
-//---------------
-export function checkPublish(draft: string, network: PublishNetwork): PublishCheck {
-  const failures: string[] = [];
-  const warnings: string[] = [];
-  const chars = countChars(draft);
-  if (draft.trim().length === 0) {
-    failures.push('Draft is empty.');
-  }
-  if (network === 'linkedin') {
-    if (chars > LINKEDIN_POST_MAX_CHARS) {
-      failures.push(
-        `Draft is ${chars} characters, over the LinkedIn ${LINKEDIN_POST_MAX_CHARS}-character post limit.`,
-      );
-    }
-    const hashtags = extractHashtags(draft);
-    if (hashtags.length > 10) {
-      warnings.push(
-        `Draft has ${hashtags.length} hashtags; posts with more than 10 read as spam.`,
-      );
-    }
-    const links = extractLinks(draft);
-    if (links.length > 0) {
-      warnings.push(
-        'Draft has a link in the body; LinkedIn demotes link posts — put the link in the first comment instead.',
-      );
-    }
-    const firstLine = draft.split('\n').find((line) => line.trim().length > 0) ?? '';
-    if (countChars(firstLine) > LINKEDIN_SEE_MORE_FOLD_CHARS) {
-      warnings.push(
-        `First line is ${countChars(firstLine)} characters, past the ~${LINKEDIN_SEE_MORE_FOLD_CHARS}-character see-more fold — the hook may be cut in the feed.`,
-      );
-    }
-  }
-  if (network === 'bluesky') {
-    const graphemes = countBlueskyGraphemes(draft);
-    if (graphemes > BLUESKY_CAPTION_MAX_GRAPHEMES) {
-      failures.push(
-        `Draft is ${graphemes} graphemes, over the Bluesky ${BLUESKY_CAPTION_MAX_GRAPHEMES}-grapheme caption limit — the caption would be cut.`,
-      );
-    }
-  }
-  if (network === 'threads' && chars > THREADS_POST_MAX_CHARS) {
-    failures.push(
-      `Draft is ${chars} characters, over the Threads ${THREADS_POST_MAX_CHARS}-character post limit.`,
-    );
-  }
-  if (network === 'facebook' && chars > FACEBOOK_POST_MAX_CHARS) {
-    failures.push(
-      `Draft is ${chars} characters, over the Facebook ${FACEBOOK_POST_MAX_CHARS}-character post limit.`,
-    );
-  }
-  if (network === 'pinterest' && chars > PINTEREST_DESCRIPTION_MAX_CHARS) {
-    failures.push(`Draft is ${chars} characters, over the Pinterest ${PINTEREST_DESCRIPTION_MAX_CHARS}-character description limit.`);
-  }
-  if (network === 'youtube' && chars > YOUTUBE_DESCRIPTION_MAX_CHARS) {
-    warnings.push(
-      `Draft is ${chars} characters, over YouTube's ${YOUTUBE_DESCRIPTION_MAX_CHARS}-character description limit — the description would be cut.`,
-    );
-  }
-  if (network === 'instagram' && chars > INSTAGRAM_CAPTION_MAX_CHARS) {
-    warnings.push(
-      `Draft is ${chars} characters, over Instagram's ${INSTAGRAM_CAPTION_MAX_CHARS}-character caption limit — the caption would be cut.`,
-    );
-  }
-  return { network, ok: failures.length === 0, failures, warnings };
 }
 
 //---------------

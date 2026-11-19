@@ -23,6 +23,7 @@ from app.services.segment_video import (
     MAX_CLIP_DURATION_SECONDS,
     MAX_CLIP_LOOPS,
     MIN_CLIP_DURATION_SECONDS,
+    clip_density_min_count,
 )
 from app.utils import ssrf
 
@@ -46,6 +47,24 @@ def test_limits_are_explicit_and_sane():
     assert MAX_CLIP_LOOPS == 3
     assert CLIP_DENSITY_ITEMS == 4, "one clip stands in for ~12s of speech"
     assert segment_video.VIDEO_CODEC == "h264"
+
+
+def test_clip_density_min_count_counts_photos_one_for_one():
+    photos = [{"url": "https://e.com/a.jpg"}, {"url": "https://e.com/b.jpg"}]
+    assert clip_density_min_count(photos, 2) == 2
+    assert clip_density_min_count([], 0) == 0
+
+
+def test_clip_density_min_count_credits_each_clip_as_four_items():
+    assert clip_density_min_count([{"url": "https://e.com/a.mp4"}], 1) == 4
+    assert (
+        clip_density_min_count([{"url": "https://e.com/a.mp4"}, {"url": "https://e.com/b.mp4"}], 2)
+        == 8
+    )
+    assert (
+        clip_density_min_count([{"url": "https://e.com/a.mp4"}, {"url": "https://e.com/b.jpg"}], 2)
+        == 5
+    )
 
 
 def test_clip_upload_cap_matches_the_temp_asset_cap():

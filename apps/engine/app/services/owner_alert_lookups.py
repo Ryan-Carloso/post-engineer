@@ -1,7 +1,7 @@
 """Best-effort display names for owner-alert emails.
 
-Provider labels mirror ``apps/web/lib/account-options.ts`` PROVIDER_LABELS
-(pinned by ``test_owner_alert_lookups.py``). Account and persona names come
+Provider labels come from ``app.providers`` (PROVIDER_LABELS, the same as
+``apps/web/lib/account-options.ts``, pinned by ``test_owner_alert_lookups.py``). Account and persona names come
 from Supabase over the same service-role REST the claim uses. Every failure
 degrades to the raw id or label, never to an exception, and no HTTP happens
 under the engine test suite unless the caller injects a session.
@@ -14,23 +14,11 @@ from typing import Any
 
 from loguru import logger
 
+from app.providers import PROVIDER_LABELS
 from app.services.notify import running_under_test
 
 TIMEOUT_SECONDS = 10
 
-PROVIDER_LABELS = {
-    "youtube": "YouTube",
-    "instagram": "Instagram",
-    "linkedin": "LinkedIn",
-    "bluesky": "Bluesky",
-    "threads": "Threads",
-    "facebook": "Facebook",
-    "pinterest": "Pinterest",
-    "3speak": "3Speak",
-    "rumble": "Rumble",
-    "fanvue": "Fanvue",
-    "telegram": "Telegram",
-}
 
 
 def provider_label(provider: str) -> str:

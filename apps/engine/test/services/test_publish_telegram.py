@@ -13,6 +13,7 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from app.models.publish import PublishParams, TelegramPublish
+from app.providers import SOCIAL_PROVIDERS
 from app.services import publish_telegram, upload_publisher
 from app.services.fill_schedule.account_outcomes import _account_ids
 from app.services.fill_schedule.metadata import metadata_for, validate_publish_plan
@@ -92,7 +93,7 @@ class PublishTelegramModuleTest(unittest.TestCase):
 
 class TelegramPublisherWiringTest(unittest.TestCase):
     def test_provider_and_part_builder_are_registered(self) -> None:
-        self.assertIn("telegram", upload_publisher.VALID_PROVIDERS)
+        self.assertIn("telegram", SOCIAL_PROVIDERS)
         metadata_type, build = upload_publisher._PART_BUILDERS["telegram"]
         self.assertIs(metadata_type, upload_publisher.TelegramMetadata)
         parts = build(upload_publisher.TelegramMetadata(caption="c", account_ids=("-9",)))

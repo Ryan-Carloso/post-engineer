@@ -109,6 +109,17 @@ def is_video_url(url: Optional[str]) -> bool:
     return is_video_ref({"url": url})
 
 
+def clip_density_min_count(media: Any, counted: int) -> int:
+    """The density minimum a segment's media counts as.
+
+    A clip covers ~12s of speech, not one 3s photo slot, so each clip
+    stands in for CLIP_DENSITY_ITEMS photos in the minimum. The maximum
+    still counts items one for one.
+    """
+    clips = sum(1 for item in media if is_video_ref(item))
+    return counted + (CLIP_DENSITY_ITEMS - 1) * clips
+
+
 def probe_video(source_path: str) -> Optional[dict]:
     """ffprobe on one clip file: {width, height, duration, codec_name}.
 
