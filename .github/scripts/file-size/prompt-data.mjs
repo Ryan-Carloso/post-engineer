@@ -11,8 +11,9 @@
 // symlink's directory (apps/web/lib/generation/) instead of the real path
 // (shared/prompt-base/), and no variant (tsconfig paths, up-from-symlink
 // imports) works without breaking Stryker/vite. So the file-size ratchet
-// exempts this directory; the cap still applies to all logic, including
-// any file merely named prompt-base elsewhere.
+// exempts every file under shared/prompt-base/; keep only prompt wording
+// there, never logic or helpers. A file merely named prompt-base elsewhere
+// is still checked.
 //---------------
 
 /** True for a repo-relative path holding prompt data (under shared/prompt-base/). */
