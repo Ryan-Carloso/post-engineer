@@ -9,6 +9,7 @@ import unittest
 
 from pydantic import ValidationError
 
+from app.providers import SOCIAL_PROVIDERS
 from app.models.publish import FanvuePublish, PublishParams
 from app.services import publish_fanvue, upload_publisher
 from app.services.fill_schedule.metadata import metadata_for, validate_publish_plan
@@ -86,7 +87,7 @@ class PublishFanvueModuleTest(unittest.TestCase):
 
 class FanvuePublisherWiringTest(unittest.TestCase):
     def test_provider_and_part_builder_are_registered(self) -> None:
-        self.assertIn("fanvue", upload_publisher.VALID_PROVIDERS)
+        self.assertIn("fanvue", SOCIAL_PROVIDERS)
         metadata_type, build = upload_publisher._PART_BUILDERS["fanvue"]
         self.assertIs(metadata_type, upload_publisher.FanvueMetadata)
         parts = build(

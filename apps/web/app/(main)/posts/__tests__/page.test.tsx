@@ -7,16 +7,10 @@ import type { ReactNode } from 'react';
 vi.mock('@/lib/api', () => ({
   useSchedulesQuery: vi.fn(),
   usePersonaListQuery: vi.fn(),
-  useYouTubeAccountsQuery: vi.fn(),
-  useInstagramAccountsQuery: vi.fn(),
-  useLinkedinAccountsQuery: vi.fn(),
-  useThreadsAccountsQuery: vi.fn(() => ({ data: { authenticated: true, accounts: [] }, isLoading: false, isError: false, error: null, refetch: vi.fn() })),
-  useFacebookAccountsQuery: vi.fn(() => ({ data: { authenticated: true, accounts: [] }, isLoading: false, isError: false, error: null, refetch: vi.fn() })),
-  useBlueskyAccountsQuery: vi.fn(),
 }));
 
 vi.mock('@/lib/social-accounts-queries', () => ({
-  useRumbleAccountsQuery: vi.fn(() => ({ data: { authenticated: true, accounts: [] }, isLoading: false, isError: false, error: null, refetch: vi.fn() })),
+  useSocialAccountsQuery: vi.fn(),
 }));
 
 vi.mock('@/lib/schedule-range', () => ({
@@ -62,11 +56,8 @@ import { useHasAnyPostQuery, useScheduleRangeQuery } from '@/lib/schedule-range'
 import {
   useSchedulesQuery,
   usePersonaListQuery,
-  useYouTubeAccountsQuery,
-  useInstagramAccountsQuery,
-  useLinkedinAccountsQuery,
-  useBlueskyAccountsQuery,
 } from '@/lib/api';
+import { useSocialAccountsQuery } from '@/lib/social-accounts-queries';
 
 const SCHEDULE = {
   id: 's1',
@@ -141,26 +132,8 @@ function mockQueries(overrides: {
     isError: false,
     refetch: vi.fn(),
   } as never);
-  vi.mocked(useYouTubeAccountsQuery).mockReturnValue({
-    data: { authenticated: true, accounts: [{ provider: 'youtube', channelId: 'ch1', channelName: 'Europa Na Estrada' }] },
-    isLoading: false,
-    isError: false,
-    refetch: vi.fn(),
-  } as never);
-  vi.mocked(useInstagramAccountsQuery).mockReturnValue({
-    data: { authenticated: true, accounts: [{ provider: 'instagram', igUserId: 'ig1', username: 'vivalave' }] },
-    isLoading: false,
-    isError: false,
-    refetch: vi.fn(),
-  } as never);
-  vi.mocked(useLinkedinAccountsQuery).mockReturnValue({
-    data: { authenticated: true, accounts: [] },
-    isLoading: false,
-    isError: false,
-    refetch: vi.fn(),
-  } as never);
-  vi.mocked(useBlueskyAccountsQuery).mockReturnValue({
-    data: { authenticated: true, accounts: [] },
+  vi.mocked(useSocialAccountsQuery).mockReturnValue({
+    data: { authenticated: true, accounts: [{ provider: 'youtube', channelId: 'ch1', channelName: 'Europa Na Estrada' }, { provider: 'instagram', igUserId: 'ig1', username: 'vivalave' }] },
     isLoading: false,
     isError: false,
     refetch: vi.fn(),
@@ -498,7 +471,9 @@ describe('PostsPage', () => {
   });
 
   it('shows the error state when an account query fails', () => {
-    vi.mocked(useYouTubeAccountsQuery).mockReturnValue({
+    // A failed account fetch must not silently render empty filter
+    // dropdowns — the error state covers it, same as the other queries.
+    vi.mocked(useSocialAccountsQuery).mockReturnValue({
       data: undefined,
       isLoading: false,
       isError: true,
@@ -510,18 +485,18 @@ describe('PostsPage', () => {
   });
 
   it('retry refetches the account queries as well', async () => {
-    const youtubeRefetch = vi.fn();
-    vi.mocked(useYouTubeAccountsQuery).mockReturnValue({
+    const accountsRefetch = vi.fn();
+    vi.mocked(useSocialAccountsQuery).mockReturnValue({
       data: undefined,
       isLoading: false,
       isError: true,
-      refetch: youtubeRefetch,
+      refetch: accountsRefetch,
     } as never);
     const user = userEvent.setup();
     render(<PostsPage />);
 
     await user.click(screen.getByRole('button', { name: 'posts.loadErrorRetry' }));
-    expect(youtubeRefetch).toHaveBeenCalledTimes(1);
+    expect(accountsRefetch).toHaveBeenCalledTimes(1);
   });
 
   it('moves "today" past midnight without a reload', async () => {
@@ -688,10 +663,10 @@ describe('PostsPage fallbacks', () => {
   it('draws at most three network glyphs per row, whatever the schedule targets', () => {
     mockQueries();
     const accounts = ['Alpha One', 'Beta Two', 'Gamma Three', 'Delta Four', 'Epsilon Five'].map(
-      (name, i) => ({ channelId: `ch${i}`, channelName: name }),
+      (name, i) => ({ provider: 'youtube', channelId: `ch${i}`, channelName: name }),
     );
-    vi.mocked(useYouTubeAccountsQuery).mockReturnValue({
-      data: { authenticated: true, accounts },
+    vi.mocked(useSocialAccountsQuery).mockReturnValue({
+      data: { authenticated: true, accounts: [...accounts, { provider: 'instagram', igUserId: 'ig1', username: 'vivalave' }] },
     } as never);
     vi.mocked(useSchedulesQuery).mockReturnValue({
       data: [{ ...SCHEDULE, youtubeAccountIds: accounts.map((a) => a.channelId) }] as never,
@@ -712,7 +687,9 @@ describe('PostsPage fallbacks', () => {
     const options = within(providerSelect)
       .getAllByRole('option')
       .map((option) => option.textContent);
-    expect(options).toEqual(['posts.allProviders', 'YouTube', 'Instagram', 'LinkedIn', 'Bluesky', 'Threads', 'Facebook', 'Rumble']);
+    // Every network of SOCIAL_PROVIDERS, in its order: the filter once
+    // listed only seven and hid Pinterest, 3Speak and Fanvue posts.
+    expect(options).toEqual(['posts.allProviders', 'YouTube', 'Instagram', 'Bluesky', 'LinkedIn', 'Threads', 'Facebook', 'Pinterest', '3Speak', 'Rumble', 'Fanvue']);
   });
 
 });

@@ -69,6 +69,7 @@ const FULL_SCHEDULE_ROW: ResponseOf<typeof listSchedulesContract>['schedules'][n
   pinterest_board_id: null,
   threespeak_account_ids: [],
   rumble_account_ids: [],
+  fanvue_account_ids: [],
   days_of_week: [1, 3, 5],
   start_hour: 9,
   end_hour: 17,

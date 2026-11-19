@@ -92,7 +92,8 @@ export function facebookCounters(insights: Record<string, number>): MetricsCount
   };
 }
 
-async function ownerAccessToken(userId: string, provider: 'instagram' | 'linkedin' | 'threads' | 'facebook', accountId: string): Promise<string> {
+// Ownership: getSocialAccountTokens only resolves the user's own accounts.
+async function ownerAccessToken(userId: string, provider: MeasuredProvider, accountId: string): Promise<string> {
   const label = PROVIDER_LABELS[provider];
   const { tokens } = await getSocialAccountTokens(createSupabaseServiceClient(), userId, provider, accountId);
   if (typeof tokens.access_token !== 'string' || tokens.access_token === '') {

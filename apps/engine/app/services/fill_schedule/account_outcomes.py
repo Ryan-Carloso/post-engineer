@@ -6,6 +6,7 @@ import json
 from datetime import datetime, timedelta
 from typing import Any
 
+from app.providers import PROVIDER_LABELS, SCHEDULE_ACCOUNT_COLUMNS
 from app.services.analytics import scrub_error_text
 from app.services.upload_publisher import RETRYABLE_STATUS_CODES
 from app.services.fill_schedule.constants import (
@@ -25,30 +26,6 @@ USER_CODES = frozenset({
     "token_missing",
     "disconnected",
 })
-_ACCOUNT_COLUMNS = {
-    "youtube": "youtube_account_ids",
-    "instagram": "instagram_account_ids",
-    "linkedin": "linkedin_account_ids",
-    "bluesky": "bluesky_account_ids",
-    "threads": "threads_account_ids",
-    "facebook": "facebook_account_ids",
-    "pinterest": "pinterest_account_ids",
-    "3speak": "threespeak_account_ids",
-    "rumble": "rumble_account_ids",
-    "fanvue": "fanvue_account_ids",
-}
-_LABELS = {
-    "youtube": "YouTube",
-    "instagram": "Instagram",
-    "linkedin": "LinkedIn",
-    "bluesky": "Bluesky",
-    "threads": "Threads",
-    "facebook": "Facebook",
-    "pinterest": "Pinterest",
-    "3speak": "3Speak",
-    "rumble": "Rumble",
-    "fanvue": "Fanvue",
-}
 _LINK_FIELDS = ("videoUrl", "permalink", "postId")
 
 
@@ -76,7 +53,7 @@ def load_outcomes(slot: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _label(provider: str) -> str:
-    return _LABELS.get(provider, provider)
+    return PROVIDER_LABELS.get(provider, provider)
 
 
 def user_notice(provider: str, code: str) -> str | None:
@@ -137,7 +114,7 @@ def classify_failure(
 
 
 def _account_ids(provider: str, schedule: dict[str, Any]) -> list[str]:
-    column = _ACCOUNT_COLUMNS.get(provider)
+    column = SCHEDULE_ACCOUNT_COLUMNS.get(provider)
     raw = schedule.get(column, []) if column else []
     ids = [str(value) for value in raw or [] if str(value)]
     return ids or [""]

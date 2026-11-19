@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { PublishUploadedVideoInput, PublishVideoDirectInput } from './client-types.js';
+import { PUBLISH_ACCOUNT_FIELDS, isTitleProvider } from './contracts/providers.js';
 
 export type DirectPublishFieldInput = PublishVideoDirectInput | PublishUploadedVideoInput;
 
@@ -29,7 +30,7 @@ export function requireDirectPublishFields(input: DirectPublishFieldInput): Dire
   let privacyStatus = '';
   let caption = '';
   let boardId = '';
-  if (input.provider === 'youtube' || input.provider === 'rumble' || input.provider === 'fanvue') {
+  if (isTitleProvider(input.provider)) {
     ({ title, description } = requireTitleAndDescription(input));
     if (input.provider === 'youtube') {
       if (input.tags === undefined || input.tags.length === 0) {
@@ -78,18 +79,18 @@ export function buildDirectPublishForm(
     formData.append('tags', fields.tags.join(','));
     formData.append('privacyStatus', fields.privacyStatus);
     for (const accountId of input.accountIds) {
-      formData.append('accountIds', accountId);
+      formData.append(PUBLISH_ACCOUNT_FIELDS.youtube, accountId);
     }
   } else if (input.provider === 'instagram') {
     formData.append('file', videoBlob, filename);
     formData.append('caption', fields.caption);
     for (const accountId of input.accountIds) {
-      formData.append('igAccountIds', accountId);
+      formData.append(PUBLISH_ACCOUNT_FIELDS.instagram, accountId);
     }
   } else {
-    const accountField = { bluesky: 'did', linkedin: 'linkedinAccountIds', threads: 'threadsAccountIds', facebook: 'facebookAccountIds', pinterest: 'pinterestAccountIds', fanvue: 'fanvueAccountIds', '3speak': 'threespeakAccountIds', rumble: 'rumbleAccountIds' }[input.provider];
     formData.append('video', videoBlob, filename);
-    if (input.provider === 'rumble' || input.provider === 'fanvue') {
+    // Rumble and Fanvue take title + description, not a caption.
+    if (isTitleProvider(input.provider)) {
       formData.append('title', fields.title);
       formData.append('description', fields.description);
     } else {
@@ -101,7 +102,7 @@ export function buildDirectPublishForm(
       }
     }
     for (const accountId of input.accountIds) {
-      formData.append(accountField, accountId);
+      formData.append(PUBLISH_ACCOUNT_FIELDS[input.provider], accountId);
     }
   }
   const key = input.idempotencyKey !== undefined && input.idempotencyKey.trim().length > 0

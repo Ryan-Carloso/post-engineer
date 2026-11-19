@@ -27,7 +27,7 @@ describe('publish code sync (web ↔ engine)', () => {
   });
 
   it('engine provider labels match PROVIDER_LABELS', () => {
-    const body = block(outcomes, '_LABELS = {', '}');
+    const body = block(read('apps/engine/app/providers.py'), 'PROVIDER_LABELS: dict[str, str] = {', '}');
     const labels = Object.fromEntries(
       [...body.matchAll(/"([a-z0-9]+)":\s*"([^"]+)"/g)].map((match) => [match[1], match[2]]),
     );

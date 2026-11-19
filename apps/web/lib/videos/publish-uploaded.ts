@@ -3,14 +3,8 @@ import 'server-only';
 import { ValidationError } from '@/lib/errors';
 import { logger } from '@/lib/logger';
 import { isSocialProvider, type SocialProvider } from '@/lib/providers/registry';
-import { handleBlueskyUpload, handleInstagramUpload, handleYoutubeUpload } from '@/lib/upload/handlers';
-import { handleFacebookUpload } from '@/lib/upload/facebook-handler';
-import { handleFanvueUpload } from '@/lib/upload/fanvue-handler';
-import { handleLinkedinUpload } from '@/lib/upload/linkedin-handler';
-import { handlePinterestUpload } from '@/lib/upload/pinterest-handler';
-import { handleRumbleUpload } from '@/lib/upload/rumble-handler';
-import { handleThreadsUpload } from '@/lib/upload/threads-handler';
-import { handleThreespeakUpload } from '@/lib/upload/threespeak-handler';
+import { PUBLISH_ACCOUNT_FIELDS, isTitleProvider } from '@/lib/contracts/providers';
+import { PUBLISH_HANDLERS } from '@/lib/upload/publish-handlers';
 import type { ContentUploadAccountResult } from '@/lib/upload/content-upload-result';
 import {
   VideoUploadError,
@@ -86,7 +80,7 @@ export function parsePublishBody(body: unknown): PublishUploadedInput {
 }
 
 export function validatePublishFields(input: PublishUploadedInput): void {
-  if (input.provider === 'youtube' || input.provider === 'rumble' || input.provider === 'fanvue') {
+  if (isTitleProvider(input.provider)) {
     if (input.title === undefined || input.title.trim() === '') {
       throw new ValidationError('Video title is required', 'title');
     }
@@ -121,17 +115,6 @@ export function validatePublishFields(input: PublishUploadedInput): void {
   }
 }
 
-const ACCOUNT_FIELD: Partial<Record<SocialProvider, string>> = {
-  bluesky: 'did',
-  linkedin: 'linkedinAccountIds',
-  threads: 'threadsAccountIds',
-  facebook: 'facebookAccountIds',
-  pinterest: 'pinterestAccountIds',
-  fanvue: 'fanvueAccountIds',
-  '3speak': 'threespeakAccountIds',
-  rumble: 'rumbleAccountIds',
-};
-
 export function buildPublishForm(
   input: PublishUploadedInput,
   buffer: Buffer,
@@ -147,17 +130,17 @@ export function buildPublishForm(
     formData.append('description', (input.description ?? '').trim());
     formData.append('tags', (input.tags ?? []).join(','));
     formData.append('privacyStatus', input.privacyStatus ?? '');
-    for (const accountId of input.accountIds) formData.append('accountIds', accountId);
+    for (const accountId of input.accountIds) formData.append(PUBLISH_ACCOUNT_FIELDS.youtube, accountId);
     return formData;
   }
   if (input.provider === 'instagram') {
     formData.append('file', file);
     formData.append('caption', (input.caption ?? '').trim());
-    for (const accountId of input.accountIds) formData.append('igAccountIds', accountId);
+    for (const accountId of input.accountIds) formData.append(PUBLISH_ACCOUNT_FIELDS.instagram, accountId);
     return formData;
   }
   formData.append('video', file);
-  if (input.provider === 'rumble' || input.provider === 'fanvue') {
+  if (isTitleProvider(input.provider)) {
     formData.append('title', (input.title ?? '').trim());
     formData.append('description', (input.description ?? '').trim());
   } else {
@@ -170,8 +153,7 @@ export function buildPublishForm(
       formData.append('boardId', (input.boardId ?? '').trim());
     }
   }
-  const accountField = ACCOUNT_FIELD[input.provider] ?? 'accountIds';
-  for (const accountId of input.accountIds) formData.append(accountField, accountId);
+  for (const accountId of input.accountIds) formData.append(PUBLISH_ACCOUNT_FIELDS[input.provider], accountId);
   return formData;
 }
 
@@ -219,26 +201,7 @@ export async function dispatchPublish(
   logId: string,
   startTime: number,
 ): Promise<PublishUploadedResult> {
-  const response: unknown =
-    provider === 'youtube'
-      ? await handleYoutubeUpload(formData, userId, logId, startTime)
-      : provider === 'instagram'
-        ? await handleInstagramUpload(formData, userId, logId, startTime)
-        : provider === 'bluesky'
-          ? await handleBlueskyUpload(formData, userId)
-          : provider === 'linkedin'
-            ? await handleLinkedinUpload(formData, userId)
-            : provider === 'threads'
-              ? await handleThreadsUpload(formData, userId)
-              : provider === 'facebook'
-                ? await handleFacebookUpload(formData, userId)
-                : provider === 'pinterest'
-                  ? await handlePinterestUpload(formData, userId)
-                  : provider === 'fanvue'
-                    ? await handleFanvueUpload(formData, userId)
-                    : provider === '3speak'
-                      ? await handleThreespeakUpload(formData, userId)
-                      : await handleRumbleUpload(formData, userId);
+  const response: unknown = await PUBLISH_HANDLERS[provider](formData, userId, logId, startTime);
   return normalizePublishResponse(provider, response, logId);
 }
 

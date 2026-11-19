@@ -146,6 +146,98 @@ export type BuildOAuthConnectUrlResult =
   | { ok: true; authUrl: string; state: string; nonce: string; codeVerifier?: string }
   | { ok: false; error: string };
 
+type OAuthConnectUrlBuilder = (redirectUri: string) => Promise<BuildOAuthConnectUrlResult>;
+
+// One builder per OAuth network (a record, not a chain): a new OAuth
+// network fails the typecheck until it has a builder, instead of falling
+// through to another network's credentials. Reuses the builders already
+// used by the web app /start routes.
+const OAUTH_CONNECT_URL_BUILDERS: Record<OAuthConnectProvider, OAuthConnectUrlBuilder> = {
+  instagram: async (redirectUri) => {
+    if (!process.env.INSTAGRAM_CLIENT_ID || !process.env.INSTAGRAM_CLIENT_SECRET) {
+      return {
+        ok: false,
+        error: 'Instagram credentials are not configured (INSTAGRAM_CLIENT_ID / INSTAGRAM_CLIENT_SECRET).',
+      };
+    }
+    const { InstagramService } = await import('./instagram');
+    const { state, nonce } = createOAuthState({ provider: 'instagram', redirectUri });
+    const authUrl = new InstagramService(redirectUri).getAuthorizationUrl(state);
+    return { ok: true, authUrl, state, nonce };
+  },
+  youtube: async (redirectUri) => {
+    const { createGoogleOAuth2Client, generateGoogleAuthUrl } = await import('./youtube');
+    const { state, nonce } = createOAuthState({ provider: 'youtube', redirectUri });
+    const oauth2Client = await createGoogleOAuth2Client(redirectUri);
+    const authUrl = generateGoogleAuthUrl(oauth2Client, state);
+    return { ok: true, authUrl, state, nonce };
+  },
+  linkedin: async (redirectUri) => {
+    if (!process.env.LINKEDIN_CLIENT_ID || !process.env.LINKEDIN_CLIENT_SECRET) {
+      return {
+        ok: false,
+        error: 'LinkedIn credentials are not configured (LINKEDIN_CLIENT_ID / LINKEDIN_CLIENT_SECRET).',
+      };
+    }
+    const { buildLinkedInAuthorizationUrl } = await import('./linkedin');
+    const { state, nonce } = createOAuthState({ provider: 'linkedin', redirectUri });
+    const authUrl = buildLinkedInAuthorizationUrl(state, redirectUri);
+    return { ok: true, authUrl, state, nonce };
+  },
+  threads: async (redirectUri) => {
+    if (!process.env.THREADS_CLIENT_ID || !process.env.THREADS_CLIENT_SECRET) {
+      return {
+        ok: false,
+        error: 'Threads credentials are not configured (THREADS_CLIENT_ID / THREADS_CLIENT_SECRET).',
+      };
+    }
+    const { buildThreadsAuthorizationUrl } = await import('./threads');
+    const { state, nonce } = createOAuthState({ provider: 'threads', redirectUri });
+    const authUrl = buildThreadsAuthorizationUrl(state, redirectUri);
+    return { ok: true, authUrl, state, nonce };
+  },
+  facebook: async (redirectUri) => {
+    if (!process.env.FACEBOOK_CLIENT_ID || !process.env.FACEBOOK_CLIENT_SECRET) {
+      return {
+        ok: false,
+        error: 'Facebook credentials are not configured (FACEBOOK_CLIENT_ID / FACEBOOK_CLIENT_SECRET).',
+      };
+    }
+    const { buildFacebookAuthorizationUrl } = await import('./facebook');
+    const { state, nonce } = createOAuthState({ provider: 'facebook', redirectUri });
+    const authUrl = buildFacebookAuthorizationUrl(state, redirectUri);
+    return { ok: true, authUrl, state, nonce };
+  },
+  pinterest: async (redirectUri) => {
+    if (!process.env.PINTEREST_CLIENT_ID || !process.env.PINTEREST_CLIENT_SECRET) {
+      return {
+        ok: false,
+        error: 'Pinterest credentials are not configured (PINTEREST_CLIENT_ID / PINTEREST_CLIENT_SECRET).',
+      };
+    }
+    const { buildPinterestAuthorizationUrl } = await import('./pinterest');
+    const { state, nonce } = createOAuthState({ provider: 'pinterest', redirectUri });
+    const authUrl = buildPinterestAuthorizationUrl(state, redirectUri);
+    return { ok: true, authUrl, state, nonce };
+  },
+  fanvue: async (redirectUri) => {
+    if (!process.env.FANVUE_CLIENT_ID || !process.env.FANVUE_CLIENT_SECRET) {
+      return {
+        ok: false,
+        error: 'Fanvue credentials are not configured (FANVUE_CLIENT_ID / FANVUE_CLIENT_SECRET).',
+      };
+    }
+    const { buildFanvueAuthUrl } = await import('./fanvue');
+    const { state, nonce } = createOAuthState({ provider: 'fanvue', redirectUri });
+    const { authUrl, codeVerifier } = buildFanvueAuthUrl(state, redirectUri);
+    // The verifier is returned alongside the URL so the caller can
+    // store it server-side (oauth_states.code_verifier); it must never
+    // be embedded in the client-visible state.
+    return { ok: true, authUrl, state, nonce, codeVerifier };
+  },
+};
+
+// Generates the OAuth auth URL for a provider, without depending on a session.
 export async function buildOAuthConnectUrl(
   provider: OAuthConnectProvider,
   redirectUri: string
@@ -154,89 +246,7 @@ export async function buildOAuthConnectUrl(
     return { ok: false, error: `Unsupported provider: ${String(provider)}.` };
   }
   try {
-    if (provider === 'instagram') {
-      if (!process.env.INSTAGRAM_CLIENT_ID || !process.env.INSTAGRAM_CLIENT_SECRET) {
-        return {
-          ok: false,
-          error:
-            'Instagram credentials are not configured (INSTAGRAM_CLIENT_ID / INSTAGRAM_CLIENT_SECRET).',
-        };
-      }
-      const { InstagramService } = await import('./instagram');
-      const { state, nonce } = createOAuthState({ provider: 'instagram', redirectUri });
-      const authUrl = new InstagramService(redirectUri).getAuthorizationUrl(state);
-      return { ok: true, authUrl, state, nonce };
-    }
-    if (provider === 'youtube') {
-      const { createGoogleOAuth2Client, generateGoogleAuthUrl } = await import('./youtube');
-      const { state, nonce } = createOAuthState({ provider: 'youtube', redirectUri });
-      const oauth2Client = await createGoogleOAuth2Client(redirectUri);
-      const authUrl = generateGoogleAuthUrl(oauth2Client, state);
-      return { ok: true, authUrl, state, nonce };
-    }
-    if (provider === 'threads') {
-      if (!process.env.THREADS_CLIENT_ID || !process.env.THREADS_CLIENT_SECRET) {
-        return {
-          ok: false,
-          error:
-            'Threads credentials are not configured (THREADS_CLIENT_ID / THREADS_CLIENT_SECRET).',
-        };
-      }
-      const { buildThreadsAuthorizationUrl } = await import('./threads');
-      const { state, nonce } = createOAuthState({ provider: 'threads', redirectUri });
-      const authUrl = buildThreadsAuthorizationUrl(state, redirectUri);
-      return { ok: true, authUrl, state, nonce };
-    }
-    if (provider === 'facebook') {
-      if (!process.env.FACEBOOK_CLIENT_ID || !process.env.FACEBOOK_CLIENT_SECRET) {
-        return {
-          ok: false,
-          error:
-            'Facebook credentials are not configured (FACEBOOK_CLIENT_ID / FACEBOOK_CLIENT_SECRET).',
-        };
-      }
-      const { buildFacebookAuthorizationUrl } = await import('./facebook');
-      const { state, nonce } = createOAuthState({ provider: 'facebook', redirectUri });
-      const authUrl = buildFacebookAuthorizationUrl(state, redirectUri);
-      return { ok: true, authUrl, state, nonce };
-    }
-    if (provider === 'pinterest') {
-      if (!process.env.PINTEREST_CLIENT_ID || !process.env.PINTEREST_CLIENT_SECRET) {
-        return {
-          ok: false,
-          error:
-            'Pinterest credentials are not configured (PINTEREST_CLIENT_ID / PINTEREST_CLIENT_SECRET).',
-        };
-      }
-      const { buildPinterestAuthorizationUrl } = await import('./pinterest');
-      const { state, nonce } = createOAuthState({ provider: 'pinterest', redirectUri });
-      const authUrl = buildPinterestAuthorizationUrl(state, redirectUri);
-      return { ok: true, authUrl, state, nonce };
-    }
-    if (provider === 'fanvue') {
-      if (!process.env.FANVUE_CLIENT_ID || !process.env.FANVUE_CLIENT_SECRET) {
-        return {
-          ok: false,
-          error:
-            'Fanvue credentials are not configured (FANVUE_CLIENT_ID / FANVUE_CLIENT_SECRET).',
-        };
-      }
-      const { buildFanvueAuthUrl } = await import('./fanvue');
-      const { state, nonce } = createOAuthState({ provider: 'fanvue', redirectUri });
-      const { authUrl, codeVerifier } = buildFanvueAuthUrl(state, redirectUri);
-      return { ok: true, authUrl, state, nonce, codeVerifier };
-    }
-    if (!process.env.LINKEDIN_CLIENT_ID || !process.env.LINKEDIN_CLIENT_SECRET) {
-      return {
-        ok: false,
-        error:
-          'LinkedIn credentials are not configured (LINKEDIN_CLIENT_ID / LINKEDIN_CLIENT_SECRET).',
-      };
-    }
-    const { buildLinkedInAuthorizationUrl } = await import('./linkedin');
-    const { state, nonce } = createOAuthState({ provider: 'linkedin', redirectUri });
-    const authUrl = buildLinkedInAuthorizationUrl(state, redirectUri);
-    return { ok: true, authUrl, state, nonce };
+    return await OAUTH_CONNECT_URL_BUILDERS[provider](redirectUri);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error.';
     return { ok: false, error: message };

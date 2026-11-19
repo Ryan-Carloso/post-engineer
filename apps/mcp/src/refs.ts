@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { PostEngineerClient } from './client.js';
+import { isSocialProvider, type SocialProvider } from './contracts/providers.js';
 import { getErrorMessage } from './errors.js';
 import type { McpToolResponse } from './tools-call.js';
 
@@ -73,11 +74,28 @@ async function resolvePersona(listPersonas: Listing, ref: string): Promise<RefOu
   return { kind: 'ok', value: { id: matches[0].id, name: matches[0].name } };
 }
 
+// The field that carries a listed account's id, by provider (the fields of
+// the web registry's toPublicAccount: apps/web/lib/providers/registry.ts).
+const ACCOUNT_ID_FIELDS: Record<SocialProvider, string> = {
+  youtube: 'channelId',
+  instagram: 'igUserId',
+  bluesky: 'did',
+  linkedin: 'providerAccountId',
+  threads: 'providerAccountId',
+  facebook: 'providerAccountId',
+  pinterest: 'providerAccountId',
+  '3speak': 'providerAccountId',
+  rumble: 'providerAccountId',
+  fanvue: 'providerAccountId',
+};
+
+// The id and the names of one listed account, by provider (the fields of the
+// web registry's toPublicAccount: apps/web/lib/providers/registry.ts).
 function accountOf(entry: unknown): { provider: string; id: string; names: string[]; label: string } | null {
   const item = record(entry);
   const provider = text(item?.provider);
   if (item === null || provider === null) return null;
-  const id = text(provider === 'youtube' ? item.channelId : provider === 'instagram' ? item.igUserId : provider === 'bluesky' ? item.did : item.providerAccountId);
+  const id = text(item[isSocialProvider(provider) ? ACCOUNT_ID_FIELDS[provider] : 'providerAccountId']);
   if (id === null) return null;
   const names = [item.channelName, item.username, item.name, item.handle, item.displayName, item.accountName].flatMap((name) => {
     const value = text(name);

@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createSupabaseClient } from '@/lib/supabase/client';
 import { useUploadStore } from '@/lib/store';
-import { mapSchedule, type ScheduleRow } from '@/lib/schedule-row';
+import { mapSchedule, type ScheduleConfig, type ScheduleRow } from '@/lib/schedule-row';
 import { fetchScheduleStatus, type ScheduledSlot } from '@/lib/schedule-status';
 import type {
   CreatePersonaResult,
@@ -478,28 +478,14 @@ export function useVoicesQuery() {
 }
 
 
-export interface ScheduleConfig {
-  id: string;
-  personaId: string | null;
-  providers: string[];
-  youtubeAccountIds: string[];
-  instagramAccountIds: string[];
-  linkedinAccountIds: string[];
-  blueskyAccountIds: string[];
-  threadsAccountIds: string[];
-  facebookAccountIds: string[];
-  pinterestAccountIds: string[];
-  pinterestBoardId: string | null;
-  threespeakAccountIds: string[];
-  rumbleAccountIds: string[];
-  daysOfWeek: number[];
-  startHour: number | null;
-  endHour: number | null;
-  postsPerDay: number;
-  timezone: string;
-  active: boolean;
-  publishMode: 'scheduled' | 'asap';
-}
+//---------------
+// Fill Schedule — video publishing timetables (days + time window + posts/day).
+// Created by POST /api/videos/generate-and-schedule (one video + slot +
+// task per call); the engine does generation per slot, then publishing at
+// each slot's time via /api/upload-content.
+//---------------
+
+export type { ScheduleConfig };
 
 async function fetchSchedules(): Promise<ScheduleConfig[]> {
   const response = await fetch('/api/schedule');
@@ -636,6 +622,10 @@ export interface SlotDetailPayload {
     pinterestAccountIds: string[];
     pinterestBoardId: string | null;
     threespeakAccountIds: string[];
+    rumbleAccountIds: string[];
+    fanvueAccountIds: string[];
+    // The schedule's IANA timezone — the detail page renders the slot time
+    // in this zone so "10:00" is never ambiguous about whose 10:00 it is.
     timezone: string;
     publishMode: 'scheduled' | 'asap';
   };

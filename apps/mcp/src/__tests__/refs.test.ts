@@ -130,6 +130,18 @@ describe('resolveAccountRef', () => {
     await resolveAccountRef(c, 'UC123');
     expect(listSocialAccounts).toHaveBeenCalledTimes(1);
   });
+
+  it('resolves a network that shares the providerAccountId field', async () => {
+    const fanvue = { accounts: [{ provider: 'fanvue', providerAccountId: 'fv-1', username: 'fan.page' }] };
+    const { client: c } = client({ accounts: fanvue });
+    expect(await resolveAccountRef(c, 'fv-1')).toEqual({ kind: 'ok', value: { provider: 'fanvue', id: 'fv-1', label: 'fan.page' } });
+  });
+
+  it('falls back to providerAccountId for an unlisted provider name', async () => {
+    const unknown = { accounts: [{ provider: 'tiktok', providerAccountId: 'tt-1', username: 'tok.page' }] };
+    const { client: c } = client({ accounts: unknown });
+    expect(await resolveAccountRef(c, 'tt-1')).toEqual({ kind: 'ok', value: { provider: 'tiktok', id: 'tt-1', label: 'tok.page' } });
+  });
 });
 
 describe('createRefResolvers', () => {

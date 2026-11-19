@@ -21,6 +21,7 @@ export const ScheduleRowSchema = z.object({
   pinterest_board_id: z.string().nullable(),
   threespeak_account_ids: z.array(z.string()),
   rumble_account_ids: z.array(z.string()),
+  fanvue_account_ids: z.array(z.string()),
   days_of_week: z.array(z.number()).nullable(),
   start_hour: z.number().nullable(),
   end_hour: z.number().nullable(),

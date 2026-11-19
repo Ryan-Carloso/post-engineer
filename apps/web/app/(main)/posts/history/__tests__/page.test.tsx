@@ -8,17 +8,11 @@ vi.mock('@/lib/api', () => ({
   useScheduleStatusQuery: vi.fn(),
   useSchedulesQuery: vi.fn(),
   usePersonaListQuery: vi.fn(),
-  useYouTubeAccountsQuery: vi.fn(),
-  useInstagramAccountsQuery: vi.fn(),
-  useLinkedinAccountsQuery: vi.fn(() => ({ data: { authenticated: true, accounts: [] }, isLoading: false, isError: false, refetch: vi.fn() })),
-  useThreadsAccountsQuery: vi.fn(() => ({ data: { authenticated: true, accounts: [] }, isLoading: false, isError: false, refetch: vi.fn() })),
-  useFacebookAccountsQuery: vi.fn(() => ({ data: { authenticated: true, accounts: [] }, isLoading: false, isError: false, refetch: vi.fn() })),
-  useBlueskyAccountsQuery: vi.fn(() => ({ data: { authenticated: true, accounts: [] }, isLoading: false, isError: false, refetch: vi.fn() })),
   useVideoGenerationsQuery: vi.fn(),
 }));
 
 vi.mock('@/lib/social-accounts-queries', () => ({
-  useRumbleAccountsQuery: vi.fn(() => ({ data: { authenticated: true, accounts: [] }, isLoading: false, isError: false, error: null, refetch: vi.fn() })),
+  useSocialAccountsQuery: vi.fn(),
 }));
 
 vi.mock('@/lib/ui', () => ({
@@ -39,10 +33,9 @@ import {
   useScheduleStatusQuery,
   useSchedulesQuery,
   usePersonaListQuery,
-  useYouTubeAccountsQuery,
-  useInstagramAccountsQuery,
   useVideoGenerationsQuery,
 } from '@/lib/api';
+import { useSocialAccountsQuery } from '@/lib/social-accounts-queries';
 
 const SCHEDULE = {
   id: 's1',
@@ -80,14 +73,8 @@ function mockQueries(overrides: { recent?: unknown[]; schedules?: unknown[]; gen
   vi.mocked(useScheduleStatusQuery).mockReturnValue(ok({ upcoming: [], recent: overrides.recent ?? [PUBLISHED_SLOT, FAILED_SLOT] }));
   vi.mocked(useSchedulesQuery).mockReturnValue(ok(overrides.schedules ?? [SCHEDULE]));
   vi.mocked(usePersonaListQuery).mockReturnValue(ok([{ id: 'p1', name: 'Viva Leve' }]));
-  vi.mocked(useYouTubeAccountsQuery).mockReturnValue({
-    data: { authenticated: true, accounts: [{ provider: 'youtube', channelId: 'ch1', channelName: 'Europa Na Estrada' }] },
-    isLoading: false,
-    isError: false,
-    refetch: vi.fn(),
-  } as never);
-  vi.mocked(useInstagramAccountsQuery).mockReturnValue({
-    data: { authenticated: true, accounts: [{ provider: 'instagram', igUserId: 'ig1', username: 'vivalave' }] },
+  vi.mocked(useSocialAccountsQuery).mockReturnValue({
+    data: { authenticated: true, accounts: [{ provider: 'youtube', channelId: 'ch1', channelName: 'Europa Na Estrada' }, { provider: 'instagram', igUserId: 'ig1', username: 'vivalave' }] },
     isLoading: false,
     isError: false,
     refetch: vi.fn(),

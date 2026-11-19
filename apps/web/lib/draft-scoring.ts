@@ -1,4 +1,20 @@
-import { BLUESKY_CAPTION_MAX_GRAPHEMES, countBlueskyGraphemes } from './bluesky';
+//---------------
+// draft-scoring — mechanical draft scoring.
+//
+// No LLM, no paid service, no external call: every signal is computed
+// from the draft text itself plus the caller's own stored post metrics.
+// The score is never a bare number: every rule that moves it appears in
+// `reasons` with the exact detail that fired, so the caller can fix the
+// draft instead of guessing what the number means. The per-network
+// publish gate lives in lib/publish-checks.ts and is re-exported here.
+//
+// Baseline honesty: post_metrics rows carry counters and script angles,
+// never the post text, so theme adherence is token overlap between the
+// draft and the user's top angles — a soft signal, not a claim that the
+// draft copies a past post. When the user has no measured posts yet,
+// the theme bucket scores 0 and says so; it never invents a baseline.
+//---------------
+
 import type { PublishNetwork } from '@/lib/contracts/videos';
 
 export type { PublishNetwork };
@@ -11,12 +27,21 @@ const SCORE_PROFILES = {
 } as const;
 
 
-import { LINKEDIN_POST_MAX_CHARS, THREADS_POST_MAX_CHARS, FACEBOOK_POST_MAX_CHARS, PINTEREST_DESCRIPTION_MAX_CHARS } from './draft-ceilings';
+import { countChars, extractHashtags, extractLinks } from './draft-text';
+import { checkPublish } from './publish-checks';
+import type { PublishCheck } from './publish-checks';
 export { DRAFT_KINDS, DRAFT_MAX_INPUT_CHARS, PUBLISH_NETWORKS } from '@/lib/contracts/videos';
-export { LINKEDIN_POST_MAX_CHARS, THREADS_POST_MAX_CHARS, FACEBOOK_POST_MAX_CHARS, PINTEREST_DESCRIPTION_MAX_CHARS };
-export const LINKEDIN_SEE_MORE_FOLD_CHARS = 210;
-export const YOUTUBE_DESCRIPTION_MAX_CHARS = 5000;
-export const INSTAGRAM_CAPTION_MAX_CHARS = 2200;
+export { LINKEDIN_POST_MAX_CHARS, THREADS_POST_MAX_CHARS, FACEBOOK_POST_MAX_CHARS, PINTEREST_DESCRIPTION_MAX_CHARS } from './draft-ceilings';
+export {
+  checkPublish,
+  INSTAGRAM_CAPTION_MAX_CHARS,
+  LINKEDIN_SEE_MORE_FOLD_CHARS,
+  YOUTUBE_DESCRIPTION_MAX_CHARS,
+} from './publish-checks';
+export type { PublishCheck } from './publish-checks';
+// The route rejects drafts over this input cap with a 400 instead of
+// silently truncating (repo rule: never silently truncate/coerce).
+// Bound the baseline fan-out: one capped metrics read per score call.
 export const BASELINE_ROW_LIMIT = 200;
 
 export const SLOP_MARKERS = [
@@ -72,13 +97,6 @@ export interface BaselineRow {
   saves: number | null;
 }
 
-export interface PublishCheck {
-  network: PublishNetwork;
-  ok: boolean;
-  failures: string[];
-  warnings: string[];
-}
-
 export interface DraftCounts {
   chars: number;
   words: number;
@@ -97,23 +115,9 @@ export interface DraftScore {
   publishCheck: PublishCheck | null;
 }
 
-function countChars(text: string): number {
-  return Array.from(text).length;
-}
-
 function countWords(text: string): number {
   const words = text.trim().split(/\s+/).filter((word) => word.length > 0);
   return text.trim().length === 0 ? 0 : words.length;
-}
-
-function extractHashtags(text: string): string[] {
-  return text.match(/(?<![\p{L}\p{N}_/])#[\p{L}\p{N}_]+/gu) ?? [];
-}
-
-function extractLinks(text: string): string[] {
-  return text.match(
-    /(?<![@\p{L}\p{N}.-])(?:https?:\/\/[^\s]+|www\.[^\s]+|(?:[a-z0-9-]+\.)+(?:com|org|net|io|co|ai|dev|app|br|pt)(?![\p{L}\p{N}-])(?:\/[^\s]*)?)/giu,
-  ) ?? [];
 }
 
 const STOPWORDS = new Set([
@@ -216,72 +220,15 @@ export function summarizeBaseline(rows: BaselineRow[], truncated: boolean): Draf
   };
 }
 
-export function checkPublish(draft: string, network: PublishNetwork): PublishCheck {
-  const failures: string[] = [];
-  const warnings: string[] = [];
-  const chars = countChars(draft);
-  if (draft.trim().length === 0) {
-    failures.push('Draft is empty.');
-  }
-  if (network === 'linkedin') {
-    if (chars > LINKEDIN_POST_MAX_CHARS) {
-      failures.push(
-        `Draft is ${chars} characters, over the LinkedIn ${LINKEDIN_POST_MAX_CHARS}-character post limit.`,
-      );
-    }
-    const hashtags = extractHashtags(draft);
-    if (hashtags.length > 10) {
-      warnings.push(
-        `Draft has ${hashtags.length} hashtags; posts with more than 10 read as spam.`,
-      );
-    }
-    const links = extractLinks(draft);
-    if (links.length > 0) {
-      warnings.push(
-        'Draft has a link in the body; LinkedIn demotes link posts — put the link in the first comment instead.',
-      );
-    }
-    const firstLine = draft.split('\n').find((line) => line.trim().length > 0) ?? '';
-    if (countChars(firstLine) > LINKEDIN_SEE_MORE_FOLD_CHARS) {
-      warnings.push(
-        `First line is ${countChars(firstLine)} characters, past the ~${LINKEDIN_SEE_MORE_FOLD_CHARS}-character see-more fold — the hook may be cut in the feed.`,
-      );
-    }
-  }
-  if (network === 'bluesky') {
-    const graphemes = countBlueskyGraphemes(draft);
-    if (graphemes > BLUESKY_CAPTION_MAX_GRAPHEMES) {
-      failures.push(
-        `Draft is ${graphemes} graphemes, over the Bluesky ${BLUESKY_CAPTION_MAX_GRAPHEMES}-grapheme caption limit — the caption would be cut.`,
-      );
-    }
-  }
-  if (network === 'threads' && chars > THREADS_POST_MAX_CHARS) {
-    failures.push(
-      `Draft is ${chars} characters, over the Threads ${THREADS_POST_MAX_CHARS}-character post limit.`,
-    );
-  }
-  if (network === 'facebook' && chars > FACEBOOK_POST_MAX_CHARS) {
-    failures.push(
-      `Draft is ${chars} characters, over the Facebook ${FACEBOOK_POST_MAX_CHARS}-character post limit.`,
-    );
-  }
-  if (network === 'pinterest' && chars > PINTEREST_DESCRIPTION_MAX_CHARS) {
-    failures.push(`Draft is ${chars} characters, over the Pinterest ${PINTEREST_DESCRIPTION_MAX_CHARS}-character description limit.`);
-  }
-  if (network === 'youtube' && chars > YOUTUBE_DESCRIPTION_MAX_CHARS) {
-    warnings.push(
-      `Draft is ${chars} characters, over YouTube's ${YOUTUBE_DESCRIPTION_MAX_CHARS}-character description limit — the description would be cut.`,
-    );
-  }
-  if (network === 'instagram' && chars > INSTAGRAM_CAPTION_MAX_CHARS) {
-    warnings.push(
-      `Draft is ${chars} characters, over Instagram's ${INSTAGRAM_CAPTION_MAX_CHARS}-character caption limit — the caption would be cut.`,
-    );
-  }
-  return { network, ok: failures.length === 0, failures, warnings };
-}
-
+//---------------
+// scoreDraft — 0-100 from mechanical signals, every point explained.
+//
+// Post buckets: hook 20, length 15, hashtags 15, slop-free 20, links 10,
+// top-theme match 15, call to action 5. Script buckets: hook 25, length 20,
+// slop-free 25, links 10, top-theme match 15, call to action 5. Each bucket emits exactly one
+// reason inside its own range, so the reasons always sum to the score and
+// the score cannot leave 0-100.
+//---------------
 export function scoreDraft(
   draft: string,
   baseline: DraftBaseline,

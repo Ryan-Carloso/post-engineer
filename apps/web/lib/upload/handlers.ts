@@ -390,12 +390,3 @@ export function buildUploadErrorResponse(
     { status: isValidationError ? 400 : isInstagramError ? (error.statusCode || 500) : isAuthError ? 401 : 500 },
   );
 }
-
-export { handleBlueskyUpload } from '@/lib/upload/bluesky-handler';
-export type { BlueskyUploadResponse } from '@/lib/upload/bluesky-handler';
-
-export { handleThreespeakUpload } from '@/lib/upload/threespeak-handler';
-export type { ThreespeakUploadResponse } from '@/lib/upload/threespeak-handler';
-
-export { handleLinkedinUpload } from '@/lib/upload/linkedin-handler';
-export type { LinkedinUploadResponse } from '@/lib/upload/linkedin-handler';

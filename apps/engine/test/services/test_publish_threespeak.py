@@ -9,6 +9,7 @@ import unittest
 
 from pydantic import ValidationError
 
+from app.providers import SOCIAL_PROVIDERS
 from app.models.publish import PublishParams, ThreespeakPublish
 from app.services import publish_threespeak, upload_publisher
 from app.services.fill_schedule.metadata import metadata_for, validate_publish_plan
@@ -72,7 +73,7 @@ class ThreespeakPublisherWiringTest(unittest.TestCase):
         self.assertIs(result.threespeak, metadata)
 
     def test_provider_and_part_builder_are_registered(self) -> None:
-        self.assertIn("3speak", upload_publisher.VALID_PROVIDERS)
+        self.assertIn("3speak", SOCIAL_PROVIDERS)
         metadata_type, build = upload_publisher._PART_BUILDERS["3speak"]
         self.assertIs(metadata_type, upload_publisher.ThreespeakMetadata)
         parts = build(upload_publisher.ThreespeakMetadata(caption="post", account_ids=("alice",)))

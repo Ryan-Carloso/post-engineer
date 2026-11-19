@@ -1,25 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { handleThreadsUpload } from '@/lib/upload/threads-handler';
-import { handleFacebookUpload } from '@/lib/upload/facebook-handler';
-import { handlePinterestUpload } from '@/lib/upload/pinterest-handler';
-import { handleFanvueUpload } from '@/lib/upload/fanvue-handler';
-import { handleThreespeakUpload } from '@/lib/upload/threespeak-handler';
-import { handleRumbleUpload } from '@/lib/upload/rumble-handler';
 import { logger } from '@/lib/logger';
 import { ValidationError } from '@/lib/errors';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { secretsMatch } from '@/lib/secrets';
-import {
-  handleYoutubeUpload,
-  handleInstagramUpload,
-  handleBlueskyUpload,
-  handleLinkedinUpload,
-  buildUploadErrorResponse,
-} from '@/lib/upload/handlers';
+import { buildUploadErrorResponse } from '@/lib/upload/handlers';
+import { PUBLISH_HANDLERS, type PublishHandlerResponse } from '@/lib/upload/publish-handlers';
 import { SOCIAL_PROVIDERS, isSocialProvider } from '@/lib/providers/registry';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
-import type { ContentUploadAccountResult } from '@/lib/upload/content-upload-result';
 import {
   createPublishLedgerClient,
   isValidPublishScopeKey,
@@ -110,11 +98,15 @@ async function postHandler(request: NextRequest) {
       partition = await partitionPublishAccounts(ledgerClient, scopeKey, provider, userId, formData);
     }
 
-    type UploadDispatchResult = {
-      success: boolean;
-      successCount?: number;
-      results?: ContentUploadAccountResult[];
-    };
+    // The ledger branches recompute successCount from the merged results,
+    // so a replayed success is counted (the handler's count only covers
+    // fresh publishes).
+    type UploadDispatchResult = PublishHandlerResponse;
+    // Heartbeat: while this request publishes, it renews its claims, so
+    // a publish longer than the lease is never taken over while alive.
+    // Stopped in the finally once the handler finished and the outcomes
+    // are recorded — including the handler-throw path, which records the
+    // claims as failed before rethrowing.
     const stopHeartbeat =
       partition !== null && partition.granted.length > 0 && ledgerClient !== null
         ? startLedgerHeartbeat(ledgerClient, partition)
@@ -131,26 +123,7 @@ async function postHandler(request: NextRequest) {
       } else {
         const handlerForm = partition !== null ? partition.formData : formData;
         try {
-          response =
-          provider === 'youtube'
-            ? await handleYoutubeUpload(handlerForm, userId, logId, startTime)
-            : provider === 'bluesky'
-              ? await handleBlueskyUpload(handlerForm, userId)
-              : provider === 'linkedin'
-                ? await handleLinkedinUpload(handlerForm, userId)
-                : provider === 'threads'
-                  ? await handleThreadsUpload(handlerForm, userId)
-                  : provider === 'facebook'
-                    ? await handleFacebookUpload(handlerForm, userId)
-                    : provider === 'pinterest'
-                      ? await handlePinterestUpload(handlerForm, userId)
-                      : provider === 'fanvue'
-                        ? await handleFanvueUpload(handlerForm, userId)
-                        : provider === '3speak'
-                          ? await handleThreespeakUpload(handlerForm, userId)
-                          : provider === 'rumble'
-                            ? await handleRumbleUpload(handlerForm, userId)
-                            : await handleInstagramUpload(handlerForm, userId, logId, startTime);
+          response = await PUBLISH_HANDLERS[provider](handlerForm, userId, logId, startTime);
         } catch (error) {
           if (partition !== null && ledgerClient !== null) {
             await releaseGrantedClaims(ledgerClient, partition, error);
