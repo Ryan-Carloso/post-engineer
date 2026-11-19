@@ -4,22 +4,29 @@
 #   MAJOR.MINOR  from the repo-root VERSION file — the same release line the
 #                web and engine deploy versions use, so a PR that touches
 #                apps/mcp/ ships web, engine and MCP as one number
-#   PATCH        the number of the merged PR that introduced the LAST commit
-#                touching apps/mcp/ (resolved through the GitHub API for that
-#                exact commit, never "the latest PR")
+#   PATCH        the ordinal of the LAST commit touching apps/mcp/ in the
+#                history main has: 1 for the first such commit, 2 for the
+#                next, and so on (git rev-list --count <that sha> -- apps/mcp/)
 #
-# e.g. 1.52.560. Nothing is committed: release-mcp.yml stamps this version
+# History order IS merge order, so the ordinal only grows along main. The PR
+# number of the same commit does not: PRs are numbered at creation, and a
+# long-lived apps/mcp/ PR merged after a newer one yields a LOWER patch than
+# the version npm already serves. The not-older guard must then refuse it,
+# which leaves the MCP code unpublished AND the deploy waiting for a version
+# npm never gets — #655, #661 and #662 all stalled that way on 2026-11-19.
+#
+# e.g. 1.53.219. Nothing is committed: release-mcp.yml stamps this version
 # into package.json/server.json only inside the publish job.
 #
-# The VPS deploy computes REQUIRED_MCP_VERSION for the web with the SAME
-# rule (deployment repo, deploy-version.sh resolve_required_mcp_version) and
+# The VPS deploy computes REQUIRED_MCP_VERSION for the web with the SAME rule
+# (deployment repo, deploy-version.sh resolve_required_mcp_version) and
 # deploys the web only once npm serves that version. If the two rules ever
 # disagree, the web waits for a version this workflow never publishes —
 # change both together.
 #
-# Needs a full-history checkout (git log over apps/mcp/), gh authenticated
-# through GH_TOKEN, and GITHUB_REPOSITORY (owner/name). Any failure exits
-# non-zero with a ::error:: line: an unidentified release is worse than none.
+# Needs a full-history checkout (git log/rev-list over apps/mcp/). Any failure
+# exits non-zero with a ::error:: line: an unidentified release is worse than
+# none.
 #
 # Usage: bash .github/scripts/mcp-release-version.sh [repo-root]
 set -euo pipefail
@@ -31,8 +38,6 @@ fail() {
   exit 1
 }
 
-[ -n "${GITHUB_REPOSITORY:-}" ] || fail "GITHUB_REPOSITORY is not set (expected owner/name)."
-
 [ -f VERSION ] || fail "The repo-root VERSION file is missing."
 release_line="$(tr -d '[:space:]' < VERSION)"
 if [[ ! "$release_line" =~ ^([0-9]+)\.([0-9]+)(\.[0-9]+)?$ ]]; then
@@ -40,12 +45,14 @@ if [[ ! "$release_line" =~ ^([0-9]+)\.([0-9]+)(\.[0-9]+)?$ ]]; then
 fi
 base="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}"
 
+[ "$(git rev-parse --is-shallow-repository 2>/dev/null || true)" = "false" ] ||
+  fail "The checkout is shallow, so apps/mcp/ has no ordinals (use fetch-depth: 0)."
+
 sha="$(git log -1 --format=%H -- apps/mcp/)" || fail "git log over apps/mcp/ failed."
 [ -n "$sha" ] || fail "No commit touches apps/mcp/ (shallow checkout? use fetch-depth: 0)."
 
-pr="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${sha}/pulls" \
-  --jq '[.[] | select(.merged_at != null)][0].number // empty')" ||
-  fail "GitHub API lookup of the PR for ${sha} failed."
-[[ "$pr" =~ ^[0-9]+$ ]] || fail "Commit ${sha} has no merged PR, so it has no release version."
+ordinal="$(git rev-list --count "$sha" -- apps/mcp/)" || fail "git rev-list over apps/mcp/ failed."
+[[ "$ordinal" =~ ^[1-9][0-9]*$ ]] ||
+  fail "Could not count the apps/mcp/ commits up to ${sha}."
 
-printf '%s.%s\n' "$base" "$pr"
+printf '%s.%s\n' "$base" "$ordinal"

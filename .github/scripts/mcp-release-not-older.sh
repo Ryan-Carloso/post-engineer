@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # Refuses a release version lower than the one npm's `latest` already has.
 #
-# The release patch is the PR number of the last merge touching apps/mcp/,
-# and PR numbers follow creation order, not merge order: when an older
-# apps/mcp/ PR (#570) merges after a newer one (#571) was published, the
-# computed 1.52.570 is lower than npm's 1.52.571. Publishing it would move
-# `latest` back to older code and the deploy would pin the web to it, so the
-# release fails loudly instead. The fix is any new apps/mcp/ merge: its
-# higher PR number yields a version above 1.52.571 that carries both PRs.
+# The release patch is the ordinal of the last commit touching apps/mcp/ in
+# main's history (mcp-release-version.sh), so it only grows: an out-of-order
+# merge cannot produce a lower version any more. This guard now protects the
+# one remaining way to go backwards — VERSION edited to an older release line,
+# or main's apps/mcp/ history rewritten — and the deploy pins the web to the
+# version this workflow publishes, so a lower release must fail loudly instead
+# of waiting for a version that will never exist. The fix is a new release
+# line in VERSION (MAJOR.MINOR), which beats the published patch by design.
 #
 # Usage: bash .github/scripts/mcp-release-not-older.sh <version> <published-latest>
 # An empty <published-latest> (nothing published yet) passes.
@@ -29,6 +30,6 @@ read -r p1 p2 p3 <<< "$published_parts"
 if [ "$v1" -lt "$p1" ] ||
   { [ "$v1" -eq "$p1" ] && [ "$v2" -lt "$p2" ]; } ||
   { [ "$v1" -eq "$p1" ] && [ "$v2" -eq "$p2" ] && [ "$v3" -lt "$p3" ]; }; then
-  echo "::error::Release version ${version} is lower than npm latest ${published}: an older apps/mcp/ PR merged after a newer one was published. Merge any apps/mcp/ change to publish a version above ${published}." >&2
+  echo "::error::Release version ${version} is lower than npm latest ${published}: the release line in VERSION is behind the one already published, or main's apps/mcp/ history was rewritten. Cut a new release line in VERSION (MAJOR.MINOR) to publish above ${published}." >&2
   exit 1
 fi
