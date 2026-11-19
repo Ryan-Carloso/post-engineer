@@ -45,7 +45,7 @@
 - Never fail silently: log errors, surface explicit messages, never catch-and-suppress. Mutations treat non-2xx, non-JSON, and `success:false` as failures; invalidate caches only on real success.
 - When a flow is removed, delete the whole path (route, client fns, MCP tool, docs, i18n keys, tests). Unused code shouldn't exist.
 - When fixing a flagged pattern, grep the whole repo for siblings (callers and callees) before calling it fixed.
-- Comments, test names, and docs must describe what the code actually does — update them in the same change.
+- Test names, docstrings, and docs must describe what the code actually does — update them in the same change.
 - Pin the same literal everywhere it lives: values duplicated across files/apps (SQL limits vs TS constants, pricing tables, cross-app copy, `SAFE_TASK_ID`) get a file-parsing sync test. No dynamic `new RegExp(interpolated)` even in tests (CodeQL) — use `includes`.
 - A new gate or check on stored data must accept every form the product already stores, not just the current canonical one: personas store language as a code (`en-US`) or a full name (`English`, see the edge-tts name map), and the English-only gates in engine/web/MCP initially rejected the name form (PR #252 review). Before adding a validator, grep the other subsystems for the forms they already accept.
 - This repo pins a specific Next.js version: check `apps/web/package.json` and `node_modules/next/dist/docs/` before framework-level code.
