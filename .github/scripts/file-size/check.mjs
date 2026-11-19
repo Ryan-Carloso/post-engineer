@@ -10,9 +10,11 @@
  *     any growth past the cap fails, there is no warning-only loophole).
  *
  * Exempt: test files, supabase/migrations, lockfiles, markdown, generated
- * *.gen.<ext> files (pinned by a drift test against their generator), and
- * vendored CalendarCN files (third-party code pinned to an upstream commit
- * in vendored-calendarcn.mjs — their line counts are upstream's, not ours).
+ * *.gen.<ext> files (pinned by a drift test against their generator), vendored
+ * CalendarCN files (third-party code pinned to an upstream commit
+ * in vendored-calendarcn.mjs — their line counts are upstream's, not ours),
+ * and prompt-data files (shared/prompt-base/** — prompt wording is data,
+ * not logic; see prompt-data.mjs for why the file cannot be split).
  * Only *.py / *.ts / *.tsx are checked; everything else is ignored.
  *
  * Usage:
@@ -29,6 +31,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { isVendoredCalendarCN } from './vendored-calendarcn.mjs';
+import { isPromptDataFile } from './prompt-data.mjs';
 
 // The cap (lines) a source file may have before the ratchet bites.
 // Shared from one constant so tests pin the same value as CI.
@@ -58,6 +61,8 @@ export function isExempt(p) {
   // Vendored CalendarCN files: third-party code pinned to an upstream
   // commit — their line counts are upstream's, not ours.
   if (isVendoredCalendarCN(p)) return true;
+  // Prompt-data files: prompt wording is data, not logic — see prompt-data.mjs.
+  if (isPromptDataFile(p)) return true;
   const segments = p.split('/');
   const base = segments[segments.length - 1];
   // Test files: *.test.*, *_test.*, or anything under a test(s) directory.
