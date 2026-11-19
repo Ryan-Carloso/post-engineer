@@ -3,19 +3,6 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { findRepoRoot } from '@/test/repo-root';
 
-//---------------
-// supabase/migrations/050_pinterest-provider.sql — the schema the Pinterest
-// connect and publish paths depend on. Each provider check is dropped and
-// re-created with the full list (the lesson of 037: a live constraint the
-// chain no longer defines can linger in production, so a plain add would
-// leave the old list in force). A shipped migration is never edited, so
-// this test pins the seven providers 050 shipped with; the file is frozen,
-// so it must NOT track SOCIAL_PROVIDERS (053 adds rumble after it, 057 adds
-// fanvue). The live pin is the 057 test. The schedule also carries one board id: a pin
-// cannot exist without a board.
-//---------------
-
-// The seven providers 050 shipped with, in the order the migration lists them.
 const PROVIDERS_AT_050 = ['youtube', 'instagram', 'bluesky', 'linkedin', 'threads', 'facebook', 'pinterest'];
 
 const sql = readFileSync(

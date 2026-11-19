@@ -45,9 +45,6 @@ def test_is_cancelled_separates_task_ids():
 
 
 def test_evicted_id_is_no_longer_cancelled(monkeypatch):
-    # The FIFO cap bounds memory, not the detach: an id evicted by ten
-    # thousand newer cancels forgets its mark, so a still-running worker
-    # for it would resume and could recreate its row.
     monkeypatch.setattr(task_cancellation, "MAX_CANCELLED_TASKS", 3)
     for task_id in ("evict-1", "evict-2", "evict-3"):
         request_cancel(task_id)
@@ -92,9 +89,6 @@ def test_cancel_and_delete_clears_the_mark_when_the_delete_fails():
 
 
 def test_forget_then_recancel_keeps_the_live_mark_within_the_cap(monkeypatch):
-    # forget() must drop the id from the eviction order too: a stale copy
-    # left behind would be evicted first and take the re-issued live mark
-    # with it, before the cap is actually reached.
     task_cancellation.reset()
     monkeypatch.setattr(task_cancellation, "MAX_CANCELLED_TASKS", 3)
     request_cancel("live")

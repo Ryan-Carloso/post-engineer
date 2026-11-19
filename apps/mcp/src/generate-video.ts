@@ -11,23 +11,8 @@ import { handleGeneratePersonaVideoBatch } from './tools-batch.js';
 import { generatePersonaVideoOutcome } from './tools-single-video.js';
 import { SOCIAL_PROVIDERS, type SocialProvider } from './contracts/providers.js';
 
-//---------------
-// generate_video (issue #566): one intent, one call. Replaces
-// the single-video and batch generation tools.
-//
-// `videos` holds 1..MAX_BATCH_VIDEOS videos. One video is generated and
-// scheduled as before; several are a batch (every BATCH_FREE_EVERY face
-// videos, the cheapest is free). The agent gives a persona and the accounts
-// by name or id and the tool resolves them (refs.ts): every reference of
-// every video is resolved BEFORE the first video is created, so an unknown
-// or ambiguous reference never leaves a half-created batch. What was
-// resolved, and which accounts the video publishes to by default, is echoed
-// back in the result.
-//---------------
-
 type Provider = SocialProvider;
 
-// Where each provider's account ids go in the web request (the per-provider arrays the route reads).
 const ACCOUNT_FIELD: Record<Provider, string> = {
   youtube: 'youtubeAccountIds',
   instagram: 'instagramAccountIds',
@@ -111,15 +96,11 @@ export interface PreparedVideo {
   note: string;
 }
 
-/** The persona's bound accounts per provider, from GET /api/persona/publishing-accounts. */
 export async function boundAccounts(client: PostEngineerClient, personaId: string): Promise<Map<Provider, string[]>> {
   let payload: unknown;
   try {
     payload = await getPersonaPublishingAccounts(client, personaId);
   } catch (error) {
-    // A malformed binding is no binding (the video then fails with "no
-    // bound publishing accounts"); a transport failure still propagates
-    // and surfaces as "Error reading the persona's publishing accounts".
     if (error instanceof MalformedContractResponseError) return new Map();
     throw error;
   }
@@ -204,7 +185,6 @@ export async function handleGenerateVideo(client: PostEngineerClient, args: Gene
     return failure('batchKey is for a batch of 2 or more videos. Use idempotencyKey to make one video safe to retry.');
   }
 
-  // Resolve every reference of every video before creating anything.
   const resolvers = createRefResolvers(client);
   const prepared: PreparedVideo[] = [];
   for (const [index, item] of videos.entries()) {

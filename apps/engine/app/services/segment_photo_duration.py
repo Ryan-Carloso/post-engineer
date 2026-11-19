@@ -16,13 +16,7 @@ screen past the maximum.
 import math
 from typing import Any, Optional
 
-# A requested photo stays on screen at least this long: shorter is a
-# flicker, not a beat (the density minimum already gives each photo
-# about 1s of speech).
 MIN_REQUESTED_PHOTO_SECONDS = 0.5
-# ... and at most this long: three times the default cap, long enough
-# to hold a turning-point beat while the slow zoom keeps the frame
-# alive. Longer stills read as frozen.
 MAX_REQUESTED_PHOTO_SECONDS = 6.0
 
 

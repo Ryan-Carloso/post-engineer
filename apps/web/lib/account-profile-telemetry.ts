@@ -1,11 +1,3 @@
-//---------------
-// PostHog events for account profile reads (name + picture), on connect and
-// on the 24h resync. They answer "why does this card show no name/photo?"
-// without server logs: whether the provider returned a name and a picture,
-// which host the picture lives on (next/image only loads allowed hosts),
-// and why a read failed. Never sends the name, the URL or the token.
-//---------------
-
 import { trackApiEvent } from './analytics';
 import type { SocialProvider } from './providers/registry';
 
@@ -48,8 +40,6 @@ export function reportProfileFetched(
   trackApiEvent(ACCOUNT_PROFILE_FETCHED_EVENT, properties);
 }
 
-// Stable code from errors shaped "CODE: detail" (ThreadsError, LinkedinError,
-// BlueskyProfileError); the free-text detail is not sent.
 export function profileErrorCode(error: unknown): string {
   if (!(error instanceof Error)) return 'non_error_thrown';
   const match = /^([A-Z][A-Z0-9_]{2,}):/.exec(error.message);

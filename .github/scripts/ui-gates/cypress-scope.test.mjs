@@ -37,7 +37,6 @@ describe('matchesGlob', () => {
 });
 
 describe('inCypressScope', () => {
-  // Paths relative to apps/web.
   it('includes app pages and layouts', () => {
     assert.equal(inCypressScope('app/(main)/account/page.tsx'), true);
     assert.equal(inCypressScope('app/layout.tsx'), true);

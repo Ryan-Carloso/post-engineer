@@ -1,32 +1,8 @@
-//---------------
-// Pinterest — API client to connect accounts (OAuth 2.0 authorization-code
-// flow) and publish video Pins to their boards.
-//
-// Documentation (2026): https://developers.pinterest.com/docs/api/v5/
-// Flow: https://www.pinterest.com/oauth/ -> POST /v5/oauth/token (HTTP
-// Basic auth with the app id/secret) -> GET /v5/user_account. Access
-// tokens live 30 days; the refresh token is continuous (60 days) and
-// rotates on every use, so every refresh persists the new pair.
-// Publishing a video Pin is four steps: POST /v5/media (register,
-// media_type video) -> POST the file to the returned S3 presigned URL
-// with the returned upload_parameters as form fields (file field named
-// `file`) -> poll GET /v5/media/{media_id} until status `succeeded`
-// (registered/processing/succeeded/failed) -> POST /v5/pins with
-// board_id, media_source { source_type: 'video_id', media_id } and a
-// cover (cover_image_key_frame_time, first frame by default).
-//
-// Secrets stay out of URLs: the app secret travels in the Basic auth
-// header (token exchange) and access tokens in the Authorization header,
-// so neither can surface in a logged request URL.
-//---------------
-
 import { PinterestError } from '@/lib/errors';
 
-// Pin title/description ceilings from the v5 PinCreate spec; the engine
-// (publish_pinterest.py) and the draft scorer pin the same values.
 export const PINTEREST_TITLE_MAX_CHARS = 100;
 export const PINTEREST_DESCRIPTION_MAX_CHARS = 800;
-export const PINTEREST_VIDEO_MAX_BYTES = 2 * 1024 * 1024 * 1024; // 2GB
+export const PINTEREST_VIDEO_MAX_BYTES = 2 * 1024 * 1024 * 1024;
 
 export const PINTEREST_SCOPES = [
   'boards:read',
@@ -39,13 +15,7 @@ export const PINTEREST_SCOPES = [
 const PINTEREST_API = 'https://api.pinterest.com/v5';
 const PINTEREST_OAUTH_URL = 'https://www.pinterest.com/oauth/';
 const REQUEST_TIMEOUT_MS = 15_000;
-// The S3 byte upload is not a JSON API call: a real video (tens to hundreds
-// of MB, up to the 2GB ceiling) cannot cross in 15s. Give the transfer its
-// own budget — the same 10 minutes the engine allows for uploads
-// (upload_publisher.DEFAULT_TIMEOUT_SECONDS).
 export const PINTEREST_UPLOAD_TIMEOUT_MS = 10 * 60_000;
-// Media processing is asynchronous: poll until the status settles, bounded
-// so a stuck video can never hang the publish forever.
 export const PINTEREST_MEDIA_MAX_POLLS = 24;
 export const PINTEREST_MEDIA_POLL_INTERVAL_MS = 5_000;
 
@@ -73,7 +43,6 @@ function readOptionalNumber(body: JsonRecord, key: string): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
-// Only Pinterest's own error message is surfaced, never the request itself.
 function describeFailure(body: JsonRecord | null, status: number): string {
   const message = body === null ? null : readOptionalString(body, 'message');
   const code = body === null ? null : readOptionalNumber(body, 'code');
@@ -81,11 +50,6 @@ function describeFailure(body: JsonRecord | null, status: number): string {
   return `status ${status}`;
 }
 
-//---------------
-// pinterestFetch — one API call. Non-2xx, a non-JSON body (a proxy can
-// answer with HTML) and a non-object body are all failures; the error
-// message is "CODE: detail" so callers and telemetry read a stable code.
-//---------------
 async function pinterestFetch(code: string, url: string, init: RequestInit = {}): Promise<JsonRecord> {
   const response = await fetch(url, { ...init, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
   const parsed: unknown = await response.json().catch(() => null);
@@ -109,11 +73,6 @@ function basicAuthHeader(): string {
   return `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`;
 }
 
-//---------------
-// buildPinterestAuthorizationUrl — OAuth consent URL. Pinterest has its
-// own app credentials (PINTEREST_CLIENT_ID / PINTEREST_CLIENT_SECRET),
-// separate from every other provider.
-//---------------
 export function buildPinterestAuthorizationUrl(state: string, redirectUriOverride?: string): string {
   const params = new URLSearchParams({
     response_type: 'code',
@@ -125,11 +84,6 @@ export function buildPinterestAuthorizationUrl(state: string, redirectUriOverrid
   return `${PINTEREST_OAUTH_URL}?${params.toString()}`;
 }
 
-//---------------
-// PinterestToken — the /v5/oauth/token response. The refresh token
-// rotates on every use: callers must persist the returned pair, never
-// keep the old refresh token.
-//---------------
 export interface PinterestToken {
   access_token: string;
   refresh_token: string | null;
@@ -167,10 +121,6 @@ async function exchangeToken(params: Record<string, string>): Promise<PinterestT
   return readToken(body, 'PINTEREST_TOKEN_FAILED');
 }
 
-//---------------
-// exchangePinterestCodeForToken — authorization code -> access token
-// (30 days) + refresh token (60 days, continuous).
-//---------------
 export async function exchangePinterestCodeForToken(
   code: string,
   redirectUriOverride?: string,
@@ -182,18 +132,10 @@ export async function exchangePinterestCodeForToken(
   });
 }
 
-//---------------
-// refreshPinterestAccessToken — refresh token -> fresh access token.
-// The refresh token rotates: the caller must persist the returned pair.
-//---------------
 export async function refreshPinterestAccessToken(refreshToken: string): Promise<PinterestToken> {
   return exchangeToken({ grant_type: 'refresh_token', refresh_token: refreshToken });
 }
 
-//---------------
-// PinterestUserProfile — the connected account: the v5 user_account id
-// is the providerAccountId, the username is the display name.
-//---------------
 export interface PinterestUserProfile {
   id: string;
   username: string | null;
@@ -215,12 +157,6 @@ export async function fetchPinterestUserProfile(accessToken: string): Promise<Pi
   };
 }
 
-//---------------
-// PinterestBoard — one board the account owns, with the id every Pin
-// needs. Boards are listed newest-first by Pinterest; the bookmark
-// cursor pages through them, bounded so a huge account cannot fan out
-// forever.
-//---------------
 export interface PinterestBoard {
   id: string;
   name: string | null;
@@ -258,13 +194,6 @@ export async function fetchPinterestBoards(accessToken: string): Promise<Pintere
   return boards;
 }
 
-//---------------
-// publishPinterestVideo — the four-step video Pin flow. The cover is the
-// first frame by default (cover_image_key_frame_time 0); a caller-supplied
-// cover image URL wins over the keyframe. Throws PinterestError on any
-// step: a failed media status is terminal, an exhausted poll budget is a
-// timeout (retryable), and a non-2xx pin creation is the publish failure.
-//---------------
 export interface PublishPinterestVideoInput {
   accessToken: string;
   boardId: string;
@@ -275,8 +204,6 @@ export interface PublishPinterestVideoInput {
   description?: string;
   coverImageUrl?: string;
   coverImageKeyFrameTime?: number;
-  // Test seam (options injection, not a production interface): poll budget
-  // and the sleep between polls.
   maxPolls?: number;
   sleep?: (ms: number) => Promise<void>;
 }
@@ -308,7 +235,6 @@ export async function publishPinterestVideo(
   const maxPolls = input.maxPolls ?? PINTEREST_MEDIA_MAX_POLLS;
   const sleep = input.sleep ?? defaultSleep;
 
-  // Step 1: register the video upload.
   const registered = await pinterestFetch(
     'PINTEREST_MEDIA_FAILED',
     `${PINTEREST_API}/media`,
@@ -322,16 +248,9 @@ export async function publishPinterestVideo(
   if (mediaId === null) throw new PinterestError('PINTEREST_MEDIA_FAILED: missing media_id', 502);
   const { uploadUrl, parameters } = readUploadParameters(registered);
 
-  // Step 2: upload the file to the presigned S3 URL. Every returned
-  // upload parameter becomes a form field, the file goes in `file`.
-  // S3 answers 204 with an empty body on success, so the body is never
-  // parsed as JSON: only the status decides.
   const form = new FormData();
   for (const [key, value] of Object.entries(parameters)) form.append(key, value);
   form.append('file', new Blob([new Uint8Array(input.video)], { type: input.contentType }), input.filename);
-  // A setTimeout-driven AbortController, not AbortSignal.timeout: the
-  // deadline must stay observable under vitest's fake timers, which do not
-  // fake AbortSignal.timeout.
   const uploadController = new AbortController();
   const uploadDeadline = setTimeout(() => uploadController.abort(), PINTEREST_UPLOAD_TIMEOUT_MS);
   let uploaded: Response;
@@ -348,8 +267,6 @@ export async function publishPinterestVideo(
     throw new PinterestError(`PINTEREST_UPLOAD_FAILED: status ${uploaded.status}`, uploaded.status);
   }
 
-  // Step 3: poll until the media settles. `failed` is terminal;
-  // running out of polls is a timeout, not a success.
   for (let poll = 0; poll < maxPolls; poll += 1) {
     const media = await pinterestFetch(
       'PINTEREST_MEDIA_FAILED',
@@ -367,7 +284,6 @@ export async function publishPinterestVideo(
     await sleep(PINTEREST_MEDIA_POLL_INTERVAL_MS);
   }
 
-  // Step 4: create the Pin on the board.
   const pinBody: Record<string, unknown> = {
     board_id: input.boardId,
     media_source: { source_type: 'video_id', media_id: mediaId },
@@ -397,10 +313,6 @@ async function createPin(accessToken: string, pinBody: Record<string, unknown>):
   return { pinId, permalink: `https://www.pinterest.com/pin/${pinId}/` };
 }
 
-//---------------
-// publishPinterestImage — an image Pin is one call: the bytes ride in the
-// pin body as image_base64 (no media upload, no processing poll).
-//---------------
 export interface PublishPinterestImageInput {
   accessToken: string;
   boardId: string;

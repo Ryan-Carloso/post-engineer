@@ -16,15 +16,12 @@ from test.controllers.test_task_segments_request import valid_segments
 
 
 def _post(payload: dict, auth_headers: dict) -> object:
-    # raise_server_exceptions=False: a handler that throws must surface
-    # as a 500 response here, not as a raised exception in the test.
     client = TestClient(asgi.app, raise_server_exceptions=False)
     return client.post("/api/v1/videos", json=payload, headers=auth_headers)
 
 
 def test_repeated_photo_returns_400_with_field_rule_and_fix(auth_headers):
     segments = valid_segments()
-    # The same photo twice: check_repeat rejects the repeat.
     segments[1]["media"] = segments[0]["media"]
     response = _post(
         {

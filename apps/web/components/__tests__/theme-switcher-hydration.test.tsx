@@ -5,10 +5,6 @@ import { renderToString } from 'react-dom/server';
 import { hydrateRoot } from 'react-dom/client';
 import { I18nProvider } from '@/lib/i18n/provider';
 
-// next-themes reads the stored choice from localStorage in its state
-// initializer: the server sees no choice ("system") while the first client
-// render already sees the stored one. The mock reproduces that split so the
-// test fails if ThemeSwitcher renders the stored value before mount.
 const themeState = vi.hoisted(() => ({ theme: 'system' }));
 vi.mock('next-themes', () => ({
   useTheme: () => ({ theme: themeState.theme, setTheme: vi.fn() }),
@@ -44,7 +40,6 @@ describe('ThemeSwitcher hydration', () => {
     const container = document.createElement('div');
     container.innerHTML = renderToString(tree());
     document.body.appendChild(container);
-    // Client side: the stored choice is now visible to the theme hook.
     themeState.theme = 'dark';
     const recoverableErrors: unknown[] = [];
     let root: { unmount: () => void } | undefined;

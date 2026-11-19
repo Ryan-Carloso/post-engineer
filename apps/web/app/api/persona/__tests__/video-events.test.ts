@@ -4,12 +4,6 @@ vi.mock('@/lib/supabase/server', () => ({
   createSupabaseServerClient: vi.fn(),
 }));
 
-//---------------
-// Tests for GET /api/persona/video-events/:taskId — SSE progress proxy.
-// Auth = Supabase session; the route pipes the engine's
-// /api/v1/tasks/:taskId/events stream without buffering it.
-//---------------
-
 import { GET } from '../video-events/[taskId]/route';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 

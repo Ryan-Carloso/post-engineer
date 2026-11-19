@@ -85,10 +85,6 @@ describe('uploadPublishMedia', () => {
   });
 
   it('sets Content-Length on the PUT: without it R2 answers 411', async () => {
-    // Next's patched fetch rebuilds a Request-input fetch with a stream body,
-    // which undici sends chunked with no Content-Length; R2 rejects the
-    // SigV4 PUT with 411 Length Required (prod, 2026-11-15). The header set
-    // here survives the rebuild, so the length always reaches R2.
     const { deps, calls } = fakeFetch(() => new Response(null, { status: 200 }));
 
     await uploadPublishMedia(Buffer.from('video'), 'instagram/1794650460355_3c764afd.mp4', 'video/mp4', deps);

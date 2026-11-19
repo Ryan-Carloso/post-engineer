@@ -1,12 +1,3 @@
-/**
- * Config loader for the API naming lint.
- *
- * Parses a restricted YAML subset (documented in .github/api-naming.yml):
- * top-level scalar keys, lists of scalars, lists of one-level maps, and
- * one level of nested maps. Kept dependency-free on purpose: the CI job
- * runs this with plain `node`, no install step.
- */
-
 import fs from 'node:fs';
 
 /**
@@ -41,7 +32,6 @@ function parseScalar(value) {
   if (v === 'false') return false;
   if (/^-?\d+$/.test(v)) return Number(v);
   if (v.startsWith('[') && v.endsWith(']')) {
-    // Flow-style list of scalars: ["a", 'b', 3]
     const items = [];
     let cur = '';
     let inS = false;
@@ -102,7 +92,6 @@ export function parseYamlSubset(text) {
             (itemText.startsWith("'") && itemText.endsWith("'"))
           );
         if (itemText === '') {
-          // `-` followed by a nested block on deeper lines.
           arr.push(parseBlock(lines[pos] ? lines[pos].indent : indent + 1));
         } else if (looksLikeMap) {
           const obj = {};

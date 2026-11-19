@@ -1,7 +1,3 @@
-// Shape for publish_video (action: from_file) (publish a user-provided video without
-// generation or schedule). Kept in a new module so tools.ts stays under the
-// file-size ratchet; tools.ts re-exports it so existing import sites
-// (`./tools.js`) keep working.
 import { z } from 'zod';
 import { MAX_UPLOAD_VIDEO_GB } from './limits.js';
 import { SOCIAL_PROVIDERS } from './contracts/providers.js';

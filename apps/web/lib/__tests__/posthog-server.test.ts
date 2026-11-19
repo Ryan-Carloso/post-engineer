@@ -1,9 +1,4 @@
-//---------------
-// posthog-server — server-side PostHog client singleton
-//
 // @vitest-environment node: getPostHogServer() returns null in browsers
-// (typeof window check), so these tests must run in Node, not jsdom.
-//---------------
 /**
  * @vitest-environment node
  */

@@ -1,9 +1,3 @@
-//---------------
-// Sends account-card display diagnostics to PostHog. Measures the live
-// label (scrollWidth > clientWidth) so a session shows whether the name
-// was stored and then clipped, or was never there.
-//---------------
-
 import { useEffect } from 'react';
 import { trackClientEvent } from './client-analytics';
 import {
@@ -66,8 +60,6 @@ export function reportAccountListFailed(provider: AccountProvider, message: stri
   trackClientEvent(ACCOUNT_LIST_FAILED_EVENT, { provider, message });
 }
 
-// One call per provider section. React Query keeps the error object around,
-// so the effect re-fires on render; reportAccountListFailed dedupes.
 export function useAccountListErrorTelemetry(provider: AccountProvider, message: string | null): void {
   useEffect(() => {
     if (message === null || message.length === 0) return;

@@ -173,8 +173,6 @@ index 1111111..2222222 100644
  }
 `;
     const { candidates } = extractFromDiff(diff, CONFIG);
-    // Only the added scheduleId line is a candidate; `ok` is context, and the
-    // destructured `data` is a local.
     assert.deepEqual(candidates.map((c) => c.name).sort(), ['scheduleId']);
   });
 });

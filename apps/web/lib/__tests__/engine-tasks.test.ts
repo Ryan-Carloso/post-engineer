@@ -339,8 +339,6 @@ describe('cancelEngineTask', () => {
     try {
       const pending = cancelEngineTask(TASK_ID, 'user-1');
       pending.catch(() => {});
-      // The per-call budget is shorter than the aggregate budget and the
-      // progress-lookup timeout: a hung engine gives up fast.
       expect(ENGINE_CANCEL_TIMEOUT_MS).toBeLessThan(ENGINE_CANCEL_BUDGET_MS);
       expect(ENGINE_CANCEL_TIMEOUT_MS).toBeLessThan(ENGINE_TASK_PROGRESS_TIMEOUT_MS);
       await vi.advanceTimersByTimeAsync(ENGINE_CANCEL_TIMEOUT_MS + 100);

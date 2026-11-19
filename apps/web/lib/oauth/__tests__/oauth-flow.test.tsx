@@ -7,7 +7,6 @@ vi.mock('@/lib/session-expiry', () => ({ notifyIfSessionExpired: vi.fn() }));
 vi.mock('@/lib/i18n/provider', () => ({ useI18n: () => ({ t: (key: string) => key }) }));
 vi.mock('../popup', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../popup')>();
-  // No real window: a blocked popup ends the flow right after the start call.
   return { ...actual, openOAuthPopup: vi.fn(() => null) };
 });
 

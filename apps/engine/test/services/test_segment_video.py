@@ -68,14 +68,10 @@ def test_clip_density_min_count_credits_each_clip_as_four_items():
 
 
 def test_clip_upload_cap_matches_the_temp_asset_cap():
-    # A larger clip could never arrive via temp_assets: the two caps must
-    # stay equal, or the engine would accept a clip the upload refuses.
     from app.controllers.v1 import temp_assets
 
     assert MAX_CLIP_BYTES == temp_assets._TEMP_ASSET_MAX_UPLOAD_BYTES
 
-
-# ---- detection: the .mp4 reference, never a new field
 
 
 @pytest.mark.parametrize("media,expected", [
@@ -94,8 +90,6 @@ def test_clip_upload_cap_matches_the_temp_asset_cap():
 def test_is_video_ref_reads_the_reference_suffix(media, expected):
     assert segment_video.is_video_ref(media) is expected
 
-
-# ---- probing: ffprobe is the content gate, the suffix is only admission
 
 
 def test_probe_video_reads_dimensions_duration_and_codec(tmp_path):
@@ -126,8 +120,6 @@ def test_probe_video_returns_none_for_audio_only(tmp_path):
     )
     assert segment_video.probe_video(path) is None
 
-
-# ---- validation: same bounds as photos, plus codec and duration
 
 
 def test_validate_video_accepts_a_portrait_h264_clip(tmp_path):
@@ -170,8 +162,6 @@ def test_validate_video_rejects_an_undecodable_file(tmp_path):
     assert segment_video.validate_video(str(path), VideoAspect.portrait) == "not_video"
 
 
-# ---- download: the SSRF guard and the byte cap, same as photos
-
 
 def test_download_video_goes_through_the_ssrf_guarded_fetcher(tmp_path):
     dest = str(tmp_path / "clip.raw")
@@ -183,8 +173,6 @@ def test_download_video_goes_through_the_ssrf_guarded_fetcher(tmp_path):
     assert kwargs["allowed_content_types"] == ("video/",)
     assert kwargs["what"] == "segment video clip"
 
-
-# ---- check: the photo codes, so the web/MCP contract keeps passing
 
 
 def test_check_media_file_reports_dimensions_and_no_face_verdict(tmp_path):
@@ -238,8 +226,6 @@ def test_check_media_url_reports_the_download_failure_code(tmp_path):
     assert result == {"code": "blocked_403", "width": None, "height": None, "has_face": None}
     assert not os.path.exists(os.path.join(str(tmp_path), "check-media-clip.raw"))
 
-
-# ---- clip_panel: the render item (copied into the task dir, never the temp asset)
 
 
 def _panel_clip(tmp_path, name="clip.mp4", seconds=5):

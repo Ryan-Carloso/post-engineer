@@ -473,8 +473,6 @@ describe('publishUploadedVideo', () => {
       download: vi.fn(async () => ({ data: new Blob([new Uint8Array(MP4)]), error: null })),
       remove: vi.fn(async () => ({ error: null })),
     };
-    // A valid publish input: the claim must run exactly once, through the
-    // conditional (expected-status) update that makes it single-use.
     const result = await publishUploadedVideo(
       store,
       storage,
@@ -484,8 +482,6 @@ describe('publishUploadedVideo', () => {
       Date.now(),
       new Date(),
     ).catch((error: unknown) => error);
-    // The instagram handler runs against mocked-nothing services and may
-    // fail downstream; what this test pins is the single claim.
     expect(claimStatuses).toEqual(['ready']);
     expect(result).toBeDefined();
     expect(storage.remove).toHaveBeenCalledWith([`${USER}/direct-uploads/x.mp4`]);

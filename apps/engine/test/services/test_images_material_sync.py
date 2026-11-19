@@ -10,7 +10,6 @@ from app.services import script_segments
 
 
 def _shared_text() -> str:
-    # Walk up instead of counting parents: mutmut runs the suite from a copied tree.
     for parent in Path(__file__).resolve().parents:
         candidate = parent / "shared" / "script-segments" / "script-segments.ts"
         if candidate.is_file():
@@ -38,14 +37,6 @@ def test_full_lipsync_media_cap_matches_the_shared_validator():
 
 
 def test_repeated_photo_rule_matches_the_shared_validator():
-    # Web and MCP run generated copies of the shared file. This pins the
-    # engine and that source to the same rule and fix text only: it does
-    # not prove the comparison semantics agree (token format, trimmed
-    # identity, mediaId-vs-url distinctness, rule precedence). Those are
-    # pinned per validator by the repeat tests (test_repeated_photo.py
-    # and script-segments-repeat.test.ts), not by this string check.
-    # The engine rule lives in segment_media_repeat.py now, not in
-    # script_segments.py, so both engine files are read here.
     rule = "the same photo must not repeat"
     fix = "Use a different photo for each media item."
     from app.services import segment_media_repeat

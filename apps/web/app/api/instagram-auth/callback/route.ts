@@ -12,9 +12,6 @@ import { withApiErrorReporting } from '@/lib/api-error-reporting';
 import { reportProfileFetched, reportProfileFetchFailed } from '@/lib/account-profile-telemetry';
 import { INSTAGRAM_USERNAME_FALLBACK } from '@/lib/providers/registry';
 
-//---------------
-// getSessionUserId — session user_id or null
-//---------------
 async function getSessionUserId(): Promise<string | null> {
   const supabase = await createSupabaseServerClient();
   const {
@@ -26,14 +23,6 @@ async function getSessionUserId(): Promise<string | null> {
   return user.id;
 }
 
-//---------------
-// GET /api/instagram-auth/callback — exchanges code for a long-lived token, encrypts
-// and persists in Supabase as provider 'instagram' (direct Instagram Login).
-//
-// CRITICAL: ALWAYS returns the popup HTML (oauthPopupResponse). If it returns
-// anything else (JSON, default Next.js error), the popup never receives
-// postMessage and gets stuck.
-//---------------
 async function getHandler(request: NextRequest) {
   const logId = logger.generateLogId();
   const { searchParams } = new URL(request.url);
@@ -41,7 +30,6 @@ async function getHandler(request: NextRequest) {
   const error = searchParams.get('error');
   const errorDescription = searchParams.get('error_description');
   const state = searchParams.get('state');
-  // Correlation id only: the raw state (and code) must never hit the logs.
   const stateRef = state ? oauthStateRef(state) : 'none';
   logger.info('[instagram-callback] received', {
     logId,
@@ -51,7 +39,6 @@ async function getHandler(request: NextRequest) {
     hasError: !!error,
   });
 
-  // Direct error from Instagram (e.g.: user denied permissions)
   if (error) {
     logger.warn('[instagram-callback] provider error', {
       logId,
@@ -71,14 +58,10 @@ async function getHandler(request: NextRequest) {
     });
   }
 
-  // Step 1+2: callback auth — web flow (session + httpOnly nonce cookie)
-  // or MCP fallback (state stored server-side via POST /api/account/connect-url).
   const callbackAuth = await resolveOAuthCallbackAuth(
     request,
     state,
     await getSessionUserId(),
-    // Service role only for the server-side oauth_states table; ownership is
-    // enforced by the user_id predicate on the consume (session user only).
     () => createSupabaseServiceClient(),
     'instagram'
   );
@@ -100,7 +83,6 @@ async function getHandler(request: NextRequest) {
   });
 
 
-  // Step 3: import InstagramService
   let InstagramService: typeof import('@/lib/instagram').InstagramService;
   try {
     const mod = await import('@/lib/instagram');
@@ -113,13 +95,6 @@ async function getHandler(request: NextRequest) {
     });
   }
 
-  // Step 4: create instance (validates env vars). The redirect_uri used in the
-  // code exchange MUST be exactly the one registered in the Meta Developer Dashboard —
-  // any other value makes Instagram reject the exchange (the vague "Unsupported
-  // request - method type: get"). Fail closed here instead of leaving
-  // the vague error.
-  // The redirectUri comes from the resolver (#45): in the MCP flow it is the stored
-  // server-side value, never the one from the client state; the equality guard is from #46.
   const allowedRedirectUris = [
     process.env.INSTAGRAM_REDIRECT_URI,
     process.env.INSTAGRAM_REDIRECT_URI_LOCAL,
@@ -150,7 +125,6 @@ async function getHandler(request: NextRequest) {
     });
   }
 
-  // Step 5: exchange code for long-lived token
   let token: { accessToken: string; expiresIn: number; tokenType: string };
   logger.debug('[instagram-callback] exchanging code for token', {
     logId,
@@ -168,7 +142,6 @@ async function getHandler(request: NextRequest) {
     });
   }
 
-  // Step 6: fetch profile
   let profile: Awaited<ReturnType<typeof instagram.getProfile>>;
   try {
     profile = await instagram.getProfile(token.accessToken);
@@ -192,10 +165,6 @@ async function getHandler(request: NextRequest) {
     });
   }
 
-  // Step 7: persist in Supabase.
-  // Both flows resolve to the signed-in session user (the connect-url
-  // fallback only accepts the state owner); upsertSocialAccount then writes
-  // with the service client (066 leaves the session client select-only).
   const tokenExpiresAt = new Date(Date.now() + token.expiresIn * 1000);
 
   try {
@@ -246,7 +215,6 @@ async function getHandler(request: NextRequest) {
     });
   }
 
-  // Step 8: success — returns public data
   logger.info('[instagram-callback] success', {
     logId,
     stateRef,
@@ -268,7 +236,4 @@ async function getHandler(request: NextRequest) {
   });
 }
 
-//---------------
-// 5xx reporting: handled server errors reach PostHog error tracking.
-//---------------
 export const GET = withApiErrorReporting('GET /api/instagram-auth/callback', getHandler);

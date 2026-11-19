@@ -11,22 +11,11 @@ import {
   type VideoGenerationRow,
 } from '@/lib/contracts/video-tasks';
 
-// The limit parser lives in the shared contract; the route re-exports it
-// so the existing import path keeps working.
 export { parseGenerationsLimit } from '@/lib/contracts/video-tasks';
-
-//---------------
-// GET /api/persona/video-generations — the user's video generation history
-// (for the Posts > History page), newest first. Optional ?limit=
-// (default 50, max 200). Rows are written by the video-job and video-status
-// routes via lib/generation/video-generation record helpers.
-//---------------
 
 async function getHandler(request: Request): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
-  // API-key/OAuth callers have no cookie session, so the service client
-  // (scoped by user_id below) is used; web sessions keep the server client.
   const supabase =
     auth.isApiKey === true || auth.isOAuth === true
       ? createSupabaseServiceClient()
@@ -34,9 +23,6 @@ async function getHandler(request: Request): Promise<NextResponse> {
 
   const limit = parseGenerationsLimit(new URL(request.url).searchParams.get('limit'));
 
-  // Filter in the query, before limit, so a capped page cannot hide an
-  // allowed row behind another persona's rows. Null persona_id on this
-  // table was stored at dispatch for a persona-less generation.
   let generationsQuery = supabase
     .from('video_generations')
     .select(
@@ -78,12 +64,7 @@ async function getHandler(request: Request): Promise<NextResponse> {
   return NextResponse.json({ success: true, generations });
 }
 
-//---------------
-// 5xx reporting: handled server errors reach PostHog error tracking.
-//---------------
 export const GET = withApiErrorReporting('GET /api/persona/video-generations', getHandler, {
-  // Polling route: the generations list refetches every 60s, so a success
-  // event per read is noise; 4xx/5xx still report.
   reportSuccess: false,
   getUserId: resolveReportingUserId,
 });

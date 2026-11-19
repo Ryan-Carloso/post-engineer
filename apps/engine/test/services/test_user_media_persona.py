@@ -43,12 +43,8 @@ def _request(**overrides):
 
 
 def test_persona_panel_sits_at_the_bottom_in_every_layout():
-    # The photo is inset where the face shows: bottom-anchored, so the
-    # captions above it never cover the photo.
     for layout in (VideoLayout.standard, VideoLayout.react, "react"):
         for full in (False, True):
-            # Full lip sync caps media at 6 photos for the whole video,
-            # so its segments carry none.
             segments = SEGMENTS
             if full:
                 segments = [{k: v for k, v in s.items() if k != "media"} for s in SEGMENTS]
@@ -68,7 +64,6 @@ def test_start_draws_the_panels_at_the_materials_stage_and_overlays_them_when_as
     assert "downloaded_videos, media_warnings" not in start
     final = inspect.getsource(tm.generate_final_videos)
     overlay = final.index("segment_panels.overlay_onto(")
-    # After the persona intro or the full lip-sync render, before the subtitles are burned in.
     assert final.index("full_lipsync.render_full_lipsync(") < overlay < final.index("video.generate_video(")
     assert final.index("prepare_persona_lipsync_video(") < overlay
     assert "_update_task)" in final[overlay : overlay + 140], "the render failure is recorded on the task"

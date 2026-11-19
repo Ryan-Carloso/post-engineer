@@ -1,25 +1,3 @@
-//---------------
-// POST /api/videos/batch-discount — the "6 for 5" batch discount (issue #487).
-//
-// The MCP tool generate_video creates each video of a batch
-// with generate-and-schedule (charged at list price, dispatched to the
-// engine at once, so they render back to back in one warm Modal container)
-// and then calls this route with the batch key and the created schedule
-// ids. The route groups those videos into one batch and credits back the
-// cheapest face video of every BATCH_FREE_EVERY (lib/billing/batch-discount).
-//
-// Rules the server enforces (never trusted from the caller):
-//   - every schedule belongs to the caller (404 otherwise) and, for a
-//     persona-scoped API key, to one of its personas (403);
-//   - a video already in another batch cannot join this one (409);
-//   - at most MAX_BATCH_VIDEOS videos per batch (400);
-//   - every video was created within BATCH_WINDOW_MS of the first (409):
-//     a batch is videos made together, not posts gathered over days.
-// Idempotent: the batch id is derived from (user, batchKey), so calling it
-// again with the same key (a retry that adds the rest of the batch)
-// only adds the missing free videos; it never credits a video twice.
-//---------------
-
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
@@ -42,7 +20,6 @@ import { applyDiscount, claimSlots, readSlotsByBatch, readSlotsBySchedules } fro
 
 const ROUTE = 'POST /api/videos/batch-discount';
 
-/** Namespace for the deterministic batch id; never reuse it for another id. */
 const BATCH_NAMESPACE = 'batch-discount/v1';
 
 const BodySchema = z
@@ -87,8 +64,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
   const limited = await applyRateLimit(request, RATE_LIMITS.batchDiscount, userId);
   if (limited) return limited;
 
-  // Service role for every caller: refund_batch_tokens and the slot updates
-  // run server-side only. Ownership is re-checked by user_id on each query.
   const supabase = createSupabaseServiceClient();
 
   const { data: schedules, error: schedulesError } = await supabase
@@ -139,8 +114,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
   const toClaim = requested.slots.filter((slot, index) => requested.batchIds[index] === null).map((slot) => slot.id);
   const claimed = await claimSlots(supabase, userId, batchId, toClaim);
   if (!claimed.ok) return fail(500, 'Failed to group the batch videos.', ERROR_CODES.INTERNAL_ERROR, claimed.error);
-  // Re-read after the claim: the discount is planned on the rows that
-  // really carry this batch id, never on the pre-claim snapshot.
   const batch = await readSlotsByBatch(supabase, userId, batchId);
   if (!batch.ok) return fail(500, 'Failed to read the batch videos.', ERROR_CODES.INTERNAL_ERROR, batch.error);
   const inBatch = new Set(batch.slots.map((slot) => slot.id));

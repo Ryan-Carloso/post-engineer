@@ -28,14 +28,11 @@ import {
 
 interface McpToolCard {
   id: string;
-  /** The actions of an action tool, shown under its name; none for generate_video and cancel_video. */
   actions: readonly string[];
   descKey: TranslationKey;
   Icon: ComponentType;
 }
 
-// The 17 intent tools of the MCP server (issue #566). apps/mcp/src registers
-// them; the docs-sync test there checks that every one is named here.
 const MCP_TOOL_CARDS: McpToolCard[] = [
   { id: 'generate_video', actions: [], descKey: 'apiKeys.toolDescGenerateVideo', Icon: FilmIcon },
   { id: 'video_tasks', actions: ['status', 'list_generations', 'get_generation'], descKey: 'apiKeys.toolDescVideoTasks', Icon: SpinnerIcon },
@@ -55,14 +52,6 @@ const MCP_TOOL_CARDS: McpToolCard[] = [
   { id: 'check_script', actions: ['validate', 'score'], descKey: 'apiKeys.toolDescCheckScript', Icon: CheckIcon },
   { id: 'publish_video', actions: ['from_file', 'create_upload', 'complete_upload', 'publish_upload'], descKey: 'apiKeys.toolDescPublishVideo', Icon: KeyIcon },
 ];
-
-//---------------
-// McpDocsSection — step 2 of the prompts hub: the MCP install prompt the
-// user pastes into their agent (with the key they just created filled in,
-// or the placeholder when there is none), the tools grid (collapsed by
-// default so the prompt stays the focus), and the security note. The hub numbers the steps, so this section has no
-// heading of its own. The prompt text lives in lib/mcp-install-prompt.ts.
-//---------------
 
 export default function McpDocsSection({ apiKey }: { apiKey: string | null }): ReactNode {
   const { t, locale } = useI18n();

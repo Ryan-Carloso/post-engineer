@@ -1,16 +1,3 @@
-//---------------
-// Request validation for POST /api/videos/generate-and-schedule. Runs before
-// auth and before any token is charged, and reports every problem it finds
-// in one 400: the top-level code/error/field describe the first problem
-// (so existing clients keep working), and `errors` lists up to
-// MAX_REPORTED_ISSUES of them.
-//
-// Order is fixed (topics/script-prompt keys, shape, title, segments,
-// providers, options, persona-less rules) so the first problem reported is
-// the same one a single-error response would have named. When the shape
-// fails, the semantic checks are skipped: they need the parsed fields.
-//---------------
-
 import type { NextResponse } from 'next/server';
 import type { z } from 'zod';
 
@@ -25,8 +12,6 @@ import { invalid, MAX_REPORTED_ISSUES, type Checked, type ValidationIssue } from
 export { MAX_REPORTED_ISSUES };
 
 export function shapeIssues(error: z.ZodError): ValidationIssue[] {
-  // Do not slice here. rejectInvalidRequest caps what is echoed and uses
-  // the array length as errorCount, which the docstring says is the real total.
   return error.issues.map((issue) => ({
     code: 'VALIDATION_FAILED' as const,
     message: `Invalid request: ${issue.message}`,
@@ -36,20 +21,16 @@ export function shapeIssues(error: z.ZodError): ValidationIssue[] {
 
 export interface SemanticInput {
   title: string;
-  /** Agent-supplied video description (issue #542 follow-up): required, non-blank. */
   description: string;
   segments: unknown;
   providers: string[];
   options: OptionsInput;
-  /** Null for a post without a persona (see route.ts). */
   personaId: string | null;
-  /** The board Pinterest pins go to (required when pinterest is selected). */
   pinterestBoardId?: string;
 }
 
 export interface CheckedRequest {
   title: string;
-  /** Trimmed agent description. */
   description: string;
   script: string;
   providers: Provider[];
@@ -57,7 +38,6 @@ export interface CheckedRequest {
   pinterestBoardId: string | null;
 }
 
-/** A post without a persona has no face and no voice: both are required. */
 function personaLessIssues(options: ValidatedOptions): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
   if (options.videoType !== 'faceless') {
@@ -77,8 +57,6 @@ function personaLessIssues(options: ValidatedOptions): ValidationIssue[] {
   return issues;
 }
 
-/** Trimmed description; blank is rejected, never treated as absent: the
- *  agent must send the publish copy (issue #542 follow-up). */
 function resolveDescription(description: string): Checked<string> {
   const trimmed = description.trim();
   if (trimmed.length === 0) {
@@ -114,14 +92,8 @@ export function checkSemantics(input: SemanticInput): Checked<CheckedRequest> {
   };
 }
 
-// A zod path can contain a caller-controlled key (publishing.accounts.<key>).
-// The issue count is already capped; each path is capped too, or one long
-// key still reaches PostHog and the response. Matches the 500-char cap
-// trackApiEvent applies to top-level strings, kept shorter for a field path.
 const MAX_FIELD_PATH_CHARS = 200;
 
-// Any issue message can quote caller input (a provider name, a zod value).
-// Same bound trackApiEvent uses for a top-level string.
 const MAX_ECHOED_MESSAGE_CHARS = 500;
 
 function capField(field: string | undefined): string | undefined {
@@ -132,7 +104,6 @@ function capMessage(message: string): string {
   return message.slice(0, MAX_ECHOED_MESSAGE_CHARS);
 }
 
-/** Track once per rejected request and return the 400 with every problem, capped. */
 export function rejectInvalidRequest(issues: ValidationIssue[]): NextResponse {
   const reported = issues.slice(0, MAX_REPORTED_ISSUES);
   const [first] = reported;

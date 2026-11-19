@@ -51,16 +51,12 @@ class TaskPrivacyTests(unittest.TestCase):
         body = response["body"]
         self.assertNotIn("cost_usd", body)
         self.assertNotIn("cost_missing_reason", body)
-        # Everything else still comes through.
         self.assertEqual(body["task_id"], self.task_id)
         self.assertEqual(body["state"], const.TASK_STATE_COMPLETE)
 
     def test_get_all_tasks_strips_cost_usd(self):
         response = video_controller.get_all_tasks(_request(), 1, 10)
         tasks = response["body"]["tasks"]
-        # Locate our own task: other tests share the global in-memory state
-        # and may leak tasks (mutmut runs an arbitrary subset order), so a
-        # global count assertion would be order-dependent.
         task = next(t for t in tasks if t["task_id"] == self.task_id)
         self.assertNotIn("cost_usd", task)
         self.assertNotIn("cost_missing_reason", task)
@@ -100,7 +96,6 @@ class TaskPrivacyTests(unittest.TestCase):
         view = video_controller._public_task_view(task)
         self.assertNotIn("cost_usd", view)
         self.assertNotIn("cost_missing_reason", view)
-        # The stored row is untouched.
         self.assertIn("cost_usd", task)
         self.assertIn("cost_missing_reason", task)
 

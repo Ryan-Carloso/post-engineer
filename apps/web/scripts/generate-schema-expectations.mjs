@@ -1,16 +1,3 @@
-// Generates apps/web/lib/schema-expectations.gen.ts: the columns that the
-// supabase migrations ADD to existing tables. The web checks them against
-// the live database at boot (lib/schema-drift.ts), so a deploy whose
-// migration was not applied yet is reported at startup instead of failing at
-// runtime with "column ... does not exist" (issue #308).
-//
-// Committed (like lib/engine/schema.gen.ts) because the web Docker build
-// context copies only apps/web: supabase/migrations is not there at build
-// time. The drift test (lib/__tests__/schema-expectations-gen.test.ts)
-// regenerates in memory and fails when the committed file is stale.
-//
-// Run: node apps/web/scripts/generate-schema-expectations.mjs [--check]
-//   --check  exit 1 (without writing) when the committed file is stale.
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -35,12 +22,6 @@ function stripComments(sql) {
   return sql.replace(/--[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
 }
 
-/**
- * Columns each table must have after every migration is applied, in file
- * order: `add column` adds, a later `drop column` removes. Only columns that
- * migrations ADD to a table count — a table's original columns come from its
- * `create table`, which a missing table would already break loudly.
- */
 export function extractRequiredColumns(sqlFiles) {
   const tables = new Map();
   for (const sql of sqlFiles) {

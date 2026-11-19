@@ -11,14 +11,6 @@ import {
   unknownVideoTypeMessage,
 } from '@/lib/tokens';
 
-//---------------
-// The video_type error suffix must match the engine's exactly: the
-// engine (apps/engine/app/models/schema.py) and the MCP
-// (apps/mcp/src/video-type.ts, pinned by its own video-type sync test)
-// carry the same literal, and the numbers in it must stay the price
-// table in lib/tokens.ts — the agent chooses the mode knowing the
-// cost, and the server charges from the type, never from the client.
-//---------------
 const root = findRepoRoot(import.meta.url);
 const engineSchema = readFileSync(join(root, 'apps/engine/app/models/schema.py'), 'utf8');
 const engineSuffix = engineSchema.match(/VIDEO_TYPE_ERROR_SUFFIX = "([^"]+)"/)?.[1];

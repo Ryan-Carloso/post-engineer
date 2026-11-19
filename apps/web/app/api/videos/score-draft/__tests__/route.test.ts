@@ -1,11 +1,3 @@
-//---------------
-// Tests for POST /api/videos/score-draft.
-//
-// Scoring is advisory and read-only: no token debit, no schedule, no
-// engine call. The baseline is one capped post_metrics read (7d first,
-// 24h fallback); the route test pins the query shape and the fallback.
-//---------------
-
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -49,8 +41,6 @@ function row(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   };
 }
 
-// Records every chained filter; `limit` resolves the next queued result,
-// so the 7d-then-24h fallback is pinned by queue order.
 function mockQuery(
   results: Array<{ data: unknown; error: unknown }>,
   personaResult: { data: unknown; error: unknown } = { data: { id: PERSONA }, error: null },
@@ -125,7 +115,6 @@ describe('POST /api/videos/score-draft', () => {
     const { calls } = mockQuery([{ data: [], error: null }, { data: [], error: null }]);
     await post({ draft: strongDraft(), personaId: PERSONA });
     expect(calls).toContainEqual(['eq', 'persona_id', PERSONA]);
-    // Ownership is re-checked: the service role bypasses RLS.
     expect(calls).toContainEqual(['from', 'personas']);
     expect(calls).toContainEqual(['eq', 'id', PERSONA]);
     expect(calls).toContainEqual(['eq', 'user_id', 'user-1']);
@@ -187,7 +176,6 @@ describe('POST /api/videos/score-draft', () => {
     );
     expect(mcpSource).toContain(`.max(${DRAFT_MAX_INPUT_CHARS}, 'draft must be at most ${DRAFT_MAX_INPUT_CHARS} characters')`);
     expect(mcpSource).toContain(`.enum([${DRAFT_KINDS.map((kind) => `'${kind}'`).join(', ')}])`);
-    // Both sides read the one network list (shared/contracts/providers.ts).
     expect(mcpSource).toContain('.enum(PUBLISH_NETWORKS)');
     expect(PUBLISH_NETWORKS).toContain('fanvue');
   });
@@ -213,9 +201,6 @@ describe('POST /api/videos/score-draft', () => {
     expect(network.status).toBe(400);
     const networkBody = (await network.json()) as Record<string, unknown>;
     expect(networkBody.field).toBe('network');
-    // The rejection message lists the valid networks from PUBLISH_NETWORKS,
-    // so it must include 3speak (it used to name only the six pre-3Speak networks).
-    // The exact text pins the separator too, not just the network names.
     expect(String(networkBody.error)).toBe(
       `network must be one of ${PUBLISH_NETWORKS.map((n) => `"${n}"`).join(', ')} when given.`,
     );

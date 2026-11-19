@@ -1,7 +1,3 @@
-//---------------
-// Mock Supabase Server Client — returns an authenticated session for tests
-//---------------
-
 const MOCK_USER = {
   id: 'test-user-id',
   email: 'test@example.com',

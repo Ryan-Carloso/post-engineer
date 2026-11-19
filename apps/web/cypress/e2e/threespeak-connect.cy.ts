@@ -1,12 +1,5 @@
-//---------------
-// 3Speak connect — e2e da seção 3Speak na página de contas.
-// Sem OAuth: formulário usuário Hive + posting key chama /api/threespeak-connect.
-//---------------
-
 describe('3Speak — conectar conta na página de contas', () => {
   beforeEach(() => {
-    // Sessão REAL no Supabase (usuário de teste do repo): o middleware
-    // valida o cookie server-side, intercepts não bastam.
     cy.loginE2EUser();
 
     cy.intercept('GET', '/api/account', {
@@ -15,13 +8,6 @@ describe('3Speak — conectar conta na página de contas', () => {
     }).as('getAccounts');
   });
 
-  //---------------
-  // openConnectDialog — o formulário de conexão vive num dialog agora
-  // (KeyConnectDialog), aberto pelo botão da seção 3Speak.
-  //---------------
-  // The connect button reads "Conectar uma conta" while the section is empty
-  // and "+ Conectar outra conta" once an account exists (accounts/page.tsx
-  // picks the label from the account count).
   function openConnectDialog(accountsConnected = false): void {
     const label = accountsConnected ? '+ Conectar outra conta' : 'Conectar uma conta';
     cy.visit('/accounts');
@@ -38,7 +24,6 @@ describe('3Speak — conectar conta na página de contas', () => {
     cy.get('[data-testid="threespeak-handle-input"]').should('be.visible');
     cy.get('[data-testid="threespeak-password-input"]').should('be.visible');
     cy.get('[data-testid="threespeak-connect-button"]').should('be.visible');
-    // aviso de segurança: só a posting key, nunca owner/active/master
     cy.contains('posting key').should('exist');
   });
 
@@ -106,7 +91,6 @@ describe('3Speak — conectar conta na página de contas', () => {
     cy.wait('@threespeakConnectFail');
 
     cy.get('[data-testid="threespeak-connect-error"]').should('be.visible');
-    // A credencial rejeitada (422) tem mensagem própria, não o erro genérico.
     cy.get('[data-testid="threespeak-connect-error"]').should('contain', 'rejeitou');
     cy.get('[data-testid="threespeak-password-input"]').should('have.value', '');
   });

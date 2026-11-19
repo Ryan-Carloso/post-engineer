@@ -70,19 +70,11 @@ export async function resolveApiKey(
   };
 }
 
-//---------------
-// isScopedApiKey — API key with an explicit persona restriction.
-// Restricted keys cannot create new personas (the scope is fixed at
-// creation) and can only see/operate on the listed personas.
-//---------------
 export interface PersonaScopeContext {
   isApiKey?: boolean;
   personaIds?: string[] | null;
 }
 
-// A type predicate so callers can use auth.personaIds directly. A scoped
-// key's personaIds is an array (possibly empty); null and undefined are
-// the unscoped cases and never enter the true branch.
 export function isScopedApiKey<T extends PersonaScopeContext>(
   auth: T,
 ): auth is T & { isApiKey: true; personaIds: string[] } {
@@ -93,11 +85,6 @@ export function isScopedApiKey<T extends PersonaScopeContext>(
   );
 }
 
-//---------------
-// isPersonaAllowed — checks whether an authenticated context can access the
-// persona. null/undefined scope = full access (web session or a key without
-// restriction); an explicit list = only the IDs it contains.
-//---------------
 export function isPersonaAllowed(
   scope: readonly string[] | null | undefined,
   personaId: string,

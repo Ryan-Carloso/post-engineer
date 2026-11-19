@@ -37,42 +37,20 @@ WEIGHTS_DIR = "/weights"
 BASE_WEIGHTS_DIR = f"{WEIGHTS_DIR}/LongCat-Video"
 AVATAR_WEIGHTS_DIR = f"{WEIGHTS_DIR}/LongCat-Video-Avatar-1.5"
 
-# Both checkpoints live on the same persistent volume: Avatar-1.5 builds on the
-# LongCat-Video foundation model and the loader expects both trees under /weights.
 WEIGHTS_VOLUME = modal.Volume.from_name("longcat-models", create_if_missing=True)
 LONGCAT_BASE_REPO = "meituan-longcat/LongCat-Video"
 LONGCAT_AVATAR_REPO = "meituan-longcat/LongCat-Video-Avatar-1.5"
 
-# H200 (141GB) removes any capacity doubt for the clip lengths production
-# renders, so an OOM means a real bug rather than a tight fit. Rate is Modal's
-# published per-second price; app/services/longcat.py mirrors it in
-# GPU_RATES_USD_S and a sync test pins the two against each other.
-# The GPU the renderer asks Modal for. Overridable per deployment so a region
-# without H200 capacity can fall back to another card the model is known to fit
-# on, without editing and redeploying this module.
-#
-# VRAM is the constraint, not speed: the checkpoints plus the KV cache need
-# roughly 54GB+ before inference starts. 48GB (L40S) OOMs; 80GB (H100, A100-80GB)
-# is the documented working floor; 141GB (H200) is headroom.
 GPU_RATES: Final[dict[str, float]] = {
     "H200": 0.001261,
     "H100": 0.001097,
     "A100-80GB": 0.000694,
 }
 
-# Ordered preference handed to Modal. Modal tries each in order and falls back
-# only when the preferred type has no capacity, which is what keeps a persona
-# video from sitting in "waiting to be scheduled" through a hardware shortage.
-#
-# H100 leads because it is the cheapest card the model is KNOWN to run on and
-# carries the best throughput per dollar measured here (an A100 render costs
-# ~1.5x more despite a 37% cheaper rate, because it needs ~2.4x the GPU
-# seconds). H200 is the fallback: faster, more VRAM, slightly pricier.
 GPU_PREFERENCE: Final[list[str]] = ["H100", "H200"]
 
 GPU = os.environ.get("LONGCAT_GPU", "")
 if GPU:
-    # Pinned mode, used by the GPU-comparison benchmarks.
     if GPU not in GPU_RATES:
         raise RuntimeError(f"LONGCAT_GPU={GPU!r} is not one of {sorted(GPU_RATES)}")
     GPU_PREFERENCE = [GPU]
@@ -94,11 +72,6 @@ def active_gpu_name() -> str | None:
     if not torch.cuda.is_available():
         return None
     reported = torch.cuda.get_device_name(0)
-    # Match the LONGEST priced name first and require the reported string to
-    # carry the model, not merely a prefix: a naive substring test maps
-    # "NVIDIA B200" onto the H200 entry because "B200" contains "200", and
-    # pricing a run on a card we do not price is exactly the mis-report this
-    # function exists to prevent.
     for known in sorted(GPU_RATES, key=len, reverse=True):
         if known.replace("-80GB", "") in reported:
             return known
@@ -115,18 +88,7 @@ def rate_for_active_gpu() -> float:
     name = active_gpu_name()
     return GPU_RATES.get(name or "", GPU_RATES[GPU_PREFERENCE[0]])
 
-# Clip length is set by --num_segments: 93 frames for the first segment plus
-# (93 - 13) = 80 new frames per extra one, at 25 fps. The client derives the
-# count from the real trimmed audio; this ceiling bounds a single job's GPU
-# time and must match MAX_SEGMENTS in app/services/longcat.py, which is what
-# keeps a request from failing AFTER a paid submit.
 MAX_SEGMENTS = 5
-
-# Clip length is set by --num_segments, not by the audio: the script hardcodes
-# num_frames = 93 per segment and appends 80 new frames per extra segment.
-# app.services.longcat.clip_seconds() owns that arithmetic; the frames
-# themselves must satisfy the pipeline's 4n+1 constraint, which is why 93 is not
-# a free parameter.
 
 LONGCAT_IMAGE = (
     modal.Image.from_registry(
@@ -135,10 +97,6 @@ LONGCAT_IMAGE = (
     )
     .apt_install("git", "ffmpeg", "libgl1", "libglib2.0-0", "libsndfile1")
     .pip_install("ninja", "packaging", "psutil")
-    # The HTTP surface in modal_longcat.py is decorated with Modal's
-    # fastapi_endpoint, which Modal no longer installs implicitly -- without
-    # this the deploy fails with "require FastAPI to be installed in their
-    # Image". loguru is imported by the request handlers at call time.
     .pip_install("fastapi[standard]", "loguru")
     .pip_install(
         "torch==2.6.0",
@@ -146,45 +104,27 @@ LONGCAT_IMAGE = (
         "torchaudio==2.6.0",
         index_url="https://download.pytorch.org/whl/cu124",
     )
-    # Built from source: no prebuilt wheel matches this torch/CUDA pair, and
-    # --no-build-isolation is required so it sees the installed torch.
     .pip_install(
         "flash_attn==2.7.4.post1",
         extra_options="--no-build-isolation",
     )
     .run_commands(f"git clone --depth 1 {LONGCAT_REPO_URL} /LongCat-Video")
-    # pip_install takes a package list, not requirement-file flags: the -r form
-    # must go through run_commands, and it only works after the clone above.
     .run_commands("pip install -r /LongCat-Video/requirements.txt")
-    # requirements_avatar.txt is not pure-pip: upstream installs it under conda
-    # and it lists packages PyPI cannot serve -- libsndfile1 (conda-forge) and
-    # tritonserverclient (NVIDIA's Triton index). Either one aborts the whole
-    # install, so they are filtered here. libsndfile1 comes from apt above;
-    # tritonserverclient is only needed for Triton-based serving, which this
-    # app does not use.
     .run_commands(
         "grep -vE '^(libsndfile1|tritonserverclient)'"
         " /LongCat-Video/requirements_avatar.txt > /tmp/requirements_avatar_pip.txt"
     )
     .run_commands("pip install -r /tmp/requirements_avatar_pip.txt")
-    # modal_longcat.py imports this module at scope, so it must be present in
-    # the GPU image too -- the class that runs the renderer hydrates the same
-    # package root.
     .add_local_file(
         Path(__file__).resolve().parent / "modal_longcat_gpu.py",
         "/root/modal_longcat_gpu.py",
         copy=True,
     )
-    # The resident renderer is imported by the Modal class's enter hook inside
-    # the GPU container; it loads the model once per container, not per clip.
     .add_local_file(
         Path(__file__).resolve().parent / "modal_longcat_resident.py",
         "/root/modal_longcat_resident.py",
         copy=True,
     )
-    # modal_longcat.py imports modal_longcat_cost at scope, so it must be
-    # present in the GPU image too, exactly like the GPU and resident
-    # modules above -- otherwise the renderer container fails on import.
     .add_local_file(
         Path(__file__).resolve().parent / "modal_longcat_cost.py",
         "/root/modal_longcat_cost.py",
@@ -193,8 +133,6 @@ LONGCAT_IMAGE = (
     .env(
         {
             "PYTHONPATH": "/LongCat-Video",
-            # Same module-scope read as the API image: without it in the image
-            # env the container never sees a deploy-time shell variable.
             "LONGCAT_MODAL_APP_NAME": os.environ.get(
                 "LONGCAT_MODAL_APP_NAME", ""
             ),
@@ -220,7 +158,6 @@ def peak_vram_gb() -> float | None:
     if not torch.cuda.is_available():
         return None
     reserved_gb = torch.cuda.max_memory_reserved() / 1e9
-    # Sub-0.1GB means the measurement missed the model entirely.
     if reserved_gb < 0.1:
         return None
     return round(reserved_gb, 2)
@@ -267,8 +204,6 @@ def run_longcat(
 
         normalize_started = time.monotonic()
         normalized = work_path / "normalized.mp4"
-        # Normalize to the same vertical 1080x1920 profile the production
-        # renderer expects, so the clip splices in without a resize.
         ffmpeg = subprocess.run(
             [
                 "ffmpeg", "-y", "-i", str(outputs[-1]),

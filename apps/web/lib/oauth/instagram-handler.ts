@@ -2,9 +2,6 @@
 
 import { useOAuthFlow } from './oauth-flow';
 
-//---------------
-// useInstagramOAuth — Instagram OAuth flow (direct Login).
-//---------------
 export function useInstagramOAuth() {
   return useOAuthFlow({
     startUrl: '/api/instagram-auth/start',

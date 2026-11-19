@@ -158,13 +158,11 @@ describe('rate-limit', () => {
 
     it('spoofing the first x-forwarded-for entry cannot reset the bucket', async () => {
       const profile = { name: 'test-spoof', limit: 1, windowMs: 60_000 };
-      // Attacker controls the first entry; the trusted proxy appends the real one last.
       const first = await applyRateLimit(
         makeRequest({ 'x-forwarded-for': 'spoofed-1, 10.20.30.40' }),
         profile,
       );
       expect(first).toBeNull();
-      // Same real client, different spoofed first entry: same bucket → blocked.
       const second = await applyRateLimit(
         makeRequest({ 'x-forwarded-for': 'spoofed-2, 10.20.30.40' }),
         profile,

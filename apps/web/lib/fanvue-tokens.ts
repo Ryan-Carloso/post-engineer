@@ -7,17 +7,6 @@ import {
 import { refreshFanvueAccessToken } from '@/lib/fanvue';
 import { FanvueError } from '@/lib/errors';
 
-//---------------
-// getValidFanvueAccessToken — the stored access token for one of the
-// user's Fanvue accounts, refreshed first when it expired. The access
-// token lives ~1 hour; the refresh token rotates on every use, so the
-// new pair is persisted before the caller publishes or resyncs the
-// profile. Shared by the upload handler and the profile resync so the
-// refresh lives in exactly one place. Throws FanvueError (401) when there is no
-// usable token: the caller turns it into a reconnect prompt, never a
-// silent skip.
-//---------------
-
 export async function getValidFanvueAccessToken(
   supabase: SupabaseClient<Database>,
   ownerUserId: string,

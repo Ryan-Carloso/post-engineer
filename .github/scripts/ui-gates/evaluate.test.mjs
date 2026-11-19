@@ -29,8 +29,6 @@ describe('evaluate.mjs CLI', () => {
   }
 
   it('creates a missing output directory and exits 0 when no UI files changed', () => {
-    // Regression: the gate job failed with ENOENT because the artifact
-    // download step (which created /tmp/ui-gates) was skipped.
     const out = path.join(tmp, 'nested', 'dir', 'findings.json');
     const code = run(['--ui-files', '', '--out', out]);
     assert.equal(code, 0);

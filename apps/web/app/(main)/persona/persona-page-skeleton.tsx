@@ -1,9 +1,3 @@
-//---------------
-// PersonaPageSkeleton — loading placeholder for the persona screen.
-// Extracted from page.tsx (issue #572): the page is grandfathered over
-// the 500-line file-size cap and may not grow, so the create-mode binding
-// picker is offset by moving this block into its own module.
-//---------------
 export const PersonaPageSkeleton = () => (
   <div aria-busy="true" aria-live="polite" className="space-y-8">
     <div className="flex items-center gap-3">

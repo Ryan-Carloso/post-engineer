@@ -3,12 +3,6 @@ import { parseContractResponse } from './contract-response.js';
 import type { ResponseOf } from './contracts/endpoint.js';
 import { applyBatchDiscount as applyBatchDiscountContract } from './contracts/videos.js';
 
-//---------------
-// POST /api/videos/batch-discount — the batch discount of issue #487.
-// A standalone function (not a client method) because client.ts is
-// grandfathered over the 500-line cap and may not grow.
-//---------------
-
 export interface ApplyBatchDiscountInput {
   batchKey: string;
   scheduleIds: string[];

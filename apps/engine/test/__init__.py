@@ -1,4 +1,3 @@
-# Unit test package for test
 """Engine test-suite bootstrap.
 
 Sets ENGINE_UNDER_TEST=1 on import — but ONLY when a test runner is
@@ -15,8 +14,6 @@ import sys
 if "pytest" in sys.modules:
     os.environ.setdefault("ENGINE_UNDER_TEST", "1")
 else:
-    # unittest path: import lazily so pytest collection never pays for
-    # (or depends on) app imports at test-package import time.
     from app.services.notify import unittest_runner_active
 
     if unittest_runner_active():

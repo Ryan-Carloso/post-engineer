@@ -1,11 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-//---------------
-// Persona scope per API key: a restricted key only accesses the personas
-// chosen at creation. Auth and Supabase are mocked boundaries; the access
-// control (403 + .in filter) is real.
-//---------------
-
 vi.mock('@/lib/request-auth', () => ({
   requireSupabaseSession: vi.fn(),
 }));

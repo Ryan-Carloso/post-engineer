@@ -1,13 +1,5 @@
 'use client';
 
-//---------------
-// Credential accounts sections — the manual-token connect sections
-// (Bluesky app password, Rumble access token). Extracted from
-// app/(main)/accounts/page.tsx (file-size ratchet): the page only
-// renders the sections, it does not own them. Brand helpers and the
-// disconnect flow live in ./accounts-section-helpers.
-//---------------
-
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import AccountCard from '@/components/account-card';
@@ -26,10 +18,6 @@ import { BrandIcon, connectedLabel, errorLabel, useDisconnectFlow } from './acco
 function BlueskyIcon(): ReactNode {
   return <svg viewBox="0 0 24 24" className="size-5" fill="currentColor" aria-hidden="true"><path d="M12 10.8c-1.087-2.114-4.046-6.033-6.798-7.978C2.566 1.01.562 1.098.064 1.855c-.499.757.06 3.708 1.277 5.196.76.93 1.883 2.022 3.19 2.904-1.538-.24-3.02.052-3.585.754-.79.982.294 3.029 2.424 4.573 1.187.86 2.662 1.5 4.082 1.788-1.555.288-3.04 1.017-3.575 2.015-.72 1.343.682 2.72 3.125 3.076 2.1.307 4.653-.355 5.998-1.71 1.345 1.355 3.898 2.017 5.998 1.71 2.443-.356 3.845-1.733 3.125-3.076-.535-.998-2.02-1.727-3.575-2.015 1.42-.288 2.895-.928 4.082-1.788 2.13-1.544 3.214-3.591 2.424-4.573-.565-.702-2.047-.994-3.585-.754 1.307-.882 2.43-1.974 3.19-2.904 1.217-1.488 1.776-4.439 1.277-5.196-.498-.757-2.502-.845-5.138.967C16.046 4.767 13.087 8.686 12 10.8z" /></svg>;
 }
-
-//---------------
-// Bluesky accounts: one query and a dialog owned by the page.
-//---------------
 
 export function BlueskyAccountsSection(): ReactNode {
   const { t } = useI18n();
@@ -54,8 +42,6 @@ export function BlueskyAccountsSection(): ReactNode {
       formData.append('appPassword', appPassword);
       const response = await fetch('/api/bluesky-connect', { method: 'POST', body: formData });
       if (!response.ok) {
-        // 401 here means a dead hub session (a rejected Bluesky credential
-        // is 422), so it triggers the host-wide session-expiry redirect.
         notifyIfSessionExpired(response);
         setError(t('accounts.blueskyConnectError'));
         setAppPassword('');
@@ -101,11 +87,6 @@ export function BlueskyAccountsSection(): ReactNode {
   );
 }
 
-//---------------
-// Rumble accounts: manual access token (no OAuth), same two-field
-// credential dialog as Bluesky — channel ID + 40-character token.
-//---------------
-
 export function RumbleAccountsSection(): ReactNode {
   const { t } = useI18n();
   const query = useRumbleAccountsQuery();
@@ -129,9 +110,6 @@ export function RumbleAccountsSection(): ReactNode {
       formData.append('accessToken', accessToken);
       const response = await fetch('/api/rumble-connect', { method: 'POST', body: formData });
       if (!response.ok) {
-        // 401 here means a dead hub session (a rejected Rumble token is
-        // 400 — format-only validation), so it triggers the host-wide
-        // session-expiry redirect.
         notifyIfSessionExpired(response);
         setError(t('accounts.rumbleConnectError'));
         setAccessToken('');

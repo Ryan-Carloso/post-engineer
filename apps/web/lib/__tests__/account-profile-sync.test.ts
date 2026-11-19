@@ -182,9 +182,6 @@ describe('syncAccountProfile', () => {
   });
 
   it('returns an unknown-provider row untouched without consulting the sources map', async () => {
-    // social_accounts.provider is check-constrained to SOCIAL_PROVIDERS
-    // (migration 037); rows outside the registry can only predate it, and
-    // the route's registry drop+log owns these rows, not the resync.
     const rec = record({ provider: 'mastodon' as never }, { profileSyncedAt: STALE });
     expect(await syncAccountProfile(supabase, 'u1', rec, { now: () => NOW })).toBe(rec);
     expect(sources.instagram.applies).not.toHaveBeenCalled();
@@ -236,7 +233,6 @@ describe('syncAccountProfile', () => {
       'ig-1',
       { profilePictureUrl: FRESH_PIC, profileSyncedAt: STALE, profileSyncFailedAt: NOW.toISOString(), profileSyncFailedReason: 'Error' },
     );
-    // No account name argument: the marker write leaves the name untouched.
     expect(vi.mocked(updateSocialAccountMetadata).mock.calls[0]).toHaveLength(5);
     expect(notifyAccountBreak).not.toHaveBeenCalled();
   });
@@ -308,7 +304,6 @@ describe('syncAccountProfile', () => {
     sources.instagram.fetch.mockRejectedValue(failure);
     const rec = record({}, { profileSyncedAt: STALE });
     await expect(syncAccountProfile(supabase, 'u1', rec, { now: () => NOW })).rejects.toBe(failure);
-    // The next list load re-reads the row with the persisted marker.
     const written = vi.mocked(updateSocialAccountMetadata).mock.calls[0][4] as Record<string, unknown>;
     const later = new Date(NOW.getTime() + 10 * 60_000);
     const second = record({}, written);
@@ -344,8 +339,6 @@ describe('syncAccountProfile', () => {
   });
 
   it('flags a non-applies row (Rumble) whose stored token is undecryptable', async () => {
-    // Rumble/3Speak/LinkedIn-org rows never fetch a profile, so without a
-    // probe their corrupted token would render as a healthy card.
     const failure = new Error('Invalid authentication tag length: 2');
     vi.mocked(getSocialAccountTokens).mockRejectedValueOnce(failure);
     const rec = record({ provider: 'rumble', providerAccountId: 'chan-1' }, { profileSyncedAt: STALE });
@@ -371,8 +364,6 @@ describe('syncAccountProfile', () => {
   });
 
   it('flags a fresh row whose stored token is undecryptable', async () => {
-    // A token corrupted since the last sync, or a Bluesky token (its
-    // public-profile fetch never reads it), would render green without it.
     const failure = new Error('Invalid authentication tag length: 2');
     vi.mocked(getSocialAccountTokens).mockRejectedValueOnce(failure);
     await expect(
@@ -390,9 +381,6 @@ describe('syncAccountProfile', () => {
   });
 
   it('flags a stale Bluesky row whose token is undecryptable even though the public fetch succeeds', async () => {
-    // Bluesky's fetch reads the public profile and never touches the stored
-    // token, so without a probe on the fetch path a corrupted token would
-    // render green on every resync due (roughly once a day).
     sources.bluesky.fetch.mockResolvedValue({ accountName: 'new_handle', pictureUrl: null, metadata: {} });
     const failure = new Error('Invalid authentication tag length: 2');
     vi.mocked(getSocialAccountTokens).mockRejectedValueOnce(failure);

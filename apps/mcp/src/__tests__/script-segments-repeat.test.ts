@@ -1,7 +1,4 @@
 import { describe, expect, it } from 'vitest';
-// The repeat rule is material-independent, so these sparse fixtures run
-// with videoType 'full_lipsync' (media optional): the images density rule would
-// fire first on one photo per segment.
 import { validateSegments } from '../script-segments.js';
 
 const REPEAT_RULE = 'the same photo must not repeat';

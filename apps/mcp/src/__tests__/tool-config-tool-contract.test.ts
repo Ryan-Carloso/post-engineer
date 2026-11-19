@@ -2,22 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { SaveToolConfigSchema } from '../tools-tool-config.js';
 import { SaveToolConfigBodySchema } from '../contracts/tool-config.js';
 
-//---------------
-// tool_config tool↔contract equivalence (shared/contracts/tool-config.ts):
-// the tool schema and the contract body schema must accept and reject the
-// same inputs, so a call the tool allows is one the route accepts and a
-// call the route rejects fails fast in the tool.
-//
-// Deliberate difference, pinned here so it stays deliberate:
-// - Neither schema enforces the cross-field rule (a key only for the
-//   tool/source it belongs to). The route's lib validation owns that rule
-//   and 400s a mismatched key, so both schemas accept one and the save
-//   fails server-side.
-// - Neither schema trims a key; the route's lib trims and rejects a
-//   whitespace-only key, so both schemas accept one and the save fails
-//   server-side.
-//---------------
-
 const VALID = {
   searchTool: 'tavily',
   stockSources: ['pexels', 'pixabay'],

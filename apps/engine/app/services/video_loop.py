@@ -13,14 +13,10 @@ file-size cap and may not grow.
 import itertools
 
 from loguru import logger
-# A remainder under this is not worth a clip of its own, and a clip this
-# much longer than the remainder still counts as fitting.
 TOLERANCE_SECONDS = 0.05
 
 
 def _trimmed(clip, take, output_dir, width, height, fps, threads):
-    # Imported here: video.py imports this module, so a top-level import
-    # back would be circular.
     from app.services import video as video_service
 
     out = f"{output_dir}/loop-trim.mp4"

@@ -4,23 +4,6 @@ import { join } from 'node:path';
 import { findRepoRoot } from '@/test/repo-root';
 import { planBatchClawback, type BatchSlot } from '../batch-discount';
 
-//---------------
-// Migration 046 — settle_batch_clawback must reopen the migration 044 cap.
-//
-// The discount credit refunds the free video's whole schedule charge, so
-// refunded_total equals charge_amount and a later refund of that schedule
-// answers nothing_to_refund. The clawback used to copy the discount back
-// onto charged_tokens and withhold the sibling refund, which leaves the
-// cap full: the re-charged video can never be refunded.
-//
-// The function refunds the cancelled slot in full, then shrinks the
-// discount generation_refund by the same amount and pulls those tokens
-// off the balance. The net matches the old withhold, and the cap has
-// room for the re-charged amount. These tests pin that SQL and walk the
-// 044 formula (sum of every video_generation row, sum of generation_refund
-// amounts) with and without the shrink. They do not talk to Postgres.
-//---------------
-
 const repoRoot = findRepoRoot(import.meta.url);
 const migrationPath = join(repoRoot, 'supabase', 'migrations', '046_batch-clawback-refund-room.sql');
 const restorePath = join(repoRoot, 'supabase', 'migrations', '047_restore-batch-discount-credit.sql');
@@ -93,14 +76,6 @@ describe('supabase/migrations/047_restore-batch-discount-credit.sql', () => {
   });
 });
 
-//---------------
-// In-memory copy of refund_batch_tokens (migration 044) plus the shrink
-// settle_batch_clawback applies to the discount row. Numbers are the
-// 6-video batch: each face video costs 2, the cheapest is credited
-// in full, then one paid sibling is cancelled. The cap is the sum of every
-// spend row under the generation id, not only the oldest one.
-//---------------
-
 const PRICE = 2;
 const START = 100;
 
@@ -143,7 +118,6 @@ function spend(ledger: Ledger, scheduleId: string, amount: number): void {
   });
 }
 
-/** Migration 044: cap refunds at the sum of every spend under the generation id. */
 function refundBatchTokens(
   ledger: Ledger,
   generationId: string,
@@ -186,10 +160,6 @@ function refundBatchTokens(
   return { refunded: true, amount: credit };
 }
 
-/**
- * The pull-back half of settle_batch_clawback: shrink the discount refund
- * and take the same tokens off the balance (free bucket first).
- */
 function shrinkDiscountRefund(ledger: Ledger, discountKey: string, take: number): void {
   const row = ledger.rows.find(
     (candidate) => candidate.type === 'generation_refund' && candidate.referenceId === discountKey,
@@ -219,11 +189,6 @@ function balance(ledger: Ledger): number {
   return ledger.paid + ledger.free;
 }
 
-/**
- * Migration 047: put `amount` back on the discount row when a clawback
- * shrunk it, and return the same tokens, without exceeding the 044 cap.
- * A row that already holds `amount` is not increased.
- */
 function restoreDiscountCredit(
   ledger: Ledger,
   generationId: string,
@@ -261,7 +226,6 @@ describe('the 044 cap after a clawback of the free video', () => {
   it('pays nothing back for the re-charged video when the discount row stays whole', () => {
     const { ledger, discountKey } = sixVideoLedger();
     expect(balance(ledger)).toBe(90);
-    // Old clawback: withhold the sibling and do not touch the ledger.
     const failure = refundBatchTokens(ledger, chargeId('F'), `${chargeId('F')}:slot:F`, PRICE);
     expect(failure).toEqual({ refunded: false, nothing_to_refund: true });
     expect(balance(ledger)).toBe(90);
@@ -274,13 +238,11 @@ describe('the 044 cap after a clawback of the free video', () => {
     expect(sibling).toEqual({ refunded: true, amount: PRICE });
     expect(balance(ledger)).toBe(92);
     shrinkDiscountRefund(ledger, discountKey, PRICE);
-    // Net of the sibling refund and the pull-back is the old withhold.
     expect(balance(ledger)).toBe(90);
     expect(ledger.rows.find((row) => row.referenceId === discountKey)?.amount).toBe(0);
 
     const failure = refundBatchTokens(ledger, chargeId('F'), `${chargeId('F')}:slot:F`, PRICE);
     expect(failure).toEqual({ refunded: true, amount: PRICE });
-    // Four videos delivered at 2 each: 100 - 8.
     expect(balance(ledger)).toBe(92);
     const retry = refundBatchTokens(ledger, chargeId('F'), discountKey, PRICE);
     expect(retry).toEqual({ refunded: false, already_refunded: true });
@@ -315,7 +277,6 @@ describe('the 044 cap after a clawback of the free video', () => {
     expect(ledger.rows.find((row) => row.referenceId === discountKey)?.amount).toBe(PRICE);
     const second = refundBatchTokens(ledger, chargeId('F'), `${chargeId('F')}:slot:F`, PRICE);
     expect(second).toEqual({ refunded: false, nothing_to_refund: true });
-    // Failed video refunded via the discount, cancelled sibling refunded in full.
     expect(balance(ledger)).toBe(92);
   });
 
@@ -324,16 +285,13 @@ describe('the 044 cap after a clawback of the free video', () => {
     const sibling = refundBatchTokens(ledger, chargeId('S'), `${chargeId('S')}:slot:S`, PRICE);
     expect(sibling).toEqual({ refunded: true, amount: PRICE });
     shrinkDiscountRefund(ledger, discountKey, PRICE);
-    // The cancelled video is created again and charged.
     spend(ledger, 'S2', PRICE);
     expect(balance(ledger)).toBe(88);
     const replay = refundBatchTokens(ledger, chargeId('F'), discountKey, PRICE);
     expect(replay).toEqual({ refunded: false, already_refunded: true });
-    // The key still exists at amount 0, so the replay itself moves nothing.
     expect(balance(ledger)).toBe(88);
     expect(restoreDiscountCredit(ledger, chargeId('F'), discountKey, PRICE)).toEqual({ held: true });
     expect(ledger.rows.find((row) => row.referenceId === discountKey)?.amount).toBe(PRICE);
-    // Six videos, one free: 100 - 10.
     expect(balance(ledger)).toBe(90);
     expect(restoreDiscountCredit(ledger, chargeId('F'), discountKey, PRICE)).toEqual({ held: true });
     expect(balance(ledger)).toBe(90);
@@ -344,7 +302,6 @@ describe('the 044 cap after a clawback of the free video', () => {
     shrinkDiscountRefund(ledger, discountKey, PRICE);
     const failure = refundBatchTokens(ledger, chargeId('F'), `${chargeId('F')}:slot:F`, PRICE);
     expect(failure).toEqual({ refunded: true, amount: PRICE });
-    // The failed attempt is created again under the same generation id.
     spend(ledger, 'F', PRICE);
     expect(balance(ledger)).toBe(88);
     expect(restoreDiscountCredit(ledger, chargeId('F'), discountKey, PRICE)).toEqual({ held: true });

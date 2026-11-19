@@ -17,8 +17,6 @@ from loguru import logger
 
 from app.services.analytics import scrub_error_text
 
-# Link fields the web resolver reads at entry top level: a provider
-# hands back at most one of them per account.
 _LINK_FIELDS = ("videoUrl", "permalink", "postId")
 
 
@@ -34,9 +32,6 @@ def entries_for_result(
     video_name = os.path.basename(video_path)
     accounts = result.get("results") if isinstance(result, dict) else None
     if accounts == []:
-        # A 2xx body with an explicitly empty results list attempted no
-        # account: nothing was posted. Record the attempt as failed so
-        # the empty body stays diagnosable instead of vanishing.
         return [
             failed_entry(
                 provider_name,
@@ -51,9 +46,6 @@ def entries_for_result(
             if isinstance(result, dict) and result.get(field)
         }
         if not links:
-            # No results list and no top-level link either: the body
-            # names nothing that was posted, so claiming a publish
-            # would recreate the published-without-links regression.
             return [
                 failed_entry(
                     provider_name,
@@ -73,9 +65,6 @@ def entries_for_result(
         if not isinstance(account, dict):
             continue
         if account.get("success") is not True:
-            # A failed account inside a 2xx body raises nothing: record
-            # it as a failed entry (upstream text scrubbed first — the
-            # entry is client-visible via the task state).
             upstream_error = str(
                 account.get("error") or "upload API reported account failure"
             )
@@ -99,20 +88,12 @@ def entries_for_result(
             if account.get(field):
                 entry[field] = account[field]
         if not any(entry.get(field) for field in _LINK_FIELDS):
-            # The post is live (a retry would double-post), so the
-            # entry stays published — but leave a signal: a renamed
-            # upstream link field would otherwise silently recreate
-            # the published-without-links regression.
             logger.warning(
                 f"fill_schedule: provider {provider_name} account published "
                 "without a link field; post is live but no link was recorded"
             )
         entries.append(entry)
     if not entries:
-        # A non-empty results list with no successful account (missing
-        # or renamed success flag, non-dict items) posted nothing, but
-        # the attempt must not vanish: record it as a failed entry so
-        # the failure stays diagnosable on the task state.
         return [
             failed_entry(
                 provider_name,

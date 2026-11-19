@@ -123,7 +123,6 @@ def test_nemotron_35_lightning_not_blocked_by_super_vl_denylist(mod):
 
 def test_missing_preferred_model_is_skipped(mod):
     prefs = json.loads(PREFS_PATH.read_text(encoding="utf-8"))
-    # beam-free is preferred but not in the sample catalog.
     available = mod.parse_opencode_verbose(SAMPLE_OPENCODE_VERBOSE)
     env = _env()
     attempts, _, decisions = mod.build_chain(prefs, available, env)

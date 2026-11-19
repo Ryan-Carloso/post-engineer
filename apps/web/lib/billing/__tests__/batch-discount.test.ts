@@ -16,11 +16,6 @@ import {
 } from '../batch-discount';
 import { RATE_LIMITS } from '@/lib/rate-limit';
 
-//---------------
-// The "6 for 5" rule of issue #487: every 6 face videos of a batch, the
-// cheapest is free; faceless never counts and is never free.
-//---------------
-
 const T0 = '2026-11-08T10:00:00.000Z';
 
 function slot(id: string, chargedTokens: number, extra: Partial<BatchSlot> = {}): BatchSlot {

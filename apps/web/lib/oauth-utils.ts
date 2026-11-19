@@ -6,24 +6,10 @@ import { NextResponse } from 'next/server';
 import type { OAuthProvider } from '@/lib/providers/registry';
 import { isOAuthProvider } from '@/lib/providers/registry';
 
-//---------------
-// OAuth State — encode/decode of the OAuth `state` parameter.
-// Stores a random nonce tied to an httpOnly cookie (CSRF protection:
-// the callback only accepts the flow if state.nonce === cookie).
-// The list of OAuth providers derives from the registry (supportsOAuthCallback).
-//---------------
-
 export const OAUTH_NONCE_COOKIE = 'oauth_state_nonce';
 
-// Fanvue is the first outbound PKCE flow: its code verifier must be
-// available at callback time. The web flow keeps it in an httpOnly cookie
-// (same pattern as the nonce cookie); the MCP flow keeps it in the
-// oauth_states row (code_verifier column, migration 057). The verifier is
-// a secret for this flow only — it is never embedded in the client-visible
-// state.
 export const FANVUE_CODE_VERIFIER_COOKIE = 'fanvue_code_verifier';
 
-// Nonce cookie TTL: 10 minutes covers the OAuth flow with margin
 const OAUTH_NONCE_MAX_AGE = 600;
 
 export interface OAuthStatePayload {
@@ -31,11 +17,6 @@ export interface OAuthStatePayload {
   nonce?: string;
   redirectUri?: string;
 }
-
-//---------------
-// createOAuthState — generates a random nonce + state encoded with it.
-// The nonce MUST be stored in an httpOnly cookie on the /start route.
-//---------------
 
 export function createOAuthState(
   base: Omit<OAuthStatePayload, 'nonce'>
@@ -48,10 +29,6 @@ export function createOAuthState(
   return { state, nonce };
 }
 
-//---------------
-// setOAuthNonceCookie — stores the nonce in an httpOnly cookie on the /start response
-//---------------
-
 export function setOAuthNonceCookie(response: NextResponse, nonce: string): void {
   response.cookies.set({
     name: OAUTH_NONCE_COOKIE,
@@ -63,14 +40,6 @@ export function setOAuthNonceCookie(response: NextResponse, nonce: string): void
     maxAge: OAUTH_NONCE_MAX_AGE,
   });
 }
-
-//---------------
-// setFanvueCodeVerifierCookie / getFanvueCodeVerifier — stores and reads
-// the PKCE code verifier for the Fanvue web flow, mirroring the nonce
-// cookie (httpOnly, same TTL, same path). The callback reads it back and
-// presents it at the token exchange; without it the code cannot be
-// exchanged.
-//---------------
 
 export function setFanvueCodeVerifierCookie(response: NextResponse, codeVerifier: string): void {
   response.cookies.set({
@@ -99,12 +68,6 @@ function clearFanvueCodeVerifierCookie(response: NextResponse): void {
   });
 }
 
-//---------------
-// verifyOAuthNonce — compares the state nonce with the httpOnly cookie nonce.
-// An attacker can forge the state (it is just base64), but cannot set
-// the httpOnly cookie in the victim's browser — only this server can.
-//---------------
-
 export function verifyOAuthNonce(
   request: NextRequest,
   statePayload: OAuthStatePayload | null
@@ -115,7 +78,6 @@ export function verifyOAuthNonce(
   if (!cookieNonce || !stateNonce) return false;
   if (cookieNonce.length !== stateNonce.length) return false;
 
-  // Constant-time comparison to prevent timing attacks
   return crypto.timingSafeEqual(Buffer.from(cookieNonce), Buffer.from(stateNonce));
 }
 
@@ -140,19 +102,10 @@ export function decodeOAuthState(state: string | null): OAuthStatePayload | null
   }
 }
 
-//---------------
-// isLocalHostname — recognizes local hosts in the format returned by URL.hostname.
-//---------------
 export function isLocalHostname(hostname: string): boolean {
   return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
 }
 
-//---------------
-// resolveOAuthRedirectUri — selects the registered callback for the environment.
-// The decision is based on NODE_ENV (not the request hostname: behind a
-// Next sees the internal localhost host and would pick the local callback in
-// proxy the prod value may be wrong). The used value is recorded in the state to be replayed in the token exchange.
-//---------------
 export function resolveOAuthRedirectUri(
   request: NextRequest,
   localEnvName: string,
@@ -170,22 +123,10 @@ export function resolveOAuthRedirectUri(
   return redirectUri;
 }
 
-//---------------
-// OAuth Popup Response — HTML that notifies the opener (parent window) and closes.
-// Used by the callbacks because the provider redirect lands directly on the API.
-//---------------
-
 export function oauthPopupResponse(
   messageType: string,
   data: Record<string, unknown>
 ): NextResponse {
-  // XSS hardening: the payload can carry attacker-controlled strings (e.g.
-  // the OAuth provider's `error` / `error_description` query params, which
-  // reach this sink before any state validation). JSON.stringify does not
-  // escape `<`, so a payload containing `</script>` would break out of the
-  // inline <script> block. Escaping `<` as \u003c keeps the JSON decodable
-  // (JSON.parse restores the original string) while making breakout
-  // impossible. This is the single sink for every OAuth popup callback.
   const payload = JSON.stringify({ type: messageType, ...data }).replace(
     /</g,
     '\\u003c'
@@ -221,7 +162,6 @@ export function oauthPopupResponse(
     headers: { 'Content-Type': 'text/html; charset=utf-8' },
   });
 
-  // The nonce is single-use: clears the cookie on any outcome
   response.cookies.set({
     name: OAUTH_NONCE_COOKIE,
     value: '',
@@ -230,8 +170,6 @@ export function oauthPopupResponse(
     maxAge: 0,
   });
 
-  // The PKCE verifier is single-use too: a Fanvue callback consumes it
-  // exactly once, so it is cleared on any outcome as well.
   clearFanvueCodeVerifierCookie(response);
 
   return response;

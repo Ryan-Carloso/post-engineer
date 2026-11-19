@@ -1,19 +1,3 @@
-//---------------
-// Paired A/B experiment results (issue #476). Pure: the route loads the
-// rows, this module compares them.
-//
-// Inside a pair both videos share topic and content, so comparing the
-// two videos of one pair isolates the tested segment. Comparisons are per
-// provider (YouTube views never mix with Bluesky views) and the winner of
-// a pair is the variant with more views. An exact two-sided sign test over
-// the decided pairs gives the p-value.
-//
-// Label rule: `pending` with no decided pair; `clear` only when every
-// target pair is decided for that provider AND p < CLEAR_P_VALUE;
-// otherwise `indicative`. Evaluating before all pairs are in is how a
-// lucky streak becomes a false winner, so a partial result is never clear.
-//---------------
-
 export const CLEAR_P_VALUE = 0.05;
 
 export type ExperimentResultLabel = 'pending' | 'indicative' | 'clear';
@@ -43,9 +27,7 @@ export interface VariantTotals {
 
 export interface PairComparison {
   pair: number;
-  /** variantId -> totals for that video on this provider. */
   values: Record<string, VariantTotals>;
-  /** Variant with more views; null on a tie. */
   winner: string | null;
 }
 
@@ -54,18 +36,14 @@ export interface ProviderResult {
   comparisons: PairComparison[];
   wins: Record<string, number>;
   ties: number;
-  /** Two-sided sign test over decided pairs; null with no decided pair. */
   pValue: number | null;
-  /** Variant ahead on decided pairs; null when level or pending. */
   leader: string | null;
   label: ExperimentResultLabel;
 }
 
 export interface ExperimentResults {
   targetPairs: number;
-  /** Pairs with a slot for both variants. */
   pairsCreated: number;
-  /** Pairs whose two videos are both published. */
   pairsPublished: number;
   providers: ProviderResult[];
 }
@@ -76,7 +54,6 @@ function binomial(n: number, k: number): number {
   return result;
 }
 
-/** Exact two-sided sign test: P(at least this lopsided | no difference). */
 export function signTestPValue(winsA: number, winsB: number): number {
   const n = winsA + winsB;
   if (n === 0) return 1;
@@ -96,7 +73,6 @@ function meanOrNull(values: Array<number | null>): number | null {
   return present.length === 0 ? null : present.reduce((total, value) => total + value, 0) / present.length;
 }
 
-/** One video's totals on one provider (summed over its accounts). */
 function totalsFor(rows: ExperimentMetricFact[]): VariantTotals {
   return {
     views: sumOrNull(rows.map((row) => row.views)),
@@ -136,7 +112,6 @@ function providerResult(
   const decided = wins[first] + wins[second];
   const pValue = decided === 0 ? null : signTestPValue(wins[first], wins[second]);
   const leader = wins[first] === wins[second] ? null : wins[first] > wins[second] ? first : second;
-  // Tied pairs are not decided, so they never count toward completeness.
   const complete = decided >= targetPairs;
   const label: ExperimentResultLabel =
     pValue === null ? 'pending' : complete && pValue < CLEAR_P_VALUE ? 'clear' : 'indicative';
@@ -149,7 +124,6 @@ export function computeExperimentResults(input: {
   slots: ExperimentSlotFact[];
   metrics: ExperimentMetricFact[];
 }): ExperimentResults {
-  // pair -> variantId -> postId; only pairs with both variants compare.
   const byPair = new Map<number, Map<string, string>>();
   const statusByPost = new Map<string, string>();
   for (const slot of input.slots) {

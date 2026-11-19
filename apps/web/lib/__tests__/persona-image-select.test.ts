@@ -46,10 +46,6 @@ describe('selectPersonaImage', () => {
   });
 
   it('unknown imageId returns null instead of silently substituting another face', () => {
-    // The caller's pinned choice must never be quietly replaced by a
-    // different photo: a future direct caller that skips the route's 404
-    // check must get null (fail loudly) rather than a face the user
-    // didn't pick.
     const picked = selectPersonaImage(
       LIBRARY,
       { title: 'business meeting at the office', imageId: 'nope' },
@@ -59,9 +55,6 @@ describe('selectPersonaImage', () => {
   });
 
   it('empty-string imageId returns null instead of falling through to automatic selection', () => {
-    // '' is falsy, so a truthiness check treats it as "no override" and
-    // silently substitutes a face. A provided id — even an empty one —
-    // must go through the exact-match path like any other id.
     const picked = selectPersonaImage(
       LIBRARY,
       { title: 'business meeting at the office', imageId: '' },
@@ -90,7 +83,6 @@ describe('selectPersonaImage', () => {
       { title: 'business meeting' },
       ['img-formal'],
     );
-    // img-formal would win on tags, but it was used recently.
     expect(picked?.id).not.toBe('img-formal');
     expect(picked?.id).toBe('img-casual');
   });
@@ -124,8 +116,6 @@ describe('selectPersonaImage', () => {
   });
 
   it('tokenizes non-Latin scripts (Cyrillic) for keyword matching', () => {
-    // A Latin-only character class would produce an empty keyword set and
-    // silently degrade to primary/first for non-Latin personas.
     const library = [
       img('img-ru', 'повседневный', 'женщина в джинсах в парке', true),
       img('img-en', 'formal', 'business woman in a suit'),
@@ -145,11 +135,6 @@ describe('PERSONA_IMAGE_WARNING_CODES', () => {
   });
 
   it('keeps this module free of Node builtin imports (client components import it)', () => {
-    // persona-image-library.tsx ('use client') imports the warning codes
-    // from here: a Node builtin import (e.g. crypto for randomUUID) would
-    // ride into the browser bundle. This module must stay dependency-free.
-    // Resolved from the vitest cwd (apps/web); the web test task always
-    // runs from there.
     const source = readFileSync(join(process.cwd(), 'lib', 'persona-image-select.ts'), 'utf8');
     expect(source).not.toMatch(/from\s+['"]node:/);
     expect(source).not.toMatch(/from\s+['"]crypto['"]/);
@@ -163,8 +148,6 @@ describe('PERSONA_IMAGE_WARNING_CODES', () => {
 
 describe('shared upload limits', () => {
   it('exposes the client-safe upload limits with the enforced values', () => {
-    // The picker imports these from the leaf instead of duplicating the
-    // literals, so the client-side gate cannot drift from server validation.
     expect(MAX_IMAGE_BYTES).toBe(10 * 1024 * 1024);
     expect([...ALLOWED_IMAGE_MIME_TYPES].sort()).toEqual([
       'image/jpeg',

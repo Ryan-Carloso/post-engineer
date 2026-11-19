@@ -2,13 +2,6 @@ import { describe, expect, it, vi } from 'vitest';
 import type { PostEngineerClient } from '../client.js';
 import { getToolConfig, saveToolConfig } from '../client-tool-config.js';
 
-//---------------
-// Tool-config client (GET/PUT /api/tool-config): the request sites stay
-// literal for the parity gate and the responses parse against the shared
-// contract (shared/contracts/tool-config.ts), so a malformed 200 is an
-// error, never a silent success. Only fake keys below — never a real one.
-//---------------
-
 const PRESENCE = {
   success: true,
   configured: true,
@@ -39,9 +32,6 @@ describe('tool-config client', () => {
   });
 
   it('strips a key value from a get 200 instead of passing it through', async () => {
-    // Response schemas are non-strict across the repo: an unexpected field
-    // is dropped, not rejected. What matters here is that a key value in
-    // the payload can never reach the agent — it is stripped at the parse.
     const client = mockClient({ ...PRESENCE, keys: { tavily: 'tvly-fake-key-1234' } });
     const result = await getToolConfig(client);
     expect(result.keysPresent.tavily).toBe(true);

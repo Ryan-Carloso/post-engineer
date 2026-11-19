@@ -14,13 +14,6 @@ import { usePinterestAccountsQuery } from '@/lib/pinterest-accounts';
 import { useFanvueAccountsQuery } from '@/lib/fanvue-accounts';
 import type { SocialProvider } from '@/lib/providers/registry';
 
-//---------------
-// usePostAccountCards — every connected account, resolved from the same
-// account queries the accounts screen uses and mapped to the shared
-// AccountCard props (real thumbnails and names). The post detail page
-// filters this list down to the accounts its schedule targets.
-//---------------
-
 export interface AccountCardData {
   id: string;
   type: SocialProvider;
@@ -85,7 +78,6 @@ export function usePostAccountCards(): AccountCardData[] {
         name: account.accountName ?? account.providerAccountId,
         thumbnail: account.profilePictureUrl,
       })),
-      // No thumbnail: Rumble has no profile API, so there is no avatar to show.
       ...(rumbleQuery.data?.accounts ?? []).map((account) => ({
         id: account.providerAccountId,
         type: 'rumble' as const,

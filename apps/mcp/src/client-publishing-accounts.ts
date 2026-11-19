@@ -6,14 +6,6 @@ import {
   setPersonaPublishingAccounts as setPersonaPublishingAccountsContract,
 } from './contracts/accounts.js';
 
-//---------------
-// Per-persona default publishing accounts (issue #212) — HTTP calls.
-//
-// Extracted from client.ts so the client module stays under the file-size
-// ratchet. These are standalone functions (not methods) because the client
-// class is grandfathered over the 500-line cap and may not grow.
-//---------------
-
 export async function getPersonaPublishingAccounts(
   client: PostEngineerClient,
   personaId: string,

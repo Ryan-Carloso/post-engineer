@@ -20,7 +20,6 @@ WORKFLOW = REPO_ROOT / ".github" / "workflows" / "deploy.yml"
 def workflow():
     with open(WORKFLOW) as f:
         data = yaml.safe_load(f)
-    # PyYAML parses the `on:` key as boolean True (YAML 1.1).
     data["on"] = data.get("on", data.get(True))
     return data
 
@@ -39,9 +38,6 @@ def test_migrate_job_only_runs_for_merged_prs(workflow):
 
 
 def test_migrate_job_skips_fork_prs(workflow):
-    # The pull_request event does not expose secrets to fork PRs; without
-    # this guard a fork merge would fail loudly on the secret checks
-    # instead of skipping quietly.
     condition = workflow["jobs"]["migrate"]["if"]
     assert "github.event.pull_request.head.repo.full_name == github.repository" in condition
 

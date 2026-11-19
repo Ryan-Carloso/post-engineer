@@ -10,18 +10,6 @@ import { accountFailure } from '@/lib/upload/account-error';
 import { rememberDeadCredential, reportAccountUnauthorized } from '@/lib/upload/account-unauthorized';
 import { getAccountIdsFromFormData } from '@/lib/upload/account-utils';
 
-//---------------
-// handleTelegramUpload — publishes to the user's Telegram chats via the
-// Bot API. Channel and group/supergroup are one path: the stored
-// provider_account_id is the chat_id and the caption is the title +
-// description the schedule built. FormData (multipart, from the engine
-// or the UI): provider=telegram, video|image|audio (File), caption,
-// telegramAccountIds (repeated; chat ids).
-// The stored token is the user's @BotFather bot token (see
-// lib/telegram.ts): a 401 from Telegram means that token is dead and is
-// reported for reconnect; a 403 means the bot lost its seat in the chat.
-//---------------
-
 interface TelegramAccountResult {
   accountId: string;
   success: boolean;
@@ -99,8 +87,6 @@ export async function handleTelegramUpload(
         ...(url === null ? {} : { permalink: url }),
       });
     } catch (error) {
-      // A rejected bot token is a Telegram 401: reportAccountUnauthorized
-      // classifies it as unauthorized and flags the account for reconnect.
       reportAccountUnauthorized('telegram', accountId, ownerUserId, error);
       results.push(accountFailure(accountId, error instanceof Error ? error : new Error('Unknown error')));
     }

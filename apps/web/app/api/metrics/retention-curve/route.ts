@@ -14,17 +14,6 @@ import { UUID, isProvisional, parseRetentionCurveQuery } from '@/lib/metrics/met
 
 const ROUTE = 'GET /api/metrics/retention-curve';
 
-//---------------
-// GET /api/metrics/retention-curve?account=&video= — the audience
-// retention curve (100 points of elapsedVideoTimeRatio ->
-// audienceWatchRatio, relativeRetentionPerformance) of one of the caller's
-// own published YouTube videos, read live from the YouTube Analytics API.
-//
-// Ownership, twice before any Analytics call: the video must have a
-// post_metrics snapshot of the caller on that account (service role
-// bypasses RLS: explicit user_id filter + persona scope below), and the
-// Data API must report it on the account's own channel.
-//---------------
 async function getHandler(request: Request): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
@@ -43,13 +32,10 @@ async function getHandler(request: Request): Promise<NextResponse> {
   let lookup = createSupabaseServiceClient()
     .from('post_metrics')
     .select('post_id')
-    // Ownership: service role bypasses RLS.
     .eq('user_id', auth.userId)
     .eq('provider', 'youtube')
     .eq('account_id', parsed.account)
     .eq('external_id', parsed.video);
-  // Same persona scope as GET /api/metrics: a scoped key sees its
-  // personas' videos plus persona-less ones.
   if (isScopedApiKey(auth)) {
     const personaIds = (auth.personaIds ?? []).filter((id) => UUID.test(id));
     lookup = personaIds.length > 0
@@ -102,8 +88,6 @@ async function getHandler(request: Request): Promise<NextResponse> {
     if (caught instanceof Error && caught.message === 'Video not found') {
       return apiErrorResponse(404, 'Video not found.', { route: ROUTE });
     }
-    // AnalyticsAuthError is already logged at error by the client; any
-    // other failure (5xx/429/abort) is transient on Google's side.
     return apiErrorResponse(502, 'YouTube Analytics is unavailable. Try again later.', {
       route: ROUTE,
       code: caught instanceof AnalyticsAuthError ? 'YOUTUBE_ANALYTICS_REJECTED' : 'YOUTUBE_ANALYTICS_UNAVAILABLE',
@@ -112,7 +96,4 @@ async function getHandler(request: Request): Promise<NextResponse> {
   }
 }
 
-//---------------
-// 5xx reporting: handled server errors reach PostHog error tracking.
-//---------------
 export const GET = withApiErrorReporting(ROUTE, getHandler, { getUserId: resolveReportingUserId });

@@ -8,9 +8,6 @@ function jsonResponse(data: unknown, ok = true, status = 200): Response {
   } as unknown as Response;
 }
 
-//---------------
-// api-slot-reschedule — the reschedule client fn (issue #555).
-//---------------
 describe('rescheduleSlot', () => {
   beforeEach(() => {
     vi.clearAllMocks();

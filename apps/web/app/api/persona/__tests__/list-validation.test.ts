@@ -41,7 +41,6 @@ describe('GET /api/persona/list — explicit user_id filter (defense in depth)',
 
     await GET(new Request('http://localhost:3434/api/persona/list'));
 
-    // Verifica que .eq('user_id', user.id) foi chamado
     expect(mockSelect).toHaveBeenCalled();
     expect(mockEq).toHaveBeenCalledWith('user_id', 'user-1');
     expect(mockOrder).toHaveBeenCalledWith('created_at', { ascending: false });

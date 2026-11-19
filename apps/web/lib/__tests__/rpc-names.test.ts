@@ -4,14 +4,8 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { findRepoRoot } from '@/test/repo-root';
 
-// supabase-js resolves `.rpc('name')` by the exact Postgres function name, and
-// a mocked test would happily pin a wrong one. A mechanical rename once swept
-// `create_experiment` into a tool label inside `.rpc(...)` (PR #586 review):
-// every literal `.rpc('x')` in the app must name a function a migration defines.
 const root = findRepoRoot(import.meta.url);
 
-// Functions the live database has but the migration chain does not create
-// (supabase/migrations/001_schema.sql lists them as pre-existing objects).
 const DEFINED_OUTSIDE_THE_CHAIN = new Set(['grant_signup_bonus', 'credit_tokens_for_payment', 'spend_tokens', 'refund_generation_tokens']);
 
 function sourceFiles(dir: string): string[] {

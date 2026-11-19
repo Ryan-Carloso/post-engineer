@@ -25,26 +25,19 @@ from urllib3.util.url import parse_url
 
 from app.utils.ssrf_retry import failed_before_anything_was_sent
 
-# Redirect statuses that carry a Location header worth following manually.
 _REDIRECT_STATUSES = {301, 302, 303, 307, 308}
 
-# Maximum number of redirects followed for a single download.
 MAX_REDIRECTS = 5
 
-# Default ceiling for a streamed download (20 MiB).
 DEFAULT_MAX_BYTES = 20 * 1024 * 1024
 
 _CHUNK_SIZE = 256 * 1024
 
-# CPython ipaddress.is_global still reports these as globally reachable.
-# They are not safe connect targets (issue #467). 192.0.0.9 and 192.0.0.10
-# are global anycast and stay allowed — they are not in these networks.
-_EXTRA_V4 = (ipaddress.ip_network("192.88.99.0/24"),)  # deprecated 6to4 anycast
+_EXTRA_V4 = (ipaddress.ip_network("192.88.99.0/24"),)
 _EXTRA_V6 = (
     ipaddress.ip_network("100:0:0:1::/64"),
     ipaddress.ip_network("5f00::/16"),
 )
-# Well-known NAT64. The last 32 bits are an embedded IPv4 address.
 _NAT64 = ipaddress.ip_network("64:ff9b::/96")
 
 
@@ -88,8 +81,6 @@ def is_public_ip(ip) -> bool:
     """
     if not ip.is_global:
         return False
-    # An IPv4-mapped address (::ffff:a.b.c.d) inherits is_global from the
-    # embedded IPv4, so the extra IPv4 ranges must be checked on it too.
     if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
         return is_public_ip(ip.ipv4_mapped)
     if isinstance(ip, ipaddress.IPv4Address):
@@ -122,7 +113,6 @@ def _public_ips(url: str, *, what: str, https_only: bool = False, resolve_host: 
         raise UnsafeUrlError(f"{what} must be a valid http(s) URL.") from exc
     if parsed.scheme not in ("http", "https") or not parsed.hostname:
         raise UnsafeUrlError(f"{what} must be a valid http(s) URL.")
-    # Webhooks are https only. Downloads keep the http allowlist above.
     if https_only and parsed.scheme != "https":
         raise UnsafeUrlError(f"{what} must be a valid https URL.")
     if any(char == "\\" or ord(char) <= 0x20 or ord(char) == 0x7F for char in url):
@@ -243,10 +233,6 @@ class _PinnedAdapter(HTTPAdapter):
         pool = super().get_connection_with_tls_context(
             request, verify, proxies, cert
         )
-        # A proxy is the TCP peer, not the URL host. download_public_file
-        # does not take a proxies argument, and the session ignores env
-        # proxies (trust_env = False). Refuse here too, or the dial would
-        # go to the proxy and the pin would never run.
         if proxies:
             raise UnsafeUrlError("A proxied fetch is not supported.")
         pool.ConnectionCls = _pinned_connection_class(pool.ConnectionCls, self._pinned_ip)
@@ -261,7 +247,6 @@ def _send_pinned(method: str, url: str, ip: str, **kwargs):
     streamed response closes the session when the body is closed.
     """
     session = requests.Session()
-    # Env proxies would be the TCP peer, not the validated address.
     session.trust_env = False
     adapter = _PinnedAdapter(ip)
     session.mount("http://", adapter)
@@ -377,8 +362,6 @@ def download_public_file(
                 content_length_value = int(content_length)
             except (TypeError, ValueError):
                 content_length_value = None
-            # NB: the int() conversion is isolated above because UnsafeUrlError
-            # subclasses ValueError — raising inside the try would be swallowed.
             if (
                 content_length_value is not None
                 and content_length_value > max_bytes
@@ -402,10 +385,6 @@ def download_public_file(
 
         downloaded = 0
         too_large = False
-        # Write to a temp file in the destination directory and atomically
-        # rename only after a complete valid stream. A mid-stream failure
-        # (network error, overage) must never corrupt or delete an existing
-        # destination file.
         dest_dir = os.path.dirname(os.path.abspath(dest_path)) or "."
         fd, temp_path = tempfile.mkstemp(
             dir=dest_dir, prefix=".download-", suffix=".part"
@@ -441,8 +420,6 @@ def download_public_file(
     try:
         os.replace(temp_path, dest_path)
     except BaseException:
-        # The atomic rename itself failed: the destination is untouched
-        # (os.replace never partially renames), but the temp file must go.
         try:
             os.unlink(temp_path)
         except OSError:

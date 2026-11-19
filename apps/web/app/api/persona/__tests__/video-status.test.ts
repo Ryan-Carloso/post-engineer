@@ -12,11 +12,6 @@ vi.mock('@/lib/billing/token-check', () => ({
   refundTokens: vi.fn(),
 }));
 
-//---------------
-// Tests for GET /api/persona/video-status/:taskId — engine status proxy.
-// Auth = Supabase session.
-//---------------
-
 import { GET } from '../video-status/[taskId]/route';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
@@ -161,21 +156,9 @@ describe('GET /api/persona/video-status/:taskId', () => {
   describe('generation history recording', () => {
     function mockServiceClient(
       generationId: string | null,
-      // `unknown` fields: the idempotency gate must narrow whatever the DB
-      // returns — tests feed malformed rows to lock that in.
       historyRow: { status: unknown; tokens_refunded: unknown } | null = null,
-      // The generation row found by the engine_task_id fallback (the batch
-      // case: prepaid under `batch:<id>` with no per-task charge row).
       fallbackGenerationId: string | null = null,
-      // The durable engine_task_state row the 404 path consults before
-      // recording a failure. Default null (no persisted row) keeps the old
-      // verdict side effects running; `{ state: 1, data: { videos: [...] } }`
-      // triggers the completed-backfill branch instead.
       durableTask: { state?: number; data?: unknown; error?: unknown } | null = null,
-      // The published scheduled_posts slot proof the 404 path consults when
-      // the durable row is absent (MAJOR 1: the video-status verdict MUST
-      // match the slot-gone verdict — a published slot means delivered
-      // value, the row backfills completed and nothing is refunded).
       publishedSlot: boolean = false,
     ) {
       const durableSingle = vi
@@ -198,9 +181,6 @@ describe('GET /api/persona/video-status/:taskId', () => {
         .fn()
         .mockResolvedValue({ data: publishedSlot ? { id: 'slot-1' } : null, error: null });
       const publishedEq3 = vi.fn().mockReturnValue({ limit: publishedLimit, maybeSingle: publishedSingle });
-      // The real builder exposes the terminators after every eq, not only
-      // after the third: the slot-by-task lookup filters on two columns
-      // (user_id + task_id) and ends the chain with maybeSingle here.
       const publishedEq2 = vi.fn().mockReturnValue({ eq: publishedEq3, maybeSingle: publishedSingle });
       const publishedEq1 = vi.fn().mockReturnValue({ eq: publishedEq2 });
       const publishedSelect = vi.fn().mockReturnValue({ eq: publishedEq1 });
@@ -216,10 +196,6 @@ describe('GET /api/persona/video-status/:taskId', () => {
       const chargeSelect = vi.fn().mockReturnValue({ eq: chargeEq1 });
       const historyEq = vi.fn().mockReturnValue({ maybeSingle: historySingle });
       const historySelect = vi.fn().mockReturnValue({ eq: historyEq });
-      // The task-id fallback is the SAME table with a different filter count
-      // (user_id + engine_task_id + limit + maybeSingle). Route it by call
-      // order: the idempotency read runs first only when a charge resolved,
-      // so a distinct builder keeps the two paths from bleeding together.
       const fallbackSingle = vi
         .fn()
         .mockResolvedValue({
@@ -237,10 +213,6 @@ describe('GET /api/persona/video-status/:taskId', () => {
           if (table === 'scheduled_posts') return { select: publishedSelect };
           return { select: chargeSelect };
         }
-        // With no charge row the FIRST video_generations read is the task-id
-        // fallback (user_id + engine_task_id + limit + maybeSingle) and the
-        // idempotency gate runs second. With a charge row the order reverses:
-        // the idempotency gate reads first and the fallback is never reached.
         videoGenerationCalls += 1;
         const useFallback = generationId === null && videoGenerationCalls === 1;
         return { select: useFallback ? fallbackSelect : historySelect };
@@ -264,16 +236,12 @@ describe('GET /api/persona/video-status/:taskId', () => {
     }
 
     it('records a failed generation with the engine error and refunds on numeric state -1', async () => {
-      // Real engine shape: the task sits under `body` and `state` is numeric
-      // (-1 failed, 1 complete, 3 queued, 4 processing).
       mockTaskBody({
         status: 200,
         message: 'success',
         body: { task_id: 'task-1', state: -1, error: 'custom audio file is invalid: boom' },
       });
       const serviceClient = mockServiceClient('gen-1');
-      // The refund RPC succeeded, so the flag is written and the next poll
-      // skips the terminal side effects.
       vi.mocked(refundTokens).mockResolvedValue(true);
       const updateSpy = vi
         .spyOn(videoGeneration, 'recordGenerationUpdate')
@@ -298,10 +266,6 @@ describe('GET /api/persona/video-status/:taskId', () => {
     });
 
     it('leaves tokens_refunded unset when the refund RPC fails so the next poll retries', async () => {
-      // Review round 5 (opencode): the route used to write
-      // tokensRefunded: true unconditionally. A failed refund then looked
-      // recorded and the "next poll must retry that refund" backstop above
-      // could never fire — the user's tokens were silently lost.
       mockTaskBody({
         status: 200,
         message: 'success',
@@ -364,13 +328,8 @@ describe('GET /api/persona/video-status/:taskId', () => {
         .spyOn(videoGeneration, 'recordGenerationUpdate')
         .mockResolvedValue(undefined);
       try {
-        // Behind the Caddy proxy the request reaches Next with Host
-        // 0.0.0.0:3000 — the link must still name the public host.
         const response = await poll('task-1', 'http://0.0.0.0:3000');
         expect(response.status).toBe(200);
-        // Inside the envelope's body, where BaseResponse readers look: the
-        // MCP narrows result.body, so a top-level postUrl would never reach
-        // video_tasks (action: status) (OpenCode #556).
         const envelope = (await response.json()) as {
           body: { postUrl: string | null };
           postUrl?: unknown;
@@ -445,8 +404,6 @@ describe('GET /api/persona/video-status/:taskId', () => {
     });
 
     it('recognizes numeric states delivered as strings', async () => {
-      // Review MINOR: taskState parses /^-?\d+$/ strings, but only native
-      // JSON numbers were exercised — lock the string branch in.
       mockTaskBody({
         status: 200,
         message: 'success',
@@ -469,10 +426,6 @@ describe('GET /api/persona/video-status/:taskId', () => {
     });
 
     it('does not re-run terminal side effects when the failure is already recorded and refunded', async () => {
-      // Review MINOR: repeat polls of an already-terminal task re-ran the
-      // charge lookup, the refund RPC and the history update — re-stamping
-      // completed_at to "last poll time". A recorded + refunded failure is
-      // a no-op.
       mockTaskBody({
         status: 200,
         message: 'success',
@@ -513,15 +466,12 @@ describe('GET /api/persona/video-status/:taskId', () => {
     });
 
     it('still retries the refund when the failure was recorded but not refunded', async () => {
-      // Edge case the skip must not swallow: the first poll recorded the
-      // failure while the refund RPC failed — the next poll must retry it.
       mockTaskBody({
         status: 200,
         message: 'success',
         body: { task_id: 'task-1', state: -1, error: 'boom' },
       });
       const serviceClient = mockServiceClient('gen-1', { status: 'failed', tokens_refunded: false });
-      // The retry lands, so the flag is written this time.
       vi.mocked(refundTokens).mockResolvedValue(true);
       const updateSpy = vi
         .spyOn(videoGeneration, 'recordGenerationUpdate')
@@ -543,11 +493,6 @@ describe('GET /api/persona/video-status/:taskId', () => {
     });
 
     it('treats a malformed history row as not-yet-terminal and re-runs side effects', async () => {
-      // Review MINOR round 2: the idempotency gate narrows the history
-      // row's types explicitly. A malformed row (non-string status,
-      // non-boolean tokens_refunded) must not crash the gate and must not
-      // silently count as a recorded terminal state — the gate opens and
-      // the terminal side effects run.
       mockTaskBody({
         status: 200,
         message: 'success',
@@ -589,14 +534,6 @@ describe('GET /api/persona/video-status/:taskId', () => {
     });
 
     it('never refunds engine-billed batch tasks: the engine owns that ledger', async () => {
-      // Billing ownership model (legacy): videos created through the removed
-      // batch endpoint (POST /api/persona/video-batch, deleted with the
-      // unified generate+schedule refactor) were charged upfront by the ENGINE
-      // under `persona-batch:<id>:video:<n>` generation ids. The engine
-      // never attaches engine_task_id to those charge rows, so this
-      // proxy's token_transactions lookup finds nothing — and it must
-      // stay that way: a web-side refund here would double-refund the
-      // engine's own failure refund for those legacy batch tasks.
       mockTaskBody({
         status: 200,
         body: { task_id: 'task-1', state: -1, error: 'boom' },
@@ -616,10 +553,6 @@ describe('GET /api/persona/video-status/:taskId', () => {
     });
 
     it('treats an engine 404 as terminal: records the failure with engine_restart and refunds', async () => {
-      // The engine lost the task (restart/redeploy with the in-memory state
-      // backend) — polling again 404s forever, so the proxy must fail the
-      // generation and refund NOW instead of passing a 502 through and
-      // letting the caller poll forever.
       mockTaskBody({ status: 404, message: 'req-1: task not found' }, 404);
       const serviceClient = mockServiceClient('gen-1');
       vi.mocked(refundTokens).mockResolvedValue(true);
@@ -649,10 +582,6 @@ describe('GET /api/persona/video-status/:taskId', () => {
     });
 
     it('backfills completed on an engine 404 when a published slot proves delivery (MAJOR 1)', async () => {
-      // The video-status verdict must match the slot-gone verdict: a
-      // published slot for the task is delivered value even without a
-      // durable engine row — the row backfills completed and NOTHING is
-      // refunded (the pre-fix code failed + refunded here).
       mockTaskBody({ status: 404, message: 'req-1: task not found' }, 404);
       const serviceClient = mockServiceClient('gen-1', null, null, null, true);
       const updateSpy = vi
@@ -681,11 +610,6 @@ describe('GET /api/persona/video-status/:taskId', () => {
     });
 
     it('does NOT record a failure on an engine 404 when the durable read itself errors (unverifiable is not failed)', async () => {
-      // Review round: the pre-fix code treated a durable/published READ ERROR
-      // like "no proof" and fell through to the failed+refund verdict —
-      // contradicting the gone-settle policy that an unverifiable state
-      // writes nothing. The route must answer non-terminal so the next poll
-      // retries.
       mockTaskBody({ status: 404, message: 'req-1: task not found' }, 404);
       const serviceClient = mockServiceClient(
         'gen-1',
@@ -698,7 +622,7 @@ describe('GET /api/persona/video-status/:taskId', () => {
         .mockResolvedValue(undefined);
       try {
         const response = await poll();
-        expect(response.status).toBe(502); // non-terminal, not 410
+        expect(response.status).toBe(502);
         expect(updateSpy).not.toHaveBeenCalled();
         expect(refundTokens).not.toHaveBeenCalledWith(serviceClient, USER_ID, 'gen-1');
       } finally {
@@ -707,10 +631,6 @@ describe('GET /api/persona/video-status/:taskId', () => {
     });
 
     it('backfills completed on an engine 404 when the durable task state proves the render finished', async () => {
-      // Production case (2026-10): the engine 404'd tasks it had already
-      // completed (redeploy window). The persisted engine_task_state row is
-      // the tie-breaker: the video exists, so the row settles completed
-      // instead of failed, and nothing is refunded for delivered value.
       mockTaskBody({ status: 404, message: 'req-1: task not found' }, 404);
       const serviceClient = mockServiceClient('gen-1', null, null, {
         state: 1,
@@ -786,9 +706,6 @@ describe('GET /api/persona/video-status/:taskId', () => {
     });
 
     it('answers terminal on 404 without touching history when no charge row links the task', async () => {
-      // Ghost task: the engine never knew it and no tokens were spent.
-      // Nothing to refund or record, but the caller must still get a
-      // terminal answer so it stops polling.
       mockTaskBody({ status: 404, message: 'req-1: task not found' }, 404);
       mockServiceClient(null);
       const updateSpy = vi
@@ -806,10 +723,6 @@ describe('GET /api/persona/video-status/:taskId', () => {
     });
 
     it('records the failure for a scheduled post whose batch charge carries no task id', async () => {
-      // A scheduled post is prepaid ONCE under `batch:<schedule_id>` with
-      // engine_task_id NULL, so the charge lookup finds nothing. Before the
-      // task-id fallback this returned early and left the history row in
-      // `running` forever while the caller had already been told 410.
       mockTaskBody({ status: 404, message: 'req-1: task not found' }, 404);
       const serviceClient = mockServiceClient(null, null, 'batch:sched-1:slot:slot-9');
       vi.mocked(refundTokens).mockResolvedValue(true);
@@ -827,9 +740,6 @@ describe('GET /api/persona/video-status/:taskId', () => {
             errorCode: 'engine_restart',
           }),
         );
-        // No per-generation charge exists, so nothing may be refunded here —
-        // and the flag must stay unset so the reconciliation cron still owns
-        // (and can still settle) the batch charge.
         expect(refundTokens).not.toHaveBeenCalled();
         const patch = updateSpy.mock.calls[0][0];
         expect(patch.tokensRefunded).toBeUndefined();

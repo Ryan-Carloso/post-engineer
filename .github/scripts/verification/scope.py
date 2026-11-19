@@ -9,10 +9,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-# Test files the verification suite runs. local_suites() classifies only
-# these exact files as the verification suite: a new test_verification_*
-# file is not in the suite command, so it falls through to review-scripts,
-# which runs the whole .github/scripts/tests directory.
 _VERIFICATION_TEST_FILES = (
     "test_verification_collect.py",
     "test_verification_workflow.py",
@@ -21,8 +17,6 @@ _VERIFICATION_TEST_PATHS = frozenset(
     f".github/scripts/tests/{name}" for name in _VERIFICATION_TEST_FILES
 )
 
-# Exact commands the workflow runs. report.py prints these, and
-# test_verification_workflow.py asserts the workflow contains each one.
 SUITE_COMMANDS: dict[str, str] = {
     "verification": (
         "python3 -m pytest "

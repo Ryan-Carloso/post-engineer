@@ -1,20 +1,4 @@
 #!/usr/bin/env node
-//---------------
-// evaluate.mjs — evaluates the three UI coverage gates and writes a
-// findings JSON file. Exits 0 when every applicable gate passes (or no
-// UI files changed), 1 otherwise.
-//
-// Usage:
-//   node evaluate.mjs \
-//     --ui-files "apps/web/app/a.tsx,apps/web/components/b.tsx" \
-//     --cobertura apps/web/coverage-unit/cobertura-coverage.xml \
-//     --lcov apps/web/coverage/lcov.info \
-//     --mutation apps/web/reports/mutation/mutation.json \
-//     --out /tmp/gate-findings.json
-//
-// Missing report files with UI changes are fail-closed ("missing"):
-// without measurement there is no proof the threshold holds.
-//---------------
 import fs from 'node:fs';
 import path from 'node:path';
 import { normalizeWebPath, parseCobertura, parseLcov, aggregateCoverage } from './coverage.mjs';
@@ -63,13 +47,9 @@ function main() {
   findings.cypress = evaluateCypress(arg('--lcov'), arg('--cobertura'), uiFiles);
   findings.mutation = evaluateMutation(arg('--mutation'), uiFiles);
 
-  // Fail closed: 'missing' (and any non-na non-pass status) fails the
-  // overall verdict. Only an explicit pass or n/a is acceptable.
   findings.pass = [findings.vitest, findings.cypress, findings.mutation].every(
     (g) => g.status === 'pass' || g.status === 'na',
   );
-  // The output directory may not exist (e.g. the artifact-download step is
-  // skipped when no UI files changed); create it.
   fs.mkdirSync(path.dirname(out), { recursive: true });
   fs.writeFileSync(out, JSON.stringify(findings, null, 2));
 
@@ -79,9 +59,6 @@ function main() {
   process.exit(findings.pass ? 0 : 1);
 }
 
-//---------------
-// Vitest gate: aggregate line coverage over ALL changed UI files.
-//---------------
 function evaluateVitest(coberturaPath, uiFiles) {
   const xml = coberturaPath ? readIfExists(coberturaPath) : null;
   if (xml === null) return { status: 'missing', reason: 'vitest cobertura report not found' };
@@ -98,11 +75,6 @@ function evaluateVitest(coberturaPath, uiFiles) {
   };
 }
 
-//---------------
-// Cypress gate: aggregate line coverage over the changed UI files that
-// fall within the cypress-coverage instrumentation scope. Files outside
-// the scope are exempt (listed in the report).
-//---------------
 function evaluateCypress(lcovPath, coberturaPath, uiFiles) {
   const inScope = uiFiles.filter((f) => inCypressScope(webRelative(f)));
   const exempt = uiFiles.filter((f) => !inCypressScope(webRelative(f)));
@@ -114,8 +86,6 @@ function evaluateCypress(lcovPath, coberturaPath, uiFiles) {
   const perFile = new Map(
     [...parseLcov(lcov)].map(([name, v]) => [normalizeWebPath(name), v]),
   );
-  // Files in scope but never executed by E2E count as 0 covered; their
-  // total lines come from the vitest report when available.
   const cobertura = coberturaPath ? readIfExists(coberturaPath) : null;
   const coberturaPerFile = cobertura
     ? new Map([...parseCobertura(cobertura)].map(([name, v]) => [normalizeWebPath(name), v]))
@@ -150,9 +120,6 @@ function evaluateCypress(lcovPath, coberturaPath, uiFiles) {
     missing,
   };
 }
-//---------------
-// Mutation gate: Stryker score over the changed UI files.
-//---------------
 function evaluateMutation(mutationPath, uiFiles) {
   const raw = mutationPath ? readIfExists(mutationPath) : null;
   if (raw === null) return { status: 'missing', reason: 'Stryker mutation.json not found' };

@@ -67,16 +67,12 @@ def _params(**overrides):
     return VideoParams(**values)
 
 
-# ---- size limit: the engine photo bottleneck, not the library limit
-
 
 def test_segment_media_limit_is_the_engine_photo_limit_not_the_library_limit():
     assert user_media.MAX_SEGMENT_MEDIA_BYTES == image_fetch.MAX_PHOTO_BYTES
     assert user_media.MAX_SEGMENT_MEDIA_BYTES == 8 * 1024 * 1024
     assert user_media.MAX_SEGMENT_MEDIA_BYTES != 10 * 1024 * 1024
 
-
-# ---- resolving one segment's media
 
 
 def _media_segments(tmp_path, media):
@@ -161,7 +157,6 @@ def test_one_bad_url_costs_only_that_segment(tmp_path, monkeypatch):
     assert prepared[0].index == 1
     assert len(skipped) == 1
     assert "segment 0" in skipped[0]
-    # The warning never carries the URL: a URL can hold credentials.
     assert "e.com" not in skipped[0] and "bad.jpg" not in skipped[0]
 
 
@@ -188,9 +183,6 @@ def test_only_the_too_small_photo_is_skipped(tmp_path, monkeypatch):
             str(tmp_path),
             VideoAspect.portrait,
         )
-    # The small photo fails the size gate; the second photo survives with
-    # no face gate left to reject it: faces were a stock B-roll rule, and
-    # agent-supplied segment photos may show people.
     assert len(prepared) == 1
     assert prepared[0].index == 1
     assert len(skipped) == 1
@@ -198,16 +190,11 @@ def test_only_the_too_small_photo_is_skipped(tmp_path, monkeypatch):
 
 
 def test_expired_media_id_reports_expired_not_invalid(tmp_path, monkeypatch):
-    # A well-formed id whose temp asset the 1 hour TTL already purged
-    # is expired, not invalid: the resolve raises "file does not exist"
-    # before any isfile check could run.
     monkeypatch.setattr(user_media, "_temp_assets_dir", lambda: str(tmp_path))
     photo, reason = user_media._resolve_media_id("abc123def456abc123def456abc12345.jpg")
     assert photo == ""
     assert reason == "media expired or missing"
 
-
-# ---- media (action: check) codes (engine side of the MCP media (action: check) tool)
 
 
 def _check(url, tmp_path, download=None):
@@ -267,13 +254,6 @@ def test_check_media_timeout_when_the_download_times_out(tmp_path):
 
 
 def test_segment_photos_no_longer_pass_through_face_detection():
-    # The face rule was a stock B-roll rule; agent-supplied segment
-    # photos may show people, so no face code or reason may survive in
-    # the segment-media path — and a photo with no face still checks
-    # "ok" here. Issue #589 is the deliberate exception: the check
-    # REPORTS has_face (consumed by the hook-photo gate in the lip-sync
-    # resolution and the web pre-charge preflight) but never filters
-    # on it; see test_check_media_detail_still_passes_a_faceless_photo.
     assert "face_detected" not in user_media.CHECK_CODES
     assert "face_detected" not in user_media._CODE_TO_REASON
 
@@ -328,8 +308,6 @@ def test_two_photos_split_the_segment_and_a_dropped_one_fails_the_task(tmp_path)
         "need 1 more photo"
     )
 
-
-# ---- aspect ratio (issue #538): a photo that fills the frame must match it
 
 
 def test_photo_validation_rejects_a_landscape_photo_for_a_portrait_video(tmp_path):
@@ -386,10 +364,6 @@ def test_check_media_detail_reports_has_face_for_a_media_id(tmp_path, monkeypatc
 
 
 def test_check_media_detail_skips_face_detection_for_a_rejected_file(tmp_path, monkeypatch):
-    # A file the mechanical checks reject (undecodable, too small, too
-    # large) must not reach the cv2 decode: its face verdict is
-    # meaningless, and a crafted over-cap image would make OpenCV decode
-    # up to its own ~1-gigapixel guard.
     monkeypatch.setattr(user_media, "_temp_assets_dir", lambda: str(tmp_path))
     not_image = tmp_path / "aabbccddeeff00112233445566778899.jpg"
     not_image.write_bytes(b"not an image at all")
@@ -414,8 +388,6 @@ def test_check_media_detail_skips_face_detection_for_a_rejected_file(tmp_path, m
 
 
 def test_check_media_detail_still_detects_faces_for_a_wrong_aspect_file(tmp_path, monkeypatch):
-    # A wrong-ratio file is still decodable, and its face verdict feeds
-    # the hook gate — detection runs for it.
     monkeypatch.setattr(user_media, "_temp_assets_dir", lambda: str(tmp_path))
     landscape = tmp_path / "aabbccddeeff00112233445566778899.jpg"
     landscape.write_bytes(_jpeg(1920, 1080))
@@ -469,8 +441,6 @@ def test_check_media_detail_reports_has_face_for_a_url(tmp_path):
 
 
 def test_check_media_detail_still_passes_a_faceless_photo(tmp_path, monkeypatch):
-    # Issue #589: has_face is reported, never a filter — a photo with
-    # no detectable face still checks "ok" in the segment-media path.
     monkeypatch.setattr(user_media, "_temp_assets_dir", lambda: str(tmp_path))
     portrait = tmp_path / "aabbccddeeff00112233445566778899.jpg"
     portrait.write_bytes(_jpeg(1080, 1920))
@@ -499,8 +469,6 @@ def test_resolve_media_id_skips_a_wrong_ratio_photo_with_both_ratios_named(
         "(1920x1080 (16:9); expected 9:16 (1080x1920))"
     ]
 
-
-# ---- media (action: check) for video clips (PR-B): the photo codes
 
 
 def _clip(tmp_path, name="clip.mp4", seconds=5, width=1080, height=1920, codec="libx264"):

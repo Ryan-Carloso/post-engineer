@@ -131,8 +131,6 @@ class PublishVideoClientTest(unittest.TestCase):
         self.assertIn(b"user-1", request["body"])
 
     def test_publish_video_sends_publish_scope_key(self) -> None:
-        # The scope key lets the web route recognise a retry of the same
-        # slot/video as the same publish instead of a new one.
         _MockHandler.responses.append((200, {"success": True}))
         upload_publisher.publish_video(
             base_url=self.base_url,
@@ -151,8 +149,6 @@ class PublishVideoClientTest(unittest.TestCase):
         self.assertIn(b"slot:slot-1:video:final.mp4", request["body"])
 
     def test_publish_video_omits_publish_scope_key_when_absent(self) -> None:
-        # Direct callers without a scope key send nothing extra: the route
-        # keeps today's behaviour for them.
         _MockHandler.responses.append((200, {"success": True}))
         upload_publisher.publish_video(
             base_url=self.base_url,
@@ -182,8 +178,6 @@ class PublishVideoClientTest(unittest.TestCase):
                 sleep=lambda seconds: None,
             )
         self.assertEqual(caught.exception.status_code, 401)
-        # The upstream body is not embedded in the message (it would flow
-        # to Discord); it is available as response_body for server logs.
         self.assertNotIn("Invalid API key.", str(caught.exception))
         self.assertIn("Invalid API key.", caught.exception.response_body or "")
 
@@ -312,7 +306,6 @@ class PublishVideoClientTest(unittest.TestCase):
                 self.rfile.read(int(self.headers.get("Content-Length", 0)))
                 type(self).requests.append({"path": self.path})
                 if len(type(self).requests) < 3:
-                    # Close without a response to force a connection error.
                     self.wfile.close()
                     return
                 body = b'{"success": true}'
@@ -346,7 +339,6 @@ class PublishVideoClientTest(unittest.TestCase):
 
     def test_publish_video_raises_on_invalid_json_success(self) -> None:
         _MockHandler.responses.append((200, {"success": True}))
-        # Replace the queued JSON 200 with a raw non-JSON 200.
         _MockHandler.responses.pop()
 
         class RawHandler(_MockHandler):
@@ -382,10 +374,6 @@ class PublishVideoClientTest(unittest.TestCase):
         self.assertEqual(str(caught.exception), "upload API returned invalid JSON")
 
     def test_publish_video_keeps_error_body_out_of_message(self) -> None:
-        # Review MINOR: the upstream response body is remote-controlled
-        # text — it must not reach the exception message (which flows to
-        # Discord via safe_reason). It stays available as response_body
-        # for server-side logs.
         long_error = "x" * 600
         _MockHandler.responses.append((400, {"success": False, "error": long_error}))
         with self.assertRaises(upload_publisher.PublishError) as caught:
@@ -404,13 +392,9 @@ class PublishVideoClientTest(unittest.TestCase):
         self.assertEqual(str(exc), "upload API returned HTTP 400")
         self.assertEqual(exc.status_code, 400)
         self.assertNotIn("x" * 10, str(exc))
-        # response_body is truncated at exactly 500 chars, server logs only.
         self.assertEqual(len(exc.response_body or ""), 500)
 
     def test_publish_video_raises_on_http_200_success_false(self) -> None:
-        # The route answers 200 for handler results. success:false (with
-        # error/errorType) is an application failure, not a published post.
-        # Not retried. The body stays out of the exception message.
         secret = "SECRET-UPSTREAM-BODY"
         _MockHandler.responses.append(
             (200, {"success": False, "error": secret, "errorType": "CustomErrorType"})
@@ -438,8 +422,6 @@ class PublishVideoClientTest(unittest.TestCase):
         self.assertEqual(sleeps, [])
 
     def test_publish_video_raises_when_every_account_result_failed(self) -> None:
-        # YouTube and Instagram keep top-level success true and report each
-        # account under results. Every account unsuccessful is still a failure.
         secret = "ACCOUNT-SECRET"
         _MockHandler.responses.append(
             (
@@ -470,8 +452,6 @@ class PublishVideoClientTest(unittest.TestCase):
         self.assertIn(secret, caught.exception.response_body or "")
 
     def test_publish_video_accepts_partial_account_success(self) -> None:
-        # One account posting is a provider success. An empty results list
-        # is not "every account failed" (all([]) is true).
         _MockHandler.responses.append(
             (
                 200,
@@ -553,7 +533,6 @@ class PublishVideoClientTest(unittest.TestCase):
         )
         self.assertTrue(result["success"])
         body = _MockHandler.requests[0]["body"]
-        # No file part means requests sends urlencoded fields, not multipart.
         self.assertIn(b"videoStoragePath=user-1%2Ffaceless%2Ftask-7%2Ffinal-1.mp4", body)
         self.assertNotIn(b"filename=", body)
         self.assertNotIn(b"mp4-bytes", body)
@@ -592,7 +571,6 @@ class PublishVideoClientTest(unittest.TestCase):
                 r2_object_path="user-1/faceless/task-7/final-1.mp4",
             )
         self.assertIn("bytes", str(caught.exception))
-        # No request reached the web: a bytes provider must never publish blind.
         self.assertEqual(_MockHandler.requests, [])
 
     def test_publish_video_youtube_sends_bytes_even_when_archive_given(self) -> None:

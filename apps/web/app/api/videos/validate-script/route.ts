@@ -1,19 +1,3 @@
-//---------------
-// POST /api/videos/validate-script — mechanical segments-script validation.
-//
-// Runs ONLY the existing mechanical validation in
-// lib/generation/script-segments.ts (the same validation the
-// generate-and-schedule route uses). It never debits tokens, never
-// schedules, and never calls the engine or Modal: there is no database
-// write and no external call on this path at all.
-//
-// Measured hook duration is a documented Phase 1 gap: no hook-only TTS
-// endpoint exists yet, so the response reports measuredDurationSeconds as
-// null with measured 'pending' and an explicit reason — it never invents
-// a duration. The hook word guard (25-40 words) already ran in the
-// mechanical validation above.
-//---------------
-
 import { NextResponse } from 'next/server';
 
 import { requireSupabaseSession } from '@/lib/request-auth';
@@ -29,15 +13,10 @@ import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-r
 
 const ROUTE = 'POST /api/videos/validate-script';
 
-// The reason measured duration stays pending: kept as one constant so the
-// response field and the MCP description cannot drift apart in wording.
 export const MEASURED_DURATION_PENDING_REASON =
   'No hook-only TTS endpoint exists yet, so the measured hook duration cannot be checked in this phase.';
 
 async function postHandler(request: Request): Promise<NextResponse> {
-  // Auth first: the same session-or-API-key auth as the other video
-  // routes (requireSupabaseSession). Unauthenticated callers get the
-  // auth error before any validation result.
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
 
@@ -51,10 +30,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
     });
   }
   const fields = typeof body === 'object' && body !== null ? (body as { segments?: unknown; videoType?: unknown }) : {};
-  // Optional, unlike generate-and-schedule (where the mode is required):
-  // absent means hook lip sync, the images mode that needs media on every
-  // segment. Full lip sync leaves media optional. An unknown value is a
-  // 400 naming every mode with its cost, never silently read as hook.
   let videoType: VideoType = 'hook_lipsync';
   if (fields.videoType !== undefined) {
     if (!isVideoType(fields.videoType)) {

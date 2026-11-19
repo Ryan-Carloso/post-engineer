@@ -31,10 +31,6 @@ import Login from '../page';
 describe('app/login/page — server render', () => {
   it('renders the GitHub login button and no debug line without a window global', () => {
     expect(typeof window).toBe('undefined');
-    // Pre-fix, GithubLogin reads window.location during render, so
-    // renderToString throws ReferenceError: window is not defined here.
-    // The assertions pin the fixed behavior: button markup present in the
-    // server HTML, and no debug line (browser-only) in that markup.
     const html = renderToString(<Login />);
     expect(html).toContain('login.githubButton');
     expect(html).not.toContain('oauth-redirect-debug');

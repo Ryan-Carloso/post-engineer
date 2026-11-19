@@ -150,7 +150,6 @@ describe('PersonaVoiceSection', () => {
     sectionMocks.voiceId = 'chatterbox:retired_voice';
     render(<PersonaVoiceSection />);
     const warning = screen.getByTestId('persona-voice-fallback-warning');
-    // Amber, never red: a swap with a visible path forward, not an error.
     expect(warning.className).toContain('warning');
     expect(warning).toHaveTextContent('persona.voiceFallbackWarning');
   });
@@ -165,20 +164,16 @@ describe('PersonaVoiceSection', () => {
     sectionMocks.voices = [];
     sectionMocks.voiceId = 'chatterbox:kokoro_af_heart';
     render(<PersonaVoiceSection />);
-    // An empty catalog is a loading/failed state, not proof of retirement:
-    // warning here would flag every valid house voice.
     expect(screen.queryByTestId('persona-voice-fallback-warning')).not.toBeInTheDocument();
   });
 
   it('does not warn that a clone is unavailable when the catalog listed no clones', () => {
     sectionMocks.voiceId = 'chatterbox_nano:uaaaaaaaaaaaa_bbbbbbbbbbbb';
-    // House-only catalog: clone merge degraded, not proof the clone is gone.
     render(<PersonaVoiceSection />);
     expect(screen.queryByTestId('persona-voice-fallback-warning')).not.toBeInTheDocument();
   });
 
   it('warns with the missing-voice copy when the loaded persona has no voice', () => {
-    // The list route omits a missing voice_id; the page writes null.
     sectionMocks.voiceId = null;
     render(<PersonaVoiceSection voiceHydrated isEditing />);
     const warning = screen.getByTestId('persona-voice-fallback-warning');

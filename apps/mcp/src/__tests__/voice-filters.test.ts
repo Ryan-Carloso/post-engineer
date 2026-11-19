@@ -78,9 +78,6 @@ describe('PersonaVoiceIdSchema', () => {
 
   it('autocomplete enum carries the 65 house names AND their labels', () => {
     const field = personaVoiceField();
-    // Zod 4 dropped the `_def` introspection this used to read; assert the
-    // JSON Schema the MCP server actually advertises instead (the same shape
-    // the index test pins for the registered tools).
     const json = z.toJSONSchema(field) as { anyOf?: Array<{ enum?: string[] }> };
     const enumValues = (json.anyOf ?? []).flatMap((part) => part.enum ?? []);
     expect(enumValues).toHaveLength(65 + 65 + 2);
@@ -286,9 +283,6 @@ describe('withResolvedPersonaVoice', () => {
 
   it('leaves inputs without a voiceId untouched (update skips)', async () => {
     const client = clientWith();
-    // Typed with the optional voiceId: a bare { personaId } fails the
-    // weak-type check on withResolvedPersonaVoice's { voiceId?: string }
-    // constraint (TS2559), even though the runtime input has no voice.
     const input: { personaId: string; voiceId?: string } = { personaId: 'p1' };
     await expect(withResolvedPersonaVoice(client, input)).resolves.toBe(input);
     expect(client.listVoices).not.toHaveBeenCalled();

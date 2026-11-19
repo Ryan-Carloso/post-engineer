@@ -22,7 +22,6 @@ const TASK_BODY = {
   privacyStatus: 'public',
 };
 
-// Minimal JPEG: SOI + JFIF marker, enough for magic-byte detection.
 const JPEG_BYTES = Buffer.from([
   0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05,
 ]);
@@ -262,7 +261,6 @@ describe('decodeImageMedia', () => {
 
   it('rejects an image over the 8 MB inline limit', () => {
     const big = Buffer.alloc(IMAGE_MAX_BYTES + 1, 0xff);
-    // Keep the JPEG magic so only the size check fires.
     big[0] = 0xff;
     big[1] = 0xd8;
     big[2] = 0xff;

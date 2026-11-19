@@ -1,14 +1,8 @@
-// Request/response schemas of the signed-upload video endpoints for
-// generate-openapi.mjs, split out because openapi-schemas.mjs is over
-// the file-size cap and may not grow. The helpers come in as arguments
-// so this module has no import cycle with openapi-schemas.mjs.
-
 import { SOCIAL_PROVIDERS as PROVIDERS } from '../../../shared/contracts/providers.ts';
 import { UPLOAD_CONTENT_TYPES } from '../../../shared/contracts/upload-types.ts';
 
 export function videoOperationSchemas({ success, object, str }) {
   return {
-    // apps/web/app/api/videos/upload-url/route.ts (parseMintBody)
     'POST /api/videos/upload-url': {
       description:
         'Mint a signed upload: returns the uploadId, the signedUrl to PUT the bytes to directly, and the expiry. The upload is bound to the caller and carries a video (capped at 2GB) or a JPEG/PNG image (capped at 8 MB) for the image networks.',
@@ -32,7 +26,6 @@ export function videoOperationSchemas({ success, object, str }) {
         502: 'The signed upload URL could not be created.',
       },
     },
-    // apps/web/app/api/videos/uploads/[uploadId]/complete/route.ts
     'POST /api/videos/uploads/[uploadId]/complete': {
       description:
         'Verify a signed upload after the PUT: the server checks the real content (magic bytes) and size, then marks it ready. Idempotent for an already-ready upload.',
@@ -48,7 +41,6 @@ export function videoOperationSchemas({ success, object, str }) {
         413: 'The stored video is over the 2GB limit.',
       },
     },
-    // apps/web/app/api/videos/publish-by-id/route.ts (parsePublishBody)
     'POST /api/videos/publish-by-id': {
       description:
         'Publish a completed signed-upload video by uploadId — the remote replacement for publish_video (action: from_file). Single-use: one publish consumes the upload. Provider field rules mirror publish_video (action: from_file) (YouTube: title, description, tags, privacyStatus; Rumble/Fanvue: title, description; Pinterest: boardId plus description or caption; the rest: caption).',

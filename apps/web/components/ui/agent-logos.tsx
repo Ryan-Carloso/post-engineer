@@ -2,13 +2,6 @@ import { PiOpenAiLogo } from 'react-icons/pi';
 import { SiClaudecode, SiCursor, SiOpencode } from 'react-icons/si';
 import { cn } from '@/lib/utils';
 
-//---------------
-// AgentLogos — row of logo tiles for the MCP-capable agents the
-// product names (API keys hero, prompts copy block). Decorative:
-// the agent names are always in the surrounding copy, so the row
-// is aria-hidden. Presentational.
-//---------------
-
 export type AgentId = 'claude' | 'openai' | 'opencode' | 'cursor';
 
 const AGENTS: Record<AgentId, { Icon: () => React.JSX.Element; tile: string }> = {

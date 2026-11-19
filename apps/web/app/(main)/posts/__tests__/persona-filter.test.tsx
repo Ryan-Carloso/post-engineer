@@ -10,12 +10,6 @@ import {
   type PersonaCalendar,
 } from '../persona-filter';
 
-//---------------
-// Tests for the persona filter behind the /posts sidebar ("Os meus
-// calendários"): which persona rows the sidebar shows, and which slots
-// stay visible when a row is toggled off.
-//---------------
-
 function schedule(id: string, personaId: string | null): ScheduleConfig {
   return {
     id,

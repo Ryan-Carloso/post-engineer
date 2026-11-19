@@ -14,12 +14,6 @@ vi.mock('@/lib/posthog-server', () => ({
   getPostHogServer: vi.fn(),
 }));
 
-//---------------
-// GET /api/billing/tokens for an OAuth caller (remote MCP): no cookie
-// session, so the route must read the wallet through the service client or
-// RLS hides the profile row and the balance degrades to a silent 0.
-//---------------
-
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';

@@ -15,7 +15,6 @@ describe('API Keys in the prompts hub — UI & E2E', () => {
 
   it('renders the key manager and the setup prompt as steps 1 and 2 of /recipes', () => {
     cy.visit('/recipes');
-    // React Query may serve a warm cache — assert UI, not cy.wait on GET.
     cy.location('pathname').should('eq', '/recipes');
 
     cy.contains('h2', 'Crie sua API key').should('be.visible');
@@ -40,8 +39,6 @@ describe('API Keys in the prompts hub — UI & E2E', () => {
 
   it('navigates to the key manager from the profile area', () => {
     cy.visit('/account');
-    // The desktop sidebar footer renders the same AccountPanel, so scope
-    // to the page container (same duplicate-DOM reason as account-profile.cy.ts).
     cy.get('[data-testid=account-page] [data-testid=profile-api-keys-link]')
       .scrollIntoView()
       .click();
@@ -103,9 +100,6 @@ describe('API Keys in the prompts hub — UI & E2E', () => {
     }).as('revokeApiKey');
 
     cy.visit('/recipes');
-    // /recipes is public: a missing session renders the sign-in call to
-    // action instead of the key manager, so the keys request never fires
-    // and the row lookup below fails — on the missing row, not a timeout.
     cy.location('pathname').should('eq', '/recipes');
     cy.get('[data-testid="api-key-row-key-1"]', { timeout: 15_000 }).scrollIntoView().within(() => {
       cy.contains('Production Server').should('be.visible');
@@ -121,8 +115,6 @@ describe('API Keys in the prompts hub — UI & E2E', () => {
   it('copies the MCP install prompt and shows the confirmation label', () => {
     cy.visit('/recipes', {
       onBeforeLoad(win) {
-        // The real clipboard API is permission-gated in the runner; the
-        // copy handler only needs writeText to resolve.
         cy.stub(win.navigator.clipboard, 'writeText').resolves();
       },
     });

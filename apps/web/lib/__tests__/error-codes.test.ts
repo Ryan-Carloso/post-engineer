@@ -1,7 +1,3 @@
-//---------------
-// error-codes — stable codes, default messages, template filling.
-//---------------
-
 import { describe, expect, it } from 'vitest';
 
 import { ERROR_CODES, errorMessage, formatErrorMessage, isErrorCode } from '../error-codes';
@@ -47,8 +43,6 @@ describe('error-codes', () => {
   });
 
   it('keeps SCHEDULE_OUT_OF_RANGE as a {minHours}/{maxDays} template fed from the shared constants', () => {
-    // The default message must stay a template: hardcoding the window here
-    // is exactly the drift this PR's reviewer flagged.
     expect(errorMessage('SCHEDULE_OUT_OF_RANGE')).toContain('{minHours}');
     expect(errorMessage('SCHEDULE_OUT_OF_RANGE')).toContain('{maxDays}');
     expect(

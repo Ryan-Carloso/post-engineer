@@ -1,14 +1,3 @@
-//---------------
-// Personas list — library face as the card display fallback.
-// Covers PersonaCard + PersonaAvatar: library-only, then avatar → photo →
-// library after load errors. The list payload is intercepted so CI never
-// depends on production personas.
-//
-// Same-origin URLs: next/image rejects unconfigured remote hosts
-// (see account-profile.cy.ts). Broken avatar/photo are intercepted 404s so
-// the real onError path runs; the library URL is a public PNG that loads.
-//---------------
-
 describe('Personas list library fallback', () => {
   beforeEach(() => {
     cy.loginE2EUser();

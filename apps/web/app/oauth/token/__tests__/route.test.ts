@@ -22,10 +22,6 @@ vi.mock('@/lib/logger', () => ({
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { logger } from '@/lib/logger';
 
-//---------------
-// In-memory stand-in for the 033 migration RPCs, mirroring their SQL
-// semantics: single-use jtis, unknown/expired/consumed → rotation fails.
-//---------------
 interface RefreshRecord {
   jti: string;
   consumedAt: number | null;
@@ -256,7 +252,6 @@ describe('POST /oauth/token', () => {
     const refreshB = ((await rotated.json()) as Record<string, unknown>).refresh_token;
     expect(refreshB).not.toBe(refreshA);
 
-    // Replaying the consumed token must fail…
     const replay = await POST(
       form({
         grant_type: 'refresh_token',
@@ -267,7 +262,6 @@ describe('POST /oauth/token', () => {
     expect(replay.status).toBe(400);
     expect(((await replay.json()) as Record<string, unknown>).error).toBe('invalid_grant');
 
-    // …while the replacement keeps working.
     const second = await POST(
       form({
         grant_type: 'refresh_token',
@@ -279,11 +273,6 @@ describe('POST /oauth/token', () => {
   });
 
   it('fails closed with 500 when refresh token registration fails', async () => {
-    // The route must never hand out an untracked refresh token: a store
-    // error here is a 500 with no refresh_token in the response, not a
-    // best-effort grant. (This is the fail-closed path migration 033
-    // exists to unblock: without the RPCs, every offline_access grant
-    // died here.)
     vi.mocked(createSupabaseServiceClient).mockReturnValue({
       rpc: vi.fn(async (fn: string) => {
         if (fn === 'register_mcp_refresh_token') {

@@ -13,11 +13,6 @@ vi.mock('@/lib/api-keys', () => ({
   validateApiKeyFormat: (key: string) => key.startsWith('post-engineer_'),
 }));
 
-//---------------
-// Testes de GET /api/persona/faces — catálogo de rostos padrão da casa
-// (public/caracter-samples). Auth = sessão Supabase OU API key (MCP).
-//---------------
-
 import { GET } from '../route';
 import { ListFacesResponseSchema } from '@/lib/contracts/personas';
 import { createSupabaseServerClient } from '@/lib/supabase/server';

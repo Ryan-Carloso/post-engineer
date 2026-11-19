@@ -4,15 +4,6 @@ import { useEffect, useState } from 'react';
 import { formatBuildInfo, parseBuildInfo } from '@/lib/version';
 import { fetchVersionBadgeBody, VERSION_BADGE_FALLBACK_LABEL } from '@/lib/version-badge-fetch';
 
-//---------------
-// VersionBadge — "BETA - 1.28.152 (#152)" pill next to the brand. Reads
-// /api/version (which proxies the engine) so the UI shows the SAME version
-// and PR the backend runs; several copies mount per page (sidebar,
-// mobile header, /account) and share one request through
-// fetchVersionBadgeBody. Degrades to a bare "BETA" pill while loading or
-// when the backend is unreachable — the badge must never break the page it
-// sits on.
-//---------------
 export default function VersionBadge() {
   const [label, setLabel] = useState(VERSION_BADGE_FALLBACK_LABEL);
 

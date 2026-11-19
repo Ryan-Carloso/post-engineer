@@ -4,12 +4,6 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 
-//---------------
-// AccountPanel tests — the shared account area shown in the desktop
-// sidebar footer and on the /account page (mobile entry point).
-// Written BEFORE the implementation (TDD).
-//---------------
-
 const { pushMock, signOutMock } = vi.hoisted(() => ({
   pushMock: vi.fn(),
   signOutMock: vi.fn(),
@@ -137,7 +131,6 @@ describe('AccountPanel', () => {
   });
 
   it('renders the version badge when showVersionBadge is set', async () => {
-    // The badge fetches /api/version (engine build metadata) on mount.
     mockFetch.mockImplementation(async (url: string) =>
       url === '/api/version'
         ? { ok: true, json: async () => ({ version: '1.8.0', build: 502, commit: 'abc123' }) }
@@ -182,9 +175,6 @@ describe('AccountPanel', () => {
     await waitFor(() => {
       expect(signOutMock).toHaveBeenCalled();
     });
-    // scope: 'local' pins the UX contract: the sign-out ends only the
-    // current session, never the user's other devices (the auth-js default
-    // scope 'global' would kill them all).
     expect(signOutMock).toHaveBeenCalledWith({ scope: 'local' });
     expect(pushMock).toHaveBeenCalledWith('/login');
   });
@@ -192,18 +182,14 @@ describe('AccountPanel', () => {
   it('signs out of all devices only after the confirmation dialog', async () => {
     render(<AccountPanel />, { wrapper: createWrapper() });
 
-    // Opening the confirmation dialog must not sign out yet.
     fireEvent.click(screen.getByTestId('sign-out-all-button'));
     expect(screen.getByTestId('sign-out-all-dialog')).toBeInTheDocument();
     expect(signOutMock).not.toHaveBeenCalled();
 
-    // Cancel: dialog closes, still no sign-out.
     fireEvent.click(screen.getByTestId('sign-out-all-cancel'));
     expect(screen.queryByTestId('sign-out-all-dialog')).not.toBeInTheDocument();
     expect(signOutMock).not.toHaveBeenCalled();
 
-    // Confirm: the scope is 'global' (every device ends) and the route
-    // goes to /login.
     fireEvent.click(screen.getByTestId('sign-out-all-button'));
     fireEvent.click(screen.getByTestId('sign-out-all-confirm'));
     await waitFor(() => {
@@ -213,7 +199,7 @@ describe('AccountPanel', () => {
   });
 
   it('keeps the global sign-out dialog open and its controls disabled while the sign-out is in flight', async () => {
-    signOutMock.mockImplementationOnce(() => new Promise(() => {})); // never settles
+    signOutMock.mockImplementationOnce(() => new Promise(() => {}));
     render(<AccountPanel />, { wrapper: createWrapper() });
     fireEvent.click(screen.getByTestId('sign-out-all-button'));
     fireEvent.click(screen.getByTestId('sign-out-all-confirm'));
@@ -224,7 +210,6 @@ describe('AccountPanel', () => {
     expect(screen.getByTestId('sign-out-all-dialog')).toBeInTheDocument();
     expect(screen.getByTestId('sign-out-all-confirm')).toBeDisabled();
     expect(screen.getByTestId('sign-out-all-cancel')).toBeDisabled();
-    // The user must not be routed to /login while the request is pending.
     expect(pushMock).not.toHaveBeenCalled();
   });
 
@@ -238,11 +223,8 @@ describe('AccountPanel', () => {
       expect(screen.getByTestId('sign-out-all-error')).toBeInTheDocument();
     });
     expect(screen.getByRole('alert')).toBeInTheDocument();
-    // No silent false success: the dialog stays open and the user is
-    // NOT routed to /login — other devices are still signed in.
     expect(screen.getByTestId('sign-out-all-dialog')).toBeInTheDocument();
     expect(pushMock).not.toHaveBeenCalled();
-    // Controls are re-enabled so the user can retry.
     expect(screen.getByTestId('sign-out-all-confirm')).toBeEnabled();
     expect(screen.getByTestId('sign-out-all-cancel')).toBeEnabled();
   });
@@ -267,7 +249,7 @@ describe('AccountPanel', () => {
   });
 
   it('keeps focus trapped in the dialog on Tab while the sign-out is pending', async () => {
-    signOutMock.mockImplementationOnce(() => new Promise(() => {})); // never settles
+    signOutMock.mockImplementationOnce(() => new Promise(() => {}));
     render(<AccountPanel />, { wrapper: createWrapper() });
     fireEvent.click(screen.getByTestId('sign-out-all-button'));
     fireEvent.click(screen.getByTestId('sign-out-all-confirm'));
@@ -275,8 +257,6 @@ describe('AccountPanel', () => {
       expect(signOutMock).toHaveBeenCalledWith({ scope: 'global' });
     });
 
-    // While pending every control is disabled, so Tab must be cancelled
-    // instead of escaping the dialog.
     const tab = new KeyboardEvent('keydown', {
       key: 'Tab',
       bubbles: true,
@@ -297,7 +277,7 @@ describe('AccountPanel', () => {
   });
 
   it('Escape does NOT close the dialog while the sign-out is pending', async () => {
-    signOutMock.mockImplementationOnce(() => new Promise(() => {})); // never settles
+    signOutMock.mockImplementationOnce(() => new Promise(() => {}));
     render(<AccountPanel />, { wrapper: createWrapper() });
     fireEvent.click(screen.getByTestId('sign-out-all-button'));
     fireEvent.click(screen.getByTestId('sign-out-all-confirm'));
@@ -312,8 +292,6 @@ describe('AccountPanel', () => {
   it('Tab pulls focus back inside the dialog when focus is on document.body', () => {
     render(<AccountPanel />, { wrapper: createWrapper() });
     fireEvent.click(screen.getByTestId('sign-out-all-button'));
-    // The dialog focuses the safe action on mount; blur to simulate the
-    // browser leaving focus on document.body (outside the dialog).
     (document.activeElement as HTMLElement).blur();
     expect(document.activeElement).not.toBe(screen.getByTestId('sign-out-all-cancel'));
 
@@ -323,14 +301,11 @@ describe('AccountPanel', () => {
       cancelable: true,
     });
     window.dispatchEvent(tab);
-    // Tab must not escape the modal: focus moves to the first focusable
-    // (the safe action, Cancel) instead of leaving the dialog.
     expect(tab.defaultPrevented).toBe(true);
     expect(document.activeElement).toBe(screen.getByTestId('sign-out-all-cancel'));
 
-    // Shift+Tab with body focus pulls focus to the LAST focusable.
     fireEvent.click(screen.getByTestId('sign-out-all-cancel'));
-    fireEvent.click(screen.getByTestId('sign-out-all-button')); // reopen
+    fireEvent.click(screen.getByTestId('sign-out-all-button'));
     (document.activeElement as HTMLElement).blur();
     const shiftTab = new KeyboardEvent('keydown', {
       key: 'Tab',
@@ -351,7 +326,6 @@ describe('AccountPanel', () => {
     render(<AccountPanel />, { wrapper: createWrapper() });
     expect(screen.queryByTestId('profile-user-link')).not.toBeInTheDocument();
     expect(screen.queryByTitle('nav.signOut')).not.toBeInTheDocument();
-    // Tokens and locale stay available regardless of session state.
     expect(screen.getByTestId('token-balance')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'PT' })).toBeInTheDocument();
   });

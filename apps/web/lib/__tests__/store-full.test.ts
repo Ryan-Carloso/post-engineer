@@ -2,10 +2,6 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { useUploadStore } from '@/lib/store';
 import type { UploadContentResult } from '@/lib/types';
 
-//---------------
-// store — setters, resets e resolveContent (gap restante)
-//---------------
-
 type StoreState = ReturnType<typeof useUploadStore.getState>;
 const emptyState: Partial<StoreState> = {
   selectedAccountIds: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [], telegram: [] },

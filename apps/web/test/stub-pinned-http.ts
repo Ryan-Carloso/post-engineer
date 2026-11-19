@@ -14,7 +14,6 @@ export function restorePinnedHttp(): void {
   restore(https.request);
 }
 
-/** Intercept requestPinned (http/https.request) so route tests skip real DNS. */
 export function stubPinnedHttp(
   status: number,
   body: Uint8Array = new Uint8Array(),

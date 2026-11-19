@@ -1,8 +1,3 @@
-//---------------
-// Prepaid token packs — the single source of truth for wallet purchases.
-// Prices are display values; Stripe Price IDs remain server-only env vars.
-//---------------
-
 export const TOKEN_PACKS = {
   pack_10: {
     id: 'pack_10',

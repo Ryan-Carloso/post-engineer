@@ -2,11 +2,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { fetchExperimentDetail, fetchExperiments } from '../experiments-dashboard';
 
-//---------------
-// experiments-dashboard fetchers (issue #532). fetch is stubbed; the
-// validators must reject a malformed body instead of rendering it.
-//---------------
-
 const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);
 
@@ -75,7 +70,6 @@ describe('fetchExperiments', () => {
     await expect(fetchExperiments()).resolves.toEqual({ success: false, error: 'offline' });
   });
 
-  // Each case breaks exactly one validator conjunct in the experiment shape.
   it.each([
     ['a string targetPairs', (experiment: typeof EXPERIMENT) => { experiment.targetPairs = '3' as never; }],
     ['a numeric personaId', (experiment: typeof EXPERIMENT) => { experiment.personaId = 9 as never; }],
@@ -111,8 +105,6 @@ describe('fetchExperimentDetail', () => {
     await expect(fetchExperimentDetail(EXPERIMENT.id, '7d')).resolves.toEqual({ ...DETAIL, source: 'snapshot', liveAt: null });
   });
 
-  // Each case breaks exactly one validator conjunct, so a validator that
-  // drops that check (or flips its && to ||) lets the body through.
   it.each([
     ['a variant with a non-string name', (body: typeof DETAIL) => { body.experiment.variants[0].name = 42 as never; }],
     ['a variant with a non-string description', (body: typeof DETAIL) => { body.experiment.variants[0].description = null as never; }],

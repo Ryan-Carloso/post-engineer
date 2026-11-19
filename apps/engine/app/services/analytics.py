@@ -61,26 +61,15 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-# Property keys matching this pattern are redacted before capture.
 _SECRET_KEY_PATTERN = re.compile(
     r"password|passwd|secret|token|authorization|auth\b|api[-_]?key|"
     r"bearer|credential|private[-_]?key|session",
     re.IGNORECASE,
 )
 
-# Values matching this pattern have the secret portion redacted.
-# Catches `key=secret`, `key: secret`, `"key": "secret"` (JSON),
-# `'key': 'secret'` (Python repr), and `Bearer <token>` in free text.
-# The optional quotes matter: model output and SDK/HTTP errors often echo
-# config blobs in JSON/dict shape, which the bare pattern missed.
 _SECRET_VALUE_PATTERN = re.compile(
     r"(password|passwd|secret|token|api[-_]?key|credential|private[-_]?key|session)[\"']?\s*[:=]\s*[\"']?([^\s,;\"']+)"
     r"|(bearer)\s+([^\s,;\"']+)"
-    # Hosted-provider keys are self-identifying by prefix (OpenRouter
-    # `sk-or-v1-...`, OpenAI `sk-...`/`sk-proj-...`). They leak with no field
-    # name in sight -- an upstream HTTP error body echoes the rejected key back
-    # verbatim -- so the key-anchored branch above cannot see them. The length
-    # floor keeps ordinary words starting with "sk" ("sketch", "sk-42") intact.
     r"|\b(sk-(?:or-v1-)?[A-Za-z0-9_-]{20,})",
     re.IGNORECASE,
 )
@@ -91,28 +80,20 @@ _REDACTED = "[redacted]"
 def scrub_secret_values(text: str) -> str:
     """Redact secret values from free-text strings (exception messages, stacktraces)."""
     def _replace(m: re.Match[str]) -> str:
-        # Group 1/3 is the key name; preserve it, redact the value.
         key = m.group(1) or m.group(3)
         if key is None:
-            # The bare provider-key branch: no key name to preserve.
             return _REDACTED
         sep = "=" if m.group(1) else " "
         return f"{key}{sep}{_REDACTED}"
     return _SECRET_VALUE_PATTERN.sub(_replace, text)
 
 
-# Placeholders for machine-local roots in analytics error text.
 _HOME_PLACEHOLDER = "<home>"
 _STORAGE_PLACEHOLDER = "<storage>"
 _PATH_PLACEHOLDER = "<path>"
 
-# Matches absolute Unix paths. The negative lookbehind keeps URL schemes
-# (https://host/...) intact — the slashes after ':' never match — and
-# protects the <home>/, <storage>/, <path>/ placeholders this module
-# inserts, whose slashes follow '>'.
 _ABSOLUTE_PATH_PATTERN = re.compile(r"(?<![\w:/<>])(?:/[\w.\-~]+)+")
 
-# Marks where the middle of a truncated multi-line error was dropped.
 _TRUNCATION_MARKER = "\n…\n"
 
 
@@ -132,16 +113,13 @@ def _replace_local_roots(text: str) -> str:
     storage = tempfile.gettempdir()
     if storage and storage != "/" and storage != home:
         roots.append((storage, _STORAGE_PLACEHOLDER))
-    # Longest root first so nested roots replace correctly.
     for root, placeholder in sorted(roots, key=lambda item: -len(item[0])):
         text = text.replace(root, placeholder)
-    # <home>/a/b/file.mp4 -> <home>/file.mp4 (same for <storage>).
     text = re.sub(
         r"(<home>|<storage>)(?:/[^\s\"'/<>]+)+/([^\s\"'/<>]+)",
         r"\1/\2",
         text,
     )
-    # Backstop for absolute paths from any other machine.
     return _ABSOLUTE_PATH_PATTERN.sub(
         lambda m: f"{_PATH_PLACEHOLDER}/{m.group(0).rsplit('/', 1)[-1]}",
         text,
@@ -166,16 +144,9 @@ def scrub_error_text(text: str, max_chars: int = 500) -> str:
     first_line = cleaned.split("\n", 1)[0]
     tail_budget = max_chars - len(first_line) - len(_TRUNCATION_MARKER)
     if tail_budget <= 0:
-        # Single long line (or a very long first line): the diagnostic
-        # detail lives at the end, so keep the tail.
         return cleaned[-max_chars:]
     return first_line + _TRUNCATION_MARKER + cleaned[-tail_budget:]
 
-# Default PostHog ingest host. Change this constant if you self-host
-# PostHog — every telemetry path in the engine reads it as the fallback
-# when POSTHOG_HOST is not set. Keep in sync with the web
-# (apps/web/lib/posthog-config.ts) constant —
-# apps/web/lib/__tests__/posthog-config.test.ts enforces it.
 DEFAULT_POSTHOG_HOST = "https://eu.i.posthog.com"
 
 _client: Any = None
@@ -193,10 +164,6 @@ def _get_environment() -> str:
     return "production" if os.environ.get("APP_ENV") == "production" else "development"
 
 
-# Exact property names exempt from key-name redaction. "token" is a
-# substring of _SECRET_KEY_PATTERN (to catch *_token secrets), so without
-# this exemption the legitimate ai_request token-usage counters would be
-# redacted before capture.
 _REDACT_EXEMPT_KEYS = frozenset(
     {"prompt_tokens", "completion_tokens", "total_tokens"}
 )
@@ -205,10 +172,6 @@ _REDACT_EXEMPT_KEYS = frozenset(
 def _scrub_secrets(properties: dict[str, Any]) -> dict[str, Any]:
     scrubbed: dict[str, Any] = {}
     for key, value in properties.items():
-        # Exempt names are legitimate telemetry counters — but only when the
-        # value is actually a number. A secret is never an int, so a
-        # non-numeric value under an exempt name is still redacted. This
-        # keeps the exemption from becoming a global opt-out for every event.
         if (
             key in _REDACT_EXEMPT_KEYS
             and isinstance(value, int)
@@ -293,14 +256,8 @@ def track_event(
         if client is None:
             return
         props = _scrub_secrets(dict(properties or {}))
-        # Origin tags: assigned after scrubbing and after any caller-supplied
-        # values, so they can never be redacted or overridden — the origin of
-        # an event is a pipeline fact, not caller input.
         props["source"] = "engine"
         props["environment"] = _get_environment()
-        # Attribute the event to the real user when known so PostHog breaks
-        # the funnel down per person; the engine pseudo-person is only the
-        # fallback for events without a user (e.g. background jobs).
         distinct_id = _resolve_distinct_id(properties or {})
         client.capture(
             distinct_id=distinct_id,
@@ -345,9 +302,6 @@ def track_ai_request(properties: dict[str, Any]) -> None:
         if not isinstance(err, str) or not err.strip():
             properties["error"] = "Error"
     track_event("ai_request", properties)
-    # Also emit the standard PostHog AI-observability event so the LLM call
-    # appears as a trace/generation in the AI product. Only the llm backend:
-    # Modal render calls are not LLM generations.
     if properties.get("backend") == "llm":
         track_ai_generation(properties)
 
@@ -380,19 +334,13 @@ def track_ai_generation(props: dict[str, Any]) -> None:
             return
         success = bool(props.get("success"))
         generation: dict[str, Any] = {
-            # One trace per generation call: the engine's LLM entry points
-            # (script, script angle, mood) are one-shot workloads with no
-            # task or user context available at the llm.py call site.
             "$ai_trace_id": str(uuid.uuid4()),
             "$ai_session_id": None,
             "$ai_provider": props.get("provider"),
             "$ai_latency": (props.get("duration_ms") or 0) / 1000,
-            # Nonstandard extras, for regressions/debugging next to the
-            # standard AI properties.
             "primary_provider": props.get("primary_provider"),
             "fallback_used": bool(props.get("fallback_used")),
             "response_chars": props.get("response_chars"),
-            # Origin tags, identical to track_event.
             "source": "engine",
             "environment": _get_environment(),
         }

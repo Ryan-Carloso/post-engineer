@@ -1,8 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { NextRequest } from 'next/server';
 
-// No mocks: the error branch returns before any session/DB/provider call,
-// so the REAL oauthPopupResponse sink executes end to end.
 import { GET } from '@/app/api/linkedin-auth/callback/route';
 
 const adversarial = '</script><script>alert(1)</script>';

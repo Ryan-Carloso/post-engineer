@@ -4,11 +4,6 @@ import { useEffect, useState } from 'react';
 
 import { fetchDenoisePreview } from '@/lib/cloned-voices-client';
 
-//---------------
-// useDenoisePreview — fetches the cleaned (denoised) take of a pending
-// reference recording while "clean audio" is on, for the A/B listen before
-// cloning. Revokes its object URL when the recording or the toggle changes.
-//---------------
 export function useDenoisePreview(
   pendingBlob: Blob | null,
   denoise: boolean,

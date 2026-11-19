@@ -1,38 +1,5 @@
-// Videos tool/contract equivalence: the MCP tool shapes and the shared
-// videos contract must accept/reject the same wire values, except where
-// the difference is deliberate and pinned below.
-//
-// Deliberate differences (the route or the tool owns the rule, not the shape):
-// - options.videoType: the tool requires it (superRefine, same message);
-//   the contract shape allows absent options — the route's semantic check
-//   rejects a call with no mode, exactly like the tool does.
-// - providers: the tool requires >= 1 and the route's semantic check
-//   rejects 0 ('Select at least one provider.'); the contract shape caps
-//   at MAX_REPORTED_ISSUES only. The tool does not cap at 20; the route
-//   shape does.
-// - segments text / overlay titles: the tool requires non-empty text
-//   (min(1), overlay title 1-60 chars); the contract shape takes any
-//   string — the route's validateSegments rejects empty text semantically.
-// - language: the tool enforces English-only; the contract shape takes
-//   any string — the route's semantic check enforces English-only.
-// - mode/schedule coupling ('asap' forbids a schedule plan, 'scheduled'
-//   requires one) lives in the route's validatePublishMode and the
-//   client/tool fail-fasts, not in the shape: the contract accepts an
-//   asap call carrying a schedule plan.
-// - score-draft messages: the tool's draft max has no trailing period and
-//   its personaId message lacks 'when given'; the contract matches the
-//   route's messages exactly. A whitespace-only draft passes the tool
-//   (min(1)) but the route and the contract reject it.
-// - batch duplicate scheduleIds, mint/publish-by-id provider-specific
-//   required fields and the generate semantic checks (segments required
-//   per mode, persona-less voice rule) are route-side, not shape rules.
-// - musicMood is inlined in the contract (the two apps keep the shared
-//   field at different depths, so a relative import cannot reach it);
-//   the bounds and the describe text are pinned to the shared field below.
 import { describe, expect, it } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
-// Walk up to the repo root instead of counting parents: Stryker runs the
-// suite from a copied tree, which shifts every fixed parent index.
 function findRepoRoot(fromUrl: string): string {
   let dir = dirname(fileURLToPath(fromUrl));
   for (;;) {
@@ -71,8 +38,6 @@ function accepts(schema: z.ZodType, value: unknown): boolean {
   return schema.safeParse(value).success;
 }
 
-// The tool shape is FLAT (providers/mode/startAt/times at the top level,
-// options nested); the contract body is NESTED (publishing + options).
 const TOOL_GENERATE = {
   title: 'Launch a SaaS in days',
   description: 'Agent description.',
@@ -105,8 +70,6 @@ describe('generate tool shape vs the videos contract', () => {
   it('rejects a missing or unknown videoType on both sides with the costs message', () => {
     const missingTool = firstIssue(GeneratePersonaVideoSchema, { ...TOOL_GENERATE, options: undefined });
     expect(missingTool).toContain('options.videoType is required; use full_lipsync (8/15)');
-    // Deliberate: the contract shape allows absent options; the route's
-    // semantic check rejects a call with no mode, exactly like the tool.
     expect(accepts(GenerateAndScheduleBodySchema, { ...CONTRACT_GENERATE, options: undefined })).toBe(true);
     const unknownTool = { ...TOOL_GENERATE, options: { videoType: 'sideways' } };
     const unknownContract = { ...CONTRACT_GENERATE, options: { videoType: 'sideways' } };
@@ -133,8 +96,6 @@ describe('generate tool shape vs the videos contract', () => {
 
   it('requires at least one provider on the tool; the contract shape caps at 20 only', () => {
     expect(accepts(GeneratePersonaVideoSchema, { ...TOOL_GENERATE, providers: [] })).toBe(false);
-    // Deliberate: the route's semantic check rejects 0 providers; the
-    // shape only caps the count.
     expect(
       accepts(GenerateAndScheduleBodySchema, {
         ...CONTRACT_GENERATE,
@@ -226,8 +187,6 @@ describe('generate tool shape vs the videos contract', () => {
   });
 
   it('lets the mode/schedule coupling live outside the shape', () => {
-    // Deliberate: the route's validatePublishMode and the client fail-fast
-    // reject this; the shape accepts it.
     const asapWithPlan = {
       ...CONTRACT_GENERATE,
       publishing: { mode: 'asap', providers: ['youtube'], schedule: { startAt: '2026-10-05T20:00:00', times: ['20:00'], timezone: 'UTC' } },
@@ -303,8 +262,6 @@ describe('validate tool shape vs the videos contract', () => {
 
   it('keeps the tool stricter on empty segments', () => {
     expect(accepts(ValidateScriptSchema, { segments: [] })).toBe(false);
-    // Deliberate: the route's validateSegments rejects empty segments
-    // semantically; the shape leaves segments opaque.
     expect(accepts(ValidateScriptBodySchema, { segments: [] })).toBe(true);
     expect(accepts(ValidateScriptBodySchema, {})).toBe(true);
   });
@@ -316,8 +273,6 @@ describe('score tool shape vs the videos contract', () => {
     expect(firstIssue(ScoreDraftBodySchema, { draft: '' })).toBe('draft is required and must be a non-empty string.');
     expect(firstIssue(ScoreDraftSchema, { draft: 'x'.repeat(10001) })).toBe('draft must be at most 10000 characters');
     expect(firstIssue(ScoreDraftBodySchema, { draft: 'x'.repeat(10001) })).toBe('draft must be at most 10000 characters.');
-    // Deliberate: a whitespace-only draft passes the tool (min(1)) but
-    // the route and the contract reject it.
     expect(accepts(ScoreDraftSchema, { draft: '   ' })).toBe(true);
     expect(accepts(ScoreDraftBodySchema, { draft: '   ' })).toBe(false);
   });

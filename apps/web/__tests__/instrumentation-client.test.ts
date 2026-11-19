@@ -1,16 +1,3 @@
-//---------------
-// instrumentation-client — browser PostHog initialization.
-//
-// The client path reads the SAME NEXT_PUBLIC_POSTHOG_HOST as the server SDK,
-// so it needs the same validation. A project API key misconfigured as the
-// host (production incident, 2026-10-13) was guarded on the server side by
-// lib/posthog-server.ts while instrumentation-client.ts still passed the raw
-// value straight to posthog-js, which accepts any string and fails only at
-// send time — one bad value would keep breaking browser telemetry.
-//
-// These tests pin the host actually handed to posthog.init.
-//---------------
-
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const initArgs: unknown[][] = [];
@@ -94,8 +81,6 @@ describe('instrumentation-client PostHog host', () => {
     expect(lastApiHost()).toBe('https://posthog.internal.example:8000');
   });
 
-  // "HTTPS or loopback only" — plaintext http to a remote host would send
-  // telemetry unencrypted. Loopback stays allowed for a local self-hoster.
   it('rejects a remote http host', async () => {
     await loadClient('http://posthog.internal.example:8000');
     expect(lastApiHost()).toBe(DEFAULT_POSTHOG_HOST);

@@ -33,8 +33,6 @@ class RunningReservation:
     def start(self, func: Callable, *args: Any, **kwargs: Any) -> None:
         if not self._held:
             raise RuntimeError("running reservation is not held")
-        # The worker owns the count from here. A spawn failure releases
-        # it inside _spawn_reserved; a second release would drop it twice.
         self._held = False
         self._manager._spawn_reserved(func, *args, **kwargs)
 
@@ -69,11 +67,6 @@ class TaskManager:
                 logger.info(
                     f"add task: {func.__name__}, current_tasks: {self.current_tasks}"
                 )
-                # Reserve the slot before the worker runs. Counting inside
-                # the thread, after this lock is released, lets a tight
-                # burst of add_task calls all observe current_tasks == 0
-                # and all start at once. Boot redispatch of many orphans
-                # is that burst. task_done releases the slot.
                 self.current_tasks += 1
                 try:
                     if on_accepted is not None:
@@ -84,10 +77,6 @@ class TaskManager:
                 start_now = True
             else:
                 queue_size = self.queue_size()
-                # Only queue once concurrency is full. The queue must be
-                # bounded: an open API can otherwise keep stacking task
-                # objects and request params until memory or third-party
-                # API cost runs away.
                 if queue_size >= self.max_queued_tasks:
                     logger.warning(
                         f"reject task: {func.__name__}, queue_size: {queue_size}, "
@@ -103,9 +92,6 @@ class TaskManager:
                 if on_accepted is not None:
                     on_accepted()
                 start_now = False
-        # Spawn outside the lock so the worker can take it (task_done)
-        # without deadlocking against the caller still inside add_task.
-        # The slot is already reserved, so a concurrent add_task queues.
         if start_now:
             self._spawn_reserved(func, *args, **kwargs)
 
@@ -147,9 +133,6 @@ class TaskManager:
 
     def run_task(self, func: Callable, *args: Any, **kwargs: Any):
         try:
-            # The slot was reserved by add_task/check_queue before this
-            # thread started. Incrementing again would double-count and
-            # stall the queue behind a phantom extra task.
             func(*args, **kwargs)
         finally:
             self.task_done()
@@ -162,8 +145,6 @@ class TaskManager:
                 and not self.is_queue_empty()
             ):
                 task_info = self.dequeue()
-                # Redis can observe an empty pop between the llen check and
-                # lpop. Do not reserve a slot for a missing item.
                 if isinstance(task_info, dict):
                     self.current_tasks += 1
                     reserved = task_info

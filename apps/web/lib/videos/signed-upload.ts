@@ -18,27 +18,8 @@ import { IMAGE_PROVIDERS, isImageProvider } from '@/lib/contracts/providers';
 
 export { MAX_VIDEO_UPLOAD_BYTES, VIDEO_UPLOAD_CONTENT_TYPES, type UploadContentType, type VideoUploadContentType };
 
-//---------------
-// Signed video uploads (issue #561) — the remote replacement for sending
-// a local video path to publish. Flow: mint (this module creates one
-// owner-bound `video_uploads` row plus a signed upload URL for the
-// private `videos` bucket), the caller PUTs the bytes straight to
-// storage, complete (the server downloads the object and verifies the
-// real content via magic bytes before marking the row `ready`), and
-// publish-by-id claims the row exactly once (`ready` -> `consumed` in a
-// single conditional update, so a replay or a concurrent second publish
-// loses). The row is the capability record: the upload id alone is never
-// enough — every step re-checks the owner and the expiry.
-// An upload may also carry a JPEG/PNG image (capped at 8 MB) for the
-// networks that post images: the remote MCP server sends images this way
-// instead of base64 in a tool argument.
-//---------------
-
 export const VIDEO_UPLOAD_BUCKET = 'videos';
-// Same 2GB ceiling as POST /api/upload-content and the MCP client guard.
 export const VIDEO_UPLOAD_TTL_MS = 15 * 60 * 1000;
-// One mint, and one hourly scheduler tick, each remove at most this
-// many expired objects. A quieter pass continues on the next tick.
 export const VIDEO_UPLOAD_SWEEP_LIMIT = 20;
 export const VIDEO_UPLOAD_STATUSES = ['pending', 'ready', 'consumed'] as const;
 
@@ -57,8 +38,6 @@ export interface VideoUploadRow {
   consumed_at: string | null;
 }
 
-// Stable failure for every signed-upload branch: routes map `status` to
-// the HTTP status and `code` to the machine-readable error code.
 export class VideoUploadError extends Error {
   constructor(
     message: string,
@@ -70,22 +49,15 @@ export class VideoUploadError extends Error {
   }
 }
 
-// Persistence + storage seams. The Supabase adapter below is the only
-// place that touches the real client, so the state machine is unit
-// tested against in-memory fakes.
 export interface VideoUploadStore {
   insertUpload(row: VideoUploadRow): Promise<VideoUploadRow>;
   getUpload(id: string): Promise<VideoUploadRow | null>;
-  // Conditional update: applies the patch only when the row still holds
-  // `expectedStatus`. Returns false when a concurrent caller moved it.
   updateUpload(
     id: string,
     expectedStatus: VideoUploadStatus,
     patch: Partial<VideoUploadRow>,
   ): Promise<boolean>;
   deleteUpload(id: string): Promise<void>;
-  // Expired pending/ready rows only. Consumed rows stay as the record
-  // that the upload was used. Bounded so one pass cannot scan the table.
   listExpired(now: Date, limit: number): Promise<Array<Pick<VideoUploadRow, 'id' | 'storage_path'>>>;
 }
 
@@ -108,7 +80,6 @@ const EXTENSIONS: Record<UploadContentType, string> = {
   'image/png': 'png',
 };
 
-/** The byte ceiling for one upload of this type: 8 MB for an image, 2GB for a video. */
 export function maxUploadBytes(contentType: UploadContentType): number {
   return isImageUploadContentType(contentType) ? MAX_IMAGE_UPLOAD_BYTES : MAX_VIDEO_UPLOAD_BYTES;
 }
@@ -155,11 +126,8 @@ export async function mintVideoUpload(
   now: Date,
 ): Promise<MintedVideoUpload> {
   try {
-    // Best-effort. A failed sweep must not refuse a new upload; the
-    // hourly scheduler retries whatever this pass left behind.
     await sweepExpiredVideoUploads(store, storage, now);
   } catch {
-    // The error is the sweep's. The mint below is independent.
   }
   const id = randomUUID();
   const storagePath = `${userId}/direct-uploads/${id}.${EXTENSIONS[input.contentType]}`;
@@ -178,7 +146,6 @@ export async function mintVideoUpload(
   });
   const { data, error } = await storage.createSignedUploadUrl(storagePath);
   if (error !== null || data === null) {
-    // No orphan row for an upload the caller can never perform.
     await store.deleteUpload(id);
     throw new VideoUploadError('Could not create the signed upload URL.', 502, 'VIDEO_UPLOAD_SIGN_FAILED');
   }
@@ -192,8 +159,6 @@ export async function mintVideoUpload(
   };
 }
 
-// Foreign-owned ids answer 404, never 403: the id's existence is itself
-// owner-private (unknown ids -> 404 rule).
 async function loadOwnedUpload(store: VideoUploadStore, userId: string, uploadId: string): Promise<VideoUploadRow> {
   const row = await store.getUpload(uploadId);
   if (row === null || row.user_id !== userId) {
@@ -202,19 +167,13 @@ async function loadOwnedUpload(store: VideoUploadStore, userId: string, uploadId
   return row;
 }
 
-// A refused upload must not keep its object: the signed URL can point at
-// up to 2GB, and an expired or rejected object is never published.
 async function discardObject(storage: VideoUploadStorage, path: string): Promise<void> {
   try {
     await storage.remove([path]);
   } catch {
-    // Best-effort. A failed delete must not hide why the upload was refused.
   }
 }
 
-// Drops expired pending and ready uploads. The object goes first: if
-// the delete of the row fails, the next pass still has the path. A
-// remove that fails leaves the row in place for the same reason.
 export async function sweepExpiredVideoUploads(
   store: VideoUploadStore,
   storage: VideoUploadStorage,
@@ -230,7 +189,6 @@ export async function sweepExpiredVideoUploads(
       await store.deleteUpload(row.id);
       removed += 1;
     } catch {
-      // Keep the row. The next mint or hourly tick retries it.
     }
   }
   return removed;
@@ -262,7 +220,6 @@ async function downloadVerifiedMedia(
   if (buffer.length > MAX_VIDEO_UPLOAD_BYTES) {
     return refuse('Video is too large. Maximum is 2GB.', 413, 'VIDEO_UPLOAD_TOO_LARGE');
   }
-  // Real content, never the declared type: both are caller-controlled.
   const magic = detectMagicMimeType(buffer);
   const detected = (UPLOAD_CONTENT_TYPES as readonly (string | null)[]).includes(magic) ? (magic as UploadContentType) : null;
   if (detected === null) {
@@ -298,7 +255,6 @@ export async function completeVideoUpload(
   }
   await rejectIfExpired(storage, row, now);
   if (row.status === 'ready') {
-    // Idempotent retry: the verified facts are already on the row.
     return {
       uploadId: row.id,
       status: 'ready',
@@ -325,10 +281,6 @@ export interface ClaimedVideoUpload {
   contentType: UploadContentType;
 }
 
-/**
- * An image upload publishes only to the networks that post images: the
- * check runs before the claim, so a refused call leaves the upload ready.
- */
 export function assertUploadFitsProviders(row: VideoUploadRow, providers: readonly string[]): void {
   if (!isImageUploadContentType(row.detected_content_type ?? row.declared_content_type)) return;
   const videoOnly = providers.filter((provider) => !isImageProvider(provider));
@@ -340,10 +292,6 @@ export function assertUploadFitsProviders(row: VideoUploadRow, providers: readon
   );
 }
 
-// Single-use consumption: the bytes are verified first, then the row is
-// claimed with one conditional update. A second caller (replay or a
-// concurrent publish) sees `consumed` and is refused before any provider
-// is contacted.
 export async function claimUploadForPublish(
   store: VideoUploadStore,
   storage: VideoUploadStorage,
@@ -372,21 +320,12 @@ export async function claimUploadForPublish(
   return { row: { ...row, status: 'consumed', consumed_at: now.toISOString() }, buffer, contentType: detectedType };
 }
 
-//---------------
-// Supabase adapters (service role; every query is owner-filtered by the
-// callers above — the store itself is keyed by upload id only).
-//---------------
-
 interface QueryError {
   message: string;
 }
 
 export function createSupabaseVideoUploadStore(): VideoUploadStore {
   const supabase = createSupabaseServiceClient();
-  // The table ships in migration 060 and is in the generated Database
-  // types; this adapter still speaks through a minimal structural view
-  // of the query builder so the store seam stays trivially fakeable in
-  // the state-machine unit tests.
   const table = () =>
     supabase.from('video_uploads' as never) as unknown as {
       insert: (values: Record<string, unknown>) => Promise<{ error: QueryError | null }>;
@@ -426,9 +365,6 @@ export function createSupabaseVideoUploadStore(): VideoUploadStore {
       return data;
     },
     async updateUpload(id, expectedStatus, patch) {
-      // `.select('id')` makes PostgREST return the updated rows, so a
-      // claim that lost the race (row no longer in expectedStatus)
-      // observes zero rows instead of a silent overwrite.
       const { data, error } = await table()
         .update({ ...patch })
         .eq('id', id)

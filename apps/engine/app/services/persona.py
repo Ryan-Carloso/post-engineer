@@ -19,8 +19,6 @@ from app.services.cloned_voices.preview_text import (
 from app.services.openrouter_tts import get_openrouter_voices
 from app.services.voice_catalog import find_voice, load_catalog
 
-# Short Instagram/TikTok-style video hook used for the house voice
-# preview samples, per language: hook question, then the pitch.
 VOICE_SAMPLE_TEXTS: dict[str, str] = {
     "pt": "Seu vídeo precisa de narração? Essa é a voz. "
     "Pronta pra usar, direto no seu próximo post.",
@@ -81,8 +79,6 @@ def preview_house_voice_mp3(user_id: str, voice_id: str, text: str | None = None
             voice_file,
             language="en",
             user_id=user_id,
-            # A preview samples the voice, it does not ship a video: skip
-            # the narration check (and its Whisper transcription) here.
             validate=False,
         )
         if not result.ok:

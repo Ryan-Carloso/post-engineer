@@ -302,11 +302,6 @@ describe('social-accounts', () => {
     });
   });
 
-  //--------------- Coverage of every changed failure branch ---------------
-  // The prompt asks for each service-client write path on success,
-  // error, and missing-row, plus ownership predicates and the
-  // public-columns select list. These tests pin those branches so a
-  // mutation that drops an .eq('user_id') or swaps clients fails.
   describe('branch coverage', () => {
     it('upsert writes with tokenExpiresAt date and asserts ownership predicate shape', async () => {
       const select = vi.fn().mockReturnThis();
@@ -330,7 +325,6 @@ describe('social-accounts', () => {
       expect(SOCIAL_ACCOUNT_PUBLIC_COLUMNS).not.toContain('encrypted_tokens');
       const payload = serviceChain.upsert.mock.calls[0]?.[0] as { token_expires_at?: string };
       expect(payload.token_expires_at).toBe(expires.toISOString());
-      // The caller client is unused for the upsert write path.
       expect(fromReturn.upsert).not.toHaveBeenCalled();
     });
 
@@ -386,10 +380,8 @@ describe('social-accounts', () => {
       const byUser = vi.fn().mockResolvedValue({ error: null });
       const byId = vi.fn().mockReturnValue({ eq: byUser });
       serviceChain.update.mockReturnValue({ eq: byId });
-      // touch returns silently when the id is not a string.
       await touchSocialAccount(mockSupabase as never, 'u1', 'instagram', 'ig-1');
       expect(serviceFrom).not.toHaveBeenCalled();
-      // update throws NotFound in that case.
       await expect(
         updateSocialAccountTokens(mockSupabase as never, 'u1', 'instagram', 'ig-1', { access_token: 'x' }),
       ).rejects.toThrow('Social account not found');

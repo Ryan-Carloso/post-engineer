@@ -117,9 +117,6 @@ class BatchDispatchSegmentsTests(unittest.TestCase):
         )
 
     def test_slot_with_pre_takes_kinds_dispatches_as_content(self):
-        # Rows stored before the takes contract carry kind body/cta;
-        # dispatch maps both to content, so the prepaid slot renders
-        # instead of failing validation on the renamed kind.
         legacy = [
             {**SEGMENTS[0]},
             {**SEGMENTS[1], "kind": "body"},
@@ -155,12 +152,6 @@ class BatchDispatchSegmentsTests(unittest.TestCase):
         self.assertIn("segments", store.updates[0][1]["error"])
 
     def test_legacy_single_object_media_dispatches_as_a_list(self):
-        # Rows stored before the media-list contract carry one object per
-        # segment; dispatch normalizes it to a list instead of failing the
-        # prepaid slot on a Pydantic list_type error with no refund. A
-        # single photo can never satisfy the images density rule on a long
-        # body, so the legacy row dispatches as full lip-sync (media
-        # optional there) — the normalization is what this pins.
         legacy = [
             dict(SEGMENTS[0]),
             dict(SEGMENTS[1], media={"mediaId": "abc123def456abc123def456abc12345.jpg"}),

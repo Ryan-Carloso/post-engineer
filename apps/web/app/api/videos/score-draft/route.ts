@@ -1,22 +1,3 @@
-//---------------
-// POST /api/videos/score-draft — mechanical draft scoring.
-//
-// Scores one draft against the caller's own measured posts (post_metrics)
-// and runs the publish check for the requested network (one of PUBLISH_NETWORKS:
-// linkedin, youtube, instagram, bluesky, threads, facebook, pinterest, 3speak,
-// rumble, fanvue). It never debits tokens, never
-// schedules, never calls the engine: there is no database write and no
-// external call on this path at all — the baseline is one capped read
-// of the caller's own rows, plus one ownership read when personaId is given.
-//
-// A script (kind: 'script') gets `publishCheck: null`: caption limits do not
-// apply to spoken text. A failing publish check does NOT make this route 400: scoring is
-// advisory, and the caller (agent or UI) decides whether to fix the
-// draft. The check result is in the response as `publishCheck`, with
-// `ok: false` and the exact failures, so a pre-publish gate can block
-// on it without this route inventing a second error contract.
-//---------------
-
 import { NextResponse } from 'next/server';
 
 import { requireSupabaseSession } from '@/lib/request-auth';
@@ -107,9 +88,6 @@ function parseBody(body: unknown): ScoreDraftBody | NextResponse {
   };
 }
 
-// A persona that is out of the key's scope, missing or someone else's must
-// not score as "no measured posts yet": the caller could not tell a bad id
-// from a new persona.
 async function personaAccessError(
   personaIds: string[] | null | undefined,
   userId: string,
@@ -122,7 +100,6 @@ async function personaAccessError(
     .from('personas')
     .select('id')
     .eq('id', personaId)
-    // Ownership: service role bypasses RLS.
     .eq('user_id', userId)
     .single();
   if (error === null) return null;
@@ -140,14 +117,10 @@ async function loadBaseline(
   scopedPersonaIds: string[],
 ): Promise<{ rows: BaselineRow[]; truncated: boolean } | null> {
   const supabase = createSupabaseServiceClient();
-  // Prefer the 7d window (a full week of signal); fall back to 24h only
-  // when the week has no measured rows at all, so a new account still
-  // gets a baseline instead of an empty one.
   for (const window of ['7d', '24h'] as const) {
     let select = supabase
       .from('post_metrics')
       .select('script_angle, views, likes, comments, saves')
-      // Ownership: service role bypasses RLS.
       .eq('user_id', userId)
       .eq('metrics_window', window);
     if (isScoped) {
@@ -157,13 +130,10 @@ async function loadBaseline(
         : select.is('persona_id', null);
     }
     if (personaId !== undefined) select = select.eq('persona_id', personaId);
-    // Filter by network only when one was requested: omitting it keeps
-    // the all-networks baseline the route had before.
     if (network !== undefined) select = select.eq('provider', network);
     const { data, error } = await select
       .order('collected_at', { ascending: false })
       .order('id', { ascending: true })
-      // One extra row reveals whether the cap cut anything.
       .limit(BASELINE_ROW_LIMIT + 1);
     if (error) {
       logger.error('[score-draft] baseline query failed', error, { userId, window });
@@ -224,7 +194,4 @@ async function postHandler(request: Request): Promise<NextResponse> {
   return NextResponse.json({ success: true, ...result });
 }
 
-//---------------
-// 5xx reporting: handled server errors reach PostHog error tracking.
-//---------------
 export const POST = withApiErrorReporting(ROUTE, postHandler, { getUserId: resolveReportingUserId });

@@ -40,7 +40,6 @@ export async function createGoogleOAuth2Client(redirectUriOverride?: string): Pr
 
   const logId = logger.generateLogId();
 
-  // Diagnostic log - Credentials and redirect_uri
   logger.info('🔍 OAuth2Client creation - diagnostics', {
     logId,
     component: 'createGoogleOAuth2Client',
@@ -74,7 +73,6 @@ export async function createGoogleOAuth2Client(redirectUriOverride?: string): Pr
   const { OAuth2Client } = await import('google-auth-library');
   const oauth2Client = new OAuth2Client(clientId, clientSecret, redirectUri);
 
-  // Success log - OAuth2Client created
   logger.info('✅ OAuth2Client created successfully', {
     logId,
     component: 'createGoogleOAuth2Client',
@@ -86,10 +84,6 @@ export async function createGoogleOAuth2Client(redirectUriOverride?: string): Pr
   return oauth2Client;
 }
 
-// The scopes the YouTube connect flow requests. yt-analytics.readonly reads
-// the owner's own channel reports (engaged views, watch time, retention curve); tokens
-// granted before it was added get a 403 from the Analytics API and the
-// metrics page asks the user to reconnect.
 export const GOOGLE_OAUTH_SCOPES = [
   'openid',
   'profile',
@@ -105,13 +99,12 @@ export function generateGoogleAuthUrl(oauth2Client: OAuth2Client, state?: string
   const authUrl = oauth2Client.generateAuthUrl({
     access_type: 'offline',
     scope: [...GOOGLE_OAUTH_SCOPES],
-    prompt: 'consent', // Force consent to get refresh token
+    prompt: 'consent',
     ...(state ? { state } : {}),
   });
 
   const logId = logger.generateLogId();
 
-  // Diagnostic log - generated auth URL
   logger.info('🔗 Generated authorization URL - diagnostics', {
     logId,
     component: 'generateGoogleAuthUrl',
@@ -132,7 +125,7 @@ export function createVideoMetadata(options: YouTubeUploadOptions): YouTubeVideo
       title: options.title,
       description: options.description || '',
       tags: options.tags || [],
-      categoryId: options.categoryId || '22' // People & Blogs
+      categoryId: options.categoryId || '22'
     },
     status: {
       privacyStatus: options.privacyStatus || 'public',
@@ -148,13 +141,11 @@ export async function uploadYouTubeVideo(
 ): Promise<{ id: string; url: string }> {
   const youtube = getYouTubeClient(authClient);
   
-  // Get file size and create stream
   let videoStream: Readable;
 
   if (videoFile instanceof File) {
     videoStream = Readable.fromWeb(videoFile.stream() as never);
   } else {
-    // Buffer is not accepted by googleapis (it expects a stream with .pipe)
     videoStream = Readable.from(videoFile);
   }
 

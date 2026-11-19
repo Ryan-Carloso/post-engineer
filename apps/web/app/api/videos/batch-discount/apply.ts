@@ -1,11 +1,3 @@
-//---------------
-// apply — the database side of POST /api/videos/batch-discount, extracted so
-// the route file exports only its handler.
-//
-// Service-role client: every query is scoped by user_id explicitly, because
-// the service role bypasses RLS.
-//---------------
-
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { logger } from '@/lib/logger';
@@ -18,7 +10,6 @@ import {
   type BatchSlot,
 } from '@/lib/billing/batch-discount';
 
-/** Stable warning codes: a committed batch never answers a bare 500. */
 export const BATCH_DISCOUNT_WARNING_CODES = {
   CREDIT_FAILED: 'BATCH_DISCOUNT_CREDIT_FAILED',
   SLOT_UPDATE_FAILED: 'BATCH_DISCOUNT_SLOT_UPDATE_FAILED',
@@ -32,7 +23,6 @@ export type ReadSlotsResult =
   | { ok: true; slots: BatchSlot[]; batchIds: (string | null)[] }
   | { ok: false; error: unknown; unreadable?: boolean };
 
-/** Read slot rows for a filter; any unreadable row fails the whole read. */
 async function readSlots(
   supabase: SupabaseClient,
   userId: string,
@@ -63,11 +53,6 @@ export function readSlotsByBatch(supabase: SupabaseClient, userId: string, batch
   return readSlots(supabase, userId, { column: 'batch_id', value: batchId });
 }
 
-/**
- * Join the slots to the batch. The predicate `batch_id is null` is the
- * check-then-act guard: a slot another batch claimed in between keeps its
- * batch, and the caller's re-read sees the conflict.
- */
 export async function claimSlots(
   supabase: SupabaseClient,
   userId: string,
@@ -94,13 +79,6 @@ interface RefundPayload {
   already_refunded?: unknown;
 }
 
-/**
- * True when the discount tokens are on the ledger for this slot.
- * `refunded` is a fresh credit. `already_refunded` is the same key, which
- * also matches a clawed-back row whose amount was shrunk to 0: that case
- * tops the row back up (migration 047) and only counts once the row holds
- * the full charge again. Anything else is not a credit.
- */
 async function creditHeld(
   supabase: SupabaseClient,
   userId: string,
@@ -126,14 +104,6 @@ async function creditHeld(
   return true;
 }
 
-/**
- * Credit every slot planBatchDiscount picks. The credit goes through
- * refund_batch_tokens under the slot's own schedule charge with a
- * `:discount` key, so it is idempotent and capped at what that schedule
- * was charged (a slot whose failure was already refunded cannot be paid
- * back twice). The slot is marked free only after the credit is on the
- * ledger; the update re-checks discount_tokens = 0 in its predicate.
- */
 export async function applyDiscount(
   supabase: SupabaseClient,
   userId: string,
@@ -153,9 +123,6 @@ export async function applyDiscount(
     });
     const payload = (data ?? {}) as RefundPayload;
     if (error || !(await creditHeld(supabase, userId, slot, payload))) {
-      // The RPC answering false is a real failure (billing rule): the user
-      // did not get the discount. Loud log, stable warning, keep going.
-      // creditHeld logs the clawed-back case itself.
       if (error || payload.already_refunded !== true) {
         logger.error('[batch-discount] discount credit failed', error ?? payload, { userId, slotId: slot.id });
       }
@@ -170,9 +137,6 @@ export async function applyDiscount(
       .eq('discount_tokens', 0)
       .select('id');
     if (updateError || (updated ?? []).length !== 1) {
-      // The credit landed but the slot still reads as paid: a later failure
-      // refund of this slot is capped by the RPC at the schedule charge, so
-      // it can never pay back more than was charged. Log loudly.
       logger.error('[batch-discount] free slot could not be marked', updateError ?? null, { userId, slotId: slot.id });
       warnings.push(BATCH_DISCOUNT_WARNING_CODES.SLOT_UPDATE_FAILED);
       continue;

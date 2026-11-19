@@ -29,8 +29,6 @@ describe('firstSegmentMedia', () => {
   });
 
   it('skips a video clip and picks the next photo', () => {
-    // A clip is never the hook photo: the hook opens with a still
-    // (engine: segment_video.is_video_ref, user_media.first_segment_media).
     expect(
       firstSegmentMedia([
         {
@@ -95,10 +93,6 @@ describe('hookPhotoForSegments', () => {
   });
 
   it('prefers the media id over the URL when the first photo carries both', () => {
-    // The engine resolves the temp asset first and only falls back to
-    // the URL, and the pre-charge face check does the same — the post
-    // detail must not render the URL image for a video that lip-synced
-    // the upload.
     expect(
       hookPhotoForSegments([
         {

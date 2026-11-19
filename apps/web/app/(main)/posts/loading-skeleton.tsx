@@ -2,21 +2,8 @@
 
 import { useI18n } from '@/lib/i18n/provider';
 
-//---------------
-// Loading skeletons for the posts pages: the calendar grid shape on /posts
-// (CalendarLoadingSkeleton), plain card grids on /posts/history
-// (CardsLoadingSkeleton). A skeleton keeps the page layout in place while
-// the queries load, instead of a lone spinner on an empty page: it is the
-// visible loading cue (the loading text sits above the skeleton, and the
-// region is role="status"). The calendar skeleton has the shown month's number of
-// weeks and the real page layout (side panel on wide screens). Shapes use
-// the line token, not sunken: sunken on the white card was barely visible.
-//---------------
-
 const SHAPE = 'animate-pulse bg-line';
 
-// Calendar + day panel side by side on wide screens (so the selected day's
-// posts show without scrolling); shared by the page and its skeleton.
 export const CALENDAR_LAYOUT_CLASS =
   'xl:grid xl:grid-cols-[minmax(0,1fr)_21rem] xl:items-start xl:gap-6';
 

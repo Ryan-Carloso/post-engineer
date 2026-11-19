@@ -1,11 +1,3 @@
-//---------------
-// Existing-media publish form (issue #384): the multipart body the
-// provider handlers already consume. Mirrors buildPublishForm in
-// lib/videos/publish-uploaded.ts — one field set per provider — but the
-// bytes come from existing media (an engine task video, a claimed upload,
-// or inline image bytes) instead of a signed-upload row.
-//---------------
-
 import { PUBLISH_ACCOUNT_FIELDS, isTitleProvider } from '@/lib/contracts/providers';
 import type { SocialProvider } from '@/lib/providers/registry';
 

@@ -11,17 +11,6 @@ import {
   type MetricsWindow,
 } from '@/lib/metrics/metrics-query';
 
-//---------------
-// MetricsCoverageCard — the videos with no snapshot for the selected
-// window (issue #525), grouped into "needs attention" (the window is open
-// and collection keeps failing, the window closed, or the publish failed)
-// and "waiting for their window" (not open yet). Rendered only when at
-// least one video is missing, so a complete window stays quiet.
-//---------------
-
-// One const per leaf (not an inline object literal): v8 coverage does not
-// report object-literal property lines, so this keeps every label visible
-// to the coverage gate.
 const pendingLabel: TranslationKey = 'metrics.coverageReasonPending';
 const retryingLabel: TranslationKey = 'metrics.coverageReasonRetrying';
 const missedLabel: TranslationKey = 'metrics.coverageReasonMissed';

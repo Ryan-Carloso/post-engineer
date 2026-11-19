@@ -8,7 +8,6 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-# add project root to python path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from app.config import config as app_config
@@ -200,10 +199,6 @@ class TestVoiceService(unittest.TestCase):
         "MPT_RUN_INTEGRATION_TESTS not set",
     )
     def test_siliconflow(self):
-        # The SiliconFlow API key lives in [siliconflow].api_key; the
-        # runtime code reads the same config source. This must use that
-        # same source so the test is not wrongly skipped when credentials
-        # are configured correctly.
         if not app_config.siliconflow.get("api_key"):
             self.skipTest("siliconflow_api_key is not configured")
 
@@ -214,10 +209,8 @@ class TestVoiceService(unittest.TestCase):
             parts = voice_name.split(":")
             if len(parts) >= 3:
                 model = parts[1]
-                # Strip the gender suffix, e.g. "alex-Male" -> "alex"
                 voice_with_gender = parts[2]
                 voice = voice_with_gender.split("-")[0]
-                # Build the full voice argument in the "model:voice" format
                 full_voice = f"{model}:{voice}"
                 voice_file = f"{temp_dir}/tts-siliconflow-{voice}.mp3"
                 subtitle_file = f"{temp_dir}/tts-siliconflow-{voice}.srt"
@@ -338,15 +331,12 @@ class TestVoiceService(unittest.TestCase):
             generated_audio = Path(voice_file).read_bytes()
 
         post.assert_called_once()
-        # trailing slash on base_url is stripped before appending /audio/speech
         self.assertEqual(captured["url"], "http://localhost:4123/v1/audio/speech")
         self.assertEqual(captured["json"]["model"], "chatterbox")
         self.assertEqual(captured["json"]["voice"], "default")
         self.assertEqual(captured["json"]["input"], "Hello world. Second sentence.")
         self.assertAlmostEqual(captured["json"]["speed"], 1.2)
-        # api_key is forwarded as a bearer token
         self.assertEqual(captured["headers"].get("Authorization"), "Bearer secret")
-        # volume is intentionally not part of the OpenAI speech payload
         self.assertNotIn("volume", captured["json"])
         self.assertEqual(generated_audio, b"RIFF-fake-wav")
         self.assertIsNone(result.error)
@@ -655,8 +645,6 @@ class TestVoiceService(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    # python -m unittest test.services.test_voice.TestVoiceService.test_azure_tts_v1
-    # python -m unittest test.services.test_voice.TestVoiceService.test_azure_tts_v2
     unittest.main() 
 
 
@@ -731,8 +719,6 @@ class TestTtsFailureReasons(unittest.TestCase):
         self.assertIn("cloned voice is not available", result.error or "")
 
     def test_chatterbox_user_clone_allowed_for_owner_reaches_tts(self):
-        # Allow path through the moved guard: an owner's clone key must
-        # proceed to Chatterbox synthesis (validated) instead of being denied.
         owner = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
         key = "uaaaaaaaabbbb_cccccccccccc"
         marker = vs.SubMaker()
@@ -937,5 +923,4 @@ class TestMktimestamp(unittest.TestCase):
         self.assertEqual(vs.mktimestamp(0), "00:00:00.000")
 
     def test_hours_minutes_and_fractional_seconds(self):
-        # 1h 2m 3.5s in 100-nanosecond units.
         self.assertEqual(vs.mktimestamp(37235000000), "01:02:03.500")

@@ -1,40 +1,17 @@
-//---------------
-// metrics — the GET /api/metrics + GET /api/metrics/retention-curve
-// contract, shared by the web routes and the MCP insights tools.
-//
-// The query parsing (parseMetricsQuery / parseRetentionCurveQuery) lives
-// here, not in the routes: the MCP tools validate their arguments locally
-// against the same rules, so a one-sided edit would make the MCP reject
-// what the route accepts (or forward what it rejects). The route keeps
-// the same 400 messages — the parsers moved verbatim out of
-// apps/web/lib/metrics/metrics-query.ts and
-// apps/web/app/api/metrics/retention-curve/route.ts.
-//---------------
-
 import { z } from 'zod';
 import { defineEndpoint } from './endpoint.js';
 import { SOCIAL_PROVIDERS, isSocialProvider, type SocialProvider } from './providers.js';
 import { METRICS_WINDOWS, type MetricsWindow } from './experiments.js';
 
-// The window values live in the experiments contract (its results read
-// takes the same ?window=); re-exported so the metrics query contract
-// is the one place the MCP and the web read them from.
 export { METRICS_WINDOWS };
 
-// Null-filter sentinel. Not a plain word: script angles are unvalidated
-// engine-generated text, so a literal like 'none' could be a real angle
-// and would become unfilterable (selecting it would filter for null rows
-// instead). Persona ids are uuids, so the sentinel is safe for them too.
 export const METRICS_NONE = '^@none';
 
 export const METRICS_FILTER_MAX_LENGTH = 200;
 
 
-/** YouTube video id (11 chars, base64url). Mirrors
- * apps/web/lib/youtube-analytics.ts (VIDEO_ID). */
 export const YOUTUBE_VIDEO_ID = /^[A-Za-z0-9_-]{1,64}$/;
 
-// post_metrics.analytics_status (migration 039 check, pinned by a sync test).
 export const ANALYTICS_STATUSES = ['ok', 'scope_missing', 'not_owned', 'no_data'] as const;
 export type AnalyticsStatus = (typeof ANALYTICS_STATUSES)[number];
 
@@ -42,14 +19,6 @@ export function isAnalyticsStatus(value: unknown): value is AnalyticsStatus {
   return typeof value === 'string' && (ANALYTICS_STATUSES as readonly string[]).includes(value);
 }
 
-// Coverage reasons (issue #525): why a published video has no snapshot
-// for the selected window. pending = the window has not opened yet;
-// retrying = the window is open and the collector keeps trying; missed =
-// the window closed while collection kept failing; no-target = the window
-// closed and the collector finished the post without ever seeing this
-// video (it was published late, after the post was marked done);
-// publish-failed = the publish outcome is 'failed', so there is no video
-// id to measure.
 export const COVERAGE_REASONS = ['pending', 'retrying', 'missed', 'no-target', 'publish-failed'] as const;
 export type CoverageReason = (typeof COVERAGE_REASONS)[number];
 
@@ -61,9 +30,6 @@ export function isMetricsWindow(value: unknown): value is MetricsWindow {
   return typeof value === 'string' && (METRICS_WINDOWS as readonly string[]).includes(value);
 }
 
-// Exported for the metrics route, which validates stored API-key
-// persona ids with the same pattern before interpolating them into a
-// PostgREST filter string.
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const KNOWN_PARAMS = new Set(['window', 'persona', 'account', 'provider', 'angle']);
@@ -88,10 +54,6 @@ function readOptional(params: URLSearchParams, key: string): string | null | { e
   return value;
 }
 
-//---------------
-// parseMetricsQuery — strict: unknown, duplicate, empty, over-length or
-// malformed params are rejected (400), never ignored or coerced.
-//---------------
 export function parseMetricsQuery(params: URLSearchParams): MetricsParseResult {
   for (const key of params.keys()) {
     if (!KNOWN_PARAMS.has(key)) return { ok: false, error: `Unknown parameter: ${key}.` };
@@ -123,9 +85,6 @@ export function parseMetricsQuery(params: URLSearchParams): MetricsParseResult {
   };
 }
 
-//---------------
-// metricsSearchParams — the inverse, for the client fetch.
-//---------------
 export function metricsSearchParams(query: MetricsQuery): URLSearchParams {
   const params = new URLSearchParams({ window: query.window });
   if (query.personaId !== null) params.set('persona', query.personaId);
@@ -135,8 +94,6 @@ export function metricsSearchParams(query: MetricsQuery): URLSearchParams {
   return params;
 }
 
-/** `?account=&video=` for the retention-curve read: each exactly once,
- * a non-empty account within the filter length, a YouTube video id. */
 export function parseRetentionCurveQuery(
   params: URLSearchParams,
 ): { account: string; video: string } | { error: string } {
@@ -151,11 +108,6 @@ export function parseRetentionCurveQuery(
   return { account: account[0], video: video[0] };
 }
 
-//---------------
-// Query params as the routes receive them (raw strings; the parsers
-// above are the validators). The endpoints declare them so the MCP
-// client and the route share one shape.
-//---------------
 export const MetricsQueryParamsSchema = z.strictObject({
   window: z.string().optional(),
   persona: z.string().optional(),
@@ -169,12 +121,6 @@ export const RetentionCurveQuerySchema = z.strictObject({
   video: z.string(),
 });
 
-//---------------
-// Response views, mirroring apps/web/lib/metrics/metrics-query.ts
-// (MetricsRowView / CoverageItem) and apps/web/lib/youtube-analytics.ts
-// (RetentionPoint). The MCP reads these rows; app field names are the
-// contract one rename away from breaking both typechecks.
-//---------------
 export const MetricsRowSchema = z.object({
   postId: z.string(),
   personaId: z.string().nullable(),
@@ -182,22 +128,11 @@ export const MetricsRowSchema = z.object({
   accountId: z.string(),
   externalId: z.string(),
   scriptAngle: z.string().nullable(),
-  // When the slot was published, from scheduled_posts.published_at (the
-  // publish date every date chart buckets by, #647). Required, not
-  // nullable: post_metrics rows are only ever created for published slots
-  // with a non-null published_at — find_post_metrics_due (migrations 025
-  // and 039) requires status 'published' plus published_at window
-  // comparisons that NULL never satisfies, the re-open scan requires a
-  // string published_at, and the engine sets published_at once on publish
-  // and never clears it. A missing parent at read time (a concurrent
-  // delete race) is a read failure (500), never a null row.
   publishedAt: z.string(),
   views: z.number().nullable(),
   likes: z.number().nullable(),
   comments: z.number().nullable(),
   saves: z.number().nullable(),
-  // YouTube Analytics (own videos only); null on other providers or when
-  // not collected. analyticsStatus 'scope_missing' = reconnect YouTube.
   analyticsViews: z.number().nullable(),
   engagedViews: z.number().nullable(),
   stayedToWatchPct: z.number().nullable(),
@@ -215,7 +150,6 @@ export const CoverageItemSchema = z.object({
   personaId: z.string().nullable(),
   provider: z.enum(SOCIAL_PROVIDERS),
   accountId: z.string(),
-  // Null for publish-failed items: a failed publish records no video id.
   externalId: z.string().nullable(),
   scriptAngle: z.string().nullable(),
   reason: z.enum(COVERAGE_REASONS),
@@ -231,13 +165,11 @@ export const MetricsResponseSchema = z.object({
   truncated: z.boolean(),
   coverage: z.array(CoverageItemSchema),
   coverageTruncated: z.boolean(),
-  // The newest snapshot in the response: the page dates its data by it.
   asOf: z.string().nullable(),
 });
 export type MetricsResponse = z.infer<typeof MetricsResponseSchema>;
 
 export const RetentionPointSchema = z.object({
-  // elapsedVideoTimeRatio: exclusive end of the interval, 0.01..1.0.
   ratio: z.number(),
   audienceWatchRatio: z.number(),
   relativeRetentionPerformance: z.number().nullable(),
@@ -253,9 +185,6 @@ export const RetentionCurveResponseSchema = z.object({
 });
 export type RetentionCurveResponse = z.infer<typeof RetentionCurveResponseSchema>;
 
-//---------------
-// Endpoints.
-//---------------
 export const listMetrics = defineEndpoint({
   method: 'GET',
   path: '/api/metrics',

@@ -121,8 +121,6 @@ describe('getSlotPost', () => {
     });
     const detail = await getSlotPost(supabase, 'slot-1', 'user-1', null);
     expect(detail?.slot.id).toBe('slot-1');
-    // Pin the query shape: the select column list is load-bearing for the
-    // camelCase mapping below.
     expect(chains['scheduled_posts'].select).toHaveBeenCalledWith(
       'id, schedule_id, slot_at, status, title, error, published_at, task_id, faceless, publish_outcomes, segments'
     );
@@ -289,7 +287,6 @@ describe('getSlotPost', () => {
       scheduled_post_progress_history: { data: [], error: null },
     });
     const detail = await getSlotPost(supabase, 'slot-1', 'user-1', null);
-    // The generating slot's angle rides the progress read — no second lookup.
     expect(fetchEngineScriptAngle).not.toHaveBeenCalled();
     expect(detail?.slot.scriptAngle).toBe('The myth that keeps coming back');
   });
@@ -329,7 +326,6 @@ describe('getSlotPost', () => {
     const detail = await getSlotPost(supabase, 'slot-1', 'user-1', null);
     expect(fetchEngineTaskProgress).toHaveBeenCalledTimes(1);
     expect(fetchEngineScriptAngle).not.toHaveBeenCalled();
-    // The prefetched progress is handed to enrichSlot so it does not fetch again.
     expect(vi.mocked(enrichSlot).mock.calls[0]?.[3]).toEqual({
       task: expect.objectContaining({ scriptAngle: 'The myth that keeps coming back' }),
     });
@@ -351,8 +347,6 @@ describe('getSlotPost', () => {
   it('degrades the slot angle to null and warns when the engine lookup throws', async () => {
     const { fetchEngineScriptAngle, fetchEngineTaskProgress } = await import('../engine-tasks');
     const { logger } = await import('../logger');
-    // The one read of the task record fails: no second read is issued for
-    // the angle — it degrades to null off the same failure.
     vi.mocked(fetchEngineTaskProgress).mockRejectedValueOnce(new Error('engine down'));
     const { supabase } = mockSupabase({
       scheduled_posts: { data: SLOT_ROW, error: null },
@@ -507,8 +501,6 @@ describe('getGenerationPost', () => {
     const detail = await getGenerationPost(supabase, 'gen-1:slot:slot-1', 'user-1', null);
     expect(detail?.progress).toBe(0);
     expect(detail?.stage).toBeNull();
-    // The failed progress read was the view's one task-record read: the
-    // angle degrades to null instead of issuing a second read.
     expect(fetchEngineScriptAngle).not.toHaveBeenCalled();
     expect(detail?.scriptAngle).toBeNull();
   });

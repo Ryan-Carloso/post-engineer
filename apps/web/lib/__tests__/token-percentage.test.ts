@@ -1,10 +1,5 @@
 import { describe, it, expect } from 'vitest';
 
-//---------------
-// TDD RED — computeTokenPercentage nunca pode retornar NaN.
-// Reproduces the sidebar bug: free plan (0 tokens/month) showed "NaN%".
-//---------------
-
 import { computeTokenPercentage, toFiniteNumber } from '@/lib/tokens';
 
 describe('computeTokenPercentage', () => {

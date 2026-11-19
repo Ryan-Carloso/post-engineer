@@ -1,40 +1,3 @@
-//---------------
-// publish-links — turn the engine's publish_results into clickable links.
-//
-// The engine's fill-schedule publisher (fill_schedule/publish.py, via
-// fill_schedule/publish_results.py) records one entry per (provider,
-// video) it published, and each entry carries whatever the provider
-// handed back:
-//
-//   youtube   → videoUrl   ready-made watch URL
-//   instagram → permalink  ready-made post URL
-//   bluesky   → postId     at://<did>/app.bsky.feed.post/<rkey>
-//   linkedin  → postId     urn:li:share:<id>  (no public URL is returned)
-//   threads   → permalink  ready-made post URL (best-effort; no URL can be derived from the id)
-//   facebook  → permalink  ready-made post URL (best-effort; no URL can be derived from the id)
-//   pinterest → permalink  ready-made pin URL; a bare numeric pin id derives
-//              https://www.pinterest.com/pin/<id>/
-//   3speak    → permalink  ready-made watch URL (best-effort; the video id alone builds no URL)
-//   rumble    → permalink  the monetized URL from the upload response (best-effort; no URL can be derived from the id)
-//   fanvue    → postId     the Fanvue post uuid (no URL is returned, and the
-//              post-URL format is unknown, so no derivation is attempted)
-//   telegram  → permalink  t.me/<username>/<message_id> (public chats only;
-//              a private chat has no URL and no derivation)
-//
-// So eight of the eleven arrive with a ready-made URL. Bluesky, LinkedIn
-// and Fanvue arrive with only a bare post id: Bluesky and LinkedIn always
-// have a derivation (they carry no URL), and Fanvue has none, so its entry
-// renders no link. Pinterest derives one only when the entry has no
-// permalink. A provider entry with neither is omitted rather than rendered
-// as a dead link.
-// An entry whose status is "failed" is omitted even when it also carries
-// a URL: that publish did not happen.
-//
-// Dependency-free on purpose (the one import is the dependency-free
-// provider list): the detail page and the card both read this, and it
-// must stay safe to import from a client component.
-//---------------
-
 import { SOCIAL_PROVIDERS, type SocialProvider } from '@/lib/contracts/providers';
 
 export type PublishProvider = SocialProvider;
@@ -46,21 +9,10 @@ export interface PublishLink {
 
 const PROVIDERS: ReadonlySet<string> = new Set<PublishProvider>(SOCIAL_PROVIDERS);
 
-//---------------
-// isPublishProvider — type guard for the known provider set. Unknown
-// providers (a future engine addition the UI doesn't know yet) are dropped
-// by narrowPublishLinks rather than rendered with an undefined label.
-//---------------
 export function isPublishProvider(value: unknown): value is PublishProvider {
   return typeof value === 'string' && PROVIDERS.has(value);
 }
 
-//---------------
-// isHttpsUrl — a link rendered into an href is an injection surface, so
-// only absolute https URLs from a known provider may reach the DOM. This
-// is what keeps a "javascript:" or "http:" value in the payload from
-// becoming a clickable link.
-//---------------
 function isHttpsUrl(value: string): boolean {
   return value.startsWith('https://');
 }
@@ -70,12 +22,6 @@ function readString(source: Record<string, unknown>, key: string): string | null
   return typeof value === 'string' && value.length > 0 ? value : null;
 }
 
-//---------------
-// blueskyPostUrl — at://<did>/app.bsky.feed.post/<rkey> becomes
-// https://bsky.app/profile/<did>/post/<rkey>. Anything that does not match
-// exactly (a bare handle, a missing rkey) yields null rather than a URL
-// that 404s.
-//---------------
 function blueskyPostUrl(postId: string): string | null {
   const match = /^at:\/\/([^/]+)\/app\.bsky\.feed\.post\/([^/]+)$/.exec(postId);
   if (!match) return null;
@@ -84,34 +30,16 @@ function blueskyPostUrl(postId: string): string | null {
   return `https://bsky.app/profile/${did}/post/${rkey}`;
 }
 
-//---------------
-// linkedinPostUrl — LinkedIn's API returns no public post URL, so the share
-// URN is turned into its feed form. Accepted trade-off: an organization
-// post is private by default, so the link can resolve to a login/404 while
-// the URN itself stays the useful part of the value.
-//---------------
 function linkedinPostUrl(postId: string): string | null {
   if (!postId.startsWith('urn:li:')) return null;
   return `https://www.linkedin.com/feed/update/${postId}`;
 }
 
-//---------------
-// pinterestPostUrl — the pin id is a bare numeric id; anything else
-// yields null rather than a URL that 404s.
-//---------------
 function pinterestPostUrl(postId: string): string | null {
   if (!/^[0-9]+$/.exec(postId)) return null;
   return `https://www.pinterest.com/pin/${postId}/`;
 }
 
-//---------------
-// POST_URL_FROM_ID — the derivation from a bare post id, per network; null
-// where the network only links through its own URL. Fanvue has none on
-// purpose: the post-URL format is unknown, so only a provider-supplied
-// permalink ever links. Telegram has none either: a message id links only
-// in a public chat (t.me/<username>/<id>), so the handler supplies the
-// permalink when there is one.
-//---------------
 const POST_URL_FROM_ID: Record<SocialProvider, ((postId: string) => string | null) | null> = {
   youtube: null,
   instagram: null,
@@ -126,11 +54,6 @@ const POST_URL_FROM_ID: Record<SocialProvider, ((postId: string) => string | nul
   telegram: null,
 };
 
-//---------------
-// resolvePublishLinks — map the engine's raw entries to links, dropping
-// anything malformed. Returns [] rather than throwing: this runs during
-// render and must never take the post detail page down.
-//---------------
 export function resolvePublishLinks(
   publishResults: unknown,
 ): PublishLink[] {
@@ -141,15 +64,12 @@ export function resolvePublishLinks(
     if (typeof entry !== 'object' || entry === null) continue;
     const record = entry as Record<string, unknown>;
 
-    // Failed publishes must not become clickable links, even if the payload
-    // also carries a URL or post id from a partial upstream body.
     if (record.status === 'failed') continue;
 
     const provider = readString(record, 'provider');
     if (provider === null || !PROVIDERS.has(provider)) continue;
 
     const typed = provider as PublishProvider;
-    // Prefer the provider's own URL; fall back to deriving one from the id.
     const direct = readString(record, 'videoUrl') ?? readString(record, 'permalink');
     if (direct !== null) {
       if (isHttpsUrl(direct)) links.push({ provider: typed, url: direct });

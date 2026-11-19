@@ -12,20 +12,6 @@ import { hasExplicitOffset } from '@/lib/timezone';
 import { logger } from '@/lib/logger';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
-//---------------
-// /api/schedule/slots/:slotId — per-slot operations on scheduled posts.
-// DELETE removes a single slot; a published slot can never be deleted
-// (the post already went out) and slots that are mid-flight (generating,
-// publishing) are rejected too — the engine owns them. A ready slot IS
-// deletable (issue #555): generated but not yet dispatched, deleting its
-// row removes the target the publisher claims, so it can never publish;
-// the delete RPC re-checks the status under a row lock, so a slot that
-// dispatches mid-delete answers 409 instead. Auth: cookie session (web)
-// or API key / OAuth token (MCP clients) via requireSupabaseSession.
-// API-key callers use the service client, so ownership is re-checked
-// explicitly below (RLS does not apply to it).
-//---------------
-
 interface SlotRow {
   id: string;
   schedule_id: string;
@@ -53,9 +39,6 @@ async function loadOwnedSlot(
     .eq('user_id', userId)
     .single();
   if (error) {
-    // PGRST116 (zero rows) is the only honest 404 — unknown id or another
-    // user's slot. Anything else is a DB failure: log loudly with the real
-    // error and return 500 so callers retry instead of giving up.
     if ((error as { code?: string }).code === 'PGRST116') {
       return { error: apiErrorResponse(404, 'Slot not found.', { route: 'SLOT_OPS /api/schedule/slots' }) };
     }
@@ -86,8 +69,6 @@ async function loadOwnedSlot(
     };
   }
   const scheduleRow = schedule as ScheduleRow | null;
-  // Explicit ownership check: the service client bypasses RLS, so the
-  // schedule row must belong to the caller.
   if (
     !scheduleRow ||
     scheduleRow.user_id !== userId ||
@@ -95,28 +76,16 @@ async function loadOwnedSlot(
   ) {
     return { error: apiErrorResponse(404, 'Slot not found.', { route: 'SLOT_OPS /api/schedule/slots' }) };
   }
-  // Pre-015 rows have no column value: they are scheduled posts by
-  // construction, so a missing mode narrows to 'scheduled', not null.
   const publishMode = scheduleRow.publish_mode === 'asap' ? 'asap' : 'scheduled';
   return { slot: row, publishMode };
 }
 
-//---------------
-// GET — one post's full detail: the slot row, its schedule (providers +
-// account ids, so clients can resolve the target accounts) and the
-// persona. Presentation follows /api/schedule/status (pending→awaiting,
-// live engine progress for generating/failed slots via the shared
-// enrichSlot helper). Unknown id or another user's slot → 404, never the
-// row.
-//---------------
 async function getHandler(
   request: Request,
   context: { params: Promise<{ slotId: string }> },
 ): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
-  // The detail fans out to the engine (progress + publish results, 10s
-  // timeouts each) — rate-limit like the other expensive surfaces.
   const limited = await applyRateLimit(request, RATE_LIMITS.deletePreview, auth.userId);
   if (limited) return limited;
   const supabase =
@@ -126,11 +95,6 @@ async function getHandler(
 
   const { slotId } = await context.params;
 
-  // The param is a scheduled_posts uuid, but callers sometimes send the
-  // engine generation key `batch:<scheduleId>:slot:<slotId>` instead.
-  // Resolve the real slot uuid before any uuid-typed filter — a raw
-  // non-uuid value raises Postgres 22P02 and turns into a 500. Anything
-  // unresolvable is an unknown id: 404, never a database round-trip.
   const resolvedSlotId = resolveSlotUuid(slotId);
   if (resolvedSlotId === null) {
     return apiErrorResponse(404, 'Slot not found.', { route: 'GET /api/schedule/slots' });
@@ -138,8 +102,6 @@ async function getHandler(
 
   let detail;
   try {
-    // The slot's absolute postUrl (issue #555) is built from the
-    // configured public base URL (NEXT_PUBLIC_APP_URL, lib/post-url).
     detail = await getSlotPost(supabase, resolvedSlotId, auth.userId, personaScopeOf(auth));
   } catch (error) {
     logger.error('[api/schedule/slots] slot lookup failed', error);
@@ -167,11 +129,6 @@ async function deleteHandler(
 
   const { slotId } = await context.params;
 
-  // The param is a scheduled_posts uuid, but callers sometimes send the
-  // engine generation key `batch:<scheduleId>:slot:<slotId>` (including
-  // percent-encoded). Resolve the real slot uuid before any uuid-typed
-  // filter — a raw non-uuid raises Postgres 22P02 and turns into a 500.
-  // Anything unresolvable is an unknown id: 404, never a database round-trip.
   const resolvedSlotId = resolveSlotUuid(slotId);
   if (resolvedSlotId === null) {
     return apiErrorResponse(404, 'Slot not found.', { route: 'DELETE /api/schedule/slots' });
@@ -181,10 +138,6 @@ async function deleteHandler(
   if ('error' in owned) return owned.error;
   const slot = owned.slot;
 
-  // DB stores 'pending'; the API presents it as 'awaiting'. Only pending
-  // (not yet dispatched to the engine), ready (generated, not yet
-  // dispatched — deleting removes the row the publisher claims) and failed
-  // (dead row cleanup) slots can be deleted.
   const DELETABLE_STATUSES = new Set(['pending', 'ready', 'failed']);
   if (!DELETABLE_STATUSES.has(slot.status)) {
     return apiErrorResponse(
@@ -196,13 +149,6 @@ async function deleteHandler(
     );
   }
 
-  // The last remaining slot of a schedule cannot be deleted individually —
-  // that would leave an active but empty schedule. Delete the whole
-  // schedule instead (DELETE /api/schedule?id=...). The check-and-delete is
-  // atomic via the delete_slot_if_not_last RPC (row lock + count + delete
-  // in one transaction); two concurrent deletes cannot both slip past the
-  // guard. The RPC is service-role only (migration 065), so it runs with
-  // the service client after the ownership check above.
   const { data: deleteResult, error: rpcError } = await createSupabaseServiceClient().rpc('delete_slot_if_not_last', {
     p_slot_id: slot.id,
     p_user_id: auth.userId,
@@ -222,8 +168,6 @@ async function deleteHandler(
     return apiErrorResponse(404, 'Slot not found.', { route: 'DELETE /api/schedule/slots' });
   }
   if (deleteResult !== 'deleted') {
-    // 'not_deletable': the slot dispatched between the status check and the
-    // RPC — treat as a conflict so the caller retries the read.
     return apiErrorResponse(
       409,
       slot.status === 'published'
@@ -235,18 +179,6 @@ async function deleteHandler(
   return NextResponse.json({ success: true });
 }
 
-//---------------
-// PATCH — edit the title and/or reschedule a slot that has not been
-// dispatched to the engine yet (DB status 'pending', presented as
-// 'awaiting') or is ready (generated, not yet dispatched — issue #555).
-// The title is the slot label; the video script comes from the stored
-// segments, so this is the edit-label action. slotAt moves the publish
-// time and reuses the scheduling window (3h lead, 30-day max); an ASAP
-// schedule has no scheduled time to move. Anything generating,
-// publishing, published or failed is rejected with 409. Only
-// { title?: string, slotAt?: string } is accepted, and at least one must
-// be present; the title is trimmed and must be non-empty.
-//---------------
 async function patchHandler(
   request: Request,
   context: { params: Promise<{ slotId: string }> },
@@ -260,8 +192,6 @@ async function patchHandler(
 
   const { slotId } = await context.params;
 
-  // Same normalization as DELETE: batch keys and percent-encoded ids
-  // resolve to the slot uuid; anything else 404s before a uuid filter.
   const resolvedSlotId = resolveSlotUuid(slotId);
   if (resolvedSlotId === null) {
     return apiErrorResponse(404, 'Slot not found.', { route: 'PATCH /api/schedule/slots' });
@@ -271,9 +201,6 @@ async function patchHandler(
   if ('error' in owned) return owned.error;
   const { slot, publishMode } = owned;
 
-  // A ready slot is generated but not dispatched: its label and publish
-  // time are still the owner's to change. Generating, publishing,
-  // published and failed slots are owned by the engine or already gone.
   const EDITABLE_STATUSES = new Set(['pending', 'ready']);
   if (!EDITABLE_STATUSES.has(slot.status)) {
     return apiErrorResponse(409, 'Only a pending or ready slot can be edited.', {
@@ -315,9 +242,6 @@ async function patchHandler(
         route: 'PATCH /api/schedule/slots',
       });
     }
-    // Reject a naive wall clock before validating: without an explicit
-    // offset `new Date` silently reads it as UTC, so the rescheduled time
-    // would depend on the server's timezone instead of the caller's.
     if (!hasExplicitOffset(rawSlotAt)) {
       return apiErrorResponse(
         400,
@@ -340,18 +264,11 @@ async function patchHandler(
     patch.slot_at = slotAt;
   }
 
-  // Service role bypasses RLS. loadOwnedSlot proved ownership and the window
-  // check above ran. A direct slot_at write would publish a ready slot as
-  // soon as it is due, so the session JWT cannot update this table.
   const { error: updateError } = await createSupabaseServiceClient()
     .from('scheduled_posts')
     .update(patch)
     .eq('id', slot.id)
     .eq('user_id', auth.userId)
-    // Re-check the status in the UPDATE predicate itself: the slot may have
-    // dispatched (pending → generating) between the check above and this
-    // write. Zero affected rows means the guard failed — surface 409 so the
-    // caller refetches instead of believing the edit landed.
     .in('status', ['pending', 'ready'])
     .select('id')
     .single();
@@ -374,11 +291,7 @@ async function patchHandler(
   });
 }
 
-//---------------
-// 5xx reporting: handled server errors reach PostHog error tracking.
-//---------------
 export const GET = withApiErrorReporting('GET /api/schedule/slots/[slotId]', getHandler, {
-  // Polling route: a success event per poll is noise; 4xx/5xx still report.
   reportSuccess: false,
   getUserId: resolveReportingUserId,
 });

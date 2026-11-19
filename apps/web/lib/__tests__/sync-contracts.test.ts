@@ -1,14 +1,3 @@
-//---------------
-// sync-contracts — stale generated copies and the Docker install layer.
-//
-// scripts/sync-contracts.mjs deletes generated copies whose shared source
-// no longer exists: after a contract rename the old copy must be gone, not
-// left behind as an empty non-module (tsc then points at the import site
-// instead of a missing file). The root postinstall runs the sync, so both
-// Dockerfiles must copy the script and its shared source BEFORE
-// `pnpm install` — otherwise the install layer fails with MODULE_NOT_FOUND
-// and the production deploy breaks.
-//---------------
 /**
  * @vitest-environment node
  */
@@ -79,7 +68,6 @@ describe('sync-contracts stale generated files', () => {
     expect(existsSync(mcpStale)).toBe(false);
     expect(output).toContain(`removed ${webStale}`);
     expect(output).toContain(`removed ${mcpStale}`);
-    // The live contracts are still generated.
     expect(readFileSync(join(root, 'apps', 'web', 'lib', 'contracts', 'experiments.ts'), 'utf8')).toContain(
       'GENERATED from shared/contracts',
     );
@@ -120,9 +108,6 @@ describe('Docker install layers run the contracts sync', () => {
     }
   });
 
-  // `pnpm build` (nx build web) would otherwise compile the on-disk
-  // generated copies without regenerating them first: the root build
-  // script runs the sync before Nx, like the typecheck script does.
   it('runs the sync before the Nx web build in the root build script', () => {
     const pkg = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8')) as {
       scripts: { build: string };
@@ -133,9 +118,6 @@ describe('Docker install layers run the contracts sync', () => {
     );
   });
 
-  // The sync alone does not invalidate a warm Nx cache (Nx does not hash
-  // the gitignored copies): the web build inputs must list the shared
-  // sources, so a contract edit changes the task hash and the build runs.
   it('lists the shared contracts in the web build inputs', () => {
     const project = JSON.parse(readFileSync(join(repoRoot, 'apps', 'web', 'project.json'), 'utf8')) as {
       targets: { build: { inputs: string[] } };

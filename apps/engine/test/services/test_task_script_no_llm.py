@@ -97,8 +97,6 @@ def test_lipsync_script_without_terminal_hook_punctuation_raises():
 
 
 def test_videos_endpoint_still_serves_segment_jobs():
-    # The web generate-and-schedule route dispatches segments jobs via
-    # POST /api/v1/videos (startEngineVideoTask); the route must stay.
     paths = {
         (getattr(route, "path", None), method)
         for route in video_controller.router.routes
@@ -110,6 +108,4 @@ def test_videos_endpoint_still_serves_segment_jobs():
 
 
 def test_persona_video_params_builder_is_removed():
-    # The builder constructed script-less, prompt-only requests that only
-    # ever worked via LLM script generation, and nothing called it.
     assert not hasattr(video_controller, "_persona_video_params")

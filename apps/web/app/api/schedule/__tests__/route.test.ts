@@ -67,9 +67,6 @@ function scheduleRow(id: string, persona_id: string | null) {
   };
 }
 
-// Fake PostHog client for the wrapper's schedule_deleted event and the
-// refund_issued events the cancel emits (same pattern as
-// lib/__tests__/api-error-reporting.test.ts).
 function mockPostHog() {
   const client = {
     capture: vi.fn(),
@@ -87,20 +84,13 @@ function refundIssuedCalls(client: { captureAs: ReturnType<typeof vi.fn> }): [st
   ) as [string, string, Record<string, unknown>][];
 }
 
-//---------------
-// mockSupabase — per-table builder, distinguishing each route flow:
-// list (GET), persona (ownership check), existing (duplicate schedule),
-// insert, update and delete.
-//---------------
 function mockSupabase(handlers: {
   list?: { data: unknown; error: unknown };
   persona?: { data: unknown };
   existing?: { data: unknown };
   accounts?: { data: unknown; error: unknown };
-  // Filtered by the .eq('provider', ...) the route applies per network.
   accountsByProvider?: Record<string, unknown[]>;
   insert?: { data: unknown; error: unknown };
-  // Current schedule row (used by DELETE for the ownership lookup).
   current?: { data: unknown; error?: unknown };
   update?: { error: unknown };
   remove?: { error: unknown };
@@ -113,14 +103,10 @@ function mockSupabase(handlers: {
     refundBatch?: { data: unknown; error: unknown };
   };
   slotsInsert?: { error?: unknown; returnedRows?: Record<string, unknown>[] };
-  /** Rows currently on scheduled_posts for this schedule (DELETE cancel). */
   scheduleSlots?: (Record<string, unknown> | null)[];
-  /** First scheduled_posts select fails (the re-read uses the live rows). */
   slotsError?: unknown;
-  /** The post-delete re-read fails. The first select still returns scheduleSlots. */
   remainingSlotsError?: unknown;
   slotDeleteError?: unknown;
-  /** Storage object removal fails (DELETE cancel image cleanup). */
   storageRemoveError?: unknown;
 }) {
   const insertedRows: Record<string, unknown>[] = [];
@@ -130,8 +116,6 @@ function mockSupabase(handlers: {
   const deleteCalls: { table: string }[] = [];
   const rpcCalls: { name: string; params: unknown }[] = [];
   const selectArgs: string[] = [];
-  // Column list requested by the scheduled_posts insert's .select() —
-  // pins that the route reads back id, title AND slot_at (MINOR 7).
   const slotSelectArgs: string[] = [];
   const slotDeleteFilters: Record<string, unknown>[] = [];
   const removedStoragePaths: string[] = [];
@@ -190,10 +174,6 @@ function mockSupabase(handlers: {
           ),
         };
       }
-      // scheduled_posts — slots created by POST (one row per video).
-      // scheduled_posts.id is database-generated: the mock assigns ids
-      // itself, like the real table, and records exactly what the route
-      // sent in sentSlotRows.
       if (table === 'scheduled_posts') {
         return {
           insert: vi.fn((rows: Record<string, unknown>[]) => {
@@ -253,7 +233,6 @@ function mockSupabase(handlers: {
           }),
         };
       }
-      // schedules — a distinct flow per operation
       const afterSelect = {
         eq: vi.fn().mockReturnThis(),
         order: vi.fn().mockResolvedValue(handlers.list ?? { data: [], error: null }),
@@ -274,7 +253,6 @@ function mockSupabase(handlers: {
           insertedRows.push(arg);
           return { select: vi.fn(() => afterSelect) };
         }),
-        // update/delete end in .eq().eq() → completion promise
         update: vi.fn((arg: Record<string, unknown>) => {
           updatedRows.push(arg);
           return {
@@ -314,13 +292,6 @@ function mockSupabase(handlers: {
   });
 }
 
-//---------------
-// The route's HTTP surface is its contract, so it is pinned directly.
-// A schedule is created by POST /api/videos/generate-and-schedule and
-// cancelled by DELETE (the MCP schedules (action: cancel) tool); there is no edit
-// verb. Adding a write path back here needs a deliberate decision, not
-// an accident, so this test fails if a PATCH handler reappears.
-//---------------
 describe('/api/schedule HTTP surface', () => {
   it('handles GET, DELETE and nothing else', () => {
     const handlers = Object.keys(scheduleRoute).filter((name) => /^(GET|POST|PUT|PATCH|DELETE)$/.test(name));
@@ -328,10 +299,6 @@ describe('/api/schedule HTTP surface', () => {
   });
 });
 
-//---------------
-// /api/schedule surface: GET (list), PATCH (update), DELETE (remove).
-// Schedules are created by POST /api/videos/generate-and-schedule, not here.
-//---------------
 describe('/api/schedule', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -420,12 +387,6 @@ describe('/api/schedule', () => {
   });
 
   it('DELETE returns 404 for a non-UUID schedule id without touching the database', async () => {
-    // Production: a truncated id (first 8 chars of a uuid, e.g. ca192c1b)
-    // reached the uuid-typed schedule_id filter and raised Postgres 22P02,
-    // turning into a 500. A non-uuid id can never match a row: 404.
-    // Run as a scoped API key: the persona-scope lookup only runs for
-    // scoped keys, so only then does selectArgs observe the schedules
-    // select the guard must precede.
     const db = mockSupabase({ remove: { error: null } });
     vi.mocked(requireSupabaseSession).mockResolvedValue({
       auth: {
@@ -512,8 +473,6 @@ describe('/api/schedule persona scoping (scoped API keys)', () => {
 
 
   it('GET lists a persona-less schedule for a scoped key', async () => {
-    // A post created without a persona (migration 012) belongs to no
-    // persona scope: filtering it away would hide the key's own post.
     scopedSupabase({
       list: {
         data: [scheduleRow('s-1', 'p-allowed'), scheduleRow('s-2', 'p-other'), scheduleRow('s-3', null)],
@@ -527,8 +486,6 @@ describe('/api/schedule persona scoping (scoped API keys)', () => {
   });
 
   it('DELETE removes a persona-less schedule for a scoped key', async () => {
-    // Ownership is the whole boundary here: the row is already filtered by
-    // user_id, and there is no persona to scope against.
     scopedSupabase({
       current: { data: { persona_id: null } },
       remove: { error: null },
@@ -611,9 +568,6 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
     };
     expect(body.success).toBe(true);
     expect(body.cancelledSlotIds).toEqual(['slot-generating', 'slot-ready', 'slot-pending']);
-    // The delete removes every unpublished slot, but only a slot whose
-    // generation never ran gets its tokens back: the generating and ready
-    // videos already spent their GPU cost.
     expect(body.refunds).toEqual([
       { slotId: 'slot-generating', refunded: false, alreadyRefunded: false, reason: 'already_generated' },
       { slotId: 'slot-ready', refunded: false, alreadyRefunded: false, reason: 'already_generated' },
@@ -642,7 +596,6 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
   });
 
   it('refunds the stored charged_tokens, never a recomputed list price', async () => {
-    // A full lip-sync very_good slot lists at 15; the stored charge wins.
     const db = mockSupabase({
       scheduleSlots: [
         { id: 'slot-full', status: 'pending', faceless: false, full_lipsync: true, charged_tokens: 7, task_id: null },
@@ -652,9 +605,6 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
     const res = await DELETE(new Request('http://localhost/api/schedule?id=11111111-1111-4111-8111-111111111111'));
     expect(res.status).toBe(200);
     expect(refundCalls(db).map((params) => params.p_amount)).toEqual([7]);
-    // The mock returns full fixture rows regardless of the requested
-    // columns, so pin the column list itself: a dropped column would pass
-    // the amount check above while production skips every slot.
     expect(db.slotSelectArgs.every((arg) => arg.includes('charged_tokens'))).toBe(true);
   });
 
@@ -669,12 +619,7 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
     });
     const res = await DELETE(new Request('http://localhost/api/schedule?id=11111111-1111-4111-8111-111111111111'));
     expect(res.status).toBe(200);
-    // The ready image slot is cancelled, so its bytes go with it; the
-    // ready video slot has no stored image, and the published image slot
-    // survives the cancel, so its bytes stay.
     expect(db.removedStoragePaths).toEqual(['scheduled-media/user-1/a.jpg']);
-    // Pin the column list: without media_kind/media_ref the route cannot
-    // tell an image slot from a video slot, and the bytes would leak.
     expect(db.slotSelectArgs.every((arg) => arg.includes('media_kind') && arg.includes('media_ref'))).toBe(true);
   });
 
@@ -858,8 +803,6 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
     });
     const res = await DELETE(new Request('http://localhost/api/schedule?id=11111111-1111-4111-8111-111111111111'));
     expect(res.status).toBe(200);
-    // The generating and ready slots already spent their GPU cost, so only
-    // the pending slot gets a refund event.
     await vi.waitFor(() => expect(refundIssuedCalls(client)).toHaveLength(1));
     expect(refundIssuedCalls(client).map(([, , props]) => props.slot_id)).toEqual(['slot-pending']);
     for (const [, , props] of refundIssuedCalls(client)) {
@@ -885,9 +828,6 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
     const body = (await res.json()) as {
       refunds: { slotId: string; refunded: boolean; alreadyRefunded: boolean; reason: string }[];
     };
-    // A task id means the engine may already have accepted the job: fail
-    // closed and keep the charge instead of risking a refund for work
-    // that already ran.
     expect(body.refunds).toEqual([
       { slotId: 'slot-p', refunded: false, alreadyRefunded: false, reason: 'already_generated' },
     ]);
@@ -904,7 +844,6 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
     });
     const res = await DELETE(new Request('http://localhost/api/schedule?id=11111111-1111-4111-8111-111111111111'));
     expect(res.status).toBe(200);
-    // Give the fire-and-forget wrapper a chance to (incorrectly) emit.
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(refundIssuedCalls(client)).toEqual([]);
   });
@@ -944,10 +883,6 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
       scheduleSlots: MIXED_SLOTS,
       remove: { error: null },
     });
-    // A non-uuid id 404s before any database call or PostHog event, so
-    // the raw value can never leak through schedule_deleted or a
-    // refund_issued — the scrub call sites stay as defense-in-depth for
-    // the uuid ids that do reach the success path.
     const res = await DELETE(
       new Request('http://localhost/api/schedule?id=Bearer%20not-a-real-token'),
     );
@@ -973,8 +908,6 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
     });
   });
 
-  // Issue #447: cancelling a generating slot must signal the engine to
-  // stop the pipeline; the refund still happens when the signal fails.
   it('signals the engine to cancel generating slots', async () => {
     vi.stubEnv('MONEYPRINT_API_URL', 'https://engine.test');
     const fetchMock = vi.fn(async () => ({ ok: true, status: 200 }));
@@ -1012,9 +945,6 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
       });
       const res = await DELETE(new Request('http://localhost/api/schedule?id=11111111-1111-4111-8111-111111111111'));
       expect(res.status).toBe(200);
-      // The generating slot keeps its charge (GPU sunk), the pending slot
-      // is refunded anyway, and the cancel failure is logged loudly
-      // without failing the cancel.
       const body = (await res.json()) as { cancelledSlotIds: string[] };
       expect(body.cancelledSlotIds).toEqual(['slot-g', 'slot-n']);
       expect(refundCalls(db).map((params) => params.p_amount)).toEqual([3]);
@@ -1031,7 +961,6 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
 
   it('does not let a hung engine cancel block refunds beyond the budget', async () => {
     vi.stubEnv('MONEYPRINT_API_URL', 'https://engine.test');
-    // A hung engine: the fetch never settles until its abort signal fires.
     vi.stubGlobal(
       'fetch',
       vi.fn(
@@ -1059,8 +988,6 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
         return res;
       });
       await vi.advanceTimersByTimeAsync(ENGINE_CANCEL_BUDGET_MS + 100);
-      // The refunds ran inside the aggregate budget even though every
-      // engine cancel is still hung/aborting.
       expect(settled).toBe(true);
       const res = await pending;
       expect(res.status).toBe(200);
@@ -1096,8 +1023,6 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
         remove: { error: null },
       });
       const pending = DELETE(new Request('http://localhost/api/schedule?id=11111111-1111-4111-8111-111111111111'));
-      // Let the handler run up to the engine-cancel step: every cancel must
-      // have started before any of them is allowed to finish.
       await new Promise((resolve) => setTimeout(resolve, 0));
       expect(started.sort()).toEqual([
         'https://engine.test/api/v1/tasks/task-g1',

@@ -1,8 +1,3 @@
-//---------------
-// Slot validation, extracted from route.ts so the route module stays
-// under the file-size ratchet. All checks run BEFORE any token is charged.
-//---------------
-
 import type { NextResponse } from 'next/server';
 import { ERROR_CODES, formatErrorMessage } from '@/lib/error-codes';
 import { validateScheduleWindow } from '@/lib/schedule-window';
@@ -39,15 +34,11 @@ export function validateSlots(
     }
     throw error;
   }
-  // Every slot must fall inside the 3h–30d publishing window.
   for (const slot of slots) {
     const windowCheck = validateScheduleWindow(new Date(slot.slotAtISO));
     if (!windowCheck.ok) {
       return validationFailed(
         ERROR_CODES.SCHEDULE_OUT_OF_RANGE,
-        // windowCheck.error is the only copy for this code at this call
-        // site: the validator always returns a non-empty message on the
-        // failure branch, and it already interpolates the window constants.
         windowCheck.error,
         'publishing.schedule',
       );

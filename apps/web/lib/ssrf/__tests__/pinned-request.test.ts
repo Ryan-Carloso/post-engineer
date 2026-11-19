@@ -13,9 +13,6 @@ type PinnedLookup = (
   callback: (error: NodeJS.ErrnoException | null, address: unknown, family?: number) => void,
 ) => void;
 
-// tls.connect is the call that would open the socket. Replacing it records
-// the host, port, and lookup the agent was about to dial, and returns a
-// socket that never leaves the process.
 function stubTlsConnect(
   onConnect: (options: tls.ConnectionOptions, socket: net.Socket) => void,
 ): void {
@@ -85,8 +82,6 @@ describe('requestPinned dials the validated address', () => {
   });
 
   it('aborts when the pinned socket does not connect before the timeout', async () => {
-    // A lookup that never answers leaves the socket unconnected, so the
-    // deadline in requestPinned is what fails the request. No address is dialed.
     const connect = tls.connect;
     vi.spyOn(tls, 'connect').mockImplementation(((options: tls.ConnectionOptions) => {
       const hung: tls.ConnectionOptions = { ...options, lookup: () => undefined };

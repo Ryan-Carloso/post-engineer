@@ -21,8 +21,6 @@ const specKeys = (): string[] =>
 const toTemplated = (route: string): string => route.replace(/\[(?:\.\.\.)?(\w+)\]/g, '{$1}');
 
 describe('public/openapi.json', () => {
-  // A schema, mapping or version change that is not regenerated would ship
-  // a stale spec; the committed file must be exactly the generator output.
   it('matches the generator output (run node apps/web/scripts/generate-openapi.mjs)', async () => {
     const generator: {
       buildSpec: (m: Record<string, Array<{ tool: string; action?: string }>>, version: string) => unknown;
@@ -31,9 +29,6 @@ describe('public/openapi.json', () => {
     expect(spec).toEqual(generator.buildSpec(mapping, generator.API_SPEC_VERSION));
   });
 
-  // The MCP release stamps its generated version into apps/mcp/package.json
-  // only inside the publish job; tying the spec version to it would ship a
-  // stale openapi.json.
   it('does not take its version from the MCP package', () => {
     const generatorSource = readFileSync(join(root, 'apps/web/scripts/generate-openapi.mjs'), 'utf8');
     expect(generatorSource.includes('apps/mcp/package.json')).toBe(false);
@@ -90,7 +85,6 @@ describe('public/openapi.json', () => {
     }
   });
 
-  // Statuses a client must branch on, beyond the shared 400/401/404/429.
   it('documents the route-specific statuses clients must handle', () => {
     const ops = spec.paths as unknown as Record<string, Record<string, { responses: Record<string, unknown> }>>;
     const statuses = (path: string, method: string): string[] => Object.keys(ops[path][method].responses);
@@ -112,8 +106,6 @@ describe('public/openapi.json', () => {
     expect(JSON.stringify(spec)).toContain('"bearerAuth"');
   });
 
-  // Issue #566: an endpoint is mapped to { tool, action? }, so an action of an
-  // intent tool names its operation `<tool>_<action>`.
   it('names an operation after its first mapping entry: <tool>_<action> for an action, <tool> otherwise', async () => {
     const generator: {
       buildSpec: (m: Record<string, Array<{ tool: string; action?: string }>>, version: string) => {

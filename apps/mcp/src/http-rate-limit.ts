@@ -1,13 +1,3 @@
-// Per-key fixed-window rate limiter for the MCP HTTP endpoint (Phase 6,
-// P6-2). Zero dependencies, in-memory only — same shape and same
-// limitation as the web's rate-limit module: on a multi-instance deploy
-// the limit is per instance, but it still blocks trivial abuse with no
-// external service. Two limiters share this implementation: the
-// per-subject limiter (key = verified token subject, checked after auth;
-// the token owner pays for the videos, so the owner is who gets limited)
-// and the pre-auth per-IP limiter below (key = client IP, checked before
-// any JWKS verification so unauthenticated traffic cannot force
-// unlimited asymmetric verifies).
 import type { IncomingMessage } from 'node:http';
 export interface HttpRateLimitResult {
   allowed: boolean;
@@ -17,7 +7,6 @@ export interface HttpRateLimitResult {
 export interface HttpRateLimiterOptions {
   limit: number;
   windowMs: number;
-  /** Clock override for tests; defaults to the real clock. */
   now?: () => number;
 }
 
@@ -36,8 +25,6 @@ export function createHttpRateLimiter(options: HttpRateLimiterOptions): HttpRate
   return {
     check(key: string): HttpRateLimitResult {
       const current = now();
-      // Lazy cleanup: expired windows are dropped when found, so the
-      // table tracks only subjects active in the current window.
       for (const [storedKey, counter] of counters) {
         if (current - counter.windowStart >= options.windowMs) {
           counters.delete(storedKey);
@@ -58,15 +45,9 @@ export function createHttpRateLimiter(options: HttpRateLimiterOptions): HttpRate
   };
 }
 
-// Default pre-auth budget per IP: deliberately above the per-subject
-// limit (120/min) so one legitimate user is governed by the subject
-// limiter, while an unauthenticated flood from one address is still
-// bounded before any token verification runs.
 export const PRE_AUTH_IP_LIMIT_PER_MINUTE = 300;
 export const PRE_AUTH_IP_WINDOW_MS = 60_000;
 
-// Pre-auth limiter factory: same fixed-window core as the per-subject
-// limiter, keyed by client IP. Callers may override limit/window/clock.
 export function createPreAuthIpRateLimiter(
   options: Partial<HttpRateLimiterOptions> = {},
 ): HttpRateLimiter {
@@ -77,16 +58,6 @@ export function createPreAuthIpRateLimiter(
   });
 }
 
-// Rate-limit key for one request. The public listener is published only
-// on 127.0.0.1 and Caddy is the only path in, so the socket peer is the
-// Docker gateway for every client. Use the same trust rule as the web
-// limiter: the LAST X-Forwarded-For entry (the hop the edge proxy
-// wrote; the proxy must overwrite the header, which Caddy does), then
-// X-Real-IP, then the socket address. The first forwarded entry is
-// client-controlled and is ignored. IPv4-mapped IPv6 peers
-// (::ffff:a.b.c.d) normalize to the IPv4 form so one client cannot
-// double its budget by alternating representations. Missing addresses
-// share the 'unknown' bucket, which fails closed under flood.
 function forwardedLast(value: string | string[] | undefined): string | undefined {
   if (value === undefined) return undefined;
   const raw = Array.isArray(value) ? value.join(',') : value;

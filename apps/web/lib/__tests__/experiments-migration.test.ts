@@ -13,13 +13,6 @@ import {
   EXPERIMENT_VARIANT_NAME_MAX_LENGTH,
 } from '@/lib/experiments/limits';
 
-//---------------
-// Migration 041 (content experiments, issue #476). The schema snapshot is
-// what Postgres reports after the whole chain is applied (CI regenerates
-// it and fails when stale), so these pins compare the code's limits with
-// the constraints the database really enforces.
-//---------------
-
 interface SnapshotColumn {
   name: string;
   type: string;
@@ -54,8 +47,6 @@ describe('experiments limits match the database checks', () => {
   const variants = table('experiment_variants').constraints;
 
   it('variable accepts exactly EXPERIMENT_VARIABLES', () => {
-    // One value: Postgres renders `in ('hook')` as an equality, which the
-    // generic enum-check sync test does not parse, so it is pinned here.
     expect(EXPERIMENT_VARIABLES).toEqual(['hook']);
     expect(experiments['experiments_variable_check']).toBe("CHECK ((variable = 'hook'::text))");
   });
@@ -97,8 +88,6 @@ describe('experiments limits match the database checks', () => {
 
 describe('experiments ownership and links', () => {
   it('an experiment records its persona and owns no schedule (migration 042)', () => {
-    // generate-and-schedule creates one schedule per video, so an
-    // experiment spans many schedules; it pins the persona instead.
     const constraints = table('experiments').constraints;
     expect(column('experiments', 'schedule_id')).toBeUndefined();
     expect(Object.keys(constraints).filter((name) => name.includes('schedule'))).toEqual([]);

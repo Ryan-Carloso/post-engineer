@@ -7,7 +7,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from app.services import subtitle_words
 
-# Whisper boundaries for "Go to bed earlier. Lose more weight tonight."
 _WORDS = [
     ("Go", 0.10, 0.30), ("to", 0.30, 0.45), ("bed", 0.45, 0.80), ("earlier.", 0.80, 1.40),
     ("Lose", 2.20, 2.50), ("more", 2.50, 2.80), ("weight", 2.80, 3.20), ("tonight.", 3.20, 3.90),
@@ -38,7 +37,6 @@ def test_a_number_heard_as_digits_is_interpolated_between_its_neighbours():
     )
     assert timed[0][1] == 0.0
     assert timed[1][1] == 1.5
-    # The spelled-out number fills the time the digits were heard in.
     assert timed[0][2] <= timed[1][1]
 
 
@@ -71,8 +69,6 @@ def test_overlapping_word_boundaries_never_start_a_cue_before_the_previous_one_e
 
 
 def test_a_transcript_that_stops_before_the_script_ends_is_rejected():
-    # Half of the words match, but nothing was heard for the last line: its cue
-    # would have no time at all (a stack of instants at the end of the video).
     timed = subtitle_words.retime_by_words(["Go to bed earlier", "Lose more weight tonight"], _WORDS[:4])
     assert timed == []
 
@@ -83,8 +79,6 @@ def test_instantaneous_words_cannot_time_a_readable_cue():
 
 
 def test_a_mis_heard_last_word_still_gets_the_time_it_was_heard_in():
-    # "HabitLoom" heard as "Habit loom": the script token has no match, but the
-    # transcript does cover the end of the script.
     words = [("Follow", 0.0, 0.5), ("Habit", 0.5, 0.9), ("loom.", 0.9, 1.4)]
     assert subtitle_words.retime_by_words(["Follow HabitLoom"], words) == [("Follow HabitLoom", 0.0, 1.4)]
 

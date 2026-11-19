@@ -8,23 +8,6 @@ import { logger } from '@/lib/logger';
 import { resolveTaskScope, type TaskScope } from '@/lib/video-task-scope';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
-//---------------
-// DELETE /api/persona/video-task/:taskId — cancels/removes the task on the
-// engine.
-//
-// Auth: cookie session (web) or API key / OAuth token (MCP cancel_video)
-// via requireSupabaseSession(request). The engine's own delete handler reads
-// the task through `get_task(task_id, user_id=auth.user_id)`
-// (apps/engine/app/controllers/v1/video.py:586), so one user can never
-// delete another user's task.
-//
-// A persona-scoped API key must not cancel a task outside its scope. The
-// lookup (lib/video-task-scope) is scoped by user_id because the service
-// client bypasses RLS. An unresolvable link, including a slot whose
-// schedule row is gone, fails closed (404): the scope cannot be proven.
-// A null persona stays allowed here. Reads use a stricter rule.
-//---------------
-
 async function deleteHandler(
   request: NextRequest,
   context: { params: Promise<{ taskId: string }> },
@@ -49,8 +32,6 @@ async function deleteHandler(
         cause: error,
       });
     }
-    // scheduleMissing is fail-closed: a deleted schedule is not proof the
-    // post was persona-less, so a scoped key may not cancel it.
     if (!scope.found || scope.scheduleMissing) {
       return apiErrorResponse(404, 'Video task not found.', { route: 'DELETE /api/persona/video-task' });
     }
@@ -72,8 +53,6 @@ async function deleteHandler(
       headers: engineAuthHeaders(auth.userId),
     });
     if (response.status === 404) {
-      // The engine scopes get_task by x-user-id, so 404 means "gone or not
-      // yours" — the same answer for both, never a cross-user hint.
       return apiErrorResponse(404, 'Video task not found.', { route: 'DELETE /api/persona/video-task' });
     }
     const body: unknown = await response.json().catch(() => null);
@@ -86,7 +65,4 @@ async function deleteHandler(
   }
 }
 
-//---------------
-// 5xx reporting: handled server errors reach PostHog error tracking.
-//---------------
 export const DELETE = withApiErrorReporting('DELETE /api/persona/video-task/[taskId]', deleteHandler, { getUserId: resolveReportingUserId });

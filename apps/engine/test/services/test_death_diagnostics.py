@@ -28,7 +28,6 @@ def _make_diag_state(requests_mock, **kwargs):
         backend = DeathDiagnosticTaskState(
             requests_module=requests_mock, **kwargs
         )
-    # Drop the init verify call so tests index only their own requests.
     requests_mock.request.reset_mock()
     return backend
 
@@ -42,9 +41,6 @@ class DeathDiagnosticStateTests(unittest.TestCase):
         self.assertIsInstance(backend, state_module.SupabaseTaskState)
 
     def test_last_reconcile_stats_defaults_empty(self):
-        # The attribute must exist from construction: the boot autopsy
-        # reads it via getattr with a default, but an absent attribute
-        # would silently report zero orphans.
         backend = _make_diag_state(self.requests)
         self.assertEqual(backend.last_reconcile_stats, {})
 
@@ -56,22 +52,21 @@ class DeathDiagnosticStateTests(unittest.TestCase):
             {"task_id": "t-3", "data": {}},
         ]
         self.requests.request.side_effect = [
-            _response(json_data=orphans),  # subclass orphan snapshot SELECT
-            _response(json_data=orphans),  # base reconcile SELECT
+            _response(json_data=orphans),
+            _response(json_data=orphans),
             *[
                 response
                 for _ in orphans
                 for response in (
-                    _response(json_data=[]),  # GET video_generations (redispatch lookup)
-                    _response(json_data=[]),  # GET video_generations (billing settle)
-                    _response(json_data=[{}]),  # PATCH task failed
+                    _response(json_data=[]),
+                    _response(json_data=[]),
+                    _response(json_data=[{}]),
                 )
             ],
         ]
         with patch.object(state_module.logger, "warning"):
             failed = backend.reconcile_orphaned_tasks()
         self.assertEqual(failed, 3)
-        # The snapshot is the orphan-listing filter, not some other GET.
         snapshot_url = self.requests.request.call_args_list[0][0][1]
         self.assertIn("state=not.in.", snapshot_url)
         stats = backend.last_reconcile_stats
@@ -82,8 +77,8 @@ class DeathDiagnosticStateTests(unittest.TestCase):
     def test_reconcile_without_orphans_records_zero_stats(self):
         backend = _make_diag_state(self.requests)
         self.requests.request.side_effect = [
-            _response(json_data=[]),  # subclass orphan snapshot SELECT
-            _response(json_data=[]),  # base reconcile SELECT
+            _response(json_data=[]),
+            _response(json_data=[]),
         ]
         with patch.object(state_module.logger, "warning"):
             failed = backend.reconcile_orphaned_tasks()
@@ -96,8 +91,8 @@ class DeathDiagnosticStateTests(unittest.TestCase):
     def test_update_task_samples_rss_on_stage(self):
         backend = _make_diag_state(self.requests)
         self.requests.request.side_effect = [
-            _response(json_data=[]),  # _select_row: no existing row
-            _response(json_data=[{}]),  # POST upsert
+            _response(json_data=[]),
+            _response(json_data=[{}]),
         ]
         backend.update_task("t-1", stage="audio")
         post = self.requests.request.call_args_list[1]
@@ -130,11 +125,6 @@ class DeathDiagnosticStateTests(unittest.TestCase):
         self.assertNotIn("stage_rss_mb", data)
 
     def test_construction_does_not_reconcile(self):
-        # The production singleton never reconciles at construction:
-        # constructing the state (import time) must never mark running tasks
-        # as orphans. The real server boot runs the reconcile explicitly in
-        # app.asgi.startup_event. A reconcile here would kill the live
-        # engine's tasks from any stray importing process.
         with patch.object(
             DeathDiagnosticTaskState, "reconcile_orphaned_tasks"
         ) as reconcile:

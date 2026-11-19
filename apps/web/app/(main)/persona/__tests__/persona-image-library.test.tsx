@@ -83,7 +83,6 @@ function makeImage(id: string): MockImage {
   };
 }
 
-/** An image whose signing failed transiently: null URL with the error flag. */
 function makeUnsignableImage(id: string): MockImage {
   return { ...makeImage(id), image_url: null, image_url_error: true as const };
 }
@@ -117,7 +116,6 @@ describe('PersonaImageLibrarySection', () => {
     expect(badges[0].className).toContain('bg-ink');
     expect(badges[0].className).toContain('text-on-ink');
     expect(screen.getByText('Front-facing portrait')).toHaveClass('text-muted-text');
-    // The undescribed, non-primary card gets the placeholder dash and no badge.
     expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(1);
   });
 
@@ -132,7 +130,6 @@ describe('PersonaImageLibrarySection', () => {
     await waitFor(() => {
       expect(screen.getByText('persona.libraryUploadError (a.jpg)')).toBeInTheDocument();
     });
-    // The failed item stays in the pending queue so the user can retry.
     expect(
       screen.getAllByPlaceholderText('persona.libraryTagPlaceholder'),
     ).toHaveLength(1);
@@ -152,11 +149,8 @@ describe('PersonaImageLibrarySection', () => {
     await userEvent.click(screen.getByRole('button', { name: 'persona.libraryUpload' }));
 
     await waitFor(() => {
-      // Unknown server errors map to the generic localized message, with
-      // the file name appended.
       expect(screen.getByText('persona.libraryUploadError (b.jpg)')).toBeInTheDocument();
     });
-    // Only the failed item remains pending.
     expect(apiMocks.uploadMutateAsync).toHaveBeenCalledTimes(2);
     expect(
       screen.getAllByPlaceholderText('persona.libraryTagPlaceholder'),
@@ -164,10 +158,6 @@ describe('PersonaImageLibrarySection', () => {
   });
 
   it('keeps the pending queue visible when a refetch fills the library', async () => {
-    // A refetch that makes the library full used to unmount the whole
-    // pending queue (queued items + upload button) while their previews
-    // stayed alive. The queue now renders outside the full/partial
-    // conditional: pending items and the upload button survive.
     const { container, rerender } = render(
       <QueryClientProvider client={new QueryClient()}>
         <PersonaImageLibrarySection personaId="persona-1" />
@@ -181,7 +171,6 @@ describe('PersonaImageLibrarySection', () => {
       ).toHaveLength(1);
     });
 
-    // The library refetches and is now full.
     apiMocks.images = Array.from({ length: 10 }, (_, i) => makeImage(`img-${i}`));
     rerender(
       <QueryClientProvider client={new QueryClient()}>
@@ -192,7 +181,6 @@ describe('PersonaImageLibrarySection', () => {
     await waitFor(() => {
       expect(screen.getByText('persona.libraryLimitReached')).toBeInTheDocument();
     });
-    // The pending item and its upload button are still there.
     expect(
       screen.getAllByPlaceholderText('persona.libraryTagPlaceholder'),
     ).toHaveLength(1);
@@ -210,11 +198,8 @@ describe('PersonaImageLibrarySection', () => {
     await userEvent.click(screen.getByRole('button', { name: 'persona.librarySave' }));
 
     await waitFor(() => {
-      // Unknown server errors map to the generic localized message — the
-      // raw English string must never reach the UI.
       expect(screen.getByText('persona.libraryUpdateError')).toBeInTheDocument();
     });
-    // Still editing: the Save button is still on screen.
     expect(screen.getByRole('button', { name: 'persona.librarySave' })).toBeInTheDocument();
   });
 
@@ -249,7 +234,6 @@ describe('PersonaImageLibrarySection', () => {
       new File(['c'], 'c.jpg', { type: 'image/jpeg' }),
     ]);
 
-    // Only one slot left: one pending item, plus the limit notice.
     const tagInputs = container.querySelectorAll('input[placeholder="persona.libraryTagPlaceholder"]');
     expect(tagInputs).toHaveLength(1);
     expect(screen.getByText('persona.libraryLimitReached')).toBeInTheDocument();
@@ -258,8 +242,6 @@ describe('PersonaImageLibrarySection', () => {
   it('names the rejection notice when files fail type/size checks', async () => {
     const { container } = renderSection();
     const input = container.querySelector('input[type="file"]') as HTMLInputElement;
-    // One valid file plus one .bmp and one oversized: the invalid ones are
-    // skipped with feedback instead of silently disappearing.
     await pickFiles(input, [
       new File(['a'], 'a.jpg', { type: 'image/jpeg' }),
       new File(['b'], 'b.bmp', { type: 'image/bmp' }),
@@ -275,10 +257,6 @@ describe('PersonaImageLibrarySection', () => {
     apiMocks.images = Array.from({ length: 9 }, (_, i) => makeImage(`img-${i}`));
     const { container } = renderSection();
     const input = container.querySelector('input[type="file"]') as HTMLInputElement;
-    // One slot left, two valid picks (one overflows) plus one oversized file
-    // (passes the input's accept filter but fails the size check): the user
-    // must see both the limit notice and the rejection notice, otherwise
-    // the size drop goes unreported behind the limit message.
     await pickFiles(input, [
       new File(['a'], 'a.jpg', { type: 'image/jpeg' }),
       new File(['b'], 'b.jpg', { type: 'image/jpeg' }),
@@ -290,9 +268,6 @@ describe('PersonaImageLibrarySection', () => {
   });
 
   it('disables the Add button while an upload is in flight', async () => {
-    // The file input and Add button must not accept new picks mid-upload:
-    // the pending queue is being drained and extra picks would land in a
-    // confusing half-state.
     let release!: (value: { success: boolean }) => void;
     apiMocks.uploadMutateAsync.mockReturnValue(
       new Promise((resolve) => {
@@ -316,9 +291,6 @@ describe('PersonaImageLibrarySection', () => {
   });
 
   it('disables pending remove buttons and inputs while an upload is in flight', async () => {
-    // Removing a pending item mid-upload would revoke its preview and drop
-    // it from state, but the upload loop captured the queue at render time
-    // and would still store the cancelled file on the server.
     let release!: (value: { success: boolean }) => void;
     apiMocks.uploadMutateAsync.mockReturnValue(
       new Promise((resolve) => {
@@ -340,8 +312,6 @@ describe('PersonaImageLibrarySection', () => {
   });
 
   it('suppresses the empty-state hint when the images query errors', async () => {
-    // The empty-state copy ("no images yet") contradicts the error message:
-    // the library may have images that simply failed to load.
     apiMocks.imagesQueryError = true;
     renderSection();
     expect(screen.queryByText('persona.libraryEmpty')).not.toBeInTheDocument();
@@ -349,8 +319,6 @@ describe('PersonaImageLibrarySection', () => {
   });
 
   it('passes the library max to the empty-state copy', async () => {
-    // Round 25: libraryEmpty hardcoded "10" while its siblings
-    // interpolate {max} — the same drift class as round 23.
     renderSection();
 
     await waitFor(() => {
@@ -360,10 +328,6 @@ describe('PersonaImageLibrarySection', () => {
   });
 
   it('keeps uploaded previews alive until the queue updates', async () => {
-    // Two pending items, sequential upload: after the first resolves but
-    // before the second finishes, the first item is still rendered in the
-    // queue — its preview URL must not be revoked yet, or a re-render in
-    // between shows a broken image.
     let releaseSecond!: (value: { success: boolean }) => void;
     apiMocks.uploadMutateAsync
       .mockResolvedValueOnce({ success: true })
@@ -394,9 +358,6 @@ describe('PersonaImageLibrarySection', () => {
   });
 
   it('surfaces server warnings when the upload succeeds with warnings', async () => {
-    // A partial success (image uploaded, primary swap failed) reports
-    // success:true with warnings — the UI must show them instead of
-    // silently looking like a full success.
     apiMocks.uploadMutateAsync.mockResolvedValue({
       success: true,
       warnings: ['primary_swap_failed'],
@@ -438,8 +399,6 @@ describe('PersonaImageLibrarySection', () => {
         <PersonaImageLibrarySection personaId="persona-1" />
       </QueryClientProvider>,
     );
-    // The server value changes (e.g. trimmed by a save elsewhere) and the
-    // list refetches before the user opens the editor.
     apiMocks.images = [{ ...makeImage('img-1'), tag: 'fresh-tag' }];
     rerender(
       <QueryClientProvider client={new QueryClient()}>
@@ -495,15 +454,11 @@ describe('PersonaImageLibrarySection', () => {
     );
 
     await waitFor(() => {
-      // Unknown server errors map to the generic localized message.
       expect(screen.getByText('persona.libraryUpdateError')).toBeInTheDocument();
     });
   });
 
   it('passes the library max to the count and limit-reached copy', async () => {
-    // The limit lives in MAX_LIBRARY_IMAGES; the translated strings
-    // interpolate {max} instead of hardcoding 10, so a limit change can't
-    // silently drift the UI copy away from the enforced cap.
     apiMocks.images = Array.from({ length: 10 }, (_, i) => makeImage(`img-${i}`));
     renderSection();
 
@@ -522,15 +477,11 @@ describe('PersonaImageLibrarySection', () => {
       expect(dictionaries[locale].persona.libraryCount).not.toContain('10');
       expect(dictionaries[locale].persona.libraryLimitReached).toContain('{max}');
       expect(dictionaries[locale].persona.libraryLimitReached).not.toContain('10');
-      // The hint and the rejection notice carry the same caps: a limit
-      // change must not leave stale copy behind either.
       expect(dictionaries[locale].persona.libraryHint).toContain('{max}');
       expect(dictionaries[locale].persona.libraryHint).toContain('{sizeMb}');
       expect(dictionaries[locale].persona.libraryHint).not.toContain('10');
       expect(dictionaries[locale].persona.libraryFilesRejected).toContain('{sizeMb}');
       expect(dictionaries[locale].persona.libraryFilesRejected).not.toContain('10MB');
-      // The empty-state copy was missed by the round-23 sweep: it
-      // hardcoded the same cap.
       expect(dictionaries[locale].persona.libraryEmpty).toContain('{max}');
       expect(dictionaries[locale].persona.libraryEmpty).not.toContain('10');
     }
@@ -542,9 +493,6 @@ describe('PersonaImageLibrarySection', () => {
     expect(
       mapPersonaImageWarnings(['primary_swap_failed', 'metadata_save_failed'], t),
     ).toBe('t:persona.libraryWarningPrimarySwap t:persona.libraryWarningMetadataSave');
-    // Unknown codes are never silently dropped — and never rendered as a
-    // raw English slug: a future server code maps to a localized generic
-    // message instead.
     expect(mapPersonaImageWarnings(['some_future_code'], t)).toBe(
       't:persona.libraryWarningUnknown',
     );
@@ -562,8 +510,6 @@ describe('PersonaImageLibrarySection', () => {
     expect(
       mapPersonaImageError('The image content does not match its declared file type.', t, 'persona.libraryUploadError'),
     ).toBe('t:persona.libraryErrorContentMismatch');
-    // The creation route appends batch file context (" (image 2: foo.jpg)");
-    // the specific mapping must still apply.
     expect(
       mapPersonaImageError(
         'The image content does not match its declared file type. (image 2: foo.jpg)',
@@ -577,8 +523,6 @@ describe('PersonaImageLibrarySection', () => {
     expect(mapPersonaImageError('Image not found.', t, 'persona.libraryDeleteError')).toBe(
       't:persona.libraryErrorNotFound',
     );
-    // Unknown server errors fall back to the generic localized message —
-    // the raw English string must never reach the UI.
     expect(
       mapPersonaImageError('Something broke in English.', t, 'persona.libraryUploadError'),
     ).toBe('t:persona.libraryUploadError');
@@ -594,7 +538,6 @@ describe('PersonaImageLibrarySection', () => {
     await waitFor(() => {
       expect(screen.getByText('persona.libraryImageUrlError')).toBeInTheDocument();
     });
-    // No img element for the failed thumbnail.
     expect(screen.queryByRole('img')).not.toBeInTheDocument();
   });
 
@@ -615,8 +558,6 @@ describe('PersonaImageLibrarySection', () => {
     await waitFor(() => {
       expect(screen.getByText('persona.libraryWarningMetadataSave')).toBeInTheDocument();
     });
-    // Still editing: the metadata was NOT persisted, so the editor stays
-    // open with the typed value instead of being discarded by the refetch.
     expect(screen.getByRole('button', { name: 'persona.librarySave' })).toBeInTheDocument();
     expect(screen.getByDisplayValue('retry-tag')).toBeInTheDocument();
   });

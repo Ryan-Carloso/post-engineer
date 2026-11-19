@@ -11,11 +11,6 @@ import {
   topVideosByViews,
 } from '../metrics-chart-data';
 
-//---------------
-// Flat row factory; every fixture uses relative publish dates so the
-// suite never becomes a time bomb (fixed future dates), and every
-// nullable field is spelled out the way production materializes it.
-//---------------
 function row(overrides: Partial<MetricsRowView> = {}): MetricsRowView {
   return {
     postId: 'post-1',
@@ -62,8 +57,6 @@ describe('rowMetricValue', () => {
 
 describe('localDayKey', () => {
   it('buckets by the day in the given time zone, not the UTC day', () => {
-    // 2026-10-21T02:30Z is still 2026-10-20 in São Paulo (-03) and
-    // already 2026-10-21 in Berlin (+02).
     expect(localDayKey('2026-10-21T02:30:00Z', { timeZone: 'America/Sao_Paulo' })).toBe('2026-10-20');
     expect(localDayKey('2026-10-21T02:30:00Z', { timeZone: 'Europe/Berlin' })).toBe('2026-10-21');
     expect(localDayKey('2026-10-21T02:30:00Z', { timeZone: 'UTC' })).toBe('2026-10-21');
@@ -133,9 +126,6 @@ describe('bucketOverTime', () => {
   });
 
   it('one point per local day with day keys that format to the same local date (axis aligns)', () => {
-    // Rows published the same local day collapse into one point; the XAxis
-    // (category on `day`) ticks are formatted from the same dayKeyToDate,
-    // so a tick always sits under its point.
     const sameDayA = new Date();
     sameDayA.setHours(9, 0, 0, 0);
     const sameDayB = new Date();
@@ -149,7 +139,6 @@ describe('bucketOverTime', () => {
     ], 'views');
     expect(result.points).toHaveLength(2);
     const days = result.points.map((p) => p.day);
-    // Oldest first so the category axis reads left-to-right.
     expect(days).toEqual([...days].sort((a, b) => a.localeCompare(b)));
     for (const point of result.points) {
       const date = dayKeyToDate(point.day);

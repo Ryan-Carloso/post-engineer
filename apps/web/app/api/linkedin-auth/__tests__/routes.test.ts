@@ -132,7 +132,6 @@ describe('GET /api/linkedin-auth/callback', () => {
     const body = (await res.json()) as { popup: string };
 
     expect(body.popup).toBe('linkedin-oauth-success');
-    // member + 2 organizations = 3 accounts
     expect(upsertSocialAccount).toHaveBeenCalledTimes(3);
 
     const calls = vi.mocked(upsertSocialAccount).mock.calls;
@@ -151,7 +150,6 @@ describe('GET /api/linkedin-auth/callback', () => {
       providerAccountId: 'urn:li:organization:222',
       accountName: null,
     });
-    // encrypted token propagated to all of them
     for (const call of calls) {
       expect(call[1].tokens.access_token).toBe('at-1');
       expect(call[1].tokens.member_urn).toBe('urn:li:person:member-123');
@@ -168,9 +166,6 @@ describe('GET /api/linkedin-auth/callback', () => {
     expect(body.popup).toBe('linkedin-oauth-error');
   });
 
-  // Connect-url (MCP) flow: the service client only serves oauth_states,
-  // backed by the shared fake that applies every filter of the real chain.
-  // The mocked decodeOAuthState yields provider 'linkedin', nonce 'nonce-1'.
   function connectUrlState(ownerId: string): { store: FakeOAuthStateStore; hash: string } {
     const store = makeOAuthStateStore();
     const hash = hashOAuthState('state-xyz');
@@ -202,14 +197,12 @@ describe('GET /api/linkedin-auth/callback', () => {
 
     expect(body.popup).toBe('linkedin-oauth-success');
     expect(store.rows.has(hash)).toBe(false);
-    // persisted under the signed-in owner through the RLS-bound session client
     expect(vi.mocked(upsertSocialAccount).mock.calls[0][0]).toBe(sessionClient);
     expect(vi.mocked(upsertSocialAccount).mock.calls[0][1]).toMatchObject({
       userId: 'api-key-owner',
       provider: 'linkedin',
       providerAccountId: 'member-123',
     });
-    // the service role only ever touched oauth_states
     expect(store.tables).toEqual(['oauth_states']);
   });
 

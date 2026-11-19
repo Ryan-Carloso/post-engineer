@@ -8,15 +8,6 @@ import {
   buildFaqJsonLd,
 } from '@/lib/seo';
 
-//---------------
-// Landing metadata — the landing page itself is a client component,
-// so it cannot export metadata. This server layout owns it instead:
-// one canonical URL, social cards, and FAQ structured data.
-// The JSON-LD mirrors the default-locale (pt) FAQ verbatim: the
-// locale switcher is client-side, so crawlers only ever see pt here.
-// The root (/) redirects to /landing for signed-out visitors, so
-// /landing — not / — is the canonical public URL.
-//---------------
 export const metadata: Metadata = {
   title: LANDING_TITLE,
   description: LANDING_DESCRIPTION,
@@ -45,8 +36,6 @@ export const metadata: Metadata = {
   },
 };
 
-// faq3 (cancel) was removed with the Starter plan: the product is still
-// beta, so the structured data lists exactly the visible FAQ items.
 const LANDING_FAQ = [
   { question: ptDictionary.landing.faq1Q, answer: ptDictionary.landing.faq1A },
   { question: ptDictionary.landing.faq2Q, answer: ptDictionary.landing.faq2A },

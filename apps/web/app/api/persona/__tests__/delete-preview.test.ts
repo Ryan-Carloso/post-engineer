@@ -2,12 +2,6 @@
 import '@testing-library/jest-dom/vitest';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-//---------------
-// GET /api/persona/delete-preview tests (real contract).
-// The external boundary (Supabase + engine) is mocked; everything else is
-// real: auth, ownership, counting, download-URL building.
-//---------------
-
 vi.mock('@/lib/supabase/server', () => ({
   createSupabaseServerClient: vi.fn(),
 }));
@@ -25,8 +19,6 @@ vi.mock('@/lib/logger', () => ({
   logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
 }));
 vi.mock('@/lib/rate-limit', async (importOriginal) => {
-  // Rate limiting is bypassed for payload-behavior tests; one dedicated
-  // test below covers the 429 path.
   const actual = await importOriginal<typeof import('@/lib/rate-limit')>();
   return { ...actual, applyRateLimit: vi.fn().mockResolvedValue(null) };
 });
@@ -55,7 +47,6 @@ const BASE_TABLES: TableData = {
     { id: 'slot-2', schedule_id: 'sched-1', status: 'published', user_id: USER_ID },
     { id: 'slot-3', schedule_id: 'sched-2', status: 'ready', user_id: USER_ID },
     { id: 'slot-4', schedule_id: 'sched-2', status: 'failed', user_id: USER_ID },
-    // Cross-user slot on the same schedule id shape: must never be counted.
     { id: 'slot-x', schedule_id: 'sched-1', status: 'pending', user_id: 'user-uuid-2' },
   ],
   video_generations: [
@@ -83,11 +74,6 @@ const BASE_TABLES: TableData = {
   ],
 };
 
-// Minimal thenable query builder: .select().eq()/.in() accumulate predicates
-// against the in-memory rows, so tests assert real scoping (user_id +
-// persona_id), not just call counts. `await` resolves { data, error } — or
-// { data: null, count, error } for head+count selects. .order()/.limit()
-// bound the list query like production.
 function makeClient(
   tables: Record<string, Array<Record<string, unknown>>>,
   errorOn?: string,
@@ -199,8 +185,6 @@ describe('GET /api/persona/delete-preview', () => {
     expect(res.status).toBe(200);
     expect(body.success).toBe(true);
     expect(GetPersonaDeletePreviewResponseSchema.safeParse(body).success).toBe(true);
-    // 2 schedules; upcoming = pending + ready (published is terminal);
-    // publishedSlots/failedSlots count the history the cascade also deletes.
     expect(body.counts).toMatchObject({
       schedules: 2,
       upcomingSlots: 2,
@@ -226,7 +210,6 @@ describe('GET /api/persona/delete-preview', () => {
       status: 'completed',
       downloadUrl: '/api/persona/video-download/task-aaa/final.mp4',
     });
-    // Failed generations are listed but never get a download link.
     expect(body.videos[1].downloadUrl).toBeNull();
   });
 
@@ -355,7 +338,6 @@ describe('GET /api/persona/delete-preview', () => {
 
   it('flags transient engine failures as incomplete and logs them', async () => {
     getClient();
-    // Engine 500: transient — the video may still exist.
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => ({ ok: false, status: 500, json: async () => null })),
@@ -378,7 +360,6 @@ describe('GET /api/persona/delete-preview', () => {
 
   it('flags unparseable engine bodies as transient and logs them', async () => {
     getClient();
-    // Engine 200 with a garbled body: almost certainly transient.
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => ({
@@ -407,7 +388,6 @@ describe('GET /api/persona/delete-preview', () => {
 
   it('does not flag 404 engine responses as incomplete', async () => {
     getClient();
-    // Engine 404: task pruned — truly gone, not transient.
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => ({ ok: false, status: 404, json: async () => null })),
@@ -439,7 +419,6 @@ describe('GET /api/persona/delete-preview', () => {
     };
     expect(res.status).toBe(200);
     expect(body.videos[0]?.downloadUrl).toBeNull();
-    // Config error: retry can never fix it, so no retry note.
     expect(body.linksIncomplete).toBe(false);
     expect(logger.error).toHaveBeenCalledWith(
       '[api/persona/delete-preview] engine auth misconfigured',
@@ -462,7 +441,6 @@ describe('GET /api/persona/delete-preview', () => {
     };
     expect(res.status).toBe(200);
     expect(body.videos[0]?.downloadUrl).toBeNull();
-    // Retry cannot fix an auth misconfig — no retry note.
     expect(body.linksIncomplete).toBe(false);
     expect(logger.error).toHaveBeenCalledWith(
       '[api/persona/delete-preview] engine task lookup failed',
@@ -487,7 +465,7 @@ describe('GET /api/persona/delete-preview', () => {
       'fetch',
       vi.fn(async () => {
         engineCalls += 1;
-        now += 10_000; // each lookup burns 10s; the budget is 15s
+        now += 10_000;
         return {
           ok: true,
           status: 200,
@@ -503,7 +481,6 @@ describe('GET /api/persona/delete-preview', () => {
       linksIncomplete: boolean;
     };
     expect(res.status).toBe(200);
-    // Lookups 0 and 1 run (t=0s, t=10s < 15s); 2..4 are skipped past budget.
     expect(engineCalls).toBe(2);
     expect(body.videos).toHaveLength(5);
     expect(body.videos[0]?.downloadUrl).toContain('/api/persona/video-download/');
@@ -511,7 +488,6 @@ describe('GET /api/persona/delete-preview', () => {
     expect(body.videos[2]?.downloadUrl).toBeNull();
     expect(body.videos[3]?.downloadUrl).toBeNull();
     expect(body.videos[4]?.downloadUrl).toBeNull();
-    // The degradation is flagged so the UI does not call it "unavailable".
     expect(body.linksIncomplete).toBe(true);
   });
 });

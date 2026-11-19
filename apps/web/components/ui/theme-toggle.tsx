@@ -13,8 +13,6 @@ interface ThemeToggleProps {
   value: ThemeChoice;
   onChange: (value: ThemeChoice) => void;
   labels: ThemeToggleLabels;
-  // Set by the caller until the stored theme is known on the client; the
-  // caller also passes the server value meanwhile (see ThemeSwitcher).
   disabled?: boolean;
   className?: string;
 }
@@ -57,8 +55,6 @@ const OPTIONS: ReadonlyArray<{ value: ThemeChoice; icon: () => React.JSX.Element
   { value: 'system', icon: MonitorIcon },
 ];
 
-// Presentational light / dark / system segmented control. State, storage and
-// the DOM class live in ThemeSwitcher (next-themes); this only renders.
 export function ThemeToggle({ value, onChange, labels, disabled = false, className }: ThemeToggleProps) {
   return (
     <div

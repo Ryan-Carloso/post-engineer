@@ -3,12 +3,6 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 
-//---------------
-// Tests for the posts loading skeletons (CalendarLoadingSkeleton,
-// CardsLoadingSkeleton). Assertions pin the rendered shape — bar counts
-// and class tokens — so a class or count change fails here, not silently.
-//---------------
-
 vi.mock('@/lib/i18n/provider', () => {
   function I18nProvider({ children }: { children: ReactNode }) {
     return <>{children}</>;
@@ -51,8 +45,6 @@ describe('CalendarLoadingSkeleton', () => {
     expect(panelCards).toHaveLength(2);
     expect(panelCards[0]?.className).toContain('rounded-xl');
 
-    // Every bar carries the pulse shape (1 title + 3 nav + 7 weekday +
-    // 35 day cells + 1 panel title + 2 panel cards).
     expect(container.querySelectorAll('.animate-pulse')).toHaveLength(49);
   });
 

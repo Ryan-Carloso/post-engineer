@@ -1,29 +1,8 @@
-//---------------
-// Facebook — API client to connect Facebook Pages (OAuth 2.0 via
-// Facebook Login) and publish videos to them.
-//
-// Documentation (2026): https://developers.facebook.com/docs/facebook-login
-// and https://developers.facebook.com/docs/graph-api/reference/page/videos
-// Flow: dialog/oauth -> short-lived user token -> long-lived user token
-// (fb_exchange_token) -> GET /me/accounts lists the Pages the user
-// manages, each with its own Page access token. A Page token derived from
-// a long-lived user token has no expiry of its own, so publishing uses the
-// stored Page token directly and the account stores no expiry date.
-// Publishing posts the video by URL (graph-video file_url), the same
-// signed-URL pattern the Threads and Instagram handlers use.
-//
-// Secrets stay out of URLs: the app secret travels in a POST body and
-// access tokens in the Authorization header, so neither can surface in a
-// logged request URL.
-//---------------
-
 import { FacebookError } from '@/lib/errors';
 import { readMetaErrorCode, readMetaErrorSubcode } from '@/lib/meta-error-code';
 
-// Facebook's documented feed-post ceiling; a video description rides the
-// same field. lib/draft-scoring.ts and the engine pin the same value.
 export const FACEBOOK_TEXT_MAX_CHARS = 63206;
-export const FACEBOOK_VIDEO_MAX_BYTES = 4 * 1024 * 1024 * 1024; // 4GB
+export const FACEBOOK_VIDEO_MAX_BYTES = 4 * 1024 * 1024 * 1024;
 
 export const FACEBOOK_SCOPES = [
   'public_profile',
@@ -68,18 +47,12 @@ function readOptionalCount(body: JsonRecord, key: string): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
-// Only Meta's own error.message is surfaced, never the request itself.
 function describeFailure(body: JsonRecord | null, status: number): string {
   const error = body === null ? null : readRecord(body, 'error');
   const message = error === null ? null : readOptionalString(error, 'message');
   return message ?? `status ${status}`;
 }
 
-//---------------
-// facebookFetch — one Graph call. Non-2xx, a non-JSON body (a proxy can
-// answer with HTML) and a non-object body are all failures; the error
-// message is "CODE: detail" so callers and telemetry read a stable code.
-//---------------
 async function facebookFetch(code: string, url: string, init: RequestInit = {}): Promise<JsonRecord> {
   const response = await fetch(url, { ...init, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
   const parsed: unknown = await response.json().catch(() => null);
@@ -119,12 +92,6 @@ function requireAccessToken(code: string, body: JsonRecord): string {
   return token;
 }
 
-//---------------
-// buildFacebookAuthorizationUrl — OAuth consent URL (Facebook Login for
-// Pages). Facebook has its own app credentials (FACEBOOK_CLIENT_ID /
-// FACEBOOK_CLIENT_SECRET), separate from the Instagram and Threads use
-// cases of the Meta app.
-//---------------
 export function buildFacebookAuthorizationUrl(state: string, redirectUriOverride?: string): string {
   const params = new URLSearchParams({
     response_type: 'code',
@@ -136,12 +103,6 @@ export function buildFacebookAuthorizationUrl(state: string, redirectUriOverride
   return `${FACEBOOK_DIALOG_URL}?${params.toString()}`;
 }
 
-//---------------
-// exchangeFacebookCodeForToken — code -> short-lived user token (~1h) ->
-// long-lived user token. Only the long-lived token is returned; the
-// short-lived one is never stored. The user token itself is never stored
-// either: only the Page tokens derived from it (fetchFacebookPages).
-//---------------
 export async function exchangeFacebookCodeForToken(
   code: string,
   redirectUriOverride?: string,
@@ -171,11 +132,6 @@ export async function exchangeFacebookCodeForToken(
   return requireAccessToken('FACEBOOK_TOKEN_FAILED', longLived);
 }
 
-//---------------
-// FacebookPage — one Page the user manages, with the Page access token
-// /me/accounts returns for it. Each Page becomes its own social account
-// (providerAccountId = Page id), mirroring LinkedIn organizations.
-//---------------
 export interface FacebookPageProfile {
   id: string;
   name: string | null;
@@ -204,7 +160,6 @@ function readProfile(body: JsonRecord, id: string): FacebookPageProfile {
   };
 }
 
-// Graph's own cursor URL, followed only when it stays on the Graph host.
 function readNextPage(body: JsonRecord): string | null {
   const paging = readRecord(body, 'paging');
   const next = paging === null ? null : readOptionalString(paging, 'next');
@@ -216,12 +171,6 @@ function readNextPage(body: JsonRecord): string | null {
   }
 }
 
-//---------------
-// fetchFacebookPages — every Page the token owner manages, bounded:
-// at most MAX_PAGE_LIST_PAGES Graph pages are followed, so a huge account
-// cannot fan out forever. An entry without an id or Page token is skipped
-// (the user did not grant that Page), never stored half-formed.
-//---------------
 export const MAX_PAGE_LIST_PAGES = 5;
 const PROFILE_FIELDS = 'id,name,category,picture{url},fan_count';
 
@@ -244,10 +193,6 @@ export async function fetchFacebookPages(userAccessToken: string): Promise<Faceb
   return pages;
 }
 
-//---------------
-// fetchFacebookPageProfile — fresh name/picture for one Page, read with
-// its Page token (the account-profile resync).
-//---------------
 export async function fetchFacebookPageProfile(
   pageId: string,
   pageAccessToken: string,
@@ -262,12 +207,6 @@ export async function fetchFacebookPageProfile(
   return readProfile(body, id);
 }
 
-//---------------
-// publishFacebookMedia — posts the video or image to the Page by URL and returns
-// the video id plus its permalink. The permalink read is best-effort: the
-// video is already live when it runs, so its failure must not turn a
-// published post into a failed one (same contract as Threads).
-//---------------
 export interface FacebookPublishResult {
   postId: string;
   permalink: string | null;
@@ -286,12 +225,6 @@ function absolutePermalink(raw: string): string {
   return `https://www.facebook.com${raw.startsWith('/') ? '' : '/'}${raw}`;
 }
 
-//---------------
-// publishFacebookMedia — a video goes to /{page}/videos on the video host
-// (file_url); an image goes to /{page}/photos (url, message). Both fetch
-// the file from the presigned URL. A photo answers its photo id and the
-// feed post_id; the permalink is read from the photo.
-//---------------
 export async function publishFacebookMedia(
   input: PublishFacebookMediaInput,
 ): Promise<FacebookPublishResult> {
@@ -325,11 +258,6 @@ export async function publishFacebookMedia(
   return { postId, permalink };
 }
 
-//---------------
-// getFacebookVideoInsights — views from video_insights plus like/comment
-// totals from the video node summaries. Throws on HTTP errors so the
-// metrics collector logs and retries on the next run.
-//---------------
 function readSummaryTotal(body: JsonRecord, key: string): number | null {
   const node = readRecord(body, key);
   const summary = node === null ? null : readRecord(node, 'summary');

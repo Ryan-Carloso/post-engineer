@@ -10,20 +10,9 @@ import {
 import { isSocialProvider } from '@/lib/providers/registry';
 import { notifyIfSessionExpired } from '@/lib/session-expiry';
 
-//---------------
-// metrics-dashboard — client-side data for the metrics page: the React
-// Query hook over GET /api/metrics, and the pure totals and sort that
-// feed the video list.
-//---------------
-
 export interface MetricsSummary {
-  // Rows in the list, whatever they reported. A row is one video on one
-  // network (a measurement), not one video: rows carry no source-video id,
-  // so unique videos cannot be counted honestly.
   measurements: number;
-  // Sum of reported views; null values are skipped, never counted as 0.
   views: number;
-  // Sum of reported likes + comments + saves; null values are skipped.
   engagement: number;
 }
 
@@ -41,11 +30,6 @@ function isMetricsResponse(value: unknown): value is MetricsResponse {
   );
 }
 
-//---------------
-// parseCoverage — lenient: a malformed item is dropped, never a reason
-// to lose the rows. An older cached response without coverage reads as
-// empty coverage with a null as-of.
-//---------------
 function parseCoverageItem(value: unknown): CoverageItem | null {
   if (typeof value !== 'object' || value === null) return null;
   const item = value as Record<string, unknown>;
@@ -94,16 +78,10 @@ function parseCoverage(body: unknown): {
   };
 }
 
-//---------------
-// fetchMetrics — never throws on HTTP errors: non-2xx, non-JSON (proxy
-// HTML) and unexpected shapes come back as { success: false }.
-//---------------
 export async function fetchMetrics(query: MetricsQuery): Promise<MetricsFetchResult> {
   try {
     const response = await fetch(`/api/metrics?${metricsSearchParams(query).toString()}`);
     if (!response.ok) {
-      // Fail-safe contract kept ({ success: false, error }), but a dead
-      // session must still trigger the host-wide redirect.
       notifyIfSessionExpired(response);
       return { success: false, error: `status ${response.status}` };
     }
@@ -123,12 +101,6 @@ export function useMetricsQuery(query: MetricsQuery): UseQueryResult<MetricsFetc
   });
 }
 
-//---------------
-// summarize — totals over the visible rows, no averages: a total can
-// never read as a bug the way an average did (HabitLoom's 31 was the
-// average of 248 views over 8 videos). Null values are skipped, never
-// counted as 0.
-//---------------
 export function summarize(rows: MetricsRowView[]): MetricsSummary {
   let views = 0;
   let engagement = 0;
@@ -141,11 +113,6 @@ export function summarize(rows: MetricsRowView[]): MetricsSummary {
   return { measurements: rows.length, views, engagement };
 }
 
-//---------------
-// sortByViews — highest first for "which videos did best". Rows with no
-// reported views go last; ties break on the newest collectedAt, so the
-// order is deterministic. Returns a new array; the input is untouched.
-//---------------
 export function sortByViews(rows: MetricsRowView[]): MetricsRowView[] {
   return [...rows].sort((a, b) => {
     if (a.views === null && b.views === null) return b.collectedAt.localeCompare(a.collectedAt);
@@ -154,12 +121,6 @@ export function sortByViews(rows: MetricsRowView[]): MetricsRowView[] {
     return b.views - a.views || b.collectedAt.localeCompare(a.collectedAt);
   });
 }
-
-//---------------
-// Retention curve (GET /api/metrics/retention-curve) — opened on demand
-// per long-form YouTube video. Same never-throw contract as fetchMetrics;
-// a reconnect code is surfaced so the page can show the reconnect prompt.
-//---------------
 
 export interface RetentionCurvePoint {
   ratio: number;
@@ -221,18 +182,13 @@ export function useRetentionCurveQuery(
 ): UseQueryResult<RetentionCurveSuccess, RetentionCurveFetchError> {
   return useQuery<RetentionCurveSuccess, RetentionCurveFetchError>({
     queryKey: ['retention-curve', accountId, videoId],
-    // A failed fetch becomes a query error, never successful cached data:
-    // an errored query is stale, so closing and reopening the panel
-    // refetches instead of serving the failure for staleTime.
     queryFn: async () => {
       const result = await fetchRetentionCurve(accountId, videoId);
       if (!result.success) throw new RetentionCurveFetchError(result.error, result.reconnect);
       return result;
     },
     enabled,
-    // Reopening the panel is the retry; do not auto-retry a 4xx/5xx.
     retry: false,
-    // A live Analytics read: keep a successful result for the session.
     staleTime: 10 * 60_000,
   });
 }

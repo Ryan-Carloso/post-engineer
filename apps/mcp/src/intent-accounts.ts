@@ -11,12 +11,6 @@ import type { McpToolResponse } from './tools-call.js';
 import { GetPersonaPublishingAccountsShape, SetPersonaPublishingAccountsShape, handleGetPersonaPublishingAccounts, handleSetPersonaPublishingAccounts } from './tools-publishing-accounts.js';
 import { handleListPinterestBoards } from './tools-pinterest.js';
 
-//---------------
-// accounts (issue #566): connected social accounts and the accounts each
-// persona publishes to. An account is given by name or id (refs.ts); the
-// network is read from the account.
-//---------------
-
 const PROVIDERS = DisconnectAccountShape.provider;
 
 const ACCOUNTS_SPECS = {

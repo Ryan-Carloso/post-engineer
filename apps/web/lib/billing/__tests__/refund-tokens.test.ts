@@ -1,16 +1,3 @@
-//---------------
-// Tests for lib/billing/refund-tokens — the shared web refund helper.
-//
-// Every request-path refund (dispatch failure, schedule cancel) funnels
-// through here so the tokens move and the audit event fires in one place:
-//   - the refund_batch_tokens RPC moves the tokens (idempotent key),
-//   - refund_issued fires ONLY on a landed refund (refunded === true),
-//     never on already_refunded — re-firing would double-count it,
-//   - the event mirrors the engine's track_refund_issued property shape
-//     (kind, amount, reason, batch_generation_id, slot_id,
-//     engine_task_id) so dashboards unify across both sides.
-//---------------
-
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('@/lib/posthog-server', () => ({ getPostHogServer: vi.fn() }));
@@ -64,11 +51,6 @@ describe('emitRefundIssued', () => {
   });
 
   it('scrubs credential-shaped fragments out of the ids before emitting', () => {
-    // The helper's id inputs are plain strings, so the funnel must scrub
-    // them — including inside batch_generation_id, which carries the same
-    // id after `batch:`. The cancel route validates the schedule uuid
-    // before this point, but the scrub is defense-in-depth for any caller
-    // handing over a request-derived value.
     emitRefundIssued('user-1', {
       kind: 'schedule_cancelled',
       amount: 2,

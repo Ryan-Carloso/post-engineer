@@ -4,12 +4,6 @@ import { checkSegmentMedia, uploadSegmentMedia } from './client-user-media.js';
 import { VIDEO_ASPECTS, isHttpUrl } from './contracts/media.js';
 import { handleLibraryCall, type McpToolResponse } from './tools-call.js';
 
-//---------------
-// Phase 2 user-media tools: media (action: upload) (local file -> mediaId) and
-// media (action: check) (mechanical URL check, one code, no LLM). Kept in a new
-// module so tools.ts stays under the file-size ratchet.
-//---------------
-
 export const UploadMediaShape = {
   path: z
     .string()

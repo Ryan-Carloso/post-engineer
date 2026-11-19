@@ -1,13 +1,3 @@
-# ---------------
-# changed_functions tests — the diff→function mapper that scopes the
-# engine mutation shards to the CHANGED functions (scripts/
-# changed_functions.py, used by the mutation (engine shard) CI job).
-#
-# The git wrapper (changed_functions_for_file) is covered against a real
-# scratch git repo; the pure core (parse_diff_changed_lines,
-# map_changed_lines) is covered directly.
-# ---------------
-
 from __future__ import annotations
 
 import json
@@ -26,9 +16,6 @@ from scripts.changed_functions import (
     parse_diff_changed_lines,
 )
 
-# ---------------
-# Pure core — parse_diff_changed_lines
-# ---------------
 DIFF_SAMPLE = """\
 diff --git a/app/services/video.py b/app/services/video.py
 index 1111111..2222222 100644
@@ -48,9 +35,6 @@ index 1111111..2222222 100644
 
 
 def test_parse_diff_changed_lines_adds_plus_lines():
-    # keep(10) / -removed / +new(11) / +another(12) / kept(13) — the
-    # removed line advances only the OLD side; the second hunk's removed
-    # line does not appear on the new side either (kept(42), +added(43)).
     assert parse_diff_changed_lines(DIFF_SAMPLE) == [11, 12, 43]
 
 
@@ -58,9 +42,6 @@ def test_parse_diff_changed_lines_empty_diff():
     assert parse_diff_changed_lines("") == []
 
 
-# ---------------
-# Pure core — map_changed_lines
-# ---------------
 TWO_FUNCTIONS = """\
 def generate_video(subject):
     x = 1
@@ -102,8 +83,6 @@ def line_of(source: str, needle: str) -> int:
 
 
 def test_map_changed_lines_module_level_change_falls_back_to_file():
-    # Pin the line number against the fixture: MODULE_LEVEL is a
-    # module-level assignment (outside every function).
     module_line = line_of(TWO_FUNCTIONS, 'MODULE_LEVEL = "value"')
     assert TWO_FUNCTIONS.splitlines()[module_line - 1].startswith("MODULE_LEVEL")
     result = map_changed_lines(
@@ -166,7 +145,6 @@ def test_map_changed_lines_class_method_uses_the_ii_separated_mangled_name():
     assert result["functions"] == ["Task.run"]
     assert result["globs"] == ["app.services.task.xǁTaskǁrun__mutmut_*"]
 
-    # A lone @staticmethod is mutable (mirrors mutmut).
     result_static = map_changed_lines(changed_lines=[7], source=source, path="app/services/task.py")
     assert result_static["mode"] == "functions"
     assert result_static["globs"] == ["app.services.task.xǁTaskǁstatic_helper__mutmut_*"]
@@ -195,18 +173,12 @@ def test_map_changed_lines_unparsable_source_falls_back():
 
 
 def test_map_changed_lines_empty_changed_lines_falls_back():
-    # Zero extracted lines must NOT silently produce an empty functions
-    # scope (0 mutants = weakened gate): fall back to the whole file.
     result = map_changed_lines(changed_lines=[], source=TWO_FUNCTIONS, path="app/services/video.py")
     assert result["mode"] == "file"
     assert "no changed lines extracted" in result["reason"]
 
 
 def test_map_changed_lines_nested_class_method_falls_back_to_file():
-    # mutmut mutates only methods of MODULE-level classes (a nested
-    # ClassDef's body passes through untouched — file_mutation.py walks
-    # module statements only), so a change inside a nested class's
-    # method cannot be pinned to a mutatable mutant name.
     source = "class Outer:\n    class Inner:\n        def method(self):\n            return 1\n"
     result = map_changed_lines(changed_lines=[4], source=source, path="app/services/d.py")
     assert result["mode"] == "file"
@@ -215,13 +187,9 @@ def test_map_changed_lines_nested_class_method_falls_back_to_file():
 def test_has_mutable_function():
     assert has_mutable_function("def f():\n    return 1\n")
     assert has_mutable_function("class C:\n    @staticmethod\n    def s():\n        return 1\n")
-    # Decorated-only file: every module-level function is decorated, so
-    # mutmut mutates nothing. (lru_cache is non-bare → not mutable by the
-    # lone-staticmethod/classmethod rule.)
     assert not has_mutable_function(
         "import functools\n\n\n@functools.lru_cache\ndef g():\n    return 1\n"
     )
-    # Controller-style file: only @router endpoint methods.
     assert not has_mutable_function(
         "class R:\n    @router.get('/x')\n    def x(self):\n        return 1\n"
     )
@@ -231,13 +199,9 @@ def test_map_changed_lines_package_init_module_key_rewrites_the_dots():
     source = "def register():\n    return 1\n"
     result = map_changed_lines(changed_lines=[2], source=source, path="app/models/__init__.py")
     assert result["mode"] == "functions"
-    # get_mutant_name rewrites ".__init__." -> "." on the full key.
     assert result["globs"] == ["app.models.x_register__mutmut_*"]
 
 
-# ---------------
-# Mangled-name helpers
-# ---------------
 def test_mangled_function_name_top_level_and_class():
     assert mangled_function_name("generate_video", None) == "x_generate_video"
     assert mangled_function_name("run", "Task") == "xǁTaskǁrun"
@@ -250,9 +214,6 @@ def test_mutant_key_module_dots():
     )
 
 
-# ---------------
-# CLI core — changed_functions_for_file against a scratch git repo
-# ---------------
 @pytest.fixture()
 def git_repo(tmp_path: Path) -> Path:
     def git(*args: str) -> str:
@@ -305,7 +266,6 @@ def test_changed_functions_for_file_new_file_falls_back(git_repo: Path):
 
 
 def test_changed_functions_for_file_unchanged_file_falls_back(git_repo: Path):
-    # steady.py exists in the base ref and is untouched in the diff.
     result = changed_functions_for_file(
         base="HEAD~1", head="HEAD", path="app/services/steady.py", cwd=str(git_repo)
     )
@@ -321,11 +281,6 @@ def test_changed_functions_for_file_git_failure_falls_back(tmp_path: Path):
     assert "git diff failed" in result["reason"]
 
 
-# ---------------
-# CLI contract — the workflow step reads "mode" and "globs"
-# unconditionally, so the JSON shape is pinned for BOTH modes (a
-# fallback output must carry "globs": [], never a missing key).
-# ---------------
 def test_cli_function_mode_output_shape(
     git_repo: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ):
@@ -341,9 +296,6 @@ def test_cli_function_mode_output_shape(
 def test_cli_file_mode_output_shape(
     git_repo: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ):
-    # Simulated fallback output (new file in this branch): the JSON must
-    # still carry "mode" and "globs": [] — the exact crash the review
-    # flagged (KeyError on ['globs']) cannot happen.
     monkeypatch.chdir(git_repo)
     rc = main(["--file", "app/services/brand_new.py", "--base", "HEAD~1", "--head", "HEAD"])
     assert rc == 0
@@ -374,7 +326,6 @@ def test_cli_check_mutable_without_base(
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ):
-    # mutation.yml's "Check shard file has mutable code" step passes no --base.
     monkeypatch.chdir(git_repo)
     assert main(["--file", "app/services/video.py", "--check-mutable"]) == 0
     assert capsys.readouterr().out.strip() == "true"

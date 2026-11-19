@@ -1,22 +1,5 @@
-//---------------
-// Central application logger.
-//
-// Every environment: errors and warnings are also reported to PostHog
-// (error tracking + analytics) with source/environment origin tags
-// (injected by lib/posthog-server.ts) so dashboards can filter prod.
-// Dev events flow deliberately — they validate the telemetry pipeline
-// daily (a silently dead pipeline once cost a week of data). info/debug
-// stay console-only in every environment to keep PostHog free of noise.
-//---------------
-
 import { getPostHogServer } from './posthog-server';
 import { scrubSecrets, redactCredentialFragments } from './scrub';
-
-//---------------
-// Supabase/PostgREST failures arrive as plain objects
-// ({ message, code, details, hint }), not Error instances.
-// Normalize them so PostHog groups issues with a useful message.
-//---------------
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -40,15 +23,6 @@ export function toError(cause: unknown): Error {
   return new Error(`Non-error value reported: ${safeJson(cause)}`);
 }
 
-//---------------
-// Raw upstream bodies (engine responses, provider errors) can echo
-// credential-shaped fragments: api_key query params, Bearer <redacted>,
-// DSN userinfo, sk- secrets. Mirror the MCP's sanitizeEngineError
-// convention: redact the fragments, then cap the length, before anything
-// reaches PostHog. Applied here in the reporter so every logger.error
-// caller is protected, not just the one that remembered to sanitize.
-//---------------
-
 const MAX_REPORT_BODY_CHARS = 200;
 
 function sanitizeReportBody(value: unknown): unknown {
@@ -56,9 +30,6 @@ function sanitizeReportBody(value: unknown): unknown {
     return redactCredentialFragments(value).slice(0, MAX_REPORT_BODY_CHARS);
   }
   if (value !== null && typeof value === 'object') {
-    // Object causes (e.g. PostgREST { message, code, details, hint }) are
-    // serialized to JSON, scrubbed for secret-bearing keys, then capped.
-    // Never send raw objects to a third-party cloud unsanitized.
     try {
       const scrubbed = scrubSecrets(value as Record<string, unknown>);
       const json = JSON.stringify(scrubbed) ?? '[unserializable]';
@@ -70,23 +41,12 @@ function sanitizeReportBody(value: unknown): unknown {
   return value;
 }
 
-//---------------
-// PostHog reporters — production only, and never allowed to throw.
-// Telemetry must never break the request path.
-//---------------
-
 function reportErrorToPostHog(message: string, cause: unknown, metadata?: Record<string, unknown>, logId?: string): void {
   try {
     const client = getPostHogServer();
     if (!client) return;
     const error = toError(cause);
-    // PostHog error tracking ingests $exception events with these properties.
-    // Everything is redacted: error messages/stacks can echo credentials
-    // (e.g. ?api_key= in upstream errors), metadata keys are scrubbed via
-    // scrubSecrets, and string metadata values go through sanitizeReportBody.
     const safeMetadata = metadata ? scrubSecrets(metadata) : {};
-    // Redact credential fragments inside string metadata values too —
-    // key-name scrubbing alone misses e.g. { body: "...api_key=..." }.
     for (const [k, v] of Object.entries(safeMetadata)) {
       if (typeof v === 'string') safeMetadata[k] = sanitizeReportBody(v);
     }
@@ -95,8 +55,6 @@ function reportErrorToPostHog(message: string, cause: unknown, metadata?: Record
       $exception_type: error.name,
       $exception_stacktrace: error.stack ? redactCredentialFragments(error.stack) : error.stack,
       log_message: message,
-      // Correlation ID: the errorId returned to API clients. Search PostHog
-      // for this value to find the exact event a user reported.
       logId,
       ...safeMetadata,
     };
@@ -107,7 +65,6 @@ function reportErrorToPostHog(message: string, cause: unknown, metadata?: Record
     }
     client.captureException(error, properties);
   } catch {
-    // Telemetry must never break the request path.
   }
 }
 
@@ -116,8 +73,6 @@ function reportWarningToPostHog(message: string, metadata?: Record<string, unkno
     const client = getPostHogServer();
     if (!client) return;
     const safeMetadata = metadata ? scrubSecrets(metadata) : {};
-    // Symmetry with the error reporter: redact credential fragments inside
-    // string values, not just key names.
     for (const [k, v] of Object.entries(safeMetadata)) {
       if (typeof v === 'string') safeMetadata[k] = sanitizeReportBody(v);
     }
@@ -127,19 +82,8 @@ function reportWarningToPostHog(message: string, metadata?: Record<string, unkno
       ...safeMetadata,
     });
   } catch {
-    // Telemetry must never break the request path.
   }
 }
-
-//---------------
-// Console output (kept in production too: Vercel logs stay the raw trail).
-//
-// The call shape mirrors a direct console.* call on purpose: the message is
-// always the first argument, metadata and the error follow as separate
-// arguments. Route tests were written against that shape (e.g.
-// toHaveBeenCalledWith(msg, expect.objectContaining(...))), so the logger
-// must not merge everything into one prefixed string.
-//---------------
 
 function writeConsole(
   level: 'INFO' | 'WARN' | 'ERROR' | 'DEBUG',
@@ -148,14 +92,8 @@ function writeConsole(
   error?: Error,
 ): string {
   const timestamp = new Date().toISOString();
-  // crypto.randomUUID (Web Crypto, available in Node and browsers): the
-  // logId is returned to API clients as `errorId`, so it must not come
-  // from Math.random (CodeQL js/insecure-randomness).
   const logId = `${timestamp.slice(0, 10)}_${timestamp.slice(11, 19).replace(/:/g, '')}_${crypto.randomUUID().replace(/-/g, '').substring(0, 6)}`;
 
-  // The logId is the correlation ID returned to API clients as `errorId`.
-  // Merge it into metadata so Vercel logs and PostHog events are searchable
-  // by it. Message shape is preserved (tests assert exact messages).
   const metaWithId = { logId, ...(metadata ?? {}) };
   const args: unknown[] = [message, metaWithId];
   if (error !== undefined) args.push(error);
@@ -171,14 +109,7 @@ function writeConsole(
   return logId;
 }
 
-//---------------
-// Logger class
-//---------------
-
 class Logger {
-  //---------------
-  // Public API: generateLogId
-  //---------------
 
   public generateLogId(): string {
     const now = new Date();
@@ -187,10 +118,6 @@ class Logger {
     const random = crypto.randomUUID().replace(/-/g, '').substring(0, 6);
     return `${date}_${time}_${random}`;
   }
-
-  //---------------
-  // Public API: core logging methods (return logId for chaining)
-  //---------------
 
   info(message: string, metadata?: Record<string, unknown>): string {
     return writeConsole('INFO', message, metadata);
@@ -207,18 +134,10 @@ class Logger {
   }
 
   error(message: string, cause?: unknown, metadata?: Record<string, unknown>): string {
-    // Only attach the error to the console call when a cause was actually
-    // given: toHaveBeenCalledWith(msg, meta) assertions require the exact
-    // argument list.
     const logId = writeConsole('ERROR', message, metadata, cause === undefined ? undefined : toError(cause));
     reportErrorToPostHog(message, cause, metadata, logId);
     return logId;
   }
-
-  //---------------
-  // Public API: specialized logging methods (void return, drop-in compatible).
-  // Console format is unchanged; error variants also report to PostHog.
-  //---------------
 
   logUploadStart(logId: string, metadata: Record<string, unknown>): void {
     console.log('[INFO] [UPLOAD_START]', messageWithLogId(logId, 'Upload started'), metadata);
@@ -288,16 +207,8 @@ class Logger {
   }
 }
 
-//---------------
-// Helper for consistent message format in specialized methods
-//---------------
-
 function messageWithLogId(logId: string, message: string): string {
   return `[${logId}] ${message}`;
 }
-
-//---------------
-// Singleton instance
-//---------------
 
 export const logger = new Logger();

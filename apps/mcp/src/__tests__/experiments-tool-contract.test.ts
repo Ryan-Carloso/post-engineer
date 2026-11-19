@@ -2,23 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { CreateExperimentSchema as ContractSchema } from '../contracts/experiments.js';
 import { CreateExperimentSchema as ToolSchema } from '../tools-experiments.js';
 
-// The `experiments` create action validates locally with a hand-written
-// shape (tools-experiments.ts) before POSTing to the route, whose body is
-// the shared contract (shared/contracts/experiments.ts). The shape is NOT
-// derived from the contract: the limits constants are shared via the
-// limits.ts re-export, but the validation refinements (.uuid(), .int(),
-// the blank-text refine, the duplicate-variant rule, strictness) are
-// re-typed by hand. A one-sided edit would make the MCP accept what the
-// route rejects (blank name forwarded, route 400s) or reject what the
-// route accepts, with no CI failure. This test pins the two schemas to
-// identical accept/reject sets on the fields they share, so either side
-// drifting breaks the build.
-//
-// Deliberate differences, pinned separately below, not in the table:
-// - the tool has no `variable` field: it only creates hook experiments and
-//   the handler hardcodes variable: 'hook';
-// - the tool defaults an omitted targetPairs to 6; the contract requires it.
-
 const VARIANTS = [
   { variantId: 'hook-calm', name: 'Calm', description: 'calm' },
   { variantId: 'hook-aggressive', name: 'Aggressive', description: 'direct' },

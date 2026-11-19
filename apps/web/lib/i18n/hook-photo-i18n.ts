@@ -1,12 +1,3 @@
-// hook-photo-i18n — copy for the First photo section on the post detail page
-// (issue #589). Merged into `posts` in ./index.ts
-// (en.ts/pt.ts are over the file-size cap and may not grow).
-//
-// The copy deliberately never claims the hook used this photo: the section
-// shows the first photo of the video, and videos generated before #589
-// opened the hook with the persona avatar instead — so a hook-usage claim
-// would be false for every historical slot. On videos generated with the
-// current behavior the first photo IS the hook photo.
 export const hookPhotoStrings = {
   pt: {
     posts: {

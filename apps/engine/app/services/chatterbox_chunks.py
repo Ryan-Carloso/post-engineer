@@ -32,26 +32,14 @@ from pydub import AudioSegment
 
 from app.utils import utils
 
-# One Chatterbox POST may wait this long. A chunk is ~8-10 s of audio; at
-# CPU RTF 3-10 that is ~30-100 s per call, so 300 s is headroom, not the
-# expected time. Worst case per task: 3 attempts x 300 s per chunk.
 CHATTERBOX_TIMEOUT_SECONDS = 300
 
-# Chatterbox degrades past ~30 s of audio per call (~40 s hard limit);
-# 300 chars is ~8-10 s of speech, well inside the stable window.
 CHATTERBOX_MAX_CHUNK_CHARS = 300
 
-# Sentence terminators. Chunks are split after one of these (plus the
-# paragraph breaks, which whitespace normalisation turns into spaces).
 _SENTENCE_END_RE = re.compile(r"(?<=[.!?…])\s+")
 
-# Clause boundaries used only when a single sentence exceeds the cap:
-# the delimiter stays attached to the preceding clause, so rejoining the
-# chunks with a single space reproduces the original text.
 _CLAUSE_END_RE = re.compile(r"(?<=[,;:—–-])\s+")
 
-# Words whose trailing period is not a sentence end ("Dr. Smith ...").
-# A piece ending in one of these is merged with the following piece.
 _ABBREVIATIONS = {
     "dr",
     "mr",
@@ -86,7 +74,6 @@ def _split_sentences(text: str) -> list[str]:
     sentences: list[str] = []
     for piece in pieces:
         if sentences and _ends_with_abbreviation(sentences[-1]):
-            # "Dr." / "etc." is not a sentence end: rejoin with the next piece.
             sentences[-1] = f"{sentences[-1]} {piece}"
         else:
             sentences.append(piece)
@@ -202,11 +189,6 @@ def concatenate_audio_files(part_files: list[str], output_file: str) -> None:
     if not part_files:
         raise ValueError("cannot concatenate audio: no audio parts given")
     ffmpeg_binary = utils.get_ffmpeg_binary()
-    # pydub offers no per-call converter: `from_file` and `export` both
-    # build their ffmpeg command from the `AudioSegment.converter` class
-    # attribute, so the binary is set here and restored in `finally`
-    # instead of leaking a global mutation. The engine generates video
-    # single-threaded, so no other thread can observe the temporary value.
     previous_converter = AudioSegment.converter
     if ffmpeg_binary:
         AudioSegment.converter = ffmpeg_binary

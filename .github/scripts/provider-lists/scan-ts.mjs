@@ -1,9 +1,3 @@
-//---------------
-// scan-ts — provider groups in a TypeScript/JavaScript source, read from
-// the syntax tree (the TypeScript compiler API, resolved from apps/web).
-// See rules.mjs for what each group kind means.
-//---------------
-
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { mentionOf, mentionsInText } from './mentions.mjs';
@@ -36,7 +30,6 @@ export function scanTs(file, text, index) {
     if (ts.isComputedPropertyName(name)) return stringLiteral(name.expression);
     return literal(name);
   };
-  // The providers a condition compares against: `x === 'a' || x === 'b'`.
   const compared = (node) => {
     if (ts.isParenthesizedExpression(node)) return compared(node.expression);
     if (ts.isPrefixUnaryExpression(node)) return compared(node.operand);
@@ -46,11 +39,6 @@ export function scanTs(file, text, index) {
     }
     return [];
   };
-  // The subject each comparison tests, as source text (`account.provider`,
-  // `p`). Sibling `if` statements that compare the same subject against a
-  // different provider form one chain: consecutive `if (p === 'a') ...` /
-  // `if (p === 'b') ...` runs where each statement alone names one provider
-  // and the combined run is per-provider dispatch with a silent fall-through.
   const comparedWithSubject = (node) => {
     if (ts.isParenthesizedExpression(node)) return comparedWithSubject(node.expression);
     if (ts.isPrefixUnaryExpression(node)) return comparedWithSubject(node.operand);
@@ -70,15 +58,7 @@ export function scanTs(file, text, index) {
     if (new Set(providers).size < 2) return;
     groups.push({ file, line: source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1, kind, providers });
   };
-  // Runs of consecutive `if` statements in one statement list that spread
-  // the dispatch across siblings instead of else-if links. A statement that
-  // returns on every branch still falls a new provider through to whatever
-  // follows the run. Each statement names one provider, so without this run
-  // grouping every sibling would be dropped by the per-node minimum.
   const reportSiblingRuns = (statements) => {
-    // Every provider a statement compares against through its whole else-if
-    // expansion, so a head else-chain and its sibling continuations group as
-    // one run instead of splitting across the two detectors.
     const namesOf = (statement) => {
       const names = [];
       for (let current = statement; current !== undefined && ts.isIfStatement(current); current = current.elseStatement) names.push(...compared(current.expression));

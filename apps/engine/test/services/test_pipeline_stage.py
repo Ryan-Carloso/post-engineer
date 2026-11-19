@@ -33,7 +33,7 @@ class PhaseTrackerTests(unittest.TestCase):
         tracker.begin("render")
         self.assertEqual(tracker.current, "render")
         self.assertEqual(tracker.last_completed, "start")
-        self.assertEqual(writes, [])  # begin() never touches task state
+        self.assertEqual(writes, [])
 
     def test_complete_advances_last_completed_and_persists(self):
         tracker, writes = self._tracker()
@@ -44,8 +44,6 @@ class PhaseTrackerTests(unittest.TestCase):
         self.assertEqual(writes, ["script"])
 
     def test_crash_mid_phase_reports_current_not_last_completed(self):
-        # The exact issue #198 scenario: music_mood completed, render
-        # started but crashed — attribution must say "render".
         tracker, _ = self._tracker()
         tracker.begin("music_mood")
         tracker.complete("music_mood")
@@ -58,7 +56,7 @@ class PhaseTrackerTests(unittest.TestCase):
             raise RuntimeError("db down")
 
         tracker = PhaseTracker("t-1", persist=boom)
-        tracker.complete("audio")  # must not raise
+        tracker.complete("audio")
         self.assertEqual(tracker.last_completed, "audio")
 
 
@@ -84,8 +82,6 @@ class StartPhaseAttributionTests(unittest.TestCase):
         ]
 
     def test_crash_during_script_phase_reports_script_stage(self):
-        # The script phase had started when generate_script raised, so the
-        # failure must say "script", not "start".
         params = VideoParams(
             video_title="Lisbon trams",
             video_description="Test description.",
@@ -101,8 +97,6 @@ class StartPhaseAttributionTests(unittest.TestCase):
         self.assertEqual(stages[0], "script")
 
     def test_crash_during_audio_phase_reports_audio_stage(self):
-        # script completes, then generate_audio raises: the failure must say
-        # "audio". This also pins the script-completion path.
         params = VideoParams(
             video_title="Lisbon trams",
             video_description="Test description.",

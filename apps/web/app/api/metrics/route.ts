@@ -21,15 +21,6 @@ import {
 } from '@/lib/metrics/metrics-query';
 import { fetchCoverage } from '@/lib/metrics/metrics-coverage';
 
-//---------------
-// GET /api/metrics — the caller's per-video snapshots (post_metrics) for
-// one window, optionally filtered by persona, account, network and script
-// angle. Feeds the metrics dashboard.
-//
-// Service-role bypasses RLS: ownership is re-checked by the explicit
-// user_id filter below, and a persona-scoped API key only sees its
-// personas' rows.
-//---------------
 async function getHandler(request: Request): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
@@ -38,8 +29,6 @@ async function getHandler(request: Request): Promise<NextResponse> {
 
   const parsed = parseMetricsQuery(new URL(request.url).searchParams);
   if (!parsed.ok) {
-    // The parse error embeds caller-controlled parameter names; log a
-    // stable template so PostHog groups these 400s into one issue.
     return apiErrorResponse(400, parsed.error, {
       route: 'GET /api/metrics',
       logMessage: 'Invalid metrics query.',
@@ -52,23 +41,12 @@ async function getHandler(request: Request): Promise<NextResponse> {
   let select = supabase
     .from('post_metrics')
     .select(
-      // One literal: supabase-js parses it for the row type.
       'post_id, persona_id, provider, account_id, external_id, script_angle, views, likes, comments, saves, collected_at, analytics_status, analytics_views, engaged_views, average_view_duration_seconds, average_view_percentage, content_type, analytics_end_date',
     )
-    // Ownership: service role bypasses RLS.
     .eq('user_id', auth.userId)
     .eq('metrics_window', query.window);
 
-  // Persona-scoped API keys see their personas' rows plus persona-less
-  // (faceless) rows — same policy as GET /api/schedule/status: a post
-  // with no persona belongs to no persona scope, so it is included like
-  // an unrestricted one, otherwise a scoped key could never see metrics
-  // for a persona-less post it can already list.
   if (isScopedApiKey(auth)) {
-    // Stored persona ids are only string-checked at key creation; drop
-    // anything that is not a UUID before interpolating into the filter
-    // string, so a malformed stored id cannot corrupt the PostgREST
-    // syntax (it just narrows the scope).
     const personaIds = (auth.personaIds ?? []).filter((id) => UUID.test(id));
     select = personaIds.length > 0
       ? select.or(`persona_id.in.(${personaIds.join(',')}),persona_id.is.null`)
@@ -91,14 +69,6 @@ async function getHandler(request: Request): Promise<NextResponse> {
   }
 
   const records = Array.isArray(data) ? data : [];
-  // Publish dates live on the parent slot (scheduled_posts.published_at),
-  // not on post_metrics. One bounded second read for the returned post
-  // ids, scoped to the caller: service role bypasses RLS, so the
-  // user_id filter here is the ownership check. postIds is already
-  // capped at METRICS_ROW_LIMIT, so the read reads at most one row per
-  // id and never fans out. Persona scope needs no extra filter: the ids
-  // come from the scoped rows query above, so this read only adds the
-  // publish date of rows the caller may already see.
   const publishDateByPostId = new Map<string, string>();
   {
     const postIds = [...new Set(
@@ -129,12 +99,6 @@ async function getHandler(request: Request): Promise<NextResponse> {
       logger.warn('[api/metrics] skipped row with unknown provider', { provider: record.provider });
       continue;
     }
-    // A post that has measured rows but no publish date cannot be
-    // represented: publishedAt is required (see MetricsRowSchema).
-    // A missing parent (a concurrent delete between the two reads —
-    // the FK cascade deletes the metrics rows with it, so only a race),
-    // a null published_at, or another user's slot is a failed read,
-    // never silently dropped data.
     const publishedAt = publishDateByPostId.get(record.post_id);
     if (publishedAt === undefined) {
       const error = new Error(`publish date missing for post ${record.post_id}`);
@@ -156,7 +120,6 @@ async function getHandler(request: Request): Promise<NextResponse> {
       analyticsViews: record.analytics_views,
       engagedViews: record.engaged_views,
       stayedToWatchPct: stayedToWatchPct(record.engaged_views, record.analytics_views),
-      // numeric columns come back from PostgREST as numbers or strings.
       averageViewDurationSeconds: numericOrNull(record.average_view_duration_seconds),
       averageViewPercentage: numericOrNull(record.average_view_percentage),
       contentType: record.content_type,
@@ -165,18 +128,10 @@ async function getHandler(request: Request): Promise<NextResponse> {
       collectedAt: record.collected_at,
     });
   }
-  // Coverage is additive visibility over the rows, never a reason to fail
-  // the dashboard: a failed coverage read logs loudly and serves the
-  // rows without it (issue #525).
   let coverage: CoverageItem[] = [];
   let coverageTruncated = false;
   try {
     const found = await fetchCoverage(supabase, auth.userId, query, new Date(), {
-      // Same persona scope as the rows query above, with one deliberate
-      // exception: a persona-less post is visible only when it is really
-      // faceless. A deleted schedule leaves the persona unknown, and that
-      // post may belong to a persona outside the scope — see the scope
-      // guard in computeCoverage.
       personaIds: isScopedApiKey(auth) ? (auth.personaIds ?? []).filter((id) => UUID.test(id)) : null,
     });
     coverage = found.items;
@@ -191,7 +146,6 @@ async function getHandler(request: Request): Promise<NextResponse> {
     truncated: records.length > METRICS_ROW_LIMIT,
     coverage,
     coverageTruncated,
-    // The newest snapshot in the response: the page dates its data by it.
     asOf: rows.reduce<string | null>(
       (max, row) => (max === null || row.collectedAt > max ? row.collectedAt : max),
       null,
@@ -199,7 +153,4 @@ async function getHandler(request: Request): Promise<NextResponse> {
   });
 }
 
-//---------------
-// 5xx reporting: handled server errors reach PostHog error tracking.
-//---------------
 export const GET = withApiErrorReporting('GET /api/metrics', getHandler, { getUserId: resolveReportingUserId });

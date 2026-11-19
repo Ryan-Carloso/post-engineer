@@ -1,9 +1,3 @@
-//---------------
-// metrics-charts-i18n — copy for the /metrics chart cards (over-time,
-// breakdown and top videos) and the Chart/List view toggle. Merged
-// into `metrics` in ./index.ts.
-//---------------
-
 export const metricsChartsStrings = {
   en: {
     metrics: {

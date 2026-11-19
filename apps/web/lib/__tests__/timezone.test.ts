@@ -63,27 +63,21 @@ describe('parseNaiveDateTime', () => {
 
 describe('zonedTimeToUtc', () => {
   it('converts a summer Lisbon wall clock (WEST = UTC+1)', () => {
-    // 2026-10-01 14:00 in Europe/Lisbon is 13:00 UTC.
     expect(zonedTimeToUtc(2026, 10, 1, 14, 0, 'Europe/Lisbon').toISOString())
       .toBe('2026-10-01T13:00:00.000Z');
   });
 
   it('converts a winter Lisbon wall clock (WET = UTC+0)', () => {
-    // 2026-01-15 14:00 in Europe/Lisbon is 14:00 UTC.
     expect(zonedTimeToUtc(2026, 1, 15, 14, 0, 'Europe/Lisbon').toISOString())
       .toBe('2026-01-15T14:00:00.000Z');
   });
 
   it('handles a negative-offset zone', () => {
-    // 2026-09-25 09:00 in America/Sao_Paulo (UTC-3) is 12:00 UTC.
     expect(zonedTimeToUtc(2026, 9, 25, 9, 0, 'America/Sao_Paulo').toISOString())
       .toBe('2026-09-25T12:00:00.000Z');
   });
 
   it('converges across a DST transition (spring forward gap)', () => {
-    // 2026-03-29 02:30 does not exist in Europe/Lisbon (clocks jump
-    // 01:00 -> 03:00 local); the fixed-point iteration must still settle
-    // on a finite instant instead of NaN.
     const result = zonedTimeToUtc(2026, 3, 29, 2, 30, 'Europe/Lisbon');
     expect(Number.isNaN(result.getTime())).toBe(false);
   });
@@ -115,7 +109,6 @@ describe('parseZonedDateTime', () => {
 
 describe('utcToZonedInputValue', () => {
   it('formats a UTC instant as wall-clock in the given timezone', () => {
-    // 13:00 UTC is 14:00 in Lisbon (WEST, UTC+1 in October).
     expect(utcToZonedInputValue('2026-10-01T13:00:00.000Z', 'Europe/Lisbon')).toBe('2026-10-01T14:00');
     expect(utcToZonedInputValue('2026-10-01T13:00:00.000Z', 'UTC')).toBe('2026-10-01T13:00');
   });

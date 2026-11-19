@@ -67,9 +67,6 @@ describe('GET /api/threads-auth/start', () => {
     const response = await startGET(new NextRequest(START));
     expect(response.status).toBe(500);
     expect((await response.json()).error).toContain('THREADS_CLIENT_SECRET');
-    // The missing-credentials cause is logged so PostHog shows the reason
-    // instead of only the wrapper's generic "[route] 500", and the response
-    // is marked so the wrapper does not report a second synthetic exception.
     expect(logger.logOAuthError).toHaveBeenCalledWith(
       'log-1',
       expect.objectContaining({ message: expect.stringContaining('THREADS_CLIENT_ID') }),
@@ -89,8 +86,6 @@ describe('GET /api/threads-auth/start', () => {
       'log-1',
       expect.objectContaining({ message: expect.stringContaining('threads secret misconfigured') }),
     );
-    // The logged cause is already reported to PostHog, so the response is
-    // marked so the wrapper does not report a second synthetic exception.
     expect(markApiErrorReported).toHaveBeenCalledWith(response);
   });
 });

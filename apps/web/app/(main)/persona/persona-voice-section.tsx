@@ -11,9 +11,6 @@ import { InlineFieldError, SectionDivider } from './persona-section-parts';
 import { PersonaHouseVoicePicker } from './voice-picker';
 import { PersonaVoiceClonePanel, VoiceTabButton } from './voice-clone-picker';
 
-/** True once a create form is ready, or an edit form has loaded its persona.
- *  The list route omits a missing voice_id (undefined) and the page writes
- *  null; that loaded-empty state must warn, the not-yet-loaded null must not. */
 export function isPersonaVoiceHydrated(
   editingPersonaId: string | null,
   editingPersona: unknown,
@@ -27,10 +24,7 @@ export const PersonaVoiceSection = ({
   hasVoiceAudio = false,
 }: {
   voiceHydrated?: boolean;
-  /** True while editing a saved persona. The create form starts with a
-   *  null voiceId; VOICE_MISSING must not warn until a persona exists. */
   isEditing?: boolean;
-  /** Uploaded voice audio: the API will not swap house ids in that case. */
   hasVoiceAudio?: boolean;
 }) => {
   const { t } = useI18n();
@@ -40,21 +34,7 @@ export const PersonaVoiceSection = ({
   const voicesQuery = useVoicesQuery();
   const [voiceTab, setVoiceTab] = useState<'house' | 'clone'>('house');
 
-  //---------------
-  // Voice-fallback warning (issue #277): the saved persona voice is checked
-  // against the LIVE served catalog (the same list the picker renders and
-  // the engine speaks with). A voice the catalog no longer lists is
-  // reported amber — with the house default the dispatch would swap in —
-  // before the user ever generates a video, so the swap the API persists is
-  // never a surprise. A freshly picked voice from either tab is in the
-  // catalog by construction, so the warning only ever names a stale id.
-  // Language comes from the persona store so a legacy non-English row is
-  // not promised an English house swap the API will refuse.
-  //---------------
   const catalogIds = new Set((voicesQuery.data ?? []).map((voice) => voice.id));
-  // Skip the check while the catalog is loading, failed, or empty: an empty
-  // set would flag every house voice as retired, and a load failure is
-  // already surfaced by the picker's own retry states.
   const resolution =
     !voiceHydrated || hasVoiceAudio || catalogIds.size === 0
       ? null

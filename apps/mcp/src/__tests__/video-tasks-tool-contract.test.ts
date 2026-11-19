@@ -6,25 +6,6 @@ import {
   parseGenerationsLimit,
 } from '../contracts/video-tasks.js';
 
-//---------------
-// video-tasks tool↔contract equivalence (shared/contracts/video-tasks.ts):
-// the tool schemas and the contract schemas/parsers must accept and
-// reject the same inputs, so a call the tool allows is one the route
-// accepts and a call the route rejects fails fast in the tool.
-//
-// Deliberate differences, pinned here so they stay deliberate:
-// - The generations limit is fail-fast in the tool (out-of-range never
-//   leaves the MCP) but lenient on the route: an invalid limit falls back
-//   to the default and an over-max limit clamps to 200 instead of 400ing.
-// - The cancel tool accepts any non-empty taskId; the route 400s ids
-//   outside SAFE_TASK_ID (lib/video-urls.ts) — spaces, slashes and other
-//   non-task characters. The tool never validates the id shape, so a bad
-//   id fails at the route, not in the tool.
-// - The video-status body has no tool zod schema: narrowTaskProgress is
-//   a runtime narrowing, so only the contract side is pinned here — the
-//   envelope shapes the wait tool's tests feed it must parse.
-//---------------
-
 describe('video-tasks tool-contract equivalence', () => {
   it('generations limit: tool fails fast where the route falls back or clamps', () => {
     const cases: Array<{ tool: unknown; route: string | null; toolOk: boolean; routeValue: number }> = [

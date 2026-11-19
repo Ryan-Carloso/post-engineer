@@ -1,11 +1,3 @@
-// Schedule detail for one slot: the schedule row's account lists,
-// board and publish mode, as the post-detail response renders them.
-//
-// Extracted from post-detail.ts so the module stays under the
-// file-size ratchet. One const per leaf (not an inline object
-// literal): v8 coverage does not report object-literal property
-// lines, so this keeps every leaf visible to the coverage gate.
-
 export interface ScheduleDetailRow {
     id: string;
     persona_id: string | null;

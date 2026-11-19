@@ -1,9 +1,3 @@
-// script-segments shared-source guard: the MCP copy of the segments
-// validation must be a generated copy of shared/script-segments/
-// script-segments.ts, never a hand-maintained second copy. This test
-// fails loudly (instead of silently testing stale code) whenever the
-// generated copy drifts from the shared source: run
-// `node scripts/sync-script-segments.mjs` from the repo root to resync.
 import { describe, expect, it } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -23,17 +17,18 @@ function findRepoRoot(fromUrl: string): string {
 
 const SHARED_RELATIVE = join('shared', 'script-segments', 'script-segments.ts');
 const GENERATED_RELATIVE = join('apps', 'mcp', 'src', 'script-segments.ts');
-// The segments validator imports its clip and text helpers from sibling
-// shared modules; their generated copies must match the shared source
-// too, or the MCP copy validates against stale helpers.
 const SIBLINGS = ['segment-media.ts', 'segment-text.ts'];
+const SIBLING_EXPORTS: Record<string, string> = {
+  'segment-media.ts': 'export const CLIP_DENSITY_ITEMS',
+  'segment-text.ts': 'export function hasForbiddenContent',
+};
 
 describe('script-segments shared source', () => {
   it('is byte-identical to the shared source of truth', () => {
     const root = findRepoRoot(import.meta.url);
     const shared = readFileSync(join(root, SHARED_RELATIVE), 'utf8');
     const generated = readFileSync(join(root, GENERATED_RELATIVE), 'utf8');
-    expect(shared).toContain('DO NOT EDIT this copy directly');
+    expect(shared).toContain('export const MAX_SEGMENTS');
     expect(generated).toBe(shared);
   });
 
@@ -41,7 +36,7 @@ describe('script-segments shared source', () => {
     const root = findRepoRoot(import.meta.url);
     const shared = readFileSync(join(root, 'shared', 'script-segments', name), 'utf8');
     const generated = readFileSync(join(root, 'apps', 'mcp', 'src', name), 'utf8');
-    expect(shared).toContain('DO NOT EDIT this copy directly');
+    expect(shared).toContain(SIBLING_EXPORTS[name]);
     expect(generated).toBe(shared);
   });
 });

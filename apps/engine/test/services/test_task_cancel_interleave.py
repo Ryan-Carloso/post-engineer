@@ -102,9 +102,6 @@ def _finish(threads: list[threading.Thread], errors: list[BaseException]) -> Non
 
 
 def test_memory_delete_during_lock_wait_is_not_recreated():
-    # The writer passes the cancel check, then blocks before the critical
-    # section. delete_task marks and pops in that window. The write must
-    # not put the row back.
     state = MemoryState()
     state.update_task("mem-race", state=4, progress=10, user_id="u-1")
     gate = _FirstEntryGate(state._lock)
@@ -133,9 +130,6 @@ def test_memory_delete_during_lock_wait_is_not_recreated():
 
 
 def test_redis_delete_during_write_window_is_not_recreated():
-    # Redis has no lock today, so the first hset is the gap after the check.
-    # Once update and delete share a lock, the lock gate trips first (before
-    # the check) and this hset block stays disarmed.
     errors: list[BaseException] = []
     gate = _FirstEntryGate(threading.RLock())
     deleted = threading.Event()
@@ -248,9 +242,6 @@ def test_supabase_delete_during_lock_wait_does_not_upsert():
 
 
 def test_supabase_select_inside_lock_does_not_upsert_after_delete():
-    # The writer is past the entry check and blocked inside the locked
-    # SELECT. delete_task runs on the other thread. Releasing the SELECT
-    # must not POST a merge-duplicates upsert after the DELETE.
     ops: list[str] = []
     select_entered = threading.Event()
     select_release = threading.Event()

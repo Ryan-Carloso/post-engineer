@@ -51,22 +51,14 @@ class TestClosingSafeTrim:
         assert result.startswith("palavra")
 
     def test_tiny_head_budget_never_returns_an_overlong_script(self):
-        # The closing sentence leaves head_budget == 1: re-cutting the head
-        # for the forced paragraph separator used budget - 2 == -1, and
-        # text[:-1] kept almost the whole head — the result blew the limit.
         closing = "C" * 57 + "."
         script = f"Hook forte aqui.\n\nCorpo longo. {closing}"
         result = persona_hook._limit_generated_script(script)
 
         assert len(result) <= 60
-        # No body text fits next to the closing sentence, but the closing
-        # sentence fits on its own — it is the closing take and must survive.
         assert result == closing
 
     def test_closing_sentence_survives_when_no_head_budget_remains(self):
-        # head_budget < 0 (closing + paragraph separator exceed the limit)
-        # while the closing sentence alone still fits: the plain-cut
-        # fallback would end before it and drop the closing take.
         closing = "C" * 58 + "."
         script = f"Hook forte aqui.\n\n{closing}"
         result = persona_hook._limit_generated_script(script)
@@ -74,9 +66,6 @@ class TestClosingSafeTrim:
         assert result == closing
 
     def test_multi_sentence_closing_paragraph_survives_whole(self):
-        # Issue #534 defect 2: the closing take is a paragraph, not one sentence.
-        # The old trim kept only its last sentence and silently dropped
-        # the closing take's opening sentence into the trimmed body.
         script = (
             "Hook forte aqui.\n\n"
             "Corpo um longo. Corpo dois longo. Corpo três longo.\n\n"
@@ -89,9 +78,6 @@ class TestClosingSafeTrim:
         assert "Corpo três" not in result
 
     def test_closing_paragraph_ships_alone_when_no_head_fits(self):
-        # The closing paragraph fits on its own (59 chars of a 60 budget)
-        # but no head text fits next to it: it ships alone, whole — the
-        # old trim kept only its last sentence next to the hook instead.
         closing = "Small study, big idea, start tonight. Follow HabitLoom now."
         script = f"Hook forte aqui.\n\n{closing}"
         result = persona_hook._limit_generated_script(script)
@@ -99,9 +85,6 @@ class TestClosingSafeTrim:
         assert result == closing
 
     def test_overlong_closing_paragraph_falls_back_to_last_sentence(self):
-        # The closing paragraph itself (68 chars) exceeds the 60 budget,
-        # so the paragraph cannot ship whole: its last sentence is still
-        # preserved instead of a plain cut that ends before it.
         script = (
             "Hook forte aqui.\n\n"
             "Corpo longo demais para caber neste orçamento curto. Segue pra mais."
@@ -114,13 +97,6 @@ class TestClosingSafeTrim:
     def test_habitloom_shaped_script_keeps_full_closing_take_at_prod_limit(
         self, monkeypatch: pytest.MonkeyPatch
     ):
-        # Issue #534 defect 2, representative shape of the HabitLoom video
-        # (task 42daee48-6ad9-4006-8bec-cfd7668be0a7): 98 words — hook 17,
-        # content 66, closing take 15 — 615 chars, over the prod 600-char
-        # limit. The full Video C text is not recoverable, so this rebuilds
-        # its shape: same word counts, same last spoken content line, same
-        # two-sentence closing take. The whole closing paragraph must
-        # survive the trim.
         monkeypatch.setitem(config.app, "max_video_script_characters", 600)
         hook = "Go to bed an hour earlier and lose more bodyweight, reports a brand new 2026 study now."
         content = (
@@ -146,17 +122,11 @@ class TestClosingSafeTrim:
         assert len(result) <= 600
         assert result.endswith(closing)
         assert "Small study, big idea" in result
-        # The trim's cost lands on the content, never the closing take: the last content
-        # sentence ("lights out one hour earlier") is cut so the whole closing
-        # paragraph fits, while the earlier content sentences survive.
         assert "without sleeping longer" in result
         assert "lights out one hour earlier" not in result
 
 
 def _repo_root() -> Path:
-    # Walk up instead of counting parents: mutmut runs the suite from a
-    # copied tree (mutants/), which shifts every fixed parent index and
-    # made parents[4] point outside the checkout in CI.
     for parent in Path(__file__).resolve().parents:
         if (parent / "supabase/migrations/024_persona-cta.sql").is_file():
             return parent
@@ -167,9 +137,6 @@ def test_cta_max_length_is_the_same_literal_everywhere():
     """DB check, web form cap and engine schema must agree."""
     repo = _repo_root()
     sql = (repo / "supabase/migrations/024_persona-cta.sql").read_text()
-    # The 200-char cap lives in the shared personas contract now (PR #596
-    # moved it out of persona-schema.ts); the web form still gets it from
-    # there, so the pin reads the contract and checks the import path.
     contract = (repo / "shared/contracts/personas.ts").read_text()
     web = (repo / "apps/web/lib/persona-schema.ts").read_text()
     schema = (repo / "apps/engine/app/models/schema.py").read_text()

@@ -1,16 +1,3 @@
-//---------------
-// ASAP branch of POST /api/media/publish-existing: publish existing media
-// now, once per (provider, account) even when the caller retries.
-//
-// A caller-supplied idempotency key becomes the publish-ledger scope key
-// `direct:existing:<id>` (the same ledger POST /api/upload-content uses):
-// before any media is loaded, every account is claimed; a retry of a call
-// that already published replays the recorded posts instead of posting
-// again, an account still publishing under the first call answers
-// publish_in_progress, and only accounts with no recorded success publish.
-// A call with no key publishes without the ledger.
-//---------------
-
 import { NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
@@ -53,24 +40,14 @@ interface ProviderPublish {
   results: ContentUploadAccountResult[];
 }
 
-/** The ledger scope key for an ASAP call: user-bound through the id. */
 export function asapScopeKey(idempotencyId: string): string {
   return `direct:existing:${idempotencyId}`;
 }
 
-/**
- * Releases the claims this call still holds: the media could not be
- * prepared, so nothing reached a provider.
- */
 export async function releaseAsapLedger(ledger: AsapLedger, error: unknown): Promise<void> {
   await Promise.all([...ledger.partitions.values()].map((partition) => releaseGrantedClaims(ledger.client, partition, error)));
 }
 
-/**
- * Claims every (provider, account) of the call. A claim failure throws
- * after releasing what was granted: publishing without the ledger could
- * post twice, so the caller answers 500 and the retry claims again.
- */
 export async function claimAsapLedger(
   scopeKey: string,
   userId: string,
@@ -102,10 +79,6 @@ function asapResponse(
   publishes: ProviderPublish[],
   replayed: boolean,
 ): NextResponse {
-  // YouTube and Instagram handlers report success: true no matter how
-  // many accounts failed — their per-account outcomes live in results —
-  // so derive each provider's outcome from its account results. The
-  // response must never claim a publish that never happened.
   const derived = publishes.map((publish) => ({ ...publish, success: publish.results.some((result) => result.success) }));
   const success = derived.every((publish) => publish.success);
   trackApiEvent('publish_existing_asap', {
@@ -118,7 +91,6 @@ function asapResponse(
   return NextResponse.json({ success, mode: 'asap', mediaKind: input.media.kind, replayed, publishes: derived, logId });
 }
 
-/** A retry whose every account is already recorded: answer from the ledger, load no media. */
 export function asapReplayResponse(
   input: PublishExistingRequest,
   userId: string,
@@ -142,7 +114,6 @@ async function publishToProvider(
   const partition = ledger?.partitions.get(provider) ?? null;
   const accountIds = partition !== null ? partition.granted.map((granted) => granted.accountId) : (ctx.accountIds[provider] ?? []);
   if (ledger !== null && partition !== null && accountIds.length === 0) {
-    // Every account of this provider is already recorded or in flight.
     return { provider, success: false, results: mergePartitionResults(partition, []) };
   }
   const stopHeartbeat = ledger !== null && partition !== null ? startLedgerHeartbeat(ledger.client, partition) : null;
@@ -152,9 +123,6 @@ async function publishToProvider(
     try {
       response = await dispatchPublish(provider, form, ctx.userId, ctx.logId, ctx.startTime);
     } catch (error) {
-      // A handler throw must not discard the providers that already
-      // published: record the failure per account and keep going, so the
-      // response always carries every provider's outcome.
       logger.error('[publish-existing] provider publish threw', error, { provider, logId: ctx.logId, userId: ctx.userId });
       if (ledger !== null && partition !== null) await releaseGrantedClaims(ledger.client, partition, error);
       const failures = accountIds.length > 0 ? accountIds.map((accountId) => accountFailure(accountId, error)) : [accountFailure('', error)];
@@ -176,8 +144,6 @@ function mediaErrorResponse(error: unknown, ctx: PublishExistingContext): NextRe
 
 export async function publishExistingMediaAsap(ctx: PublishExistingContext, ledger: AsapLedger | null): Promise<NextResponse> {
   const { userId, input, logId } = ctx;
-  // An image reaches only IMAGE_PROVIDERS: the semantics check (inline
-  // image) and verifyMedia (an image upload) already rejected the rest.
   const providers: Provider[] = input.publishing.providers;
   const publishes: ProviderPublish[] = [];
 
@@ -196,8 +162,6 @@ export async function publishExistingMediaAsap(ctx: PublishExistingContext, ledg
         publishes.push(await publishToProvider(provider, { buffer: claimed.buffer, contentType: claimed.contentType }, ctx, ledger));
       }
     } finally {
-      // Single-use claim: the bytes are gone once dispatched, published
-      // or not — exactly like publish-by-id.
       const { error: removeError } = await storage.remove([claimed.row.storage_path]);
       if (removeError) {
         logger.error('[publish-existing] claimed upload cleanup failed', removeError, { uploadId: ctx.uploadRow.id, userId });

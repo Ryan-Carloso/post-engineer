@@ -1,22 +1,8 @@
-//---------------
-// scheduler tests — startup first-run, restart-safe due-check
-// (persisted last success), lease-busy skip, and error survival.
-//
-// Driven with vitest fake timers against the dependency-injected core
-// (lib/scheduler.ts); the real wiring lives in lib/scheduler-jobs.ts.
-// The deps mock simulates the DB persistence: recordSuccess moves the
-// last-success timestamp that acquireLease hands back, exactly like the
-// real scheduler_leases row.
-//---------------
-
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createScheduler, type LeaseAcquisition, type SchedulerDeps, type SchedulerJob } from '../scheduler';
 
 const HOUR = 60 * 60 * 1000;
 
-//---------------
-// deps with simulated persistence: `last` moves on recordSuccess.
-//---------------
 function makeDeps(
   overrides: Partial<SchedulerDeps> & { lastSuccessAt?: Date | null } = {},
 ): SchedulerDeps {
@@ -34,7 +20,7 @@ function makeDeps(
       error: vi.fn(),
     },
     holder: 'test-holder',
-    now: () => Date.now(), // follows the fake clock
+    now: () => Date.now(),
     ...rest,
   };
   let last: Date | null = lastSuccessAt;
@@ -73,7 +59,6 @@ describe('createScheduler', () => {
     await settleImmediateTick();
     expect(deps.jobs[0].run).toHaveBeenCalledTimes(1);
     expect(deps.recordSuccess).toHaveBeenCalledWith('billing-reconcile');
-    // Same event name + property shape the /api/cron route emitted.
     expect(deps.track).toHaveBeenCalledWith('billing_reconciled', {
       route: 'POST /api/cron/billing-reconcile',
       status: 200,
@@ -82,9 +67,6 @@ describe('createScheduler', () => {
   });
 
   it('restart before the due gap does not run, then the job fires when the gap elapses', async () => {
-    // Simulate a restart 2h after the last successful run: the immediate
-    // startup tick must NOT run the 24h job, and hourly ticks must keep
-    // skipping until the persisted gap reaches 24h.
     const deps = makeDeps({
       lastSuccessAt: new Date(Date.now() - 2 * HOUR),
       jobs: [makeJob()],
@@ -95,10 +77,10 @@ describe('createScheduler', () => {
     await settleImmediateTick();
     expect(deps.jobs[0].run).not.toHaveBeenCalled();
 
-    await vi.advanceTimersByTimeAsync(HOUR); // 3h since last success
+    await vi.advanceTimersByTimeAsync(HOUR);
     expect(deps.jobs[0].run).not.toHaveBeenCalled();
 
-    await vi.advanceTimersByTimeAsync(22 * HOUR); // 25h since last success
+    await vi.advanceTimersByTimeAsync(22 * HOUR);
     expect(deps.jobs[0].run).toHaveBeenCalledTimes(1);
     expect(deps.recordSuccess).toHaveBeenCalledWith('billing-reconcile');
     expect(deps.track).toHaveBeenCalledWith('billing_reconciled', {
@@ -125,8 +107,6 @@ describe('createScheduler', () => {
 
     await settleImmediateTick();
     await vi.advanceTimersByTimeAsync(HOUR);
-    // Startup first-run + one hourly tick (the next hourly tick is due
-    // only after another full hour).
     expect(deps.jobs[0].run).toHaveBeenCalledTimes(2);
     scheduler.stop();
   });
@@ -169,12 +149,8 @@ describe('createScheduler', () => {
       expect.any(Error),
       {},
     );
-    // A failed run is NOT recorded as a success.
     expect(deps.recordSuccess).not.toHaveBeenCalled();
-    expect(deps.track).toHaveBeenCalledTimes(1); // scheduler_started only
-
-    // The timer survived: the next tick runs again (still due — last
-    // success never recorded) and succeeds.
+    expect(deps.track).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(HOUR);
     expect(run).toHaveBeenCalledTimes(2);
     expect(deps.recordSuccess).toHaveBeenCalledWith('billing-reconcile');
@@ -206,8 +182,6 @@ describe('createScheduler', () => {
   });
 
   it('survives an acquireLease failure: reports and retries on the next tick', async () => {
-    // The lease RPC itself failing (DB down) must not kill the
-    // scheduler: the tick is contained and the next tick tries again.
     const acquireLease = vi
       .fn()
       .mockRejectedValueOnce(new Error('acquire rpc failed: db down'))
@@ -231,8 +205,6 @@ describe('createScheduler', () => {
   });
 
   it('stop() clears the timers so nothing runs afterwards', async () => {
-    // The job is DUE at startup: the immediate tick runs it once; after
-    // stop() the hourly ticks must never run it again.
     const deps = makeDeps({ lastSuccessAt: null, jobs: [makeJob()] });
     const scheduler = createScheduler(deps);
     scheduler.start();

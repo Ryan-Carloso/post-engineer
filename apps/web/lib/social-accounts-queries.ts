@@ -12,25 +12,12 @@ import type {
 import { logger } from '@/lib/logger';
 import { HttpStatusError } from '@/lib/errors';
 
-//---------------
-// Social accounts — ONE shared ['social-accounts'] query: one GET /api/account
-// per page, not one per provider; hooks filter via `select`, types unchanged.
-//
-// Extracted from lib/api.ts (file-size ratchet); lib/api.ts re-exports
-// these names so existing import sites (`@/lib/api`) keep working.
-//---------------
-
 interface ServerAccountPayload {
   authenticated: boolean;
   accounts: PublicAccountItem[];
   message?: string;
 }
 
-//---------------
-// fetchProviderAccounts — single fetch from /api/account filtered by provider.
-// The shape and the provider list come from the registry (lib/providers/registry.ts):
-// the server already returns each account with provider and correct fields.
-//---------------
 function selectProviderAccounts<T extends PublicAccountItem>(
   provider: T['provider'],
 ): (payload: ServerAccountPayload) => { authenticated: boolean; accounts: T[] } {
@@ -61,23 +48,13 @@ async function fetchServerAccounts(): Promise<ServerAccountPayload> {
   }
 }
 
-//---------------
-// fetchYouTubeAccounts — YouTube accounts (no tokens) from /api/account
-//---------------
 export async function fetchYouTubeAccounts(): Promise<AccountResponse> {
   return fetchProviderAccounts<AccountData>('youtube');
 }
 
-//---------------
-// fetchInstagramAccounts — Instagram accounts (no tokens) via /api/account
-//---------------
 export async function fetchInstagramAccounts(): Promise<InstagramAccountResponse> {
   return fetchProviderAccounts<InstagramAccountData>('instagram');
 }
-
-//---------------
-// fetchBlueskyAccounts — Bluesky accounts (handle/did) via /api/account
-//---------------
 
 export interface BlueskyAccountResponse {
   authenticated: boolean;
@@ -100,7 +77,6 @@ export function useSocialAccountsQuery<TData>(
   });
 }
 
-// Selectors hoisted to module scope: React Query memoizes on the select reference.
 const selectYouTubeAccounts = selectProviderAccounts<AccountData>('youtube');
 const selectInstagramAccounts = selectProviderAccounts<InstagramAccountData>('instagram');
 const selectBlueskyAccounts = selectProviderAccounts<BlueskyAccountData>('bluesky');

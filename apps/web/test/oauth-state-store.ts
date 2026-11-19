@@ -1,12 +1,3 @@
-// In-memory fake of the oauth_states table for tests.
-// Mirrors every query chain apps/web/lib/oauth-connect.ts runs against it,
-// and applies each filter for real, so a dropped predicate (e.g. the
-// user_id ownership filter on the atomic consume) changes the outcome:
-//   insert(row)
-//   delete().eq(...).eq(...).gt('expires_at', now).select(cols)   (atomic consume)
-//   delete().eq('state_hash', h).lte('expires_at', now)            (expired cleanup)
-//   select(cols).eq('state_hash', h).maybeSingle()                 (miss diagnostic)
-
 export interface OAuthStateRow {
   state_hash: string;
   user_id: string;
@@ -14,8 +5,6 @@ export interface OAuthStateRow {
   nonce: string;
   redirect_uri: string;
   expires_at: string;
-  // PKCE code verifier (Fanvue only, migration 057). Absent/null for every
-  // non-PKCE provider row.
   code_verifier?: string | null;
 }
 
@@ -30,8 +19,6 @@ export interface FakeOAuthStateStore {
 
 interface DeleteChain {
   eq: (column: RowColumn, value: string) => DeleteChain;
-  // Time comparisons only ever run on expires_at (the atomic consume and
-  // the expired cleanup); narrowing the column keeps row[column] a string.
   gt: (column: 'expires_at', value: string) => DeleteChain;
   lte: (column: 'expires_at', value: string) => Promise<{ error: null }>;
   select: (columns: string) => Promise<{ data: Array<Partial<OAuthStateRow>>; error: null }>;
@@ -57,7 +44,6 @@ function pickColumns(row: OAuthStateRow, columns: string): Partial<OAuthStateRow
   for (const raw of columns.split(',')) {
     const column = raw.trim();
     if (column === 'code_verifier') {
-      // Nullable in the database: an absent verifier reads back as null.
       picked.code_verifier = row.code_verifier ?? null;
     } else if (column === 'state_hash' || column === 'user_id' || column === 'provider' ||
         column === 'nonce' || column === 'redirect_uri' || column === 'expires_at') {

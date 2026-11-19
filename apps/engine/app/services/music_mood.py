@@ -25,8 +25,6 @@ from app.models.schema import VideoParams
 from app.services.analytics import scrub_error_text
 from app.utils import utils
 
-# Explicit no-music choice. The API contract spells it as the literal
-# "none"; the constant pins the value inside this module.
 MUSIC_MOOD_NONE = "none"
 
 
@@ -42,8 +40,6 @@ def get_available_music_moods(catalog_file: str | None = None) -> tuple[str, ...
     try:
         catalog = toml.load(resolved_catalog)
     except (OSError, toml.TomlDecodeError) as exc:
-        # Scrubbed: the resolved path is absolute, and the OSError text
-        # carries it too — no machine layout in the logs.
         logger.warning(
             scrub_error_text(
                 f"failed to load BGM moods: {resolved_catalog}, error: {str(exc)}"
@@ -104,8 +100,6 @@ def resolve_music_mood(params: VideoParams) -> str:
         if requested in moods:
             return requested
         if not moods:
-            # Scrubbed: the requested mood is agent-supplied free text and
-            # this ERROR is forwarded to PostHog as $exception.
             logger.error(
                 scrub_error_text(
                     f"BGM catalog is empty: cannot play requested mood {requested!r}; "
@@ -117,7 +111,6 @@ def resolve_music_mood(params: VideoParams) -> str:
             f"unknown music mood: {requested!r}; available moods: {', '.join(moods)}"
         )
     if not moods:
-        # Static message: no free text, no path — nothing to scrub.
         logger.error("BGM catalog is empty: no mood available; rendering without music")
         return MUSIC_MOOD_NONE
     return sorted(moods)[0]
@@ -134,8 +127,6 @@ def log_bgm_selection(music_mood: str, catalog: str, selected_file: str) -> None
         logger.info("BGM selection: mood='none' (explicit no-music choice)")
         return
     if not selected_file:
-        # Scrubbed: the ERROR is forwarded to PostHog as $exception, and
-        # the catalog path is absolute — no machine layout in analytics.
         logger.error(
             scrub_error_text(
                 f"BGM selection failed: mood={music_mood!r} has no track in catalog "

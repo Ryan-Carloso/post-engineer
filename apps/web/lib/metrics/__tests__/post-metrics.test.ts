@@ -114,10 +114,6 @@ describe('metricsTargets', () => {
   });
 });
 
-// Each migration that re-creates the check must list every provider the
-// app supported at that point; the latest one (052) lists them all.
-// A shipped migration is never edited, so 049 pins its historical list.
-
 describe('post_metrics provider check (migrations 034, 049, 050 and 052)', () => {
   function listedProviders(file: string): string[] {
     const sql = readFileSync(join(findRepoRoot(import.meta.url), 'supabase/migrations', file), 'utf8');
@@ -216,7 +212,6 @@ describe('collectPostMetrics', () => {
     expect(d.saveMetrics).toHaveBeenCalledWith(expect.objectContaining({ window: '28d', retention }));
     const tracked = vi.mocked(d.track).mock.calls[0]?.[1];
     expect(tracked).toMatchObject({ engaged_views: 640, analytics_status: 'ok', window: '28d' });
-    // The nested snapshot (dates, content type) never reaches PostHog.
     expect(tracked).not.toHaveProperty('retention');
   });
 
@@ -355,7 +350,6 @@ describe('collectPostMetrics', () => {
       accountId: 'ig-acct',
       externalId: 'media-9',
     }, { window: '24h', now: new Date('2026-10-21T12:00:00.000Z') });
-    // Resolution runs only for the videos still to collect.
     expect(d.resolveTarget).toHaveBeenCalledTimes(1);
     expect(d.resolveTarget).toHaveBeenCalledWith('user-1', {
       provider: 'instagram',
@@ -437,8 +431,6 @@ describe('collectPostMetrics', () => {
   });
 
   it('retries a transient Instagram failure and logs status with meta code', async () => {
-    // Code 100 without subcode 33 is a generic invalid-parameter
-    // failure, not a deleted media: it must retry, not skip.
     const invalidParam = new InstagramApiError('Invalid parameter', 400, undefined, 100);
     const d = deps({
       fetchTaskSource: vi.fn(async () => ({ publishResults: [IG_ENTRY], scriptAngle: null })),
@@ -498,7 +490,6 @@ describe('collectPostMetrics', () => {
 });
 
 describe('createPostMetricsStore', () => {
-  // Chainable per-table mock for the re-open scan; `limit` resolves the query.
   function fakeFrom(tables: Record<string, { data: unknown; error: unknown }>) {
     return vi.fn((table: string) => {
       const builder: Record<string, unknown> = {};
@@ -557,8 +548,6 @@ describe('createPostMetricsStore', () => {
     await expect(store.listDuePosts(new Date(), 51)).rejects.toThrow('due posts lookup failed: boom');
   });
 
-  // The late-target re-read (issue #525 item 4): a post marked done can
-  // still gain a target, and the due SQL never re-reads done posts.
   it('re-opens a done post when a target appears after it was marked done', async () => {
     const rpc = vi.fn(async () => ({ data: [], error: null }));
     const store = createPostMetricsStore({
@@ -573,7 +562,6 @@ describe('createPostMetricsStore', () => {
     } as unknown as SupabaseClient);
     const posts = await store.listDuePosts(new Date('2026-10-21T12:00:00.000Z'), 51);
 
-    // The YouTube snapshot is in; the Instagram target is not.
     expect(posts).toEqual([{
       id: 'post-1', userId: 'user-1', taskId: 'task-1', window: '24h',
       collectedKeys: new Set(['youtube:abc123']),
@@ -593,8 +581,6 @@ describe('createPostMetricsStore', () => {
       }),
     } as unknown as SupabaseClient);
     const posts = await store.listDuePosts(new Date('2026-10-21T12:00:00.000Z'), 51);
-    // Mirror the due SQL (migration 039): the run retries the target
-    // until the token is reconnected or the window closes.
     expect(posts).toEqual([{
       id: 'post-1', userId: 'user-1', taskId: 'task-1', window: '24h',
       collectedKeys: new Set(),
@@ -775,8 +761,6 @@ describe('createPostMetricsStore', () => {
       }),
     } as unknown as SupabaseClient);
     const posts = await store.listDuePosts(new Date('2026-10-21T12:00:00.000Z'), 51);
-    // Budget is 1 (49 RPC posts of a 50-post run): only the first
-    // re-openable candidate fits, so the second one proves the cap.
     expect(posts).toHaveLength(50);
     expect(posts[49]).toMatchObject({ id: 'post-99', window: '24h' });
   });
@@ -794,8 +778,6 @@ describe('createPostMetricsStore', () => {
     expect(posts).toHaveLength(51);
     expect(from).not.toHaveBeenCalled();
 
-    // The boundary is the 50-post processing cap, not the 51-post probe
-    // limit: with exactly 50 RPC posts the re-open budget is already 0.
     const rpc50 = vi.fn(async () => ({
       data: Array.from({ length: 50 }, (_, index) => ({
         post_id: `post-${index}`, user_id: 'user-1', task_id: `task-${index}`, metrics_window: '24h', collected_keys: [],
@@ -875,7 +857,6 @@ describe('createPostMetricsStore', () => {
       }),
     } as unknown as SupabaseClient);
     const posts = await store.listDuePosts(new Date('2026-10-21T12:00:00.000Z'), 51);
-    // Only the well-formed post re-opens (its Instagram target is uncollected).
     expect(posts).toEqual([{
       id: 'post-1', userId: 'user-1', taskId: 'task-1', window: '24h',
       collectedKeys: new Set(['youtube:abc123']),
@@ -898,9 +879,6 @@ describe('createPostMetricsStore', () => {
       }),
     } as unknown as SupabaseClient);
     const posts = await store.listDuePosts(new Date('2026-10-21T12:00:00.000Z'), 51);
-    // The post with only an unknown provider is skipped; the post with a
-    // known target re-opens. Both unknown providers are reported, never
-    // silently skipped.
     expect(posts).toEqual([{
       id: 'post-1', userId: 'user-1', taskId: 'task-1', window: '24h',
       collectedKeys: new Set(),
@@ -1000,15 +978,12 @@ describe('createPostMetricsStore', () => {
     ]) {
       expect(columns.has(key)).toBe(true);
     }
-    // The upsert also writes script_angle, added by migration 026 (the
-    // final schema is 025 + 026); persona_id is trigger-filled from 026.
     const sql026 = readFileSync(
       join(findRepoRoot(import.meta.url), 'supabase', 'migrations', '026_post-metrics-dimensions.sql'),
       'utf8',
     );
     expect(sql026).toContain('add column if not exists script_angle');
     expect(sql026).toContain('add column if not exists persona_id');
-    // The upsert's onConflict target must be the table's unique key.
     expect(sql).toContain('unique (post_id, provider, external_id, metrics_window)');
   });
 });
@@ -1079,7 +1054,6 @@ describe('migration 039 (post metrics retention + 28d window)', () => {
     const fn = sql.slice(sql.indexOf('create or replace function public.find_post_metrics_due'));
     expect(fn).toContain("values ('24h', 24), ('7d', 168), ('28d', 672)");
     expect(fn).toContain('from public.post_metrics_done pmd');
-    // A scope-less YouTube snapshot stays uncollected so the next run retries it.
     expect(fn).toContain("and (pm.analytics_status is null or pm.analytics_status = 'scope_missing')");
     expect(fn).toContain('grant execute on function public.find_post_metrics_due(timestamptz, integer) to service_role');
   });
@@ -1091,7 +1065,6 @@ describe('migration 039 (post metrics retention + 28d window)', () => {
     expect(fn).toContain("and pm.provider = 'youtube'");
     expect(fn).toContain('and pm.account_id = p_account_id');
     expect(fn).toContain("and (pm.analytics_status is null or pm.analytics_status = 'scope_missing')");
-    // A closed window cannot be back-filled: stop the reconnect prompt.
     expect(fn).toContain('update public.post_metrics pm');
     expect(fn).toContain("set analytics_status = 'no_data'");
     expect(fn).toContain("and pm.analytics_status = 'scope_missing'");

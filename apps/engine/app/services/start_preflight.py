@@ -12,7 +12,6 @@ from app.services import persona_preflight, voice_preflight
 from app.services.pipeline_stage import PhaseTracker
 
 
-# Runs that stop before the audio stage never synthesize speech.
 _STOPS_BEFORE_AUDIO = ("script",)
 
 

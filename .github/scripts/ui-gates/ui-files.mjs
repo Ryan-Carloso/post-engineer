@@ -1,16 +1,5 @@
 import { isVendoredCalendarCN } from '../file-size/vendored-calendarcn.mjs';
 
-//---------------
-// UI file detection (paths relative to the repo root).
-//
-// A UI file is a TS/TSX source file under apps/web/app/** or
-// apps/web/components/**, excluding test files (*.test.*, *.cy.* and
-// __tests__/ directories) and vendored CalendarCN components (third-party
-// code pinned to an upstream commit — their coverage is upstream's, not
-// ours). Changed files come from
-// `git diff --name-only --diff-filter=ACMR <base>...<head>`.
-//---------------
-
 const UI_PREFIXES = ['apps/web/app/', 'apps/web/components/'];
 
 export function isUiFile(repoPath) {

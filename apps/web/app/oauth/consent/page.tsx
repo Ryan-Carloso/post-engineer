@@ -6,13 +6,6 @@ import { verifyConsentRequest } from '@/lib/oauth/tokens';
 import { resolveClient } from '@/lib/oauth/resolve-client';
 import { sanitizeClientName } from '@/lib/oauth/client-name';
 
-//---------------
-// /oauth/consent — OAuth consent screen. Receives the signed request
-// (?request=...), requires the owner's session, and approves/denies via
-// POST to /oauth/approve. Without a session (or a different owner) → /login
-// with `next` to resume exactly here after login.
-//---------------
-
 export default async function OAuthConsentPage({
   searchParams,
 }: {
@@ -38,9 +31,6 @@ export default async function OAuthConsentPage({
   const service = createSupabaseServiceClient();
   const client = await resolveClient(claims.clientId, service);
   const scopes = claims.scope.split(' ').filter((scope) => scope.length > 0);
-  // Hardened display name: Unicode-normalized, no bidi/control characters,
-  // length-capped — a client name must not be able to visually impersonate
-  // another application on the consent screen.
   const displayName = sanitizeClientName(client?.clientName, 'o aplicativo');
 
   return (

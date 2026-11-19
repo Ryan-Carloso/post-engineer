@@ -1,7 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
-// Walk up to the repo root instead of counting parents: Stryker runs the
-// suite from a copied tree, which shifts every fixed parent index.
 function findRepoRoot(fromUrl: string): string {
   let dir = dirname(fileURLToPath(fromUrl));
   for (;;) {
@@ -25,17 +23,8 @@ import {
   MAX_BATCH_VIDEOS,
 } from '../limits.js';
 
-//---------------
-// The MCP batch tool mirrors the web batch discount rules (issue #487).
-// Nothing shares a module across the two apps, so each literal is pinned to
-// its web source here.
-//---------------
-
 const root = findRepoRoot(import.meta.url);
 const rules = readFileSync(join(root, 'apps/web/lib/billing/batch-discount.ts'), 'utf8');
-// MAX_BATCH_VIDEOS and the batchKey rule live in the shared videos contract
-// now (the route imports its body schema from there); the window and the
-// free-every count still live in the web billing lib.
 const contract = readFileSync(join(root, 'shared/contracts/videos.ts'), 'utf8');
 
 describe('batch discount limits stay in sync with the web', () => {

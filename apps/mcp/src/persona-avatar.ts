@@ -1,8 +1,3 @@
-// Persona face sources for personas (action: create) and personas (action: update): a public
-// image URL (avatarUrl) or a local image file (avatarPath). The file goes
-// up as the multipart `photo` field, the same field the web form uses, so
-// the face never depends on the server downloading a link. Extracted from
-// client.ts and tools.ts so both stay under the file-size ratchet.
 import { readFile, stat } from 'node:fs/promises';
 import { basename } from 'node:path';
 
@@ -13,25 +8,11 @@ import { assertImageSize, mimeTypeForImagePath } from './image-guards.js';
 import { MAX_LIBRARY_IMAGE_MB } from './limits.js';
 
 export async function imageFormFile(path: string): Promise<Blob> {
-  // Validate before uploading: the API rejects the file anyway, so an
-  // oversized or unsupported image fails fast locally instead of wasting an
-  // upload. A stat() pre-check bounds memory before readFile — a multi-GB
-  // file misnamed .png would otherwise load fully into this stdio process.
-  // The TOCTOU window is benign: the authoritative size check still runs on
-  // the buffer after read. Any failure surfaces with the full path for a
-  // consistent, actionable message.
-  // Note: the extension is trusted as a hint only; the server re-validates
-  // content via magic bytes, so a mislabeled file still fails server-side
-  // (duplicating magic-byte sniffing locally would be a second source of
-  // truth that can drift).
   const mimeType = mimeTypeForImagePath(path);
   try {
     const fileStat = await stat(path);
     assertImageSize(fileStat.size, path);
   } catch (error) {
-    // Discriminate by type, not by message text: the typed size error
-    // passes through untouched, while stat failures become the actionable
-    // "Failed to read image" wrapper.
     if (error instanceof ImageTooLargeError) throw error;
     throw new Error(`Failed to read image "${path}": ${getErrorMessage(error)}`);
   }
@@ -42,21 +23,14 @@ export async function imageFormFile(path: string): Promise<Blob> {
     throw new Error(`Failed to read image "${path}": ${getErrorMessage(error)}`);
   }
   if (buffer.length === 0) {
-    // A 0-byte file would pass the local gate but shift the index-aligned
-    // imageTags/imageDescriptions (the server 400s when the tag/description
-    // counts don't match the file count), so reject it here with a clear
-    // message instead of a confusing server 400.
     throw new Error(`Image "${path}" is empty.`);
   }
-  // The post-read check reuses the shared guard: same limit, same message,
-  // full path — and it covers the (benign) TOCTOU window after stat.
   assertImageSize(buffer.length, path);
   return new Blob([buffer], { type: mimeType });
 }
 
 const AVATAR_PATH_DESCRIPTION = `Local file path to the persona face photo (JPG/JPEG, PNG, or WebP, max ${MAX_LIBRARY_IMAGE_MB}MB), uploaded directly. Use instead of avatarUrl for your own photo.`;
 
-/** personas (action: create): exactly one of avatarUrl or avatarPath (checked in the client). */
 export const CreatePersonaAvatarFields = {
   avatarUrl: z
     .string()
@@ -68,18 +42,11 @@ export const CreatePersonaAvatarFields = {
   avatarPath: z.string().min(1).optional().describe(AVATAR_PATH_DESCRIPTION),
 };
 
-/** personas (action: update): at most one of avatarUrl or avatarPath. */
 export const UpdatePersonaAvatarFields = {
-  // No .nullable(): the API has no "clear avatar" sentinel — null would be silently ignored.
   avatarUrl: z.string().url().optional().describe('New public avatar image URL'),
   avatarPath: z.string().min(1).optional().describe(`New face photo. ${AVATAR_PATH_DESCRIPTION}`),
 };
 
-/**
- * Full-schema refine for the handler re-parse (the SDK validates the raw
- * shape only): a face from exactly one source (create) or at most one
- * (update) fails as a schema error before any file read or fetch.
- */
 export function refinePersonaAvatar(required: boolean) {
   return (value: PersonaAvatarInput, ctx: z.RefinementCtx): void => {
     const count = [value.avatarUrl, value.avatarPath].filter(provided).length;
@@ -96,17 +63,10 @@ export interface PersonaAvatarInput {
   avatarPath?: string | null;
 }
 
-// Programmatic callers can pass null; only a non-empty string is a face.
 function provided(value: string | null | undefined): value is string {
   return value !== undefined && value !== null && value.length > 0;
 }
 
-/**
- * Appends the persona face to the form: `avatarUrl` as text or
- * `avatarPath` as the `photo` file. Both at once is a conflict the server
- * would resolve silently (the photo wins on PATCH), so it fails here before
- * any file read. `required` makes a missing face an error (create).
- */
 export async function appendPersonaAvatar(
   formData: FormData,
   input: PersonaAvatarInput,

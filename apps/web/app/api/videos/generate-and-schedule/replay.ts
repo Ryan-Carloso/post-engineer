@@ -1,9 +1,3 @@
-//---------------
-// Replay helper for POST /api/videos/generate-and-schedule: fetch an
-// existing schedule + slots for an idempotent retry. Extracted from
-// route.ts so the route stays under the file-size ratchet.
-//---------------
-
 import { NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
@@ -27,7 +21,6 @@ export async function fetchReplay(
     logger.error('[generate-and-schedule] replay fetch failed', error, { scheduleId });
     return null;
   }
-  // Replay ASAP uses the stored publish_mode; pre-015 rows default scheduled.
   const { data: scheduleRow } = await supabase
     .from('schedules')
     .select('publish_mode')

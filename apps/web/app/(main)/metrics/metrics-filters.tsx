@@ -35,16 +35,6 @@ import {
 import type { MetricsQuery } from '@/lib/metrics/metrics-query';
 import { isSocialProvider } from '@/lib/providers/registry';
 
-//---------------
-// MetricsFilterSheet + ActiveFilterChips — the metrics filters as one
-// shadcn Sheet (option 3): a Filters button with an active-count badge
-// opens a panel with the two filters; Apply commits the draft, Clear
-// resets it, and the applied filters show as removable chips below the
-// toolbar. Persona uses a searchable Combobox (long list); network uses
-// Select. Account and script angle are not offered here: angle comparison
-// belongs to /experiments, and an account is almost always one per network.
-//---------------
-
 export const FILTER_ALL = 'all';
 
 export interface FilterOption {
@@ -78,7 +68,6 @@ export function MetricsFilterSheet({
   const activeCount = countActive(filters);
 
   const handleOpenChange = (next: boolean): void => {
-    // Opening discards any unapplied draft; closing without Apply does too.
     if (next) setDraft(filters);
     setOpen(next);
   };

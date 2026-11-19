@@ -8,17 +8,10 @@ import { readMetaErrorCode, readMetaErrorSubcode } from '@/lib/meta-error-code';
 import { parseInstagramInsightsPayload } from '@/lib/instagram-insights';
 import { INSTAGRAM_USERNAME_FALLBACK } from '@/lib/providers/registry';
 
-//---------------
-// InstagramService — Instagram API with Instagram Login (direct, no Facebook).
-// Authorization: instagram.com/oauth/authorize
-// Token exchange: api.instagram.com/oauth/access_token (short-lived) →
-// graph.instagram.com (long-lived). Publishing: container + media_publish.
-//---------------
-
 export interface InstagramLongLivedToken {
   accessToken: string;
   tokenType: string;
-  expiresIn: number; // segundos
+  expiresIn: number;
 }
 
 export const INSTAGRAM_PROFILE_TIMEOUT_MS = 8000;
@@ -27,7 +20,7 @@ export const INSTAGRAM_PROFILE_FIELDS =
   'id,username,name,profile_picture_url,followers_count,media_count';
 
 export interface InstagramProfile {
-  userdId: string; // app-scoped user id (IG)
+  userdId: string;
   username: string;
   name?: string;
   profilePictureUrl?: string;
@@ -73,9 +66,6 @@ export class InstagramService {
 
   }
 
-  //---------------
-  // getAuthorizationUrl — authorization URL (direct Instagram Login)
-  //---------------
   getAuthorizationUrl(state: string): string {
     const params = new URLSearchParams({
       client_id: this.clientId,
@@ -88,11 +78,6 @@ export class InstagramService {
     return `https://www.instagram.com/oauth/authorize?${params.toString()}`;
   }
 
-  //---------------
-  // handleApiError — converts AxiosError into InstagramApiError. `log:
-  // false` skips the two error logs for callers that log the typed error
-  // themselves (the metrics collector warns once per failed snapshot).
-  //---------------
   private handleApiError(error: unknown, context: string, { log }: { log: boolean } = { log: true }): never {
     const asError = error instanceof Error ? error : new Error(String(error));
     if (axios.isAxiosError(error)) {
@@ -143,19 +128,11 @@ export class InstagramService {
     throw new InstagramApiError(asError.message, 500, asError);
   }
 
-  //---------------
-  // redactSecrets — removes the client_secret from any text that goes to
-  // logs or error messages (Instagram may echo parameters back in the body).
-  //---------------
   private redactSecrets(text: string): string {
     if (!text || !this.clientSecret) return text;
     return text.split(this.clientSecret).join('[redacted]');
   }
 
-  //---------------
-  // describeTokenExchangeError — builds the token exchange error message
-  // with the HTTP status and the body returned by Instagram, without exposing secrets.
-  //---------------
   private describeTokenExchangeError(status: number, rawBody: string): string {
     let detail = this.redactSecrets(rawBody).slice(0, 500);
     try {
@@ -180,16 +157,10 @@ export class InstagramService {
             : detail;
       }
     } catch {
-      // keep the raw body (already redacted)
     }
     return `Instagram token exchange failed (status ${status}): ${detail || 'no details'}`;
   }
 
-  //---------------
-  // exchangeCodeForShortLivedToken — code → short-lived token.
-  // Instagram REQUIRES POST with application/x-www-form-urlencoded on this
-  // endpoint; GET returns "Unsupported request - method type: get".
-  //---------------
   private async exchangeCodeForShortLivedToken(
     code: string
   ): Promise<{ accessToken: string; userId: string }> {
@@ -257,17 +228,12 @@ export class InstagramService {
     };
   }
 
-  //---------------
-  // exchangeCodeForLongLivedToken — code → token curto → token longo
-  //---------------
   async exchangeCodeForLongLivedToken(code: string): Promise<InstagramLongLivedToken> {
     const longLivedEndpoint = 'https://graph.instagram.com/access_token';
 
-    // Step 1: code → short-lived token (POST form-urlencoded, fetch nativo)
     const shortLived = await this.exchangeCodeForShortLivedToken(code);
 
     try {
-      // Step 2: short-lived → long-lived (~60 days) — endpoint only accepts GET
       const longTokenResponse = await axios.get(longLivedEndpoint, {
         params: {
           grant_type: 'ig_exchange_token',
@@ -291,12 +257,6 @@ export class InstagramService {
       this.handleApiError(error, 'exchangeCodeForLongLivedToken');
     }
   }
-  //---------------
-  // getMediaInsights — performance counters of one published media
-  // (GET /{media-id}/insights). Returns the raw metric name -> value map;
-  // a metric the API omits is simply absent (never a fake 0). Throws on
-  // HTTP errors so the caller can log and retry on the next run.
-  //---------------
   async getMediaInsights(mediaId: string, accessToken: string): Promise<Record<string, number>> {
     try {
       const response = await axios.get(
@@ -308,15 +268,10 @@ export class InstagramService {
       );
       return parseInstagramInsightsPayload(response.data);
     } catch (error) {
-      // The collector logs one warning with status + Meta code per failure.
       this.handleApiError(error, 'getMediaInsights', { log: false });
     }
   }
 
-  //---------------
-  // getProfile — /me returns only `id` unless `fields` is passed, so every
-  // shown field is requested; app-scoped `id` stays the identity rows key on.
-  //---------------
   async getProfile(accessToken: string): Promise<InstagramProfile> {
     try {
       const response = await axios.get(
@@ -354,9 +309,6 @@ export class InstagramService {
     }
   }
 
-  //---------------
-  // publishMedia — creates the media container and publishes (photo or video)
-  //---------------
   async publishMedia(
     igUserId: string,
     accessToken: string,
@@ -367,7 +319,6 @@ export class InstagramService {
     const mediaType = isVideo ? 'REELS' : 'IMAGE';
 
     try {
-      // Step 1: container
       const containerResponse = await axios.post(
         `https://graph.instagram.com/${this.apiVersion}/${igUserId}/media`,
         null,
@@ -384,11 +335,8 @@ export class InstagramService {
 
       const { id: creationId } = containerResponse.data as { id: string };
 
-      // Step 2: wait for processing — required for both video and image
-      // (publishing before the container is FINISHED returns code 9007 "Media ID is not available")
       await this.waitForContainer(creationId, accessToken);
 
-      // Step 3: publish
       const publishResponse = await axios.post(
         `https://graph.instagram.com/${this.apiVersion}/${igUserId}/media_publish`,
         null,
@@ -402,7 +350,6 @@ export class InstagramService {
 
       const published = publishResponse.data as { id: string };
 
-      // Permalink is optional (best-effort)
       let permalink: string | undefined;
       try {
         const permalinkResponse = await axios.get(
@@ -413,7 +360,6 @@ export class InstagramService {
         );
         permalink = (permalinkResponse.data as { permalink?: string }).permalink;
       } catch {
-        // permalink is optional — ignore failures
       }
 
       return {
@@ -437,9 +383,6 @@ export class InstagramService {
     }
   }
 
-  //---------------
-  // waitForContainer — polls the container status until it is ready
-  //---------------
   private async waitForContainer(creationId: string, accessToken: string): Promise<void> {
     const maxAttempts = 30;
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -466,9 +409,6 @@ export class InstagramService {
     throw new InstagramApiError('Timed out waiting for media processing', 408);
   }
 
-  //---------------
-  // refreshLongLivedToken — renews a valid long-lived token (>= 24h old) for ~60 days
-  //---------------
   async refreshLongLivedToken(accessToken: string): Promise<InstagramLongLivedToken> {
     try {
       const response = await axios.get(
@@ -483,7 +423,6 @@ export class InstagramService {
       );
 
       const data = response.data as { access_token?: unknown; token_type?: unknown; expires_in?: unknown };
-      // A malformed 200 is a failure, never a stored blank token.
       if (typeof data.access_token !== 'string' || data.access_token === '') {
         throw new InstagramApiError('Instagram token refresh returned no access token', 502);
       }

@@ -2,13 +2,6 @@ import '@testing-library/jest-dom/vitest';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 
-//---------------
-// Tests for the persona screen's token section: face quality and the estimated
-// cost per video. There is no face-mix slider anymore (every persona has a
-// face; "no face" is a per-post choice in /posts/new). The cost comes from
-// computeVideoTokens (the real price, the same one the server charges).
-//---------------
-
 vi.mock('@/lib/i18n/provider', () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const react = require('react') as typeof import('react');

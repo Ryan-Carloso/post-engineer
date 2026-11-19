@@ -1,25 +1,3 @@
-//---------------
-// Prompts hub data — one entry per prompt. Adding prompt N+1 is
-// adding one entry here plus its i18n title, objective, steps,
-// deliverables, and example keys in both locales. The list page
-// and the detail page render from this array, never from a
-// hand-built page per prompt. Prompt text is English by design:
-// generation language is en. The recipe docs in docs/recipes/ link
-// to this hub instead of repeating the text, which renders here as
-// structured components, not as a raw markdown dump. Cards link
-// to the internal detail page; the list footer's "Add your
-// prompt" link (add-prompt-link.tsx) and the detail page's doc
-// link are the only GitHub links.
-//
-// Prompt texts live once in shared/prompt-base/prompt-base.ts and are
-// imported here through a symlink at @/lib/generation/prompt-base —
-// there is no web copy. A direct import fails tsc with TS6059 (web
-// rootDir is apps/web) and, worse, breaks Stryker's sandbox, which
-// copies only the app root and would leave the shared file behind.
-// The symlink is dereferenced by tsc, webpack, vitest, and Stryker,
-// so every tool sees the shared content as a local file.
-//---------------
-
 import type { TranslationKey } from '@/lib/i18n';
 import {
   DAILY_NEWS_PROMPT,

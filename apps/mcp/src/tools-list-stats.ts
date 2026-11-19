@@ -3,11 +3,6 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 
-// Measures the `tools/list` payload an agent loads into its context. Used by
-// scripts/measure-tools-list.mjs, which is how the before/after numbers of
-// the tool consolidation (issue #566) are recorded.
-
-/** Rough ratio for English/JSON text; an estimate, not a tokenizer. */
 export const ESTIMATED_BYTES_PER_TOKEN = 4;
 
 export const DEFAULT_TOP_TOOLS = 10;
@@ -19,10 +14,8 @@ export interface ToolSize {
 
 export interface ToolsListSummary {
   toolCount: number;
-  /** UTF-8 bytes of the JSON array of tools, exactly as a client receives it. */
   totalBytes: number;
   estimatedTokens: number;
-  /** Largest tools first, ties broken by name. */
   top: ToolSize[];
 }
 
@@ -57,7 +50,6 @@ export function formatToolsListReport(summary: ToolsListSummary): string {
   return lines.join('\n');
 }
 
-/** Lists a server's tools through a real MCP client over an in-memory pair, as an agent would. */
 export async function listServerTools(server: { connect(transport: Transport): Promise<void>; close(): Promise<void> }): Promise<Tool[]> {
   const [serverSide, clientSide] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: 'measure-tools-list', version: '0.0.0' });

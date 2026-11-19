@@ -70,10 +70,6 @@ describe('PersonaHouseVoicePicker selected card', () => {
   });
 
   it('shows a legacy clone persona as Cloned with no sample button', () => {
-    // The catalog serves the clone under chatterbox_nano: while the persona
-    // stored it before the rename under chatterbox:. The card must still
-    // render the "Cloned" tag — not the raw clone key — and must not offer
-    // a sample button for a /voice-samples/<clone_key>.mp3 that does not exist.
     pickerMocks.voices = [
       {
         id: `chatterbox_nano:${CLONE_KEY}`,

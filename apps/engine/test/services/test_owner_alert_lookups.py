@@ -57,8 +57,6 @@ ENV = {
 
 
 def _repo_root() -> Path:
-    # Walk up instead of counting parents: mutmut runs the suite from a
-    # copied tree (mutants/), which shifts every fixed parent index.
     for parent in Path(__file__).resolve().parents:
         if (parent / "apps/web/lib/account-options.ts").is_file():
             return parent

@@ -2,9 +2,6 @@
 
 import { useOAuthFlow } from './oauth-flow';
 
-//---------------
-// useThreadsOAuth — Threads OAuth flow.
-//---------------
 export function useThreadsOAuth() {
   return useOAuthFlow({
     startUrl: '/api/threads-auth/start',

@@ -90,7 +90,6 @@ def check_telemetry(path: str, lines: list[tuple[int, str]], root: Path) -> list
         if src is not None and 0 < number <= len(src):
             joined = _call_block(src, number - 1)
         else:
-            # File not in the checkout: fall back to the added lines only.
             joined = _call_block([line for _, line in lines], index)
         keys = sorted(set(FREE_TEXT_KEY.findall(joined)))
         if keys and not SCRUB.search(joined):

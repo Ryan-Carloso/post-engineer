@@ -1,7 +1,3 @@
-//---------------
-// merge-timings — overlay shard durations onto the previous cache.
-//---------------
-
 import { readFileSync, writeFileSync, readdirSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';

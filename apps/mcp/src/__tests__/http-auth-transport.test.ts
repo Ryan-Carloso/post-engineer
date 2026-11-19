@@ -19,9 +19,6 @@ import type { HttpAuthenticator } from '../http-auth.js';
 
 vi.mock('../analytics.js', () => ({
   mcpTelemetryHeaders: () => ({}),
-  // Passthrough stand-in for the real withTracking, which only opens the
-  // per-call context: mcp_tool_called is recorded by the web API from the
-  // request headers, not by the MCP (see analytics.test.ts).
   withTelemetryHeaders: (_headers: unknown, run: () => Promise<unknown>) => run(),
   withToolCall: (_tool: string, _action: string, run: () => Promise<unknown>) => run(),
   withTracking: (_toolName: string, handler: (args: unknown) => Promise<unknown>) => async (args: unknown) => {
@@ -277,10 +274,6 @@ describe('HTTP transport with OAuth authentication (P6-2)', () => {
       authConfig(),
     );
     handles.push(handle);
-    // The listener is bound to 0.0.0.0 (proven by serveHttpTransport
-    // resolving), but fetch to a 0.0.0.0 URL fails in sandboxed
-    // environments with a proxy configured — reach the same listener
-    // via loopback instead; the auth check under test is identical.
     const loopbackUrl = handle.url.replace('0.0.0.0', '127.0.0.1');
     const response = await fetch(loopbackUrl, {
       method: 'POST',
