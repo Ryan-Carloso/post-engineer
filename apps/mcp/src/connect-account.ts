@@ -6,6 +6,7 @@
 import { z } from 'zod';
 
 import type { PostEngineerClient } from './client.js';
+import { connectTelegramAccount } from './client-telegram.js';
 import { SOCIAL_PROVIDERS, isOAuthConnectProvider, type DirectConnectProvider } from './contracts/providers.js';
 import { getErrorMessage } from './errors.js';
 import { redactSecretFromError } from './secret-redaction.js';
@@ -158,7 +159,7 @@ export async function handleConnectAccount(
         };
       }
       try {
-        const result = await client.connectTelegramAccount(args.botToken, args.chatId, args.chatType);
+        const result = await connectTelegramAccount(client, args.botToken, args.chatId, args.chatType);
         // Project the upstream response to named fields: stringifying the
         // whole body would surface any field the route adds later.
         const { accountId, chatId, chatType, title } = result;

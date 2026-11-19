@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { z } from 'zod';
+import { connectTelegramAccount } from '../client-telegram.js';
+
+vi.mock('../client-telegram.js', () => ({ connectTelegramAccount: vi.fn() }));
 
 vi.mock('../analytics.js', () => ({
   mcpTelemetryHeaders: () => ({}),
@@ -181,7 +184,6 @@ describe('MCP Tool Handlers', () => {
     connectBlueskyAccount: vi.fn(),
     connectThreespeakAccount: vi.fn(),
     connectRumbleAccount: vi.fn(),
-    connectTelegramAccount: vi.fn(),
     request: vi.fn(),
     getHeaders: vi.fn().mockReturnValue({}),
   } as unknown as PostEngineerClient;
@@ -770,7 +772,7 @@ describe('MCP Tool Handlers', () => {
   });
 
   it('handleConnectAccount connects Telegram directly with the bot token, chat and kind', async () => {
-    vi.mocked(mockClient.connectTelegramAccount).mockResolvedValue({
+    vi.mocked(connectTelegramAccount).mockResolvedValue({
       success: true,
       accountId: 'acc-tg',
       chatId: '-1001234567890',
@@ -786,7 +788,7 @@ describe('MCP Tool Handlers', () => {
       chatType: 'channel',
     });
 
-    expect(mockClient.connectTelegramAccount).toHaveBeenCalledWith(botToken, '-1001234567890', 'channel');
+    expect(connectTelegramAccount).toHaveBeenCalledWith(mockClient, botToken, '-1001234567890', 'channel');
     expect(response.isError).toBeUndefined();
     const text = textOf(response);
     expect(text).toMatch(/connected/i);
@@ -802,12 +804,12 @@ describe('MCP Tool Handlers', () => {
 
     expect(response.isError).toBe(true);
     expect(textOf(response)).toMatch(/botToken.*chatId.*chatType/i);
-    expect(mockClient.connectTelegramAccount).not.toHaveBeenCalled();
+    expect(connectTelegramAccount).not.toHaveBeenCalled();
   });
 
   it('handleConnectAccount never leaks the bot token on Telegram errors', async () => {
     const botToken = '123456789:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
-    vi.mocked(mockClient.connectTelegramAccount).mockRejectedValue(
+    vi.mocked(connectTelegramAccount).mockRejectedValue(
       new Error(`Failed to connect Telegram account: 422 Telegram rejected the bot token ${botToken}.`),
     );
 

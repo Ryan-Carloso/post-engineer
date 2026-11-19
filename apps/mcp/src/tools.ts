@@ -50,9 +50,8 @@ import {
 import { getErrorMessage, ApiError } from './errors.js';
 import { isEnglishLanguage, ONLY_ENGLISH_VIDEOS_MESSAGE } from './language.js';
 import { CreatePersonaAvatarFields, refinePersonaAvatar } from './persona-avatar.js';
-import { getSlot as getSlotContract } from './contracts/schedule.js';
+import { presentSlotDetail } from './slot-detail-present.js';
 import { FACE_QUALITIES, VIDEO_ASPECTS } from './contracts/personas.js';
-import type { ResponseOf } from './contracts/endpoint.js';
 
 export type { McpToolResponse } from './tools-call.js';
 // Image path/tag/description limits are shared by create-persona and persona_media (action: add_image).
@@ -697,57 +696,6 @@ function narrowTokenTransactions(result: unknown): {
     total: num(record.total),
     limit: num(record.limit),
     offset: num(record.offset),
-  };
-}
-
-/** The agent-facing shape of a slot detail: the parsed contract result
- * with the `success` envelope and the `generation` block dropped (the
- * slot's own progress/stage already carry it). Fields are picked, never
- * spread, so unknown fields can never ride through to the agent. */
-function presentSlotDetail(detail: ResponseOf<typeof getSlotContract>) {
-  const { slot, schedule, persona } = detail;
-  return {
-    slot: {
-      id: slot.id,
-      scheduleId: slot.scheduleId,
-      slotAt: slot.slotAt,
-      status: slot.status,
-      title: slot.title,
-      taskId: slot.taskId,
-      progress: slot.progress,
-      stage: slot.stage,
-      error: slot.error,
-      publishedAt: slot.publishedAt,
-      postUrl: slot.postUrl,
-      publishLinks: slot.publishLinks,
-      progressHistory: slot.progressHistory,
-      scriptAngle: slot.scriptAngle,
-      retryable: slot.retryable,
-      queuePosition: slot.queuePosition,
-      queueTotal: slot.queueTotal,
-      userNotices: slot.userNotices,
-      providerFailures: slot.providerFailures,
-    },
-    schedule: {
-      id: schedule.id,
-      personaId: schedule.personaId,
-      providers: schedule.providers,
-      youtubeAccountIds: schedule.youtubeAccountIds,
-      instagramAccountIds: schedule.instagramAccountIds,
-      linkedinAccountIds: schedule.linkedinAccountIds,
-      blueskyAccountIds: schedule.blueskyAccountIds,
-      threadsAccountIds: schedule.threadsAccountIds,
-      facebookAccountIds: schedule.facebookAccountIds,
-      pinterestAccountIds: schedule.pinterestAccountIds,
-      pinterestBoardId: schedule.pinterestBoardId,
-      threespeakAccountIds: schedule.threespeakAccountIds,
-      rumbleAccountIds: schedule.rumbleAccountIds,
-      fanvueAccountIds: schedule.fanvueAccountIds,
-      telegramAccountIds: schedule.telegramAccountIds,
-      timezone: schedule.timezone,
-      publishMode: schedule.publishMode,
-    },
-    persona: persona === null ? null : { id: persona.id, name: persona.name },
   };
 }
 

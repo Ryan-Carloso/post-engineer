@@ -38,7 +38,6 @@ import {
 import {
   connectBlueskyAccount as connectBlueskyAccountContract,
   connectRumbleAccount as connectRumbleAccountContract,
-  connectTelegramAccount as connectTelegramAccountContract,
   connectThreespeakAccount as connectThreespeakAccountContract,
   disconnectAccount as disconnectAccountContract,
   getOAuthConnectUrl as getOAuthConnectUrlContract,
@@ -403,19 +402,6 @@ export class PostEngineerClient {
       return parseContractResponse(connectRumbleAccountContract, raw);
     } catch (error) {
       throw redactSecretFromError(error, accessToken);
-    }
-  }
-
-  async connectTelegramAccount(botToken: string, chatId: string, chatType: 'channel' | 'group'): Promise<ResponseOf<typeof connectTelegramAccountContract>> {
-    try {
-      const raw = await this.request(
-        '/api/telegram-connect',
-        { method: 'POST', headers: this.getHeaders(), body: JSON.stringify({ botToken, chatId, chatType }) },
-        'connect Telegram account',
-      );
-      return parseContractResponse(connectTelegramAccountContract, raw);
-    } catch (error) {
-      throw redactSecretFromError(error, botToken);
     }
   }
 

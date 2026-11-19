@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { connectTelegramAccount } from '../client-telegram.js';
 import {
   PostEngineerClient,
   assertImageSize,
@@ -1646,7 +1647,7 @@ describe('generate and schedule video client', () => {
     });
 
     const botToken = '123456789:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
-    const result = await client.connectTelegramAccount(botToken, '-1001234567890', 'group');
+    const result = await connectTelegramAccount(client, botToken, '-1001234567890', 'group');
     expect(global.fetch).toHaveBeenCalledWith(
       `${baseUrl}/api/telegram-connect`,
       expect.objectContaining({
@@ -1668,7 +1669,7 @@ describe('generate and schedule video client', () => {
       text: async () => `Telegram rejected the bot token ${botToken}.`,
     });
 
-    const error = await client.connectTelegramAccount(botToken, '-1001234567890', 'channel').catch((e) => e);
+    const error = await connectTelegramAccount(client, botToken, '-1001234567890', 'channel').catch((e) => e);
     expect(error).toBeInstanceOf(Error);
     expect((error as Error).message).toContain('Failed to connect Telegram account: 422');
     expect((error as Error).message).not.toContain(botToken);
