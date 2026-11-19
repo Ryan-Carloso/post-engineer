@@ -12,17 +12,23 @@ const PROMPT_BASE_DIR = path.resolve(HERE, '..', '..', '..', 'shared', 'prompt-b
 // here so the negative cases below exercise exactly what the real-files
 // test enforces.
 // DATA_ONLY_PATTERN rejects module wiring: dynamic import, require calls,
-// static imports, side-effect imports, and re-exports (the barrel a
-// re-attempted split would use).
+// static imports, side-effect imports, re-exports (the barrel a
+// re-attempted split would use), and Python imports. The re-export arm is
+// deliberately bounded: an unbounded `[\s\S]*?` between `export` and
+// `from '...'` false-positives on the real prompt file, whose wording
+// contains `from'` (a string literal ending in "from"). So single-line
+// re-exports match on one line with a non-empty path, and multi-line ones
+// only through their braces (`export { ... } from '...'`).
 const DATA_ONLY_PATTERN =
-  /\b(import|require)\s*\(|^\s*(import|export)\b[^\n]*\bfrom\s*['"]|^\s*import\s*['"]/m;
+  /\b(import|require)\s*\(|^\s*(import|export)\b[^\n]*\bfrom\s*['"][^'"\n]*['"]|^\s*(import|export)\s*\{[^}]*\}\s*from\s*['"][^'"\n]+['"]|^\s*import\s*['"]|^\s*(import|from)\s+\w/m;
 // NO_LOGIC_PATTERN rejects helpers: arrow functions, function/class
 // declarations (including `export default`), function/class expressions
 // assigned to a const (named or anonymous), call expressions assigned to a
-// const (`export const X = buildPrompt();`), and Python defs (the exemption
-// covers .py files too).
+// const — bare (`export const X = buildPrompt();`) or member
+// (`export const X = base.slice(1);`) — top-level calls
+// (`os.system('x')`), and Python defs (the exemption covers .py files too).
 const NO_LOGIC_PATTERN =
-  /=>|^\s*(export\s+(default\s+)?)?(async\s+)?(function|class)\b|=\s*(async\s+)?(function|class)\b|=\s*[A-Za-z_$][\w$]*\s*\(|^\s*(async\s+)?def\s/m;
+  /=>|^\s*(async\s+)?def\s|^\s*(export\s+(default\s+)?)?(async\s+)?(function|class)\b|=\s*(async\s+)?(function|class)\b|=\s*[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*\s*\(|^\s*[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*\s*\(/m;
 
 /** Recursively collect every file under a directory. */
 function walk(dir) {
@@ -90,6 +96,18 @@ describe('prompt-data files', () => {
 
   it('rejects call expressions assigned to a const', () => {
     assert.match('export const X = buildPrompt();', NO_LOGIC_PATTERN);
+    assert.match('export const X = base.slice(1);', NO_LOGIC_PATTERN);
+  });
+
+  it('rejects multi-line re-exports and imports', () => {
+    assert.match("export {\n  h,\n} from './x'", DATA_ONLY_PATTERN);
+    assert.match('import {\n  a,\n  b\n} from "./y"', DATA_ONLY_PATTERN);
+  });
+
+  it('rejects Python imports and top-level calls', () => {
+    assert.match('import os\nos.system("x")', DATA_ONLY_PATTERN);
+    assert.match('import os\nos.system("x")', NO_LOGIC_PATTERN);
+    assert.match('from x import y', DATA_ONLY_PATTERN);
   });
 
   it('rejects async Python definitions', () => {
