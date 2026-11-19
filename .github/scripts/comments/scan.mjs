@@ -90,6 +90,15 @@ export function pyComments(text) {
   return JSON.parse(out).map((c) => ({ ...c, directive: isPyDirective(c.text), jsxWrapper: null }));
 }
 
+export function pySameAst(before, after) {
+  const out = execFileSync('python3', ['-I', path.join(HERE, 'py_same_ast.py')], {
+    input: JSON.stringify({ before, after }),
+    encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  return JSON.parse(out) === true;
+}
+
 export function lineOf(text, pos) {
   return text.slice(0, pos).split('\n').length;
 }

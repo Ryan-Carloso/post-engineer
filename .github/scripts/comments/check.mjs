@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { isVendoredCalendarCN } from '../file-size/vendored-calendarcn.mjs';
-import { findComments, lineOf } from './scan.mjs';
+import { findComments, lineOf, pySameAst } from './scan.mjs';
 import { stripComments } from './strip.mjs';
 import { sameCode } from './code-tokens.mjs';
 
@@ -57,16 +57,25 @@ export function run(argv, root = REPO_ROOT, log = console.log) {
   let found = 0;
   let fixedFiles = 0;
   let refused = 0;
+  let unreadable = 0;
   for (const file of targets) {
     const abs = path.join(root, file);
     if (!fs.existsSync(abs)) continue;
     const text = fs.readFileSync(abs, 'utf8');
-    const all = findComments(text, file);
+    let all;
+    try {
+      all = findComments(text, file);
+    } catch (error) {
+      unreadable++;
+      log(`${file}: could not be scanned: ${String(error.message).split('\n')[0]}`);
+      continue;
+    }
     const comments = all.filter((c) => !c.directive);
     if (comments.length === 0) continue;
     if (fix) {
       const stripped = stripComments(text, all);
-      if (!file.endsWith('.py') && !sameCode(text, stripped, file)) {
+      const unchanged = file.endsWith('.py') ? pySameAst(text, stripped) : sameCode(text, stripped, file);
+      if (!unchanged) {
         refused++;
         log(`${file}: not fixed, stripping would change the code; remove these comments by hand`);
         continue;
@@ -84,9 +93,9 @@ export function run(argv, root = REPO_ROOT, log = console.log) {
   }
   if (fix) {
     log(`comments: stripped comments from ${fixedFiles} file(s)`);
-    return refused > 0 ? 1 : 0;
+    return refused > 0 || unreadable > 0 ? 1 : 0;
   }
-  if (found > 0) {
+  if (found > 0 || unreadable > 0) {
     log(`comments: ${found} comment(s) found. Remove them, or run: node .github/scripts/comments/check.mjs --fix`);
     return 1;
   }

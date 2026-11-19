@@ -122,3 +122,29 @@ test('--fix refuses to write a file when stripping would change the code', () =>
   assert.equal(result.text, src);
   assert.ok(result.logs.some((line) => line.includes('a.tsx: not fixed, stripping would change the code')));
 });
+
+test('--fix keeps the Python syntax tree and refuses a file it cannot parse', async () => {
+  const { pySameAst } = await import('./scan.mjs');
+  assert.equal(runFix('a.py', 'def f():\n    # note\n    return 1  # one\n'), 'def f():\n    return 1\n');
+  assert.equal(pySameAst('x = 1\n', 'x = 2\n'), false);
+  assert.equal(pySameAst('x = 1  # a\n', 'x = 1\n'), true);
+  const unparseable = runFixWithCode('b.py', 'x = = 1  # note\n');
+  assert.equal(unparseable.code, 1);
+  assert.equal(unparseable.text, 'x = = 1  # note\n');
+  assert.ok(unparseable.logs.some((line) => line.includes('b.py: not fixed, stripping would change the code')));
+});
+
+test('a file the tokenizer cannot read is reported and the run continues', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'comments-'));
+  try {
+    fs.writeFileSync(path.join(dir, 'bad.py'), 'def f(:\n    pass  # note\n');
+    fs.writeFileSync(path.join(dir, 'good.ts'), 'const a = 1; // note\n');
+    const logs = [];
+    const code = run(['bad.py', 'good.ts'], dir, (line) => logs.push(line));
+    assert.equal(code, 1);
+    assert.ok(logs.some((line) => line.startsWith('bad.py: could not be scanned')));
+    assert.ok(logs.some((line) => line.startsWith('good.ts:1: // note')));
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
