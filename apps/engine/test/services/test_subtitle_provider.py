@@ -120,6 +120,39 @@ def test_whisper_raising_falls_back_to_the_estimate_and_logs_an_error(task_dir):
     log_error.assert_any_call("whisper subtitle failed: RuntimeError: model load failed")
 
 
+def test_whisper_correction_failure_falls_back_to_the_estimate(task_dir):
+    with (
+        patch.object(subtitle_provider.subtitle, "create", side_effect=_write("subtitle_file")),
+        patch.object(
+            subtitle_provider.subtitle, "correct", side_effect=RuntimeError("align failed")
+        ),
+        patch.object(
+            subtitle_provider.voice, "create_subtitle", side_effect=_write("subtitle_file")
+        ) as estimate,
+        patch.object(subtitle_provider.logger, "error") as log_error,
+    ):
+        result = _build(object())
+    assert result == str(task_dir / "subtitle.srt")
+    estimate.assert_called_once()
+    log_error.assert_any_call("whisper subtitle failed: RuntimeError: align failed")
+
+
+def test_estimate_without_cues_returns_empty(task_dir):
+    with (
+        patch.object(subtitle_provider.subtitle, "create", return_value=None),
+        patch.object(
+            subtitle_provider.voice, "create_subtitle", side_effect=_write("subtitle_file", "")
+        ) as estimate,
+        patch.object(subtitle_provider.logger, "error") as log_error,
+    ):
+        result = _build(object())
+    assert result == ""
+    estimate.assert_called_once()
+    log_error.assert_any_call(
+        "no subtitle cues: whisper failed and no TTS timeline could replace it"
+    )
+
+
 def test_whisper_with_an_empty_file_falls_back_to_the_estimate(task_dir):
     with (
         patch.object(subtitle_provider.subtitle, "create", side_effect=_write("subtitle_file", "")),
