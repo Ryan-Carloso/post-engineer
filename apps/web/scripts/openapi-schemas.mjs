@@ -181,6 +181,23 @@ const clonedVoice = { ...anyObject, description: 'Cloned voice record.' };
 const slotIdPath = 'slotId is the slot id returned by generate-and-schedule.';
 const ok = success({});
 
+// apps/web/app/api/tool-config/route.ts (GetToolConfigResponseSchema):
+// presence only — never a key value. PUT returns the same shape with
+// configured always true.
+const toolConfigPresence = {
+  configured: { type: 'boolean' },
+  searchTool: { type: 'string', enum: ['tavily', 'exa'], nullable: true },
+  stockSources: { type: 'array', items: { type: 'string', enum: ['pexels', 'pixabay', 'coverr'] } },
+  keysPresent: object(
+    fields({ type: 'boolean' }, ['tavily', 'exa', 'pexels', 'pixabay', 'coverr']),
+    ['tavily', 'exa', 'pexels', 'pixabay', 'coverr'],
+  ),
+  keysLast4: object(
+    fields({ type: 'string', nullable: true }, ['tavily', 'exa', 'pexels', 'pixabay', 'coverr']),
+    ['tavily', 'exa', 'pexels', 'pixabay', 'coverr'],
+  ),
+};
+
 export const operationSchemas = {
   'POST /api/videos/generate-and-schedule': {
     extraResponses: {
@@ -303,6 +320,21 @@ export const operationSchemas = {
       accounts: { type: 'array', items: anyObject },
       message: str,
     }),
+  },
+  // apps/web/app/api/tool-config/route.ts (SaveToolConfigBodySchema)
+  'GET /api/tool-config': {
+    response: success(toolConfigPresence),
+  },
+  'PUT /api/tool-config': {
+    request: object(
+      {
+        searchTool: { type: 'string', enum: ['tavily', 'exa'], nullable: true },
+        stockSources: { type: 'array', items: { type: 'string', enum: ['pexels', 'pixabay', 'coverr'] } },
+        keys: object(fields({ ...str, minLength: 1, maxLength: 512 }, ['tavily', 'exa', 'pexels', 'pixabay', 'coverr'])),
+      },
+      ['searchTool', 'stockSources', 'keys'],
+    ),
+    response: success({ ...toolConfigPresence, configured: { type: 'boolean', enum: [true] } }),
   },
   // apps/web/app/api/pinterest/boards/route.ts
   'GET /api/pinterest/boards': {

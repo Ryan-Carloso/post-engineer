@@ -70,7 +70,7 @@ describe('listServerTools', () => {
     const server = createPostEngineerMcpServer(new PostEngineerClient({ apiKey: 'measure-only' }), 'stdio');
     const tools = await listServerTools(server);
     const names = tools.map((entry) => entry.name);
-    expect(tools).toHaveLength(16);
+    expect(tools).toHaveLength(17);
     expect(new Set(names).size).toBe(names.length);
     expect(names).toContain('generate_video');
     // Each tool carries a usable input schema, which is what makes up most of the payload.

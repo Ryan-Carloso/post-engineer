@@ -227,6 +227,18 @@
       "action": "set_persona_publishing"
     }
   ],
+  "GET /api/tool-config": [
+    {
+      "tool": "tool_config",
+      "action": "get"
+    }
+  ],
+  "PUT /api/tool-config": [
+    {
+      "tool": "tool_config",
+      "action": "save"
+    }
+  ],
   "DELETE /api/persona": [
     {
       "tool": "personas",

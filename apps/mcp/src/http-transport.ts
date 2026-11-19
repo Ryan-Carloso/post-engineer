@@ -2,7 +2,7 @@
 //
 // This module wires the McpServer built by createPostEngineerMcpServer()
 // to the SDK's StreamableHTTPServerTransport instead of stdio. The HTTP
-// endpoint serves the same 16 intent tools with the same handlers, minus
+// endpoint serves the same 17 intent tools with the same handlers, minus
 // every action and field that would read a path from this host's filesystem
 // (see remote-shapes.ts and the `unavailable` options in intent-*.ts).
 //

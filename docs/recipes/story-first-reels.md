@@ -33,7 +33,7 @@ informative, funny, inspirational, relatable, or provocative — never
 basic content.
 Media is mixed: AI photos, real photos, licensed stock photos, and
 licensed stock video (b-roll) from the sources configured for this
-video (Pexels, Pixabay, Coverr) — on faceless videos and on the
+account (Pexels, Pixabay, Coverr) — on faceless videos and on the
 non-hook takes of hook_lipsync videos; never on full_lipsync, never
 in the hook window, where a skipped clip fails the render, with one
 consistent persona for the whole video whenever the persona appears,

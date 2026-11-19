@@ -9,6 +9,7 @@ import { registerAccountTools } from './intent-accounts.js';
 import { registerContentTools } from './intent-content.js';
 import { registerLibraryTools } from './intent-library.js';
 import { registerPersonaMediaTools, registerPersonaTools } from './intent-personas.js';
+import { registerToolConfigTools } from './intent-tool-config.js';
 import { registerVideoTools } from './intent-video.js';
 import { registerVoiceTools } from './intent-voices.js';
 import { parseHttpTransportOptions, serveHttpTransport } from './http-transport.js';
@@ -28,7 +29,7 @@ export { PostEngineerClient };
 export { handleMcpWebRequest } from './http-web.js';
 
 //---------------
-// The tools are intent tools (issue #566), not one tool per endpoint: 16
+// The tools are intent tools (issue #566), not one tool per endpoint: 17
 // tools, most with an `action`. Each tools module registers its own, next to
 // its shapes and handlers; tools that read a file from the disk offer those
 // actions only on the stdio server, where the disk is the agent's own
@@ -52,6 +53,7 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient, transpo
   registerPersonaMediaTools(server, apiClient, remote);
   registerVoiceTools(server, apiClient, remote);
   registerAccountTools(server, apiClient, recipeSession);
+  registerToolConfigTools(server, apiClient);
   registerLibraryTools(server, apiClient, recipeSession);
   registerContentTools(server, apiClient, recipeSession, remote);
 
