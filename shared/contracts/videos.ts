@@ -112,8 +112,8 @@ export const segmentsRequestSchema = z.array(
   z
     .object({
       kind: z.enum(['hook', 'content']),
-      // Marks the take that performs this video's CTA (issue #639).
-      text: z.string(), cta: z.boolean().optional(),
+      text: z.string(),
+      cta: z.boolean().optional(), // Marks the take that performs this video's CTA (issue #639).
       media: z
         .array(
           z
