@@ -265,8 +265,6 @@ describe('prompts hub data', () => {
     expect(text).toContain('Coverr');
     expect(text).toContain('Reuse the stock answers');
     expect(text).toContain('never claim the answers were saved');
-    // The search-tool ask lives in the base; step 4 must not repeat it,
-    // so the composed prompt asks it exactly once.
     expect(fullText.split('Ask me once which search tool you already have').length - 1).toBe(1);
     expect(text).not.toContain('issue #');
   });
@@ -283,7 +281,6 @@ describe('prompts hub data', () => {
     expect(text).toContain('never claim the answers were saved');
     expect(text).toContain('If a key is missing, tell');
     expect(text).toContain('me to set it and keep going with the sources that are configured');
-    // This phrase really spans a line break.
     expect(text).toMatch(/never print them,\s+never paste them anywhere else, never log them/);
     expect(text).not.toContain('standing configuration for this account');
     expect(text).not.toContain('save the answers as the');
@@ -295,14 +292,10 @@ describe('prompts hub data', () => {
     expect(fullText.startsWith(baseText)).toBe(true);
     const text = fullText.slice(baseText.length + 2);
     expect(text).toContain('Ask which licensed stock video sources I have keys for, in order');
-    // The fallback phrase spans a line break, so pin it with a regex.
     expect(text).toMatch(/If a source fails - timeout, no results, or\s+error - use the next configured source/);
     expect(text).toContain('try the best-matching');
     expect(text).toContain('source first and never stop at the first failure');
-    // Terminal case: if every configured source fails, nothing is left
-    // to try — photos only.
     expect(text).toMatch(/If every configured\s+source fails, use photos only/);
-    // Step 4 asks stock sources only; the search tool lives in the base.
     expect(text).not.toContain('which search tool');
   });
 
@@ -774,7 +767,6 @@ describe('prompts hub data', () => {
     expect(text).toContain('Never invent a fact');
     expect(text).toContain('Tavily');
     expect(text).toContain('Exa');
-    // The fallback phrase spans a line break, so pin it with a regex.
     expect(text).toMatch(/If\s+that tool fails - timeout, out of tokens, or error - try the next/);
     expect(text).toContain('configured search tool');
     expect(text).toContain('cut it from the script');
@@ -793,14 +785,10 @@ describe('prompts hub data', () => {
     expect(text).toContain('If no stock source is configured,');
     expect(text).toContain('photos only. A clip is full-frame');
     expect(text).toMatch(/clip\s+audio is discarded/);
-    // If a stock source fails, the agent tries the next configured one —
-    // best match first, never stopping at the first failure.
     expect(text).toContain('If a source fails - timeout, no results, or');
     expect(text).toContain('error - use the next configured source');
     expect(text).toContain('try the best-matching');
     expect(text).toContain('source first and never stop at the first failure');
-    // Terminal case: if every configured source fails, nothing is left
-    // to try — photos only.
     expect(text).toMatch(/If every configured\s+source fails, use photos only/);
     expect(text).toContain('extract frames');
     expect(text).toContain('same subject,');
@@ -808,9 +796,6 @@ describe('prompts hub data', () => {
     expect(text).toContain('never forced in');
     expect(text).not.toContain('it cannot use');
     expect(text).not.toContain('never attach a video URL');
-    // v3/v4 lessons, for a 10/10 video: every emotional beat is visible
-    // in the image, the rhythm varies take by take, every sentence gets
-    // its own image, and every image is sharp, well-lit, and on-topic.
     expect(text).toContain('Every emotional beat must be VISIBLE in the image');
     expect(text).toContain('visibly triumphant');
     expect(text).toContain('An invisible beat is a failure');

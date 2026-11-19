@@ -17,8 +17,6 @@ interface MetricsRowProps {
   subtitle: string;
   formatNumber: (value: number) => string;
   formatDate: (iso: string) => string;
-  // Anchor target for the top-videos chart: clicking a bar scrolls to
-  // this row in the list view.
   id?: string;
 }
 

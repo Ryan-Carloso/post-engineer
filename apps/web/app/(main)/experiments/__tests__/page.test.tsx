@@ -129,8 +129,6 @@ describe('/experiments page', () => {
     mockQueries(detailFixture());
     render(<ExperimentsPage />);
     expect(screen.getByText('experiments.title')).toBeInTheDocument();
-    // Human names appear (chart totals + wins tally); A/B variant
-    // labels never do.
     expect(screen.getAllByText(/Calm question/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Direct hook/).length).toBeGreaterThan(0);
     expect(screen.queryByText(/variante a/i)).toBeNull();
@@ -143,7 +141,6 @@ describe('/experiments page', () => {
     expect(screen.getByText('experiments.labelIndicative').className).toContain('bg-warning-soft');
     expect(screen.getByRole('combobox')).not.toBeDisabled();
     expect(screen.getByText(/experiments\.pValue/)).toBeInTheDocument();
-    // Charts show the totals as text; the per-pair table is behind Show table.
     expect(screen.queryByRole('table')).toBeNull();
     fireEvent.click(screen.getByText('experiments.showTable'));
     expect(screen.getAllByText('500')).toHaveLength(3);
