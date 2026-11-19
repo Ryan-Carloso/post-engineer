@@ -8,6 +8,7 @@ from app.services import upload_publisher
 from app.services.fill_schedule.youtube_tags import derive_tags_from_title
 from app.services.publish_fanvue import validate_fanvue_metadata
 from app.services.publish_pinterest import validate_pinterest_metadata
+from app.services.publish_telegram import validate_telegram_metadata
 
 
 class AccountNotBoundError(RuntimeError):
@@ -68,6 +69,13 @@ def _fanvue_metadata(title: str, schedule: dict[str, Any], copy: str):
     )
 
 
+def _telegram_metadata(title: str, schedule: dict[str, Any], copy: str):
+    return upload_publisher.TelegramMetadata(
+        caption=copy[: upload_publisher.TELEGRAM_CAPTION_MAX_LENGTH],
+        account_ids=tuple(str(value) for value in schedule.get("telegram_account_ids", [])),
+    )
+
+
 def _threespeak_metadata(title: str, schedule: dict[str, Any], copy: str):
     return upload_publisher.ThreespeakMetadata(
         caption=copy,
@@ -104,6 +112,7 @@ _METADATA_BUILDERS: dict[str, Any] = {
     upload_publisher.FACEBOOK_PROVIDER: _facebook_metadata,
     upload_publisher.PINTEREST_PROVIDER: _pinterest_metadata,
     upload_publisher.FANVUE_PROVIDER: _fanvue_metadata,
+    upload_publisher.TELEGRAM_PROVIDER: _telegram_metadata,
     upload_publisher.THREESPEAK_PROVIDER: _threespeak_metadata,
     upload_publisher.RUMBLE_PROVIDER: _rumble_metadata,
     upload_publisher.INSTAGRAM_PROVIDER: _instagram_metadata,
@@ -187,6 +196,9 @@ def validate_publish_plan(
             rumble = metadata
         elif isinstance(metadata, upload_publisher.FanvueMetadata):
             validate_fanvue_metadata(metadata)
+        elif isinstance(metadata, upload_publisher.TelegramMetadata):
+            # Gated here for the same file-size reason as Fanvue above.
+            validate_telegram_metadata(metadata)
     upload_publisher.validate_publish_metadata(
         providers,
         youtube,

@@ -10,11 +10,29 @@ import {
   parsePersonaPublishingAccountsQuery,
   RumbleConnectBodySchema,
   SetPersonaPublishingAccountsBodySchema,
+  TelegramConnectBodySchema,
   ThreespeakConnectBodySchema,
 } from '../contracts/accounts.js';
 import { GetPersonaPublishingAccountsSchema } from '../tools-publishing-accounts.js';
 
-const ALL_PROVIDERS = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'pinterest', 'fanvue', '3speak', 'rumble'] as const;
+//---------------
+// accounts tool↔contract equivalence (shared/contracts/accounts.ts):
+// the tool schemas and the contract schemas/parsers must accept and
+// reject the same inputs, so a call the tool allows is one the route
+// accepts and a call the route rejects fails fast in the tool.
+//
+// Deliberate differences, pinned here so they stay deliberate:
+// - The connect tool shape is one flat shape for all providers: a
+//   missing credential passes the tool schema and the handler enforces
+//   presence per provider, while each contract body requires both of its
+//   fields. Only the blank-credential cases are equivalent.
+// - The publishing-accounts PUT body accepts unknown provider keys on
+//   both sides; the route rejects them server-side.
+// - The publishing-accounts GET personaId is a UUID on the route only;
+//   the tool accepts any non-empty string and the route 400s the rest.
+//---------------
+
+const ALL_PROVIDERS = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'pinterest', 'fanvue', '3speak', 'rumble', 'telegram'] as const;
 
 describe('accounts tool-contract equivalence', () => {
   it('disconnect accepts every provider on both sides', () => {
@@ -55,8 +73,10 @@ describe('accounts tool-contract equivalence', () => {
       { tool: { provider: '3speak', username: 'x', postingKey: '   ' }, contract: { username: 'x', postingKey: '   ' } },
       { tool: { provider: 'rumble', channelId: '   ', accessToken: 'x' }, contract: { channelId: '   ', accessToken: 'x' } },
       { tool: { provider: 'rumble', channelId: 'x', accessToken: '   ' }, contract: { channelId: 'x', accessToken: '   ' } },
+      { tool: { provider: 'telegram', botToken: '   ', chatId: '-1001', chatType: 'channel' }, contract: { botToken: '   ', chatId: '-1001', chatType: 'channel' } },
+      { tool: { provider: 'telegram', botToken: '123:abc', chatId: '   ', chatType: 'group' }, contract: { botToken: '123:abc', chatId: '   ', chatType: 'group' } },
     ];
-    const contracts = [BlueskyConnectBodySchema, BlueskyConnectBodySchema, ThreespeakConnectBodySchema, ThreespeakConnectBodySchema, RumbleConnectBodySchema, RumbleConnectBodySchema];
+    const contracts = [BlueskyConnectBodySchema, BlueskyConnectBodySchema, ThreespeakConnectBodySchema, ThreespeakConnectBodySchema, RumbleConnectBodySchema, RumbleConnectBodySchema, TelegramConnectBodySchema, TelegramConnectBodySchema];
     for (const [index, { tool, contract }] of cases.entries()) {
       expect(ConnectAccountSchema.safeParse(tool).success).toBe(false);
       expect(contracts[index]?.safeParse(contract).success).toBe(false);
@@ -70,6 +90,8 @@ describe('accounts tool-contract equivalence', () => {
     expect(ThreespeakConnectBodySchema.safeParse({ username: 'alice', postingKey: '5Kkey' }).success).toBe(true);
     expect(ConnectAccountSchema.safeParse({ provider: 'rumble', channelId: 'chan-1', accessToken: 'a'.repeat(40) }).success).toBe(true);
     expect(RumbleConnectBodySchema.safeParse({ channelId: 'chan-1', accessToken: 'a'.repeat(40) }).success).toBe(true);
+    expect(ConnectAccountSchema.safeParse({ provider: 'telegram', botToken: '123:abc', chatId: '-1001', chatType: 'channel' }).success).toBe(true);
+    expect(TelegramConnectBodySchema.safeParse({ botToken: '123:abc', chatId: '-1001', chatType: 'channel' }).success).toBe(true);
   });
 
   it('pinterest boards rejects a blank account id on both sides and trims a valid one', () => {
@@ -92,6 +114,7 @@ describe('accounts tool-contract equivalence', () => {
     const notArray = { accounts: { youtube: 'UC-1' } };
     expect(SetPersonaPublishingAccountsSchema.safeParse({ personaId: 'p-1', ...notArray }).success).toBe(false);
     expect(SetPersonaPublishingAccountsBodySchema.safeParse(notArray).success).toBe(false);
+    // Unknown provider keys pass both sides; the route rejects them.
     const unknownProvider = { accounts: { myspace: ['id-1'] } };
     expect(SetPersonaPublishingAccountsSchema.safeParse({ personaId: 'p-1', ...unknownProvider }).success).toBe(true);
     expect(SetPersonaPublishingAccountsBodySchema.safeParse(unknownProvider).success).toBe(true);
@@ -101,6 +124,7 @@ describe('accounts tool-contract equivalence', () => {
     const uuid = '11111111-1111-4111-8111-111111111111';
     expect(GetPersonaPublishingAccountsSchema.safeParse({ personaId: uuid }).success).toBe(true);
     expect(parsePersonaPublishingAccountsQuery(new URLSearchParams({ personaId: uuid })).ok).toBe(true);
+    // The tool accepts any non-empty id; the route 400s a non-UUID.
     expect(GetPersonaPublishingAccountsSchema.safeParse({ personaId: 'p-1' }).success).toBe(true);
     const parsed = parsePersonaPublishingAccountsQuery(new URLSearchParams({ personaId: 'p-1' }));
     expect(parsed.ok).toBe(false);

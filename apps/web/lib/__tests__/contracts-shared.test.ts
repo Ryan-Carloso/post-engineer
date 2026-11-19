@@ -87,7 +87,7 @@ describe('contracts shared source', () => {
       const provider = (variant.shape as { provider: { value: string } }).provider.value;
       expect(registry).toContain(`provider: '${provider}'`);
     }
-    expect(PublicAccountItemSchema.options).toHaveLength(10);
+    expect(PublicAccountItemSchema.options).toHaveLength(11);
     for (const name of ['AccountData', 'InstagramAccountData', 'BlueskyAccountData', 'LinkedinAccountData', 'ThreadsAccountData', 'FacebookAccountData', 'PinterestAccountData', 'ThreespeakAccountData', 'RumbleAccountData', 'FanvueAccountData']) {
       expect(registry).toContain(name);
     }

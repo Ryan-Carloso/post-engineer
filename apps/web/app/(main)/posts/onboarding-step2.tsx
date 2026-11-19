@@ -24,7 +24,23 @@ import { notifyIfSessionExpired } from '@/lib/session-expiry';
 import { useSocialAccountsQuery } from '@/lib/social-accounts-queries';
 import { INPUT_CLASS } from '@/lib/ui';
 import { PROVIDER_LABELS } from '@/lib/account-options';
+import { TelegramSetupGuide, telegramConnectErrorKey, type TelegramChatKind } from '@/components/telegram-setup-guide';
 
+//---------------
+// Onboarding wizard step 2 — inline connect (issue #578, refs #573).
+// The old step 2 linked every provider to /accounts, which unmounted
+// this dialog (it only renders on /posts) and left the user to find
+// their way back through the saved-step resume. This step never
+// navigates: tapping a row swaps the dialog to that provider's real
+// connect UI, and the OAuth flows open a popup (lib/oauth/popup.ts),
+// so the page — and the wizard — stay mounted through the whole
+// connect. The saved-step resume in lib/onboarding-wizard.ts stays as
+// the safety net for a detour; dismiss-on-close is unchanged.
+//---------------
+
+// Display order is the approved mockup order: SOCIAL_PROVIDERS order with
+// Fanvue moved up before 3Speak/Rumble. Brand names are literals: the
+// same in both locales.
 const STEP2_PROVIDERS: readonly SocialProvider[] = SOCIAL_PROVIDERS.flatMap((provider): SocialProvider[] => {
   if (provider === 'fanvue') return [];
   return provider === '3speak' ? ['fanvue', provider] : [provider];
@@ -41,7 +57,17 @@ const PROVIDER_DESCRIPTIONS: Record<SocialProvider, TranslationKey> = {
   fanvue: 'accounts.fanvueDescription',
   '3speak': 'accounts.threespeakDescription',
   rumble: 'accounts.rumbleDescription',
+  telegram: 'accounts.telegramDescription',
 };
+
+//---------------
+// ONBOARDING_OAUTH_CONFIG — the /accounts OAuth configs, by value.
+// The per-provider hooks (lib/oauth/*-handler.ts) are the same
+// useOAuthFlow call with the same config; the sync test in
+// __tests__/onboarding-step2-oauth-config.test.tsx pins the copy, so a
+// start URL or callback message that changes in a handler breaks there
+// instead of silently connecting the wrong provider.
+//---------------
 
 export const ONBOARDING_OAUTH_CONFIG: Record<
   OAuthProvider,
@@ -98,6 +124,15 @@ export const ONBOARDING_OAUTH_CONFIG: Record<
   },
 };
 
+//---------------
+// Credential providers have no OAuth: Bluesky takes a handle plus an
+// app password, 3Speak a Hive username plus its posting key, Rumble a
+// channel id plus a manual access token. The endpoints, field names,
+// and error mapping are the same as the /accounts sections
+// (credential-accounts-sections.tsx, threespeak-accounts-section.tsx);
+// only the form renders inline here instead of in a KeyConnectDialog.
+//---------------
+
 type CredentialProvider = Exclude<SocialProvider, OAuthProvider>;
 
 interface CredentialConnectConfig {
@@ -152,8 +187,24 @@ const CREDENTIAL_CONFIG: Record<CredentialProvider, CredentialConnectConfig> = {
     securityHintKey: 'accounts.rumbleSecurityHint',
     errorKey: 'accounts.rumbleConnectError',
   },
+  telegram: {
+    endpoint: '/api/telegram-connect',
+    handleField: 'chatId',
+    passwordField: 'botToken',
+    titleKey: 'accounts.telegramConnectTitle',
+    hintKey: 'accounts.telegramConnectHint',
+    handleLabelKey: 'accounts.telegramChatLabel',
+    passwordLabelKey: 'accounts.telegramTokenLabel',
+    submitLabelKey: 'accounts.telegramConnect',
+    securityHintKey: 'accounts.telegramSecurityHint',
+    errorKey: 'accounts.telegramConnectError',
+  },
 };
 
+// An account with sync status 'error' has a dead credential (revoked
+// token, undecryptable secret) — the /accounts page flags it as invalid
+// instead of healthy, so the wizard must not badge it Connected either.
+// The field is optional: payloads without it read as healthy.
 function connectedProviders(accounts: Array<{ provider: string; status?: AccountSyncStatus }>): Set<SocialProvider> {
   const connected = new Set<SocialProvider>();
   for (const account of accounts) {
@@ -166,6 +217,9 @@ export function WizardStepTwo() {
   const { t } = useI18n();
   const next = useOnboardingWizardStore((s) => s.next);
   const [selected, setSelected] = useState<SocialProvider | null>(null);
+  // One shared ['social-accounts'] query — the same single GET
+  // /api/account the /accounts page uses — so the badges read the
+  // live connected state with no extra fetch.
   const accountsQuery = useSocialAccountsQuery();
   const connected = connectedProviders(accountsQuery.data?.accounts ?? []);
 
@@ -224,6 +278,8 @@ function WizardStepTwoConnect({ provider, onBack }: { provider: SocialProvider; 
   const { t } = useI18n();
   const next = useOnboardingWizardStore((s) => s.next);
   const accountsQuery = useSocialAccountsQuery();
+  // Same dead-credential guard as connectedProviders: an 'error' account
+  // must not show Connected or Continue here either.
   const connected = (accountsQuery.data?.accounts ?? []).some(
     (account) => account.provider === provider && account.status !== 'error',
   );
@@ -293,12 +349,22 @@ function OAuthConnectView({ provider, connected }: { provider: OAuthProvider; co
   );
 }
 
+//---------------
+// useCredentialConnect — the /accounts credential POST as a hook: the
+// same endpoint, field names, and error mapping as the provider's
+// section, with the shared accounts query invalidated on success so
+// the Connected badge appears without a page reload.
+//---------------
+
 function useCredentialConnect(provider: CredentialProvider) {
   const { t } = useI18n();
   const queryClient = useQueryClient();
   const config = CREDENTIAL_CONFIG[provider];
   const [handle, setHandle] = useState('');
   const [appPassword, setAppPassword] = useState('');
+  // Telegram only: which destination the setup guide validates (a
+  // channel bot must be an admin who can post, a group bot a member).
+  const [chatKind, setChatKind] = useState<TelegramChatKind>('channel');
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -310,10 +376,23 @@ function useCredentialConnect(provider: CredentialProvider) {
       const formData = new FormData();
       formData.append(config.handleField, handle.trim());
       formData.append(config.passwordField, appPassword);
+      if (provider === 'telegram') formData.append('chatType', chatKind);
       const response = await fetch(config.endpoint, { method: 'POST', body: formData });
       if (!response.ok) {
+        // 401 here means a dead hub session (a rejected credential is 422
+        // for Bluesky/3Speak, 400 for Rumble — format-only validation), so
+        // it triggers the host-wide session-expiry redirect.
         notifyIfSessionExpired(response);
-        if (config.credentialRejectedKey) {
+        if (provider === 'telegram') {
+          // Each Telegram rejection carries its own TELEGRAM_* code: name
+          // the step the user must fix (token, chat, kind, permission).
+          const body: unknown = await response.json().catch(() => null);
+          const code = typeof body === 'object' && body !== null && 'code' in body ? body.code : undefined;
+          setError(t(telegramConnectErrorKey(code, chatKind)));
+        } else if (config.credentialRejectedKey) {
+          // A rejected credential is 422 THREESPEAK_CREDENTIAL_REJECTED:
+          // name it, so the user knows the username/key pair is what
+          // 3Speak refused.
           const body: unknown = await response.json().catch(() => null);
           const code = (body as { code?: unknown } | null)?.code;
           setError(
@@ -340,16 +419,17 @@ function useCredentialConnect(provider: CredentialProvider) {
     }
   };
 
-  return { config, handle, appPassword, pending, error, setHandle, setAppPassword, connect };
+  return { config, handle, appPassword, pending, error, setHandle, setAppPassword, connect, chatKind, setChatKind };
 }
 
 function CredentialConnectView({ provider, connected }: { provider: CredentialProvider; connected: boolean }) {
   const { t } = useI18n();
-  const { config, handle, appPassword, pending, error, setHandle, setAppPassword, connect } =
+  const { config, handle, appPassword, pending, error, setHandle, setAppPassword, connect, chatKind, setChatKind } =
     useCredentialConnect(provider);
   return (
     <div className="grid gap-4">
       <p className="text-sm leading-5 text-muted-text">{t(config.hintKey)}</p>
+      {provider === 'telegram' ? <TelegramSetupGuide kind={chatKind} onKindChange={setChatKind} /> : null}
       <label className="text-sm font-medium text-ink-soft">
         {t(config.handleLabelKey)}
         <input

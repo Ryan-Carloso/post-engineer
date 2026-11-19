@@ -12,6 +12,8 @@ const { mockRequireSupabaseSession, mockApplyRateLimit, mockHandleYoutubeUpload,
     mockHandleRumbleUpload: vi.fn(),
     mockBuildUploadErrorResponse: vi.fn(),
     mockCreateSupabaseServiceClient: vi.fn(),
+    // Plain array (not a mock fn): beforeEach's clearAllMocks must not wipe
+    // the registration record — the wrapper runs once at module import.
     apiErrorReportingCalls: [] as unknown[][],
   };
 });
@@ -144,6 +146,8 @@ describe('POST /api/upload-content', () => {
     expect(mockHandleYoutubeUpload).toHaveBeenCalledTimes(1);
     const [, userId] = mockHandleYoutubeUpload.mock.calls[0] as unknown[];
     expect(userId).toBe(USER_ID);
+    // Pin the observability calls: message, endpoint/method labels and the
+    // structured metadata travel to the logger verbatim.
     expect(vi.mocked(logger.info)).toHaveBeenCalledWith('[upload-content] request recebido', {
       logId: 'log-1',
       metadata: { provider: 'youtube', userId: USER_ID, fields: ['provider'] },
@@ -198,6 +202,8 @@ describe('POST /api/upload-content', () => {
 
     expect(res.status).toBe(401);
     expect(mockHandleYoutubeUpload).not.toHaveBeenCalled();
+    // The session helper's error passes through verbatim — the route must
+    // not substitute its own fallback body on this path.
     expect(await res.json()).toEqual({ success: false });
   });
 
@@ -214,6 +220,8 @@ describe('POST /api/upload-content', () => {
   });
 
   it('returns the authentication-required fallback when the auth helper yields no auth and no error', async () => {
+    // requireSupabaseSession always returns an error with a null auth in
+    // production; this pins the defensive fallback for callers that do not.
     mockRequireSupabaseSession.mockResolvedValue({ auth: null, error: null });
 
     const res = await POST(makeRequest());
@@ -256,6 +264,10 @@ describe('POST /api/upload-content', () => {
   it('rejects a non-string userId on the engine-secret path', async () => {
     mockRequireSupabaseSession.mockResolvedValue({ auth: null, error: null });
 
+    // A File userId must not be honored: the engine-secret path only trusts
+    // a non-empty string. Built as a minimal fake because constructing a
+    // NextRequest over a FormData containing a File chokes in jsdom; the
+    // route only touches headers and formData().
     const form = new FormData();
     form.append('provider', 'youtube');
     form.append('userId', new File(['x'], 'id.txt', { type: 'text/plain' }));
@@ -271,6 +283,8 @@ describe('POST /api/upload-content', () => {
   });
 
   it('registers the route label with the API error-reporting wrapper', () => {
+    // The wrapper runs once at module import; calls are recorded in a plain
+    // array because beforeEach's clearAllMocks wipes mock functions.
     expect(apiErrorReportingCalls).toEqual([
       ['POST /api/upload-content', expect.any(Function), { getUserId: expect.any(Function) }],
     ]);
@@ -298,7 +312,8 @@ describe('POST /api/upload-content', () => {
     expect(res.status).toBe(400);
     expect(mockBuildUploadErrorResponse).toHaveBeenCalled();
     const err = mockBuildUploadErrorResponse.mock.calls[0][0] as Error;
-    expect(err.message).toBe('Invalid provider. Use one of: youtube, instagram, bluesky, linkedin, threads, facebook, pinterest, 3speak, rumble, fanvue');
+    expect(err.message).toBe('Invalid provider. Use one of: youtube, instagram, bluesky, linkedin, threads, facebook, pinterest, 3speak, rumble, fanvue, telegram');
+    // The validation error carries the offending field for the client.
     expect((err as ValidationError).field).toBe('provider');
   });
 
@@ -311,6 +326,7 @@ describe('POST /api/upload-content', () => {
     expect(mockHandleYoutubeUpload).not.toHaveBeenCalled();
     const [, profile, identity] = mockApplyRateLimit.mock.calls[0] as unknown[];
     expect(identity).toBe(USER_ID);
+    // YouTube uploads use the dedicated youtube-upload profile.
     expect(profile).toBe(RATE_LIMITS.youtubeUpload);
   });
 
@@ -321,7 +337,9 @@ describe('POST /api/upload-content', () => {
     expect(mockHandleYoutubeUpload).not.toHaveBeenCalled();
     const body = (await res.json()) as { success: boolean; provider: string };
     expect(body).toEqual({ success: true, provider: 'instagram', results: [] });
+    // The 200 body parses against the shared contract the MCP reads.
     expect(UploadContentResponseSchema.safeParse(body).success).toBe(true);
+    // Non-YouTube providers share the instagram-post rate-limit profile.
     const [, profile] = mockApplyRateLimit.mock.calls[0] as unknown[];
     expect(profile).toBe(RATE_LIMITS.instagramPost);
   });
@@ -361,6 +379,7 @@ describe('POST /api/upload-content', () => {
     expect(mockHandleYoutubeUpload).not.toHaveBeenCalled();
     const facebookBody = await res.json();
     expect(facebookBody).toEqual({ success: true, results: [{ accountId: '111', success: true, postId: 'vid-1' }] });
+    // The 200 body parses against the shared contract the MCP reads.
     expect(UploadContentResponseSchema.safeParse(facebookBody).success).toBe(true);
   });
 
@@ -437,10 +456,14 @@ describe('POST /api/upload-content with a personal API key', () => {
       error: null,
     });
 
+    // A form userId must never let an API-key caller publish as someone
+    // else: the identity comes from the resolved key, not the form.
     const req = makeRequest({ userId: 'someone-else' });
     const res = await POST(req);
 
     expect(res.status).toBe(200);
+    // The auth helper only inspects Bearer/x-api-key headers when it
+    // receives the request — this assertion pins the API-key capability.
     expect(mockRequireSupabaseSession).toHaveBeenCalledTimes(1);
     expect(mockRequireSupabaseSession.mock.calls[0][0]).toBe(req);
     const [, userId] = mockHandleYoutubeUpload.mock.calls[0] as unknown[];
@@ -464,6 +487,13 @@ describe('POST /api/upload-content with a personal API key', () => {
   });
 });
 
+//---------------
+// Publish ledger — an in-memory stand-in for the claim/record RPCs
+// (migration 061), with the same rules: a fresh key is claimed, a
+// published key replays its recorded result, an in-flight key waits,
+// a failed key or an expired lease is claimed again, and only the
+// request holding the lease can record.
+//---------------
 type LedgerRow = {
   status: 'in_progress' | 'published' | 'failed' | 'unknown';
   leaseUntil: number | null;
@@ -597,6 +627,7 @@ describe('POST /api/upload-content with a publish scope key', () => {
         { accountId: 'acc-2', success: true, videoUrl: 'https://youtu.be/def' },
       ],
     });
+    // The fresh account's post is recorded, so a later retry replays it too.
     expect(ledger.rows.get(ledgerKey('acc-2'))?.status).toBe('published');
     expect(ledger.rows.get(ledgerKey('acc-2'))?.result).toEqual(
       { accountId: 'acc-2', success: true, videoUrl: 'https://youtu.be/def' },
@@ -715,6 +746,9 @@ describe('POST /api/upload-content with a publish scope key', () => {
     });
 
     const first = await POST(makeRequest({ accountIds: ['acc-1'], scopeKey: SCOPE_KEY }));
+    // The caller still gets the handler's success: when it receives it, its
+    // own recorded success keeps the account from retrying at all. The
+    // unknown park only matters when the caller never got this answer.
     expect((await first.json() as { success: boolean }).success).toBe(true);
     expect(ledger.rows.get(ledgerKey('acc-1'))?.status).toBe('unknown');
 
@@ -791,10 +825,12 @@ describe('POST /api/upload-content with a publish scope key', () => {
       });
       mockHandleYoutubeUpload.mockImplementation(() => handlerDone);
       const resPromise = POST(makeRequest({ accountIds: ['acc-1'], scopeKey: SCOPE_KEY }));
+      // Let the route claim and reach the handler.
       await vi.advanceTimersByTimeAsync(0);
       expect(mockHandleYoutubeUpload).toHaveBeenCalledTimes(1);
       const before = ledger.rows.get(ledgerKey('acc-1'))?.leaseUntil;
 
+      // One heartbeat beat touches the claim, pushing its lease out.
       await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
       expect(ledger.rpc).toHaveBeenCalledWith(
         'touch_publish_ledger',
@@ -802,6 +838,7 @@ describe('POST /api/upload-content with a publish scope key', () => {
       );
       expect(ledger.rows.get(ledgerKey('acc-1'))?.leaseUntil).toBeGreaterThan(before ?? 0);
 
+      // Finish the handler; the heartbeat stops with the request.
       resolveHandler({
         success: true,
         provider: 'youtube',

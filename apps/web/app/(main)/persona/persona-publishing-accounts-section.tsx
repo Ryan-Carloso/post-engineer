@@ -17,7 +17,7 @@ import {
   useFacebookAccountsQuery,
   useThreespeakAccountsQuery,
 } from '@/lib/api';
-import { useRumbleAccountsQuery } from '@/lib/social-accounts-queries';
+import { useRumbleAccountsQuery, useTelegramAccountsQuery } from '@/lib/social-accounts-queries';
 import { usePinterestAccountsQuery } from '@/lib/pinterest-accounts';
 import { useFanvueAccountsQuery } from '@/lib/fanvue-accounts';
 import { useI18n } from '@/lib/i18n/provider';
@@ -111,6 +111,7 @@ export function PersonaPublishingAccountsSection({ personaId }: { personaId?: st
   const threespeak = useThreespeakAccountsQuery();
   const rumble = useRumbleAccountsQuery();
   const fanvue = useFanvueAccountsQuery();
+  const telegram = useTelegramAccountsQuery();
 
   const isDraft = personaId === undefined;
   const draftSelection = usePersonaStore((s) => s.publishingAccounts);
@@ -318,10 +319,23 @@ export function PersonaPublishingAccountsSection({ personaId }: { personaId?: st
         />
       ),
     })),
+    telegram: (telegram.data?.accounts ?? []).map((account) => ({
+      id: account.providerAccountId,
+      card: (
+        <AccountCard
+          key={`telegram:${account.providerAccountId}`}
+          type="telegram"
+          name={account.accountName ?? account.providerAccountId}
+          labelOrigin={account.accountName ? 'stored' : 'provider_id'}
+          selected={selection.telegram.includes(account.providerAccountId)}
+          onSelect={() => toggle('telegram', account.providerAccountId)}
+        />
+      ),
+    })),
   };
 
   const accountsLoading =
-    youtube.isLoading || instagram.isLoading || bluesky.isLoading || linkedin.isLoading || threads.isLoading || facebook.isLoading || pinterest.isLoading || threespeak.isLoading || rumble.isLoading || fanvue.isLoading;
+    youtube.isLoading || instagram.isLoading || bluesky.isLoading || linkedin.isLoading || threads.isLoading || facebook.isLoading || pinterest.isLoading || threespeak.isLoading || rumble.isLoading || fanvue.isLoading || telegram.isLoading;
 
   return (
     <section data-error-field="accounts">

@@ -40,6 +40,7 @@ describe('account-columns', () => {
       pinterest_account_ids: [],
       threespeak_account_ids: [],
       fanvue_account_ids: [],
+      telegram_account_ids: [],
     });
   });
 

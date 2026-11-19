@@ -13,6 +13,7 @@ vi.mock('@/lib/upload/pinterest-handler', () => ({ handlePinterestUpload: vi.fn(
 vi.mock('@/lib/upload/rumble-handler', () => ({ handleRumbleUpload: vi.fn() }));
 vi.mock('@/lib/upload/threads-handler', () => ({ handleThreadsUpload: vi.fn() }));
 vi.mock('@/lib/upload/threespeak-handler', () => ({ handleThreespeakUpload: vi.fn() }));
+vi.mock('@/lib/upload/telegram-handler', () => ({ handleTelegramUpload: vi.fn() }));
 
 import { ValidationError } from '@/lib/errors';
 import { handleBlueskyUpload } from '@/lib/upload/bluesky-handler';
@@ -22,6 +23,7 @@ import { handleFanvueUpload } from '@/lib/upload/fanvue-handler';
 import { handleLinkedinUpload } from '@/lib/upload/linkedin-handler';
 import { handlePinterestUpload } from '@/lib/upload/pinterest-handler';
 import { handleRumbleUpload } from '@/lib/upload/rumble-handler';
+import { handleTelegramUpload } from '@/lib/upload/telegram-handler';
 import { handleThreadsUpload } from '@/lib/upload/threads-handler';
 import { handleThreespeakUpload } from '@/lib/upload/threespeak-handler';
 import { PUBLISH_ACCOUNT_FIELDS } from '@/lib/contracts/providers';
@@ -49,6 +51,7 @@ const HANDLER_BY_PROVIDER = {
   fanvue: handleFanvueUpload,
   '3speak': handleThreespeakUpload,
   rumble: handleRumbleUpload,
+  telegram: handleTelegramUpload,
 } as const satisfies Record<SocialProvider, unknown>;
 
 function readyFixture(options?: { removeRejects?: boolean }): { store: VideoUploadStore; storage: VideoUploadStorage } {

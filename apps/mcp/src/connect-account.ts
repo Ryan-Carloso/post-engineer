@@ -1,10 +1,19 @@
+// accounts (action: connect): shape, schema and handler.
+//
+// Extracted from tools.ts so tools.ts stays under the file-size ratchet.
+// Re-exported from tools.ts, so existing import sites (`./tools.js`) keep
+// working, including the personas and accounts registration (intent-*.ts).
 import { z } from 'zod';
 
 import type { PostEngineerClient } from './client.js';
+import { connectTelegramAccount } from './client-telegram.js';
 import { SOCIAL_PROVIDERS, isOAuthConnectProvider, type DirectConnectProvider } from './contracts/providers.js';
 import { getErrorMessage } from './errors.js';
+import { redactSecretFromError } from './secret-redaction.js';
 import { handleLibraryCall, type McpToolResponse } from './tools-call.js';
 
+// A credential present but blank is rejected with the same message the
+// route uses — the route trims and rejects blanks, so the tool does too.
 function nonBlank(message: string) {
   return z
     .string()
@@ -14,12 +23,15 @@ function nonBlank(message: string) {
 
 export const ConnectAccountShape = {
   provider: z.enum(SOCIAL_PROVIDERS).describe('The social platform to connect'),
-  handle: nonBlank('Bluesky handle is required.').optional().describe('Bluesky handle (e.g. user.bsky.social). Required only for bluesky.'),
-  appPassword: nonBlank('Bluesky app password is required.').optional().describe('Bluesky app password (Settings > App passwords). Required only for bluesky. Never shared or logged.'),
-  username: nonBlank('Hive username is required.').optional().describe('Hive username (e.g. alice). Required only for 3speak.'),
-  postingKey: nonBlank('Hive posting key is required.').optional().describe('Hive posting key (the posting key only — never the owner, active, or master password). Required only for 3speak. Never shared or logged.'),
-  channelId: nonBlank('Rumble channel ID is required.').optional().describe('Rumble channel ID. Required only for rumble.'),
-  accessToken: nonBlank('Rumble access token is required.').optional().describe('Rumble 40-character Simple Upload API access token (issued by emailing bd@rumble.com). Required only for rumble. Never shared or logged.'),
+  handle: nonBlank('Bluesky handle is required.').optional().describe('bluesky only: the handle (e.g. user.bsky.social).'),
+  appPassword: nonBlank('Bluesky app password is required.').optional().describe('bluesky only: an app password (Settings > App passwords). Never logged.'),
+  username: nonBlank('Hive username is required.').optional().describe('3speak only: the Hive username.'),
+  postingKey: nonBlank('Hive posting key is required.').optional().describe('3speak only: the Hive posting key (never the owner/active/master key). Never logged.'),
+  channelId: nonBlank('Rumble channel ID is required.').optional().describe('rumble only: the channel ID.'),
+  accessToken: nonBlank('Rumble access token is required.').optional().describe('rumble only: the upload access token (from bd@rumble.com). Never logged.'),
+  botToken: nonBlank('Telegram bot token is required.').optional().describe('telegram only: the @BotFather bot token. Never logged.'),
+  chatId: nonBlank('Telegram chat ID or @username is required.').optional().describe('telegram only: @username or numeric chat ID.'),
+  chatType: z.enum(['channel', 'group']).optional().describe('telegram only: channel or group.'),
 };
 
 export const ConnectAccountSchema = z.object(ConnectAccountShape);
@@ -31,6 +43,14 @@ export async function handleConnectAccount(
   client: PostEngineerClient,
   args: z.infer<typeof ConnectAccountSchema>
 ): Promise<McpToolResponse> {
+  // One handler per direct-connect network (a record, not a chain): a new
+  // direct-connect network fails the typecheck until it has a handler,
+  // instead of falling through to the OAuth URL path. Bluesky and 3Speak
+  // project the upstream response to named fields (Telegram too, with the
+  // bot token redacted from any error); Rumble shares
+  // handleLibraryCall, which renders the same success/error text. Built
+  // inside the handler so the parity check, which follows calls from the
+  // action's own body, sees each network's client call.
   const DIRECT_CONNECT_HANDLERS: Record<DirectConnectProvider, DirectConnectHandler> = {
     bluesky: async (client, args) => {
       if (!args.handle || !args.appPassword) {
@@ -46,6 +66,8 @@ export async function handleConnectAccount(
       }
       try {
         const result = await client.connectBlueskyAccount(args.handle, args.appPassword);
+        // Project the upstream response to named fields: stringifying the
+        // whole body would surface any field the route adds later.
         const { accountId, did } = result;
         return {
           content: [
@@ -81,6 +103,8 @@ export async function handleConnectAccount(
       }
       try {
         const result = await client.connectThreespeakAccount(args.username, args.postingKey);
+        // Project the upstream response to named fields: stringifying the
+        // whole body would surface any field the route adds later.
         const { accountId, username } = result;
         return {
           content: [
@@ -122,6 +146,43 @@ export async function handleConnectAccount(
         'Rumble account connected successfully',
       );
     },
+    telegram: async (client, args) => {
+      if (!args.botToken || !args.chatId || !args.chatType) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: 'Error: Telegram requires botToken, chatId and chatType (channel or group).',
+            },
+          ],
+          isError: true,
+        };
+      }
+      try {
+        const result = await connectTelegramAccount(client, args.botToken, args.chatId, args.chatType);
+        // Project the upstream response to named fields: stringifying the
+        // whole body would surface any field the route adds later.
+        const { accountId, chatId, chatType, title } = result;
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Telegram account connected successfully: chatId=${chatId} chatType=${chatType} title=${title} accountId=${accountId}`,
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Error connecting Telegram account: ${getErrorMessage(redactSecretFromError(error, args.botToken))}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    },
   };
   if (!isOAuthConnectProvider(args.provider)) {
     return DIRECT_CONNECT_HANDLERS[args.provider](client, args);
@@ -141,6 +202,8 @@ export async function handleConnectAccount(
       };
     }
     const result = parsed.data;
+    // Never echo a non-https URL as a "open in your browser" authorization
+    // link: z.string().url() accepts any scheme, including javascript:.
     if (new URL(result.auth_url).protocol !== 'https:') {
       return {
         content: [

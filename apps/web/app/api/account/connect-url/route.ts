@@ -13,12 +13,32 @@ import {
   type OAuthConnectProvider,
 } from '@/lib/oauth-connect';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
+import { DIRECT_CONNECT_PROVIDERS, type DirectConnectProvider } from '@/lib/contracts/providers';
+
+//---------------
+// POST /api/account/connect-url — generates the OAuth auth URL to connect
+// a new social account. Built for the MCP flow: authenticates via API key
+// (or session), without depending on the browser's httpOnly nonce cookie.
+// The state is stored server-side (oauth_states table) and the callback
+// consumes it as a fallback. Body: { provider: one of OAUTH_CONNECT_PROVIDERS (shared/contracts/providers.ts) }.
+// Bluesky uses an app password: POST /api/bluesky-connect.
+// Rumble uses a manual access token: POST /api/rumble-connect.
+// Telegram uses a @BotFather bot token: POST /api/telegram-connect.
+//
+// Error contract (agent/MCP-consumed API): failures return
+//   { success: false, error: '<stable-code>' }
+// with the error class in the HTTP status. The codes are machine-readable
+// on purpose — the caller (an AI agent) presents them in the user's
+// language, so no English prose is hardcoded here.
+// Internal details go to the server-side log, never to the client.
+//---------------
 
 export const CONNECT_URL_ERRORS = {
   AUTHENTICATION_REQUIRED: 'authentication_required',
   INVALID_JSON_BODY: 'invalid_json_body',
   BLUESKY_REQUIRES_APP_PASSWORD: 'bluesky_requires_app_password',
   RUMBLE_REQUIRES_ACCESS_TOKEN: 'rumble_requires_access_token',
+  TELEGRAM_REQUIRES_BOT_TOKEN: 'telegram_requires_bot_token',
   INVALID_PROVIDER: 'invalid_provider',
   REDIRECT_URI_UNAVAILABLE: 'redirect_uri_unavailable',
   PROVIDER_NOT_CONFIGURED: 'provider_not_configured',
@@ -29,12 +49,29 @@ export const CONNECT_URL_ERRORS = {
 export type ConnectUrlErrorCode =
   (typeof CONNECT_URL_ERRORS)[keyof typeof CONNECT_URL_ERRORS];
 
+// A network that connects directly has no OAuth URL: each answers with the
+// code naming its own connect route. 3Speak has no dedicated code and keeps
+// answering invalid_provider.
+const DIRECT_CONNECT_ERRORS: Record<DirectConnectProvider, ConnectUrlErrorCode> = {
+  bluesky: CONNECT_URL_ERRORS.BLUESKY_REQUIRES_APP_PASSWORD,
+  '3speak': CONNECT_URL_ERRORS.INVALID_PROVIDER,
+  rumble: CONNECT_URL_ERRORS.RUMBLE_REQUIRES_ACCESS_TOKEN,
+  telegram: CONNECT_URL_ERRORS.TELEGRAM_REQUIRES_BOT_TOKEN,
+};
+
+function isDirectConnectProvider(value: unknown): value is DirectConnectProvider {
+  return typeof value === 'string' && (DIRECT_CONNECT_PROVIDERS as readonly string[]).includes(value);
+}
+
 function errorResponse(
   status: number,
   error: ConnectUrlErrorCode,
   route: string,
   cause?: unknown,
 ): NextResponse {
+  // The cause is threaded through apiErrorResponse (which logs it once),
+  // never pre-logged here: pre-logging would emit two PostHog events for
+  // one failure.
   return apiErrorResponse(status, error, { route, cause });
 }
 
@@ -66,11 +103,8 @@ async function postHandler(request: NextRequest): Promise<NextResponse> {
       return errorResponse(400, CONNECT_URL_ERRORS.INVALID_JSON_BODY, 'POST /api/account/connect-url');
     }
 
-    if (provider === 'bluesky') {
-      return errorResponse(400, CONNECT_URL_ERRORS.BLUESKY_REQUIRES_APP_PASSWORD, 'POST /api/account/connect-url');
-    }
-    if (provider === 'rumble') {
-      return errorResponse(400, CONNECT_URL_ERRORS.RUMBLE_REQUIRES_ACCESS_TOKEN, 'POST /api/account/connect-url');
+    if (isDirectConnectProvider(provider)) {
+      return errorResponse(400, DIRECT_CONNECT_ERRORS[provider], 'POST /api/account/connect-url');
     }
     if (!isOAuthConnectProvider(provider)) {
       return errorResponse(400, CONNECT_URL_ERRORS.INVALID_PROVIDER, 'POST /api/account/connect-url');
@@ -102,6 +136,8 @@ async function postHandler(request: NextRequest): Promise<NextResponse> {
         provider,
         nonce: built.nonce,
         redirectUri,
+        // Fanvue only: the PKCE verifier must be stored server-side so
+        // the callback can exchange the code without a browser cookie.
         ...(built.codeVerifier !== undefined ? { codeVerifier: built.codeVerifier } : {}),
       });
     } catch (storeError) {
@@ -113,6 +149,8 @@ async function postHandler(request: NextRequest): Promise<NextResponse> {
       );
     }
 
+    // Correlation id for the callback logs: the raw state never leaves
+    // the server unhashed.
     logger.info('[oauth-connect] connect URL issued', {
       logId,
       provider,
@@ -129,4 +167,7 @@ async function postHandler(request: NextRequest): Promise<NextResponse> {
   }
 }
 
+//---------------
+// 5xx reporting: handled server errors reach PostHog error tracking.
+//---------------
 export const POST = withApiErrorReporting('POST /api/account/connect-url', postHandler, { getUserId: resolveReportingUserId });

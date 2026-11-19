@@ -122,6 +122,7 @@ export async function generatePersonaVideoOutcome(
         fanvueAccountIds: args.fanvueAccountIds,
         threespeakAccountIds: args.threespeakAccountIds,
         rumbleAccountIds: args.rumbleAccountIds,
+        telegramAccountIds: args.telegramAccountIds,
         mode,
         startAt: args.startAt,
         times: args.times,

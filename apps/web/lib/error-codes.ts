@@ -17,6 +17,13 @@ export const ERROR_CODES = {
   VALIDATION_FAILED: 'VALIDATION_FAILED',
   BLUESKY_CREDENTIAL_REJECTED: 'BLUESKY_CREDENTIAL_REJECTED',
   THREESPEAK_CREDENTIAL_REJECTED: 'THREESPEAK_CREDENTIAL_REJECTED',
+  // POST /api/telegram-connect: each step the bot must prove before the
+  // chat is saved fails with its own code, so the UI names the fix.
+  TELEGRAM_TOKEN_REJECTED: 'TELEGRAM_TOKEN_REJECTED',
+  TELEGRAM_CHAT_NOT_FOUND: 'TELEGRAM_CHAT_NOT_FOUND',
+  TELEGRAM_CHAT_KIND_MISMATCH: 'TELEGRAM_CHAT_KIND_MISMATCH',
+  TELEGRAM_BOT_NOT_MEMBER: 'TELEGRAM_BOT_NOT_MEMBER',
+  TELEGRAM_BOT_CANNOT_POST: 'TELEGRAM_BOT_CANNOT_POST',
   VOICE_UNAVAILABLE: 'VOICE_UNAVAILABLE',
   UNKNOWN_VOICE: 'UNKNOWN_VOICE',
   INTERNAL_ERROR: 'INTERNAL_ERROR',
@@ -49,12 +56,18 @@ const DEFAULT_MESSAGES: Record<ErrorCode, string> = {
   VALIDATION_FAILED: 'Request validation failed.',
   BLUESKY_CREDENTIAL_REJECTED: 'Invalid Bluesky handle or app password.',
   THREESPEAK_CREDENTIAL_REJECTED: 'Invalid Hive username or posting key.',
+  TELEGRAM_TOKEN_REJECTED: 'Telegram rejected the bot token. Copy a fresh token from @BotFather and try again.',
+  TELEGRAM_CHAT_NOT_FOUND: 'Telegram could not find that chat. Check the chat ID or @username and that the bot was added to it.',
+  TELEGRAM_CHAT_KIND_MISMATCH: 'That chat is a {actual}, not a {expected}. Pick {actual} in the setup and try again.',
+  TELEGRAM_BOT_NOT_MEMBER: 'The bot is not a member of that chat. Add it in Telegram first, then try again.',
+  TELEGRAM_BOT_CANNOT_POST:
+    'The bot cannot post there yet. Make it an administrator who can post (channel) or allow it to send messages (group), then try again.',
   VOICE_UNAVAILABLE: 'The persona’s voice is unavailable and there is no default voice for its language. Update the persona.',
   UNKNOWN_VOICE:
     'Unknown voice "{attempt}". Not a house voice and not one of your clones. Pick one from GET /api/persona/voices.',
   INTERNAL_ERROR: 'Something went wrong. Please try again later.',
   ENGINE_UNAVAILABLE: 'Video generation is temporarily unavailable. Please try again later.',
-  IMAGE_PROVIDER_UNSUPPORTED: 'Images can only be published to Instagram, Bluesky, LinkedIn, Threads, Facebook and Pinterest.',
+  IMAGE_PROVIDER_UNSUPPORTED: 'Images can only be published to Instagram, Bluesky, LinkedIn, Threads, Facebook, Pinterest and Telegram.',
   VIDEO_UPLOAD_CONSUMED: 'This video upload was already used. Upload it again to publish.',
   VIDEO_UPLOAD_SCHEDULED:
     'This video upload is already scheduled. An upload publishes once: schedule it to every network in one call, or upload it again.',

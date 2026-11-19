@@ -15,6 +15,7 @@ export const ACCOUNT_NAME_FALLBACKS = {
   '3speak': null,
   rumble: null,
   fanvue: null,
+  telegram: null,
 } as const satisfies Record<SocialProvider, string | null>;
 
 export const THUMBNAIL_HOST_ALLOWLIST = [

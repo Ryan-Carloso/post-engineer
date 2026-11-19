@@ -9,6 +9,7 @@ import { handleFanvueUpload } from '@/lib/upload/fanvue-handler';
 import { handleLinkedinUpload } from '@/lib/upload/linkedin-handler';
 import { handlePinterestUpload } from '@/lib/upload/pinterest-handler';
 import { handleRumbleUpload } from '@/lib/upload/rumble-handler';
+import { handleTelegramUpload } from '@/lib/upload/telegram-handler';
 import { handleThreadsUpload } from '@/lib/upload/threads-handler';
 import { handleThreespeakUpload } from '@/lib/upload/threespeak-handler';
 
@@ -36,4 +37,5 @@ export const PUBLISH_HANDLERS: Record<SocialProvider, PublishHandler> = {
   '3speak': (formData, ownerUserId) => handleThreespeakUpload(formData, ownerUserId),
   rumble: (formData, ownerUserId) => handleRumbleUpload(formData, ownerUserId),
   fanvue: (formData, ownerUserId) => handleFanvueUpload(formData, ownerUserId),
+  telegram: (formData, ownerUserId) => handleTelegramUpload(formData, ownerUserId),
 };

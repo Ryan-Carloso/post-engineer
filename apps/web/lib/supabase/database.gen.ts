@@ -386,7 +386,7 @@ export interface Database {
         id: string;
         post_id: string;
         user_id: string;
-        provider: 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook' | 'pinterest' | '3speak' | 'rumble' | 'fanvue';
+        provider: 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook' | 'pinterest' | '3speak' | 'rumble' | 'fanvue' | 'telegram';
         account_id: string;
         external_id: string;
         metrics_window: '24h' | '7d' | '28d';
@@ -413,7 +413,7 @@ export interface Database {
         id?: string;
         post_id: string;
         user_id: string;
-        provider: 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook' | 'pinterest' | '3speak' | 'rumble' | 'fanvue';
+        provider: 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook' | 'pinterest' | '3speak' | 'rumble' | 'fanvue' | 'telegram';
         account_id: string;
         external_id: string;
         metrics_window: '24h' | '7d' | '28d';
@@ -440,7 +440,7 @@ export interface Database {
         id?: string;
         post_id?: string;
         user_id?: string;
-        provider?: 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook' | 'pinterest' | '3speak' | 'rumble' | 'fanvue';
+        provider?: 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook' | 'pinterest' | '3speak' | 'rumble' | 'fanvue' | 'telegram';
         account_id?: string;
         external_id?: string;
         metrics_window?: '24h' | '7d' | '28d';
@@ -715,6 +715,7 @@ export interface Database {
         threespeak_account_ids: string[];
         rumble_account_ids: string[];
         fanvue_account_ids: string[];
+        telegram_account_ids: string[];
         };
         Insert: {
         id?: string;
@@ -752,6 +753,7 @@ export interface Database {
         threespeak_account_ids?: string[];
         rumble_account_ids?: string[];
         fanvue_account_ids?: string[];
+        telegram_account_ids?: string[];
         };
         Update: {
         id?: string;
@@ -789,6 +791,7 @@ export interface Database {
         threespeak_account_ids?: string[];
         rumble_account_ids?: string[];
         fanvue_account_ids?: string[];
+        telegram_account_ids?: string[];
         };
         Relationships: [];
       };
@@ -796,7 +799,7 @@ export interface Database {
         Row: {
         id: string;
         user_id: string;
-        provider: 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook' | 'pinterest' | '3speak' | 'rumble' | 'fanvue';
+        provider: 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook' | 'pinterest' | '3speak' | 'rumble' | 'fanvue' | 'telegram';
         provider_account_id: string;
         account_name: string | null;
         account_metadata: Json;
@@ -810,7 +813,7 @@ export interface Database {
         Insert: {
         id?: string;
         user_id: string;
-        provider: 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook' | 'pinterest' | '3speak' | 'rumble' | 'fanvue';
+        provider: 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook' | 'pinterest' | '3speak' | 'rumble' | 'fanvue' | 'telegram';
         provider_account_id: string;
         account_name?: string | null;
         account_metadata: Json;
@@ -824,7 +827,7 @@ export interface Database {
         Update: {
         id?: string;
         user_id?: string;
-        provider?: 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook' | 'pinterest' | '3speak' | 'rumble' | 'fanvue';
+        provider?: 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook' | 'pinterest' | '3speak' | 'rumble' | 'fanvue' | 'telegram';
         provider_account_id?: string;
         account_name?: string | null;
         account_metadata?: Json;

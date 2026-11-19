@@ -85,6 +85,7 @@ const ACCOUNT_ID_FIELDS: Record<SocialProvider, string> = {
   '3speak': 'providerAccountId',
   rumble: 'providerAccountId',
   fanvue: 'providerAccountId',
+  telegram: 'providerAccountId',
 };
 
 function accountOf(entry: unknown): { provider: string; id: string; names: string[]; label: string } | null {

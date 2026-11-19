@@ -56,7 +56,7 @@ const ASAP_REPLY = {
 function fakeClient(publishReply: () => Promise<unknown>, bound: Record<string, string[]> = {}) {
   const request = vi.fn(async (path: string, _init?: unknown): Promise<unknown> => {
     if (path.startsWith('/api/persona/publishing-accounts')) {
-      const defaults = { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [], ...bound };
+      const defaults = { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [], telegram: [], ...bound };
       return { success: true, defaults };
     }
     if (path === '/api/media/publish-existing') return publishReply();
@@ -301,7 +301,7 @@ describe('publish_existing tool handler', () => {
     const { client, request } = fakeClient(async () => ASAP_REPLY);
     const response = await handlePublishExisting(client, args({ mediaKind: 'image', taskId: undefined, imagePath: join(dir, 'missing.png'), accounts: ['UC1', 'ig-1'] }));
     expect(response.isError).toBe(true);
-    expect(textOf(response)).toContain('images go to instagram, bluesky, linkedin, threads, facebook, pinterest only; drop the youtube account(s).');
+    expect(textOf(response)).toContain('images go to instagram, bluesky, linkedin, threads, facebook, pinterest, telegram only; drop the youtube account(s).');
     expect(request.mock.calls.some(([path]) => path === '/api/media/publish-existing')).toBe(false);
   });
 

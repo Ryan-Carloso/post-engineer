@@ -67,6 +67,7 @@ export const SlotScheduleSchema = z.object({
   threespeakAccountIds: z.array(z.string()),
   rumbleAccountIds: z.array(z.string()),
   fanvueAccountIds: z.array(z.string()),
+  telegramAccountIds: z.array(z.string()),
   timezone: z.string(),
   publishMode: z.enum(['scheduled', 'asap']),
 });

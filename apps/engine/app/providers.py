@@ -22,6 +22,7 @@ SocialProvider = Literal[
     "3speak",
     "rumble",
     "fanvue",
+    "telegram",
 ]
 SOCIAL_PROVIDERS: tuple[str, ...] = get_args(SocialProvider)
 
@@ -36,6 +37,7 @@ PROVIDER_LABELS: dict[str, str] = {
     "3speak": "3Speak",
     "rumble": "Rumble",
     "fanvue": "Fanvue",
+    "telegram": "Telegram",
 }
 
 SCHEDULE_ACCOUNT_COLUMNS: dict[str, str] = {
@@ -49,6 +51,7 @@ SCHEDULE_ACCOUNT_COLUMNS: dict[str, str] = {
     "3speak": "threespeak_account_ids",
     "rumble": "rumble_account_ids",
     "fanvue": "fanvue_account_ids",
+    "telegram": "telegram_account_ids",
 }
 
 URL_MEDIA_PROVIDERS: frozenset[str] = frozenset({"instagram", "threads", "facebook"})

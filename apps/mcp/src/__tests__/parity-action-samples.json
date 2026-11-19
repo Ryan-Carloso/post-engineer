@@ -29,6 +29,15 @@
         "channelId": "c1",
         "accessToken": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
       }
+    },
+    {
+      "args": {
+        "action": "connect",
+        "provider": "telegram",
+        "botToken": "123456789:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "chatId": "-1001234567890",
+        "chatType": "channel"
+      }
     }
   ],
   "accounts.disconnect": [

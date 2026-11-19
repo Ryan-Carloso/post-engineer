@@ -33,8 +33,11 @@ vi.mock('@/lib/api', () => ({
 
 vi.mock('@/lib/social-accounts-queries', () => ({
   useRumbleAccountsQuery: vi.fn(),
+  useTelegramAccountsQuery: vi.fn(),
 }));
 
+// Only notifyIfSessionExpired is doubled; the module's redirect behavior is
+// pinned in lib/__tests__/session-expiry.test.tsx.
 vi.mock('@/lib/session-expiry', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/session-expiry')>();
   return {
@@ -158,7 +161,7 @@ vi.mock('@/components/account-card', () => ({
 import AccountsPage from '../page';
 import { reportAccountDisconnectFailed, useAccountListErrorTelemetry } from '@/lib/account-card-telemetry';
 import { useYouTubeAccountsQuery, useInstagramAccountsQuery, useBlueskyAccountsQuery, useLinkedinAccountsQuery, useThreadsAccountsQuery, useFacebookAccountsQuery, useThreespeakAccountsQuery, useDisconnectAccountMutation } from '@/lib/api';
-import { useRumbleAccountsQuery } from '@/lib/social-accounts-queries';
+import { useRumbleAccountsQuery, useTelegramAccountsQuery } from '@/lib/social-accounts-queries';
 import { useYouTubeOAuth } from '@/lib/oauth/google-handler';
 import { notifyIfSessionExpired } from '@/lib/session-expiry';
 import { useInstagramOAuth } from '@/lib/oauth/instagram-handler';
@@ -217,6 +220,7 @@ beforeEach(() => {
   vi.mocked(useFanvueAccountsQuery, { partial: true }).mockReturnValue({ data: { authenticated: true, accounts: [] }, isLoading: false, error: null, refetch: vi.fn() });
   vi.mocked(useFanvueOAuth).mockReturnValue(fanvueOAuth);
   vi.mocked(useRumbleAccountsQuery, { partial: true }).mockReturnValue({ data: { authenticated: true, accounts: [] }, isLoading: false, error: null, refetch: vi.fn() });
+  vi.mocked(useTelegramAccountsQuery, { partial: true }).mockReturnValue({ data: { authenticated: true, accounts: [] }, isLoading: false, error: null, refetch: vi.fn() });
   vi.mocked(useLinkedInOAuth).mockReturnValue({
     startOAuth: vi.fn().mockResolvedValue(undefined),
     isLoading: false,
@@ -257,12 +261,12 @@ describe('app/(main)/accounts/page — AccountsPage', () => {
 
   it('shows the shared connection slot when YouTube has no accounts', () => {
     render(<AccountsPage />, { wrapper: createWrapper() });
-    expect(screen.getAllByText('accounts.connectFirst')).toHaveLength(10);
+    expect(screen.getAllByText('accounts.connectFirst')).toHaveLength(11);
   });
 
   it('shows the shared connection slot when Instagram has no accounts', () => {
     render(<AccountsPage />, { wrapper: createWrapper() });
-    expect(screen.getAllByRole('button', { name: 'accounts.connectFirst' })).toHaveLength(10);
+    expect(screen.getAllByRole('button', { name: 'accounts.connectFirst' })).toHaveLength(11);
   });
 
   it('shows loading skeletons while loading', () => {
@@ -451,6 +455,7 @@ describe('app/(main)/accounts/page — AccountsPage', () => {
     });
     render(<AccountsPage />, { wrapper: createWrapper() });
     fireEvent.click(screen.getByTestId('youtube-disconnect-button'));
+    // The dialog names the account before it can be removed.
     expect(await screen.findByTestId('disconnect-dialog')).toBeVisible();
     fireEvent.click(screen.getByTestId('disconnect-cancel-button'));
     await waitFor(() => expect(screen.queryByTestId('disconnect-dialog')).not.toBeInTheDocument());
@@ -582,6 +587,7 @@ describe('app/(main)/accounts/page — AccountsPage', () => {
   it('renders the dialog copy and starts closed with empty fields', async () => {
     render(<AccountsPage />, { wrapper: createWrapper() });
     expect(screen.queryByTestId('bluesky-handle-input')).not.toBeInTheDocument();
+    // Section order: youtube, instagram, bluesky, linkedin, threads.
     fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' })[2]);
     expect(await screen.findByTestId('bluesky-handle-input')).toBeTruthy();
     expect(screen.getByText('accounts.blueskyConnectTitle')).toBeTruthy();
@@ -607,6 +613,7 @@ describe('app/(main)/accounts/page — AccountsPage', () => {
   async function submitBlueskyConnect(status: number, body: unknown): Promise<void> {
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status, json: async () => body })));
     render(<AccountsPage />, { wrapper: createWrapper() });
+    // Section order: youtube, instagram, bluesky, linkedin, threads.
     fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' })[2]);
     fireEvent.change(await screen.findByTestId('bluesky-handle-input'), { target: { value: 'voce.bsky.social' } });
     fireEvent.change(screen.getByTestId('bluesky-password-input'), { target: { value: 'app-password' } });
@@ -630,6 +637,8 @@ describe('app/(main)/accounts/page — AccountsPage', () => {
     const notify = vi.mocked(notifyIfSessionExpired);
     notify.mockClear();
     await submitBlueskyConnect(422, { success: false, code: 'BLUESKY_CREDENTIAL_REJECTED' });
+    // The 422 response still goes through the session-expiry check, which
+    // only acts on 401 (pinned in lib/__tests__/session-expiry.test.tsx).
     expect(notify).toHaveBeenCalledTimes(1);
     expect(vi.mocked(notify).mock.calls[0][0]).toMatchObject({ status: 422 });
   });
@@ -733,6 +742,7 @@ describe('Threads accounts section', () => {
     render(<AccountsPage />, { wrapper: createWrapper() });
     expect(screen.getByText('accounts.threadsLabel')).toBeTruthy();
     expect(screen.getByText('accounts.threadsDescription')).toBeTruthy();
+    // Section order: youtube, instagram, bluesky, linkedin, threads, facebook, pinterest, fanvue, 3speak, rumble.
     fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' })[4]);
     expect(threadsOAuth.startOAuth).toHaveBeenCalledTimes(1);
   });
@@ -794,6 +804,7 @@ describe('Facebook Pages accounts section', () => {
     render(<AccountsPage />, { wrapper: createWrapper() });
     expect(screen.getByText('accounts.facebookLabel')).toBeTruthy();
     expect(screen.getByText('accounts.facebookDescription')).toBeTruthy();
+    // Section order: youtube, instagram, bluesky, linkedin, threads, facebook, pinterest, fanvue, 3speak, rumble.
     fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' })[5]);
     expect(facebookOAuth.startOAuth).toHaveBeenCalledTimes(1);
   });
@@ -818,6 +829,7 @@ describe('Facebook Pages accounts section', () => {
     expect(cards[1]).toHaveAttribute('data-label-origin', 'provider_id');
     expect(screen.getByText('My Page')).toBeTruthy();
     expect(screen.getByText('222')).toBeTruthy();
+    // With a Page connected the button offers another one.
     expect(screen.getAllByRole('button', { name: 'accounts.connectAnother' }).length).toBeGreaterThan(0);
   });
 
@@ -835,6 +847,7 @@ describe('Facebook Pages accounts section', () => {
   it('disables the connect button while the OAuth popup is opening', () => {
     vi.mocked(useFacebookOAuth).mockReturnValue({ ...facebookOAuth, isLoading: true });
     render(<AccountsPage />, { wrapper: createWrapper() });
+    // Section order: youtube, instagram, bluesky, linkedin, threads, facebook, pinterest, fanvue, 3speak, rumble.
     const button = screen.getAllByRole('button', { name: 'accounts.connectFirst' })[5] as HTMLButtonElement;
     expect(button).toBeDisabled();
   });
@@ -859,6 +872,7 @@ describe('Facebook Pages accounts section', () => {
     expect(cards[1]).toHaveAttribute('data-label-origin', 'provider_id');
     expect(screen.getByText('My Page')).toBeTruthy();
     expect(screen.getByText('222')).toBeTruthy();
+    // With a Page connected the button offers another one.
     expect(screen.getAllByRole('button', { name: 'accounts.connectAnother' }).length).toBeGreaterThan(0);
   });
   it('reports a Facebook disconnect failure for that provider', async () => {
@@ -914,6 +928,7 @@ describe('Facebook Pages accounts section', () => {
     const fetchMock = vi.fn(async () => ({ ok: false, status, json: async () => body }));
     vi.stubGlobal('fetch', fetchMock);
     render(<AccountsPage />, { wrapper: createWrapper() });
+    // Section order: youtube, instagram, bluesky, linkedin, threads, facebook, pinterest, fanvue, 3speak, rumble.
     fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' })[8]);
     fireEvent.change(await screen.findByTestId('threespeak-handle-input'), { target: { value: 'alice' } });
     fireEvent.change(screen.getByTestId('threespeak-password-input'), { target: { value: '5K-posting-key' } });
@@ -940,6 +955,7 @@ describe('Facebook Pages accounts section', () => {
     const sent = fetchMock.mock.calls[0][1].body as FormData;
     expect(sent.get('username')).toBe('alice');
     expect(sent.get('postingKey')).toBe('5K-posting-key');
+    // A rejected credential names itself instead of the generic error.
     expect(screen.getByTestId('threespeak-connect-error')).toHaveTextContent('accounts.threespeakCredentialRejected');
   });
 
@@ -981,6 +997,8 @@ describe('Facebook Pages accounts section', () => {
     const notify = vi.mocked(notifyIfSessionExpired);
     notify.mockClear();
     await submitThreespeakConnect(422, { success: false, code: 'THREESPEAK_CREDENTIAL_REJECTED' });
+    // The 422 response still goes through the session-expiry check, which
+    // only acts on 401 (pinned in lib/__tests__/session-expiry.test.tsx).
     expect(notify).toHaveBeenCalledTimes(1);
     expect(vi.mocked(notify).mock.calls[0][0]).toMatchObject({ status: 422 });
   });
@@ -1003,6 +1021,7 @@ describe('Pinterest accounts section', () => {
     render(<AccountsPage />, { wrapper: createWrapper() });
     expect(screen.getByText('accounts.pinterestLabel')).toBeTruthy();
     expect(screen.getByText('accounts.pinterestDescription')).toBeTruthy();
+    // Section order: youtube, instagram, bluesky, linkedin, threads, facebook, pinterest, fanvue, 3speak, rumble.
     fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' })[6] as HTMLElement);
     expect(pinterestOAuth.startOAuth).toHaveBeenCalledTimes(1);
   });
@@ -1027,6 +1046,7 @@ describe('Pinterest accounts section', () => {
     expect(cards[1]).toHaveAttribute('data-label-origin', 'provider_id');
     expect(screen.getByText('Maker')).toBeTruthy();
     expect(screen.getByText('222')).toBeTruthy();
+    // With an account connected the button offers another one.
     expect(screen.getAllByRole('button', { name: 'accounts.connectAnother' }).length).toBeGreaterThan(0);
   });
 
@@ -1054,6 +1074,7 @@ describe('Fanvue accounts section', () => {
     render(<AccountsPage />, { wrapper: createWrapper() });
     expect(screen.getByText('accounts.fanvueLabel')).toBeTruthy();
     expect(screen.getByText('accounts.fanvueDescription')).toBeTruthy();
+    // Section order: youtube, instagram, bluesky, linkedin, threads, facebook, pinterest, fanvue, 3speak, rumble.
     fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' })[7] as HTMLElement);
     expect(fanvueOAuth.startOAuth).toHaveBeenCalledTimes(1);
   });
@@ -1084,7 +1105,8 @@ describe('Rumble accounts section', () => {
     const fetchMock = vi.fn(async () => ({ ok: status >= 200 && status < 300, status, json: async () => body }));
     vi.stubGlobal('fetch', fetchMock);
     render(<AccountsPage />, { wrapper: createWrapper() });
-    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' }).at(-1) as HTMLElement);
+    // Rumble is the second-to-last section (Telegram follows it).
+    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' }).at(-2) as HTMLElement);
     fireEvent.change(await screen.findByTestId('rumble-handle-input'), { target: { value: 'chan-1' } });
     fireEvent.change(screen.getByTestId('rumble-password-input'), { target: { value: 'a'.repeat(40) } });
     fireEvent.click(screen.getByTestId('rumble-connect-button'));
@@ -1095,7 +1117,7 @@ describe('Rumble accounts section', () => {
     render(<AccountsPage />, { wrapper: createWrapper() });
     expect(screen.getByText('accounts.rumbleLabel')).toBeTruthy();
     expect(screen.getByText('accounts.rumbleDescription')).toBeTruthy();
-    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' }).at(-1) as HTMLElement);
+    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' }).at(-2) as HTMLElement);
     expect(await screen.findByTestId('rumble-handle-input')).toBeTruthy();
     expect(screen.getByTestId('rumble-password-input')).toBeTruthy();
   });
@@ -1120,6 +1142,7 @@ describe('Rumble accounts section', () => {
     expect(cards[1]).toHaveAttribute('data-label-origin', 'provider_id');
     expect(screen.getByText('My Channel')).toBeTruthy();
     expect(screen.getByText('chan-2')).toBeTruthy();
+    // With a channel connected the button offers another one.
     expect(screen.getAllByRole('button', { name: 'accounts.connectAnother' }).length).toBeGreaterThan(0);
   });
 
@@ -1137,7 +1160,8 @@ describe('Rumble accounts section', () => {
   it('renders the dialog copy and starts closed with empty fields', async () => {
     render(<AccountsPage />, { wrapper: createWrapper() });
     expect(screen.queryByTestId('rumble-handle-input')).not.toBeInTheDocument();
-    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' }).at(-1) as HTMLElement);
+    // Rumble is the second-to-last section (Telegram follows it).
+    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' }).at(-2) as HTMLElement);
     expect(await screen.findByTestId('rumble-handle-input')).toBeTruthy();
     expect(screen.getByText('accounts.rumbleConnectTitle')).toBeTruthy();
     expect(screen.getByText('accounts.rumbleConnectHint')).toBeTruthy();
@@ -1153,7 +1177,7 @@ describe('Rumble accounts section', () => {
 
   it('closes the Rumble dialog from its close button', async () => {
     render(<AccountsPage />, { wrapper: createWrapper() });
-    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' }).at(-1) as HTMLElement);
+    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' }).at(-2) as HTMLElement);
     expect(await screen.findByTestId('rumble-handle-input')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'accounts.closeDialog' }));
     await waitFor(() => expect(screen.queryByTestId('rumble-handle-input')).not.toBeInTheDocument());
@@ -1161,7 +1185,7 @@ describe('Rumble accounts section', () => {
 
   it('keeps the Rumble connect button disabled until both fields are non-blank', async () => {
     render(<AccountsPage />, { wrapper: createWrapper() });
-    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' }).at(-1) as HTMLElement);
+    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' }).at(-2) as HTMLElement);
     const button = await screen.findByTestId('rumble-connect-button');
     expect(button).toBeDisabled();
     fireEvent.change(screen.getByTestId('rumble-handle-input'), { target: { value: '   ' } });
@@ -1196,7 +1220,7 @@ describe('Rumble accounts section', () => {
     const fetchMock = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ success: true }) }));
     vi.stubGlobal('fetch', fetchMock);
     render(<AccountsPage />, { wrapper: createWrapper() });
-    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' }).at(-1) as HTMLElement);
+    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' }).at(-2) as HTMLElement);
     fireEvent.change(await screen.findByTestId('rumble-handle-input'), { target: { value: '  chan-1  ' } });
     fireEvent.change(screen.getByTestId('rumble-password-input'), { target: { value: 'a'.repeat(40) } });
     fireEvent.click(screen.getByTestId('rumble-connect-button'));
@@ -1217,7 +1241,7 @@ describe('Rumble accounts section', () => {
     );
     vi.stubGlobal('fetch', fetchMock);
     render(<AccountsPage />, { wrapper: createWrapper() });
-    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' }).at(-1) as HTMLElement);
+    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' }).at(-2) as HTMLElement);
     fireEvent.change(await screen.findByTestId('rumble-handle-input'), { target: { value: 'chan-1' } });
     fireEvent.change(screen.getByTestId('rumble-password-input'), { target: { value: 'a'.repeat(40) } });
     fireEvent.click(screen.getByTestId('rumble-connect-button'));
@@ -1240,7 +1264,7 @@ describe('Rumble accounts section', () => {
   it('shows the error text when the connect request throws', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('network down'); }));
     render(<AccountsPage />, { wrapper: createWrapper() });
-    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' }).at(-1) as HTMLElement);
+    fireEvent.click(screen.getAllByRole('button', { name: 'accounts.connectFirst' }).at(-2) as HTMLElement);
     fireEvent.change(await screen.findByTestId('rumble-handle-input'), { target: { value: 'chan-1' } });
     fireEvent.change(screen.getByTestId('rumble-password-input'), { target: { value: 'a'.repeat(40) } });
     fireEvent.click(screen.getByTestId('rumble-connect-button'));
@@ -1464,6 +1488,7 @@ describe('error state wiring — broken cards offer reconnect, healthy cards kee
   });
 
   it('linkedin: reconnect on the org card still starts OAuth', () => {
+    // The org row is the broken one here; the member row stays healthy.
     const section = oauthSections[2];
     const startOAuth = section.armOAuth();
     section.setAccounts('both');

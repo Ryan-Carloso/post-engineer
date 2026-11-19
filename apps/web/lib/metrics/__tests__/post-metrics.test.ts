@@ -93,7 +93,7 @@ describe('metricsTargets', () => {
   });
 
   it('extracts a target for every provider in SOCIAL_PROVIDERS', () => {
-    const fixtures: Record<string, unknown> = { youtube: YT_ENTRY, instagram: IG_ENTRY, bluesky: BSKY_ENTRY, linkedin: LI_ENTRY, threads: { provider: 'threads', status: 'published', accountId: '42', postId: 'p1' }, facebook: { provider: 'facebook', status: 'published', accountId: '111', postId: 'v1' }, pinterest: { provider: 'pinterest', status: 'published', accountId: 'pin-acct', postId: '1234567890123456' }, '3speak': { provider: '3speak', status: 'published', accountId: 'alice', postId: 'vid-7' }, rumble: { provider: 'rumble', status: 'published', accountId: 'chan-1', postId: 'vid-1' }, fanvue: { provider: 'fanvue', status: 'published', accountId: 'fv-acct', postId: 'post-1' } };
+    const fixtures: Record<string, unknown> = { youtube: YT_ENTRY, instagram: IG_ENTRY, bluesky: BSKY_ENTRY, linkedin: LI_ENTRY, threads: { provider: 'threads', status: 'published', accountId: '42', postId: 'p1' }, facebook: { provider: 'facebook', status: 'published', accountId: '111', postId: 'v1' }, pinterest: { provider: 'pinterest', status: 'published', accountId: 'pin-acct', postId: '1234567890123456' }, '3speak': { provider: '3speak', status: 'published', accountId: 'alice', postId: 'vid-7' }, rumble: { provider: 'rumble', status: 'published', accountId: 'chan-1', postId: 'vid-1' }, fanvue: { provider: 'fanvue', status: 'published', accountId: 'fv-acct', postId: 'post-1' }, telegram: { provider: 'telegram', status: 'published', accountId: '-1001234567890', postId: '42' } };
     for (const provider of SOCIAL_PROVIDERS) {
       const { targets } = metricsTargets([fixtures[provider]]);
       expect(targets.map((target) => target.provider), provider).toEqual([provider]);
@@ -143,6 +143,10 @@ describe('post_metrics provider check (migrations 034, 049, 050 and 052)', () =>
 
   it('057 allows exactly the ten providers it shipped with', () => {
     expect(listedProviders('057_fanvue-provider.sql').sort()).toEqual(['3speak', 'bluesky', 'facebook', 'fanvue', 'instagram', 'linkedin', 'pinterest', 'rumble', 'threads', 'youtube']);
+  });
+
+  it('071 allows exactly the eleven providers it shipped with', () => {
+    expect(listedProviders('071_telegram-provider.sql').sort()).toEqual(['3speak', 'bluesky', 'facebook', 'fanvue', 'instagram', 'linkedin', 'pinterest', 'rumble', 'telegram', 'threads', 'youtube']);
   });
 });
 

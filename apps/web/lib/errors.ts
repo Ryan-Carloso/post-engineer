@@ -109,6 +109,16 @@ export class FanvueError extends Error {
   }
 }
 
+export class TelegramError extends Error {
+  readonly code: 'invalid_token' | 'not_member' | 'no_permission' | 'chat_not_found' | 'publish_failed' | 'unknown';
+
+  constructor(code: TelegramError['code'], message: string, public statusCode: number) {
+    super(message);
+    this.name = 'TelegramError';
+    this.code = code;
+  }
+}
+
 export class RumbleError extends Error {
   readonly code: 'invalid_token' | 'upload_failed' | 'unknown';
 

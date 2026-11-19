@@ -30,6 +30,7 @@ import { useI18n } from '@/lib/i18n/provider';
 import { AccountsIcon, GoogleIcon, InstagramIcon } from '@/lib/ui';
 import { BrandIcon, connectedLabel, errorLabel, useDisconnectFlow } from './accounts-section-helpers';
 import { ThreespeakAccountsSection } from './threespeak-accounts-section';
+import { TelegramAccountsSection } from './telegram-accounts-section';
 
 export default function AccountsPage(): React.ReactElement {
   return (
@@ -46,6 +47,7 @@ export default function AccountsPage(): React.ReactElement {
         <FanvueAccountsSection />
         <ThreespeakAccountsSection />
         <RumbleAccountsSection />
+        <TelegramAccountsSection />
       </main>
     </div>
   );

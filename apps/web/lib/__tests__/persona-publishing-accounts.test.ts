@@ -101,6 +101,7 @@ describe('getPersonaDefaultAccounts', () => {
       '3speak': [],
       rumble: [],
       fanvue: [],
+      telegram: [],
     });
   });
 
@@ -279,6 +280,7 @@ describe('emptyPersonaDefaultAccounts', () => {
       '3speak': [],
       rumble: [],
       fanvue: [],
+      telegram: [],
     });
   });
 });

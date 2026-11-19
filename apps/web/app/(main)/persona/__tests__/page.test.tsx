@@ -64,6 +64,7 @@ vi.mock('@/lib/api', () => ({
 
 vi.mock('@/lib/social-accounts-queries', () => ({
   useRumbleAccountsQuery: vi.fn(() => ({ data: { authenticated: true, accounts: [] }, isLoading: false, error: null })),
+  useTelegramAccountsQuery: vi.fn(() => ({ data: { authenticated: true, accounts: [] }, isLoading: false, error: null })),
 }));
 
 vi.mock('@/lib/pinterest-accounts', () => ({

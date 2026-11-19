@@ -21,5 +21,6 @@ export function scheduleAccountColumns(
     threespeak_account_ids: accountIds['3speak'] ?? [],
     rumble_account_ids: accountIds.rumble ?? [],
     fanvue_account_ids: accountIds.fanvue ?? [],
+    telegram_account_ids: accountIds.telegram ?? [],
   };
 }

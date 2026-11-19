@@ -228,7 +228,7 @@ describe('every action runs its handler against the client', () => {
         instagramAccountIds: [], linkedinAccountIds: [], blueskyAccountIds: [],
         threadsAccountIds: [], facebookAccountIds: [], pinterestAccountIds: [],
         pinterestBoardId: null, threespeakAccountIds: [], rumbleAccountIds: [],
-        fanvueAccountIds: [], timezone: 'UTC', publishMode: 'scheduled',
+        fanvueAccountIds: [], telegramAccountIds: [], timezone: 'UTC', publishMode: 'scheduled',
       },
       persona: null,
       generation: {
@@ -267,7 +267,7 @@ describe('every action runs its handler against the client', () => {
   });
 
   it('resolves a persona given by name before the call', async () => {
-    vi.mocked(mockClient.listPersonas).mockResolvedValue({ authenticated: true, personas: [{ id: PERSONA, name: 'Maria', createdAt: '2026-01-01T00:00:00Z', boundAccounts: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [] } }] });
+    vi.mocked(mockClient.listPersonas).mockResolvedValue({ authenticated: true, personas: [{ id: PERSONA, name: 'Maria', createdAt: '2026-01-01T00:00:00Z', boundAccounts: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [], telegram: [] } }] });
     vi.mocked(mockClient.listPersonaImages).mockResolvedValue({ success: true, images: [] });
     const result = await call('persona_media', { action: 'list_images', persona: 'maria' });
     expect(result.isError).toBeFalsy();
@@ -275,7 +275,7 @@ describe('every action runs its handler against the client', () => {
   });
 
   it('answers an unknown persona name with the way to list them and calls nothing else', async () => {
-    vi.mocked(mockClient.listPersonas).mockResolvedValue({ authenticated: true, personas: [{ id: PERSONA, name: 'Maria', createdAt: '2026-01-01T00:00:00Z', boundAccounts: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [] } }] });
+    vi.mocked(mockClient.listPersonas).mockResolvedValue({ authenticated: true, personas: [{ id: PERSONA, name: 'Maria', createdAt: '2026-01-01T00:00:00Z', boundAccounts: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [], telegram: [] } }] });
     const result = await call('persona_media', { action: 'list_images', persona: 'Ghost' });
     expect(result.isError).toBe(true);
     expect(JSON.stringify(result.content)).toContain('No persona named');

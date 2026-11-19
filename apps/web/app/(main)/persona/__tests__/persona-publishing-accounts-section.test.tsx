@@ -62,6 +62,7 @@ const mockQueries = vi.hoisted(() => ({
   threespeak: { data: { authenticated: true, accounts: [] as unknown[] }, isLoading: false, error: null as null },
   rumble: { data: { authenticated: true, accounts: [] as unknown[] }, isLoading: false, error: null as null },
   fanvue: { data: { authenticated: true, accounts: [] as unknown[] }, isLoading: false, error: null as null },
+  telegram: { data: { authenticated: true, accounts: [] as unknown[] }, isLoading: false, error: null as null },
 }));
 
 vi.mock('@/lib/api', () => ({
@@ -84,6 +85,7 @@ vi.mock('@/lib/fanvue-accounts', () => ({
 
 vi.mock('@/lib/social-accounts-queries', () => ({
   useRumbleAccountsQuery: () => mockQueries.rumble,
+  useTelegramAccountsQuery: () => mockQueries.telegram,
 }));
 
 vi.mock('@/lib/account-card-telemetry', () => ({
@@ -320,7 +322,7 @@ describe('PersonaPublishingAccountsSection', () => {
         expect.objectContaining({
           method: 'PUT',
           body: JSON.stringify({
-            accounts: { youtube: ['UC-1', 'UC-2'], instagram: [], bluesky: ['did:plc:abc'], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': ['alice'], rumble: [], fanvue: [] },
+            accounts: { youtube: ['UC-1', 'UC-2'], instagram: [], bluesky: ['did:plc:abc'], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': ['alice'], rumble: [], fanvue: [], telegram: [] },
           }),
         }),
       );
@@ -481,7 +483,7 @@ describe('PersonaPublishingAccountsSection', () => {
         expect.objectContaining({
           method: 'PUT',
           body: JSON.stringify({
-            accounts: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: ['fb-1', 'fb-2'], pinterest: [], '3speak': [], rumble: [], fanvue: [] },
+            accounts: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: ['fb-1', 'fb-2'], pinterest: [], '3speak': [], rumble: [], fanvue: [], telegram: [] },
           }),
         }),
       );
@@ -536,7 +538,7 @@ describe('PersonaPublishingAccountsSection', () => {
         expect.objectContaining({
           method: 'PUT',
           body: JSON.stringify({
-            accounts: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: ['pin-1', 'pin-2'], '3speak': [], rumble: [], fanvue: [] },
+            accounts: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: ['pin-1', 'pin-2'], '3speak': [], rumble: [], fanvue: [], telegram: [] },
           }),
         }),
       );
@@ -592,7 +594,7 @@ describe('PersonaPublishingAccountsSection', () => {
         expect.objectContaining({
           method: 'PUT',
           body: JSON.stringify({
-            accounts: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: ['fv-1', 'fv-2'] },
+            accounts: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: ['fv-1', 'fv-2'], telegram: [] },
           }),
         }),
       );
@@ -646,7 +648,7 @@ describe('PersonaPublishingAccountsSection', () => {
         expect.objectContaining({
           method: 'PUT',
           body: JSON.stringify({
-            accounts: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: ['chan-1', 'chan-2'], fanvue: [] },
+            accounts: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: ['chan-1', 'chan-2'], fanvue: [], telegram: [] },
           }),
         }),
       );

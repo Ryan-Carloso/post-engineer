@@ -62,6 +62,7 @@ vi.mock('@/lib/i18n/provider', () => ({
         'accounts.rumbleSecurityHint':
           'The access token is like a password for your Rumble account: anyone with it can upload as you. Keep it private — if it leaks, email Rumble to revoke it.',
         'accounts.rumbleConnectError': 'Could not connect Rumble. Check the channel ID and the 40-character access token.',
+        'accounts.telegramErrorIsGroup': 'That chat is a group, not a channel. Pick Group above and try again.',
         'onboarding.step3Title': 'Connect your agent',
         'onboarding.step3Step1': 'Create an API key.',
         'onboarding.step3Step2': 'Paste the setup into your agent.',
@@ -250,6 +251,16 @@ const YOUTUBE_ERROR_ACCOUNT = {
   status: 'error',
 } as const;
 
+const TELEGRAM_ACCOUNT = {
+  provider: 'telegram',
+  recordId: 'rec-telegram-1',
+  providerAccountId: '-1001',
+  accountName: 'News',
+  chatType: 'group',
+  connectedAt: 1,
+  lastUsed: 1,
+} as const;
+
 const RUMBLE_ACCOUNT = {
   provider: 'rumble',
   recordId: 'rec-rumble-1',
@@ -283,7 +294,7 @@ function installStep2Mocks() {
     if (url === '/api/google-oauth/start') {
       return { ok: true, json: async () => ({ success: true, auth_url: 'https://accounts.google.com/o/oauth2/auth' }) } as Response;
     }
-    if (url === '/api/bluesky-connect' || url === '/api/threespeak-connect' || url === '/api/rumble-connect') {
+    if (url === '/api/bluesky-connect' || url === '/api/threespeak-connect' || url === '/api/rumble-connect' || url === '/api/telegram-connect') {
       return {
         ok: connectResponse.ok,
         status: connectResponse.status ?? (connectResponse.ok ? 200 : 400),
@@ -554,6 +565,43 @@ describe('OnboardingWizard step 2', () => {
     });
     await user.click(within(dialog).getByRole('button', { name: 'Continue' }));
     expect(within(dialog).getByText('Connect your agent')).toBeInTheDocument();
+  });
+
+  it('connects Telegram inline with the setup guide, sending the picked kind', async () => {
+    const user = userEvent.setup();
+    accountResponseQueue = [[], [TELEGRAM_ACCOUNT as unknown as Record<string, unknown>]];
+    const dialog = await openStep2List();
+    await user.click(screen.getByTestId('onboarding-provider-telegram'));
+    expect(within(dialog).getByText('accounts.telegramSetupAddChannel')).toBeInTheDocument();
+    await user.click(screen.getByTestId('telegram-kind-group'));
+    expect(within(dialog).getByText('accounts.telegramSetupAddGroup')).toBeInTheDocument();
+    await user.type(screen.getByTestId('telegram-handle-input'), '-1001');
+    await user.type(screen.getByTestId('telegram-password-input'), `123456789:${'A'.repeat(35)}`);
+    await user.click(screen.getByTestId('telegram-connect-button'));
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(([url]) => url === '/api/telegram-connect')).toBe(true);
+    });
+    const postCall = fetchMock.mock.calls.find(([url]) => url === '/api/telegram-connect');
+    const body = postCall?.[1]?.body as FormData;
+    expect(body.get('chatId')).toBe('-1001');
+    expect(body.get('botToken')).toBe(`123456789:${'A'.repeat(35)}`);
+    expect(body.get('chatType')).toBe('group');
+    await waitFor(() => {
+      expect(within(dialog).getByText('Connected')).toBeInTheDocument();
+    });
+  });
+
+  it('names the Telegram fix the route reports instead of the generic error', async () => {
+    const user = userEvent.setup();
+    connectResponse = { ok: false, status: 400, body: { success: false, code: 'TELEGRAM_CHAT_KIND_MISMATCH' } };
+    const dialog = await openStep2List();
+    await user.click(screen.getByTestId('onboarding-provider-telegram'));
+    await user.type(screen.getByTestId('telegram-handle-input'), '@club');
+    await user.type(screen.getByTestId('telegram-password-input'), `123456789:${'A'.repeat(35)}`);
+    await user.click(screen.getByTestId('telegram-connect-button'));
+    await waitFor(() => {
+      expect(within(dialog).getByText('That chat is a group, not a channel. Pick Group above and try again.')).toBeInTheDocument();
+    });
   });
 
   it('keeps step 2 across unmount and remount', async () => {
