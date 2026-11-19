@@ -20,9 +20,14 @@ name: release-mcp
 # locking every agent out.
 #
 # SELF-HEALING — the run is level-triggered, like the deploy's .deploy-state:
-# on every push to main that touches apps/mcp/, on a best-effort schedule and
-# on demand, it computes the version for main's HEAD and asks npm whether it
-# already exists. Present: the run ends in seconds. Missing: build, test,
+# on every push to main that touches apps/mcp/ or the rule itself (VERSION,
+# mcp-release-version.sh), on a best-effort schedule and on demand, it
+# computes the version for main's HEAD and asks npm whether it already
+# exists. The rule's own inputs are triggers because the deploy computes the
+# same version: a release-line cut or a rule change moves the required version
+# with no apps/mcp/ file touched, and nothing would publish it (1.53.220 and
+# 1.54.220 both waited on a manual dispatch). Present: the run ends in
+# seconds. Missing: build, test,
 # publish. GitHub throttles frequent schedules — observed ticks are hours
 # apart, not the 10-minute cron — so a publish that never happened needs a
 # merge touching apps/mcp/ or `gh workflow run release-mcp.yml`; the deploy
@@ -37,6 +42,8 @@ on:
     branches: [main]
     paths:
       - 'apps/mcp/**'
+      - 'VERSION'
+      - '.github/scripts/mcp-release-version.sh'
   schedule:
     - cron: '*/10 * * * *'
   workflow_dispatch:
