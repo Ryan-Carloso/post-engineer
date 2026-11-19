@@ -77,18 +77,12 @@ class BatchGenerator:
         this tick stays pending: it is not queued, not failed, and not
         refunded. Batch dispatch never fills the task-manager queue.
         """
-        # Lazy: app.controllers.v1.video builds the process-wide manager
-        # at import, which must not run at fill-schedule import time.
         from app.controllers.v1.video import task_manager
 
         budget = free_running_slots(task_manager)
         enqueued = 0
         enqueued_titles: list[str] = []
 
-        # Soonest slot_at first. read_pending_slots already returns at
-        # most `budget` rows, including when the store ignores limit, so
-        # the page cannot outrun the free running slots. A validation
-        # failure does not consume a slot; a deferral does not either.
         for slot in read_pending_slots(self.store, now, budget):
             label = self._generate_slot(slot)
             if label is not None:
@@ -109,44 +103,13 @@ class BatchGenerator:
         task_id: str | None = None
         user_id: str | None = None
         try:
-            # The identity may be gone (persona deleted after the schedule
-            # was created, and no snapshot): fail the slot instead of killing
-            # the whole generate stage every tick. A persona-less schedule
-            # resolves from its own snapshot columns here.
             identity = post_identity(schedule)
-            # Segments are the script, stored at creation; there is no LLM
-            # fallback, so a slot without segments has no script and fails
-            # loudly here — before dispatch, so nothing is spent and
-            # nothing needs refunding.
             title = str(slot.get("title") or "").strip()
-            # Agent-supplied publish copy (migration 055): the description
-            # rides the slot row into the task as video_description. Rows
-            # created before migration 055 were backfilled with the slot
-            # title as their description; only a row with no title at all
-            # still fails loudly in validate_publish_plan — there is no
-            # fallback for new rows.
             description = str(slot.get("description") or "").strip()
-            # The one video mode (migration 056): a row without a valid
-            # value fails loudly here, before any dispatch or spend.
             video_type = slot_video_type(slot)
-            # Rows stored before the media-list contract carry one object
-            # per segment; normalize so a prepaid slot renders instead of
-            # failing on a Pydantic list_type error with no refund. A
-            # genuinely malformed row still fails loudly below.
             segments = legacy_media_list(slot.get("segments"))
             if not segments:
                 raise RuntimeError("Slot has no script segments")
-            # Pre-flight before anything about the job itself: a slot that
-            # could never publish is the more fundamental failure, and this
-            # check is free.
-            # Issue #572: when the schedule has a persona, prove every
-            # account against the persona's binding, read now — an account
-            # unbound after scheduling fails the slot here, before any
-            # dispatch or spend. Faceless schedules carry no persona and
-            # skip the check. A binding read that fails (Supabase down)
-            # leaves the slot pending for the next tick instead of
-            # failing it: a transient outage must not burn a prepaid
-            # slot, mirroring the publish-side fail-closed retry.
             bound_accounts = None
             if schedule.get("persona_id"):
                 try:
@@ -158,44 +121,17 @@ class BatchGenerator:
                     )
                     return None
             validate_publish_plan(schedule, title, description, bound_accounts)
-            # `PersonaParams` requires exactly one of voice_id / voice_audio_url,
-            # so a schedule that resolves no voice can never generate. Checked
-            # before the dispatch: failing the slot now gives a readable reason
-            # instead of an opaque engine rejection after the request left.
-            # (No refund on this path: the slot never reached the dispatch a
-            # refund is anchored to.)
             voice_for(identity)
             user_id = slot_user_id(slot)
             if user_id is None:
                 raise RuntimeError("Scheduled slot has no user_id")
-            # Prepaid at request time under this id: no spend here, only a
-            # refund of the slot's stored charge if dispatch itself fails.
             generation_id = f"batch:{schedule['id']}"
             task_id = new_task_id(slot)
             try:
-                # Built inside the refund block on purpose: the validator
-                # re-checks the persisted segments (hook floor included),
-                # so a row stored under an older floor that no longer
-                # validates must refund like a dispatch failure — the
-                # same fail+refund the direct-redispatch path gives a
-                # persisted payload — instead of burning the prepaid slot.
                 request = TaskVideoRequest(
-                    # Pre-migration rows were created when the engine cap was
-                    # 500 (video_subject) and the web had none, so a stored
-                    # title can legally exceed the 100-char video_title cap.
-                    # Publish truncates the YouTube title to the same 100
-                    # (metadata_for), so the request carries the truncated
-                    # title and the row keeps generating instead of failing
-                    # validation on a stored title (migration 055).
                     video_title=title[:100],
                     video_description=description,
                     video_type=video_type,
-                    # Face quality (snapshot first, persona second, via post_identity)
-                    # is what the web priced this slot with: without it a
-                    # tick-dispatched or requeued very_good slot renders at the
-                    # `ok` default it was not charged for. Faceless shows no face,
-                    # so it keeps the engine default — mirror of the web direct
-                    # path (video-job-payload.ts).
                     video_quality=(
                         LipSyncQuality.very_good
                         if video_type != "faceless" and identity.get("face_quality") == "very_good"
@@ -203,32 +139,10 @@ class BatchGenerator:
                     ),
                     persona=build_persona_params(identity, self.store, video_type),
                     video_aspect=identity.get("video_aspect") or "9:16",
-                    # Layout resolves through post_identity() like every other
-                    # editorial field: snapshot first, persona embed second. The
-                    # `or "standard"` covers both a NULL snapshot (schedule created
-                    # before migration 018) and a NULL persona column, which is
-                    # the behaviour every existing video already has.
                     video_layout=identity.get("video_layout") or "standard",
-                    # Per-post BGM mood (migration 045), like direct dispatch.
-                    # Without it a tick-dispatched or requeued slot silently
-                    # renders the engine's default mood instead of the
-                    # requested one; a pre-migration row renders the default,
-                    # as every earlier video did.
                     music_mood=slot_music_mood(slot),
-                    # Segments (scheduled_posts, migration 030), forwarded exactly
-                    # like the web's direct dispatch does. Without this, a
-                    # requeued slot (engine restart mid-generation) or a
-                    # tick-dispatched pending slot would regenerate a script
-                    # from the title alone: the script differs and every user
-                    # photo disappears with no warning. The TaskVideoRequest
-                    # validator joins them into video_script and rejects a
-                    # malformed row, so a corrupt row fails the slot loudly
-                    # instead of rendering a different video.
                     segments=segments,
                     video_cta=identity.get("cta_text") or "",
-                    # Snapshot (post_language) already resolved by post_identity();
-                    # without this the job carries no language for TTS and the
-                    # English-only gate below.
                     video_language=str(identity.get("language") or ""),
                     paragraph_number=(
                         int(identity["paragraph_number"])
@@ -236,17 +150,6 @@ class BatchGenerator:
                         else None
                     ),
                 )
-                # Face modes need a face: the photo comes only from the
-                # persona embed (the snapshot carries no photo). A slot
-                # whose persona has none — or one the engine can never
-                # fetch (a relative path, a non-http scheme) — can never
-                # generate, so it fails here, inside the refund block,
-                # so its prepaid cost comes back — same as the language
-                # gate below. A stored photo_path is always usable (the
-                # filler signs it into a URL); only avatar_url needs the
-                # shape check (mirror of the web pre-charge guard). The
-                # 056 backfill keeps photo-less rows faceless, so this
-                # only fires for a row that asked for a face it never had.
                 if video_type in ("full_lipsync", "hook_lipsync"):
                     avatar_url = identity.get("avatar_url")
                     if avatar_url:
@@ -258,18 +161,8 @@ class BatchGenerator:
                         raise RuntimeError(
                             f"{video_type} requires a persona with a photo"
                         )
-                # English-only launch: a slot scheduled before the launch can
-                # still carry a non-English language. It fails here, inside
-                # the refund block, so its prepaid cost comes back — and
-                # before the funnel entry below, because a language-gated
-                # slot is a data error, not a generation attempt.
                 if request.video_language.strip() and not is_english_language(request.video_language):
                     raise ValueError(ENGLISH_ONLY_VIDEO_MESSAGE)
-                # Funnel entry fires from on_accepted: after the reservation
-                # and the task-row write, before the worker. SlotDeferred is
-                # no attempt (no event, no refund, slot stays pending). A
-                # failed task-row write emits failed with no requested event
-                # (outside the denominator); later failures have both.
                 def _accepted() -> None:
                     tm.track_generation_requested(
                         task_id,
@@ -292,10 +185,6 @@ class BatchGenerator:
             except SlotDeferred:
                 raise
             except Exception as dispatch_exc:
-                # Refund just this video's stored charge; the id keeps the
-                # other videos' charges intact. A free slot (charged 0) has
-                # nothing to refund. A failing refund is logged and must not
-                # replace the dispatch error as the slot's failure reason.
                 cost = slot_refund_amount(slot)
                 refunded = False
                 try:
@@ -318,9 +207,6 @@ class BatchGenerator:
                             f"fill_schedule: refund not applied for undispatched "
                             f"slot {slot['id']}: rpc returned not-refunded"
                         )
-                # Fire refund_issued only on a landed refund (see reconcile.py
-                # for why never optimistically). The task never reached the
-                # engine, but the allocated id still links the ledger row.
                 if refunded and cost is not None:
                     track_refund_issued(
                         user_id=user_id,
@@ -331,9 +217,6 @@ class BatchGenerator:
                         engine_task_id=task_id,
                     )
                 raise dispatch_exc
-            # Claim only after the worker has started. A slot the manager
-            # could not start never reaches this write, and it has no
-            # task-state row for boot triage to fail or refund.
             self.store.update_slot(
                 slot["id"], status=SLOT_GENERATING, title=title, task_id=task_id
             )
@@ -345,54 +228,25 @@ class BatchGenerator:
             )
             return None
         except Exception as exc:
-            # A failed slot is a real recurring error: log at ERROR so the
-            # PostHog bridge (loguru sink, ERROR+) forwards it, scrubbed.
             logger.error(
                 f"fill_schedule: slot {slot['id']} generation failed: "
                 f"{scrub_secret_values(str(exc))}"
             )
-            # The error column is client-visible (/api/schedule/status spreads
-            # the row into the response): scrub the full message before
-            # truncating, like the telemetry reason below — a raw str(exc)
-            # could echo bearer tokens or DSNs to clients.
             self.store.update_slot(
                 slot["id"], status=SLOT_FAILED, error=scrub_secret_values(str(exc))[:500]
             )
-            # Funnel note: slot failures raised before task creation (deleted
-            # persona, scriptless slot, missing user_id) intentionally have no
-            # matching video_generation_requested — they are scheduling/data
-            # errors, not generation failures, so they sit outside the
-            # requested -> failed task funnel by design.
             failed_props: dict[str, object] = {
                 "flow": "batch",
                 "pipeline": "video",
                 "slotId": slot["id"],
-                # Identity for PostHog: the dispatch never created a task
-                # row, so these props are the only attribution the failed
-                # event gets. (slotId keeps its historic camelCase name;
-                # new props use snake_case.)
                 "schedule_id": schedule.get("id"),
                 "persona_id": schedule.get("persona_id"),
-                # Scrub the full message before truncating: a cut landing
-                # mid-key would leave a fragment the key-anchored pattern
-                # can no longer match, leaking the raw remainder into
-                # PostHog properties.
                 "reason": nonempty_error_reason(str(exc), type(exc).__name__),
             }
             if task_id is not None:
                 failed_props["task_id"] = task_id
             if user_id is not None:
                 failed_props["user_id"] = user_id
-            # Dedup by task id on a dedicated dispatch-failure guard (separate
-            # from the pipeline terminal guard _fail_task uses): a crash
-            # between dispatch and update_slot(generating) re-dispatches the
-            # same deterministic id, and without the guard the second failed
-            # dispatch would double-count the failure numerator while
-            # requested stays suppressed. The guards stay separate so a
-            # dispatch failure can never suppress — or re-arm — the genuine
-            # pipeline terminal event of a later successful re-dispatch.
-            # Pre-task failures (task_id None) have no requested event, so
-            # they always emit.
             if task_id is None or tm._should_emit_dispatch_failed_event(task_id):
                 track_event("video_generation_failed", failed_props)
             notify_safe(
@@ -453,16 +307,11 @@ class BatchGenerator:
                 user_id=user_id,
                 flow="batch",
                 pipeline="video",
-                # New tasks start at explicit 0/PROCESSING: update_task() only
-                # overwrites state/progress when they are passed, so the initial
-                # values are set here rather than relying on defaults.
                 state=model_const.TASK_STATE_PROCESSING,
                 progress=0,
                 **tracking_ids,
             )
 
-        # Same lazy import as run(): the controller module builds the
-        # process-wide manager at import time.
         from app.controllers.v1.video import task_manager
 
         submit_batch_start(

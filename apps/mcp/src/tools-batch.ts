@@ -8,22 +8,6 @@ import { sanitizeEngineError } from './tools.js';
 import type { McpToolResponse } from './tools-call.js';
 import { generatePersonaVideoOutcome } from './tools-single-video.js';
 
-//---------------
-// generate_video — the batch discount of issue #487.
-//
-// Creates every video of the batch with generate-and-schedule, one after
-// the other, so the engine receives them back to back and renders them in
-// one warm Modal container. Each video is charged its normal price at
-// creation; then POST /api/videos/batch-discount groups them and credits
-// back the cheapest face video of every BATCH_FREE_EVERY. The server owns
-// every discount rule; this tool only reports what it answered.
-//
-// Idempotent: video N uses the key `batch-<batchKey>-v<N>`, so calling the
-// tool again with the same batchKey and the same videos in the same order
-// replays the videos already created (no second charge), creates the
-// missing ones and retries the discount.
-//---------------
-
 export const BatchVideoSchema = z
   .object(GeneratePersonaVideoShape)
   .omit({ idempotencyKey: true, experiment: true, recipe: true })
@@ -72,7 +56,6 @@ interface DiscountSummary {
   warnings: string[];
 }
 
-/** Codes a retry of the same videos can never clear. */
 const PERMANENT_DISCOUNT_CODES = new Set(['BATCH_WINDOW_EXCEEDED', 'BATCH_CONFLICT', 'BATCH_TOO_LARGE']);
 
 function describeDiscount(summary: DiscountSummary): string {
@@ -80,7 +63,6 @@ function describeDiscount(summary: DiscountSummary): string {
     `Batch: ${summary.faceVideos} face video(s); ${summary.freeVideos} free (${summary.discountTokens} token(s) credited back); ${summary.chargedTokens} token(s) charged in total.`,
   ];
   const missing = BATCH_FREE_EVERY - (summary.faceVideos % BATCH_FREE_EVERY);
-  // The cap is on every video in the batch, faceless included.
   if (summary.videos + missing <= MAX_BATCH_VIDEOS) {
     lines.push(`${missing} more face video(s) in this batch would make one more video free.`);
   }

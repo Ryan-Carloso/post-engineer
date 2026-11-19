@@ -16,25 +16,6 @@ import { isPersonaAllowed, isScopedApiKey, type PersonaScopeContext } from './ap
 import { logger } from './logger';
 import { postUrlFor } from './post-url';
 
-//---------------
-// Post detail — the shared builders behind GET /api/posts/[id] (and the
-// slot detail route). One id resolves to either a scheduled slot or a
-// direct video generation; both shapes carry live progress so the detail
-// page never guesses which endpoint owns the id (issue #208).
-//
-// Ownership: every query is scoped by user_id. PGRST116 (zero rows) means
-// unknown id or another user's row → null. Any other DB error throws so
-// the caller can 500 (retryable) instead of 404 (terminal).
-//
-// Persona scope: a persona-scoped API key only sees posts of its personas
-// plus persona-less posts — the same policy as GET /api/schedule/status
-// and GET /api/metrics. An out-of-scope post resolves to null (404, like
-// the list endpoints that never show it), and is rejected before any
-// engine call.
-//---------------
-
-// The persona allow-list for a caller: null = unrestricted (web session,
-// OAuth, or an unscoped key); an array = only those personas.
 export function personaScopeOf(auth: PersonaScopeContext): readonly string[] | null {
   return isScopedApiKey(auth) ? (auth.personaIds ?? []) : null;
 }
@@ -64,15 +45,7 @@ export interface SlotPostDetail {
     providerFailures: PublishProviderFailure[];
     queuePosition: null;
     queueTotal: null;
-    // Absolute link to the post detail page — the agent sends this link in
-    // chat so the owner can watch/download the video (issue #555). Null
-    // when the public app URL is not configured.
     postUrl: string | null;
-    // The photo the lip-sync hook opens with (issue #589): the first
-    // photo of the video's segments, derived from the slot's stored
-    // segments — never the persona avatar. A URL photo carries its url;
-    // a mediaId upload or no segment photo carries url null with a
-    // source that says why ('upload' / 'persona').
     hookPhoto: HookPhoto;
   };
   schedule: {
@@ -90,6 +63,7 @@ export interface SlotPostDetail {
     threespeakAccountIds: string[];
     rumbleAccountIds: string[];
     fanvueAccountIds: string[];
+    telegramAccountIds: string[];
     timezone: string;
     publishMode: 'scheduled' | 'asap';
   };
@@ -144,14 +118,6 @@ async function resolveSlotPublishLinks(
   }
 }
 
-//---------------
-// resolvePublishedSlotEngineData — publish links and script angle for a
-// published slot from ONE engine task read (fetchEnginePostMetricsSource):
-// both live on the same record, so reading it twice per detail view would
-// double the engine traffic on a rate-limited endpoint. A failed lookup
-// degrades both to empty/null with both warnings, mirroring the separate
-// resolvers below.
-//---------------
 async function resolvePublishedSlotEngineData(
   taskId: string,
   userId: string,
@@ -167,15 +133,6 @@ async function resolvePublishedSlotEngineData(
   }
 }
 
-//---------------
-// getSlotPost — the full detail for a scheduled_posts id: slot row,
-// schedule, persona, live engine progress, publish links, progress
-// history. Null when the id is unknown, another user's, or the schedule
-// row is gone (the slot without its schedule is not a post). The absolute
-// postUrl the agent sends in chat is built from the configured public
-// base URL (NEXT_PUBLIC_APP_URL, lib/post-url), never the request origin;
-// without it postUrl is null.
-//---------------
 export async function getSlotPost(
   supabase: SupabaseClient,
   slotId: string,
@@ -208,20 +165,15 @@ export async function getSlotPost(
 
   const { data: schedule, error: scheduleError } = await supabase
     .from('schedules')
-    .select('id, persona_id, providers, youtube_account_ids, instagram_account_ids, linkedin_account_ids, bluesky_account_ids, threads_account_ids, facebook_account_ids, pinterest_account_ids, pinterest_board_id, threespeak_account_ids, rumble_account_ids, fanvue_account_ids, timezone, post_language, post_voice_id, post_video_aspect, post_video_layout, post_niche, post_paragraph_number, post_face_quality, publish_mode')
+    .select('id, persona_id, providers, youtube_account_ids, instagram_account_ids, linkedin_account_ids, bluesky_account_ids, threads_account_ids, facebook_account_ids, pinterest_account_ids, pinterest_board_id, threespeak_account_ids, rumble_account_ids, fanvue_account_ids, telegram_account_ids, timezone, post_language, post_voice_id, post_video_aspect, post_video_layout, post_niche, post_paragraph_number, post_face_quality, publish_mode')
     .eq('id', row.schedule_id)
     .eq('user_id', userId)
     .maybeSingle();
   if (scheduleError) throw scheduleError;
   const scheduleRow = schedule as ScheduleDetailRow | null;
-  // Ownership re-check: the service client (API-key/OAuth callers)
-  // bypasses RLS, so the schedule must belong to the caller.
   if (!scheduleRow) return null;
   if (!inPersonaScope(personaScope, scheduleRow.persona_id)) return null;
 
-  // No persona is a real state (a post created without one, migration 012):
-  // skip the lookup entirely rather than issuing `.eq('id', null)` and
-  // logging a spurious failure on every request.
   let personaRow: { id: string; name: string } | null = null;
   if (scheduleRow.persona_id !== null) {
     const { data: persona, error: personaError } = await supabase
@@ -230,8 +182,6 @@ export async function getSlotPost(
       .eq('id', scheduleRow.persona_id)
       .single();
     if (personaError && !isNotFound(personaError)) {
-      // The persona name is cosmetic on the detail page — a failed lookup
-      // degrades to a null persona, but never silently.
       logger.warn('[post-detail] persona lookup failed', {
         code: personaError.code,
         message: personaError.message,
@@ -241,11 +191,6 @@ export async function getSlotPost(
   }
 
   const slotTaskId = typeof row.task_id === 'string' && row.task_id.length > 0 ? row.task_id : null;
-  // For a live slot, progress and the script angle live on the same engine
-  // task record: fetch it once here, hand it to enrichSlot (which would
-  // otherwise fetch it again), and take the angle from it. A failed
-  // prefetch degrades exactly like enrichSlot's own lookup (progress 0,
-  // logged) — enrichSlot is told not to fetch a second time.
   let prefetchedTask: EngineTaskProgress | undefined;
   let prefetchFailed = false;
   if ((row.status === 'generating' || row.status === 'failed') && slotTaskId !== null) {
@@ -269,18 +214,12 @@ export async function getSlotPost(
         ? { allowEngineLookup: false }
         : {},
   );
-  // A published slot needs publish links AND the angle, both on the same
-  // engine task record: one read serves both. Any other status needs at
-  // most the angle (publish links are published-only).
   let publishLinks: PublishLink[];
   let scriptAngle: string | null;
   if (row.status === 'published' && slotTaskId !== null) {
     ({ publishLinks, scriptAngle } = await resolvePublishedSlotEngineData(slotTaskId, userId));
   } else {
     publishLinks = await resolveSlotPublishLinks(row, userId);
-    // One task-record read per view: a prefetched task carries the angle,
-    // and a failed prefetch already burned the view's one read — the angle
-    // degrades to null instead of reading the same record a second time.
     scriptAngle =
       prefetchedTask !== undefined
         ? prefetchedTask.scriptAngle
@@ -289,9 +228,6 @@ export async function getSlotPost(
           : await resolveScriptAngle(row.task_id, userId);
   }
 
-  // Progress history: every observed (progress, stage) transition recorded
-  // while the post was live. A failed lookup degrades to an empty list —
-  // the detail still resolves.
   const { data: historyRows, error: historyError } = await supabase
     .from('scheduled_post_progress_history')
     .select('progress, stage, recorded_at')
@@ -312,7 +248,6 @@ export async function getSlotPost(
     }),
   );
 
-  // One const per leaf: v8 coverage skips object-literal property lines.
   const slotIdOut = row.id;
   const scheduleIdOut = row.schedule_id;
   const slotAtOut = row.slot_at;
@@ -326,9 +261,6 @@ export async function getSlotPost(
   const progressOut = enrichment.progress;
   const stageOut = enrichment.stage;
   const retryableOut = enrichment.retryable;
-  // The schedule's account lists live in buildScheduleDetail (extracted
-  // to post-detail-schedule.ts for the file-size ratchet); only the
-  // per-account publish notices stay inline here.
   const publishNotices = noticesFromOutcomes(row.publish_outcomes);
   const userNoticesOut = publishNotices.userNotices;
   const providerFailuresOut = publishNotices.providerFailures;
@@ -351,8 +283,6 @@ export async function getSlotPost(
       scriptAngle,
       publishLinks,
       progressHistory,
-      // Queue position is a list concept (position among the schedule's
-      // pending slots); the detail view doesn't render it.
       queuePosition: null,
       queueTotal: null,
       userNotices: userNoticesOut,
@@ -364,14 +294,6 @@ export async function getSlotPost(
   };
 }
 
-//---------------
-// getGenerationPost — one video_generations row by generation_id, with live
-// engine progress while the generation is still in flight. generate-and-schedule
-// writes status 'running' (and engine_task_id) once the engine accepts the
-// job; 'pending' is the pre-accept snapshot and is included so a task id
-// recorded before that flip still shows progress. A failed progress lookup
-// degrades to 0 — the detail still resolves; the next poll retries.
-//---------------
 export async function getGenerationPost(
   supabase: SupabaseClient,
   generationId: string,
@@ -407,11 +329,6 @@ export async function getGenerationPost(
 
   let progress = 0;
   let stage: string | null = null;
-  // The angle lives on the same task record the progress read fetches: when
-  // that read happens, the angle comes from it instead of a second read.
-  // Undefined means no read was attempted (terminal generation or no task
-  // id) — the angle then gets its own read below. A failed read sets it to
-  // null: that attempt was this view's one read.
   let angleFromProgress: string | null | undefined;
   if ((row.status === 'pending' || row.status === 'running') && row.engine_task_id) {
     try {
@@ -422,11 +339,6 @@ export async function getGenerationPost(
         stage = task.stage;
       }
     } catch (taskError) {
-      // Transient (5xx, abort, network): degrade, keep progress 0 so the
-      // next poll retries. Only a 404 is terminal, and generations never
-      // settle tasks from a read path. The failed read was this view's one
-      // task-record read, so the angle degrades to null with it instead of
-      // reading the same record a second time.
       angleFromProgress = null;
       logger.warn('[post-detail] engine task progress unavailable', {
         taskId: row.engine_task_id,
@@ -435,8 +347,6 @@ export async function getGenerationPost(
     }
   }
 
-  // One const per leaf (not an inline object literal): v8 coverage does not
-  // report object-literal property lines.
   const idOut = row.id;
   const generationIdOut = row.generation_id;
   const engineTaskIdOut = row.engine_task_id;

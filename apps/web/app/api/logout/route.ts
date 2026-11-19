@@ -3,19 +3,12 @@ import { logger } from '@/lib/logger';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
-//---------------
-// POST /api/logout — ends the user's Supabase session.
-// Social-account OAuth tokens stay encrypted in the database
-// (social_accounts); this endpoint only disconnects the current session.
-//---------------
-
 async function postHandler() {
   const logId = logger.generateLogId();
 
   try {
     const supabase = await createSupabaseServerClient();
 
-    // Verify user is authenticated
     const {
       data: { user },
       error: sessionError,
@@ -28,8 +21,6 @@ async function postHandler() {
       );
     }
 
-    // scope: 'local' — end only THIS session; the default 'global' would
-    // also sign the user out on every other device.
     const { error } = await supabase.auth.signOut({ scope: 'local' });
 
     if (error) {
@@ -70,7 +61,4 @@ async function postHandler() {
   }
 }
 
-//---------------
-// 5xx reporting: handled server errors reach PostHog error tracking.
-//---------------
 export const POST = withApiErrorReporting('POST /api/logout', postHandler, { getUserId: resolveReportingUserId });

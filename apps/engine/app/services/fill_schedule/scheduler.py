@@ -22,10 +22,6 @@ from app.services.fill_schedule.publish import BatchPublisher
 from app.services.fill_schedule.reconcile import BatchReconciler
 from app.services.fill_schedule.store import CONNECT_RETRIES, ScheduleStore
 
-# A sustained outage fails every stage on every tick (~3 ERRORs a minute).
-# It is reported as one incident instead: ERROR when it starts, ERROR again
-# every OUTAGE_REMINDER_SECONDS while it lasts, WARNING for the failures in
-# between (the PostHog sink forwards ERROR+ only).
 OUTAGE_REMINDER_SECONDS = 30 * 60
 
 class FillScheduleScheduler:
@@ -69,18 +65,6 @@ class FillScheduleScheduler:
         A stage that raises reports -1 in the result.
         """
         results: dict[str, int] = {}
-        # Connect circuit breaker: re-arm the retry budget every tick, then
-        # disarm it as soon as a stage fails. The breaker does not classify
-        # the failure (only the outage report below does), but a failure does say
-        # Supabase is unreachable right now: paying the full connect budget
-        # again on each later stage would stretch the tick to ~2min against a
-        # 60s TICK_SECONDS without recovering anything. Re-armed next tick,
-        # so a transient blip costs one tick only.
-        #
-        # Accepted false negative: an UNRELATED stage failure (LLM outage,
-        # bad publish credentials) also disarms, so a genuine DNS blip in a
-        # later stage of the same tick gets no retry. One tick of reduced
-        # resilience, re-armed at the top of the next.
         self.store.set_connect_retries(CONNECT_RETRIES)
         connection_failed = False
         for stage_name, stage in (
@@ -96,9 +80,6 @@ class FillScheduleScheduler:
                     connection_failed = True
                     self._report_outage(stage_name, diagnostic, now)
                 else:
-                    # A failed tick stage is a real recurring error: log at
-                    # ERROR so the PostHog bridge (loguru sink, ERROR+)
-                    # forwards it.
                     logger.error(f"fill_schedule: stage {stage_name} failed: {diagnostic}")
                 results[stage_name] = -1
                 self.store.set_connect_retries(0)

@@ -1,21 +1,4 @@
 #!/usr/bin/env node
-/**
- * API naming lint — CI entry point.
- *
- * Diff-based: only names ADDED in the PR diff under the configured
- * contract surface (api_paths) are linted. Existing names are grandfathered.
- *
- * Pipeline: extract candidates -> deterministic denylist -> LLM review
- * (skipped gracefully without API_NAMING_LLM_API_KEY) -> GitHub annotations
- * + findings JSON for the PR-comment step.
- *
- * Usage:
- *   node run.mjs --base <sha> --head <sha> [--repo-root <path>]
- *                [--config <path>] [--diff-file <path>] [--findings-out <path>]
- *
- * --diff-file reads a unified diff from disk instead of git (test hook).
- * Exit code: 1 when any error-severity finding exists, else 0.
- */
 
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -62,7 +45,6 @@ async function main() {
   const diff = getDiff(args, repoRoot);
   const { candidates, newEndpoints } = extractFromDiff(diff, config);
 
-  // Deterministic layer first; denylisted names skip the LLM (already failed).
   const denyFindings = checkDenylist(candidates, config);
   const denied = new Set(denyFindings.map((f) => `${f.file}:${f.line}:${f.name}`));
   const llmCandidates = candidates.filter((c) => !denied.has(`${c.file}:${c.line}:${c.name}`));
@@ -73,7 +55,6 @@ async function main() {
     (a, b) => a.file.localeCompare(b.file) || a.line - b.line || a.name.localeCompare(b.name),
   );
 
-  // Annotations go to stdout (GitHub scans the whole log for :: commands).
   const annotations = formatAnnotations(findings, warnings);
   if (annotations) console.log(annotations);
   for (const ep of newEndpoints) {

@@ -16,10 +16,6 @@ import { ValidateScriptSchema } from './single-video-shape.js';
 import { ScoreDraftShape, ValidateScriptShape, handleScoreDraft, handleValidateScript } from './tools-single-video.js';
 import { handleCompleteVideoUpload, handleCreateVideoUpload, handlePublishUploadedVideo } from './tools-publish-uploaded.js';
 
-//---------------
-// experiments, media, check_script and publish_video (issue #566).
-//---------------
-
 const EXPERIMENTS_SPECS = {
   create: optionalPersonaRefShape(CreateExperimentShape),
   list: ListExperimentsShape,
@@ -60,7 +56,6 @@ export function registerContentTools(server: McpServer, client: PostEngineerClie
     ),
   );
 
-  // upload reads a local file: only the stdio server offers it.
   const mediaOptions: ActionOptions<typeof MEDIA_SPECS> = remote ? { unavailable: ['upload'] } : {};
   server.tool(
     'media',
@@ -99,9 +94,6 @@ export function registerContentTools(server: McpServer, client: PostEngineerClie
     ),
   );
 
-  // from_file reads a local video: only the stdio server offers it. A
-  // publish_existing image is a local file (imagePath) on stdio only;
-  // remotely it goes through a signed upload (create_upload) instead.
   const publishOptions: ActionOptions<typeof PUBLISH_SPECS> = remote
     ? { unavailable: ['from_file'], variants: { publish_existing: optionalPersonaRefShape(PublishExistingRemoteShape) } }
     : { variants: { publish_existing: optionalPersonaRefShape(PublishExistingLocalShape) } };

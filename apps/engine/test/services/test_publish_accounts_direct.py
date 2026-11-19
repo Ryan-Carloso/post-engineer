@@ -91,9 +91,6 @@ class PublishSlotAccountsDirectTests(unittest.TestCase):
         }
 
     def test_new_account_starts_at_attempt_one_not_the_slot_counter(self) -> None:
-        # The slot counter holds other accounts' failures (3 = at the cap):
-        # YouTube already spent its 3 tries. A brand-new Bluesky account
-        # must get its own 3 tries, not inherit YouTube's.
         video = os.path.basename(self.video_path)
         youtube_spent = {
             "provider": "youtube", "accountId": "yt-1", "video": video,
@@ -114,8 +111,6 @@ class PublishSlotAccountsDirectTests(unittest.TestCase):
         self.assertTrue(result.any_retrying)
 
     def test_legacy_slot_without_outcomes_keeps_the_slot_counter(self) -> None:
-        # A slot that never recorded per-account outcomes is still on the
-        # legacy slot-level counter: its accounts keep counting from it.
         slot, schedule = self._slot(["bluesky"], publish_attempts=2)
 
         def publish(**kwargs):
@@ -128,8 +123,6 @@ class PublishSlotAccountsDirectTests(unittest.TestCase):
         self.assertEqual(outcome["code"], "retries_exhausted")
 
     def test_legacy_outcome_without_attempts_keeps_the_slot_counter(self) -> None:
-        # An outcome recorded before per-account attempts existed has no
-        # attempts field: the slot counter is the only budget it has.
         video = os.path.basename(self.video_path)
         legacy = {
             "provider": "bluesky", "accountId": "bsky-1", "video": video,
@@ -150,7 +143,7 @@ class PublishSlotAccountsDirectTests(unittest.TestCase):
 
         def record_results(entries):
             calls.append(True)
-            return len(calls) > 1  # First write fails, second succeeds.
+            return len(calls) > 1
 
         result = self._run(slot, schedule, self._ok, record_results=record_results)
         self.assertEqual(len(calls), 2)

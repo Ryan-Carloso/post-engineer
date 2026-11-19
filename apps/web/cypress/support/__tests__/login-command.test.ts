@@ -6,12 +6,6 @@ import { describe, expect, it } from 'vitest';
 
 import { findRepoRoot } from '../../../test/repo-root';
 
-// loginE2EUser is a Cypress command, so the suite cannot execute it.
-// The order is the contract: a session cookie written before the browser
-// is on the app origin does not attach, and a previous test's document
-// can still clear cookies until it is gone. /landing is public and does
-// not mount the Supabase client. The password grant itself is cached by
-// cy.session for the whole run; validate must not request another one.
 describe('loginE2EUser cookie order', () => {
   const source = readFileSync(
     join(dirname(fileURLToPath(import.meta.url)), '../commands.ts'),
@@ -49,8 +43,6 @@ describe('loginE2EUser cookie order', () => {
   });
 
   it('gives the retry sleep a timeout longer than its delay', () => {
-    // Without it, cy.then gives up on the sleep after defaultCommandTimeout
-    // and a Retry-After above 4s fails the login instead of retrying.
     expect(source).toContain('cy.then({ timeout: retryWaitTimeoutMs(step.delayMs) }, () => sleepMs(step.delayMs))');
   });
 

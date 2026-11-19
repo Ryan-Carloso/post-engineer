@@ -1,14 +1,10 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { resolveScriptLanguage, useUploadStore } from '@/lib/store';
 
-//---------------
-// UploadStore — unit tests for the multi-account toggle
-//---------------
-
 describe('useUploadStore', () => {
   beforeEach(() => {
     useUploadStore.setState({
-      selectedAccountIds: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [] },
+      selectedAccountIds: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [], telegram: [] },
       mode: 'youtube',
       file: null,
       title: '',
@@ -64,7 +60,7 @@ describe('useUploadStore', () => {
         pinterest: [],
         '3speak': [],
         rumble: [],
-        fanvue: [],
+        fanvue: [], telegram: [],
       });
     });
 
@@ -83,7 +79,7 @@ describe('useUploadStore', () => {
         pinterest: [],
         '3speak': [],
         rumble: [],
-        fanvue: [],
+        fanvue: [], telegram: [],
       });
     });
 
@@ -101,7 +97,7 @@ describe('useUploadStore', () => {
         pinterest: [],
         '3speak': [],
         rumble: [],
-        fanvue: [],
+        fanvue: [], telegram: [],
       });
     });
   });
@@ -137,7 +133,7 @@ describe('useUploadStore', () => {
         pinterest: [],
         '3speak': [],
         rumble: [],
-        fanvue: [],
+        fanvue: [], telegram: [],
       });
     });
 
@@ -157,7 +153,7 @@ describe('useUploadStore', () => {
         pinterest: [],
         '3speak': [],
         rumble: [],
-        fanvue: [],
+        fanvue: [], telegram: [],
       });
     });
   });
@@ -262,7 +258,7 @@ describe('useUploadStore', () => {
         pinterest: [],
         '3speak': [],
         rumble: [],
-        fanvue: [],
+        fanvue: [], telegram: [],
       });
     });
 
@@ -281,7 +277,7 @@ describe('useUploadStore', () => {
         pinterest: [],
         '3speak': [],
         rumble: [],
-        fanvue: [],
+        fanvue: [], telegram: [],
       });
     });
 
@@ -300,7 +296,7 @@ describe('useUploadStore', () => {
         pinterest: [],
         '3speak': [],
         rumble: [],
-        fanvue: [],
+        fanvue: [], telegram: [],
       });
     });
   });
@@ -323,10 +319,6 @@ describe('useUploadStore', () => {
 });
 
 describe('resolveScriptLanguage', () => {
-  // English-only launch: the locale derivation is suspended — every new
-  // persona starts in English whatever the UI locale is. These cases pin
-  // the lock; when the other languages launch, the pt/es/fr locales map
-  // to their own script language again.
   it('resolves every locale to English during the English-only launch', () => {
     expect(resolveScriptLanguage('pt')).toBe('en');
     expect(resolveScriptLanguage('pt-BR')).toBe('en');

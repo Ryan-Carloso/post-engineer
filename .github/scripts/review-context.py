@@ -39,7 +39,6 @@ STACK_RE = re.compile(
 )
 MAX_BODY = 8000
 
-# (parsed JSON, response headers with lowercase names)
 Fetch = Callable[[str], tuple[Any, dict[str, str]]]
 
 
@@ -75,8 +74,6 @@ def http_fetch(path: str) -> tuple[Any, dict[str, str]]:
             headers = {key.lower(): value for key, value in response.headers.items()}
             return payload, headers
     except urllib.error.HTTPError as exc:
-        # Do not read or attach the body: error pages can echo the token
-        # query, and the stacked-PR loop prints this exception.
         raise GitHubHTTPError(exc.code) from None
 
 

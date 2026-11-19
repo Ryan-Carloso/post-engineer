@@ -17,11 +17,6 @@ from app.services.cloned_voices.constants import (
 )
 
 
-# Speech cleanup applied before cloning when the user keeps "clean audio" on:
-# drop rumble below 80 Hz and hiss above 12 kHz, suppress steady background
-# noise (FFT denoiser, -25 dB floor), then level loudness. A clone copies
-# whatever noise its reference carries, so phone recordings sound better
-# cleaned; studio recordings can opt out and keep the original.
 DENOISE_FILTER = "highpass=f=80,lowpass=f=12000,afftdn=nf=-25,loudnorm=I=-20:TP=-2"
 
 
@@ -92,12 +87,6 @@ def normalize_reference_audio(source_bytes: bytes, denoise: bool) -> NormalizedR
         wav_path = work_path / "reference.wav"
         source_path.write_bytes(source_bytes)
 
-        # Reject over-long sources from the cheap probe before the decode
-        # pass: with the denoise filter chain that pass costs real CPU per
-        # second of audio, and a byte-capped low-bitrate upload can hold
-        # far more than MAX_REFERENCE_SECONDS. A probe that cannot read
-        # the source (None) falls through — the post-decode probe below
-        # still rejects it as invalid.
         source_duration = _probe_duration_seconds(source_path)
         if source_duration is not None and source_duration > MAX_REFERENCE_SECONDS:
             raise ReferenceAudioError(

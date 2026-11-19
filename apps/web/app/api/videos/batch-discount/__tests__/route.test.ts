@@ -82,7 +82,6 @@ describe('POST /api/videos/batch-discount', () => {
     });
     expect(json.freeVideos).toEqual([{ scheduleId: slots[5]?.schedule_id, slotId: '6', discountTokens: 2 }]);
     expect(BatchDiscountResponseSchema.safeParse(json).success).toBe(true);
-    // One credit, under the free video's own schedule charge, idempotent key.
     expect(fake.rpcCalls).toEqual([
       {
         name: 'refund_batch_tokens',

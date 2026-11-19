@@ -3,14 +3,6 @@ import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import { notifyIfSessionExpired } from '@/lib/session-expiry';
 import type { ExperimentResultLabel } from './results';
 
-//---------------
-// experiments-dashboard — client-side data for the /experiments page:
-// the React Query hooks over GET /api/experiments and
-// GET /api/experiments/[id]?live=1. Same never-throw contract as the
-// metrics dashboard: a bad status or an unexpected body is
-// { success: false, error }, never a thrown fetch.
-//---------------
-
 export type ExperimentsWindow = '24h' | '7d';
 
 export interface ExperimentVariantView {
@@ -189,10 +181,6 @@ export function useExperimentDetailQuery(
     queryFn: () => fetchExperimentDetail(id as string, window),
     enabled: id !== null,
     staleTime: 30_000,
-    // Live while any video is still inside its window: poll once a
-    // minute, even after a failed read (the server cache expires after
-    // 5 minutes, so a retry can pick up a recovered provider). Frozen
-    // results never poll.
     refetchInterval: (query) => {
       const data = query.state.data;
       return data !== undefined && data.success && !data.frozen ? 60_000 : false;

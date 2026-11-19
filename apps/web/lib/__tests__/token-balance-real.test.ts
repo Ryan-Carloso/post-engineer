@@ -16,10 +16,6 @@ import { fetchTokenBalance } from '@/lib/token-balance';
 import { logger } from '@/lib/logger';
 
 describe('fetchTokenBalance', () => {
-  // No mockReset() here: in this vitest version, resetting the stubbed
-  // global fetch makes a throwing mock surface as an unhandled error even
-  // though fetchTokenBalance catches it. Every test arms the mock
-  // explicitly, so no reset is needed for isolation.
   it('returns the server wallet balance with free breakdown', async () => {
     mockFetch.mockResolvedValue({ ok: true, json: async () => ({ success: true, balance: 45, free: 0 }) });
     await expect(fetchTokenBalance()).resolves.toEqual({ balance: 45, free: 0 });

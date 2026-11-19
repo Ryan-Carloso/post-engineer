@@ -1,11 +1,3 @@
-//---------------
-// Tests for POST /api/videos/generate-and-schedule.
-//
-// Supabase (service client), the engine client, the audio SSRF check and
-// analytics are mocked boundaries; slot math (distributeSlots), the payload
-// builder and zod parsing are real.
-//---------------
-
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NextResponse } from 'next/server';
 import { findRepoRoot } from '@/test/repo-root';
@@ -13,8 +5,6 @@ import { GenerateAndScheduleResponseSchema } from '@/lib/contracts/videos';
 
 vi.mock('@/lib/request-auth', () => ({
   requireSupabaseSession: vi.fn(),
-  // Mirrors the real helper (Bearer engine secret + user id) so the
-  // full lip-sync preflight's engine call is testable through the route.
   engineAuthHeaders: (userId: string) => ({
     Authorization: 'Bearer engine-secret',
     'x-user-id': userId,
@@ -24,8 +14,6 @@ vi.mock('@/lib/request-auth', () => ({
 vi.mock('@/lib/supabase/service', () => ({ createSupabaseServiceClient: vi.fn() }));
 
 vi.mock('@/lib/rate-limit', async (importOriginal) => {
-  // Rate limiting is bypassed for payload-behavior tests; one dedicated
-  // test below covers the 429 path.
   const actual = await importOriginal<typeof import('@/lib/rate-limit')>();
   return { ...actual, applyRateLimit: vi.fn().mockResolvedValue(null) };
 });
@@ -84,9 +72,6 @@ vi.mock('@/lib/engine-image-url', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/engine-image-url')>();
   return {
     ...actual,
-    // Faithful routing of the real helper: absolute/data URLs pass through,
-    // empty input resolves to nothing, a relative site path is re-hosted.
-    // The fetch + bucket upload are the part that cannot run in a unit test.
     ensureEngineImageUrl: vi.fn(async (url: string | null | undefined) => {
       const candidate = typeof url === 'string' ? url.trim() : '';
       if (candidate.length === 0) return undefined;
@@ -97,8 +82,6 @@ vi.mock('@/lib/engine-image-url', async (importOriginal) => {
 });
 
 vi.mock('../generate-and-schedule/experiment-link', async (importOriginal) => {
-  // The link check has its own unit tests; here only the route wiring
-  // (called before the charge, link written on the slot) is under test.
   const actual = await importOriginal<typeof import('../generate-and-schedule/experiment-link')>();
   return { ...actual, checkExperimentLink: vi.fn().mockResolvedValue({ ok: true }), verifyExperimentPairAfterInsert: vi.fn().mockResolvedValue({ ok: true }) };
 });
@@ -142,62 +125,35 @@ interface DbConfig {
   persona?: Record<string, unknown> | null;
   personaErrorCode?: string;
   socialAccounts?: Array<{ provider: string; provider_account_id: string; needs_reconnect?: boolean }>;
-  /** Per-persona default publishing accounts (issue #212). */
   personaDefaultAccounts?: Array<{ provider: string; provider_account_id: string }>;
   existingScheduleId?: string | null;
-  /** publish_mode the mocked schedules row carries (replay envelope test). */
   existingSchedulePublishMode?: 'scheduled' | 'asap';
   scheduleLookupError?: boolean;
   replaySlots?: Array<{ id: string; slot_at: string; title: string; task_id: string | null; status: string }>;
   slotCount?: number | null;
   ledgerIds?: string[];
-  /** Typed ledger rows for the generation_id: when set, replaces ledgerIds
-   *  (which defaults every row to a 2-token video_generation spend).
-   *  Amounts mirror production: spends negative, refunds positive. */
   ledgerRows?: Array<{ id: string; type: string; amount: number }>;
   ledgerError?: boolean;
   spend?: { spent: boolean; balance: number };
   spendErrorCode?: string;
   scheduleInsertErrorCode?: string;
-  /** Constraint named by a 23505 on the schedule insert, mirroring the
-   *  Postgres message (`duplicate key value violates unique constraint "…"`). */
   scheduleInsertConstraint?: string;
-  /** PostgREST error `details` field for the schedule insert failure; the
-   *  route reads the constraint name out of `message + details`. */
   scheduleInsertDetails?: string;
   slotInsertFails?: boolean;
   engineFailSubjects?: string[];
-  /** Subjects for which the engine task is unreachable (no upstreamStatus),
-   *  exercising the 'engine_unavailable' per-slot code. */
   engineUnavailableSubjects?: string[];
-  /** Makes storage.createSignedUrl resolve with an error. */
   signUrlError?: boolean;
-  /** Makes storage.createSignedUrl throw. */
   signUrlThrows?: boolean;
-  /** Makes the social_accounts lookup fail with a DB error. */
   socialAccountsError?: boolean;
-  /** Full message for the spend_tokens RPC failure. */
   spendErrorMessage?: string;
-  /** Tables for which update() resolves with an error (bind-failure path). */
   updateErrorTables?: string[];
-  /** Tables for which update() THROWS (network crash) — bind-failure paths
-   *  must catch it instead of failing the dispatch (voice-swap persist). */
   updateThrowsTables?: string[];
-  /** Makes the scheduled_posts replay select fail (fetchReplay error path). */
   replaySlotsError?: boolean;
-  /** Subjects for which the engine accepts but returns no task id. */
   engineNoTaskIdSubjects?: string[];
-  /** Makes the per-slot refund_batch_tokens RPC fail. */
   refundBatchErrorCode?: string;
-  /** Whether the user's cloned_voices table has a ready row (issue #277
-   *  clone-availability lookup). Default: no rows. */
   cloneReady?: boolean;
-  /** Makes the cloned_voices availability lookup fail / throw (its
-   *  fail-open paths must keep the dispatch alive). */
   cloneReadyError?: boolean;
   cloneReadyThrows?: boolean;
-  /** maybeSingle() on personas disagrees with single(). 'missing' is no
-   *  row; an object is the PostgREST error from the binding lookup. */
   personaBindingLookup?: 'missing' | { message: string };
 }
 
@@ -242,8 +198,6 @@ function makeClient(cfg: DbConfig): unknown {
           }
           return { data: null, error: null };
         }
-        // getPersonaDefaultAccounts proves persona ownership with
-        // maybeSingle(); serve the same persona row single() serves.
         if (name === 'personas') {
           if (cfg.personaBindingLookup === 'missing') return { data: null, error: null };
           if (cfg.personaBindingLookup) return { data: null, error: cfg.personaBindingLookup };
@@ -262,8 +216,6 @@ function makeClient(cfg: DbConfig): unknown {
       },
       insert: (rows: unknown) => {
         inserts[name] = Array.isArray(rows) ? rows : [rows];
-        // Postgres names the constraint in the message of a 23505; the route
-        // classifies the failure by that name, so the mock must carry it.
         const insertError = (): { code: string; message: string; details?: string } => ({
           code: cfg.scheduleInsertErrorCode ?? '23505',
           message: cfg.scheduleInsertConstraint
@@ -335,8 +287,6 @@ function makeClient(cfg: DbConfig): unknown {
           return Promise.resolve({ data: cfg.personaDefaultAccounts ?? [], error: null }).then(resolve, reject);
         }
         if (name === 'cloned_voices') {
-          // The clone availability lookup (issue #277) resolves a ready row
-          // only when the fixture says so; anything else is unavailable.
           if (cfg.cloneReadyError) {
             return Promise.resolve({ data: null, error: { code: 'XX000', message: 'db down' } }).then(resolve, reject);
           }
@@ -355,8 +305,6 @@ function makeClient(cfg: DbConfig): unknown {
         }
         if (name === 'scheduled_posts') {
           if (isCountQuery) {
-            // An explicit null pins the DB returning a null count without
-            // an error (undefined falls back to the replay fixture length).
             const count = cfg.slotCount === undefined ? (cfg.replaySlots ?? []).length : cfg.slotCount;
             return Promise.resolve({ data: [], count, error: null }).then(resolve, reject);
           }
@@ -431,8 +379,6 @@ function setup(cfg: DbConfig = {}): void {
   });
 }
 
-// Images mode needs media on every segment (one photo per ~3s): hook 25
-// words -> 4, content 42 -> 6, content take 9 -> 2.
 const DEFAULT_SEGMENTS = [
   {
     kind: 'hook',
@@ -451,8 +397,6 @@ const DEFAULT_SEGMENTS = [
   },
 ];
 
-// Full lip sync caps media at 6 photos for the whole video, so its requests
-// carry no media at all.
 const NO_MEDIA_SEGMENTS = DEFAULT_SEGMENTS.map(({ kind, text }) => ({ kind, text }));
 
 function baseBody(overrides: Record<string, unknown> = {}): Record<string, unknown> {
@@ -484,9 +428,6 @@ function post(body: unknown, headers?: Record<string, string>): Promise<NextResp
 const DEFAULT_CFG: DbConfig = {
   persona: PERSONA,
   socialAccounts: [{ provider: 'youtube', provider_account_id: 'acct-1' }],
-  // The fixture persona is bound to its only account (issue #572): every
-  // test that passes explicit accounts must pass a bound one, or the
-  // binding check 400s before the charge.
   personaDefaultAccounts: [{ provider: 'youtube', provider_account_id: 'acct-1' }],
 };
 
@@ -494,10 +435,6 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(applyRateLimit).mockResolvedValue(null);
   setup(DEFAULT_CFG);
-  // The merged route runs the segment-media aspect preflight before
-  // charging (#538): every full-frame photo asks the engine media/check.
-  // Answer it as fitting (9:16) so the request reaches the dispatch the
-  // test is about; the preflight itself is pinned in its own test file.
   vi.stubEnv('MONEYPRINT_API_URL', 'https://engine.test');
   vi.stubEnv('MONEYPRINT_API_SECRET', 'engine-secret');
   vi.stubGlobal(
@@ -526,16 +463,11 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(json.schedule.id.length).toBeGreaterThan(0);      expect(json.slots).toHaveLength(1);
       expect(json.slots[0]).toMatchObject({ title: 'Porto trip', taskId: 'task-Porto trip', status: 'generating' });
 
-      // ONE atomic spend for the whole operation: 1 video x 2 tokens.
       const spends = rpcCalls.filter((c) => c.name === 'spend_tokens');
       expect(spends).toHaveLength(1);
       expect(spends[0].args.p_amount).toBe(2);
       expect(spends[0].args.p_user_id).toBe(USER_ID);
 
-      // Schedule row: deterministic id; scheduled_at is the legacy column
-      // and the insert pins it NULL. No 'kind' key: the schedules table
-      // has no kind column (it never landed in the schema), and inserting
-      // an unknown key makes PostgREST reject the whole insert (500).
       const scheduleRows = inserts['schedules'] as Array<Record<string, unknown>>;
       expect(scheduleRows).toHaveLength(1);
       expect(scheduleRows[0]).not.toHaveProperty('kind');
@@ -543,27 +475,18 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(scheduleRows[0].posts_per_day).toBe(1);
       expect(scheduleRows[0].youtube_account_ids).toEqual(['acct-1']);
 
-      // The slot carries the title.
       const slotRows = inserts['scheduled_posts'] as Array<Record<string, unknown>>;
       expect(slotRows).toHaveLength(1);
       expect(slotRows.map((r) => r.title)).toEqual(['Porto trip']);
       expect(slotRows.every((r) => r.status === 'pending')).toBe(true);
-      // The slot stores exactly what was charged: every refund path reads it.
       expect(slotRows.map((r) => r.charged_tokens)).toEqual([spends[0].args.p_amount]);
 
-      // The slot was flipped to generating with its task_id.
       const binds = updates.filter((u) => u.table === 'scheduled_posts' && u.fields.status === 'generating');
       expect(binds).toHaveLength(1);
       expect(binds[0].fields.task_id).toBe('task-Porto trip');
     });
 
     it('inserts only columns that exist on public.schedules', async () => {
-      // Sync test: the supabase-js mock records any payload key, so a
-      // speculative key (like the removed 'kind') sailed through tests and
-      // 500d every production call — PostgREST rejects unknown keys. Parse
-      // the canonical schema AND every migration's added columns, then assert
-      // every insert key is a real column, so the next phantom key fails CI
-      // instead of production.
       const { readFileSync, readdirSync } = await import('node:fs');
       const { join } = await import('node:path');
       const migrationsDir = join(findRepoRoot(import.meta.url), 'supabase', 'migrations');
@@ -574,9 +497,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
       );
       expect(tableMatch).not.toBeNull();
       const columnBlock = tableMatch?.[1] ?? '';
-      // Table-level constraints (e.g. `unique (user_id, persona_id),`) start
-      // with a keyword, not a column name — filter them so a future phantom
-      // key named like a SQL keyword can't false-pass.
       const constraintKeywords = new Set([
         'primary',
         'unique',
@@ -594,9 +514,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
               name && !name.startsWith('--') && !constraintKeywords.has(name),
           ),
       );
-      // Later migrations add columns with `alter table ... add column if not
-      // exists <name>` (e.g. migration 015's publish_mode): those are real
-      // columns too.
       const addColumnPattern =
         /alter table public\.schedules\s+add column if not exists\s+([a-z_][a-z0-9_]*)/gi;
       for (const file of readdirSync(migrationsDir).filter((f) => f.endsWith('.sql'))) {
@@ -605,7 +522,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
           columns.add(match[1]);
         }
       }
-      // Sentinel: guards against a degraded parse passing vacuously.
       expect(columns.has('scheduled_at')).toBe(true);
       expect(columns.has('publish_mode')).toBe(true);
 
@@ -629,11 +545,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
     });
 
     it('stores the faceless choice on every slot (the engine prices a slot from it)', async () => {
-      // scheduled_posts.video_type is where the per-post choice lives:
-      // the engine's batch pipeline reads it when it refunds a failed
-      // slot. The faceless flag is derived storage for the batch-discount
-      // reader. A slot created without the mode would be re-priced as a
-      // faced video.
       const res = await post(baseBody({ options: { videoType: 'faceless' } }));
       expect(res.status).toBe(200);
       const slotRows = inserts['scheduled_posts'] as Array<Record<string, unknown>>;
@@ -644,10 +555,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
     });
 
     it('stores the requested music mood on every slot (the engine rebuilds a requeued slot from it)', async () => {
-      // scheduled_posts.music_mood is where the per-post choice lives: the
-      // engine's batch pipeline reads it when it rebuilds a tick-dispatched
-      // or requeued slot. A slot created without it would render with the
-      // engine's default mood instead of the requested one.
       const res = await post(baseBody({ options: { musicMood: 'calm' } }));
       expect(res.status).toBe(200);
       const slotRows = inserts['scheduled_posts'] as Array<Record<string, unknown>>;
@@ -672,7 +579,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(res.status).toBe(200);
       const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
       expect(payload.video_type).toBe('hook_lipsync');
-      // The persona's face quality becomes the job resolution.
       expect(payload.video_quality).toBe('ok');
     });
 
@@ -680,11 +586,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
       const res = await post(baseBody());
       expect(res.status).toBe(200);
       const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
-      // recordGenerationStart is mocked, but its recorded input carries the
-      // generation_id the route computed for the video_generations row.
       const genInput = vi.mocked(recordGenerationStart).mock.calls[0][0] as { generationId: string };
-      // The engine payload carries the same generation_id: the engine tags
-      // its PostHog events with it.
       expect(payload.generation_id).toBe(genInput.generationId);
       expect(typeof payload.generation_id).toBe('string');
     });
@@ -703,8 +605,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
       const genInput = vi.mocked(recordGenerationStart).mock.calls[0][0];
       const enginePayload = vi.mocked(startEngineVideoTask).mock.calls[0][1];
       const slotRows = inserts['scheduled_posts'] as Array<Record<string, unknown>>;
-      // The exact payload dispatched to the engine is what the boot triage
-      // rebuilds from: same object, not a re-serialization.
       expect(genInput.persistence?.params).toBe(enginePayload);
       expect(genInput.persistence).toEqual({
         params: enginePayload,
@@ -748,9 +648,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(res.status).toBe(200);
       const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
       expect(payload.video_type).toBe('faceless');
-      // No face to resolve: the persona's face quality does not apply, and no
-      // image travels to the engine. Asserted on the serialized payload —
-      // that is what the engine receives (an undefined key is dropped).
       expect(payload).not.toHaveProperty('video_quality');
       const serialized = JSON.parse(JSON.stringify(payload)) as { persona: Record<string, unknown> };
       expect(serialized.persona).not.toHaveProperty('photo_url');
@@ -761,15 +658,11 @@ describe('POST /api/videos/generate-and-schedule', () => {
         baseBody({ options: { webhookUrl: 'https://example.com/hook' } }),
       );
       expect(res.status).toBe(200);
-      // A public https webhook passes the pre-charge check and is then
-      // charged like any other request.
       expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(1);
       const calls = vi.mocked(startEngineVideoTask).mock.calls;
       expect(calls).toHaveLength(1);
       expect((calls[0][1] as Record<string, unknown>).webhook_url).toBe('https://example.com/hook');
       expect((calls[0][1] as Record<string, unknown>).video_title).toBe('Porto trip');
-      // Phase 5-4: scripts come from options.segments only — no prompt
-      // rides the engine payload anymore.
       expect(calls[0][1] as Record<string, unknown>).not.toHaveProperty('video_script_prompt');
     });
 
@@ -853,9 +746,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
     });
 
     it('rejects a slot less than 3 hours in the future', async () => {
-      // Pin the clock to a mid-day instant: the wall-clock arithmetic below
-      // must stay deterministic no matter when the suite runs (midnight
-      // crossings and DST shifts would otherwise move the slot).
       vi.useFakeTimers();
       vi.setSystemTime(new Date('2026-09-18T09:00:00.000Z'));
       try {
@@ -865,9 +755,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
         const json = await res.json();
         expect(res.status).toBe(400);
         expect(json.code).toBe('SCHEDULE_OUT_OF_RANGE');
-        // The validator's message (with the interpolated window constants)
-        // is the copy clients receive — pin it so the code and the returned
-        // message can't silently diverge.
         expect(json.error).toMatch(/at least 3 hours in advance/i);
       } finally {
         vi.useRealTimers();
@@ -883,10 +770,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
     });
 
     it('sends video_type full_lipsync to the engine for an opt-in full-mode post', async () => {
-      // The preflight runs before charging: stub a fitting narration so
-      // the request proceeds past it to dispatch. The avatar face check
-      // also runs (text-only segments fall back to the persona photo),
-      // so media/check URLs answer with a faced photo like the default stub.
       vi.stubEnv('MONEYPRINT_API_URL', 'https://engine.test');
       vi.stubEnv('MONEYPRINT_API_SECRET', 'engine-secret');
       vi.stubGlobal(
@@ -908,8 +791,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
         expect(res.status).toBe(200);
         const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
         expect(payload.video_type).toBe('full_lipsync');
-        // Full lip-sync charges the full price (8 tokens, face ok),
-        // not the hook-only price (2 tokens).
         const spends = rpcCalls.filter((c) => c.name === 'spend_tokens');
         expect(spends).toHaveLength(1);
         expect(spends[0].args.p_amount).toBe(8);
@@ -922,8 +803,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
     });
 
     it('rejects an unknown videoType with a 400 listing the modes and costs', async () => {
-      // No media: full lip sync leaves it optional, so the request reaches
-      // the videoType check instead of failing on media.
       const res = await post(baseBody({ options: { videoType: 'sideways', segments: NO_MEDIA_SEGMENTS } }));
       const json = await res.json();
       expect(res.status).toBe(400);
@@ -1015,9 +894,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
     });
 
     it('rejects per-segment terms at parse time (dead with the stock path)', async () => {
-      // Search terms only existed to fetch stock material (issue #542):
-      // the schema no longer lists the field, so zod rejects it before
-      // the content validator ever sees it.
       const withTerms = [
         { kind: 'hook', text: segmentsHook },
         { kind: 'content', text: segmentsContent, terms: ['restaurant kitchen'] },
@@ -1209,11 +1085,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
     });
 
     it('re-charges when the prior spend was fully refunded', async () => {
-      // Attempt 1 charged, then the slot-insert rollback (or the
-      // experiment-pair recheck) refunded under the same generation_id.
-      // The refund inserts a credit row and never deletes the spend row,
-      // so the ledger holds both — only the net counts: fully refunded
-      // means the retry must charge again, or the video renders for free.
       setup({
         ...DEFAULT_CFG,
         ledgerRows: [
@@ -1229,8 +1100,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
     });
 
     it('does not charge when the ledger holds an unrefunded spend row', async () => {
-      // Same fixture shape as the refunded case, but with no refund row:
-      // the retry resumes without charging.
       setup({
         ...DEFAULT_CFG,
         ledgerRows: [{ id: 'tx-spend', type: 'video_generation', amount: -2 }],
@@ -1243,8 +1112,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
     });
 
     it('does not charge when the ledger holds a spend with only a partial refund', async () => {
-      // A partial refund leaves a net spend standing: the retry resumes
-      // without charging.
       setup({
         ...DEFAULT_CFG,
         ledgerRows: [
@@ -1270,8 +1137,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
 
     it('refunds our spend on a schedule PK conflict (we did not create the schedule)', async () => {
       const key = 'race-key-1';
-      // Step 7 misses the schedule (race), we spend, then the insert hits
-      // the PK: our spend is redundant, refund it before replaying.
       vi.mocked(logger.error).mockClear();
       setup({
         ...DEFAULT_CFG,
@@ -1283,17 +1148,11 @@ describe('POST /api/videos/generate-and-schedule', () => {
       const json = await res.json();
       expect(res.status).toBe(200);
       expect(json.replayed).toBe(true);
-      // Our spend did not create the schedule: undo it so the retry is not
-      // charged twice. The winner's own spend under the same generation_id
-      // is the single charge.
       const refunds = rpcCalls.filter((c) => c.name === 'refund_batch_tokens');
       expect(refunds).toHaveLength(1);
       expect(refunds[0].args.p_reason).toMatch(/PK race/);
-      // The rollback refunds our whole spend, not a single slot's share.
       expect(refunds[0].args.p_amount).toBe(2);
       expect(String(refunds[0].args.p_refund_key)).toMatch(/^batch:.*:rollback:/);
-      // The rollback refund landed: the success path logs it (a mutant
-      // that inverts the refunded flag would drop this log).
       expect(vi.mocked(logger.error)).toHaveBeenCalledWith(
         expect.stringMatching(/refunded redundant spend, replaying winner/),
         expect.anything(),
@@ -1303,10 +1162,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
 
     it('does not refund on a schedule PK conflict when we skipped our spend (already spent)', async () => {
       const key = 'race-key-2';
-      // The ledger already holds this generation_id, so this request skips
-      // its spend. If the schedule insert then PK-conflicts with a concurrent
-      // winner, there is no redundant spend of ours to undo: refunding would
-      // steal the legitimate prior spend.
       setup({
         ...DEFAULT_CFG,
         ledgerIds: ['tx-old'],
@@ -1325,10 +1180,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
 
     it('still replays the winner when the PK-race refund RPC fails', async () => {
       const key = 'race-key-3';
-      // The refund RPC reports { data, error } without throwing, so a
-      // failed refund used to be swallowed while the log claimed success.
-      // The failure must be logged loudly, but the winner's schedule still
-      // exists — return it instead of a 500 that hides it.
       vi.mocked(logger.error).mockClear();
       setup({
         ...DEFAULT_CFG,
@@ -1351,8 +1202,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
     });
 
     it('deletes a 0-slot zombie schedule (created an hour ago) and completes without charging twice', async () => {
-      // Age no longer matters: a 0-slot schedule is a zombie whether it is
-      // an hour or a minute old.
       const key = 'zombie-key-1';
       const scheduleId = deterministicUuid(IDEMPOTENCY_NAMESPACE, `${USER_ID}:${key}`);
       setup({
@@ -1360,26 +1209,18 @@ describe('POST /api/videos/generate-and-schedule', () => {
         existingScheduleId: scheduleId,
         replaySlots: [],
         slotCount: 0,
-        // A previous attempt spent but died before creating slots.
         ledgerIds: ['tx-old'],
       });
       const res = await post(baseBody({ idempotencyKey: key }));
       const json = await res.json();
       expect(res.status).toBe(200);
-      // Not a replay: the zombie was cleared and the operation ran fresh.
       expect(json.replayed).toBe(false);
       expect(json.slots).toHaveLength(1);
-      // The zombie schedule row was deleted.
       expect(deletes).toContain('schedules');
-      // No second charge: the ledger already had this generation_id.
       expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
     });
 
     it('deletes a recent 0-slot zombie schedule and runs fresh without charging twice', async () => {
-      // Regression: a retry while the zombie was still fresh used to replay
-      // the empty schedule ("0 publish slot(s)") instead of running fresh.
-      // A 0-slot schedule can never produce videos, so it is a zombie at any
-      // age: delete it and run fresh.
       const key = 'young-zombie-key-1';
       const scheduleId = deterministicUuid(IDEMPOTENCY_NAMESPACE, `${USER_ID}:${key}`);
       setup({
@@ -1387,25 +1228,19 @@ describe('POST /api/videos/generate-and-schedule', () => {
         existingScheduleId: scheduleId,
         replaySlots: [],
         slotCount: 0,
-        // A previous attempt spent but died before creating slots.
         ledgerIds: ['tx-old'],
       });
       const res = await post(baseBody({ idempotencyKey: key }));
       const json = await res.json();
       expect(res.status).toBe(200);
-      // Not a replay: the zombie was cleared and the operation ran fresh.
       expect(json.replayed).toBe(false);
       expect(json.schedule.id).toBe(scheduleId);
       expect(json.slots).toHaveLength(1);
-      // The zombie schedule row was deleted.
       expect(deletes).toContain('schedules');
-      // No second charge: the ledger already had this generation_id.
       expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
     });
 
     it('spends exactly once when a fresh 0-slot zombie had no prior spend', async () => {
-      // Same zombie path, but the dead attempt died before spending: the
-      // fresh run must charge exactly once — no double charge, no free run.
       const key = 'young-zombie-key-2';
       const scheduleId = deterministicUuid(IDEMPOTENCY_NAMESPACE, `${USER_ID}:${key}`);
       setup({
@@ -1427,9 +1262,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
     });
 
     it('treats a null slot count as a 0-slot zombie and runs fresh', async () => {
-      // The count query can return a null count without an error; the route
-      // coerces null to 0 so a count-less schedule is treated as a zombie
-      // and deleted instead of being replayed empty.
       const key = 'null-count-zombie-key';
       const scheduleId = deterministicUuid(IDEMPOTENCY_NAMESPACE, `${USER_ID}:${key}`);
       setup({
@@ -1437,19 +1269,15 @@ describe('POST /api/videos/generate-and-schedule', () => {
         existingScheduleId: scheduleId,
         replaySlots: [],
         slotCount: null,
-        // A previous attempt spent but died before creating slots.
         ledgerIds: ['tx-old'],
       });
       const res = await post(baseBody({ idempotencyKey: key }));
       const json = await res.json();
       expect(res.status).toBe(200);
-      // Not a replay: the zombie was cleared and the operation ran fresh.
       expect(json.replayed).toBe(false);
       expect(json.schedule.id).toBe(scheduleId);
       expect(json.slots).toHaveLength(1);
-      // The zombie schedule row was deleted.
       expect(deletes).toContain('schedules');
-      // No second charge: the ledger already had this generation_id.
       expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
     });
 
@@ -1470,12 +1298,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
     });
 
     it('409s with PERSONA_ALREADY_SCHEDULED instead of "replaying" a schedule it never inserted', async () => {
-      // The regression this pins: the persona already owns a schedule row, so
-      // the insert violates schedules_persona_owner. That is not a PK race —
-      // nothing of ours exists to replay. Answering `{slots: [],
-      // replayed: true}` reported a successful batch of videos that was never
-      // generated, which is how every MCP generate call for this persona
-      // silently no-opped.
       setup({
         ...DEFAULT_CFG,
         scheduleInsertErrorCode: '23505',
@@ -1486,18 +1308,14 @@ describe('POST /api/videos/generate-and-schedule', () => {
       const json = await res.json();
       expect(res.status).toBe(409);
       expect(json.code).toBe('PERSONA_ALREADY_SCHEDULED');
-      // The lie is the point of the test: no empty "replay" success.
       expect(json.replayed).toBeUndefined();
       expect(json.slots).toBeUndefined();
-      // Our spend bought nothing: give it back.
       const refunds = rpcCalls.filter((c) => c.name === 'refund_batch_tokens');
       expect(refunds).toHaveLength(1);
       expect(refunds[0].args.p_batch_generation_id).toMatch(/^batch:/);
     });
 
     it('does not refund the persona-already-scheduled conflict when we skipped our spend', async () => {
-      // alreadySpent: this request charged nothing, so the prior charge under
-      // the same generation_id is legitimate and refunding would steal it.
       setup({
         ...DEFAULT_CFG,
         ledgerIds: ['tx-old'],
@@ -1512,8 +1330,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
     });
 
     it('refunds and 500s on a unique violation from an unclassified constraint', async () => {
-      // An unrecognized constraint is not a race and not a known business
-      // rule: fail loudly instead of guessing a replay.
       setup({
         ...DEFAULT_CFG,
         scheduleInsertErrorCode: '23505',
@@ -1530,8 +1346,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
 
   describe('per-slot failures', () => {
     it('marks the failed slot failed+refunded', async () => {
-      // One call is one video: the single slot failing means every slot
-      // failed, so the honest answer is 502 — with the refund still issued.
       setup({ ...DEFAULT_CFG, engineFailSubjects: ['Porto trip'] });
       const res = await post(baseBody());
       const json = await res.json();
@@ -1550,7 +1364,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
       const failedUpdates = updates.filter((u) => u.table === 'scheduled_posts' && u.fields.status === 'failed');
       expect(failedUpdates).toHaveLength(1);
 
-      // The refund leaves a trace: refund_issued with the dispatch reason.
       const issued = capturedEvents.filter((entry) => entry.event === 'refund_issued');
       expect(issued).toHaveLength(1);
       expect(issued[0].properties).toMatchObject({
@@ -1575,8 +1388,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
         failureStage: 'dispatch',
         refunded: true,
       });
-      // Run the actual event payload through the scrubber: the renamed key
-      // must survive it (a `token*` key would reach PostHog as '[redacted]').
       expect(scrubSecrets(failedEvent?.[1] as Record<string, unknown>)).toMatchObject({
         errorCode: 'ENGINE_UNAVAILABLE',
         failureStage: 'dispatch',
@@ -1585,12 +1396,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
     });
 
     it('refunds the re-charge when a fully-refunded retry fails dispatch', async () => {
-      // Attempt 1 spent and was fully refunded (net 0), so the retry
-      // re-charges under the same generation_id. If its dispatch then
-      // fails, the per-slot refund must still be attempted for the fresh
-      // charge — a refund cap counting only the first charge would answer
-      // nothing_to_refund and the user would pay for a failed video
-      // (migration 044 makes the cap net-aware; this pins the route half).
       setup({
         ...DEFAULT_CFG,
         ledgerRows: [
@@ -1603,9 +1408,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
       const json = await res.json();
       expect(res.status).toBe(502);
       expect(json.slots[0]).toMatchObject({ title: 'Porto trip', taskId: null, status: 'failed' });
-      // The retry charged again (net 0 before it) ...
       expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(1);
-      // ... and the failed dispatch still attempts a refund of that charge.
       const refunds = rpcCalls.filter((c) => c.name === 'refund_batch_tokens');
       expect(refunds).toHaveLength(1);
       expect(refunds[0].args.p_amount).toBe(2);
@@ -1822,9 +1625,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
     });
 
     it('rejects a provider with connected accounts but none selected', async () => {
-      // The persona is bound to instagram only: youtube has a connected
-      // account but the request selects none of it, so the binding-aware
-      // message names the persona binding instead of the generic pick.
       setup({
         ...DEFAULT_CFG,
         socialAccounts: [{ provider: 'youtube', provider_account_id: 'acct-1' }],
@@ -1854,7 +1654,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
           { provider: 'youtube', provider_account_id: 42 as unknown as string },
         ],
       });
-      // The malformed row is skipped; the valid acct-1 still authorizes.
       const res = await post(baseBody());
       expect(res.status).toBe(200);
     });
@@ -1890,8 +1689,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
           { provider: 'youtube', provider_account_id: 'acct-1' },
           { provider: 'youtube', provider_account_id: 'acct-default' },
         ],
-        // Both accounts are bound: the explicit choice wins over the
-        // binding fallback, and the binding check passes for either.
         personaDefaultAccounts: [
           { provider: 'youtube', provider_account_id: 'acct-1' },
           { provider: 'youtube', provider_account_id: 'acct-default' },
@@ -1908,8 +1705,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
       const res = await post(noAccountsBody());
       const json = await res.json();
       expect(res.status).toBe(400);
-      // Issue #572: a persona with zero bound accounts cannot schedule at
-      // all — the error names the missing binding, not the missing pick.
       expect(json.code).toBe('PERSONA_NO_BOUND_ACCOUNTS');
       expect(json.error).toBe('This persona has no accounts bound. Bind at least one account before scheduling.');
     });
@@ -1926,8 +1721,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
           },
         }),
       );
-      // Still a 400 (missing accounts) — a null persona never triggers the
-      // defaults lookup. The exact code depends on faceless validation order.
       expect(res.status).toBe(400);
       const json = await res.json();
       expect(json.success).toBe(false);
@@ -1952,7 +1745,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(json.code).toBe('ACCOUNT_NOT_BOUND_TO_PERSONA');
       expect(json.error).toBe('Selected youtube account is not bound to this persona.');
       expect(json.field).toBe('publishing.accounts.youtube');
-      // Pre-charge: no token was spent for the rejected request.
       expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
     });
 
@@ -2003,9 +1795,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
       });
       const res = await post(
         baseBody({
-          // Absent, not null: the schema rejects an explicit null personaId.
           personaId: undefined,
-          // A persona-less post carries its own voice (no persona to read one from).
           options: { videoType: 'faceless', voiceId: 'chatterbox:kokoro_af_heart' },
           publishing: {
             providers: ['youtube'],
@@ -2079,9 +1869,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
     });
 
     it('rejects a stored avatar_url the engine cannot use, before any charge', async () => {
-      // A relative path that is not one of our own site assets can never be
-      // fetched by the engine: it used to die at ~75% of the pipeline as
-      // "persona image download rejected", after the tokens were charged.
       setup({ ...DEFAULT_CFG, persona: { ...PERSONA, avatar_url: 'characters/ana.png' } });
       const res = await post(baseBody());
       const json = await res.json();
@@ -2109,8 +1896,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
     });
 
     it('rejects an avatar_url pointing at a private literal IP before any charge', async () => {
-      // The engine's SSRF guard rejects private addresses; a literal private
-      // IP is rejected there deterministically, so the pre-flight mirrors it.
       setup({ ...DEFAULT_CFG, persona: { ...PERSONA, avatar_url: 'http://127.0.0.1/avatar.png' } });
       const res = await post(baseBody());
       const json = await res.json();
@@ -2121,9 +1906,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
     });
 
     it('rejects a data:image avatar_url without a payload separator', async () => {
-      // The engine splits a data URI on the first comma and decodes the
-      // payload; without the separator it raises "invalid persona image
-      // data URI" mid-pipeline.
       setup({ ...DEFAULT_CFG, persona: { ...PERSONA, avatar_url: 'data:image/png;base64' } });
       const res = await post(baseBody());
       const json = await res.json();
@@ -2156,17 +1938,12 @@ describe('POST /api/videos/generate-and-schedule', () => {
     });
 
     it('does not validate the persona image for faceless posts', async () => {
-      // A faceless post never sends a photo to the engine, so a stored bad
-      // avatar_url must not block it.
       setup({ ...DEFAULT_CFG, persona: { ...PERSONA, avatar_url: 'not-a-url' } });
       const res = await post(baseBody({ options: { videoType: 'faceless' } }));
       expect(res.status).toBe(200);
     });
 
     it('does not validate the persona image when a library image is pinned', async () => {
-      // A pinned imageId replaces the persona photo for every slot (the
-      // pinned image itself is resolved and checked before the charge), so
-      // the stored avatar_url never reaches the engine.
       setup({ ...DEFAULT_CFG, persona: { ...PERSONA, avatar_url: 'not-a-url' } });
       vi.mocked(resolveVideoImage).mockResolvedValue({
         ok: true,
@@ -2236,8 +2013,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
       setup({ ...DEFAULT_CFG, persona: { ...PERSONA, voice_id: null, voice_audio_path: null } });
       const res = await post(baseBody());
       const json = await res.json();
-      // No voice is NOT a failure: the persona's language (English) has a
-      // house default, so the dispatch proceeds with it before any spend.
       expect(res.status).toBe(200);
       expect(json.success).toBe(true);
       expect(json.warnings).toEqual([
@@ -2247,14 +2022,11 @@ describe('POST /api/videos/generate-and-schedule', () => {
       const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
       const enginePersona = payload.persona as Record<string, unknown>;
       expect(enginePersona.voice_id).toBe('chatterbox:kokoro_af_heart');
-      // The swap is persisted on the persona, in one user-scoped update.
       const swapUpdate = updates.find((u) => u.table === 'personas');
       expect(swapUpdate?.fields).toEqual({ voice_id: 'chatterbox:kokoro_af_heart' });
     });
 
     it('swaps an unrouteable persona voice for the language default and reports the swap', async () => {
-      // Capture through the shared recording client: a prior test's
-      // mockReturnValue must not leak into this one's assertions.
       vi.mocked(getPostHogServer).mockReturnValue(recordingClient as never);
       setup({ ...DEFAULT_CFG, persona: { ...PERSONA, voice_id: 'energetic' } });
       const res = await post(baseBody());
@@ -2268,10 +2040,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect((payload.persona as Record<string, unknown>).voice_id).toBe('chatterbox:kokoro_af_heart');
       const swapUpdate = updates.find((u) => u.table === 'personas');
       expect(swapUpdate?.fields).toEqual({ voice_id: 'chatterbox:kokoro_af_heart' });
-      // The swap is telemetry, never silence: the PostHog event carries the
-      // voice ids and the reason, and no personal data. (withApiErrorReporting
-      // also captures its own success event; only the fallback event is
-      // pinned here.)
       expect(capturedEvents.filter((entry) => entry.event === 'voice_fallback_applied')).toEqual([
         {
           distinctId: USER_ID,
@@ -2335,8 +2103,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
     });
 
     it('survives a THROWING persist: the dispatch proceeds with the swapped voice (review MINOR)', async () => {
-      // A failed persist must not break the dispatch: the engine payload
-      // already carries the working voice, and the swap repeats next post.
       vi.mocked(getPostHogServer).mockReturnValue(recordingClient as never);
       setup({ ...DEFAULT_CFG, persona: { ...PERSONA, voice_id: null, voice_audio_path: null }, updateThrowsTables: ['personas'] });
       const res = await post(baseBody());
@@ -2347,8 +2113,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
         { code: 'voice_fallback_applied', fromVoice: '', toVoice: 'chatterbox:kokoro_af_heart' },
       ]);
       expect(GenerateAndScheduleResponseSchema.safeParse(json).success).toBe(true);
-      // The mock records the attempted personas update; no DB row was
-      // committed (the client threw). Dispatch still uses the swapped voice.
       expect(updates.some((u) => u.table === 'personas')).toBe(true);
     });
 
@@ -2407,8 +2171,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
       const json = await res.json();
       expect(res.status).toBe(200);
       expect(json.warnings).toBeUndefined();
-      // The persona's stored (invalid) voice is NOT swapped either: the
-      // explicit request voice is what this post speaks with.
       const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
       expect((payload.persona as Record<string, unknown>).voice_id).toBe('chatterbox:kokoro_af_heart');
       expect(updates.find((u) => u.table === 'personas')).toBeUndefined();
@@ -2453,9 +2215,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
     });
 
     it('keeps the clone when the availability lookup FAILS: fail open into the engine guard', async () => {
-      // The clone-availability lookup has two fail-open paths (DB error and
-      // thrown client). Either keeps the clone — a transient DB outage must
-      // not fail a dispatch the engine's ownership guard would accept.
       setup({
         ...DEFAULT_CFG,
         persona: { ...PERSONA, voice_id: 'chatterbox_nano:uaaaaaaaaaaaa_bbbbbbbbbbbb' },
@@ -2522,9 +2281,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
 
   describe('spend and insert branches (mutation hardening)', () => {
     it('replays on a spend 23505 that names the generation constraint', async () => {
-      // A concurrent duplicate spent under the same generation_id first:
-      // classify the 23505 by its constraint name and replay instead of
-      // double-charging.
       setup({
         ...DEFAULT_CFG,
         spendErrorCode: '23505',
@@ -2559,8 +2315,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
     });
 
     it('classifies the persona-owner constraint out of the error details field', async () => {
-      // PostgREST surfaces the constraint name in `details` when the
-      // message is generic: the classification must read both.
       setup({
         ...DEFAULT_CFG,
         scheduleInsertErrorCode: '23505',
@@ -2575,8 +2329,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
     });
 
     it('refunds and 500s on a bare 23505 with no constraint name (violatedConstraint null)', async () => {
-      // Neither message nor details names a constraint: not a PK race, not a
-      // known business rule — refund loudly instead of guessing a replay.
       setup({ ...DEFAULT_CFG, scheduleInsertErrorCode: '23505' });
       const res = await post(baseBody({ idempotencyKey: 'bare-23505-key' }));
       const json = await res.json();
@@ -2587,9 +2339,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
     });
 
     it('still 409s when the persona-owner refund fails', async () => {
-      // A failed refund is a billing discrepancy, not a request failure: the
-      // conflict is real either way, so the 409 stands and the failure is
-      // logged loudly for investigation.
       setup({
         ...DEFAULT_CFG,
         scheduleInsertErrorCode: '23505',
@@ -2615,23 +2364,16 @@ describe('POST /api/videos/generate-and-schedule', () => {
       const json = await res.json();
       expect(res.status).toBe(500);
       expect(json.code).toBe('INTERNAL_ERROR');
-      // Compensating rollback: no half-created schedule survives.
       expect(deletes).toContain('scheduled_posts');
       expect(deletes).toContain('schedules');
       const refunds = rpcCalls.filter((c) => c.name === 'refund_batch_tokens');
       expect(refunds).toHaveLength(1);
       expect(refunds[0].args.p_reason).toBe('Unified generate+schedule: slot insert failed; tokens refunded');
-      // The rollback refunds the whole spend through the net-aware RPC,
-      // with a per-attempt key (see the fresh-key test below).
       expect(refunds[0].args.p_amount).toBe(2);
       expect(String(refunds[0].args.p_refund_key)).toMatch(/^batch:.*:rollback:/);
     });
 
     it('uses a fresh rollback refund key on each attempt', async () => {
-      // Attempt 1 spends and rolls back (slot insert fails); the retry
-      // re-charges (net 0) and rolls back again. The second rollback refund
-      // must carry a different key, or the RPC answers already_refunded
-      // and the retry's fresh charge is never returned.
       setup({
         ...DEFAULT_CFG,
         ledgerRows: [
@@ -2661,14 +2403,11 @@ describe('POST /api/videos/generate-and-schedule', () => {
       setup({ ...DEFAULT_CFG, updateErrorTables: ['scheduled_posts'] });
       const res = await post(baseBody());
       const json = await res.json();
-      // The slot failed, none with an engine code: honest 502, internal.
       expect(res.status).toBe(502);
       expect(json.success).toBe(false);
       expect(json.code).toBe('INTERNAL_ERROR');
       expect(json.slots).toHaveLength(1);
       expect(json.slots[0]).toMatchObject({ title: 'Porto trip', taskId: null, status: 'failed', errorCode: 'bind_failed' });
-      // The engine accepted the task: the task id was preserved for
-      // recovery instead of being orphaned.
       expect(vi.mocked(startEngineVideoTask)).toHaveBeenCalledTimes(1);
     });
 
@@ -2683,8 +2422,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
     });
 
     it('marks the slot image_resolve_failed when dispatch-time resolution fails', async () => {
-      // The pre-charge resolution (for the face check) succeeds with an
-      // empty library; only the dispatch-time resolution fails.
       vi.mocked(resolveVideoImage)
         .mockResolvedValueOnce({ ok: true, image: null })
         .mockResolvedValue({ ok: false, error: 'library down', status: 500 });
@@ -2698,9 +2435,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
 
     it('marks the slot image_sign_failed when the selected image cannot be signed', async () => {
       setup({ ...DEFAULT_CFG, signUrlError: true });
-      // The pre-charge resolution (for the face check) succeeds with an
-      // empty library, so no signing happens before the charge; only the
-      // dispatch-time signing fails.
       vi.mocked(resolveVideoImage)
         .mockResolvedValueOnce({ ok: true, image: null })
         .mockResolvedValue({
@@ -2715,9 +2449,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
     });
 
     it('rejects a face-mode request with 400 when no face source exists (pre-charge photo check)', async () => {
-      // A face mode needs a persona photo: the pre-charge check in
-      // preparePersona rejects it before any charge or slot insert, so
-      // the dispatch-stage photo_missing backstop never runs for it.
       setup({ ...DEFAULT_CFG, persona: { ...PERSONA, avatar_url: null, photo_path: null } });
       const res = await post(baseBody());
       const json = await res.json();
@@ -2729,9 +2460,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
     });
 
     it('500s before charging when the pre-charge library resolution fails', async () => {
-      // The library cannot be read, so the pre-charge face check cannot
-      // know which photo dispatch would use: fail before the charge
-      // instead of checking the stored avatar and risking a false pass.
       vi.mocked(resolveVideoImage).mockResolvedValue({ ok: false, error: 'library down', status: 500 });
       const res = await post(baseBody());
       const json = await res.json();
@@ -2757,13 +2485,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
     });
 
     it('rejects a faceless stored persona photo with 400 before any charge', async () => {
-      // Uploaded/https personas store photo_path with avatar_url null, and
-      // dispatch signs photoPath as the persona fallback: the pre-charge
-      // face check must validate that file, not pass the request through
-      // to a charge and an engine failure. Full lip-sync text-only
-      // segments reach the fallback in production (media is optional
-      // there), so the narration stub answers 51s like the other
-      // full-mode tests.
       setup({ ...DEFAULT_CFG, persona: { ...PERSONA, avatar_url: null, photo_path: 'personas/user-1/photo.jpg' } });
       vi.mocked(resolveVideoImage).mockResolvedValue({ ok: true, image: null });
       vi.stubGlobal(
@@ -2806,10 +2527,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(res.status).toBe(502);
       expect(json.success).toBe(false);
       expect(json.slots[0]).toMatchObject({ title: 'Porto trip', status: 'failed', tokensRefunded: false });
-      // A refund that never landed leaves no refund_issued behind.
       expect(capturedEvents.filter((entry) => entry.event === 'refund_issued')).toEqual([]);
-      // The slot still reports failed; the history marks the refund as not
-      // delivered so the discrepancy stays visible.
       const failedCall = vi
         .mocked(recordGenerationUpdate)
         .mock.calls.find((call) => (call[0] as { status?: string }).status === 'failed');
@@ -2903,14 +2621,12 @@ describe('POST /api/videos/generate-and-schedule', () => {
     });
 
     it('tracks tasks_created with accepted and failed counts', async () => {
-      // One call is one video: the success case pins accepted 1, failed 0.
       const res = await post(baseBody());
       expect(res.status).toBe(200);
       expect(vi.mocked(trackApiEvent)).toHaveBeenCalledWith(
         'video_tasks_created',
         expect.objectContaining({ tasksAccepted: 1, tasksFailed: 0 }),
       );
-      // durationMs is wall-clock elapsed (Date.now() - startedAt), not a sum.
       const completed = vi
         .mocked(trackApiEvent)
         .mock.calls.find((call) => call[0] === 'video_creation_completed');
@@ -3001,9 +2717,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
     });
 
     it('treats an empty-string personaId as a persona-less post', async () => {
-      // Null is the only accepted spelling: a blank string cannot
-      // half-intend a persona, it becomes the persona-less path (and must
-      // still satisfy it).
       const res = await post(baseBody({ personaId: '', options: { videoType: 'faceless', voiceId: 'chatterbox:kokoro_af_heart' } }));
       expect(res.status).toBe(200);
       const scheduleRows = inserts['schedules'] as Array<Record<string, unknown>>;
@@ -3029,8 +2742,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
       const json = await res.json();
       expect(json.success).toBe(true);
 
-      // The schedule carries the priced identity: null persona plus the
-      // snapshot the engine re-reads at tick time.
       const scheduleRows = inserts['schedules'] as Array<Record<string, unknown>>;
       expect(scheduleRows).toHaveLength(1);
       expect(scheduleRows[0].persona_id).toBeNull();
@@ -3039,15 +2750,10 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(scheduleRows[0].post_niche).toBe('comedy');
       expect(scheduleRows[0].post_video_aspect).toBe('16:9');
       expect(scheduleRows[0].post_paragraph_number).toBe(3);
-      // Phase 5-4: no script prompt is snapshotted onto the schedule —
-      // the script lives on the slot's segments.
       expect(scheduleRows[0]).not.toHaveProperty('post_script_prompt');
-      // No persona, no persona call to action: the engine picks a generic one.
       expect(scheduleRows[0].post_cta_text).toBeNull();
       expect(scheduleRows[0].post_face_quality).toBe('ok');
 
-      // The engine payload identifies the post by its own shape: no persona
-      // name, the request's editorial values, no face.
       const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
       const persona = payload.persona as Record<string, unknown>;
       expect(persona.name).toBe('Post');
@@ -3080,8 +2786,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
     });
 
     it('skips the persona scope check for a persona-less post', async () => {
-      // A scoped API key that allows nothing still creates a persona-less
-      // post: there is no persona to scope against.
       vi.mocked(isPersonaAllowed).mockReturnValue(false);
       const res = await post(baseBody({ personaId: undefined, options: { videoType: 'faceless', voiceId: 'chatterbox:kokoro_af_heart' } }));
       expect(res.status).toBe(200);
@@ -3089,8 +2793,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
     });
 
     it('snapshots the audioUrl for a persona-less audio post so the engine tick can resolve its voice', async () => {
-      // Without this column the engine's voice_for pre-dispatch check would
-      // fail every slot of an audioUrl post with "post resolves no voice".
       const res = await post(
         baseBody({
           personaId: undefined,
@@ -3106,10 +2808,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
     });
 
     it('does not snapshot a signed voice URL for a persona-backed audio-voice post', async () => {
-      // preparePersona signs voice_audio_path into a 1-hour URL for the
-      // direct dispatch; snapshotting it would store an expired URL that
-      // shadows the fresh re-signing at tick time. The tick must re-sign
-      // from the persona embed instead.
       setup({ ...DEFAULT_CFG, persona: { ...PERSONA, voice_id: null, voice_audio_path: 'u/v.mp3' } });
       const res = await post(baseBody());
       expect(res.status).toBe(200);
@@ -3124,15 +2822,11 @@ describe('POST /api/videos/generate-and-schedule', () => {
       const spends = rpcCalls.filter((c) => c.name === 'spend_tokens');
       expect(spends).toHaveLength(1);
       expect(spends[0].args.p_amount).toBe(1);
-      // No persona means no library to resolve from and no anti-repeat
-      // history to record into.
       expect(vi.mocked(resolveVideoImage)).not.toHaveBeenCalled();
       expect(vi.mocked(recordRecentImageId)).not.toHaveBeenCalled();
     });
 
     it('snapshots a null video_aspect when the persona has none', async () => {
-      // A legacy persona row can carry a null video_aspect: the snapshot
-      // must store null, not crash on the missing value.
       setup({ ...DEFAULT_CFG, persona: { ...PERSONA, video_aspect: null } });
       const res = await post(baseBody());
       expect(res.status).toBe(200);
@@ -3140,9 +2834,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(scheduleRows).toHaveLength(1);
       expect(scheduleRows[0].post_video_aspect).toBeNull();
       const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
-      // The payload builder strips null preference fields: the engine
-      // would reject an explicit null with the opaque 502, so absence is
-      // the contract, not null.
       expect(payload).not.toHaveProperty('video_aspect');
     });
 
@@ -3153,16 +2844,12 @@ describe('POST /api/videos/generate-and-schedule', () => {
         }),
       );
       expect(res.status).toBe(200);
-      // The snapshot on the schedule is the priced identity: overrides win
-      // over the persona's stored definition.
       const scheduleRows = inserts['schedules'] as Array<Record<string, unknown>>;
       expect(scheduleRows[0].post_niche).toBe('tech');
       expect(scheduleRows[0].post_language).toBe('en-US');
       expect(scheduleRows[0].post_video_aspect).toBe('16:9');
       expect(scheduleRows[0].post_paragraph_number).toBe(2);
-      // Phase 5-4: no script prompt is snapshotted onto the schedule.
       expect(scheduleRows[0]).not.toHaveProperty('post_script_prompt');
-      // And the engine payload carries the same resolved values.
       const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
       expect(payload.video_language).toBe('en-US');
       expect(payload.video_aspect).toBe('16:9');
@@ -3202,9 +2889,6 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(json.schedule.mode).toBe('asap');
       expect(json.slots).toHaveLength(1);
 
-      // slot_at is the request time, not a distributed future slot: the
-      // engine's tick publishes ready slots with slot_at <= now, so these
-      // go out the moment generation finishes. The 3h window never applies.
       const slotRows = inserts['scheduled_posts'] as Array<Record<string, unknown>>;
       expect(slotRows).toHaveLength(1);
       for (const row of slotRows) {
@@ -3445,8 +3129,6 @@ describe('full lip-sync preflight — pre-charge rejection', () => {
     const json = await res.json();
     expect(res.status).toBe(400);
     expect(String(json.field)).toContain('options.videoType');
-    // The charge is the proof, not just the error: no spend, no schedule
-    // row, no engine dispatch happened for the rejected request.
     expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
     expect(rpcCalls.filter((c) => c.name.startsWith('refund'))).toHaveLength(0);
     expect(inserts['schedules']).toBeUndefined();
@@ -3466,11 +3148,6 @@ describe('full lip-sync preflight — pre-charge rejection', () => {
   });
 
   it('skips the narration preflight for non-full videos but still checks segment ratios', async () => {
-    // The narration check (audio/preflight-duration) is full-lip-sync
-    // only; the aspect check (media/check) still runs for the segments'
-    // full-frame photos — the default persona has no face, so all 12 do —
-    // plus the first-photo face check, which re-checks the first photo
-    // for a face (issue #589).
     const calls: Array<string> = [];
     vi.stubGlobal(
       'fetch',
@@ -3503,7 +3180,6 @@ describe('POST /api/videos/generate-and-schedule — experiment link (issue #476
       link: EXPERIMENT,
       userId: USER_ID,
       personaId: 'persona-1',
-      // Same deterministic schedule id the replay path uses.
       replayScheduleId: deterministicUuid(IDEMPOTENCY_NAMESPACE, `${USER_ID}:exp-key`),
       facts: { providers: ['youtube'], accountIds: { youtube: ['acct-1'] }, videoType: 'hook_lipsync', segments: DEFAULT_SEGMENTS },
     });

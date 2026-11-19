@@ -1,17 +1,3 @@
-//---------------
-// fanvue-posts — creates the post that attaches uploaded vault media.
-//
-// Verified against api.fanvue.com/docs/api-reference/create-a-new-post:
-//   POST /posts { text, mediaUuids, audience }
-// `audience` is required; this client always sends `subscribers`
-// because Fanvue is an 18+ platform and we never create a public post.
-// The response carries the new post's `uuid`.
-//
-// `text` has a 5000-character API ceiling. It is validated here and
-// rejected, never truncated: the route that builds it (upload-content)
-// must report the problem instead of publishing a cut-off caption.
-//---------------
-
 import { FanvueError } from '@/lib/errors';
 import {
   FANVUE_API_BASE,

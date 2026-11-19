@@ -4,18 +4,6 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/supabase/database.gen';
 import { encryptJson, decryptJson, TokenDecryptError } from '@/lib/token-crypto';
 
-//---------------
-// Tool Config — per-user research/stock tool configuration (issue #669).
-// One row per user in user_tool_configs: the configured search tool, the
-// licensed stock sources, and the API keys in one AES-256-GCM blob
-// (lib/token-crypto.ts encryptJson/decryptJson, the same envelope as
-// social_accounts.encrypted_tokens). Reads/writes use the service client
-// after the route proves ownership: the session JWT has no SELECT on the
-// table (migration 070), so ciphertext never reaches PostgREST and a key
-// is never returned in full by any API or MCP response — presence and the
-// last 4 characters only.
-//---------------
-
 export const TOOL_CONFIG_SEARCH_TOOLS = ['tavily', 'exa', 'own'] as const;
 export type ToolConfigSearchTool = (typeof TOOL_CONFIG_SEARCH_TOOLS)[number];
 
@@ -33,17 +21,12 @@ export interface ToolConfigInput {
   keys: ToolConfigKeys;
 }
 
-// The full configuration as stored, keys included. This shape never
-// leaves the server: the route converts it to ToolConfigPresence before
-// answering, so no API or MCP response ever carries a key value.
 export interface ToolConfig {
   searchTool: ToolConfigSearchTool | null;
   stockSources: ToolConfigStockSource[];
   keys: ToolConfigKeys;
 }
 
-// What a save returns: the configuration minus the key values. A key is
-// shown as present + its last 4 characters, never in full.
 export interface ToolConfigPresence {
   searchTool: ToolConfigSearchTool | null;
   stockSources: ToolConfigStockSource[];
@@ -61,9 +44,6 @@ export class ToolConfigValidationError extends Error {
   }
 }
 
-// The stored blob exists but this key cannot read it (tampered, or
-// encrypted under a different key). The user repairs it by saving the
-// configuration again; it is never a missing row.
 export class ToolConfigUnreadableError extends Error {
   constructor() {
     super('Saved tool configuration could not be read; save it again');
@@ -93,8 +73,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-// The last 4 characters of a key, for display only. A key of 4 characters
-// or fewer is never shown in full.
 export function last4OfKey(key: string): string {
   return key.length <= 4 ? '****' : key.slice(-4);
 }
@@ -117,10 +95,6 @@ export function toToolConfigPresence(config: ToolConfig): ToolConfigPresence {
   };
 }
 
-// Strict validation for a replace-whole save: every field is required and a
-// key is only accepted for the tool/source it belongs to. Keys are trimmed
-// (a whitespace-only key is empty) and duplicate stock sources collapse to
-// one; nothing else is silently truncated, coerced, or dropped.
 export function validateToolConfigInput(value: unknown): ToolConfigInput {
   if (!isRecord(value)) {
     throw new ToolConfigValidationError('config', 'Tool configuration must be an object');
@@ -182,9 +156,6 @@ export function validateToolConfigInput(value: unknown): ToolConfigInput {
     keys[name] = key;
   }
 
-  // A key only makes sense for the tool/source it belongs to: a Tavily key
-  // with no Tavily selection (or an Exa key alongside Tavily) is a
-  // contradictory save, not a partial one.
   if (keys.tavily !== undefined && searchTool !== 'tavily') {
     throw new ToolConfigValidationError(
       'keys.tavily',
@@ -206,9 +177,6 @@ export function validateToolConfigInput(value: unknown): ToolConfigInput {
   return { searchTool, stockSources, keys };
 }
 
-// The stored blob was written by saveToolConfig, but a read never trusts
-// it blindly: unknown names and non-string values are dropped, so a blob
-// written by an older or foreign writer cannot smuggle a field through.
 function parseStoredKeys(encryptedKeys: string | null): ToolConfigKeys {
   if (encryptedKeys === null || encryptedKeys === '') {
     return {};
@@ -257,8 +225,6 @@ export async function getToolConfig(
     keys = parseStoredKeys(data.encrypted_keys);
   } catch (error) {
     if (error instanceof TokenDecryptError) {
-      // A blob this key cannot read is a broken stored row, not a missing
-      // one: the user saves the configuration again to repair it.
       throw new ToolConfigUnreadableError();
     }
     throw error;

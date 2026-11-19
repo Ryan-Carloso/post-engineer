@@ -1,12 +1,6 @@
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-//---------------
-// /api/persona/publishing-accounts tests (real contract).
-// The external boundary (Supabase) is mocked; everything else is real:
-// auth, rate limit (bypassed), ownership, validation, replace-all write.
-//---------------
-
 vi.mock('@/lib/supabase/server', () => ({
   createSupabaseServerClient: vi.fn(),
 }));
@@ -150,9 +144,6 @@ describe('GET /api/persona/publishing-accounts', () => {
   });
 
   it('401s when unauthenticated', async () => {
-    // requireSupabaseSession returns a NextResponse (not a plain Response)
-    // on auth failure, and the route passes it through via `instanceof
-    // NextResponse` — the mock must match the real shape.
     vi.mocked(requireSupabaseSession).mockResolvedValue({
       auth: null,
       error: NextResponse.json({ success: false }, { status: 401 }),
@@ -162,10 +153,6 @@ describe('GET /api/persona/publishing-accounts', () => {
   });
 
   it('400s with a stable validation code for a non-uuid personaId (placeholder callers stop leaking Postgres errors)', async () => {
-    // The production warnings: `invalid input syntax for type uuid: "p-1"`
-    // from a caller that sent placeholder ids. A uuid-shape gate answers
-    // with a machine-readable VALIDATION_FAILED on the personaId field and
-    // NEVER hits Postgres.
     const request = new Request('https://app.test/api/persona/publishing-accounts?personaId=p-1', {
       method: 'GET',
       headers: { 'x-api-key': 'key' },
@@ -284,7 +271,6 @@ describe('PUT /api/persona/publishing-accounts', () => {
     const body = await res.json();
     expect(body.code).toBe('VALIDATION_FAILED');
     expect(body.error).toBe('A persona must have at least one bound account.');
-    // The replace-all delete never ran: the previous binding survives.
     expect(tables.persona_default_accounts).toHaveLength(1);
   });
 });

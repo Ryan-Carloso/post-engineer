@@ -16,8 +16,6 @@ from app.services import segment_photo_duration
 
 
 def _repo_file(*parts: str) -> Path:
-    # Walk up instead of counting parents: mutmut runs the suite from a
-    # copied tree (mutants/), which shifts every fixed parent index.
     for parent in Path(__file__).resolve().parents:
         candidate = parent.joinpath(*parts)
         if candidate.is_file():

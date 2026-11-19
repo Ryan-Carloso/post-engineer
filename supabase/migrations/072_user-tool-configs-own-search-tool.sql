@@ -1,5 +1,5 @@
 -- ============================================================================
--- 071 — 'own' as a persisted search tool for user_tool_configs.
+-- 072 — 'own' as a persisted search tool for user_tool_configs.
 -- The base prompt offers the agent's own web or MCP search tool as an
 -- answer, but migration 070 shipped (PR #671) with the search_tool check
 -- holding only ('tavily', 'exa'), so that answer could only be stored as

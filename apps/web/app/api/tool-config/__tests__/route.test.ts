@@ -2,13 +2,6 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-//---------------
-// GET/PUT /api/tool-config (issue #669): auth, unconfigured shape,
-// presence-only on GET and PUT, validation 400s, and
-// generic 500s that never leak a raw DB message or a key value.
-// Only fake keys below — never a real one.
-//---------------
-
 vi.mock('@/lib/request-auth', () => ({
   requireSupabaseSession: vi.fn(),
 }));
@@ -58,9 +51,6 @@ function authed() {
 function unauthed() {
   vi.mocked(requireSupabaseSession).mockResolvedValue({
     auth: null,
-    // The route checks `ctx instanceof NextResponse`, so the error must be
-    // a NextResponse like the real requireSupabaseSession returns — a plain
-    // Response would slip past the check and run the handler unauthenticated.
     error: NextResponseServer.json({ success: false, error: 'Unauthorized.' }, { status: 401 }),
   } as unknown as Awaited<ReturnType<typeof requireSupabaseSession>>);
 }

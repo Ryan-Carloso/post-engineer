@@ -7,10 +7,6 @@ import {
 } from '@/lib/oauth/popup';
 import type { TranslateFunction } from '@/lib/oauth/popup';
 
-//---------------
-// popup.ts — OAuthError, messages, window and callback messages
-//---------------
-
 const t: TranslateFunction = (key, vars) =>
   vars ? `${key}:${JSON.stringify(vars)}` : key;
 

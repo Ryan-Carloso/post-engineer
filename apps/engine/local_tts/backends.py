@@ -93,7 +93,6 @@ def _synth_phonon(text: str, voice: str) -> tuple[np.ndarray, int]:
 
 
 def _synth_kokoro(text: str, voice: str) -> tuple[np.ndarray, int]:
-    # Kokoro voice ids start with the accent: a* = American, b* = British.
     pipeline = _kokoro("a" if voice.startswith("a") else "b")
     chunks = [
         np.asarray(result.audio, dtype=np.float32).reshape(-1)

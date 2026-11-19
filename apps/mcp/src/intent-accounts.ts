@@ -11,12 +11,6 @@ import type { McpToolResponse } from './tools-call.js';
 import { GetPersonaPublishingAccountsShape, SetPersonaPublishingAccountsShape, handleGetPersonaPublishingAccounts, handleSetPersonaPublishingAccounts } from './tools-publishing-accounts.js';
 import { handleListPinterestBoards } from './tools-pinterest.js';
 
-//---------------
-// accounts (issue #566): connected social accounts and the accounts each
-// persona publishes to. An account is given by name or id (refs.ts); the
-// network is read from the account.
-//---------------
-
 const PROVIDERS = DisconnectAccountShape.provider;
 
 const ACCOUNTS_SPECS = {
@@ -32,7 +26,7 @@ const ACCOUNTS_SPECS = {
 };
 
 export const AccountsDescription = actionDescription(
-  'Connected social accounts. list: every account with the ids and names to publish with (YouTube, Instagram, LinkedIn, Threads, Facebook, Bluesky, Pinterest, 3Speak, Rumble, Fanvue). connect: starts the connection of a network (an OAuth link to open, or a direct connect for Bluesky, 3Speak and Rumble). disconnect: removes an account. get_persona_publishing / set_persona_publishing: the accounts a persona publishes to by default (set replaces the whole set and must keep at least one). list_boards: the boards of a Pinterest account.',
+  'Connected social accounts. list: every account with the ids and names to publish with. connect: an OAuth link to open, or a direct connect with the credential fields below. disconnect: removes an account. get_persona_publishing / set_persona_publishing: the accounts a persona publishes to by default (set replaces them all). list_boards: the boards of a Pinterest account.',
   ACCOUNTS_SPECS,
 );
 

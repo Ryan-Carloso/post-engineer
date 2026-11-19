@@ -16,7 +16,6 @@ from unittest.mock import patch
 from app.models.schema import TaskVideoRequest, VideoParams
 from app.services import task as tm
 
-# Images mode needs about one photo per 3s (hook 25 words → 4, body 38 → 5, CTA 7 → 1).
 SEGMENTS = [
     {
         "kind": "hook",

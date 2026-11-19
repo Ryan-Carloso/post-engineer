@@ -155,8 +155,6 @@ class TestLipSyncSpliceRealFfmpeg(unittest.TestCase):
             )
             return result.stdout or b""
 
-        # Reference: the lip-sync fixture re-encoded exactly as the splice
-        # encodes its intro (same size, same codec, same preset).
         reference = os.path.join(self.tmpdir, "intro-reference.mp4")
         subprocess.run(
             [

@@ -1,13 +1,3 @@
-//---------------
-// POST /api/videos/publish-by-id — publish a signed-upload video by id
-// (issue #561). The remote replacement for publish_video (action: from_file): instead
-// of a local videoPath, the caller names the uploadId from the
-// signed-upload flow (mint -> PUT bytes -> complete). The server checks
-// ownership, verifies the stored bytes again, and consumes the upload
-// exactly once before dispatching to the same provider handlers as
-// POST /api/upload-content. A replayed or foreign id never publishes.
-//---------------
-
 import { NextResponse } from 'next/server';
 
 import { apiErrorResponse } from '@/lib/api-error';
@@ -51,8 +41,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
 
   try {
     const input = parsePublishBody(body);
-    // An upload a scheduled slot holds publishes from that slot: publishing
-    // it now would consume it and fail the slot later (migration 067).
     await assertUploadNotScheduled(createSupabaseServiceClient(), auth.userId, input.uploadId);
     const response = await publishUploadedVideo(
       createSupabaseVideoUploadStore(),

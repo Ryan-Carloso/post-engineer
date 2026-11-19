@@ -1,7 +1,3 @@
-//---------------
-// Custom Cypress commands
-//---------------
-
 import {
   decodeSupabaseSessionCookie,
   encodeSupabaseSessionCookie,
@@ -27,12 +23,6 @@ declare global {
 }
 
 Cypress.Commands.add('loginE2EUser', () => {
-  // One password grant per Cypress run (cy.session + cacheAcrossSpecs).
-  // The id includes the e2e email so a different user never restores it.
-  // validate only reads the cookie Cypress already restored — it does not
-  // call /auth/v1/token. The cookie is still written after a visit to
-  // /landing: a cookie set before the browser is on the app origin does
-  // not attach, and /landing is public so it does not mount Supabase.
   const supabaseUrl = requiredCypressEnv('supabaseUrl', 'CYPRESS_SUPABASE_URL');
   const anonKey = requiredCypressEnv('supabaseAnonKey', 'CYPRESS_SUPABASE_ANON_KEY');
   const email = requiredCypressEnv('e2eTestEmail', 'CYPRESS_E2E_TEST_EMAIL');
@@ -45,7 +35,6 @@ Cypress.Commands.add('loginE2EUser', () => {
       obtainPasswordGrant({ supabaseUrl, anonKey, email, password }).then((session) => {
         const encoded = encodeSupabaseSessionCookie(session);
         cy.visit('/landing');
-        // log: false — the value is a live access token.
         cy.setCookie(cookieName, encoded, { log: false });
         cy.getCookie(cookieName, { log: false }).should('exist');
       });
@@ -73,7 +62,6 @@ function obtainPasswordGrant(input: {
           url: `${input.supabaseUrl}/auth/v1/token?grant_type=password`,
           headers: { apikey: input.anonKey },
           body: { email: input.email, password: input.password },
-          // A non-2xx must not dump the request body (it holds the password).
           failOnStatusCode: false,
           log: false,
         })
@@ -94,7 +82,6 @@ function obtainPasswordGrant(input: {
           if (!isPasswordGrantSession(response.body)) {
             throw new Error('Supabase password grant returned HTTP 200 without an access_token');
           }
-          // log: false — the body holds the access token and the refresh token.
           return cy.wrap(response.body, { log: false });
         });
     });
@@ -125,10 +112,6 @@ function sleepMs(delayMs: number): Promise<void> {
   });
 }
 
-// House voices live in a dialog opened from the voice card ("Escolher voz" /
-// "Trocar voz", or the EN labels). Picking searches by label first so the
-// row is on screen whatever the catalog size, then clicks the row; the
-// dialog closes on pick.
 const VOICE_PICKER_TRIGGER = /^(Escolher voz|Trocar voz|Choose voice|Change voice)$/;
 
 Cypress.Commands.add('openVoicePicker', () => {

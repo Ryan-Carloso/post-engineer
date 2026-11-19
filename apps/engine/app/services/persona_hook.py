@@ -15,21 +15,11 @@ from app.config import config
 from app.services.analytics import track_event
 
 
-# Product-fixed hook pacing ("always this way"): deliberately NOT
-# config-driven — these values were validated against GPU intro cost and
-# lipsync quality windows, and tunable knobs reopen those failure modes
-# (hooks over the GPU ceiling).
 PERSONA_HOOK_MIN_SECONDS = 8.0
 PERSONA_HOOK_MAX_SECONDS = 12.0
 PERSONA_HOOK_TARGET_WORDS_MIN = 25
 PERSONA_HOOK_TARGET_WORDS_MAX = 35
 
-
-# A hook outside the 8-12s quality window is only a cosmetic miss: the
-# intro runs shorter or longer than ideal, but the video is watchable. It
-# never fails the task and never regenerates the hook — a regeneration
-# re-runs the LLM plus the whole TTS (minutes of CPU for local voices).
-# Past the GPU ceiling the intro is capped instead (lipsync_window_seconds).
 
 
 def report_lipsync_intro_skipped(task_id: str, hook_end_seconds: float) -> None:
@@ -259,24 +249,14 @@ def _limit_to_closing_sentence(text: str, limit: int) -> str:
     sentences = _SENTENCE_END_RE.split(text)
     closing = sentences[-1]
     head = text[: len(text) - len(closing)].rstrip()
-    # Keep the separator that preceded the closing sentence (paragraph
-    # break or space) so the hook paragraph boundary survives the trim.
     separator = text[len(head) : len(text) - len(closing)]
     head_budget = limit - len(separator) - len(closing)
     if len(sentences) > 1 and len(closing) <= limit:
-        # The closing sentence fits on its own: never fall back to a plain
-        # cut, which ends before it and drops the closing take this trim
-        # exists to preserve — even when no earlier text fits next to it.
         if head_budget > 0:
             trimmed_head = _cut_to_budget(head, head_budget)
             if "\n\n" in head and "\n\n" not in trimmed_head and "\n" not in separator:
-                # The trim kept only the hook paragraph: the closing sentence
-                # must stay its own paragraph or the hook loses its boundary.
                 separator = "\n\n"
                 if len(trimmed_head) + len(separator) + len(closing) > limit:
-                    # Clamp at 0: head_budget can be 1 here, and a negative
-                    # budget makes _cut_to_budget keep text[:-1] — nearly the
-                    # whole head — instead of trimming to the limit.
                     trimmed_head = _cut_to_budget(head, max(head_budget - 2, 0))
             if trimmed_head:
                 return f"{trimmed_head}{separator}{closing}"
@@ -303,8 +283,6 @@ def _limit_generated_script(script: str) -> str:
     closing = paragraphs[-1]
     if len(paragraphs) > 1 and len(closing) <= limit:
         head = normalized[: len(normalized) - len(closing)].rstrip()
-        # The separator between head and closing paragraph (a blank line)
-        # keeps the closing take its own paragraph in the trimmed script.
         separator = normalized[len(head) : len(normalized) - len(closing)]
         head_budget = limit - len(separator) - len(closing)
         if head_budget > 0:

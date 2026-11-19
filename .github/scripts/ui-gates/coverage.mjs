@@ -1,16 +1,3 @@
-//---------------
-// Coverage parsing and aggregation.
-//
-// normalizeWebPath: coverage reports use paths relative to apps/web
-// (vitest cobertura, lcov SF, Stryker filenames); the gate works with
-// repo-relative paths, so 'apps/web/' is prepended when missing.
-//
-// aggregateCoverage: sums covered/total executable lines across the
-// target files only. Files with zero coverable lines are skipped;
-// files absent from the report are listed as missing (the caller
-// decides how to treat them).
-//---------------
-
 const WEB_PREFIX = 'apps/web/';
 
 export function normalizeWebPath(path) {
@@ -19,11 +6,6 @@ export function normalizeWebPath(path) {
   return trimmed.startsWith(WEB_PREFIX) ? trimmed : WEB_PREFIX + trimmed;
 }
 
-//---------------
-// parseCobertura — per-file {covered, total} from a Cobertura XML
-// string (vitest --coverage.reporter=cobertura). Dependency-free:
-// only <class filename="..."> and <line number hits> are read.
-//---------------
 export function parseCobertura(xml) {
   const perFile = new Map();
   if (typeof xml !== 'string') return perFile;
@@ -46,10 +28,6 @@ export function parseCobertura(xml) {
   return perFile;
 }
 
-//---------------
-// parseLcov — per-file {covered, total} from an lcov.info string
-// (@cypress/code-coverage output). Counts DA records with hits > 0.
-//---------------
 export function parseLcov(text) {
   const perFile = new Map();
   if (typeof text !== 'string') return perFile;
@@ -71,9 +49,6 @@ export function parseLcov(text) {
   return perFile;
 }
 
-//---------------
-// aggregateCoverage — sums over targetFiles (repo-relative).
-//---------------
 export function aggregateCoverage(perFile, targetFiles) {
   let covered = 0;
   let total = 0;

@@ -1,11 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-//---------------
-// Mocks (same shape as instagram.test.ts; this file stays separate because
-// instagram.test.ts is grandfathered over the 500-line file-size cap and
-// may not grow by a single line).
-//---------------
-
 const mockPost = vi.fn();
 const mockGet = vi.fn();
 
@@ -32,18 +26,6 @@ vi.mock('@/lib/logger', () => ({
 import { InstagramService } from '@/lib/instagram';
 import { InstagramApiError } from '@/lib/errors';
 import { logger } from '@/lib/logger';
-
-//---------------
-// InstagramService — Meta code 190 (dead token) + logging shape
-//
-// Production incident 2026-11-16 08:30:15Z: Meta answered publishMedia with
-// HTTP 400 + { error: { code: 190, message: 'Error validating access token:
-// The session has been invalidated ...', type: 'OAuthException' } }. The
-// thrown InstagramApiError dropped the provider code, so isUnauthorizedError
-// missed it (no publish_account_unauthorized event, no owner email), and the
-// two logger.error(..., undefined, ...) calls recorded bare 'Unknown error'
-// $exception events with the real error buried in metadata.
-//---------------
 
 describe('InstagramService Meta code 190', () => {
   const envBackup = { ...process.env };

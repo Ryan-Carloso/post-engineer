@@ -25,8 +25,6 @@ import sys
 from pathlib import Path
 from typing import Any
 
-# Fixed `info` block: the snapshot describes the HTTP contract, never the
-# deployment's branding or version (both come from config.toml).
 CONTRACT_INFO: dict[str, str] = {"title": "Post Engineer engine", "version": "contract"}
 
 
@@ -44,8 +42,6 @@ def render(spec: dict[str, Any]) -> str:
 
 def current_spec_text() -> str:
     """Build the snapshot text from the live FastAPI app (no server started)."""
-    # Imported lazily so the pure helpers above stay importable without
-    # loading the whole engine (config, routers, analytics sink).
     from app.asgi import app
 
     return render(build_spec(app.openapi()))

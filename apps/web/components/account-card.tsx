@@ -9,14 +9,6 @@ import { useI18n } from '@/lib/i18n/provider';
 import { cn } from '@/lib/utils';
 import type { SocialProvider } from '@/lib/providers/registry';
 
-//---------------
-// AccountCard — shared social-account card.
-// Supports YouTube, Instagram, Bluesky, LinkedIn, Threads, Facebook and Rumble.
-// Used on the accounts page (select / disconnect), API-key creation
-// (checkbox selection) and the persona schedule (compact mode: avatar
-// only, falling back to the first letters of the name).
-//---------------
-
 export interface AccountCardProps {
   type: SocialProvider;
   name: string;
@@ -24,36 +16,19 @@ export interface AccountCardProps {
   thumbnail?: string;
   customUrl?: string;
   handle?: string;
-  // Display name stored for the account but not painted on this card
-  // (Instagram `name`). Reported to PostHog; it does not change the label.
   storedDisplayName?: string;
-  // 'provider_id' when the visible label is the opaque provider id because
-  // accountName was empty (LinkedIn, Threads).
   labelOrigin?: AccountLabelOrigin;
   onSelect?: () => void;
   selected?: boolean;
   compact?: boolean;
   showDisconnect?: boolean;
   onDisconnect?: () => void;
-  // Broken account (its last profile sync failed, e.g. an undecryptable
-  // stored token): the card flags it and offers only the reconnect action.
-  // Reconnect refreshes the token on the same record; disconnect removes
-  // the account, so a broken card never shows the trash button.
   error?: boolean;
   onReconnect?: () => void;
 }
 
-//---------------
-// Minimum visible label width (px): the floor that keeps ~8 letters of the
-// account name on the card before the truncation "…" takes over. Pinned by
-// the account-card test.
-//---------------
 export const ACCOUNT_LABEL_MIN_WIDTH_PX = 88;
 
-//---------------
-// nameInitials — avatar fallback: first two letters of the name
-// ("@" on handles is ignored), or "?" when nothing usable remains.
-//---------------
 function nameInitials(name: string): string {
   const cleaned = name.trim().replace(/^@+/, '');
   return (cleaned.slice(0, 2) || '?').toUpperCase();
@@ -128,8 +103,6 @@ export default function AccountCard({
     );
   }
 
-  // The label never shrinks below this: with the inline trash button the
-  // name keeps at least ~8 letters before the "…" takes over.
   const body = (
     <div className="flex items-center gap-3">
       {thumbnail && !thumbnailFailed ? (
@@ -225,11 +198,6 @@ export default function AccountCard({
   return <div ref={(node) => { cardRef.current = node; }} data-testid="account-card" className={cn('rounded-xl border bg-card p-4', error ? 'border-destructive' : 'border-line')}>{body}</div>;
 }
 
-//---------------
-// AccountAvatar — image-sized avatar (the compact card is 64px and the
-// image is scaled). With no image, or when the image fails to load, shows
-// the first letters of the account name.
-//---------------
 const AccountAvatar = ({
   name,
   thumbnail,

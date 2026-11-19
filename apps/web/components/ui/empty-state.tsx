@@ -3,12 +3,6 @@ import type { LucideIcon } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 
-//---------------
-// EmptyState — the one "nothing here yet" block. Every list, panel and
-// filter result renders this instead of a local dashed box, so an empty
-// screen always offers the same icon, the same sentence shape and one
-// next step. Presentational: the caller owns the copy and the action.
-//---------------
 export function EmptyState({
   icon: Icon,
   title,

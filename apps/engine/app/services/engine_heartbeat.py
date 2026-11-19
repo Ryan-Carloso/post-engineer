@@ -63,9 +63,6 @@ def current_rss_mb() -> float | None:
 
         ru_maxrss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
         if sys.platform == "darwin":
-            # macOS: ru_maxrss is in BYTES (the same name is in kilobytes
-            # on Linux) — divide twice or the dashboard plot reports a
-            # memory ~1024x too large for Mac-only runs.
             return ru_maxrss / 1024 / 1024
         return ru_maxrss / 1024
     except Exception:  # noqa: BLE001 - diagnostics only
@@ -205,9 +202,6 @@ def start_heartbeat_thread(interval_s: float = HEARTBEAT_INTERVAL_S) -> threadin
     _heartbeat_stop.clear()
 
     def _loop() -> None:
-        # Beat first, then sleep inside the stop event's wait: the first
-        # beat is immediate, and a stop request unblocks the sleep at once
-        # instead of waiting out the interval.
         while True:
             try:
                 write_beat()

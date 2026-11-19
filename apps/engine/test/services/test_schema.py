@@ -52,16 +52,12 @@ class TestSchemaBounds(unittest.TestCase):
         kwargs.setdefault("video_type", "faceless")
         return VideoParams(**kwargs)
 
-    # VideoParams.video_script: max 20000 chars
-
     def test_video_script_rejects_20001_chars(self):
         with self.assertRaises(ValidationError):
             self._params(video_script="x" * 20001)
 
     def test_video_script_accepts_20000_chars(self):
         self.assertEqual(len(self._params(video_script="x" * 20000).video_script), 20000)
-
-    # Numeric fields: sane ranges, defaults stay valid
 
     def test_video_clip_duration_bounds(self):
         for bad in (0, -1, 61, 3600):
@@ -77,7 +73,6 @@ class TestSchemaBounds(unittest.TestCase):
                 self._params(font_size=bad)
         self.assertEqual(self._params(font_size=8).font_size, 8)
         self.assertEqual(self._params(font_size=300).font_size, 300)
-        # Default comes from config [ui] (production default), not the fallback.
         self.assertEqual(self._params().font_size, config.ui.get("font_size", 50))
 
     def test_stroke_width_bounds(self):
@@ -86,7 +81,6 @@ class TestSchemaBounds(unittest.TestCase):
                 self._params(stroke_width=bad)
         self.assertEqual(self._params(stroke_width=0).stroke_width, 0)
         self.assertEqual(self._params(stroke_width=20).stroke_width, 20)
-        # Default comes from config [ui] (production default), not the fallback.
         self.assertEqual(
             self._params().stroke_width, config.ui.get("stroke_width", 1.5)
         )

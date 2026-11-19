@@ -5,12 +5,6 @@ import { setPersonaDefaultAccounts, type PersonaDefaultAccounts } from '@/lib/pe
 import { rollbackStoragePath } from '@/lib/persona-remote-face';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 
-//---------------
-// savePersonaBinding tests (issue #572): a coded lib error keeps its
-// status (400/404), only genuine DB failures are a 500 — the rollback
-// itself runs in every failure case, so no persona survives unbound.
-//---------------
-
 vi.mock('@/lib/persona-publishing-accounts', () => ({
   setPersonaDefaultAccounts: vi.fn(),
 }));
@@ -54,6 +48,7 @@ const BINDING: PersonaDefaultAccounts = {
   '3speak': [],
   rumble: [],
   fanvue: [],
+  telegram: [],
 };
 
 describe('savePersonaBinding', () => {

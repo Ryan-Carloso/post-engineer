@@ -142,7 +142,7 @@ shape: renaming a field there fails `pnpm typecheck` in BOTH apps in the same ch
 runtime change (same URLs, same 400 messages). The accounts calls
 (`GET /api/account`, `DELETE /api/account`, `POST /api/account/connect-url`,
 `POST /api/bluesky-connect`, `POST /api/threespeak-connect`,
-`POST /api/rumble-connect`, `GET /api/pinterest/boards`,
+`POST /api/rumble-connect`, `POST /api/telegram-connect`, `GET /api/pinterest/boards`,
 `GET /api/persona/publishing-accounts`, `PUT /api/persona/publishing-accounts`,
 including their strict query parsing) follow the same shape. The schedule calls
 (`GET /api/schedule`, `DELETE /api/schedule`, `GET /api/schedule/status`,

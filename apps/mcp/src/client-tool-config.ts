@@ -6,14 +6,6 @@ import {
   saveToolConfig as saveToolConfigContract,
 } from './contracts/tool-config.js';
 
-//---------------
-// Tool configuration (issue #669) — HTTP calls.
-//
-// The saved configuration answers which research tool (Tavily/Exa/own) and
-// which licensed stock sources (Pexels/Pixabay/Coverr) the user has keys
-// for. Both endpoints return presence only — never a key value.
-//---------------
-
 export async function getToolConfig(
   client: PostEngineerClient,
 ): Promise<ResponseOf<typeof getToolConfigContract>> {

@@ -2,11 +2,6 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { isUiFile } from './ui-files.mjs';
 
-//---------------
-// UI file definition (repo-relative paths):
-// apps/web/app/** and apps/web/components/** (*.ts/*.tsx),
-// excluding test files (*.test.*, *.cy.*, __tests__/ dirs).
-//---------------
 describe('isUiFile', () => {
   it('matches page components under apps/web/app', () => {
     assert.equal(isUiFile('apps/web/app/(main)/account/page.tsx'), true);

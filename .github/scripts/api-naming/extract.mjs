@@ -1,20 +1,10 @@
-/**
- * Diff-based contract name extraction.
- *
- * Only names ADDED in the diff are candidates — existing names are
- * grandfathered, so the lint never asks for renames of shipped fields.
- * Extraction is scoped to the `api_paths` globs from the versioned config.
- */
-
 const TS_KEY_RE = /(?:^|[{,])\s*["']?([A-Za-z_$][\w$]*)["']?\s*:/g;
-// `default:` / `case x:` in switch statements are not field declarations.
 const TS_KEYWORDS = new Set(['default', 'case']);
 
 const PY_FIELD_RE = /^\s*([A-Za-z_]\w*)\s*:/;
 const PY_CLASS_RE = /^\s*class\s+(\w+)/;
 const PY_ALIAS_RE = /(?<!\w)alias\s*=\s*["']([^"']+)["']/;
 const PY_SER_ALIAS_RE = /serialization_alias\s*=\s*["']([^"']+)["']/;
-// Python keywords that can syntactically match `name:` but are not fields.
 const PY_KEYWORDS = new Set([
   'else',
   'try',
@@ -43,7 +33,6 @@ export function matchesGlob(filePath, pattern) {
     const ch = pattern[i];
     if (ch === '*') {
       if (pattern[i + 1] === '*') {
-        // Collapse `**/` to an optional any-depth prefix.
         if (pattern[i + 2] === '/') {
           re += '(?:.*/)?';
           i += 2;
@@ -69,18 +58,10 @@ function isPy(path) {
   return path.endsWith('.py');
 }
 
-/**
- * Destructuring patterns bind LOCAL variables, never contract names:
- *   const { data: existingSchedule } = await supabase.from('schedules').select();
- *   function build({ data }: { data: string }) { ... }
- *   const f = ({ data }) => ...;
- * Single-line patterns only — multi-line destructuring in route files is rare
- * enough that the LLM layer (with full context) is the backstop for it.
- */
 const DESTRUCTURING_PATTERNS = [
-  /(^|[\s(;{,])(const|let|var)\s*\{/, // const { data: x } = ...; for (const { x } of ...)
-  /\(\s*\{[^}]*\}\s*:/, // function f({ data }: Opts)
-  /\(\s*\{[^}]*\}\)\s*=>/, // ({ data }) => ...
+  /(^|[\s(;{,])(const|let|var)\s*\{/,
+  /\(\s*\{[^}]*\}\s*:/,
+  /\(\s*\{[^}]*\}\)\s*=>/,
 ];
 
 function isDestructuringLine(line) {
@@ -108,7 +89,6 @@ function extractNamesFromLine(line, filePath, inPyClass) {
       names.push(m[1]);
       const serAlias = PY_SER_ALIAS_RE.exec(line);
       const alias = PY_ALIAS_RE.exec(line);
-      // The exposed wire name is what API consumers see.
       if (serAlias) names.push(serAlias[1]);
       else if (alias) names.push(alias[1]);
     }
@@ -143,7 +123,6 @@ export function extractFromDiff(diffText, config) {
     const isNewFile = /^new file mode/m.test(fileDiff);
     if (isNewFile) newEndpoints.push({ file: newPath, kind: 'endpoint' });
 
-    // Walk hunks, tracking new-file line numbers and Python class scope.
     const hunkRe = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/gm;
     let hunk;
     while ((hunk = hunkRe.exec(fileDiff)) !== null) {
@@ -155,7 +134,7 @@ export function extractFromDiff(diffText, config) {
       const rows = [];
       for (const raw of body.split('\n')) {
         if (raw.startsWith('+++') || raw.startsWith('---')) continue;
-        if (raw.startsWith('\\')) continue; // "\ No newline at end of file"
+        if (raw.startsWith('\\')) continue;
         const kind = raw.startsWith('+') ? 'add' : raw.startsWith('-') ? 'del' : 'ctx';
         const text = raw.slice(1);
         const rowLine = kind === 'del' ? null : newLine;
@@ -163,9 +142,6 @@ export function extractFromDiff(diffText, config) {
         rows.push({ kind, text, newLine: rowLine });
       }
 
-      // Walk rows tracking Python class scope (context lines included, since
-      // the `class` declaration is usually unchanged); extraction still only
-      // reads added lines.
       const scopeStack = [];
       const addedKeys = [];
       const removedKeys = [];
@@ -190,8 +166,6 @@ export function extractFromDiff(diffText, config) {
         }
       }
 
-      // Rename heuristic: exactly one removed key and one added key in the
-      // same hunk means the field was renamed.
       const renamedFrom =
         removedKeys.length === 1 && addedKeys.length === 1 && removedKeys[0] !== addedKeys[0].name
           ? removedKeys[0]

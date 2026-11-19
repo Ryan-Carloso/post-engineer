@@ -16,8 +16,6 @@ from app.providers import (
 
 
 def _repo_root(start: Path | None = None) -> Path:
-    # Walk up instead of counting parents: mutmut runs the suite from a
-    # copied tree (mutants/), which shifts every fixed parent index.
     here = (start if start is not None else Path(__file__)).resolve()
     for parent in (*([here] if here.is_dir() else []), *here.parents):
         if (parent / "shared/contracts/providers.ts").is_file():
@@ -58,9 +56,6 @@ class ProvidersMirrorTest(unittest.TestCase):
         self.assertTrue(URL_MEDIA_PROVIDERS <= set(SOCIAL_PROVIDERS))
 
     def test_repo_root_walks_up_past_mutants_tree(self) -> None:
-        # Simulate mutmut's relocated tree: the test file lives under
-        # <root>/apps/engine/mutants/test/services/ while the shared
-        # contract stays at <root>/shared/contracts/providers.ts.
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             (root / "shared" / "contracts").mkdir(parents=True)

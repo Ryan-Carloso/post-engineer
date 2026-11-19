@@ -1,6 +1,3 @@
-// posts-calendar-i18n — copy for the /posts calendar, the /posts/history page, the month
-// calendar and the refreshed post cards. Merged into `posts` in ./index.ts
-// (en.ts/pt.ts are over the file-size cap and may not grow).
 export const postsCalendarStrings = {
   pt: {
     posts: {
@@ -29,6 +26,7 @@ export const postsCalendarStrings = {
       sidebarLisbon: 'Lisboa',
       calendarDayPostCountOne: '1 publicação',
       calendarDayPostCountMany: '{count} publicações',
+      dayPanelSwitchHint: 'Toca noutro dia para ver os vídeos dele.',
       calendarDayNone: 'Nenhuma publicação neste dia.',
       calendarDayNoneHint: 'Para este dia, peça ao seu agente. Ele manda a publicação pelo MCP.',
       calendarMonthEmptyTitle: 'Nenhuma publicação em {month}',
@@ -89,6 +87,7 @@ export const postsCalendarStrings = {
       sidebarLisbon: 'Lisbon',
       calendarDayPostCountOne: '1 post',
       calendarDayPostCountMany: '{count} posts',
+      dayPanelSwitchHint: 'Tap another day to see its videos.',
       calendarDayNone: 'No posts on this day.',
       calendarDayNoneHint: 'For this day, ask your agent. It sends the post through the MCP.',
       calendarMonthEmptyTitle: 'No posts in {month}',

@@ -24,9 +24,6 @@ import {
 } from 'lucide-react';
 import SiteFooter from '@/components/site-footer';
 
-//---------------
-// Ícones de marca sem correspondente no lucide — SVGs locais
-//---------------
 const YouTubeIcon = () => (
   <svg viewBox="0 0 24 24" className="size-5" aria-hidden="true">
     <path
@@ -72,15 +69,6 @@ export default function LandingPage() {
   );
 }
 
-/* -----------------
-   Local Components
------------------- */
-
-//---------------
-// LandingHeader — topo fixo com navegação por âncoras e CTAs.
-// No mobile (<md) a navegação desktop colapsa num menu hambúrguer para
-// caber em 390px sem scroll horizontal.
-//---------------
 const LandingHeader = () => {
   const { t } = useI18n();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -182,9 +170,6 @@ const LandingHeader = () => {
   );
 };
 
-//---------------
-// LandingHero — headline, benefícios, CTAs e mockup do produto
-//---------------
 const LandingHero = () => {
   const { t } = useI18n();
   const checks: Array<'check1' | 'check2' | 'check3'> = ['check1', 'check2', 'check3'];
@@ -240,9 +225,6 @@ const LandingHero = () => {
   );
 };
 
-//---------------
-// HeroAvatars — grupo de avatares com iniciais para prova social
-//---------------
 const HeroAvatars = () => {
   const people = [
     { initial: 'A', bg: 'bg-[#f59e0b]' },
@@ -264,9 +246,6 @@ const HeroAvatars = () => {
   );
 };
 
-//---------------
-// HeroMockup — mockup do dashboard com badge de crescimento e card de agendamento
-//---------------
 const HeroMockup = () => {
   const { t } = useI18n();
   const stats = [
@@ -280,7 +259,6 @@ const HeroMockup = () => {
   ];
   return (
     <div className="relative mx-auto hidden w-full max-w-lg lg:block">
-      {/* Badge de crescimento */}
       <div className="absolute top-16 -left-6 z-10 rounded-2xl bg-card px-4 py-3 shadow-[0_12px_32px_rgba(20,32,51,0.12)] ring-1 ring-hairline">
         <div className="flex items-center gap-2.5">
           <ChartBar className="size-5 text-[#6366f1]" />
@@ -291,7 +269,6 @@ const HeroMockup = () => {
         </div>
       </div>
 
-      {/* Dashboard */}
       <div className="rounded-3xl bg-card p-5 shadow-[0_24px_64px_rgba(20,32,51,0.12)] ring-1 ring-hairline">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -363,7 +340,6 @@ const HeroMockup = () => {
         </div>
       </div>
 
-      {/* Card "Agendado" */}
       <div className="absolute -right-2 -bottom-5 z-10 flex items-center gap-2.5 rounded-2xl bg-card px-4 py-3 shadow-[0_12px_32px_rgba(20,32,51,0.14)] ring-1 ring-hairline">
         <span className="flex size-9 items-center justify-center rounded-full bg-[#ecfdf5]">
           <CalendarDays className="size-4 text-[#10b981]" />
@@ -377,9 +353,6 @@ const HeroMockup = () => {
   );
 };
 
-//---------------
-// LandingPlatforms — faixa com as plataformas suportadas
-//---------------
 const LandingPlatforms = () => {
   const { t } = useI18n();
   const platforms = [
@@ -410,9 +383,6 @@ const LandingPlatforms = () => {
   );
 };
 
-//---------------
-// LandingHowItWorks — seção "Como funciona" com 3 passos numerados
-//---------------
 const LandingHowItWorks = () => {
   const { t } = useI18n();
   const steps = [
@@ -453,9 +423,6 @@ const LandingHowItWorks = () => {
   );
 };
 
-//---------------
-// LandingFeatures — três benefícios principais em linha
-//---------------
 const LandingFeatures = () => {
   const { t } = useI18n();
   const features = [
@@ -484,10 +451,6 @@ const LandingFeatures = () => {
   );
 };
 
-//---------------
-// LandingPricing — beta contact card, no prices yet (tokens via contact,
-// or self-host from GitHub)
-//---------------
 const LandingPricing = () => {
   const { t } = useI18n();
   return (
@@ -510,13 +473,8 @@ const LandingPricing = () => {
   );
 };
 
-//---------------
-// LandingFaq — perguntas frequentes com <details>
-//---------------
 const LandingFaq = () => {
   const { t } = useI18n();
-  // faq3 (cancel) is gone: cancelling only makes sense with a paid plan,
-  // and the product is still beta with tokens set up by contact.
   const faqs: Array<{ q: 'faq1Q' | 'faq2Q' | 'faq4Q'; a: 'faq1A' | 'faq2A' | 'faq4A' }> = [
     { q: 'faq1Q', a: 'faq1A' },
     { q: 'faq2Q', a: 'faq2A' },
@@ -547,9 +505,6 @@ const LandingFaq = () => {
   );
 };
 
-//---------------
-// LandingFinalCta — chamada final antes do rodapé
-//---------------
 const LandingFinalCta = () => {
   const { t } = useI18n();
   return (

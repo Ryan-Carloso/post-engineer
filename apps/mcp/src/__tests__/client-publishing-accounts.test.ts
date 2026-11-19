@@ -2,13 +2,6 @@ import { describe, expect, it, vi } from 'vitest';
 import type { PostEngineerClient } from '../client.js';
 import { getPersonaPublishingAccounts, setPersonaPublishingAccounts } from '../client-publishing-accounts.js';
 
-//---------------
-// Publishing-accounts client (GET/PUT /api/persona/publishing-accounts):
-// the request sites stay literal for the parity gate and the responses
-// parse against the shared contract (shared/contracts/accounts.ts), so a
-// malformed 200 is an error, never a silent success.
-//---------------
-
 const FULL_DEFAULTS = {
   youtube: ['UC-1'],
   instagram: [],
@@ -20,6 +13,7 @@ const FULL_DEFAULTS = {
   '3speak': [],
   rumble: [],
   fanvue: [],
+  telegram: [],
 };
 
 function mockClient(payload: unknown): PostEngineerClient {

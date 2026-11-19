@@ -1,32 +1,3 @@
-// OAuth authentication for the MCP HTTP endpoint (Phase 6, P6-2).
-//
-// The endpoint reuses the web authorization server's tokens: a client
-// presents a Bearer ES256 JWT minted by /oauth/token, and this module
-// verifies it OFFLINE against the published JWKS — the design the
-// web's jwks.json comment already anticipates ("The remote MCP
-// validates access tokens offline against this JWKS"). The checks
-// mirror the web's verifyAccessToken (apps/web/lib/oauth/tokens.ts):
-// issuer, audience = MCP resource, ES256 only, token_use = access,
-// plus the P6-2 scope rule: the scope list must include mcp:tools.
-// An authorization code, a refresh token, an API key, or a token for
-// another resource is never accepted here, even if its signature is
-// valid — type confusion between token kinds is exactly what
-// token_use exists to prevent.
-//
-// Per-subject isolation: verification returns the token's subject, and
-// the HTTP layer builds the per-request MCP server with that subject's
-// bearer forwarded to the web API (which resolves OAuth bearers to
-// the same subject). No tool state is shared between requests, and
-// the bearer is never logged: authentication failures return null
-// and the caller answers 401 without ever printing the token.
-//
-// Auth is configured only when MCP_OAUTH_ISSUER and MCP_RESOURCE are
-// both set. Without them the transport keeps its P6-1 behaviour
-// (loopback only, unauthenticated); with them, every /mcp request
-// must authenticate, loopback included — an authenticated endpoint
-// that skipped auth for local requests would be a hole, not a
-// convenience. A non-loopback bind without auth configured is
-// refused at startup (see http-transport.ts).
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 
@@ -40,7 +11,6 @@ export interface HttpAuthConfig {
 export interface AuthContext {
   sub: string;
   clientId: string;
-  /** The verified bearer, forwarded to the web API for this request. */
   bearer: string;
 }
 
@@ -48,22 +18,9 @@ export interface HttpAuthenticator {
   verify(token: string): Promise<AuthContext>;
 }
 
-// Default per-subject rate limit for the remote endpoint: 120 requests
-// per minute, mirroring the web's post-detail profile (120/min) — the
-// nearest web profile for a polled read surface. Generation itself is
-// additionally limited server-side by the web's video-job profiles, so
-// this limit is abuse protection, not spend protection.
 const DEFAULT_RATE_LIMIT_PER_MINUTE = 120;
 
-// Parse the OAuth configuration from the environment. Returns null
-// when auth is not configured at all (loopback mode); throws on a
-// malformed rate limit so the process fails fast instead of running
-// with an unintended limit.
 export function parseHttpAuthOptions(env: NodeJS.ProcessEnv): HttpAuthConfig | null {
-  // Mirror apps/web/lib/oauth/config.ts: the web strips trailing slashes
-  // before these values become expected token claims, so the MCP side
-  // must expect the normalized forms or a trailing slash in env would
-  // reject every otherwise-valid token.
   const issuer = env.MCP_OAUTH_ISSUER?.trim().replace(/\/+$/, '');
   const resource = env.MCP_RESOURCE?.trim().replace(/\/+$/, '');
   if (issuer === undefined || issuer === '' || resource === undefined || resource === '') {
@@ -92,8 +49,6 @@ function requiredClaim(payload: Record<string, unknown>, name: string): string {
   return value;
 }
 
-// Build a verifier bound to one JWKS URL. The remote JWK set caches
-// keys (jose's default) so every request does not refetch the JWKS.
 export function createHttpAuthenticator(config: HttpAuthConfig): HttpAuthenticator {
   const jwks = createRemoteJWKSet(new URL(config.jwksUrl));
   return {
@@ -119,10 +74,6 @@ export function createHttpAuthenticator(config: HttpAuthConfig): HttpAuthenticat
   };
 }
 
-// Extract and verify the Bearer token of one request. Returns null for
-// a missing header, a non-Bearer scheme, a non-JWT value (an API key
-// is not an OAuth token and is never accepted here), or any
-// verification failure. Never throws, never logs the token.
 export async function authenticateHttpRequest(
   req: IncomingMessage,
   authenticator: HttpAuthenticator,
@@ -140,9 +91,6 @@ export async function authenticateHttpRequest(
   }
 }
 
-// Whether the request presented a Bearer token at all (scheme
-// case-insensitive, non-empty value), regardless of whether it
-// verifies. Used only to decide the 401 challenge's error code.
 export function bearerTokenPresented(req: IncomingMessage): boolean {
   const authorization = req.headers.authorization;
   if (authorization === undefined) return false;
@@ -150,15 +98,10 @@ export function bearerTokenPresented(req: IncomingMessage): boolean {
   return parts.length === 2 && parts[0]?.toLowerCase() === 'bearer' && parts[1] !== '';
 }
 
-// Strip characters that would break out of a quoted header value.
 function headerSafe(value: string): string {
   return value.replace(/["\r\n]/g, '');
 }
 
-// The protected-resource metadata URL for a resource identifier, when
-// the identifier is a URL: the origin serves the RFC 9728 document at
-// /.well-known/oauth-protected-resource. Null for opaque identifiers,
-// where no metadata URL can be derived.
 export function protectedResourceMetadataUrl(resource: string): string | null {
   try {
     return `${new URL(resource).origin}/.well-known/oauth-protected-resource`;
@@ -167,12 +110,6 @@ export function protectedResourceMetadataUrl(resource: string): string | null {
   }
 }
 
-// Answer 401 for an unauthenticated /mcp request. The WWW-Authenticate
-// header carries realm, resource, and (when derivable) resource_metadata
-// so an MCP-spec client can discover the authorization server; the
-// error="invalid_token" code is included only when a token was actually
-// presented (RFC 6750: no error code for a request lacking credentials).
-// The body names no tool and no token.
 export function unauthorizedHttpResponse(
   res: ServerResponse,
   config: HttpAuthConfig,
@@ -193,10 +130,6 @@ export function unauthorizedHttpResponse(
   res.end(JSON.stringify({ error: 'Authentication required.' }));
 }
 
-// RFC 9728 protected-resource metadata for this endpoint: the resource
-// itself, the authorization server that issues its tokens, and the
-// scopes the endpoint accepts. Served at
-// /.well-known/oauth-protected-resource (see http-transport.ts).
 export function protectedResourceDocument(config: HttpAuthConfig): {
   resource: string;
   authorization_servers: string[];

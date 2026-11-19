@@ -16,27 +16,10 @@ import { ScriptSegmentShape } from './single-video-shape.js';
 import { generatePersonaVideoOutcome } from './tools-single-video.js';
 import { handleLibraryCall, type McpToolResponse } from './tools-call.js';
 
-//---------------
-// Paired A/B content experiments (issue #476): experiments (action: create),
-// experiments (action: list), experiments (action: add_pair) and experiments (action: results).
-//
-// An experiment tests ONE variable (the hook) with two variants. It is a
-// set of pairs: inside a pair both videos share topic and content and only
-// the hook differs; across pairs the topic changes. experiments (action: add_pair)
-// creates both videos of one pair through generate-and-schedule (two normal
-// charged videos) and the server rejects a pair that differs in anything
-// but the hook, before charging.
-//---------------
-
 const variantId = z
   .string()
   .regex(EXPERIMENT_VARIANT_ID_PATTERN, 'variantId must be a lowercase slug such as hook-aggressive (never "A"/"B")');
 
-// Non-blank text, mirroring the shared contract's text() (shared/contracts/
-// experiments.ts): min 1, max, and no blank-only value. The limits come
-// from the shared constants; the refine is re-typed here because the
-// contract's helper is not exported, and experiments-tool-contract.test.ts
-// pins the two schemas to identical accept/reject sets.
 function nonBlankText(max: number) {
   return z
     .string()
@@ -86,8 +69,6 @@ export const GetExperimentResultsShape = {
 };
 export const GetExperimentResultsSchema = z.object(GetExperimentResultsShape);
 
-// Both videos of a pair share everything but the hook: the delivery fields are
-// the ones of a generate_video video (persona and accounts by name or id).
 const { segments: _segments, title: _title, experiment: _experiment, ...deliveryShape } = GenerateVideoItemSchema.shape;
 
 export const AddExperimentPairShape = {
@@ -154,7 +135,6 @@ export async function handleGetExperimentResults(
   return handleLibraryCall(() => getExperimentResults(client, args.experimentId, args.window), 'getting experiment results');
 }
 
-/** Shift a startAt by hours, keeping it naive (wall clock) when it was naive. */
 export function shiftStartAt(startAt: string, hours: number): string {
   const absolute = /(?:[zZ]|[+-]\d{2}:?\d{2})$/.test(startAt);
   const ms = Date.parse(absolute ? startAt : `${startAt}Z`) + hours * 3_600_000;
@@ -171,7 +151,6 @@ export async function handleAddExperimentPair(
   args: z.infer<typeof AddExperimentPairSchema>,
 ): Promise<McpToolResponse> {
   const { experimentId, pair, title, segments, hooks, spacingHours, ...deliveryRefs } = args;
-  // Resolve the persona and accounts once, before the first video exists.
   const resolved = await prepareVideo(client, createRefResolvers(client), {
     ...deliveryRefs,
     title,
@@ -179,8 +158,6 @@ export async function handleAddExperimentPair(
   });
   if (resolved.kind === 'response') return resolved.response;
   const { segments: _placeholder, title: _slotTitle, idempotencyKey: _unused, experiment: _link, recipe: _recipe, ...delivery } = resolved.prepared.video;
-  // Alternate which variant goes first (A,B / B,A) so publish order never
-  // favours one variant.
   const ordered = pair % 2 === 1 ? hooks : [hooks[1], hooks[0]];
   const parts: string[] = [];
   for (const [index, hook] of ordered.entries()) {
@@ -193,8 +170,6 @@ export async function handleAddExperimentPair(
       startAt,
       title,
       segments: [{ kind: 'hook', text: hook.text, ...(hook.media === undefined ? {} : { media: hook.media }) }, ...segments],
-      // Deterministic per (experiment, pair, variant): calling this tool
-      // again replays the videos already created instead of charging twice.
       idempotencyKey: `exp-${experimentId}-p${pair}-${hook.variantId}`,
       experiment: { experimentId, variantId: hook.variantId, pair },
     });
@@ -203,12 +178,6 @@ export async function handleAddExperimentPair(
       return { content: [{ type: 'text', text: `Pair ${pair}, variant ${hook.variantId}: ${textOf(response)}${done}` }], isError: true };
     }
     if (failedSlotIds.length > 0) {
-      // A 2xx can carry a failed slot: a dispatch failure (502) leaves the
-      // failed slot behind and a retry on the same key replays it. The slot
-      // is its schedule's only slot, so schedules (action: delete_slot) answers 409 (last slot)
-      // and schedules (action: cancel) leaves a failed row alone, which keeps the
-      // (experiment, pair, variant) unique key taken: this pair number
-      // cannot be redone, so the recovery is a new pair number.
       const done = index === 1 ? ` The ${ordered[0].variantId} video of pair ${pair} was created and stays; it is left without a partner and does not count toward the result.` : '';
       return {
         content: [

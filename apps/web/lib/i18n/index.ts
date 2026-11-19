@@ -1,7 +1,3 @@
-//---------------
-// i18n — unified dictionary exports and type utilities
-//---------------
-
 import { ptDictionary as basePtDictionary, type Dictionary as BaseDictionary } from './pt';
 import { enDictionary as baseEnDictionary } from './en';
 import { publishingAccountsStrings } from './publishing-accounts';
@@ -15,6 +11,7 @@ import { facebookStrings } from './facebook-i18n';
 import { pinterestStrings } from './pinterest-i18n';
 import { fanvueStrings } from './fanvue-i18n';
 import { rumbleStrings } from './rumble-i18n';
+import { telegramStrings } from './telegram-i18n';
 import { promptsStrings } from './nav-prompts-i18n';
 import { voiceFallbackStrings } from './voice-fallback-i18n';
 import { personaLayoutHintStrings } from './persona-layout-hint-i18n';
@@ -27,17 +24,6 @@ import { hookPhotoStrings } from './hook-photo-i18n';
 import { onboardingStrings } from './onboarding-i18n';
 import type { Locale } from './types';
 
-//---------------
-// Per-persona default publishing accounts (issue #212): en.ts/pt.ts are
-// grandfathered over the 500-line file-size cap and may not grow a single
-// line, so the feature's copy lives in ./publishing-accounts and is merged
-// here. The persona layout hint follows the same pattern
-// (./persona-layout-hint-i18n, merged into personas below). The exported
-// dictionaries stay reference-identical per locale
-// (dictionaries.pt === ptDictionary), and the Dictionary/TranslationKey
-// contract below covers the merged keys.
-//---------------
-
 export const ptDictionary = {
   ...basePtDictionary,
   tokens: { ...basePtDictionary.tokens, ...fullLipsyncPriceStrings.pt.tokens },
@@ -47,7 +33,7 @@ export const ptDictionary = {
   nav: { ...basePtDictionary.nav, ...metricsStrings.pt.nav, ...promptsStrings.pt.nav, ...experimentsStrings.pt.nav },
   metrics: { ...metricsStrings.pt.metrics, ...metricsCoverageStrings.pt.metrics, ...metricsFiltersStrings.pt.metrics, ...metricsChartsStrings.pt.metrics },
   experiments: experimentsStrings.pt.experiments,
-  accounts: { ...basePtDictionary.accounts, ...threadsStrings.pt.accounts, ...facebookStrings.pt.accounts, ...pinterestStrings.pt.accounts, ...fanvueStrings.pt.accounts, ...rumbleStrings.pt.accounts },
+  accounts: { ...basePtDictionary.accounts, ...threadsStrings.pt.accounts, ...facebookStrings.pt.accounts, ...pinterestStrings.pt.accounts, ...fanvueStrings.pt.accounts, ...rumbleStrings.pt.accounts, ...telegramStrings.pt.accounts },
   posts: { ...basePtDictionary.posts, ...postsCalendarStrings.pt.posts, ...hookPhotoStrings.pt.posts },
   personas: { ...basePtDictionary.personas, ...personaLayoutHintStrings.pt.personas, ...personaBoundAccountsStrings.pt.personas },
   landing: { ...basePtDictionary.landing, ...pricingContactStrings.pt.landing },
@@ -64,7 +50,7 @@ export const enDictionary = {
   nav: { ...baseEnDictionary.nav, ...metricsStrings.en.nav, ...promptsStrings.en.nav, ...experimentsStrings.en.nav },
   metrics: { ...metricsStrings.en.metrics, ...metricsCoverageStrings.en.metrics, ...metricsFiltersStrings.en.metrics, ...metricsChartsStrings.en.metrics },
   experiments: experimentsStrings.en.experiments,
-  accounts: { ...baseEnDictionary.accounts, ...threadsStrings.en.accounts, ...facebookStrings.en.accounts, ...pinterestStrings.en.accounts, ...fanvueStrings.en.accounts, ...rumbleStrings.en.accounts },
+  accounts: { ...baseEnDictionary.accounts, ...threadsStrings.en.accounts, ...facebookStrings.en.accounts, ...pinterestStrings.en.accounts, ...fanvueStrings.en.accounts, ...rumbleStrings.en.accounts, ...telegramStrings.en.accounts },
   posts: { ...baseEnDictionary.posts, ...postsCalendarStrings.en.posts, ...hookPhotoStrings.en.posts },
   personas: { ...baseEnDictionary.personas, ...personaLayoutHintStrings.en.personas, ...personaBoundAccountsStrings.en.personas },
   landing: { ...baseEnDictionary.landing, ...pricingContactStrings.en.landing },
@@ -78,7 +64,7 @@ type ExperimentsKeys = typeof experimentsStrings.en;
 type MetricsCoverageKeys = typeof metricsCoverageStrings.en;
 type MetricsFiltersKeys = typeof metricsFiltersStrings.en;
 type MetricsChartsKeys = typeof metricsChartsStrings.en;
-type ThreadsKeys = typeof threadsStrings.en & typeof facebookStrings.en & typeof pinterestStrings.en & typeof fanvueStrings.en & typeof rumbleStrings.en;
+type ThreadsKeys = typeof threadsStrings.en & typeof facebookStrings.en & typeof pinterestStrings.en & typeof fanvueStrings.en & typeof rumbleStrings.en & typeof telegramStrings.en;
 type PromptsKeys = typeof promptsStrings.en;
 type VoiceFallbackKeys = typeof voiceFallbackStrings.en;
 type PersonaLayoutHintKeys = typeof personaLayoutHintStrings.en;
@@ -171,10 +157,6 @@ export const LOCALES: ReadonlyArray<{ value: Locale; label: string }> = [
   { value: 'en', label: 'EN' },
 ];
 
-//---------------
-// TranslationKey — union of all translation keys in dot-notation
-// Ex.: "nav.posts" | "posts.statusPending" | "accounts.default" | ...
-//---------------
 export type TranslationKey = {
   [Section in keyof Dictionary]: {
     [Key in keyof Dictionary[Section]]: Key extends string

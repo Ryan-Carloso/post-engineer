@@ -1,6 +1,3 @@
-// Unit tests for the test-flight script (pure logic + poll loop with a stubbed slot fetch).
-// Run: node --test .github/scripts/test-flight/*.test.mjs
-
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -127,7 +124,6 @@ describe('resolveScript', () => {
     assert.equal(script.title, TEST_SCRIPT.title);
     assert.equal(script.source, 'llm');
     assert.deepEqual(script.segments, TEST_SCRIPT.segments);
-    // The route requires a description; the flight uses the script text.
     assert.equal(
       script.description,
       TEST_SCRIPT.segments.map((segment) => segment.text).join('\n\n'),
@@ -205,7 +201,6 @@ describe('scheduledTarget', () => {
     assert.equal(target.timezone, 'UTC');
     assert.match(target.startAt, /^\d{4}-\d{2}-\d{2}$/);
     assert.match(target.times[0], /^\d{2}:\d{2}$/);
-    // 10:00 + 3h10m = 13:10 UTC.
     assert.equal(target.times[0], '13:10');
   });
 });
@@ -299,8 +294,6 @@ describe('assertPublishedSlot', () => {
   });
 
   it('labels detail-shaped slots by their id field, never undefined', () => {
-    // GET /api/schedule/slots/[slotId] returns slot.id (not slotId):
-    // the 2026-10-20 flight reported "ASAP slot undefined published...".
     assert.throws(
       () =>
         assertPublishedSlot(
@@ -544,9 +537,6 @@ describe('runFlight', () => {
   });
 
   it('fails without spending anything when no explicit account ids exist', async () => {
-    // Issue #572: no auto-discovery — the flight fails in resolveConfig,
-    // before any generate call. The fetch stub would 500 on any call, so
-    // zero calls proves nothing was attempted.
     const { calls, fetchFn } = installFetch(happyRoutes({}));
     await assert.rejects(
       runFlight(
@@ -719,8 +709,6 @@ describe('test-flight workflow pins', () => {
   it('runs in the test-flight environment and keys retries by run attempt', () => {
     assert.equal(workflow.includes('environment: test-flight'), true);
     assert.equal(workflow.includes('${{ github.run_id }}-${{ github.run_attempt }}'), true);
-    // A scheduled health monitor must never skip silently: a missing
-    // persona fails fast in flight.mjs instead of concluding "skipped".
     assert.equal(
       workflow.includes("github.event_name != 'schedule' || vars.TEST_FLIGHT_PERSONA_ID != ''"),
       false,

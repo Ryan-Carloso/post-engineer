@@ -1,36 +1,9 @@
-//---------------
-// accounts — the social-accounts contract, shared by the web routes and
-// the MCP accounts tools.
-//
-// GET /api/account lists the caller's connected accounts (no tokens);
-// DELETE disconnects one; POST /api/account/connect-url mints an OAuth
-// URL for the seven OAuth providers (Bluesky takes an app password and
-// Rumble a manual access token instead); POST /api/bluesky-connect,
-// /api/threespeak-connect and /api/rumble-connect connect those three;
-// GET /api/pinterest/boards lists one Pinterest account's boards; and
-// GET/PUT /api/persona/publishing-accounts read/replace a persona's
-// bound publishing accounts.
-//
-// The connect routes validate credentials by hand (JSON and, for
-// Bluesky, multipart) with stable messages; the contract body schemas
-// mirror those messages, pinned by the MCP tool-schema equivalence
-// test. The publishing-accounts PUT normalizes server-side (unknown
-// providers rejected, ids trimmed/deduped, empties dropped, at least
-// one bound account required) — the contract body schema mirrors what
-// the MCP sends, and those server rules stay server-side.
-//---------------
-
 import { z } from 'zod';
 import { defineEndpoint } from './endpoint.js';
 import { OAUTH_CONNECT_PROVIDERS, SOCIAL_PROVIDERS } from './providers.js';
 
 export const ACCOUNT_SYNC_STATUSES = ['ok', 'error'] as const;
 
-//---------------
-// Public account items — what GET /api/account returns, mirroring
-// apps/web/lib/providers/registry.ts (PublicAccountItem) and
-// apps/web/lib/types.ts (AccountData, InstagramAccountData). No tokens.
-//---------------
 const accountStatus = z.enum(ACCOUNT_SYNC_STATUSES).optional();
 const accountTimestamps = { connectedAt: z.number(), lastUsed: z.number(), status: accountStatus };
 
@@ -141,6 +114,17 @@ export const FanvueAccountSchema = z.object({
   ...accountTimestamps,
 });
 
+export const TelegramAccountSchema = z.object({
+  provider: z.literal('telegram'),
+  recordId: z.string(),
+  providerAccountId: z.string(),
+  accountName: z.string().nullable(),
+  chatType: z.enum(['channel', 'group', 'supergroup']).optional(),
+  username: z.string().optional(),
+  botUsername: z.string().optional(),
+  ...accountTimestamps,
+});
+
 export const PublicAccountItemSchema = z.discriminatedUnion('provider', [
   YoutubeAccountSchema,
   InstagramAccountSchema,
@@ -152,11 +136,10 @@ export const PublicAccountItemSchema = z.discriminatedUnion('provider', [
   ThreespeakAccountSchema,
   RumbleAccountSchema,
   FanvueAccountSchema,
+  TelegramAccountSchema,
 ]);
 export type PublicAccountItem = z.infer<typeof PublicAccountItemSchema>;
 
-// A non-blank credential field: the routes trim and reject blanks with
-// the same message, so the schema does too.
 function nonBlank(message: string) {
   return z
     .string()
@@ -164,9 +147,6 @@ function nonBlank(message: string) {
     .refine((value) => value.trim().length > 0, { message });
 }
 
-//---------------
-// Request bodies — mirror the routes' hand-rolled validation.
-//---------------
 export const ConnectUrlBodySchema = z.object({
   provider: z.enum(OAUTH_CONNECT_PROVIDERS),
 });
@@ -186,6 +166,14 @@ export const RumbleConnectBodySchema = z.object({
   accessToken: nonBlank('Rumble access token is required.'),
 });
 
+export const TelegramConnectBodySchema = z.object({
+  botToken: nonBlank('Telegram bot token is required.'),
+  chatId: nonBlank('Telegram chat ID or @username is required.'),
+  chatType: z.enum(['channel', 'group'], {
+    error: () => 'chatType must be channel or group.',
+  }),
+});
+
 export const DisconnectAccountQuerySchema = z.strictObject({
   provider: z.string(),
   providerAccountId: z.string(),
@@ -203,11 +191,6 @@ export const SetPersonaPublishingAccountsBodySchema = z.object({
   accounts: z.record(z.string(), z.array(z.string().min(1))),
 });
 
-//---------------
-// Query parsers — the validators the routes call, mirroring their
-// 400 messages exactly (metrics.ts pattern). The query schemas above
-// are descriptive (raw strings); these are the validators.
-//---------------
 const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function parseDisconnectAccountQuery(params: URLSearchParams): {
@@ -230,17 +213,9 @@ export function parseListPinterestBoardsQuery(params: URLSearchParams): { ok: tr
   if (accountId === null || accountId.trim() === '') {
     return { ok: false, error: 'accountId is required.' };
   }
-  // The route looks the token up by the trimmed id.
   return { ok: true, accountId: accountId.trim() };
 }
 
-// Placeholder/sentinel ids (e.g. 'p-1' from an unthinking caller — the
-// production warnings were `invalid input syntax for type uuid: "p-1"`)
-// never reach Postgres: a stable validation 400 answers them with a
-// machine-readable field, instead of a PostgREST error the UI can't
-// classify and PostHog can't group (same convention as issue #216).
-// Same canonical-shape check the engine's SAFE_TASK_ID enforces upstream:
-// a uuid-shaped string (any version layout the DB generates).
 export function parsePersonaPublishingAccountsQuery(params: URLSearchParams): { ok: true; personaId: string } | { ok: false; error: string } {
   const personaId = params.get('personaId');
   if (!personaId) return { ok: false, error: 'personaId is required.' };
@@ -248,9 +223,6 @@ export function parsePersonaPublishingAccountsQuery(params: URLSearchParams): { 
   return { ok: true, personaId };
 }
 
-//---------------
-// Response views.
-//---------------
 export const ListSocialAccountsResponseSchema = z.object({
   authenticated: z.literal(true),
   accounts: z.array(PublicAccountItemSchema),
@@ -286,6 +258,14 @@ export const RumbleConnectResponseSchema = z.object({
   channelId: z.string(),
 });
 
+export const TelegramConnectResponseSchema = z.object({
+  success: z.literal(true),
+  accountId: z.string(),
+  chatId: z.string(),
+  chatType: z.enum(['channel', 'group', 'supergroup']),
+  title: z.string(),
+});
+
 export const PinterestBoardSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -297,8 +277,6 @@ export const ListPinterestBoardsResponseSchema = z.object({
   boards: z.array(PinterestBoardSchema),
 });
 
-// Every known provider is always present (possibly empty) — the GET
-// returns the full map, never a partial one.
 export const PersonaPublishingAccountsSchema = z.object({
   youtube: z.array(z.string()),
   instagram: z.array(z.string()),
@@ -310,6 +288,7 @@ export const PersonaPublishingAccountsSchema = z.object({
   '3speak': z.array(z.string()),
   rumble: z.array(z.string()),
   fanvue: z.array(z.string()),
+  telegram: z.array(z.string()),
 });
 export type PersonaPublishingAccounts = z.infer<typeof PersonaPublishingAccountsSchema>;
 
@@ -319,9 +298,6 @@ export const PersonaPublishingAccountsResponseSchema = z.object({
 });
 export type PersonaPublishingAccountsResponse = z.infer<typeof PersonaPublishingAccountsResponseSchema>;
 
-//---------------
-// Endpoints.
-//---------------
 export const listSocialAccounts = defineEndpoint({
   method: 'GET',
   path: '/api/account',
@@ -361,6 +337,13 @@ export const connectRumbleAccount = defineEndpoint({
   path: '/api/rumble-connect',
   body: RumbleConnectBodySchema,
   response: RumbleConnectResponseSchema,
+});
+
+export const connectTelegramAccount = defineEndpoint({
+  method: 'POST',
+  path: '/api/telegram-connect',
+  body: TelegramConnectBodySchema,
+  response: TelegramConnectResponseSchema,
 });
 
 export const listPinterestBoards = defineEndpoint({

@@ -53,10 +53,6 @@ describe('buildJobPayload — request allowlist', () => {
   });
 
   it('drops the dead contract fields instead of forwarding them', () => {
-    // video_subject, lipsync, full_lipsync, faceless_material and
-    // lipsync_enabled are gone from the contract (issue #542 follow-up):
-    // a stale caller still sending them must not reach the engine, and
-    // the drop is warned about instead of silent.
     const payload = buildJobPayload(persona(), {
       video_title: 'Porto trip',
       video_subject: 'Porto trip',
@@ -171,7 +167,6 @@ describe('buildJobPayload — request allowlist', () => {
       photo_url: 'https://cdn.test/photo.png',
       voice_id: 'voice-1',
       voice_audio_url: 'https://cdn.test/voice.mp3',
-      // The niche rides the persona record as channel context.
       niche: 'finance',
     });
   });
@@ -194,9 +189,6 @@ describe('buildJobPayload — persona preference defaults', () => {
   });
 
   it('never maps a persona script prompt onto the engine payload', () => {
-    // Phase 5-4: the script_prompt -> video_script_prompt mapping is gone.
-    // A persona object that still carries script_prompt (legacy shape)
-    // must not leak it into the payload.
     const payload = buildJobPayload(
       persona({ script_prompt: 'be punchy' } as Partial<JobPersona>),
       {},
@@ -210,7 +202,6 @@ describe('buildJobPayload — persona preference defaults', () => {
       paragraph_number: 0,
     });
     expect(payload.video_language).toBe('en');
-    // 0 is an explicit non-string value, not an absent marker.
     expect(payload.paragraph_number).toBe(0);
   });
 
@@ -295,8 +286,6 @@ describe('buildJobPayload — niche and script prompt', () => {
 
 describe('buildJobPayload — final null pass', () => {
   it('drops null engine-facing fields instead of forwarding them', () => {
-    // video_type faceless keeps the face-quality defaulting out of the
-    // picture, so the null pass is what removes video_quality.
     const payload = buildJobPayload(persona({ niche: 'finance' }), {
       video_type: 'faceless',
       video_quality: null,

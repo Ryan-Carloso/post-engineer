@@ -8,26 +8,6 @@ import { apiErrorResponse } from '@/lib/api-error';
 import { ERROR_CODES, errorMessage } from '@/lib/error-codes';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
-//---------------
-// POST /api/threespeak-connect — connects a 3Speak (Hive) account via
-// posting key. Validates the credential against 3Speak Studio BEFORE
-// saving (the login mints a JWT with the key), encrypts the posting key
-// (like the Bluesky app password) and inserts into social_accounts with
-// provider='3speak' and provider_account_id=<hive username>.
-//
-// Two entry flows (same business logic):
-// - Web: Supabase session + FormData { username, postingKey } (original).
-// - MCP: Post Engineer API key + JSON { username, postingKey }.
-//
-// The "API key" here is Post Engineer's — it only identifies WHICH user
-// is connecting. The Hive credential remains username + posting key in
-// the body (3Speak has no OAuth and no API keys of its own); the key is
-// validated against Studio's servers before saving. Only the POSTING key
-// is accepted — never the owner/active key or the master password —
-// because posting is all the integration needs, and the posting key
-// cannot move funds.
-//---------------
-
 function errorResponse(
   status: number,
   error: string,
@@ -92,8 +72,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
   }
   const { username, postingKey } = credentials;
 
-  // Service role bypasses RLS. auth.userId is the owner. A cookie JWT must
-  // not write encrypted_tokens.
   const supabase = createSupabaseServiceClient();
 
   try {
@@ -105,9 +83,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
       handle: normalizedUsername,
     });
 
-    // Upsert, not insert: a reconnect refreshes the token on the row the
-    // unique (user_id, provider, provider_account_id) key already holds
-    // (migration 040), so a plain insert fails with a constraint violation.
     const { data: upserted, error: upsertError } = await supabase
       .from('social_accounts')
       .upsert(
@@ -126,8 +101,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
       .single();
 
     if (upsertError || !upserted) {
-      // The full PostgREST error object (not just the message) is threaded
-      // as cause so the PostHog issue carries code/details/hint.
       return errorResponse(500, 'Could not save the 3Speak account.', 'POST /api/threespeak-connect', {
         cause: upsertError,
         metadata: { userId: auth.userId },
@@ -140,9 +113,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
       (error instanceof ThreespeakError && error.code === 'invalid_credentials') ||
       (error instanceof Error && error.name === 'ThreespeakError' && /Invalid Hive/i.test(error.message));
     if (isInvalidCredentials) {
-      // 422, not 401: 3Speak rejected the credential, the hub session is fine.
-      // 401 stays reserved for a missing/expired hub session so clients can
-      // react to every 401 as a session expiry.
       return errorResponse(422, errorMessage(ERROR_CODES.THREESPEAK_CREDENTIAL_REJECTED), 'POST /api/threespeak-connect', {
         code: ERROR_CODES.THREESPEAK_CREDENTIAL_REJECTED,
       });
@@ -155,7 +125,4 @@ async function postHandler(request: Request): Promise<NextResponse> {
   }
 }
 
-//---------------
-// 5xx reporting: handled server errors reach PostHog error tracking.
-//---------------
 export const POST = withApiErrorReporting('POST /api/threespeak-connect', postHandler, { getUserId: resolveReportingUserId });

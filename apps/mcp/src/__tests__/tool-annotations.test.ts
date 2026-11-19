@@ -15,13 +15,6 @@ vi.mock('../analytics.js', () => ({
   },
 }));
 
-// ChatGPT and other annotation-aware clients use these hints to decide
-// whether to auto-approve, confirm, or warn. Every tool must carry them, and
-// they are per TOOL, not per action: a tool with a destructive action is
-// annotated destructive for all its actions (the most dangerous action wins,
-// issue #566 §12), so only the domains with no destructive action are
-// read-only, and cancel_video stays its own tool so a client can allow status
-// checks without allowing cancellation.
 const READ_ONLY_TOOLS = ['video_tasks', 'posts', 'insights', 'billing', 'prompts', 'check_script'];
 
 const DESTRUCTIVE_TOOLS = ['cancel_video', 'personas', 'persona_media', 'voices', 'accounts', 'schedules', 'publish_video', 'tool_config'];
@@ -59,7 +52,6 @@ describe('tool annotations over HTTP tools/list', () => {
             destructiveHint: false,
           });
         }
-        // Every listed tool carries an explicit openWorld hint.
         for (const tool of tools) {
           expect(typeof tool.annotations?.openWorldHint, `tool ${tool.name} openWorldHint`).toBe('boolean');
           expect(typeof tool.annotations?.readOnlyHint, `tool ${tool.name} readOnlyHint`).toBe('boolean');

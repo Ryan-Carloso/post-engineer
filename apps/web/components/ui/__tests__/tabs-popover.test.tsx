@@ -2,12 +2,6 @@ import '@testing-library/jest-dom/vitest';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 
-//---------------
-// Tests for the vendored shadcn Tabs and Popover: the list/trigger
-// classes, tab activation (including a disabled trigger), and the
-// popover content classes with its default center alignment.
-//---------------
-
 import { Tabs, TabsList, TabsTrigger } from '../tabs';
 import { Popover, PopoverContent, PopoverTrigger } from '../popover';
 

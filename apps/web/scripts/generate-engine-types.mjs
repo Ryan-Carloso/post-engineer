@@ -1,15 +1,3 @@
-// Generates apps/web/lib/engine/schema.gen.ts from the engine's committed
-// OpenAPI snapshot (apps/engine/openapi.json, exported by
-// apps/engine/scripts/export_openapi.py).
-//
-// The generated file is committed (like lib/generation/script-segments.ts)
-// because the web Docker build context copies only apps/web: the engine
-// snapshot is not there at build time. The drift test
-// (lib/engine/__tests__/schema-gen.test.ts) regenerates in memory and fails
-// when the committed file is stale.
-//
-// Run: node apps/web/scripts/generate-engine-types.mjs [--check]
-//   --check  exit 1 (without writing) when the committed file is stale.
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -27,22 +15,11 @@ const HEADER = [
   '',
 ].join('\n');
 
-/**
- * Render the TypeScript types for an OpenAPI spec (parsed JSON object).
- * Pure apart from openapi-typescript itself: same spec in, same text out.
- */
 export async function generateEngineTypes(spec) {
   const ast = await openapiTS(spec, { alphabetize: true, defaultNonNullable: false });
   return HEADER + astToString(ast);
 }
 
-/**
- * Run the generator CLI against explicit paths and I/O hooks. The
- * production entry point (main) passes the real paths and console/process
- * hooks; tests pass temp paths and mocks so every branch — write,
- * --check up-to-date, --check stale, --check missing output — runs
- * without touching the committed files.
- */
 export async function runCli({ snapshotPath, outputPath, args, exit, log, error }) {
   const spec = JSON.parse(readFileSync(snapshotPath, 'utf8'));
   const text = await generateEngineTypes(spec);
@@ -67,7 +44,6 @@ export async function runCli({ snapshotPath, outputPath, args, exit, log, error 
 
 async function main() { await runCli({ snapshotPath: SNAPSHOT_PATH, outputPath: OUTPUT_PATH, args: process.argv, exit: process.exit, log: console.log.bind(console), error: console.error.bind(console) }); }
 
-/** Log a CLI failure and exit non-zero (exported so the entry path is testable). */
 export function reportCliFailure(error) {
   console.error(error);
   process.exit(1);

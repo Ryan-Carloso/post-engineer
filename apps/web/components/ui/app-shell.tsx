@@ -22,9 +22,6 @@ import {
   SparklesIcon,
 } from '@/lib/ui';
 
-//---------------
-// NavItem — definition of a sidebar tab
-//---------------
 interface NavItem {
   href: string;
   labelKey: 'nav.accounts' | 'nav.persona' | 'nav.posts' | 'nav.history' | 'nav.metrics' | 'nav.experiments' | 'nav.prompts' | 'nav.billing';
@@ -34,28 +31,18 @@ interface NavItem {
 
 const HISTORY_HREF = '/posts/history';
 
-// onRoute — the path is the route or one of its subroutes, matched by whole
-// segments (/account never matches /accounts).
 function onRoute(route: string, pathname: string): boolean {
   return pathname === route || pathname.startsWith(`${route}/`);
 }
 
-// isNavActive — a tab is current on its route and subroutes. /posts/history
-// is its own entry, so it never also lights up the Posts (calendar) tab.
-// The Personas tab (/personas) also covers the /persona editor routes.
 function isNavActive(href: string, pathname: string): boolean {
   if (href === '/posts' && onRoute(HISTORY_HREF, pathname)) return false;
   if (href === '/personas') return onRoute(href, pathname) || onRoute('/persona', pathname);
   return onRoute(href, pathname);
 }
 
-// Routes reached through the mobile "More" sheet instead of a bottom tab.
 const MORE_ROUTES = [HISTORY_HREF, '/metrics', '/experiments', '/billing'];
 
-//---------------
-// AppShell — authenticated shell with Arc-browser-style fixed sidebar.
-// Shared by the (main) layout.
-//---------------
 export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-dvh overflow-hidden bg-surface">
@@ -70,13 +57,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-/* -----------------
-   Local Components
------------------- */
-
-//---------------
-// MainSidebar — card-surface sidebar (theme token, light/dark) with vertical tabs, Arc-inspired
-//---------------
 const MainSidebar = () => {
   const pathname = usePathname();
   const { t } = useI18n();
@@ -121,9 +101,6 @@ const MainSidebar = () => {
   );
 };
 
-//---------------
-// SidebarTab — individual tab with icon, label and active highlight
-//---------------
 const SidebarTab = ({ item, isActive }: { item: NavItem; isActive: boolean }) => {
   const { t } = useI18n();
   const Icon = item.icon;
@@ -145,10 +122,6 @@ const SidebarTab = ({ item, isActive }: { item: NavItem; isActive: boolean }) =>
   );
 };
 
-//---------------
-// MobileHeader — compact brand for small screens, with the version badge
-// and the profile avatar linking to /account.
-//---------------
 const MobileHeader = () => {
   const { t } = useI18n();
   return (
@@ -163,25 +136,17 @@ const MobileHeader = () => {
   );
 };
 
-//---------------
-// MobileNavigation — fixed bottom navigation: four uniform tabs plus "More",
-// a bottom sheet linking History, Metrics and Tokens (/billing). The profile
-// (/account) is the avatar in the mobile header.
-//---------------
 const MOBILE_TAB_CLASS = 'flex min-w-0 flex-1 flex-col items-center gap-0.5 px-1 text-center text-xs leading-tight';
 
 const MobileNavigation = () => {
   const { t } = useI18n();
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
-  // Any navigation (a link inside the sheet included) closes the sheet.
   useEffect(() => setMoreOpen(false), [pathname]);
 
   const tabs: Array<{
     href: string;
     labelKey: NavItem['labelKey'];
-    // Short label for tabs whose full label wraps in a ~70px tab.
-    // The sidebar keeps the full label.
     shortLabelKey?: 'nav.promptsShort';
     icon: () => React.JSX.Element;
   }> = [
@@ -249,9 +214,6 @@ const MobileNavigation = () => {
   );
 };
 
-//---------------
-// SidebarLegalLinks — privacy, terms and support links in the sidebar footer
-//---------------
 const SidebarLegalLinks = () => {
   const { t } = useI18n();
   return (

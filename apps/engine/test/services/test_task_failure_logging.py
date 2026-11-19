@@ -86,8 +86,6 @@ class FailTaskLoggingTests(unittest.TestCase):
         self.assertEqual(capture.errors()[0]["extra"].get("stage"), "unknown")
 
     def test_every_fail_task_call_logs_each_step(self):
-        # The user wants the failure reason visible per step in PostHog:
-        # repeated notices log every time (the Discord alert stays deduped).
         with (
             _LogCapture() as capture,
             patch.object(task_service, "send_discord", return_value=True) as send_discord,
@@ -101,10 +99,6 @@ class FailTaskLoggingTests(unittest.TestCase):
         send_discord.assert_called_once()
 
     def test_fail_task_survives_state_write_failure(self):
-        # With a network state backend the terminal write can raise; the
-        # failure must still be recorded loudly, never propagate out of the
-        # pipeline's top-level except handler (which would leave the row
-        # PROCESSING forever with no refund).
         failing_state = MagicMock()
         failing_state.get_task.return_value = None
         failing_state.update_task.side_effect = RuntimeError("supabase down")
@@ -114,28 +108,17 @@ class FailTaskLoggingTests(unittest.TestCase):
             patch.object(task_service, "send_discord", return_value=True),
             patch.object(task_service.task_webhook, "notify_terminal_task"),
         ):
-            task_service._fail_task("t-9", "boom", stage="audio")  # must not raise
+            task_service._fail_task("t-9", "boom", stage="audio")
         loud = [
             r for r in capture.errors() if "t-9" in r["message"] and "state" in r["message"].lower()
         ]
         self.assertTrue(loud, "permanent state-write loss must log loudly")
 
     def test_no_direct_failed_writes_outside_fail_task(self):
-        # Pin: TASK_STATE_FAILED must only ever be written by _fail_task
-        # (reads, e.g. _task_already_failed, are fine).
         src = Path(task_service.__file__).read_text()
         self.assertEqual(_direct_failed_write_offenders(src), [])
 
 
-# mutmut 3.x rewrites every mutated module into a single file
-# (mutants/<module>.py): the original function is kept as
-# x__<name>__mutmut_orig plus one x__<name>__mutmut_<N> copy per mutant
-# (mangle_function_name: "x_" + name + "__mutmut"; the working <name>
-# becomes a trampoline dispatching to the active copy). Structural pins that
-# read task_service.__file__ therefore see _fail_task's body under mangled
-# names — treat those copies as _fail_task itself, or every legitimate write
-# inside its body is reported once per copy (184 false offenders broke the
-# mutation (engine) CI job on PR #97).
 _MUTMUT_FAIL_TASK_RE = re.compile(r"^x__fail_task__mutmut_(?:orig|\d+)$")
 
 
@@ -168,16 +151,10 @@ def _direct_failed_write_offenders(source: str) -> list[str]:
 
 
 class MutmutSourceScanTests(unittest.TestCase):
-    # Regression tests for the mutation (engine) CI failure on PR #97:
-    # mutmut 3.x runs the suite against mutants/<module>.py, where _fail_task
-    # exists under mangled names. The structural pin must see through the
-    # mangling instead of reporting 184 false offenders.
 
     _WRITE = "    sm.persist_state_update(sm.state, task_id, state=const.TASK_STATE_FAILED)\n"
 
     def _mutmut_style_source(self):
-        # Names exactly as mutmut 3.x mangles them: "x_" + name + "__mutmut"
-        # with _orig / _<N> suffixes (see mangle_function_name).
         parts = ["def _fail_task(task_id):\n" + self._WRITE]
         parts.append("def x__fail_task__mutmut_orig(task_id):\n" + self._WRITE)
         for n in (1, 2):
@@ -195,9 +172,6 @@ class MutmutSourceScanTests(unittest.TestCase):
         self.assertTrue(offenders[0].startswith("other:"), offenders)
 
     def test_mutmut_variant_of_other_function_still_flagged(self):
-        # A mangled copy of a NON-_fail_task function must still be
-        # inspected — a mutant adding a direct failed write there is a
-        # real offender (reported under its mangled name).
         src = "def x__other__mutmut_3(task_id):\n" + self._WRITE
         offenders = _direct_failed_write_offenders(src)
         self.assertEqual(len(offenders), 1)
@@ -213,11 +187,6 @@ class MutmutSourceScanTests(unittest.TestCase):
 
 class TerminalWriteWiringTests(unittest.TestCase):
     def test_terminal_writes_use_persist_state_update(self):
-        # A lost terminal write with a network state backend leaves the row
-        # PROCESSING forever (no failure recorded, no refund). Every write
-        # of a terminal state must go through persist_state_update (retry
-        # once, then log loudly) — never a bare sm.state.update_task, which
-        # would silently drop the write on a network failure.
         services_dir = Path(task_service.__file__).parent
         offenders = []
         for module_file in ("task.py",):
@@ -265,10 +234,6 @@ class StartCrashStageTests(unittest.TestCase):
             ),
             patch.object(task_service, "send_discord", return_value=True),
             patch.object(task_service, "cleanup_task_intermediates"),
-            # The crash path runs through task_outcome.crash_or_stop, which
-            # resolves cleanup from its own module globals — patching only
-            # task.cleanup_task_intermediates would leave the real cleanup
-            # running (live pattern: test_task_outcome.py).
             patch.object(
                 task_outcome, "cleanup_task_intermediates"
             ) as crash_cleanup,
@@ -282,44 +247,31 @@ class StartCrashStageTests(unittest.TestCase):
             if fail_in == "generate_script":
                 task_service.start(task_id, params, stop_at="script")
             else:
-                # script succeeds (or the crash happens even earlier)
                 task_service.start(task_id, params, stop_at="video")
         capture.crash_cleanup = crash_cleanup
         return capture
 
     def test_crash_before_any_phase_logs_stage_start(self):
-        # require_r2_configuration raises before the script phase begins.
         capture = self._run_start_until_crash("require_r2_configuration")
         stages = [r["extra"].get("stage") for r in capture.errors()]
         self.assertIn("start", stages)
 
     def test_crash_during_script_phase_logs_script_stage(self):
-        # Issue #198: the script phase had started when generate_script
-        # raised, so the failure is a script failure, not "start".
         capture = self._run_start_until_crash("generate_script")
         stages = [r["extra"].get("stage") for r in capture.errors()]
         self.assertIn("script", stages)
 
     def test_crash_during_audio_phase_logs_audio_stage(self):
-        # Issue #198: the audio phase had started when generate_audio
-        # raised, so the failure is an audio failure, not "script".
         capture = self._run_start_until_crash("generate_audio")
         stages = [r["extra"].get("stage") for r in capture.errors()]
         self.assertIn("audio", stages)
 
     def test_crash_path_cleanup_mock_is_actually_invoked(self):
-        # crash_or_stop resolves cleanup_task_intermediates from
-        # task_outcome's globals, so that mock — not the task-module one —
-        # must be the one called on the crash path.
         capture = self._run_start_until_crash("generate_script")
         self.assertEqual(capture.crash_cleanup.call_count, 1)
         self.assertEqual(capture.crash_cleanup.call_args.args[0], "crash-task")
 
     def test_mark_records_stage_in_task_state(self):
-        # The SSE progress endpoint reads the stage from task state, so the
-        # phase tracker must persist the last completed phase there on
-        # complete(). Run a minimal start(): patch everything after the
-        # script phase so start() returns early at stop_at="script".
         params = TaskVideoRequest(
             video_title="topic",
             video_description="Test description.",

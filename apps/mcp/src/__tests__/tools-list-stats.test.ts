@@ -5,10 +5,6 @@ import { PostEngineerClient } from '../client.js';
 import { createPostEngineerMcpServer } from '../index.js';
 import { ESTIMATED_BYTES_PER_TOKEN, formatToolsListReport, listServerTools, summarizeTools } from '../tools-list-stats.js';
 
-// Issue #566 phase 1: the `tools/list` payload is the number the tool
-// consolidation has to shrink by at least 40%. These tests pin how it is
-// measured, so a before/after comparison always counts the same bytes.
-
 function tool(name: string, description: string) {
   return { name, description, inputSchema: { type: 'object' as const, properties: {} } };
 }
@@ -73,7 +69,6 @@ describe('listServerTools', () => {
     expect(tools).toHaveLength(17);
     expect(new Set(names).size).toBe(names.length);
     expect(names).toContain('generate_video');
-    // Each tool carries a usable input schema, which is what makes up most of the payload.
     for (const entry of tools) expect(entry.inputSchema.type).toBe('object');
   });
 

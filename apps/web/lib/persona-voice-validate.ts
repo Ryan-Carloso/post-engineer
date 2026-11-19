@@ -1,16 +1,3 @@
-//---------------
-// persona-voice-validate — server-side voice validation for POST/PATCH
-// /api/persona (issue #353). It applies the same resolution the video
-// dispatch already applies (resolvePersonaVoice), but a voice the engine
-// would not accept is now rejected with a 400 pointing at
-// GET /api/persona/voices BEFORE any upload, insert or update — instead of
-// being silently swapped at video time. The PATCH path validates a voice
-// only when it differs from the stored one: the form always resends
-// voiceId, and 16 personas still store legacy bare names, so a name-only
-// edit must never 400 on the unchanged voice. A catalog fetch failure
-// degrades to shape-only validation (exactly what dispatch does).
-//---------------
-
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { fetchPersonaVoiceCatalogIds } from '@/lib/voice-catalog-fetch';
 import { cloneKeyOf, isCloneVoiceId } from '@/lib/voice-catalog';
@@ -18,14 +5,6 @@ import { resolvePersonaVoice } from '@/lib/voice-fallback';
 import { logger } from '@/lib/logger';
 import { redactCredentialFragments } from '@/lib/scrub';
 
-//---------------
-// cloneVoiceAvailable — whether the persona's clone id still names one of
-// this user's READY clones (cloned_voices, migration 023). The engine_key
-// is the persona id's key half without the routing prefix. A failed lookup
-// resolves true (fail open): the engine's ownership guard at TTS time is
-// the last line of defense, and a transient DB error must not fail a
-// dispatch the engine would accept.
-//---------------
 export async function cloneVoiceAvailable(
   supabase: SupabaseClient,
   userId: string,
@@ -50,21 +29,8 @@ export async function cloneVoiceAvailable(
   }
 }
 
-//---------------
-// UNKNOWN_VOICE copy + rejection options (issue #353 amendment 2/3). The
-// exact web copy is shared with the enumerable default in error-codes.ts
-// ({attempt} = truncated attempted value, so a looping agent can see what
-// it keeps passing and telemetry always agrees with the message).
-// personaVoiceRejectionOptions feeds the route errorResponse: the stable
-// code travels to the client (parseErrorResponse passes it through) and the
-// logMessage keeps the PostHog message keyed by route+code (#301), with the
-// attempted voice as a scrubbed property. An empty/absent attempt (the
-// 'Provide voiceId.' contract) carries no code.
-//---------------
-
 import { ERROR_CODES, formatErrorMessage } from '@/lib/error-codes';
 
-// Telemetry and copy share one truncation so both always agree.
 const MAX_VOICE_ATTEMPT = 80;
 
 export interface VoiceRejectionOptions {
@@ -81,18 +47,8 @@ export function personaVoiceRejectionOptions(
   if (attempt.length === 0) return undefined;
   return {
     code: ERROR_CODES.UNKNOWN_VOICE,
-    // Stable by design (#301): the PostHog message must not embed the
-    // free user text; the template lives in error-codes.ts.
     logMessage: 'Unknown voice',
-    // The attempt is caller-typed free text: key-name scrubbing in the
-    // reporting path never touches the value, so credential fragments
-    // (a pasted Bearer token, an sk- key) are redacted here, at the
-    // call site, before the property can reach PostHog.
     metadata: { voice: redactCredentialFragments(attempt) },
-    // The 401/403 pattern: apiErrorResponse logs console-only and stays
-    // unmarked, so withApiErrorReporting emits the route's semantic
-    // persona_created_rejected / persona_updated_rejected event — exactly
-    // one event, with the code and the attempted voice attached.
     leaveReportingToWrapper: true,
   };
 }
@@ -100,11 +56,6 @@ export function personaVoiceRejectionOptions(
 const unknownVoiceMessage = (voiceId: string) =>
   formatErrorMessage(ERROR_CODES.UNKNOWN_VOICE, { attempt: voiceId.slice(0, MAX_VOICE_ATTEMPT) });
 
-/** validatePersonaVoiceInput — null when the voice is acceptable, else the
- *  400 message. Creation requires a voiceId: the empty value keeps the
- *  POST contract ('Provide voiceId.'). Sentinels (no-voice/none) and the
- *  provider ids the engine routes itself (elevenlabs:, openrouter:) pass
- *  without consulting the catalog. */
 export async function validatePersonaVoiceInput(
   supabase: SupabaseClient,
   userId: string,
@@ -114,9 +65,6 @@ export async function validatePersonaVoiceInput(
   if (trimmed.length === 0) return 'Provide voiceId.';
   const lowered = trimmed.toLowerCase();
   if (lowered === 'no-voice' || lowered === 'none') return null;
-  // Sentinels and the provider ids the engine routes itself never consult
-  // the catalog; house and clone shapes do (same retirement logic as
-  // dispatch, issue #277).
   const needsCatalog = trimmed.startsWith('chatterbox:') || isCloneVoiceId(trimmed);
   const catalogIds = needsCatalog ? await fetchPersonaVoiceCatalogIds(userId) : undefined;
   const cloneAvailable = isCloneVoiceId(trimmed)
@@ -132,12 +80,6 @@ interface PersonaVoiceRow {
   voice_audio_path?: unknown;
 }
 
-/** applyPersonaVoicePatch — the PATCH /api/persona voice block (#353).
- *  Validates the incoming voice ONLY when it differs from the stored one
- *  (trim-exact compare, same convention as the stored ids), then applies
- *  the same write the route already did: voice_id = incoming,
- *  voice_audio_path = null, with the replaced clone audio queued for
- *  cleanup. No voiceId sent → nothing happens. */
 export async function applyPersonaVoicePatch(
   supabase: SupabaseClient,
   userId: string,

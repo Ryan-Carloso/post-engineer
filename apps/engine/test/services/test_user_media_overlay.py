@@ -53,8 +53,6 @@ def _photo_color(url):
 
 
 def _download(url, dest_path, session=None):
-    # Distinct URLs are distinct photos: identical bytes under two URLs
-    # is a duplicate photo, skipped by prepare_segment_media.
     with open(dest_path, "wb") as handle:
         handle.write(_jpeg(color=_photo_color(url)))
     return dest_path
@@ -144,8 +142,6 @@ def test_missing_font_keeps_the_photo_and_warns(tmp_path):
 
 
 def test_a_photo_is_drawn_without_any_face_gate(tmp_path):
-    # Faces were a stock B-roll rule: a segment photo is drawn whatever
-    # it shows, and no face check runs before the panel is built.
     panels, skipped = _prepare(tmp_path, _segments({"title": "Sushi"}))
     assert len(panels) == 1
     assert skipped == []
@@ -175,7 +171,6 @@ def test_two_segments_with_their_own_photo_each_get_their_own_panel_and_card(tmp
     first = tmp_path / "aabbccddeeff00112233445566778899.jpg"
     second = tmp_path / "00112233445566778899aabbccddeeff.jpg"
     first.write_bytes(_jpeg())
-    # A second copy of the same bytes would be a duplicate photo, skipped.
     second.write_bytes(_jpeg(color=(30, 30, 200)))
     segments = [
         {**SEGMENTS_TEXT[0], "media": [{"mediaId": first.name, "overlay": {"title": "First"}}]},
@@ -264,8 +259,6 @@ def test_prepare_segment_panels_without_segments_writes_nothing(tmp_path, monkey
     assert not (tmp_path / segment_panels.MANIFEST_NAME).exists()
 
 
-# ---- panel over the face, full frame everywhere else
-
 
 def _two_media_segments():
     return [
@@ -300,7 +293,6 @@ def test_full_lipsync_photos_are_all_panels_over_the_face(tmp_path):
 def test_hook_only_lipsync_puts_the_hook_photo_over_the_face_and_the_background_photo_full_frame(
     tmp_path,
 ):
-    # The hook is spoken 0.0-1.2 and the CTA from 5.0: the face leaves at 1.2.
     panels, skipped = _prepare(tmp_path, _two_media_segments(), face=segment_panels.FACE_HOOK)
     assert skipped == []
     assert [panel.index for panel in panels] == [0, 1]
@@ -324,8 +316,6 @@ def _script():
 
 
 def test_the_handover_is_the_window_the_intro_actually_renders(tmp_path):
-    # The MAJOR this pins: the panel/full-frame boundary must come from the
-    # same measurement the intro renders, not from the segment intervals.
     subtitle_path = _subtitle(tmp_path)
     intro_window = persona_hook.resolve_lipsync_window(
         "t",
@@ -402,8 +392,6 @@ def test_prepare_segment_panels_uses_the_video_type_to_pick_panel_or_full_frame(
 
     monkeypatch.setattr(segment_panels.utils, "task_dir", lambda task_id: str(tmp_path))
     monkeypatch.setattr(user_media.utils, "task_dir", lambda task_id: str(tmp_path))
-    # The CTA carries three photos so they tile the 6 s audio at 2 s each
-    # after the hook hands over.
     hook, cta = _two_media_segments()
     segments = [
         hook,

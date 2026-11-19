@@ -12,8 +12,6 @@ import { isPublicIp } from '../public-ip.js';
 
 const { httpsRequestMock } = vi.hoisted(() => ({ httpsRequestMock: vi.fn() }));
 
-// The remote download goes through node:https with a pinned lookup, not the
-// global fetch: the mock below stands in for the socket.
 vi.mock('node:https', () => ({ request: httpsRequestMock }));
 
 vi.mock('../analytics.js', () => ({
@@ -117,16 +115,12 @@ function lookupOf(addresses: string[]): ReturnType<typeof vi.fn<HostLookup>> {
 describe('fetchCloneReferenceAudio on the remote server', () => {
   let fetchMock: ReturnType<typeof vi.fn>;
 
-  // Captured https.request call: url, options (incl. the pinned lookup),
-  // and the response callback.
   let capturedRequest: {
     url: unknown;
     options: { lookup?: (...args: never[]) => unknown; signal?: unknown };
     callback: (res: unknown) => void;
   } | null = null;
 
-  // Fake IncomingMessage: an async-iterable body plus the status, headers
-  // and stream controls the download reads.
   function httpsAudioResponse(
     chunks: Uint8Array[],
     statusCode = 200,
@@ -143,8 +137,6 @@ describe('fetchCloneReferenceAudio on the remote server', () => {
     });
   }
 
-  // Arm the https mock: end() either delivers the armed response or emits
-  // the armed socket error, mirroring a real request.
   function armHttps(response: unknown, error: Error | null = null): void {
     capturedRequest = null;
     httpsRequestMock.mockImplementation(
@@ -168,7 +160,6 @@ describe('fetchCloneReferenceAudio on the remote server', () => {
     );
   }
 
-  // Call the lookup pinned into the captured request and collect its answer.
   function pinnedLookupAnswer(
     hostname: string,
     options: { family?: number; all?: boolean },
@@ -276,8 +267,6 @@ describe('fetchCloneReferenceAudio on the remote server', () => {
     armHttps(httpsAudioResponse([new Uint8Array([1, 2, 3])]));
     const lookup = lookupOf(['93.184.216.34']);
     await fetchCloneReferenceAudio('https://audio.example.com/ref.mp3', { remote: true, lookup });
-    // The pinned lookup ignores the hostname entirely: a second answer
-    // (DNS rebinding) can never steer the socket to another address.
     const rebound = await pinnedLookupAnswer('attacker.example.com', { family: 0 });
     expect(rebound.error).toBeNull();
     expect(rebound.address).toBe('93.184.216.34');

@@ -4,20 +4,11 @@ import { computeVideoTokens } from '@/lib/tokens';
 import { usePersonaStore } from '@/lib/store';
 import { useI18n } from '@/lib/i18n/provider';
 
-//---------------
-// PersonaTokensSection — face quality + estimated cost per video.
-// Every persona has a face ("no face" is chosen per post, at creation), so
-// there is no 0-100% mix here anymore: the cost is always the whole face,
-// weighted by the chosen quality.
-//---------------
 export function PersonaTokensSection() {
   const faceQuality = usePersonaStore((s) => s.faceQuality);
   const setFaceQuality = usePersonaStore((s) => s.setFaceQuality);
   const { t } = useI18n();
 
-  // The persona always has a face, so this is the with-face price (faceless is
-  // a per-post choice, priced on the post screen). Full lip-sync is also a
-  // per-post choice, priced here so the dashboard shows both modes.
   const cost = computeVideoTokens('hook_lipsync', faceQuality);
   const fullLipsyncCost = computeVideoTokens('full_lipsync', faceQuality);
 

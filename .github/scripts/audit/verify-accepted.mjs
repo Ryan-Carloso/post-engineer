@@ -1,26 +1,4 @@
 #!/usr/bin/env node
-// Dependency-audit gate.
-//
-// `pnpm audit` is the source of truth; this script decides which advisories the
-// workspace has knowingly accepted. The accepted list lives in
-// .github/audit/accepted-advisories.json — one entry per GHSA, with the reason
-// and the scope (runtime vs dev). The gate fails when:
-//
-//   - an advisory at or above the threshold is NOT in the list (new risk),
-//   - an entry in the list is no longer reported (the list rots otherwise),
-//   - an entry names a different package than the advisory does (copy-paste),
-//   - an entry is missing a reason, a valid severity or a valid scope.
-//
-// An advisory is identified by GHSA id, so a NEW advisory on a package we
-// already accept still fails: accepting one id never accepts its siblings.
-//
-// Usage: node .github/scripts/audit/verify-accepted.mjs [--level low|moderate|high|critical]
-//        node .github/scripts/audit/verify-accepted.mjs --self-test
-//
-// `pnpm audit` needs the lockfile only (no node_modules), and pnpm exits
-// non-zero when it finds anything — the report on stdout is what matters here.
-// The workflow runs --self-test first, so the gate proves its own logic on
-// every run.
 
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -31,10 +9,8 @@ export const SCOPES = ['runtime', 'dev'];
 const GHSA = /^GHSA(-[0-9a-z]{4}){3}$/;
 const MIN_REASON_CHARS = 40;
 
-/** A gate failure the caller should report as-is. */
 export class GateError extends Error {}
 
-/** Validate the accepted list and index it by GHSA. */
 export function validateAccepted(accepted, source = 'accepted-advisories.json') {
   if (!Array.isArray(accepted)) throw new GateError(`${source} must hold an "advisories" array`);
   const byId = new Map();
@@ -57,11 +33,6 @@ export function validateAccepted(accepted, source = 'accepted-advisories.json') 
   return byId;
 }
 
-/**
- * Split the report into accepted and rejected advisories.
- * Returns `blocking` (unaccepted at or above the level) and `stale` (accepted
- * ids the report no longer carries), the two failure conditions of the gate.
- */
 export function evaluate(advisories, acceptedById, level) {
   const seen = new Set();
   const acceptedNow = [];
@@ -95,7 +66,6 @@ function entry(ghsa, pkg, severity = 'high', scope = 'dev') {
   return { ghsa, package: pkg, severity, scope, reason: 'x'.repeat(MIN_REASON_CHARS) };
 }
 
-/** Exercise the filtering rules. Returns the list of failed expectations. */
 export function selfTest() {
   const failures = [];
   const expect = (label, actual, expected) => {
@@ -198,7 +168,6 @@ function main() {
     maxBuffer: 64 * 1024 * 1024,
   });
 
-  // pnpm may prefix the JSON with warnings; keep the outermost object.
   const stdout = run.stdout ?? '';
   const start = stdout.indexOf('{');
   const end = stdout.lastIndexOf('}');

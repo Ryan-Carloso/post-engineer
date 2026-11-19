@@ -30,9 +30,6 @@ GENDERS: tuple[str, ...] = ("female", "male")
 ACCENTS: tuple[str, ...] = ("us", "gb")
 KINDS: tuple[str, ...] = ("standard", "character")
 
-# Voices from the retired Modal Chatterbox volume that personas may still
-# store. Each maps to the closest catalog voice (same gender and accent) so
-# existing personas keep speaking instead of failing at render time.
 LEGACY_VOICE_ALIASES: dict[str, str] = {
     "en_us_female_01": "kokoro_af_heart",
     "en_us_female_02": "kokoro_af_bella",
@@ -43,11 +40,7 @@ LEGACY_VOICE_ALIASES: dict[str, str] = {
     "en_us_male_03": "kokoro_am_eric",
     "en_us_male_04": "kokoro_am_liam",
     "default-Female": "kokoro_af_heart",
-    # voice.py strips a display "-Female"/"-Male" suffix before dispatch, so
-    # the old config default arrives at the TTS server as plain "default".
     "default": "kokoro_af_heart",
-    # The retired personal "ryan" house clone (removed from the shared
-    # catalog in this release); personas that picked it keep a male US voice.
     "ryan": "kokoro_am_michael",
 }
 
@@ -88,8 +81,6 @@ def _parse_voice(raw: object) -> CatalogVoice:
         raise ValueError(f"catalog entry {name} has unknown kind")
     if not isinstance(description, str) or not description.strip():
         raise ValueError(f"catalog entry {name} has no description")
-    # Characters are their own category with no accent; standard voices
-    # always carry one, so the origin filter never drops them.
     if kind == "character" and accent is not None:
         raise ValueError(f"character {name} must not have an accent")
     if kind == "standard" and accent not in ACCENTS:

@@ -16,8 +16,6 @@ function updateChain(error: unknown = null) {
   const chain = { eq };
   eq.mockReturnValue(chain);
   Object.assign(chain, {
-    // Synchronous resolve: await assimilates the thenable without a promise
-    // inside the callback (oxlint no-promise-in-callback).
     then: (resolve: (value: { error: unknown }) => unknown) => {
       resolve({ error });
     },

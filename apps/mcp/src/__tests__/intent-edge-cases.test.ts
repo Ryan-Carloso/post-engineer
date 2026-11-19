@@ -7,10 +7,6 @@ import { createRefResolvers, resolveAccountRef, withOptionalPersona, withPersona
 import { handleAddExperimentPair, AddExperimentPairSchema } from '../tools-experiments.js';
 import type { McpToolResponse } from '../tools-call.js';
 
-// Edge cases of the intent-tool plumbing: malformed listings are never read
-// as "no match", references that fail stop the call before any request, and
-// the action-tool builders refuse an ill-formed definition.
-
 const MARIA = '11111111-1111-4111-8111-111111111111';
 const text = (response: McpToolResponse): string => response.content.map((part) => (part.type === 'text' ? part.text : '')).join('\n');
 
@@ -61,7 +57,6 @@ describe('reference resolution on malformed listings', () => {
     const resolvers = createRefResolvers(client({ listSocialAccounts: accounts }));
     expect(await resolvers.account('did:plc:abc')).toMatchObject({ kind: 'ok', value: { provider: 'bluesky' } });
     expect(await resolvers.account('17')).toMatchObject({ kind: 'ok', value: { provider: 'instagram' } });
-    // An account with no name is addressed by its id, and is labelled with it.
     expect(await resolvers.account('li-1')).toEqual({ kind: 'ok', value: { provider: 'linkedin', id: 'li-1', label: 'li-1' } });
   });
 

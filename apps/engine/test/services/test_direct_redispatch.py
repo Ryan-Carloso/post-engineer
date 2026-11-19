@@ -65,7 +65,6 @@ class DirectGenerationRowTests(unittest.TestCase):
         state = _state_with_rows([_row()])
         row = direct_redispatch._direct_generation_row(state, "t-1")
         self.assertEqual(row, _row())
-        # The lookup keys the orphan's engine task id.
         query = state._request.call_args[0][1]
         self.assertIn("engine_task_id=eq.t-1", query)
 
@@ -135,9 +134,6 @@ class TriageRedispatchDirectTests(unittest.TestCase):
         state.update_task.assert_not_called()
 
     def test_legacy_single_object_media_params_are_claimed(self):
-        # A payload persisted before the media-list contract carries one
-        # object per segment; triage normalizes it instead of dropping
-        # the prepaid orphan as unvalidatable.
         params = {
             "video_title": "myth busting",
             "video_description": "Agent description.",
@@ -148,8 +144,6 @@ class TriageRedispatchDirectTests(unittest.TestCase):
                 "photo_url": "https://e.com/p.jpg",
                 "voice_id": "calm",
             },
-            # Full lip-sync: a single legacy photo can never satisfy the
-            # images density rule on a long body, and media is optional here.
             "segments": [
                 {
                     "kind": "hook",
@@ -183,9 +177,6 @@ class TriageRedispatchDirectTests(unittest.TestCase):
         state.update_task.assert_not_called()
 
     def test_stage_none_is_not_redispatched(self):
-        # stage=None is what a previous redispatch wrote. A crash before
-        # the pipeline re-marks a generation stage is failed+refunded, not
-        # started again. See the stage=None comment in triage_redispatch_direct.
         state = _state_with_rows([_row()])
         claimed = self._claimed(state, "t-1", _direct_data(stage=None))
         self.assertFalse(claimed)
@@ -208,10 +199,6 @@ class TriageRedispatchDirectTests(unittest.TestCase):
         self.assertEqual(spawned, set())
 
     def test_persisted_unresolvable_webhook_is_redispatched_not_failed_refunded(self):
-        # A DNS blip during a restart must not kill a recoverable prepaid
-        # orphan: schema validation never resolves the webhook host, so a
-        # persisted payload whose webhook host does not resolve still
-        # rebuilds. The resolver is armed to explode to prove no DNS is used.
         params = {
             "video_title": "myth busting",
             "video_description": "Agent description.",
@@ -232,27 +219,18 @@ class TriageRedispatchDirectTests(unittest.TestCase):
         with patch.object(direct_redispatch, "track_event") as track:
             claimed = direct_redispatch.triage_redispatch_direct(state, "t-1", _direct_data())
         self.assertTrue(claimed)
-        # The task row goes back to a fresh PROCESSING state; the slot
-        # binding (scheduled_posts.task_id) and the video_generations row
-        # are untouched, so the tick reconciler picks the task up when it
-        # finishes. No billing change: the generation was prepaid.
         _, kwargs = state.update_task.call_args
         self.assertEqual(kwargs["state"], const.TASK_STATE_PROCESSING)
         self.assertEqual(kwargs["progress"], 0)
         self.assertIsNone(kwargs["stage"])
         self.assertTrue(kwargs["auto_requeued"])
         self.assertEqual(kwargs["requeue_count"], 1)
-        # The counter write happens during review. Startup is what starts
-        # the pipeline; this test stops before that.
         self.assertEqual(len(direct_redispatch._pending_direct_redispatches), 1)
         job = direct_redispatch._pending_direct_redispatches[0]
         self.assertEqual(job.task_id, "t-1")
         self.assertEqual(job.requeue_count, 1)
         self.assertEqual(job.request.video_title, "myth busting")
         self.assertEqual(job.request.generation_id, "g1")
-        # The persisted engine payload (buildJobPayload) carries no publish
-        # plan: publishing happens exclusively via the fill-schedule slot
-        # worker. The TaskVideoRequest.publish field was removed.
         track.assert_called_once()
         self.assertEqual(track.call_args[0][0], "task_auto_requeued")
         self.assertEqual(track.call_args[0][1]["flow"], "direct")
@@ -296,8 +274,6 @@ class RedispatchStartupTests(unittest.TestCase):
         direct_redispatch._pending_direct_redispatches.clear()
 
     def test_pipeline_import_failure_keeps_the_persisted_counter(self):
-        # The counter is written during review, before the pipeline import.
-        # An import error used to skip that write and retry on every boot.
         state = _state_with_rows([_row()])
         with patch.object(direct_redispatch, "track_event"):
             claimed = direct_redispatch.triage_redispatch_direct(state, "t-1", _direct_data())
@@ -354,9 +330,6 @@ class RedispatchStartupTests(unittest.TestCase):
             with patch("app.services.task.start", worker):
                 accepted = direct_redispatch.start_pending_direct_redispatches(manager)
             self.assertEqual(accepted, 3)
-            # Reserved under the lock: one running, two queued, before any
-            # worker has to have entered. A bare thread per job would show
-            # queue_size 0.
             self.assertEqual(manager.current_tasks, 1)
             self.assertEqual(manager.queue_size(), 2)
             release.set()
@@ -386,8 +359,6 @@ class RedispatchStartupTests(unittest.TestCase):
         seen: dict[str, object] = {}
 
         def worker(task_id, params, stop_at="video"):
-            # Set the event first so a start during the unbound window is
-            # visible even if reading state then raises.
             seen["has_state"] = hasattr(state_mod, "state")
             if hasattr(state_mod, "state"):
                 seen["state_is_saved"] = state_mod.state is saved_state
@@ -411,7 +382,6 @@ class RedispatchStartupTests(unittest.TestCase):
                     create=True,
                 ),
             ):
-                # Constructor window: the name is not published yet.
                 del state_mod.state
                 try:
                     before = {thread.name for thread in threading.enumerate()}

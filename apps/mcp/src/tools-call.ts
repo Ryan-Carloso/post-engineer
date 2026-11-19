@@ -4,7 +4,6 @@ import { getErrorMessage } from './errors.js';
 
 export type McpToolResponse = CallToolResult;
 
-/** Shared wrapper for simple list/mutate handlers (try/catch + JSON text). */
 export async function handleLibraryCall(
   clientCall: () => Promise<unknown>,
   errorVerb: string,

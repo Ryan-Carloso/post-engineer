@@ -69,8 +69,6 @@ class MemoryState(BaseState):
                 clamped = 100
             update["progress"] = clamped
 
-        # Re-check under the lock delete_task holds around the pop, so a
-        # delete that already marked this id cannot be undone (issue #447).
         with self._lock:
             if is_cancelled(task_id):
                 return
@@ -85,8 +83,6 @@ class MemoryState(BaseState):
             return copy.deepcopy(task) if task is not None else None
 
     def delete_task(self, task_id: str):
-        # Deleting cancels first, so a running worker detaches instead of
-        # recreating the row on its next progress write (issue #447).
         def _pop() -> None:
             with self._lock:
                 self._tasks.pop(task_id, None)
@@ -94,7 +90,6 @@ class MemoryState(BaseState):
         cancel_and_delete(task_id, _pop)
 
 
-# Redis state management
 class RedisState(BaseState):
     """
     Redis-backed task state.
@@ -110,7 +105,6 @@ class RedisState(BaseState):
         import redis
 
         self._redis = redis.StrictRedis(host=host, port=port, db=db, password=password)
-        # Same lock update_task holds across the cancel check and the hsets.
         self._lock = threading.RLock()
 
     def get_all_tasks(self, page: int, page_size: int, user_id: str | None = None):
@@ -129,8 +123,6 @@ class RedisState(BaseState):
                 if user_id is None or task.get("user_id") == user_id:
                     all_tasks.append(task)
 
-            # Even when the current page is already full, keep SCANning until
-            # cursor=0: the caller needs the exact total to render pagination.
             if cursor == 0:
                 break
         return all_tasks[start:end], len(all_tasks)
@@ -152,7 +144,6 @@ class RedisState(BaseState):
             fields["progress"] = clamped
         fields.update(kwargs)
 
-        # Check and hsets share the lock with delete_task's DEL (issue #447).
         with self._lock:
             if is_cancelled(task_id):
                 return
@@ -180,29 +171,8 @@ class RedisState(BaseState):
         cancel_and_delete(task_id, _delete)
 
 
-# HTTP timeouts for task-state requests, (connect, read): short enough that a
-# Supabase outage fails fast instead of wedging writers behind update_task's
-# RLock (each holder would otherwise block per call, serializing every
-# concurrent task thread's progress writes).
-#
-# Connect is 3s, NOT the fill-schedule store's 10s. This client retries
-# connect failures (shared policy in app/utils/supabase_retry.py), so the
-# worst case per call is max(3 * connect + 1.0s backoff, read) — 3 attempts,
-# not 2 (supabase_retry.worst_case_seconds):
-#   connect=3  -> max(10.0, 10) = 10s  (the pre-retry ceiling, exactly)
-#   connect=10 -> max(31.0, 10) = 31s  (re-serializes every writer)
-# update_task holds the lock across a SELECT and a POST, so the per-call
-# ceiling is paid twice. Keep connect at 3 unless that budget is revisited.
-#
-# Accepted trade: urllib3's connect timeout also bounds the TLS handshake, so
-# a handshake slower than 3s now fails (3 attempts) where it previously
-# succeeded at 10s. Raising connect to 5 pushes the worst case to 16s and
-# breaks the ceiling this constant exists to hold, so the latency sensitivity
-# stays and only the retry budget absorbs it.
 _STATE_REQUEST_TIMEOUT_SECONDS = (3, 10)
 
-# Boot reconcile bounds: a huge orphan backlog after a long outage must not
-# stall boot — leftover rows are drained by subsequent boots.
 _RECONCILE_BATCH_LIMIT = 100
 _RECONCILE_PROGRESS_EVERY = 25
 
@@ -215,9 +185,6 @@ class _SupabaseAuthError(RuntimeError):
     """
 
 
-# Reason recorded on tasks (and their video_generations rows) orphaned by an
-# engine restart: shared between the task-state write and the billing write
-# so both surfaces tell the same story.
 _ORPHAN_ERROR_MESSAGE = "engine restarted while the task was still running"
 
 
@@ -258,17 +225,8 @@ class SupabaseTaskState(BaseState):
             "Authorization": f"Bearer {key}",
             "Content-Type": "application/json",
         }
-        # Serializes the SELECT→POST read-modify-write in update_task:
-        # in-process writers are multi-threaded (task thread, publish
-        # thread, fill-schedule thread), and without the lock two writers
-        # can read the same base row and the last POST wins, silently
-        # dropping the other's kwargs. Same role as MemoryState's RLock.
         self._lock = threading.RLock()
         self._verify_table()
-        # NOTE: the orphan reconcile used to run here (reconcile_on_boot).
-        # It now runs only in app.asgi.startup_event: reconciling at import
-        # time let any stray importing process fail the live engine's
-        # running tasks as orphans.
 
     def _request(
         self, method: str, query: str, table: str | None = None, **kwargs: Any
@@ -285,8 +243,6 @@ class SupabaseTaskState(BaseState):
         return response
 
     def _rpc(self, function: str, payload: dict[str, Any]) -> Any:
-        # PostgREST stored-procedure call, e.g. the idempotent
-        # refund_generation_tokens used to return tokens for dead tasks.
         response = self._requests.request(
             "POST",
             f"{self._base_url}/rest/v1/rpc/{function}",
@@ -313,8 +269,6 @@ class SupabaseTaskState(BaseState):
             raise
 
     def _verify_table(self) -> None:
-        # Fail fast at boot when the migration was not applied: every later
-        # call would 404 opaquely.
         try:
             self._request("GET", "select=task_id&limit=1")
         except Exception as exc:  # noqa: BLE001 - inspected for 404 below
@@ -337,16 +291,10 @@ class SupabaseTaskState(BaseState):
 
     @staticmethod
     def _eq(value: str) -> str:
-        # Percent-encode PostgREST filter values: task_id/user_id originate
-        # partly from caller-controlled headers, and a raw space, & or ,
-        # would otherwise produce 400s or silently wrong filters.
         return quote(value, safe="")
 
     @staticmethod
     def _safe_data(row: dict[str, Any]) -> dict[str, Any]:
-        # The data column is untyped JSONB: a non-object value (manual
-        # dashboard edit, future writer) must degrade to {} with a log,
-        # never brick the row by raising on every subsequent read/write.
         data = row.get("data")
         if not isinstance(data, dict):
             logger.warning(
@@ -380,11 +328,6 @@ class SupabaseTaskState(BaseState):
             clamped_progress = int(progress)
             if clamped_progress > 100:
                 clamped_progress = 100
-        # The SELECT→POST below is a read-modify-write: hold the lock for
-        # the whole sequence so concurrent writers cannot read the same
-        # base row and silently drop each other's kwargs (last POST wins).
-        # The cancel check stays inside that lock, which delete_task also
-        # holds around the DELETE, so a removed row is not upserted back.
         with self._lock:
             if is_cancelled(task_id):
                 return
@@ -394,10 +337,6 @@ class SupabaseTaskState(BaseState):
             )
             data.update(kwargs)
             user_id = kwargs.get("user_id", existing.get("user_id") if existing else None)
-            # state/progress are only sent when explicitly passed: a
-            # kwargs-only call must not clobber them with defaults, and the
-            # merge-duplicates upsert then keeps the stored values. A brand
-            # new row falls back to the table defaults (0/0).
             payload: dict[str, Any] = {
                 "task_id": task_id,
                 "user_id": user_id,
@@ -463,8 +402,6 @@ class SupabaseTaskState(BaseState):
         on the next boot. Returns how many rows were failed
         (requeued orphans are not counted).
         """
-        # Lazy import to keep this module importable from small entry
-        # points; orphan_requeue pulls in the fill-schedule store.
         from app.services import orphan_requeue
 
         response = self._request(
@@ -490,16 +427,9 @@ class SupabaseTaskState(BaseState):
                 if orphan_requeue.triage_orphan(self, task_id, data, slot_store):
                     continue
             except Exception as exc:  # noqa: BLE001 - loud log, next boot retries
-                # Never degrade to fail+refund: the orphan's state is unknown,
-                # so leave it non-terminal for the next boot to retry.
                 logger.error(f"failed to triage orphaned task {task_id}: {exc}")
                 continue
             try:
-                # Billing first: if the process dies after the settle but
-                # before the task PATCH, the next boot re-selects the still
-                # non-terminal task and the settle skips the already-terminal
-                # generation row (idempotent RPC) — a crash can never lose a
-                # refund that the task PATCH already survived.
                 self._settle_orphan_billing(task_id)
                 data["error"] = _ORPHAN_ERROR_MESSAGE
                 self._request(
@@ -534,10 +464,6 @@ class SupabaseTaskState(BaseState):
         )
         rows = response.json()
         if not rows:
-            # No video_generations row is normal for fill_schedule batch
-            # tasks (the web never sees batch task ids; the batch reconciler
-            # settles those refunds separately) — warn, don't error, so the
-            # log doesn't read as stuck user tokens.
             logger.warning(
                 f"orphaned task {task_id} has no video_generations row "
                 "(expected for fill_schedule batch tasks); "
@@ -545,9 +471,6 @@ class SupabaseTaskState(BaseState):
             )
             return
         if len(rows) > 1:
-            # The relation is 1:1 today; a second row would silently stay
-            # pending and unrefunded if we only settled rows[0]. Settle the
-            # oldest and say so loudly so the new flow gets a row per task.
             logger.warning(
                 f"orphaned task {task_id} has {len(rows)} video_generations "
                 "rows; settling the oldest only"
@@ -581,11 +504,6 @@ class SupabaseTaskState(BaseState):
             "updated_at": now,
         }
         if refunded:
-            # Never write tokens_refunded=false over a row that already
-            # carries true (the refund RPC may have landed on an earlier
-            # attempt, or the web poll path settled concurrently): the web
-            # backstop heals a false flag on the next poll, but a true flag
-            # must never flap back to false.
             patch["tokens_refunded"] = True
         self._request(
             "PATCH",
@@ -594,17 +512,11 @@ class SupabaseTaskState(BaseState):
             json=patch,
         )
 
-# persist_state_update lives in state_persistence.py (extracted so this
-# file stays under the size ratchet) and is re-exported here: callers and
-# tests import it as ``state.persist_state_update``.
 from app.services.state_persistence import persist_state_update  # noqa: F401,E402
 
 __all__ = ["BaseState", "MemoryState", "RedisState", "SupabaseTaskState", "persist_state_update"]
 
 
-# Global state — memory by default; redis when enable_redis=true; supabase
-# when MPT_STATE_BACKEND=supabase (persistent: survives restarts/redeploys;
-# requires the engine_task_state table — see supabase/migrations/003_engine-task-state.sql).
 _enable_redis = config.app.get("enable_redis", False)
 _redis_host = config.app.get("redis_host", "localhost")
 _redis_port = config.app.get("redis_port", 6379)
@@ -614,9 +526,9 @@ _redis_password = config.app.get("redis_password", None)
 _state_backend = os.getenv("MPT_STATE_BACKEND", "memory").lower()
 state: BaseState
 if _state_backend == "supabase":
-    from app.services.death_diagnostics import DeathDiagnosticTaskState  # lazy: avoids an import cycle
+    from app.services.death_diagnostics import DeathDiagnosticTaskState
 
-    state = DeathDiagnosticTaskState()  # reconcile runs in asgi.startup_event, not at import
+    state = DeathDiagnosticTaskState()
 elif _enable_redis:
     state = RedisState(
         host=_redis_host, port=_redis_port, db=_redis_db, password=_redis_password

@@ -1,10 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { isUiFile } from './ui-files.mjs';
 
-//---------------
-// Changed UI files in a PR, via git diff (repo-relative paths).
-// defaultRunGit is injectable for tests.
-//---------------
 export function changedUiFiles(baseRef, headRef, runGit = defaultRunGit) {
   const output = runGit(['diff', '--name-only', '--diff-filter=ACMR', `${baseRef}...${headRef}`]);
   return output

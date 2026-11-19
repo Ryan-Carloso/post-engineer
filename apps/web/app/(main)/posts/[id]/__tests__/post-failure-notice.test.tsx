@@ -2,11 +2,6 @@ import '@testing-library/jest-dom/vitest';
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 
-//---------------
-// Tests for PostFailureNotice (post detail, directly under the player).
-// i18n echoes keys so the assertions pin structure, not copy.
-//---------------
-
 vi.mock('@/lib/i18n/provider', () => ({
   useI18n: () => ({ locale: 'en', t: (key: string) => key }),
 }));
@@ -21,7 +16,6 @@ describe('PostFailureNotice', () => {
     expect(block).not.toBeNull();
     expect(screen.getByText('posts.cardFailedPermanent')).toBeInTheDocument();
     expect(screen.getByText('posts.cardDetails')).toBeInTheDocument();
-    // The engine text is kept for support, but only inside the disclosure.
     const details = block?.querySelector('details');
     expect(details).not.toBeNull();
     expect(details).toHaveTextContent('LongCat job failed: torchrun exited 1');
@@ -41,8 +35,6 @@ describe('PostFailureNotice', () => {
   });
 
   it('renders nothing for a failed post whose error is an empty string', () => {
-    // An empty message is not an error to disclose: the length check must
-    // stay strict, or an empty disclosure renders for a failed post.
     render(<PostFailureNotice status="failed" error="" />);
     expect(document.querySelector('[data-post-failure]')).toBeNull();
   });

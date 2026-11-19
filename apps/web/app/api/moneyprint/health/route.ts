@@ -3,12 +3,6 @@ import { requireSupabaseSession } from '@/lib/request-auth';
 import { logger } from '@/lib/logger';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
-//---------------
-// GET /api/moneyprint/health — proxy diagnostics to the engine.
-// Internal API: requires a Supabase session. Keeps the backend URL
-// server-side only and returns a sanitized status.
-//---------------
-
 async function getHandler(): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession();
   if (authError || !auth) return authError;
@@ -38,7 +32,4 @@ async function getHandler(): Promise<NextResponse> {
   }
 }
 
-//---------------
-// 5xx reporting: handled server errors reach PostHog error tracking.
-//---------------
 export const GET = withApiErrorReporting('GET /api/moneyprint/health', getHandler, { getUserId: resolveReportingUserId });

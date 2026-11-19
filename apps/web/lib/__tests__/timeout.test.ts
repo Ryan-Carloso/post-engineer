@@ -12,7 +12,7 @@ describe('withTimeout', () => {
   });
 
   it('rejects with TimeoutError after timeout', async () => {
-    const p = new Promise<string>(() => {}); // never resolves
+    const p = new Promise<string>(() => {});
     const promise = withTimeout(p, { timeoutMs: 500 });
     vi.advanceTimersByTime(600);
     await expect(promise).rejects.toThrow(TimeoutError);

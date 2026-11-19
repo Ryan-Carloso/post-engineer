@@ -21,11 +21,8 @@ import unicodedata
 
 from app.services import subtitle
 
-# Sentence punctuation deleted from subtitle text. "?" is the only
-# terminal mark that survives; apostrophes are not in this set on purpose.
 _REMOVED_PUNCTUATION = frozenset(".,!;:…。、！；：．，‼")
 
-# Question-mark variants normalized to "?".
 _QUESTION_MARKS = frozenset({"？", "⁇", "⁈", "⁉"})
 
 _WHITESPACE_RUN = re.compile(r"\s+")

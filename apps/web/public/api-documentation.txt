@@ -115,6 +115,7 @@ POST   /api/account/connect-url                               connect account (O
 POST   /api/bluesky-connect                                   connect account (Bluesky)
 POST   /api/threespeak-connect                                connect account (3Speak)
 POST   /api/rumble-connect                                    connect account (Rumble)
+POST   /api/telegram-connect                                  connect account (Telegram)
 GET    /api/schedule                                          list schedules
 DELETE /api/schedule                                          cancel schedule
 GET    /api/schedule/status                                   list posts
@@ -143,11 +144,14 @@ SOCIAL ACCOUNTS
 ================================================================================
 
 Supported: YouTube, Instagram, LinkedIn, Threads, Facebook Pages, Bluesky,
-3Speak, Rumble. Connect via POST /api/account/connect-url (returns an https
-auth_url to open in a browser), POST /api/bluesky-connect (app password),
-POST /api/threespeak-connect (Hive posting key) or POST /api/rumble-connect
-(access token issued by emailing bd@rumble.com). Then map accounts to a
-persona with PUT /api/persona/publishing-accounts.
+3Speak, Rumble, Telegram. Connect via POST /api/account/connect-url (returns
+an https auth_url to open in a browser), POST /api/bluesky-connect (app
+password), POST /api/threespeak-connect (Hive posting key), POST
+/api/rumble-connect (access token issued by emailing bd@rumble.com) or POST
+/api/telegram-connect (a @BotFather bot token, the chat ID or @username, and
+chatType channel or group: a channel bot must be an administrator who can
+post, a group bot a member allowed to send). Then map accounts to a persona
+with PUT /api/persona/publishing-accounts.
 
 ================================================================================
 MARKETPLACES (RapidAPI, Apify, MCP Registry)

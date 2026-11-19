@@ -68,8 +68,6 @@ describe('token wallet operations', () => {
   });
 
   it('returns false and logs when the refund RPC answers without applying', async () => {
-    // Review round 5 (opencode): the soft-failure branch left zero trail —
-    // an "RPC answered, refund not applied" outcome was invisible.
     const mock = createMockSupabase({
       refund_generation_tokens: { data: { refunded: false }, error: null },
     });
@@ -147,7 +145,6 @@ describe('free starter tokens', () => {
       grant_signup_bonus: { data: null, error: null },
       spend_tokens: { data: { spent: true, balance: 5, free_balance: 0 }, error: null },
     });
-    // grant throws ( network/bug ) — the flow must not break
     mock.rpc.mockImplementation((fn: string) => {
       if (fn === 'grant_signup_bonus') return Promise.reject(new Error('boom'));
       return Promise.resolve({ data: { spent: true, balance: 5, free_balance: 0 }, error: null });

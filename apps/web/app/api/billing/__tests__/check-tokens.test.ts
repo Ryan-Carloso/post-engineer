@@ -119,8 +119,6 @@ describe('POST /api/billing/check-tokens', () => {
   });
 
   it('retorna 400 com os modos válidos quando videoType é desconhecido', async () => {
-    // An unknown mode is rejected with the modes and their costs, never
-    // silently priced as another mode — and no charge is attempted.
     vi.mocked(checkAndDeductTokens).mockResolvedValue({ ok: true, cost: 2 });
 
     const res = await POST(makePostRequest({ userId: 'u1', videoType: 'sideways' }));

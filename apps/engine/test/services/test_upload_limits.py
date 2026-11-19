@@ -35,7 +35,6 @@ class TestSaveUploadStream(unittest.TestCase):
         with self.assertRaises(UploadTooLargeError):
             save_upload_stream(upload, dest, max_bytes=50, chunk_size=10)
 
-        # Dest should not exist and no stray temp files left
         self.assertFalse(os.path.exists(dest))
         self.assertEqual(os.listdir(self.tmp), [])
 

@@ -4,14 +4,6 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 
-//---------------
-// Tests for MetricsFilterSheet and ActiveFilterChips: the badge count,
-// the draft (Apply commits, Clear resets, closing discards), the
-// Persona Combobox and the Network Select, and the removable chips.
-// i18n is mocked; t() returns the key, with {vars} appended when
-// interpolated. The Sheet/Combobox/Select primitives are real.
-//---------------
-
 vi.mock('@/lib/i18n/provider', () => {
   function I18nProvider({ children }: { children: ReactNode }) {
     return <>{children}</>;
@@ -34,11 +26,7 @@ import {
   type MetricsFilterPatch,
 } from '../metrics-filters';
 
-// cmdk scrolls the active item into view when the list opens; jsdom
-// has no Element.scrollIntoView, so stub it for the Combobox tests.
 window.HTMLElement.prototype.scrollIntoView = vi.fn();
-// Radix Select calls hasPointerCapture on pointerdown; jsdom has none,
-// so the trigger never opens without these stubs.
 window.HTMLElement.prototype.hasPointerCapture = () => false;
 window.HTMLElement.prototype.setPointerCapture = () => {};
 window.HTMLElement.prototype.releasePointerCapture = () => {};
@@ -108,7 +96,6 @@ describe('MetricsFilterSheet', () => {
     expect(button).toBeInTheDocument();
     expect(button).toHaveAttribute('aria-label', 'metrics.filtersButton');
     expect(button).toHaveTextContent('metrics.filtersButton');
-    // No badge at all: a badge would show the count, even a zero.
     expect(screen.queryByText('0')).toBeNull();
     expect(screen.queryByText('1')).toBeNull();
   });
@@ -221,7 +208,6 @@ describe('MetricsFilterSheet', () => {
     await openSheet();
     await openCombobox();
     fireEvent.click(screen.getByText('Alpha'));
-    // Close the Sheet with its X button, without applying.
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     await waitFor(() => expect(screen.queryByText('metrics.filtersTitle')).toBeNull());
     await openSheet();

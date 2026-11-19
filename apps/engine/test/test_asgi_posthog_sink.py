@@ -40,9 +40,6 @@ class PostHogSinkTests(unittest.TestCase):
         assert properties["$exception_stacktrace"] == ""
 
     def test_plain_error_record_includes_exception_list(self):
-        # PostHog error tracking requires $exception_list on every $exception
-        # event; without it ingestion flags $cymbal_errors ("missing field
-        # $exception_list") and the event never groups in Error Tracking.
         with patch("app.asgi.track_event") as track_event:
             asgi._loguru_posthog_sink(_message())
         _, properties = track_event.call_args[0]
@@ -51,15 +48,9 @@ class PostHogSinkTests(unittest.TestCase):
         assert exc_list[0]["value"] == "boom"
         assert exc_list[0]["type"] == "Error"
         assert exc_list[0]["stacktrace"] == {"type": "raw", "frames": []}
-        # handled: True matches posthog-python's own capture default
-        # (exception_utils.py): these records are caught-and-logged, the
-        # app keeps serving — pin the semantics explicitly.
         assert exc_list[0]["mechanism"] == {"type": "generic", "handled": True}
 
     def test_long_message_truncated(self):
-        # $exception_list is the surface whose absence broke ingestion;
-        # an unbounded value risks the event being dropped exactly when
-        # the payload is biggest — cap it like the stacktrace text.
         long_message = "e" * 6000
         with patch("app.asgi.track_event") as track_event:
             asgi._loguru_posthog_sink(_message(message=long_message))
@@ -76,9 +67,6 @@ class PostHogSinkTests(unittest.TestCase):
         assert len(str(properties["$exception_list"][0]["value"])) <= 5000
 
     def test_task_id_only_record_stays_error(self):
-        # A record that binds task_id without http_status_code (e.g.
-        # task.py's task_id/stage/error_type context) is not an
-        # HttpException: the classification must stay "Error".
         with patch("app.asgi.track_event") as track_event:
             asgi._loguru_posthog_sink(_message(extra={"task_id": "task-1"}))
         _, properties = track_event.call_args[0]
@@ -86,9 +74,6 @@ class PostHogSinkTests(unittest.TestCase):
         assert properties["$exception_list"][0]["type"] == "Error"
 
     def test_none_status_code_not_classified_as_http_exception(self):
-        # The "is HttpException" gate must match the property-forwarding
-        # gate (not-None): a None http_status_code forwards no property,
-        # so it must not classify as HttpException either.
         with patch("app.asgi.track_event") as track_event:
             asgi._loguru_posthog_sink(
                 _message(extra={"task_id": "t", "http_status_code": None})
@@ -98,9 +83,6 @@ class PostHogSinkTests(unittest.TestCase):
         assert properties["$exception_list"][0]["type"] == "Error"
 
     def test_bool_extra_forwarded_as_scrubbed_string(self):
-        # isinstance(True, int) is True: a bool must not take the int
-        # exemption — the repo's "a secret is never an int" rule
-        # (analytics.py) gates bools out explicitly.
         with patch("app.asgi.track_event") as track_event:
             asgi._loguru_posthog_sink(
                 _message(extra={"task_id": "t", "http_status_code": True})
@@ -108,13 +90,9 @@ class PostHogSinkTests(unittest.TestCase):
         _, properties = track_event.call_args[0]
         assert properties["http_status_code"] == "True"
         assert not isinstance(properties["http_status_code"], bool)
-        # Classification still keys off presence (not-None gate): pin it so
-        # a future gate change can't silently re-label the entry.
         assert properties["$exception_list"][0]["type"] == "HttpException"
 
     def test_long_task_id_extra_truncated(self):
-        # Whitelisted string extras are scrubbed but must also be
-        # length-capped like every other free-text field.
         with patch("app.asgi.track_event") as track_event:
             asgi._loguru_posthog_sink(_message(extra={"task_id": "t" * 6000}))
         _, properties = track_event.call_args[0]
@@ -143,9 +121,6 @@ class PostHogSinkTests(unittest.TestCase):
         assert len(exc_list) == 1
         assert exc_list[0]["type"] == "ValueError"
         assert exc_list[0]["value"] == "kaput"
-        # PostHog models $exception_list[].stacktrace Sentry-style
-        # ({"type": "raw", "frames": [...]}, like posthog-python's own
-        # capture); a plain string fails ingestion serde.
         stacktrace = exc_list[0]["stacktrace"]
         assert stacktrace["type"] == "raw"
         assert len(stacktrace["frames"]) >= 1
@@ -154,11 +129,6 @@ class PostHogSinkTests(unittest.TestCase):
         assert isinstance(frame["lineno"], int)
 
     def test_stacktrace_scrubbed_before_truncate(self):
-        # Pin the PR #38 rule (scrub the full free text before truncating):
-        # spy on scrub_secret_values and assert it observes the untruncated
-        # stacktrace. A truncate-first order would only ever hand it <=5000
-        # chars, letting a cut that strips the regex key-anchor leak the
-        # value that follows it.
         raw = "x" * 6000
         seen_lengths: list[int] = []
         real_scrub = asgi.scrub_secret_values
@@ -179,9 +149,6 @@ class PostHogSinkTests(unittest.TestCase):
         assert len(str(properties["$exception_stacktrace"])) <= 5000
 
     def test_bound_task_context_forwarded_as_properties(self):
-        # HttpException logs via logger.bind(task_id=..., http_status_code=...):
-        # the sink must surface them as filterable properties so the reason
-        # is visible without parsing the flat message.
         with patch("app.asgi.track_event") as track_event:
             asgi._loguru_posthog_sink(
                 _message(
@@ -197,11 +164,6 @@ class PostHogSinkTests(unittest.TestCase):
         assert properties["$exception_types"] == ["HttpException"]
 
     def test_stacktrace_frames_capped(self):
-        # The _MAX_STACKTRACE_FRAMES cap keeps deep tracebacks (e.g.
-        # RecursionError) from blowing up the event payload — pin it, and
-        # pin WHICH end survives: Sentry-style frames end with the innermost
-        # frame, so the cap must keep the last N (the error site), not the
-        # first N (framework boilerplate).
         def _raise_deep() -> None:
             raise ValueError("deep")
 
@@ -237,8 +199,6 @@ class PostHogSinkTests(unittest.TestCase):
             def record(self):  # noqa: D102 - test double
                 raise RuntimeError("nope")
 
-        # A throwing PostHog client and a broken record must both be swallowed:
-        # telemetry must never break the app.
         with patch("app.asgi.track_event", side_effect=RuntimeError("posthog down")):
             asgi._loguru_posthog_sink(BadMessage())
             asgi._loguru_posthog_sink(_message())
@@ -272,8 +232,6 @@ def _swallow_http_exception(raise_fn, *args) -> None:
 
 
 def _log_fail_task_stage(task_id: str, stage: str) -> None:
-    # Same shape as services.task._fail_task: task id, stage and error type
-    # bound as extras on a flat ERROR record.
     logger.bind(task_id=task_id, stage=stage, error_type="TaskError").error(
         "video task failed at stage {stage}: boom", stage=stage
     )
@@ -292,13 +250,6 @@ def _captured_properties(*log_calls) -> list[dict]:
 
 
 def _running_under_mutmut() -> bool:
-    # mutmut 3.x rewrites the module under test so every function routes
-    # through its trampoline: frame-counting (logger.opt(depth=1)) then
-    # attributes the record to the trampoline, not the raise site. The
-    # mock-based tests in test_exception.py pin the opt(depth=1) call
-    # itself (and kill its mutants); the raise-site integration test below
-    # is skipped under the transform instead of asserting a harness
-    # artifact.
     return "mutmut.mutation.trampoline" in sys.modules
 
 
@@ -311,8 +262,6 @@ class FlatLogGroupingTests(unittest.TestCase):
         assert storage["$exception_fingerprint"] != scheduler["$exception_fingerprint"]
 
     def test_repeated_flat_logs_from_one_source_share_a_fingerprint(self):
-        # The task id changes per request: it must not reach the key, or
-        # every request would open its own issue.
         first, second = _captured_properties(
             lambda: _log_storage_failure("task-1"),
             lambda: _log_storage_failure("task-2"),
@@ -336,8 +285,6 @@ class FlatLogGroupingTests(unittest.TestCase):
         assert http["$exception_fingerprint"].startswith("HttpException:")
 
     def test_record_with_exception_keeps_frame_grouping(self):
-        # Records with a live exception carry real frames: PostHog groups
-        # them by those frames, so the sink adds no fingerprint.
         def _log_with_exception() -> None:
             try:
                 raise ValueError("boom")
@@ -359,9 +306,6 @@ class FlatLogGroupingTests(unittest.TestCase):
         "attributes there instead of the raise site",
     )
     def test_http_exception_fingerprint_uses_raise_site_not_init(self):
-        # HttpException logs from its own __init__: without depth
-        # attribution every 5xx raised anywhere would share one
-        # "...:__init__" issue.
         storage, scheduler = _captured_properties(
             lambda: _swallow_http_exception(_raise_http_from_storage, "task-1"),
             lambda: _swallow_http_exception(_raise_http_from_scheduler, "task-1"),
@@ -371,8 +315,6 @@ class FlatLogGroupingTests(unittest.TestCase):
         assert "__init__" not in storage["$exception_fingerprint"]
 
     def test_http_exception_fingerprint_includes_status_code(self):
-        # A 502 from a dead upstream and a 500 from our own bug are
-        # different issues even when raised at the same site.
         err_500, err_502 = _captured_properties(
             lambda: _swallow_http_exception(_raise_http_with_status, "task-1", 500),
             lambda: _swallow_http_exception(_raise_http_with_status, "task-1", 502),
@@ -382,8 +324,6 @@ class FlatLogGroupingTests(unittest.TestCase):
         assert ":502:" in err_502["$exception_fingerprint"]
 
     def test_fail_task_stages_get_separate_fingerprints(self):
-        # Upload failures (bad R2 creds) and script failures (dead LLM)
-        # have different root causes: one issue per pipeline stage.
         upload, script = _captured_properties(
             lambda: _log_fail_task_stage("task-1", "upload"),
             lambda: _log_fail_task_stage("task-1", "script"),
@@ -400,8 +340,6 @@ class FlatLogGroupingTests(unittest.TestCase):
         assert "task-1" not in first["$exception_fingerprint"]
 
     def test_bool_status_code_gets_no_status_qualifier(self):
-        # A non-int status must not reach the key (same bool exclusion
-        # as property forwarding); the type prefix alone still groups it.
         with patch("app.asgi.track_event") as track_event:
             asgi._loguru_posthog_sink(
                 _message(
@@ -419,15 +357,6 @@ class FlatLogGroupingTests(unittest.TestCase):
 
 class StartupWarmClientTests(unittest.TestCase):
     def test_startup_event_warms_posthog_client(self):
-        # The PostHog client must be warmed by the server startup hook —
-        # not at controller import time (which also runs under pytest,
-        # webui entry points, and anything else that imports the
-        # controller module).
-        # Patch the heartbeat thread: startup_event starts a daemon that
-        # calls nvidia-smi through subprocess.run every 45s and never
-        # stops. mutmut collects worker exits with os.wait() in the same
-        # process after the full stats run, so a leaked thread's child
-        # is reaped as if it were a mutant worker (KeyError, shard exit 1).
         with (
             patch("app.asgi.warm_client") as warm,
             patch("app.asgi.start_fill_schedule_scheduler"),
@@ -440,10 +369,6 @@ class StartupWarmClientTests(unittest.TestCase):
         heartbeat.assert_called_once_with()
 
     def test_startup_event_runs_orphan_reconcile(self):
-        # The orphan reconcile moved from import time (state.py singleton
-        # construction) to the real server boot: startup_event must call it
-        # on the state backend. A reconcile here is safe — this IS the
-        # server booting, not a stray importing process.
         from unittest.mock import MagicMock
 
         mock_state = MagicMock()
@@ -459,8 +384,6 @@ class StartupWarmClientTests(unittest.TestCase):
         mock_state.reconcile_orphaned_tasks.assert_called_once_with()
 
     def test_startup_event_skips_reconcile_without_method(self):
-        # Memory/redis backends have no reconcile_orphaned_tasks: the
-        # getattr guard must skip silently instead of raising.
         from types import SimpleNamespace
 
         plain_state = SimpleNamespace()
@@ -472,10 +395,8 @@ class StartupWarmClientTests(unittest.TestCase):
             patch.object(asgi.sm, "state", plain_state),
         ):
             asgi.startup_event()
-        # No exception raised; nothing to assert beyond survival.
 
     def test_startup_event_logs_failed_orphan_count(self):
-        # When the reconcile marks orphans failed, startup logs the count.
         from unittest.mock import MagicMock
 
         mock_state = MagicMock()

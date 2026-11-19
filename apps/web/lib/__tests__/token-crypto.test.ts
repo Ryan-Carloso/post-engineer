@@ -109,8 +109,6 @@ describe('token-crypto', () => {
     });
 
     it('throws TokenDecryptError on a blob that decrypts to a non-object', () => {
-      // A JSON array is valid JSON but not a valid decrypted object. The
-      // cast builds a blob no well-typed caller can produce on purpose.
       const encrypted = encryptJson(['tavily'] as unknown as Record<string, unknown>);
       expect(() => decryptJson(encrypted)).toThrow(TokenDecryptError);
     });

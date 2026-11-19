@@ -2,21 +2,11 @@
 
 import type { TranslationKey } from '@/lib/i18n';
 
-//---------------
-// OAuthErrorCode — typed codes for OAuth flow errors on the client.
-// Each code has its own translation in i18n (`oauth` section).
-//---------------
-
 export type OAuthErrorCode =
   | 'start-failed'
   | 'popup-blocked'
   | 'popup-closed'
   | 'oauth-failed';
-
-//---------------
-// OAuthError — typed flow error. `detail` carries the original message
-// (server or popup error) and is preferably displayed when present.
-//---------------
 
 export class OAuthError extends Error {
   readonly code: OAuthErrorCode;
@@ -30,19 +20,10 @@ export class OAuthError extends Error {
   }
 }
 
-//---------------
-// TranslateFunction — signature of useI18n's `t`, used by the translator
-//---------------
-
 export type TranslateFunction = (
   key: TranslationKey,
   vars?: Record<string, string | number>
 ) => string;
-
-//---------------
-// toOAuthErrorMessage — converts the captured error into a translated message.
-// Detail messages (server/popup) take priority over the i18n fallback.
-//---------------
 
 export function toOAuthErrorMessage(
   err: unknown,
@@ -64,10 +45,6 @@ export function toOAuthErrorMessage(
   return t('oauth.failed');
 }
 
-//---------------
-// openOAuthPopup — opens the provider window centered on screen
-//---------------
-
 export function openOAuthPopup(
   authUrl: string,
   windowName: string
@@ -86,19 +63,10 @@ export function openOAuthPopup(
   return popup;
 }
 
-//---------------
-// OAuthPopupMessage — shape of the postMessage sent by the callback
-//---------------
-
 interface OAuthPopupMessage {
   type?: string;
   error?: string;
 }
-
-//---------------
-// waitForOAuthPopup — waits for the callback message (success or error).
-// If the window is closed before finishing, rejects with `popup-closed`.
-//---------------
 
 export function waitForOAuthPopup(
   popup: Window,

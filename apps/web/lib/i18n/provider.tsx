@@ -6,9 +6,6 @@ import type { TranslationKey } from './index';
 import type { Locale } from './types';
 import { DEFAULT_LOCALE, STORAGE_KEY } from './types';
 
-//---------------
-// I18nContext — valor exposto pelo provider
-//---------------
 interface I18nContextValue {
   locale: Locale;
   setLocale: (locale: Locale) => void;
@@ -17,9 +14,6 @@ interface I18nContextValue {
 
 const I18nContext = createContext<I18nContextValue | null>(null);
 
-//---------------
-// resolveKey — accesses a dot-notation value inside the dictionary
-//---------------
 function resolveKey(dictionary: (typeof dictionaries)[Locale], key: TranslationKey): string {
   const parts = key.split('.') as [string, string];
   const section = dictionary[parts[0] as keyof typeof dictionary];
@@ -28,9 +22,6 @@ function resolveKey(dictionary: (typeof dictionaries)[Locale], key: TranslationK
   return typeof value === 'string' ? value : key;
 }
 
-//---------------
-// interpolate — substitui {var} pelos valores passados
-//---------------
 function interpolate(template: string, vars?: Record<string, string | number>): string {
   if (!vars) return template;
   return template.replace(/\{(\w+)\}/g, (match, name: string) => {
@@ -39,18 +30,12 @@ function interpolate(template: string, vars?: Record<string, string | number>): 
   });
 }
 
-//---------------
-// readStoredLocale — carrega o idioma salvo no localStorage
-//---------------
 function readStoredLocale(): Locale {
   if (typeof window === 'undefined') return DEFAULT_LOCALE;
   const stored = window.localStorage.getItem(STORAGE_KEY);
   return stored === 'pt' || stored === 'en' ? stored : DEFAULT_LOCALE;
 }
 
-//---------------
-// I18nProvider — provides translations and language control to the tree
-//---------------
 export function I18nProvider({ children }: { children: React.ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>(DEFAULT_LOCALE);
 
@@ -76,9 +61,6 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }
 
-//---------------
-// useI18n — hook for accessing translations
-//---------------
 export function useI18n(): I18nContextValue {
   const context = useContext(I18nContext);
   if (!context) {

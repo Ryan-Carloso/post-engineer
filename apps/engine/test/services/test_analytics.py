@@ -36,8 +36,6 @@ def test_track_event_captures_with_properties():
 
 
 def test_track_event_uses_user_id_as_distinct_id():
-    # PostHog person attribution: a real user_id becomes the distinct_id so
-    # the funnel breaks down per person instead of one engine pseudo-person.
     with mock.patch.dict(os.environ, {"POSTHOG_API_KEY": "phc_test_key"}):
         with mock.patch("posthog.Posthog") as mock_cls:
             instance = mock_cls.return_value
@@ -51,8 +49,6 @@ def test_track_event_uses_user_id_as_distinct_id():
 
 @pytest.mark.parametrize("user_id", ["unknown", "", None, 12345])
 def test_track_event_falls_back_to_engine_distinct_id(user_id):
-    # Missing, sentinel ("unknown"), empty, or non-string user_id keeps the
-    # engine pseudo-person as distinct_id.
     with mock.patch.dict(os.environ, {"POSTHOG_API_KEY": "phc_test_key"}):
         with mock.patch("posthog.Posthog") as mock_cls:
             instance = mock_cls.return_value
@@ -67,7 +63,6 @@ def test_track_event_falls_back_to_engine_distinct_id(user_id):
 def test_track_event_noop_when_key_missing():
     with mock.patch.dict(os.environ, {}, clear=True):
         with mock.patch("posthog.Posthog") as mock_cls:
-            # Should not raise and should not construct the client.
             analytics.track_event("video_generation_started", {"slotId": "s1"})
             mock_cls.assert_not_called()
 
@@ -88,8 +83,6 @@ def test_track_event_redacts_secrets():
 
 
 def test_track_event_does_not_flush_by_default():
-    # Hot paths stay batched: flush() blocks until the queue drains, so it
-    # is opt-in via immediate=True only.
     with mock.patch.dict(os.environ, {"POSTHOG_API_KEY": "phc_test_key"}):
         with mock.patch("posthog.Posthog") as mock_cls:
             instance = mock_cls.return_value
@@ -99,8 +92,6 @@ def test_track_event_does_not_flush_by_default():
 
 
 def test_track_event_flushes_when_immediate():
-    # A lone event (e.g. a publish failure with nothing after it) would sit
-    # in the client's batch queue; immediate=True flushes it right away.
     with mock.patch.dict(os.environ, {"POSTHOG_API_KEY": "phc_test_key"}):
         with mock.patch("posthog.Posthog") as mock_cls:
             instance = mock_cls.return_value
@@ -112,13 +103,10 @@ def test_track_event_flushes_when_immediate():
 
 
 def test_track_event_flush_failure_never_raises():
-    # Telemetry must never break the request path, even if flush throws.
-    # The event was still captured before the flush attempt.
     with mock.patch.dict(os.environ, {"POSTHOG_API_KEY": "phc_test_key"}):
         with mock.patch("posthog.Posthog") as mock_cls:
             instance = mock_cls.return_value
             instance.flush.side_effect = RuntimeError("flush down")
-            # Must not raise.
             analytics.track_event(
                 "publish_provider_failed", {"provider": "youtube"}, immediate=True
             )
@@ -130,7 +118,6 @@ def test_track_event_never_raises_on_capture_failure():
         with mock.patch("posthog.Posthog") as mock_cls:
             instance = mock_cls.return_value
             instance.capture.side_effect = RuntimeError("posthog down")
-            # Must not raise.
             analytics.track_event("video_generated", {"slotId": "s1"})
 
 
@@ -150,34 +137,23 @@ def test_scrub_secret_values_redacts_key_value_pairs():
 
 
 def test_scrub_secret_values_redacts_a_bare_provider_key():
-    # A hosted provider key is self-identifying by its prefix, so it leaks even
-    # when nothing in the message names the field it belongs to -- e.g. an HTTP
-    # error body echoing the rejected key back at us. The key-anchored pattern
-    # above cannot see that shape, and these strings reach the task error, the
-    # logs, the Discord alerts and PostHog.
     assert "abcdefghijklmnopqrstuvwxyz012345" not in analytics.scrub_secret_values(
         "rejected key sk-or-v1-abcdefghijklmnopqrstuvwxyz012345"
     )
     assert "abcdefghijklmnopqrstuvwxyz012345" not in analytics.scrub_secret_values(
         '{"error":"bad key sk-or-v1-abcdefghijklmnopqrstuvwxyz012345"}'
     )
-    # The same shape for OpenAI-style keys, which the TTS path can also surface.
     assert "abcdefghijklmnopqrstuvwxyz012345" not in analytics.scrub_secret_values(
         "rejected key sk-proj-abcdefghijklmnopqrstuvwxyz012345"
     )
 
 
 def test_scrub_secret_values_keeps_short_sk_words():
-    # The prefix alone is not proof of a secret: "sk-" fragments inside ordinary
-    # prose or a short id must survive, or the scrubber eats real diagnostics.
     assert analytics.scrub_secret_values("task sk-42 finished") == "task sk-42 finished"
     assert analytics.scrub_secret_values("sketch") == "sketch"
 
 
 def test_scrub_secret_values_redacts_quoted_shapes():
-    # Model output and SDK errors echo config blobs as JSON or Python dict
-    # reprs — the scrubber must catch those shapes too, not just bare
-    # key=value pairs.
     assert "sk-secret-123" not in analytics.scrub_secret_values(
         '{"api_key": "sk-secret-123"}'
     )
@@ -188,7 +164,6 @@ def test_scrub_secret_values_redacts_quoted_shapes():
     assert "hunter2" not in analytics.scrub_secret_values(
         "{'password': 'hunter2'}"
     )
-    # Bearer inside a JSON body was already caught; pin it.
     assert "sk-abc" not in analytics.scrub_secret_values(
         '{"authorization": "Bearer sk-abc"}'
     )
@@ -200,8 +175,6 @@ def test_scrub_secret_values_leaves_clean_text():
 
 
 def test_default_posthog_host_const_is_https_url():
-    # Self-host seam: the constant is the single fallback every engine
-    # telemetry path uses when POSTHOG_HOST is not set.
     assert analytics.DEFAULT_POSTHOG_HOST.startswith("https://")
 
 
@@ -226,9 +199,6 @@ def test_get_client_prefers_posthog_host_env():
 
 
 def test_track_event_keeps_token_usage_counters_intact():
-    # prompt_tokens/completion_tokens/total_tokens are legitimate analytics
-    # counters — the "token" secret-key substring must not redact them,
-    # while a real secret-bearing key still is.
     with mock.patch.dict(os.environ, {"POSTHOG_API_KEY": "phc_test_key"}):
         with mock.patch("posthog.Posthog") as mock_cls:
             instance = mock_cls.return_value
@@ -249,9 +219,6 @@ def test_track_event_keeps_token_usage_counters_intact():
 
 
 def test_track_event_exemption_only_applies_to_numeric_values():
-    # The token-counter exemption is scoped to actual numbers: a secret is
-    # never an int, so a non-numeric value under an exempt name is still
-    # redacted.
     with mock.patch.dict(os.environ, {"POSTHOG_API_KEY": "phc_test_key"}):
         with mock.patch("posthog.Posthog") as mock_cls:
             instance = mock_cls.return_value
@@ -268,18 +235,12 @@ def test_track_event_exemption_only_applies_to_numeric_values():
 
 
 def test_warm_client_invokes_get_client():
-    # warm_client() exists so the on_accepted funnel callback (which runs
-    # under the task-manager lock) never pays the first-call import +
-    # construction cost: it must actually trigger client construction.
     with mock.patch.object(analytics, "_get_client") as get_client:
         analytics.warm_client()
     get_client.assert_called_once_with()
 
 
 def test_track_event_tags_source_and_environment():
-    # Every engine capture carries where it came from (source) and which
-    # deployment produced it (environment) so PostHog dashboards can split
-    # engine / web-server / web-client / MCP traffic and prod / dev.
     with mock.patch.dict(os.environ, {"POSTHOG_API_KEY": "phc_test_key"}):
         with mock.patch("posthog.Posthog") as mock_cls:
             instance = mock_cls.return_value
@@ -288,7 +249,6 @@ def test_track_event_tags_source_and_environment():
             props = instance.capture.call_args.kwargs["properties"]
             assert props["source"] == "engine"
             assert props["environment"] == "development"
-            # Caller properties survive alongside the tags.
             assert props["slotId"] == "s1"
 
 
@@ -305,10 +265,6 @@ def test_track_event_tags_environment_production_when_app_env_production():
 
 
 def test_track_ai_request_carries_origin_tags():
-    # track_ai_request delegates to track_event, so it inherits the tags —
-    # pin it so a future bypass of track_event cannot silently drop them.
-    # backend=llm also emits the AI-observability $ai_generation event,
-    # which carries the same tags (covered in the AI observability tests).
     with mock.patch.dict(os.environ, {"POSTHOG_API_KEY": "phc_test_key"}):
         with mock.patch("posthog.Posthog") as mock_cls:
             instance = mock_cls.return_value
@@ -351,13 +307,10 @@ def _ffmpeg_style_error(home: str) -> str:
 def test_scrub_error_text_keeps_diagnostic_tail_of_multiline_tool_error():
     home = os.path.expanduser("~")
     result = analytics.scrub_error_text(_ffmpeg_style_error(home), max_chars=200)
-    # The diagnostic tail survives...
     assert "Error opening output file" in result
     assert "Could not write header" in result
-    # ...while the head banner noise is dropped.
     assert "banner line 20" not in result
     assert "banner line 39" not in result
-    # The first line (what failed) is kept as context.
     assert result.startswith("ffmpeg version 6.1")
 
 
@@ -397,8 +350,6 @@ def test_scrub_error_text_keeps_tail_of_long_single_line():
 
 
 def test_scrub_error_text_long_first_line_keeps_tail():
-    # A very long first line exhausts the tail budget: the message
-    # collapses to its last max_chars characters (diagnostic end).
     text = "B" * 600 + "\nfinal diagnostic detail"
     result = analytics.scrub_error_text(text, max_chars=100)
     assert result.endswith("final diagnostic detail")
@@ -415,8 +366,6 @@ class TestAIObservabilityGeneration:
     """
 
     def _llm_props(self, **overrides):
-        # Uniform ai_request schema the llm paths build (values here are
-        # already scrubbed/truncated by the caller, like production).
         props = {
             "backend": "llm",
             "provider": "openrouter",
@@ -454,7 +403,6 @@ class TestAIObservabilityGeneration:
         assert events == ["ai_request", "$ai_generation"]
         assert len(generations) == 1
         props = generations[0].kwargs["properties"]
-        # A trace id and an explicit null session id (one-shot workload).
         uuid.UUID(props["$ai_trace_id"])
         assert props["$ai_session_id"] is None
         assert props["$ai_provider"] == "openrouter"
@@ -462,7 +410,6 @@ class TestAIObservabilityGeneration:
         assert props["$ai_latency"] == 1.5
 
     def test_generation_never_carries_prompt_input(self):
-        # Prompts never leave the machine (module rule, 2026-10-01).
         _, generations = self._capture()
         props = generations[0].kwargs["properties"]
         assert "$ai_input" not in props
@@ -472,14 +419,10 @@ class TestAIObservabilityGeneration:
         props = generations[0].kwargs["properties"]
         assert props["$ai_input_tokens"] == 10
         assert props["$ai_output_tokens"] == 20
-        # Real reported spend (OpenRouter) passes through and is marked as
-        # provider-reported so PostHog keeps it instead of estimating.
         assert props["$ai_total_cost_usd"] == 0.0004
         assert props["$ai_cost_passthrough"] is True
 
     def test_generation_omits_unknown_counters_never_fake_zero(self):
-        # A provider that reports nothing contributes no counter at all —
-        # a 0 would lie in the dashboards (engine nullable-metrics rule).
         _, generations = self._capture(
             prompt_tokens=0,
             completion_tokens=0,
@@ -492,7 +435,6 @@ class TestAIObservabilityGeneration:
         assert "$ai_output_tokens" not in props
         assert "$ai_total_cost_usd" not in props
         assert "$ai_cost_passthrough" not in props
-        # Same for a provider without a resolvable model name.
         assert "$ai_model" not in props
 
     def test_failed_generation_carries_scrubbed_error_not_preview(self):
@@ -512,18 +454,12 @@ class TestAIObservabilityGeneration:
         assert "response_preview" not in props
 
     def test_successful_generation_carries_response_preview_not_full_text(self):
-        # response_preview is the ai_request property: scrubbed and capped
-        # at the call site. $ai_output_choices (the full model output) is
-        # deliberately not sent for the same reason.
         _, generations = self._capture(response_preview="script body")
         props = generations[0].kwargs["properties"]
         assert props["response_preview"] == "script body"
         assert "$ai_output_choices" not in props
 
     def test_generation_carries_origin_tags_and_engine_distinct_id(self):
-        # LLM calls carry no user context at the llm.py call site, so the
-        # generation lands on the engine pseudo-person, tagged like every
-        # engine event.
         _, generations = self._capture()
         call = generations[0]
         props = call.kwargs["properties"]
@@ -532,7 +468,6 @@ class TestAIObservabilityGeneration:
         assert props["environment"] == "development"
 
     def test_modal_backend_emits_no_generation_event(self):
-        # Modal renders are not LLM generations.
         with mock.patch.dict(os.environ, {"POSTHOG_API_KEY": "phc_test_key"}):
             with mock.patch("posthog.Posthog") as mock_cls:
                 instance = mock_cls.return_value
@@ -545,7 +480,6 @@ class TestAIObservabilityGeneration:
     def test_noop_without_api_key(self):
         with mock.patch.dict(os.environ, {}, clear=True):
             with mock.patch("posthog.Posthog") as mock_cls:
-                # Must not raise and must not construct the client.
                 analytics.track_ai_request(self._llm_props())
                 mock_cls.assert_not_called()
 
@@ -554,11 +488,8 @@ class TestAIObservabilityGeneration:
             with mock.patch("posthog.Posthog") as mock_cls:
                 instance = mock_cls.return_value
                 instance.capture.side_effect = RuntimeError("posthog down")
-                # Must not raise: a downed PostHog must not break generation.
                 analytics.track_ai_request(self._llm_props())
         events = [call.kwargs["event"] for call in instance.capture.call_args_list]
-        # Both events were attempted (mocks record even a raising call);
-        # the point is the side_effect propagated to nobody.
         assert events == ["ai_request", "$ai_generation"]
 
 

@@ -105,8 +105,6 @@ class TestHttpErrorResponseBody(unittest.TestCase):
         self.assertEqual(props["response_body"], '{"detail":"workspace is disabled"}')
 
     def test_failure_tracks_no_response_body_without_one(self):
-        # A non-HTTP failure (e.g. a missing env var) has no upstream
-        # body, so the property must be absent, not empty.
         with patch.object(longcat, "track_ai_request") as track:
             with patch.dict(os.environ, _LONGCAT_ENV):
                 os.environ.pop("LONGCAT_SUBMIT_URL", None)

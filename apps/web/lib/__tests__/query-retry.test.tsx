@@ -68,9 +68,6 @@ describe('fetchers carry the HTTP status', () => {
   });
 });
 
-//---------------
-// The real default policy on a real QueryClient: count fetch attempts.
-//---------------
 describe('dashboard queries with the default retry policy', () => {
   function wrapper(): (props: { children: ReactNode }) => ReactNode {
     const client = new QueryClient({
@@ -105,8 +102,6 @@ describe('dashboard queries with the default retry policy', () => {
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
-  // A 200 whose body says success:false is a failed read, not data: it
-  // throws with the 2xx status, which the policy treats as transient.
   it.each<[string, () => UseQueryResult<unknown, Error>]>([
     ['useSchedulesQuery', () => useSchedulesQuery()],
     ['useScheduleStatusQuery', () => useScheduleStatusQuery()],
@@ -127,8 +122,6 @@ describe('dashboard queries with the default retry policy', () => {
     expect(fetch).toHaveBeenCalledTimes(2);
   });
 
-  // A proxy/CDN error page is not JSON: the status must still reach the
-  // retry policy and the session-expiry handler.
   it.each<[string, () => UseQueryResult<unknown, Error>]>([
     ['useVoicesQuery', () => useVoicesQuery()],
     ['useSchedulesQuery', () => useSchedulesQuery()],
@@ -161,10 +154,6 @@ describe('dashboard queries with the default retry policy', () => {
   });
 });
 
-//---------------
-// Branches next to the status plumbing: fallback messages, the 2xx paths,
-// and a failed-but-OK mutation that must not trip the session redirect.
-//---------------
 describe('fetcher branches around the HTTP status', () => {
   function wrapper(): (props: { children: ReactNode }) => ReactNode {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });

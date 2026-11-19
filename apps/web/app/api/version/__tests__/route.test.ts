@@ -151,7 +151,6 @@ describe('GET /api/version', () => {
       let signal: AbortSignal | undefined;
       const fetchMock = vi.fn(async (_url: string, init?: { signal?: AbortSignal }) => {
         signal = init?.signal;
-        // Hang until the request is aborted, like a stalled engine would.
         await new Promise<void>((resolve) => {
           signal?.addEventListener('abort', () => resolve(), { once: true });
         });
@@ -160,7 +159,6 @@ describe('GET /api/version', () => {
       vi.stubGlobal('fetch', fetchMock);
       const pending = GET();
       await vi.advanceTimersByTimeAsync(6000);
-      // Fails fast when the timeout callback never aborts (mutant: () => {}).
       expect(signal?.aborted).toBe(true);
       const res = await pending;
       expect(res.status).toBe(502);
@@ -223,7 +221,6 @@ describe('GET /api/version', () => {
       status: 200,
       json: async () => ({ version: '1.8.0', build: 502, commit: 'abc123' }),
     });
-    // GET takes no Request and never touches request-auth: no mock needed.
     const res = await GET();
     expect(res.status).toBe(200);
   });

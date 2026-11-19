@@ -79,23 +79,15 @@ class StoreRequestsTests(unittest.TestCase):
         self.assertEqual(kwargs["params"]["order"], "slot_at.asc")
 
     def test_slot_select_embeds_personas_for_generate_stage(self):
-        # C1: generate() needs the personas embed inside the schedule join.
-        # Without it PostgREST doesn't return personas and EVERY tick fails
-        # with "no persona embed" in production (older tests masked this by
-        # injecting personas inline in the fixture).
-        # `!left` (not `!inner`) since migration 012: a schedule may have no
-        # persona, and an inner join would drop those slots from every tick.
         self.store.pending_slots(datetime(2026, 9, 6, 12, 0, tzinfo=UTC), limit=10)
         _, _, kwargs = self._last_call()
         select = kwargs["params"]["select"]
         self.assertIn("personas(", select)
         for field in ("niche", "language", "video_aspect", "voice_id"):
             self.assertIn(field, select)
-        # Phase 5-4: the script prompt no longer rides the identity select.
         self.assertNotIn("script_prompt", select)
 
     def test_ready_due_slots_embeds_personas_for_notification(self):
-        # The Discord publish message needs the persona name.
         self.store.ready_due_slots(datetime(2026, 9, 7, 12, 0, tzinfo=UTC))
         _, _, kwargs = self._last_call()
         self.assertIn("personas(", kwargs["params"]["select"])
@@ -107,10 +99,6 @@ class StoreRequestsTests(unittest.TestCase):
         self.assertEqual(kwargs["params"]["task_id"], "not.is.null")
 
     def test_generating_slots_reads_the_slot_row_alone(self):
-        # The reconciler refunds from the slot's own schedule_id and stored
-        # charged_tokens (migration 045), so the select is the whole slot row
-        # and no schedules embed: a refund never depends on a joinable
-        # persona or snapshot.
         self.store.generating_slots()
         _, _, kwargs = self._last_call()
         self.assertEqual(kwargs["params"]["select"], "*")
@@ -135,12 +123,6 @@ class StoreRequestsTests(unittest.TestCase):
 
 
     def test_claim_ready_slot_is_conditional_on_ready(self):
-        # C2: atomic claim — only transitions if the slot is still 'ready'.
-        # A conditional PATCH (id + status=eq.ready) returns the row if the
-        # race is won; returns [] if another worker/publish took the slot.
-        # The claim also re-checks due-ness (slot_at <= now, issue #555):
-        # a ready slot rescheduled to the future between the due snapshot
-        # and this claim must not publish at its old time.
         now = datetime(2026, 9, 7, 12, 0, tzinfo=timezone.utc)
         self.requests.request.return_value = _response(json_data=[{"id": "slot-1"}])
         claimed = self.store.claim_ready_slot("slot-1", now)
@@ -154,14 +136,11 @@ class StoreRequestsTests(unittest.TestCase):
         self.assertIn("representation", kwargs["headers"]["Prefer"])
 
     def test_claim_ready_slot_returns_false_when_lost(self):
-        # Slot already claimed (or published) → PostgREST returns [].
         now = datetime(2026, 9, 7, 12, 0, tzinfo=timezone.utc)
         self.requests.request.return_value = _response(json_data=[])
         self.assertFalse(self.store.claim_ready_slot("slot-1", now))
 
     def test_resumable_publishing_slots_reads_due_publishing_rows(self):
-        # A publishing slot is resumed once its backoff or crash lease
-        # (publish_not_before) passes, or when it never parked one.
         self.requests.request.return_value = _response(
             json_data=[{"id": "slot-9", "status": "publishing"}, "junk"]
         )
@@ -272,7 +251,6 @@ class GenerationHorizonTests(unittest.TestCase):
                 app_config.app["fill_schedule_generation_horizon_hours"] = original
         kwargs = self._pair(store)[1]
         slot_at = kwargs["params"]["slot_at"]
-        # 12:00 + 1h horizon -> 13:00 cutoff on the same day
         self.assertEqual(slot_at, "lte.2026-09-06T13:00:00+00:00")
 
     @staticmethod
@@ -317,7 +295,6 @@ class _JsonHandler(BaseHTTPRequestHandler):
         self._respond([{"id": "slot-1"}])
 
     def do_POST(self):  # noqa: N802 - http.server API
-        # Answers the token RPC shape so a retried POST can complete.
         self._respond({"spent": True, "refunded": True})
 
     def log_message(self, *args):
@@ -385,9 +362,6 @@ class RetryingSessionTests(unittest.TestCase):
         return attempts, patch.object(HTTPConnection, "getresponse", flaky_getresponse)
 
     def test_read_failures_are_not_retried(self):
-        # Behavioral, not a config read: raising from getresponse proves the
-        # request was SENT, so retrying could double-apply a POST. Assert the
-        # attempt count (1), which fails if read retries are ever enabled.
         import requests
 
         attempts, patcher = self._patch_getresponse(failures=1)
@@ -396,10 +370,6 @@ class RetryingSessionTests(unittest.TestCase):
         self.assertEqual(len(attempts), 1, "a read failure was retried")
 
     def test_post_rpc_retries_a_connect_failure(self):
-        # The billing-relevant half of the policy: spend_tokens is a POST, and
-        # the "connect failure means Supabase never saw it" argument is what
-        # makes retrying it safe. Pins that the connect retry is not gated on
-        # the HTTP method (urllib3's allowed_methods excludes POST).
         attempts, patcher = self._patch_new_conn(failures=1)
         with patcher:
             spent = self.store.spend_tokens("user-1", "batch:sched-1", 2, "why")

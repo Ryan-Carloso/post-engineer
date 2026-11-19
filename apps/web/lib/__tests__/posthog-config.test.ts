@@ -1,15 +1,4 @@
-//---------------
-// DEFAULT_POSTHOG_HOST — the self-host seam for PostHog telemetry.
-//
-// - The constant is the single fallback every telemetry path uses
-//   (browser client in instrumentation-client.ts, server SDK in
-//   lib/posthog-server.ts).
-// - NEXT_PUBLIC_POSTHOG_HOST overrides it at runtime without a code change.
-// - A self-hoster changes the constant here, once.
-//
 // @vitest-environment node: the host-fallback tests drive the server SDK
-// loader, which must not initialize in a browser-like environment.
-//---------------
 /**
  * @vitest-environment node
  */
@@ -19,8 +8,6 @@ import { findRepoRoot } from '@/test/repo-root';
 
 const ctorArgs: unknown[][] = [];
 
-// Capture the SDK constructor args so the tests can assert which host
-// the server client was built with.
 vi.mock('posthog-node', () => ({
   PostHog: class {
     constructor(...args: unknown[]) {
@@ -38,9 +25,6 @@ import { DEFAULT_POSTHOG_HOST } from '@/lib/posthog-config';
 import { __resetPostHogServerForTests } from '@/lib/posthog-server';
 
 describe('DEFAULT_POSTHOG_HOST', () => {
-  // Shape-only pin (mirrors the engine test): self-hosters change this
-  // constant, so an exact-value assertion would fail `pnpm test` for them.
-  // The fallback/override wiring is pinned by the tests below.
   it('is a valid https ingest URL', () => {
     expect(DEFAULT_POSTHOG_HOST).toMatch(/^https:\/\//);
   });
@@ -48,18 +32,6 @@ describe('DEFAULT_POSTHOG_HOST', () => {
 
 describe('DEFAULT_POSTHOG_HOST cross-app sync', () => {
   it('keeps web and engine pointing at the same PostHog host', async () => {
-    // Web and engine each declare their own DEFAULT_POSTHOG_HOST literal
-    // (no shared package between them; the MCP reports through the web
-    // API and has no PostHog host). A one-sided change would
-    // silently route one app's events to the wrong region — and every
-    // analytics path swallows delivery errors by design, so nothing would
-    // surface. This test parses both files and asserts the literals
-    // match, mirroring the SQL-literals sync test precedent.
-    //
-    // Self-hosters: change the constant in both apps. If you
-    // intentionally point them at different hosts, update this test to
-    // assert your intended mapping instead of deleting it — a divergent
-    // host should always be a conscious choice.
     const { readFileSync } = await import('node:fs');
     const { join } = await import('node:path');
     const repoRoot = findRepoRoot(import.meta.url);
@@ -83,7 +55,6 @@ describe('DEFAULT_POSTHOG_HOST cross-app sync', () => {
     expect(webHost).toBeDefined();
     expect(engineHost).toBeDefined();
     expect(engineHost).toBe(webHost);
-    // The imported constant is the parsed web value (regex sanity check).
     expect(DEFAULT_POSTHOG_HOST).toBe(webHost);
   });
 });
@@ -127,18 +98,6 @@ describe('server client host resolution', () => {
   });
 });
 
-//---------------
-// Production incident (2026-10-13): NEXT_PUBLIC_POSTHOG_HOST was set to a
-// project API key (phc_...) instead of an ingest URL. posthog-node accepts
-// any string at construction — it does NOT validate the host — so the client
-// was built fine and every capture failed at flush() time with
-// "Network error while fetching PostHog". Combined with the memoized
-// sdkPromise, one bad boot disabled server telemetry for the whole process
-// lifetime while /api/version still reported posthogConfigured: true.
-//
-// These tests pin the guard: a non-URL host is rejected up front, loudly,
-// and the default ingest host is used instead.
-//---------------
 describe('server client host validation', () => {
   const originalEnv = { ...process.env };
 
@@ -158,9 +117,6 @@ describe('server client host validation', () => {
     vi.restoreAllMocks();
   });
 
-  // A structurally valid PostHog project API key, of the shape that was
-  // misconfigured in production. The literal is a FAKE (this repo is public):
-  // the point is the `phc_` prefix and key-like body, not the real value.
   const misconfiguredHost = 'phc_notARealProjectKey0000000000000000000000000';
 
   it('rejects a project API key used as NEXT_PUBLIC_POSTHOG_HOST', async () => {
@@ -184,8 +140,6 @@ describe('server client host validation', () => {
       .mock.calls.map((call) => String(call[0]))
       .join('\n');
     expect(warnings).toContain('NEXT_PUBLIC_POSTHOG_HOST');
-    // The warning must not echo the value itself: the misconfigured value
-    // IS a credential in this incident's shape.
     expect(warnings).not.toContain(misconfiguredHost);
   });
 
@@ -228,10 +182,6 @@ describe('server client host validation', () => {
     });
   });
 
-  // Plaintext http to a REMOTE host would ship telemetry (including the API
-  // key in the request path) unencrypted. The house rule for user/server
-  // fetch targets in this repo is "HTTPS or loopback only" — http is allowed
-  // only for loopback, so a local self-hosted PostHog still works.
   it.each([
     ['a remote http host', 'http://posthog.internal.example:8000'],
     ['a bare-IP http host', 'http://10.0.0.5:8000'],

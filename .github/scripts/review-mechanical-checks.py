@@ -35,8 +35,6 @@ MIGRATION_RE = re.compile(r"^(\d+)[_-]")
 PROD_HINTS = ("/app/", "/lib/", "/src/", "apps/engine/app/")
 TEST_HINTS = ("__tests__", "/test/", ".test.", ".spec.", ".cy.ts", "__mocks__")
 
-# High-confidence secret prefixes. Only (file, pattern-name) pairs are
-# reported — never the matched value itself.
 SECRET_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"sk-[A-Za-z0-9]{20,}"), "OpenAI-style sk- key"),
     (
@@ -130,11 +128,11 @@ def check_secrets_in_diff(diff_text: str) -> list[tuple[str, str, int]]:
             for pattern, name in SECRET_PATTERNS:
                 match = pattern.search(added)
                 if match and _is_synthetic_token(_token_body(match.group(0))):
-                    continue  # synthetic fixture, not a secret; check other patterns
+                    continue
                 if match:
                     key = (current_file, name)
                     hits[key] = hits.get(key, 0) + 1
-                    break  # one pattern per line is enough
+                    break
     return [(f, name, n) for (f, name), n in sorted(hits.items())]
 
 
@@ -152,7 +150,6 @@ def main() -> int:
     lines: list[str] = []
     failed = False
 
-    # 1. Duplicate migration numbers.
     dupes = check_migration_numbers(Path(args.migrations))
     if dupes:
         failed = True
@@ -161,7 +158,6 @@ def main() -> int:
     else:
         lines.append("- ✅ OK — migration numbers unique in `supabase/migrations/`")
 
-    # 2. Production files changed without test files.
     changed = [
         line.strip()
         for line in Path(args.files).read_text(encoding="utf-8").splitlines()
@@ -184,7 +180,6 @@ def main() -> int:
     else:
         lines.append("- ✅ OK — no production files changed")
 
-    # 3. Obvious secrets in added diff lines.
     diff_text = Path(args.diff).read_text(encoding="utf-8", errors="replace")
     secrets = check_secrets_in_diff(diff_text)
     if secrets:

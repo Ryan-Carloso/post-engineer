@@ -24,15 +24,11 @@ from app.services.analytics import scrub_secret_values
 
 ENV_WEBHOOK_URL = "DISCORD_WEBHOOK_URL"
 
-# Simple post: {url, json}. Injectable for tests.
 PostFn = Callable[[str, dict[str, str]], Any]
 
 _TIMEOUT_SECONDS = 5
 
 
-#: Explicit marker the engine test suite sets on import (test/__init__.py).
-#: The authoritative "we are running tests" signal — works under pytest and
-#: `python -m unittest` alike, unlike pytest's runtime fingerprints.
 ENGINE_UNDER_TEST_ENV_VAR = "ENGINE_UNDER_TEST"
 
 
@@ -112,18 +108,6 @@ def send_discord(message: str, post: PostFn | None = None) -> bool:
     """Sends ``{"content": message}`` to the webhook. Returns True if sent."""
     url = os.getenv(ENV_WEBHOOK_URL, "")
     if post is None and running_under_test():
-        # Never ping the production Discord channel from the test suite:
-        # importing app.asgi during pytest collection loads the tracked .env
-        # with the real DISCORD_WEBHOOK_URL. Tests that inject a fake post
-        # still exercise the send logic below.
-        #
-        # A genuine test run always sets a runner marker (ENGINE_UNDER_TEST via
-        # the suite bootstrap, or PYTEST_CURRENT_TEST via pytest itself), so
-        # reaching this warning means ENGINE_UNDER_TEST=1 leaked into a
-        # process with no corroborating runner behind it — no
-        # PYTEST_CURRENT_TEST, no pytest import, no unittest driver entry
-        # point. Every alert would silently stop. Warn so the operator sees
-        # it; stay quiet (debug) during real test runs.
         if url and test_skip_is_suspicious():
             logger.warning(
                 "discord notify skipped: ENGINE_UNDER_TEST=1 with no test runner "
@@ -139,7 +123,6 @@ def send_discord(message: str, post: PostFn | None = None) -> bool:
         response.raise_for_status()
         return True
     except Exception as exc:  # noqa: BLE001 — notifier never takes down the caller
-        # Never include the URL (may contain a token) or the body in the log.
         logger.warning(f"discord notify failed: {type(exc).__name__}")
         return False
 
@@ -190,10 +173,6 @@ def safe_reason(exc: BaseException) -> str:
         return type(exc).__name__
     if redact_known_url(message, webhook_url) != message:
         return type(exc).__name__
-    # The summary reaches Discord, logs, and (via _fail_task) client-visible
-    # task errors: scrub the full message before the 200-cut, like the
-    # telemetry reason — a cut landing mid-key would leave a fragment the
-    # key-anchored pattern can no longer match.
     return scrub_secret_values(message)[:200]
 
 
@@ -214,9 +193,6 @@ def safe_diagnostic(exc: BaseException, edge_chars: int = 200) -> str:
     return f"{name}: {message[:edge_chars]} ... {message[-edge_chars:]}"
 
 
-# ---------------------------------------------------------------------------
-# Messages — pure builders, testable without network
-# ---------------------------------------------------------------------------
 DISCORD_MAX_CONTENT = 2000
 
 

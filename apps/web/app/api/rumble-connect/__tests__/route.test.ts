@@ -14,14 +14,12 @@ vi.mock('@/lib/request-auth', () => ({
 }));
 
 vi.mock('@/lib/token-crypto', () => ({
-  // non-reversible mock: hides the content like the real cipher would
   encryptTokens: vi.fn(
     (payload: Record<string, unknown>) => `v1.mockcipher.${Buffer.from(JSON.stringify(payload)).toString('base64')}`,
   ),
   decryptTokens: vi.fn(),
 }));
 
-// The limiter has its own suite (rate-limit.test.ts); here it never throttles.
 vi.mock('@/lib/rate-limit', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/rate-limit')>();
   return { ...actual, applyRateLimit: vi.fn().mockResolvedValue(null) };
@@ -198,7 +196,6 @@ describe('POST /api/rumble-connect', () => {
     const body = (await res.json()) as { success: boolean; accountId: string; channelId: string };
     expect(body).toEqual({ success: true, accountId: 'row-1', channelId: 'chan-1' });
 
-    // encrypted token, never in plaintext
     expect(encryptTokens).toHaveBeenCalledWith(
       expect.objectContaining({ access_token: TOKEN, token_type: 'rumble_access_token', channel_id: 'chan-1' }),
     );
@@ -221,9 +218,6 @@ describe('POST /api/rumble-connect', () => {
 
     const res = await POST(formRequest({ channelId: 'chan-1', accessToken: TOKEN }));
     expect(res.status).toBe(200);
-    // A reconnect overwrites the stored token on the same row: the upsert
-    // targets the unique (user_id, provider, provider_account_id) key, so
-    // it cannot fail with a constraint violation like the plain insert did.
     expect(upserted).toHaveLength(1);
     expect(upsertOptions[0]).toEqual({ onConflict: 'user_id,provider,provider_account_id' });
     expect(upserted[0]).toMatchObject({
@@ -280,7 +274,6 @@ describe('POST /api/rumble-connect', () => {
       provider: 'rumble',
       provider_account_id: 'chan-1',
     });
-    // via API key uses the service client
     expect(vi.mocked(createSupabaseServiceClient)).toHaveBeenCalled();
   });
 
@@ -301,8 +294,6 @@ describe('POST /api/rumble-connect', () => {
       provider: 'rumble',
       provider_account_id: 'chan-1',
     });
-    // An OAuth caller (remote MCP) has no cookie session, so the cookie
-    // client would see no user and RLS would hide the row.
     expect(vi.mocked(createSupabaseServiceClient)).toHaveBeenCalled();
     expect(vi.mocked(createSupabaseServerClient)).not.toHaveBeenCalled();
   });

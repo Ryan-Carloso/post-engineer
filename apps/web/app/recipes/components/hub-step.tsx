@@ -1,10 +1,3 @@
-//---------------
-// HubStep — one numbered step of the prompts hub (1 key, 2 setup,
-// 3 recipes): a number badge, a title, a one-line hint, and the step's
-// content below. The hub is the only numbered multi-section flow in the
-// app, so there is no shared primitive to reuse. Presentational.
-//---------------
-
 export default function HubStep({
   number,
   title,

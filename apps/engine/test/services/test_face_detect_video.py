@@ -106,7 +106,6 @@ def test_reads_the_config_flag_when_force_exclude_is_not_given(fake_cv2, monkeyp
     monkeypatch.setitem(face_detect.config.app, "material_exclude_people", True)
     fake_cv2.cascade = FakeCascade(faces=[FACE])
     fake_cv2.capture = FakeCapture([_frame()])
-    # No force_exclude: the config flag enables the filter.
     assert face_detect.video_contains_face("video.mp4") is True
 
 
@@ -137,10 +136,6 @@ def test_returns_false_when_no_sampled_frame_has_a_face(fake_cv2):
 
 
 def test_ignores_faces_on_unsampled_frames(fake_cv2):
-    # 16 frames, 8 samples: step 2, so only even frames are checked.
-    # Mark odd frames as "face" frames via their pixel value; the cascade
-    # reports a face exactly on those. A face on an unsampled frame must
-    # not count — if the step were 1, this test would fail.
     frames = [np.full((240, 320, 3), i % 2, dtype=np.uint8) for i in range(16)]
 
     class MarkingCascade(FakeCascade):

@@ -1,17 +1,3 @@
-// Generation facts for one slot: the read-only record of what the post
-// was generated with.
-//
-// Extracted from route.ts so the route module stays under the file-size
-// ratchet.
-// buildGenerationFacts — the read-only record of what the post was
-// generated with: the post_* snapshot columns written at creation
-// (migration 012) plus the slot's faceless flag. A named function (not an
-// inline object literal) so unit tests — and v8 coverage — see every leaf.
-// The object keeps every key with null leaves (never undefined) so the UI
-// never has to feature-detect; pre-012 schedules simply read all null.
-// If a future migration drops or renames one of these columns, the select
-// in getHandler is the thing that 500s.
-//---------------
 export function buildGenerationFacts(
   row: { faceless: boolean | null },
   scheduleRow: {
@@ -33,20 +19,10 @@ export function buildGenerationFacts(
   paragraphNumber: number | null;
   faceQuality: string | null;
 } {
-  // Only the literal true counts — the stored video_type decides the
-  // mode, and slot-rows.ts writes this derived flag from it, so a legacy
-  // NULL row is never misread as faceless.
-  // One const per leaf (not an inline object literal): v8 coverage does not
-  // report object-literal property lines, so this keeps every fact visible
-  // to the coverage gate.
   const faceless = row.faceless === true;
   const language = scheduleRow.post_language ?? null;
   const voiceId = scheduleRow.post_voice_id ?? null;
   const videoAspect = scheduleRow.post_video_aspect ?? null;
-  // NULL for schedules created before migration 018. It is NOT normalized to
-  // 'standard' here: this surface is a faithful read of the snapshot (like
-  // every sibling above), and the engine is the single place that turns a
-  // missing layout into a render decision.
   const videoLayout = scheduleRow.post_video_layout ?? null;
   const niche = scheduleRow.post_niche ?? null;
   const paragraphNumber = scheduleRow.post_paragraph_number ?? null;

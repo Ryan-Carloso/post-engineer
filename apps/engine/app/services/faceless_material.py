@@ -16,10 +16,6 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from app.models.schema import VideoAspect
 
-# No runtime app imports: script_segments reads IMAGES, and schema imports
-# script_segments at load time, so a schema import here would be circular.
-
-# The agent-images-only material value, shared by validation and the pipeline.
 IMAGES = "images"
 
 

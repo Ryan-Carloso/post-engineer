@@ -1,10 +1,3 @@
-//---------------
-// Persona house voice custom-text preview E2E — on /persona, after picking a
-// house voice, typing a line and clicking "Ouvir com o meu texto" POSTs the
-// text to /api/persona/voices/<id>/preview and plays the returned audio.
-// Network mocked with cy.intercept; the Audio constructor and
-// URL.createObjectURL are stubbed before page load.
-//---------------
 import { houseVoice } from '../support/voices';
 
 const VOICES = [
@@ -41,8 +34,6 @@ const stubAudio = (win: Cypress.AUTWindow): void => {
 
 describe('Persona — prévia de voz da casa com texto próprio', () => {
   beforeEach(() => {
-    // Sessão REAL: o middleware rejeita visits sem cookie e devolve
-    // /landing, onde a query de vozes nunca dispara.
     cy.loginE2EUser();
 
     cy.intercept('GET', '/api/persona/voices', {
@@ -77,9 +68,6 @@ describe('Persona — prévia de voz da casa com texto próprio', () => {
       expect(interception.request.body.text).to.equal('Hello there');
     });
 
-    // The fetch resolves before the blob is read and the Audio element is
-    // constructed, so assert with `should` (retries) rather than a
-    // one-shot `then`.
     cy.window().should((win) => {
       const audios = (win as unknown as { __fakeAudios: FakeAudioRecord[] }).__fakeAudios;
       expect(audios).to.have.length(1);

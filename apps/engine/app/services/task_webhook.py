@@ -27,8 +27,6 @@ from app.utils import ssrf
 
 WEBHOOK_TIMEOUT_SECONDS = 10
 
-# Bound the dedupe cache so the process can't grow it forever (same
-# pattern as the Discord failure-alert dedupe in app/services/task.py).
 MAX_WEBHOOK_TASKS = 1000
 _webhook_lock = Lock()
 _notified_task_ids: deque[str] = deque(maxlen=MAX_WEBHOOK_TASKS)
@@ -49,9 +47,6 @@ def _post(webhook_url: str, payload: dict, task_id: str) -> None:
             webhook_url, json=payload, timeout=WEBHOOK_TIMEOUT_SECONDS
         )
         try:
-            # requests does not treat a 3xx as an error, and the pinned POST
-            # does not follow it. A redirect is a failed delivery: following
-            # it would dial whatever the Location host resolves to.
             status = response.status_code
             if isinstance(status, int) and not isinstance(status, bool) and 300 <= status < 400:
                 raise requests.HTTPError(
@@ -61,15 +56,6 @@ def _post(webhook_url: str, payload: dict, task_id: str) -> None:
         finally:
             response.close()
     except Exception as exc:  # noqa: BLE001 — delivery is best-effort by design
-        # Never raise: a dead webhook must not fail or stall the task.
-        # ERROR goes to PostHog via the asgi sink so the user can see why
-        # the callback never arrived.
-        # The webhook URL is a credential (Discord/Slack-style path-embedded
-        # tokens): requests embeds it in str(exc), and the key-anchored
-        # scrubber cannot match path-embedded tokens. Redact every
-        # serialization the transport can produce via the shared helper,
-        # then scrub-then-truncate the remainder like every other
-        # free-text error surface.
         message = redact_known_url(str(exc), webhook_url)
         error = scrub_secret_values(message)[:500]
         logger.bind(task_id=task_id).error(

@@ -9,16 +9,6 @@ import { logger } from '@/lib/logger';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 import type { VideoGenerationRow } from '@/lib/contracts/video-tasks';
 
-//---------------
-// GET /api/persona/video-generations/[generationId] — one generation's
-// detail, the exact row shape of the list route. The Posts detail page
-// resolves by id so it never needs to pull the whole history; unknown id
-// or another user's row → 404.
-//---------------
-
-// The DB row is snake_case; the response object below is the contract's
-// camelCase VideoGenerationRow (the select list is pinned to it in
-// contracts-shared.test).
 interface DbGenerationRow {
   id: string;
   generation_id: string;
@@ -38,8 +28,6 @@ async function getHandler(
 ): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
-  // API-key/OAuth callers have no cookie session, so the service client
-  // (scoped by user_id below) is used; web sessions keep the server client.
   const supabase =
     auth.isApiKey === true || auth.isOAuth === true
       ? createSupabaseServiceClient()
@@ -47,8 +35,6 @@ async function getHandler(
 
   const { generationId } = await context.params;
 
-  // Same persona filter as the list. A miss is PGRST116, the same 404 as
-  // an unknown id, so an out-of-scope row is not distinguishable.
   let generationQuery = supabase
     .from('video_generations')
     .select(
@@ -66,9 +52,6 @@ async function getHandler(
   const { data, error } = await generationQuery.single();
 
   if (error) {
-    // PGRST116 (zero rows) is the only honest 404 — unknown id or another
-    // user's row. Anything else is a DB failure: log loudly with the real
-    // error and return 500 so callers retry instead of giving up.
     if ((error as { code?: string }).code === 'PGRST116') {
       return apiErrorResponse(404, 'Generation not found.', {
         route: 'GET /api/persona/video-generations/[generationId]',
@@ -101,7 +84,4 @@ async function getHandler(
   });
 }
 
-//---------------
-// 5xx reporting: handled server errors reach PostHog error tracking.
-//---------------
 export const GET = withApiErrorReporting('GET /api/persona/video-generations/[generationId]', getHandler, { getUserId: resolveReportingUserId });

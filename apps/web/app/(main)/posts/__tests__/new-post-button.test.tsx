@@ -3,11 +3,6 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 
-//---------------
-// New post is a link to the recipes hub, not a button that opens an
-// explanation: the web app has no create form. The i18n mock returns keys.
-//---------------
-
 vi.mock('@/lib/i18n/provider', () => {
   function I18nProvider({ children }: { children: ReactNode }) {
     return <>{children}</>;
@@ -32,9 +27,6 @@ describe('NewPostButton', () => {
     render(<NewPostButton className="h-8 min-w-0 shrink px-2 text-xs" />);
     const link = screen.getByRole('link', { name: 'posts.newPostAction' });
     expect(link.className).toContain('h-8');
-    // Assert on whole tokens: twMerge drops the built-in 'shrink-0' when
-    // the caller passes 'shrink', so a substring check would only match
-    // the '[&_svg]:shrink-0' selector from the Button base styles.
     expect(link.className.split(' ')).toContain('shrink');
     expect(link.className.split(' ')).not.toContain('shrink-0');
     expect(link.className).toContain('whitespace-nowrap');

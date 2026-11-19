@@ -1,13 +1,3 @@
-//---------------
-// shard-tests — split a vitest file list into duration-balanced shards.
-//
-// Longest-processing-time: the slowest file is placed first, each time into
-// the shard whose assigned files currently sum to the least time. Files with
-// no recorded duration take the median of the known durations (or 1ms when
-// nothing has been recorded yet), so a cold cache still splits by count.
-// The same inputs always produce the same shards.
-//---------------
-
 export const WEB_SHARD_TOTAL = 4;
 
 /**

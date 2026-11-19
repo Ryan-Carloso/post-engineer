@@ -1,7 +1,4 @@
 // @vitest-environment node
-// Rota de API usa Response/Blob/fetch nativos (undici); o jsdom mistura
-// implementações e quebra `new Response(new Blob(...))` (object.stream
-// is not a function). Testes de UI ficam no jsdom.
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/lib/supabase/server', () => ({
@@ -53,7 +50,6 @@ describe('GET /api/persona/video-download/:taskId/...path — taskId validation'
   it('aceita taskId válido (alphanum + ._-)', async () => {
     const validTaskIds = ['task-1', 'task_1', 'task.1', 'Task1', 't1'];
     for (const taskId of validTaskIds) {
-      // Mock fetch to return a video response
       const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
         new Response(new Blob(['video']), { status: 200, headers: { 'content-type': 'video/mp4' } }),
       );

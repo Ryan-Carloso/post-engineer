@@ -1,20 +1,4 @@
 #!/usr/bin/env node
-//---------------
-// Report a failed test-flight job to PostHog.
-//
-// The write-script and flight steps fail loudly on purpose: no fallback
-// script is ever published. A GitHub Actions failure alone is easy to
-// miss, so this step runs with `if: failure()` and sends one
-// test_flight_failed event to the PostHog EU ingest API.
-//
-// Telemetry must never mask the original failure:
-// - Missing TEST_FLIGHT_POSTHOG_KEY: log a warning, exit 0. The job
-//   still fails from the step that actually failed.
-// - PostHog request failure: log a warning, exit 0.
-// - The key is never logged. Only workflow name, run id, faceless flag,
-//   and the GitHub run URL are sent, never API keys, persona ids, or
-//   account ids.
-//---------------
 
 import { pathToFileURL } from 'node:url';
 
@@ -22,7 +6,7 @@ export const DEFAULT_POSTHOG_HOST = 'https://eu.i.posthog.com';
 
 export function buildEvent({ workflow, runId, faceless, runUrl }) {
   return {
-    api_key: undefined, // set by reportFailure, never part of the tested shape
+    api_key: undefined,
     event: 'test_flight_failed',
     distinct_id: 'test-flight',
     properties: {

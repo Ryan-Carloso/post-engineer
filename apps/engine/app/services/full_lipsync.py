@@ -41,29 +41,11 @@ from app.services.lipsync_active import persona_lipsync_active
 from app.utils import ssrf, utils
 
 logger = logging.getLogger(__name__)
-# Per-window cap, in seconds. Must stay equal to task.py
-# PERSONA_LIPSYNC_MAX_SECONDS; a test pins the two literals together.
 FULL_LIPSYNC_MAX_WINDOW_SECONDS: float = 12.0
-# LongCat's smallest clip is one segment: 93 frames at 25fps = 3.72s.
-# A window shorter than this would render a padded clip longer than its
-# audio, so short tails are merged backwards (see plan_windows).
 FULL_LIPSYNC_MIN_WINDOW_SECONDS: float = 3.72
-# Bound on total GPU work per video: 5 windows x 12s = 60s of narration.
-# The token price is flat per video (ok -> 2, very_good -> 3), so it must
-# not cover unbounded GPU work: beyond 60s the job fails fast, before any
-# LongCat window is submitted (plan_windows runs first in
-# render_full_lipsync), instead of queueing an unbounded GPU bill. It never
-# truncates, never drops a window, and never degrades to background footage.
-# Enforcement layer: the engine is authoritative, on the measured TTS
-# duration. The web side cannot measure TTS seconds before charge (TTS
-# happens engine-side, the same precedent as the custom-audio 60s limit
-# verified by the engine with ffprobe): a >60s full-mode request passes web
-# validation, is charged, then fails here before any GPU spend, and the
-# failed slot is refunded by the existing fill_schedule reconciler.
 MAX_FULL_LIPSYNC_WINDOWS: int = 5
 MAX_FULL_LIPSYNC_SECONDS: float = MAX_FULL_LIPSYNC_WINDOWS * FULL_LIPSYNC_MAX_WINDOW_SECONDS
 
-# Subtitle timing pattern, same shape as persona_hook's cue parser.
 _CUE_TIMING_RE = re.compile(r"(\d+):(\d+):(\d+)[,\.](\d+)\s*-->\s*(\d+):(\d+):(\d+)[,\.](\d+)")
 
 
@@ -129,8 +111,6 @@ def plan_windows(
         windows.append((current, end - current))
         current = end
     if len(windows) > MAX_FULL_LIPSYNC_WINDOWS:
-        # Cue cuts can overshoot the cap within 60s (58s, 5s cues -> six
-        # 10s windows); an even split always fits (>= 6s over 12s).
         count = math.ceil(audio_seconds / FULL_LIPSYNC_MAX_WINDOW_SECONDS)
         windows = [(i * audio_seconds / count, audio_seconds / count) for i in range(count)]
     for start, duration in windows:
@@ -262,7 +242,6 @@ def resolve_persona_image(
     image_path = path.join(task_dir, "persona-lipsync-image.png")
     source_label = "lip-sync image"
     if path.isfile(image_path) and path.getsize(image_path) > 0:
-        # Already fetched by persona_preflight at the start of the task.
         pass
     else:
         fetched = False
@@ -277,9 +256,6 @@ def resolve_persona_image(
                     f"image {image_index})"
                 )
                 shutil.copyfile(photo, image_path)
-                # A fresh URL download lives in this task's own dir and
-                # is removed once copied; a shared temp asset is never
-                # touched.
                 if photo.startswith(task_dir + os.sep):
                     with contextlib.suppress(OSError):
                         os.remove(photo)
@@ -382,31 +358,17 @@ def render_full_lipsync(
         output_path,
         codec=codec,
     )
-    # check=False: with check=True the `status != 0` branch below is
-    # unreachable in production (subprocess.run raises instead).
     runner = run_ffmpeg or (
         lambda argv: subprocess.run(argv, capture_output=True, text=True, check=False)
     )
     result = runner(command)
     status = getattr(result, "returncode", 0)
     if status != 0:
-        # Raised message reaches task error/Discord via safe_reason
-        # (secrets only), so stderr must not be embedded in it. It is
-        # not logged either: CodeQL flags logging stderr-derived text
-        # even scrubbed (verified: a codeql suppression on the scrubbed
-        # log line did not clear the alert on head e07b0654).
         logger.error("full lip-sync concat failed")
         raise FullLipSyncError("full lip-sync concat failed")
     return output_path, total_cost_usd(costs), job_ids
 
 
-# A lip-sync face fills the frame (full mode: the whole video; hook mode:
-# the intro), so the default center caption lands on the mouth. 70% from
-# the top sits under the chin and above the bottom strip the platform UI
-# (title, channel) covers. 70% is the top of the caption box, not its
-# center: a multi-line caption extends downward from there, and the final
-# encode clamps it on-screen. The value is an estimate from a Shorts
-# screenshot, not yet verified on a rendered video.
 LIPSYNC_CAPTION_POSITION: float = 70.0
 
 

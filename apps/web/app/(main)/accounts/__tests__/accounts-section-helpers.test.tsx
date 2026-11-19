@@ -2,12 +2,6 @@ import { describe, it, expect } from 'vitest';
 import { connectedLabel, errorLabel } from '@/app/(main)/accounts/accounts-section-helpers';
 import { useI18n } from '@/lib/i18n/provider';
 
-//---------------
-// accounts-section-helpers — unit tests for the section labels.
-// The t stub interpolates { count } so the label's count argument is
-// pinned, not just the key: dropping it changes the rendered pill.
-//---------------
-
 type T = ReturnType<typeof useI18n>['t'];
 
 const t: T = ((key: string, options?: { count?: number }) =>

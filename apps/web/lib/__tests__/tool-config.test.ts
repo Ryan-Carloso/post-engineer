@@ -12,12 +12,6 @@ import {
 } from '@/lib/tool-config';
 import { TokenDecryptError } from '@/lib/token-crypto';
 
-//---------------
-// Tool Config lib (issue #669): strict validation, encrypted-at-rest
-// keys (same AES-256-GCM envelope as social tokens), presence-only
-// summaries. Only fake keys below — never a real one.
-//---------------
-
 vi.mock('@/lib/token-crypto', () => ({
   encryptJson: vi.fn((payload: unknown) => `encrypted.${JSON.stringify(payload)}`),
   decryptJson: vi.fn((encrypted: string) => JSON.parse(encrypted.replace('encrypted.', ''))),
@@ -266,9 +260,6 @@ describe('saveToolConfig', () => {
     expect(row.search_tool).toBe('tavily');
     expect(row.stock_sources).toEqual(['pexels', 'pixabay']);
     expect(typeof row.encrypted_keys).toBe('string');
-    // The mock encryptJson is a plaintext stand-in (the real envelope is
-    // pinned in token-crypto.test.ts, where no plaintext ever survives);
-    // here the assertion is that the keys went through encryptJson at all.
     expect(row.encrypted_keys).toBe(`encrypted.${JSON.stringify(VALID_INPUT.keys)}`);
     expect(options).toEqual({ onConflict: 'user_id' });
     expect(presence.keysPresent.tavily).toBe(true);

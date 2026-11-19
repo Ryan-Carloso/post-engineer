@@ -77,9 +77,6 @@ def transcribe_text(audio_file: str) -> str | None:
         logger.info(
             f"detected language: '{info.language}', probability: {info.language_probability:.2f}"
         )
-        # transcribe() returns a lazy segment generator: the inference runs
-        # while it is consumed, so the join stays inside the try — a failure
-        # mid-stream must yield None, not raise out of this helper.
         return " ".join(segment.text.strip() for segment in segments if segment.text.strip())
     except Exception as exc:
         logger.error(f"whisper transcription failed: {type(exc).__name__}: {exc}")
@@ -112,8 +109,6 @@ def create(audio_file, subtitle_file: str = ""):
 
     start = timer()
     subtitles = []
-    # Every word with its own boundaries: the SRT below collapses them into
-    # sentence cues, but the persona hook needs where its last word ends.
     spoken_words = []
 
     def recognized(seg_text, seg_start, seg_end):
@@ -146,11 +141,9 @@ def create(audio_file, subtitle_file: str = ""):
                     is_segmented = True
 
                 seg_end = word.end
-                # If it contains punctuation, then break the sentence.
                 seg_text += word.word
 
                 if utils.str_contains_punctuation(word.word):
-                    # remove last char
                     seg_text = seg_text[:-1]
                     if not seg_text:
                         continue
@@ -238,9 +231,6 @@ def file_to_subtitles(filename):
             elif current_times:
                 current_text += line
 
-    # Flush the final block. SRT files whose last subtitle is not followed by a
-    # trailing blank line never hit the blank-line branch above, so without this
-    # the last subtitle would be silently dropped.
     if current_times:
         index += 1
         times_texts.append((index, current_times.strip(), current_text.strip()))
@@ -325,8 +315,6 @@ def correct(subtitle_file, video_script):
         logger.success("Subtitle is correct")
         return
 
-    # Whisper's word boundaries place each cue on the word it starts with;
-    # without usable ones the cues are spread by character share instead.
     timed = subtitle_words.retime_by_words(script_lines, file_to_words(subtitle_file))
     if timed:
         method = "spoken word boundaries"

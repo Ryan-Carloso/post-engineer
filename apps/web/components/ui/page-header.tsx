@@ -2,11 +2,6 @@ import type { ReactNode } from 'react';
 
 import { cn } from '@/lib/utils';
 
-//---------------
-// PageHeader — the one title block every authenticated page uses. Screens
-// pass their own actions (refresh, create, filters) so the title, the
-// supporting line and the action cluster keep one rhythm across the app.
-//---------------
 export function PageHeader({
   title,
   description,

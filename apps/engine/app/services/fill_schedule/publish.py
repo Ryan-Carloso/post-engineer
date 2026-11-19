@@ -93,10 +93,6 @@ class BatchPublisher:
         if not self.base_url or not self.api_secret:
             logger.warning("fill_schedule: publish skipped — MPT_UPLOAD_API_BASE_URL/MONEYPRINT_API_SECRET missing")
             return 0
-        # A slot left in publishing by a crash is resumed here once its
-        # lease (publish_not_before) passes; it never goes back to ready.
-        # Snapshot before this tick parks new backoffs, so a slot we just
-        # scheduled is not resumed in the same pass.
         resumable: list[dict[str, Any]] = []
         fetch = getattr(self.store, "resumable_publishing_slots", None)
         if callable(fetch):
@@ -124,20 +120,7 @@ class BatchPublisher:
                 return 0
         elif not self.store.claim_ready_slot(str(slot["id"]), now):
             return 0
-        # Issue #384: image cleanup is known from the slot row alone, so
-        # a permanent binding failure also removes bytes that will never
-        # publish. A resumed upload slot's own claimed bytes are known too.
         media_cleanup = image_cleanup(slot) or claimed_upload_cleanup(self.store, slot, resumed)
-        # Issue #572: re-check the persona binding at publish time, after
-        # the claim and before any video leaves the server. The generate
-        # pre-flight proves the plan before GPU is spent, but the schedule
-        # row is the publisher's only input — an account unbound after
-        # generation (or a schedule created before the binding existed)
-        # would otherwise publish to an account the persona no longer
-        # owns. A schedule without a persona (faceless) skips the check.
-        # A binding read that fails leaves the slot in `publishing` for
-        # the resume path instead of publishing blind: fail closed, and a
-        # transient outage never burns a generated video.
         persona_id = schedule.get("persona_id")
         if isinstance(persona_id, str) and persona_id:
             try:
@@ -160,9 +143,6 @@ class BatchPublisher:
                 cleanup_existing_media(self.store, slot, media_cleanup)
                 return 0
             except (RuntimeError, ValueError) as exc:
-                # Any other plan failure (blank description, unsupported
-                # provider, caption limits) is a validation error, not a
-                # binding rejection — the refund reason must say so.
                 self._fail_slot_permanently(
                     slot,
                     schedule,
@@ -172,17 +152,14 @@ class BatchPublisher:
                 cleanup_existing_media(self.store, slot, media_cleanup)
                 return 0
         if not resumed:
-            # Once per publish: a resume (backoff, crash lease) is the same publish.
             track_event("video_publish_started", publish_tracking_context(slot, schedule))
         if not slot.get("task_id") and slot.get("media_kind") in ("upload", "image"):
-            # Issue #384: task-less media slot publishes from stored media; resolver marks permanent failures (None = done).
             fail = partial(self._fail_slot_permanently, slot, schedule)
             resolved = resolve_existing_media(self.store, fail, slot, now, resumed)
             if resolved is None:
                 return 0
             videos, video_reader, content_type, upload_cleanup = resolved
             media_cleanup = upload_cleanup or media_cleanup
-            # Media bytes come from the resolver, not the R2 archive (no presign).
             task = object_path = None
         else:
             task = self.task_state.get_task(str(slot["task_id"]))
@@ -310,7 +287,6 @@ class BatchPublisher:
                 publish_not_before=None,
                 **outcome_fields,
             )
-            # Single-use media is spent: remove the stored bytes now.
             cleanup_existing_media(self.store, slot, media_cleanup)
             track_event(
                 "video_published",
@@ -362,9 +338,6 @@ class BatchPublisher:
             attempts=account_result.max_attempts,
             emit_failed_event=False,
             outcomes=account_result.outcomes,
-            # An unknown outcome means the post may already be live: money
-            # must not move on an unknown outcome, so the slot fails
-            # WITHOUT refunding — support refunds it after the human check.
             refund=not any(
                 outcome.get("code") == "publish_unknown" for outcome in account_result.outcomes
             ),

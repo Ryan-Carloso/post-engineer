@@ -3,12 +3,6 @@ import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createElement, type ReactNode } from 'react';
 
-//---------------
-// Tests for the public persona seam in lib/api:
-// createPersona, generatePersonaAvatar e useVoicesQuery/fetchVoices.
-// The global fetch is stubbed (HTTP boundary) — nothing internal is mocked.
-//---------------
-
 import {
   createPersona,
   generatePersonaAvatar,
@@ -84,9 +78,6 @@ describe('lib/api — persona', () => {
     });
 
     it('keeps the valid entries of a mixed imageIds/warnings array instead of dropping it', async () => {
-      // A partially malformed payload must not silently drop real
-      // partial-success notes: filter non-string entries, keep the valid
-      // ones (each warning is independently mapped through i18n anyway).
       fetchMock.mockResolvedValue(
         jsonResponse({
           success: true,
@@ -396,10 +387,6 @@ describe('lib/api — persona', () => {
     }
 
     it('drops malformed image records instead of passing them to the UI', async () => {
-      // The UI reads id/image_url directly, is_primary drives the primary
-      // badge/toggle, and tag/description render as text: a record missing
-      // id, with a non-string image_url, a non-boolean is_primary, or a
-      // non-string tag/description must not flow through unchecked.
       fetchMock.mockResolvedValue(
         jsonResponse({
           success: true,

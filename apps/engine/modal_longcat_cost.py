@@ -19,8 +19,6 @@ import uuid
 from typing import Final
 
 
-# Idle hold after the last job before Modal scales the container to zero.
-# Must match the @app.cls scaledown_window in modal_longcat.py.
 SCALEDOWN_WINDOW_S: Final[int] = 60
 
 
@@ -92,7 +90,6 @@ class ContainerCostTracker:
         return max(0.0, round(float(container_cost_usd) - self._handler_costs_total, 4))
 
 
-# Module-level tracker: one per container process, created at import.
 TRACKER = ContainerCostTracker()
 
 

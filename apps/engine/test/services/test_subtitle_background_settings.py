@@ -104,9 +104,6 @@ class TestSubtitleBackgroundSettings(unittest.TestCase):
         )
 
         self.assertEqual(x, 0)
-        # Visible pixels are 34px tall, so in a 93px container there should be
-        # ~29px above and below; because the mask starts at 12px from the
-        # top, the TextClip itself must shift up to 18px.
         self.assertEqual(y, 18)
 
     def test_wrap_text_keeps_closing_punctuation_with_text(self):

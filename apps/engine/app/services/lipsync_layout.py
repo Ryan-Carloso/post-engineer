@@ -13,10 +13,6 @@ LAYOUT_STANDARD = "standard"
 LAYOUT_REACT = "react"
 VIDEO_LAYOUTS = frozenset({LAYOUT_STANDARD, LAYOUT_REACT})
 
-# Divider drawn on the seam between the persona and the images in the react
-# layout. Without it the two blocks read as two videos stapled together; a 2px
-# line at the seam reads as one frame. Sized in output pixels so it stays the
-# same visual weight at any resolution.
 REACT_DIVIDER_PX = 4
 REACT_DIVIDER_COLOR = "white@0.85"
 
@@ -35,10 +31,8 @@ def _react_split_filter(width: int, height: int) -> str:
     half = height // 2
     divider_y = half - REACT_DIVIDER_PX // 2
     return (
-        # background footage (input 0) fills the lower block, cover-fit then centre-crop.
         f"[0:v]scale={width}:{half}:force_original_aspect_ratio=increase,"
         f"crop={width}:{half},setsar=1[bg];"
-        # persona (input 1): scale by width, crop the torso off the bottom.
         f"[1:v]scale={width}:-2,crop={width}:{half},setsar=1[avatar];"
         f"[avatar][bg]vstack=inputs=2[stacked];"
         f"[stacked]drawbox=x=0:y={divider_y}:w={width}:h={REACT_DIVIDER_PX}"
@@ -79,9 +73,6 @@ def _build_lipsync_intro_command(
             str(duration),
             "-filter_complex",
             _react_split_filter(width, height),
-            # Video from the filter output; audio from INPUT 1 (the persona).
-            # A background clip carries its own audio, so mapping 0:a?
-            # buries the narration under background footage sound.
             "-map",
             "[vout]",
             "-map",
@@ -98,17 +89,11 @@ def _build_lipsync_intro_command(
             "-vf",
             f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
             f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,setsar=1",
-            # The standard intro drops audio entirely: this segment REPLACES
-            # the background's first seconds, and the background's own audio is
-            # re-muxed later from the source timeline.
             "-an",
         ]
     return command + [
         "-c:v",
         codec,
-        # Force the pipeline fps: LongCat avatar-v1.5 renders at 25fps and a
-        # stream-copied 30fps tail would balloon the concat timeline by the
-        # timebase ratio (measured +5.4s on a 27s video).
         "-r",
         str(fps),
         "-preset",

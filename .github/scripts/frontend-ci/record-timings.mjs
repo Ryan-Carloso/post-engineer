@@ -1,7 +1,3 @@
-//---------------
-// record-timings — write one shard's file durations from a vitest JSON report.
-//---------------
-
 import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';

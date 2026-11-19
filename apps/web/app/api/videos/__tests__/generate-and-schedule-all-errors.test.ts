@@ -288,7 +288,6 @@ describe('checkSemantics (direct)', () => {
     });
     expect(outcome.ok).toBe(false);
     if (outcome.ok) return;
-    // The persona-less rules need valid options, so they are not reported here.
     expect(outcome.issues.map((i) => i.field)).toEqual([
       'title',
       'options.segments',

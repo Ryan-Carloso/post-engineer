@@ -1,21 +1,6 @@
-//---------------
-// fanvue-http — the one place that talks to api.fanvue.com.
-//
-// Every API request needs `Authorization: Bearer <token>` plus the
-// `X-Fanvue-API-Version` header. This module owns the shared pieces
-// (base URL, version, JSON fetch and the response readers) so the
-// OAuth client (lib/fanvue.ts), the vault upload (lib/fanvue-media.ts)
-// and post creation (lib/fanvue-posts.ts) cannot drift apart.
-//
-// Non-2xx, a non-JSON body (a proxy can answer with HTML) and a
-// non-object body are all failures; the message is "CODE: detail" so
-// callers and telemetry read a stable code.
-//---------------
-
 import { FanvueError } from '@/lib/errors';
 
 export const FANVUE_API_BASE = 'https://api.fanvue.com';
-// Required on every api.fanvue.com request (not on the auth host).
 export const FANVUE_API_VERSION = '2025-06-26';
 const REQUEST_TIMEOUT_MS = 15_000;
 
@@ -48,7 +33,6 @@ export function readOptionalBoolean(body: JsonRecord, key: string): boolean | nu
   return typeof value === 'boolean' ? value : null;
 }
 
-// Only Fanvue's own error message is surfaced, never the request itself.
 function describeFailure(body: JsonRecord | null, status: number): string {
   const message =
     body === null

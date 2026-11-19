@@ -35,7 +35,6 @@ def test_thirty_two_words_accept_four_photos_and_refuse_eleven():
 
 
 def test_a_short_segment_still_needs_one_photo_and_refuses_a_second_when_it_would_flicker():
-    # 3 words is about 1s: one photo, and a second would flash.
     assert density_error(3, 1) is None
     rule, _fix = density_error(3, 2)
     assert "at most 1 image" in rule

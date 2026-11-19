@@ -235,8 +235,6 @@ class ClonedVoiceServiceTests(unittest.TestCase):
         self.store.get_for_user.return_value = {"engine_voice_key": "uabc_clone1"}
         self.store.mark_ready.side_effect = RuntimeError("supabase down")
         self.store.mark_failed.side_effect = RuntimeError("supabase down")
-        # Must not raise: an escaping exception would strand the row in
-        # pending with no signal at all.
         register_clone_in_background(
             "user-1",
             "clone-1",

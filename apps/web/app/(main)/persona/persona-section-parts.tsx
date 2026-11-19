@@ -2,9 +2,6 @@
 
 import { SECTION_LABEL_CLASS } from '@/lib/ui';
 
-//---------------
-// SectionDivider — divider with label
-//---------------
 export function SectionDivider({ label }: { label: string }) {
   return (
     <div className="flex items-center gap-3">
@@ -14,9 +11,6 @@ export function SectionDivider({ label }: { label: string }) {
   );
 }
 
-//---------------
-// InlineFieldError — validation error next to the invalid field.
-//---------------
 export function InlineFieldError({ message }: { message: string }) {
   return (
     <p role="alert" className="mt-2 text-sm font-medium text-destructive">{message}</p>

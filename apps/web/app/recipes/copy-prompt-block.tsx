@@ -5,17 +5,6 @@ import { useCopyText } from '@/lib/use-copy-text';
 import { Button } from '@/components/ui/button';
 import AgentLogos from '@/components/ui/agent-logos';
 
-//---------------
-// CopyPromptBlock — the detail page's signature element and its
-// primary action: the full prompt in a dark panel, a big accent
-// copy button, and the explanation around it (what copying does,
-// where the prompt goes — the user's own agent — and what happens
-// next). GitHub is not part of this flow and is not mentioned
-// here; it appears only as a small link at the bottom of the
-// detail page. Presentational: props + callback only, no fetch; the
-// copy itself goes through useCopyText.
-//---------------
-
 export default function CopyPromptBlock({ prompt }: { prompt: string }) {
   const { t } = useI18n();
   const { copied, copy } = useCopyText();

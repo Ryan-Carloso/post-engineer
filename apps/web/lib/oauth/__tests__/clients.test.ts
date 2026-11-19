@@ -45,12 +45,6 @@ describe('oauth clients', () => {
   });
 });
 
-//---------------
-// SSRF guards for fetchCimdDocument (CodeQL #17).
-// The client_id URL is attacker-controlled: the fetch must never follow
-// redirects and must never reach non-public IPs.
-//---------------
-
 function lookupReturning(...addresses: string[]) {
   return vi.fn(
     async (_hostname: string): Promise<LookupAddress[]> =>
@@ -70,23 +64,23 @@ function okFetch(body: unknown) {
 
 describe('isBlockedIpAddress', () => {
   it.each([
-    '127.0.0.1', // loopback
-    '10.0.0.1', // private
-    '172.16.0.1', // private
-    '192.168.1.1', // private
-    '169.254.169.254', // link-local (cloud metadata)
-    '0.0.0.0', // this network
-    '100.64.0.1', // CGNAT
-    '224.0.0.1', // multicast
-    '::1', // IPv6 loopback
-    '::ffff:127.0.0.1', // IPv4-mapped loopback
-    '::ffff:7f00:1', // IPv4-mapped loopback written in hex
-    'fc00::1', // IPv6 unique local
-    'fe80::1', // IPv6 link-local
-    'ff02::1', // IPv6 multicast
-    '198.18.0.1', // benchmarking
-    '192.0.0.8', // IETF protocol assignments, not the anycast exception
-    '[::1]', // bracketed loopback
+    '127.0.0.1',
+    '10.0.0.1',
+    '172.16.0.1',
+    '192.168.1.1',
+    '169.254.169.254',
+    '0.0.0.0',
+    '100.64.0.1',
+    '224.0.0.1',
+    '::1',
+    '::ffff:127.0.0.1',
+    '::ffff:7f00:1',
+    'fc00::1',
+    'fe80::1',
+    'ff02::1',
+    '198.18.0.1',
+    '192.0.0.8',
+    '[::1]',
   ])('blocks %s', (address) => {
     expect(isBlockedIpAddress(address)).toBe(true);
   });
@@ -282,7 +276,6 @@ describe('fetchCimdDocument SSRF guards', () => {
       if (capturedLookup === undefined) {
         throw new Error('document fetch did not install a pinned lookup');
       }
-      // Copy into a const so the closure does not see the mutable binding.
       const pinnedLookup = capturedLookup;
       const pinned = await new Promise<{ error: unknown; address: unknown }>((resolve) => {
         pinnedLookup('attacker.example', { all: true }, (error, address) => {

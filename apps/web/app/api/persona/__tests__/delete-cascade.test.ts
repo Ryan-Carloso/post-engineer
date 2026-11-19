@@ -2,13 +2,6 @@
 import '@testing-library/jest-dom/vitest';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-//---------------
-// DELETE /api/persona cascade tests (real contract).
-// Supabase + engine are mocked; everything else is real: auth, ownership,
-// delete ordering (slots -> schedules -> generations -> persona), counts,
-// PostHog event, and the no-refund invariant.
-//---------------
-
 vi.mock('@/lib/supabase/server', () => ({
   createSupabaseServerClient: vi.fn(),
 }));
@@ -26,14 +19,10 @@ vi.mock('@/lib/logger', () => ({
   logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
 }));
 vi.mock('@/lib/rate-limit', async (importOriginal) => {
-  // Rate limiting is bypassed for payload-behavior tests; one dedicated
-  // test below covers the 429 path.
   const actual = await importOriginal<typeof import('@/lib/rate-limit')>();
   return { ...actual, applyRateLimit: vi.fn().mockResolvedValue(null) };
 });
 vi.mock('next/server', async (importOriginal) => {
-  // after() needs a request scope; in tests the callback runs inline so
-  // the post-response engine cleanup is still exercised.
   const actual = await importOriginal<typeof import('next/server')>();
   return {
     ...actual,
@@ -87,8 +76,6 @@ function baseTables(): Record<string, Row[]> {
   };
 }
 
-// Thenable query builder with real in-memory filtering and real deletes,
-// recording delete order per table.
 function makeClient(tables: Record<string, Row[]>, deleteErrorOn?: string, removeError: unknown = null) {
   const deletes: string[] = [];
   const from = (table: string) => {
@@ -207,8 +194,6 @@ afterEach(() => {
 const del = (personaId: string) =>
   DELETE(new Request(`http://localhost/api/persona?personaId=${personaId}`, { method: 'DELETE' }));
 
-// after() callbacks run on the microtask queue in tests; flush them before
-// asserting on post-response side effects like the engine cleanup.
 const flushAfterCallbacks = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe('DELETE /api/persona cascade', () => {
@@ -261,7 +246,6 @@ describe('DELETE /api/persona cascade', () => {
   });
 
   it('logs storage cleanup failures on the after() path without failing the delete', async () => {
-    // after() runs inline in tests; the microtask flush below lets it land.
     setup(undefined, undefined, null, { message: 'storage down' });
     const res = await del(PERSONA_ID);
     expect(res.status).toBe(200);
@@ -358,14 +342,13 @@ describe('DELETE /api/persona cascade', () => {
       vi.fn(async (url: string, init?: { method?: string }) => {
         if (init?.method === 'DELETE') {
           engineDeletes.push(url);
-          now += 15_000; // each cleanup burns 15s; the budget is 20s
+          now += 15_000;
         }
         return { ok: true, status: 200, json: async () => ({}) };
       }),
     );
     await del(PERSONA_ID);
     await flushAfterCallbacks();
-    // task-aaa runs (t=0), task-bbb runs (t=15s < 20s), task-ccc is skipped (t=30s).
     expect(engineDeletes).toContain('https://engine.internal:8080/api/v1/tasks/task-aaa');
     expect(engineDeletes).toContain('https://engine.internal:8080/api/v1/tasks/task-bbb');
     expect(engineDeletes).not.toContain(expect.stringContaining('task-ccc'));
@@ -425,14 +408,11 @@ describe('DELETE /api/persona cascade', () => {
     expect(res.status).toBe(500);
     expect(body.success).toBe(false);
     expect(body.code).toBe('INTERNAL_ERROR');
-    // The failed step is named in the server log (loud, never silent).
     expect(logger.error).toHaveBeenCalledWith(
       '[api/persona] cascade delete failed at schedules',
       expect.anything(),
       expect.objectContaining({ personaId: PERSONA_ID }),
     );
-    // Slots were deleted, schedules failed: the persona row must survive
-    // (loud failure, never a silent half-delete).
     expect(deletes).toEqual(['scheduled_posts', 'schedules']);
   });
 });

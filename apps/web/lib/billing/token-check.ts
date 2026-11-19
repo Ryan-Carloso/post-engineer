@@ -14,8 +14,6 @@ export async function checkAndDeductTokens(
 > {
   const cost = computeVideoTokens(videoType, faceQuality);
 
-  // Lazy one-time grant: every account gets 3 free tokens on first use.
-  // Best-effort — if the RPC does not exist yet (pending migration), the flow continues.
   let grantOk = false;
   let grantedFree = 0;
   try {
@@ -78,10 +76,6 @@ export async function refundTokens(
     return false;
   }
 
-  // Review round 5 (opencode): the soft-failure branch ("RPC answered,
-  // refund not applied") left zero trail. Log loudly — the caller leaves
-  // tokens_refunded unset so the next poll retries, and this log is the
-  // only trail for that outcome.
   const refunded = isRecord(data) && data.refunded === true;
   if (!refunded) {
     logger.error('[token-check] refund not applied', null, { userId, generationId });

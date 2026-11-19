@@ -170,8 +170,6 @@ describe('POST /api/account/connect-url', () => {
     });
     const res = await POST(makeRequest({ provider: 'instagram' }));
     expect(res.status).toBe(500);
-    // No double-reporting: the failure is logged exactly once, by
-    // apiErrorResponse, with the underlying cause attached.
     expect(logger.logOAuthError).not.toHaveBeenCalled();
     expect(logger.error).toHaveBeenCalledTimes(1);
     const [, cause] = vi.mocked(logger.error).mock.calls[0] as [string, unknown];

@@ -1,9 +1,3 @@
-//---------------
-// scheduler-lease tests — the DB lease RPCs: return shapes and the
-// error path (an RPC failure must throw a tagged error so the scheduler
-// tick treats the tick as failed and retries, never silently skipping).
-//---------------
-
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const { rpcMock } = vi.hoisted(() => ({ rpcMock: vi.fn() }));
@@ -43,8 +37,6 @@ describe('tryAcquireSchedulerLease', () => {
       data: null,
       error: { message: 'connect failed: https://user:secret@db.internal:5432/postgres' },
     });
-    // The credential-bearing fragment (userinfo in the URL) must be
-    // redacted before the message is thrown/logged.
     await expect(tryAcquireSchedulerLease('post-metrics', 1800, 'h1')).rejects.toThrow(
       'acquire rpc failed: connect failed: https://[redacted]@db.internal:5432/postgres',
     );

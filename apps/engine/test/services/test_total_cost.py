@@ -43,17 +43,9 @@ class AmortizeVideoCostTests(unittest.TestCase):
         )
 
     def test_single_video_bears_the_whole_overhead(self):
-        # Overhead = container 2.5 minus handler 0.63 = 1.87, so the total
-        # is 0.63 + 1.87 + 0.0757 = 2.5757. The old formula fed the full
-        # container spend (2.5) here and reported 3.2057, counting the
-        # handler twice because container spend already includes it.
         self.assertEqual(amortize_video_cost(0.63, 1.87, 0.0757, 1), 2.5757)
 
     def test_measured_complete_dev_video_regression(self):
-        # Measured 2026-11-02, 51.36s complete dev video, H100, cold:
-        # handler 1.8366, container 2.8245, overhead 2.8245 - 1.8366
-        # = 0.9879, scaledown 0.0658. Wrong (double-count) total would be
-        # 1.8366 + 2.8245 + 0.0658 = 4.7269; the real total is 2.8903.
         self.assertEqual(amortize_video_cost(1.8366, 0.9879, 0.0658, 1), 2.8903)
 
     def test_missing_shared_input_never_falls_back_to_handler_only(self):

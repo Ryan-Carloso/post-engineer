@@ -33,7 +33,6 @@ def _cue(index, start, end, text):
     return (index, f"{start} --> {end}", text)
 
 
-# Real shape from task 0d742933 (Chatterbox voice, Whisper fallback).
 _WHISPER_SCRIPT = (
     "Stop wasting your trip stuck in a ninety minute line for the original, it's not worth it.\n\n"
     "Stop eating at the most famous Francesinha house, you're doing it wrong. "
@@ -62,7 +61,6 @@ _WHISPER_CUES = [
 class TestHookEndMeasurement:
     def test_coarse_whisper_cue_is_interpolated_not_taken_whole(self):
         end = _find_hook_end_seconds(_WHISPER_SCRIPT, _WHISPER_CUES)
-        # The hook is roughly the first third of a 14.46s cue.
         assert 3.0 < end < 7.0
 
     def test_exact_cue_boundary_is_kept(self):
@@ -156,9 +154,6 @@ class TestLipsyncIntroIsCappedNotSkipped:
                 )
             )
             track = stack.enter_context(patch.object(persona_hook, "track_event"))
-            # The face gate is orthogonal to the hook timing pinned here
-            # (the data-URI avatar bytes are not a decodable photo): the
-            # gate has its own tests in test_persona_preflight.py.
             stack.enter_context(
                 patch("app.services.face_detect.image_contains_face", return_value=True)
             )
@@ -223,8 +218,6 @@ class TestHookEstimatedWithoutSubtitles:
         assert [c[0][0] for c in track.call_args_list] == ["persona_hook_lipsync_skipped"]
 
     def test_no_skip_exception_type_remains(self):
-        # A skip is an explicit None return, never an exception a generic
-        # `except ValueError` could swallow.
         assert not hasattr(persona_hook, "LipsyncIntroSkipped")
 
 

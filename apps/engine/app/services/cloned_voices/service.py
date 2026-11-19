@@ -210,9 +210,6 @@ class ClonedVoiceService:
                 language=language.strip(),
             )
         except Exception:
-            # The reference WAV is already in storage; without the row it
-            # can never be reached by the delete path, so remove it now —
-            # and say so loudly if even that fails.
             try:
                 removed = self._store.delete_storage_object(storage_path)
             except Exception:
@@ -267,9 +264,6 @@ class ClonedVoiceService:
         storage_path = row.get("storage_path")
         if isinstance(storage_path, str) and storage_path:
             if not self._store.delete_storage_object(storage_path):
-                # The row is still deleted below so the UI never gets stuck
-                # on a voice whose storage object could not be removed; the
-                # orphaned object stays diagnosable from this log line.
                 logger.error(
                     "cloned voice storage object left orphaned, "
                     f"clone_id: {clone_id}, path: {storage_path}"
@@ -295,8 +289,6 @@ class ClonedVoiceService:
             lang = (language or row.get("language") or "en").strip().lower()
             spoken_text = VOICE_SAMPLE_TEXTS.get(lang) or VOICE_SAMPLE_TEXTS.get("en-us", "")
         else:
-            # Caller-provided preview text (validated at the endpoint): the
-            # clone speaks exactly this instead of the fixed sample.
             spoken_text = text
 
         with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:

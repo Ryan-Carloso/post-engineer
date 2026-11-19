@@ -13,14 +13,6 @@ vi.mock('@/lib/api-keys', () => ({
   validateApiKeyFormat: (key: string) => key.startsWith('post-engineer_'),
 }));
 
-//---------------
-// GET /api/persona/voices tests — proxy of the house voice catalog to
-// money-print. Auth = Supabase session. Only Supabase SSR and the global
-// fetch (HTTP) are mocked. Upstream mocks use the real engine envelope
-// (BaseResponse: { status, message, body }) so the tests pin the
-// production contract instead of a fake shape.
-//---------------
-
 import { GET } from '../route';
 import { ListVoicesResponseSchema } from '@/lib/contracts/voices';
 import { createSupabaseServerClient } from '@/lib/supabase/server';

@@ -1,20 +1,3 @@
-//---------------
-// ensureEngineImageUrl — make the persona image reachable by the engine.
-//
-// The engine downloads this image through an SSRF guard that refuses loopback
-// and private addresses, and accepts only `data:image/…` or an absolute
-// http(s) URL. Two shapes reach us:
-//
-//   * an absolute signed Supabase URL (a photo the user uploaded) — used as-is;
-//   * a RELATIVE path to our own static asset (`/caracter-samples/file-1.png`,
-//     what picking a house character stores) — unusable, and not fixable by
-//     prefixing the origin: in local dev the web sits on 127.0.0.1, which the
-//     guard blocks by design.
-//
-// So the relative case is read from our own origin and re-hosted in the
-// personas bucket, which yields a real public URL in every environment.
-//---------------
-
 import { isIP } from 'node:net';
 
 import { SIGNED_URL_TTL_SECONDS } from '@/app/api/videos/generate-and-schedule/persona-prep';
@@ -46,31 +29,10 @@ export interface EngineImageUrlDeps {
   fetchImpl?: typeof fetch;
 }
 
-//---------------
-// isDirectlyUsable — already something the engine can fetch itself.
-//---------------
 function isDirectlyUsable(url: string): boolean {
   return url.startsWith('data:image/') || /^https?:\/\//i.test(url);
 }
 
-//---------------
-// isEngineUsablePersonaImageUrl — true when a stored persona image URL is
-// a shape the engine can consume, mirroring the acceptance rules of
-// prepare_persona_lipsync_video + ssrf.assert_public_url in the engine
-// (the engine re-checks everything at download time; this pre-flight check
-// exists only so a bad stored URL fails before any token charge):
-// - a public asset path (`/caracter-samples/...`, isPublicAssetPath):
-//   ensureEngineImageUrl re-hosts it into a public URL before the engine
-//   ever sees it. Any other `/`-prefixed value — notably `//host/...` and
-//   `/\host/...`, which change the host when resolved (issue #448) — is
-//   rejected;
-// - a `data:image/` URI with the payload separator the engine splits on;
-// - an http(s) URL with a hostname, where a literal IP host must be public
-//   (hostnames are left to the engine's resolve-and-check, like the other
-//   pre-flight URL checks in the generate-and-schedule route).
-// Anything else (a relative non-asset path, a non-http scheme, a host-less
-// URL) is guaranteed to die mid-pipeline, so callers reject it up front.
-//---------------
 export function isEngineUsablePersonaImageUrl(value: string): boolean {
   const candidate = value.trim();
   if (candidate.startsWith('/')) return isPublicAssetPath(candidate);
@@ -88,10 +50,6 @@ export function isEngineUsablePersonaImageUrl(value: string): boolean {
   return true;
 }
 
-//---------------
-// objectPathFor — stable per-user path, so re-hosting the same character
-// overwrites instead of accumulating copies on every video.
-//---------------
 function objectPathFor(userId: string, relativePath: string): string {
   const cleaned = relativePath.replace(/^\/+/, '').replace(/[^a-zA-Z0-9._/-]/g, '-');
   return `${userId}/engine-images/${cleaned}`;
@@ -105,14 +63,10 @@ export async function ensureEngineImageUrl(
   if (candidate.length === 0) return undefined;
   if (isDirectlyUsable(candidate)) return candidate;
 
-  // Only our own public assets are fetched server-side (issue #448). The
-  // stored value is user-controlled, so it is never echoed in the message.
   if (!isPublicAssetPath(candidate)) {
     throw new Error('persona image is not usable by the engine and is not a site asset path');
   }
 
-  // Defense in depth: the resolved URL must stay on our own origin. An asset
-  // path cannot change the host today; this holds if that check ever loosens.
   const origin = new URL(deps.origin).origin;
   const resolved = new URL(candidate, origin);
   if (resolved.origin !== origin) {
@@ -120,7 +74,6 @@ export async function ensureEngineImageUrl(
   }
 
   const doFetch = deps.fetchImpl ?? fetch;
-  // redirect:'error' — a 3xx can never move the read off our origin.
   const response = await doFetch(resolved.toString(), {
     redirect: 'error',
     signal: AbortSignal.timeout(ASSET_FETCH_TIMEOUT_MS),
@@ -147,10 +100,6 @@ export async function ensureEngineImageUrl(
     throw new Error(`could not host the persona image ${candidate}: ${uploadError.message}`);
   }
 
-  // The hosted URL is sent to the engine at dispatch and must outlive the
-  // serial render queue like every other generation-time signing (24h):
-  // a house-character slot picked up more than 1h after creation would
-  // otherwise fail with the same HTTP 400 as the 1h persona-photo URL.
   const { data, error: signError } = await client.createSignedUrl(objectPath, SIGNED_URL_TTL_SECONDS);
   if (signError || !data?.signedUrl) {
     throw new Error(

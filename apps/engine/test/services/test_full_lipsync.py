@@ -62,9 +62,6 @@ class PlanWindowsTests(unittest.TestCase):
         self.assertEqual(full_lipsync.MAX_FULL_LIPSYNC_WINDOWS, 5)
 
     def test_cue_overflow_falls_back_to_even_split(self):
-        # Review example: 58s with cues every 5s greedily cuts six
-        # 10s windows, but five even windows fit the 60s ceiling, so
-        # preflight-approved narration must not fail here after charge.
         cues = [float(s) for s in range(5, 56, 5)]
         windows = full_lipsync.plan_windows(58.0, cues)
         self.assertEqual(len(windows), 5)
@@ -74,8 +71,6 @@ class PlanWindowsTests(unittest.TestCase):
             self.assertGreaterEqual(duration, 3.72)
 
     def test_cue_split_preferred_when_it_fits(self):
-        # 50s with cues every 5s cuts exactly five 10s windows, so the
-        # cue-aligned split stays, no even-split fallback is needed.
         cues = [float(s) for s in range(5, 50, 5)]
         self.assertEqual(
             full_lipsync.plan_windows(50.0, cues),
@@ -83,14 +78,11 @@ class PlanWindowsTests(unittest.TestCase):
         )
 
     def test_short_tail_merges_backwards(self):
-        # 25s with a cue at 24s would leave a 1s tail; it merges instead.
         windows = full_lipsync.plan_windows(25.0, [12.0, 24.0])
         self.assertAlmostEqual(windows[-1][1], 3.72)
         self.assertAlmostEqual(sum(duration for _start, duration in windows), 25.0)
 
     def test_window_cap_matches_task_ceiling(self):
-        # task.py PERSONA_LIPSYNC_MAX_SECONDS is the observed-safe ceiling;
-        # this module must not silently drift to the 16.52s theoretical one.
         task_source = (
             Path(__file__).resolve().parents[2] / "app" / "services" / "task.py"
         ).read_text()
@@ -195,19 +187,6 @@ class RenderTests(unittest.TestCase):
         self.assertEqual(calls, [])
 
     def test_production_concat_failure_raises_full_lipsync_error(self):
-        # The production runner (run_ffmpeg=None) must convert a failed
-        # ffmpeg run into FullLipSyncError — not leak
-        # subprocess.CalledProcessError. The fake mirrors real
-        # subprocess.run: it raises CalledProcessError when check=True
-        # (the old code) and returns a failed result when check=False
-        # (the fix), so this test fails on the old code and passes on
-        # the new one — a plain return-value mock would pass on both.
-        # The raised message must carry NO stderr fragment and NO
-        # absolute path: it reaches the task error and Discord via
-        # safe_reason, which scrubs secrets but not local paths. The
-        # log carries no stderr either: CodeQL flags logging
-        # stderr-derived text even scrubbed, so only the generic
-        # failure is logged.
         def fake_run(argv, **kwargs):
             if kwargs.get("check"):
                 raise subprocess.CalledProcessError(1, argv, stderr="ffmpeg boom")
@@ -306,8 +285,6 @@ class CaptionParamsTest(unittest.TestCase):
         self.assertIs(full_lipsync.caption_params(params), params)
 
     def test_full_lipsync_react_layout_still_moves_caption(self) -> None:
-        # Full mode has no persona/background seam: the whole video is the
-        # face, so the react exclusion applies to the hook only.
         params = self._params(video_type="full_lipsync", subtitle_position="center", video_layout="react")
         moved = full_lipsync.caption_params(params)
         self.assertEqual(moved.subtitle_position, "custom")

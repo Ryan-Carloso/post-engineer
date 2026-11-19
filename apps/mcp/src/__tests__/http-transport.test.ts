@@ -13,9 +13,6 @@ import {
 
 vi.mock('../analytics.js', () => ({
   mcpTelemetryHeaders: () => ({}),
-  // Passthrough stand-in for the real withTracking, which only opens the
-  // per-call context: mcp_tool_called is recorded by the web API from the
-  // request headers, not by the MCP (see analytics.test.ts).
   withTelemetryHeaders: (_headers: unknown, run: () => Promise<unknown>) => run(),
   withToolCall: (_tool: string, _action: string, run: () => Promise<unknown>) => run(),
   withTracking: (_toolName: string, handler: (args: unknown) => Promise<unknown>) => async (args: unknown) => {
@@ -135,7 +132,6 @@ describe('parseHttpTransportOptions', () => {
   });
 });
 
-// Actions that read a file from the disk: offered on the stdio server only.
 const FILE_ONLY_ACTIONS: Array<[string, string]> = [['media', 'upload'], ['persona_media', 'add_image'], ['publish_video', 'from_file']];
 
 async function listedNames(client: PostEngineerClient, transport: 'stdio' | 'http'): Promise<string[]> {
@@ -171,8 +167,6 @@ describe('serveHttpTransport', () => {
       const memoryNames = await listedNames(client, 'http');
       const stdioNames = await listedNames(client, 'stdio');
 
-      // The HTTP listener must serve the same tools as the http factory,
-      // and the stdio server has the same 17 tools with extra file actions.
       expect(httpNames).toEqual(memoryNames);
       expect(stdioNames).toEqual(httpNames);
       expect(httpNames).toHaveLength(17);
@@ -273,9 +267,6 @@ describe('serveHttpTransport', () => {
     expect(response.status).toBe(404);
   });
 
-  // P6-2 changed this behaviour deliberately: --allow-remote without
-  // OAuth configured is a startup error, not a warning — an
-  // unauthenticated remote endpoint is no longer possible.
   it('refuses to start with --allow-remote and no OAuth configured', async () => {
     await expect(
       serveHttpTransport(() => createPostEngineerMcpServer(mockClient()), {
@@ -286,8 +277,6 @@ describe('serveHttpTransport', () => {
     ).rejects.toThrow(/OAuth authentication/);
   });
 
-  // Raw requests: fetch forbids setting Origin and Host headers, and
-  // these tests need exactly those headers to exercise the rebinding guard.
   async function rawStatus(url: string, headers: Record<string, string>): Promise<number> {
     return new Promise((resolve, reject) => {
       const req = httpRequest(url, { method: 'GET', headers }, (res) => {
@@ -318,8 +307,6 @@ describe('serveHttpTransport', () => {
     handles.push(handle);
     const healthUrl = handle.url.replace(/\/mcp$/, '/health');
     expect(await rawStatus(healthUrl, { origin: 'http://localhost:5173' })).toBe(200);
-    // URL keeps brackets on IPv6 literals: the [::1] origin must pass
-    // the same loopback check as the bare ::1 host.
     expect(await rawStatus(healthUrl, { origin: 'http://[::1]:5173' })).toBe(200);
   });
 
@@ -338,9 +325,6 @@ describe('serveHttpTransport', () => {
     expect(await rawStatus(healthUrl, { host: '::1' })).toBe(200);
   });
 
-  // P6-2: a non-loopback bind now requires OAuth configured; the Host
-  // check is still skipped for that bind. /health needs no token, so a
-  // dummy auth config suffices here — no JWKS fetch happens for it.
   it('skips the Host check when bound non-loopback with auth configured', async () => {
     const handle = await serveHttpTransport(
       () => createPostEngineerMcpServer(mockClient()),

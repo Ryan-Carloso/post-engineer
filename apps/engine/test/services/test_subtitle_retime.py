@@ -34,7 +34,6 @@ _SCRIPT = (
     "actually held together so I could eat with my hands like a human being."
 )
 
-# Real Whisper output for that script (task 8ddff83c, Chatterbox voice).
 _WHISPER_SRT = (
     "1\n00:00:00,080 --> 00:00:11,020\n"
     "i ate five legendary franzenhus until number three held its bread together the rest "
@@ -64,7 +63,6 @@ def _correct(srt: str, script: str):
 def test_coarse_cues_give_every_capped_script_line_its_own_ordered_cue():
     text, items = _correct(_WHISPER_SRT, _SCRIPT)
     assert "00:00:00,000 --> 00:00:00,000" not in text
-    # 9 punctuation lines, each longer than MAX_CUE_WORDS split into balanced cues.
     assert len(items) == 15
     assert all(len(item[2].split()) <= subtitle_cues.MAX_CUE_WORDS for item in items)
     assert items[0][2].startswith("I ate five legendary")
@@ -96,7 +94,6 @@ def test_cues_start_at_their_first_spoken_word_when_word_boundaries_exist(tmp_pa
     assert [item[2] for item in items] == ["Go to bed earlier", "Lose more weight tonight"]
     assert _seconds(items[0][1], 0) == pytest.approx(0.10)
     assert _seconds(items[0][1], 1) == pytest.approx(1.40)
-    # Character share would have started this cue near 1.9s: the speech pauses first.
     assert _seconds(items[1][1], 0) == pytest.approx(2.20)
     assert _seconds(items[1][1], 1) == pytest.approx(3.90)
 
@@ -131,13 +128,11 @@ def test_a_transcript_that_stops_early_falls_back_to_character_share(tmp_path):
     subtitle.correct(str(srt), "Go to bed earlier. Lose more weight tonight.")
 
     items = subtitle.file_to_subtitles(str(srt))
-    # The last line is spread over the spoken span, not stacked on one instant.
     assert _seconds(items[1][1], 1) - _seconds(items[1][1], 0) > 0.5
 
 
 def test_hook_measured_on_the_corrected_file_lands_inside_the_first_cue():
     _, items = _correct(_WHISPER_SRT, _SCRIPT)
-    # "I ate ... collapse." is the first ~half of the 0.08-11.02s cue.
     assert 3.0 < _find_hook_end_seconds(_SCRIPT, items) < 9.0
 
 

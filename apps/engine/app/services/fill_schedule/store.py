@@ -18,22 +18,10 @@ from app.services.fill_schedule.constants import (
     SLOT_READY,
 )
 from app.utils.supabase_retry import (
-    CONNECT_RETRIES as CONNECT_RETRIES,  # re-exported: tests and callers read it here
+    CONNECT_RETRIES as CONNECT_RETRIES,
 )
 from app.utils.supabase_retry import build_retrying_session, set_retry_budget
 
-# (connect, read). Connect is a narrowing from the previous flat timeout=30,
-# which bounded BOTH at 30: a TLS handshake that took 12-25s used to succeed
-# and now fails (then retries), so this is a real behavior change on a
-# high-latency link, not a pure speedup.
-#
-# Worst case per request is max(3 * 10 + 1.0, 30) = 31s — see
-# supabase_retry.worst_case_seconds (3 attempts, not 2). That is per REQUEST,
-# not per tick: a sustained Supabase outage makes each of the tick's stages
-# pay ~31s on its first call (generated, reconciled, published, plus publish's
-# resumable_publishing_slots), so a tick runs ~2min instead of 0s and the
-# effective period stretches past TICK_SECONDS. The scheduler's connect
-# circuit breaker caps that; this comment records the underlying cost.
 REQUEST_TIMEOUT_SECONDS = (10, 30)
 
 
@@ -48,18 +36,10 @@ class SupabaseAuthError(RuntimeError):
 class ScheduleStore:
     """Read/write ``schedules`` and ``scheduled_posts`` in Supabase."""
 
-    # `!left` on personas, not `!inner`: a schedule may have no persona
-    # (migration 012 — a faceless post defined by its post_* snapshot
-    # columns), and an inner join would silently drop those slots from every
-    # tick. The snapshot columns ride along so `post_identity` never needs a
-    # second round trip.
-    # The schedules columns a tick reads to build a job: publish plan plus
-    # the identity (persona embed and its snapshot). Shared by the
-    # generate/publish selects.
     SLOT_IDENTITY_SELECT = (
         "id,user_id,persona_id,providers,youtube_account_ids,"
         "instagram_account_ids,linkedin_account_ids,bluesky_account_ids,threads_account_ids,facebook_account_ids,pinterest_account_ids,pinterest_board_id,threespeak_account_ids,"
-        "instagram_account_ids,linkedin_account_ids,bluesky_account_ids,threads_account_ids,facebook_account_ids,pinterest_account_ids,pinterest_board_id,rumble_account_ids,fanvue_account_ids,"
+        "instagram_account_ids,linkedin_account_ids,bluesky_account_ids,threads_account_ids,facebook_account_ids,pinterest_account_ids,pinterest_board_id,rumble_account_ids,fanvue_account_ids,telegram_account_ids,"
         "post_voice_id,post_niche,post_language,"
         "post_video_aspect,post_video_layout,post_paragraph_number,post_face_quality,"
         "post_voice_audio_url,post_cta_text,"
@@ -82,8 +62,6 @@ class ScheduleStore:
         if not key:
             raise RuntimeError("SUPABASE_SERVICE_ROLE_KEY is required for fill_schedule")
         self._requests = requests_module if requests_module is not None else build_retrying_session()
-        # Retry budget currently armed. The scheduler lowers it to 0 for the
-        # rest of a tick once a stage has failed (see set_connect_retries).
         self.connect_retries = CONNECT_RETRIES
         self._base_url = base_url.rstrip("/")
         self._key = key
@@ -108,8 +86,6 @@ class ScheduleStore:
         self.connect_retries = count
         if isinstance(self._requests, requests.Session):
             set_retry_budget(self._requests, count)
-        # Otherwise a test injected a mock in place of the session: there is
-        # no adapter to retune, and the recorded flag is what tests assert.
 
     def _request(self, method: str, path: str, **kwargs: Any) -> Any:
         response = self._requests.request(
@@ -159,10 +135,6 @@ class ScheduleStore:
         return [row for row in rows if isinstance(row, dict)] if isinstance(rows, list) else []
 
     def generating_slots(self) -> list[dict[str, Any]]:
-        # The reconciler refunds under `batch:{scheduleId}` using the slot's
-        # own schedule_id and stored charged_tokens (migration 045), so it
-        # needs no schedules embed: a refund never depends on a joinable
-        # persona or snapshot.
         rows = self._request(
             "GET",
             "scheduled_posts",
@@ -181,11 +153,6 @@ class ScheduleStore:
             params={
                 "status": f"eq.{SLOT_READY}",
                 "slot_at": f"lte.{now_utc.isoformat()}",
-                # publish_not_before is the retry backoff key (PR-B of #277):
-                # a slot that just failed a publish attempt waits its delay
-                # before the next attempt — and the column is also simply
-                # absent on older rows until migration 028, so either no key
-                # or an elapsed one qualifies.
                 "or": (
                     "(publish_not_before.is.null,"
                     f"publish_not_before.lte.{now_utc.isoformat()})"
@@ -243,8 +210,6 @@ class ScheduleStore:
         )
 
     def spend_tokens(self, user_id: str, generation_id: str, amount: int, reason: str) -> bool:
-        # Used by the batch billing flow (video.py); the scheduler itself
-        # never spends — batches are prepaid at request time.
         result = self._request(
             "POST",
             "rpc/spend_tokens",
@@ -259,7 +224,6 @@ class ScheduleStore:
         return isinstance(result, dict) and result.get("spent") is True
 
     def refund_tokens(self, user_id: str, generation_id: str, reason: str) -> bool:
-        # Used by the batch billing flow (video.py).
         result = self._request(
             "POST",
             "rpc/refund_generation_tokens",

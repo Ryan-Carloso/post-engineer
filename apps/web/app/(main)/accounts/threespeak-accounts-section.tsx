@@ -13,11 +13,6 @@ import { notifyIfSessionExpired } from '@/lib/session-expiry';
 import { ProviderIcon } from '@/components/provider-icon';
 import { BrandIcon, connectedLabel, errorLabel, useDisconnectFlow } from './accounts-section-helpers';
 
-// 3Speak accounts: one query and a key dialog owned by the page — same
-// shape as Bluesky (no OAuth: a Hive username plus its posting key).
-// A rejected key is 422, not 401; only a dead hub session is 401 here.
-//---------------
-
 export function ThreespeakAccountsSection(): ReactNode {
   const { t } = useI18n();
   const query = useThreespeakAccountsQuery();
@@ -41,13 +36,7 @@ export function ThreespeakAccountsSection(): ReactNode {
       formData.append('postingKey', appPassword);
       const response = await fetch('/api/threespeak-connect', { method: 'POST', body: formData });
       if (!response.ok) {
-        // 401 here means a dead hub session (a rejected Hive posting key
-        // is 422), so it triggers the host-wide session-expiry redirect.
         notifyIfSessionExpired(response);
-        // A rejected credential is 422 THREESPEAK_CREDENTIAL_REJECTED: name
-        // it, so the user knows the username/key pair is what 3Speak refused.
-        // (notifyIfSessionExpired reads only the status, so the body is
-        // still unread here.)
         const body: unknown = await response.json().catch(() => null);
         const code = (body as { code?: unknown } | null)?.code;
         setError(

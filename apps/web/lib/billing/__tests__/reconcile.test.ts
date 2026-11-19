@@ -1,22 +1,3 @@
-//---------------
-// Tests for lib/billing/reconcile — daily billing reconciliation.
-//
-// The store (Supabase) and the engine HTTP check are the mocked
-// boundaries; the orchestration decisions are real and fully
-// deterministic — there is no human review queue:
-//   - zombie schedule (0 slots, old, spent, no videos) -> auto-refund
-//   - stuck generation + engine task gone + no published slot -> auto-refund
-//   - stuck generation + engine failed -> auto-refund with the
-//     categorized engine reason
-//   - stuck generation + engine complete -> backfill completed, no refund
-//   - stuck generation + active/unreachable inside the day limit ->
-//     deferred to the next run (no refund, no settle)
-//   - stuck generation + active/unreachable past the day limit ->
-//     auto-refund (no provable delivery)
-//   - stuck generation + no engine task id -> refund unless a published
-//     slot proves value was delivered
-//---------------
-
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { findRepoRoot } from '@/test/repo-root';
 
@@ -330,8 +311,6 @@ describe('runBillingReconciliation — zombies', () => {
 
     const report = await runBillingReconciliation(store);
 
-    // The RPC was attempted exactly once; its refunded=false is the
-    // idempotent "already settled" answer, not an error.
     expect(refundCalls).toEqual([[z.userId, z.generationId, ZOMBIE_REFUND_REASON]]);
     expect(captureAs).not.toHaveBeenCalledWith(
       z.userId,
@@ -483,7 +462,7 @@ describe('runBillingReconciliation — stuck generations', () => {
 
   it('defers (no refund, no settle) an active task inside the day limit', async () => {
     engineBody({ body: { state: 3 } });
-    const s = stuck(); // 12h old — past the 6h stuck bar, inside the 3-day box
+    const s = stuck();
     const store = fakeStore({ findStuckGenerations: async () => [s] });
 
     const report = await runBillingReconciliation(store);
@@ -609,7 +588,6 @@ describe('runBillingReconciliation — stuck generations', () => {
 
     await runBillingReconciliation(store);
 
-    // Never mark refunded optimistically: the RPC said no.
     expect(store.calls.settled).toEqual([
       expect.objectContaining({ generationId: s.generationId, status: 'failed', refunded: false }),
     ]);
@@ -699,8 +677,6 @@ describe('supabase/migrations/004_billing_reconcile.sql literals', () => {
     const sql = await readMigration();
     expect(sql).toContain('find_zombie_schedule_candidates');
     expect(sql).toContain('find_stuck_generations');
-    // The zombie query keys off the batch: generation id convention and
-    // requires zero slots, zero generated videos, and a ledger spend.
     expect(sql).toContain("'batch:'");
     expect(sql).toContain('scheduled_posts');
     expect(sql).toContain('video_generations');
@@ -713,8 +689,6 @@ describe('supabase/migrations/004_billing_reconcile.sql literals', () => {
     expect(sql).toContain('/api/cron/billing-reconcile');
     expect(sql).toContain('pg_cron');
     expect(sql).toContain('pg_net');
-    // Graceful degradation: never fail the migration when the extensions
-    // or the cron settings are missing (vanilla PG in CI).
     expect(sql).toContain('pg_available_extensions');
   });
 });

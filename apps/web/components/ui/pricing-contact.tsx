@@ -4,16 +4,6 @@ import type { ReactNode } from 'react';
 import { useI18n } from '@/lib/i18n/provider';
 import { whatsappUrl } from '@/lib/whatsapp';
 
-//---------------
-// PricingContactCard — beta pricing replacement for the token pack cards.
-//
-// No prices: Post Engineer is still in beta, so tokens are arranged by
-// contacting the team. WhatsApp reuses the existing support number
-// (NEXT_PUBLIC_WHATSAPP_NUMBER) and is omitted when it is not configured,
-// exactly like the other support links; email is always shown so contact
-// never disappears. The GitHub link is the open-source self-host path.
-//---------------
-
 export const SUPPORT_EMAIL = 'madebyryandev@gmail.com';
 export const GITHUB_URL = 'https://github.com/Ryan-Carloso/post-engineer';
 

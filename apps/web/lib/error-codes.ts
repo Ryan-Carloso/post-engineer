@@ -1,14 +1,3 @@
-//---------------
-// error-codes — central stable error codes for API, MCP and UI.
-//
-// Every user-facing failure from the generate-and-schedule flow (and, over
-// time, the rest of the API) returns { success: false, error, code, field?, errorId }.
-// Codes are stable machine-readable strings; `error` is the default
-// human-readable message (templates use {placeholders} filled by
-// formatErrorMessage). API, MCP and UI share these codes so agents and
-// frontends can react programmatically instead of parsing copy.
-//---------------
-
 export const ERROR_CODES = {
   PERSONA_NOT_FOUND: 'PERSONA_NOT_FOUND',
   PERSONA_ACCESS_DENIED: 'PERSONA_ACCESS_DENIED',
@@ -16,11 +5,7 @@ export const ERROR_CODES = {
   SOCIAL_ACCOUNT_NOT_OWNED: 'SOCIAL_ACCOUNT_NOT_OWNED',
   INVALID_PROVIDER_ACCOUNT: 'INVALID_PROVIDER_ACCOUNT',
   NO_CONNECTED_ACCOUNTS: 'NO_CONNECTED_ACCOUNTS',
-  // Issue #572: the account is connected and owned, but the persona is not
-  // bound to it — publishing to it is refused before any token is charged.
   ACCOUNT_NOT_BOUND_TO_PERSONA: 'ACCOUNT_NOT_BOUND_TO_PERSONA',
-  // Issue #572: the persona has zero bound accounts, so nothing can be
-  // scheduled for it until an account is bound.
   PERSONA_NO_BOUND_ACCOUNTS: 'PERSONA_NO_BOUND_ACCOUNTS',
   PERSONA_ALREADY_SCHEDULED: 'PERSONA_ALREADY_SCHEDULED',
   TOPICS_REQUIRED: 'TOPICS_REQUIRED',
@@ -32,18 +17,17 @@ export const ERROR_CODES = {
   VALIDATION_FAILED: 'VALIDATION_FAILED',
   BLUESKY_CREDENTIAL_REJECTED: 'BLUESKY_CREDENTIAL_REJECTED',
   THREESPEAK_CREDENTIAL_REJECTED: 'THREESPEAK_CREDENTIAL_REJECTED',
+  TELEGRAM_TOKEN_REJECTED: 'TELEGRAM_TOKEN_REJECTED',
+  TELEGRAM_CHAT_NOT_FOUND: 'TELEGRAM_CHAT_NOT_FOUND',
+  TELEGRAM_CHAT_KIND_MISMATCH: 'TELEGRAM_CHAT_KIND_MISMATCH',
+  TELEGRAM_BOT_NOT_MEMBER: 'TELEGRAM_BOT_NOT_MEMBER',
+  TELEGRAM_BOT_CANNOT_POST: 'TELEGRAM_BOT_CANNOT_POST',
   VOICE_UNAVAILABLE: 'VOICE_UNAVAILABLE',
   UNKNOWN_VOICE: 'UNKNOWN_VOICE',
   INTERNAL_ERROR: 'INTERNAL_ERROR',
   ENGINE_UNAVAILABLE: 'ENGINE_UNAVAILABLE',
-  // An image (an image signed upload) can only go to the networks whose
-  // handler posts images (IMAGE_PROVIDERS in shared/contracts/providers.ts).
   IMAGE_PROVIDER_UNSUPPORTED: 'IMAGE_PROVIDER_UNSUPPORTED',
-  // Issue #384: a ready video upload was already consumed (or expired) by
-  // the time the scheduled publish tried to hold it.
   VIDEO_UPLOAD_CONSUMED: 'VIDEO_UPLOAD_CONSUMED',
-  // A signed upload is single-use: it already backs a live scheduled slot
-  // (migration 067), so a second call cannot schedule or publish it.
   VIDEO_UPLOAD_SCHEDULED: 'VIDEO_UPLOAD_SCHEDULED',
   MCP_VERSION_MISMATCH: 'MCP_VERSION_MISMATCH',
 } as const;
@@ -70,31 +54,28 @@ const DEFAULT_MESSAGES: Record<ErrorCode, string> = {
   VALIDATION_FAILED: 'Request validation failed.',
   BLUESKY_CREDENTIAL_REJECTED: 'Invalid Bluesky handle or app password.',
   THREESPEAK_CREDENTIAL_REJECTED: 'Invalid Hive username or posting key.',
+  TELEGRAM_TOKEN_REJECTED: 'Telegram rejected the bot token. Copy a fresh token from @BotFather and try again.',
+  TELEGRAM_CHAT_NOT_FOUND: 'Telegram could not find that chat. Check the chat ID or @username and that the bot was added to it.',
+  TELEGRAM_CHAT_KIND_MISMATCH: 'That chat is a {actual}, not a {expected}. Pick {actual} in the setup and try again.',
+  TELEGRAM_BOT_NOT_MEMBER: 'The bot is not a member of that chat. Add it in Telegram first, then try again.',
+  TELEGRAM_BOT_CANNOT_POST:
+    'The bot cannot post there yet. Make it an administrator who can post (channel) or allow it to send messages (group), then try again.',
   VOICE_UNAVAILABLE: 'The persona’s voice is unavailable and there is no default voice for its language. Update the persona.',
   UNKNOWN_VOICE:
     'Unknown voice "{attempt}". Not a house voice and not one of your clones. Pick one from GET /api/persona/voices.',
-  // Never leak internals: unexpected failures get this safe message; the
-  // technical detail goes to server logs (and errorId) only.
   INTERNAL_ERROR: 'Something went wrong. Please try again later.',
   ENGINE_UNAVAILABLE: 'Video generation is temporarily unavailable. Please try again later.',
-  IMAGE_PROVIDER_UNSUPPORTED: 'Images can only be published to Instagram, Bluesky, LinkedIn, Threads, Facebook and Pinterest.',
+  IMAGE_PROVIDER_UNSUPPORTED: 'Images can only be published to Instagram, Bluesky, LinkedIn, Threads, Facebook, Pinterest and Telegram.',
   VIDEO_UPLOAD_CONSUMED: 'This video upload was already used. Upload it again to publish.',
   VIDEO_UPLOAD_SCHEDULED:
     'This video upload is already scheduled. An upload publishes once: schedule it to every network in one call, or upload it again.',
-  // The gate (mcp-version-gate.ts) always sends a specific message naming
-  // both versions; this default only names the fix.
   MCP_VERSION_MISMATCH: 'This post-engineer-mcp version does not match the server. Restart the MCP with the version the server requires.',
 };
 
-/** Default human-readable message for a code. */
 export function errorMessage(code: ErrorCode): string {
   return DEFAULT_MESSAGES[code];
 }
 
-/**
- * Fill {placeholders} in the default message. Unknown placeholders are left
- * untouched so a missing param never produces a broken sentence.
- */
 export function formatErrorMessage(
   code: ErrorCode,
   params?: Record<string, string | number>,
@@ -102,14 +83,12 @@ export function formatErrorMessage(
   let message = DEFAULT_MESSAGES[code];
   if (params) {
     for (const [key, value] of Object.entries(params)) {
-      // split/join instead of replaceAll: the tsconfig lib target predates es2021.
       message = message.split(`{${key}}`).join(String(value));
     }
   }
   return message;
 }
 
-/** Type guard for values arriving from untyped boundaries (MCP, UI). */
 export function isErrorCode(value: unknown): value is ErrorCode {
   return typeof value === 'string' && (Object.values(ERROR_CODES) as string[]).includes(value);
 }

@@ -12,20 +12,6 @@ import { readBody } from '@/lib/contracts-server';
 import { createExperiment } from '@/lib/contracts/experiments';
 import { listExperiments } from '@/lib/experiments/read';
 
-//---------------
-// /api/experiments — paired content A/B tests (issue #476).
-//
-// POST creates an experiment and its two variants in one transaction
-// (create_experiment RPC). Videos join it later through
-// POST /api/videos/generate-and-schedule with `experiment: { experimentId,
-// variantId, pair }`, which checks pair fairness before charging.
-// GET lists the caller's experiments.
-//
-// Service role bypasses RLS: ownership is the explicit user id passed to
-// the RPC and the user_id filter on every read; a persona-scoped API key
-// may only create and see experiments of its personas (or persona-less).
-//---------------
-
 const ROUTE_POST = 'POST /api/experiments';
 
 async function postHandler(request: Request): Promise<NextResponse> {

@@ -1,19 +1,4 @@
 #!/usr/bin/env node
-//---------------
-// dump-schema — snapshot of the public schema as Postgres itself reports it
-// after the migration chain is applied: tables, columns (type, NOT NULL,
-// default), constraints (CHECK / FK / PK / UNIQUE definitions), RLS flag,
-// policies and enum types.
-//
-//   node scripts/db/dump-schema.mjs --db-url <url> --write   regenerate
-//   node scripts/db/dump-schema.mjs --db-url <url> --check   fail on drift
-//
-// The committed supabase/schema.snapshot.json is what the unit tests read
-// (no database needed there) and what CI compares against a freshly migrated
-// ephemeral Postgres, so a migration that changes the schema without the
-// snapshot change is visible in review, and code-side lists (providers,
-// modes) are checked against the constraints the database really has.
-//---------------
 
 import { spawnSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -22,8 +7,6 @@ import { fileURLToPath } from 'node:url';
 
 const SNAPSHOT_PATH = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'supabase', 'schema.snapshot.json');
 
-// jsonb sorts object keys, so the output is deterministic; columns keep
-// attnum order and constraints/policies are keyed by name.
 const QUERY = `
 select jsonb_pretty(jsonb_build_object('enums', coalesce((
   select jsonb_object_agg(t.typname, (
@@ -71,7 +54,6 @@ function readFlag(name) {
 function dumpSchema(dbUrl) {
   const result = spawnSync('psql', [dbUrl, '-v', 'ON_ERROR_STOP=1', '-At', '-c', QUERY], { encoding: 'utf8' });
   if (result.status !== 0) {
-    // psql echoes the connection string on failure; print stderr only.
     throw new Error(`psql failed: ${result.stderr.trim() || result.error?.message || 'unknown error'}`);
   }
   return `${result.stdout.trim()}\n`;

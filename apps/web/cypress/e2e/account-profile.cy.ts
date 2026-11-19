@@ -1,19 +1,3 @@
-//---------------
-// Account area (Perfil/Profile) — E2E for the mobile header avatar, the
-// /account page and the desktop sidebar footer link.
-//
-// Real Supabase session (loginE2EUser): the middleware validates the
-// cookie server-side, so the session must be real. user_metadata is
-// rewritten inside the real cookie (access_token stays valid) to drive
-// the displayed name/initial — no avatar_url is seeded because
-// next/image would reject an unconfigured remote host.
-//---------------
-
-//---------------
-// Cookie name is derived from the configured Supabase URL at runtime
-// (same derivation as support/commands.ts), so these tests work against
-// any Supabase project and no real project ref is hardcoded here.
-//---------------
 function authCookieName(): string {
   const supabaseUrl = Cypress.env('supabaseUrl') as string | undefined;
   if (typeof supabaseUrl !== 'string' || supabaseUrl.length === 0) {
@@ -23,11 +7,6 @@ function authCookieName(): string {
   return `sb-${ref}-auth-token`;
 }
 
-//---------------
-// seedUserMetadata — replaces user_metadata inside the real session cookie
-// that loginE2EUser wrote, keeping its access_token so the middleware still
-// resolves a user. The account UI reads the name/avatar from that metadata.
-//---------------
 function seedUserMetadata(userMetadata: Record<string, unknown>): void {
   const cookieName = authCookieName();
   cy.getCookie(cookieName).then((cookie) => {
@@ -48,11 +27,6 @@ function seedUserMetadata(userMetadata: Record<string, unknown>): void {
   });
 }
 
-//---------------
-// Intercepts for the requests the shell really fires on mount. The token
-// balance fetch is the only one the /account page needs; the rest serve
-// the "/" -> posts redirect used by the navigation tests.
-//---------------
 function interceptShellData(): void {
   cy.intercept('GET', '/api/account', {
     statusCode: 200,
@@ -82,12 +56,6 @@ function interceptShellData(): void {
 
 const MOBILE_VIEWPORT: [number, number] = [390, 844];
 
-//---------------
-// The first-visit wizard auto-opens on /posts ("/" redirects there) and
-// its dialog covers the page, so these specs visit as a returning user.
-// A Cypress spec cannot import the key from lib/onboarding-wizard.ts,
-// so the literal is pinned here (same as posts-create.cy.ts).
-//---------------
 function visitHomeAsReturningUser(): void {
   cy.visit('/', {
     onBeforeLoad(win) {
@@ -96,10 +64,6 @@ function visitHomeAsReturningUser(): void {
   });
 }
 
-//---------------
-// The desktop sidebar is h-screen; on a short viewport the footer (user
-// block) is clipped off-screen, so the desktop spec uses a tall viewport.
-//---------------
 const TALL_DESKTOP_VIEWPORT: [number, number] = [1280, 1100];
 
 describe('Account area — mobile header (390px)', () => {
@@ -120,7 +84,6 @@ describe('Account area — mobile header (390px)', () => {
     cy.get('[data-testid=mobile-profile-link]')
       .should('be.visible')
       .and('have.attr', 'href', '/account');
-    // No avatar_url seeded: the initial-letter fallback circle renders.
     cy.get('[data-testid=mobile-profile-link]').should('contain', 'C');
   });
 
@@ -147,8 +110,6 @@ describe('Account area — mobile header (390px)', () => {
   it('has four bottom tab links starting at /posts plus More', () => {
     visitHomeAsReturningUser();
 
-    // The bottom nav is the fixed nav; the translated aria-label depends on
-    // the locale, so select by layout classes instead.
     cy.get('nav.fixed.bottom-0').as('bottomNav');
     cy.get('@bottomNav')
       .find('a')
@@ -170,8 +131,6 @@ describe('Account area — /account page', () => {
   it('renders user, token balance, version, locale switcher and sign out', () => {
     cy.visit('/account');
 
-    // All assertions are scoped to the page container: the desktop sidebar
-    // (hidden on mobile via CSS) renders a second AccountPanel in the DOM.
     cy.get('[data-testid=account-page]').as('page');
 
     cy.get('@page').contains('h1', 'Perfil').should('be.visible');
@@ -182,7 +141,6 @@ describe('Account area — /account page', () => {
       .and('have.attr', 'href', '/account')
       .and('contain', 'Cypress');
 
-    // The client really fires /api/billing/tokens on mount (TokenBalance).
     cy.wait('@getTokens');
     cy.get('@page').find('[data-testid=token-balance]').should('contain', '100');
 
@@ -214,9 +172,6 @@ describe('Account area — /account page', () => {
   it('signs out and lands on /login', () => {
     cy.visit('/account');
 
-    // Stub the auth-server logout call: these specs share one E2E
-    // account with the parallel cypress job, and a real sign-out here
-    // would revoke its session mid-run (the /landing bounce).
     cy.intercept('POST', '**/auth/v1/logout*', { statusCode: 204 });
 
     cy.get('[data-testid=account-page]').find('button[title="Sair"]').scrollIntoView().click();
@@ -235,9 +190,6 @@ describe('Account area — desktop sidebar footer', () => {
   it('sidebar has seven tabs starting at /posts and has no API Keys tab', () => {
     visitHomeAsReturningUser();
 
-    // Sidebar nav: Posts first, then History, ..., API Key & MCP last.
-    // Seven tabs; the mobile bottom bar has four tabs plus a More sheet
-    // that holds History, Metrics and A/B Tests.
     cy.get('aside nav')
       .first()
       .find('a')

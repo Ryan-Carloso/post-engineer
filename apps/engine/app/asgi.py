@@ -38,25 +38,10 @@ def should_init_error_tracking() -> bool:
     return not notify.running_under_test() and bool(os.getenv("POSTHOG_API_KEY"))
 
 
-#---------------
-# PostHog error tracking. Without a key: warn and continue without error
-# tracking (the engine also runs in dev/tests without a complete .env).
-# Under pytest the init is always skipped (see should_init_error_tracking).
-#---------------
-# Loguru extras forwarded as PostHog properties on $exception events.
-# Whitelisted: only filterable, non-sensitive context (ids, status codes).
-# Anything else bound to a record stays out of telemetry.
 _EXCEPTION_CONTEXT_EXTRAS = ("task_id", "http_status_code")
 
-# Bound on serialized frames per $exception_list entry: deep tracebacks
-# (e.g. RecursionError) must not blow up the event payload.
 _MAX_STACKTRACE_FRAMES = 100
 
-# Bound on free-text fields ($exception_message, entry value, stacktrace
-# text): oversized values risk ingestion dropping the event — or silently
-# truncating properties — exactly when the payload is biggest. Scrub the
-# full text first, then cut (PR #38 rule: a cut landing mid-key would
-# otherwise strip the regex anchor and leak the value).
 _MAX_TEXT_CHARS = 5000
 
 
@@ -93,12 +78,6 @@ def _stacktrace_frames(exc_tb: TracebackType | None) -> list[dict[str, object]]:
 def _exception_list_entry(
     exc_type: str, value: str, stacktrace: dict[str, object]
 ) -> dict[str, object]:
-    # PostHog error tracking requires $exception_list on every $exception
-    # event; without it ingestion flags $cymbal_errors ("missing field
-    # $exception_list") and the event never groups in Error Tracking.
-    # handled: True matches posthog-python's own capture default — records
-    # reaching this sink were caught and logged while the app keeps
-    # serving, never process crashes.
     return {
         "type": exc_type,
         "value": value,
@@ -131,15 +110,10 @@ def _flat_log_fingerprint(record: dict[str, object], exc_type: str) -> str | Non
     if not isinstance(extra, dict):
         extra = {}
     key = exc_type
-    # The status separates caller faults from server faults only when it is
-    # a real int: bools take the string path in property forwarding (a
-    # secret is never an int), so they must not reach the key either.
     status_code = extra.get("http_status_code")
     if isinstance(status_code, int) and not isinstance(status_code, bool):
         key += f":{status_code}"
     key += f":{module}:{function}"
-    # Stage names are the pipeline's own bounded phase vocabulary, never
-    # free text: safe to group on.
     stage = extra.get("stage")
     if isinstance(stage, str) and stage:
         key += f":stage={stage}"
@@ -162,19 +136,12 @@ def _loguru_posthog_sink(message) -> None:
         for key in _EXCEPTION_CONTEXT_EXTRAS:
             if isinstance(extra, dict) and extra.get(key) is not None:
                 value = extra[key]
-                # Typed ints (e.g. http_status_code) are not free text:
-                # forward them raw so PostHog numeric filters/breakdowns
-                # work; everything else is scrubbed AND length-capped like
-                # every other free-text field. Bools are excluded
-                # explicitly — isinstance(True, int) is True, and a secret
-                # is never an int (analytics.py rule).
                 properties[key] = (
                     value
                     if isinstance(value, int) and not isinstance(value, bool)
                     else _scrub_and_truncate(str(value))
                 )
         if exception is not None:
-            # loguru stores the exception as a (type, value, traceback) tuple
             exc_value = exception[1]
             exc_type_name = type(exc_value).__name__
             exc_message = _scrub_and_truncate(str(exc_value))
@@ -193,11 +160,6 @@ def _loguru_posthog_sink(message) -> None:
                 "frames": _stacktrace_frames(exception[2]),
             }
         else:
-            # No live exception tuple (e.g. HttpException logs its own flat
-            # message): synthesize the entry so the event still ingests.
-            # The http_status_code extra marks our HttpException path — same
-            # not-None gate as the property forwarding above, so the
-            # classification can never drift from the forwarded signal.
             exc_type_name = (
                 "HttpException"
                 if isinstance(extra, dict) and extra.get("http_status_code") is not None
@@ -212,7 +174,6 @@ def _loguru_posthog_sink(message) -> None:
         properties["$exception_type"] = exc_type_name
         properties["$exception_message"] = exc_message
         properties["$exception_stacktrace"] = stacktrace_text
-        # HogQL Error Tracking queries `$exception_types.1` (1-indexed).
         properties["$exception_types"] = [exc_type_name]
         properties["$exception_list"] = [
             _exception_list_entry(exc_type_name, exc_message, stacktrace)
@@ -223,14 +184,10 @@ def _loguru_posthog_sink(message) -> None:
 
 
 if should_init_error_tracking():
-    # Loguru records are forwarded to PostHog via the sink below.
     logger.add(_loguru_posthog_sink, level="ERROR")
     logger.info("PostHog error tracking enabled")
 elif notify.running_under_test():
     if notify.test_skip_is_suspicious():
-        # The guard fired with no test runner behind it (bare pytest import
-        # or a leaked ENGINE_UNDER_TEST in a production environment): every
-        # error report would silently stop. Loud, not debug.
         logger.warning("PostHog error tracking skipped: no test runner detected — tracking disabled outside a test run")
     else:
         logger.debug("PostHog error tracking skipped: running under pytest")
@@ -266,13 +223,6 @@ def exception_handler(request: Request, e: HttpException):
 
 
 def validation_exception_handler(request: Request, e: RequestValidationError):
-    # Pydantic v2 puts the raised exception object in the error dict's ctx
-    # (e.g. SegmentValidationError carrying field/rule/fix, or any ValueError
-    # from a model validator), which plain json.dumps cannot serialize — the
-    # handler itself threw and the caller got a 500 instead of the 400.
-    # jsonable_encoder is what FastAPI's own default handler uses: it renders
-    # the exception as its attributes, so the 4xx still names the field,
-    # the rule, and the fix.
     return JSONResponse(
         status_code=400,
         content=utils.get_response(
@@ -302,22 +252,7 @@ def get_application() -> FastAPI:
 
 app = get_application()
 
-# No CORS: the engine is internal — browsers never hit it directly; every
-# call goes through Next.js (same origin as the app) with the Supabase JWT.
-
-# Build metadata: VERSION/PR_NUMBER/BUILD/COMMIT are injected at build and
-# deploy time. In production the VPS deploy generates them (see
-# deploy-version.sh in the deployment repo): VERSION is MAJOR.MINOR.PR where
-# PR is the merged pull request that introduced the deployed commit, BUILD is
-# that same PR number (the build identifier) and COMMIT is the full SHA. CI
-# injects its own values so the test suite exercises the same code path. The
-# repo-root VERSION file is mounted read-only into the container as the
-# fallback for the version when VERSION is unset (local runs). Nothing
-# version-related is committed to git per build — parallel PRs never conflict
-# on version files.
 VERSION_FILE = "/app/VERSION"
-# Written at image build (engine Dockerfile, after ARG COMMIT/BUILD so the
-# layer is not reused across deploys). ISO UTC. Empty locally.
 BUILT_AT_FILE = "/app/BUILT_AT"
 
 
@@ -396,9 +331,6 @@ app.mount("/", StaticFiles(directory=public_dir, html=True), name="")
 @app.on_event("shutdown")
 def shutdown_event():
     logger.info("shutdown event")
-    # Stamp a clean shutdown for the boot autopsy: a later boot that finds
-    # no fresh stamp is by construction an unclean death (SIGKILL/OOM).
-    # Never breaks shutdown: the hook is best-effort.
     try:
         from app.services import engine_heartbeat
 
@@ -414,22 +346,7 @@ def startup_event():
         f"startup event (version {build['version']} "
         f"pr {build['pr']} build {build['build']} commit {build['commit']})"
     )
-    # Warm the PostHog client on server startup — not at controller import
-    # time: the on_accepted funnel callback runs under the task-manager
-    # lock, and the first track_event in a process pays the posthog import
-    # + client construction. Confining it here keeps the side effect in the
-    # process that actually serves traffic. No-op when POSTHOG_API_KEY is
-    # unset.
     warm_client()
-    # Orphan reconcile runs HERE, at real server boot — never at import
-    # time. app.services.state is imported by any process touching the app;
-    # reconciling there would mark the live engine's running tasks as
-    # orphans and fail them. Only the Supabase backend reconciles; the
-    # memory/redis backends have no such method.
-    # Liveness heartbeat (Supabase row, ~45s) + the PostHog engine_boot
-    # autopsy event: orphan counts from the boot reconcile, time since the
-    # last heartbeat, clean/unclean shutdown, last RSS. Best-effort: a
-    # diagnostics failure must never break startup.
     try:
         reconcile = getattr(sm.state, "reconcile_orphaned_tasks", None)
         if callable(reconcile):
@@ -443,21 +360,12 @@ def startup_event():
     except Exception as exc:  # noqa: BLE001 - startup continues regardless
         logger.warning(f"engine heartbeat/boot event failed: {exc}")
     start_fill_schedule_scheduler()
-    # The reconcile above only marks direct orphans. Start them here,
-    # through the shared task manager (max_concurrent_tasks). The review
-    # must not start tm.start itself: that used to run inside
-    # SupabaseTaskState.__init__, before app.services.state.state was
-    # assigned, and the worker reads that binding.
     try:
         from app.services.direct_redispatch import start_pending_direct_redispatches
 
         start_pending_direct_redispatches()
     except Exception as exc:  # noqa: BLE001 - startup continues regardless
         logger.warning(f"direct orphan redispatch failed: {exc}")
-    # Cloned voices: the registration background task does not survive a
-    # restart, so rows would stay pending forever. Re-run them here, at
-    # real boot (reference WAVs are already in storage). Best-effort like
-    # the reconciles above; a no-op when the Supabase env is unset.
     try:
         from app.services.cloned_voices.service import reconcile_pending_registrations
 

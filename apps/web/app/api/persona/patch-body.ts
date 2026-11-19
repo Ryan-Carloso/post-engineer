@@ -1,7 +1,3 @@
-// PATCH body parsing for the persona route.
-//
-// Extracted from route.ts so the route module stays under the file-size
-// ratchet. All fields are optional on edit; missing fields parse as null.
 import { FACE_QUALITIES, PERSONA_CTA_MAX_LENGTH, photoExtensionOf, VALID_VIDEO_ASPECTS, VIDEO_LAYOUTS } from '@/lib/persona-schema';
 import { isFileLike } from '@/lib/persona-images';
 
@@ -9,9 +5,6 @@ function isVideoLayout(value: string): value is (typeof VIDEO_LAYOUTS)[number] {
   return (VIDEO_LAYOUTS as readonly string[]).includes(value);
 }
 
-// parsePatchBody — all fields are optional on edit; returns
-// null for the ones missing from the multipart body.
-//---------------
 export interface PersonaPatchBody {
   name: string | null;
   photo: File | null;
@@ -30,9 +23,6 @@ export interface PersonaPatchBody {
 
 type ParsePatchResult =
   | { ok: true; value: PersonaPatchBody }
-  // logMessage is set only where the error embeds user input: the body
-  // keeps the rejected value for the caller, the log line uses the stable
-  // template so PostHog groups by template, not one issue per input.
   | { ok: false; error: string; logMessage?: string };
 
 export async function parsePatchBody(request: Request): Promise<ParsePatchResult> {
@@ -77,9 +67,6 @@ export async function parsePatchBody(request: Request): Promise<ParsePatchResult
     };
   }
   const scriptPrompt = optionalString(formData.get('scriptPrompt'));
-  // ctaText is the one field the user can also clear: a present but blank
-  // value means "remove the CTA" (''), not "leave unchanged" — the generic
-  // optionalString blank-to-null mapping would silently drop the clear.
   const rawCtaText = formData.get('ctaText');
   const ctaText =
     typeof rawCtaText === 'string' ? (rawCtaText.trim().length === 0 ? '' : rawCtaText) : null;

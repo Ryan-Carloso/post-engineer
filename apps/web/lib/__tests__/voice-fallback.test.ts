@@ -217,16 +217,11 @@ describe('resolvePersonaVoice', () => {
     });
 
     it('never gives a non-English persona the English legacy alias target (review MAJOR: the alias path respects the language)', () => {
-      // The legacy alias targets are ALL English house voices; a Portuguese
-      // persona with `en_us_female_02` stored must resolve unavailable (fail
-      // before any spend), not silently speak English through the alias.
       expect(resolvePersonaVoice('en_us_female_02', 'pt')).toEqual({ kind: 'unavailable' });
       expect(resolvePersonaVoice('en_us_male_01', 'pt-BR')).toEqual({ kind: 'unavailable' });
     });
 
     it('still resolves the alias target for an English-language persona whose language is unset', () => {
-      // A missing/unknown language leans English (the pipeline's hard gate):
-      // the alias keeps resolving.
       expect(resolvePersonaVoice('en_us_female_02', null)).toMatchObject({ kind: 'fallback', toVoice: 'chatterbox:kokoro_af_bella' });
     });
 

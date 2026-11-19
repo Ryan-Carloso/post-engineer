@@ -41,21 +41,10 @@ from app.services.segment_panels import Panel
 from app.utils import file_security, ssrf, utils
 from app.utils.ssrf import UnsafeUrlError
 
-# A larger clip could never arrive via temp_assets (its 50 MB upload
-# cap): the two caps must stay equal, pinned by a test in
-# test_segment_video.py.
 MAX_CLIP_BYTES = 50 * 1024 * 1024
-# A take is seconds of speech: 30s covers any take with loop headroom,
-# and a longer file is almost certainly a whole video, not b-roll.
 MAX_CLIP_DURATION_SECONDS = 30.0
-# Shorter than this loops visibly even once: a strobe, not b-roll.
 MIN_CLIP_DURATION_SECONDS = 1.0
-# A clip may loop this many times to fill its take; past that the
-# repetition is obvious and coverage fails instead (with a refund).
 MAX_CLIP_LOOPS = 3
-# Density credit: one clip stands in for ~12s of speech (four 3s photo
-# slots), matching the 3x loop cap on a typical 4s-or-longer clip. The
-# render-time coverage check is the exact backstop for a shorter clip.
 CLIP_DENSITY_ITEMS = 4
 VIDEO_CODEC = "h264"
 VIDEO_SUFFIX = ".mp4"
@@ -67,9 +56,6 @@ REASON_DUPLICATE_CLIP = "duplicate video clip"
 REASON_OVERLAY_ON_CLIP = "overlays are not supported on video clips"
 REASON_CLIP_FAILED = "video clip failed to render"
 
-# The check endpoint reuses the photo codes, so the web/MCP contract
-# keeps passing: an unusable clip is not_image, one over the duration
-# cap is too_large. The render skip reasons carry the precise wording.
 _CHECK_CODE = {"not_video": "not_image", "video_too_long": "too_large"}
 
 _VIDEO_MEDIA_ID_PATTERN = re.compile(r"^[0-9a-f]{32}\.mp4$")
@@ -419,7 +405,6 @@ def clip_panel(
         _drop(downloaded)
         _drop(clip_path)
         return None, [f"{label} media skipped: {REASON_CLIP_FAILED}"]
-    # The clip exists: only now does it block a repeat.
     photo_content.claim(seen, clip_hash, label)
     lines: list[str] = []
     overlay = media.get("overlay") if isinstance(media, dict) else None

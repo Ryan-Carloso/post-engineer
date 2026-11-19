@@ -1,20 +1,9 @@
-//---------------
-// Facts about what an account card can show. Pure: no DOM, no PostHog.
-// The accounts page paints a truncated label; these fields are what PostHog
-// needs to tell a CSS clip from a missing stored name, a blocked image
-// host, or an Instagram display name that never reaches the card.
-//---------------
-
 import type { SocialProvider } from '@/lib/contracts/providers';
 
 export const ACCOUNT_CARD_DISPLAY_EVENT = 'account_card_displayed';
 export const ACCOUNT_DISCONNECT_FAILED_EVENT = 'account_disconnect_failed';
 export const ACCOUNT_LIST_FAILED_EVENT = 'account_list_failed';
 
-// Fallback labels written by lib/providers/registry.ts when accountName is
-// empty; null for a network that shows the account id instead. The card
-// receives the already-substituted string. A source test pins these
-// literals to that file.
 export const ACCOUNT_NAME_FALLBACKS = {
   youtube: 'YouTube Account',
   instagram: 'instagram_user',
@@ -26,10 +15,9 @@ export const ACCOUNT_NAME_FALLBACKS = {
   '3speak': null,
   rumble: null,
   fanvue: null,
+  telegram: null,
 } as const satisfies Record<SocialProvider, string | null>;
 
-// Hosts next/image is allowed to load. next.config.ts is the other copy;
-// a source test fails if they diverge. `**.cdninstagram.com` is the suffix.
 export const THUMBNAIL_HOST_ALLOWLIST = [
   'avatars.githubusercontent.com',
   'yt3.ggpht.com',
@@ -40,8 +28,6 @@ export const THUMBNAIL_HOST_ALLOWLIST = [
   'media.fanvue.com',
 ] as const;
 
-// Wildcard hosts in next/image remotePatterns (next.config.ts): the
-// Instagram/Threads/Facebook CDNs are matched by suffix, not exact hostname.
 export const THUMBNAIL_HOST_SUFFIXES = ['.cdninstagram.com', '.fbcdn.net'] as const;
 
 const LABEL_CAP = 200;
@@ -122,9 +108,6 @@ export function thumbnailHostAllowed(host: string): boolean {
   );
 }
 
-// Signed CDN picture URLs expire (`oe` = Unix seconds, hex). Shared with
-// lib/account-profile-sync.ts, whose resync re-reads the profile when this
-// is true.
 export function pictureUrlExpired(url: string, now = Date.now()): boolean {
   try {
     const oe = new URL(url).searchParams.get('oe');
@@ -144,7 +127,6 @@ function isTruncated(el: ElementBox | null | undefined): boolean {
 function nameIsFallback(provider: AccountProvider, shown: string): boolean {
   const fallback = ACCOUNT_NAME_FALLBACKS[provider];
   if (fallback === null) return false;
-  // Instagram's card shows the username as a handle (@instagram_user).
   return shown === fallback || (provider === 'instagram' && shown === `@${fallback}`);
 }
 

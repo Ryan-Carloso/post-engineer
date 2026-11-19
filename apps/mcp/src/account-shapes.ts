@@ -1,6 +1,3 @@
-// Connect/disconnect account shapes. Kept in a new module so tools.ts stays
-// under the file-size ratchet; tools.ts re-exports them so existing import
-// sites (`./tools.js`) keep working.
 import { z } from 'zod';
 import { SOCIAL_PROVIDERS } from './contracts/providers.js';
 
@@ -18,15 +15,6 @@ export const DisconnectAccountShape = {
 
 export const DisconnectAccountSchema = z.object(DisconnectAccountShape);
 
-//---------------
-// createPersonaAccountsField — the bound publishing accounts a new
-// persona is born with (issue #572). Lives here (not in tools.ts) so
-// tools.ts stays under the file-size ratchet: a persona is born bound
-// to at least one publishing account — videos publish only to bound
-// accounts, and a persona with no bound account cannot exist. The
-// server enforces the same rule; the refine fails the call here first,
-// before any file is read.
-//---------------
 export const createPersonaAccountsField = z
   .record(z.string(), z.array(z.string().min(1)))
   .refine((accounts) => Object.values(accounts).some((ids) => ids.length > 0), {

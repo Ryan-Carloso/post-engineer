@@ -62,10 +62,6 @@ describe('root layout metadata — search and social', () => {
     expect(twitter.images).toContain('/og.png');
     const publicDir = join(findRepoRoot(import.meta.url), 'apps', 'web', 'public');
     expect(existsSync(join(publicDir, 'og.png'))).toBe(true);
-    // The metadata declares 1200x630 to crawlers, so check the file
-    // itself, not just its existence: PNG IHDR holds width/height
-    // big-endian at bytes 16 and 20. Otherwise the suite would pass
-    // with any size image behind the same declared numbers.
     const png = readFileSync(join(publicDir, 'og.png'));
     expect(png.readUInt32BE(16)).toBe(1200);
     expect(png.readUInt32BE(20)).toBe(630);
@@ -113,8 +109,6 @@ describe('public/robots.txt — real sitemap, no placeholder', () => {
   it('points crawlers at the real sitemap and keeps the placeholder out', () => {
     const publicDir = join(findRepoRoot(import.meta.url), 'apps', 'web', 'public');
     const robots = readFileSync(join(publicDir, 'robots.txt'), 'utf8');
-    // Line-exact: a commented-out '# Sitemap:' line is ignored by
-    // crawlers, so a plain toContain would pass on a dead directive.
     const lines = robots.split('\n').map((line) => line.trim());
     expect(lines).toContain('Sitemap: https://post-engineer.com/sitemap.xml');
     expect(robots).not.toContain('your-domain.example');

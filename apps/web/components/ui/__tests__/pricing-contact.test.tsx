@@ -24,10 +24,6 @@ import { PricingContactCard } from '../pricing-contact';
 
 const WHATSAPP_ENV = 'NEXT_PUBLIC_WHATSAPP_NUMBER';
 const TEST_NUMBER = '15551234567';
-// Literal expectations, never the module's own exports: asserting
-// `mailto:${SUPPORT_EMAIL}` against the imported SUPPORT_EMAIL passes
-// even when the export itself is mutated to '' (the expectation moves
-// with the mutant). The same self-reference hid the GITHUB_URL mutant.
 const SUPPORT_EMAIL_LITERAL = 'madebyryandev@gmail.com';
 const GITHUB_URL_LITERAL = 'https://github.com/Ryan-Carloso/post-engineer';
 const origWhatsappEnv = process.env[WHATSAPP_ENV];

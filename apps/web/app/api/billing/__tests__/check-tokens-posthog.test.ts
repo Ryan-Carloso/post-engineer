@@ -1,11 +1,3 @@
-//---------------
-// Route-level proof: handled 5xx responses from a real API route reach
-// PostHog via withApiErrorReporting ($exception), and the 401 arrives as
-// the route's semantic `<name>_rejected` event (never an $exception).
-// Uses POST /api/billing/check-tokens because its 500 path (missing
-// MONEYPRINT_API_SECRET) is deterministic without touching a database.
-//---------------
-
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { NextRequest } from 'next/server';
 

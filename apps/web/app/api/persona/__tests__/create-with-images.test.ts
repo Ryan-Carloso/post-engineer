@@ -1,8 +1,4 @@
 // @vitest-environment node
-// POST /api/persona with an image library: `images` files plus parallel
-// `imageTags` / `imageDescriptions` JSON arrays and `imagePrimaryIndex`.
-// Auth and Supabase are mocked boundaries; form parsing, validation, the
-// 10-image cap, and rollback are real.
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 vi.mock('@/lib/request-auth', () => ({
@@ -44,11 +40,6 @@ function terminal(result: unknown): Record<string, unknown> {
   return chain;
 }
 
-// Issue #572: creation binds the persona's publishing accounts right after
-// the insert (setPersonaDefaultAccounts): ownership select on personas,
-// owned-accounts list on social_accounts, replace-all on
-// persona_default_accounts. Every client in this file must answer those
-// queries, or creation fails before any library work runs.
 function bindingTables(table: string): Record<string, unknown> | null {
   if (table === 'social_accounts') {
     return {
@@ -160,8 +151,6 @@ function mockClient(options: { failPrimarySwap?: boolean } = {}) {
 }
 
 const png = (name: string, size = 1024): File => {
-  // Real PNG magic bytes: the server validates content, not just the
-  // declared MIME type.
   const bytes = new Uint8Array(size);
   if (size >= 8) bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
   return new File([bytes], name, { type: 'image/png' });
@@ -178,9 +167,6 @@ function createRequest(fields: Record<string, string>, images: File[] = []): Req
 const BASE_FIELDS = {
   name: 'Ana',
   voiceId: 'chatterbox:kokoro_af_heart',
-  // Issue #572: every persona must bind at least one publishing account at
-  // creation, so the fixtures carry one — the image-validation errors these
-  // tests pin run after the binding check.
   publishingAccounts: JSON.stringify({ youtube: ['UC-1'] }),
 };
 
@@ -211,12 +197,6 @@ describe('POST /api/persona with image library', () => {
     expect(calls.imageInserts[1].description).toBe('at the office');
   });
 
-  //---------------
-  // Storage layout pin (creation writer): {userId}/{personaId}/images/{uuid}.{ext}.
-  // The persona id is minted by the route BEFORE the upload so the folder can
-  // be per persona; the insert must carry that same id, otherwise the folder
-  // and the row disagree.
-  //---------------
   it('stores library images under {userId}/{personaId}/images/', async () => {
     const calls = mockClient();
     const res = await POST(createRequest(BASE_FIELDS, [png('a.png'), png('b.png')]));
@@ -255,9 +235,6 @@ describe('POST /api/persona with image library', () => {
   });
 
   it('tags an over-length library tag VALIDATION_FAILED on the tag field', async () => {
-    // addLibraryImages rejects the tag after the persona row exists: the
-    // creation rollback deletes the row and the 400 still carries the
-    // stable code (no bare errorResponse forward).
     const calls = mockClient();
     const res = await POST(
       createRequest(
@@ -303,7 +280,6 @@ describe('POST /api/persona with image library', () => {
     const res = await POST(createRequest(BASE_FIELDS, [png('a.png'), bad]));
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error?: string };
-    // The second file (index 1) is the bad one; the error names it.
     expect(body.error).toContain('(image 2: doc.pdf)');
   });
 
@@ -316,7 +292,6 @@ describe('POST /api/persona with image library', () => {
     const body = (await res.json()) as { error?: string; code?: string; field?: string };
     expect(body.code).toBe('VALIDATION_FAILED');
     expect(body.field).toBe('images');
-    // The client still gets the file name; the logged template does not.
     expect(body.error).toContain('secret-plan.pdf');
     const messages = warn.mock.calls.map((call) => String(call[0]));
     const routeWarning = messages.find((m) => m.startsWith('[POST /api/persona] 400'));
@@ -327,13 +302,7 @@ describe('POST /api/persona with image library', () => {
   });
 
   it('reads each library file once at creation (validated bytes are reused)', async () => {
-    // The creation route validates upfront (fail-fast) and passes the
-    // bytes to addLibraryImages via validatedContent; addLibraryImages
-    // must not re-read the file. We verify by spying on the file's
-    // arrayBuffer through the FormData round-trip.
     const calls = mockClient();
-    // The route reads via request.formData(); spy on the File prototype
-    // so the spy survives any cloning.
     let readCount = 0;
     const originalArrayBuffer = File.prototype.arrayBuffer;
     File.prototype.arrayBuffer = async function (this: File) {
@@ -374,9 +343,6 @@ describe('POST /api/persona with image library', () => {
   });
 
   it('rejects a non-numeric imagePrimaryIndex instead of silently dropping it', async () => {
-    // parsePrimaryIndex used to treat 'abc' as unset: a caller's pinned
-    // primary selection was silently lost. Like the sibling
-    // imageTags/imageDescriptions parser, malformed input is a 400.
     const calls = mockClient();
     const res = await POST(
       createRequest({ ...BASE_FIELDS, imagePrimaryIndex: 'abc' }, [png('a.png'), png('b.png')]),
@@ -391,13 +357,7 @@ describe('POST /api/persona with image library', () => {
   });
 
   it('reports the malformed imagePrimaryIndex before reading image bytes', async () => {
-    // Cheap param validation must precede the expensive per-file content
-    // checks: an invalid index plus an invalid image must surface the index
-    // error without reading the file bytes at all. The request round-trips
-    // through multipart, so the spy goes on the shared File prototype.
     const calls = mockClient();
-    // .png name passes the extension check so validation would reach the
-    // magic-byte read; the spy proves that read never happens.
     const badImage = new File(['not an image'], 'a.png', { type: 'image/png' });
     const readSpy = vi.spyOn(File.prototype, 'arrayBuffer');
     try {
@@ -430,18 +390,12 @@ describe('POST /api/persona with image library', () => {
   });
 
   it('accepts library images that are not built by the global File constructor', async () => {
-    // The server runtime (undici) File can be a different constructor than
-    // the global File. The route must use a structural check: a file-like
-    // object that is NOT `instanceof File` must still be accepted as a
-    // library image instead of being silently dropped.
     const calls = mockClient();
     const structuralFile = {
       name: 'a.png',
       type: 'image/png',
       size: 1024,
       arrayBuffer: async () => {
-        // Real PNG magic bytes: the server validates content, not just the
-        // declared MIME type.
         const bytes = new Uint8Array(1024);
         bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
         return bytes.buffer;
@@ -483,8 +437,6 @@ describe('POST /api/persona with image library', () => {
   });
 
   it('rejects imageTags that do not cover every image with a 400', async () => {
-    // Tags/descriptions are matched to files by index: a non-empty array
-    // that does not cover every file is a client bug, not a silent default.
     const calls = mockClient();
     const res = await POST(
       createRequest(
@@ -517,13 +469,10 @@ describe('POST /api/persona with image library', () => {
     const res = await POST(
       createRequest({ ...BASE_FIELDS, imagePrimaryIndex: '0' }, [png('a.png')]),
     );
-    // The persona and images are already committed: the response stays 200
-    // and the failed primary intent is surfaced as a warning, not a 500.
     expect(res.status).toBe(200);
     const body = (await res.json()) as { success: boolean; warnings?: string[] };
     expect(body.success).toBe(true);
     expect(body.warnings).toHaveLength(1);
-    // Stable code, not English copy: the UI maps it through i18n.
     expect(body.warnings?.[0]).toBe('primary_swap_failed');
   });
 
@@ -547,8 +496,6 @@ describe('POST /api/persona with image library', () => {
   });
 
   it('rejects a non-file images entry instead of silently dropping it and shifting tags', async () => {
-    // A stray string in the `images` field must not be filtered out: the
-    // index-aligned imageTags would silently shift onto the wrong image.
     const calls = mockClient();
     const form = new FormData();
     for (const [key, value] of Object.entries(BASE_FIELDS)) form.append(key, value);
@@ -566,11 +513,9 @@ describe('POST /api/persona with image library', () => {
   });
 
   it('rejects spoofed content: GIF bytes declared as image/png', async () => {
-    // The declared MIME type and extension pass the allowlist, but the
-    // magic bytes say GIF. The server must read the real bytes.
     const calls = mockClient();
     const gifBytes = new Uint8Array(1024);
-    gifBytes.set([0x47, 0x49, 0x46, 0x38, 0x39, 0x61]); // GIF89a
+    gifBytes.set([0x47, 0x49, 0x46, 0x38, 0x39, 0x61]);
     const spoofed = new File([gifBytes], 'a.png', { type: 'image/png' });
     const res = await POST(createRequest(BASE_FIELDS, [spoofed]));
     expect(res.status).toBe(400);
@@ -578,11 +523,6 @@ describe('POST /api/persona with image library', () => {
   });
 
   it('retries leftover library storage paths BEFORE the persona cascade delete', async () => {
-    // addLibraryImages fails on the second insert; its rollback delete of
-    // rows succeeds but the storage remove fails, so leftover paths are
-    // surfaced. The creation rollback must retry the storage remove BEFORE
-    // deleting the persona row — the cascade erases the image rows, making
-    // a later retry unrecoverable.
     const events: string[] = [];
     let imageSeq = 0;
     let removeCalls = 0;
@@ -636,26 +576,16 @@ describe('POST /api/persona with image library', () => {
       createRequest(BASE_FIELDS, [png('a.png'), png('b.png')]),
     );
     expect(res.status).toBe(500);
-    // The retry (remove#2, all stored paths) runs before the cascade delete.
-    // (remove#3 is the main photo rollback, which runs after the persona row
-    // is gone — existing behavior, unrelated to the library paths.)
     expect(events).toEqual([
       'remove#1:2',
       'remove#2:2',
       'persona-delete',
       'remove#3:1',
     ]);
-    // The ordering that matters: retry before cascade.
     expect(events.indexOf('remove#2:2')).toBeLessThan(events.indexOf('persona-delete'));
   });
 
   it('removes row-backed library storage paths AFTER a successful persona cascade delete', async () => {
-    // addLibraryImages fails on the second insert and its rollback row
-    // delete fails on both attempts, so the first image's row survives
-    // with a live storage reference (rowBackedPaths). The cascade delete
-    // erases the row but NOT the storage object — the route must remove
-    // the file after the delete succeeds, or a private photo orphans in
-    // storage forever.
     const events: string[] = [];
     const uploadedPaths: string[] = [];
     let imageSeq = 0;
@@ -676,9 +606,6 @@ describe('POST /api/persona with image library', () => {
         }
         return {
           select: vi.fn(() => terminal({ count: 0, error: null })),
-          // Echo the insert payload's image_path: production stores
-          // `path`, so the mock must echo it — a hardcoded path makes
-          // every stored path look "rowless" (round-7 lesson).
           insert: vi.fn((values: Record<string, unknown>) => {
             imageSeq += 1;
             if (imageSeq === 2) return terminal({ data: null, error: { message: 'insert boom' } });
@@ -716,9 +643,6 @@ describe('POST /api/persona with image library', () => {
       createRequest(BASE_FIELDS, [png('a.png'), png('b.png')]),
     );
     expect(res.status).toBe(500);
-    // uploadedPaths: [photo, image1, image2]. Image 2 has no row (insert
-    // failed), so its path is a true orphan removed inside the helper's
-    // rollback; image 1's path is row-backed until the cascade delete.
     const [, image1Path, image2Path] = uploadedPaths;
     expect(events).toEqual([
       `remove:personas:${image2Path}`,
@@ -726,16 +650,12 @@ describe('POST /api/persona with image library', () => {
       `remove:personas:${image1Path}`,
       `remove:personas:${uploadedPaths[0]}`,
     ]);
-    // The row-backed remove runs only after the cascade delete.
     expect(events.indexOf(`remove:personas:${image1Path}`)).toBeGreaterThan(
       events.indexOf('persona-delete'),
     );
   });
 
   it('never removes row-backed storage when the persona cascade delete fails', async () => {
-    // The persona delete fails: the cascade never ran, so the image rows
-    // still reference their storage files. Removing them would leave
-    // surviving rows pointing at deleted objects.
     const events: string[] = [];
     const uploadedPaths: string[] = [];
     let imageSeq = 0;
@@ -794,8 +714,6 @@ describe('POST /api/persona with image library', () => {
     );
     expect(res.status).toBe(500);
     const image1Path = uploadedPaths[1];
-    // The rowless orphan is still removed; the row-backed path is never
-    // touched while its row survives.
     expect(events).not.toContain(`remove:personas:${image1Path}`);
     expect(events).toContain('persona-delete');
   });

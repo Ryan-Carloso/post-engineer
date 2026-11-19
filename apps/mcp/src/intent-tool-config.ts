@@ -9,12 +9,6 @@ import {
   handleSaveToolConfig,
 } from './tools-tool-config.js';
 
-//---------------
-// tool_config (issue #669): the account's saved research/stock tool
-// configuration. save replaces the whole set (a key left out is
-// forgotten), so the tool is DESTRUCTIVE for all its actions.
-//---------------
-
 const TOOL_CONFIG_SPECS = {
   get: GetToolConfigShape,
   save: SaveToolConfigShape,

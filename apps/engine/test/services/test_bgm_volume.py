@@ -7,10 +7,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from app.models.schema import VideoParams
 
-# Measured on the published HabitLoom video (issue #534, YouTube zBkJoczF7HA):
-# the music sat 8 dB below the voice at the old default gain of 0.2. The
-# user wants the voice clearly audible: music 15 dB below the voice, i.e.
-# 7 dB more attenuation than the old default.
 MEASURED_NET_BALANCE_DB = -8.0
 TARGET_NET_BALANCE_DB = -15.0
 OLD_DEFAULT_BGM_VOLUME = 0.2

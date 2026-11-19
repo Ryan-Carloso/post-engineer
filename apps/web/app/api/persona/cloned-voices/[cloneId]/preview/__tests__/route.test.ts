@@ -293,7 +293,6 @@ describe('POST /api/persona/cloned-voices/:cloneId/preview caller text', () => {
     expect(url).toBe('http://127.0.0.1:8080/api/v1/cloned-voices/clone-1/preview');
     expect(init?.body).toBe(JSON.stringify({ text: 'say this' }));
     expect(new Headers(init?.headers).get('content-type')).toBe('application/json');
-    // The text never travels in the URL.
     expect(String(url).includes('say')).toBe(false);
   });
 

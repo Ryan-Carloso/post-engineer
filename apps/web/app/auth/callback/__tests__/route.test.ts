@@ -118,7 +118,6 @@ describe('GET /auth/callback', () => {
     cookiesCfg.set('sb-token', 'v', {});
     cookiesCfg.remove('sb-token', {});
     expect(res.status).toBe(307);
-    // Absolute URL that is not a code-relay target: open redirect closed.
     expect(res.headers.get('location')).toBe('http://localhost/');
   });
 
@@ -182,7 +181,6 @@ describe('GET /auth/callback — Vercel preview relay', () => {
     });
 
     const res = await GET(makeRequest(requestUrl));
-    // Not a code-relay target AND not a safe relative path: falls back to '/'.
     expect(res.headers.get('location')).toBe('https://post-engineer.com/');
     expect(mockCreateServerClient).toHaveBeenCalledTimes(1);
   });
@@ -197,7 +195,6 @@ describe('GET /auth/callback — Vercel preview relay', () => {
     });
 
     const res = await GET(makeRequest(requestUrl));
-    // Open redirect closed: absolute external URLs fall back to '/'.
     expect(res.headers.get('location')).toBe('https://post-engineer.com/');
     expect(mockCreateServerClient).toHaveBeenCalledTimes(1);
   });

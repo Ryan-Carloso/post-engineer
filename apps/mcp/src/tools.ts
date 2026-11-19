@@ -18,7 +18,6 @@ import {
 } from './schedule-shapes.js';
 import { DisconnectAccountSchema, DisconnectAccountShape, createPersonaAccountsField } from './account-shapes.js';
 import { PublishVideoDirectSchema, PublishVideoDirectShape } from './publish-direct-shape.js';
-// Re-exported so existing import sites (`./tools.js`) keep working.
 export {
   CancelScheduleSchema,
   CancelScheduleShape,
@@ -50,24 +49,19 @@ import {
 import { getErrorMessage, ApiError } from './errors.js';
 import { isEnglishLanguage, ONLY_ENGLISH_VIDEOS_MESSAGE } from './language.js';
 import { CreatePersonaAvatarFields, refinePersonaAvatar } from './persona-avatar.js';
-import { getSlot as getSlotContract } from './contracts/schedule.js';
+import { presentSlotDetail } from './slot-detail-present.js';
 import { FACE_QUALITIES, VIDEO_ASPECTS } from './contracts/personas.js';
-import type { ResponseOf } from './contracts/endpoint.js';
 
 export type { McpToolResponse } from './tools-call.js';
-// Image path/tag/description limits are shared by create-persona and persona_media (action: add_image).
 const LibraryImageFields = {
   path: z.string().min(1).describe(`Local file path to the image (JPG/JPEG, PNG, or WebP, max ${MAX_LIBRARY_IMAGE_MB}MB)`),
   tag: z.string().max(MAX_LIBRARY_TAG_LENGTH).optional().describe('Short tag for deterministic per-video matching (e.g. casual, formal, gym)'),
   description: z.string().max(MAX_LIBRARY_DESCRIPTION_LENGTH).optional().describe('Description of the photo for tag/keyword matching (e.g. smiling at the beach at sunset)'),
 };
-// Single source of truth: the intent-*.ts modules build the advertised shapes from these
-// ones, so field definitions (and their descriptions) live here only.
 const PersonaLibraryImageInputShape = z.object(LibraryImageFields);
 
 export const CreatePersonaShape = {
   name: z.string().min(1, 'Name is required').describe('Name of the persona'),
-  // Every persona has a face (avatarUrl or avatarPath); faceless is a per-video mode (options.videoType).
   ...CreatePersonaAvatarFields,
   voiceId: personaVoiceField('voiceId is required').describe('id or label from voices (action: list). Never type a provider prefix.'),
   language: z
@@ -108,8 +102,6 @@ export {
 
 export const ListFacesShape = {};
 
-// personas (action: update) lives in persona-update.ts (shape, schema and handler);
-// re-exported here so existing import sites keep working.
 export { UpdatePersonaShape, UpdatePersonaSchema, handleUpdatePersona } from './persona-update.js';
 export { ConnectAccountShape, ConnectAccountSchema, handleConnectAccount } from './connect-account.js';
 
@@ -174,9 +166,6 @@ export const ListPersonaImagesSchema = z.object(ListPersonaImagesShape);
 export const AddPersonaImageShape = {
   personaId: z.string().min(1, 'personaId is required').describe('The ID of the persona to add the image to'),
   ...LibraryImageFields,
-  // Swap-only, symmetric with persona_media (action: update_image): isPrimary:false on a new
-  // image is meaningless (never primary unless marked), so the schema accepts
-  // only true and surfaces the constraint at parse time, not as a silent drop.
   isPrimary: z
     .literal(true)
     .optional()
@@ -187,18 +176,12 @@ export const AddPersonaImageSchema = z.object(AddPersonaImageShape);
 
 export const UpdatePersonaImageShape = {
   id: z.string().min(1, 'id is required').describe('The library image ID to update'),
-  // Reuse the shared field definitions so tag/description limits can't drift
-  // from the create path; PATCH supports clearing via empty string, which the
-  // create schema's .min(1) path field doesn't need. Whitespace-only values
-  // trim to '' client-side and therefore clear too (undefined = keep, '' = clear).
   tag: LibraryImageFields.tag.describe(
     'New tag (empty or whitespace-only clears the stored value; omit to keep it)'
   ),
   description: LibraryImageFields.description.describe(
     'New description (empty or whitespace-only clears the stored value; omit to keep it)'
   ),
-  // Swap-only: the server rejects isPrimary:false, so the schema accepts only
-  // true and surfaces the constraint at parse time instead of a server 400.
   isPrimary: z
     .literal(true)
     .optional()
@@ -224,9 +207,6 @@ export async function handleCreatePersona(
   client: PostEngineerClient,
   args: z.infer<typeof CreatePersonaSchema>
 ): Promise<McpToolResponse> {
-  // Re-parses with the full schema (the SDK parses tool args from the raw
-  // shape only), then routes the voice BEFORE any POST: an unknown voice
-  // never debits tokens (issue #353).
   return handleLibraryCall(
     async () => client.createPersona(await withResolvedPersonaVoice(client, CreatePersonaSchema.parse(args))),
     'creating persona',
@@ -468,7 +448,6 @@ export async function handleGetVideoGeneration(
   }
 }
 
-/** One narrowed video_generations row: the fields the tool contract promises. */
 interface NarrowedVideoGeneration {
   id: string | null;
   generationId: string | null;
@@ -482,9 +461,6 @@ interface NarrowedVideoGeneration {
   completedAt: string | null;
 }
 
-/** Narrows one video_generations row. Anything the API adds later rides
- * through unparsed — the projection only pins what the tool renders and
- * documents. */
 function narrowVideoGeneration(row: unknown): NarrowedVideoGeneration {
   const record =
     typeof row === 'object' && row !== null ? (row as Record<string, unknown>) : {};
@@ -505,8 +481,6 @@ function narrowVideoGeneration(row: unknown): NarrowedVideoGeneration {
   };
 }
 
-/** Narrows the GET /api/persona/video-generations envelope to the pinned
- * row fields. */
 function narrowVideoGenerations(result: unknown): NarrowedVideoGeneration[] {
   const record =
     typeof result === 'object' && result !== null
@@ -648,10 +622,6 @@ export async function handleDisconnectAccount(
   }
 }
 
-/** Narrows the GET /api/persona/delete-preview envelope: the persona, the
- * removal counts, and the per-video download links. Anything the API adds
- * later rides through unparsed. */
-/** One narrowed token_transactions row: the fields the tool contract promises. */
 interface NarrowedTokenTransaction {
   id: string | null;
   amount: number | null;
@@ -662,9 +632,6 @@ interface NarrowedTokenTransaction {
   createdAt: string | null;
 }
 
-/** Narrows the GET /api/billing/transactions envelope. Anything the API
- * adds later rides through unparsed — the projection only pins what the
- * tool renders and documents. */
 function narrowTokenTransactions(result: unknown): {
   transactions: NarrowedTokenTransaction[];
   total: number | null;
@@ -697,56 +664,6 @@ function narrowTokenTransactions(result: unknown): {
     total: num(record.total),
     limit: num(record.limit),
     offset: num(record.offset),
-  };
-}
-
-/** The agent-facing shape of a slot detail: the parsed contract result
- * with the `success` envelope and the `generation` block dropped (the
- * slot's own progress/stage already carry it). Fields are picked, never
- * spread, so unknown fields can never ride through to the agent. */
-function presentSlotDetail(detail: ResponseOf<typeof getSlotContract>) {
-  const { slot, schedule, persona } = detail;
-  return {
-    slot: {
-      id: slot.id,
-      scheduleId: slot.scheduleId,
-      slotAt: slot.slotAt,
-      status: slot.status,
-      title: slot.title,
-      taskId: slot.taskId,
-      progress: slot.progress,
-      stage: slot.stage,
-      error: slot.error,
-      publishedAt: slot.publishedAt,
-      postUrl: slot.postUrl,
-      publishLinks: slot.publishLinks,
-      progressHistory: slot.progressHistory,
-      scriptAngle: slot.scriptAngle,
-      retryable: slot.retryable,
-      queuePosition: slot.queuePosition,
-      queueTotal: slot.queueTotal,
-      userNotices: slot.userNotices,
-      providerFailures: slot.providerFailures,
-    },
-    schedule: {
-      id: schedule.id,
-      personaId: schedule.personaId,
-      providers: schedule.providers,
-      youtubeAccountIds: schedule.youtubeAccountIds,
-      instagramAccountIds: schedule.instagramAccountIds,
-      linkedinAccountIds: schedule.linkedinAccountIds,
-      blueskyAccountIds: schedule.blueskyAccountIds,
-      threadsAccountIds: schedule.threadsAccountIds,
-      facebookAccountIds: schedule.facebookAccountIds,
-      pinterestAccountIds: schedule.pinterestAccountIds,
-      pinterestBoardId: schedule.pinterestBoardId,
-      threespeakAccountIds: schedule.threespeakAccountIds,
-      rumbleAccountIds: schedule.rumbleAccountIds,
-      fanvueAccountIds: schedule.fanvueAccountIds,
-      timezone: schedule.timezone,
-      publishMode: schedule.publishMode,
-    },
-    persona: persona === null ? null : { id: persona.id, name: persona.name },
   };
 }
 
@@ -791,10 +708,6 @@ export async function handleUpdatePersonaImage(
 ): Promise<McpToolResponse> {
   return handleLibraryCall(
     () => {
-      // Re-parse with the refined schema (the SDK parses tool args from the
-      // raw shape only): the "at least one of tag/description/isPrimary"
-      // refine becomes a loud isError before any client call, and it pairs
-      // with the same reason handleCreatePersona re-parses.
       const parsed = UpdatePersonaImageSchema.parse(args);
       return client.updatePersonaImage({
         id: parsed.id,
@@ -819,12 +732,6 @@ export async function handleRemovePersonaImage(
   );
 }
 
-/** Redacts credential-shaped material from an engine failure reason before
- * it reaches the MCP client. The engine error is the user's own task failure
- * text (e.g. "persona hook must end between 3 and 6 seconds"), but provider
- * exceptions can echo request URLs, DSNs, or bearer tokens into it. Keep the
- * human-readable reason intact; only the secret-shaped fragments are masked.
- * Mirrors the app-password redaction in client.ts. */
 export function sanitizeEngineError(error: string): string {
   return error
     .replace(/\bBearer\s+[^\s]+/gi, 'Bearer [redacted]')
@@ -833,12 +740,6 @@ export function sanitizeEngineError(error: string): string {
     .replace(/\bsk-[A-Za-z0-9_-]{20,}/g, '[redacted]');
 }
 
-/** Narrows the web video-status response to the progress fields agents
- * poll on, plus the post detail link when the video belongs to a scheduled
- * slot (issue #555). The engine task record carries task_id/state/progress/
- * stage; error carries the engine failure reason when the task failed. A
- * body without them (empty-body sentinel, 404 shape) is reported with
- * explicit nulls rather than silently dropping fields. */
 export function narrowTaskProgress(result: unknown): {
   task_id: string | null;
   state: number | null;
@@ -864,11 +765,7 @@ export function narrowTaskProgress(result: unknown): {
     state: typeof state === 'number' ? state : null,
     progress: typeof progress === 'number' ? progress : null,
     stage: typeof stage === 'string' ? stage : null,
-    // Surface the engine failure reason: without it a failed task only
-    // reports state -1 and the caller can never learn why it failed.
     error: typeof error === 'string' ? sanitizeEngineError(error) : null,
-    // The post detail link, when the video belongs to a scheduled slot
-    // (null for direct generations and for tasks with no slot yet).
     postUrl: typeof get('postUrl') === 'string' ? (get('postUrl') as string) : null,
   };
 }

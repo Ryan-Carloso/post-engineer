@@ -48,10 +48,6 @@ def _run_with_responses(
 def test_non_200_body_is_included_in_the_error(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    # Production evidence (2026-10): the bare "status 404" hid that a Modal
-    # gateway answered ("modal-http: workspace ... is disabled") — days of
-    # debugging would have been saved by surfacing the server's verdict in
-    # the stored error_message.
     error = _run_with_responses(
         monkeypatch,
         [(404, "modal-http: workspace ac-X is disabled\n")],
@@ -65,10 +61,6 @@ def test_non_200_body_is_included_in_the_error(
 def test_response_body_credentials_are_scrubbed(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    # CRITICAL review round: the upstream body goes into the stored error and
-    # the log line untouched — a gateway echoing a rejected key, or the
-    # caller's own "user:pass@host" base_url, would leak into video_generations
-    # and the logs. Both consumer paths share _scrubbed_response_body.
     error = _run_with_responses(
         monkeypatch,
         [(
@@ -81,7 +73,7 @@ def test_response_body_credentials_are_scrubbed(
     assert "sk-real" not in error
     assert "t0k3n" not in error
     assert "user:pw@" not in error
-    assert "api_key" in error  # the key NAME survives; the VALUE is redacted
+    assert "api_key" in error
     assert "***:***@chatter.internal" in error
     assert error == error.strip()
 
@@ -100,10 +92,6 @@ def test_scrub_helper_alone_scrubs_credentials_and_cap_at_200() -> None:
 def test_bubbled_exception_log_is_scrubbed(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    # Review nit round 2: the catch-path record carried the raw exception
-    # ("chatterbox tts failed: {str(e)}") — a request exception can embed the
-    # caller's credential-bearing base_url or an echoed key. The record must
-    # carry the same scrubbed text the stored error does.
     import app.services.voice_providers as vp
     from types import SimpleNamespace
 
@@ -165,5 +153,4 @@ def test_scrub_helper_is_linear_on_colon_heavy_input() -> None:
 
     body = _scrubbed_response_body("https://" + ":" * 20000)
     assert len(body) <= 200
-    # No userinfo match (no '@'): the body passes through, capped.
     assert body == "https://" + ":" * 192

@@ -1,23 +1,3 @@
-//---------------
-// POST /api/media/upload — segment media upload (MCP media (action: upload)).
-//
-// The MCP server has no engine secret and must never get one, so it
-// cannot call the engine's temp_assets endpoint directly. This route is
-// the authenticated bridge: the caller authenticates with a session or
-// API key, the route validates the real image type and the 8MB engine
-// photo limit, then the server calls the engine's existing temp_assets
-// flow with the server secret (uploadEngineTempAsset). The response
-// carries only the mediaId: the temp asset URL is a capability (its UUID
-// filename) and never leaves the server, and the engine resolves the
-// mediaId from its own temp_assets directory at task start.
-//
-// Temp assets expire after 1 hour: upload shortly before generating. A
-// scheduled slot far in the future may outlive the asset; in the images
-// modes the engine then fails the task (images_do_not_cover_audio names
-// the photo) instead of rendering without it, while full lip sync only
-// warns.
-//---------------
-
 import { NextResponse } from 'next/server';
 
 import { apiErrorResponse } from '@/lib/api-error';
@@ -29,8 +9,6 @@ import { requireSupabaseSession } from '@/lib/request-auth';
 
 const ROUTE = 'POST /api/media/upload';
 
-// The engine photo bottleneck (place_photos MAX_PHOTO_BYTES), not the
-// 10MB persona library limit: a larger segment upload could never render.
 const MAX_SEGMENT_MEDIA_BYTES = 8 * 1024 * 1024;
 const TEMP_ASSET_TTL_SECONDS = 60 * 60;
 
@@ -72,9 +50,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
   if (file.size > MAX_SEGMENT_MEDIA_BYTES) {
     return apiErrorResponse(413, 'Image exceeds the 8MB segment media limit.', { route: ROUTE });
   }
-  // Real content type, never the declared MIME or the filename: both are
-  // client-controlled and spoofable. Only the types the temp_assets flow
-  // accepts by suffix pass, so the engine never receives a mismatched file.
   const buffer = Buffer.from(await file.arrayBuffer());
   const mimeType = detectMagicMimeType(buffer);
   const extension = mimeType === null ? undefined : MIME_TO_EXTENSION[mimeType];
@@ -86,8 +61,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
   if (assetUrl === undefined) {
     return apiErrorResponse(502, 'Video service is unavailable.', { route: ROUTE });
   }
-  // The mediaId is the UUID filename the engine itself minted. The full
-  // URL is never returned: it is the download capability.
   let mediaId: string | undefined;
   try {
     mediaId = new URL(assetUrl).pathname.split('/').pop();

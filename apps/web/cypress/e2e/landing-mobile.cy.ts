@@ -1,9 +1,3 @@
-//---------------
-// Landing Mobile — testes responsivos da landing em viewport mobile.
-// Garante que o header caiba em 390px sem scroll horizontal e que a
-// navegação mobile (hambúrguer) exponha Entrar, idioma e âncoras.
-//---------------
-
 describe('Landing — Mobile (390px)', () => {
   beforeEach(() => {
     cy.viewport(390, 844);

@@ -86,49 +86,36 @@ def _preprocess_text_for_tts(text: str) -> str:
     if not text:
         return text
 
-    # Remove periods that are not abbreviations.
-    # Protects common abbreviations by keeping their periods.
     processed = text
 
-    # Common abbreviations (Portuguese and English) that must keep the
-    # period - format: (regex_pattern, replacement_text)
     abbreviations = [
-        # Portuguese titles
         (r'\bsr\.', 'Sr.'), (r'\bSr\.', 'Sr.'),
         (r'\bsra\.', 'Sra.'), (r'\bSra\.', 'Sra.'),
         (r'\bdra\.', 'Dra.'), (r'\bDra\.', 'Dra.'),
         (r'\bdr\.', 'Dr.'), (r'\bDr\.', 'Dr.'),
         (r'\bprof\.', 'Prof.'), (r'\bProf\.', 'Prof.'),
         (r'\beng\.', 'Eng.'), (r'\bEng\.', 'Eng.'),
-        # Common abbreviations
         (r'\betc\.', 'etc.'),
         (r'\bvs\.', 'vs.'), (r'\bVs\.', 'vs.'),
         (r'\bex\.', 'ex.'), (r'\bEx\.', 'ex.'),
         (r'\bno\.', 'nº.'), (r'\bNo\.', 'Nº.'),
         (r'\bpág\.', 'pág.'), (r'\bp\.', 'p.'),
-        # Emails and URLs
-        (r'\b[\w\.-]+@[\w\.-]+\.com\b', None),  # Emails ending in .com
-        (r'\b[\w\.-]+@[\w\.-]+\.br\b', None),   # Emails ending in .br
-        (r'\b[\w\.-]+@[\w\.-]+\.gov\b', None),  # Emails ending in .gov
+        (r'\b[\w\.-]+@[\w\.-]+\.com\b', None),
+        (r'\b[\w\.-]+@[\w\.-]+\.br\b', None),
+        (r'\b[\w\.-]+@[\w\.-]+\.gov\b', None),
     ]
 
-    # First, temporarily protect abbreviations
     protected_abbrs = []
     for i, (pattern, replacement) in enumerate(abbreviations):
         placeholder = f"__ABBREV_{i}__"
-        # Find all matches and replace them
         matches = list(re.finditer(pattern, processed, flags=re.IGNORECASE))
-        for match in reversed(matches):  # Reverse to keep positions correct
-            # Use the original match text to preserve capitalization
+        for match in reversed(matches):
             original_text = match.group(0)
             protected_abbrs.append((placeholder, original_text))
             processed = processed[:match.start()] + placeholder + processed[match.end():]
 
-    # Preserve sentence punctuation. Providers receive the user's text as
-    # written; stripping periods changes meaning and breaks subtitle alignment.
     processed = re.sub(r'\s+', ' ', processed).strip()
 
-    # Restore abbreviations
     for placeholder, original_text in protected_abbrs:
         processed = processed.replace(placeholder, original_text)
 
@@ -155,7 +142,6 @@ def populate_legacy_submaker_with_full_text(
     Returns:
         The SubMaker with subtitle data filled in.
     """
-    # Clear old values so a caller reusing the object does not stack stale data.
     sub_maker.subs = []
     sub_maker.offset = []
 
@@ -165,10 +151,6 @@ def populate_legacy_submaker_with_full_text(
 
     audio_duration_100ns = max(int(audio_duration_seconds * 10000000), 1)
 
-    # Paths without word-level boundaries still reuse the project's original
-    # "split by punctuation + distribute duration by character count"
-    # strategy. That lets create_subtitle() match script sentences and
-    # avoids falling back to Whisper again.
     sentences = utils.split_string_by_punctuations(normalized_text)
     if not sentences:
         sentences = [normalized_text]
@@ -185,9 +167,6 @@ def populate_legacy_submaker_with_full_text(
         if not cleaned_sentence:
             continue
 
-        # Earlier sentences get a duration proportional to their character
-        # count; the last sentence absorbs the remaining duration so integer
-        # rounding never loses total duration or ends subtitles before the audio.
         if index == len(sentences) - 1:
             sentence_end = audio_duration_100ns
         else:
@@ -198,7 +177,6 @@ def populate_legacy_submaker_with_full_text(
             )
             sentence_end = min(current_offset + sentence_duration, audio_duration_100ns)
 
-        # One fragment per capped cue, so create_subtitle matches the script lines.
         for cue, cue_start, cue_end in subtitle_cues.split_timed(
             cleaned_sentence, current_offset, sentence_end
         ):
@@ -209,23 +187,6 @@ def populate_legacy_submaker_with_full_text(
     return sub_maker
 
 
-#---------------
-# _scrubbed_response_body — one source for the scrubber applied to an
-# upstream response body before it is stored or logged. Many TTS gateways
-# echo rejected credentials verbatim (api_key/Authorization values in
-# key=value or JSON shape, and "https://user:pass@host" URLs probe the
-# People's own base_url). The secret-value rules come from the shared
-# scrub_secret_values (analytics); the URL userinfo redactor mirrors the
-# one the engine's error paths apply to their own messages.
-#---------------
-# The user part before the first ':' cannot itself contain ':', so it
-# is excluded from the first class. Without that exclusion the engine
-# tries every split of a ':'-heavy string before the literal ':'
-# (polynomial backtracking, CodeQL py/polynomial-redos); with it the
-# first part is deterministic and a ':'-heavy string without '@' fails
-# in linear time. Matching behaviour for real userinfo is unchanged:
-# 'user:pass@' still matches with user='user', the ':' separator, and
-# pass='pass' (the password part may still contain ':').
 _URL_USERINFO_RE = re.compile(
     r"((?:https?|wss?)://)([^/\s?#@:]*:[^/\s?#@]*@)",
     re.IGNORECASE,
@@ -254,7 +215,6 @@ def elevenlabs_tts(
         logger.error("ElevenLabs TTS text is empty")
         return TtsResult(error="ElevenLabs TTS failed: text is empty")
 
-    # Preprocess text to avoid TTS reading "ponto" ("period") in Portuguese
     text = _preprocess_text_for_tts(text)
     api_key = config.elevenlabs.get("api_key", "")
     if not api_key:
@@ -280,7 +240,6 @@ def elevenlabs_tts(
         },
     }
 
-    # Errors where retrying will never help (auth/access/validation failures).
     _NON_RETRYABLE_CODES = {401, 403, 422}
     _NON_RETRYABLE_STATUSES = {"voice_disabled", "voice_access_denied", "unauthorized"}
 
@@ -304,8 +263,6 @@ def elevenlabs_tts(
                     reason = (
                         f"ElevenLabs TTS request rejected (status {response.status_code}"
                         f"{', ' + error_status if error_status else ''}): "
-                        # Scrub before the 200-cut: a cut landing mid-secret
-                        # defeats the scrubber and leaks the raw remainder.
                         f"{scrub_secret_values(response.text)[:200]}"
                     )
                     logger.error(
@@ -375,7 +332,6 @@ def chatterbox_tts(
         logger.error("Chatterbox TTS text is empty")
         return TtsResult(error="Chatterbox TTS failed: text is empty")
 
-    # Preprocess text to avoid TTS reading "ponto" ("period") in Portuguese
     text = _preprocess_text_for_tts(text)
     base_url = (config.chatterbox.get("base_url", "") or "").strip().rstrip("/")
     if not base_url:
@@ -396,14 +352,8 @@ def chatterbox_tts(
         "model": model_id,
         "voice": voice,
         "response_format": "mp3",
-        # OpenAI speech API accepts speed 0.25-4.0; MoneyPrinterTurbo's rate is a
-        # 1.0-centred multiplier, so it maps directly (clamped to the valid range).
         "speed": max(0.25, min(4.0, float(voice_rate or 1.0))),
     }
-    # voice_volume is accepted for parity with the other TTS providers but is
-    # intentionally not sent: the OpenAI /audio/speech contract has no volume
-    # field, so Chatterbox servers ignore it. Adjust loudness via voice_rate
-    # (speed) or in post-processing instead.
 
     def _synthesize_chunk(chunk_text: str, target_file: str) -> str | None:
         """POST one chunk with the old 3-attempt retry loop. None = success."""
@@ -418,11 +368,6 @@ def chatterbox_tts(
                     url, json=payload, headers=headers, timeout=CHATTERBOX_TIMEOUT_SECONDS
                 )
                 if response.status_code != 200:
-                    # The verdict is ONLY included after the credential scrubber:
-                    # an upstream body may echo rejected credentials (keys,
-                    # "user:pass@host" URLs) — saving it raw would leak them into
-                    # the history row and the logs. Both the log line and the
-                    # stored error consume the SAME scrubbed text.
                     body = _scrubbed_response_body(response.text)
                     if body:
                         last_error = f"status {response.status_code}: {body}"
@@ -431,13 +376,6 @@ def chatterbox_tts(
                     logger.error(
                         f"chatterbox tts failed with status {response.status_code}: {body}"
                     )
-                    # A 4xx means the request itself is wrong (bad voice, bad
-                    # model, auth): retrying the identical request can never
-                    # change the answer, so fail fast on the first attempt
-                    # instead of burning 3 attempts before giving up. Transient
-                    # client errors (408 request timeout, 429 rate limited) are
-                    # excluded and keep the normal retry loop, matching
-                    # elevenlabs_tts and openrouter_tts.
                     if (
                         400 <= response.status_code < 500
                         and response.status_code not in (408, 429)
@@ -449,12 +387,7 @@ def chatterbox_tts(
                     f.write(response.content)
                 return None
             except Exception as e:
-                # Scrub before the 200-cut: a cut landing mid-secret defeats the
-                # scrubber and leaks the raw remainder.
                 last_error = scrub_secret_values(str(e))[:200]
-                # The record carries the SAME appendage the stored error does: an
-                # exception can embed the request URL with credentials (review
-                # nit — scrub_error_text also strips machine-local paths).
                 logger.error(
                     f"chatterbox tts failed: {scrub_error_text(str(e), max_chars=200)}"
                 )
@@ -463,7 +396,6 @@ def chatterbox_tts(
 
     chunks = split_chatterbox_script(text)
     if len(chunks) == 1:
-        # Short scripts keep the old path: one POST straight to voice_file.
         error = _synthesize_chunk(chunks[0], voice_file)
         if error is not None:
             return TtsResult(error=error)

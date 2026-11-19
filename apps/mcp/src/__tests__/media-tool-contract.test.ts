@@ -2,15 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { MediaCheckBodySchema } from '../contracts/media.js';
 import { CheckMediaSchema } from '../tools-user-media.js';
 
-//---------------
-// media check tool schema vs the shared contract — the MCP tool
-// validates its arguments locally with the same rules the route
-// enforces (MediaCheckBodySchema in the contract, mirroring the
-// route's hand-rolled validation). A one-sided edit would make the
-// MCP reject what the route accepts (or forward what it rejects), so
-// the two must agree on every case.
-//---------------
-
 type MediaCheckCase = { args: Record<string, string>; accept: boolean };
 
 const CASES: MediaCheckCase[] = [

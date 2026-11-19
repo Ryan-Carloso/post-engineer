@@ -16,13 +16,6 @@ import { useFacebookOAuth } from '@/lib/oauth/facebook-handler';
 import { usePinterestOAuth } from '@/lib/oauth/pinterest-handler';
 import { useFanvueOAuth } from '@/lib/oauth/fanvue-handler';
 
-//---------------
-// The wizard's inline connect reuses the /accounts OAuth configs by
-// value, not by importing the per-provider hooks: this sync test pins
-// the copy, so a start URL or callback message that changes in a handler
-// breaks here instead of silently connecting the wrong provider.
-//---------------
-
 const HANDLERS = {
   youtube: useYouTubeOAuth,
   instagram: useInstagramOAuth,

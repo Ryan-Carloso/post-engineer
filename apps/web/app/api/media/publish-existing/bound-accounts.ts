@@ -5,15 +5,6 @@ import { ERROR_CODES, formatErrorMessage } from '@/lib/error-codes';
 import { logger } from '@/lib/logger';
 import { getPersonaDefaultAccounts, type PersonaDefaultAccounts } from '@/lib/persona-publishing-accounts';
 
-//---------------
-// loadPublishBinding — the persona's bound publishing accounts for
-// POST /api/media/publish-existing. A persona-less publish has none.
-// The persona is checked first (id + owner); getPersonaDefaultAccounts
-// re-proves ownership and throws, so a persona deleted between the two
-// reads is the same 404 and any other failure is a logged 500 — never an
-// error escaping the handler.
-//---------------
-
 function hasCode(error: unknown, code: string): boolean {
   return typeof error === 'object' && error !== null && 'code' in error && error.code === code;
 }

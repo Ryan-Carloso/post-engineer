@@ -3,10 +3,6 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-// server.json is the MCP Registry metadata. The registry rejects a publish
-// whose name differs from package.json mcpName, and release-mcp.yml refuses
-// to publish when the versions drift, so pin both here (and the release
-// stamp script that rewrites them) before a release ever runs.
 const here = dirname(fileURLToPath(import.meta.url));
 const mcpRoot = join(here, '..', '..');
 const repoRoot = join(mcpRoot, '..', '..');
@@ -27,8 +23,6 @@ const pkg: { name: string; mcpName: string; version: string } = JSON.parse(
   readFileSync(join(mcpRoot, 'package.json'), 'utf8'),
 );
 const server: ServerJson = JSON.parse(readFileSync(join(mcpRoot, 'server.json'), 'utf8'));
-// requireApiKey moved out of index.ts into its own module (issue #561):
-// the "API key is required" error lives there now, and this pin follows it.
 const requireApiKeyTs = readFileSync(join(here, '..', 'require-api-key.ts'), 'utf8');
 
 describe('server.json (MCP Registry metadata)', () => {
@@ -88,7 +82,6 @@ describe('release workflow keeps server.json in step', () => {
     expect(npmPublish).toBeGreaterThan(-1);
     expect(registryPublish).toBeGreaterThan(npmPublish);
     expect(release.includes('./mcp-publisher login github-oidc')).toBe(true);
-    // The drift check must stop the release before npm ships anything.
     const verify = release.indexOf('- name: Verify server.json matches the package');
     expect(verify).toBeGreaterThan(-1);
     expect(verify).toBeLessThan(npmPublish);

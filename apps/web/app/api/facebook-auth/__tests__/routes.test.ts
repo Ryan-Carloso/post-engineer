@@ -93,9 +93,6 @@ describe('GET /api/facebook-auth/start', () => {
     const response = await startGET(new NextRequest(START));
     expect(response.status).toBe(500);
     expect((await response.json()).error).toContain('FACEBOOK_CLIENT_SECRET');
-    // The missing-credentials cause is logged so PostHog shows the reason
-    // instead of only the wrapper's generic "[route] 500", and the response
-    // is marked so the wrapper does not report a second synthetic exception.
     expect(logger.logOAuthError).toHaveBeenCalledWith(
       'log-1',
       expect.objectContaining({ message: expect.stringContaining('FACEBOOK_CLIENT_ID') }),
@@ -112,8 +109,6 @@ describe('GET /api/facebook-auth/start', () => {
     const body = await response.json();
     expect(body).toEqual({ success: false, error: 'Failed to generate the authorization URL.' });
     expect(logger.logOAuthError).toHaveBeenCalledWith('log-1', expect.objectContaining({ message: expect.stringContaining('FACEBOOK_REDIRECT_URI') }));
-    // The logged cause is already reported to PostHog, so the response is
-    // marked so the wrapper does not report a second synthetic exception.
     expect(markApiErrorReported).toHaveBeenCalledWith(response);
   });
 });
@@ -150,7 +145,6 @@ describe('GET /api/facebook-auth/callback', () => {
     });
     expect(vi.mocked(upsertSocialAccount).mock.calls[1][1].accountMetadata).toHaveProperty('followersCount', undefined);
     expect(reportProfileFetched).toHaveBeenCalledTimes(2);
-    // Neither the user token nor a Page token reaches the popup.
     const serialized = JSON.stringify(body);
     expect(serialized).not.toContain('user-long-tok');
     expect(serialized).not.toContain('ptok-');

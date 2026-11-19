@@ -26,15 +26,9 @@ from app.services.voice_providers import (
     populate_legacy_submaker_with_full_text,
 )
 
-# OpenRouter endpoints. Both are hard infrastructure names: the engine talks to
-# the public OpenRouter API and nowhere else, so a different base would mean a
-# different provider entirely rather than a config tweak.
 OPENROUTER_SPEECH_URL = "https://openrouter.ai/api/v1/audio/speech"
 OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models"
 
-# Voice ids are provider-qualified; `voice.tts` routes on this prefix.
-# Format: `openrouter:<model>:<voice>` -- OpenRouter voices are per-model, so
-# the id carries both halves.
 OPENROUTER_VOICE_PREFIX = "openrouter:"
 
 
@@ -82,8 +76,6 @@ def _configured_openrouter_models() -> list[str]:
     return result
 
 
-# Discovered catalogs, keyed by (api_key, models) so a config change is a new
-# key rather than a stale answer. That also means tests need no reset hook.
 _openrouter_voice_cache: dict[tuple[str, tuple[str, ...]], list[str]] = {}
 
 
@@ -119,7 +111,6 @@ def get_openrouter_voices() -> list[str]:
     try:
         response = requests.get(
             OPENROUTER_MODELS_URL,
-            # Without this filter the payload is every OpenRouter model.
             params={"output_modalities": "speech"},
             headers={"Authorization": f"Bearer {api_key}"},
             timeout=15,
@@ -127,14 +118,11 @@ def get_openrouter_voices() -> list[str]:
         if response.status_code != 200:
             logger.warning(
                 f"OpenRouter voices fetch failed with status {response.status_code}: "
-                # Scrub: an upstream HTTP error can echo the rejected key back.
                 f"{scrub_secret_values(response.text)[:200]}"
             )
             return []
         payload = response.json()
     except Exception as e:
-        # Scrub: the exception string can carry the key (e.g. a proxy or TLS
-        # error echoing the Authorization header).
         logger.warning(f"OpenRouter voices fetch failed: {scrub_secret_values(str(e))}")
         return []
 
@@ -143,8 +131,6 @@ def get_openrouter_voices() -> list[str]:
         logger.warning("OpenRouter voices fetch returned an unexpected payload shape")
         return []
 
-    # Index model id -> voices, narrowing every entry: one malformed model must
-    # not discard the real voices beside it.
     voices_by_model: dict[str, list[str]] = {}
     for entry in entries:
         if not isinstance(entry, dict):
@@ -160,15 +146,12 @@ def get_openrouter_voices() -> list[str]:
             for voice in supported
             if isinstance(voice, str) and voice.strip()
         ]
-        # Preserve order, drop duplicates.
         voices_by_model[model_id] = list(dict.fromkeys(cleaned))
 
     voices: list[str] = []
     for model in models:
         model_voices = voices_by_model.get(model)
         if not model_voices:
-            # A typo'd id is far likelier than a model that genuinely lists no
-            # voices, and a silently empty picker hides the typo.
             logger.warning(
                 f"OpenRouter model {model!r} is not a speech model with voices; "
                 "check [openrouter] models in config.toml"
@@ -241,9 +224,6 @@ def openrouter_tts(
     if float(voice_rate or 1.0) != 1.0:
         payload["speed"] = float(voice_rate)
 
-    # Errors where retrying will never help: the model rejected the voice or
-    # the input, the key is wrong, or the model/voice does not exist. Retrying
-    # spends three requests to reach the same answer.
     _NON_RETRYABLE_CODES = {400, 401, 403, 404, 422}
 
     last_error: str | None = None
@@ -267,8 +247,6 @@ def openrouter_tts(
                 if response.status_code in _NON_RETRYABLE_CODES:
                     reason = (
                         f"OpenRouter TTS request rejected (status {response.status_code}): "
-                        # Scrub before the 200-cut: a cut landing mid-secret
-                        # defeats the scrubber and leaks the raw remainder.
                         f"{scrub_secret_values(response.text)[:200]}"
                     )
                     logger.error(
@@ -302,9 +280,6 @@ def openrouter_tts(
                 )
             )
         except Exception as e:
-            # Scrub before the 200-cut: a cut landing mid-secret defeats the
-            # scrubber and leaks the raw remainder. The log line is scrubbed
-            # too: the exception string can carry the key.
             last_error = scrub_secret_values(str(e))[:200]
             logger.error(f"openrouter tts failed: {scrub_secret_values(str(e))}")
 
@@ -329,8 +304,6 @@ def dispatch_openrouter_tts(
     """
     if not is_openrouter_voice(voice_name):
         return None
-    # Format: openrouter:<model>:<voice>. The model is part of the id
-    # because OpenRouter voices are per-model.
     parsed = parse_openrouter_voice(voice_name)
     if parsed is None:
         logger.error(f"Invalid openrouter voice name format: {voice_name}")

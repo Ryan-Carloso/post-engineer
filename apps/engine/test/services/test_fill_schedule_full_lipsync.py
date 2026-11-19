@@ -116,8 +116,6 @@ class BatchDispatchVideoTypeTests(unittest.TestCase):
         return dispatch.call_args[0][1]
 
     def test_full_lipsync_slot_dispatches_full_lipsync(self):
-        # Full lip sync needs no media (at most 6 photos for the whole
-        # video), so the slot dispatches with the media stripped.
         slot = _slot(video_type="full_lipsync")
         for segment in slot["segments"]:
             segment.pop("media", None)
@@ -129,11 +127,6 @@ class BatchDispatchVideoTypeTests(unittest.TestCase):
         self.assertEqual(request.video_type, "hook_lipsync")
 
     def test_long_stored_title_is_truncated_to_the_engine_cap(self):
-        # Pre-migration rows were created when the engine cap was 500
-        # (video_subject) and the web had none: the request carries the
-        # title truncated to 100 — what publish shows on YouTube — and
-        # the row keeps generating instead of failing validation before
-        # the refund block.
         request = self._dispatched_request(_slot(title="x" * 150))
         self.assertEqual(request.video_title, "x" * 100)
 
@@ -185,10 +178,6 @@ class BatchDispatchVideoTypeTests(unittest.TestCase):
         return slot
 
     def test_full_lipsync_slot_without_a_persona_photo_fails_with_a_refund(self):
-        # Full lip-sync needs a face by design, so a photo-less persona
-        # fails — but inside the refund block, so the prepaid 8 tokens
-        # come back instead of stranding the slot (pre-migration rows
-        # asked for a face they never had).
         slot = self._photo_less(_slot(video_type="full_lipsync", charged_tokens=8))
         for segment in slot["segments"]:
             segment.pop("media", None)
@@ -205,9 +194,6 @@ class BatchDispatchVideoTypeTests(unittest.TestCase):
         self.assertEqual(store.refund_batch_calls[0][3], 2)
 
     def test_hook_lipsync_slot_with_an_unusable_persona_photo_fails_with_a_refund(self):
-        # A stored avatar_url the engine can never fetch (a relative
-        # path, a non-http scheme) fails in the same refund block as a
-        # missing photo, instead of dispatching and dying mid-pipeline.
         slot = _slot(charged_tokens=2)
         slot["schedules"]["personas"]["photo_path"] = None
         slot["schedules"]["personas"]["avatar_url"] = "not-a-url"
@@ -217,8 +203,6 @@ class BatchDispatchVideoTypeTests(unittest.TestCase):
         self.assertEqual(store.refund_batch_calls[0][3], 2)
 
     def test_hook_lipsync_slot_with_a_house_face_avatar_dispatches(self):
-        # A house-face path is usable: the engine resolves it to an
-        # absolute URL at download time.
         slot = _slot()
         slot["schedules"]["personas"]["photo_path"] = None
         slot["schedules"]["personas"]["avatar_url"] = "/caracter-samples/file-1.png"

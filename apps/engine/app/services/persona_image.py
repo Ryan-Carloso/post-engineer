@@ -7,8 +7,6 @@ from urllib.parse import urlparse
 
 from app.services import longcat, upload_publisher
 
-# House faces from the web persona picker are stored as a path relative to
-# the web app (apps/web/public/caracter-samples/file-N.png).
 _HOUSE_FACE_PATH = re.compile(r"/caracter-samples/file-\d+\.png")
 
 

@@ -7,17 +7,6 @@ import { SITE_URL } from '@/lib/seo';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import type { SocialProvider } from '@/lib/providers/registry';
 
-//---------------
-// owner-alert-mail — email the account owner when a connected account
-// breaks (issue #558). Resend is called directly. A missing key or From
-// address logs once and returns before any claim, so the request still
-// succeeds and a later deploy can send.
-//
-// Dedup is claim_owner_alert (migration 059): one email per account per
-// failure class per 7 days. A failed send releases the claim.
-// The body uses fixed sentences. It never includes error.message or a token.
-//---------------
-
 const RESEND_URL = 'https://api.resend.com/emails';
 const ACCOUNT_WINDOW_DAYS = 7;
 const USER_AGENT = 'post-engineer/owner-alert';

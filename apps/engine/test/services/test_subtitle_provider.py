@@ -106,7 +106,6 @@ def test_whisper_raising_falls_back_to_edge_and_logs_an_error(task_dir):
 
 
 def test_whisper_failing_with_custom_audio_has_no_edge_fallback(task_dir):
-    # No TTS timeline exists for custom audio, so there is nothing to fall back to.
     with (
         patch.object(subtitle_provider.subtitle, "create", return_value=None),
         patch.object(subtitle_provider.voice, "create_subtitle") as edge,

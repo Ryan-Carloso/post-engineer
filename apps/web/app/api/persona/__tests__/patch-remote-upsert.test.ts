@@ -4,8 +4,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('@/lib/supabase/server', () => ({
   createSupabaseServerClient: vi.fn(),
 }));
-// Persona row writes run on the service client after the ownership check
-// (migration 066 leaves the session client select-only on personas).
 vi.mock('@/lib/supabase/service', () => ({
   createSupabaseServiceClient: vi.fn(),
 }));
@@ -79,8 +77,6 @@ describe('PATCH remote ingest onto an existing photo object', () => {
         })),
       })),
     };
-    // Backwards-compat: the session client also carries storage for
-    // rollback paths that still use the session client.
     const client = { ...sessionClient, from: sessionClient.from };
     return { client, serviceClient, uploaded, removeMock, patchEqCalls };
   }

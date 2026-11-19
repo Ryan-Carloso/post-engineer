@@ -16,8 +16,6 @@ import { checkSchemaDrift, describeDrift, reportSchemaDrift } from '@/lib/schema
 
 type Existing = Record<string, string[] | 'missing-table' | 'unreachable'>;
 
-// A fake PostgREST client: select(cols).limit(0) errors the way PostgREST
-// does when a requested column (42703) or the table (42P01) does not exist.
 function fakeClient(existing: Existing): SupabaseClient {
   return {
     from: (table: string) => ({
@@ -68,8 +66,6 @@ describe('checkSchemaDrift', () => {
 });
 
 describe('checkSchemaDrift per-column probes', () => {
-  // The combined probe says a column is missing (42703), then the per-column
-  // probes answer whatever the script says, in order.
   function scriptedClient(perColumn: Array<string | null>): SupabaseClient {
     let calls = 0;
     return {

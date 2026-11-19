@@ -8,6 +8,7 @@ from app.services import upload_publisher
 from app.services.fill_schedule.youtube_tags import derive_tags_from_title
 from app.services.publish_fanvue import validate_fanvue_metadata
 from app.services.publish_pinterest import validate_pinterest_metadata
+from app.services.publish_telegram import validate_telegram_metadata
 
 
 class AccountNotBoundError(RuntimeError):
@@ -24,9 +25,6 @@ def _youtube_metadata(title: str, schedule: dict[str, Any], copy: str):
     return upload_publisher.YouTubeMetadata(
         title=title[:100],
         description=copy,
-        # Tags come from the title text itself, so they are always in
-        # the video's own language. Never empty for a real title; the
-        # pre-flight rejects degenerate titles before GPU is spent.
         tags=derive_tags_from_title(title),
         privacy_status="public",
         account_ids=tuple(str(value) for value in schedule.get("youtube_account_ids", [])),
@@ -71,10 +69,15 @@ def _fanvue_metadata(title: str, schedule: dict[str, Any], copy: str):
     )
 
 
+def _telegram_metadata(title: str, schedule: dict[str, Any], copy: str):
+    return upload_publisher.TelegramMetadata(
+        caption=copy[: upload_publisher.TELEGRAM_CAPTION_MAX_LENGTH],
+        account_ids=tuple(str(value) for value in schedule.get("telegram_account_ids", [])),
+    )
+
+
 def _threespeak_metadata(title: str, schedule: dict[str, Any], copy: str):
     return upload_publisher.ThreespeakMetadata(
-        # No documented caption cap on 3Speak: the whole copy is the
-        # caption, and the web route takes the title from its first line.
         caption=copy,
         account_ids=tuple(str(value) for value in schedule.get("threespeak_account_ids", [])),
     )
@@ -102,9 +105,6 @@ def _bluesky_metadata(title: str, schedule: dict[str, Any], copy: str):
     )
 
 
-# One builder per provider (a dispatch dict, not an if chain): a new
-# provider fails here instead of falling through to another network's
-# metadata shape.
 _METADATA_BUILDERS: dict[str, Any] = {
     upload_publisher.YOUTUBE_PROVIDER: _youtube_metadata,
     upload_publisher.LINKEDIN_PROVIDER: _linkedin_metadata,
@@ -112,6 +112,7 @@ _METADATA_BUILDERS: dict[str, Any] = {
     upload_publisher.FACEBOOK_PROVIDER: _facebook_metadata,
     upload_publisher.PINTEREST_PROVIDER: _pinterest_metadata,
     upload_publisher.FANVUE_PROVIDER: _fanvue_metadata,
+    upload_publisher.TELEGRAM_PROVIDER: _telegram_metadata,
     upload_publisher.THREESPEAK_PROVIDER: _threespeak_metadata,
     upload_publisher.RUMBLE_PROVIDER: _rumble_metadata,
     upload_publisher.INSTAGRAM_PROVIDER: _instagram_metadata,
@@ -188,21 +189,15 @@ def validate_publish_plan(
         elif isinstance(metadata, upload_publisher.FacebookMetadata):
             facebook = metadata
         elif isinstance(metadata, upload_publisher.PinterestMetadata):
-            # Pinterest is validated here, not in validate_publish_metadata:
-            # upload_publisher.py is at the 500-line file-size cap, so
-            # its validator takes no new provider parameter. The pre-flight
-            # is the only production caller, so this is the whole gate.
             validate_pinterest_metadata(metadata)
         elif isinstance(metadata, upload_publisher.ThreespeakMetadata):
             threespeak = metadata
         elif isinstance(metadata, upload_publisher.RumbleMetadata):
             rumble = metadata
         elif isinstance(metadata, upload_publisher.FanvueMetadata):
-            # Fanvue is validated here, not in validate_publish_metadata:
-            # upload_publisher.py is at the 500-line file-size cap, so
-            # its validator takes no new provider parameter. The pre-flight
-            # is the only production caller, so this is the whole gate.
             validate_fanvue_metadata(metadata)
+        elif isinstance(metadata, upload_publisher.TelegramMetadata):
+            validate_telegram_metadata(metadata)
     upload_publisher.validate_publish_metadata(
         providers,
         youtube,

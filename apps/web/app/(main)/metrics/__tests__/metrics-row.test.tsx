@@ -4,13 +4,6 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 
-//---------------
-// Tests for MetricsRow: views as the main number with inline engagement,
-// and the YouTube retention line plus the on-demand retention curve.
-// The retention-curve query stays real; the network (fetch) and i18n
-// are mocked. t() returns the key, with {vars} appended when interpolated.
-//---------------
-
 vi.mock('@/lib/i18n/provider', () => {
   function I18nProvider({ children }: { children: ReactNode }) {
     return <>{children}</>;
@@ -41,7 +34,6 @@ vi.mock('@/components/provider-icon', () => ({
 import { MetricsRow } from '../metrics-row';
 import type { MetricsRowView } from '@/lib/metrics/metrics-query';
 
-// One module-level relative publish date so row() is stable per run.
 const PUBLISHED_AT = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
 
 function row(overrides: Partial<MetricsRowView> = {}): MetricsRowView {
@@ -86,7 +78,6 @@ describe('MetricsRow', () => {
     expect(screen.getByText('metrics.stayedToWatchDerived:')).toBeInTheDocument();
     expect(screen.getByText('64.1%')).toBeInTheDocument();
     expect(screen.getByText('metrics.provisional')).toHaveAttribute('title', 'metrics.provisionalHint');
-    // Shorts get the no-curve note instead of a curve toggle.
     expect(screen.getByText('metrics.curveShortsNote')).toBeInTheDocument();
     expect(screen.queryByText('metrics.curveShow')).toBeNull();
     expect(screen.queryByText('metrics.reconnectTitle')).toBeNull();
@@ -107,7 +98,6 @@ describe('MetricsRow', () => {
     renderRow({ analyticsStatus: 'ok', contentType: 'VIDEO_ON_DEMAND', stayedToWatchPct: 50 });
     const toggle = await screen.findByRole('button', { name: 'metrics.curveShow' });
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    // Nothing is fetched from Analytics until the user asks.
     expect(fetchMock.mock.calls.some(([url]) => url.startsWith('/api/metrics/retention-curve'))).toBe(false);
     fireEvent.click(toggle);
     await waitFor(() => expect(screen.getByTestId('retention-curve')).toHaveTextContent('1 points'));
@@ -125,8 +115,6 @@ describe('MetricsRow', () => {
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('metrics.reconnectTitle'));
     expect(curveFetch).toHaveBeenCalledTimes(1);
 
-    // A failed read is an errored (stale) query: closing and reopening the
-    // panel retries instead of serving the cached failure.
     fireEvent.click(screen.getByRole('button', { name: 'metrics.curveHide' }));
     fireEvent.click(screen.getByRole('button', { name: 'metrics.curveShow' }));
     await waitFor(() => expect(curveFetch).toHaveBeenCalledTimes(2));

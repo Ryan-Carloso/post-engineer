@@ -17,11 +17,6 @@ vi.mock('@/lib/posthog-server', () => ({
   getPostHogServer: vi.fn(),
 }));
 
-//---------------
-// Tests for GET /api/billing/tokens — prepaid wallet balance.
-// Auth = Supabase session (cookie) OR personal API key (Bearer, MCP).
-//---------------
-
 import { GET } from '../route';
 import { TokenBalanceResponseSchema } from '@/lib/contracts/billing';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
@@ -83,7 +78,6 @@ describe('GET /api/billing/tokens', () => {
     expect(res.status).toBe(200);
     const body: unknown = await res.json();
     expect(body).toEqual({ success: true, balance: 8, free: 3 });
-    // The 200 body parses against the shared contract the MCP reads.
     expect(TokenBalanceResponseSchema.safeParse(body).success).toBe(true);
   });
 
@@ -93,9 +87,6 @@ describe('GET /api/billing/tokens', () => {
     const res = await GET();
 
     expect(res.status).toBe(200);
-    // The wrapper reports fire-and-forget; the balance used to be
-    // invisible in PostHog (route + status only), so a balance jump
-    // could not be traced to the value the user actually saw.
     await vi.waitFor(() =>
       expect(client.capture).toHaveBeenCalledWith(
         'token_balance_fetched',
@@ -131,9 +122,6 @@ describe('GET /api/billing/tokens', () => {
 
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ success: true, balance: 8, free: 3 });
-    // An API-key caller reads through the service client (the cookie
-    // client sees no session, so RLS would hide the profile row and the
-    // balance would degrade to a silent 0).
     expect(createSupabaseServiceClient).toHaveBeenCalled();
     expect(createSupabaseServerClient).not.toHaveBeenCalled();
   });

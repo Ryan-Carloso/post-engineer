@@ -8,23 +8,8 @@ import { logger } from '@/lib/logger';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 import { parseTransactionsLimit, parseTransactionsOffset } from '@/lib/contracts/billing';
 
-// The paging parse helpers live in the shared contract
-// (shared/contracts/billing.ts) and are re-exported here so existing
-// importers keep their path.
 export { parseTransactionsLimit, parseTransactionsOffset } from '@/lib/contracts/billing';
 
-//---------------
-// GET /api/billing/transactions — the current user's token ledger,
-// newest first, paginated.
-// Auth = Supabase session (cookie) OR personal API key (Bearer/x-api-key, MCP).
-// RLS already scopes session queries to the caller; the service client used
-// for API keys bypasses RLS, so every query is explicitly filtered by user_id.
-//---------------
-
-//---------------
-// toTransaction — maps a raw ledger row to the public response shape.
-// numeric amounts arrive as strings via PostgREST; coerce to number.
-//---------------
 function toTransaction(row: {
   id: unknown;
   amount: unknown;
@@ -54,9 +39,6 @@ async function getHandler(request?: Request): Promise<NextResponse> {
     );
   }
   const userId = auth.userId;
-  // OAuth (MCP) callers have no cookie session, so like API keys they
-  // must use the service client — the server client would silently
-  // return zero rows through RLS.
   const supabase = auth.isApiKey === true || auth.isOAuth === true
     ? createSupabaseServiceClient()
     : await createSupabaseServerClient();
@@ -106,7 +88,4 @@ async function getHandler(request?: Request): Promise<NextResponse> {
   }
 }
 
-//---------------
-// 5xx reporting: handled server errors reach PostHog error tracking.
-//---------------
 export const GET = withApiErrorReporting('GET /api/billing/transactions', getHandler, { getUserId: resolveReportingUserId });
