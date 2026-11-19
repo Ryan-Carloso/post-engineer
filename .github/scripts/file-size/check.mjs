@@ -29,7 +29,6 @@ export function isSourceFile(p) {
 
 export function isExempt(p) {
   if (isVendoredCalendarCN(p)) return true;
-  // Prompt-data files: prompt wording is data, not logic — see prompt-data.mjs.
   if (isPromptDataFile(p)) return true;
   const segments = p.split('/');
   const base = segments[segments.length - 1];

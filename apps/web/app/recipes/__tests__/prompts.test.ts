@@ -749,9 +749,6 @@ describe('prompts hub data', () => {
     expect(text).toContain('provocative');
     expect(text).toContain('One archetype only');
     expect(text).toContain('adds nothing to the viewer');
-    // The archetype must be OBVIOUS, not subtle: the viewer recognizes
-    // it instantly, without thinking. If it could be any archetype, it
-    // is none of them.
     expect(text).toContain('The archetype must be OBVIOUS');
     expect(text).toContain('without thinking');
     expect(text).toContain('it is none of them');
@@ -822,13 +819,6 @@ describe('prompts hub data', () => {
   });
 
   it('carries the 10/10-loop lessons (v7-v15): one beat per segment, two body states, duration contrast, matching clips, covered takes, literal study, 12-word CTA', () => {
-    // The loop lessons were verified on real rendered videos (v7-v15):
-    // each segment is one beat, the body change is visible in the body,
-    // photos pace with SegmentMedia.duration, clips must match the persona
-    // even from behind, every take is covered, the study is literal, and
-    // the CTA is 12 words over 2 photos. Pins are single-line fragments:
-    // the composed prompt joins source lines with '\n', so a needle
-    // spanning a source-line break never matches.
     const fullText = getPrompt('story-first-reels')?.prompt ?? '';
     const baseText = SHARED_PROMPT_BASE.join('\n');
     expect(fullText.startsWith(baseText)).toBe(true);
@@ -862,14 +852,6 @@ describe('prompts hub data', () => {
   });
 
   it('carries the 10/10-loop lessons (v16-v24): in-sentence pace, chart-only study page, payoff windows from measured audio', () => {
-    // The loop lessons were verified on real rendered videos (v16-v24):
-    // a take-span pace hides a rushed line (v23 CTA: 216 wpm on span,
-    // 306 wpm inside the sentence), a study paper with fake text columns
-    // reads fake on pause (v23 chart-only page fixed it by construction),
-    // and payoff windows re-tuned from measured audio ends land exact
-    // (v21 dance 1.01s early, v22-v24 exact at 0.02-0.08s). Pins are
-    // single-line fragments: the composed prompt joins source lines
-    // with '\n', so a needle spanning a source-line break never matches.
     const fullText = getPrompt('story-first-reels')?.prompt ?? '';
     const baseText = SHARED_PROMPT_BASE.join('\n');
     expect(fullText.startsWith(baseText)).toBe(true);
@@ -883,9 +865,6 @@ describe('prompts hub data', () => {
     expect(text).toContain('re-tune the photo windows');
     expect(text).toContain('measured audio ends');
     expect(text).toContain('never re-estimate');
-    // Round-2 review clarification: the study runs fast except for its
-    // chart, which holds 2s or more - the chart-duration rule moved here
-    // from the study sentence so the exception is explicit.
     expect(text).toContain('The study is fast except for its chart');
   });
 });

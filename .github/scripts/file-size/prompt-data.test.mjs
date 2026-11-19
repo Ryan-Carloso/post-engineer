@@ -8,29 +8,11 @@ import { isPromptDataFile } from './prompt-data.mjs';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PROMPT_BASE_DIR = path.resolve(HERE, '..', '..', '..', 'shared', 'prompt-base');
 
-// The guard itself: prompt-data files hold wording only. The patterns live
-// here so the negative cases below exercise exactly what the real-files
-// test enforces.
-// DATA_ONLY_PATTERN rejects module wiring: dynamic import, require calls,
-// static imports, side-effect imports, re-exports (the barrel a
-// re-attempted split would use), and Python imports. The re-export arm is
-// deliberately bounded: an unbounded `[\s\S]*?` between `export` and
-// `from '...'` false-positives on the real prompt file, whose wording
-// contains `from'` (a string literal ending in "from"). So single-line
-// re-exports match on one line with a non-empty path, and multi-line ones
-// only through their braces (`export { ... } from '...'`).
 const DATA_ONLY_PATTERN =
   /\b(import|require)\s*\(|^\s*(import|export)\b[^\n]*\bfrom\s*['"][^'"\n]*['"]|^\s*(import|export)\s*\{[^}]*\}\s*from\s*['"][^'"\n]+['"]|^\s*import\s*['"]|^\s*(import|from)\s+\w/m;
-// NO_LOGIC_PATTERN rejects helpers: arrow functions, function/class
-// declarations (including `export default`), function/class expressions
-// assigned to a const (named or anonymous), call expressions assigned to a
-// const — bare (`export const X = buildPrompt();`) or member
-// (`export const X = base.slice(1);`) — top-level calls
-// (`os.system('x')`), and Python defs (the exemption covers .py files too).
 const NO_LOGIC_PATTERN =
   /=>|^\s*(async\s+)?def\s|^\s*(export\s+(default\s+)?)?(async\s+)?(function|class)\b|=\s*(async\s+)?(function|class)\b|=\s*[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*\s*\(|^\s*[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*\s*\(/m;
 
-/** Recursively collect every file under a directory. */
 function walk(dir) {
   const out = [];
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -66,8 +48,6 @@ describe('prompt-data files', () => {
   });
 
   it('holds only prompt wording, never logic or helpers', () => {
-    // Every source type the exemption covers (.py, .ts, .tsx), not just
-    // the .ts files the store holds today.
     const files = walk(PROMPT_BASE_DIR).filter((f) => /\.(py|tsx?)$/.test(f));
     assert.ok(files.length > 0, 'expected at least one prompt-data file');
     for (const file of files) {
