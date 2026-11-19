@@ -16,7 +16,7 @@ import { encryptJson, decryptJson, TokenDecryptError } from '@/lib/token-crypto'
 // last 4 characters only.
 //---------------
 
-export const TOOL_CONFIG_SEARCH_TOOLS = ['tavily', 'exa'] as const;
+export const TOOL_CONFIG_SEARCH_TOOLS = ['tavily', 'exa', 'own'] as const;
 export type ToolConfigSearchTool = (typeof TOOL_CONFIG_SEARCH_TOOLS)[number];
 
 export const TOOL_CONFIG_STOCK_SOURCES = ['pexels', 'pixabay', 'coverr'] as const;
@@ -117,19 +117,20 @@ export function toToolConfigPresence(config: ToolConfig): ToolConfigPresence {
   };
 }
 
-// Strict validation for a replace-whole save: every field is required, a
-// key is only accepted for the tool/source it belongs to, and nothing is
-// silently truncated, coerced, or dropped.
+// Strict validation for a replace-whole save: every field is required and a
+// key is only accepted for the tool/source it belongs to. Keys are trimmed
+// (a whitespace-only key is empty) and duplicate stock sources collapse to
+// one; nothing else is silently truncated, coerced, or dropped.
 export function validateToolConfigInput(value: unknown): ToolConfigInput {
   if (!isRecord(value)) {
     throw new ToolConfigValidationError('config', 'Tool configuration must be an object');
   }
 
   const searchTool = value.searchTool;
-  if (searchTool !== null && searchTool !== 'tavily' && searchTool !== 'exa') {
+  if (searchTool !== null && searchTool !== 'tavily' && searchTool !== 'exa' && searchTool !== 'own') {
     throw new ToolConfigValidationError(
       'searchTool',
-      'searchTool must be "tavily", "exa", or null',
+      'searchTool must be "tavily", "exa", "own", or null',
     );
   }
 
@@ -243,7 +244,9 @@ export async function getToolConfig(
   }
 
   const searchTool =
-    data.search_tool === 'tavily' || data.search_tool === 'exa' ? data.search_tool : null;
+    data.search_tool === 'tavily' || data.search_tool === 'exa' || data.search_tool === 'own'
+      ? data.search_tool
+      : null;
   const stockSources = (Array.isArray(data.stock_sources) ? data.stock_sources : []).filter(
     (source): source is ToolConfigStockSource =>
       source === 'pexels' || source === 'pixabay' || source === 'coverr',

@@ -53,7 +53,7 @@ const ToolConfigKeysShape = {
 
 export const SaveToolConfigShape = {
   searchTool: z
-    .enum(['tavily', 'exa'])
+    .enum(['tavily', 'exa', 'own'])
     .nullable()
     .describe('The configured search tool, or null when none is configured.'),
   stockSources: z

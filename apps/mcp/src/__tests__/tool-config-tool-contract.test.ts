@@ -36,6 +36,12 @@ describe('tool_config tool-contract equivalence', () => {
     expect(SaveToolConfigBodySchema.safeParse(empty).success).toBe(true);
   });
 
+  it("save accepts 'own' as the search tool on both sides", () => {
+    const own = { searchTool: 'own', stockSources: [], keys: {} };
+    expect(SaveToolConfigSchema.safeParse(own).success).toBe(true);
+    expect(SaveToolConfigBodySchema.safeParse(own).success).toBe(true);
+  });
+
   it('save rejects an unknown search tool on both sides', () => {
     const bad = { ...VALID, searchTool: 'google' };
     expect(SaveToolConfigSchema.safeParse(bad).success).toBe(false);

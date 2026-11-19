@@ -11,7 +11,7 @@ import { VIDEO_TYPES } from '@/lib/tokens';
 import { VIDEO_UPLOAD_STATUSES } from '@/lib/videos/signed-upload';
 import { UPLOAD_CONTENT_TYPES } from '@/lib/contracts/videos';
 import { SCHEDULED_MEDIA_KINDS } from '@/app/api/media/publish-existing/schema';
-import { TOOL_CONFIG_SEARCH_TOOLS } from '@/lib/tool-config';
+import { TOOL_CONFIG_SEARCH_TOOLS, TOOL_CONFIG_STOCK_SOURCES } from '@/lib/tool-config';
 
 //---------------
 // Every enum-like CHECK constraint the database really has must match the
@@ -30,10 +30,11 @@ import { TOOL_CONFIG_SEARCH_TOOLS } from '@/lib/tool-config';
 // of parsing SQL, honors every drop/add and every `do $$ ... if not exists`
 // guard exactly as Postgres does. This test then pins:
 //
-//   1. every enum check (`col = ANY (ARRAY[...])`, or the single-value
+//   1. every enum check (`col = ANY (ARRAY[...])`, the single-value
 //      form `col = 'value'` Postgres rewrites a one-element `IN (...)`
-//      into) found in the snapshot is registered below, so a new
-//      constraint cannot land without a pinned expected list;
+//      into, or the containment form `col <@ ARRAY[...]`) found in the
+//      snapshot is registered below, so a new constraint cannot land
+//      without a pinned expected list;
 //   2. every registered constraint exists in the snapshot;
 //   3. the database list equals the code's list.
 //
@@ -68,6 +69,14 @@ function parseEnumChecks(): Map<string, EnumCheck> {
       if (list !== null) {
         const values = [...list[2].matchAll(/'([^']*)'::text/g)].map((value) => value[1]);
         checks.set(name, { table, column: list[1], values });
+        continue;
+      }
+      // An array-containment CHECK (`col <@ ARRAY[...]`) pins the whole
+      // list an array column's value must stay inside (migration 070).
+      const contains = /(\w+) <@ ARRAY\[([^\]]*)\]/.exec(text);
+      if (contains !== null) {
+        const values = [...contains[2].matchAll(/'([^']*)'::text/g)].map((value) => value[1]);
+        checks.set(name, { table, column: contains[1], values });
         continue;
       }
       // Postgres rewrites a one-element `IN ('x')` as `col = 'x'::text`.
@@ -115,6 +124,9 @@ const EXPECTED: Record<string, readonly string[]> = {
   // migration 070 (issue #669). search_tool is nullable: the parser keeps
   // only the ANY (ARRAY[...]) arm, which is this list.
   user_tool_configs_search_tool_check: TOOL_CONFIG_SEARCH_TOOLS,
+  // migration 070 (issue #669). The parser keeps only the <@ ARRAY[...]
+  // arm, which is this list.
+  user_tool_configs_stock_sources_check: TOOL_CONFIG_STOCK_SOURCES,
 };
 
 describe('database enum checks match the code', () => {

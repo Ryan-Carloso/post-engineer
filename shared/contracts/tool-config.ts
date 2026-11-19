@@ -5,11 +5,12 @@ import { defineEndpoint } from './endpoint.js';
 // Tool Config (issue #669): per-user research/stock tool configuration.
 // The single source of truth for the GET/PUT /api/tool-config exchange.
 // The route re-validates strictly (lib/tool-config.ts): a key is only
-// accepted for the tool/source it belongs to, and nothing is truncated,
-// coerced, or dropped. These schemas describe the exchange shape only.
+// accepted for the tool/source it belongs to. The lib trims keys and
+// dedupes stock sources; nothing else is truncated, coerced, or dropped.
+// These schemas describe the exchange shape only.
 //---------------
 
-export const ToolConfigSearchToolSchema = z.enum(['tavily', 'exa']);
+export const ToolConfigSearchToolSchema = z.enum(['tavily', 'exa', 'own']);
 export type ToolConfigSearchTool = z.infer<typeof ToolConfigSearchToolSchema>;
 
 export const ToolConfigStockSourceSchema = z.enum(['pexels', 'pixabay', 'coverr']);

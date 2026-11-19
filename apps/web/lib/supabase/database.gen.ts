@@ -987,21 +987,21 @@ export interface Database {
       user_tool_configs: {
         Row: {
         user_id: string;
-        search_tool: 'tavily' | 'exa' | null;
+        search_tool: 'tavily' | 'exa' | 'own' | null;
         stock_sources: string[];
         encrypted_keys: string | null;
         updated_at: string;
         };
         Insert: {
         user_id: string;
-        search_tool?: 'tavily' | 'exa' | null;
+        search_tool?: 'tavily' | 'exa' | 'own' | null;
         stock_sources?: string[];
         encrypted_keys?: string | null;
         updated_at?: string;
         };
         Update: {
         user_id?: string;
-        search_tool?: 'tavily' | 'exa' | null;
+        search_tool?: 'tavily' | 'exa' | 'own' | null;
         stock_sources?: string[];
         encrypted_keys?: string | null;
         updated_at?: string;

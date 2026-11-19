@@ -1594,7 +1594,7 @@
             },
             "constraints": {
                 "user_tool_configs_pkey": "PRIMARY KEY (user_id)",
-                "user_tool_configs_search_tool_check": "CHECK ((search_tool = ANY (ARRAY['tavily'::text, 'exa'::text])))",
+                "user_tool_configs_search_tool_check": "CHECK ((search_tool = ANY (ARRAY['tavily'::text, 'exa'::text, 'own'::text])))",
                 "user_tool_configs_stock_sources_check": "CHECK ((stock_sources <@ ARRAY['pexels'::text, 'pixabay'::text, 'coverr'::text]))"
             }
         },

@@ -21,7 +21,7 @@ const TOOL_CONFIG_SPECS = {
 };
 
 export const ToolConfigDescription = actionDescription(
-  'Saved research and stock tool configuration. get: which search tool (Tavily/Exa) and licensed stock sources (Pexels/Pixabay/Coverr) are saved for this account, each key as present + last 4 characters only — keys are never returned in full. save: replaces the whole saved configuration (search tool, stock sources, API keys); a key left out is forgotten, so send every key the user still has. Ask once at setup, save here, and check get before asking again.',
+  'Saved research and stock tool configuration. get: which search tool (Tavily/Exa/own) and licensed stock sources (Pexels/Pixabay/Coverr) are saved for this account, each key as present + last 4 characters only — keys are never returned in full. save: replaces the whole saved configuration (search tool, stock sources, API keys); a key left out is forgotten, so send every key the user still has. Ask once at setup, save here, and check get before asking again.',
   TOOL_CONFIG_SPECS,
 );
 

@@ -116,6 +116,14 @@ describe('validateToolConfigInput', () => {
     });
   });
 
+  it("accepts 'own' as the search tool: the agent's own search needs no key", () => {
+    expect(validateToolConfigInput({ searchTool: 'own', stockSources: [], keys: {} })).toEqual({
+      searchTool: 'own',
+      stockSources: [],
+      keys: {},
+    });
+  });
+
   it('trims key whitespace and dedupes stock sources', () => {
     const input = validateToolConfigInput({
       searchTool: 'exa',
@@ -131,6 +139,7 @@ describe('validateToolConfigInput', () => {
     ['tavily', 'config'],
     [[], 'config'],
     [{ searchTool: 'google', stockSources: [], keys: {} }, 'searchTool'],
+    [{ searchTool: 'own', stockSources: [], keys: { tavily: 'x' } }, 'keys.tavily'],
     [{ searchTool: 'tavily', stockSources: 'pexels', keys: {} }, 'stockSources'],
     [{ searchTool: 'tavily', stockSources: ['unsplash'], keys: {} }, 'stockSources'],
     [{ searchTool: 'tavily', stockSources: [], keys: 'nope' }, 'keys'],
