@@ -205,6 +205,16 @@ describe('getToolConfig', () => {
     });
   });
 
+  it("returns 'own' as the saved search tool", async () => {
+    const row = { search_tool: 'own', stock_sources: [], encrypted_keys: null };
+    const { client } = mockSupabase(row);
+    expect(await getToolConfig(client, 'u1')).toEqual({
+      searchTool: 'own',
+      stockSources: [],
+      keys: {},
+    });
+  });
+
   it('returns an empty key map when no blob is stored', async () => {
     const row = { search_tool: null, stock_sources: [], encrypted_keys: null };
     const { client } = mockSupabase(row);

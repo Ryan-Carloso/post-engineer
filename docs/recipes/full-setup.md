@@ -52,9 +52,9 @@ never a blocker.
 - Which tools the user already has: the agent checks the saved tool
   configuration first (`tool_config` `get`), asks once at setup for what
   is missing, and saves the complete configuration (`tool_config` `save`,
-  search tool, stock sources, and every key, stored encrypted, never shown
-  back in full) so a later conversation reuses them instead of asking
-  again: a save replaces everything, so a partial save is never made — a
+  search tool, stock sources, and every key for the selected search tool
+  and stock sources, stored encrypted, never shown back in full) so a later
+  conversation reuses them instead of asking again: a save replaces everything, so a partial save is never made — a
   stored key the agent cannot resend blocks the save. The licensed stock
   video sources (Pexels, Pixabay, Coverr, or none), asked in order, best
   match first, falling back to the next configured source on failure. The

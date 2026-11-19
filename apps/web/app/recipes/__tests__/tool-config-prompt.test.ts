@@ -27,6 +27,12 @@ describe('tool-config prompt', () => {
     expect(base).toContain('save the COMPLETE configuration with tool_config');
     expect(base).toContain('never save a partial configuration');
     expect(base).toContain('if a stored key is missing from your own environment, do not save at all');
+    // The complete save covers only keys for the selected search tool and
+    // stock sources: validateToolConfigInput rejects a key for an
+    // unselected tool, so ordering "every key" would 400 and persist
+    // nothing. The unscoped wording is gone.
+    expect(base).toContain('every key for the selected search tool and stock sources');
+    expect(base).not.toContain('every key from your own environment');
     // The saved check comes before the ask in the base text.
     expect(base.indexOf('tool_config (action: get)')).toBeLessThan(
       base.indexOf('Ask me once which search tool'),
@@ -47,6 +53,9 @@ describe('tool-config prompt', () => {
     expect(text).toContain('Save the COMPLETE configuration with tool_config');
     expect(text).toContain('never save a partial configuration');
     expect(text).toContain('do not save at all');
+    // Same selected-only scope as the base: no key for an unselected tool.
+    expect(text).toContain('every key for the selected search tool and stock sources');
+    expect(text).not.toContain('every key from your own environment');
     // The get check comes before the save in the setup step.
     expect(text.indexOf('tool_config (action: get)')).toBeLessThan(
       text.indexOf('tool_config (action: save)'),

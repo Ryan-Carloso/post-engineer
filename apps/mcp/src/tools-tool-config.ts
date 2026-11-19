@@ -67,7 +67,7 @@ export const SaveToolConfigShape = {
     .strict()
     .describe(
       'API keys for the configured tools, one per configured tool or source. ' +
-        'Replaces the whole saved set: a key left out here is forgotten, so send every key the user still has. ' +
+        'Replaces the whole saved set: a key left out here is forgotten, so send every key the user still has for the selected search tool and stock sources. ' +
         'Keys are stored encrypted and are never returned in full — get shows presence and last 4 characters only.',
     ),
 };
