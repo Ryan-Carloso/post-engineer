@@ -8,6 +8,7 @@ import unittest
 
 from pydantic import ValidationError
 
+from app.providers import SOCIAL_PROVIDERS
 from app.models.publish import PublishParams, ThreadsPublish
 from app.services import upload_publisher
 from app.services.fill_schedule.metadata import metadata_for, validate_publish_plan
@@ -55,7 +56,7 @@ class ThreadsPublisherTest(unittest.TestCase):
                 ("threadsAccountIds", "2"),
             ],
         )
-        self.assertIn("threads", upload_publisher.VALID_PROVIDERS)
+        self.assertIn("threads", SOCIAL_PROVIDERS)
         self.assertIn("threads", upload_publisher._PART_BUILDERS)
 
 
