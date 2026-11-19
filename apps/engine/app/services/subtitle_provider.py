@@ -1,10 +1,11 @@
-"""Pick the subtitle provider and fall back between providers.
+"""Time the captions from the real speech, with the TTS estimate as fallback.
 
-`whisper` times the cues from the real speech; `edge` spreads the script over
-the TTS timeline (no TTS provider returns word times). Each is the fallback
-of the other: a provider that leaves no usable file is logged as an error and
-the other one is tried, so a Whisper model that cannot load does not ship a
-video without captions.
+Whisper transcribes the narration and every caption is placed on the words
+it heard. No TTS provider returns word times: the TTS timeline only spreads
+the script over the audio by character share, which drifts by seconds
+through the middle of a video. It is used only when Whisper leaves no
+usable file, logged as an error, so a Whisper model that cannot load does
+not ship a video without captions.
 """
 
 import os
@@ -12,7 +13,6 @@ from os import path
 
 from loguru import logger
 
-from app.config import config
 from app.services import subtitle, subtitle_cleanup, voice
 from app.utils import utils
 
@@ -35,7 +35,7 @@ def _whisper(audio_file: str, video_script: str, subtitle_path: str) -> bool:
     return _has_cues(subtitle_path)
 
 
-def _edge(sub_maker, video_script: str, subtitle_path: str) -> bool:
+def _tts_estimate(sub_maker, video_script: str, subtitle_path: str) -> bool:
     voice.create_subtitle(text=video_script, sub_maker=sub_maker, subtitle_file=subtitle_path)
     return os.path.exists(subtitle_path) and _has_cues(subtitle_path)
 
@@ -43,38 +43,23 @@ def _edge(sub_maker, video_script: str, subtitle_path: str) -> bool:
 def build_subtitle(task_id, params, video_script, sub_maker, audio_file) -> str:
     """Write `subtitle.srt` for the task; return its path, or "" when none.
 
-    Returns "" when subtitles are off, when the provider needs a TTS timeline
-    that custom audio does not have, when no provider produced cues, or when
-    subtitle cleanup could not produce a cleaned file.
+    Returns "" when subtitles are off, when Whisper produced no cues and
+    there is no TTS timeline to estimate from (custom audio), when the
+    estimate produced no cues either, or when subtitle cleanup could not
+    produce a cleaned file.
     """
     logger.info("\n\n## generating subtitle")
     if not params.subtitle_enabled:
         return ""
 
     subtitle_path = path.join(utils.task_dir(task_id), "subtitle.srt")
-    provider = config.app.get("subtitle_provider", "edge").strip().lower()
-    logger.info(f"\n\n## generating subtitle, provider: {provider}")
-
-    if sub_maker is None and provider != "whisper":
-        logger.warning(
-            f"subtitle maker is missing, skip subtitle generation for provider: {provider}"
-        )
-        return ""
-
-    ok = False
-    if provider == "whisper":
-        ok = _whisper(audio_file, video_script, subtitle_path)
-        if not ok and sub_maker is not None:
-            logger.error("whisper produced no subtitle; falling back to the TTS timeline")
-            ok = _edge(sub_maker, video_script, subtitle_path)
-    elif provider == "edge":
-        ok = _edge(sub_maker, video_script, subtitle_path)
-        if not ok:
-            logger.warning("subtitle file not found, fallback to whisper")
-            ok = _whisper(audio_file, video_script, subtitle_path)
+    ok = _whisper(audio_file, video_script, subtitle_path)
+    if not ok and sub_maker is not None:
+        logger.error("whisper produced no subtitle; falling back to the estimated TTS timeline")
+        ok = _tts_estimate(sub_maker, video_script, subtitle_path)
 
     if not ok:
-        logger.error(f"no subtitle provider produced cues (provider: {provider})")
+        logger.error("no subtitle cues: whisper failed and no TTS timeline could replace it")
         return ""
     if not subtitle_cleanup.clean_subtitle_file(subtitle_path):
         logger.error("subtitle cleanup failed; shipping no subtitles")
