@@ -34,7 +34,7 @@ interface McpToolCard {
   Icon: ComponentType;
 }
 
-// The 16 intent tools of the MCP server (issue #566). apps/mcp/src registers
+// The 17 intent tools of the MCP server (issue #566). apps/mcp/src registers
 // them; the docs-sync test there checks that every one is named here.
 const MCP_TOOL_CARDS: McpToolCard[] = [
   { id: 'generate_video', actions: [], descKey: 'apiKeys.toolDescGenerateVideo', Icon: FilmIcon },
@@ -44,6 +44,7 @@ const MCP_TOOL_CARDS: McpToolCard[] = [
   { id: 'persona_media', actions: ['list_faces', 'list_images', 'add_image', 'update_image', 'remove_image'], descKey: 'apiKeys.toolDescPersonaMedia', Icon: ImageIcon },
   { id: 'voices', actions: ['list', 'preview', 'list_clones', 'create_clone', 'get_clone', 'preview_clone', 'delete_clone'], descKey: 'apiKeys.toolDescVoices', Icon: MicIcon },
   { id: 'accounts', actions: ['list', 'connect', 'disconnect', 'get_persona_publishing', 'set_persona_publishing', 'list_boards'], descKey: 'apiKeys.toolDescAccounts', Icon: AccountsIcon },
+  { id: 'tool_config', actions: ['get', 'save'], descKey: 'apiKeys.toolDescToolConfig', Icon: KeyIcon },
   { id: 'schedules', actions: ['list', 'cancel', 'get_slot', 'update_slot_title', 'delete_slot'], descKey: 'apiKeys.toolDescSchedules', Icon: CalendarIcon },
   { id: 'posts', actions: ['list', 'get'], descKey: 'apiKeys.toolDescPosts', Icon: ExternalLinkIcon },
   { id: 'insights', actions: ['post_metrics', 'retention_curve'], descKey: 'apiKeys.toolDescInsights', Icon: HistoryIcon },
