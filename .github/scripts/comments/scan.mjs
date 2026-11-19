@@ -16,9 +16,12 @@ export function loadTypeScript() {
 }
 
 const TS_DIRECTIVE =
-  /eslint-(disable|enable)|^\s*\/[/*]\s*eslint\s|@ts-(expect-error|ignore|nocheck|check)|@(vitest|jest)-environment|@vite-ignore|(istanbul|c8|v8) ignore|Stryker (disable|restore)|prettier-ignore|oxlint-(disable|enable)|[@#]__PURE__|codeql\[|lgtm\[|biome-ignore|@jsx|@license|@preserve|^\/\/\/\s*<(reference|amd)/;
-const WEBPACK_DIRECTIVE =
-  /^\s*(?:\/\/|\/\*+)\s*webpack[A-Z]\w*\s*:\s*(?:true|false|"[^"]*"|'[^']*')\s*(?:\*\/)?\s*$/;
+  /eslint-(disable|enable)|^\s*\/[/*]\s*eslint\s|@ts-(expect-error|ignore|nocheck|check)|@(vitest|jest)-environment|@vite-ignore|(istanbul|c8|v8) ignore|Stryker (disable|restore)|prettier-ignore|oxlint-(disable|enable)|[@#]__PURE__|codeql\[|lgtm\[|biome-ignore|@jsx|@license|@preserve|^\/\/\/\s*<(reference|amd)|^\s*\/[/*]\s*(eslint-env\s|@refresh reset\b|stylelint-(disable|enable)\b|tslint:(disable|enable)\b)/;
+const WEBPACK_VALUE = String.raw`(?:true|false|-?\d+|"[^"]*"|'[^']*'|\/(?:\\.|[^/\\\n])+\/[a-z]*|\[[^\]]*\])`;
+const WEBPACK_PAIR = String.raw`webpack[A-Z]\w*\s*:\s*${WEBPACK_VALUE}`;
+const WEBPACK_DIRECTIVE = new RegExp(
+  String.raw`^\s*(?:\/\/|\/\*+)\s*${WEBPACK_PAIR}(?:\s*,\s*${WEBPACK_PAIR})*\s*,?\s*(?:\*\/)?\s*$`,
+);
 const JS_TYPE_DIRECTIVE = /@(type|typedef|satisfies|template)\s*[{\s]|@param\s*\{|@returns?\s*\{/;
 
 export function isTsDirective(commentText, file) {

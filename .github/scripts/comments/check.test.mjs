@@ -80,3 +80,17 @@ test('exempts generated, vendored and code-owned files', () => {
   assert.equal(isExempt('apps/web/components/calendar.tsx'), true);
   assert.equal(isExempt('apps/web/lib/api.ts'), false);
 });
+
+test('keeps combined, regex and array webpack magic comments', () => {
+  const src =
+    'await import(/* webpackChunkName: "x", webpackPrefetch: true */ "a");\n' +
+    'await import(/* webpackInclude: /\\.json$/ */ `./d/${n}`);\n' +
+    'await import(/* webpackExports: ["a", "b"] */ "b");\n';
+  assert.equal(runFix('a.ts', src), src);
+});
+
+test('keeps refresh, eslint-env, stylelint and tslint directives but strips prose that mentions them', () => {
+  const kept = '// @refresh reset\n/* eslint-env node */\n/* stylelint-disable */\n// tslint:disable-next-line\nconst a = 1;\n';
+  assert.equal(runFix('a.ts', kept), kept);
+  assert.equal(runFix('b.ts', '// the @refresh reset trick and eslint-env\nconst a = 1;\n'), 'const a = 1;\n');
+});
