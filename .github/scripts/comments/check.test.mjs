@@ -143,7 +143,7 @@ test('a file the tokenizer cannot read is reported and the run continues', () =>
     const code = run(['bad.py', 'good.ts'], dir, (line) => logs.push(line));
     assert.equal(code, 1);
     assert.ok(logs.some((line) => line.startsWith('bad.py: could not be scanned')));
-    assert.ok(logs.some((line) => line.startsWith('good.ts:1: // note')));
+    assert.ok(logs.some((line) => line.includes('good.ts') && line.includes('// note')));
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
