@@ -40,6 +40,7 @@ export const componentSchemas = {
     properties: {
       kind: { type: 'string', enum: ['hook', 'content'] },
       text: str,
+      cta: { type: 'boolean', description: "Marks the take that performs this video's CTA (issue #639)." },
       media: { type: 'array', maxItems: 30, items: { type: 'object', additionalProperties: false, properties: { mediaId: str, url: str } } },
     },
   },
@@ -107,6 +108,18 @@ const generateBody = object(
     }, ['segments']),
     experiment: experimentLinkSchema,
     idempotencyKey: str,
+    cta: {
+      type: 'object',
+      nullable: true,
+      description: 'Per-video CTA override (issue #639): explicit wins over the persona default; null disables the CTA for this video.',
+      properties: {
+        type: { type: 'string', enum: ['follow', 'comment', 'share', 'save', 'link', 'buy', 'other'] },
+        url: { type: 'string', maxLength: 2048 },
+        instruction: { type: 'string', maxLength: 500 },
+      },
+      required: ['type'],
+      additionalProperties: false,
+    },
   },
   ['title', 'publishing', 'options'],
 );
@@ -121,7 +134,9 @@ const personaFields = {
   videoAspect: { type: 'string', enum: ['9:16', '16:9', '1:1'] },
   videoLayout: { type: 'string', enum: ['standard', 'react'] },
   scriptPrompt: { type: 'string', maxLength: 2000 },
-  ctaText: { type: 'string', maxLength: 200 },
+  ctaType: { type: 'string', enum: ['follow', 'comment', 'share', 'save', 'link', 'buy', 'other'] },
+  ctaUrl: { type: 'string', maxLength: 2048 },
+  ctaInstruction: { type: 'string', maxLength: 500 },
   niche: { type: 'string', maxLength: 300 },
   paragraphNumber: { type: 'integer', minimum: 1, maximum: 10 },
   faceQuality: { type: 'string', enum: ['ok', 'very_good'] },
@@ -133,7 +148,7 @@ const personaSummary = object({
   ...fields(str, ['id', 'name']),
   createdAt: { type: 'string', format: 'date-time' },
   ...fields(str, ['avatarUrl', 'photoUrl', 'libraryUrl', 'voiceId', 'voiceAudioUrl', 'language']),
-  ...fields(str, ['videoAspect', 'videoLayout', 'scriptPrompt', 'ctaText']),
+  ...fields(str, ['videoAspect', 'videoLayout', 'scriptPrompt', 'ctaType', 'ctaUrl', 'ctaInstruction']),
   paragraphNumber: int,
   ...fields(str, ['niche', 'faceQuality']),
 });

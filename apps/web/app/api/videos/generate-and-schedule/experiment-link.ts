@@ -7,6 +7,7 @@ export { ExperimentLinkSchema, type ExperimentLink };
 import { logger } from '@/lib/logger';
 import { isVideoType, type VideoType } from '@/lib/tokens';
 import type { PersonaPrep } from './persona-prep';
+import type { ResolvedCta } from './cta-validation';
 import { PROVIDER_ACCOUNT_COLUMNS } from './account-columns';
 import { recordExperimentVideoLinked } from './experiment-link-telemetry';
 
@@ -26,7 +27,7 @@ export interface PairFacts {
   faceQuality: string | null;
   language: string | null;
   niche: string | null;
-  ctaText: string | null;
+  cta: ResolvedCta | null;
 }
 
 const SCALAR_SETTINGS: ReadonlyArray<{ field: string; label: string; read: (facts: PairFacts) => string | number | null }> = [
@@ -38,7 +39,9 @@ const SCALAR_SETTINGS: ReadonlyArray<{ field: string; label: string; read: (fact
   { field: 'options.faceQuality', label: 'face quality', read: (facts) => facts.faceQuality },
   { field: 'options.language', label: 'language', read: (facts) => facts.language },
   { field: 'options.niche', label: 'niche', read: (facts) => facts.niche },
-  { field: 'options.ctaText', label: 'call to action text', read: (facts) => facts.ctaText },
+  { field: 'cta.type', label: 'call to action type', read: (facts) => facts.cta?.type ?? null },
+  { field: 'cta.url', label: 'call to action URL', read: (facts) => facts.cta?.url ?? null },
+  { field: 'cta.instruction', label: 'call to action instruction', read: (facts) => facts.cta?.instruction ?? null },
 ];
 
 export function buildPairFacts(input: {
@@ -50,6 +53,7 @@ export function buildPairFacts(input: {
   segments: unknown;
   videoType: VideoType;
   audioUrl: string | undefined;
+  cta: ResolvedCta | null;
 }): PairFacts {
   const { prep } = input;
   return {
@@ -67,7 +71,7 @@ export function buildPairFacts(input: {
     faceQuality: prep.faceQuality,
     language: prep.language,
     niche: prep.niche,
-    ctaText: prep.ctaText,
+    cta: input.cta,
   };
 }
 
@@ -220,7 +224,7 @@ async function comparePartner(
   const { data: schedule, error: scheduleError } = await supabase
     .from('schedules')
     .select(
-      'providers, post_voice_id, post_voice_audio_url, post_video_aspect, post_video_layout, post_paragraph_number, post_face_quality, post_language, post_niche, post_cta_text, youtube_account_ids, instagram_account_ids, linkedin_account_ids, bluesky_account_ids, threads_account_ids, facebook_account_ids, pinterest_account_ids, pinterest_board_id, threespeak_account_ids, rumble_account_ids, fanvue_account_ids, telegram_account_ids',
+      'providers, post_voice_id, post_voice_audio_url, post_video_aspect, post_video_layout, post_paragraph_number, post_face_quality, post_language, post_niche, post_cta_type, post_cta_url, post_cta_instruction, youtube_account_ids, instagram_account_ids, linkedin_account_ids, bluesky_account_ids, threads_account_ids, facebook_account_ids, pinterest_account_ids, pinterest_board_id, threespeak_account_ids, rumble_account_ids, fanvue_account_ids, telegram_account_ids',
     )
     .eq('id', partner.schedule_id)
     .eq('user_id', userId)
@@ -251,7 +255,14 @@ async function comparePartner(
       faceQuality: schedule.post_face_quality,
       language: schedule.post_language,
       niche: schedule.post_niche,
-      ctaText: schedule.post_cta_text,
+      cta:
+        schedule.post_cta_type === null
+          ? null
+          : {
+            type: schedule.post_cta_type as ResolvedCta['type'],
+            url: schedule.post_cta_url ?? null,
+            instruction: schedule.post_cta_instruction ?? null,
+          },
     },
     input.facts,
   );

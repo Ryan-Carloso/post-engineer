@@ -16,13 +16,15 @@ import {
 } from '@/components/ui/carousel';
 import { useVoicesQuery, createPersona, useUpdatePersonaMutation, usePersonaListQuery } from '@/lib/api';
 import { resolveScriptLanguage, usePersonaStore } from '@/lib/store';
-import { personaFormSchema } from '@/lib/persona-schema';
+import { personaFormSchema, parsePersonaCtaType } from '@/lib/persona-schema';
 import { useI18n } from '@/lib/i18n/provider';
 import { PersonaTokensSection } from './persona-tokens';
 import { PersonaImageLibrarySection, mapPersonaImageWarnings } from './persona-image-library';
 import { PersonaPreferencesSection } from './persona-preferences-section';
+import { PersonaCtaSection } from './persona-cta-section';
 import { PersonaPublishingAccountsSection } from './persona-publishing-accounts-section';
 import { PersonaPageSkeleton } from './persona-page-skeleton';
+import { PersonaErrorDialog } from './persona-error-dialog';
 import { PersonaFormSync } from './persona-form-sync';
 import { PersonaPhotoPicker } from './persona-photo-picker';
 import { isPersonaVoiceHydrated, PersonaVoiceSection } from './persona-voice-section';
@@ -72,7 +74,6 @@ const PersonaPageContent = () => {
       name: usePersonaStore.getState().name,
       niche: usePersonaStore.getState().niche,
       scriptPrompt: usePersonaStore.getState().scriptPrompt,
-      ctaText: usePersonaStore.getState().ctaText,
     },
   });
 
@@ -89,12 +90,15 @@ const PersonaPageContent = () => {
     store.setVideoLayout(persona.videoLayout ?? 'standard');
     store.setFaceQuality(persona.faceQuality === 'very_good' ? 'very_good' : 'ok');
     store.setScriptPrompt(persona.scriptPrompt ?? '');
-    store.setCtaText(persona.ctaText ?? '');
+    store.setCta({
+      type: parsePersonaCtaType(persona.ctaType),
+      url: persona.ctaUrl ?? '',
+      instruction: persona.ctaInstruction ?? '',
+    });
     store.setNiche(persona.niche ?? '');
     store.setResult(null);
     methods.setValue('name', persona.name);
     methods.setValue('scriptPrompt', persona.scriptPrompt ?? '');
-    methods.setValue('ctaText', persona.ctaText ?? '');
     methods.setValue('niche', persona.niche ?? '');
   }, [editingPersona, methods]);
 
@@ -136,6 +140,9 @@ const PersonaPageContent = () => {
           </section>
           <section className="rounded-2xl border border-line bg-card p-5 shadow-sm sm:p-6">
             <PersonaPreferencesSection />
+          </section>
+          <section className="rounded-2xl border border-line bg-card p-5 shadow-sm sm:p-6">
+            <PersonaCtaSection />
           </section>
           <PersonaPublishingAccountsSection personaId={editingPersonaId ?? undefined} />
           <PersonaSubmit editId={editId} />
@@ -464,13 +471,12 @@ const PersonaFeedback = () => {
     name: string;
     niche: string;
     scriptPrompt: string;
-    ctaText: string;
   }>();
 
   if (!result) return null;
 
   const handleCreateAnother = () => {
-    reset({ name: '', niche: '', scriptPrompt: '', ctaText: '' });
+    reset({ name: '', niche: '', scriptPrompt: '' });
     usePersonaStore.getState().resetForm();
   };
 
@@ -517,45 +523,6 @@ const PersonaFeedback = () => {
   }
 
   return <PersonaErrorDialog />;
-};
-
-const PersonaErrorDialog = () => {
-  const result = usePersonaStore((s) => s.result);
-  const { t } = useI18n();
-
-  if (!result || result.success) return null;
-
-  return (
-    <div
-      role="alertdialog"
-      aria-modal="true"
-      aria-labelledby="persona-error-dialog-title"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/60 p-4"
-    >
-      <div className="w-full max-w-md rounded-2xl bg-card p-6 shadow-xl">
-        <div className="flex items-start gap-3.5">
-          <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-destructive text-destructive-foreground">
-            <AlertIcon />
-          </span>
-          <div className="min-w-0 flex-1">
-            <h2 id="persona-error-dialog-title" className="text-lg font-semibold text-ink">
-              {t('persona.failed')}
-            </h2>
-            <p className="mt-1 text-sm leading-6 text-muted-text">{result.error}</p>
-          </div>
-        </div>
-        <div className="mt-6 flex justify-end">
-          <button
-            type="button"
-            onClick={() => usePersonaStore.getState().setResult(null)}
-            className="inline-flex min-h-11 items-center justify-center rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-on-ink transition-colors hover:bg-accent-hover"
-          >
-            {t('persona.tryAgain')}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
 };
 
 const getCharacterIndex = (avatarUrl: string | null): number => {

@@ -142,7 +142,14 @@ class BatchGenerator:
                     video_layout=identity.get("video_layout") or "standard",
                     music_mood=slot_music_mood(slot),
                     segments=segments,
-                    video_cta=identity.get("cta_text") or "",
+                    cta_type=(
+                        identity.get("cta_type")
+                        if any(
+                            isinstance(segment, dict) and segment.get("cta") is True
+                            for segment in segments
+                        )
+                        else None
+                    ),
                     video_language=str(identity.get("language") or ""),
                     paragraph_number=(
                         int(identity["paragraph_number"])

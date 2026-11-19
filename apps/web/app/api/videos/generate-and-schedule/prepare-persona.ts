@@ -21,6 +21,7 @@ import { fetchPersonaVoiceCatalogIds } from '@/lib/voice-catalog-fetch';
 import { cloneVoiceAvailable, validatePersonaVoiceInput } from '@/lib/persona-voice-validate';
 export { cloneVoiceAvailable } from '@/lib/persona-voice-validate';
 import { signedUrl, resolvePostWithoutPersona, type PersonaPrep } from './persona-prep';
+import { parsePersonaCtaType } from '@/lib/persona-schema';
 
 export const ROUTE = 'POST /api/videos/generate-and-schedule';
 
@@ -75,7 +76,7 @@ export async function preparePersona(
   const { data: persona, error: personaError } = await supabase
     .from('personas')
     .select(
-      'id, name, photo_path, avatar_url, voice_id, voice_audio_path, language, video_aspect, video_layout, cta_text, paragraph_number, niche, face_quality',
+      'id, name, photo_path, avatar_url, voice_id, voice_audio_path, language, video_aspect, video_layout, cta_type, cta_url, cta_instruction, paragraph_number, niche, face_quality',
     )
     .eq('id', personaId)
     .eq('user_id', userId)
@@ -173,7 +174,11 @@ export async function preparePersona(
     avatarUrl,
     photoPath,
     niche: opts.niche ?? niche,
-    ctaText: (persona.cta_text as string | null) ?? null,
+    cta: {
+      type: parsePersonaCtaType(persona.cta_type as string | null),
+      url: (persona.cta_url as string | null) || null,
+      instruction: (persona.cta_instruction as string | null) || null,
+    },
     language: effectiveLanguage,
     videoAspect: opts.videoAspect ?? ((persona.video_aspect as string | null) ?? null),
     videoLayout: opts.videoLayout ?? ((persona.video_layout as string | null) ?? null),

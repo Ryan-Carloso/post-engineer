@@ -133,17 +133,25 @@ def _repo_root() -> Path:
     raise AssertionError("repo root not found from the test file location")
 
 
-def test_cta_max_length_is_the_same_literal_everywhere():
-    """DB check, web form cap and engine schema must agree."""
+def test_cta_intent_literals_are_the_same_everywhere():
+    """DB check, shared contract and engine enum must agree on the CTA intent."""
     repo = _repo_root()
-    sql = (repo / "supabase/migrations/024_persona-cta.sql").read_text()
+    sql = (repo / "supabase/migrations/072_persona-cta-intent.sql").read_text()
     contract = (repo / "shared/contracts/personas.ts").read_text()
-    web = (repo / "apps/web/lib/persona-schema.ts").read_text()
+    cta = (repo / "apps/engine/app/models/cta.py").read_text()
     schema = (repo / "apps/engine/app/models/schema.py").read_text()
 
-    assert "char_length(cta_text) <= 200" in sql
-    assert "char_length(post_cta_text) <= 200" in sql
-    assert "export const PERSONA_CTA_MAX_LENGTH = 200;" in contract
-    assert "PERSONA_CTA_MAX_LENGTH" in web
-    assert "from './contracts/personas'" in web
-    assert 'video_cta: str = Field(default="", max_length=200)' in schema
+    types = "('follow', 'comment', 'share', 'save', 'link', 'buy', 'other')"
+    assert f"cta_type in {types}" in sql
+    assert f"post_cta_type in {types}" in sql
+    assert "char_length(cta_url) <= 2048" in sql
+    assert "char_length(cta_instruction) <= 500" in sql
+    assert "drop column if exists cta_text" in sql
+    assert "drop column if exists post_cta_text" in sql
+    assert "PERSONA_CTA_TYPES = ['follow', 'comment', 'share', 'save', 'link', 'buy', 'other'] as const;" in contract
+    assert "PERSONA_CTA_URL_MAX_LENGTH = 2048" in contract
+    assert "PERSONA_CTA_INSTRUCTION_MAX_LENGTH = 500" in contract
+    for name in ["follow", "comment", "share", "save", "link", "buy", "other"]:
+        assert f'{name} = "{name}"' in cta
+    assert "video_cta" not in schema
+    assert "cta_type: Optional[CtaType] = None" in schema

@@ -69,7 +69,7 @@ export const GetExperimentResultsShape = {
 };
 export const GetExperimentResultsSchema = z.object(GetExperimentResultsShape);
 
-const { segments: _segments, title: _title, experiment: _experiment, ...deliveryShape } = GenerateVideoItemSchema.shape;
+const { segments: _segments, title: _title, experiment: _experiment, cta: _cta, ...deliveryShape } = GenerateVideoItemSchema.shape;
 
 export const AddExperimentPairShape = {
   experimentId: z.string().uuid().describe('Experiment id from experiments (action: create).'),

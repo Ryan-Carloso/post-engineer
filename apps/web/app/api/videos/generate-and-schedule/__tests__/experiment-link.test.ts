@@ -35,7 +35,7 @@ function facts(overrides: Partial<PairFacts> = {}): PairFacts {
     faceQuality: 'ok',
     language: 'en-US',
     niche: 'fitness',
-    ctaText: 'Follow for more.',
+    cta: { type: 'follow', url: null, instruction: null },
     ...overrides,
   };
 }
@@ -86,7 +86,9 @@ const PARTNER_SCHEDULE = {
     post_face_quality: 'ok',
     post_language: 'en-US',
     post_niche: 'fitness',
-    post_cta_text: 'Follow for more.',
+    post_cta_type: 'follow',
+    post_cta_url: null,
+    post_cta_instruction: null,
     youtube_account_ids: ['chan-1'],
     instagram_account_ids: [],
     linkedin_account_ids: [],
@@ -268,7 +270,11 @@ describe('pairMismatch', () => {
     expect(pairMismatch(partner, facts({ faceQuality: 'very_good' }))?.field).toBe('options.faceQuality');
     expect(pairMismatch(partner, facts({ language: 'pt-BR' }))?.field).toBe('options.language');
     expect(pairMismatch(partner, facts({ niche: 'cooking' }))?.field).toBe('options.niche');
-    expect(pairMismatch(partner, facts({ ctaText: 'Subscribe.' }))?.field).toBe('options.ctaText');
+    expect(pairMismatch(partner, facts({ cta: { type: 'comment', url: null, instruction: null } }))?.field).toBe('cta.type');
+    const linkPartner = facts({ cta: { type: 'link', url: 'https://example.com/a', instruction: null } });
+    expect(pairMismatch(linkPartner, facts({ cta: { type: 'link', url: 'https://example.com/b', instruction: null } }))?.field).toBe('cta.url');
+    const otherPartner = facts({ cta: { type: 'other', url: null, instruction: 'join the group' } });
+    expect(pairMismatch(otherPartner, facts({ cta: { type: 'other', url: null, instruction: 'buy the course' } }))?.field).toBe('cta.instruction');
     const pinterestPartner = facts({ providers: ['pinterest'], accountIds: { pinterest: ['u1'] }, pinterestBoardId: 'b1', segments: SEGMENTS });
     expect(pairMismatch(pinterestPartner, facts({ providers: ['pinterest'], accountIds: { pinterest: ['u1'] }, pinterestBoardId: 'b2' }))?.field).toBe('publishing.pinterestBoardId');
     expect(pairMismatch(pinterestPartner, facts({ providers: ['pinterest'], accountIds: { pinterest: ['u1'] }, pinterestBoardId: 'b1' }))).toBeNull();
@@ -420,23 +426,23 @@ describe('verifyExperimentPairAfterInsert', () => {
 
 describe('buildPairFacts', () => {
   it('defaults a missing voice id and audio URL to null and keeps the requested video type', () => {
-    const prep = { faceless: false, faceQuality: null, voiceIdValue: undefined, niche: null, ctaText: null, language: null, videoAspect: null, videoLayout: null, paragraphNumber: null } as unknown as PersonaPrep;
-    expect(buildPairFacts({ providers: [], accountIds: {}, pinterestBoardId: undefined, prep, title: 'T', segments: [], videoType: 'hook_lipsync', audioUrl: 'https://x/v.mp3' })).toMatchObject({
-      voiceId: null, videoType: 'hook_lipsync', voiceAudioUrl: 'https://x/v.mp3', pinterestBoardId: null,
+    const prep = { faceless: false, faceQuality: null, voiceIdValue: undefined, niche: null, cta: null, language: null, videoAspect: null, videoLayout: null, paragraphNumber: null } as unknown as PersonaPrep;
+    expect(buildPairFacts({ providers: [], accountIds: {}, pinterestBoardId: undefined, prep, title: 'T', segments: [], videoType: 'hook_lipsync', audioUrl: 'https://x/v.mp3', cta: null })).toMatchObject({
+      voiceId: null, videoType: 'hook_lipsync', voiceAudioUrl: 'https://x/v.mp3', pinterestBoardId: null, cta: null,
     });
   });
 
   it('maps the resolved request values exactly as the route stores them', () => {
     const prep = {
-      faceless: true, faceQuality: 'ok', voiceIdValue: 'v1', niche: 'fitness', ctaText: 'Go.', language: 'en-US',
+      faceless: true, faceQuality: 'ok', voiceIdValue: 'v1', niche: 'fitness', cta: { type: 'follow', url: null, instruction: null }, language: 'en-US',
       videoAspect: '9:16', videoLayout: 'standard', paragraphNumber: 3,
     } as unknown as PersonaPrep;
     expect(
-      buildPairFacts({ providers: ['youtube'], accountIds: { youtube: ['a'] }, pinterestBoardId: 'b1', prep, title: 'T', segments: [], videoType: 'full_lipsync', audioUrl: undefined }),
+      buildPairFacts({ providers: ['youtube'], accountIds: { youtube: ['a'] }, pinterestBoardId: 'b1', prep, title: 'T', segments: [], videoType: 'full_lipsync', audioUrl: undefined, cta: { type: 'follow', url: null, instruction: null } }),
     ).toEqual({
       providers: ['youtube'], accountIds: { youtube: ['a'] }, pinterestBoardId: 'b1', voiceId: 'v1', videoType: 'full_lipsync', segments: [], title: 'T',
       voiceAudioUrl: null, videoAspect: '9:16', videoLayout: 'standard', paragraphNumber: 3, faceQuality: 'ok',
-      language: 'en-US', niche: 'fitness', ctaText: 'Go.',
+      language: 'en-US', niche: 'fitness', cta: { type: 'follow', url: null, instruction: null },
     });
   });
 });

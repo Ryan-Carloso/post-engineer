@@ -136,6 +136,7 @@ export async function generatePersonaVideoOutcome(
         },
         idempotencyKey: args.idempotencyKey,
         experiment: args.experiment,
+        cta: args.cta,
       });
     const scheduleId = narrowed.schedule.id;
     const humanSummary =

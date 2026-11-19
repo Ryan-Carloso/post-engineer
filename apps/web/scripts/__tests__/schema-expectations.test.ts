@@ -25,8 +25,8 @@ describe('extractRequiredColumns', () => {
   it('collects a single add column', async () => {
     const { extractRequiredColumns } = await loadGenerator();
     expect(
-      extractRequiredColumns(['alter table public.personas add column if not exists cta_text text;']),
-    ).toEqual({ personas: ['cta_text'] });
+      extractRequiredColumns(['alter table public.personas add column if not exists cta_type text;']),
+    ).toEqual({ personas: ['cta_type'] });
   });
 
   it('collects several add columns from one multi-line alter table', async () => {

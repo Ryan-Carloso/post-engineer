@@ -16,6 +16,8 @@ import { answerSchedulePkRace } from './pk-race';
 import { fetchReplay } from './replay';
 import { refundRollbackSpend } from './rollback-refund';
 import { buildPairFacts, checkExperimentLink, verifyExperimentPairAfterInsert } from './experiment-link';
+import { buildIdentitySnapshot } from './identity-snapshot';
+import { resolveEffectiveCta, validateCtaTake } from './cta-validation';
 import { scheduleAccountColumns } from './account-columns';
 import { checkPreChargePreflights } from './aspect-preflight';
 import { resolvePreChargeFallbackPhotos } from './library-photo';
@@ -125,7 +127,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
   const rawIssues = rawKeyIssues(body);
   const parsed = GenerateAndScheduleBodySchema.safeParse(body);
   if (!parsed.success) return rejectInvalidRequest([...rawIssues, ...shapeIssues(parsed.error)]);
-  const { publishing, options, idempotencyKey, experiment } = parsed.data;
+  const { publishing, options, idempotencyKey, experiment, cta: ctaOverride } = parsed.data;
 
   const personaId = parsed.data.personaId?.trim() || null;
   const checked = checkSemantics({
@@ -193,6 +195,12 @@ async function postHandler(request: Request): Promise<NextResponse> {
   });
   if (prep instanceof NextResponse) return prep;
 
+  const effectiveCta = resolveEffectiveCta(ctaOverride, prep.cta);
+  const ctaCheck = validateCtaTake(effectiveCta, options?.segments);
+  if (!ctaCheck.ok) {
+    return validationFailed(ERROR_CODES.VALIDATION_FAILED, ctaCheck.message, ctaCheck.field);
+  }
+
   const bound = await loadBoundPublishingAccounts(supabase, personaId, userId);
   if (bound instanceof NextResponse) return bound;
   const validatedAccounts = await validateAccounts(
@@ -231,7 +239,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
   if (preflight instanceof NextResponse) return preflight;
 
   const idem = resolveIdempotency(userId, idempotencyKey, request);
-  const pairFacts = buildPairFacts({ providers, accountIds, pinterestBoardId, prep, title, segments: options?.segments, videoType: validatedOptions.videoType, audioUrl: validatedOptions.audioUrl });
+  const pairFacts = buildPairFacts({ providers, accountIds, pinterestBoardId, prep, title, segments: options?.segments, videoType: validatedOptions.videoType, audioUrl: validatedOptions.audioUrl, cta: effectiveCta });
   if (experiment !== undefined) {
     const link = await checkExperimentLink(supabase, { link: experiment, userId, personaId, replayScheduleId: idem.scheduleId, facts: pairFacts });
     if (!link.ok && link.status === 500) return coded(500, ERROR_CODES.INTERNAL_ERROR, formatErrorMessage(ERROR_CODES.INTERNAL_ERROR));
@@ -375,15 +383,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
     scheduled_at: null,
     active: true,
     publish_mode: mode,
-    post_voice_id: prep.voiceIdValue ?? null,
-    post_voice_audio_url: validatedOptions.audioUrl ?? null,
-    post_cta_text: prep.ctaText,
-    post_niche: prep.niche,
-    post_language: prep.language,
-    post_video_aspect: prep.videoAspect,
-    post_video_layout: prep.videoLayout,
-    post_paragraph_number: prep.paragraphNumber,
-    post_face_quality: prep.faceQuality,
+    ...buildIdentitySnapshot(prep, validatedOptions.audioUrl, effectiveCta),
   });
   if (scheduleError) {
     const constraint = violatedConstraint(scheduleError);
@@ -550,7 +550,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
         language: prep.language,
         video_aspect: prep.videoAspect,
         video_layout: prep.videoLayout,
-        cta_text: prep.ctaText,
         paragraph_number: prep.paragraphNumber,
         niche: prep.niche,
         face_quality: prep.faceQuality,
@@ -560,6 +559,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
         video_type: validatedOptions.videoType,
         video_script: segmentsScript,
         webhook_url: validatedOptions.webhookUrl,
+        cta_type: effectiveCta?.type ?? null,
         generation_id: slotGenerationId,
         slot_id: slot.id,
         music_mood: validatedOptions.musicMood,

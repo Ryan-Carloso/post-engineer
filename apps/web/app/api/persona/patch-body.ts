@@ -1,4 +1,5 @@
-import { FACE_QUALITIES, PERSONA_CTA_MAX_LENGTH, photoExtensionOf, VALID_VIDEO_ASPECTS, VIDEO_LAYOUTS } from '@/lib/persona-schema';
+import { FACE_QUALITIES, PERSONA_CTA_INSTRUCTION_MAX_LENGTH, PERSONA_CTA_TYPES, PERSONA_CTA_URL_MAX_LENGTH, photoExtensionOf, VALID_VIDEO_ASPECTS, VIDEO_LAYOUTS } from '@/lib/persona-schema';
+import { isEnglishLanguage, ONLY_ENGLISH_VIDEOS_MESSAGE } from '@/lib/language-gate';
 import { isFileLike } from '@/lib/persona-images';
 
 function isVideoLayout(value: string): value is (typeof VIDEO_LAYOUTS)[number] {
@@ -15,7 +16,9 @@ export interface PersonaPatchBody {
   videoAspect: string | null;
   videoLayout: (typeof VIDEO_LAYOUTS)[number] | null;
   scriptPrompt: string | null;
-  ctaText: string | null;
+  ctaType: (typeof PERSONA_CTA_TYPES)[number] | null;
+  ctaUrl: string | null;
+  ctaInstruction: string | null;
   paragraphNumber: number | null;
   niche: string | null;
   faceQuality: (typeof FACE_QUALITIES)[number] | null;
@@ -67,11 +70,32 @@ export async function parsePatchBody(request: Request): Promise<ParsePatchResult
     };
   }
   const scriptPrompt = optionalString(formData.get('scriptPrompt'));
-  const rawCtaText = formData.get('ctaText');
-  const ctaText =
-    typeof rawCtaText === 'string' ? (rawCtaText.trim().length === 0 ? '' : rawCtaText) : null;
-  if (ctaText !== null && ctaText.length > PERSONA_CTA_MAX_LENGTH) {
-    return { ok: false, error: `Invalid ctaText: use at most ${PERSONA_CTA_MAX_LENGTH} characters.` };
+  const ctaType = optionalString(formData.get('ctaType'));
+  if (ctaType !== null && !(PERSONA_CTA_TYPES as readonly string[]).includes(ctaType)) {
+    return {
+      ok: false,
+      error: `Invalid ctaType: ${ctaType}. Use one of ${PERSONA_CTA_TYPES.join(', ')}.`,
+      logMessage: `Invalid ctaType. Use one of ${PERSONA_CTA_TYPES.join(', ')}.`,
+    };
+  }
+  const rawCtaUrl = formData.get('ctaUrl');
+  const ctaUrl =
+    typeof rawCtaUrl === 'string' ? (rawCtaUrl.trim().length === 0 ? '' : rawCtaUrl) : null;
+  if (ctaUrl !== null && ctaUrl.length > 0) {
+    if (ctaUrl.length > PERSONA_CTA_URL_MAX_LENGTH) {
+      return { ok: false, error: `Invalid ctaUrl: use at most ${PERSONA_CTA_URL_MAX_LENGTH} characters.` };
+    }
+    try {
+      new URL(ctaUrl);
+    } catch {
+      return { ok: false, error: 'Invalid ctaUrl: use a valid URL.' };
+    }
+  }
+  const rawCtaInstruction = formData.get('ctaInstruction');
+  const ctaInstruction =
+    typeof rawCtaInstruction === 'string' ? (rawCtaInstruction.trim().length === 0 ? '' : rawCtaInstruction) : null;
+  if (ctaInstruction !== null && ctaInstruction.length > PERSONA_CTA_INSTRUCTION_MAX_LENGTH) {
+    return { ok: false, error: `Invalid ctaInstruction: use at most ${PERSONA_CTA_INSTRUCTION_MAX_LENGTH} characters.` };
   }
   const niche = optionalString(formData.get('niche'));
   if (niche !== null && niche.length > 300) {
@@ -107,7 +131,9 @@ export async function parsePatchBody(request: Request): Promise<ParsePatchResult
       videoAspect,
       videoLayout,
       scriptPrompt,
-      ctaText,
+      ctaType: ctaType as (typeof PERSONA_CTA_TYPES)[number] | null,
+      ctaUrl,
+      ctaInstruction,
       paragraphNumber,
       niche,
       faceQuality: faceQuality as (typeof FACE_QUALITIES)[number] | null,
@@ -122,4 +148,15 @@ function asFile(value: FormDataEntryValue | null): File | null {
 function optionalString(value: FormDataEntryValue | null): string | null {
   if (typeof value !== 'string' || value.trim().length === 0) return null;
   return value;
+}
+
+export function englishOnlyPatchError(patch: PersonaPatchBody): string | null {
+  if (
+    patch.language !== null
+    && patch.language.trim().length > 0
+    && !isEnglishLanguage(patch.language)
+  ) {
+    return ONLY_ENGLISH_VIDEOS_MESSAGE;
+  }
+  return null;
 }

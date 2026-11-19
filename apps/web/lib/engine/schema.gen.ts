@@ -592,6 +592,16 @@ export interface components {
             text?: string | null;
         };
         /**
+         * CtaType
+         * @description The seven CTA intents a persona can carry.
+         *
+         *     follow/comment/share/save carry no facts; link/buy carry a URL;
+         *     other carries a free-text instruction. The wording is written per
+         *     video by the agent from the video's topic, never stored.
+         * @enum {string}
+         */
+        CtaType: "follow" | "comment" | "share" | "save" | "link" | "buy" | "other";
+        /**
          * HouseVoicePreviewRequest
          * @description Optional JSON body of the house preview endpoint: ``{"text": "..."}``.
          *
@@ -693,6 +703,11 @@ export interface components {
         };
         /** ScriptSegment */
         ScriptSegment: {
+            /**
+             * Cta
+             * @default false
+             */
+            cta?: boolean;
             /**
              * Kind
              * @enum {string}
@@ -895,6 +910,7 @@ export interface components {
              * @default 0.09
              */
             bgm_volume?: number | null;
+            cta_type?: components["schemas"]["CtaType"] | null;
             /** Custom Audio File */
             custom_audio_file?: string | null;
             /**
@@ -974,11 +990,6 @@ export interface components {
             video_clip_duration?: number | null;
             /** @default random */
             video_concat_mode?: components["schemas"]["VideoConcatMode"] | null;
-            /**
-             * Video Cta
-             * @default
-             */
-            video_cta?: string;
             /** Video Description */
             video_description: string;
             /**

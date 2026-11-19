@@ -13,7 +13,9 @@ export interface PersonaRecord {
   videoAspect?: string;
   videoLayout?: string;
   scriptPrompt?: string;
-  ctaText?: string;
+  ctaType?: string;
+  ctaUrl?: string;
+  ctaInstruction?: string;
   paragraphNumber?: number;
   niche?: string;
   faceQuality?: string;

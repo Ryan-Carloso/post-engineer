@@ -4,6 +4,7 @@ import { defineEndpoint } from './endpoint.js';
 import { EXPERIMENT_TARGET_PAIRS_MAX, EXPERIMENT_VARIANT_ID_PATTERN } from './experiments.js';
 import { UploadContentResponseSchema } from './media.js';
 import { UUID } from './metrics.js';
+import { PersonaCtaSchema } from './personas.js';
 import { SOCIAL_PROVIDERS } from './providers.js';
 import { ScheduleWarningSchema } from './schedule-warnings.js';
 import { MAX_IMAGE_UPLOAD_BYTES, MAX_VIDEO_UPLOAD_BYTES, UPLOAD_CONTENT_TYPES, UPLOAD_CONTENT_TYPE_MESSAGE, isImageUploadContentType } from './upload-types.js';
@@ -57,6 +58,7 @@ export const segmentsRequestSchema = z.array(
     .object({
       kind: z.enum(['hook', 'content']),
       text: z.string(),
+      cta: z.boolean().optional(),
       media: z
         .array(
           z
@@ -129,7 +131,7 @@ export const GenerateAndScheduleBodySchema = z.object({
   publishing: PublishingSchema,
   options: OptionsSchema,
   idempotencyKey: z.string().optional(),
-  experiment: ExperimentLinkSchema.optional(),
+  experiment: ExperimentLinkSchema.optional(), cta: PersonaCtaSchema.nullable().optional(),
 });
 
 export type GenerateAndScheduleBody = z.infer<typeof GenerateAndScheduleBodySchema>;

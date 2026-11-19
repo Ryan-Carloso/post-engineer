@@ -13,7 +13,29 @@ export type VideoLayout = (typeof VIDEO_LAYOUTS)[number];
 export const FACE_QUALITIES = ['ok', 'very_good'] as const;
 export type FaceQuality = (typeof FACE_QUALITIES)[number];
 
-export const PERSONA_CTA_MAX_LENGTH = 200;
+export const PERSONA_CTA_TYPES = ['follow', 'comment', 'share', 'save', 'link', 'buy', 'other'] as const;
+export type PersonaCtaType = (typeof PERSONA_CTA_TYPES)[number];
+export const PERSONA_CTA_URL_MAX_LENGTH = 2048;
+export const PERSONA_CTA_INSTRUCTION_MAX_LENGTH = 500;
+
+export const PersonaCtaSchema = z
+  .object({
+    type: z.enum(PERSONA_CTA_TYPES),
+    url: z.string().url().max(PERSONA_CTA_URL_MAX_LENGTH).optional(),
+    instruction: z.string().min(1).max(PERSONA_CTA_INSTRUCTION_MAX_LENGTH).optional(),
+  })
+  .refine(
+    (cta) =>
+      (cta.type === 'link' || cta.type === 'buy'
+        ? cta.url !== undefined
+        : cta.url === undefined) &&
+      (cta.type === 'other' ? cta.instruction !== undefined : cta.instruction === undefined),
+    {
+      message:
+        'A link/buy CTA needs its URL, an other CTA needs its instruction, and the other types carry no facts.',
+    },
+  );
+export type PersonaCta = z.infer<typeof PersonaCtaSchema>;
 
 export const MAX_LIBRARY_IMAGES = 10;
 export const MAX_TAG_LENGTH = 100;
@@ -40,7 +62,9 @@ export const PersonaListItemSchema = z.object({
   videoAspect: z.string().optional(),
   videoLayout: z.string().optional(),
   scriptPrompt: z.string().optional(),
-  ctaText: z.string().optional(),
+  ctaType: z.enum(PERSONA_CTA_TYPES).optional(),
+  ctaUrl: z.string().max(PERSONA_CTA_URL_MAX_LENGTH).optional(),
+  ctaInstruction: z.string().max(PERSONA_CTA_INSTRUCTION_MAX_LENGTH).optional(),
   paragraphNumber: z.number().optional(),
   niche: z.string().optional(),
   faceQuality: z.string().optional(),
@@ -173,7 +197,9 @@ export const CreatePersonaBodySchema = z.object({
   videoAspect: z.enum(VIDEO_ASPECTS).optional(),
   videoLayout: z.enum(VIDEO_LAYOUTS).optional(),
   scriptPrompt: z.string().max(2000).optional(),
-  ctaText: z.string().max(PERSONA_CTA_MAX_LENGTH).optional(),
+  ctaType: z.enum(PERSONA_CTA_TYPES).optional(),
+  ctaUrl: z.string().url().max(PERSONA_CTA_URL_MAX_LENGTH).optional(),
+  ctaInstruction: z.string().max(PERSONA_CTA_INSTRUCTION_MAX_LENGTH).optional(),
   niche: z.string().max(300).optional(),
   paragraphNumber: z.coerce.number().int().min(1).max(10).optional(),
   faceQuality: z.enum(FACE_QUALITIES).optional(),
@@ -202,7 +228,9 @@ export const UpdatePersonaBodySchema = z
     videoAspect: optionalFormText(z.enum(VIDEO_ASPECTS)),
     videoLayout: optionalFormText(z.enum(VIDEO_LAYOUTS)),
     scriptPrompt: optionalFormText(z.string().max(2000)),
-    ctaText: z.string().max(PERSONA_CTA_MAX_LENGTH).optional(),
+    ctaType: z.enum(PERSONA_CTA_TYPES).optional(),
+    ctaUrl: z.string().max(PERSONA_CTA_URL_MAX_LENGTH).optional(),
+    ctaInstruction: z.string().max(PERSONA_CTA_INSTRUCTION_MAX_LENGTH).optional(),
     paragraphNumber: optionalFormText(z.string()),
     niche: optionalFormText(z.string().max(300)),
     faceQuality: optionalFormText(z.enum(FACE_QUALITIES)),
