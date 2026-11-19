@@ -136,6 +136,7 @@ export function ProviderCard({ provider, firstName, secondName, firstId, secondI
             secondId={secondId}
             variantName={variantName}
             formatNumber={formatNumber}
+            metric={metric}
           />
         )}
       </div>
@@ -326,7 +327,10 @@ function ChartEmpty({ message }: { message: string }): React.ReactElement {
   );
 }
 
-function PairTable({ pairsCreated, comparisons, firstName, secondName, firstId, secondId, variantName, formatNumber }: {
+// PairTable — the accessible fallback of the per-pair chart: one row per
+// pair with the selected metric for each variant (the same values the
+// chart draws) and the pair winner the experiment recorded.
+function PairTable({ pairsCreated, comparisons, firstName, secondName, firstId, secondId, variantName, formatNumber, metric }: {
   pairsCreated: number;
   comparisons: ExperimentPairComparison[];
   firstName: string;
@@ -335,11 +339,13 @@ function PairTable({ pairsCreated, comparisons, firstName, secondName, firstId, 
   secondId: string;
   variantName: (variantId: string) => string;
   formatNumber: (value: number) => string;
+  metric: ExperimentChartMetric;
 }): React.ReactElement {
   const { t } = useI18n();
   return (
     <div className="overflow-x-auto">
       <table className="mt-4 w-full min-w-80 text-sm">
+        <caption className="mb-1 text-left text-xs text-muted-text">{t(METRIC_LABEL_KEY[metric])}</caption>
         <thead>
           <tr className="border-b border-hairline text-left text-xs font-semibold text-muted-text">
             <th scope="col" className="py-2 pr-2">{t('experiments.pairHeader')}</th>
@@ -351,14 +357,14 @@ function PairTable({ pairsCreated, comparisons, firstName, secondName, firstId, 
         <tbody>
           {Array.from({ length: pairsCreated }, (_, index) => index + 1).map((pair) => {
             const comparison = comparisons.find((entry) => entry.pair === pair);
-            const viewsFirst = comparison?.values[firstId]?.views ?? null;
-            const viewsSecond = comparison?.values[secondId]?.views ?? null;
+            const valueFirst = comparison?.values[firstId]?.[metric] ?? null;
+            const valueSecond = comparison?.values[secondId]?.[metric] ?? null;
             const winner = comparison?.winner ?? null;
             return (
               <tr key={pair} className="border-b border-hairline last:border-b-0">
                 <td className="py-2 pr-2 text-muted-text tabular-nums">{pair}</td>
-                <td className="py-2 pr-2 text-right text-ink tabular-nums">{viewsFirst === null ? '—' : formatNumber(viewsFirst)}</td>
-                <td className="py-2 pr-2 text-right text-ink tabular-nums">{viewsSecond === null ? '—' : formatNumber(viewsSecond)}</td>
+                <td className="py-2 pr-2 text-right text-ink tabular-nums">{valueFirst === null ? '—' : formatNumber(valueFirst)}</td>
+                <td className="py-2 pr-2 text-right text-ink tabular-nums">{valueSecond === null ? '—' : formatNumber(valueSecond)}</td>
                 <td className="py-2 text-right font-medium text-ink">
                   {winner === null ? (comparison === undefined ? t('experiments.noData') : t('experiments.tie')) : variantName(winner)}
                 </td>

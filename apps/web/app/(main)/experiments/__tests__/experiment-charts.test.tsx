@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest';
 import { describe, it, expect, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import * as React from 'react';
 import type { ReactNode } from 'react';
 
@@ -388,7 +388,7 @@ describe('ProviderCard charts', () => {
     );
   }
 
-  it('switches the metric and keeps the table behind Show table', () => {
+  it('switches the metric, and the table behind Show table follows it', () => {
     renderCard();
     expect(screen.queryByRole('table')).toBeNull();
     expect(screen.getByText('Calm question: 1.500 · Direct hook: 750')).toBeInTheDocument();
@@ -397,8 +397,12 @@ describe('ProviderCard charts', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'experiments.metricLikes' }));
     expect(screen.getByText('Calm question: 6 · Direct hook: 3')).toBeInTheDocument();
     fireEvent.click(screen.getByText('experiments.showTable'));
-    expect(screen.getByRole('table')).toBeInTheDocument();
-    expect(screen.getAllByText('500')).toHaveLength(3);
+    const table = screen.getByRole('table', { name: 'experiments.metricLikes' });
+    // The fallback table follows the selected metric: likes per pair, not views.
+    const cells = within(table).getAllByRole('row').slice(1).map((row) =>
+      within(row).getAllByRole('cell').slice(1, 3).map((cell) => cell.textContent));
+    expect(cells).toEqual([['2', '1'], ['2', '1'], ['2', '1']]);
+    expect(within(table).queryByText('500')).toBeNull();
     fireEvent.click(screen.getByText('experiments.hideTable'));
     expect(screen.queryByRole('table')).toBeNull();
   });
