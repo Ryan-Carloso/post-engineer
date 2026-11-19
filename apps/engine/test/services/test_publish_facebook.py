@@ -9,6 +9,7 @@ import unittest
 
 from pydantic import ValidationError
 
+from app.providers import SOCIAL_PROVIDERS
 from app.models.publish import FacebookPublish, PublishParams
 from app.services import publish_facebook, upload_publisher
 from app.services.fill_schedule.metadata import metadata_for, validate_publish_plan
@@ -73,7 +74,7 @@ class FacebookPublisherWiringTest(unittest.TestCase):
         self.assertIs(result.facebook, metadata)
 
     def test_provider_and_part_builder_are_registered(self) -> None:
-        self.assertIn("facebook", upload_publisher.VALID_PROVIDERS)
+        self.assertIn("facebook", SOCIAL_PROVIDERS)
         metadata_type, build = upload_publisher._PART_BUILDERS["facebook"]
         self.assertIs(metadata_type, upload_publisher.FacebookMetadata)
         parts = build(upload_publisher.FacebookMetadata(caption="post", account_ids=("9",)))

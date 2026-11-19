@@ -74,9 +74,13 @@ vi.mock('@/lib/supabase/service', () => ({
 vi.mock('@/lib/upload/handlers', () => ({
   handleYoutubeUpload: (...args: unknown[]) => mockHandleYoutubeUpload(...args),
   handleInstagramUpload: (...args: unknown[]) => mockHandleInstagramUpload(...args),
-  handleBlueskyUpload: (...args: unknown[]) => mockHandleBlueskyUpload(...args),
-  handleLinkedinUpload: (...args: unknown[]) => mockHandleLinkedinUpload(...args),
   buildUploadErrorResponse: (...args: unknown[]) => mockBuildUploadErrorResponse(...args),
+}));
+vi.mock('@/lib/upload/bluesky-handler', () => ({
+  handleBlueskyUpload: (...args: unknown[]) => mockHandleBlueskyUpload(...args),
+}));
+vi.mock('@/lib/upload/linkedin-handler', () => ({
+  handleLinkedinUpload: (...args: unknown[]) => mockHandleLinkedinUpload(...args),
 }));
 
 import { logger } from '@/lib/logger';

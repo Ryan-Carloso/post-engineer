@@ -12,6 +12,7 @@ import { VIDEO_UPLOAD_STATUSES } from '@/lib/videos/signed-upload';
 import { UPLOAD_CONTENT_TYPES } from '@/lib/contracts/videos';
 import { SCHEDULED_MEDIA_KINDS } from '@/app/api/media/publish-existing/schema';
 import { PERSONA_CTA_TYPES } from '@/lib/contracts/personas';
+import { TOOL_CONFIG_SEARCH_TOOLS } from '@/lib/tool-config';
 
 //---------------
 // Every enum-like CHECK constraint the database really has must match the
@@ -112,12 +113,15 @@ const EXPECTED: Record<string, readonly string[]> = {
   // migration 063. 'task' writes no media columns (the slot keeps its
   // task_id), so only the stored-media kinds appear in the check.
   scheduled_posts_media_kind_check: SCHEDULED_MEDIA_KINDS,
-  // migration 070. Both the persona column and the schedule snapshot
+  // migration 071. Both the persona column and the schedule snapshot
   // column mirror the shared CTA intent literal; the snapshot column
-  // became nullable in 071 (a schedule can legitimately have no CTA),
+  // became nullable in 072 (a schedule can legitimately have no CTA),
   // which does not change the CHECK — NULL passes a CHECK in Postgres.
   personas_cta_type_check: PERSONA_CTA_TYPES,
   schedules_post_cta_type_check: PERSONA_CTA_TYPES,
+  // migration 070 (issue #669). search_tool is nullable: the parser keeps
+  // only the ANY (ARRAY[...]) arm, which is this list.
+  user_tool_configs_search_tool_check: TOOL_CONFIG_SEARCH_TOOLS,
 };
 
 describe('database enum checks match the code', () => {

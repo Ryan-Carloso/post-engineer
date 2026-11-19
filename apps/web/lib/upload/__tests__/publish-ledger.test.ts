@@ -2,8 +2,8 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { findRepoRoot } from '@/test/repo-root';
+import { PUBLISH_ACCOUNT_FIELDS } from '@/lib/contracts/providers';
 import {
-  PUBLISH_ACCOUNT_FIELDS,
   PUBLISH_IN_PROGRESS_CODE,
   PUBLISH_LEDGER_LEASE_SECONDS,
   PUBLISH_LEDGER_RECORD_RETRY_DELAYS_MS,

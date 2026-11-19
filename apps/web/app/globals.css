@@ -75,6 +75,12 @@
   --calendar-current-week: #edece9;
   --calendar-day-hover: #eeece8;
   --calendar-day-hover-current-week: #e2e1dc;
+  /* Chart palette (Okabe-Ito, colorblind-safe), one per series/group. */
+  --chart-1: #0072b2;
+  --chart-2: #e69f00;
+  --chart-3: #009e73;
+  --chart-4: #cc79a7;
+  --chart-5: #d55e00;
 }
 
 .dark {
@@ -145,6 +151,11 @@
   --calendar-current-week: #2e2e2e;
   --calendar-day-hover: #2e2e2e;
   --calendar-day-hover-current-week: #3d3d3d;
+  --chart-1: #56b4e9;
+  --chart-2: #f0c040;
+  --chart-3: #6fd3a8;
+  --chart-4: #e6a3cb;
+  --chart-5: #ff8c52;
 }
 
 @custom-variant dark (&:where(.dark, .dark *));
@@ -192,6 +203,11 @@
   --color-info-soft: var(--info-soft);
   --color-warning: var(--warning);
   --color-warning-soft: var(--warning-soft);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
   --text-xxs: 0.625rem;

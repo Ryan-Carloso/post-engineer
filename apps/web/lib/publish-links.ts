@@ -19,8 +19,11 @@
 //   fanvue    → permalink  ready-made post URL (best-effort; no URL can be derived from the id —
 //              the Fanvue post-URL format is unknown, so no derivation is attempted)
 //
-// So three providers arrive with a URL and two need one derived. A provider
-// entry with neither is omitted rather than rendered as a dead link.
+// So eight of the ten arrive with a ready-made URL, and the three that can
+// fall back to a bare post id have a derivation: Bluesky and LinkedIn
+// always (they carry no URL), Pinterest only when the entry has no
+// permalink. A provider entry with neither is omitted rather than rendered
+// as a dead link.
 // An entry whose status is "failed" is omitted even when it also carries
 // a URL: that publish did not happen.
 //
@@ -99,6 +102,25 @@ function pinterestPostUrl(postId: string): string | null {
 }
 
 //---------------
+// POST_URL_FROM_ID — the derivation from a bare post id, per network; null
+// where the network only links through its own URL. Fanvue has none on
+// purpose: the post-URL format is unknown, so only a provider-supplied
+// permalink ever links.
+//---------------
+const POST_URL_FROM_ID: Record<SocialProvider, ((postId: string) => string | null) | null> = {
+  youtube: null,
+  instagram: null,
+  bluesky: blueskyPostUrl,
+  linkedin: linkedinPostUrl,
+  threads: null,
+  facebook: null,
+  pinterest: pinterestPostUrl,
+  '3speak': null,
+  rumble: null,
+  fanvue: null,
+};
+
+//---------------
 // resolvePublishLinks — map the engine's raw entries to links, dropping
 // anything malformed. Returns [] rather than throwing: this runs during
 // render and must never take the post detail page down.
@@ -130,16 +152,8 @@ export function resolvePublishLinks(
 
     const postId = readString(record, 'postId');
     if (postId === null) continue;
-    // Fanvue has no derivation here on purpose: the post-URL format is
-    // unknown, so only a provider-supplied permalink ever links.
-    const derived =
-      typed === 'bluesky'
-        ? blueskyPostUrl(postId)
-        : typed === 'linkedin'
-          ? linkedinPostUrl(postId)
-          : typed === 'pinterest'
-            ? pinterestPostUrl(postId)
-            : null;
+    const derive = POST_URL_FROM_ID[typed];
+    const derived = derive === null ? null : derive(postId);
     if (derived !== null && isHttpsUrl(derived)) links.push({ provider: typed, url: derived });
   }
   return links;

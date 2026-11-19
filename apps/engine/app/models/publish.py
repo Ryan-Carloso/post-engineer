@@ -4,6 +4,8 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.providers import SocialProvider
+
 
 class YouTubePublish(BaseModel):
     """YouTube publish fields required by the internal upload API."""
@@ -89,9 +91,7 @@ class FanvuePublish(BaseModel):
 class PublishParams(BaseModel):
     """Optional publish selection for a task (YouTube/Instagram/Bluesky/LinkedIn/Threads/Facebook/Pinterest/3Speak/Rumble/Fanvue)."""
 
-    providers: list[
-        Literal["youtube", "instagram", "bluesky", "linkedin", "threads", "facebook", "pinterest", "3speak", "rumble", "fanvue"]
-    ] = Field(min_length=1)
+    providers: list[SocialProvider] = Field(min_length=1)
     youtube: Optional[YouTubePublish] = None
     instagram: Optional[InstagramPublish] = None
     bluesky: Optional["BlueskyPublish"] = None

@@ -1,0 +1,59 @@
+name: provider-lists
+
+# One list of social networks, and no network left without its logic.
+#
+# shared/contracts/providers.ts (SOCIAL_PROVIDERS) is the one list and the
+# home of every named subset. The lint reads the production sources of the
+# web, the MCP, the shared contracts, the scripts, the Apify Actor and the
+# engine, and fails on:
+#   - a hand-typed provider list (array, union, tuple, set, Literal[...]);
+#   - a per-provider ternary/if/switch chain (use Record<SocialProvider, …>);
+#   - a per-provider map or select string that skips a network.
+# The engine (apps/engine/app/providers.py) and the Apify Actor keep one
+# mirror each; the lint checks each mirror equals SOCIAL_PROVIDERS.
+# Rules: .github/scripts/provider-lists/rules.mjs. Findings become ::error
+# annotations and fail the job.
+#
+# The TypeScript scanner uses the compiler API from apps/web's
+# node_modules, so the job installs the workspace.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 pinned 2026-09-25
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 10.22.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 pinned 2026-09-25
+        with:
+          node-version: '22'
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5 pinned 2026-09-25
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Unit tests (provider-lists lint)
+        run: node --test .github/scripts/provider-lists/check.test.mjs
+
+      - name: Run provider-lists lint
+        run: node .github/scripts/provider-lists/check.mjs

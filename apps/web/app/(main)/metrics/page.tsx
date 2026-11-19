@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { usePersonasQuery, useSocialAccountsQuery } from '@/lib/api';
 import { useI18n } from '@/lib/i18n/provider';
 import type { TranslationKey } from '@/lib/i18n';
@@ -9,6 +9,7 @@ import { AlertIcon, ChartIcon, SpinnerIcon } from '@/lib/ui';
 import { cn } from '@/lib/utils';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { MetricsRow } from './metrics-row';
+import { MetricsCharts, MetricsViewToggle, readMetricsView, rowElementId, writeMetricsView, type MetricsView } from './metrics-charts';
 import { MetricsCoverageCard } from './metrics-coverage-card';
 import {
   ActiveFilterChips,
@@ -30,10 +31,12 @@ import { sortByViews, summarize, useMetricsQuery } from '@/lib/metrics/metrics-d
 
 //---------------
 // MetricsPage — how are my videos doing? Totals over the visible rows
-// (no averages, no per-group comparison — that lives on /experiments):
-// videos measured, total views, total engagement. One filter bar: the
-// window Tabs plus a Filters Sheet with Persona and Network only. The
-// list is sorted by views, highest first.
+// (videos measured, total views, total engagement), then either the
+// charts (views over time by publish day, views by network or persona,
+// top videos) or the per-video list sorted by views, highest first.
+// Charts is the default view. One filter bar: the window Tabs plus a
+// Filters Sheet with Persona and Network only. The A/B experiment
+// comparison lives on /experiments.
 //---------------
 
 const WINDOW_LABEL_KEYS: Record<MetricsQuery['window'], TranslationKey> = {
@@ -48,6 +51,26 @@ const EMPTY_QUERY: MetricsQuery = { window: '24h', personaId: null, accountId: n
 export default function MetricsPage(): React.ReactElement {
   const { t, locale } = useI18n();
   const [query, setQuery] = useState<MetricsQuery>(EMPTY_QUERY);
+  const [view, setView] = useState<MetricsView>('chart');
+  // The saved view is read after mount, not during the first render,
+  // so the server render (default 'chart') and the client render
+  // agree and there is no hydration mismatch for a viewer with a
+  // stored preference either way.
+  useEffect(() => {
+    setView(readMetricsView());
+  }, []);
+  const changeView = (next: MetricsView): void => {
+    setView(next);
+    writeMetricsView(next);
+  };
+  const scrollToRow = (row: MetricsRowView): void => {
+    // A bar click only peeks at the list to land on the row: it must
+    // not rewrite the viewer's saved preference.
+    setView('list');
+    window.requestAnimationFrame(() => {
+      document.getElementById(rowElementId(row))?.scrollIntoView({ block: 'center' });
+    });
+  };
 
   const metricsQuery = useMetricsQuery(query);
   const personasQuery = usePersonasQuery();
@@ -147,6 +170,7 @@ export default function MetricsPage(): React.ReactElement {
             personaOptions={personaOptions}
             providerOptions={providerOptions}
           />
+          <MetricsViewToggle value={view} onChange={changeView} />
         </div>
         <p className="text-xs text-muted-text">{t('metrics.windowCaption')}</p>
         {activeFilters.length > 0 && (
@@ -186,39 +210,52 @@ export default function MetricsPage(): React.ReactElement {
         </div>
       )}
 
-      <section className={cn(CARD_CLASS, 'p-4 lg:p-6')}>
-        <h2 className="mb-2 text-lg font-semibold tracking-[-0.02em] text-ink">{t('metrics.tableTitle')}</h2>
-        {asOf !== null && (
-          <p className="mb-2 text-xs text-muted-text">{t('metrics.asOf', { date: formatDateTime(asOf) })}</p>
-        )}
-        {metricsQuery.isLoading ? (
-          <div className="flex items-center justify-center py-20 text-muted-text"><SpinnerIcon /></div>
-        ) : failed ? (
-          <StatePanel tone="error" message={t('metrics.loadError')}
-            action={<button type="button" onClick={() => void metricsQuery.refetch()} disabled={metricsQuery.isFetching}
-              className="rounded-xl border border-line bg-card px-4 py-2 text-sm font-semibold text-ink hover:bg-surface disabled:opacity-50">
-              {t('metrics.retry')}
-            </button>} />
-        ) : rows.length === 0 ? (
-          <StatePanel tone="empty" message={t(filtered ? 'metrics.emptyFiltered' : 'metrics.empty')} />
-        ) : (
-          <ul className="divide-y divide-hairline">
-            {sorted.map((row) => (
-              <MetricsRow
-                key={`${row.postId}:${row.provider}:${row.externalId}`}
-                row={row}
-                title={fallbackTitle(row)}
-                subtitle={`${personaLabel(row.personaId)} · ${accountLabels.get(row.accountId) ?? row.accountId}`}
-                formatNumber={formatNumber}
-                formatDate={formatDate}
-              />
-            ))}
-          </ul>
-        )}
-        {result !== undefined && result.success && result.truncated && (
-          <p className="mt-3 text-xs text-muted-text">{t('metrics.truncated', { limit: METRICS_ROW_LIMIT })}</p>
-        )}
-      </section>
+      {view === 'chart' ? (
+        <MetricsCharts
+          rows={rows}
+          isLoading={metricsQuery.isLoading}
+          isError={failed}
+          truncated={result !== undefined && result.success ? result.truncated : false}
+          personaLabel={personaLabel}
+          rowTitle={fallbackTitle}
+          onSelectRow={scrollToRow}
+        />
+      ) : (
+        <section className={cn(CARD_CLASS, 'p-4 lg:p-6')}>
+          <h2 className="mb-2 text-lg font-semibold tracking-[-0.02em] text-ink">{t('metrics.tableTitle')}</h2>
+          {asOf !== null && (
+            <p className="mb-2 text-xs text-muted-text">{t('metrics.asOf', { date: formatDateTime(asOf) })}</p>
+          )}
+          {metricsQuery.isLoading ? (
+            <div className="flex items-center justify-center py-20 text-muted-text"><SpinnerIcon /></div>
+          ) : failed ? (
+            <StatePanel tone="error" message={t('metrics.loadError')}
+              action={<button type="button" onClick={() => void metricsQuery.refetch()} disabled={metricsQuery.isFetching}
+                className="rounded-xl border border-line bg-card px-4 py-2 text-sm font-semibold text-ink hover:bg-surface disabled:opacity-50">
+                {t('metrics.retry')}
+              </button>} />
+          ) : rows.length === 0 ? (
+            <StatePanel tone="empty" message={t(filtered ? 'metrics.emptyFiltered' : 'metrics.empty')} />
+          ) : (
+            <ul className="divide-y divide-hairline">
+              {sorted.map((row) => (
+                <MetricsRow
+                  key={`${row.postId}:${row.provider}:${row.externalId}`}
+                  id={rowElementId(row)}
+                  row={row}
+                  title={fallbackTitle(row)}
+                  subtitle={`${personaLabel(row.personaId)} · ${accountLabels.get(row.accountId) ?? row.accountId}`}
+                  formatNumber={formatNumber}
+                  formatDate={formatDate}
+                />
+              ))}
+            </ul>
+          )}
+          {result !== undefined && result.success && result.truncated && (
+            <p className="mt-3 text-xs text-muted-text">{t('metrics.truncated', { limit: METRICS_ROW_LIMIT })}</p>
+          )}
+        </section>
+      )}
 
       {coverage.length > 0 && (
         <MetricsCoverageCard
@@ -239,7 +276,7 @@ function StatTile({ label, value, hint }: { label: string; value: string; hint?:
     <div className={cn(CARD_CLASS, 'p-4')}>
       <p className="text-xs font-semibold text-muted-text">{label}</p>
       <p className="mt-1 truncate text-2xl font-bold tracking-[-0.03em] text-ink">{value}</p>
-      {hint !== undefined && <p className="text-xs tabular-nums text-muted-text">{hint}</p>}
+      {hint !== undefined && <p className="text-xs text-muted-text tabular-nums">{hint}</p>}
     </div>
   );
 }

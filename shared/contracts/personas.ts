@@ -35,11 +35,11 @@ export type FaceQuality = (typeof FACE_QUALITIES)[number];
 
 // Per-persona call to action, intent only (issue #639). The persona stores
 // a type plus facts — never wording: the agent writes the CTA per video.
-// The type list and the fact caps mirror the DB checks (migration 070);
+// The type list and the fact caps mirror the DB checks (migration 071);
 // persona-cta-types-migration.test.ts pins all three surfaces together.
 export const PERSONA_CTA_TYPES = ['follow', 'comment', 'share', 'save', 'link', 'buy', 'other'] as const;
 export type PersonaCtaType = (typeof PERSONA_CTA_TYPES)[number];
-// Fact caps, mirrored by the DB checks (migration 070).
+// Fact caps, mirrored by the DB checks (migration 071).
 export const PERSONA_CTA_URL_MAX_LENGTH = 2048;
 export const PERSONA_CTA_INSTRUCTION_MAX_LENGTH = 500;
 

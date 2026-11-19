@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { encryptTokens, decryptTokens, TokenDecryptError } from '@/lib/token-crypto';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { encryptTokens, decryptTokens, encryptJson, decryptJson, TokenDecryptError } from '@/lib/token-crypto';
 
 const VALID_KEY = Buffer.alloc(32).toString('base64');
 const SHORT_KEY = Buffer.alloc(16).toString('base64');
@@ -79,6 +79,43 @@ describe('token-crypto', () => {
     });
   });
 
+  describe('encryptJson/decryptJson', () => {
+    beforeEach(() => {
+      process.env.TOKEN_ENCRYPTION_KEY = VALID_KEY;
+    });
+
+    it('roundtrips a plain JSON object through the same v1 envelope', () => {
+      const payload = { tavily: 'tvly-fake-key-1234', pexels: 'pxls-fake-key-5678' };
+      const encrypted = encryptJson(payload);
+      expect(encrypted.split('.')[0]).toBe('v1');
+      expect(decryptJson(encrypted)).toEqual(payload);
+    });
+
+    it('never leaves a key value readable in the ciphertext', () => {
+      const encrypted = encryptJson({ tavily: 'tvly-fake-key-1234' });
+      expect(encrypted).not.toContain('tvly-fake-key-1234');
+    });
+
+    it('a token blob decrypts as JSON too: one envelope, not two schemes', () => {
+      const encrypted = encryptTokens({ access_token: 'tok' });
+      expect(decryptJson(encrypted)).toEqual({ access_token: 'tok' });
+    });
+
+    it('throws TokenDecryptError on a tampered blob', () => {
+      const encrypted = encryptJson({ tavily: 'tvly-fake-key-1234' });
+      const parts = encrypted.split('.');
+      parts[3] = parts[3] + 'x';
+      expect(() => decryptJson(parts.join('.'))).toThrow(TokenDecryptError);
+    });
+
+    it('throws TokenDecryptError on a blob that decrypts to a non-object', () => {
+      // A JSON array is valid JSON but not a valid decrypted object. The
+      // cast builds a blob no well-typed caller can produce on purpose.
+      const encrypted = encryptJson(['tavily'] as unknown as Record<string, unknown>);
+      expect(() => decryptJson(encrypted)).toThrow(TokenDecryptError);
+    });
+  });
+
   describe('missing/invalid key', () => {
     it('throws when TOKEN_ENCRYPTION_KEY is not defined', () => {
       delete process.env.TOKEN_ENCRYPTION_KEY;
@@ -88,6 +125,38 @@ describe('token-crypto', () => {
     it('throws when key decodes to wrong length', () => {
       process.env.TOKEN_ENCRYPTION_KEY = SHORT_KEY;
       expect(() => encryptTokens({ access_token: 'tok' })).toThrow('32 bytes');
+    });
+  });
+
+  describe('decrypt with a missing or invalid key', () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it('decryptTokens throws a plain Error, not TokenDecryptError, when the key is missing', () => {
+      process.env.TOKEN_ENCRYPTION_KEY = VALID_KEY;
+      const encrypted = encryptTokens({ access_token: 'tok' });
+      vi.stubEnv('TOKEN_ENCRYPTION_KEY', undefined);
+      expect(() => decryptTokens(encrypted)).toThrow('TOKEN_ENCRYPTION_KEY is not defined');
+      expect(() => decryptTokens(encrypted)).not.toThrow(TokenDecryptError);
+    });
+
+    it('decryptJson throws a plain Error, not TokenDecryptError, when the key is missing', () => {
+      process.env.TOKEN_ENCRYPTION_KEY = VALID_KEY;
+      const encrypted = encryptJson({ tavily: 'tvly-fake-key-1234' });
+      vi.stubEnv('TOKEN_ENCRYPTION_KEY', undefined);
+      expect(() => decryptJson(encrypted)).toThrow('TOKEN_ENCRYPTION_KEY is not defined');
+      expect(() => decryptJson(encrypted)).not.toThrow(TokenDecryptError);
+    });
+
+    it('decryptTokens throws a plain Error, not TokenDecryptError, when the key is the wrong length', () => {
+      process.env.TOKEN_ENCRYPTION_KEY = VALID_KEY;
+      const encrypted = encryptTokens({ access_token: 'tok' });
+      vi.stubEnv('TOKEN_ENCRYPTION_KEY', SHORT_KEY);
+      expect(() => decryptTokens(encrypted)).toThrow(
+        'TOKEN_ENCRYPTION_KEY must decode to exactly 32 bytes',
+      );
+      expect(() => decryptTokens(encrypted)).not.toThrow(TokenDecryptError);
     });
   });
 });

@@ -3886,13 +3886,13 @@
                               "type": "string"
                             }
                           },
-                          "linkedin_account_ids": {
+                          "bluesky_account_ids": {
                             "type": "array",
                             "items": {
                               "type": "string"
                             }
                           },
-                          "bluesky_account_ids": {
+                          "linkedin_account_ids": {
                             "type": "array",
                             "items": {
                               "type": "string"
@@ -3905,6 +3905,30 @@
                             }
                           },
                           "facebook_account_ids": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "pinterest_account_ids": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "threespeak_account_ids": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "rumble_account_ids": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "fanvue_account_ids": {
                             "type": "array",
                             "items": {
                               "type": "string"
@@ -4832,6 +4856,389 @@
             }
           }
         ]
+      }
+    },
+    "/api/tool-config": {
+      "get": {
+        "operationId": "get_tool_config_get",
+        "summary": "tool config get",
+        "tags": [
+          "tool-config"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "configured": {
+                      "type": "boolean"
+                    },
+                    "searchTool": {
+                      "type": "string",
+                      "enum": [
+                        "tavily",
+                        "exa"
+                      ],
+                      "nullable": true
+                    },
+                    "stockSources": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "pexels",
+                          "pixabay",
+                          "coverr"
+                        ]
+                      }
+                    },
+                    "keysPresent": {
+                      "type": "object",
+                      "properties": {
+                        "tavily": {
+                          "type": "boolean"
+                        },
+                        "exa": {
+                          "type": "boolean"
+                        },
+                        "pexels": {
+                          "type": "boolean"
+                        },
+                        "pixabay": {
+                          "type": "boolean"
+                        },
+                        "coverr": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "tavily",
+                        "exa",
+                        "pexels",
+                        "pixabay",
+                        "coverr"
+                      ]
+                    },
+                    "keysLast4": {
+                      "type": "object",
+                      "properties": {
+                        "tavily": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "exa": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "pexels": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "pixabay": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "coverr": {
+                          "type": "string",
+                          "nullable": true
+                        }
+                      },
+                      "required": [
+                        "tavily",
+                        "exa",
+                        "pexels",
+                        "pixabay",
+                        "coverr"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "put_tool_config_save",
+        "summary": "tool config save",
+        "tags": [
+          "tool-config"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "configured": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "searchTool": {
+                      "type": "string",
+                      "enum": [
+                        "tavily",
+                        "exa"
+                      ],
+                      "nullable": true
+                    },
+                    "stockSources": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "pexels",
+                          "pixabay",
+                          "coverr"
+                        ]
+                      }
+                    },
+                    "keysPresent": {
+                      "type": "object",
+                      "properties": {
+                        "tavily": {
+                          "type": "boolean"
+                        },
+                        "exa": {
+                          "type": "boolean"
+                        },
+                        "pexels": {
+                          "type": "boolean"
+                        },
+                        "pixabay": {
+                          "type": "boolean"
+                        },
+                        "coverr": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "tavily",
+                        "exa",
+                        "pexels",
+                        "pixabay",
+                        "coverr"
+                      ]
+                    },
+                    "keysLast4": {
+                      "type": "object",
+                      "properties": {
+                        "tavily": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "exa": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "pexels": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "pixabay": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "coverr": {
+                          "type": "string",
+                          "nullable": true
+                        }
+                      },
+                      "required": [
+                        "tavily",
+                        "exa",
+                        "pexels",
+                        "pixabay",
+                        "coverr"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "searchTool": {
+                    "type": "string",
+                    "enum": [
+                      "tavily",
+                      "exa"
+                    ],
+                    "nullable": true
+                  },
+                  "stockSources": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "pexels",
+                        "pixabay",
+                        "coverr"
+                      ]
+                    }
+                  },
+                  "keys": {
+                    "type": "object",
+                    "properties": {
+                      "tavily": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 512
+                      },
+                      "exa": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 512
+                      },
+                      "pexels": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 512
+                      },
+                      "pixabay": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 512
+                      },
+                      "coverr": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 512
+                      }
+                    }
+                  }
+                },
+                "required": [
+                  "searchTool",
+                  "stockSources",
+                  "keys"
+                ]
+              }
+            }
+          }
+        }
       }
     },
     "/api/persona/video-generations": {

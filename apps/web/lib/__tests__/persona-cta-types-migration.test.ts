@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { findRepoRoot } from '@/test/repo-root';
 
 //---------------
-// supabase/migrations/070_persona-cta-intent.sql — the CTA intent contract
+// supabase/migrations/071_persona-cta-intent.sql — the CTA intent contract
 // spanning the database, the engine, and the shared TS literal.
 //
 // The DB CHECK constraint, the engine's CtaType enum and the shared
@@ -25,7 +25,7 @@ const migrationPath = join(
   repoRoot,
   'supabase',
   'migrations',
-  '070_persona-cta-intent.sql',
+  '071_persona-cta-intent.sql',
 );
 
 // 071 later dropped NOT NULL on schedules.post_cta_type only (a schedule
@@ -34,7 +34,7 @@ const migration071Path = join(
   repoRoot,
   'supabase',
   'migrations',
-  '071_schedules-post-cta-type-nullable.sql',
+  '072_schedules-post-cta-type-nullable.sql',
 );
 
 // The single TS literal both apps share.
@@ -71,7 +71,7 @@ function engineAllowedCtaTypes(): string[] {
   );
 }
 
-describe('supabase/migrations/070_persona-cta-intent.sql', () => {
+describe('supabase/migrations/071_persona-cta-intent.sql', () => {
   it('is guarded so a re-run is a no-op', () => {
     const sql = readFileSync(migrationPath, 'utf8');
     expect(sql).toContain('add column if not exists cta_type');
@@ -96,7 +96,7 @@ describe('supabase/migrations/070_persona-cta-intent.sql', () => {
   });
 });
 
-describe('supabase/migrations/071_schedules-post-cta-type-nullable.sql', () => {
+describe('supabase/migrations/072_schedules-post-cta-type-nullable.sql', () => {
   it('drops NOT NULL on schedules.post_cta_type only', () => {
     const sql = readFileSync(migration071Path, 'utf8');
     // A schedule legitimately has no CTA (faceless posts, per-video
@@ -121,10 +121,10 @@ const migration072Path = join(
   repoRoot,
   'supabase',
   'migrations',
-  '072_schedules-post-cta-type-no-default.sql',
+  '073_schedules-post-cta-type-no-default.sql',
 );
 
-describe('supabase/migrations/072_schedules-post-cta-type-no-default.sql', () => {
+describe('supabase/migrations/073_schedules-post-cta-type-no-default.sql', () => {
   it('drops the default on schedules.post_cta_type only', () => {
     const sql = readFileSync(migration072Path, 'utf8');
     expect(sql).toContain('alter column post_cta_type drop default');

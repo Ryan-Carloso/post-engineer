@@ -1584,6 +1584,48 @@
                 "post_metrics_done_metrics_window_check": "CHECK ((metrics_window = ANY (ARRAY['24h'::text, '7d'::text, '28d'::text])))"
             }
         },
+        "user_tool_configs": {
+            "rls": true,
+            "columns": [
+                {
+                    "name": "user_id",
+                    "type": "uuid",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "search_tool",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "stock_sources",
+                    "type": "text[]",
+                    "default": "'{}'::text[]",
+                    "notNull": true
+                },
+                {
+                    "name": "encrypted_keys",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "updated_at",
+                    "type": "timestamp with time zone",
+                    "default": "now()",
+                    "notNull": true
+                }
+            ],
+            "policies": {
+            },
+            "constraints": {
+                "user_tool_configs_pkey": "PRIMARY KEY (user_id)",
+                "user_tool_configs_search_tool_check": "CHECK ((search_tool = ANY (ARRAY['tavily'::text, 'exa'::text])))",
+                "user_tool_configs_stock_sources_check": "CHECK ((stock_sources <@ ARRAY['pexels'::text, 'pixabay'::text, 'coverr'::text]))"
+            }
+        },
         "video_generations": {
             "rls": true,
             "columns": [

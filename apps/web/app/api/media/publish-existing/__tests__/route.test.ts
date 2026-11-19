@@ -677,7 +677,7 @@ describe('POST /api/media/publish-existing', () => {
     expect(client.__insertedSchedules[0]?.publish_mode).toBe('scheduled');
     // The CTA snapshot columns are NULL: existing media carries no
     // generation identity, and post_cta_type must not inherit the
-    // migration 070 default 'follow' by omission (issue #639).
+    // migration 071 default 'follow' by omission (issue #639).
     expect(client.__insertedSchedules[0]?.post_cta_type).toBeNull();
     expect(client.__insertedSchedules[0]?.post_cta_url).toBeNull();
     expect(client.__insertedSchedules[0]?.post_cta_instruction).toBeNull();
