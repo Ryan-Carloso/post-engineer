@@ -166,8 +166,8 @@ def _repo_root() -> Path:
 def test_cta_intent_literals_are_the_same_everywhere():
     """DB check, shared contract and engine enum must agree on the CTA intent."""
     repo = _repo_root()
-    sql = (repo / "supabase/migrations/070_persona-cta-intent.sql").read_text()
-    # The 200-char stored-text cap died with migration 070: the persona
+    sql = (repo / "supabase/migrations/071_persona-cta-intent.sql").read_text()
+    # The 200-char stored-text cap died with migration 071: the persona
     # stores an intent plus facts now, and the caps live in the shared
     # personas contract (PERSONA_CTA_URL_MAX_LENGTH /
     # PERSONA_CTA_INSTRUCTION_MAX_LENGTH).

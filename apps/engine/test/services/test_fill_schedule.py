@@ -529,7 +529,7 @@ class BatchScheduleTests(unittest.TestCase):
 
     def test_generate_slot_stored_before_cta_rule_renders_without_a_cta(self):
         # A slot stored before issue #639 has segments with no cta marker:
-        # the snapshot type (backfilled 'follow' by migration 070) must not
+        # the snapshot type (backfilled 'follow' by migration 071) must not
         # fail the row — the CTA simply does not apply to it.
         slot = self._batch_slot()
         del slot["schedules"]["personas"]
