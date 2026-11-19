@@ -566,10 +566,6 @@ describe('PostsCalendar week view', () => {
     expect(screen.getByLabelText(/Lisbon time zone/)).toBeInTheDocument();
   });
 
-  // Alternative A on a phone: one time axis only (the viewer's) — the two
-  // Lisbon + viewer columns ate ~40% of a 390px screen and cut the chips
-  // to a single letter. Events render as dots instead of chips (CSS, see
-  // globals.css `[data-mobile-week]`), so the grid only needs the marker.
   it('shows no secondary time zone axis on a mobile week', () => {
     renderWeek({ mobileWeek: true });
     expect(screen.queryByLabelText(/Lisbon time zone/)).not.toBeInTheDocument();
