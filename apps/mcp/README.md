@@ -178,7 +178,7 @@ Run it before and after a change to tool schemas and put both outputs in the PR.
 
 ## Tools
 
-The server offers **16 intent tools**, not one tool per API endpoint. A tool is a complete abstraction of an intent: it takes what you would say ("the persona Maria", "my YouTube channel"), resolves the ids inside the call, and returns only what the agent needs for the next step. Most tools take an `action`; the schema is one flat object (a required `action` plus the fields of every action), and each tool's description lists the required fields per action. A field of another action, or a missing required field, is rejected before any request is sent, naming the tool, the action and the field.
+The server offers **17 intent tools**, not one tool per API endpoint. A tool is a complete abstraction of an intent: it takes what you would say ("the persona Maria", "my YouTube channel"), resolves the ids inside the call, and returns only what the agent needs for the next step. Most tools take an `action`; the schema is one flat object (a required `action` plus the fields of every action), and each tool's description lists the required fields per action. A field of another action, or a missing required field, is rejected before any request is sent, naming the tool, the action and the field.
 
 | Tool | Actions | What it is for |
 |---|---|---|
@@ -189,6 +189,7 @@ The server offers **16 intent tools**, not one tool per API endpoint. A tool is 
 | `persona_media` | `list_faces`, `list_images`, `add_image`, `update_image`, `remove_image` | Stock faces and a persona's image library. |
 | `voices` | `list`, `preview`, `list_clones`, `create_clone`, `get_clone`, `preview_clone`, `delete_clone` | House voices and voice clones. |
 | `accounts` | `list`, `connect`, `disconnect`, `get_persona_publishing`, `set_persona_publishing`, `list_boards` | Social accounts and the accounts each persona publishes to. |
+| `tool_config` | `get`, `save` | The saved research/stock tool configuration: which search tool (Tavily/Exa) and stock sources (Pexels/Pixabay/Coverr) the account has keys for. `save` replaces the whole set; keys are stored encrypted and are never returned in full — `get` shows presence and last 4 characters only. |
 | `schedules` | `list`, `cancel`, `get_slot`, `update_slot_title`, `delete_slot` | Future slots. |
 | `posts` | `list`, `get` | Published and scheduled posts. |
 | `insights` | `post_metrics`, `retention_curve` | How posts performed. |
@@ -215,7 +216,7 @@ Batch (2-12 videos) needs a `batchKey` and rejects `idempotencyKey`; one video t
 
 ### Measuring the size of `tools/list`
 
-See "Measuring the `tools/list` payload" above. The 16 tools weigh about 59 KB on the stdio server (the 56 tools they replace weighed about 102 KB).
+See "Measuring the `tools/list` payload" above. The 17 tools weigh about 62 KB on the stdio server (the 56 tools they replace weighed about 102 KB).
 
 ### Breaking change: the 56 old tool names are gone
 

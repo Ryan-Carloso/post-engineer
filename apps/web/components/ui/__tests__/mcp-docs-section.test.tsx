@@ -76,11 +76,14 @@ describe('McpDocsSection', () => {
     expect(screen.queryByTestId('mcp-docs-help-cta')).toBeNull();
   });
 
-  it('renders the tools grid with the 16 intent tools and the actions of each', () => {
+  it('renders the tools grid with the 17 intent tools and the actions of each', () => {
     render(<McpDocsSection apiKey={null} />);
 
     const grid = screen.getByTestId('mcp-tools-grid');
     expect(grid).toBeInTheDocument();
+    // Each card renders its tool id in the bold mono paragraph, in registry
+    // order — asserting the id itself (not just grid text) so a blanked id
+    // fails. The 17 tools are the MCP server's surface (issue #566).
     const ids = [...grid.querySelectorAll('p.font-bold')].map((p) => p.textContent);
     expect(ids).toEqual([
       'generate_video',
@@ -90,6 +93,7 @@ describe('McpDocsSection', () => {
       'persona_media',
       'voices',
       'accounts',
+      'tool_config',
       'schedules',
       'posts',
       'insights',

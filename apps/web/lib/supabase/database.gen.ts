@@ -984,6 +984,30 @@ export interface Database {
         };
         Relationships: [];
       };
+      user_tool_configs: {
+        Row: {
+        user_id: string;
+        search_tool: 'tavily' | 'exa' | null;
+        stock_sources: string[];
+        encrypted_keys: string | null;
+        updated_at: string;
+        };
+        Insert: {
+        user_id: string;
+        search_tool?: 'tavily' | 'exa' | null;
+        stock_sources?: string[];
+        encrypted_keys?: string | null;
+        updated_at?: string;
+        };
+        Update: {
+        user_id?: string;
+        search_tool?: 'tavily' | 'exa' | null;
+        stock_sources?: string[];
+        encrypted_keys?: string | null;
+        updated_at?: string;
+        };
+        Relationships: [];
+      };
       video_generations: {
         Row: {
         id: string;
