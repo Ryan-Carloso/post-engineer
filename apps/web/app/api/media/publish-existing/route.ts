@@ -167,8 +167,9 @@ async function scheduleExistingMedia(ctx: PublishExistingContext): Promise<NextR
     post_voice_id: null,
     post_voice_audio_url: null,
     // The CTA snapshot columns are NULL too: existing media carries no
-    // generation identity, and post_cta_type must not inherit migration
-    // 070's default 'follow' by omission (issue #639).
+    // generation identity. post_cta_type is written explicitly as NULL:
+    // no default applies since migration 073, and a write that omitted
+    // it used to inherit 'follow' (issue #639).
     post_cta_type: null,
     post_cta_url: null,
     post_cta_instruction: null,

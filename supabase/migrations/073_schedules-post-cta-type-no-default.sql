@@ -1,6 +1,6 @@
--- 072: drop the default 'follow' on schedules.post_cta_type (issue #639).
+-- 073: drop the default 'follow' on schedules.post_cta_type (issue #639).
 --
--- NULL means "no CTA on this post" (migration 071). The default let any
+-- NULL means "no CTA on this post" (migration 072). The default let any
 -- writer that omits the column inherit 'follow' by omission:
 -- publish-existing did exactly that, storing a follow CTA on media that
 -- never had one. Both schedules writers now set the column explicitly

@@ -1,6 +1,6 @@
--- 071: schedules.post_cta_type is nullable (issue #639).
+-- 072: schedules.post_cta_type is nullable (issue #639).
 --
--- Migration 070 made post_cta_type NOT NULL DEFAULT 'follow', but a
+-- Migration 071 made post_cta_type NOT NULL DEFAULT 'follow', but a
 -- schedule legitimately has no CTA: every faceless post, and every video
 -- with a per-video `cta: null` override. The snapshot writer
 -- (buildIdentitySnapshot) stores NULL for those, so the NOT NULL check

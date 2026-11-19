@@ -1,5 +1,5 @@
 -- ============================================================================
--- Migration 070 — Per-persona CTA, intent only (issue #639)
+-- Migration 071 — Per-persona CTA, intent only (issue #639)
 -- ----------------------------------------------------------------------------
 -- WHY: the old stored-text CTA (personas.cta_text, migration 024) held a
 -- fixed phrase written at persona creation — but the agent has more
