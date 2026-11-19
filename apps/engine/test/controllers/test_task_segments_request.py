@@ -23,8 +23,6 @@ def _photos(prefix, count):
 
 
 def valid_segments():
-    # Images mode needs about one photo per 3s: hook 25 words → 4,
-    # body 42 → 6, CTA 9 → 2.
     return [
         {"kind": "hook", "text": HOOK, "media": _photos("h", 4)},
         {"kind": "content", "text": BODY, "media": _photos("b", 6)},
@@ -123,10 +121,6 @@ def test_empty_segments_list_is_rejected():
 
 
 def test_segments_joining_beyond_video_script_cap_is_rejected():
-    # One very long token keeps every word count in range while the
-    # joined script passes the 20000-character video_script cap: the
-    # cap must apply to the joined value, not only to a directly
-    # supplied video_script.
     long_body = "x" * 20001 + " " + " ".join(["word"] * 29) + "."
     segments = [
         {"kind": "hook", "text": HOOK, "media": _photos("h", 4)},

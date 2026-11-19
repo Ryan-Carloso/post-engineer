@@ -93,9 +93,6 @@ def measure_narration_duration(
             language=language,
             user_id=user_id,
             task_id="audio-preflight",
-            # Preflight only measures duration: the narration check (and
-            # its Whisper transcription) belongs in generate_audio, where
-            # the video is built — not in this synchronous endpoint.
             validate=False,
         )
         if not result.ok:
@@ -111,15 +108,9 @@ def measure_narration_duration(
 
 def _measure_voice_audio_duration(voice_audio_url: str) -> float:
     """Download a voice-audio narration and return its ffprobe duration."""
-    # Lazy import: task.py is the whole video pipeline; this module must
-    # stay importable from a light controller without pulling it in.
     from app.services.task import PersonaVoiceError, _download_persona_voice
 
     work_dir = tempfile.mkdtemp(prefix="audio-preflight-voice-")
-    # _download_persona_voice downloads into utils.task_dir(task_id), not
-    # into work_dir, so it gets a synthetic task id whose directory is
-    # removed below. It enforces the 60s product limit itself; a
-    # PersonaVoiceError from it becomes VoiceAudioRejectedError below.
     task_id = f"audio-preflight-{Path(work_dir).name}"
     try:
         audio_file = _download_persona_voice(task_id, voice_audio_url)

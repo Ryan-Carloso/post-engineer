@@ -25,8 +25,6 @@ async function postHandler(request: Request, context: RouteContext): Promise<Nex
     return NextResponse.json({ success: false, error: 'Voice id is required.' }, { status: 400 });
   }
 
-  // Optional caller text, validated before the engine call. The text is
-  // never logged; only the parse error (which carries no text) is returned.
   let rawBody: string;
   try {
     rawBody = await request.text();
@@ -64,10 +62,6 @@ async function postHandler(request: Request, context: RouteContext): Promise<Nex
       return NextResponse.json({ success: false, error: 'Voice not found.' }, { status: 404 });
     }
     if (upstream.status === 422) {
-      // Forward the engine's validation detail: a 422 is a malformed
-      // request, not a down service, so it must not become a generic 502.
-      // FastAPI's detail is a list of field errors; only a string detail
-      // is forwarded verbatim.
       const data: unknown = await upstream.json().catch(() => null);
       const detail =
         typeof data === 'object' && data !== null && 'detail' in data ? data.detail : undefined;

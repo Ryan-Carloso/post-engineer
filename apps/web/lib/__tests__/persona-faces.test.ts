@@ -38,7 +38,6 @@ describe('listDefaultPersonaFaces', () => {
       expect(face.ethnicity.length).toBeGreaterThan(0);
       expect(face.hair.length).toBeGreaterThan(0);
       expect(face.description.length).toBeGreaterThan(20);
-      // Metadata must stay English (no Portuguese diacritics / common PT words).
       expect(face.description).not.toMatch(/[àáâãéêíóôõúç]/i);
       expect(face.hair).not.toMatch(/[àáâãéêíóôõúç]/i);
       expect(face.description).not.toMatch(/\b(mulher|homem|cabelo|anos)\b/i);

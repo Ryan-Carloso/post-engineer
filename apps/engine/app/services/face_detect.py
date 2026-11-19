@@ -64,10 +64,6 @@ def image_contains_face(image_path: str) -> bool | None:
         return None
 
     try:
-        # Header-only probe: a small compressed file can declare enormous
-        # dimensions, and the full decode below would allocate gigabytes.
-        # Undecodable here means cv2 cannot decode it either, so False
-        # keeps its documented "unreadable file" meaning.
         with Image.open(image_path) as opened:
             width, height = opened.size
     except (OSError, ValueError, Image.DecompressionBombError):
@@ -91,8 +87,6 @@ def image_contains_face(image_path: str) -> bool | None:
         )
         return len(faces) > 0
     except Exception as e:
-        # A raise here is a detector failure, not evidence of "no face":
-        # return None so the caller does not fail the video over it.
         logger.warning(f"face detection failed for '{image_path}': {str(e)}")
         return None
 

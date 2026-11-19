@@ -1,20 +1,6 @@
-//---------------
-// prepare-bun-tsconfig — a tsconfig `bun check` can read.
-//
-// `bun check` is the TypeScript 7 checker. TypeScript 7 removed `baseUrl`
-// (TS5102) and stops before checking any file when the option is present.
-// Next.js and `tsc` 5.9 still use `baseUrl` for the `@/*` paths, so the
-// committed tsconfig keeps it. This writes a sibling config with that one
-// option removed. The paths already start with `./`, which is what
-// TypeScript 7 resolves them against.
-//---------------
-
 import { readFileSync, writeFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
-// TypeScript 7 checks side-effect CSS imports. The declaration lives outside
-// apps/web so the mutation workflow, which selects apps/web/**/*.ts, does
-// not try to mutate a file with no mutants and no tests.
 export const BUN_CSS_DECLARATION = '../../.github/scripts/frontend-ci/css-side-effect.d.ts';
 
 /**

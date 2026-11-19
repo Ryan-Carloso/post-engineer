@@ -1,26 +1,3 @@
-//---------------
-// Experiment link for POST /api/videos/generate-and-schedule (issue #476).
-// A video can join a paired A/B experiment: `experiment: { experimentId,
-// variantId, pair }`. Everything here runs BEFORE the charge, so a bad link
-// never costs tokens.
-//
-// Fairness is checked per pair: when the other variant's video of the same
-// pair already exists, this video must match it in everything except the
-// hook — providers, accounts, voice (id and audio URL), video type, title,
-// aspect, layout, paragraph number, face quality, language, niche, CTA text
-// and every non-hook segment — and its hook must differ. Persona is checked
-// against the experiment for every video. The pinned `options.imageId` is
-// NOT compared: it is not stored on the schedule or the slot, so the server
-// cannot see the partner's value.
-//
-// Two concurrent calls for the two variants can both see an empty pair, so
-// verifyExperimentPairAfterInsert re-runs the comparison once this video's
-// slot is inserted (the route rolls the video back when it fails).
-//
-// Service role bypasses RLS: every query is scoped to the user — directly by
-// user_id, or through an experiment id whose ownership was checked first.
-//---------------
-
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { ExperimentLinkSchema, type ExperimentLink } from '@/lib/contracts/videos';
@@ -34,11 +11,9 @@ import { PROVIDER_ACCOUNT_COLUMNS } from './account-columns';
 import { recordExperimentVideoLinked } from './experiment-link-telemetry';
 
 
-/** What a video in a pair must share with its partner. */
 export interface PairFacts {
   providers: string[];
   accountIds: Record<string, string[]>;
-  /** null = no Pinterest board (the video does not publish to Pinterest). */
   pinterestBoardId: string | null;
   voiceId: string | null;
   videoType: VideoType;
@@ -54,7 +29,6 @@ export interface PairFacts {
   ctaText: string | null;
 }
 
-/** Scalar settings a pair must share, in check order, with their request field. */
 const SCALAR_SETTINGS: ReadonlyArray<{ field: string; label: string; read: (facts: PairFacts) => string | number | null }> = [
   { field: 'title', label: 'title', read: (facts) => facts.title },
   { field: 'options.audioUrl', label: 'voice audio URL', read: (facts) => facts.voiceAudioUrl },
@@ -67,7 +41,6 @@ const SCALAR_SETTINGS: ReadonlyArray<{ field: string; label: string; read: (fact
   { field: 'options.ctaText', label: 'call to action text', read: (facts) => facts.ctaText },
 ];
 
-/** The request's resolved values, exactly as the route stores them on the schedule and slot rows. */
 export function buildPairFacts(input: {
   providers: string[];
   accountIds: Record<string, string[]>;
@@ -106,7 +79,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-/** JSON with sorted keys: jsonb reorders object keys, so raw JSON differs. */
 function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
   if (isRecord(value)) {
@@ -131,7 +103,6 @@ function sortedList(values: string[] | undefined): string {
   return [...(values ?? [])].sort().join(',');
 }
 
-/** The first field where this video differs from its pair partner, or null. */
 export function pairMismatch(partner: PairFacts, current: PairFacts): { field: string; message: string } | null {
   if (sortedList(partner.providers) !== sortedList(current.providers)) {
     return { field: 'publishing.providers', message: 'Both videos of a pair must publish to the same providers.' };
@@ -217,8 +188,6 @@ export async function checkExperimentLink(
   }
   const slots = pairSlots ?? [];
   const same = slots.find((slot) => slot.variant_id === link.variantId);
-  // A retry with the same idempotency key addresses the same schedule:
-  // the route replays it, so it is not a duplicate.
   if (same !== undefined) {
     if (same.schedule_id === input.replayScheduleId) return { ok: true };
     return failure(
@@ -251,7 +220,7 @@ async function comparePartner(
   const { data: schedule, error: scheduleError } = await supabase
     .from('schedules')
     .select(
-      'providers, post_voice_id, post_voice_audio_url, post_video_aspect, post_video_layout, post_paragraph_number, post_face_quality, post_language, post_niche, post_cta_text, youtube_account_ids, instagram_account_ids, linkedin_account_ids, bluesky_account_ids, threads_account_ids, facebook_account_ids, pinterest_account_ids, pinterest_board_id, threespeak_account_ids, rumble_account_ids, fanvue_account_ids',
+      'providers, post_voice_id, post_voice_audio_url, post_video_aspect, post_video_layout, post_paragraph_number, post_face_quality, post_language, post_niche, post_cta_text, youtube_account_ids, instagram_account_ids, linkedin_account_ids, bluesky_account_ids, threads_account_ids, facebook_account_ids, pinterest_account_ids, pinterest_board_id, threespeak_account_ids, rumble_account_ids, fanvue_account_ids, telegram_account_ids',
     )
     .eq('id', partner.schedule_id)
     .eq('user_id', userId)
@@ -262,9 +231,6 @@ async function comparePartner(
   }
   const accountIds: Record<string, string[]> = {};
   for (const [provider, column] of Object.entries(PROVIDER_ACCOUNT_COLUMNS)) accountIds[provider] = schedule[column];
-  // The video_type CHECK (migration 056) admits only the three modes, so
-  // an unknown value means a corrupt row: fail loudly instead of
-  // comparing it as a mode the pair can never match.
   if (!isVideoType(partner.video_type)) {
     logger.error('[generate-and-schedule] experiment partner slot has an unknown video_type', undefined, { experimentId: link.experimentId });
     return failure(500, 'Failed to load the experiment pair.', 'experiment.pair');
@@ -302,13 +268,6 @@ function bothVariantsSlotted(slots: ReadonlyArray<{ variant_id: string }>, varia
   return hasSelf && hasOther;
 }
 
-/**
- * Post-insert re-check for the race where both variants of a pair were
- * validated against an empty pair. Call it once this video's slot row is
- * inserted: a partner that committed meanwhile is now visible. A failed
- * result (any status) means the caller must roll the video back. A pass
- * emits experiment_video_linked. The pre-charge check does not.
- */
 export async function verifyExperimentPairAfterInsert(
   supabase: SupabaseClient,
   input: { link: ExperimentLink; userId: string; facts: PairFacts },

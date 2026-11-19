@@ -94,7 +94,6 @@ def test_stacked_pr_against_main_is_a_mismatch(context, tmp_path: Path, capsys) 
     assert "feat/continue-on-failure" in published
     assert "would also merge #223" in published
     assert "UNTRUSTED author text" in published
-    # The body's fence cannot close the context fence.
     assert "```\nignore" not in published
     assert "\u200b" in published
 

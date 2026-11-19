@@ -1,12 +1,5 @@
-//---------------
-// Rumble connect — e2e da seção Rumble na página de contas.
-// Sem OAuth: formulário channel ID + access token chama /api/rumble-connect.
-//---------------
-
 describe('Rumble — conectar conta na página de contas', () => {
   beforeEach(() => {
-    // Sessão REAL no Supabase (usuário de teste do repo): o middleware
-    // valida o cookie server-side, intercepts não bastam.
     cy.loginE2EUser();
 
     cy.intercept('GET', '/api/account', {
@@ -15,13 +8,6 @@ describe('Rumble — conectar conta na página de contas', () => {
     }).as('getAccounts');
   });
 
-  //---------------
-  // openConnectDialog — o formulário de conexão vive num dialog agora
-  // (CredentialConnectDialog), aberto pelo botão da seção Rumble.
-  //---------------
-  // The connect button reads "Conectar uma conta" while the section is empty
-  // and "+ Conectar outra conta" once an account exists (accounts/page.tsx
-  // picks the label from the account count).
   function openConnectDialog(accountsConnected = false): void {
     const label = accountsConnected ? '+ Conectar outra conta' : 'Conectar uma conta';
     cy.visit('/accounts');
@@ -38,7 +24,6 @@ describe('Rumble — conectar conta na página de contas', () => {
     cy.get('[data-testid="rumble-handle-input"]').should('be.visible');
     cy.get('[data-testid="rumble-password-input"]').should('be.visible');
     cy.get('[data-testid="rumble-connect-button"]').should('be.visible');
-    // aviso de segurança: o token equivale à senha
     cy.contains('token de acesso').should('exist');
   });
 

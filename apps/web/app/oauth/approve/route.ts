@@ -3,12 +3,6 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { getOAuthKeys } from '@/lib/oauth/keys';
 import { verifyConsentRequest, mintAuthorizationCode } from '@/lib/oauth/tokens';
 
-//---------------
-// POST /oauth/approve — decisão do consentimento (form da página
-// /oauth/consent). Aprova → authorization code no redirect_uri. Nega →
-// error=access_denied. O pedido é um JWT assinado: nada de estado no banco.
-//---------------
-
 function errorRedirect(redirectUri: string, error: string, state: string): NextResponse {
   const url = new URL(redirectUri);
   url.searchParams.set('error', error);

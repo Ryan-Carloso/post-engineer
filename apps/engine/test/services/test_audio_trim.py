@@ -34,7 +34,6 @@ def test_speech_ends_at_the_silence_that_runs_to_the_end():
 
 
 def test_silence_end_printed_at_the_file_end_still_counts():
-    # Newer ffmpeg prints silence_end at EOF for a trailing silence.
     log = "silence_start: 2.999977\nsilence_end: 7 | silence_duration: 4.000023\n"
     assert audio_trim.speech_end_seconds(log, 7.0) == 2.999977
 
@@ -90,7 +89,6 @@ def test_ffmpeg_failure_keeps_the_original(tmp_path):
 
 
 def test_tts_audio_is_trimmed_before_its_length_is_used():
-    # Wiring: generate_audio cuts the TTS file right after synthesis.
     import inspect
 
     from app.services import task
@@ -185,7 +183,6 @@ def test_the_word_cut_decision_is_logged_in_seconds(tmp_path):
 
 
 def test_a_silence_scan_that_cuts_nothing_says_why(tmp_path):
-    # The v11/v12 renders logged nothing at all when the scan found no silence.
     audio = tmp_path / "audio.mp3"
     audio.write_bytes(b"x")
     quiet_log = subprocess.CompletedProcess([], 0, "", "no silence here")
@@ -247,10 +244,6 @@ def _fake_word_cut(calls):
 
 
 def test_a_shared_custom_audio_file_is_never_trimmed_in_place(tmp_path):
-    # Regression: a custom audio file from the shared local_videos dir was
-    # cut in place by the word-based trim, so reusing it in a later task
-    # heard the cut version. The shared file must stay byte-identical
-    # while the task-local copy is still trimmed.
     shared_dir = tmp_path / "shared"
     task_dir = tmp_path / "task"
     shared_dir.mkdir()
@@ -295,9 +288,6 @@ def test_a_task_dir_symlink_to_shared_audio_is_replaced_not_written_through(tmp_
 
 
 def test_a_realpath_failure_skips_the_trim(tmp_path):
-    # Degrade, don't fail: a realpath OSError (vanished path mid-flight)
-    # returns None so the caller skips the trim — returning the original
-    # path would cut the shared file in place, the bug this helper fixes.
     shared_dir = tmp_path / "shared"
     task_dir = tmp_path / "task"
     shared_dir.mkdir()
@@ -311,9 +301,6 @@ def test_a_realpath_failure_skips_the_trim(tmp_path):
 
 
 def test_a_copy_failure_skips_the_trim(tmp_path):
-    # Degrade, don't fail: when the copy into the task dir fails, the
-    # caller skips the trim instead of failing the task, and the shared
-    # file stays untouched (and untrimmed).
     shared_dir = tmp_path / "shared"
     task_dir = tmp_path / "task"
     shared_dir.mkdir()
@@ -328,10 +315,6 @@ def test_a_copy_failure_skips_the_trim(tmp_path):
 
 
 def test_task_start_copies_shared_audio_before_the_word_cut():
-    # Pin the task.start wiring: the task-local copy must precede the
-    # in-place word cut, or the shared original gets cut (see the
-    # task_local_copy tests above). Same source-scan pattern as the
-    # word-cut ordering test.
     from app.services import task
 
     source = inspect.getsource(task.start)
@@ -342,10 +325,6 @@ def test_task_start_copies_shared_audio_before_the_word_cut():
 
 
 def test_word_cut_skipped_when_last_word_mismatches_script(tmp_path):
-    # Issue #534 defect 2: Whisper can miss or mis-hear the trailing words
-    # (the #539 video's captions show "22%" that was never spoken). Cutting
-    # the audio at a mis-transcribed last word would cut real speech — the
-    # CTA tail — off the file. A mismatch keeps the full audio instead.
     audio = tmp_path / "audio.mp3"
     audio.write_bytes(b"x")
     words = [("a", 0.0, 1.0), ("b", 20.0, 28.4)]
@@ -361,8 +340,6 @@ def test_word_cut_skipped_when_last_word_mismatches_script(tmp_path):
 
 
 def test_word_cut_kept_when_last_word_matches_script(tmp_path):
-    # Same tail, but the transcript's last word is the script's last word:
-    # the cut is safe and still happens.
     audio = tmp_path / "audio.mp3"
     audio.write_bytes(b"x")
     calls = []
@@ -381,8 +358,6 @@ def test_word_cut_kept_when_last_word_matches_script(tmp_path):
 
 
 def test_word_cut_match_ignores_case_and_punctuation(tmp_path):
-    # "HabitLoom." in the transcript vs "habitloom" in the script: the same
-    # word, so the cut still happens.
     audio = tmp_path / "audio.mp3"
     audio.write_bytes(b"x")
     words = [("habitloom.", 27.0, 28.4)]
@@ -396,9 +371,6 @@ def test_word_cut_match_ignores_case_and_punctuation(tmp_path):
 
 
 def test_word_cut_skipped_when_script_last_word_has_no_ascii_letters(tmp_path):
-    # Issue #534 review: a CJK/Cyrillic/Arabic last word normalizes to "",
-    # which used to silently disable the guard and cut unverified speech.
-    # An unmatchable last word keeps the full audio instead.
     audio = tmp_path / "audio.mp3"
     audio.write_bytes(b"x")
     words = [("你好", 20.0, 28.4)]

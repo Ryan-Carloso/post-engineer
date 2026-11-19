@@ -1,9 +1,3 @@
-//---------------
-// Display-only library face for GET /api/persona/list.
-// Picks one persona_images row to sign: newest primary (created_at desc,
-// then id desc), else the newest non-primary. Never mixes personas.
-//---------------
-
 export interface LibraryDisplayImage {
   id: string;
   persona_id: string;

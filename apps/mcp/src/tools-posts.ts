@@ -11,13 +11,6 @@ import {
 } from './limits.js';
 import { handleLibraryCall, type McpToolResponse } from './tools-call.js';
 
-//---------------
-// posts (action: get), insights (action: post_metrics) and insights (action: retention_curve) — MCP tools.
-//
-// Extracted from tools.ts so the tools module stays under the file-size
-// ratchet.
-//---------------
-
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export const GetPostShape = {
@@ -87,9 +80,6 @@ export async function handleGetYouTubeRetentionCurve(
   return handleLibraryCall(() => getYouTubeRetentionCurve(client, args), 'getting YouTube retention curve');
 }
 
-// posts (action: list) — the upcoming/recent lists, or (with from + to) every post in a
-// window. The schema's from/to pairing is a .refine, which the SDK's shape
-// validation does not run, so the args are re-parsed here.
 export async function handleListPosts(client: PostEngineerClient, args: unknown): Promise<McpToolResponse> {
   const parsed = ListPostsSchema.safeParse(args);
   if (!parsed.success) {

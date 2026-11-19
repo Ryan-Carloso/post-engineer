@@ -1,12 +1,4 @@
 // @vitest-environment node
-//---------------
-// Tests for POST /api/media/check (MCP media (action: check)).
-//
-// The route authenticates the caller and proxies to the engine's
-// /api/v1/media/check with the server secret; the engine runs the
-// SSRF-safe download and the mechanical checks. The response carries
-// only the code — never the checked URL.
-//---------------
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { NextResponse } from 'next/server';
@@ -66,7 +58,6 @@ describe('POST /api/media/check', () => {
     const payload = (await response.json()) as Record<string, unknown>;
     expect(payload.success).toBe(true);
     expect(payload.code).toBe('ok');
-    // The 200 body parses against the shared contract the MCP reads.
     expect(MediaCheckResponseSchema.safeParse(payload).success).toBe(true);
     expect(JSON.stringify(payload)).not.toContain('secret-value');
     const fetchCall = vi.mocked(global.fetch).mock.calls[0];
@@ -115,7 +106,6 @@ describe('POST /api/media/check', () => {
     expect(payload.code).toBe('wrong_aspect');
     expect(payload.width).toBe(1920);
     expect(payload.height).toBe(1080);
-    // The 200 body parses against the shared contract the MCP reads.
     expect(MediaCheckResponseSchema.safeParse(payload).success).toBe(true);
     const fetchCall = vi.mocked(global.fetch).mock.calls[0];
     expect(JSON.parse(String(fetchCall?.[1]?.body))).toEqual({
@@ -147,8 +137,6 @@ describe('POST /api/media/check', () => {
     expect(response.status).toBe(200);
     const payload = (await response.json()) as Record<string, unknown>;
     expect(payload.code).toBe('media_expired');
-    // The 200 body parses against the shared contract the MCP reads
-    // (null dimensions are dropped by the route, never served).
     expect(MediaCheckResponseSchema.safeParse(payload).success).toBe(true);
   });
 

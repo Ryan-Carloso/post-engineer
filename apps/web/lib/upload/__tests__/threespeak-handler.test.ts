@@ -82,8 +82,6 @@ describe('handleThreespeakUpload', () => {
     const result = await handleThreespeakUpload(formData(), 'user-1');
     expect(result).toEqual({ success: false, results: [{ accountId: 'alice', success: false, error: '3Speak posting key not found' }] });
     expect(publishThreespeakVideo).not.toHaveBeenCalled();
-    // The credential never reached 3Speak: the account is flagged for
-    // reconnect, like the other providers' missing-credential branches.
     expect(markAccountNeedsReconnect).toHaveBeenCalledWith('user-1', '3speak', 'alice');
   });
 
@@ -113,8 +111,6 @@ describe('handleThreespeakUpload', () => {
   });
 
   it('rejects a video over the 2GB limit before buffering it', async () => {
-    // The size is faked on the instance: allocating a real 2GB file would
-    // OOM the test, and the guard reads only `size` before `arrayBuffer()`.
     const big = new File([MP4_BYTES], 'clip.mp4', { type: 'video/mp4' });
     Object.defineProperty(big, 'size', { value: THREESPEAK_VIDEO_MAX_BYTES + 1 });
     const result = await handleThreespeakUpload(formData({ video: big }), 'user-1');

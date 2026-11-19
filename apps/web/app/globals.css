@@ -378,3 +378,84 @@ input {
     white-space: nowrap;
   }
 }
+
+/* Mobile week view (Alternative A): events are dots, not chips — one dot
+ * per post at its time, coloured by status, so seven columns fit a phone.
+ * The lib still positions the chip at the event's time; the chip box keeps
+ * the lib's geometry (overlapping events sit side by side) while a dot is
+ * drawn centred in it and the chip's own text is hidden. The colour comes
+ * from the chip's own colour layer (:has), mapped to the calendar's dot
+ * vocabulary (status.ts CALENDAR_GROUP_DOT); an unknown colour falls back
+ * to muted. The "add time zone" button hides too: a second axis would
+ * bring back the overflow this removes. The keyboard focus ring wraps the
+ * dot, not the collapsed box. Re-check after any CalendarCN upgrade. */
+[data-mobile-week] [data-event-id] {
+  min-height: 0 !important;
+  overflow: visible !important;
+  padding: 0 !important;
+  background: transparent !important;
+}
+
+[data-mobile-week] [data-event-id] > * {
+  display: none !important;
+}
+
+[data-mobile-week] [data-event-id]::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  transform: translate(-50%, -50%);
+  border-radius: 9999px;
+  background-color: var(--muted-text);
+}
+
+[data-mobile-week] [data-event-id]:has(> .bg-event-red-bg)::before,
+[data-mobile-week] [data-event-id]:has(> .bg-event-red-border)::before {
+  background-color: var(--destructive);
+}
+
+[data-mobile-week] [data-event-id]:has(> .bg-event-green-bg)::before,
+[data-mobile-week] [data-event-id]:has(> .bg-event-green-border)::before {
+  background-color: var(--success);
+}
+
+[data-mobile-week] [data-event-id]:has(> .bg-event-blue-bg)::before,
+[data-mobile-week] [data-event-id]:has(> .bg-event-blue-border)::before {
+  background-color: var(--info);
+}
+
+[data-mobile-week] [data-event-id]:focus-visible::after {
+  top: 50% !important;
+  left: 50% !important;
+  right: auto !important;
+  bottom: auto !important;
+  width: 16px !important;
+  height: 16px !important;
+  transform: translate(-50%, -50%) !important;
+  border-radius: 9999px !important;
+}
+
+[data-mobile-week] [aria-label="Add time zone"] {
+  display: none !important;
+}
+
+/* The day header renders the full weekday name ("domingo") in 1fr tracks:
+ * on a phone the 35px tracks are narrower than the names, so each track
+ * grows to fit its word and the header drifts off the grid columns (the
+ * grid itself stays 35px). Let the header cells shrink to the track and
+ * stack the name above the number, small enough to fit, so the header
+ * stays aligned with the columns it labels. Re-check after any CalendarCN
+ * upgrade. */
+[data-mobile-week] .overflow-clip > div > [aria-hidden] > div.flex {
+  min-width: 0;
+  flex-direction: column;
+  gap: 0;
+}
+
+[data-mobile-week] .overflow-clip > div > [aria-hidden] > div.flex > span:first-child {
+  font-size: 10px;
+  line-height: 1.2;
+}

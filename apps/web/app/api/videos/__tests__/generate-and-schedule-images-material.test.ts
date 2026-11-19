@@ -1,9 +1,4 @@
 // @vitest-environment node
-//---------------
-// The "images" material (issue #481) on generate-and-schedule: every
-// segment must carry media, and a missing one is a 400 before auth and
-// before any token is charged.
-//---------------
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('@/lib/analytics', () => ({ trackApiEvent: vi.fn() }));

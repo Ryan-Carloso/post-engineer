@@ -4,14 +4,6 @@ import { useI18n } from '@/lib/i18n/provider';
 import type { SlotDetailPayload } from '@/lib/api';
 import { buildGenerationRows } from './generation-rows';
 
-//---------------
-// GenerationFactsSection — read-only record of what the post was generated
-// with. The facts come from the post_* snapshot columns written at creation
-// (migration 012) plus the slot's faceless flag — deliberately a snapshot,
-// so editing the persona afterwards cannot rewrite an already-queued video.
-// This section is a record of what was charged for: it must never gain edit
-// affordances.
-//---------------
 export const GenerationFactsSection = ({
   generation,
   personaName,

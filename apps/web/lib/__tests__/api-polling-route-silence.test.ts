@@ -1,20 +1,3 @@
-//---------------
-// API polling-route silence — a polled route must not emit a 2xx success
-// event per poll.
-//
-// withApiErrorReporting reports every 2xx under the route's semantic
-// success name. On a route that a client polls (video status, slot
-// detail) that turns one user action into hundreds of identical read
-// events, burying real actions (post published, tokens spent). Those
-// routes opt out with `reportSuccess: false`; failures (4xx warnings and
-// 5xx $exceptions) stay reported either way.
-//
-// This test pins both directions: every route on the polling list opts
-// out, and no other route does — silencing a real action's success event
-// is a telemetry decision, not a drive-by. Adding a route to the list is
-// deliberate.
-//---------------
-
 import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
@@ -23,8 +6,6 @@ import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 const apiDir = join(here, '..', '..', 'app', 'api');
 
-// Routes a client re-reads on an interval: one success event per poll is
-// noise. Every other route keeps its semantic 2xx event.
 const POLLING_ROUTE_LABELS = new Set([
   'GET /api/persona/video-generations',
   'GET /api/persona/video-status/[taskId]',
@@ -46,8 +27,6 @@ function collectRouteFiles(dir: string): string[] {
   return out.sort();
 }
 
-// Extract each withApiErrorReporting(...) call's full argument text
-// (paren-balanced) so multi-line options objects are covered.
 function extractWrapperCalls(content: string): string[] {
   const calls: string[] = [];
   const marker = 'withApiErrorReporting(';
@@ -76,8 +55,6 @@ interface WrappedCall {
   text: string;
 }
 
-// Resolve the label of each call, honouring `const NAME = 'label'`
-// indirection so an indirect label is never mistaken for an unnamed one.
 function collectWrappedCalls(): WrappedCall[] {
   const calls: WrappedCall[] = [];
   for (const file of collectRouteFiles(apiDir)) {

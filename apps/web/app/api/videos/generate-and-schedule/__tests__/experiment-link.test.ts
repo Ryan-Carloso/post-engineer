@@ -9,12 +9,6 @@ import { EXPERIMENT_VIDEO_LINKED_EVENT } from '../experiment-link-telemetry';
 import { buildPairFacts, checkExperimentLink, ExperimentLinkSchema, pairMismatch, verifyExperimentPairAfterInsert, type PairFacts } from '../experiment-link';
 import type { PersonaPrep } from '../persona-prep';
 
-//---------------
-// Experiment link checks for generate-and-schedule (issue #476). The
-// Supabase mock records each query's filters and answers per table, like
-// PostgREST: a select chain ending in maybeSingle() or awaited directly.
-//---------------
-
 const EXPERIMENT_ID = '7b0e6c1e-0000-4000-8000-000000000001';
 const USER_ID = 'user-1';
 const SCHEDULE_ID = 'sched-current';
@@ -101,7 +95,6 @@ const PARTNER_SCHEDULE = {
   },
   error: null,
 };
-// jsonb reorders keys: the stored partner segments come back reordered.
 const PARTNER_SLOT = {
   schedule_id: 'sched-partner',
   variant_id: 'hook-calm',
@@ -142,7 +135,6 @@ describe('checkExperimentLink', () => {
     const { promise, filters } = run({ experiment: OK_EXPERIMENT, variants: OK_VARIANTS, slots: { data: [], error: null } });
     await expect(promise).resolves.toEqual({ ok: true });
     expect(filters).toContainEqual({ table: 'experiments', column: 'user_id', value: USER_ID });
-    // The variants query is scoped through the experiment id the ownership query used.
     const ownedId = filters.find((f) => f.table === 'experiments' && f.column === 'id')?.value;
     expect(ownedId).toBe(EXPERIMENT_ID);
     expect(filters).toContainEqual({ table: 'experiment_variants', column: 'experiment_id', value: ownedId });
@@ -362,8 +354,6 @@ describe('verifyExperimentPairAfterInsert', () => {
 
     function linkedCall(): Record<string, unknown> | undefined {
       const call = vi.mocked(trackApiEventAs).mock.calls.find((entry) => entry[1] === EXPERIMENT_VIDEO_LINKED_EVENT);
-      // Attributed to the caller, so the experiments funnel joins it to
-      // the same person as experiments (action: create) and results.
       expect(call?.[0]).toBe(USER_ID);
       return call?.[2];
     }

@@ -4,11 +4,6 @@ import { render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 
-//---------------
-// /account page tests — the Perfil/Profile area reachable from the
-// mobile header avatar. Written BEFORE the implementation (TDD).
-//---------------
-
 vi.mock('next/link', () => ({
   default: ({ href, children, ...rest }: React.ComponentProps<'a'> & { href: string }) => (
     <a href={href} {...rest}>{children}</a>

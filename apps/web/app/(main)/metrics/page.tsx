@@ -29,16 +29,6 @@ import {
 } from '@/lib/metrics/metrics-query';
 import { sortByViews, summarize, useMetricsQuery } from '@/lib/metrics/metrics-dashboard';
 
-//---------------
-// MetricsPage — how are my videos doing? Totals over the visible rows
-// (videos measured, total views, total engagement), then either the
-// charts (views over time by publish day, views by network or persona,
-// top videos) or the per-video list sorted by views, highest first.
-// Charts is the default view. One filter bar: the window Tabs plus a
-// Filters Sheet with Persona and Network only. The A/B experiment
-// comparison lives on /experiments.
-//---------------
-
 const WINDOW_LABEL_KEYS: Record<MetricsQuery['window'], TranslationKey> = {
   '24h': 'metrics.window24h',
   '7d': 'metrics.window7d',
@@ -52,10 +42,6 @@ export default function MetricsPage(): React.ReactElement {
   const { t, locale } = useI18n();
   const [query, setQuery] = useState<MetricsQuery>(EMPTY_QUERY);
   const [view, setView] = useState<MetricsView>('chart');
-  // The saved view is read after mount, not during the first render,
-  // so the server render (default 'chart') and the client render
-  // agree and there is no hydration mismatch for a viewer with a
-  // stored preference either way.
   useEffect(() => {
     setView(readMetricsView());
   }, []);
@@ -64,8 +50,6 @@ export default function MetricsPage(): React.ReactElement {
     writeMetricsView(next);
   };
   const scrollToRow = (row: MetricsRowView): void => {
-    // A bar click only peeks at the list to land on the row: it must
-    // not rewrite the viewer's saved preference.
     setView('list');
     window.requestAnimationFrame(() => {
       document.getElementById(rowElementId(row))?.scrollIntoView({ block: 'center' });
@@ -89,8 +73,6 @@ export default function MetricsPage(): React.ReactElement {
     () => (result !== undefined && result.success ? result.rows : []),
     [result],
   );
-  // Coverage (issue #525): the published videos with no snapshot for this
-  // window, and the newest collection time. Empty until the first load.
   const coverage: CoverageItem[] = result !== undefined && result.success ? result.coverage : [];
   const coverageTruncated = result !== undefined && result.success ? result.coverageTruncated : false;
   const asOf = result !== undefined && result.success ? result.asOf : null;
@@ -124,8 +106,6 @@ export default function MetricsPage(): React.ReactElement {
     new Date(iso).toLocaleDateString(locale === 'pt' ? 'pt-BR' : 'en-US', { dateStyle: 'medium' });
   const formatDateTime = (iso: string): string =>
     new Date(iso).toLocaleString(locale === 'pt' ? 'pt-BR' : 'en-US', { dateStyle: 'medium', timeStyle: 'short' });
-  // Tokens granted before yt-analytics.readonly: one prompt for the page,
-  // never zeros in the rows.
   const needsReconnect = rows.some((row) => row.analyticsStatus === 'scope_missing');
   const fallbackTitle = (row: MetricsRowView): string =>
     row.scriptAngle ?? `${PROVIDER_LABELS[row.provider]} · ${formatDate(row.collectedAt)}`;

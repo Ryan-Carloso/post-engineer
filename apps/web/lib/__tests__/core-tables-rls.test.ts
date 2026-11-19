@@ -3,15 +3,6 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { findRepoRoot } from '@/test/repo-root';
 
-//---------------
-// 066_core-tables-rls.sql — least privilege for the 001 core tables.
-// A `for all` owner policy plus Supabase's default table grant lets a
-// logged-in user write billing columns through PostgREST (issue #464
-// review). This pins the policy shape and the column grants. Restoring
-// `for all` on user_profiles fails here even when a column revoke would
-// still deny the write.
-//---------------
-
 const repoRoot = findRepoRoot(import.meta.url);
 const migrationPath = join(repoRoot, 'supabase', 'migrations', '066_core-tables-rls.sql');
 const retiredPath = join(repoRoot, 'supabase', 'migrations', '065_core-tables-rls.sql');

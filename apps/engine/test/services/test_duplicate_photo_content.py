@@ -68,7 +68,6 @@ def test_same_bytes_under_two_media_ids_second_is_skipped(tmp_path, monkeypatch)
     assert len(prepared) == 1
     assert prepared[0].index == 0
     assert skipped == ["segment 0 image 1 media skipped: duplicate photo"]
-    # The warning carries labels only: no mediaId of either copy.
     assert "aabbccdd" not in skipped[0] and "00112233" not in skipped[0]
 
 
@@ -94,9 +93,7 @@ def test_same_bytes_behind_two_urls_second_is_skipped(tmp_path, monkeypatch):
         )
     assert len(prepared) == 1
     assert skipped == ["segment 0 image 1 media skipped: duplicate photo"]
-    # The second download is removed with the skip, not left on disk.
     assert not (tmp_path / "segment-media-0-1.raw").exists()
-    # The warning carries labels only: no URL or query string.
     assert "e.com" not in skipped[0] and "sig=" not in skipped[0]
 
 
@@ -144,9 +141,6 @@ def test_same_bytes_across_segments_second_is_skipped(tmp_path, monkeypatch):
 
 
 def test_first_copy_that_fails_to_render_does_not_block_its_repeat(tmp_path, monkeypatch):
-    # The hash is claimed only once the panel actually exists: a first
-    # copy whose panel fails to render placed nothing, so its identical
-    # repeat must render instead of being skipped as a duplicate.
     monkeypatch.setattr(user_media, "_temp_assets_dir", lambda: str(tmp_path))
 
     def fake_download(url, dest_path, session=None):

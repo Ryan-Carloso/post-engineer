@@ -1,80 +1,23 @@
-//---------------
-// Shared API error responder.
-//
-// Migrated Web API error responses (4xx and 5xx) flow through
-// apiErrorResponse so PostHog receives enough structured context to debug
-// the real cause, while clients only see safe public messages. The returned
-// errorId is the logger's logId: users can report it and we can find the
-// exact event.
-//
-// Safety rules:
-// - 4xx (user/input errors) are logged as warnings; 5xx as errors with the
-//   underlying cause, so PostHog captures the real failure.
-// - Metadata keys that look secret-bearing (tokens, passwords, auth
-//   headers, ...) are redacted before logging — never pass raw request
-//   bodies, signed URLs, or credentials here.
-// - Telemetry must never break the request path: logging is wrapped so a
-//   throwing logger still yields a valid error response.
-//---------------
-
 import { NextResponse } from 'next/server';
 import { logger } from './logger';
 import { scrubSecrets, redactCredentialFragments } from './scrub';
 import { markApiErrorReported, attachApiErrorProperties } from './api-error-reporting';
 
 export interface ApiErrorOptions {
-  // Route identifier for debugging, e.g. 'POST /api/schedule'.
   route?: string;
-  // Underlying failure — reported to PostHog as the exception cause on 5xx,
-  // and as a serialized string in metadata on 4xx (logger.warn has no
-  // cause parameter). Keep it out of the client response: only the public
-  // message is returned.
   cause?: unknown;
-  // Stable template for the PostHog log message. When the public error
-  // embeds user-controlled input (e.g. a malformed field value), pass a
-  // stable template here so PostHog groups by the template instead of
-  // creating one issue per distinct input; put the raw value (truncated)
-  // in metadata. Defaults to the public error message.
   logMessage?: string;
-  // Safe metadata only: ids, counts, validated enums. Never auth headers,
-  // tokens, passwords, app passwords, raw request bodies, or signed URLs.
-  // Logged to PostHog, never returned to the client.
   metadata?: Record<string, unknown>;
-  // Extra client-safe fields merged into the JSON response body
-  // (e.g. { code: 'INSUFFICIENT_TOKENS' }). Also logged for debugging.
-  // Must be client-safe: no internals, no secrets.
   extra?: Record<string, unknown>;
-  // Stable machine-readable error code (see lib/error-codes.ts), returned
-  // as a top-level `code` field so API, MCP and UI share one contract.
-  // `error` stays the human-readable message (backwards compatible).
   code?: string;
-  // Leave PostHog reporting to the outer withApiErrorReporting wrapper
-  // (which emits the route's semantic `<name>_rejected` event, e.g.
-  // persona_created_rejected) instead of reporting here as the generic
-  // server_warning. Mirrors the built-in 401/403 pattern for 4xx codes
-  // that must stay grouped under their route's semantic event. The
-  // scrubbed metadata is attached to the response as event properties.
   leaveReportingToWrapper?: boolean;
-  // Request field the error belongs to (e.g. 'publishing.accounts.youtube'),
-  // so the UI can highlight the right input. Omitted when not field-specific.
   field?: string;
 }
-
-// Secret-scrubbing policy lives in ./scrub.ts (shared with analytics.ts):
-// metadata keys that look secret-bearing are redacted before logging.
-
-//---------------
-// Public API: ApiErrorOptions
-//---------------
 
 function fallbackErrorId(): string {
   return `fallback_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 8)}`;
 }
 
-// Serialize a cause for 4xx metadata. logger.warn has no cause parameter,
-// so the cause rides in metadata instead of being silently dropped.
-// Errors serialize to their message; other values are JSON-stringified
-// (truncated) so PostHog shows something useful.
 function serializeCause(cause: unknown): string {
   if (cause instanceof Error) return redactCredentialFragments(cause.message).slice(0, 300);
   try {
@@ -92,19 +35,12 @@ export function apiErrorResponse(
   options?: ApiErrorOptions,
 ): NextResponse {
   const route = options?.route ?? 'unknown route';
-  // Extra response fields are safe by contract, but scrub them anyway:
-  // defense in depth against a caller accidentally passing something secret.
-  // code/field are first-class: they ride in the body AND the logged
-  // metadata so PostHog can group by code.
   const extra = scrubSecrets({
     ...(options?.code !== undefined ? { code: options.code } : {}),
     ...(options?.field !== undefined ? { field: options.field } : {}),
     ...(options?.extra ?? {}),
   });
   const metadata = scrubSecrets({ route, ...(options?.metadata ?? {}), ...extra });
-  // The PostHog message uses the stable template when provided, so
-  // user-controlled input in the public error doesn't create one issue
-  // per distinct value. The client still receives the detailed message.
   const logMessage = options?.logMessage ?? error;
   const message = `[${route}] ${status} ${logMessage}`;
 
@@ -115,43 +51,22 @@ export function apiErrorResponse(
     if (status >= 500) {
       errorId = logger.error(message, options?.cause, metadata);
     } else if (status === 401 || status === 403 || leaveReportingToWrapper) {
-      // Auth failures and wrapper-reported responses (opt-in via
-      // leaveReportingToWrapper, e.g. the UNKNOWN_VOICE voice rejection)
-      // log console-only here (no logger.warn): the withApiErrorReporting
-      // wrapper reports them to PostHog as the route's
-      // `<semantic_name>_rejected` event instead, so there is still
-      // exactly one event.
-      // The errorId is still returned so clients get a consistent shape.
-      // Use %s format to avoid CodeQL format-string warning on the
-      // interpolated route/status/message.
       console.warn('%s', `[${route}] ${status} ${logMessage}`, metadata);
       errorId = fallbackErrorId();
     } else if (options?.cause !== undefined) {
-      // 4xx can carry a cause too (e.g. Stripe signature verification
-      // failure) — logger.warn has no cause parameter, so serialize it
-      // into metadata instead of silently dropping it.
       errorId = logger.warn(message, { ...metadata, cause: serializeCause(options.cause) });
     } else {
       errorId = logger.warn(message, metadata);
     }
   } catch {
-    // Telemetry must never break the request path.
     errorId = fallbackErrorId();
   }
 
-  // extra strings are fragment-redacted by scrubSecrets. The top-level
-  // error is the same text as errors[0].message on validation 400s, so it
-  // gets the same treatment or the body would keep the only raw copy.
   const publicError = redactCredentialFragments(error);
   const response = NextResponse.json(
     { success: false, error: publicError, errorId, ...extra },
     { status },
   );
-  // logger.error (5xx) and logger.warn (other 4xx) above already reported to
-  // PostHog: mark the response so withApiErrorReporting skips it instead of
-  // emitting a duplicate. 401/403 and leaveReportingToWrapper responses are
-  // console-only here — leave them unmarked so the wrapper reports them (as
-  // `<semantic_name>_rejected`), carrying the attached scrubbed metadata.
   if (leaveReportingToWrapper) {
     attachApiErrorProperties(response, metadata);
   } else if (status >= 400 && status !== 401 && status !== 403) markApiErrorReported(response);

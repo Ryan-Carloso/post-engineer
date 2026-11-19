@@ -1,10 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-//---------------
-// Testes de GET /api/persona/list — personas do usuário logado,
-// com signed URLs para foto e amostra de voz.
-//---------------
-
 vi.mock('@/lib/supabase/server', () => ({
   createSupabaseServerClient: vi.fn(),
 }));
@@ -99,7 +94,6 @@ const LIBRARY_ROWS = [
   },
 ];
 
-// Issue #572: the bound publishing accounts per persona (persona_default_accounts).
 const BINDING_ROWS = [
   { persona_id: 'p-1', provider: 'youtube', provider_account_id: 'yt-1' },
   { persona_id: 'p-1', provider: 'instagram', provider_account_id: 'ig-1' },
@@ -117,6 +111,7 @@ const EMPTY_BINDING = {
   '3speak': [],
   rumble: [],
   fanvue: [],
+  telegram: [],
 };
 
 function mockSupabase(
@@ -157,8 +152,6 @@ function mockSupabase(
   const client = {
     from: vi.fn((table: string) => {
       if (table === 'persona_default_accounts') {
-        // The table carries no user_id: the scope is the listed persona
-        // ids, which the route already filtered to the caller.
         return {
           select: vi.fn(() => ({
             in: vi.fn(async (_col: string, ids: string[]) => {
@@ -324,12 +317,6 @@ describe('GET /api/persona/list', () => {
     expect(body.personas[0].niche).toBe('finanças pessoais');
     expect(body.personas[1].niche).toBeUndefined();
   });
-
-  //---------------
-  // Issue #572 — the list carries each persona's bound publishing accounts
-  // (persona_default_accounts), scoped to the listed personas, so the card
-  // can show where the persona publishes — and warn when it binds nothing.
-  //---------------
 
   it('returns the bound publishing accounts per persona', async () => {
     const { bindingFilters } = mockSupabase();

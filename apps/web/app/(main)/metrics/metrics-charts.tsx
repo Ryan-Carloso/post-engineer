@@ -20,23 +20,8 @@ import {
   type ChartMetric,
 } from '@/lib/metrics/metrics-chart-data';
 
-//---------------
-// MetricsCharts — the three chart cards of the /metrics charts view,
-// all computed from the rows already on screen (the charts follow the
-// window tabs and the Persona/Network filters because the rows do).
-// Nulls are excluded from every sum and stated in a caption. Presentational:
-// the page owns the query and passes the rows in.
-//---------------
-
 export type MetricsView = 'chart' | 'list';
 
-//---------------
-// The Chart/List toggle is remembered per viewer: localStorage may
-// throw (private mode, disabled storage), so every read/write is in a
-// try/catch. The default view is the chart (the feature this page
-// ships); it falls back to the chart when nothing is stored, and only
-// a saved 'list' opts the viewer out.
-//---------------
 export const METRICS_VIEW_STORAGE_KEY = 'metrics-view-mode';
 
 export function readMetricsView(): MetricsView {
@@ -52,19 +37,12 @@ export function writeMetricsView(view: MetricsView): void {
   try {
     window.localStorage.setItem(METRICS_VIEW_STORAGE_KEY, view);
   } catch {
-    // Storage unavailable: the page still holds the choice in state.
   }
 }
 
 export function rowElementId(row: MetricsRowView): string {
   return `metric-row-${row.postId}-${row.provider}-${row.externalId}`;
 }
-
-//---------------
-// withoutViewsKey / withoutPublishDateKey / withoutMetricKey
-// map the excluded-row captions to their singular (count === 1) or
-// plural copy. The i18n keys exist in PT and EN so the sentence reads
-// "1 vídeo/video" for one and "N vídeos/videos" otherwise.
 
 export function withoutViewsKey(count: number): 'metrics.chartsWithoutView' | 'metrics.chartsWithoutViews' {
   return count === 1 ? 'metrics.chartsWithoutView' : 'metrics.chartsWithoutViews';
@@ -277,9 +255,6 @@ export function MetricsCharts({ rows, isLoading, isError, truncated, personaLabe
               <ChartTooltip cursor={{ fill: 'var(--color-value)', fillOpacity: 0.12 }} content={<ChartTooltipContent
                 formatter={(value, name) => `${String(topConfig[String(name)]?.label ?? name)}: ${formatNumber(Number(value))}`}
               />} />
-              {/* The click handler lives on the series: Recharts calls a <Bar>
-                  onClick with (datum, index, event), while a chart-level
-                  BarChart onClick gets (chartState, event) instead. */}
               <Bar
                 dataKey="value"
                 fill="var(--color-value)"

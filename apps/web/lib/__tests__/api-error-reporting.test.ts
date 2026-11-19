@@ -1,16 +1,3 @@
-//---------------
-// withApiErrorReporting — unit tests.
-//
-// Next.js's onRequestError (instrumentation.ts) only fires for unhandled
-// (thrown) errors. This wrapper closes the gap for handled responses:
-// 5xx go to PostHog error tracking ($exception), 4xx (including 401/403)
-// go as warnings (server_warning), 2xx go as plain success events
-// (server_success). When the route opts in via getUserId, events are
-// attributed to the real user (PostHog distinct_id) instead of the shared
-// post-engineer-server identity; routes without the opt-in keep the
-// shared identity.
-//---------------
-
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -230,7 +217,6 @@ describe('withApiErrorReporting', () => {
         code: 'BAD_INPUT',
       });
       expect(client.captureException).not.toHaveBeenCalled();
-      // The client-visible response is never mutated by reporting.
       expect(await res.json()).toMatchObject({ code: 'BAD_INPUT' });
     },
   );
@@ -288,14 +274,11 @@ describe('withApiErrorReporting', () => {
       status: 500,
       code: 'INTERNAL_ERROR',
     });
-    // Never a blind exception: message and type travel as explicit
-    // properties (the stable route + status + code string, no user text).
     expect(properties).toMatchObject({
       $exception_message: '[POST /api/videos/generate-and-schedule] 500 INTERNAL_ERROR',
       $exception_type: 'Error',
     });
     expect(error.message).toBe('[POST /api/videos/generate-and-schedule] 500 INTERNAL_ERROR');
-    // The client-visible response is never mutated by reporting.
     expect(await res.json()).toMatchObject({
       success: false,
       code: 'INTERNAL_ERROR',
@@ -369,7 +352,6 @@ describe('withApiErrorReporting', () => {
     });
 
     await expect(wrapped(getRequest())).rejects.toThrow('boom');
-    // Give the fire-and-forget path a chance to (incorrectly) run.
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(client.captureException).not.toHaveBeenCalled();
   });
@@ -579,7 +561,6 @@ describe('withApiErrorReporting', () => {
       Error,
       Record<string, unknown>,
     ];
-    // No request to resolve the user from — reported without a user id.
     expect(properties).toMatchObject({ route: 'GET /api/health', status: 500 });
     expect(properties).not.toHaveProperty('userId');
   });
@@ -612,7 +593,6 @@ describe('withApiErrorReporting reportSuccess opt-out', () => {
 
     const res = await wrapped(getRequest());
 
-    // The response itself is untouched — only the telemetry is silenced.
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ status: 'processing' });
     await new Promise((resolve) => setTimeout(resolve, 10));
@@ -646,7 +626,6 @@ describe('withApiErrorReporting reportSuccess opt-out', () => {
     expect(res.status).toBe(404);
     await vi.waitFor(() => expect(client.capture).toHaveBeenCalledTimes(1));
     const [event] = client.capture.mock.calls[0] as [string];
-    // Semantic name for this mapped route (see api-telemetry-names.ts).
     expect(event).toBe('video_status_fetched_rejected');
     expect(client.captureException).not.toHaveBeenCalled();
   });
@@ -681,8 +660,6 @@ describe('withApiErrorReporting semantic event names', () => {
       Record<string, unknown>,
     ];
     expect(event).toBe('billing_transactions_fetched');
-    // route + status stay in the properties: dashboards grouping by route
-    // keep working through the cut-over.
     expect(properties).toMatchObject({
       route: 'GET /api/billing/transactions',
       status: 200,
@@ -731,8 +708,6 @@ describe('withApiErrorReporting semantic event names', () => {
     } as never);
     const res = await wrapped(getRequest('http://localhost/api/persona', 'POST'));
 
-    // The response goes out untouched; NO logger.warn here (that path
-    // reports server_warning itself) — the wrapper is the single reporter.
     expect(res.status).toBe(400);
     expect(logger.warn).not.toHaveBeenCalled();
     expect(console.warn).toHaveBeenCalledWith(
@@ -740,9 +715,6 @@ describe('withApiErrorReporting semantic event names', () => {
       '[POST /api/persona] 400 Unknown voice',
       expect.objectContaining({ voice: 'energetic' }),
     );
-    // The wrapper emits the route's semantic _rejected event attributed to
-    // the user (captureAs), with the code from the body AND the attached
-    // attempted-voice property. Exactly one event: no server_warning.
     await vi.waitFor(() => expect(client.captureAs).toHaveBeenCalledTimes(1));
     const [userId, event, properties] = client.captureAs.mock.calls[0] as [
       string,
@@ -854,8 +826,6 @@ describe('withApiErrorReporting display-name person property', () => {
       string,
       Record<string, unknown>,
     ];
-    // The uuid is the identity (names change and can collide); the name is
-    // only a person property, never the distinct_id.
     expect(distinctId).toBe('user-123');
     expect(distinctId).not.toBe('Ryan');
     expect(properties).toMatchObject({ userId: 'user-123', $set: { name: 'Ryan' } });

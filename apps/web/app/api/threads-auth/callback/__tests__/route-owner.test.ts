@@ -2,8 +2,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NextRequest } from 'next/server';
 
-// Connect-url (MCP) flow against the real resolveOAuthCallbackAuth: only the
-// framework, the provider client and the persistence sink are mocked.
 vi.mock('@/lib/api-error-reporting', () => ({ withApiErrorReporting: (_route: string, handler: unknown) => handler }));
 vi.mock('@/lib/supabase/server', () => ({ createSupabaseServerClient: vi.fn() }));
 vi.mock('@/lib/supabase/service', () => ({ createSupabaseServiceClient: vi.fn() }));
@@ -17,7 +15,6 @@ vi.mock('@/lib/threads', () => ({
   fetchThreadsProfile: vi.fn(),
 }));
 vi.mock('@/lib/oauth-utils', () => ({
-  // the browser carries no nonce cookie for this state: connect-url flow
   decodeOAuthState: vi.fn(() => ({ provider: 'threads', nonce: 'n', redirectUri: 'https://app.example/cb' })),
   verifyOAuthNonce: vi.fn(() => false),
   oauthPopupResponse: vi.fn((type: string, data: unknown) => Response.json({ type, data })),
@@ -77,7 +74,6 @@ describe('GET /api/threads-auth/callback — connect-url owner binding', () => {
       provider: 'threads',
       providerAccountId: '42',
     });
-    // the service role only ever touched oauth_states
     expect(store.tables).toEqual(['oauth_states']);
   });
 

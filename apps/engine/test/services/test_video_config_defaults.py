@@ -25,8 +25,6 @@ class TestVideoConfigDefaults(unittest.TestCase):
 
     def setUp(self):
         self.example_text = example_config.read_text(encoding="utf-8")
-        # Isolate from the ambient config so these pin the shipped DEFAULT,
-        # not whatever this machine's gitignored config.toml happens to say.
         self._original_config = dict(config.app)
         config.app.pop("video_preset", None)
         config.app.pop("video_codec", None)

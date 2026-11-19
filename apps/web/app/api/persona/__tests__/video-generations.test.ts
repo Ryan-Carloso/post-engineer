@@ -1,11 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-//---------------
-// Tests for GET /api/persona/video-generations — the user's video
-// generation history. Supabase is a mocked boundary; the row mapping and
-// the ?limit= validation are real.
-//---------------
-
 vi.mock('@/lib/request-auth', () => ({
   requireSupabaseSession: vi.fn(),
 }));
@@ -90,10 +84,6 @@ describe('GET /api/persona/video-generations', () => {
   });
 
   it('never selects or returns the raw engine error message', async () => {
-    // Review MINOR: error_message may contain paths or upstream bodies and
-    // is kept server-side for support only — the UI renders errorCode, so
-    // the API must not ship the raw text to the browser (visible via
-    // devtools even when never rendered).
     const client = mockClient([ROW]);
     vi.mocked(createSupabaseServerClient).mockResolvedValue(client as never);
 

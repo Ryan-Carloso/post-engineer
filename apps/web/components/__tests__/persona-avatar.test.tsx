@@ -28,12 +28,6 @@ vi.mock('@/lib/client-logger', () => ({
 
 import PersonaAvatar from '../persona-avatar';
 
-//---------------
-// PersonaAvatar — avatar, then photo, then library, then initials. The
-// personas list passes libraryUrl; the create-post picker does not. The
-// fallback order is pinned here rather than in either screen.
-//---------------
-
 beforeEach(() => {
   vi.clearAllMocks();
 });
@@ -134,12 +128,9 @@ describe('PersonaAvatar', () => {
   it('drops a leading @ when building initials from a handle', () => {
     render(<PersonaAvatar name="@resenha.fut" />);
 
-    // "@resenha.fut" -> tokens ["resenha", "fut"] -> "RF".
     expect(screen.getByText('RF')).toBeInTheDocument();
   });
 
-  // A signed Supabase URL expires; a broken one used to leave a blank circle
-  // with no diagnostic trail, so the failure must degrade like the fallback.
   it('degrades to the initials when the image fails to load', () => {
     render(<PersonaAvatar avatarUrl="https://x.test/gone.png" name="Viva Leve" />);
 
@@ -204,8 +195,6 @@ describe('PersonaAvatar', () => {
     expect(screen.getByText('VL')).toBeInTheDocument();
   });
 
-  // An aborted request (unmount / Fast Refresh) fires `error` too: reacting
-  // to it logged a false failure AND threw away a photo that was fine.
   it('ignores the error of a load aborted by unmount', () => {
     const { unmount } = render(<PersonaAvatar avatarUrl="https://x.test/ok.png" name="Viva Leve" />);
     const image = screen.getByAltText('Viva Leve');
@@ -216,11 +205,6 @@ describe('PersonaAvatar', () => {
     expect(mockWarn).not.toHaveBeenCalled();
   });
 
-  //---------------
-  // The diagnostics: "no photo" has two very different causes and both used
-  // to be silent. The logged source is redacted (a storage URL's query holds
-  // the signature token).
-  //---------------
   it('warns (not errors) about a failed image with a redacted source', () => {
     render(
       <PersonaAvatar

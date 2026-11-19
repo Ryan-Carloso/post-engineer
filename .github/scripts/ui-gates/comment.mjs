@@ -1,16 +1,3 @@
-//---------------
-// PR comment rendering for the UI coverage gates.
-//
-// Findings shape:
-// {
-//   uiFiles: string[],
-//   vitest:   { covered, total, status: 'pass'|'fail' } | { status: 'na'|'missing', reason },
-//   cypress:  { covered, total, status, inScope: string[], exempt: string[] } | { status: 'na'|'missing', reason },
-//   mutation: { score, killed, survived, timeout, total, status } | { status: 'na'|'missing', reason },
-//   pass: boolean,
-// }
-//---------------
-
 export const COMMENT_MARKER = '<!-- ui-coverage-gates -->';
 
 export const VITEST_MIN = 80;
@@ -86,11 +73,6 @@ function renderNotes(findings) {
   return notes;
 }
 
-//---------------
-// CLI: node comment.mjs --findings <path-to-findings.json>
-//   prints the rendered markdown to stdout (used by the workflow to
-//   post/refresh the single PR comment).
-//---------------
 import fs from 'node:fs';
 
 const invokedAsCli = process.argv[1] && process.argv[1].endsWith('comment.mjs');

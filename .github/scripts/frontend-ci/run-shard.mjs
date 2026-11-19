@@ -1,11 +1,3 @@
-//---------------
-// run-shard — print the vitest files for one CI shard, one path per line.
-//
-// Diagnostics go to stderr so the caller can capture stdout as the file list.
-// A pull request lists changed tests with `vitest list --changed`. If that
-// command fails, the shard runs the full suite instead of skipping it.
-//---------------
-
 import { execFileSync } from 'node:child_process';
 import { readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';

@@ -306,7 +306,6 @@ describe('app/(main)/layout — MainLayout', () => {
       isLoading: false,
     } as never);
     render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
-    // The avatar shows in the sidebar user block and in the mobile header link.
     const sidebarImg = within(screen.getByTestId('profile-user-link')).getByRole('img', { name: 'A' });
     expect(sidebarImg).toHaveAttribute('src', 'https://example.com/avatar.png');
     const headerImg = within(screen.getByTestId('mobile-profile-link')).getByRole('img', { name: 'A' });
@@ -403,8 +402,6 @@ describe('app/(main)/layout — MainLayout', () => {
       const labels = within(getMobileNav())
         .getAllByRole('link')
         .map((link) => link.textContent);
-      // The mobile tab uses the short label. The full prompts label
-      // wraps to two lines in a ~70px tab.
       expect(labels).toEqual(['nav.posts', 'nav.persona', 'nav.accounts', 'nav.promptsShort']);
     });
 

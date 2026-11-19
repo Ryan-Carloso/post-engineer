@@ -1,22 +1,11 @@
 // @vitest-environment node
-// API routes use native Request/FormData (undici); jsdom mixes
-// implementations and hangs `request.formData()`.
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-
-//---------------
-// Tests for /api/persona/images — persona image library CRUD.
-// Auth and Supabase are mocked boundaries; ownership checks, the 10-image
-// limit, file validation, and primary-image handling are real.
-//---------------
 
 vi.mock('@/lib/request-auth', () => ({
   requireSupabaseSession: vi.fn(),
 }));
 
 vi.mock('@/lib/rate-limit', async (importOriginal) => {
-  // Rate limiting is covered by the dedicated
-  // app/api/persona/__tests__/images-rate-limit.test.ts suite; these
-  // payload-behavior tests bypass it so every case reaches the handler.
   const actual = await importOriginal<typeof import('@/lib/rate-limit')>();
   return {
     ...actual,
@@ -38,9 +27,6 @@ import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { logger } from '@/lib/logger';
 
-// The 400 log line pins the route string and the stable template: without
-// it, blanking either string in the response call changes nothing any test
-// observes (the body carries neither).
 const warnSpy = vi.spyOn(logger, 'warn');
 function loggedWarnings(): string[] {
   return warnSpy.mock.calls.map((call) => String(call[0]));
@@ -65,38 +51,14 @@ interface DbState {
   listRows: unknown[];
   insertedRow: unknown | null;
   updatedRow: unknown | null;
-  /** Makes the set_primary_persona_image RPC fail (primary-swap error path). */
   failPrimarySwap?: boolean;
-  /**
-   * Makes the set_primary_persona_image RPC fail with code P0002 (the image
-   * row vanished between the ownership check and the swap).
-   */
   failPrimarySwapGone?: boolean;
-  /** Makes the persona_images metadata UPDATE fail (partial-commit path). */
   failUpdate?: boolean;
-  /** Storage paths for which createSignedUrl fails (image_url_error path). */
   failSignPaths?: string[];
-  /**
-   * Makes the metadata UPDATE report PGRST116 (the row was concurrently
-   * deleted between the ownership check and the update): 404, not 500.
-   */
   failUpdateGone?: boolean;
-  /**
-   * Makes the post-mutation row refetch fail (fetchImageRow returns null).
-   * The default select branch serves the refetch in PATCH/POST flows.
-   */
   failRefetch?: boolean;
-  /** Makes the storage remove() call fail (orphan-file logging path). */
   storageRemoveError?: { message: string } | null;
-  /**
-   * Makes the personas ownership lookup fail with a PostgREST error.
-   * code 'PGRST116' = zero rows (404); anything else = DB failure (500).
-   */
   personaLookupError?: { code?: string; message: string } | null;
-  /**
-   * Makes the persona_images single-row lookup fail with a PostgREST error.
-   * Same PGRST116-vs-DB-failure split as personaLookupError.
-   */
   imageLookupError?: { code?: string; message: string } | null;
 }
 
@@ -147,8 +109,6 @@ function mockClient(state: Partial<DbState> = {}) {
     }),
     from: vi.fn((table: string) => {
       if (table === 'personas') {
-        // Zero rows surface as PGRST116 through .single(); the route maps
-        // that to 404 and any other DB error to 500.
         const error =
           full.personaLookupError ?? (full.persona ? null : { code: 'PGRST116', message: 'nf' });
         return terminal({ data: error ? null : full.persona, error });
@@ -217,8 +177,6 @@ function mockAuth(auth: { userId: string; isApiKey?: boolean; personaIds?: strin
 }
 
 function imageFile(name = 'photo.png', type = 'image/png', size = 1024): File {
-  // Real magic bytes matching the declared type: the server validates
-  // content, not just the declared MIME type.
   const bytes = new Uint8Array(size);
   if (type === 'image/png') bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
   if (type === 'image/jpeg') bytes.set([0xff, 0xd8, 0xff, 0xe0]);
@@ -274,8 +232,6 @@ describe('GET /api/persona/images', () => {
   });
 
   it('returns 500 (not 404) when the persona lookup fails with a real DB error', async () => {
-    // A Supabase outage must not masquerade as "not found": the client
-    // would stop retrying and there would be no diagnostic trail.
     mockAuth({ userId: USER_ID });
     mockClient({ personaLookupError: { code: 'XX000', message: 'connection reset' } });
     const res = await GET(
@@ -339,7 +295,6 @@ describe('GET /api/persona/images', () => {
       images: Array<Record<string, unknown>>;
     };
     expect(body.images[0]).not.toHaveProperty('image_path');
-    // Only the UI-needed fields are projected.
     expect(Object.keys(body.images[0] ?? {}).sort()).toEqual(
       ['created_at', 'description', 'id', 'image_url', 'is_primary', 'tag'].sort(),
     );
@@ -356,8 +311,6 @@ describe('POST /api/persona/images', () => {
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: string; code?: string; field?: string };
     expect(body.error).toContain('10');
-    // A full library names no field: the image input is fine, the
-    // library is full.
     expect(body.code).toBe('VALIDATION_FAILED');
     expect(body.field).toBeUndefined();
     expect(loggedWarnings()).toContain(
@@ -409,8 +362,6 @@ describe('POST /api/persona/images', () => {
   it('returns 400 for a zero-size image file', async () => {
     mockAuth({ userId: USER_ID });
     mockClient();
-    // imageFile() always writes magic bytes; a zero-size file needs an
-    // empty File constructed directly.
     const empty = new File([], 'empty.png', { type: 'image/png' });
     const res = await POST(postForm({ personaId: PERSONA_ID, image: empty }));
     expect(res.status).toBe(400);
@@ -423,8 +374,6 @@ describe('POST /api/persona/images', () => {
   it('rejects a non-string description with 400 instead of silently dropping it', async () => {
     mockAuth({ userId: USER_ID });
     mockClient();
-    // A File under 'description' is a valid FormDataEntryValue; silently
-    // coercing it to '' would lose the caller's metadata with a 201.
     const res = await POST(
       postForm({ personaId: PERSONA_ID, image: imageFile(), description: imageFile() }),
     );
@@ -441,8 +390,6 @@ describe('POST /api/persona/images', () => {
   it('rejects a non-string tag with 400 instead of silently dropping it', async () => {
     mockAuth({ userId: USER_ID });
     mockClient();
-    // A File under 'tag' is a valid FormDataEntryValue; silently coercing it
-    // to '' would lose the caller's metadata with a 201.
     const res = await POST(
       postForm({ personaId: PERSONA_ID, image: imageFile(), tag: imageFile() }),
     );
@@ -484,7 +431,6 @@ describe('POST /api/persona/images', () => {
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: string; code?: string; field?: string };
     expect(body.error).toBe('tag must be at most 100 characters.');
-    // The tag input failed, not the file: the UI highlights the tag input.
     expect(body.code).toBe('VALIDATION_FAILED');
     expect(body.field).toBe('tag');
     expect(loggedWarnings()).toContain(
@@ -509,11 +455,6 @@ describe('POST /api/persona/images', () => {
   });
 
   it('still reports success when the primary flag fails after upload', async () => {
-    // The image row and storage object are already committed: a primary-flag
-    // failure must not become a 500 while the image exists. Best-effort:
-    // 201 with the true is_primary state plus a warnings array so the
-    // caller knows the image is NOT primary (mirrors the PATCH
-    // partial-success contract).
     mockAuth({ userId: USER_ID });
     mockClient({ insertedRow: IMAGE_ROW, failPrimarySwap: true });
     const res = await POST(
@@ -543,9 +484,6 @@ describe('POST /api/persona/images', () => {
   });
 
   it('logs leftover storage paths when the upload rollback cannot clean up', async () => {
-    // addLibraryImages surfaces leftoverPaths when its internal rollback
-    // fails; the route must not discard them — they are the only record of
-    // the orphaned storage objects.
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     try {
       mockAuth({ userId: USER_ID });
@@ -586,9 +524,6 @@ describe('POST /api/persona/images', () => {
   });
 
   it('rejects a non-boolean isPrimary string instead of silently coercing to false', async () => {
-    // formData.get('isPrimary') === 'true' used to treat '1'/'yes'/'True' as
-    // not-primary: an API-key caller sending '1' got a 201 with a silently
-    // unset primary. Only 'true'/'false' are accepted now.
     mockAuth({ userId: USER_ID });
     mockClient({ insertedRow: IMAGE_ROW });
     const res = await POST(
@@ -605,8 +540,6 @@ describe('POST /api/persona/images', () => {
   });
 
   it('adds a library image with a single personas query (ownership only)', async () => {
-    // The faceless guard is gone with the mode, so POST's only personas read
-    // is the ownership check — one round-trip, no second fetch.
     mockAuth({ userId: USER_ID });
     const { client } = mockClient({ persona: { id: PERSONA_ID }, insertedRow: IMAGE_ROW });
     const res = await POST(
@@ -722,7 +655,6 @@ describe('PATCH /api/persona/images', () => {
     const { calls } = mockClient({ imageRow: IMAGE_ROW, updatedRow: IMAGE_ROW });
     const res = await PATCH(patchRequest({ id: IMAGE_ROW.id, isPrimary: true }));
     expect(res.status).toBe(200);
-    // One atomic swap: no separate demote/promote updates from the app.
     expect(calls.primarySwaps).toEqual([
       { p_persona_id: PERSONA_ID, p_image_id: IMAGE_ROW.id, p_user_id: USER_ID },
     ]);
@@ -738,9 +670,6 @@ describe('PATCH /api/persona/images', () => {
   });
 
   it('returns 404 when the swap RPC reports the image vanished (P0002)', async () => {
-    // A concurrent delete can race the ownership pre-check: the SQL function
-    // raises with errcode P0002, which the route maps to 404 instead of a
-    // misleading 500.
     mockAuth({ userId: USER_ID });
     mockClient({ imageRow: IMAGE_ROW, updatedRow: IMAGE_ROW, failPrimarySwapGone: true });
     const res = await PATCH(patchRequest({ id: IMAGE_ROW.id, isPrimary: true }));
@@ -750,9 +679,6 @@ describe('PATCH /api/persona/images', () => {
   });
 
   it('returns a warning-style success when the metadata update fails after a swap', async () => {
-    // The primary swap already committed atomically: a 500 would hide that
-    // from the caller. Report the true row state with a warning instead,
-    // mirroring the POST best-effort path.
     mockAuth({ userId: USER_ID });
     mockClient({ imageRow: IMAGE_ROW, updatedRow: IMAGE_ROW, failUpdate: true });
     const res = await PATCH(
@@ -765,10 +691,6 @@ describe('PATCH /api/persona/images', () => {
   });
 
   it('reports an honest partial success when the refetch fails after a committed swap', async () => {
-    // The swap RPC committed, then the row refetch failed: a bare 500 would
-    // tell the UI "nothing changed" and hide the committed primary change.
-    // The mutation hook invalidates on success, so the library refetch
-    // converges the UI to the true state.
     mockAuth({ userId: USER_ID });
     mockClient({ imageRow: IMAGE_ROW, updatedRow: IMAGE_ROW, failRefetch: true });
     const res = await PATCH(patchRequest({ id: IMAGE_ROW.id, isPrimary: true }));
@@ -805,9 +727,7 @@ describe('PATCH /api/persona/images', () => {
     expect(body.warnings).toEqual(['metadata_save_failed', 'row_refetch_failed']);
   });
 
-  it('returns 500 when a metadata-only update fails — no swap committed to warn about', async () => {    // The warning-style success exists only because a primary swap already
-    // committed atomically. With no swap in this PATCH, claiming "Primary
-    // image was updated" would be a lie: keep the honest 500.
+  it('returns 500 when a metadata-only update fails — no swap committed to warn about', async () => {
     mockAuth({ userId: USER_ID });
     mockClient({ imageRow: IMAGE_ROW, updatedRow: IMAGE_ROW, failUpdate: true });
     const res = await PATCH(patchRequest({ id: IMAGE_ROW.id, tag: 'formal' }));
@@ -818,8 +738,6 @@ describe('PATCH /api/persona/images', () => {
   });
 
   it('returns 404 when the row is concurrently deleted between the ownership check and the metadata update', async () => {
-    // The TOCTOU window is real: getOwnedImage succeeded, then the row
-    // vanished. PGRST116 on the update means "not found", not a DB failure.
     mockAuth({ userId: USER_ID });
     mockClient({ imageRow: IMAGE_ROW, updatedRow: IMAGE_ROW, failUpdateGone: true });
     const res = await PATCH(patchRequest({ id: IMAGE_ROW.id, tag: 'formal' }));
@@ -827,9 +745,6 @@ describe('PATCH /api/persona/images', () => {
   });
 
   it('rejects isPrimary:false — primary is swap-only, never demote-only', async () => {
-    // A demote-only PATCH would leave the library with zero primary images
-    // and push every consumer onto the deterministic fallback. To change the
-    // primary, set isPrimary:true on the new image instead.
     mockAuth({ userId: USER_ID });
     mockClient({ imageRow: IMAGE_ROW, updatedRow: IMAGE_ROW });
     const res = await PATCH(patchRequest({ id: IMAGE_ROW.id, isPrimary: false }));

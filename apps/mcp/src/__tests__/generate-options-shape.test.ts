@@ -4,8 +4,6 @@ import { GeneratePersonaVideoSchema } from '../single-video-shape.js';
 
 describe('generate_persona_video options (Phase 5-4)', () => {
   it('no longer advertises scriptPrompt or scriptPrompts as generation inputs', () => {
-    // Scripts come from segments only: the generation options must not
-    // offer a prompt override anymore.
     expect(GeneratePersonaVideoOptionsShape).not.toHaveProperty('scriptPrompt');
     expect(GeneratePersonaVideoOptionsShape).not.toHaveProperty('scriptPrompts');
   });
@@ -91,9 +89,6 @@ describe('webhookUrl rejects loopback and private literals', () => {
     }
   });
 
-  // Zod runs .refine even after .url() fails, so the refine must not throw
-  // on a string URL cannot parse: a malformed webhookUrl is a validation
-  // issue, never an exception out of the schema.
   it.each(['not a url', 'https://', '://missing-scheme'])('reports %s as an issue instead of throwing', (webhookUrl) => {
     const parsed = parseOptions({ webhookUrl });
     expect(parsed.success).toBe(false);

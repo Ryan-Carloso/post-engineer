@@ -68,9 +68,6 @@ class TestRedactText:
         ) == "fetch failed for https://x.test/v.mp4?token=*** retrying"
 
     def test_trailing_comma_after_url_is_consumed_by_the_url_matcher(self):
-        # The URL matcher swallows trailing punctuation, so the comma after
-        # the URL does not survive redaction. Pinned as-is; a future fix
-        # to the matcher updates this test.
         assert redact_text(
             "fetch failed for https://x.test/v.mp4?token=abc123, retrying"
         ) == "fetch failed for https://x.test/v.mp4?token=*** retrying"

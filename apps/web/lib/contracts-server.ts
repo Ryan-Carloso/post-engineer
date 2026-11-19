@@ -1,8 +1,3 @@
-// Server-side helpers for shared endpoint contracts. `readBody` reads and
-// validates a request body against the contract body schema, reproducing
-// the 400 behavior of the first contract route (POST /api/experiments)
-// exactly: invalid JSON, VALIDATION_FAILED, the first-issue message and
-// the field extra. The route identifier is `${method} ${path}`.
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 

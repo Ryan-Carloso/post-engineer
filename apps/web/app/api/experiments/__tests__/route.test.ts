@@ -34,12 +34,6 @@ import { fetchEnginePostMetricsSource } from '@/lib/engine-tasks';
 import { fetchProviderCounters } from '@/lib/metrics/provider-counters';
 import { successEventName } from '@/lib/api-telemetry-names';
 
-//---------------
-// /api/experiments (issue #476). The Supabase mock answers per table and
-// records every chained call; a query resolves at limit(), maybeSingle()
-// or when awaited, like supabase-js.
-//---------------
-
 const USER = 'user-1';
 const PERSONA = '11111111-2222-4333-8444-555555555555';
 const EXPERIMENT_ID = '7b0e6c1e-0000-4000-8000-000000000001';
@@ -242,7 +236,6 @@ describe('GET /api/experiments/[id]', () => {
     const youtube = json.results.providers[0];
     expect(youtube.wins).toEqual({ 'hook-calm': 0, 'hook-aggressive': 3 });
     expect(youtube.comparisons[0].values['hook-calm'].averageViewDurationSeconds).toBe(12.5);
-    // 3 of 3 is p = 0.25: never a clear winner.
     expect(youtube.label).toBe('indicative');
     const properties = await resultsEventProperties();
     expect(properties).toMatchObject({
@@ -290,7 +283,6 @@ describe('GET /api/experiments/[id]', () => {
 });
 
 describe('GET /api/experiments/[id] ?live=1', () => {
-  // Published 2h ago, so the 7d window is still live-reading.
   const recentSlots = [1, 2, 3].flatMap((pair) => [
     { id: `calm-${pair}`, variant_id: 'hook-calm', experiment_pair: pair, status: 'published', title: 't', slot_at: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(), published_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), task_id: `task-calm-${pair}` },
     { id: `aggr-${pair}`, variant_id: 'hook-aggressive', experiment_pair: pair, status: 'published', title: 't', slot_at: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(), published_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), task_id: `task-aggr-${pair}` },
@@ -308,7 +300,6 @@ describe('GET /api/experiments/[id] ?live=1', () => {
       scriptAngle: null,
     }));
     vi.mocked(fetchProviderCounters).mockImplementation(async (_userId: string, target: { externalId: string }) => ({
-      // Live views flip the snapshot winner: calm 500 beats aggressive 250.
       views: target.externalId.includes('calm') ? 500 : 250,
       likes: 2,
       comments: 1,
@@ -393,8 +384,6 @@ describe('GET /api/experiments/[id] ?live=1', () => {
   });
 
   it('500 (logged) when the task-id read fails after the facts loaded', async () => {
-    // The facts read and the task-id read both query scheduled_posts, so
-    // the mock fails only the second limit() on that table.
     const answers: Record<string, Answer> = {
       experiments: { data: EXPERIMENT_ROW, error: null },
       experiment_variants: { data: VARIANT_ROWS, error: null },

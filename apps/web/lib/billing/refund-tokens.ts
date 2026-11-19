@@ -1,45 +1,8 @@
-//---------------
-// Shared web refund helper — the single place request-path refunds move
-// tokens and say so.
-//
-// The dispatch-failure catch in generate-and-schedule and the DELETE
-// /api/schedule cancel refunds both call refund_batch_tokens, but neither
-// emitted anything: only the engine emits refund_issued, so a user who
-// cancelled a ready video (or whose dispatch failed) had no trace in
-// PostHog that their tokens came back. Every request-path refund funnels
-// through here so the tokens move and the audit event fires together:
-// refundSlotTokens moves the tokens and emits, and the batch-clawback
-// settlement path emits through emitRefundIssued after the settlement
-// itself moves them.
-//
-// Telemetry rules (same as the engine's track_refund_issued in
-// apps/engine/app/services/fill_schedule/support.py and the web
-// reconciler's trackRefundIssued in ./reconcile.ts):
-// - Fire refund_issued ONLY on a landed refund (refunded === true).
-//   The RPC is idempotent, so already_refunded means a previous call
-//   already settled this slot — firing again would double-count it.
-// - The token count travels as `amount`, never a `token*` key: the
-//   scrubber redacts every key containing "token", which would erase
-//   the audit value of the event.
-// - These events intentionally bypass scrubSecrets (the call goes to
-//   captureAs directly) — but the id fields are fragment-scrubbed inside
-//   emitRefundIssued as defense-in-depth: the cancel route validates the
-//   schedule uuid before this point, but the helper's id inputs are plain
-//   strings and other callers may still hand over request-derived values.
-//   UUIDs pass through unchanged; only credential-shaped fragments are
-//   redacted. The remaining properties are a fixed reason literal and
-//   counts, so they cannot carry secrets.
-// - Telemetry must never break the request path: emitRefundIssued never
-//   throws, and refundSlotTokens reports RPC failures in its result
-//   instead of throwing, so the caller can log them and keep going.
-//---------------
-
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getPostHogServer } from '@/lib/posthog-server';
 import { redactCredentialFragments } from '@/lib/scrub';
 import { batchChargeId, batchSlotRefundKey } from './batch-discount';
 
-/** Request paths that refund a prepaid slot. */
 export type RefundEventKind = 'dispatch_failed' | 'schedule_cancelled';
 
 export interface RefundIssuedProperties {
@@ -52,18 +15,6 @@ export interface RefundIssuedProperties {
   engineTaskId: string | null;
 }
 
-/**
- * Emit refund_issued for a landed refund, mirroring the engine's
- * track_refund_issued property shape (kind, amount, reason,
- * batch_generation_id, slot_id, engine_task_id) plus schedule_id so the
- * cancel can be found without deriving it from the batch id. The user id
- * travels both as the distinct_id (captureAs) and as user_id, matching
- * the engine event. Callers must invoke this ONLY after the refund RPC
- * reports refunded === true — never optimistically, never for an
- * already-refunded slot. The id fields are fragment-scrubbed here, at
- * the funnel every request-path refund_issued passes through, because a
- * caller may hand over a request-derived id (the cancel scheduleId).
- */
 export function emitRefundIssued(userId: string, props: RefundIssuedProperties): void {
   try {
     getPostHogServer()?.captureAs(userId, 'refund_issued', {
@@ -78,7 +29,6 @@ export function emitRefundIssued(userId: string, props: RefundIssuedProperties):
         props.engineTaskId === null ? null : redactCredentialFragments(props.engineTaskId),
     });
   } catch {
-    // Telemetry must never break the request path.
   }
 }
 
@@ -99,17 +49,6 @@ export interface RefundSlotTokensResult {
   error?: unknown;
 }
 
-/**
- * Refund one prepaid slot via the idempotent refund_batch_tokens RPC and
- * emit refund_issued when the tokens actually moved. The refund key is
- * derived from the schedule and slot ids (batchSlotRefundKey), so it
- * matches the key the cancel path uses — a slot refunded on one path is
- * never credited twice on the other. Returns the RPC outcome without
- * throwing: `refunded` means the tokens moved on this call,
- * `alreadyRefunded` means a previous call already settled the slot (the
- * tokens are back either way), and `error` carries the RPC failure for
- * the caller to log.
- */
 export async function refundSlotTokens(input: RefundSlotTokensInput): Promise<RefundSlotTokensResult> {
   const batchGenerationId = batchChargeId(input.scheduleId);
   let data: unknown = null;

@@ -11,8 +11,6 @@ vi.mock('@/lib/logger', () => ({
   },
 }));
 
-// Shared in-memory oauth_states fake: applies every filter of the real
-// query chains, including the user_id ownership predicate.
 const makeStore = makeOAuthStateStore;
 
 const REDIRECT = 'https://post-engineer.com/api/instagram-auth/callback';
@@ -48,7 +46,6 @@ describe('oauth-connect', () => {
       nonce: 'nonce-1',
       redirectUri: REDIRECT,
     });
-    // single-use: second read returns null (row was deleted on consumption)
     expect(await consumeOAuthState(store as never, 'raw-state-abc', 'user-1')).toBeNull();
     expect(store.rows.has(hashOAuthState('raw-state-abc'))).toBe(false);
   });
@@ -65,7 +62,6 @@ describe('oauth-connect', () => {
       expiresInSeconds: -10,
     });
     expect(await consumeOAuthState(store as never, 'raw-state-exp', 'user-1')).toBeNull();
-    // expired is not returned, but the row is cleaned (best-effort)
     expect(store.rows.has(hashOAuthState('raw-state-exp'))).toBe(false);
   });
 
@@ -82,9 +78,7 @@ describe('oauth-connect', () => {
     const { logger } = await import('@/lib/logger');
     vi.mocked(logger.warn).mockClear();
     expect(await consumeOAuthState(store as never, 'raw-state-owned', 'other-user')).toBeNull();
-    // a mismatching caller cannot burn the owner's single-use state
     expect(store.rows.has(hashOAuthState('raw-state-owned'))).toBe(true);
-    // logged distinctly from expired/unknown, by state reference only
     expect(logger.warn).toHaveBeenCalledWith(
       expect.stringMatching(/another user/i),
       { stateRef: hashOAuthState('raw-state-owned').slice(0, 12) }
@@ -103,7 +97,6 @@ describe('oauth-connect', () => {
           calls.push('delete');
           return {
             eq: (_col: string, _val: string) => ({
-              // atomic consumption: DELETE ... WHERE user_id = owner AND expires_at > now RETURNING ...
               eq: (col: string, val: string) => {
                 calls.push(`owner-filter:${col}=${val}`);
                 return {
@@ -115,7 +108,6 @@ describe('oauth-connect', () => {
                   }),
                 };
               },
-              // best-effort cleanup of expired rows
               lte: (_c2: string, _nowIso: string) => {
                 calls.push('cleanup-delete');
                 return Promise.resolve({ error: null });
@@ -123,7 +115,6 @@ describe('oauth-connect', () => {
             }),
           };
         },
-        // diagnostic read on miss: expired vs unknown state
         select: (_cols: string) => {
           calls.push('diagnostic-select');
           return {
@@ -135,9 +126,6 @@ describe('oauth-connect', () => {
       })),
     };
     await consumeOAuthState(fake as never, 'whatever', 'owner-1');
-    // the consumption itself never reads first: single conditional DELETE
-    // whose predicate carries the owner; on a miss exactly one diagnostic
-    // SELECT follows, and with no expired row there is no cleanup DELETE.
     expect(calls).toEqual([
       'delete',
       'owner-filter:user_id=owner-1',
@@ -287,7 +275,6 @@ describe('resolveOAuthCallbackAuth', () => {
   it('web flow: state from another provider in the cookie is rejected (403)', async () => {
     const { resolveOAuthCallbackAuth } = await import('@/lib/oauth-connect');
     const { createOAuthState } = await import('@/lib/oauth-utils');
-    // state created for instagram, but the expected callback is youtube's
     const { state, nonce } = createOAuthState({ provider: 'instagram', redirectUri: REDIRECT });
     const request = await webRequest(state, nonce);
     const result = await resolveOAuthCallbackAuth(request, state, 'session-user', () => makeStore() as never, 'youtube');
@@ -325,7 +312,6 @@ describe('resolveOAuthCallbackAuth', () => {
       error: 'Authentication required. Please log in.',
       status: 401,
     });
-    // the owner can still finish the flow after signing in
     expect(store.rows.has(hash)).toBe(true);
     expect(store.tables).toEqual([]);
   });
@@ -344,7 +330,6 @@ describe('resolveOAuthCallbackAuth', () => {
     );
     expect(result).toEqual({ ok: false, error: 'Invalid or expired OAuth state.', status: 403 });
     expect(store.rows.has(hash)).toBe(true);
-    // the real owner, signed in, still completes the flow
     const ownerResult = await resolveOAuthCallbackAuth(
       await webRequest(state, null),
       state,
@@ -363,7 +348,6 @@ describe('resolveOAuthCallbackAuth', () => {
     const result = await resolveOAuthCallbackAuth(request, state, 'api-key-owner', () => store as never, 'youtube');
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.status).toBe(403);
-    // single-use: the state was consumed even though it was rejected
     expect(store.rows.has(hash)).toBe(false);
     expect(hashOAuthState(state)).toBe(hash);
   });
@@ -373,7 +357,6 @@ describe('resolveOAuthCallbackAuth', () => {
     const { createOAuthState } = await import('@/lib/oauth-utils');
     const store = makeStore();
     const { state } = createOAuthState({ provider: 'instagram', redirectUri: REDIRECT });
-    // the state carries nonce X, but the (tampered) store says the nonce is Y
     await storeOAuthState(store as never, {
       state,
       userId: 'api-key-owner',
@@ -570,8 +553,6 @@ describe('oauth-connect logging', () => {
   it('consumeOAuthState logs the database error detail when the conditional delete fails', async () => {
     const { consumeOAuthState, oauthStateRef } = await import('@/lib/oauth-connect');
     const { logger } = await import('@/lib/logger');
-    // Atomic DELETE fails with a database error: this must not be misreported
-    // as "unknown or expired state".
     const failingStore = {
       from: () => ({
         delete: () => ({
@@ -602,7 +583,6 @@ describe('oauth-connect logging', () => {
         dbCode: 'PGRST301',
       })
     );
-    // The raw state never appears in the logs.
     expect(JSON.stringify(vi.mocked(logger.error).mock.calls)).not.toContain('db-error-state');
   });
 
@@ -680,13 +660,6 @@ describe('oauth-connect logging', () => {
   });
 });
 
-//---------------
-// Fanvue PKCE — the code verifier must survive from /start (or from the
-// connect-url store) to the callback, in both flows. The shared
-// test/oauth-state-store fake carries the code_verifier column (migration
-// 057), so the round-trips below use it.
-//---------------
-
 describe('oauth-connect — fanvue PKCE', () => {
   const FANVUE_REDIRECT = 'https://post-engineer.com/api/fanvue-auth/callback';
 
@@ -707,10 +680,6 @@ describe('oauth-connect — fanvue PKCE', () => {
       expect(url.searchParams.get('code_challenge_method')).toBe('S256');
       expect(url.searchParams.get('state')).toBe(result.state);
       expect(result.codeVerifier).toMatch(/^[A-Za-z0-9_-]{43}$/);
-      // The challenge in the URL is the S256 of the returned verifier.
-      // False positive: this hashes the PKCE code verifier (a random
-      // 43-char string) to assert the RFC 7636 S256 challenge, not a
-      // password. SHA-256 is the mandated hash here.
       expect(url.searchParams.get('code_challenge')).toBe(
         // codeql[js/insufficient-password-hash]
         createHash('sha256').update(result.codeVerifier as string, 'utf8').digest('base64url'),
@@ -749,7 +718,6 @@ describe('oauth-connect — fanvue PKCE', () => {
       redirectUri: FANVUE_REDIRECT,
       codeVerifier: 'verifier-fan-1',
     });
-    // Single-use: the verifier is gone with the row.
     expect(await consumeOAuthState(store as never, 'raw-state-fan', 'user-1')).toBeNull();
   });
 
@@ -794,8 +762,6 @@ describe('oauth-connect — fanvue PKCE', () => {
     const { NextRequest } = await import('next/server');
     const store = makeStore();
     const { state, nonce } = createOAuthState({ provider: 'fanvue', redirectUri: FANVUE_REDIRECT });
-    // The verifier the start stored: the nonce cookie is absent here
-    // (API-key flow), so the stored row is the only source.
     await storeOAuthState(store as never, {
       state,
       userId: 'api-key-owner',

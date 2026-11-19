@@ -15,23 +15,6 @@ import {
 import { parsePersonaPublishingAccountsQuery } from '@/lib/contracts/accounts';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
-//---------------
-// /api/persona/publishing-accounts?personaId= — per-persona bound
-// publishing accounts (issue #212, migration 022; the binding became
-// mandatory in issue #572).
-//
-// GET returns the persona's binding grouped per provider; PUT replaces the
-// whole set, which must keep at least one bound account (issue #572) — an
-// all-empty map is a 400 and the previous binding survives.
-// generate-and-schedule falls back to the binding when
-// publishing.accounts is omitted; explicit accounts must be a subset of
-// the binding.
-//
-// Auth = Supabase session (cookie) OR personal API key (Bearer/x-api-key,
-// MCP). Ownership is enforced in the lib (service-role callers are
-// re-scoped by user_id).
-//---------------
-
 const ROUTE = 'GET /api/persona/publishing-accounts';
 const PUT_ROUTE = 'PUT /api/persona/publishing-accounts';
 
@@ -51,9 +34,6 @@ function codedError(
   return apiErrorResponse(status, message, { route, code: errorCode, field });
 }
 
-// The lib marks caller mistakes with a code; an uncoded error is a server
-// fault (a failed DB read or write). It is logged and answered as a generic
-// 500 — never a 400, and never with the raw DB message.
 function libErrorToResponse(route: string, error: unknown): NextResponse {
   const code =
     typeof error === 'object' && error !== null && 'code' in error && typeof error.code === 'string'
@@ -90,9 +70,6 @@ async function resolveContext(request: Request, route: string): Promise<RouteCon
   const auth = session.auth;
   const limited = await applyRateLimit(request, RATE_LIMITS.publishingAccounts, auth.userId);
   if (limited) return limited;
-  // Service-role bypasses RLS: every query below is re-scoped by user_id,
-  // and the persona row itself is the ownership proof. OAuth callers have
-  // no cookie session, so they get the service client like API keys.
   const supabase =
     auth.isApiKey === true || auth.isOAuth === true
       ? createSupabaseServiceClient()

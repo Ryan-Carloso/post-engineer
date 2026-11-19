@@ -51,19 +51,12 @@ export const CreateClonedVoiceShape = {
 
 export const CREATE_CLONE_AUDIO_SOURCE_MESSAGE = 'Send exactly one of audioUrl or audioPath.';
 
-// The tool registers the raw shape (no object-level refine), so the handler
-// re-parses with this schema to enforce exactly one audio source.
 export const CreateClonedVoiceSchema = z
   .object(CreateClonedVoiceShape)
   .refine((args) => (args.audioUrl === undefined) !== (args.audioPath === undefined), {
     message: CREATE_CLONE_AUDIO_SOURCE_MESSAGE,
   });
 
-/** voices (action: create_clone) over HTTP: audioUrl only — a local audioPath would
- * resolve on the MCP server's filesystem, not on the agent's machine.
- * The SDK strips unknown keys before the handler runs, so a smuggled
- * audioPath is dropped (never read), not loudly rejected; the strict
- * re-parse is defense-in-depth for direct handler callers only. */
 export const CreateClonedVoiceRemoteShape = {
   audioUrl: z
     .string()

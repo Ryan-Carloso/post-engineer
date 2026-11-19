@@ -1,7 +1,3 @@
-// Pins the cloned-voice preview text cap to the same literal in all three
-// apps (AGENTS.md: pin the same literal everywhere it lives). Each app keeps
-// its own constant because the MCP tarball and the engine cannot import the
-// web app; this test parses the three source files instead.
 import { describe, expect, it } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -42,16 +38,10 @@ describe('cloned-voice preview text cap', () => {
   });
 
   it('is the same literal in the shared voices contract', () => {
-    // The contract's PreviewVoiceBodySchema caps the same text; the route
-    // parsers and the engine validator cannot import it, so the literal is
-    // pinned here instead of shared by import.
     expect(PREVIEW_TEXT_MAX_CHARS).toBe(CLONE_PREVIEW_TEXT_MAX_CHARS);
   });
 });
 
-// The house preview reuses the cloned-voice validator on the engine side, so
-// its cap lives in only two more places: the web house preview route parser
-// and the MCP limits module. Same 300, pinned the same way.
 describe('house-voice preview text cap', () => {
   it('is 300 in the MCP limits module', () => {
     expect(HOUSE_PREVIEW_TEXT_MAX_CHARS).toBe(300);

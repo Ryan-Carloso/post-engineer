@@ -13,6 +13,7 @@ vi.mock('@/lib/upload/pinterest-handler', () => ({ handlePinterestUpload: vi.fn(
 vi.mock('@/lib/upload/rumble-handler', () => ({ handleRumbleUpload: vi.fn() }));
 vi.mock('@/lib/upload/threads-handler', () => ({ handleThreadsUpload: vi.fn() }));
 vi.mock('@/lib/upload/threespeak-handler', () => ({ handleThreespeakUpload: vi.fn() }));
+vi.mock('@/lib/upload/telegram-handler', () => ({ handleTelegramUpload: vi.fn() }));
 
 import { ValidationError } from '@/lib/errors';
 import { handleBlueskyUpload } from '@/lib/upload/bluesky-handler';
@@ -22,6 +23,7 @@ import { handleFanvueUpload } from '@/lib/upload/fanvue-handler';
 import { handleLinkedinUpload } from '@/lib/upload/linkedin-handler';
 import { handlePinterestUpload } from '@/lib/upload/pinterest-handler';
 import { handleRumbleUpload } from '@/lib/upload/rumble-handler';
+import { handleTelegramUpload } from '@/lib/upload/telegram-handler';
 import { handleThreadsUpload } from '@/lib/upload/threads-handler';
 import { handleThreespeakUpload } from '@/lib/upload/threespeak-handler';
 import { PUBLISH_ACCOUNT_FIELDS } from '@/lib/contracts/providers';
@@ -49,6 +51,7 @@ const HANDLER_BY_PROVIDER = {
   fanvue: handleFanvueUpload,
   '3speak': handleThreespeakUpload,
   rumble: handleRumbleUpload,
+  telegram: handleTelegramUpload,
 } as const satisfies Record<SocialProvider, unknown>;
 
 function readyFixture(options?: { removeRejects?: boolean }): { store: VideoUploadStore; storage: VideoUploadStorage } {
@@ -470,8 +473,6 @@ describe('publishUploadedVideo', () => {
       download: vi.fn(async () => ({ data: new Blob([new Uint8Array(MP4)]), error: null })),
       remove: vi.fn(async () => ({ error: null })),
     };
-    // A valid publish input: the claim must run exactly once, through the
-    // conditional (expected-status) update that makes it single-use.
     const result = await publishUploadedVideo(
       store,
       storage,
@@ -481,8 +482,6 @@ describe('publishUploadedVideo', () => {
       Date.now(),
       new Date(),
     ).catch((error: unknown) => error);
-    // The instagram handler runs against mocked-nothing services and may
-    // fail downstream; what this test pins is the single claim.
     expect(claimStatuses).toEqual(['ready']);
     expect(result).toBeDefined();
     expect(storage.remove).toHaveBeenCalledWith([`${USER}/direct-uploads/x.mp4`]);

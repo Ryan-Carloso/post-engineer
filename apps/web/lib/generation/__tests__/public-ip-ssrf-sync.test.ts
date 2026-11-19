@@ -34,9 +34,6 @@ function loadCases(): PublicIpCases {
 
 const cases = loadCases();
 
-// Literal representatives asserted by the engine suite
-// (apps/engine/test/utils/test_ssrf.py): the private literals it rejects
-// and the public literals / resolved address it accepts.
 const ENGINE_BLOCKED = ['127.0.0.1', '169.254.169.254', '::1', '10.0.0.5'];
 const ENGINE_ALLOWED = ['1.1.1.1', '2606:4700:4700::1111', '93.184.215.14'];
 
@@ -58,10 +55,6 @@ describe('isPublicIp — shared SSRF fixture', () => {
     expect(isPublicIp('')).toBe(false);
   });
 
-  // Each pair is the last allowed address and the first rejected address of
-  // one special range (and the reverse edge). Dropping a range check, or
-  // treating NAT64 as public without looking at the embedded IPv4, fails
-  // the matching row.
   it.each([
     ['100.63.255.255', true],
     ['100.64.0.0', false],

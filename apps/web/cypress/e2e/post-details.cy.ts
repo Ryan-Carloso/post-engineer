@@ -1,12 +1,3 @@
-//---------------
-// Post details E2E — the redesigned detail page shows the post's identity:
-// its Post ID with a working copy button, the scheduled date rendered in
-// the schedule's timezone, the caption, and the target accounts by name.
-// The API responses are stubbed so the assertions never depend on the E2E
-// user's real data; the login itself is real (the middleware bounces
-// unauthenticated visits to /landing, so every app-page spec logs in).
-//---------------
-
 const POST_DETAIL_SLOT_ID = 'slot-e2e-1';
 const POST_DETAIL_SCHEDULE_ID = 'sched-e2e-1';
 
@@ -77,11 +68,6 @@ function accountsPayload() {
   };
 }
 
-//---------------
-// stubClipboard — the copy button writes through navigator.clipboard.
-// localhost is a secure context so it usually exists; the guard keeps the
-// spec green where it doesn't.
-//---------------
 function stubClipboard(): void {
   cy.window().then((win) => {
     const nav = win.navigator as Navigator & {
@@ -100,20 +86,11 @@ function stubClipboard(): void {
 
 describe('Post details page', () => {
   beforeEach(() => {
-    // Real session cookie first: the middleware validates it server-side and
-    // bounces unauthenticated visitors to /landing. loginE2EUser restores a
-    // cy.session, and test isolation clears cookies between tests, so it
-    // must run in beforeEach — a before() login only authenticates the first
-    // test and every later visit bounces to /landing, where no slot request
-    // ever fires and cy.wait('@slotDetail') times out with "No request ever
-    // occurred". Every other app-page spec does the same.
     cy.loginE2EUser();
 
     cy.intercept('GET', '/api/posts/*', { ...slotDetailPayload(), kind: 'slot' }).as('slotDetail');
     cy.intercept('GET', '/api/account', accountsPayload()).as('accounts');
     cy.visit(`/posts/${POST_DETAIL_SLOT_ID}`);
-    // The page resolves its entity by id through the detail endpoint —
-    // wait for the stubbed response the page actually consumes.
     cy.wait('@slotDetail');
   });
 
@@ -129,26 +106,17 @@ describe('Post details page', () => {
   });
 
   it('shows the scheduled date in the schedule timezone', () => {
-    // 2030-06-01T10:00:00Z is 11:00 in Europe/Lisbon (UTC+1 in June) —
-    // the converted hour proves the zone is applied, not just printed.
-    // The schedule section sits below the fold of the scrollable main
-    // column, so scroll each target into view before asserting visibility.
     cy.contains(/Agendado para|Scheduled for/).scrollIntoView().should('be.visible');
     cy.contains('11:00').scrollIntoView().should('be.visible');
     cy.contains('(Europe/Lisbon)').scrollIntoView().should('be.visible');
   });
 
   it('shows the generation facts of the post', () => {
-    // The read-only record of what the post was generated with: the
-    // language renders as the raw code, and the Face row names the face
-    // mode. The section sits below the fold of the scrollable main column,
-    // so scroll each target into view before asserting visibility.
     cy.contains(/Como foi gerado|How it was generated/).scrollIntoView().should('be.visible');
     cy.contains('pt-BR').scrollIntoView().should('be.visible');
     cy.contains('ana_neural').scrollIntoView().should('be.visible');
     cy.contains('9:16').scrollIntoView().should('be.visible');
     cy.contains(/Com o rosto da persona|With the persona's face/).scrollIntoView().should('be.visible');
-    // Never editable: no edit affordance may appear inside the section.
     cy.contains(/Como foi gerado|How it was generated/)
       .parent('section')
       .within(() => {
@@ -178,7 +146,6 @@ describe('Post details page', () => {
     cy.wait('@updateCaption').its('request.body').should('deep.equal', {
       title: 'Updated E2E caption',
     });
-    // The editor closes on success.
     cy.get('textarea').should('not.exist');
   });
 
@@ -186,7 +153,6 @@ describe('Post details page', () => {
     cy.intercept('DELETE', '/api/schedule/slots/*', { success: true }).as('deleteSlot');
 
     cy.contains('button', /Apagar|Delete/).click();
-    // Two-step delete: the first click arms the confirmation.
     cy.contains('button', /Confirmar exclusão|Confirm deletion/).click();
 
     cy.wait('@deleteSlot');
@@ -194,11 +160,6 @@ describe('Post details page', () => {
   });
 });
 
-//---------------
-// Progress history — the detail page lists every observed (progress,
-// stage) transition of a generating post, with regressed rows marked so a
-// 40% -> 0% drop is visible instead of a mystery.
-//---------------
 describe('Post details page — progress history', () => {
   const HISTORY = [
     { progress: 40, stage: 'subtitle', recordedAt: '2026-10-05T22:10:00.000Z' },
@@ -240,7 +201,6 @@ describe('Post details page — progress history', () => {
       .should('be.visible');
     cy.get('[data-testid="progress-history-row"]').should('have.length', 3);
     cy.get('[data-testid="progress-history-row"]').eq(0).should('contain', '40%');
-    // The 0% row follows 40%: a regression, marked for visibility.
     cy.get('[data-testid="progress-history-row"]')
       .eq(1)
       .should('have.attr', 'data-regressed', 'true')

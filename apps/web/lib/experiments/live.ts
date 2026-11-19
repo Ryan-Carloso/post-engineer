@@ -1,34 +1,10 @@
-//---------------
-// Live experiment results (issue #532). The snapshot read only sees a
-// video once its window snapshot exists (24-48h after publish); this
-// module re-reads the live provider counters for videos still inside
-// their window and recomputes the same paired results from the merged
-// facts — the math in results.ts is untouched.
-//
-// Honesty rules:
-// - A live counter is cumulative since publish, so it only stands in for
-//   a window while that window is still open: a video stops being
-//   live-read once its window closes (publish + 24h for the 24h window,
-//   publish + 7d for 7d). After that the snapshot is the value.
-// - A failed provider read never becomes a zero: the snapshot fact stays
-//   and the failure is reported, so the page can say the numbers are
-//   stale instead of showing a fake live 0.
-// - Reads are cached per experiment + window for LIVE_CACHE_TTL_MS, so
-//   polling the page does not hammer the provider APIs on every view.
-//   The cache lives in module memory (one web instance); a restart or a
-//   new deploy clears it, which only costs one fresh read.
-//---------------
-
 import { computeExperimentResults, type ExperimentMetricFact } from './results';
 import type { ExperimentDetail, ExperimentFacts, ReadResult } from './read';
 import type { MetricsWindow } from '@/lib/metrics/metrics-query';
 import { METRICS_WINDOW_START_HOURS } from '@/lib/metrics/metrics-query';
 import { metricsTargets, type MetricsCounters, type MetricsTarget } from '@/lib/metrics/post-metrics';
 
-// Live reads are cached this long per experiment + window.
 export const LIVE_CACHE_TTL_MS = 5 * 60 * 1000;
-// Live updates stop 7d after publish (issue #532): after that the 7d
-// snapshot is final and no provider is read again.
 export const LIVE_FREEZE_HOURS = 168;
 
 export type LiveSource = 'live' | 'partial' | 'snapshot';
@@ -39,13 +15,9 @@ export interface LiveFailure {
 }
 
 export interface LiveExperimentDetail extends ExperimentDetail {
-  /** 'live': every eligible video read fresh. 'partial': at least one read failed. 'snapshot': no fresh read. */
   source: LiveSource;
-  /** When the live counters were read; null when nothing was read live. */
   liveAt: string | null;
-  /** Eligible videos/providers whose live read failed (snapshot kept). */
   liveFailures: LiveFailure[];
-  /** True once every published video is past publish + 7d. */
   frozen: boolean;
 }
 
@@ -69,11 +41,6 @@ export function clearLiveExperimentCache(): void {
 }
 
 function windowHours(window: MetricsWindow): number {
-  // A live counter is cumulative since publish, so it only stands in for
-  // a window while that window's span is still running: until publish +
-  // 24h for the 24h window and publish + 7d for the 7d window. Past that
-  // the cumulative count exceeds the window's span and the snapshot is
-  // the value. METRICS_WINDOW_START_HOURS pins those spans (24 / 168).
   return METRICS_WINDOW_START_HOURS[window];
 }
 
@@ -116,8 +83,6 @@ export async function loadLiveExperimentResults(
     liveFailures: [],
     frozen,
   };
-  // No live window (28d), nothing published, or everything frozen: the
-  // snapshot is the answer and no provider is touched.
   if (!isLiveWindow(window) || frozen || published.length === 0) return { ok: true, value: snapshotDetail };
 
   const horizonMs = windowHours(window) * 60 * 60 * 1000;
@@ -170,14 +135,11 @@ export async function loadLiveExperimentResults(
     }
   }
 
-  // No provider answered: the snapshot stands, with the failures listed.
   if (liveFacts.size === 0) {
     const value: LiveExperimentDetail = { ...snapshotDetail, liveFailures };
     return { ok: true, value };
   }
   const merged = metrics.map((fact) => liveFacts.get(`${fact.postId}:${fact.provider}`) ?? fact);
-  // A live video/provider with no snapshot row yet has no fact to replace:
-  // append it so the pair compares instead of staying undecided.
   for (const fact of liveFacts.values()) {
     if (!metrics.some((row) => row.postId === fact.postId && row.provider === fact.provider)) {
       merged.push(fact);

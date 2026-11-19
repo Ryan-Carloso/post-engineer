@@ -1,15 +1,3 @@
-//---------------
-// Cancel media cleanup (issue #384): a scheduled image stores its bytes
-// in the `uploads` bucket at the slot's media_ref path. Cancelling the
-// schedule deletes the slot rows first; the objects follow, best-effort —
-// a removal failure is logged loudly and never fails the cancel (the
-// caller already got its slots deleted). Ownership covers the object path
-// too, not just the slot row: only a path under this user's own
-// `scheduled-media/<user_id>/` prefix is ever removed, and dot segments
-// are rejected — a corrupted or foreign media_ref must never make the
-// service client delete another user's object.
-//---------------
-
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { logger } from '@/lib/logger';

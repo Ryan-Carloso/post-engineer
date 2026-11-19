@@ -50,7 +50,6 @@ class PublishRumbleModuleTest(unittest.TestCase):
             validate(publish_rumble.RumbleMetadata(title="a" * 101, description="desc", account_ids=("1",)))
         with self.assertRaisesRegex(ValueError, "rumble publish requires a non-empty description"):
             validate(publish_rumble.RumbleMetadata(title="post", description="  ", account_ids=("1",)))
-        # At the title limit is valid.
         validate(publish_rumble.RumbleMetadata(title="a" * 100, description="desc", account_ids=("1",)))
 
     def test_account_ids_are_normalized_to_a_tuple(self) -> None:

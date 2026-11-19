@@ -1,6 +1,3 @@
-// Apify entry point: thin glue around runActor (src/post-engineer.js).
-// The run id is the idempotency key, so an Apify retry of the same run
-// replays the accepted job instead of charging tokens twice.
 import { Actor, log } from 'apify';
 import { runActor } from './post-engineer.js';
 
@@ -20,6 +17,5 @@ try {
   await Actor.setValue('OUTPUT', result);
   await Actor.exit();
 } catch (error) {
-  // Messages from runActor are already redacted (no API key).
   await Actor.fail(error instanceof Error ? error.message : String(error));
 }

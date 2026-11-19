@@ -1,17 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { resolvePublishLinks } from '../publish-links';
 
-//---------------
-// publish-links — turn the engine's publish_results into clickable links.
-//
-// The engine records one entry per (provider, video) it published. Only
-// YouTube and Instagram hand back a ready-made URL; Bluesky returns an
-// at:// record URI and LinkedIn a bare URN, so both are derived here.
-//
-// A provider entry with neither a URL nor an id is omitted rather than
-// rendered as a dead link — a missing link is honest, a broken one is not.
-//---------------
-
 describe('resolvePublishLinks', () => {
   it('uses the YouTube videoUrl as-is', () => {
     expect(
@@ -37,8 +26,6 @@ describe('resolvePublishLinks', () => {
     expect(resolvePublishLinks([{ provider: '3speak', postId: 'video-1' }])).toEqual([]);
   });
 
-  // Bluesky returns at://<did>/app.bsky.feed.post/<rkey>; the public web
-  // URL is bsky.app/profile/<did>/post/<rkey>.
   it('derives the public Bluesky URL from the at:// record URI', () => {
     expect(
       resolvePublishLinks([
@@ -49,9 +36,6 @@ describe('resolvePublishLinks', () => {
     ]);
   });
 
-  // LinkedIn publishes no public URL. We derive one from the share URN;
-  // it can 404 for a private organization post, which is accepted (the id
-  // is still the useful part) — documented so it is not read as a bug.
   it('derives a LinkedIn feed URL from the share URN', () => {
     expect(
       resolvePublishLinks([{ provider: 'linkedin', postId: 'urn:li:share:12345' }]),
@@ -64,9 +48,6 @@ describe('resolvePublishLinks', () => {
     expect(resolvePublishLinks([{ provider: 'linkedin' }])).toEqual([]);
   });
 
-  // The engine stamps status "failed" when that provider did not post.
-  // A URL on the same entry must not render: it would advertise a publish
-  // that did not happen. A sibling published entry still links.
   it('yields no link for a failed provider entry', () => {
     expect(
       resolvePublishLinks([
@@ -90,8 +71,6 @@ describe('resolvePublishLinks', () => {
     expect(resolvePublishLinks([{ provider: 'tiktok', postId: 'x' }])).toEqual([]);
   });
 
-  // The payload crosses a network boundary; anything malformed must degrade
-  // to "no links" instead of throwing and taking the detail page down.
   it('returns no links for a non-array payload', () => {
     expect(resolvePublishLinks(null)).toEqual([]);
     expect(resolvePublishLinks('nope')).toEqual([]);
@@ -103,8 +82,6 @@ describe('resolvePublishLinks', () => {
     expect(resolvePublishLinks([{ provider: 7, videoUrl: 'https://x.test' }])).toEqual([]);
   });
 
-  // A link rendered into an href is an injection surface: only https URLs
-  // from the providers we know may pass through.
   it('drops a non-https URL', () => {
     expect(
       resolvePublishLinks([{ provider: 'youtube', videoUrl: 'javascript:alert(1)' }]),

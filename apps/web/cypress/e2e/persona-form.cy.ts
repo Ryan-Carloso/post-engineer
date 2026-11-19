@@ -1,15 +1,4 @@
 import { houseVoice } from '../support/voices';
-//---------------
-// Persona form E2E — the /persona flows the voice-sample spec does not
-// cover: tabs, photo upload, aspect picker, store-level validation
-// errors, edit mode, the load-error page, prompt_rejected, the
-// server-error dialog, and a network failure.
-//
-// Every mutating call is intercepted (CI must never write production
-// data): POST /api/persona is stubbed per test, the persona list is a
-// canned payload, and the image library is stubbed empty in edit mode.
-// The session is real (cy.loginE2EUser), like the other specs.
-//---------------
 
 
 const FORM_VOICES = [
@@ -42,9 +31,6 @@ const stubFormAudio = (win: Cypress.AUTWindow): void => {
   (win as unknown as { __fakeAudios: FakeAudioRecord[] }).__fakeAudios = created;
 };
 
-// Base read-only intercepts: the voice catalog, an empty persona list,
-// and an empty image library. Tests that need different payloads register
-// their own intercept afterwards (the last matching intercept wins).
 function mockBase(): void {
   cy.intercept('GET', '/api/persona/voices', {
     statusCode: 200,
@@ -66,9 +52,6 @@ function mockBase(): void {
     body: { success: true, voices: [] },
   }).as('getClonedVoices');
 
-  // Issue #572: create requires at least one bound publishing account —
-  // without a connected account the submit never fires POST /api/persona,
-  // so the server-error tests below need one to select.
   cy.intercept('GET', '/api/account', {
     statusCode: 200,
     body: {
@@ -81,8 +64,6 @@ function mockBase(): void {
 
 function visitPersona(path: string): void {
   cy.visit(path, { onBeforeLoad: stubFormAudio });
-  // Do not cy.wait('@getVoices'): React Query may serve a warm cache with no
-  // network round-trip (same flake class as posts-create personas wait).
   cy.location('pathname', { timeout: 15_000 }).then((pathname) => {
     if (pathname === '/landing') {
       cy.loginE2EUser();
@@ -93,8 +74,6 @@ function visitPersona(path: string): void {
   cy.get('#persona-name', { timeout: 15_000 }).should('be.visible');
 }
 
-// Fill a valid create form: name + character + voice + one bound
-// publishing account (issue #572: the submit is blocked without one).
 function fillValidForm(): void {
   cy.get('#persona-name').type('Maya E2E');
   cy.contains('[role="tab"]', 'Escolha um personagem').click();
@@ -141,7 +120,6 @@ describe('Persona — formulário (abas, foto, validação, edição, erros)', (
     );
 
     cy.contains('foto.png').should('be.visible');
-    // The photo branch offers the same "send photo" control to replace it.
     cy.contains('button', 'Enviar foto').should('be.visible');
   });
 
@@ -175,10 +153,6 @@ describe('Persona — formulário (abas, foto, validação, edição, erros)', (
     cy.pickHouseVoice('en us male 01');
     cy.contains('button', 'Criar persona').click();
 
-    // The app smooth-scrolls to the error field; Cypress's Electron does
-    // not settle that animation inside the assertion timeout, so bring
-    // the section into view instantly — the test asserts the error is
-    // shown, not the scroll animation.
     cy.get('[data-error-field="avatar"]').scrollIntoView();
     cy.contains('Envie uma foto ou gere um avatar por IA.').should('be.visible');
   });
@@ -188,8 +162,6 @@ describe('Persona — formulário (abas, foto, validação, edição, erros)', (
     cy.wait('@getClonedVoices');
 
     cy.get('#persona-name').type('Maya E2E').blur();
-    // Photo upload satisfies the avatar gate without relying on the character
-    // carousel (off-screen slides flake in CI viewports).
     cy.contains('[role="tab"]', 'Envie sua foto').click();
     cy.get('input[type="file"][multiple]').selectFile(
       { contents: Cypress.Buffer.from('fake image bytes'), fileName: 'foto.png', mimeType: 'image/png' },
@@ -227,7 +199,6 @@ describe('Persona — formulário (abas, foto, validação, edição, erros)', (
 
     visitPersona('/persona?edit=p-1');
 
-    // English-only launch: no sample-language selector exists any more.
     cy.get('#persona-name').should('have.value', 'Maya E2E');
     cy.get('select[data-testid=sample-language]').should('not.exist');
   });
@@ -266,8 +237,6 @@ describe('Persona — formulário (abas, foto, validação, edição, erros)', (
       body: { error: 'voices down' },
     }).as('getVoicesError');
 
-    // The 500 intercept answers the voices request, so the base
-    // getVoices alias never fires — wait for the error alias instead.
     cy.visit('/persona', { onBeforeLoad: stubFormAudio });
     cy.wait('@getVoicesError');
 

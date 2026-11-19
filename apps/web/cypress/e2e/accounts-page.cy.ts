@@ -1,8 +1,3 @@
-//---------------
-// Accounts — UI tests para a página /accounts.
-// Testa o fluxo único de conexão, listas de contas e OAuth.
-//---------------
-
 describe('Accounts — UI', () => {
   beforeEach(() => {
     cy.loginE2EUser();
@@ -23,7 +18,6 @@ describe('Accounts — UI', () => {
     cy.wait('@getAccounts');
 
     cy.contains('h1', 'Contas').should('be.visible');
-    // One connect slot per section: youtube, instagram, bluesky, linkedin, threads, facebook, pinterest, fanvue, 3speak, rumble.
     cy.get('button[aria-label="Conectar uma conta"]').should('have.length', 10);
   });
 
@@ -95,7 +89,6 @@ describe('Accounts — UI', () => {
       body: { authenticated: true, accounts: [], message: 'ok' },
     }).as('getAccounts');
 
-    // Start do OAuth falha no servidor
     cy.intercept('GET', '/api/google-oauth/start', {
       statusCode: 500,
       body: { success: false },
@@ -153,9 +146,6 @@ describe('Accounts — UI', () => {
     cy.get('[data-testid=account-card]').should('have.length', 1);
     cy.contains('Canal Alpha').should('be.visible');
 
-    // A seleção de contas para publicação vive na criação (API/MCP); em
-    // /accounts o card é somente leitura e o checkbox não é renderizado
-    // (account-card.tsx só o exibe sem `showDisconnect`).
     cy.get('[data-testid=account-card-select]').should('not.exist');
     cy.get('[data-testid=youtube-disconnect-button]').should('be.visible');
   });
@@ -196,9 +186,6 @@ describe('Accounts — UI', () => {
     cy.get('[data-testid=account-card-remove]').should('not.exist');
   });
 
-  // The trash button opens the confirmation dialog; cancelling keeps the
-  // card. The confirm-then-rejected-delete path is covered by
-  // 'mostra LinkedIn e Threads e o erro quando a desconexão é recusada'.
   it('abre um popup de confirmação antes de desconectar; cancelar mantém o card', () => {
     const accounts = [
       {
@@ -221,11 +208,9 @@ describe('Accounts — UI', () => {
     cy.wait('@getAccounts');
 
     cy.get('[data-testid=youtube-disconnect-button]').first().click();
-    // The dialog names the exact account it would remove.
     cy.get('[data-testid=disconnect-dialog]').should('be.visible');
     cy.contains('[data-testid=disconnect-dialog-account]', 'Canal Alpha').should('be.visible');
     cy.get('[data-testid=disconnect-cancel-button]').click();
-    // Cancelled: the dialog closes, the card stays and no DELETE is fired.
     cy.get('[data-testid=disconnect-dialog]').should('not.exist');
     cy.contains('Canal Alpha').should('be.visible');
   });
@@ -247,8 +232,6 @@ describe('Accounts — UI', () => {
     });
   });
 
-  // LinkedIn and Threads cards, plus a rejected disconnect, are the account
-  // page lines the Cypress coverage gate was missing.
   it('mostra LinkedIn e Threads e o erro quando a desconexão é recusada', () => {
     cy.intercept('GET', '/api/account', {
       statusCode: 200,
@@ -302,8 +285,6 @@ describe('Accounts — UI', () => {
     cy.visit('/accounts');
     cy.wait('@getAccounts');
 
-    // Names sit in a truncated heading. A parent with overflow:hidden clips
-    // them, so Cypress does not count the heading as visible.
     cy.contains('section', 'LinkedIn').scrollIntoView().within(() => {
       cy.contains('h3', 'Ada Lovelace').should('exist');
       cy.contains('Perfil').should('exist');
@@ -356,13 +337,10 @@ describe('Accounts — UI', () => {
     cy.visit('/accounts');
     cy.wait('@getAccounts');
 
-    // The broken card names the problem and offers only the reconnect action.
     cy.contains('Canal Partido').should('be.visible');
     cy.contains('Token inválido').should('be.visible');
     cy.get('[data-testid=youtube-reconnect-button]').should('be.visible');
     cy.get('[data-testid=youtube-disconnect-button]').should('not.exist');
-    // The section header counts the broken account; the healthy sibling
-    // keeps its trash button.
     cy.contains('1 conta com problema').should('be.visible');
     cy.get('[data-testid=instagram-disconnect-button]').should('be.visible');
   });

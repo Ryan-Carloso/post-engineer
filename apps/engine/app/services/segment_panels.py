@@ -32,17 +32,14 @@ from app.models.schema import VideoAspect
 from app.services import media_overlay, panel_motion, image_fetch, video
 from app.utils import utils
 
-# Where the photo may be full frame: never (face on screen), after the hook, or always.
 FACE_NONE = "none"
 FACE_HOOK = "hook"
 FACE_FULL = "full"
 
-# The card's rectangle on a full-frame photo, below the status bar.
 FULL_CARD_SIDE = 36
 FULL_CARD_TOP_FRACTION = 0.0724
 FULL_CARD_HEIGHT_FRACTION = 0.545
 
-# Layout constants are for a 1080-pixel short edge and scale with it.
 PANEL_WIDTH = 1000
 EDGE_MARGIN = 30
 HEIGHT_FRACTION = 0.38
@@ -53,7 +50,6 @@ SHADOW_OFFSET = 8
 SHADOW_BLUR = 14
 BACKDROP_BLUR = 30
 SHADOW_ALPHA = 120
-# Space kept between the panel's top edge and the caption block above it.
 CAPTION_GAP = 24
 
 MANIFEST_NAME = "segment-panels.json"
@@ -83,16 +79,10 @@ class Panel:
     start: float
     end: float
     caption_bottom: Optional[int] = None
-    # "in"/"out": a full-frame photo that zooms slowly (images material, panel_motion).
     motion: Optional[str] = None
-    # A video clip (segment_video): its source duration in seconds. None
-    # for a photo. A clip loops to fill its seconds (at most 3 plays),
-    # plays full-frame at frame_width x frame_height, and never zooms.
     clip_seconds: Optional[float] = None
     frame_width: Optional[int] = None
     frame_height: Optional[int] = None
-    # Requested on-screen seconds for a full-frame photo (segment pacing):
-    # None means the default 2s pace. Framed panels over the face ignore it.
     requested_duration: Optional[float] = None
 
 

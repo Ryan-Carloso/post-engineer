@@ -1,12 +1,6 @@
 import type { SlotDetailPayload } from '@/lib/api';
 import type { TranslationKey } from '@/lib/i18n';
 
-//---------------
-// buildGenerationRows — the label/value rows of the post's generation facts,
-// in display order. Extracted from page.tsx (grandfathered over the
-// file-size cap). There is no material row: every video is the agent's own
-// images since migration 054, so there is nothing to choose between.
-//---------------
 export interface GenerationRow {
   label: string;
   value: string;

@@ -1,17 +1,6 @@
-// Pure Actor logic: validates the Actor input, calls the Post Engineer API
-// through an injected fetch, and polls the video task. No Apify SDK here so
-// it is unit-tested with node:test and no dependencies. The API key is sent
-// only as the Bearer header and is redacted from every message it returns.
-
 export const DEFAULT_API_URL = 'https://post-engineer.com';
-// Mirror of SOCIAL_PROVIDERS (shared/contracts/providers.ts): the Actor builds
-// on its own, so it keeps one copy, checked by .github/scripts/provider-lists.
-export const PROVIDERS = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'pinterest', '3speak', 'rumble', 'fanvue'];
+export const PROVIDERS = ['youtube', 'instagram', 'linkedin', 'bluesky', 'threads', 'facebook', 'pinterest', '3speak', 'rumble', 'fanvue', 'telegram'];
 export const MODES = ['asap', 'scheduled'];
-// Every video renders only the images given here. About one image per
-// 3 seconds of speech (8 words), each image on screen at least about 1
-// second (3 words), at most 30 images. Segments stay capped at 12.
-// Full lip sync is the only mode without images.
 export const MAX_SEGMENTS = 12;
 export const MAX_IMAGES = 30;
 export const WORDS_PER_IMAGE = 8;
@@ -22,7 +11,6 @@ export const POLL_INTERVAL_MS = 15_000;
 export const DEFAULT_TIMEOUT_MINUTES = 30;
 export const MAX_TIMEOUT_MINUTES = 60;
 
-// Engine task states (AGENTS.md billing rules): only -1 and 1 are terminal.
 const STATE_FAILED = -1;
 const STATE_COMPLETE = 1;
 const LOOPBACK_HOSTS = ['localhost', '127.0.0.1', '[::1]'];
@@ -140,11 +128,6 @@ function parseTimeoutMinutes(raw) {
   return value;
 }
 
-// How the video looks, with the rules generate-and-schedule enforces before
-// any charge (route.ts): a post without a persona must be faceless and needs
-// a voice; full lip-sync needs a persona's face, so never with faceless.
-// The Actor still takes the faceless/fullLipsync inputs (its public
-// interface) and translates them to the route's one videoType field.
 function parseLook(raw, personaId) {
   const faceless = optionalBoolean(raw, 'faceless', personaId === undefined);
   const voiceId = optionalString(raw, 'voiceId');
@@ -158,15 +141,10 @@ function parseLook(raw, personaId) {
   if (fullLipsync && (faceless || personaId === undefined)) {
     throw new ActorInputError('fullLipsync needs a persona with a face, so it cannot be used with faceless videos.');
   }
-  // faceless wins: a persona video with faceless on is voice-only (the old
-  // options.faceless contract) — never silently upgraded to hook_lipsync,
-  // which would show the face and charge the hook price instead of 1 token.
   const videoType = faceless ? 'faceless' : fullLipsync ? 'full_lipsync' : 'hook_lipsync';
   return { videoType, voiceId };
 }
 
-// Body paragraphs (split on blank lines). With images each paragraph is its
-// own segment, and the image list is split across those segments by length.
 function bodyParagraphs(body) {
   return body.split(/\n\s*\n/).map((paragraph) => paragraph.trim()).filter((paragraph) => paragraph !== '');
 }
@@ -184,8 +162,6 @@ function maxImagesFor(words) {
   return Math.max(1, Math.floor(words / MIN_WORDS_PER_IMAGE));
 }
 
-// Hand the URLs out in order. Each segment gets at least one image per ~3s
-// and at most one image per ~1s, so a short segment does not flicker.
 export function assignImages(urls, texts) {
   const lows = texts.map((text) => minImagesFor(countWords(text)));
   const highs = texts.map((text) => maxImagesFor(countWords(text)));
@@ -219,9 +195,6 @@ export function assignImages(urls, texts) {
   });
 }
 
-// images: public https URLs, required for every video except full lip
-// sync. The web fetches them with its own SSRF guard; here only the shape
-// and the ~3s rhythm are checked.
 function parseImages(raw, videoType, hook, body, cta) {
   const value = raw.images;
   const given = value !== undefined && value !== null;
@@ -250,11 +223,8 @@ function parseImages(raw, videoType, hook, body, cta) {
   return urls;
 }
 
-/** Validates and normalizes the Actor input; throws ActorInputError. */
 export function parseInput(raw) {
   if (!isRecord(raw)) throw new ActorInputError('Actor input must be a JSON object.');
-  // No key means a dry run (see runActor): the Store's daily auto-test runs
-  // the default input, which cannot carry anyone's key.
   const apiKey = optionalString(raw, 'apiKey') ?? null;
   if (apiKey !== null && !apiKey.startsWith(API_KEY_PREFIX)) {
     throw new ActorInputError(`apiKey must be a Post Engineer API key (starts with ${API_KEY_PREFIX}).`);
@@ -271,8 +241,6 @@ export function parseInput(raw) {
     apiKey,
     apiUrl: parseApiUrl(raw),
     title: requireString(raw, 'title'),
-    // Publish caption (the route requires it): an explicit description
-    // input, or the hook when omitted — the hook is the caption-like line.
     description: optionalString(raw, 'description') ?? hook,
     hook,
     body,
@@ -289,9 +257,6 @@ export function parseInput(raw) {
   };
 }
 
-/** Hook first, then content takes in order: the segments contract of generate-and-schedule.
- *  With images, each body paragraph is a content take and the URL list is split
- *  across segments, about one image per 3 seconds, in the order given. */
 export function buildSegments(input) {
   if (input.images === undefined) {
     return [
@@ -312,7 +277,6 @@ export function buildSegments(input) {
   }));
 }
 
-/** Request body for POST /api/videos/generate-and-schedule. */
 export function buildGenerateBody(input, idempotencyKey) {
   return {
     title: input.title,
@@ -333,7 +297,6 @@ export function buildGenerateBody(input, idempotencyKey) {
   };
 }
 
-/** Removes the API key from any text that may reach logs or the run output. */
 export function redact(text, apiKey) {
   return apiKey === null || apiKey === '' ? text : text.split(apiKey).join('[redacted]');
 }
@@ -381,14 +344,8 @@ function taskStateOf(task) {
 
 const isTransient = (status) => status === 429 || status >= 500;
 
-// Slot statuses (GET /api/schedule/slots/{id}) that mean the video exists.
-// 'completed' is the presentation of a slot whose lost task was settled as
-// delivered (apps/web/lib/schedule-slot-presentation.ts).
 const DELIVERED_SLOT_STATUSES = ['ready', 'publishing', 'published', 'completed'];
 
-// 410 Gone means the engine no longer has the task, but the web proxy sends
-// the same 410 whether the video was delivered first (completed, no refund)
-// or not (failed and refunded). The slot status carries that verdict.
 async function settleGoneTask(ctx, slotId, goneJson) {
   const { ok, json } = await callApi(ctx, 'GET', `/api/schedule/slots/${encodeURIComponent(slotId)}`);
   const slotStatus = ok && isRecord(json) && isRecord(json.slot) ? json.slot.status : null;
@@ -426,13 +383,6 @@ async function waitForTask(ctx, slotId, taskId, deadline) {
   return { videoStatus: 'timeout' };
 }
 
-/**
- * Runs one Actor job: validate the script (no tokens), generate and
- * schedule one video, then optionally wait for it. Throws ActorInputError
- * or PostEngineerApiError with a redacted message on failure. Without an
- * API key it is a dry run: the input is validated and the request that
- * would be sent is returned, with no API call and no tokens spent.
- */
 export async function runActor({ input: rawInput, fetchImpl, sleep, now, idempotencyKey, log }) {
   const input = parseInput(rawInput);
   if (input.apiKey === null) {
@@ -451,7 +401,6 @@ export async function runActor({ input: rawInput, fetchImpl, sleep, now, idempot
   });
   if (!validation.ok) {
     const detail = errorMessageOf(validation.json, validation.status);
-    // Only a 400 is about the script; anything else is the key or the service.
     if (validation.status === 400) throw new ActorInputError(redact(`Script rejected: ${detail}`, input.apiKey));
     const prefix = validation.status === 401 || validation.status === 403
       ? 'API key rejected (create one at https://post-engineer.com/recipes)'

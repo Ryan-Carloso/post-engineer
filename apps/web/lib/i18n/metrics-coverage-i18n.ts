@@ -1,7 +1,3 @@
-// metrics-coverage-i18n — copy for the metrics coverage section (issue
-// #525): published videos with no snapshot for the selected window, and
-// why. Merged into `metrics` in ./index.ts (metrics-i18n.ts is over the
-// file-size cap and may not grow).
 export const metricsCoverageStrings = {
   en: {
     metrics: {

@@ -1,12 +1,6 @@
 import Link from 'next/link';
 import SiteFooter from '@/components/site-footer';
 
-//---------------
-// PublicPromptsFrame — page frame for signed-out visitors of the
-// prompts hub: same paper background and padding as the AppShell
-// content area, a back link to the site, and the public footer.
-//---------------
-
 export default function PublicPromptsFrame({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen flex-col bg-surface">

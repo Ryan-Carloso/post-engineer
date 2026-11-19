@@ -13,19 +13,8 @@ import { resolveSlotAccounts } from './post-card';
 import { PostRow } from './post-row';
 import type { PersonaPhoto } from './calendar-days';
 
-//---------------
-// Shared by the posts calendar (/posts) and the post history
-// (/posts/history): the joins every slot card needs (schedule, persona,
-// publishing accounts), the network/account filters and the card itself.
-//---------------
-
 export type ProviderFilter = 'all' | SocialProvider;
 
-//---------------
-// resolveAccountFilter — a selected account only stays applied when it
-// belongs to the network filter ('all' keeps any account). Unknown ids
-// and incompatible networks fall back to 'all'.
-//---------------
 function resolveAccountFilter(accountId: string, provider: ProviderFilter, accounts: AccountOption[]): string {
   if (accountId === 'all') return 'all';
   const account = accounts.find((item) => item.id === accountId);
@@ -37,9 +26,6 @@ function resolveAccountFilter(accountId: string, provider: ProviderFilter, accou
 export interface PostJoins {
   scheduleById: Map<string, ScheduleConfig>;
   personaNameById: Map<string, string>;
-  // Persona photo per id, same fallback chain as PersonaAvatar (avatar,
-  // then photo, then library) — the calendar cell photo comes from here,
-  // no extra fetch.
   personaPhotoById: Map<string, PersonaPhoto>;
   accountOptions: AccountOption[];
   isLoading: boolean;
@@ -50,7 +36,6 @@ export interface PostJoins {
 export function usePostJoins(): PostJoins {
   const schedulesQuery = useSchedulesQuery();
   const personasQuery = usePersonaListQuery();
-  // Every network's accounts, from the one shared social-accounts query.
   const accountsQuery = useSocialAccountsQuery();
 
   const scheduleById = useMemo(
@@ -89,12 +74,6 @@ export function usePostJoins(): PostJoins {
     personaNameById,
     personaPhotoById,
     accountOptions,
-    // A failed personas fetch must not silently render "Removed persona"
-    // labels — callers show the error state for it like any other query.
-    // The account queries feed the filter dropdowns, so their loading and
-    // errors count the same way: a failed one must surface the error state
-    // (and the retry button must re-fetch it) instead of silently
-    // rendering empty filters.
     isLoading:
       schedulesQuery.isLoading ||
       personasQuery.isLoading ||
@@ -109,7 +88,7 @@ export function usePostJoins(): PostJoins {
 
 export interface PostFilters {
   provider: ProviderFilter;
-  account: string; // effective account filter ('all' or an account id)
+  account: string;
   visibleAccounts: AccountOption[];
   hasActiveFilter: boolean;
   setProvider: (next: ProviderFilter) => void;
@@ -133,15 +112,10 @@ export function usePostFilters(joins: PostJoins): PostFilters {
   const setProvider = useCallback(
     (next: ProviderFilter) => {
       setProviderState(next);
-      // A selected account that doesn't belong to the new network would
-      // otherwise linger in state and silently reactivate when switching
-      // back — reset it instead.
       setAccount((current) => resolveAccountFilter(current, next, accountOptions));
     },
     [accountOptions],
   );
-  // Slots whose schedule was deleted never pass, so counts and the rendered
-  // list always agree.
   const passes = useCallback(
     (slot: ScheduledSlot): boolean => {
       const schedule = scheduleById.get(slot.scheduleId);
@@ -160,8 +134,6 @@ export function usePostFilters(joins: PostJoins): PostFilters {
   return { provider, account, visibleAccounts, hasActiveFilter, setProvider, setAccount, clear, passes };
 }
 
-// One fixed width on wide screens, so the selects do not change size with
-// the locale or the chosen option; an applied filter is outlined in navy.
 const SELECT_CLASS =
   'h-10 w-full appearance-none truncate rounded-xl border border-input bg-card bg-no-repeat px-3 text-sm font-medium text-primary sm:w-48';
 const SELECT_CHEVRON_CLASS =
@@ -183,9 +155,6 @@ export function PostFiltersBar({
   const { t } = useI18n();
   const inert = disabled || unavailable;
   return (
-    // Side by side on a phone too (two columns), so the filters take one
-    // row above the calendar instead of two. "Clear filters" shows only
-    // while a filter is applied.
     <div
       className={cn(
         'mt-3 grid grid-cols-2 gap-3 sm:mt-4 sm:flex sm:flex-wrap sm:items-end',
@@ -248,16 +217,9 @@ export function PostFiltersBar({
   );
 }
 
-// timeOnly: the calendar's day list already names the day in its heading,
-// so its rows show only the time; the history list keeps the full date.
-// Both lists render the same PostRow: one post reads the same way wherever
-// it shows up.
 export function SlotCard({ slot, joins, timeOnly = false }: { slot: ScheduledSlot; joins: PostJoins; timeOnly?: boolean }) {
   const { t, locale } = useI18n();
   const schedule = joins.scheduleById.get(slot.scheduleId);
-  // A post created without a persona (migration 012) has none to look up —
-  // that is not a removed persona, and saying so would be a lie about a post
-  // that never had one.
   const personaId = schedule?.personaId ?? null;
   const personaName = personaId === null ? t('posts.noPersona') : joins.personaNameById.get(personaId) ?? t('posts.personaFallback');
   return (

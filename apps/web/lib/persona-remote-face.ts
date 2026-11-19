@@ -1,10 +1,3 @@
-//---------------
-// persona-remote-face — ingest a remote http(s) avatar into the personas
-// bucket. Public sample assets and data:image URLs stay on avatar_url; any
-// other non-http(s) value is refused at write time (issue #448).
-// SSRF: public DNS, fail closed, redirect: 'error', http(s) only, timeout.
-//---------------
-
 import { randomUUID } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
 
@@ -83,7 +76,6 @@ async function assertPublicHttpUrl(
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
     return { ok: false, error: REMOTE_FACE_ERROR };
   }
-  // isPublicIp is the binding tests replace on the custom-audio re-export.
   const safety = await resolvePublicHost(parsed.hostname, lookupImpl, isPublicIp);
   if (!safety.ok) return { ok: false, error: REMOTE_FACE_ERROR };
   return { ok: true, addresses: safety.addresses };
@@ -138,7 +130,6 @@ export async function downloadPublicImage(
       });
     }
   } catch (error) {
-    // Hostname only: the full URL can carry signed-link tokens.
     logger.error('[persona-remote-face] image request failed', error, {
       host: new URL(url).hostname,
     });
@@ -221,8 +212,6 @@ export async function resolvePersonaAvatar(
   if (isKeptAvatarUrl(trimmed)) {
     return { ok: true, photoPath: null, avatarUrl: trimmed };
   }
-  // Neither kept nor http(s): refuse it instead of storing an opaque string
-  // that dispatch would later resolve against our origin (issue #448).
   if (!isRemoteAvatarUrl(trimmed)) {
     return { ok: false, error: REMOTE_FACE_ERROR };
   }

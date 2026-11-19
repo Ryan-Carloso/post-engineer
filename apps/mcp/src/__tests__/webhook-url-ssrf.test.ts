@@ -61,9 +61,6 @@ describe('webhookUrl matches the shared webhook fixture', () => {
     }
   });
 
-  // Multicast literals are not in the shared table: Python still reports
-  // them global (blockedBeyondPython), so the engine accepts them. The MCP
-  // rule is stricter and blocks them.
   it('rejects a multicast literal (stricter than the engine)', () => {
     for (const webhookUrl of ['https://224.0.0.1/hook', 'https://[ff02::1]/hook']) {
       const parsed = parseOptions({ webhookUrl });

@@ -29,12 +29,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 RUMBLE_PROVIDER: str = "rumble"
-# Rumble upload form ceiling; lib/rumble.ts pins the same value. The web
-# draft scorer does not enforce it — the ceiling lives at the publish
-# boundary (lib/rumble.ts, this module, and the upload handler).
 RUMBLE_TITLE_MAX_LENGTH: int = 100
-# Personal Use / not for sale. The only other documented value (6 = Rumble
-# Only) is deliberately never sent: it locks the video into exclusivity.
 RUMBLE_LICENSE_TYPE: int = 0
 
 

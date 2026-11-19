@@ -92,9 +92,6 @@ describe('isVoiceOption', () => {
   });
 
   it('agrees with the shared VoiceOptionSchema on every case', () => {
-    // The contract schema is the zod mirror of isVoiceOption. A one-sided
-    // edit would make the MCP accept a voice the web picker rejects (or
-    // the reverse), so both must give the same verdict on each case.
     const cases: Array<{ value: unknown; ok: boolean }> = [
       { value: CATALOG[0], ok: true },
       { value: CATALOG[4], ok: true },
@@ -123,9 +120,6 @@ describe('voiceSampleName', () => {
   });
 
   it('returns null for clone-key ids even when kind is standard', () => {
-    // A persona stored before the chatterbox_nano: rename falls through to
-    // the legacy fallback with kind "standard"; its key must never resolve
-    // to a /voice-samples/<clone_key>.mp3 that does not exist.
     expect(
       voiceSampleName(v({ id: 'chatterbox:uaaaaaaaabbbb_cccccccccccc', provider: 'chatterbox' })),
     ).toBeNull();
@@ -135,9 +129,6 @@ describe('voiceSampleName', () => {
   });
 
   it('resolves legacy voice ids through the engine alias map to a sample that exists', () => {
-    // The old sample files were deleted with the Modal catalog; the engine
-    // aliases a stored legacy id to a Kokoro voice at render time, so the
-    // picker must play that voice's sample, not the missing legacy file.
     expect(voiceSampleName(v({ id: 'chatterbox:en_us_male_01', provider: 'chatterbox' }))).toBe('kokoro_am_michael');
     expect(voiceSampleName(v({ id: 'chatterbox:en_us_female_01', provider: 'chatterbox' }))).toBe('kokoro_af_heart');
     expect(voiceSampleName(v({ id: 'chatterbox:ryan', provider: 'chatterbox' }))).toBe('kokoro_am_michael');

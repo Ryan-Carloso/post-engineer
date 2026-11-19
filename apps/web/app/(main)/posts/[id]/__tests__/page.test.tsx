@@ -4,17 +4,8 @@ import { render, screen, within, waitFor, fireEvent, act } from '@testing-librar
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 
-//---------------
-// Tests for the post detail page (/posts/[id]) — resolves the entity by
-// id through GET /api/posts/[id], never by scanning the history lists.
-//---------------
-
 const pushMock = vi.fn();
 
-// The i18n mock returns the key verbatim (no dictionary, no interpolation),
-// so tests pin behavior by asserting the exact t() call args — the key AND
-// the interpolated vars. A plain getByText(key) cannot see a wrong number
-// or a missing var, so the position assertions go through mockT.
 const mockT = vi.fn((key: string, _vars?: Record<string, unknown>) => key);
 
 vi.mock('next/image', () => ({
@@ -186,7 +177,6 @@ function mockQueries(overrides: {
   slotLoading?: boolean;
 } = {}) {
   vi.mocked(usePostDetailQuery).mockImplementation((id: string) => {
-    // The page asks for the route id; 'u1' is the default fixture's id.
     const slotPayloadId = ((overrides.slot as { slot?: { id?: string } } | null)?.slot as { id?: string } | undefined)?.id ?? 'u1';
     const isFixtureId = id === slotPayloadId;
     if (overrides.slotLoading) {
@@ -222,9 +212,6 @@ function mockQueries(overrides: {
 }
 
 function mockMutations() {
-  // Real react-query invokes the per-call callbacks on success — the
-  // mocks mirror that so onSuccess side effects (close editor, redirect)
-  // are exercised.
   vi.mocked(useUpdateSlotMutation).mockReturnValue({
     mutate: vi.fn((...args: unknown[]) => {
       const options = args[args.length - 1] as { onSuccess?: () => void } | undefined;
@@ -271,8 +258,6 @@ describe('PostDetailPage', () => {
     render(<DetailPage />);
 
     expect(screen.getByText('Upcoming topic')).toBeInTheDocument();
-    // The header title shows the persona name (the generation-facts section
-    // below renders it a second time in its Persona row).
     expect(screen.getByRole('heading', { name: 'Viva Leve' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'posts.editCaption' }));
@@ -309,7 +294,6 @@ describe('PostDetailPage', () => {
     expect(screen.queryByLabelText('posts.captionLabel')).not.toBeInTheDocument();
     expect(screen.getByText('Upcoming topic')).toBeInTheDocument();
 
-    // Reopening the editor shows the original caption, not the discarded draft.
     await user.click(screen.getByRole('button', { name: 'posts.editCaption' }));
     expect(screen.getByLabelText('posts.captionLabel')).toHaveValue('Upcoming topic');
   });
@@ -343,8 +327,6 @@ describe('PostDetailPage', () => {
     expect(linkedin).toHaveAttribute('href', 'https://www.linkedin.com/feed/update/urn:li:activity:1');
   });
 
-  // Published links open another site, so they must never share the tab
-  // with the app itself.
   it('opens each published link in a new tab', () => {
     mockQueries({
       slot: slotPayload({
@@ -413,9 +395,6 @@ describe('PostDetailPage', () => {
     expect(video).not.toBeNull();
     expect(video?.getAttribute('src')).toBe('/api/persona/video-download/task-9/final-1.mp4');
     expect(video?.getAttribute('controls')).not.toBeNull();
-    // The player must keep the video's intrinsic aspect ratio — faceless
-    // videos are often vertical (9:16) and a forced 16:9 box letterboxes
-    // them into a black rectangle.
     expect(video?.className).toContain('h-auto');
     expect(video?.className).not.toContain('aspect-video');
     expect(screen.queryByRole('button', { name: 'posts.editCaption' })).not.toBeInTheDocument();
@@ -463,8 +442,6 @@ describe('PostDetailPage', () => {
     expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '45');
   });
 
-  // The scheduled refetch on usePostDetailQuery delivers the status flip —
-  // the page must swap the progress UI for the player without a reload.
   it('swaps the progress UI for the player when a refetch flips generating to ready', () => {
     const generating = slotPayload({
       status: 'generating',
@@ -492,8 +469,6 @@ describe('PostDetailPage', () => {
     expect(document.querySelector('video')).toBeNull();
     expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '45');
 
-    // The refetch returns ready: the page re-renders with the <video>
-    // instead of the progress bar.
     current = ready;
     rerender(<DetailPage />);
 
@@ -503,23 +478,6 @@ describe('PostDetailPage', () => {
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
   });
 
-  //---------------
-  // GenerationFactsSection — read-only record of what the post was generated
-  // with (the post_* snapshot + faceless flag). Never editable: it records
-  // what was charged for.
-  //---------------
-  //---------------
-  // HookPhotoSection — the first photo of the video (issue #589). The copy
-  // never claims the hook used the photo: videos generated before #589
-  // opened with the persona avatar, so the section shows the first photo
-  // with a neutral note. A URL photo renders; an upload or a persona
-  // fallback has no durable URL and renders a note instead. Faceless
-  // videos never show a face, so the section renders nothing for them.
-  // The position (segment/image, 1-based) is asserted through mockT call
-  // args — the key mock never interpolates, so getByText alone cannot see
-  // a wrong number. A null index on either side drops the position and
-  // falls back to the persona note.
-  //---------------
   it('shows the hook photo image and its position when the first photo came from a URL', () => {
     mockQueries({
       slot: slotPayload({
@@ -616,10 +574,6 @@ describe('PostDetailPage', () => {
     expect(mockT).toHaveBeenCalledWith('posts.hookPhotoPersonaNote');
   });
 
-  // Branch priority: only a segment photo renders an image, and only the
-  // upload branch renders the upload note. A URL on a non-segment photo
-  // never reaches the image branch, and a null position never reaches a
-  // note that needs one — both fall through to the persona note.
   it('never renders an image for an upload photo even when it carries a URL', () => {
     mockQueries({
       slot: slotPayload({
@@ -711,9 +665,6 @@ describe('PostDetailPage', () => {
   });
 
   it('labels a faceless post as faceless and a persona post by name', () => {
-    // Faceless direction: the Face row always renders, reading Faceless.
-    // A consistent persona-less fixture has no persona row AND a null
-    // personaId on the schedule (that is what the page keys noPersona on).
     mockQueries({
       slot: slotPayload({}, {
         persona: null,
@@ -729,7 +680,6 @@ describe('PostDetailPage', () => {
     expect(within(facelessSection).getByText('posts.noPersona')).toBeInTheDocument();
     unmount();
 
-    // Persona direction: the face row must not claim Faceless for a face post.
     mockQueries({ slot: slotPayload() });
     render(<DetailPage />);
     const faceSection = screen.getByRole('region', { name: 'posts.generationFactsLabel' });
@@ -739,7 +689,6 @@ describe('PostDetailPage', () => {
   });
 
   it('renders no row for a fact the post does not have', () => {
-    // A null fact produces no row at all — not even the label.
     mockQueries({ slot: slotPayload() });
     render(<DetailPage />);
 
@@ -749,14 +698,11 @@ describe('PostDetailPage', () => {
     expect(within(section).queryByText('posts.generationFormatLabel')).not.toBeInTheDocument();
     expect(within(section).queryByText('posts.generationNicheLabel')).not.toBeInTheDocument();
     expect(within(section).queryByText('posts.generationParagraphsLabel')).not.toBeInTheDocument();
-    // ...while the always-rendered rows are still there.
     expect(within(section).getByText('posts.generationFaceLabel')).toBeInTheDocument();
     expect(within(section).getByText('posts.generationPersonaLabel')).toBeInTheDocument();
   });
 
   it('renders every fact row when the post has the full snapshot', () => {
-    // Kills the "never push" mutants: each optional fact must appear with
-    // its value when present.
     mockQueries({
       slot: slotPayload({}, {
         generation: generationPayload({
@@ -784,8 +730,6 @@ describe('PostDetailPage', () => {
   });
 
   it('never offers editing on the generation facts', () => {
-    // The user's explicit "apenas como readOnly": no button, input or
-    // checkbox may appear inside the section.
     mockQueries({
       slot: slotPayload({}, {
         generation: generationPayload({ language: 'pt-BR', niche: 'cooking', paragraphNumber: 5 }),
@@ -880,7 +824,6 @@ describe('PostDetailPage', () => {
     render(<DetailPage />);
 
     await user.click(screen.getByRole('button', { name: 'posts.reschedule' }));
-    // 2030-06-01T10:00:00Z is 11:00 in Europe/Lisbon (summer, UTC+1).
     expect(screen.getByLabelText('posts.reschedule')).toHaveValue('2030-06-01T11:00');
   });
 
@@ -896,7 +839,6 @@ describe('PostDetailPage', () => {
     const mutate = vi.mocked(useRescheduleSlotMutation).mock.results[0].value.mutate as ReturnType<
       typeof vi.fn
     >;
-    // 12:00 in Europe/Lisbon (summer) is 11:00 UTC.
     expect(mutate).toHaveBeenCalledWith(
       { slotId: 'u1', slotAt: '2030-06-02T11:00:00.000Z' },
       expect.anything(),
@@ -995,17 +937,11 @@ describe('PostDetailPage', () => {
   });
 });
 
-//---------------
-// Post identity — the redesigned detail page surfaces the post's own
-// identity: its id with a copy button, the scheduled (or published) date
-// rendered in the schedule's timezone, and the target accounts by name.
-//---------------
 describe('PostDetailPage — post identity', () => {
   const writeText = vi.fn();
 
   beforeEach(() => {
     writeText.mockResolvedValue(undefined);
-    // jsdom ships no clipboard — the page calls it on copy.
     Object.defineProperty(navigator, 'clipboard', {
       value: { writeText },
       configurable: true,
@@ -1018,9 +954,6 @@ describe('PostDetailPage — post identity', () => {
     expect(screen.getByText('posts.postIdLabel')).toBeInTheDocument();
     expect(screen.getByText('u1')).toBeInTheDocument();
 
-    // fireEvent, not user.click: this matches the other clipboard-copy
-    // tests (every useCopyText caller) — user-event's pointer sequence
-    // does not reach the handler under jsdom here.
     fireEvent.click(screen.getByRole('button', { name: 'posts.copyPostId' }));
     expect(writeText).toHaveBeenCalledWith('u1');
     expect(await screen.findByText('posts.copied')).toBeInTheDocument();
@@ -1029,9 +962,6 @@ describe('PostDetailPage — post identity', () => {
   it('shows the scheduled date in the schedule timezone', () => {
     render(<DetailPage />);
 
-    // 2030-06-01T10:00:00Z is 11:00 in Europe/Lisbon (UTC+1 in June) —
-    // asserting the converted hour proves the zone is applied, not just
-    // printed next to the viewer's local time.
     const section = screen.getByLabelText('posts.scheduleLabel');
     expect(section).toHaveTextContent('posts.scheduledForLabel');
     expect(section).toHaveTextContent('Jun');
@@ -1053,7 +983,6 @@ describe('PostDetailPage — post identity', () => {
     vi.mocked(useParams).mockReturnValue({ id: 'r1' });
     render(<DetailPage />);
 
-    // 2020-01-01T10:05:00Z is 10:05 in Europe/Lisbon (UTC+0 in January).
     const section = screen.getByLabelText('posts.scheduleLabel');
     expect(section).toHaveTextContent('posts.publishedOnLabel');
     expect(section).toHaveTextContent('10:05');
@@ -1101,7 +1030,6 @@ describe('PostDetailPage — post identity', () => {
       });
       render(<DetailPage />);
 
-      // The date must not blank: it renders in the viewer's zone instead.
       const section = screen.getByLabelText('posts.scheduleLabel');
       expect(section).toHaveTextContent('posts.scheduledForLabel');
       expect(section).toHaveTextContent('(Not/AZone)');
@@ -1123,15 +1051,12 @@ describe('PostDetailPage — post identity', () => {
     try {
       render(<DetailPage />);
 
-      // The indicator turns on once the clipboard write resolves, so each
-      // click is flushed inside an async act.
       const button = screen.getByRole('button', { name: 'posts.copyPostId' });
       await act(async () => {
         fireEvent.click(button);
       });
       expect(screen.getByText('posts.copied')).toBeInTheDocument();
 
-      // 2s into the 2.5s window, click again: the window restarts.
       act(() => {
         vi.advanceTimersByTime(2000);
       });
@@ -1139,9 +1064,6 @@ describe('PostDetailPage — post identity', () => {
         fireEvent.click(button);
       });
 
-      // 2s after the second click the indicator is still up (2s into the
-      // restarted window); without the reset it would have cleared 0.5s
-      // after the second click.
       act(() => {
         vi.advanceTimersByTime(2000);
       });
@@ -1207,7 +1129,6 @@ describe('PostDetailPage — progress history', () => {
     const section = screen.getByLabelText('posts.progressHistoryTitle');
     const rows = within(section).getAllByTestId('progress-history-row');
     expect(rows[0]).not.toHaveAttribute('data-regressed');
-    // 0% after 40% is a regression; 50% after 0% is forward progress.
     expect(rows[1]).toHaveAttribute('data-regressed', 'true');
     expect(rows[2]).not.toHaveAttribute('data-regressed');
   });

@@ -31,18 +31,13 @@ from app.controllers.v1.base import new_router
 from app.models.exception import HttpException
 from app.utils import file_security, upload_limits, utils
 
-#---------------
-# Routers: upload requires the bearer secret (same contract as the other
-# v1 routes); download lives on an unauthenticated router because the engine
-# itself fetches the URL without headers — the UUID name is the capability.
-#---------------
 upload_router = new_router()
 router = APIRouter()
 router.tags = ["V1"]
 router.prefix = "/api/v1"
 
-TEMP_ASSET_TTL_SECONDS = 60 * 60  # 1 hour — no job lives longer than that
-_TEMP_ASSET_MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
+TEMP_ASSET_TTL_SECONDS = 60 * 60
+_TEMP_ASSET_MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 
 _ALLOWED_SUFFIXES = (
     "jpg", "jpeg", "png", "webp",
@@ -78,8 +73,6 @@ def _sanitize_name(filename: str, request_id: str) -> str:
             status_code=400,
             message=f"{request_id}: only {', '.join(_ALLOWED_SUFFIXES)} files are allowed",
         )
-    # The final name is always our own UUID — the client-supplied name never
-    # touches the disk.
     return f"{utils.get_uuid(remove_hyphen=True)}.{suffix}"
 
 
@@ -100,8 +93,6 @@ def upload_temp_asset(request: Request, file: UploadFile = File(...)):
     _purge_expired()
     name = _sanitize_name(file.filename, request_id)
     save_path = os.path.join(_temp_assets_dir(), name)
-    # Stream the upload with a 50 MB cap instead of buffering the whole body
-    # in RAM; over-limit uploads get 413 and leave no partial file.
     try:
         upload_limits.save_upload_stream(
             file, save_path, max_bytes=_TEMP_ASSET_MAX_UPLOAD_BYTES

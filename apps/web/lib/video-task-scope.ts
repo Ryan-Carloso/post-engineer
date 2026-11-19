@@ -6,22 +6,6 @@ import { logger } from '@/lib/logger';
 import { UUID } from '@/lib/metrics/metrics-query';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 
-//---------------
-// video-task-scope — which persona owns an engine task, and whether a
-// persona-scoped API key may read it.
-//
-// The service client bypasses RLS, so every lookup filters by user_id.
-// A generation row wins over a scheduled slot: video_generations.persona_id
-// is stored at dispatch, and a null there is a persona-less (faceless)
-// generation, not an orphan of a deleted schedule. Slot orphans are
-// resolved through scheduled_posts.faceless (literal true only) and the
-// schedule row. A deleted schedule does not make the post faceless.
-//
-// DELETE stays fail-closed: a missing schedule is not found, and a null
-// persona is allowed. Reads hide a null persona unless the post is
-// faceless, and answer 404 (the same as unknown) when it is out of scope.
-//---------------
-
 export interface TaskScope {
   found: boolean;
   personaId: string | null;
@@ -48,8 +32,6 @@ function field(row: unknown, key: string): unknown {
   return Reflect.get(row, key);
 }
 
-// Persona ids are only string-checked at key creation. Drop anything that
-// is not a UUID before interpolating it into a PostgREST filter.
 export function generationPersonaOrFilter(personaIds: readonly string[]): GenerationPersonaFilter {
   const ids = personaIds.filter((id) => UUID.test(id));
   if (ids.length === 0) return { kind: 'null' };
@@ -120,9 +102,6 @@ export function isTaskVisibleToScopedKey(scope: TaskScope, personaIds: readonly 
   return personaIds.includes(scope.personaId);
 }
 
-// Returns a 404/500 response when a scoped key must not continue, or null
-// when the caller may talk to the engine. Unscoped keys and OAuth skip
-// the lookup. The 404 matches the unknown-task answer for that route.
 export async function enforceScopedTaskRead(
   auth: PersonaScopeContext & { userId: string },
   taskId: string,

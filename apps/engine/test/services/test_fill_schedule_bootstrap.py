@@ -34,7 +34,6 @@ class StartFillScheduleSchedulerTests(unittest.TestCase):
         env = {"SUPABASE_URL": "", "SUPABASE_SERVICE_ROLE_KEY": ""}
         with patch.dict(os.environ, env, clear=False):
             with patch.object(asgi, "start_fill_schedule_thread") as thread:
-                # Must not raise — app boot continues.
                 asgi.start_fill_schedule_scheduler()
         thread.assert_not_called()
 
@@ -53,8 +52,6 @@ class StartFillScheduleSchedulerTests(unittest.TestCase):
         self.assertTrue(any("started" in message for message in notifications))
 
     def test_scheduler_starts_without_a_queue_dependency(self):
-        # The daily persona batch (and its queue) is gone: the scheduler
-        # boots with only the store, no queue wiring required.
         asgi = self._import_asgi()
         self.assertFalse(hasattr(asgi, "fill_schedule_queue"))
         notifications = []
@@ -90,9 +87,6 @@ def _without_pytest_modules():
 
 
 def _env_without_pytest(extra=None):
-    # Simulate "outside any test run": strip both the pytest fingerprint and
-    # the suite bootstrap marker (test/__init__.py sets ENGINE_UNDER_TEST=1
-    # for the whole session).
     env = {
         k: v
         for k, v in os.environ.items()
@@ -109,10 +103,6 @@ class ErrorTrackingInitTests(unittest.TestCase):
         return asgi
 
     def test_error_tracking_disabled_under_pytest(self):
-        # Regression: importing app.asgi during pytest collection runs
-        # load_dotenv(), which loads the tracked .env with the real
-        # POSTHOG_API_KEY. The test process must never attach production
-        # error tracking.
         asgi = self._import_asgi()
         self.assertFalse(asgi.should_init_error_tracking())
 
@@ -131,11 +121,6 @@ class ErrorTrackingInitTests(unittest.TestCase):
             self.assertFalse(asgi.should_init_error_tracking())
 
     def test_asgi_import_warns_when_guard_fires_without_runner(self):
-        # Review MINOR: a production-like process where the guard fires but
-        # no test runner is behind it (leaked ENGINE_UNDER_TEST, no pytest /
-        # unittest importable) must warn loudly about the skipped error
-        # tracking — not stay silent at debug. Runs in a subprocess so the
-        # real import-time branch executes in isolation.
         env = {
             k: v
             for k, v in os.environ.items()
@@ -156,9 +141,6 @@ class ErrorTrackingInitTests(unittest.TestCase):
         self.assertIn("no test runner detected", output)
 
     def test_asgi_import_enables_tracking_with_dsn_outside_tests(self):
-        # Sanity: without any guard trigger and a PostHog key set, tracking
-        # initializes (info log) — the warning above is specific to the
-        # guard firing without a runner.
         env = {
             k: v
             for k, v in os.environ.items()

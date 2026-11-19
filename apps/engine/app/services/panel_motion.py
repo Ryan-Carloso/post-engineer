@@ -12,13 +12,11 @@ import math
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    # segment_panels imports this module to build its overlay command.
     from app.services.segment_panels import Panel
 
 FPS = 30
 ZOOM_PER_SECOND = 0.03
 MAX_ZOOM = 1.12
-# Supersampling factor before zoompan (see module docstring).
 SUPERSAMPLE = 2
 
 

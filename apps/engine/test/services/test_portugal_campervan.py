@@ -25,7 +25,6 @@ import sys
 import unittest
 from pathlib import Path
 
-# add project root to python path (matches the other test files)
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from app.models.schema import VideoParams
@@ -38,25 +37,17 @@ RUN_INTEGRATION_TESTS = os.environ.get("MPT_RUN_INTEGRATION_TESTS", "").lower() 
     "yes",
 }
 
-# ────────────────────────────────────────────────────────────────────────── #
-# Configurable test parameters — edit these to retarget the test.
-# ────────────────────────────────────────────────────────────────────────── #
 SUBJECT = "Viagem de Portugal com campervan"
-# Script supplied with the job: hook paragraph, then body. The pipeline
-# takes it as-is and never generates one.
 SCRIPT = (
     "Portugal de campervan é a forma mais livre de conhecer o país, "
     "do Douro ao Algarve, sem horários e sem hotéis.\n\n"
     "Acordas junto ao mar, almoças numa aldeia do interior e terminas o "
     "dia num miradouro sobre o Atlântico, com a casa sempre contigo."
 )
-LANGUAGE = "pt-BR"  # script + narration language
-VOICE = "pt-BR-FranciscaNeural"  # Brazilian female voice.
+LANGUAGE = "pt-BR"
+VOICE = "pt-BR-FranciscaNeural"
 ASPECT = "9:16"
 OUTPUT_COPY_NAME = "portugal_campervan_2.mp4"
-# NOTE: this test must NOT override video-generation logic (script prompt,
-# subtitle styling, etc.). Those live as production defaults in config.toml
-# and app/models/schema.py. The test only sets subject/language/voice/aspect.
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 STORAGE_DIR = PROJECT_ROOT / "storage"
@@ -67,8 +58,6 @@ class TestPortugalCampervanE2E(unittest.TestCase):
 
     @unittest.skipUnless(RUN_INTEGRATION_TESTS, "set MPT_RUN_INTEGRATION_TESTS=1 to run")
     def test_generate_portugal_campervan_video(self):
-        # storage/ is auto-created by the task service, but ensure it exists
-        # before we copy the friendly-named output there.
         STORAGE_DIR.mkdir(parents=True, exist_ok=True)
 
         task_id = utils.get_uuid()
@@ -91,14 +80,11 @@ class TestPortugalCampervanE2E(unittest.TestCase):
             paragraph_number=1,
         )
 
-        # ── Run the whole pipeline in-process ──
         result = tm.start(task_id=task_id, params=params)
 
-        # ── Assert the pipeline returned a non-empty result ──
         self.assertIsNotNone(result, "tm.start returned None — pipeline failed")
         print(f"[result]  {result}")
 
-        # ── Locate the rendered final-*.mp4 under the task directory ──
         task_dir = STORAGE_DIR / "tasks" / task_id
         final_videos = sorted(task_dir.glob("final-*.mp4"))
         self.assertGreater(
@@ -110,7 +96,6 @@ class TestPortugalCampervanE2E(unittest.TestCase):
         primary_video = final_videos[0]
         size_bytes = primary_video.stat().st_size
         size_mb = size_bytes / (1024 * 1024)
-        # A real rendered vertical short is at least a few hundred KB.
         self.assertGreater(
             size_bytes,
             100_000,
@@ -118,7 +103,6 @@ class TestPortugalCampervanE2E(unittest.TestCase):
         )
         print(f"[video]   {primary_video}  ({size_mb:.2f} MB)")
 
-        # ── Copy to a stable, friendly filename so it's easy to open ──
         friendly = STORAGE_DIR / OUTPUT_COPY_NAME
         shutil.copy2(primary_video, friendly)
         print(f"[copy]    {friendly}")

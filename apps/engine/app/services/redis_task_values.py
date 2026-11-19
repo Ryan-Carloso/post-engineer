@@ -17,12 +17,10 @@ def convert_redis_task_value(value: bytes) -> object:
     value_str = value.decode("utf-8")
 
     try:
-        # Byte-string lists (video paths) come back as their Python literal.
         return ast.literal_eval(value_str)
     except (ValueError, SyntaxError):
         pass
 
     if value_str.isdigit():
-        # Leading-zero numerals are not valid Python literals ("08").
         return int(value_str)
     return value_str

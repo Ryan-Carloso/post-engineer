@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import re
 
-# Engine registry keys: u{12 hex of user uuid}_{12 hex of clone uuid}
 _USER_CLONE_KEY_RE = re.compile(r"^u([0-9a-f]{12})_([0-9a-f]{12})$", re.IGNORECASE)
 
 

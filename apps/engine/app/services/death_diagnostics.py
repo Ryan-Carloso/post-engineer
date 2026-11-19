@@ -65,9 +65,6 @@ class DeathDiagnosticTaskState(SupabaseTaskState):
     """
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
-        # Set before super().__init__ so it exists when the boot reconcile
-        # (run explicitly in app.asgi.startup_event) records its stats via
-        # our reconcile_orphaned_tasks override.
         self.last_reconcile_stats: dict[str, object] = {}
         super().__init__(*args, **kwargs)
 
@@ -79,20 +76,12 @@ class DeathDiagnosticTaskState(SupabaseTaskState):
         **kwargs: object,
     ) -> None:
         if "stage" in kwargs:
-            # Per-phase memory pressure, persisted with the stage mark: when
-            # the next boot triages this row as an orphan, the last stage's
-            # RSS shows what the process was carrying when it died. Cheap
-            # (/proc read); VRAM rides the heartbeat row.
             rss_mb = engine_heartbeat.current_rss_mb()
             if rss_mb is not None:
                 kwargs["stage_rss_mb"] = round(rss_mb, 1)
         super().update_task(task_id, state=state, progress=progress, **kwargs)
 
     def reconcile_orphaned_tasks(self) -> int:
-        # Snapshot before the base marks the rows failed: afterwards the
-        # per-stage breakdown is no longer queryable as "orphans". The
-        # single-writer assumption (one engine process owns the table) means
-        # nothing changes between this SELECT and the base's own.
         rows = _orphan_rows(self)
         failed = super().reconcile_orphaned_tasks()
         self.last_reconcile_stats = {

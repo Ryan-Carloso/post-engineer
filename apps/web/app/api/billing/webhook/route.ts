@@ -142,7 +142,4 @@ async function fulfillCheckout(
   }
 }
 
-//---------------
-// 5xx reporting: handled server errors reach PostHog error tracking.
-//---------------
 export const POST = withApiErrorReporting('POST /api/billing/webhook', postHandler);

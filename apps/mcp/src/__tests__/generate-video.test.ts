@@ -4,11 +4,6 @@ import type { PostEngineerClient } from '../client.js';
 import { GenerateVideoSchema, handleGenerateVideo } from '../generate-video.js';
 import type { McpToolResponse } from '../tools-call.js';
 
-// generate_video (issue #566): one call generates one video or a batch, and
-// the persona and accounts are given by name or id. Every reference of every
-// video is resolved BEFORE the first video is created, and the result echoes
-// what was resolved.
-
 const MARIA = '11111111-1111-4111-8111-111111111111';
 const JOAO = '22222222-2222-4222-8222-222222222222';
 
@@ -57,7 +52,7 @@ function fakes(options: { personas?: unknown; accounts?: unknown; bound?: unknow
   const listPersonas = vi.fn(async () => options.personas ?? { personas: [{ id: MARIA, name: 'Maria' }, { id: JOAO, name: 'João' }] });
   const listSocialAccounts = vi.fn(async () => options.accounts ?? { accounts: [{ provider: 'youtube', channelId: 'UC1', channelName: 'Maria Cooks' }, { provider: '3speak', providerAccountId: 'maria-hive', accountName: 'Maria Hive' }] });
   const request = vi.fn(async (path: string) => {
-    if (path.startsWith('/api/persona/publishing-accounts')) return options.bound ?? { success: true, defaults: { youtube: ['UC1'], instagram: [], bluesky: ['did:plc:abc'], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [] } };
+    if (path.startsWith('/api/persona/publishing-accounts')) return options.bound ?? { success: true, defaults: { youtube: ['UC1'], instagram: [], bluesky: ['did:plc:abc'], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [], telegram: [] } };
     if (path === '/api/videos/batch-discount') {
       return { success: true, batchId: 'batch-1', faceVideos: 2, earnedFreeVideos: 0, freeVideos: [], discountTokens: 0, chargedTokens: 6, videos: 2, warnings: [] };
     }
@@ -78,7 +73,6 @@ describe('generate_video: one video', () => {
     const sent = f.generatePersonaVideo.mock.calls[0][0];
     expect(sent.personaId).toBe(MARIA);
     expect(sent.providers).toEqual(['youtube', 'bluesky']);
-    // Bound accounts are the server default: the account arrays stay unset.
     expect(sent.youtubeAccountIds).toBeUndefined();
     expect(text(response)).toContain(`Resolved: persona "Maria" → ${MARIA}`);
     expect(text(response)).toContain("publishing to the persona's bound accounts: youtube (UC1); bluesky (did:plc:abc)");
@@ -149,7 +143,7 @@ describe('generate_video: one video', () => {
   });
 
   it('fails when the persona has no bound accounts and none were given', async () => {
-    const f = fakes({ bound: { success: true, defaults: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [] } } });
+    const f = fakes({ bound: { success: true, defaults: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [], telegram: [] } } });
     const response = await handleGenerateVideo(f.client, parse({ videos: [video()] }));
     expect(response.isError).toBe(true);
     expect(text(response)).toContain('no bound publishing accounts');

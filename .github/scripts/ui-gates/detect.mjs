@@ -1,11 +1,6 @@
 #!/usr/bin/env node
-//---------------
-// detect.mjs — prints the PR's changed UI files (repo-relative,
-// comma-separated; empty output when none).
-//
-// Usage: node detect.mjs --base origin/main --head <sha>
-//---------------
 import { changedUiFiles } from './changed.mjs';
+import { filterCodeChanged } from './code-changed.mjs';
 
 function arg(name) {
   const idx = process.argv.indexOf(name);
@@ -19,4 +14,4 @@ if (!base || !head) {
   process.exit(2);
 }
 
-console.log(changedUiFiles(base, head).join(','));
+console.log((await filterCodeChanged(changedUiFiles(base, head), base, head)).join(','));

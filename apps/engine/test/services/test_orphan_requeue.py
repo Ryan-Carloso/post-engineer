@@ -111,7 +111,6 @@ class TriageRequeueTests(unittest.TestCase):
         store = self._slot_store({"id": "slot-1", "status": "pending", "task_id": "t-1"})
         with patch.object(orphan_requeue, "track_event") as track:
             claimed = orphan_requeue.triage_requeue(state, store, "t-1", _task_data())
-        # Claimed (never fail+refund), but nothing to reset: the tick owns it.
         self.assertTrue(claimed)
         store.update_slot.assert_not_called()
         track.assert_not_called()
@@ -194,8 +193,6 @@ class TriageRequeueStageGateTests(unittest.TestCase):
             claimed = orphan_requeue.triage_orphan(
                 state, "t-1", _task_data(requeue_count=3), store
             )
-        # A deterministically crashing task must settle (fail+refund) instead
-        # of regenerating on every boot forever.
         self.assertFalse(claimed)
         store.update_slot.assert_not_called()
         state.update_task.assert_not_called()

@@ -189,8 +189,6 @@ describe('GET /api/account', () => {
   });
 
   it('marks Rumble, 3Speak and LinkedIn-org rows with status error when their sync fails', async () => {
-    // These providers never fetch a profile, so their broken state only
-    // reaches the page through the sync failure (undecryptable token).
     mockSession();
     const rumble = {
       id: 'rec-rumble', provider: 'rumble', providerAccountId: 'chan-1', accountName: 'chan-1',
@@ -267,9 +265,6 @@ describe('GET /api/account', () => {
   });
 
   it('leaves transient sync failures unflagged so the card keeps its disconnect action', async () => {
-    // A provider 5xx, a DB read failure and an unclassified error are not
-    // credential failures: flagging them would mislabel the card as
-    // "Invalid token" and hide the trash until the next successful list.
     mockSession();
     const outage = {
       id: 'rec-502', provider: 'threads', providerAccountId: '42', accountName: 'ana',

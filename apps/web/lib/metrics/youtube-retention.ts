@@ -6,17 +6,6 @@ import { analyticsDate, queryVideoStats, videoSnippet } from '@/lib/youtube-anal
 import { ANALYTICS_PROVISIONAL_DAYS } from './metrics-query';
 import type { MetricsTarget, MetricsWindow, RetentionSnapshot } from './post-metrics';
 
-//---------------
-// youtube-retention — the Analytics half of a YouTube snapshot: engaged
-// views and watch time for the owner's own video over publish date ..
-// end date. A transient Analytics failure throws before the snapshot is
-// saved, so the collector retries the whole target (Data API counters
-// included) next hour.
-//---------------
-
-// Analytics data is provisional for ~48-72h. The '28d' window queries up to
-// collection - 3 days so its values are final; '24h'/'7d' query up to the
-// collection day and are shown as provisional.
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export function analyticsEndDate(window: MetricsWindow, now: Date): string {
@@ -44,9 +33,6 @@ export async function youtubeRetention(
   context: { window: MetricsWindow; now: Date },
 ): Promise<RetentionSnapshot> {
   const snippet = videoSnippet(videoInfo);
-  // Ownership: target.accountId is the connected channel id
-  // (social_accounts.provider_account_id). A video on any other channel is
-  // never sent to the Analytics API.
   if (snippet.channelId !== target.accountId) {
     logger.warn('[post-metrics] video is not on the account channel; analytics skipped', {
       accountId: target.accountId,

@@ -8,19 +8,6 @@ import type { SocialProvider } from '../contracts/providers.js';
 import { METRICS_NONE } from '../limits.js';
 import { GetPostMetricsSchema, GetYouTubeRetentionCurveSchema } from '../tools-posts.js';
 
-//---------------
-// metrics tool schemas vs the shared contract — the MCP tools validate
-// their arguments locally with the same rules the routes enforce
-// (parseMetricsQuery / parseRetentionCurveQuery in the contract). A
-// one-sided edit would make the MCP reject what the route accepts (or
-// forward what it rejects), so the two must agree on every case.
-//
-// Deliberate difference: the tool schemas do not reject unknown keys
-// (the MCP framework only ever passes the advertised fields), while the
-// route parsers reject unknown query params — that difference is
-// route-side only and is covered by the web route tests.
-//---------------
-
 const PERSONA = '0b7c2c55-4a3e-4c55-9d7e-1f2a3b4c5d6e';
 
 type MetricsCase = { args: Record<string, string>; accept: boolean };
@@ -42,10 +29,6 @@ const METRICS_CASES: MetricsCase[] = [
 ];
 
 function metricsParams(args: Record<string, string>): URLSearchParams {
-  // The same mapping getPostMetrics does: tool field names are the route
-  // parameter names, so the params are built straight from the args. The
-  // cast only satisfies the type: reject cases carry an invalid provider
-  // on purpose, and the contract must reject the runtime value.
   return metricsSearchParams({
     window: args.window as '24h' | '7d' | '28d',
     personaId: args.persona ?? null,

@@ -1,30 +1,4 @@
 #!/usr/bin/env node
-/**
- * File-size ratchet lint — CI entry point.
- *
- * Diff-based: only files CHANGED in the PR diff are linted. A file is
- * flagged when:
- *   - a NEW file exceeds LINE_CAP lines, or
- *   - a MODIFIED file grows past LINE_CAP lines (this is a true ratchet:
- *     files already above the cap are grandfathered and may only shrink —
- *     any growth past the cap fails, there is no warning-only loophole).
- *
- * Exempt: test files, supabase/migrations, lockfiles, markdown, generated
- * *.gen.<ext> files (pinned by a drift test against their generator), vendored
- * CalendarCN files (third-party code pinned to an upstream commit
- * in vendored-calendarcn.mjs — their line counts are upstream's, not ours),
- * and prompt-data files (shared/prompt-base/** — prompt wording is data,
- * not logic; see prompt-data.mjs for why the file cannot be split).
- * Only *.py / *.ts / *.tsx are checked; everything else is ignored.
- *
- * Usage:
- *   node check.mjs --base <sha> --head <sha> [--repo-root <path>]
- *   node check.mjs --fixtures <path>          # test hook: JSON list of
- *                                            # { path, status, baseLines, headLines }
- *
- * Exit code: 1 when any violation exists, else 0. Violations are printed
- * as GitHub ::error annotations (file=<path>).
- */
 
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -33,8 +7,6 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { isVendoredCalendarCN } from './vendored-calendarcn.mjs';
 import { isPromptDataFile } from './prompt-data.mjs';
 
-// The cap (lines) a source file may have before the ratchet bites.
-// Shared from one constant so tests pin the same value as CI.
 export const LINE_CAP = 500;
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -51,52 +23,34 @@ function parseArgs(argv) {
   return args;
 }
 
-/** True for files this lint covers at all (*.py / *.ts / *.tsx). */
 export function isSourceFile(p) {
   return /\.(py|tsx?)$/.test(p);
 }
 
-/** True for paths excluded from the lint (tests, migrations, lockfiles, docs, generated). */
 export function isExempt(p) {
-  // Vendored CalendarCN files: third-party code pinned to an upstream
-  // commit — their line counts are upstream's, not ours.
   if (isVendoredCalendarCN(p)) return true;
   // Prompt-data files: prompt wording is data, not logic — see prompt-data.mjs.
   if (isPromptDataFile(p)) return true;
   const segments = p.split('/');
   const base = segments[segments.length - 1];
-  // Test files: *.test.*, *_test.*, or anything under a test(s) directory.
   if (base.includes('.test.') || base.includes('_test.')) return true;
   if (segments.some((s) => s === 'test' || s === 'tests')) return true;
-  // Versioned DB migrations are append-only by design; never linted.
   if (segments[0] === 'supabase' && segments[1] === 'migrations') return true;
-  // Lockfiles: pnpm-lock.yaml, uv.lock, and any *.lock.
   if (base === 'pnpm-lock.yaml' || base === 'uv.lock' || base.endsWith('.lock')) return true;
-  // Markdown docs.
   if (base.endsWith('.md')) return true;
-  // Generated code (*.gen.<ext>, e.g. apps/web/lib/engine/schema.gen.ts) is
-  // pinned by a drift test against its generator, never edited by hand.
   if (/\.gen\.[^.]+$/.test(base)) return true;
   return false;
 }
 
-/**
- * Count lines in text the way an editor shows them: every newline plus a
- * final unterminated line. Empty file counts 0.
- */
 export function countLines(text) {
   if (text.length === 0) return 0;
   const newlines = (text.match(/\n/g) || []).length;
   return text.endsWith('\n') ? newlines : newlines + 1;
 }
 
-/**
- * Evaluate one changed file. Returns a human-readable violation message,
- * or null when the file is compliant (or out of scope).
- */
 export function checkFile({ path: p, status, baseLines, headLines }) {
   if (!isSourceFile(p) || isExempt(p)) return null;
-  const kind = status[0]; // 'R100' -> 'R', etc.
+  const kind = status[0];
   if (kind === 'A') {
     if (headLines > LINE_CAP) {
       return `new file has ${headLines} lines, above the ${LINE_CAP}-line cap`;
@@ -111,7 +65,6 @@ export function checkFile({ path: p, status, baseLines, headLines }) {
     }
     return null;
   }
-  // Deleted / unmerged / unknown statuses are never violations.
   return null;
 }
 
@@ -127,14 +80,10 @@ function gitShow(ref, filePath, repoRoot) {
       maxBuffer: 64 * 1024 * 1024,
     });
   } catch {
-    return null; // Missing at this ref (e.g. renamed across the diff).
+    return null;
   }
 }
 
-/**
- * Collect { path, status, baseLines, headLines } for every changed file in
- * `git diff base...head`, skipping files that can never violate.
- */
 function collectFromGit(base, head, repoRoot) {
   const raw = execFileSync(
     'git',

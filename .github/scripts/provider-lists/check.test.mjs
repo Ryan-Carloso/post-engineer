@@ -1,5 +1,3 @@
-// Unit tests for the provider-lists lint: node --test .github/scripts/provider-lists/*.test.mjs
-
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -90,9 +88,6 @@ describe('scanTs', () => {
   it('finds runs of sibling if statements that share a subject', () => {
     assert.deepEqual(tsKinds("if (p === 'youtube') a();\nif (p === 'instagram') b();\nif (p === 'bluesky') c();\n"), [['chain', 3]]);
     assert.deepEqual(tsKinds("if (a.provider === 'youtube') a();\nif (a.provider === 'instagram') b();\nif (a.provider === 'bluesky') c();\n"), [['chain', 3]]);
-    // The scanner groups runs of two or more; the rules drop the ones under
-    // the per-provider threshold. Unrelated statements and a different
-    // subject break the run.
     assert.deepEqual(tsKinds("if (p === 'youtube') a();\nif (p === 'instagram') b();\n"), [['chain', 2]]);
     assert.deepEqual(tsKinds("if (p === 'youtube') a();\nwork();\nif (p === 'instagram') b();\nif (p === 'bluesky') c();\n"), [['chain', 2]]);
     assert.deepEqual(tsKinds("if (p === 'youtube') a();\nif (q === 'instagram') b();\nif (q === 'bluesky') c();\n"), [['chain', 2]]);

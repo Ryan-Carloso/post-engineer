@@ -12,14 +12,13 @@ export async function withTimeout<T>(
   const { timeoutMs, onProgress } = options;
   const startTime = Date.now();
 
-  // Progress tracker
   let progressInterval: NodeJS.Timeout | undefined;
   if (onProgress) {
     progressInterval = setInterval(() => {
       const elapsed = Date.now() - startTime;
       const remaining = timeoutMs - elapsed;
       onProgress(elapsed, remaining);
-    }, 1000); // Update progress every second
+    }, 1000);
   }
 
   const timeoutPromise = new Promise<never>((_, reject) => {
@@ -43,11 +42,11 @@ export async function withTimeout<T>(
 }
 
 export const TIMEOUT_CONFIG = {
-  UPLOAD_TIMEOUT: 30 * 60 * 1000, // 30 minutos
-  OAUTH_TIMEOUT: 5 * 60 * 1000, // 5 minutos
-  HEALTH_CHECK_TIMEOUT: 10 * 1000, // 10 segundos
-  CONNECTION_TIMEOUT: 30 * 1000, // 30 segundos
-  VALIDATION_TIMEOUT: 5 * 1000, // 5 segundos
+  UPLOAD_TIMEOUT: 30 * 60 * 1000,
+  OAUTH_TIMEOUT: 5 * 60 * 1000,
+  HEALTH_CHECK_TIMEOUT: 10 * 1000,
+  CONNECTION_TIMEOUT: 30 * 1000,
+  VALIDATION_TIMEOUT: 5 * 1000,
 } as const;
 
 export async function withUploadTimeout<T>(promise: Promise<T>): Promise<T> {

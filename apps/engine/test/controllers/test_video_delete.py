@@ -77,13 +77,10 @@ def test_delete_video_succeeds_when_rmtree_raises_and_logs_error(monkeypatch, tm
     finally:
         logger.remove(sink)
 
-    # The delete is already committed when rmtree runs, so the request
-    # must succeed even though the directory is stranded.
     assert response["status"] == 200
     assert sm.state.get_task(task_id) is None
     assert current.exists()
     errors = [line for line in lines if "ERROR" in line]
     assert any(task_id in line for line in errors)
-    # No machine-local path beyond the basename reaches the log.
     assert not any(str(tmp_path) in line for line in errors)
     sm.state.delete_task(task_id)

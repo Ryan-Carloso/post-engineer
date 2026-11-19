@@ -1,13 +1,5 @@
 'use client';
 
-//---------------
-// DisconnectAccountDialog — destructive confirmation before removing a
-// connected social account. Built on the Radix dialog primitives: Escape
-// closes, focus is trapped inside the panel (and restored on close), and
-// the content unmounts when closed so the next open starts clean.
-// Initial focus lands on the cancel button, never the confirm.
-//---------------
-
 import { useRef, type ReactNode } from 'react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { SpinnerIcon } from '@/lib/ui';

@@ -1,6 +1,3 @@
-// Schedule warning objects (never a bare string). `voice_fallback_applied`
-// names the voice the route swapped in. `account_needs_reconnect` names
-// the accounts whose stored login is already dead.
 import { z } from 'zod';
 
 import { SOCIAL_PROVIDERS } from './providers.js';

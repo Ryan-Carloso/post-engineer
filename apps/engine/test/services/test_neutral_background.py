@@ -49,9 +49,6 @@ class TestNeutralPng(unittest.TestCase):
         from PIL import Image
 
         with tempfile.TemporaryDirectory() as tmp:
-            # VideoParams defaults video_aspect to the unvalidated string
-            # "9:16" (pydantic does not validate defaults); the renderer
-            # must coerce it instead of crashing on .to_resolution().
             path = render_neutral_png(tmp, "9:16")
             self.assertTrue(os.path.isfile(path))
             with Image.open(path) as image:

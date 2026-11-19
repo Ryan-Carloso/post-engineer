@@ -59,14 +59,13 @@ def _r2_client():
     botocore does the signing. Endpoint URL is explicit because R2 is
     S3-compatible but NOT AWS, so the default AWS endpoint would be wrong.
     """
-    import boto3  # imported lazily so non-video engine operations need no client
+    import boto3
 
     return boto3.client(
         "s3",
         endpoint_url=r2_endpoint(),
         aws_access_key_id=(os.getenv("R2_ACCESS_KEY_ID") or "").strip(),
         aws_secret_access_key=(os.getenv("R2_SECRET_ACCESS_KEY") or "").strip(),
-        # R2 ignores the region, but botocore refuses to sign without one.
         region_name="auto",
     )
 

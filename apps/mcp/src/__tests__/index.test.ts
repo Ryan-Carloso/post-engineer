@@ -10,18 +10,12 @@ vi.mock('../analytics.js', async (importOriginal) => {
   return {
     ...original,
     mcpTelemetryHeaders: () => ({}),
-    // Passthrough stand-ins for the per-call context: mcp_tool_called is
-    // recorded by the web API from the request headers, not by the MCP
-    // (see analytics.test.ts).
     withTelemetryHeaders: (_headers: unknown, run: () => Promise<unknown>) => run(),
     withToolCall: (_tool: string, _action: string, run: () => Promise<unknown>) => run(),
     withTracking: (_toolName: string, handler: (args: unknown) => Promise<unknown>) => async (args: unknown) => handler(args),
   };
 });
 
-// Issue #566: 17 intent tools instead of one tool per endpoint. Each action
-// tool advertises ONE flat object (a required `action` enum plus every field
-// of every action, optional); tools without actions keep their own shape.
 const ACTIONS: Record<string, string[]> = {
   video_tasks: ['status', 'list_generations', 'get_generation'],
   personas: ['list', 'get', 'create', 'update', 'delete'],
@@ -42,7 +36,6 @@ const ACTIONS: Record<string, string[]> = {
 const SINGLE_TOOLS: Record<string, string[]> = { generate_video: ['videos'], cancel_video: ['taskId'] };
 const EXPECTED_TOOLS = [...Object.keys(ACTIONS), ...Object.keys(SINGLE_TOOLS)].sort();
 
-// Actions that read a file from the disk exist only on the stdio server.
 const LOCAL_ONLY: Record<string, string[]> = { persona_media: ['add_image'], media: ['upload'], publish_video: ['from_file'] };
 
 async function listTools(transport: 'stdio' | 'http'): Promise<Map<string, Tool>> {
@@ -84,7 +77,6 @@ describe('action tools advertise one flat schema', () => {
     const tool = (await listTools('stdio')).get(name);
     expect(actionsOf(tool)).toEqual(actions);
     expect(tool?.inputSchema.required).toEqual(['action']);
-    // The flat shape carries the fields of the actions, not an empty object.
     expect(Object.keys(tool?.inputSchema.properties ?? {}).length).toBeGreaterThan(1 + (actions.length === 0 ? 0 : 0));
   });
 
@@ -140,10 +132,6 @@ describe('action tools advertise one flat schema', () => {
   it('keeps the whole tools/list payload at least 35% below the 102,160 bytes of the 56 endpoint-mirror tools', async () => {
     const tools = [...(await listTools('stdio')).values()];
     const bytes = Buffer.byteLength(JSON.stringify(tools), 'utf8');
-    // Was 40% (0.6) with 16 tools at ~59 KB; the 17th tool (tool_config,
-    // ~2.4 KB) puts the set at ~62 KB, 38% below the mirror set. The cap
-    // is a bloat guard, not a product limit: a real tool the user asked
-    // for moves it, and the set stays far lighter than 56 mirror tools.
     expect(bytes).toBeLessThanOrEqual(102_160 * 0.65);
   });
 });
@@ -181,8 +169,6 @@ describe('createPostEngineerMcpServer without injected client', () => {
 });
 
 describe('every action runs its handler against the client', () => {
-  // The action handlers only execute when the action is called: drive each
-  // one that goes through a client method over the in-memory transport.
   const PERSONA = '11111111-1111-4111-8111-111111111111';
   const mockClient = {
     listVoices: vi.fn(),
@@ -242,7 +228,7 @@ describe('every action runs its handler against the client', () => {
         instagramAccountIds: [], linkedinAccountIds: [], blueskyAccountIds: [],
         threadsAccountIds: [], facebookAccountIds: [], pinterestAccountIds: [],
         pinterestBoardId: null, threespeakAccountIds: [], rumbleAccountIds: [],
-        fanvueAccountIds: [], timezone: 'UTC', publishMode: 'scheduled',
+        fanvueAccountIds: [], telegramAccountIds: [], timezone: 'UTC', publishMode: 'scheduled',
       },
       persona: null,
       generation: {
@@ -281,7 +267,7 @@ describe('every action runs its handler against the client', () => {
   });
 
   it('resolves a persona given by name before the call', async () => {
-    vi.mocked(mockClient.listPersonas).mockResolvedValue({ authenticated: true, personas: [{ id: PERSONA, name: 'Maria', createdAt: '2026-01-01T00:00:00Z', boundAccounts: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [] } }] });
+    vi.mocked(mockClient.listPersonas).mockResolvedValue({ authenticated: true, personas: [{ id: PERSONA, name: 'Maria', createdAt: '2026-01-01T00:00:00Z', boundAccounts: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [], telegram: [] } }] });
     vi.mocked(mockClient.listPersonaImages).mockResolvedValue({ success: true, images: [] });
     const result = await call('persona_media', { action: 'list_images', persona: 'maria' });
     expect(result.isError).toBeFalsy();
@@ -289,7 +275,7 @@ describe('every action runs its handler against the client', () => {
   });
 
   it('answers an unknown persona name with the way to list them and calls nothing else', async () => {
-    vi.mocked(mockClient.listPersonas).mockResolvedValue({ authenticated: true, personas: [{ id: PERSONA, name: 'Maria', createdAt: '2026-01-01T00:00:00Z', boundAccounts: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [] } }] });
+    vi.mocked(mockClient.listPersonas).mockResolvedValue({ authenticated: true, personas: [{ id: PERSONA, name: 'Maria', createdAt: '2026-01-01T00:00:00Z', boundAccounts: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [], telegram: [] } }] });
     const result = await call('persona_media', { action: 'list_images', persona: 'Ghost' });
     expect(result.isError).toBe(true);
     expect(JSON.stringify(result.content)).toContain('No persona named');

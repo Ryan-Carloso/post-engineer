@@ -1,13 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-//---------------
-// Storage paths of a persona that the delete must remove: the avatar photo,
-// the voice audio file, and every library image. Library rows vanish via
-// ON DELETE CASCADE, but their storage objects would orphan forever, so the
-// paths are collected BEFORE the persona row is deleted, while they are
-// still recoverable.
-//---------------
-
 export async function collectPersonaStoragePaths(
   supabase: SupabaseClient,
   persona: { photo_path: string | null; voice_audio_path: string | null },

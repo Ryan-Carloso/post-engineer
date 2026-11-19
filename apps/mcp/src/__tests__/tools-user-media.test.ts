@@ -64,7 +64,6 @@ describe('upload_media tool', () => {
   });
 
   it('validates the real image type, not the extension', async () => {
-    // JPEG bytes in a .png file: the content wins, the upload proceeds.
     const path = tempFile('porto.png', JPEG_HEADER);
     const client = fakeClient(async () => ({ success: true, mediaId: 'aabbccddeeff00112233445566778899.jpg', expiresInSeconds: 3600 }));
     const response = await handleUploadMedia(client, { path });
@@ -98,7 +97,6 @@ describe('upload_media tool', () => {
   });
 
   it('rejects a malformed 200 body instead of reporting success', async () => {
-    // The pre-contract shape (no expiry) is now a loud error.
     const path = tempFile('porto.png', PNG_HEADER);
     const client = fakeClient(async () => ({ success: true, mediaId: 'aabbccddeeff00112233445566778899.png' }));
     const response = await handleUploadMedia(client, { path });

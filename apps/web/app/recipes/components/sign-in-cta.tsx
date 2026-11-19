@@ -1,12 +1,6 @@
 import Link from 'next/link';
 import { KeyIcon } from '@/lib/ui';
 
-//---------------
-// SignInCta — step 1 of the prompts hub for a signed-out visitor: the
-// key manager needs an account, so this links to the login page and
-// brings the visitor back to the hub afterwards. Presentational.
-//---------------
-
 export const SIGN_IN_HREF = '/login?next=/recipes';
 
 export default function SignInCta({

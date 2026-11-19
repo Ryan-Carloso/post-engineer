@@ -1,9 +1,3 @@
-// Schedule/slot tool shapes, plus the generate_video options
-// shape and the URL-field helpers only it uses.
-//
-// Extracted from tools.ts so the tools module stays under the file-size
-// ratchet. tools.ts re-exports every name here, so existing import sites
-// keep working.
 import { isIP } from 'node:net';
 import { z } from 'zod';
 import { isEnglishLanguage, ONLY_ENGLISH_VIDEOS_MESSAGE } from './language.js';
@@ -75,9 +69,6 @@ export const DeleteSlotShape = {
 
 export const DeleteSlotSchema = z.object(DeleteSlotShape);
 
-// Loopback hosts for which a plain http: media URL is tolerated (local
-// dev). Anything else must be https so the bytes never travel in cleartext.
-// webhookUrl does not use this list: a callback is https on a public host.
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
 
 function isHttpsOrLoopbackHttp(url: string): boolean {
@@ -91,7 +82,6 @@ function isHttpsOrLoopbackHttp(url: string): boolean {
   return parsed.protocol === 'http:' && LOOPBACK_HOSTS.has(parsed.hostname);
 }
 
-/** URL field for user-supplied media URLs: https, or http on loopback only. */
 function httpsUrlField(fieldName: string) {
   return z
     .string()
@@ -101,14 +91,10 @@ function httpsUrlField(fieldName: string) {
     });
 }
 
-/** https only. A loopback or private literal host is rejected; a name is left to the engine. */
 function isPublicHttpsWebhookUrl(url: string): boolean {
-  // Zod still runs this refine when `.url()` failed, so a malformed string
-  // must be a validation issue here, never a thrown TypeError.
   if (!URL.canParse(url)) return false;
   const parsed = new URL(url);
   if (parsed.protocol !== 'https:') return false;
-  // Node keeps the brackets on an IPv6 hostname (`[::1]`).
   const host = parsed.hostname.replace(/^\[|\]$/g, '');
   if (host.toLowerCase() === 'localhost') return false;
   if (isIP(host) !== 0 && !isPublicIp(host)) return false;
@@ -125,11 +111,6 @@ function webhookUrlField() {
 }
 
 export const GeneratePersonaVideoOptionsShape = {
-  // The one video mode (issue #542 follow-up): required — it decides the
-  // render path and the price. The `error` callback gives the
-  // missing/invalid message with every mode and its cost, so the agent can
-  // choose knowing the price. Zod 4 replaced v3's `errorMap`: a missing
-  // value arrives as `invalid_value` with no `input` (v3's `ctx.data`).
   videoType: z
     .enum(VIDEO_TYPES, {
       error: (issue) =>

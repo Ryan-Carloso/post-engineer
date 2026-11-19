@@ -3,11 +3,6 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { findRepoRoot } from '../test/repo-root';
 
-//---------------
-// Pins the Cypress CI retry policy (issue #199): intermittent app-side
-// failures hit a different spec on every CI run, so `cypress run` re-runs a
-// failed test up to twice while `cypress open` never retries.
-//---------------
 describe('cypress.config.ts retries', () => {
   const source = readFileSync(join(findRepoRoot(import.meta.url), 'apps/web/cypress.config.ts'), 'utf8');
 

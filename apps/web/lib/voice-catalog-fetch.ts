@@ -1,10 +1,3 @@
-//---------------
-// Server fetch of the engine voice catalog the persona picker uses
-// (GET /api/v1/personas/voices). Shared by GET /api/persona/voices and
-// generate-and-schedule so dispatch applies the same catalogIds the UI
-// already uses to warn about a retired house voice.
-//---------------
-
 import { engineAuthHeaders } from '@/lib/request-auth';
 import { engineBaseUrl } from '@/lib/engine-proxy';
 import { logger } from '@/lib/logger';
@@ -47,9 +40,6 @@ export async function fetchPersonaVoiceOptions(userId: string): Promise<VoiceCat
   }
 }
 
-/** Catalog ids for resolvePersonaVoice. Undefined means "catalog not
- *  loaded": omit catalogIds so a fetch failure cannot retire every house
- *  voice. */
 export async function fetchPersonaVoiceCatalogIds(userId: string): Promise<ReadonlySet<string> | undefined> {
   const result = await fetchPersonaVoiceOptions(userId);
   if (!result.ok || result.voices.length === 0) return undefined;

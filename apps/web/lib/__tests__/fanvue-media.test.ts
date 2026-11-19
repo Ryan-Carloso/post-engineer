@@ -265,12 +265,6 @@ describe('waitForFanvueMediaReady', () => {
   });
 
   it('caps the default ready wait at 120s to leave room for the upload inside the clients 600s budget', () => {
-    // The engine (DEFAULT_TIMEOUT_SECONDS) and the MCP client
-    // (DIRECT_PUBLISH_TIMEOUT_MS) both abort at 600s; the request also
-    // uploads every part first, so a 300s poll would leave less room for
-    // the upload before the clients abort and the scheduler retry
-    // duplicates the post. The cap shrinks that window; it does not
-    // eliminate it, since a slow upload alone can still exceed 600s.
     expect(FANVUE_MEDIA_READY_TIMEOUT_MS).toBe(2 * 60_000);
   });
 
@@ -320,7 +314,6 @@ describe('uploadVideoToFanvueVault', () => {
 
     expect(mockFetch).toHaveBeenCalledTimes(7);
 
-    // Untyped totalParts: the caller computes ceil(10 / 4) = 3.
     const signed = call(1);
     expect(signed.url.searchParams.get('from')).toBe('1');
     expect(signed.url.searchParams.get('to')).toBe('3');
@@ -344,8 +337,6 @@ describe('uploadVideoToFanvueVault', () => {
   });
 
   it('rejects a session whose totalParts does not cover the whole file', async () => {
-    // 10 bytes at a 4-byte partSize need 3 parts; an API totalParts of 2
-    // would leave the last 2 bytes unsent and silently truncate the video.
     mockFetch.mockResolvedValueOnce(sessionResponse({ totalParts: 2 }));
 
     await expect(
@@ -360,8 +351,6 @@ describe('uploadVideoToFanvueVault', () => {
   });
 
   it('rejects a session whose totalParts exceeds the parts the file needs', async () => {
-    // 10 bytes at a 4-byte partSize need 3 parts; an API totalParts of 4
-    // would upload a zero-byte part past the end of the buffer.
     mockFetch.mockResolvedValueOnce(sessionResponse({ totalParts: 4 }));
 
     await expect(

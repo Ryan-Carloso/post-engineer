@@ -2,13 +2,6 @@
  * @vitest-environment node
  */
 
-//---------------
-// web-dockerignore — the web image builds from the monorepo root, so its
-// Dockerfile-specific ignore file must keep host build artefacts out of
-// `COPY apps/web ./apps/web`; a host node_modules copied over the image's
-// fresh install broke every prod web build from 2026-10-23.
-//---------------
-
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';

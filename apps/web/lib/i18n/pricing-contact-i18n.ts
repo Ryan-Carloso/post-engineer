@@ -1,12 +1,3 @@
-//---------------
-// pricing-contact — beta pricing page copy: no prices, contact only.
-//
-// The en/pt dictionaries are grandfathered over the 500-line file-size cap
-// and may not grow a single line, so this copy lives here. It is merged
-// into the landing section in ./index.ts, which also extends the
-// Dictionary/TranslationKey contract — en.ts and pt.ts stay the same size.
-//---------------
-
 export const pricingContactStrings = {
   en: {
     landing: {

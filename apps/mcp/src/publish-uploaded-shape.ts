@@ -1,10 +1,3 @@
-// Shapes for the signed-upload publish flow (issue #561): the remote
-// (HTTP) replacement for publish_video (action: from_file). JSON only — no field
-// names a file on disk. The caller first mints a signed upload with
-// publish_video (action: create_upload), PUTs the video (or image) bytes to the returned signedUrl,
-// completes it with publish_video (action: complete_upload), and finally publishes by id
-// with publish_video (action: publish_upload). Kept in a new module so tools.ts stays
-// under the file-size ratchet.
 import { z } from 'zod';
 import { MAX_UPLOAD_VIDEO_BYTES, MAX_UPLOAD_VIDEO_GB } from './limits.js';
 import { PublishVideoDirectShape } from './publish-direct-shape.js';

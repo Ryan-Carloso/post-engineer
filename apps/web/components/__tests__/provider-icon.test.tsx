@@ -4,14 +4,6 @@ import { render, screen } from '@testing-library/react';
 import { SOCIAL_PROVIDERS } from '@/lib/providers/registry';
 import { ProviderIcon } from '@/components/provider-icon';
 
-//---------------
-// ProviderIcon — one entry per social network in SOCIAL_PROVIDERS. The
-// exhaustive icon map is enforced at compile time (satisfies
-// Record<SocialProvider, ...>): adding a network to the registry without
-// an icon breaks `tsc`. This suite pins the runtime side: every provider
-// renders a labelled glyph.
-//---------------
-
 describe('ProviderIcon', () => {
   it('renders a labelled glyph for every social provider in the registry', () => {
     for (const provider of SOCIAL_PROVIDERS) {

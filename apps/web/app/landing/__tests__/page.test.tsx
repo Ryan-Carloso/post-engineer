@@ -36,8 +36,6 @@ vi.mock('@/components/site-footer', () => ({
 
 describe('app/landing/page — Landing', () => {
   it('renders the brand logo in the header and footer (not the legacy bolt mark)', () => {
-    // Pins the AppLogo usages: a silent revert to the old brand mark on
-    // the landing surface would otherwise pass CI.
     render(<Landing />);
     expect(screen.getAllByTestId('app-logo')).toHaveLength(2);
   });
@@ -49,17 +47,12 @@ describe('app/landing/page — Landing', () => {
   });
 
   it('does not render the removed +500 creators claim anywhere', () => {
-    // Owner decision: no unverified creator count on the landing, in
-    // either locale. The mock t() returns the key itself, so the
-    // removed line would surface as 'landing.socialProof' if it came back.
     render(<Landing />);
     expect(screen.queryByText('landing.socialProof')).toBeNull();
     expect(screen.queryByText(/500/)).toBeNull();
   });
 
   it('states no creator count in either locale dictionary', () => {
-    // The test above renders with a mocked t(), so it cannot see
-    // dictionary text: assert the real values carry no count claim.
     expect(ptDictionary.landing.ctaFinalSubtitle.includes('centenas')).toBe(false);
     expect(ptDictionary.landing.ctaFinalSubtitle.includes('500')).toBe(false);
     expect(enDictionary.landing.ctaFinalSubtitle.includes('hundreds')).toBe(false);

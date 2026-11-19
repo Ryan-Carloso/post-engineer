@@ -1,11 +1,3 @@
-// Prints the size of the `tools/list` payload of the built MCP server (issue
-// #566): tool count, total bytes, estimated tokens and the largest tools. Run
-// it before and after a tool change and paste both outputs in the PR.
-//
-//   pnpm build && node scripts/measure-tools-list.mjs [--transport stdio|http] [--top 10] [--json]
-//
-// Needs no API key and makes no network call: the server is created with a
-// placeholder key and listed over an in-memory transport.
 import { existsSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 

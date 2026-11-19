@@ -1,12 +1,3 @@
-//---------------
-// instrumentation tests:
-// 1. onRequestError — unhandled request errors captured to PostHog
-//    (server-side error tracking). Never throws.
-// 2. register() — starts the internal scheduler ONLY in the nodejs
-//    runtime (edge compilation cannot resolve the scheduler's import
-//    chain — 'Module not found crypto') and only when the gate allows.
-//---------------
-
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const { schedulerJobsMock } = vi.hoisted(() => ({
@@ -157,7 +148,6 @@ describe('register() scheduler startup', () => {
     (process.env as Record<string, string>).NEXT_RUNTIME = 'edge';
     schedulerJobsMock.isSchedulerEnabled.mockReturnValue(true);
     await register();
-    // The dynamic import inside the nodejs branch must not even run.
     expect(schedulerJobsMock.isSchedulerEnabled).not.toHaveBeenCalled();
     expect(schedulerJobsMock.startInternalScheduler).not.toHaveBeenCalled();
   });

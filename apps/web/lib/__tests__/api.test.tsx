@@ -21,10 +21,6 @@ function jsonResponse(data: unknown, ok = true, status = 200): Response {
   } as unknown as Response;
 }
 
-//---------------
-// api.ts — fetchers and React Query hooks
-//---------------
-
 describe('api', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -147,10 +143,6 @@ describe('api', () => {
     expect(user?.id).toBe('u1');
   });
 
-  //---------------
-  // Hooks — renderHook with QueryClientProvider
-  //---------------
-
   function createWrapper(): (props: { children: ReactNode }) => ReactNode {
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } },
@@ -205,8 +197,6 @@ describe('api', () => {
       expect(first.result.current.youtube.isSuccess).toBe(true);
       expect(second.result.current.linkedin.isSuccess).toBe(true);
     });
-    // One shared query key: every consumer reads the same single request,
-    // no matter how many provider hooks are mounted.
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(fetch).toHaveBeenCalledWith('/api/account');
     expect(first.result.current.social.data?.accounts).toHaveLength(5);
@@ -226,7 +216,6 @@ describe('api', () => {
     expect(remounted.result.current.youtube.isSuccess).toBe(true);
     expect(fetch).toHaveBeenCalledTimes(1);
 
-    // Invalidating the shared key refetches once for all providers.
     await act(async () => {
       await client.invalidateQueries({ queryKey: ['social-accounts'] });
     });
@@ -362,9 +351,6 @@ describe('api', () => {
   });
 
   it('uploadPersonaImage surfaces server warnings instead of discarding them', async () => {
-    // The POST/PATCH partial-success contract reports warnings (e.g. the
-    // image uploaded but the primary swap failed). The mutation result
-    // must carry them so the UI can show them.
     vi.mocked(fetch).mockResolvedValue(
       jsonResponse({
         success: true,
@@ -393,8 +379,6 @@ describe('api', () => {
   });
 
   it('useUpdatePersonaImageMutation requires personaId like the upload hook', async () => {
-    // A null personaId must fail loudly at call time — otherwise onSuccess
-    // invalidates the ['persona-images', null] query key, a stale-cache bug.
     const { useUpdatePersonaImageMutation } = await import('@/lib/api');
     const { result } = renderHook(() => useUpdatePersonaImageMutation(null), {
       wrapper: createWrapper(),
@@ -416,7 +400,6 @@ describe('api', () => {
 
   it('updatePersonaImage rejects isPrimary:false without a network call', async () => {
     const { updatePersonaImage } = await import('@/lib/api');
-    // The type is isPrimary?: true; the runtime guard protects JS callers.
     await expect(
       updatePersonaImage({ id: 'img-1', isPrimary: false as unknown as true }),
     ).rejects.toThrow('isPrimary cannot be false');
@@ -453,10 +436,6 @@ describe('api', () => {
     expect(result.current.data?.recent[0]?.progress).toBe(80);
     expect(result.current.data?.recent[0]?.retryable).toBe(true);
   });
-
-  //---------------
-  // Per-slot operations (Posts page: edit title, delete scheduled slot).
-  //---------------
 
   it('updateSlotTitle PATCHes /api/schedule/slots/:id with the title', async () => {
     vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ success: true, title: 'Novo tema' }));
@@ -523,18 +502,9 @@ describe('api', () => {
 
     const invalidatedKeys = invalidateSpy.mock.calls.map((c) => (c[0] as { queryKey: unknown[] })?.queryKey);
     expect(invalidatedKeys).toContainEqual(['fill-schedule-status']);
-    // The detail page reads ['post-detail', slotId] with a 30s staleTime —
-    // a title save must invalidate it too or the page shows the old title.
     expect(invalidatedKeys).toContainEqual(['post-detail', 'slot-1']);
     invalidateSpy.mockRestore();
   });
-
-  //---------------
-  //---------------
-  // Unified post detail — one endpoint resolves any post id, so the detail
-  // page never guesses between endpoints. A 404 resolves to null (not
-  // found), other failures throw.
-  //---------------
 
   it('fetchPostDetail GETs /api/posts/:id and maps a slot payload', async () => {
     vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({
@@ -638,16 +608,11 @@ describe('api', () => {
     const { fetchPostDetail } = await import('@/lib/api');
     const detail = await fetchPostDetail('slot-1');
     if (detail?.kind !== 'slot') throw new Error('expected slot');
-    // An unknown provider would render its label map as literal
-    // "undefined" — it is dropped, not cast.
     expect(detail.slot.publishLinks).toEqual([
       { provider: 'youtube', url: 'https://www.youtube.com/watch?v=abc' },
     ]);
   });
 
-  // The payload crosses a network boundary, so a slot that predates this
-  // field (or a malformed one) must read as "no links" instead of handing
-  // the UI an undefined it would have to guard at every render.
   it('fetchPostDetail defaults missing or malformed publishLinks to an empty list', async () => {
     vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({
       success: true,
@@ -683,7 +648,6 @@ describe('api', () => {
         progressHistory: [
           { progress: 40, stage: 'subtitle', recordedAt: '2026-10-05T22:10:00.000Z' },
           { progress: 0, stage: 'music_mood', recordedAt: '2026-10-05T22:12:00.000Z' },
-          // Malformed entries are dropped, not cast.
           { progress: 'lots', stage: 'x', recordedAt: '2026-10-05T22:13:00.000Z' },
           { progress: 50, recordedAt: '2026-10-05T22:14:00.000Z' },
           null,
@@ -755,18 +719,10 @@ describe('api', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(fetch).toHaveBeenCalledWith('/api/posts/slot-1', expect.anything());
 
-    // No id → the query stays idle (the route param can be missing while
-    // the page mounts).
     const { result: idleResult } = renderHook(() => usePostDetailQuery(''), { wrapper });
     expect(idleResult.current.fetchStatus).toBe('idle');
   });
 
-  // Regression pin for the frozen detail page: usePostDetailQuery was the
-  // only query on the post detail screen without a refetchInterval, so a
-  // user parked on a generating post never saw it flip to ready — and the
-  // <video> only renders for ready/publishing/published. Fake timers assert
-  // the actual scheduling; a static config assert would not catch a broken
-  // interval (and Stryker's 60_000 → 60_001 mutant must die here).
   it('usePostDetailQuery refetches the post every 60s', async () => {
     vi.useFakeTimers();
     try {
@@ -789,13 +745,11 @@ describe('api', () => {
       expect(result.current.isSuccess).toBe(true);
       expect(fetch).toHaveBeenCalledTimes(1);
 
-      // 59_999ms in: still a single fetch — the interval is exactly 60s.
       await act(async () => {
         await vi.advanceTimersByTimeAsync(59_999);
       });
       expect(fetch).toHaveBeenCalledTimes(1);
 
-      // The 60s mark fires the scheduled refetch.
       await act(async () => {
         await vi.advanceTimersByTimeAsync(1);
       });
@@ -806,9 +760,6 @@ describe('api', () => {
     }
   });
 
-  // narrowGeneration — the route always sends every generation key, but the
-  // payload crosses the network: a malformed or missing block must narrow
-  // to the all-null shape instead of handing the UI an undefined.
   it('fetchPostDetail narrows the generation facts from the route payload', async () => {
     vi.mocked(fetch).mockResolvedValueOnce(
       jsonResponse({
@@ -951,8 +902,6 @@ describe('api', () => {
 
   describe('fetchScheduleStatus', () => {
     it('trusts the route hasAnyPost field when both lists are empty (stale slots)', async () => {
-      // A past pending slot is in neither list, so the lists alone would
-      // read the account as never-posted.
       vi.mocked(fetch).mockResolvedValueOnce(
         jsonResponse({ success: true, upcoming: [], recent: [], hasAnyPost: true }),
       );

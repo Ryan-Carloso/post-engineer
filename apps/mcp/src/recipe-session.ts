@@ -4,29 +4,6 @@ import { validateSegments } from './script-segments.js';
 import type { VideoType } from './video-type.js';
 import type { McpToolResponse } from './tools-call.js';
 
-//---------------
-// Recipe adoption: nudges and the telemetry that measures them.
-//
-// An agent that never hears about the recipe hub improvises scripts. This
-// module keeps one RecipeSession per MCP server instance (one stdio
-// connection, or one HTTP request — the HTTP transport is stateless) and:
-//
-// 1. Nudges. Entry tools (the calls an agent makes before its first video)
-//    get one extra text block pointing at prompts (action: list), and a script the
-//    mechanical validator rejects gets a hint that recipes produce scripts
-//    that pass. The nudge stops once the agent has listed or fetched a
-//    recipe.
-// 2. Telemetry. The MCP never talks to PostHog (analytics.ts): the session
-//    state rides on the API requests of the wrapped tools as X-MCP-* headers,
-//    and the web API validates them and adds them to `mcp_tool_called`
-//    (apps/web/lib/mcp-tool-telemetry.ts). The header names and the nudge
-//    surfaces are pinned against the web module by mcp-recipe-headers-sync.
-//
-// Recipe slugs are format-checked here (the hub lives on the web, so the
-// MCP has no slug list); the web maps any slug that is not a hub slug to
-// 'unknown', so agent text never reaches PostHog.
-//---------------
-
 export type McpTransportKind = 'stdio' | 'http';
 
 export const RECIPE_NUDGE_SURFACES = [
@@ -50,10 +27,8 @@ export const MCP_RECIPE_FETCHED_HEADER = 'X-MCP-Recipe-Fetched';
 export const MCP_SCRIPT_REJECTIONS_HEADER = 'X-MCP-Script-Rejections';
 export const MCP_RECIPE_HEADER = 'X-MCP-Recipe';
 
-// A recipe slug as the web hub writes them; anything else is never sent.
 export const RECIPE_SLUG_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/;
 
-// Header values stay bounded: the counter saturates instead of growing.
 const MAX_SCRIPT_REJECTIONS = 999;
 
 export const RECIPE_NUDGE_TEXT =
@@ -62,11 +37,6 @@ export const RECIPE_NUDGE_TEXT =
 export const SCRIPT_REJECTED_RECIPE_HINT =
   'Recipes produce scripts that pass these limits: call prompts (action: list) and follow the matching recipe with prompts (action: get).';
 
-//---------------
-// The text an agent runs for a recipe: the hub text plus a footer asking
-// it to declare the recipe on generate_video, so its request
-// carries X-MCP-Recipe. Shared by prompts (action: get) and the slash commands.
-//---------------
 export function recipeRunText(slug: string, prompt: string): string {
   return `${prompt}\n\nWhen you call generate_video for this recipe, pass recipe: "${slug}".`;
 }
@@ -84,7 +54,6 @@ export class RecipeSession {
 
   constructor(readonly transport: McpTransportKind) {}
 
-  /** True once the agent listed or fetched a recipe in this session. */
   knowsRecipes(): boolean {
     return this.recipesListed || this.lastRecipeFetched !== null;
   }
@@ -97,7 +66,6 @@ export class RecipeSession {
     this.recipesListed = true;
   }
 
-  /** Call only after the API returned the recipe, so the slug is real. */
   recordRecipeFetched(slug: string): void {
     if (isRecipeSlug(slug)) this.lastRecipeFetched = slug;
   }
@@ -106,7 +74,6 @@ export class RecipeSession {
     this.scriptRejections = Math.min(this.scriptRejections + 1, MAX_SCRIPT_REJECTIONS);
   }
 
-  /** Headers for the API requests of one call; recipe is that call's slug. */
   telemetryHeaders(recipe: unknown): Record<string, string> {
     const headers: Record<string, string> = {
       [MCP_SESSION_ID_HEADER]: this.sessionId,
@@ -120,7 +87,6 @@ export class RecipeSession {
     return headers;
   }
 
-  /** Run one call with this session's headers on every API request it sends. */
   run<TResult>(recipe: unknown, call: () => Promise<TResult>): Promise<TResult> {
     return withTelemetryHeaders(() => this.telemetryHeaders(recipe), call);
   }
@@ -130,12 +96,6 @@ function withExtraText(response: McpToolResponse, text: string): McpToolResponse
   return { ...response, content: [...response.content, { type: 'text', text }] };
 }
 
-//---------------
-// Wrap an entry tool: its requests carry the session headers and, on
-// success while the agent has not met the recipes yet, the nudge is
-// appended as its own text block (the first block stays the tool's own
-// payload, so JSON consumers keep parsing it).
-//---------------
 export function withRecipeNudge<TArgs>(
   session: RecipeSession,
   surface: RecipeNudgeSurface,
@@ -151,15 +111,6 @@ export function withRecipeNudge<TArgs>(
   };
 }
 
-//---------------
-// Wrap a script tool (check_script (action: validate), generate_video): its
-// requests carry the session headers plus the declared recipe; a script
-// the mechanical validator rejects (no API request is sent then) bumps the
-// session's rejection counter, which the next request reports, and gets
-// the recipe hint unless a recipe is already in play. The classification
-// re-runs the same pure validator the handler runs, so it never parses
-// the handler's error text.
-//---------------
 export interface ScriptView {
   segments: unknown;
   videoType?: VideoType;

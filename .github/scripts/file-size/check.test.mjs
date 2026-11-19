@@ -131,7 +131,6 @@ describe('file-size ratchet (exemptions)', () => {
   });
 
   it('still checks source files nested under test dirs for other extensions only', () => {
-    // Sanity: a real source file elsewhere in the diff must still fail.
     const { exitCode } = runCheck([
       A('apps/engine/test/test_task.py', 900),
       A('apps/engine/app/services/newmod.py', 501),

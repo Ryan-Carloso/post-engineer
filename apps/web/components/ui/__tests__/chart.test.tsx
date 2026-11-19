@@ -4,13 +4,6 @@ import { render, screen } from '@testing-library/react';
 import * as React from 'react';
 import type { ReactNode } from 'react';
 
-//---------------
-// Tests for the vendored shadcn chart primitives (components/ui/chart).
-// Recharts' ResponsiveContainer never gets a size in jsdom, so it is
-// stubbed with a fixed-size clone; everything else (container, style,
-// tooltip, legend) is the real code.
-//---------------
-
 vi.mock('recharts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('recharts')>();
   function ResponsiveContainerStub({ children }: { children: ReactNode }): React.ReactElement {
@@ -107,8 +100,6 @@ describe('ChartTooltipContent', () => {
   });
 
   it('renders no label block when the label resolves to nothing', () => {
-    // dataKey outside the config + no label: the tooltip label memo
-    // returns null while the row itself still renders.
     renderWithConfig(<ChartTooltipContent active payload={[tooltipItem({ dataKey: 'ghost', name: 'ghost' })] as never} />);
     expect(screen.queryByText('Views')).toBeNull();
     expect(screen.getByText('ghost')).toBeInTheDocument();
@@ -118,7 +109,6 @@ describe('ChartTooltipContent', () => {
     renderWithConfig(
       <ChartTooltipContent active payload={[tooltipItem()] as never} labelKey="name" label="ignored" />,
     );
-    // key 'name' -> item.name 'average' -> config label 'Views'.
     expect(screen.getAllByText('Views').length).toBeGreaterThan(0);
     expect(screen.getByText('120')).toBeInTheDocument();
   });
@@ -175,7 +165,6 @@ describe('ChartTooltipContent', () => {
         label="Alpha"
       />,
     );
-    // The visible row is the average one; the type:none entry is filtered.
     expect(screen.getAllByText('Views').length).toBeGreaterThan(0);
     expect(screen.queryByText('ghost')).toBeNull();
     expect(document.querySelector('.border-dashed')).not.toBeNull();
@@ -235,8 +224,6 @@ describe('ChartLegendContent', () => {
 
 describe('useChart consumers outside a container', () => {
   it('throws when rendered without a ChartContainer', () => {
-    // React logs the render error to console.error; silence it for this
-    // test only and restore the spy afterwards.
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
       expect(() => render(<ChartTooltipContent active payload={[]} />)).toThrow('useChart must be used within');

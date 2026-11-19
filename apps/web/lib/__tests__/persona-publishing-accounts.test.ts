@@ -1,6 +1,3 @@
-// Unit tests for the persona default publishing accounts lib
-// (issue #212). The Supabase client is faked in-memory; the SQL lives in
-// migration 022 and is pinned by the sync test below.
 import { describe, it, expect } from 'vitest';
 import {
   emptyPersonaDefaultAccounts,
@@ -104,6 +101,7 @@ describe('getPersonaDefaultAccounts', () => {
       '3speak': [],
       rumble: [],
       fanvue: [],
+      telegram: [],
     });
   });
 
@@ -282,6 +280,7 @@ describe('emptyPersonaDefaultAccounts', () => {
       '3speak': [],
       rumble: [],
       fanvue: [],
+      telegram: [],
     });
   });
 });

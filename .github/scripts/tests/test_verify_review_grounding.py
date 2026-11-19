@@ -89,8 +89,6 @@ def test_grounded_finding_is_kept(verifier, repo, tmp_path, monkeypatch, capsys)
     rc, published, _ = run_main(verifier, monkeypatch, capsys, GROUNDED_FINDING, tmp_path)
     assert rc == 0
     assert "### MINOR: magic number" in published
-    # `:2` normalizes to `:2-2` when that span already matches the quote.
-    # A correction note is only added when the cited numbers were wrong.
     assert "**Location:** apps/web/lib/thing.ts:2-2" in published
     assert "corrected" not in published
 
@@ -98,9 +96,6 @@ def test_grounded_finding_is_kept(verifier, repo, tmp_path, monkeypatch, capsys)
 def test_wrong_line_numbers_are_reanchored(
     verifier, repo, tmp_path, monkeypatch, capsys
 ):
-    # The quote is on line 2. A cited line that does not contain it is
-    # rewritten to the quote's real span, with the note on the next line
-    # (a same-line suffix would be parsed as part of the path later).
     review = GROUNDED_FINDING.replace("apps/web/lib/thing.ts:2", "apps/web/lib/thing.ts:99")
     rc, published, _ = run_main(verifier, monkeypatch, capsys, review, tmp_path)
     assert rc == 0
@@ -123,7 +118,6 @@ def test_quote_missing_from_file_is_not_a_clean_pass(
     assert "No finding could be grounded" in published
     assert verifier.UNVERIFIED_SECTION_HEADING in published
     assert "MINOR: magic number" in published
-    # The location line is the model's citation, not a rewritten span.
     assert "**Location:** apps/web/lib/thing.ts:2\n" in published
     assert "**Location:** apps/web/lib/thing.ts:2-2" not in published
     assert "return 99;" in published
@@ -143,8 +137,6 @@ def test_nothing_material_review_published_as_is(
 def test_unparseable_findings_format_is_not_published(
     verifier, repo, tmp_path, monkeypatch, capsys
 ):
-    # The model ignored the mandated `### SEVERITY:` format and emitted a
-    # finding under `## `. This must NOT be published as "nothing material".
     review = """\
 ## MAJOR: SQL injection
 
@@ -159,8 +151,6 @@ def test_unparseable_findings_format_is_not_published(
     assert published.startswith(verifier.NOT_REVIEWED_MARKER)
     assert "Review format error" in published
     assert "Treat this PR as NOT reviewed" in published
-    # The raw finding is posted under the unverified heading. It is not
-    # promoted to a verified `### MAJOR` finding.
     assert verifier.UNVERIFIED_SECTION_HEADING in published
     assert "## MAJOR: SQL injection" in published
     assert "### MAJOR: SQL injection" not in published
@@ -171,7 +161,6 @@ def test_unparseable_findings_format_is_not_published(
 def test_heading_inside_quoted_fence_does_not_split_finding(
     verifier, tmp_path, monkeypatch, capsys
 ):
-    # A verbatim quote of a markdown doc may itself contain a `### ` line.
     doc = tmp_path / "docs" / "notes.md"
     doc.parent.mkdir(parents=True)
     doc.write_text("# Title\n\n### Sub section\n\nBody text.\n", encoding="utf-8")
@@ -191,19 +180,14 @@ Body text.
 """
     rc, published, _ = run_main(verifier, monkeypatch, capsys, review, tmp_path)
     assert rc == 0
-    # The finding must survive whole, not split at the inner `### ` line.
     assert published.count("### MINOR: stale docs") == 1
     assert "### Sub section" in published
 
 
 def test_non_utf8_review_does_not_crash(verifier, repo, tmp_path, monkeypatch, capsys):
-    # Raw model output can contain invalid bytes; the verifier must degrade,
-    # not turn the review into a red check.
     rc, published, _ = run_main(
         verifier, monkeypatch, capsys, b"### MINOR: x\n\xff\xfe invalid\n", tmp_path
     )
-    # A heading with no location is a dropped finding, not a clean review.
-    # The process must still return a string instead of raising.
     assert rc == 1
     assert isinstance(published, str)
     assert published.startswith(verifier.NOT_REVIEWED_MARKER)
@@ -318,7 +302,6 @@ def test_partial_drop_stays_green_and_lists_the_drop(
     assert "**Location:** nope/missing.py:1-2" in published
     assert "x = 1" in published
     assert verifier.NOT_REVIEWED_MARKER not in published
-    # The grounded finding stays in the main list, above the unverified section.
     assert published.index("### MINOR: magic number") < published.index(
         verifier.UNVERIFIED_SECTION_HEADING
     )
@@ -430,8 +413,6 @@ def test_ambiguous_basename_is_not_a_guess(
     assert "Best guess: none. More than one changed file shares that basename." in published
     assert "apps/a/thing.ts" not in published
     assert "apps/b/thing.ts" not in published
-    # The real file contains the quote, but an ambiguous basename must not
-    # promote the finding into the verified list.
     assert "**Location:** apps/web/lib/thing.ts:2-2" not in published
 
 

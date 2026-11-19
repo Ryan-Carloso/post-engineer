@@ -3,19 +3,6 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { findRepoRoot } from '@/test/repo-root';
 
-//---------------
-// supabase/migrations/057_fanvue-provider.sql — the schema the Fanvue
-// connect and publish paths depend on. Each provider check is dropped and
-// re-created with the full list (the lesson of 037: a live constraint the
-// chain no longer defines can linger in production, so a plain add would
-// leave the old list in force). A shipped migration is never edited, so
-// this test pins the ten providers 057 shipped with; the file is frozen,
-// so it must NOT track SOCIAL_PROVIDERS. Fanvue needs no board: a video
-// publishes to the account. The PKCE code_verifier rides oauth_states so
-// the MCP connect-url flow can complete the code exchange.
-//---------------
-
-// The ten providers 057 shipped with, in the order the migration lists them.
 const PROVIDERS_AT_057 = ['youtube', 'instagram', 'bluesky', 'linkedin', 'threads', 'facebook', 'pinterest', '3speak', 'rumble', 'fanvue'];
 
 const sql = readFileSync(

@@ -1,17 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 
-//---------------
-// Tests for the persona video token pricing model.
-//  - Faceless (no face, per post)         = 1 token
-//  - Face ok (480p)                       = 2 tokens
-//  - Face very good (720p)                = 3 tokens
-//  - Full lip-sync, face ok               = 8 tokens
-//  - Full lip-sync, face very good        = 15 tokens
-// No face MIX anymore: personas are always faced, so the price is a lookup on
-// (videoType, face quality). It is the only copy: the engine
-// refunds the charged amount stored on the slot, never a recomputed price.
-//---------------
-
 import {
   computeVideoTokens,
   netLedgerSpent,
@@ -62,9 +50,6 @@ describe('computeVideoTokens', () => {
   });
 
   it('o preço nunca é zero nem fracionário', () => {
-    // The function returns a whole-token lookup; both branches are integers,
-    // so the previous "round up so fractions are never charged" rule is
-    // structural now, not arithmetic.
     for (const videoType of ['faceless', 'hook_lipsync', 'full_lipsync'] as const) {
       for (const quality of ['ok', 'very_good'] as const) {
         const cost = computeVideoTokens(videoType, quality);
@@ -99,8 +84,6 @@ describe('video_type error messages', () => {
   });
 
   it('the suffix costs match the price tables', () => {
-    // The suffix is hand-written prose, so the prices it quotes must be
-    // derived from the same tables computeVideoTokens reads.
     expect(VIDEO_TYPE_ERROR_SUFFIX).toContain(
       `full_lipsync (${FULL_LIPSYNC_PRICES.ok}/${FULL_LIPSYNC_PRICES.very_good})`,
     );

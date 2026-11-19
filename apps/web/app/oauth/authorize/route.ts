@@ -6,12 +6,6 @@ import { getOAuthKeys } from '@/lib/oauth/keys';
 import { mintConsentRequest } from '@/lib/oauth/tokens';
 import { getIssuer } from '@/lib/oauth/config';
 
-//---------------
-// GET /oauth/authorize — ponto de entrada do fluxo OAuth (response_type=code
-// + PKCE S256 + resource). Sem sessão → /login com `next` para retomar.
-// Com sessão → consentimento em /oauth/consent com pedido assinado.
-//---------------
-
 export async function GET(request: Request): Promise<NextResponse> {
   const url = new URL(request.url);
   const service = createSupabaseServiceClient();

@@ -208,9 +208,6 @@ class BatchDispatchCapTests(unittest.TestCase):
             return len(self.started)
 
     def test_one_tick_admits_at_most_max_concurrent_and_leaves_the_rest_pending(self):
-        # N running slots, a queue large enough to absorb the overflow, and
-        # M>N pending rows. The overflow must stay pending: queue room is
-        # not a reason to take every row on this tick.
         concurrent = 2
         pending = 5
         manager = InMemoryTaskManager(max_concurrent_tasks=concurrent, max_queued_tasks=10)
@@ -234,7 +231,6 @@ class BatchDispatchCapTests(unittest.TestCase):
         )
         self.assertNotIn("failed", statuses.values())
         self.assertEqual(store.refund_batch_calls, [])
-        # Soonest slot_at wins the free slots.
         self.assertEqual(statuses["slot-0"], SLOT_GENERATING)
         self.assertEqual(statuses["slot-1"], SLOT_GENERATING)
         self.assertEqual(statuses["slot-2"], SLOT_PENDING)
@@ -260,8 +256,6 @@ class BatchDispatchCapTests(unittest.TestCase):
             time.sleep(0.01)
         self.assertEqual(manager.current_tasks, 0)
 
-        # A fresh hold so the second wave stays inside the manager long
-        # enough to count, and does not re-enter the ids already admitted.
         self.release = threading.Event()
         second = self._run(generator)
         self.assertEqual(second, concurrent)
@@ -278,8 +272,6 @@ class BatchDispatchCapTests(unittest.TestCase):
         self.assertEqual(store.refund_batch_calls, [])
 
     def test_occupied_manager_defers_every_pending_slot(self):
-        # A direct job already holds the only running slot. Batch work
-        # shares that cap: nothing is admitted, nothing is refunded.
         manager = InMemoryTaskManager(max_concurrent_tasks=1, max_queued_tasks=10)
         held = threading.Event()
 
@@ -301,9 +293,6 @@ class BatchDispatchCapTests(unittest.TestCase):
         self.assertEqual(store.refund_batch_calls, [])
 
     def test_restart_triage_then_first_tick_respects_the_cap(self):
-        # Boot resets every generating batch slot to pending. The first
-        # tick after that reset still admits at most N, not one pipeline
-        # per in-flight slot.
         concurrent = 1
         pending = 4
         manager = InMemoryTaskManager(max_concurrent_tasks=concurrent, max_queued_tasks=10)
@@ -334,8 +323,6 @@ class BatchDispatchCapTests(unittest.TestCase):
         self.assertEqual(store.refund_batch_calls, [])
 
     def test_manager_rejection_leaves_the_slot_pending_without_a_refund(self):
-        # Free running slots say the tick may try, then the manager
-        # rejects. That is a deferral: pending, not failed, no refund.
         class _RejectManager:
             max_concurrent_tasks = 2
             current_tasks = 0
@@ -355,9 +342,6 @@ class BatchDispatchCapTests(unittest.TestCase):
         self.assertEqual(self._wait_started(1, timeout=0.2), 0)
 
     def test_full_running_cap_defers_instead_of_filling_the_queue(self):
-        # The page was sized as if one running slot were free, then a
-        # direct job took it. Batch dispatch does not fill the queue:
-        # every slot stays pending, and no task row is written.
         manager = InMemoryTaskManager(max_concurrent_tasks=1, max_queued_tasks=5)
         direct = threading.Event()
         manager.add_task(lambda: direct.wait(5))
@@ -379,10 +363,6 @@ class BatchDispatchCapTests(unittest.TestCase):
             self.assertIsNone(state.get_task(new_task_id(slot)))
 
     def test_rejected_admission_leaves_no_task_row_for_boot_triage(self):
-        # The tick still tries one slot, then the manager cannot start it
-        # (running cap taken, queue unable to absorb). The slot stays
-        # pending and the memory task state has no row for its task id.
-        # Boot triage over that state therefore fails and refunds nothing.
         manager = InMemoryTaskManager(max_concurrent_tasks=1, max_queued_tasks=0)
         manager.current_tasks = 1
         store = _MemorySlots([_slot(0)])
@@ -407,9 +387,6 @@ class BatchDispatchCapTests(unittest.TestCase):
         self.assertIsNone(state.get_task(task_id))
 
     def test_task_row_write_failure_does_not_hold_a_running_slot(self):
-        # Admission reserves the running slot before the task row is
-        # written. If that write raises, the reservation is released and
-        # a later direct job can still take the only running slot.
         manager = InMemoryTaskManager(max_concurrent_tasks=1, max_queued_tasks=5)
         seen: list[int] = []
 
@@ -558,9 +535,6 @@ class BatchAdmissionHelperTests(unittest.TestCase):
         self.assertEqual(started, ["batch-1"])
 
     def test_row_write_runs_outside_the_manager_lock(self):
-        # The manager lock is not reentrant. The task-row write must be
-        # able to take it, which it can only do when submit is not holding
-        # it across the write.
         manager = InMemoryTaskManager(max_concurrent_tasks=1, max_queued_tasks=1)
         release = threading.Event()
         self.addCleanup(release.set)
@@ -583,9 +557,6 @@ class BatchAdmissionHelperTests(unittest.TestCase):
         self.assertEqual(manager.current_tasks, 1)
 
     def test_submit_releases_the_slot_when_on_accepted_raises(self):
-        # The task row is written, then the funnel callback raises. The
-        # reservation must come back before the error propagates: no
-        # worker, and the running cap is not held.
         manager = InMemoryTaskManager(max_concurrent_tasks=1, max_queued_tasks=2)
         wrote: list[int] = []
         started: list[str] = []
@@ -617,7 +588,6 @@ class BatchAdmissionHelperTests(unittest.TestCase):
         self.assertEqual(manager.queue_size(), 0)
 
     def test_submit_defers_when_the_running_cap_is_full(self):
-        # Queue room is not admission. A batch slot only starts now.
         manager = InMemoryTaskManager(max_concurrent_tasks=1, max_queued_tasks=2)
         release = threading.Event()
         manager.add_task(lambda: release.wait(2))

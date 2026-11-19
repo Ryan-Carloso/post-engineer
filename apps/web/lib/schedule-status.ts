@@ -1,10 +1,6 @@
 import { HttpStatusError } from '@/lib/errors';
 import type { PublishProviderFailure, PublishUserNotice } from '@/lib/publish-user-notice';
 
-// Schedule-status shapes and fetcher, extracted from lib/api.ts so that
-// file stays under the file-size ratchet. Import sites keep using
-// `@/lib/api`, which re-exports everything here.
-
 export interface ScheduledSlot {
   id: string;
   scheduleId: string;
@@ -45,8 +41,6 @@ interface ScheduleStatusPayload {
   success: boolean;
   upcoming?: SlotRow[];
   recent?: SlotRow[];
-  // Whether the account has any post at all, in any month: the lists
-  // cannot answer it (a stale past pending/ready slot is in neither).
   hasAnyPost?: boolean;
 }
 
@@ -84,8 +78,6 @@ export async function fetchScheduleStatus(limit?: number): Promise<{
   return {
     upcoming,
     recent,
-    // The route answers "any post at all" directly; responses from before
-    // the field existed fall back to the lists (which miss stale slots).
     hasAnyPost: data.hasAnyPost ?? (upcoming.length > 0 || recent.length > 0),
   };
 }

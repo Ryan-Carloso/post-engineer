@@ -94,9 +94,6 @@ function makeRequest(query: string): NextRequest {
   return new NextRequest(`http://localhost/api/google-oauth/callback${query}`);
 }
 
-// Connect-url (MCP) flow: the service client only serves oauth_states,
-// backed by the shared fake that applies every filter of the real chain.
-// The mocked decodeOAuthState (beforeEach) yields provider 'youtube', nonce 'n'.
 function connectUrlState(ownerId: string): { store: FakeOAuthStateStore; hash: string } {
   const store = makeOAuthStateStore();
   const hash = hashOAuthState('s');
@@ -196,7 +193,6 @@ describe('/api/google-oauth/callback', () => {
     const res = await GET(makeRequest('?code=c&state=s'));
     expect(await res.text()).toBe('popup');
     expect(upsertSocialAccount).toHaveBeenCalledTimes(1);
-    // A reconnect must reopen the retention windows the old token closed.
     expect(resetYouTubeRetentionWindows).toHaveBeenCalledWith('user-1', 'chan-1');
     expect(oauthPopupResponse).toHaveBeenCalledWith(
       'youtube-oauth-success',
@@ -290,12 +286,10 @@ describe('/api/google-oauth/callback', () => {
       expect.objectContaining({ account: expect.objectContaining({ channelId: 'chan-1' }) }),
     );
     expect(store.rows.has(hash)).toBe(false);
-    // persisted under the signed-in owner through the RLS-bound session client
     expect(upsertSocialAccount).toHaveBeenCalledWith(
       sessionClient,
       expect.objectContaining({ userId: 'api-key-owner', provider: 'youtube' }),
     );
-    // the service role only ever touched oauth_states
     expect(store.tables).toEqual(['oauth_states']);
   });
 

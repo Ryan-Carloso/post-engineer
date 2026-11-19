@@ -77,7 +77,6 @@ describe('fetchProviderCounters', () => {
 
     expect(getAuthenticatedClient).toHaveBeenCalledWith('user-1', 'yt');
     expect(getYouTubeVideoInfo).toHaveBeenCalledWith('client', 'vid');
-    // The Analytics half reuses the same client, video info, and window.
     expect(youtubeRetention).toHaveBeenCalledWith('client', videoInfo, { provider: 'youtube', accountId: 'yt', externalId: 'vid' }, CTX);
     expect(counters).toEqual({ views: 10, likes: 2, comments: 1, saves: null, retention });
   });

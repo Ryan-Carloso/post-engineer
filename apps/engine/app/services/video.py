@@ -57,9 +57,6 @@ def _resolve_font_path(font_name: str) -> str:
     Windows-style separators, and ``../`` traversal are rejected — and the
     file must exist. Raises ``ValueError`` on any violation.
     """
-    # A backslash is a valid filename character on POSIX, so reject it
-    # explicitly: on Windows it is a path separator, and the font name must
-    # be a bare basename in every platform's syntax.
     if not font_name or "\\" in font_name or os.path.basename(font_name) != font_name:
         raise ValueError(f"invalid font name: {font_name!r}")
     return file_security.resolve_path_within_directory(
@@ -115,27 +112,14 @@ class SubClippedVideoClip:
 
 
 audio_codec = "aac"
-# The ffmpeg/AAC combo in Docker is more prone to audio quality wobble at
-# default settings, so the audio bitrate is raised explicitly here to avoid
-# audible distortion in the final render from too-low defaults.
 audio_bitrate = "192k"
 fps = 30
-# When FFmpeg concats/transcodes at a fixed framerate, the final duration
-# can end up tens of milliseconds shorter than MoviePy's theoretical read.
-# Keep a small safety margin on the video material so frame rounding can't
-# produce a black screen, stutter, or a voiceless tail at the end of the audio.
 _VIDEO_DURATION_SAFETY_MARGIN = 0.1
 _BGM_EXTENSIONS = (".mp3",)
 _DEFAULT_VIDEO_CODEC = "libx264"
 
-# How long the one-frame encoder probe may run. It only starts ffmpeg and
-# encodes a single 64x64 frame, so anything slower means the encoder is not
-# usable and the probe should not block a task.
 _ENCODER_PROBE_TIMEOUT_SECONDS = 20
 
-# Upper bound for the local lip-sync concat. Generous for a CPU-only host
-# (the observed worst case was ~13 min for a full re-encode) but finite, so
-# a wedged ffmpeg fails the task instead of leaving it `running` forever.
 _LIPSYNC_CONCAT_TIMEOUT_SECONDS = 30 * 60
 _SUPPORTED_VIDEO_CODECS = (
     "libx264",
@@ -251,10 +235,6 @@ _SUPPORTED_VIDEO_PRESETS = {
     "slow",
 }
 
-# The preset used when config.toml does not name one. veryfast because this
-# project runs on CPU-only hosts (no GPU in most self-host deployments),
-# where libx264's medium preset dominated the wall-clock cost of every
-# encode — a ~13 min lip-sync splice was observed in production.
 _DEFAULT_VIDEO_PRESET = "veryfast"
 
 
@@ -397,9 +377,6 @@ def _get_effective_video_codec(preferred_codec: str | None = None) -> str:
         )
         return _DEFAULT_VIDEO_CODEC
 
-    # Compiled in is not the same as usable. Probing once here means a
-    # hardware encoder this host cannot run falls back BEFORE the task starts,
-    # instead of once per clip after a real encode failure.
     if not _encoder_actually_usable(selected_codec):
         logger.warning(
             f"ffmpeg encoder {selected_codec} cannot encode on this host, "
@@ -481,8 +458,6 @@ def _write_videofile_with_codec_fallback(clip, output_file: str, codec: str, **k
 
 
 def _escape_ffmpeg_concat_path(file_path: str) -> str:
-    # The concat demuxer wraps paths in single quotes, so single quotes inside
-    # the path must be escaped first.
     return file_path.replace("'", "'\\''")
 
 
@@ -531,9 +506,6 @@ def concat_video_clips_with_ffmpeg(
 
     def run_concat(codec: str):
         command = build_command(codec)
-        # Concat and encode once with ffmpeg instead of MoviePy's per-segment
-        # merge, avoiding repeated re-encoding and the quality/color-shift
-        # risk that comes with it.
         result = subprocess.run(
             command,
             capture_output=True,
@@ -609,9 +581,6 @@ def replace_video_intro_with_lipsync(
     drifting apart.
     """
     if layout not in VIDEO_LAYOUTS:
-        # Fail loud. A typo must never degrade to the default silently: the
-        # user picked a layout and would get a different video without any
-        # signal that their choice was dropped.
         raise ValueError(
             f"unknown lipsync layout {layout!r}; expected one of "
             f"{', '.join(sorted(VIDEO_LAYOUTS))}"
@@ -619,15 +588,6 @@ def replace_video_intro_with_lipsync(
     source = _open_video_clip_quietly(background_video)
     width, height = source.w, source.h
     source.close()
-    # Encode ONLY the intro. The tail is already H.264 at the right
-    # dimensions from combine_videos, so re-encoding all ~32s of it (what
-    # this did before) was the dominant cost of the splice — ~13 minutes on
-    # a CPU-only host, with no log output while it ran.
-    #
-    # Two steps rather than one filter_complex concat: the concat FILTER
-    # forces every input frame through the encoder, which is exactly the
-    # cost being removed. Encoding the intro alone and then joining the two
-    # files with the concat DEMUXER lets the tail be stream-copied.
     intro_file = f"{os.path.splitext(output_file)[0]}-intro-encoded.mp4"
     intro_command = _build_lipsync_intro_command(
         background_video=background_video,
@@ -651,14 +611,8 @@ def replace_video_intro_with_lipsync(
             failure_message="lip-sync intro encode failed",
         )
 
-        # Join with the concat DEMUXER: both files are H.264 at the same
-        # resolution, so `-c:v copy` remuxes without re-encoding a frame.
         tail_file = f"{os.path.splitext(output_file)[0]}-tail.mp4"
         try:
-            # -ss MUST precede -i here. With -c:v copy there is no decoding,
-            # so a post-input -ss (which seeks by discarding decoded frames)
-            # cannot work and ffmpeg writes an empty file — verified: the
-            # output probed as duration N/A.
             tail_command = [
                 utils.get_ffmpeg_binary(), "-y",
                 "-ss", str(duration),
@@ -692,9 +646,6 @@ def replace_video_intro_with_lipsync(
         finally:
             delete_files([intro_file, tail_file])
     except subprocess.TimeoutExpired as exc:
-        # Without this the task stayed `running` forever on a wedged ffmpeg:
-        # the LongCat timeout only covers the remote job, not this local
-        # encode. Same class as _fail_task's other loud, bounded waits.
         raise RuntimeError(
             f"lip-sync concat timed out after {_LIPSYNC_CONCAT_TIMEOUT_SECONDS}s"
         ) from exc
@@ -737,16 +688,11 @@ def video_duration_seconds(video_path: str) -> float:
 
 
 def _sanitize_image_file(image_path: str) -> str:
-    # Some local images open fine in Pillow but carry corrupt EXIF/eXIf
-    # metadata that makes ImageClip throw during parsing. Re-export a "clean
-    # image" here to strip the bad metadata.
     image_root, _ = os.path.splitext(image_path)
     sanitized_path = f"{image_root}.sanitized.png"
 
     with Image.open(image_path) as image:
         image.load()
-        # Export as PNG uniformly so JPEG/PNG's differing metadata paths can't
-        # carry the corrupt block along.
         cleaned_image = Image.new(image.mode, image.size)
         cleaned_image.putdata(list(image.getdata()))
         cleaned_image.save(sanitized_path)
@@ -755,8 +701,6 @@ def _sanitize_image_file(image_path: str) -> str:
 
 
 def _open_image_clip_with_fallback(image_path: str):
-    # Try the original image first; only generate a metadata-free copy if
-    # corrupt metadata breaks it.
     try:
         return ImageClip(image_path), image_path
     except Exception as exc:
@@ -805,29 +749,24 @@ def close_clip(clip):
         return
         
     try:
-        # close main resources
         if hasattr(clip, 'reader') and clip.reader is not None:
             clip.reader.close()
             
-        # close audio resources
         if hasattr(clip, 'audio') and clip.audio is not None:
             if hasattr(clip.audio, 'reader') and clip.audio.reader is not None:
                 clip.audio.reader.close()
             del clip.audio
             
-        # close mask resources
         if hasattr(clip, 'mask') and clip.mask is not None:
             if hasattr(clip.mask, 'reader') and clip.mask.reader is not None:
                 clip.mask.reader.close()
             del clip.mask
             
-        # handle child clips in composite clips
         if hasattr(clip, 'clips') and clip.clips:
             for child_clip in clip.clips:
-                if child_clip is not clip:  # avoid possible circular references
+                if child_clip is not clip:
                     close_clip(child_clip)
             
-        # clear clip list
         if hasattr(clip, 'clips'):
             clip.clips = []
             
@@ -849,13 +788,6 @@ def delete_files(files: List[str] | str):
 
 
 def _resolve_bgm_file_path(song_dir: str, bgm_file: str) -> str:
-    # Background music may only be read from the resource/songs directory, so
-    # an arbitrary user-supplied path can't be opened by MoviePy. Two common
-    # inputs are accepted:
-    # 1. output000.mp3 — from the BGM list or a bare filename
-    # 2. ./resource/songs/output000.mp3 — a project-relative path
-    # Both are re-validated against the resource/songs allowlist, so neither
-    # can bypass the directory restriction.
     try:
         return file_security.resolve_path_within_directory(song_dir, bgm_file)
     except ValueError as song_dir_exc:
@@ -883,8 +815,6 @@ def select_bgm_file(
     try:
         catalog = toml.load(catalog_file)
     except (OSError, toml.TomlDecodeError) as exc:
-        # Scrubbed: the catalog path is absolute, and the OSError text
-        # carries it too — no machine layout in the logs.
         logger.warning(
             scrub_error_text(
                 f"failed to load bgm catalog: {catalog_file}, error: {str(exc)}"
@@ -933,8 +863,6 @@ def get_bgm_file(music_mood: str, recent_files: Sequence[str] = ()) -> str:
     if not os.path.isabs(resolved_catalog):
         resolved_catalog = os.path.join(utils.root_dir(), resolved_catalog)
     if music_mood == "none":
-        # Explicit no-music choice: log at INFO through the same helper
-        # that reports every other selection outcome (never an ERROR).
         log_bgm_selection(music_mood, resolved_catalog, "")
         return ""
     selected_file = select_bgm_file(
@@ -1018,8 +946,6 @@ def _fit_clip_to_canvas(clip, video_width: int, video_height: int):
     if clip_ratio == video_ratio:
         return clip.resized(new_size=(video_width, video_height))
 
-    # Reject side bars: the clip must be at least as wide as the canvas
-    # (clip_ratio >= video_ratio).
     if clip_ratio < video_ratio:
         return None
 
@@ -1027,8 +953,6 @@ def _fit_clip_to_canvas(clip, video_width: int, video_height: int):
     if bars > MAX_LETTERBOX_BARS:
         return None
 
-    # Maximized letterbox: smallest scale factor — the clip touches both
-    # edges of one dimension and sits centered on the black background.
     scale_factor = min(video_width / clip_w, video_height / clip_h)
     new_width = int(clip_w * scale_factor)
     new_height = int(clip_h * scale_factor)
@@ -1112,13 +1036,8 @@ def _reencode_clip_with_ffmpeg(
     try:
         subprocess.run(cmd, capture_output=True, check=True, timeout=600)
     except (OSError, subprocess.TimeoutExpired, subprocess.CalledProcessError) as exc:
-        # Reuse the existing codec fallback machinery: only disable the
-        # hardware encoder when libx264 can write the file successfully.
         if effective_codec == _DEFAULT_VIDEO_CODEC:
             raise_reencode_failure(src, exc)
-        # Keep the hardware attempt's stderr tail in the warning: if the
-        # libx264 retry also fails, only the retry's stderr reaches the
-        # raised error, and this attempt's cause would be lost.
         tail = ffmpeg_stderr_tail(exc)
         logger.warning(
             f"[ffmpeg] re-encode with {effective_codec} failed, "
@@ -1152,9 +1071,6 @@ def combine_videos(
 ) -> str:
     audio_clip = AudioFileClip(audio_file)
     try:
-        # Only the voiceover duration is needed here to size the material
-        # concat; audio_clip isn't used afterwards. Close it right away so
-        # early returns or exception paths can't leak the file handle.
         audio_duration = audio_clip.duration
     finally:
         close_clip(audio_clip)
@@ -1166,8 +1082,6 @@ def combine_videos(
         f"(audio duration + {_VIDEO_DURATION_SAFETY_MARGIN:.2f}s safety margin)"
     )
 
-    # Tolerate direct API calls that omit the transition mode, so a later
-    # .value access can't crash.
     transition_value = getattr(video_transition_mode, "value", video_transition_mode)
     output_dir = os.path.dirname(combined_video_path)
 
@@ -1188,9 +1102,6 @@ def combine_videos(
         while start_time < clip_duration:
             end_time = min(start_time + max_clip_duration, clip_duration)
 
-            # Keep every valid segment: a clip shorter than max_clip_duration
-            # is never dropped, and the small tail of a long video isn't
-            # swallowed either.
             if end_time > start_time:
                 subclipped_items.append(
                     SubClippedVideoClip(
@@ -1214,16 +1125,10 @@ def combine_videos(
         
     logger.debug(f"total subclipped items: {len(subclipped_items)}")
     
-    # Add downloaded clips over and over until the duration of the audio (max_duration) has been reached
     for i, subclipped_item in enumerate(subclipped_items):
         if video_duration >= required_video_duration:
             break
 
-        # Trim the LAST clip to the remaining budget: without this a long
-        # clip (video_clip_duration >= 5) overshoots the voiceover by up to
-        # clip-1 seconds of silent footage, and the muxed voiceover would
-        # end before the video. With the historical 2s clips the drift
-        # was invisible; with 9s clips it broke the timeline.
         remaining = required_video_duration - video_duration
 
         logger.debug(
@@ -1234,8 +1139,6 @@ def combine_videos(
         )
 
         try:
-            # Fast path: no transitions -> re-encode straight with ffmpeg,
-            # skipping MoviePy open/fit/effects overhead entirely (~7x faster).
             if not _needs_moviepy_effects(video_transition_mode):
                 clip_w, clip_h = subclipped_item.width, subclipped_item.height
                 if clip_w == video_width and clip_h == video_height:
@@ -1293,9 +1196,6 @@ def combine_videos(
                 ),
             )
             clip_duration = clip.duration
-            # Not every clip arrives in the canvas shape: within the bar band
-            # (MAX_LETTERBOX_BARS) it becomes a maximized letterbox; outside
-            # it, the clip is discarded.
             clip_w, clip_h = clip.size
             if clip_w != video_width or clip_h != video_height:
                 logger.debug(
@@ -1336,7 +1236,6 @@ def combine_videos(
             if clip.duration > max_clip_duration:
                 clip = clip.subclipped(0, max_clip_duration)
                 
-            # wirte clip to temp file
             clip_file = f"{output_dir}/temp-clip-{i+1}.mp4"
             _write_videofile_with_codec_fallback(
                 clip,
@@ -1346,7 +1245,6 @@ def combine_videos(
                 fps=fps,
             )
 
-            # Store clip duration before closing
             clip_duration_saved = clip.duration
             close_clip(clip)
 
@@ -1366,8 +1264,6 @@ def combine_videos(
         except Exception as e:
             logger.error(f"failed to process clip: {scrub_error_text(str(e))}")
 
-    # Only fail when there WAS material and no clip survived the shape
-    # filter. Empty input (video_paths=[]) is a legitimate test path.
     if video_paths and not processed_clips:
         raise ValueError(
             f"no usable clips for target {video_width}x{video_height}: every clip "
@@ -1376,7 +1272,6 @@ def combine_videos(
             "Check the material sources."
         )
 
-    # loop processed clips until the video duration covers the audio duration and the small safety margin.
     if video_duration < required_video_duration:
         logger.warning(
             f"video duration ({video_duration:.2f}s) is shorter than required duration "
@@ -1393,13 +1288,11 @@ def combine_videos(
             f"looped {len(processed_clips)-len(base_clips)} clips"
         )
      
-    # merge video clips progressively, avoid loading all videos at once to avoid memory overflow
     logger.info("starting clip merging process")
     if not processed_clips:
         logger.warning("no clips available for merging")
         return combined_video_path
     
-    # if there is only one clip, use it directly
     if len(processed_clips) == 1:
         logger.info("using single clip directly")
         shutil.copy(processed_clips[0].file_path, combined_video_path)
@@ -1416,7 +1309,6 @@ def combine_videos(
         output_dir=output_dir,
     )
     
-    # clean temp files
     delete_files(clip_files)
             
     logger.info("video combining completed")
@@ -1424,9 +1316,6 @@ def combine_videos(
 
 
 def _hex_to_rgb(color: str) -> tuple[int, int, int]:
-    # The subtitle background color comes from API/WebUI params and may be
-    # empty or malformed. Only accept #RRGGBB here; invalid values fall back
-    # to black so the PIL render stage can't raise and kill the task.
     if isinstance(color, str) and color.startswith("#") and len(color) == 7:
         try:
             return (int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16))
@@ -1442,10 +1331,6 @@ def _rounded_subtitle_background_clip(
     alpha: int = 140,
     radius: int = 16,
 ) -> ImageClip:
-    # The new subtitle background is only used when explicitly enabled: draw
-    # a rounded translucent panel as an RGBA image, then hand it to MoviePy
-    # as a transparent ImageClip for compositing. The default path stays
-    # untouched while a softer subtitle look can be trialed cheaply.
     rgb = _hex_to_rgb(color)
     safe_alpha = max(0, min(255, int(alpha)))
     img = Image.new("RGBA", (width, height), (0, 0, 0, 0))
@@ -1517,9 +1402,6 @@ def generate_video(
     logger.info(f"  ③ subtitle: {subtitle_path}")
     logger.info(f"  ④ output: {output_file}")
 
-    # https://github.com/harry0703/MoneyPrinterTurbo/issues/217
-    # PermissionError: [WinError 32] The process cannot access the file because it is being used by another process: 'final-1.mp4.tempTEMP_MPY_wvf_snd.mp3'
-    # write into the same directory as the output file
     output_dir = os.path.dirname(output_file)
 
     font_path = ""
@@ -1533,9 +1415,6 @@ def generate_video(
         logger.info(f"  ⑤ font: {font_path}")
 
     def resolve_subtitle_background_color():
-        # Back-compat for the historical param: `text_background_color` may be
-        # a boolean or an actual color string. Normalize here so passing
-        # True/False straight into TextClip can't produce surprising renders.
         if isinstance(params.text_background_color, bool):
             return "#000000" if params.text_background_color else None
         return params.text_background_color
@@ -1550,12 +1429,6 @@ def generate_video(
         )
         has_subtitle_background = bool(bg_color)
         pad_x = int(params.font_size * 0.6) if has_subtitle_background else 0
-        # The subtitle background needs explicit horizontal padding. Deduct
-        # the padding from the available width before wrapping, so long
-        # English lines or large sizes that exactly fill 90% of the video
-        # width don't touch the background edges and look clipped. Both the
-        # plain rectangle and rounded backgrounds share this path;
-        # background-less subtitles keep the original max width.
         text_max_width = max(1, int(max_width) - 2 * pad_x)
         wrapped_txt, txt_height = wrap_text(
             phrase,
@@ -1569,18 +1442,9 @@ def generate_video(
         text_clip_margin_y = max(
             int(params.font_size * 0.3), int(params.stroke_width * 2)
         )
-        # MoviePy auto-shrinks the text box height under `method=label`; with
-        # multiline subtitles, stroke, or a background color it can clip the
-        # lower half of the last line. Pass a more conservative height here,
-        # folding line spacing and extra top/bottom padding in, so both the
-        # subtitle background and the text itself always render fully.
         clip_h = int(txt_height + vertical_padding + (interline * line_count))
 
         if rounded_bg_enabled:
-            # A rounded background should hug the text width instead of reusing
-            # the 90% video width. Measure the longest line with PIL first,
-            # then add horizontal padding, so short subtitles don't get an
-            # over-wide panel.
             try:
                 font = ImageFont.truetype(font_path, params.font_size)
                 text_w = max(
@@ -1673,7 +1537,6 @@ def generate_video(
         _clip = _clip.with_start(subtitle_item[0][0])
         _clip = _clip.with_end(subtitle_item[0][1])
         _clip = _clip.with_duration(duration)
-        # A caption spoken while a segment panel is on screen stays above it.
         max_bottom = caption_layout.cue_bottom(caption_bands, subtitle_item[0])
         _clip = _clip.with_position(
             (
@@ -1733,9 +1596,6 @@ def generate_video(
             logger.error(f"failed to add bgm: {str(e)}")
 
     video_clip = video_clip.with_audio(audio_clip)
-    # Explicitly keep the input audio's sample rate; fall back to MoviePy's
-    # 44100Hz default when unavailable. This reduces resampling-induced
-    # quality wobble across runtimes, especially in Docker.
     output_audio_fps = int(getattr(audio_clip, "fps", 0) or 44100)
     _write_videofile_with_codec_fallback(
         video_clip,

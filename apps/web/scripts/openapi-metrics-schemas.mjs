@@ -1,7 +1,3 @@
-// Request/response schemas of the metrics endpoints for generate-openapi.mjs,
-// split out of openapi-schemas.mjs (over the file-size cap). The helpers come
-// in as arguments so this module has no import cycle with openapi-schemas.mjs.
-// The experiment schemas ride along (openapi-schemas.mjs may not grow).
 import { experimentLinkSchema, experimentOperationSchemas } from './openapi-experiments-schemas.mjs';
 import { batchOperationSchemas } from './openapi-batch-schemas.mjs';
 
@@ -11,16 +7,13 @@ export function metricsOperationSchemas({ success, object, anyObject, str }) {
   return {
     ...experimentOperationSchemas({ success, object, anyObject, str }),
     ...batchOperationSchemas({ success, object, str }),
-    // apps/web/app/api/metrics/route.ts (KNOWN_PARAMS)
     'GET /api/metrics': {
-      // parseMetricsQuery: omitting window returns 400 "window must be 24h, 7d or 28d."
       query: [
         { name: 'window', required: true, enum: ['24h', '7d', '28d'] },
         ...['persona', 'account', 'provider', 'angle'].map((name) => ({ name, required: false })),
       ],
       response: success({ rows: { type: 'array', items: anyObject }, truncated: { type: 'boolean' } }),
     },
-    // apps/web/app/api/metrics/retention-curve/route.ts (readParams)
     'GET /api/metrics/retention-curve': {
       extraResponses: {
         403: 'YOUTUBE_ANALYTICS_SCOPE_MISSING or YOUTUBE_RECONNECT_REQUIRED: reconnect YouTube.',

@@ -1,21 +1,10 @@
 import 'server-only';
 
-//---------------
-// Threads — API client to connect accounts (OAuth 2.0) and publish videos.
-//
-// Documentation (2026): https://developers.facebook.com/docs/threads
-// Publishing is container-based: POST /{user}/threads with a public video_url,
-// wait for the container to reach FINISHED, then POST /{user}/threads_publish.
-// The long-lived token expires in 60 days; the scheduler's
-// social-token-refresh job renews it before then (refreshThreadsToken).
-//---------------
-
 import { ThreadsError } from '@/lib/errors';
 import { readMetaErrorCode, readMetaErrorSubcode } from '@/lib/meta-error-code';
 
-// The documented text ceiling; the scorer and the engine pin the same value.
 export const THREADS_TEXT_MAX_CHARS = 500;
-export const THREADS_VIDEO_MAX_BYTES = 1024 * 1024 * 1024; // 1GB
+export const THREADS_VIDEO_MAX_BYTES = 1024 * 1024 * 1024;
 
 export const THREADS_SCOPES = ['threads_basic', 'threads_content_publish', 'threads_manage_insights'] as const;
 
@@ -34,9 +23,6 @@ function requireEnv(name: string): string {
   return value;
 }
 
-// Bodies are parsed defensively: a proxy can answer with HTML, and only
-// Meta's own error.message is safe to surface (never the request URL, which
-// would carry the access token).
 async function readBody(response: Response): Promise<Record<string, unknown>> {
   const body: unknown = await response.json().catch(() => null);
   return typeof body === 'object' && body !== null ? (body as Record<string, unknown>) : {};
@@ -76,13 +62,6 @@ function requireId(code: string, body: Record<string, unknown>): string {
   return body.id;
 }
 
-//---------------
-// buildThreadsAuthorizationUrl — OAuth consent URL
-//---------------
-// Threads has its own App ID and App Secret (THREADS_CLIENT_ID /
-// THREADS_CLIENT_SECRET) from the "Access the Threads API" use case of the
-// Meta app. Meta rejects the Instagram App ID here (error 4476002), so the
-// Instagram credentials must never be used for Threads OAuth.
 export function buildThreadsAuthorizationUrl(state: string, redirectUriOverride?: string): string {
   const params = new URLSearchParams({
     response_type: 'code',
@@ -94,10 +73,6 @@ export function buildThreadsAuthorizationUrl(state: string, redirectUriOverride?
   return `${THREADS_AUTHORIZE_URL}?${params.toString()}`;
 }
 
-//---------------
-// exchangeThreadsCodeForToken — code → short-lived token (1h) → long-lived
-// token (60 days). The short-lived token is never stored.
-//---------------
 export interface ThreadsToken {
   access_token: string;
   expires_in: number;
@@ -134,11 +109,6 @@ export async function exchangeThreadsCodeForToken(code: string, redirectUriOverr
   };
 }
 
-//---------------
-// refreshThreadsToken — exchanges a valid long-lived token (at least 24h
-// old) for a fresh 60-day one. A token Meta already invalidated fails with
-// code 190 and only a reconnect fixes it.
-//---------------
 export async function refreshThreadsToken(accessToken: string): Promise<ThreadsToken> {
   const params = new URLSearchParams({ grant_type: 'th_refresh_token', access_token: accessToken });
   const body = await threadsFetch('THREADS_TOKEN_REFRESH_FAILED', `${THREADS_API}/refresh_access_token?${params.toString()}`);
@@ -151,9 +121,6 @@ export async function refreshThreadsToken(accessToken: string): Promise<ThreadsT
   return { access_token: body.access_token, expires_in: body.expires_in };
 }
 
-//---------------
-// fetchThreadsProfile — the profile the token belongs to
-//---------------
 export interface ThreadsProfile {
   id: string;
   username: string | null;
@@ -174,13 +141,6 @@ export async function fetchThreadsProfile(accessToken: string): Promise<ThreadsP
   };
 }
 
-//---------------
-// publishThreadsMedia — container → wait until FINISHED → publish, for a
-// video (media_type VIDEO, video_url) or an image (IMAGE, image_url). The sleep
-// is injected so tests never wait on the real poll interval. The permalink
-// read is best-effort: the post is already live when it runs, so its failure
-// must not turn a published post into a failed one.
-//---------------
 export interface ThreadsPublishResult {
   postId: string;
   permalink: string | null;
@@ -249,10 +209,6 @@ export async function publishThreadsMedia(input: PublishThreadsMediaInput): Prom
   return { postId, permalink };
 }
 
-//---------------
-// getThreadsInsights — metric name → value for one post. Throws on HTTP
-// errors so the metrics collector logs and retries on the next run.
-//---------------
 export async function getThreadsInsights(accessToken: string, mediaId: string): Promise<Record<string, number>> {
   const params = new URLSearchParams({ metric: 'views,likes,replies', access_token: accessToken });
   const body = await threadsFetch(

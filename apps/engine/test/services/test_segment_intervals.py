@@ -49,11 +49,6 @@ def test_exact_word_walk_gives_each_segment_its_spoken_interval():
 
 
 def test_zero_token_segment_inherits_the_previous_boundary_instead_of_crashing():
-    # A segment with no spoken words (punctuation-only text passes
-    # validation in full lip sync; the images modes reject it before
-    # charging) has no interval of its own: inherit the previous
-    # boundary instead of indexing an empty slice, which raised
-    # IndexError and failed the video.
     words = [("Porto", 0.0, 1.0), ("walks", 1.0, 2.0), ("now", 2.0, 3.0)]
     segments = [
         {"kind": "hook", "text": "Porto walks."},
@@ -66,8 +61,6 @@ def test_zero_token_segment_inherits_the_previous_boundary_instead_of_crashing()
 
 
 def test_word_list_shorter_than_segments_falls_back_to_proportional_timing():
-    # The word file covers only the hook: the flattened token lists differ
-    # in length, so the exact walk cannot match and the fallback runs.
     words = [("I", 0.0, 0.3), ("don't", 0.3, 0.8), ("know", 0.8, 1.2)]
     segments = [
         {"kind": "hook", "text": "I don't know."},
@@ -75,8 +68,6 @@ def test_word_list_shorter_than_segments_falls_back_to_proportional_timing():
     ]
     intervals, fallback = segment_intervals.segment_intervals(segments, words, 10.0)
     assert fallback is True
-    # Proportional to token counts: "don't" tokenises to 2, so the hook
-    # has 4 tokens against the CTA's 3 over 10 seconds.
     assert intervals[0][0] == 0.0
     assert intervals[0][1] == pytest.approx(10.0 * 4 / 7)
     assert intervals[1] == (pytest.approx(10.0 * 4 / 7), 10.0)
@@ -85,13 +76,10 @@ def test_word_list_shorter_than_segments_falls_back_to_proportional_timing():
 def test_no_word_times_means_proportional_intervals():
     intervals, fallback = segment_intervals.segment_intervals(SEGMENTS, [], 12.0)
     assert fallback is True
-    # Token counts 3, 6, 3 over 12 seconds.
     assert intervals == [(0.0, 3.0), (3.0, 9.0), (9.0, 12.0)]
 
 
 def test_intervals_read_from_the_subtitle_word_file():
-    # The walker consumes subtitle.file_to_words, not a hand-built list:
-    # the file next to the subtitle is the production input.
     import tempfile
 
     with tempfile.TemporaryDirectory() as tmp:

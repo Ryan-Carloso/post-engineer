@@ -34,7 +34,6 @@ function mockFetch(calls: Array<(url: string, init?: RequestInit) => Response>):
 }
 
 function mp4Buffer(timescale: number, duration: number, version = 0): Buffer {
-  // Minimal MP4: ftyp box + moov box holding one mvhd box.
   const ftyp = Buffer.alloc(24);
   ftyp.writeUInt32BE(24, 0);
   ftyp.write('ftyp', 4, 'latin1');

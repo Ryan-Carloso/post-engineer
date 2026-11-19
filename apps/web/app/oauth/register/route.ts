@@ -5,13 +5,6 @@ import { validateDcrMetadata } from '@/lib/oauth/clients';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { logger } from '@/lib/logger';
 
-//---------------
-// POST /oauth/register — Dynamic Client Registration (RFC 7591).
-// Public clients (ChatGPT/Codex) register without a secret
-// (token_endpoint_auth_method: none) and receive a persisted client_id.
-// CIMD (client_id = https URL) does not need to register.
-//---------------
-
 export async function POST(request: Request): Promise<NextResponse> {
   const limited = await applyRateLimit(request, RATE_LIMITS.oauthRegister);
   if (limited) return limited;

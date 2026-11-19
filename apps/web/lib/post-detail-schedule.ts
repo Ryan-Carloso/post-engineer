@@ -1,11 +1,3 @@
-// Schedule detail for one slot: the schedule row's account lists,
-// board and publish mode, as the post-detail response renders them.
-//
-// Extracted from post-detail.ts so the module stays under the
-// file-size ratchet. One const per leaf (not an inline object
-// literal): v8 coverage does not report object-literal property
-// lines, so this keeps every leaf visible to the coverage gate.
-
 export interface ScheduleDetailRow {
     id: string;
     persona_id: string | null;
@@ -21,6 +13,7 @@ export interface ScheduleDetailRow {
     threespeak_account_ids: string[] | null;
     rumble_account_ids: string[] | null;
     fanvue_account_ids: string[] | null;
+    telegram_account_ids: string[] | null;
     timezone: string;
     post_language: string | null;
     post_voice_id: string | null;
@@ -47,6 +40,7 @@ export function buildScheduleDetail(scheduleRow: ScheduleDetailRow) {
   const threespeakAccountIdsOut = scheduleRow.threespeak_account_ids ?? [];
   const rumbleAccountIdsOut = scheduleRow.rumble_account_ids ?? [];
   const fanvueAccountIdsOut = scheduleRow.fanvue_account_ids ?? [];
+  const telegramAccountIdsOut = scheduleRow.telegram_account_ids ?? [];
   const timezoneOut = scheduleRow.timezone;
   const publishModeOut: 'asap' | 'scheduled' = scheduleRow.publish_mode === 'asap' ? 'asap' : 'scheduled';
   return {
@@ -64,6 +58,7 @@ export function buildScheduleDetail(scheduleRow: ScheduleDetailRow) {
     threespeakAccountIds: threespeakAccountIdsOut,
     rumbleAccountIds: rumbleAccountIdsOut,
     fanvueAccountIds: fanvueAccountIdsOut,
+    telegramAccountIds: telegramAccountIdsOut,
     timezone: timezoneOut,
     publishMode: publishModeOut,
   };

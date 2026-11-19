@@ -10,8 +10,6 @@ const cta = 'Save this video before your next trip to Porto.';
 
 describe('validateSegments (shared module)', () => {
   it('accepts a valid hook and content takes and joins them with blank lines', () => {
-    // Full lip sync leaves media optional: these fixtures carry no media
-    // on purpose, so the content rules are what this pins.
     const segments = [
       { kind: 'hook', text: hook },
       { kind: 'content', text: content },
@@ -43,8 +41,6 @@ describe('validateSegments (shared module)', () => {
   });
 
   it('rejects media with an unknown key, like the generation route does', () => {
-    // Full lip sync leaves the hook media optional, so the unknown key on
-    // the content is the error that fires.
     const result = validateSegments(
       [
         { kind: 'hook', text: hook },
@@ -138,7 +134,6 @@ describe('validateSegments (shared module)', () => {
   });
 
   it('rejects more than 12 segments and more than 6 medias via the cap rules', () => {
-    // 25 + 11*14 + 5 = 184 words: inside the total, so the segment cap fires.
     const hook25 = Array.from({ length: 25 }, () => 'word').join(' ') + '.';
     const segments: Array<{ kind: string; text: string }> = [{ kind: 'hook', text: hook25 }];
     for (let i = 0; i < 11; i += 1) {
@@ -148,7 +143,6 @@ describe('validateSegments (shared module)', () => {
     const many = validateSegments(segments);
     expect(many.ok).toBe(false);
     if (!many.ok) expect(many.error.rule).toBe('at most 12 segments are allowed');
-    // 25 + 7*14 + 5 = 128 words and 9 segments: only the media cap fires.
     const mediaSegments: Array<{ kind: string; text: string; media?: Array<{ url: string }> }> = [{ kind: 'hook', text: hook25 }];
     for (let i = 0; i < 7; i += 1) {
       mediaSegments.push({
@@ -174,9 +168,6 @@ describe('validateSegments (fail paths reformatted by the shared copy)', () => {
   });
 
   it('accepts a CTA take in the middle of the video', () => {
-    // Issue #577 acceptance: a CTA is just a content take, so it may
-    // sit anywhere after the hook — here in the middle — and the video
-    // still renders in take order.
     const segments = [
       { kind: 'hook', text: hook },
       { kind: 'content', text: cta },
@@ -214,8 +205,6 @@ describe('validateSegments (fail paths reformatted by the shared copy)', () => {
   });
 
   it('accepts short and long content takes: there is no CTA word range', () => {
-    // Issue #577: a two-word content take and a 21-word content take
-    // both pass — the old 5-20 CTA range does not apply to content takes.
     const short = validateSegments(
       [
         { kind: 'hook', text: hook },
@@ -244,9 +233,6 @@ describe('validateSegments (fail paths reformatted by the shared copy)', () => {
     ]);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.field).toBe('segments.0.text');
-    // Issue #563: at the fastest measured pace (0.330s/word, 182 wpm) a
-    // 24-word hook lasts 7.9s, under the 8s floor, so 24 words cannot
-    // always fill the 8-12s window; 25 is the smallest count that does.
     const tooShort = validateSegments([
       { kind: 'hook', text: Array.from({ length: 24 }, () => 'word').join(' ') + '.' },
       { kind: 'content', text: content },
@@ -268,8 +254,6 @@ describe('validateSegments (fail paths reformatted by the shared copy)', () => {
   });
 
   it('rejects media with neither mediaId nor url', () => {
-    // Full lip sync leaves the hook media optional, so the empty media
-    // item on the content is the error that fires.
     const result = validateSegments(
       [
         { kind: 'hook', text: hook },

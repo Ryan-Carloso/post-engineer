@@ -84,8 +84,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
   if (typeof language !== 'string' || !language.trim()) {
     return NextResponse.json({ success: false, error: 'Language is required.' }, { status: 400 });
   }
-  // English-only launch: cloning only ever worked well in English. The
-  // engine enforces the same rule; rejecting here saves the round-trip.
   if (!isEnglishLanguage(language)) {
     return NextResponse.json({ success: false, error: ONLY_ENGLISH_CLONE_MESSAGE }, { status: 400 });
   }

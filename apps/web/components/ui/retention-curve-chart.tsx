@@ -3,15 +3,6 @@
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from 'recharts';
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart';
 
-//---------------
-// RetentionCurveChart — YouTube audience retention of one long-form video:
-// x = share of the video elapsed (0-100%), y = audience watching (% of the
-// starting audience; can pass 100% when viewers rewatch a part) and, when
-// YouTube reports it, the relative retention vs. similar-length videos
-// (0-100%). Presentational: the page fetches the points and the labels.
-// A line chart: it follows one value along the video.
-//---------------
-
 export interface RetentionCurveDatum {
   ratio: number;
   audienceWatchRatio: number;

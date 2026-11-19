@@ -47,8 +47,6 @@ class LayoutCommandTest(unittest.TestCase):
 
         vd._run_ffmpeg_bounded = fake_run
         vd._open_video_clip_quietly = lambda path: FakeClip(1080, 1920)
-        # The concat tail is written by ffmpeg in the real flow; here it never
-        # appears, so pretend it does or the cleanup path raises.
         os.path.exists = lambda path: True
 
     def tearDown(self) -> None:
@@ -72,10 +70,6 @@ class LayoutCommandTest(unittest.TestCase):
                     maps.append(command[index + 1])
         return maps
 
-    # ------------------------------------------------------------------
-    # react layout
-    # ------------------------------------------------------------------
-
     def test_react_vstacks_avatar_over_background(self) -> None:
         vd.compose_lipsync_layout(
             background_video="bg.mp4",
@@ -86,8 +80,6 @@ class LayoutCommandTest(unittest.TestCase):
         )
         graph = self._graph()
         self.assertIn("vstack=inputs=2", graph)
-        # The persona block scales by WIDTH and is cropped from the top, which
-        # keeps head and shoulders and drops the torso.
         self.assertIn(f"scale={1080}:-2", graph)
         self.assertIn("crop=1080:960", graph)
 
@@ -100,8 +92,6 @@ class LayoutCommandTest(unittest.TestCase):
             layout="react",
         )
         graph = self._graph()
-        # Half of 1920 is 960. Pinning the literal guards an off-by-one that
-        # would make vstack produce 1919 pixels and the tail shift by a frame.
         self.assertIn("crop=1080:960", graph)
         self.assertEqual(graph.count("crop=1080:960"), 2)
 
@@ -136,10 +126,6 @@ class LayoutCommandTest(unittest.TestCase):
         self.assertNotIn("0:a?", maps)
         self.assertNotIn("0:a", maps)
 
-    # ------------------------------------------------------------------
-    # standard layout (default) is untouched
-    # ------------------------------------------------------------------
-
     def test_standard_layout_does_not_stack(self) -> None:
         vd.compose_lipsync_layout(
             background_video="bg.mp4",
@@ -164,10 +150,6 @@ class LayoutCommandTest(unittest.TestCase):
         joined = " ".join(" ".join(c) for c in self.commands)
         self.assertIn("concat", joined)
         self.assertIn("-ss", joined)
-
-    # ------------------------------------------------------------------
-    # unknown layout fails loud
-    # ------------------------------------------------------------------
 
     def test_unknown_layout_raises_instead_of_silently_standard(self) -> None:
         with self.assertRaises(ValueError) as ctx:

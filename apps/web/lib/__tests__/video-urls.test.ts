@@ -1,12 +1,6 @@
 // @vitest-environment node
 import { describe, it, expect } from 'vitest';
 
-//---------------
-// rewriteVideoUrls unit tests.
-// Extracted from the video-status route so the delete-preview endpoint can
-// reuse the exact same engine-URI → web-download-URL mapping.
-//---------------
-
 import { firstDownloadUrl, rewriteVideoUrls, SAFE_TASK_ID } from '../video-urls';
 
 const BASE = 'https://engine.internal:8080';
@@ -32,8 +26,6 @@ describe('rewriteVideoUrls', () => {
   });
 
   it('passes absolute URLs from a foreign origin through untouched (never proxied)', () => {
-    // Only engine-origin /api/v1/download|stream URIs are rewritten to the
-    // web proxy; foreign URLs are data, returned as-is and never fetched.
     expect(rewriteVideoUrls('https://evil.example/x.mp4', TASK, BASE)).toBe(
       'https://evil.example/x.mp4',
     );
@@ -78,7 +70,6 @@ describe('firstDownloadUrl', () => {
   });
 
   it('rejects pre-formed URLs with an unsafe task-id segment', () => {
-    // Path traversal smuggled into a same-origin download href.
     expect(
       firstDownloadUrl({ video: '/api/persona/video-download/../../settings' }),
     ).toBeNull();

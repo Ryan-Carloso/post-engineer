@@ -1,20 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { ensureEngineImageUrl, isEngineUsablePersonaImageUrl } from '../engine-image-url';
 
-//---------------
-// The engine downloads the persona image over HTTP through an SSRF guard that
-// rejects loopback and private addresses. Two shapes arrive from the web:
-//
-// * an absolute signed Supabase URL (uploaded photo) — passed straight through;
-// * a RELATIVE path to our own static asset (`/caracter-samples/file-1.png`,
-//   what picking a house character stores) — the engine cannot resolve that,
-//   and it is not reachable either: in local dev the web is on 127.0.0.1,
-//   which the SSRF guard blocks by design.
-//
-// The relative case is re-hosted in the personas bucket so the engine gets a
-// real, publicly reachable URL in every environment.
-//---------------
-
 const ORIGINAL_BLOB = new Uint8Array([137, 80, 78, 71]);
 
 function fakeStorage() {
@@ -74,8 +60,6 @@ describe('ensureEngineImageUrl', () => {
       fetchImpl: fetchImpl as never,
     });
 
-    // The asset is read from our own origin, never from the user, with
-    // redirects refused and a timeout so a hop cannot leave the origin.
     expect(fetchImpl).toHaveBeenCalledTimes(1);
     const [source, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
     expect(source).toBe('http://localhost:3434/caracter-samples/file-1.png');
@@ -87,11 +71,6 @@ describe('ensureEngineImageUrl', () => {
     expect(objectPath).toContain('u-1');
     expect(objectPath).toContain('caracter-samples');
     expect(options.contentType).toBe('image/png');
-    // The hosted house-character URL must outlive the serial render queue
-    // like every other generation-time signing (24h, same constant as
-    // persona-prep's SIGNED_URL_TTL_SECONDS): a slot picked up more than
-    // 1h after creation would otherwise fail with the same HTTP 400 the
-    // 1h persona-photo URL caused (OpenCode review, PR #564).
     expect(createSignedUrl).toHaveBeenCalledWith(objectPath, 24 * 3600);
     expect(result).toBe('https://project.supabase.co/storage/v1/object/sign/personas/x.png?token=T');
   });
@@ -125,9 +104,6 @@ describe('ensureEngineImageUrl', () => {
     ).rejects.toThrow(/bucket full/);
   });
 
-  // Issue #448: a stored avatar that only LOOKS like a site path must never
-  // reach fetch — '//host' and '/\\host' are authority-relative and change
-  // the host when resolved against the origin.
   it.each([
     '//169.254.169.254/latest/meta-data/',
     '//10.0.0.5/admin',
@@ -154,7 +130,6 @@ describe('ensureEngineImageUrl', () => {
 
   it('does not re-host an asset whose fetch hits a redirect', async () => {
     const { storage, upload } = fakeStorage();
-    // fetch with redirect:'error' rejects with a TypeError on any 3xx.
     const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
       if (init?.redirect === 'error') throw new TypeError('fetch failed: redirect');
       return new Response(ORIGINAL_BLOB, { status: 200 });
@@ -187,15 +162,10 @@ describe('ensureEngineImageUrl', () => {
 
 describe('isEngineUsablePersonaImageUrl', () => {
   it.each([
-    // Site paths are re-hosted by ensureEngineImageUrl before the engine
-    // ever sees them.
     '/caracter-samples/file-1.png',
-    // Data URIs with the payload separator the engine splits on.
     'data:image/png;base64,iVBORw0KGgo=',
-    // Ordinary public http(s) URLs.
     'https://cdn.example/avatar.png',
     'http://images.example.org/a.jpg?size=large',
-    // A literal public IP is a global address, like the engine's check.
     'https://8.8.8.8/avatar.png',
     'http://[2606:4700:4700::1111]/avatar.png',
   ])('accepts %s', (url) => {
@@ -203,31 +173,22 @@ describe('isEngineUsablePersonaImageUrl', () => {
   });
 
   it.each([
-    // A relative path that is not one of our own site assets.
     'characters/ana.png',
     'avatar.png',
-    // Non-http(s) schemes.
     'ftp://cdn.example/avatar.png',
     'file:///etc/passwd',
-    // A data URI without the payload separator cannot be decoded by the
-    // engine ("invalid persona image data URI").
     'data:image/png;base64',
-    // Private / loopback / link-local literal IPs are rejected by the
-    // engine's SSRF guard.
     'http://127.0.0.1/avatar.png',
     'http://10.0.0.5/avatar.png',
     'https://192.168.1.10/avatar.png',
     'http://169.254.169.254/latest/meta-data',
     'http://[::1]/avatar.png',
-    // Authority-relative and traversing site paths change the host or
-    // leave the asset directory once resolved against the origin (#448).
     '//169.254.169.254/latest/meta-data/',
     '//10.0.0.5/admin',
     '/\\169.254.169.254/x',
     '/%2F%2Fhost/x',
     '/caracter-samples/../x',
     '/api/persona/images',
-    // Plain garbage.
     'not-a-url',
     '',
   ])('rejects %s', (url) => {

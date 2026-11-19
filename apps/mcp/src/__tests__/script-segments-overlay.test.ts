@@ -1,6 +1,4 @@
 import { describe, expect, it } from 'vitest';
-// Full lip sync leaves media optional: the overlay shape is what these
-// tests pin, so every call runs with videoType 'full_lipsync'.
 import {
   MAX_OVERLAY_BADGE_CHARS,
   MAX_OVERLAY_SUBTITLE_CHARS,

@@ -6,30 +6,11 @@ import { checkMedia as checkMediaContract, uploadMedia as uploadMediaContract } 
 import type { CheckMediaCode, VideoAspect } from './contracts/media.js';
 import { MAX_SEGMENT_MEDIA_BYTES, MAX_SEGMENT_MEDIA_MB } from './limits.js';
 
-// The check codes live in the shared media contract; re-exported so
-// existing import sites keep working.
 export { CHECK_MEDIA_CODES } from './contracts/media.js';
 export type { CheckMediaCode } from './contracts/media.js';
 
-//---------------
-// Segment media client calls (Phase 2, user media per segment).
-// Standalone functions (not client methods) because client.ts is
-// grandfathered over the 500-line cap and may not grow — the same
-// pattern as client-video-task.ts.
-//---------------
-
-// Multipart uploads can legitimately exceed the client's default budget;
-// mirrors UPLOAD_TIMEOUT_MS in client.ts (kept as a literal here so
-// client.ts stays untouched).
 const UPLOAD_TIMEOUT_MS = 120_000;
 
-/**
- * Real image type from magic bytes — the extension is never trusted.
- * Only the types the engine temp_assets flow accepts by suffix (JPG,
- * PNG, WebP): the web route re-validates authoritatively with its own
- * magic-byte check, so a drift here can only fail fast, never smuggle
- * a bad file through.
- */
 export function detectSegmentImageMimeType(buffer: Buffer): string | null {
   if (buffer.length < 12) return null;
   if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return 'image/jpeg';
@@ -50,12 +31,6 @@ function assertSegmentMediaSize(sizeBytes: number, path: string): void {
   }
 }
 
-/**
- * Read one local image with the stat-before-read, size-guard-before-and-
- * after-read pattern of the persona library uploads (8MB engine photo
- * limit) and sniff its real type. Shared by the segment upload and the
- * publish_existing image path, so both read local files the same way.
- */
 export async function readLocalImage(path: string): Promise<{ buffer: Buffer; mimeType: string }> {
   let fileStat;
   try {
@@ -83,11 +58,6 @@ export async function readLocalImage(path: string): Promise<{ buffer: Buffer; mi
   return { buffer, mimeType };
 }
 
-/**
- * Upload one local image for a segment and return its mediaId.
- * Only the mediaId reaches tool output: the local path and the temp
- * asset URL never do.
- */
 export async function uploadSegmentMedia(
   client: PostEngineerClient,
   path: string,
@@ -99,7 +69,6 @@ export async function uploadSegmentMedia(
     '/api/media/upload',
     {
       method: 'POST',
-      // No JSON content type: fetch sets the multipart boundary itself.
       headers: client.getHeaders(false),
       body: formData,
     },
@@ -110,16 +79,6 @@ export async function uploadSegmentMedia(
   return { mediaId: parsed.mediaId };
 }
 
-/**
- * Mechanically check one image URL through the engine (no LLM, no
- * relevance judgement): the agent, who sees the image, decides
- * relevance. Returns exactly one code plus the probed dimensions when
- * the engine measured them, plus has_face when the engine reported it
- * (whether a detectable face is in the photo, or null when there is no
- * file to check or the detector is unavailable — issue #589); the URL
- * never reaches output. With a video aspect given, a photo that cannot
- * fill the frame returns wrong_aspect instead of ok.
- */
 export async function checkSegmentMedia(
   client: PostEngineerClient,
   url: string,
@@ -149,8 +108,6 @@ export async function checkSegmentMedia(
   const narrowed: { code: CheckMediaCode; width?: number; height?: number; has_face?: boolean | null } = { code: checked.code };
   if (checked.width !== undefined) narrowed.width = checked.width;
   if (checked.height !== undefined) narrowed.height = checked.height;
-  // has_face is lenient by design (issue #589): a non-boolean value is
-  // dropped (older engines omit the key entirely), never an error.
   if (checked.has_face === true || checked.has_face === false || checked.has_face === null) {
     narrowed.has_face = checked.has_face;
   }

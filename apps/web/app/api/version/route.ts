@@ -5,17 +5,6 @@ import { getBuildInfo, parseBuildInfo } from '@/lib/version';
 import { isPostHogServerConfigured } from '@/lib/posthog-server';
 import { isSchedulerEnabled } from '@/lib/scheduler-jobs';
 
-//---------------
-// Public version endpoint — no auth required. Proxies the engine's
-// GET /version so the UI always shows the SAME version and build the
-// backend runs (the engine is the single source of truth for "what is
-// live"). An unreachable or misbehaving engine is a loud 502
-// (engine_unreachable, reported to PostHog) — the version badge degrades
-// to a bare "BETA" pill rather than showing a stale or web-only version.
-// posthogConfigured is the web's own telemetry state (boolean only — the
-// key never leaves the server), so a silent misconfiguration like
-// issue #157 is monitorable from the outside.
-//---------------
 const ENGINE_VERSION_TIMEOUT_MS = 5000;
 
 async function getHandler() {
@@ -69,7 +58,4 @@ async function getHandler() {
   }
 }
 
-//---------------
-// 5xx reporting: handled server errors reach PostHog error tracking.
-//---------------
 export const GET = withApiErrorReporting('GET /api/version', getHandler);

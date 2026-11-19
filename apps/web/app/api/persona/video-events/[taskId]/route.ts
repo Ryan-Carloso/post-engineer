@@ -5,17 +5,6 @@ import { SAFE_TASK_ID } from '@/lib/video-urls';
 import { enforceScopedTaskRead } from '@/lib/video-task-scope';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
-//---------------
-// GET /api/persona/video-events/:taskId — SSE progress proxy.
-// Forwards the engine's /api/v1/tasks/:taskId/events stream
-// (text/event-stream). EventSource cannot send the Authorization header
-// the engine requires, so the browser talks to this cookie-authenticated
-// proxy instead. The stream is piped through without buffering.
-// Terminal side effects (generation history + token refund) still live on
-// the video-status proxy: clients do one final GET there after receiving
-// a terminal snapshot.
-//---------------
-
 async function getHandler(
   request: Request,
   context: { params: Promise<{ taskId: string }> },
@@ -69,7 +58,4 @@ async function getHandler(
   }
 }
 
-//---------------
-// 5xx reporting: handled server errors reach PostHog error tracking.
-//---------------
 export const GET = withApiErrorReporting('GET /api/persona/video-events/[taskId]', getHandler, { getUserId: resolveReportingUserId });

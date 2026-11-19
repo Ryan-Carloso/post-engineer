@@ -41,17 +41,9 @@ from loguru import logger
 from app.services.analytics import track_event
 from app.utils import utils
 
-# Fraction of script words that must be heard in the narration.
 MIN_COVERAGE = 0.90
-# The last N script words are the ending (CTA): they must be heard too,
-# so a video whose narration stops early fails even when most words pass.
 TAIL_WORDS = 10
 MIN_TAIL_COVERAGE = 0.80
-# Short scripts take the single-POST path inside Chatterbox's ~30 s stable
-# window, so there is nothing long enough to lose its place on.
-# Preflight and previews opt out explicitly with validate=False instead:
-# their job is measurement/sampling, and the real gate runs in
-# generate_audio, where the video is actually built.
 MIN_WORDS_FOR_VALIDATION = 20
 
 
@@ -135,8 +127,6 @@ def validate_transcript(script: str, transcript: str) -> CoverageReport:
 
 def validate_audio(script: str, audio_file: str) -> ValidationOutcome:
     """Transcribe `audio_file` and check it against `script`."""
-    # Lazy import: subtitle loads the Whisper model, and importing it at
-    # module load would pull the model config into every TTS caller.
     from app.services.subtitle import transcribe_text
 
     try:
@@ -214,8 +204,6 @@ def synthesize_chatterbox_with_validation(
     `user_id` is carried into the telemetry props so the validation
     events attribute to the video's owner, not the engine pseudo-person.
     """
-    # Lazy import: voice_providers must stay importable without this
-    # module, and the tests patch chatterbox_tts at its origin.
     from app.services.voice_providers import TtsResult, chatterbox_tts
 
     result = chatterbox_tts(text, voice, voice_file, voice_rate, voice_volume)
@@ -240,7 +228,7 @@ def synthesize_chatterbox_with_validation(
         return result
 
     report = outcome.report
-    assert report is not None  # "failed" always carries a report
+    assert report is not None
     logger.warning(
         "chatterbox tts validation failed: heard "
         f"{report.coverage:.0%} of the script "
@@ -258,7 +246,7 @@ def synthesize_chatterbox_with_validation(
         return retry
     second = validate_audio(text, voice_file)
     if second.status == "ok":
-        assert second.report is not None  # "ok" always carries a report
+        assert second.report is not None
         logger.success(
             "chatterbox tts validation passed after one re-synthesis "
             f"(coverage {second.report.coverage:.0%})"
@@ -270,9 +258,6 @@ def synthesize_chatterbox_with_validation(
         )
         return retry
     if second.status == "unavailable":
-        # The first check already proved this narration suspect; a retry
-        # whose audio cannot be verified is not shipped on the
-        # synthesiser's word.
         logger.error(
             "chatterbox tts validation unavailable on re-check after a failed "
             "first check; failing instead of shipping unverified audio"

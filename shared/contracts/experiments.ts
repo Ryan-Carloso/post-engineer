@@ -1,38 +1,21 @@
-// Paired content A/B experiments contract (issue #476): the single source
-// of truth for POST /api/experiments, GET /api/experiments and
-// GET /api/experiments/:id. Both apps generate a copy of this file (see
-// scripts/sync-contracts.mjs); never edit a generated copy by hand.
-//
-// Request bodies are strict (an unknown key, an over-length value or a
-// blank string is a 400, never trimmed or dropped). Response schemas are
-// plain objects (extra fields ignored) so live-read fields added by the
-// route do not fail parsing. Limits mirror the CHECK constraints of
-// supabase/migrations/041_experiments.sql and are pinned to the snapshot
-// by apps/web/lib/__tests__/experiments-migration.test.ts.
 import { z } from 'zod';
 
 import { defineEndpoint } from './endpoint.js';
 
-/** Script variables an experiment may test. v1: the hook segment only. */
 export const EXPERIMENT_VARIABLES = ['hook'] as const;
 export type ExperimentVariable = (typeof EXPERIMENT_VARIABLES)[number];
 
-/** Pairs per experiment: below 3 there is no signal at all. */
 export const EXPERIMENT_TARGET_PAIRS_MIN = 3;
 export const EXPERIMENT_TARGET_PAIRS_MAX = 20;
 
-/** An experiment compares exactly two variants (positions 0 and 1). */
 export const EXPERIMENT_VARIANT_COUNT = 2;
 
 export const EXPERIMENT_NAME_MAX_LENGTH = 120;
 export const EXPERIMENT_VARIANT_NAME_MAX_LENGTH = 80;
 export const EXPERIMENT_VARIANT_DESCRIPTION_MAX_LENGTH = 500;
 
-/** Variant slug, e.g. `hook-aggressive`. Never a visible "A"/"B" label. */
 export const EXPERIMENT_VARIANT_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,47}$/;
 
-/** Results windows for GET /api/experiments/:id (`?window=`). Mirrors
- * apps/web/lib/metrics/metrics-query.ts (METRICS_WINDOWS). */
 export const METRICS_WINDOWS = ['24h', '7d', '28d'] as const;
 export type MetricsWindow = (typeof METRICS_WINDOWS)[number];
 
@@ -48,7 +31,6 @@ export const CreateExperimentSchema = z
   .object({
     name: text(EXPERIMENT_NAME_MAX_LENGTH),
     variable: z.enum(EXPERIMENT_VARIABLES),
-    // null / absent: a faceless experiment with no persona.
     personaId: z.string().uuid().nullable().optional(),
     targetPairs: z.number().int().min(EXPERIMENT_TARGET_PAIRS_MIN).max(EXPERIMENT_TARGET_PAIRS_MAX),
     variants: z
@@ -72,7 +54,6 @@ export type CreateExperimentInput = z.infer<typeof CreateExperimentSchema>;
 
 export const DEFAULT_RESULTS_WINDOW: MetricsWindow = '7d';
 
-/** `?window=` for the results read: absent -> 7d; anything unknown -> error. */
 export function parseResultsWindow(params: URLSearchParams): MetricsWindow | { error: string } {
   const unknown = [...params.keys()].filter((key) => key !== 'window');
   if (unknown.length > 0) return { error: 'Unknown query parameter.' };
@@ -84,11 +65,9 @@ export function parseResultsWindow(params: URLSearchParams): MetricsWindow | { e
 
 export interface ExperimentDetailQuery {
   window: MetricsWindow;
-  /** Live provider counters instead of snapshots (issue #532). */
   live: boolean;
 }
 
-/** `?window=&live=` for the detail read: `live` is absent or `0`/`1` only. */
 export function parseExperimentDetailQuery(params: URLSearchParams): ExperimentDetailQuery | { error: string } {
   const unknown = [...params.keys()].filter((key) => key !== 'window' && key !== 'live');
   if (unknown.length > 0) return { error: 'Unknown query parameter.' };
@@ -104,11 +83,6 @@ export function parseExperimentDetailQuery(params: URLSearchParams): ExperimentD
   return { window, live: rawLive === '1' };
 }
 
-//---------------
-// Response views, mirroring apps/web/lib/experiments/read.ts and
-// results.ts (the MCP reads experiment/videos/results; app field names
-// are the contract one rename away from breaking both typechecks).
-//---------------
 export const ExperimentVariantViewSchema = z.object({
   variantId: z.string(),
   name: z.string(),
@@ -143,10 +117,6 @@ export const ListExperimentsResponseSchema = z.object({
   truncated: z.boolean(),
 });
 
-// The detail videos/results payloads (lib/experiments/read.ts and
-// results.ts) are large and the MCP only forwards them as JSON, so the
-// contract keeps them as loose records and types the experiment view
-// the MCP reads (name/variants) strictly.
 export const ExperimentVideoViewSchema = z.record(z.string(), z.unknown());
 
 export const ExperimentResultsSchema = z.record(z.string(), z.unknown());
@@ -158,7 +128,6 @@ export const GetExperimentResultsResponseSchema = z.object({
   videos: z.array(z.record(z.string(), z.unknown())),
   results: z.record(z.string(), z.unknown()),
   truncated: z.boolean(),
-  // Live-read shape (issue #532): present only with `?live=1`.
   source: z.enum(['live', 'partial', 'snapshot']).optional(),
   liveAt: z.string().nullable().optional(),
   liveFailures: z.array(z.record(z.string(), z.unknown())).optional(),

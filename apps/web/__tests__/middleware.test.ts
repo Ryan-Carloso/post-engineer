@@ -1,11 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { NextRequest } from 'next/server';
 
-// auth-js is not a direct dependency of the web app. These objects match
-// the fields getUser() puts on AuthSessionMissingError, AuthApiError, and
-// AuthRetryableFetchError (name + status). Middleware must key off those,
-// not a class it would have to import into the edge bundle.
-
 const { getUser } = vi.hoisted(() => ({
   getUser: vi.fn(),
 }));
@@ -17,13 +12,6 @@ vi.mock('@supabase/ssr', () => ({
 }));
 
 import { config, middleware } from '@/middleware';
-
-// The coverage Cypress job fails when a client navigation to
-// /posts/<slotId> lands on /landing. Middleware is the only redirect
-// to that path. getUser() reports aborted fetches, HTTP 429, and 5xx
-// as { user: null, error } and leaves the cookie in place; a 307 still
-// follows, and the matcher never runs on /landing, so the browser stays
-// there for the whole assertion window.
 
 function requestFor(pathname: string): NextRequest {
   return new NextRequest(`http://localhost:3434${pathname}`);
@@ -181,7 +169,6 @@ describe('middleware auth redirect', () => {
     expect(response.headers.get('location')).toBeNull();
   });
 
-  // API marketplaces and agents fetch the spec anonymously.
   it('does not redirect unauthenticated requests for the public /openapi.json spec', async () => {
     getUser.mockResolvedValue({
       data: { user: null },
@@ -211,8 +198,6 @@ describe('middleware auth redirect', () => {
     expect(config.matcher[0].includes('openapi\\.json$')).toBe(true);
   });
 
-  // Crawlers fetch the sitemap unauthenticated; a 307 to /landing would
-  // hand them HTML instead of XML.
   it('does not redirect unauthenticated requests for /sitemap.xml', async () => {
     getUser.mockResolvedValue({
       data: { user: null },
@@ -242,10 +227,6 @@ describe('middleware auth redirect', () => {
     expect(config.matcher[0].includes('sitemap\\.xml$')).toBe(true);
   });
 
-  // The hosted /mcp endpoint authenticates with an OAuth bearer token in
-  // the route itself (issue #561); a 307 to /landing would make it
-  // unreachable for every hosted agent, so it bypasses the session
-  // middleware exactly like the public spec and sitemap.
   it('does not redirect unauthenticated requests for /mcp', async () => {
     getUser.mockResolvedValue({
       data: { user: null },

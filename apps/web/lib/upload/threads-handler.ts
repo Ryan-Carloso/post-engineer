@@ -8,15 +8,6 @@ import { getAccountIdsFromFormData } from '@/lib/upload/account-utils';
 import { cleanupPublishMedia } from '@/lib/upload/publish-media';
 import { stagePublishMedia } from '@/lib/upload/publish-media-file';
 
-//---------------
-// handleThreadsUpload — publishes the video or image to the user's Threads accounts.
-// Threads fetches the media from a URL, so the file is stored
-// on R2 first (presigned URL, lib/upload/publish-media.ts, same path as Instagram).
-// FormData (multipart, coming from the engine or the UI):
-//   provider=threads, video (File: MP4/MOV video or JPEG/PNG image), caption, threadsAccountIds (repeated),
-//   userId (internal engine call only).
-//---------------
-
 interface ThreadsAccountResult {
   accountId: string;
   success: boolean;
@@ -66,7 +57,6 @@ export async function handleThreadsUpload(
 
   for (const accountId of accountIds) {
     try {
-      // Ownership: resolves only the user's own accounts.
       const { tokens } = await getSocialAccountTokens(supabase, ownerUserId, 'threads', accountId);
       const accessToken = tokens.access_token;
 
@@ -102,7 +92,6 @@ export async function handleThreadsUpload(
     }
   }
 
-  // Archive presign created no temp copy, so there is nothing to clean.
   if (!staged.usedArchive) {
     void cleanupPublishMedia('threads');
   }

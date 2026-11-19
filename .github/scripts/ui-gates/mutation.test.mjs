@@ -2,8 +2,6 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { mutationScore } from './mutation.mjs';
 
-// Stryker mutation.json shape: files keyed by path relative to the
-// Stryker working directory (apps/web), each with a mutants array.
 const REPORT = {
   files: {
     'app/(main)/account/page.tsx': {
@@ -29,7 +27,6 @@ describe('mutationScore', () => {
       'apps/web/app/(main)/account/page.tsx',
       'apps/web/components/ui/account-panel.tsx',
     ]);
-    // (2 killed + 1 timeout + 1 killed) / 6 total = 66%
     assert.equal(score.total, 6);
     assert.equal(score.killed, 3);
     assert.equal(score.survived, 2);

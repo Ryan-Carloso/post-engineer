@@ -12,21 +12,7 @@ import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { logger } from '@/lib/logger';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 
-//---------------
-// POST /oauth/token — exchanges code+PKCE for tokens and rotates refresh
-// tokens. Public client: no secret (token_endpoint_auth_method none).
-// Accepts application/x-www-form-urlencoded (RFC 6749) and
-// application/json (modern client practice, e.g. ChatGPT).
-//
-// Refresh tokens are single-use: every issued token registers its jti in
-// the mcp_oauth_refresh_tokens allowlist (migration 033, identifier only —
-// never the token value), and rotation consumes the old jti while
-// registering the replacement in one atomic RPC. Replays, unknown or
-// expired jtis are rejected with invalid_grant.
-//---------------
-
 const ACCESS_TTL_SECONDS = 3600;
-// Must stay in sync with the '30d' expiry used by mintRefreshToken.
 const REFRESH_TTL_SECONDS = 30 * 24 * 60 * 60;
 
 function refreshExpiresAtIso(): string {
@@ -40,9 +26,6 @@ function logStoreError(action: string, error: unknown): void {
   );
 }
 
-// Registers a freshly minted refresh token's jti in the allowlist.
-// Returns false when the token cannot be tracked — the caller must then
-// fail closed and never hand out the untracked token.
 async function registerRefreshToken(claims: RefreshTokenClaims): Promise<boolean> {
   try {
     const supabase = createSupabaseServiceClient();
@@ -65,10 +48,6 @@ async function registerRefreshToken(claims: RefreshTokenClaims): Promise<boolean
   }
 }
 
-// Atomically consumes the presented refresh token and registers the
-// replacement. Returns true exactly once per jti; concurrent replays race
-// here and all but one lose. Throws on store errors (caller maps to
-// server_error); returns false for unknown/consumed/expired jtis.
 async function rotateRefreshToken(
   oldClaims: RefreshTokenClaims,
   newClaims: RefreshTokenClaims,
@@ -183,8 +162,6 @@ export async function POST(request: Request): Promise<NextResponse> {
         scope: claims.scope,
         resource: claims.resource,
       });
-      // Register the jti before handing the token out: an untracked token
-      // could never be rotated safely, so fail closed instead.
       const refreshClaims = await verifyRefreshToken(keys, refreshToken).catch(() => null);
       if (!refreshClaims || !(await registerRefreshToken(refreshClaims))) {
         return NextResponse.json({ error: 'server_error' }, { status: 500 });
@@ -205,8 +182,6 @@ export async function POST(request: Request): Promise<NextResponse> {
       return invalidGrant('Refresh token is invalid.');
     }
 
-    // Mint the replacement first (its jti goes into the atomic rotation),
-    // then consume the presented token exactly once.
     const rotated = await mintRefreshToken(keys, {
       sub: claims.sub,
       clientId: claims.clientId,
@@ -226,7 +201,6 @@ export async function POST(request: Request): Promise<NextResponse> {
       return NextResponse.json({ error: 'server_error' }, { status: 500 });
     }
     if (!rotationAccepted) {
-      // Unknown, expired, or already consumed (replayed) refresh token.
       return invalidGrant('Refresh token has already been used or expired.');
     }
 

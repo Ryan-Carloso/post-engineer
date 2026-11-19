@@ -14,9 +14,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 THREESPEAK_PROVIDER: str = "3speak"
-# 3Speak has no documented caption cap (the web draft scorer
-# lib/draft-scoring.ts pins the same: no case in its publish check), so
-# the caption is sent whole; the web route still requires it non-empty.
 
 
 @dataclass

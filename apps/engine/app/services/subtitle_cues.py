@@ -9,8 +9,6 @@ import math
 
 from app.utils import utils
 
-# Words per on-screen cue. Both the TTS-timeline path (voice.create_subtitle)
-# and the Whisper path (subtitle.correct) split with this cap.
 MAX_CUE_WORDS = 6
 
 
@@ -55,7 +53,6 @@ def split_timed(text: str, start: int, end: int) -> list[tuple[str, int, int]]:
     cursor, covered = start, 0
     for cue in cues:
         covered += len(cue)
-        # Integer maths: the last cue (covered == total) ends exactly on `end`.
         cue_end = start + (end - start) * covered // total
         timed.append((cue, cursor, cue_end))
         cursor = cue_end

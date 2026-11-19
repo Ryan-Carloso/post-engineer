@@ -6,11 +6,6 @@ import { fetchTokenBalance } from '@/lib/token-balance';
 import { toFiniteNumber } from '@/lib/tokens';
 import { useI18n } from '@/lib/i18n/provider';
 
-//---------------
-// TokenBalance — prepaid wallet balance. `compact` renders the one-row form
-// the sidebar uses (the tall card is what pushed the last nav item off a
-// 900px viewport); the full card stays on /account.
-//---------------
 export function TokenBalance({ compact = false }: { compact?: boolean }) {
   const [balance, setBalance] = useState(0);
   const { t } = useI18n();
@@ -74,7 +69,6 @@ export function TokenBalance({ compact = false }: { compact?: boolean }) {
   );
 }
 
-// Ex.: 100 → '100', 98.5 → '98.5', 0 → '0' — sem zeros redundantes.
 function formatBalance(balance: unknown): string {
   const safe = toFiniteNumber(balance, 0);
   return String(Math.round(safe * 100) / 100);

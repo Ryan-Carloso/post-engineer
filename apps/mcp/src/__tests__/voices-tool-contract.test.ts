@@ -1,8 +1,3 @@
-// Voices tool schemas vs the shared voices contract: the preview text
-// field must accept and reject exactly what the route's body parser
-// accepts and rejects, and the list gender filter must offer exactly the
-// genders the catalog serves. Deliberate differences are pinned below so
-// a future edit does not silently change a tool's contract.
 import { describe, expect, it } from 'vitest';
 
 import { CreateClonedVoiceBodySchema, PREVIEW_TEXT_MAX_CHARS, PreviewVoiceBodySchema, VOICE_GENDERS } from '../contracts/voices.js';
@@ -53,9 +48,6 @@ describe('preview text: tool schema vs contract body', () => {
 
 describe('create clone: tool shape vs contract body (deliberate differences)', () => {
   it('sends booleans where the form body takes string literals', () => {
-    // The tool takes consent/denoise as booleans; the client converts them
-    // to the 'true'/'false' form fields the route reads. The contract
-    // mirrors the form body, so it rejects the tool's booleans.
     const tool = CreateClonedVoiceSchema.safeParse({
       audioUrl: 'https://cdn.example.com/ref.wav',
       language: 'en',
@@ -69,9 +61,6 @@ describe('create clone: tool shape vs contract body (deliberate differences)', (
   });
 
   it('enforces English in the tool where the contract only requires a language', () => {
-    // The route enforces English-only clones; the contract mirrors the
-    // route's body shape (language is any non-empty string) while the tool
-    // rejects a non-English language before the request is sent.
     expect(CreateClonedVoiceBodySchema.safeParse({ consent: 'true', denoise: 'false', language: 'pt' }).success).toBe(true);
     const tool = CreateClonedVoiceSchema.safeParse({
       audioUrl: 'https://cdn.example.com/ref.wav',
@@ -93,9 +82,6 @@ describe('list voices: gender filter vs contract enums', () => {
   });
 
   it('keeps the character origin as a tool-only filter value', () => {
-    // 'character' is not a VOICE_ACCENTS member: the origin filter maps it
-    // to kind === 'character', not to an accent. The contract's accents
-    // stay us/gb only.
     expect(ListVoicesSchema.safeParse({ origin: 'character' }).success).toBe(true);
     expect(ListVoicesSchema.safeParse({ origin: 'au' }).success).toBe(false);
   });

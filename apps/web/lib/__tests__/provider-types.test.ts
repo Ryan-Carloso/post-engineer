@@ -1,8 +1,3 @@
-//---------------
-// provider-types — upload/mode types accept ANY provider,
-// not just 'youtube' | 'instagram'.
-//---------------
-
 import { describe, it, expect } from 'vitest';
 import type { UploadContentResult } from '@/lib/types';
 import { useUploadStore } from '@/lib/store';

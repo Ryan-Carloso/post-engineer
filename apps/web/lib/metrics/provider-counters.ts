@@ -12,17 +12,8 @@ import { PROVIDER_LABELS } from '@/lib/account-options';
 import type { CounterContext, MeasuredProvider, MetricsCounters, MetricsTarget } from './post-metrics';
 import { youtubeRetention } from './youtube-retention';
 
-// Bluesky's public AppView serves post counters without authentication.
 const BSKY_APPVIEW = 'https://public.api.bsky.app';
 
-//---------------
-// provider-counters — reads one published video's counters from its
-// network with the owner's stored account tokens. Throws on any provider
-// or token failure; the collector logs it and retries next hour.
-//---------------
-
-// YouTube reports counters as decimal strings; a missing one (e.g. likes
-// hidden by the creator) stays null, never 0.
 export function parseCount(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   if (typeof value === 'string' && /^\d+$/.test(value)) return Number(value);
@@ -39,7 +30,6 @@ export function youtubeCounters(videoInfo: unknown): MetricsCounters {
     views: parseCount(stats.viewCount),
     likes: parseCount(stats.likeCount),
     comments: parseCount(stats.commentCount),
-    // YouTube exposes no per-video save count.
     saves: null,
   };
 }
@@ -68,7 +58,6 @@ export function blueskyCounters(getPostsBody: unknown): MetricsCounters {
     ? (posts[0] as Record<string, unknown>)
     : {};
   return {
-    // Bluesky exposes no view or save count.
     views: null,
     likes: parseCount(post.likeCount),
     comments: parseCount(post.replyCount),
@@ -78,7 +67,6 @@ export function blueskyCounters(getPostsBody: unknown): MetricsCounters {
 
 export function linkedinCounters(socialActions: unknown): MetricsCounters {
   return {
-    // Member posts expose no view or save count to w_member_social apps.
     views: null,
     likes: parseCount(readObject(socialActions, 'likesSummary').totalLikes),
     comments: parseCount(readObject(socialActions, 'commentsSummary').aggregatedTotalComments),
@@ -91,7 +79,6 @@ export function threadsCounters(insights: Record<string, number>): MetricsCounte
     views: parseCount(insights.views),
     likes: parseCount(insights.likes),
     comments: parseCount(insights.replies),
-    // Threads exposes no save count.
     saves: null,
   };
 }
@@ -101,12 +88,10 @@ export function facebookCounters(insights: Record<string, number>): MetricsCount
     views: parseCount(insights.total_video_views),
     likes: parseCount(insights.likes),
     comments: parseCount(insights.comments),
-    // Facebook exposes no per-video save count.
     saves: null,
   };
 }
 
-// Ownership: getSocialAccountTokens only resolves the user's own accounts.
 async function ownerAccessToken(userId: string, provider: MeasuredProvider, accountId: string): Promise<string> {
   const label = PROVIDER_LABELS[provider];
   const { tokens } = await getSocialAccountTokens(createSupabaseServiceClient(), userId, provider, accountId);
@@ -121,8 +106,6 @@ async function ownerAccessToken(userId: string, provider: MeasuredProvider, acco
 
 type CounterFetcher = (userId: string, target: MetricsTarget, context: CounterContext) => Promise<MetricsCounters>;
 
-// Exhaustive over SOCIAL_PROVIDERS: a new provider fails the typecheck
-// until it has a fetcher here.
 export const COUNTER_FETCHERS: Record<MeasuredProvider, CounterFetcher> = {
   async youtube(userId, target, context) {
     const client = await getAuthenticatedClient(userId, target.accountId);
@@ -153,30 +136,18 @@ export const COUNTER_FETCHERS: Record<MeasuredProvider, CounterFetcher> = {
     return facebookCounters(await getFacebookVideoInsights(token, target.externalId));
   },
   async pinterest() {
-    // Pinterest exposes no per-Pin metrics the collector can read with the
-    // Standard-access scopes (pin-level analytics need the Ads API), so a
-    // published Pin is measured as unknown on every counter rather than
-    // failing the whole metrics run. The target extractor still records
-    // the pin id, so wiring the fetcher later needs no schema change.
     return { views: null, likes: null, comments: null, saves: null };
   },
-  // 3Speak's documented Studio API exposes no per-video analytics
-  // endpoint, so there is nothing to count. Null counters record the row
-  // (views/likes/comments/saves all "no data") and close the window
-  // instead of failing the snapshot on every hourly run.
   async '3speak'() {
     return { views: null, likes: null, comments: null, saves: null };
   },
   async rumble() {
-    // Rumble has no read API (no stats, analytics or video endpoint):
-    // there is nothing to fetch, so the snapshot stays unknown instead
-    // of failing the run on every Rumble video.
     return { views: null, likes: null, comments: null, saves: null };
   },
   async fanvue() {
-    // Fanvue exposes no per-post metrics the collector can read, so a
-    // published Fanvue video is measured as unknown on every counter
-    // rather than failing the whole metrics run.
+    return { views: null, likes: null, comments: null, saves: null };
+  },
+  async telegram() {
     return { views: null, likes: null, comments: null, saves: null };
   },
 };

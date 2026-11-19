@@ -93,8 +93,6 @@ def _sweep_idle_nano() -> None:
 @app.on_event("startup")
 def _prepare_voices_dir() -> None:
     VOICES_DIR.mkdir(parents=True, exist_ok=True)
-    # Daemon thread: checks every NANO_SWEEP_SECONDS whether the clone model
-    # has been idle long enough to free its ~3 GB.
     threading.Thread(target=_sweep_idle_nano, name="nano-idle-sweep", daemon=True).start()
 
 
@@ -146,10 +144,8 @@ async def speech(request: Request) -> Response:
     try:
         audio_bytes, media_type = await run_in_threadpool(_generate, text, voice, response_format)
     except KeyError as error:
-        # Voice names are not secret; the message is safe to return.
         return _error(404, str(error.args[0]))
     except Exception:
-        # Log the failure only — never the input text or auth material.
         logger.exception(f"local tts generation failed, voice: {voice}")
         return _error(500, "generation failed")
     logger.info(
@@ -163,7 +159,6 @@ mount_chatterbox_registry_routes(
     app,
     voices_dir=str(VOICES_DIR),
     voices_config_path=str(VOICES_CONFIG_PATH),
-    # A local disk volume: writes are durable on return, nothing to commit.
     commit_volume=lambda: None,
     authorize=authorize_request,
 )

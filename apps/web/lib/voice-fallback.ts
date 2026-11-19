@@ -1,31 +1,3 @@
-//---------------
-// voice-fallback — fail-fast persona-voice resolution (issue #277).
-//
-// Before a video job is dispatched the persona's voice id is validated
-// against the engine's real routing rules (voice.tts). An invalid voice
-// used to be discovered at TTS time (stage `audio`) — after the charge and
-// often after partial render work. Now it is resolved HERE and swapped for
-// the house default voice of the persona's own language and, when it can be
-// told from the stored id, gender. The swap is persisted on the persona and
-// reported to the user (stable warning code below), never silent.
-//
-// What counts as VALID (must mirror the engine's voice.tts routing):
-// - `no-voice` / `none` — the explicit silence sentinel;
-// - `elevenlabs:<voice_id>` — the provider validates the id itself;
-// - `openrouter:<model>:<voice>` — routed by prefix (the voice half may
-//   carry its own colons, e.g. Azure ids);
-// - `chatterbox:<name>` / `chatterbox_nano:<key>` — house voices and
-//   clones. House names are only provably valid when the served catalog is
-//   supplied (`catalogIds`): the catalog is the engine's own list, so a
-//   name it no longer serves is retired. Clone ids are per-user rows —
-//   without the catalog the caller must check availability itself.
-//
-// Everything else (bare display names like `energetic`, removed-provider
-// ids like the pre-#272 Edge `en-US-GuyNeural`, empty values) is INVALID
-// and falls back. Chatterbox-nano clones serve English only, so a fallback
-// never targets a clone — always a house catalog voice.
-//---------------
-
 import { isEnglishLanguage } from '@/lib/language-gate';
 import { cloneKeyOf, isCloneVoiceId } from '@/lib/voice-catalog';
 
@@ -45,27 +17,13 @@ function catalogListsCloneKey(catalogIds: ReadonlySet<string>, voiceId: string):
   return false;
 }
 
-/** Stable warning code surfaced by the dispatch API when a persona voice
- * was swapped. Shared with the UI warning mapper (amber, never red) —
- * same convention as PERSONA_IMAGE_WARNING_CODES. */
 export const VOICE_FALLBACK_WARNING_CODE = 'voice_fallback_applied';
 
-/**
- * Why the stored voice was replaced. Sent as the PostHog `reason` property
- * and rendered by the UI mapper — values are stable machine strings, never
- * raw error text.
- */
 export const VOICE_FALLBACK_REASONS = {
-  /** The persona stored no voice at all. */
   VOICE_MISSING: 'voice_missing',
-  /** A bare display name or an id no provider routes (Edge, 'energetic', …). */
   UNKNOWN_VOICE: 'unknown_voice',
-  /** A house catalog name the served catalog no longer lists. */
   RETIRED_HOUSE_VOICE: 'retired_house_voice',
-  /** The persona's clone id is not (or no longer) a ready clone of this user. */
   CLONE_UNAVAILABLE: 'clone_unavailable',
-  /** A bare legacy Modal-era voice name (e.g. `en_us_female_02`) the engine
-   *  can no longer route: swapped to the exact alias target. */
   LEGACY_VOICE_ALIAS: 'legacy_voice_alias',
 } as const;
 
@@ -77,52 +35,21 @@ export interface VoiceFallbackInfo {
   reason: VoiceFallbackReason;
 }
 
-/**
- * What the persona's stored voice resolves to.
- * - `valid` / `clone`: the voice is used as stored (`clone` ids still need
- *   an availability check the caller performs).
- * - `fallback`: the stored voice is unusable; use `toVoice` and surface the
- *   swap (persist + warning + telemetry).
- * - `unavailable`: no valid voice exists for the persona's language — fail
- *   the request BEFORE spending render or TTS.
- */
 export type VoiceResolution =
   | { kind: 'valid'; voiceId: string }
   | { kind: 'clone'; voiceId: string; key: string }
   | ({ kind: 'fallback' } & VoiceFallbackInfo)
   | { kind: 'unavailable' };
 
-// English-only for now (launch lock, #252): these are the English house
-// defaults. When other languages launch, replace this single pair with a
-// per-language default map and resolve defaultVoiceFor() by the persona's
-// language — the fallback path already takes the language, it just has no
-// non-English target to pick yet.
-//---------------
-// The house default voices, one per gender plus the gender-less default.
-// Precedent: the engine's LEGACY_VOICE_ALIASES resolve the retired config
-// default (`default`, `default-Female`) to kokoro_af_heart and the retired
-// personal male house clone (`ryan`) to kokoro_am_michael — the same voices
-// stay the defaults here, and a fallback never targets a chatterbox-nano
-// clone (clones serve English only and belong to a single user).
-//---------------
 const DEFAULT_VOICE_FEMALE = 'chatterbox:kokoro_af_heart';
 const DEFAULT_VOICE_MALE = 'chatterbox:kokoro_am_michael';
 const DEFAULT_VOICE_ANY = DEFAULT_VOICE_FEMALE;
 
 export interface ResolvePersonaVoiceOptions {
-  /** Ids the engine's served catalog lists right now (GET /api/persona/voices
-   *  payload). When given, house names and clones are checked against it; a
-   *  missing id is retired/unavailable instead of trusted. Absent: id shape
-   *  alone decides (the engine fails loudly on a name it cannot route). */
   catalogIds?: ReadonlySet<string>;
-  /** Availability of the persona's clone voice (the caller's DB check).
-   *  Only read when the stored id is a clone id and `catalogIds` did not
-   *  already settle it. Default true (assume available). */
   cloneAvailable?: boolean;
 }
 
-/** Non-English persona: no house voice speaks that language (English-only
- *  launch, #252), so the persona's language has no valid voice. */
 const NO_VOICE_FOR_LANGUAGE: VoiceResolution = { kind: 'unavailable' };
 
 function defaultVoiceFor(gender: 'female' | 'male' | null): string {
@@ -130,22 +57,12 @@ function defaultVoiceFor(gender: 'female' | 'male' | null): string {
   return DEFAULT_VOICE_ANY;
 }
 
-/**
- * The gender the stored voice id spells out, when it does. Real legacy
- * forms in this repo: `-Female`/`-Male` suffixes (Edge/Azure/`default-Female`),
- * `_female_`/`_male_` Modal/chatterbox ids (`en_us_female_01`), and the
- * underscore-to-space display rewrite (`en us female 01`). Female is
- * matched first so `female` is not swallowed by `male`.
- */
 function voiceGenderHint(voiceId: string): 'female' | 'male' | null {
   if (/(?:^|[-_\s])female(?:[-_\s]|$)/i.test(voiceId)) return 'female';
   if (/(?:^|[-_\s])male(?:[-_\s]|$)/i.test(voiceId)) return 'male';
   return null;
 }
 
-/** The bare legacy Modal-era names the engine still resolves (and only
- *  there — a BARE alias id never reaches the engine's alias map, because
- *  the alias lookup lives behind the local TTS server's routing). */
 const BARE_LEGACY_ALIAS_TARGETS: Record<string, string> = {
   default: 'chatterbox:kokoro_af_heart',
   ryan: 'chatterbox:kokoro_am_michael',
@@ -174,8 +91,6 @@ export function resolvePersonaVoice(
   const trimmed = (voiceId ?? '').trim();
   const catalogIds = opts.catalogIds;
   const hasClones = catalogIds !== undefined && catalogContainsClone(catalogIds);
-  // An absent voice falls back to the persona's language default (no
-  // gender is known) instead of failing at TTS with "no voice configured".
   if (trimmed.length === 0) {
     return fallbackResolution('', VOICE_FALLBACK_REASONS.VOICE_MISSING, null, language);
   }
@@ -191,8 +106,6 @@ export function resolvePersonaVoice(
   }
   if (trimmed.startsWith('openrouter:')) {
     const remainder = trimmed.slice('openrouter:'.length);
-    // `openrouter:<model>:<voice>` — the voice half may carry colons of its
-    // own, so only the model half must be non-empty here.
     const model = remainder.split(':')[0]?.trim() ?? '';
     if (model.length > 0 && remainder.includes(':')) {
       const voice = remainder.slice(remainder.indexOf(':') + 1).trim();
@@ -203,13 +116,9 @@ export function resolvePersonaVoice(
   if (isCloneVoiceId(trimmed)) {
     const key = cloneKeyOf(trimmed) ?? '';
     if (catalogIds !== undefined) {
-      // Compare by clone KEY: personas still store `chatterbox:<key>` while
-      // the served catalog lists `chatterbox_nano:<key>` (voice-catalog.ts).
       if (catalogListsCloneKey(catalogIds, trimmed)) {
         return { kind: 'valid', voiceId: trimmed };
       }
-      // A catalog with zero clone rows is a degraded merge, not proof the
-      // clone is gone — treat it as "catalog not loaded" and fall through.
       if (hasClones) {
         return fallbackResolution(trimmed, VOICE_FALLBACK_REASONS.CLONE_UNAVAILABLE, null, language);
       }
@@ -231,11 +140,6 @@ export function resolvePersonaVoice(
     return { kind: 'valid', voiceId: trimmed };
   }
 
-  // Bare id — no provider prefix. A legacy Modal-era name resolves to its
-  // exact alias target — but the swap ALWAYS respects the persona's
-  // language: the alias targets are English house voices, so a non-English
-  // persona gets `unavailable` (fail before spend) instead of an
-  // English-speaking video it never asked for (review MAJOR round 2).
   const aliasTarget = BARE_LEGACY_ALIAS_TARGETS[lowered];
   if (aliasTarget !== undefined) {
     if (language !== null && language !== undefined && language.trim().length > 0 && !isEnglishLanguage(language)) {

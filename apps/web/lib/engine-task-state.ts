@@ -1,16 +1,3 @@
-//---------------
-// engine-task-state — parsing helpers for the engine's task payload.
-//
-// The engine wraps the task under `data` and reports progress as a
-// numeric `state` (-1 failed, 1 complete, 3 queued, 4 processing),
-// alongside a string `status` like "publishing". Some shapes only carry
-// a string status. The numeric state wins when present because the
-// string status is not terminal-oriented.
-//
-// Shared by the video-status proxy route and the billing reconciliation
-// (both need the same terminal-state reading of one engine response).
-//---------------
-
 export function taskPayload(value: unknown): Record<string, unknown> | null {
   if (typeof value !== 'object' || value === null) return null;
   const record = value as Record<string, unknown>;
@@ -31,11 +18,6 @@ export function taskState(task: Record<string, unknown>): number | null {
   return null;
 }
 
-//---------------
-// extractTaskError — the engine stores the failure reason in the task's
-// `error` field; the status proxy passes it through. Returns null when the
-// body carries no usable error text.
-//---------------
 export function extractTaskError(value: unknown): string | null {
   const task = taskPayload(value);
   if (!task) return null;
@@ -43,12 +25,6 @@ export function extractTaskError(value: unknown): string | null {
   return typeof candidate === 'string' && candidate.length > 0 ? candidate : null;
 }
 
-//---------------
-// Terminal / pending detection. The numeric state wins when present; the
-// string-status fallback covers shapes that carry only `status` /
-// `task_status`. Shared by the video-status proxy and the video-download
-// route so both read the same task the same way.
-//---------------
 const FAILED_STATUS_STRINGS = ['failed', 'failure', 'error'];
 const COMPLETED_STATUS_STRINGS = ['completed', 'complete', 'done', 'success'];
 const PENDING_STATUS_STRINGS = ['queued', 'processing', 'pending', 'running', 'started'];

@@ -22,19 +22,12 @@ function row(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     post_id: 'post-1', persona_id: PERSONA, provider: 'youtube', account_id: 'yt', external_id: 'v1',
     script_angle: 'myth', views: 10, likes: 2, comments: 1, saves: null, collected_at: '2026-10-21T12:00:00Z',
-    // Migration 039 columns: null on non-YouTube or not-collected rows.
     analytics_status: null, analytics_views: null, engaged_views: null, average_view_duration_seconds: null,
     average_view_percentage: null, content_type: null, analytics_end_date: null,
     ...overrides,
   };
 }
 
-// Records every chained filter; `limit` resolves the query like supabase-js.
-// Pass per-table results to give each table its own rows. A table used by
-// two reads (scheduled_posts: publish dates first, coverage second) takes
-// an array consumed one entry per `from` call, so each read gets its own
-// fixture. `invocations` keeps the per-read chains separate so a test can
-// pin which read carries a filter.
 type TableResult = { data: unknown; error: unknown };
 type Tables = Record<string, TableResult | TableResult[]>;
 
@@ -49,7 +42,6 @@ function mockQuery(result: TableResult, tables?: Tables) {
       calls.push([method, ...args]);
       invocationCalls.push([method, ...args]);
     };
-    // A per-table result overrides the shared one for that table only.
     const tableBuilder: Record<string, unknown> = {};
     for (const method of ['select', 'eq', 'is', 'in', 'or', 'order', 'gte']) {
       tableBuilder[method] = vi.fn((...args: unknown[]) => { record(method, args); return tableBuilder; });
@@ -70,8 +62,6 @@ function mockQuery(result: TableResult, tables?: Tables) {
   return { calls, from, invocations };
 }
 
-// A parent-slot row for the publish-date read. `publishedAt` is derived
-// from Date.now() by callers, never a fixed date.
 function parent(id: string, publishedAt: string): Record<string, unknown> {
   return { id, user_id: 'user-1', published_at: publishedAt };
 }
@@ -91,9 +81,6 @@ describe('GET /api/metrics', () => {
     const { calls, from, invocations } = mockQuery(
       { data: [row()], error: null },
       {
-        // publish-date read (first scheduled_posts call) and the coverage
-        // posts read (second) share the table name, so they take the two
-        // fixtures in call order.
         scheduled_posts: [
           { data: [parent('post-1', publishedAt)], error: null },
           { data: [], error: null },
@@ -122,11 +109,7 @@ describe('GET /api/metrics', () => {
         averageViewPercentage: null, contentType: null, analyticsStatus: null, provisional: false,
       }],
     });
-    // The 200 body parses against the shared contract the MCP reads.
     expect(MetricsResponseSchema.safeParse(body).success).toBe(true);
-    // The publish-date read is one bounded ownership-checked lookup, not
-    // one query per row: select only the two columns, filter by the
-    // caller, ask for exactly the returned ids, cap at the row limit.
     const publishDateRead = invocations.find(
       (inv) => inv.table === 'scheduled_posts' && inv.calls.some((call) => call[0] === 'select' && call[1] === 'id, published_at'),
     );
@@ -172,10 +155,8 @@ describe('GET /api/metrics', () => {
       publishedAt, analyticsViews: 1000, engagedViews: 641, stayedToWatchPct: 64.1, averageViewDurationSeconds: 21.4,
       averageViewPercentage: 78.2, contentType: 'SHORTS', analyticsStatus: 'ok', provisional: true,
     });
-    // 0 views is no signal (null), never 0%; a range ending 3+ days before collection is final.
     expect(rows[1]).toMatchObject({ stayedToWatchPct: null, provisional: false });
     expect(rows[2]).toMatchObject({ analyticsStatus: 'scope_missing', engagedViews: null, stayedToWatchPct: null });
-    // An unknown stored status never reaches the client.
     expect(rows[3]).toMatchObject({ analyticsStatus: null });
   });
 
@@ -203,8 +184,6 @@ describe('GET /api/metrics', () => {
     } as never);
     const { calls } = mockQuery({ data: [], error: null });
     await get('?window=24h');
-    // Persona-less (faceless) rows belong to no persona scope and stay
-    // visible, mirroring GET /api/schedule/status.
     expect(calls).toContainEqual(['or', `persona_id.in.(${PERSONA}),persona_id.is.null`]);
   });
 
@@ -221,8 +200,6 @@ describe('GET /api/metrics', () => {
     vi.mocked(requireSupabaseSession).mockResolvedValue({
       auth: { userId: 'user-1', isApiKey: true, personaIds: [PERSONA] }, error: null,
     } as never);
-    // Published 25h ago: the 24h window is open, so the missing targets
-    // are retrying items.
     const publishedAt = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
     const youtube = { provider: 'youtube', accountId: 'yt', status: 'published', videoUrl: 'https://youtu.be/v2' };
     mockQuery(
@@ -232,9 +209,6 @@ describe('GET /api/metrics', () => {
           data: [
             { id: 'post-own', schedule_id: 'sched-own', user_id: 'user-1', status: 'published', published_at: publishedAt, publish_outcomes: [youtube], faceless: false },
             { id: 'post-other', schedule_id: 'sched-other', user_id: 'user-1', status: 'published', published_at: publishedAt, publish_outcomes: [youtube], faceless: false },
-            // Schedule gone and not faceless: an orphaned persona post.
-            // Its post_metrics rows still carry the persona, so the rows
-            // query hides it — coverage must hide it too.
             { id: 'post-orphan', schedule_id: 'sched-gone', user_id: 'user-1', status: 'published', published_at: publishedAt, publish_outcomes: [youtube], faceless: false },
             { id: 'post-faceless', schedule_id: 'sched-gone', user_id: 'user-1', status: 'published', published_at: publishedAt, publish_outcomes: [youtube], faceless: true },
           ],
@@ -336,17 +310,10 @@ describe('GET /api/metrics', () => {
   });
 
   it('returns coverage for a published video with no snapshot, and asOf as the newest collected_at', async () => {
-    // Published 25h ago: the 24h window opened an hour ago, so the
-    // missing YouTube target is retrying, not pending or missed.
     const publishedAt = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
     mockQuery(
       { data: [row(), row({ post_id: 'post-2', collected_at: '2026-10-22T08:00:00Z' })], error: null },
       {
-        // First scheduled_posts read is the publish-date lookup (both
-        // posts); the second is the coverage posts read (post-2 with its
-        // outcomes). Do not merge them: a coverage-shaped row has no
-        // publish date for post-1, and a publish-date-only row has no
-        // outcomes for coverage.
         scheduled_posts: [
           { data: [parent('post-1', publishedAt), parent('post-2', publishedAt)], error: null },
           {
@@ -360,8 +327,6 @@ describe('GET /api/metrics', () => {
         ],
         schedules: { data: [{ id: 'sched-1', persona_id: PERSONA }], error: null },
         post_metrics_done: { data: [], error: null },
-        // The coverage rows read shares the table with the dashboard rows:
-        // same rows here, so the target (external id v2) is still missing.
         post_metrics: { data: [row(), row({ post_id: 'post-2', collected_at: '2026-10-22T08:00:00Z' })], error: null },
       },
     );
@@ -382,9 +347,6 @@ describe('GET /api/metrics', () => {
     mockQuery(
       { data: [row()], error: null },
       {
-        // First scheduled_posts read is the publish-date lookup (succeeds);
-        // the second is the coverage posts read (fails). A failed coverage
-        // read degrades to empty coverage, never a 500.
         scheduled_posts: [
           { data: [parent('post-1', publishedAt)], error: null },
           { data: null, error: { message: 'boom' } },
@@ -420,11 +382,6 @@ describe('GET /api/metrics', () => {
     const { invocations } = mockQuery(
       { data: [row({ post_id: 'post-own' })], error: null },
       {
-        // The production rows query never returns out-of-scope rows, so
-        // the mocked metrics rows contain only the in-scope post. The
-        // publish-date fixture additionally carries the out-of-scope
-        // post's slot: the handler must only ask for (and only expose)
-        // the in-scope id.
         scheduled_posts: [
           { data: [parent('post-own', ownPublishedAt), parent('post-other', otherPublishedAt)], error: null },
           { data: [], error: null },
@@ -438,8 +395,6 @@ describe('GET /api/metrics', () => {
     expect(body.rows[0]).toMatchObject({ postId: 'post-own', publishedAt: ownPublishedAt });
     expect(body.rows.map((r: { postId: string }) => r.postId)).not.toContain('post-other');
     expect(body.rows.map((r: { publishedAt: string }) => r.publishedAt)).not.toContain(otherPublishedAt);
-    // The publish-date read asks for exactly the in-scope ids, for the
-    // caller only: no out-of-scope id is ever requested.
     const publishDateRead = invocations.find(
       (inv) => inv.table === 'scheduled_posts' && inv.calls.some((call) => call[0] === 'select' && call[1] === 'id, published_at'),
     );
@@ -455,7 +410,6 @@ describe('GET /api/metrics', () => {
     const response = await get('?window=24h');
     expect(response.status).toBe(500);
     expect(logger.error).toHaveBeenCalledWith('[api/metrics] publish-date lookup failed', { message: 'boom' });
-    // No partial rows are served: the failure is loud, not dropped data.
     const body = await response.json();
     expect(body.rows).toBeUndefined();
   });
@@ -465,9 +419,6 @@ describe('GET /api/metrics', () => {
       { data: [row(), row({ post_id: 'post-2' })], error: null },
       {
         scheduled_posts: [
-          // post-2 is measured but its slot row is absent (concurrent
-          // delete race) / published_at is null: publishedAt is
-          // required, so this is a read failure, not a null row.
           { data: [{ id: 'post-1', user_id: 'user-1', published_at: new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString() }], error: null },
           { data: [], error: null },
         ],

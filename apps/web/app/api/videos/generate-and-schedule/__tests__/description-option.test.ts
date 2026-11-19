@@ -6,16 +6,6 @@ vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), debug: vi.fn(), warn: 
 import { POST } from '../route';
 import { checkSemantics } from '../request-validation';
 
-//---------------
-// POST /api/videos/generate-and-schedule — description is REQUIRED
-// (issue #542 follow-up): the agent supplies the publish copy, there is
-// no fallback to the subject or to a mechanical caption. The shape parse
-// runs before auth, so a missing description is a 400 with no charge and
-// no DB touch. The 5000-char cap mirrors VideoParams.video_description.
-// The route is never reached past validation in this env (auth throws on
-// cookies() outside a request scope), so the pass-through case goes
-// through checkSemantics directly.
-//---------------
 function post(body: unknown) {
   return POST(
     new Request('http://localhost/api/videos/generate-and-schedule', {

@@ -62,8 +62,6 @@ class RssFallbackUnitTests(unittest.TestCase):
     /proc is forced to fail to reach the fallback.
     """
 
-    # A fake resource module ride-along value: one ru_maxrss reading used
-    # by both platform branches so the results are directly comparable.
     RU_MAXRSS = 150_000_000
 
     def _fallback(self, fake_platform: str) -> float | None:
@@ -83,8 +81,6 @@ class RssFallbackUnitTests(unittest.TestCase):
             return real_open(path, *args, **kwargs)
 
         fake_resource = types.ModuleType("resource")
-        # The function passes resource.RUSAGE_SELF to getrusage: the fake
-        # module carries the constant the call reads.
         fake_resource.RUSAGE_SELF = 0  # type: ignore[attr-defined]
 
         def fake_getrusage(_who: int):
@@ -102,18 +98,14 @@ class RssFallbackUnitTests(unittest.TestCase):
             return engine_heartbeat.current_rss_mb()
 
     def test_linux_fallback_divides_once_kilobytes_to_mib(self):
-        # 150_000_000 kB → 146484.375 MiB.
         rss = self._fallback("linux")
         self.assertAlmostEqual(rss, self.RU_MAXRSS / 1024, places=3)
 
     def test_macos_fallback_divides_twice_bytes_to_mib(self):
-        # 150_000_000 bytes → 143.05 MiB.
         rss = self._fallback("darwin")
         self.assertAlmostEqual(rss, self.RU_MAXRSS / 1024 / 1024, places=3)
 
     def test_macos_result_is_1024x_smaller_than_linux_for_the_same_value(self):
-        # The bug this pins: the same ru_maxrss number used to produce the
-        # same MB on both platforms, inflating every Mac reading 1024x.
         linux = self._fallback("linux")
         macos = self._fallback("darwin")
         self.assertAlmostEqual(linux / macos, 1024.0, places=3)
@@ -210,34 +202,22 @@ class HeartbeatIoTests(unittest.TestCase):
         self.assertIn("clean_shutdown_at", kwargs["json"])
 
     def test_start_heartbeat_thread_is_daemon(self):
-        # start/stop/join all sit inside the write_beat patch: a loop
-        # scheduled after the patch exits would run its first beat against
-        # the real function and flake the assertion below.
         with patch.object(engine_heartbeat, "write_beat") as write:
             thread = engine_heartbeat.start_heartbeat_thread(interval_s=3600)
             self.assertTrue(thread.daemon)
             self.assertTrue(thread.is_alive())
             write.assert_called_once()
-            # The thread must not outlive the test: a leaked daemon that runs
-            # subprocess calls races with mutmut's child bookkeeping (the
-            # video.py shard crashed on exactly that). stop() unblocks the
-            # loop's wait at once, so the join is immediate.
             engine_heartbeat.stop_heartbeat_thread()
             thread.join(timeout=5)
         self.assertFalse(thread.is_alive())
 
     def test_stop_heartbeat_thread_unblocks_the_loop_immediately(self):
-        # A long interval must not delay the stop: the loop sleeps inside
-        # the stop event's wait, not a bare time.sleep.
         engine_heartbeat._heartbeat_stop.clear()
         with patch.object(engine_heartbeat, "write_beat"):
             thread = engine_heartbeat.start_heartbeat_thread(interval_s=3600)
             engine_heartbeat.stop_heartbeat_thread()
             thread.join(timeout=5)
             self.assertFalse(thread.is_alive())
-            # A restart clears the stale signal: the new loop beats again
-            # (the mocked write was called once per started loop), and
-            # stopping it again unblocks it the same way.
             thread2 = engine_heartbeat.start_heartbeat_thread(interval_s=3600)
             self.assertFalse(engine_heartbeat._heartbeat_stop.is_set())
             engine_heartbeat.stop_heartbeat_thread()
@@ -323,7 +303,6 @@ class BootEventTests(unittest.TestCase):
 
     def test_boot_event_never_raises(self):
         with patch.object(engine_heartbeat, "read_beat", side_effect=RuntimeError("down")):
-            # Must not raise: boot diagnostics never break boot.
             engine_heartbeat.report_boot_event(MagicMock())
 
 
@@ -334,9 +313,6 @@ class MigrationPathTests(unittest.TestCase):
         self.assertEqual(path.name, "020_engine-heartbeat.sql")
 
     def test_walks_up_past_mutants_tree(self):
-        # Simulate mutmut's relocated tree: the test file lives under
-        # <root>/apps/engine/mutants/test/services/ while the migration
-        # stays at <root>/supabase/migrations/.
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             (root / "supabase" / "migrations").mkdir(parents=True)

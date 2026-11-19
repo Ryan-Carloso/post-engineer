@@ -62,9 +62,6 @@ def scan(path: str, text: str, index: dict[str, str]) -> list[dict[str, object]]
         return []
 
     def if_names(node: ast.If) -> list[str]:
-        # Every provider an `if` compares against through its whole elif
-        # expansion, so a head elif chain and its sibling continuations
-        # group as one run instead of splitting across the two detectors.
         names: list[str] = []
         current: ast.AST | None = node
         while isinstance(current, ast.If):
@@ -121,11 +118,6 @@ def scan(path: str, text: str, index: dict[str, str]) -> list[dict[str, object]]
         elif isinstance(node, ast.Constant) and isinstance(node.value, str) and id(node) not in docstrings:
             report(node, "text", [index.get(token) for token in TOKEN.findall(node.value)])
 
-    # Runs of consecutive `if` statements in one statement list that spread
-    # the dispatch across siblings instead of if/elif links: each statement
-    # alone names one provider, so without this grouping every sibling is
-    # dropped by the per-node minimum while the combined run is
-    # per-provider dispatch with a silent fall-through to whatever follows.
     def report_sibling_runs(statements: list[ast.stmt]) -> None:
         run: list[ast.If] = []
         subject: str | None = None

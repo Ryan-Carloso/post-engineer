@@ -25,8 +25,6 @@ def _source(name: str) -> str:
 
 class TestClipArithmeticSync(unittest.TestCase):
     def test_generate_seconds_matches_the_client_for_every_segment_count(self):
-        # The client sizes num_segments from the narration; if the renderer's
-        # clip length drifts the audio gets padded or cut at the wrong place.
         for segments in range(1, longcat.MAX_SEGMENTS + 1):
             with self.subTest(segments=segments):
                 self.assertAlmostEqual(
@@ -61,8 +59,6 @@ class TestPaddingSamples(unittest.TestCase):
 
 class TestRenderFailsBeforeGpuWork(unittest.TestCase):
     def _renderer(self) -> resident.ResidentRenderer:
-        # __new__ skips the GPU-only constructor; the validation under test runs
-        # before anything touches torch.
         return resident.ResidentRenderer.__new__(resident.ResidentRenderer)
 
     def test_unknown_resolution_is_rejected(self):
@@ -146,8 +142,6 @@ class TestModelLoadsOncePerContainer(unittest.TestCase):
         self.assertIn("run_longcat(self.renderer", handler)
 
     def test_generator_is_reseeded_for_every_clip(self):
-        # A long-lived process must not let one clip's randomness leak into the
-        # next: the seed is applied inside the per-clip path, not the loader.
         tree = ast.parse(_source("modal_longcat_resident.py"))
         for node in ast.walk(tree):
             if isinstance(node, ast.FunctionDef) and node.name == "_render":

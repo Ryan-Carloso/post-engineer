@@ -27,10 +27,6 @@ from app.services.chatterbox_chunks import (
     split_chatterbox_script,
 )
 
-# The incident script (video 3lGceKCJZM4, 504 chars / 98 words), reconstructed
-# from the burned-in captions in analysis-3lGceKCJZM4/DEEP-ANALYSIS.md §6.
-# It shipped with a repeated fragment, a skipped sentence, and 14 missing
-# words from a single 504-char POST.
 INCIDENT_SCRIPT = (
     "Finished dinner. Don't sit down yet — walk for 10 minutes. "
     "In a 2016 trial, 41 adults with type 2 diabetes tried two ways to walk "
@@ -64,19 +60,12 @@ def test_incident_script_splits_into_two_ordered_chunks() -> None:
     chunks = split_chatterbox_script(INCIDENT_SCRIPT)
     assert len(chunks) == 2
     assert all(len(chunk) <= CHATTERBOX_MAX_CHUNK_CHARS for chunk in chunks)
-    # Order preserved, hook first, content takes after, nothing lost or reordered.
     assert " ".join(chunks) == INCIDENT_SCRIPT
     assert chunks[0].startswith("Finished dinner.")
     assert chunks[-1].endswith("Follow HabitLoom for one habit a day.")
-    # Every chunk ends on a sentence boundary, never mid-sentence.
     assert all(chunk.endswith((".", "!", "?")) for chunk in chunks)
 
 
-# The incident script as the agent actually sent it: segments joined with
-# blank lines — hook paragraph, body paragraph, CTA paragraph. The body
-# tail ("no diet change") plus the whole CTA fits under 300 chars, so the
-# old sentence packer merged them into one chunk across the section
-# boundary; a section-aware split must keep them apart.
 INCIDENT_SCRIPT_PARAGRAPHS = (
     "Finished dinner. Don't sit down yet — walk for 10 minutes."
     "\n\n"
@@ -100,16 +89,11 @@ def _paragraphs(text: str) -> list[str]:
 def test_chunk_never_crosses_a_paragraph_boundary() -> None:
     chunks = split_chatterbox_script(INCIDENT_SCRIPT_PARAGRAPHS)
     assert len(chunks) == 4
-    # Hook alone in its own chunk, CTA alone in the last chunk.
     assert chunks[0] == _paragraphs(INCIDENT_SCRIPT_PARAGRAPHS)[0]
     assert chunks[-1] == _paragraphs(INCIDENT_SCRIPT_PARAGRAPHS)[-1]
-    # No chunk contains text from two paragraphs: every chunk is a
-    # substring of exactly one paragraph.
     paras = _paragraphs(INCIDENT_SCRIPT_PARAGRAPHS)
     assert all(any(chunk in para for para in paras) for chunk in chunks)
-    # Nothing lost or reordered (paragraph breaks become single spaces).
     assert " ".join(chunks) == " ".join(INCIDENT_SCRIPT_PARAGRAPHS.split())
-    # The old merge, spelled out: body tail and CTA start never share a chunk.
     assert not any("no diet change" in chunk and "Try it tonight" in chunk for chunk in chunks)
 
 
@@ -128,17 +112,13 @@ def test_section_boundaries_are_chunk_boundaries() -> None:
     chunks = split_chatterbox_script(text)
     assert len(chunks) > 1
     paras = _paragraphs(text)
-    # Every chunk lives inside exactly one paragraph.
     assert all(any(chunk in para for para in paras) for chunk in chunks)
-    # Hook and CTA each keep their own chunk.
     assert chunks[0] == paras[0]
     assert chunks[-1] == paras[-1]
     assert " ".join(chunks) == " ".join(text.split())
 
 
 def test_short_multi_paragraph_script_is_single_chunk() -> None:
-    # Short scripts keep the old single-POST path unchanged, even across
-    # paragraphs: one short call is inside the model's stable window.
     text = "Hook here.\n\nBody sentence one. Body sentence two.\n\nFollow us today."
     assert split_chatterbox_script(text) == [" ".join(text.split())]
 
@@ -166,18 +146,14 @@ def test_long_sentence_splits_at_clause_boundaries() -> None:
     assert len(chunks) > 1
     assert all(len(chunk) <= CHATTERBOX_MAX_CHUNK_CHARS for chunk in chunks)
     assert " ".join(chunks) == text
-    # No chunk boundary falls inside a word.
     assert all(not chunk.endswith(("a", "an", "the")) for chunk in chunks)
 
 
 def test_single_word_longer_than_cap_is_hard_cut() -> None:
-    # A single word has no natural boundary, so it is hard-cut and the
-    # round trip gains one space per cut (see split_chatterbox_script).
     word = "a" * 350
     chunks = split_chatterbox_script(word)
     assert chunks == ["a" * CHATTERBOX_MAX_CHUNK_CHARS, "a" * 50]
     assert " ".join(chunks) == "a" * CHATTERBOX_MAX_CHUNK_CHARS + " " + "a" * 50
-    # A word over twice the cap is cut more than once.
     assert split_chatterbox_script("b" * 650) == [
         "b" * CHATTERBOX_MAX_CHUNK_CHARS,
         "b" * CHATTERBOX_MAX_CHUNK_CHARS,
@@ -361,8 +337,6 @@ def _run_chatterbox(
 
     def _fake_concat(part_files: list[str], output_file: str) -> None:
         concats.append(list(part_files))
-        # Part files live in a TemporaryDirectory that is deleted on return,
-        # so capture their bytes here, while they still exist.
         concat_bytes.append([Path(part).read_bytes() for part in part_files])
         Path(output_file).write_bytes(b"joined-audio")
 
@@ -417,7 +391,6 @@ def test_chatterbox_tts_long_script_posts_one_chunk_at_a_time_in_order(
     assert all(call["json"]["voice"] == "default" for call in calls)
     assert len(concats) == 1
     assert len(concats[0]) == 2
-    # The part files hold the chunk audios in script order.
     assert concat_bytes == [[b"audio-0", b"audio-1"]]
     assert Path(tmp_path / "voice.mp3").read_bytes() == b"joined-audio"
     assert result.error is None
@@ -436,7 +409,7 @@ def test_chatterbox_tts_chunk_failure_aborts_before_concat(tmp_path: Path) -> No
             _FakeResponse(b"", status_code=500, text="boom"),
         ],
     )
-    assert len(calls) == 4  # chunk 1 once, chunk 2 three attempts
+    assert len(calls) == 4
     assert concats == []
     assert result.error is not None
     assert "after 3 attempts" in result.error

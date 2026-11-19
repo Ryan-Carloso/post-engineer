@@ -26,8 +26,6 @@ async function postHandler(request: Request, context: RouteContext): Promise<Nex
     return NextResponse.json({ success: false, error: 'Clone id is required.' }, { status: 400 });
   }
 
-  // Optional caller text, validated before the engine call. The text is
-  // never logged; only the parse error (which carries no text) is returned.
   let rawBody: string;
   try {
     rawBody = await request.text();
@@ -51,8 +49,6 @@ async function postHandler(request: Request, context: RouteContext): Promise<Nex
   const url = new URL(`${baseUrl}/api/v1/cloned-voices/${encodeURIComponent(cloneId)}/preview`);
   const language = new URL(request.url).searchParams.get('language');
   if (language && language.trim()) {
-    // English-only launch: a preview renders the cloned voice speaking, so
-    // a non-English override is rejected before it reaches the engine.
     if (!isEnglishLanguage(language)) {
       return NextResponse.json(
         { success: false, error: ONLY_ENGLISH_CLONE_MESSAGE },

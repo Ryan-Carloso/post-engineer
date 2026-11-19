@@ -1,22 +1,3 @@
-//---------------
-// fanvue-media — the vault upload contract (verified against
-// api.fanvue.com/docs/tutorials/uploading-media).
-//
-// A video reaches Fanvue in four steps:
-//   1. POST /media/uploads               -> mediaUuid, uploadId, partSize,
-//                                           maxParts, totalParts
-//   2. GET  /media/uploads/{id}/parts/urls?from=1&to=N
-//                                        -> signed URL per part
-//   3. PUT  each part to its signed URL  -> ETag per part
-//   4. PATCH /media/uploads/{id}         -> { parts: [{ PartNumber, ETag }] }
-// Then poll GET /media/{mediaUuid} until status is `ready` — attaching
-// media while it is still `processing` publishes a post fans cannot open.
-//
-// The API caps a file at 1.5 GiB and parts at 6 MiB, so a real video is
-// uploaded in several parts. Sending only part 1 (the old implementation)
-// silently truncated every video larger than one part.
-//---------------
-
 import { FanvueError } from '@/lib/errors';
 import {
   FANVUE_API_BASE,
@@ -28,22 +9,8 @@ import {
   readOptionalString,
 } from '@/lib/fanvue-http';
 
-// The vault byte upload is not a JSON API call: a real part cannot cross
-// in 15s. Give each part transfer its own budget.
 export const FANVUE_UPLOAD_TIMEOUT_MS = 10 * 60_000;
-// The API documents a 1.5 GiB ceiling for a media upload.
 export const FANVUE_MAX_FILE_BYTES = 1_610_612_736;
-// Poll cadence from the API docs' own helper: every 1.5s.
-// The ready wait is capped at 120s to keep the post-creation phase as far
-// inside the clients' 600s budget (engine DEFAULT_TIMEOUT_SECONDS in
-// app/services/upload_publisher.py, DIRECT_PUBLISH_TIMEOUT_MS in
-// apps/mcp/src/limits.ts) as the unbounded upload allows: the request
-// uploads every part first, and a client timeout mid-publish reports
-// failure while the server keeps going — the scheduler retry would then
-// duplicate the post. The cap shrinks that window but does not eliminate
-// it: a slow upload alone can still exceed 600s. A poll timeout is safe
-// to retry instead: no post exists yet, so the retry uploads a fresh
-// media item.
 export const FANVUE_MEDIA_POLL_INTERVAL_MS = 1_500;
 export const FANVUE_MEDIA_READY_TIMEOUT_MS = 2 * 60_000;
 
@@ -55,8 +22,6 @@ export interface FanvueUploadSession {
   uploadId: string;
   partSize: number;
   maxParts: number;
-  // Null when the create response omitted totalParts; the caller computes
-  // ceil(fileSize / partSize).
   totalParts: number | null;
 }
 
@@ -70,11 +35,6 @@ export interface FanvueUploadedPart {
   etag: string;
 }
 
-//---------------
-// createFanvueUploadSession — step 1: registers the media item and opens
-// the multipart session. `mediaUuid` is the id the post needs; `uploadId`
-// is the session every later step uses.
-//---------------
 export async function createFanvueUploadSession(
   accessToken: string,
   input: { filename: string; fileSize: number },
@@ -114,10 +74,6 @@ export async function createFanvueUploadSession(
   return { mediaUuid, uploadId, partSize, maxParts, totalParts };
 }
 
-//---------------
-// fetchFanvueUploadPartUrls — step 2: signing a contiguous range costs one
-// request instead of one per part. Part numbers are 1-based.
-//---------------
 export async function fetchFanvueUploadPartUrls(
   accessToken: string,
   uploadId: string,
@@ -150,20 +106,11 @@ export async function fetchFanvueUploadPartUrls(
   return parts;
 }
 
-//---------------
-// uploadFanvueUploadPart — step 3: PUT the raw bytes to one signed URL.
-// The URL already carries its authorization, so no Bearer header is sent.
-// Only the status decides (a presigned endpoint answers with an empty
-// body); a missing ETag is a failure, not a guess.
-//---------------
 export async function uploadFanvueUploadPart(
   uploadUrl: string,
   bytes: Uint8Array,
   contentType: string,
 ): Promise<string> {
-  // A setTimeout-driven AbortController, not AbortSignal.timeout: the
-  // deadline must stay observable under vitest's fake timers, which do not
-  // fake AbortSignal.timeout.
   const uploadController = new AbortController();
   const uploadDeadline = setTimeout(() => uploadController.abort(), FANVUE_UPLOAD_TIMEOUT_MS);
   let uploaded: Response;
@@ -187,12 +134,6 @@ export async function uploadFanvueUploadPart(
   return etag;
 }
 
-//---------------
-// completeFanvueUploadSession — step 4: tells Fanvue the parts landed.
-// Field names are the API's capitalized `PartNumber` / `ETag`. The
-// response is the media status (normally `processing`), not a media id:
-// the id came from step 1.
-//---------------
 export async function completeFanvueUploadSession(
   accessToken: string,
   uploadId: string,
@@ -228,10 +169,6 @@ export interface FanvueMediaState {
   errorReason: string | null;
 }
 
-//---------------
-// fetchFanvueMedia — one processing-status read. When status is `error`,
-// `errorReason` names the cause (unsupported_format, video_too_long, ...).
-//---------------
 export async function fetchFanvueMedia(
   accessToken: string,
   mediaUuid: string,
@@ -261,11 +198,6 @@ function defaultSleep(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
-//---------------
-// waitForFanvueMediaReady — polls until the transcoder marks the media
-// ready. A post attached before `ready` is visible to fans but cannot be
-// opened, so this wait is part of publishing.
-//---------------
 export async function waitForFanvueMediaReady(
   accessToken: string,
   mediaUuid: string,
@@ -302,11 +234,6 @@ export interface UploadVideoToFanvueVaultInput {
   contentType: string;
 }
 
-//---------------
-// uploadVideoToFanvueVault — the whole upload as one call: create the
-// session, sign every part, PUT them in order, complete the session and
-// wait for `ready`. Returns the media uuid the post needs.
-//---------------
 export async function uploadVideoToFanvueVault(
   input: UploadVideoToFanvueVaultInput,
 ): Promise<string> {
@@ -329,11 +256,6 @@ export async function uploadVideoToFanvueVault(
   if (!Number.isInteger(totalParts) || totalParts < 1) {
     throw new FanvueError('FANVUE_UPLOAD_FAILED: invalid totalParts', 502);
   }
-  // The API's totalParts must cover the whole file: a smaller value would
-  // leave the buffer tail unsent and silently truncate the video — the
-  // exact failure this client was rewritten to stop. A larger value would
-  // upload zero-byte parts past the end of the buffer. An inconsistent
-  // session fails loudly here, before any part is signed.
   if (totalParts * session.partSize < input.video.length) {
     throw new FanvueError(
       `FANVUE_UPLOAD_FAILED: session covers ${totalParts * session.partSize} of ${input.video.length} bytes`,

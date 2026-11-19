@@ -8,26 +8,8 @@ import { actionDescription, actionShape, byAction } from './action-tool.js';
 import { READ_ONLY } from './tool-annotations.js';
 import { RecipeSession, isRecipeSlug, recipeRunText, type McpTransportKind } from './recipe-session.js';
 
-// Re-exported so the intent modules and index.ts import the recipe wrappers from one place.
 export { withRecipeNudge, withScriptOutcome, type McpTransportKind } from './recipe-session.js';
 
-//---------------
-// Recipe self-serve tools: prompts (action: list) and prompts (action: get).
-//
-// Slash commands are a user channel: an agent that arrives without a human
-// typing /place-spotlight only sees the tool list and tool results, so it
-// never learns the recipes exist. These two tools put the hub in that
-// channel: prompts (action: list) advertises what recipes exist (slugs + titles +
-// descriptions, no prompt text — cheap in tokens), and prompts (action: get) fetches
-// one recipe's full text by slug. Both read the web hub over the API
-// (client-prompts.ts), the same source the slash commands use.
-//---------------
-
-//---------------
-// Server instructions, advertised in the MCP initialize result. An agent
-// that reads the initialize payload sees the nudge before its first call;
-// tools see it only in their descriptions (see generate_video).
-//---------------
 export const SERVER_INSTRUCTIONS = [
   'post-engineer turns content into scheduled persona videos.',
   'Every video is generated from a complete, validated script — never improvised — and generation always costs prepaid tokens.',
@@ -76,12 +58,6 @@ function errorResponse(action: string, message: string): McpToolResponse {
   return { content: [{ type: 'text', text: `Error ${action}: ${message}` }], isError: true };
 }
 
-//---------------
-// Registration lives here (index.ts only wires the intent modules). The prompts tool runs inside the server's RecipeSession: its
-// requests carry the recipe-adoption headers, `list` marks the recipes as
-// known, and `get` records the slug once the API returned it. Returns the
-// session so the other intent modules wrap the entry and script actions with the same one.
-//---------------
 const PROMPTS_SPECS = { list: ListPromptsShape, get: GetPromptShape };
 
 export function registerPromptTools(server: McpServer, client: PostEngineerClient, transport: McpTransportKind): RecipeSession {

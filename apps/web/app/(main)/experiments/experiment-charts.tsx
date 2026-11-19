@@ -32,17 +32,6 @@ import {
 } from '@/components/ui/chart';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
-//---------------
-// experiment-charts — per-provider A/B charts (issue #647): variant
-// comparison, per-pair rows and win split, all from the comparisons the
-// API already returns. Variant comparison and win split state their
-// totals as text; the per-pair chart explains its color encoding in a
-// caption; the per-pair table stays behind "Show table" as the
-// accessible fallback.
-// Theme tokens only (var(--info) / var(--warning) / var(--faint));
-// A/B are labelled by name, so they are distinguishable without colour.
-//---------------
-
 const LABEL_BADGE_CLASS: Record<ExperimentResultLabel, string> = {
   pending: 'bg-surface text-muted-text',
   indicative: 'bg-warning-soft text-warning',
@@ -178,8 +167,6 @@ export function VariantComparisonChart({ comparisons, firstId, secondId, firstNa
   const hasA = totalsA.includedPairs > 0;
   const hasB = totalsB.includedPairs > 0;
   const hasData = hasA || hasB;
-  // One group, two series (grouped bars). A variant with no non-null
-  // value has no series at all, so its bar is never drawn, not drawn as 0.
   const rows = [{ name: t(METRIC_LABEL_KEY[metric]), a: totalsA.total ?? 0, b: totalsB.total ?? 0 }];
   const config: ChartConfig = {
     a: { label: firstName, color: 'var(--info)' },
@@ -327,9 +314,6 @@ function ChartEmpty({ message }: { message: string }): React.ReactElement {
   );
 }
 
-// PairTable — the accessible fallback of the per-pair chart: one row per
-// pair with the selected metric for each variant (the same values the
-// chart draws) and the pair winner the experiment recorded.
 function PairTable({ pairsCreated, comparisons, firstName, secondName, firstId, secondId, variantName, formatNumber, metric }: {
   pairsCreated: number;
   comparisons: ExperimentPairComparison[];

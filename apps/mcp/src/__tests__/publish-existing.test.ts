@@ -53,11 +53,10 @@ const ASAP_REPLY = {
   logId: 'log-1',
 };
 
-/** A client whose request answers per path; the publish reply is configurable. */
 function fakeClient(publishReply: () => Promise<unknown>, bound: Record<string, string[]> = {}) {
   const request = vi.fn(async (path: string, _init?: unknown): Promise<unknown> => {
     if (path.startsWith('/api/persona/publishing-accounts')) {
-      const defaults = { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [], ...bound };
+      const defaults = { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [], telegram: [], ...bound };
       return { success: true, defaults };
     }
     if (path === '/api/media/publish-existing') return publishReply();
@@ -302,7 +301,7 @@ describe('publish_existing tool handler', () => {
     const { client, request } = fakeClient(async () => ASAP_REPLY);
     const response = await handlePublishExisting(client, args({ mediaKind: 'image', taskId: undefined, imagePath: join(dir, 'missing.png'), accounts: ['UC1', 'ig-1'] }));
     expect(response.isError).toBe(true);
-    expect(textOf(response)).toContain('images go to instagram, bluesky, linkedin, threads, facebook, pinterest only; drop the youtube account(s).');
+    expect(textOf(response)).toContain('images go to instagram, bluesky, linkedin, threads, facebook, pinterest, telegram only; drop the youtube account(s).');
     expect(request.mock.calls.some(([path]) => path === '/api/media/publish-existing')).toBe(false);
   });
 
@@ -314,7 +313,6 @@ describe('publish_existing tool handler', () => {
     const response = await handlePublishExisting(client, args({ mediaKind: 'image', taskId: undefined, imagePath: path, accounts: ['ig-1'], mode: 'asap', publishAt: undefined }));
     expect(response.isError).toBeUndefined();
     expect(publishBody(request).media).toEqual({ kind: 'image', imageData: png.toString('base64'), contentType: 'image/png' });
-    // The local path never reaches the output.
     expect(textOf(response)).not.toContain(dir);
   });
 
@@ -429,10 +427,7 @@ describe('publish_existing tool on both transports', () => {
       (properties.mediaKind as { description?: string } | undefined)?.description ?? '';
     const stdio = descriptionOf(await publishProperties('stdio'));
     const http = descriptionOf(await publishProperties('http'));
-    // The stdio shape reads the image from disk, so its description names the field.
     expect(stdio).toContain('imagePath');
-    // The remote shape has no imagePath: advertising it sends an agent at a
-    // field the transport never accepts, so the description names the upload path.
     expect(http).not.toContain('imagePath');
     expect(http).toContain('create_upload');
     expect(http).toContain('mediaKind upload');

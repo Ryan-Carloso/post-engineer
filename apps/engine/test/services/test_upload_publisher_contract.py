@@ -56,9 +56,6 @@ class PublishMetadataValidationTest(unittest.TestCase):
         )
 
     def test_accepts_pinterest_without_a_metadata_gate_here(self) -> None:
-        # Pinterest takes no parameter on validate_publish_metadata: its gate
-        # is fill_schedule.metadata.validate_publish_plan, so a pinterest-only
-        # call passes here even with no pinterest metadata attached.
         metadata = upload_publisher.validate_publish_metadata(
             providers=["pinterest"],
             youtube=None,
@@ -67,9 +64,6 @@ class PublishMetadataValidationTest(unittest.TestCase):
         self.assertEqual(metadata.providers, ("pinterest",))
 
     def test_accepts_fanvue_without_a_metadata_gate_here(self) -> None:
-        # Fanvue takes no parameter on validate_publish_metadata: its gate
-        # is fill_schedule.metadata.validate_publish_plan, so a fanvue-only
-        # call passes here even with no fanvue metadata attached.
         metadata = upload_publisher.validate_publish_metadata(
             providers=["fanvue"],
             youtube=None,
@@ -184,7 +178,6 @@ class PublishPartsContractTest(unittest.TestCase):
         self.assertEqual(fields.get("title"), "My title")
         self.assertEqual(fields.get("description"), "My description")
         self.assertEqual(fields.get("privacyStatus"), "unlisted")
-        # accountIds is a repeated field, never a joined string.
         self.assertEqual(parts.fields.count(("accountIds", "acc_1")), 1)
         self.assertEqual(parts.fields.count(("accountIds", "acc_2")), 1)
         self.assertEqual(len(parts.tags), 1)
