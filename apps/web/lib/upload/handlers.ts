@@ -420,18 +420,3 @@ export function buildUploadErrorResponse(
     { status: isValidationError ? 400 : isInstagramError ? (error.statusCode || 500) : isAuthError ? 401 : 500 },
   );
 }
-
-// Reexport of the Bluesky handler (implemented in bluesky-handler.ts) so
-// /api/upload-content imports every provider from this module.
-export { handleBlueskyUpload } from '@/lib/upload/bluesky-handler';
-export type { BlueskyUploadResponse } from '@/lib/upload/bluesky-handler';
-
-// Reexport of the 3Speak handler (implemented in threespeak-handler.ts) so
-// /api/upload-content imports every provider from this module.
-export { handleThreespeakUpload } from '@/lib/upload/threespeak-handler';
-export type { ThreespeakUploadResponse } from '@/lib/upload/threespeak-handler';
-
-// Reexport of the LinkedIn handler (implemented in linkedin-handler.ts) so
-// /api/upload-content imports every provider from this module.
-export { handleLinkedinUpload } from '@/lib/upload/linkedin-handler';
-export type { LinkedinUploadResponse } from '@/lib/upload/linkedin-handler';

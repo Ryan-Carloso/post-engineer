@@ -59,33 +59,58 @@ export function formatSocialHandle(handle: string): string {
   return `@${trimmed}`;
 }
 
-export function accountOption(account: PublicAccountItem): AccountOption {
-  if (account.provider === 'bluesky') return { id: account.did, provider: 'bluesky', label: formatSocialHandle(account.handle) };
-  if (account.provider === 'linkedin') {
+// One builder per network (a record, not a chain): a new provider fails
+// the typecheck until it has a builder, instead of falling through to
+// another network's id or label. Each builder is called through its own
+// key, so the provider check below only guards the builder contract and
+// narrows the discriminated union to the provider's own shape.
+const ACCOUNT_OPTION_BUILDERS: Record<SocialProvider, (account: PublicAccountItem) => AccountOption> = {
+  youtube: (account) => {
+    if (account.provider !== 'youtube') throw new Error(`accountOption: youtube builder got a ${account.provider} account`);
+    return { id: account.channelId, provider: 'youtube', label: account.channelName };
+  },
+  instagram: (account) => {
+    if (account.provider !== 'instagram') throw new Error(`accountOption: instagram builder got a ${account.provider} account`);
+    return { id: account.igUserId, provider: 'instagram', label: formatSocialHandle(account.username) };
+  },
+  bluesky: (account) => {
+    if (account.provider !== 'bluesky') throw new Error(`accountOption: bluesky builder got a ${account.provider} account`);
+    return { id: account.did, provider: 'bluesky', label: formatSocialHandle(account.handle) };
+  },
+  linkedin: (account) => {
+    if (account.provider !== 'linkedin') throw new Error(`accountOption: linkedin builder got a ${account.provider} account`);
     return { id: account.providerAccountId, provider: 'linkedin', label: account.accountName ?? account.providerAccountId };
-  }
-  if (account.provider === 'threads') {
+  },
+  threads: (account) => {
+    if (account.provider !== 'threads') throw new Error(`accountOption: threads builder got a ${account.provider} account`);
     return {
       id: account.providerAccountId,
       provider: 'threads',
       label: account.accountName === null ? account.providerAccountId : formatSocialHandle(account.accountName),
     };
-  }
-  if (account.provider === 'facebook') {
+  },
+  facebook: (account) => {
+    if (account.provider !== 'facebook') throw new Error(`accountOption: facebook builder got a ${account.provider} account`);
     return { id: account.providerAccountId, provider: 'facebook', label: account.accountName ?? account.providerAccountId };
-  }
-  if (account.provider === 'pinterest') {
+  },
+  pinterest: (account) => {
+    if (account.provider !== 'pinterest') throw new Error(`accountOption: pinterest builder got a ${account.provider} account`);
     return { id: account.providerAccountId, provider: 'pinterest', label: account.accountName ?? account.providerAccountId };
-  }
-  if (account.provider === 'fanvue') {
-    return { id: account.providerAccountId, provider: 'fanvue', label: account.accountName ?? account.providerAccountId };
-  }
-  if (account.provider === '3speak') {
+  },
+  '3speak': (account) => {
+    if (account.provider !== '3speak') throw new Error(`accountOption: 3speak builder got a ${account.provider} account`);
     return { id: account.providerAccountId, provider: '3speak', label: account.accountName ?? account.providerAccountId };
-  }
-  if (account.provider === 'rumble') {
+  },
+  rumble: (account) => {
+    if (account.provider !== 'rumble') throw new Error(`accountOption: rumble builder got a ${account.provider} account`);
     return { id: account.providerAccountId, provider: 'rumble', label: account.accountName ?? account.providerAccountId };
-  }
-  if (account.provider === 'instagram') return { id: account.igUserId, provider: 'instagram', label: formatSocialHandle(account.username) };
-  return { id: account.channelId, provider: 'youtube', label: account.channelName };
+  },
+  fanvue: (account) => {
+    if (account.provider !== 'fanvue') throw new Error(`accountOption: fanvue builder got a ${account.provider} account`);
+    return { id: account.providerAccountId, provider: 'fanvue', label: account.accountName ?? account.providerAccountId };
+  },
+};
+
+export function accountOption(account: PublicAccountItem): AccountOption {
+  return ACCOUNT_OPTION_BUILDERS[account.provider](account);
 }

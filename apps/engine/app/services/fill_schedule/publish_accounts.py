@@ -9,6 +9,7 @@ from typing import Any, Callable
 
 from loguru import logger
 
+from app.providers import URL_MEDIA_PROVIDERS
 from app.services.analytics import scrub_error_text
 from app.services.fill_schedule.account_outcomes import (
     _account_ids,
@@ -140,11 +141,7 @@ def publish_slot_accounts(
                 "publish_attempts": max_attempts,
                 "publish_not_before": lease,
             })
-            use_archive = video_object_path is not None and provider_name in {
-                upload_publisher.INSTAGRAM_PROVIDER,
-                upload_publisher.THREADS_PROVIDER,
-                upload_publisher.FACEBOOK_PROVIDER,
-            }
+            use_archive = video_object_path is not None and provider_name in URL_MEDIA_PROVIDERS
             if not use_archive:
                 if video_bytes is None and result.transport_error is None:
                     try:

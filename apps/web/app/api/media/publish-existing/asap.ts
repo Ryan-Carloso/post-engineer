@@ -20,8 +20,8 @@ import { logger } from '@/lib/logger';
 import { accountFailure } from '@/lib/upload/account-error';
 import type { ContentUploadAccountResult } from '@/lib/upload/content-upload-result';
 import { buildUploadErrorResponse } from '@/lib/upload/handlers';
+import { PUBLISH_ACCOUNT_FIELDS } from '@/lib/contracts/providers';
 import {
-  PUBLISH_ACCOUNT_FIELDS,
   createPublishLedgerClient,
   mergePartitionResults,
   partitionPublishAccounts,

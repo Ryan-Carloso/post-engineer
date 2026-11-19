@@ -33,6 +33,6 @@ export const createPersonaAccountsField = z
     message: 'Select at least one publishing account for this persona.',
   })
   .describe(
-    'Publishing accounts this persona is bound to, per provider, e.g. { youtube: ["UC..."], bluesky: ["did:plc:..."], \'3speak\': ["alice"] }. ' +
+    'Publishing accounts this persona is bound to, per provider, e.g. { youtube: ["UC..."], bluesky: ["did:plc:..."] }. ' +
       'At least one account is required. Account IDs come from accounts (action: list) (channelId / igUserId / providerAccountId / did).',
   );

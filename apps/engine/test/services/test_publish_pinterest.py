@@ -9,6 +9,7 @@ import unittest
 
 from pydantic import ValidationError
 
+from app.providers import SOCIAL_PROVIDERS
 from app.models.publish import PinterestPublish, PublishParams
 from app.services import publish_pinterest, upload_publisher
 from app.services.fill_schedule.metadata import metadata_for, validate_publish_plan
@@ -86,7 +87,7 @@ class PublishPinterestModuleTest(unittest.TestCase):
 
 class PinterestPublisherWiringTest(unittest.TestCase):
     def test_provider_and_part_builder_are_registered(self) -> None:
-        self.assertIn("pinterest", upload_publisher.VALID_PROVIDERS)
+        self.assertIn("pinterest", SOCIAL_PROVIDERS)
         metadata_type, build = upload_publisher._PART_BUILDERS["pinterest"]
         self.assertIs(metadata_type, upload_publisher.PinterestMetadata)
         parts = build(
