@@ -117,8 +117,6 @@ export interface KeyConnectDialogProps {
   error: string | null;
   pending: boolean;
   idPrefix?: string;
-  // Setup steps shown above the credential fields (the Telegram
-  // channel/group guide); omitted by the two-field dialogs.
   guide?: ReactNode;
   onHandleChange: (value: string) => void;
   onPasswordChange: (value: string) => void;

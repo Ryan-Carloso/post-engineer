@@ -137,7 +137,6 @@ const TARGET_EXTRACTORS: Record<MeasuredProvider, (record: Record<string, unknow
   '3speak': (record) => readString(record, 'postId'),
   rumble: (record) => readString(record, 'postId'),
   fanvue: (record) => readString(record, 'postId'),
-  // The Telegram publish result stores the message id as postId.
   telegram: (record) => readString(record, 'postId'),
 };
 

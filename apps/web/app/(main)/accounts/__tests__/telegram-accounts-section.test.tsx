@@ -21,8 +21,6 @@ vi.mock('@/lib/social-accounts-queries', () => ({
   useTelegramAccountsQuery: vi.fn(),
 }));
 
-// Only notifyIfSessionExpired is doubled; the module's redirect behavior is
-// pinned in lib/__tests__/session-expiry.test.tsx.
 vi.mock('@/lib/session-expiry', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/session-expiry')>()),
   notifyIfSessionExpired: vi.fn(),

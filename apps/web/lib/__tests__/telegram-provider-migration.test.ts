@@ -3,19 +3,6 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { findRepoRoot } from '@/test/repo-root';
 
-//---------------
-// supabase/migrations/071_telegram-provider.sql — the schema the Telegram
-// connect and publish paths depend on. Each provider check is dropped and
-// re-created with the full list (the lesson of 037: a live constraint the
-// chain no longer defines can linger in production, so a plain add would
-// leave the old list in force). A shipped migration is never edited, so
-// this test pins the eleven providers 071 shipped with; the file is
-// frozen, so it must NOT track SOCIAL_PROVIDERS. Channel and group are
-// one provider: the chat kind lives in account_metadata, never in the
-// provider value, so no 'telegram_channel' / 'telegram_group' appears.
-//---------------
-
-// The eleven providers 071 shipped with, in the order the migration lists them.
 const PROVIDERS_AT_071 = ['youtube', 'instagram', 'bluesky', 'linkedin', 'threads', 'facebook', 'pinterest', '3speak', 'rumble', 'fanvue', 'telegram'];
 
 const sql = readFileSync(

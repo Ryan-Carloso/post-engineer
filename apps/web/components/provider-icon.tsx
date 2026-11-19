@@ -70,7 +70,6 @@ const PROVIDER_GLYPHS: Record<SocialProvider, ProviderGlyph> = {
   telegram: {
     label: 'telegram',
     className: 'text-[#229ed9]',
-    // Paper-plane mark, Telegram's signature glyph (simplified path).
     path:
       'M21.9 4.6c.2-1-.6-1.7-1.5-1.3L2.7 10c-1 .4-1 1.8.2 2.1l4.4 1.4 1.7 5.3c.3.8 1.3 1 1.9.3l2.4-2.3 4.5 3.3c.8.6 2 .2 2.3-.8l2.6-14.7ZM8.5 12.6l9.5-6c.3-.2.6.2.3.4l-8 7.2-.3 3.2-1.5-4.8Z',
   },

@@ -197,7 +197,6 @@ def validate_publish_plan(
         elif isinstance(metadata, upload_publisher.FanvueMetadata):
             validate_fanvue_metadata(metadata)
         elif isinstance(metadata, upload_publisher.TelegramMetadata):
-            # Gated here for the same file-size reason as Fanvue above.
             validate_telegram_metadata(metadata)
     upload_publisher.validate_publish_metadata(
         providers,

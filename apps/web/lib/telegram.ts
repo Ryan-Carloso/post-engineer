@@ -1,30 +1,8 @@
-//---------------
-// Telegram — Bot API client.
-//
-// Documentation: https://core.telegram.org/bots/api
-//
-// There is no OAuth. The user creates a bot with @BotFather and pastes
-// its token here (a direct-connect credential, like the Bluesky app
-// password); that one bot is then added to every destination the user
-// publishes to. A channel and a group/supergroup are the same publish:
-// sendVideo / sendPhoto / sendAudio on a chat_id. The destination kind
-// (TelegramChatType) only changes the permission the connect flow must
-// prove — a channel bot must be an administrator who can post, a group
-// bot only needs to be a member allowed to send — so it is account
-// metadata, never a second provider.
-//
-// The bot token travels in the request URL path
-// (https://api.telegram.org/bot<token>/<method>), so no error, log line
-// or thrown message may ever carry the request URL: every failure below
-// is built from the API description only, with the token replaced.
-//---------------
-
 import { TelegramError } from '@/lib/errors';
 
 export const TELEGRAM_API_BASE = 'https://api.telegram.org';
 export const TELEGRAM_CAPTION_MAX_LENGTH = 1024;
 export const TELEGRAM_MESSAGE_MAX_LENGTH = 4096;
-// Cloud Bot API upload ceiling for files sent as multipart.
 export const TELEGRAM_FILE_MAX_BYTES = 50 * 1024 * 1024;
 const TELEGRAM_TIMEOUT_MS = 120_000;
 
@@ -47,7 +25,6 @@ export interface TelegramPublishResult {
   chatId: string;
 }
 
-// Bot tokens look like `123456789:AA...` (bot id, colon, 35-char secret).
 const BOT_TOKEN_PATTERN = /^\d{8,12}:[A-Za-z0-9_-]{35}$/;
 
 export function isValidTelegramBotToken(value: string): boolean {
@@ -130,9 +107,6 @@ export async function getTelegramChat(botToken: string, chatId: string): Promise
   };
 }
 
-// assertBotCanPost — the one place channel and group differ: a channel
-// bot must be an administrator with can_post_messages, a group bot must
-// be present and not restricted from sending.
 export async function assertBotCanPost(botToken: string, chat: TelegramChatInfo, botId: number): Promise<void> {
   const member = await callBotApi(botToken, 'getChatMember', { json: { chat_id: chat.chatId, user_id: botId } });
   const status = member.status;
@@ -183,8 +157,6 @@ export async function publishToTelegram(input: TelegramPublishInput): Promise<Te
   return { messageId: result.message_id, chatId: String(result.chat.id) };
 }
 
-// telegramPostUrl — a public link exists only for a chat with a username
-// (t.me/<username>/<message_id>); private chats get no URL, never a guess.
 export function telegramPostUrl(username: string | null, messageId: number): string | null {
   if (username === null || username === '') return null;
   return `https://t.me/${username}/${messageId}`;

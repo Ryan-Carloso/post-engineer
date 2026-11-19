@@ -1,19 +1,5 @@
 'use client';
 
-//---------------
-// Telegram setup guide — the "info" that walks the user through
-// connecting a channel or a group: the kind picker and the steps for
-// that kind (@BotFather, adding the bot with the right permission,
-// finding the chat ID). Shared by the accounts screen and the
-// onboarding wizard, both of which render it above the chat and token
-// fields of their credential dialog.
-//
-// The kind matters only at connect time: a channel bot must be an
-// administrator who can post, a group bot a member allowed to send.
-// The picked kind is sent as chatType and checked server-side against
-// the real chat (POST /api/telegram-connect).
-//---------------
-
 import type { ReactNode } from 'react';
 import type { TranslationKey } from '@/lib/i18n';
 import { ERROR_CODES } from '@/lib/error-codes';
@@ -21,8 +7,6 @@ import { useI18n } from '@/lib/i18n/provider';
 
 export type TelegramChatKind = 'channel' | 'group';
 
-/** The localized sentence for a /api/telegram-connect error code; an
- * unknown or missing code gets the generic connect error. */
 export function telegramConnectErrorKey(code: unknown, kind: TelegramChatKind): TranslationKey {
   if (code === ERROR_CODES.TELEGRAM_TOKEN_REJECTED) return 'accounts.telegramErrorToken';
   if (code === ERROR_CODES.TELEGRAM_CHAT_NOT_FOUND) return 'accounts.telegramErrorChatNotFound';

@@ -194,8 +194,6 @@ const fanvue: ProfileSource = {
   },
 };
 
-// Telegram's Bot API can re-read the chat (getChat) but no avatar is
-// managed, so the resync only refreshes the stored title/username.
 const telegram: ProfileSource = {
   pictureKey: 'profilePictureUrl',
   applies: () => false,

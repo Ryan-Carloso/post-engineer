@@ -148,10 +148,6 @@ export const COUNTER_FETCHERS: Record<MeasuredProvider, CounterFetcher> = {
     return { views: null, likes: null, comments: null, saves: null };
   },
   async telegram() {
-    // The Bot API exposes no per-message views/likes the collector can
-    // read (channel views ride the message object Telegram never serves
-    // back), so a published Telegram post is measured as unknown on
-    // every counter rather than failing the whole metrics run.
     return { views: null, likes: null, comments: null, saves: null };
   },
 };
