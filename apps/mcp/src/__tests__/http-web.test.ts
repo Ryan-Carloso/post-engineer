@@ -99,10 +99,10 @@ describe('handleMcpWebRequest', () => {
       const stdioNames = await listedNames(client, 'stdio');
 
       // The hosted endpoint must serve the same tools as the http factory,
-      // and the stdio server has the same 16 tools with extra file actions.
+      // and the stdio server has the same 17 tools with extra file actions.
       expect(httpNames).toEqual(memoryNames);
       expect(stdioNames).toEqual(httpNames);
-      expect(httpNames).toHaveLength(16);
+      expect(httpNames).toHaveLength(17);
       const actionsOf = (name: string): string[] =>
         (httpTools.tools.find((tool) => tool.name === name)?.inputSchema.properties as { action?: { enum?: string[] } } | undefined)?.action?.enum ?? [];
       for (const [tool, action] of FILE_ONLY_ACTIONS) {

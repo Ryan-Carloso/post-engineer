@@ -1,0 +1,43 @@
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { actionDescription, actionShape, byAction } from './action-tool.js';
+import type { PostEngineerClient } from './client.js';
+import { DESTRUCTIVE } from './tool-annotations.js';
+import {
+  GetToolConfigShape,
+  SaveToolConfigShape,
+  handleGetToolConfig,
+  handleSaveToolConfig,
+} from './tools-tool-config.js';
+
+//---------------
+// tool_config (issue #669): the account's saved research/stock tool
+// configuration. save replaces the whole set (a key left out is
+// forgotten), so the tool is DESTRUCTIVE for all its actions.
+//---------------
+
+const TOOL_CONFIG_SPECS = {
+  get: GetToolConfigShape,
+  save: SaveToolConfigShape,
+};
+
+export const ToolConfigDescription = actionDescription(
+  'Saved research and stock tool configuration. get: which search tool (Tavily/Exa) and licensed stock sources (Pexels/Pixabay/Coverr) are saved for this account, each key as present + last 4 characters only — keys are never returned in full. save: replaces the whole saved configuration (search tool, stock sources, API keys); a key left out is forgotten, so send every key the user still has. Ask once at setup, save here, and check get before asking again.',
+  TOOL_CONFIG_SPECS,
+);
+
+export function registerToolConfigTools(server: McpServer, client: PostEngineerClient): void {
+  server.tool(
+    'tool_config',
+    ToolConfigDescription,
+    actionShape(TOOL_CONFIG_SPECS),
+    DESTRUCTIVE,
+    byAction(
+      {
+        get: async () => handleGetToolConfig(client),
+        save: async (args) => handleSaveToolConfig(client, args),
+      },
+      TOOL_CONFIG_SPECS,
+      'tool_config',
+    ),
+  );
+}

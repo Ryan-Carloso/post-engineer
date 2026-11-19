@@ -1,4 +1,4 @@
-// apiKeys descriptions of the 16 MCP intent tools (issue #566), shown on the
+// apiKeys descriptions of the 17 MCP intent tools (issue #566), shown on the
 // MCP docs card. Split out of en.ts, which is over the file-size cap and may not grow.
 export const mcpToolDescEn = {
   toolDescGenerateVideo: 'Generate and schedule one video or a batch (every 6th face video is free)',
@@ -8,6 +8,7 @@ export const mcpToolDescEn = {
   toolDescPersonaMedia: "Stock faces and a persona's image library",
   toolDescVoices: 'House voices, previews and voice clones',
   toolDescAccounts: 'Connect accounts and choose where a persona publishes',
+  toolDescToolConfig: 'Saved search and stock tool setup — keys stored encrypted, never shown back',
   toolDescSchedules: 'Your scheduled posts: list, cancel, edit',
   toolDescPosts: 'Your upcoming and published posts',
   toolDescInsights: 'Post metrics and YouTube retention curves',
