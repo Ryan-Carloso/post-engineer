@@ -6,8 +6,9 @@ name: release-mcp
 # (org Ryan-Carloso, repo post-engineer, workflow release-mcp.yml).
 #
 # VERSION — generated, never committed (.github/scripts/mcp-release-version.sh):
-#   MAJOR.MINOR from the repo-root VERSION file + the number of the merged PR that
-#   introduced the last commit touching apps/mcp/ (e.g. 1.52.560). No
+#   MAJOR.MINOR from the repo-root VERSION file + the ordinal of the last commit
+#   touching apps/mcp/ in main's history (e.g. 1.53.219), so the patch follows
+#   merge order and can never drop below the version npm already serves. No
 #   version-bump commit, no bump PR, no manual tag. The publish job stamps the
 #   version into package.json/server.json in its own workspace only.
 #
@@ -61,7 +62,6 @@ jobs:
     permissions:
       contents: write # push the mcp-v<version> tag
       id-token: write # npm trusted publishing / provenance
-      pull-requests: read # commits/{sha}/pulls in mcp-release-version.sh
     outputs:
       version: ${{ steps.version.outputs.version }}
       published_now: ${{ steps.published.outputs.published_now }}
@@ -76,8 +76,6 @@ jobs:
 
       - name: Resolve the release version
         id: version
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           VERSION="$(bash .github/scripts/mcp-release-version.sh)"
