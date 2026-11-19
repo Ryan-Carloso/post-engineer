@@ -723,8 +723,8 @@ describe('prompts hub data', () => {
       'discarded,',
       'never forced in',
       'the base lines about material do not apply here',
-      'Match text to image per SENTENCE, not per segment',
-      'gets an image that shows what the sentence says',
+      'One segment is one beat',
+      'never the next sentence',
       'Image quality, no exceptions',
       'No neutral filler photo',
       'One consistent persona',
@@ -825,15 +825,15 @@ describe('prompts hub data', () => {
     expect(text).not.toContain('never attach a video URL');
     expect(text).not.toContain('saved at setup');
     // v3/v4 lessons, for a 10/10 video: every emotional beat is visible
-    // in the image, the rhythm varies take by take, every sentence gets
-    // its own image, and every image is sharp, well-lit, and on-topic.
+    // in the image, the rhythm varies take by take, every segment is one
+    // beat and gets its own image, and every image is sharp, well-lit, and on-topic.
     expect(text).toContain('Every emotional beat must be VISIBLE in the image');
     expect(text).toContain('visibly triumphant');
     expect(text).toContain('An invisible beat is a failure');
     expect(text).toContain('Vary the rhythm deliberately');
     expect(text).toContain('pace changes from take to take');
-    expect(text).toContain('Match text to image per SENTENCE, not per segment');
-    expect(text).toContain('gets an image that shows what the sentence says');
+    expect(text).toContain('One segment is one beat');
+    expect(text).toContain('never the next sentence');
     expect(text).toContain('Image quality, no exceptions');
     expect(text).toContain('No neutral filler photo');
     expect(text).toContain('no repeated compositions');
@@ -853,5 +853,45 @@ describe('prompts hub data', () => {
     expect(text).not.toContain('why you regain weight after a diet');
     expect(text).not.toContain('Mara');
     expect(text).not.toContain('issue #');
+  });
+
+  it('carries the 10/10-loop lessons (v7-v15): one beat per segment, two body states, duration contrast, matching clips, covered takes, literal study, 12-word CTA', () => {
+    // The loop lessons were verified on real rendered videos (v7-v15):
+    // each segment is one beat, the body change is visible in the body,
+    // photos pace with SegmentMedia.duration, clips must match the persona
+    // even from behind, every take is covered, the study is literal, and
+    // the CTA is 12 words over 2 photos. Pins are single-line fragments:
+    // the composed prompt joins source lines with '\n', so a needle
+    // spanning a source-line break never matches.
+    const fullText = getPrompt('story-first-reels')?.prompt ?? '';
+    const baseText = SHARED_PROMPT_BASE.join('\n');
+    expect(fullText.startsWith(baseText)).toBe(true);
+    const text = fullText.slice(baseText.length + 2);
+    expect(text).toContain('One segment is one beat');
+    expect(text).toContain('never the next sentence');
+    expect(text).toContain('TWO body states');
+    expect(text).toContain('visible IN THE BODY');
+    expect(text).toContain('checking its body matches the phase');
+    expect(text).toContain('SegmentMedia.duration (0.5-6s)');
+    expect(text).toContain('never more than 2');
+    expect(text).toContain('hold the low point 3.5-5s');
+    expect(text).toContain('fast at 1-1.5s');
+    expect(text).toContain('the payoff 4-6s');
+    expect(text).toContain('One photo is one beat, never two');
+    expect(text).toContain('same persona even');
+    expect(text).toContain('same hair, same clothes, same setting');
+    expect(text).toContain('"No visible face"');
+    expect(text).toContain('is NOT enough');
+    expect(text).toContain('Re-encode every clip to 30 fps');
+    expect(text).toContain('verify the PLAYED');
+    expect(text).toContain('rendered cut list');
+    expect(text).toContain('Every take must have image for ALL its audio');
+    expect(text).toContain('the last frame is the payoff');
+    expect(text).toContain('A study gets a literal image');
+    expect(text).toContain('labeled chart');
+    expect(text).toContain('The notebook enters only on its sentence');
+    expect(text).toContain('a chart holds 2s or more');
+    expect(text).toContain('12 words over 2 photos');
+    expect(text).toContain('The turning-point object appears only at the turn, never before');
   });
 });
