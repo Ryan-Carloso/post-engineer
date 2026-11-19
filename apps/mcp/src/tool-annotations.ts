@@ -8,7 +8,7 @@
 // DESTRUCTIVE for all its actions (issue #566 §12).
 // - READ_ONLY: video_tasks, posts, insights, billing, prompts, check_script.
 // - DESTRUCTIVE: cancel_video, personas, persona_media, voices, accounts,
-//   schedules, publish_video.
+//   schedules, publish_video, tool_config.
 // - MUTATING (generate_video, experiments, media): creates/updates/generation that change state but do not
 //   destroy existing content.
 // openWorldHint is true for every tool here: each one talks to the Post
