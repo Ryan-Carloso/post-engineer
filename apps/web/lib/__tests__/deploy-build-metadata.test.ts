@@ -1,19 +1,4 @@
-//---------------
-// deploy-build-metadata — the deployment-generated version contract, pinned
-// across every file that has to agree on it.
-//
-// The VPS deploy (deployment repo: deploy-version.sh + deploy.sh) exports
-// VERSION / PR_NUMBER / BUILD / COMMIT before `docker compose up --build`.
-// The engine reads them at runtime from the environment; the web image bakes
-// them in as build args that next.config.ts inlines into the bundle.
-//
-// A one-sided rename is silent in production: the engine would report
-// `pr: null` and the web badge would fall back to the bare version, with no
-// error anywhere. This test parses the four build files and asserts the same
-// four names appear on each side (SQL-literals sync-test precedent).
-//
 // @vitest-environment node
-//---------------
 /**
  * @vitest-environment node
  */
@@ -23,7 +8,6 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { findRepoRoot } from '@/test/repo-root';
 
-// The names deploy.sh exports (ENGINE_DEPLOY_* -> export_build_env).
 const BUILD_METADATA_VARS = ['VERSION', 'PR_NUMBER', 'BUILD', 'COMMIT'] as const;
 
 function read(...relativePath: string[]): string {
@@ -81,8 +65,6 @@ describe('deployment build metadata contract', () => {
   });
 
   it('reads PR_NUMBER on the engine side too', () => {
-    // The engine's build info (asgi.py get_build_info) is what /version and
-    // /health expose; the web only proxies it.
     const asgi = read('apps', 'engine', 'app', 'asgi.py');
     for (const name of BUILD_METADATA_VARS) {
       expect(asgi, `engine asgi.py must read ${name}`).toContain(`"${name}"`);
@@ -90,11 +72,6 @@ describe('deployment build metadata contract', () => {
   });
 
   it('requires REQUIRED_MCP_VERSION at runtime in the web container', () => {
-    // deploy.sh exports REQUIRED_MCP_VERSION only once npm serves that MCP
-    // version. The `:?` form makes `docker compose up` fail before it
-    // touches the running container when the deploy did not export it, so
-    // a misconfigured deploy keeps the old web up instead of starting one
-    // that 500s every MCP call.
     const compose = read('apps', 'web', 'docker-compose.yml');
     const environment = compose.slice(compose.indexOf('    environment:'));
     expect(environment).toContain('REQUIRED_MCP_VERSION: ${REQUIRED_MCP_VERSION:?');

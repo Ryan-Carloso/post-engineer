@@ -21,9 +21,6 @@ import {
 } from '../status';
 
 describe('day bucketing timezone (viewer browser timezone)', () => {
-  // 2026-11-02T02:30Z is 23:30 on Nov 1 in São Paulo (UTC-3) but already
-  // Nov 2 in UTC and Tokyo. The zone is an argument: process.env.TZ does
-  // not move Date inside the Stryker worker, so a stubbed TZ fails there.
   const slot = { slotAt: '2026-11-02T02:30:00.000Z' };
 
   it('puts a 23:30 local post on the local day, not the UTC day', () => {
@@ -51,7 +48,7 @@ describe('day bucketing timezone (viewer browser timezone)', () => {
 
 describe('buildMonthGrid', () => {
   it('is always 6 weeks of 7 days starting on the locale first weekday', () => {
-    const sunday = buildMonthGrid(2030, 5, 0); // June 2030 starts on a Saturday
+    const sunday = buildMonthGrid(2030, 5, 0);
     expect(sunday).toHaveLength(6);
     expect(sunday.every((week) => week.length === 7)).toBe(true);
     expect(sunday[0][0].date.getDay()).toBe(0);
@@ -81,8 +78,6 @@ describe('buildMonthGrid', () => {
 });
 
 describe('week helpers', () => {
-  // 2030-06-01 is a Saturday; the week holding it starts Sunday 2030-05-26
-  // (weekStartsOn 0) or Monday 2030-05-27 (weekStartsOn 1).
   it('starts the week on the locale first weekday', () => {
     expect(dayKey(weekStart(new Date(2030, 5, 1), 0))).toBe('2030-05-26');
     expect(dayKey(weekStart(new Date(2030, 5, 1), 1))).toBe('2030-05-27');
@@ -111,8 +106,6 @@ describe('week helpers', () => {
 });
 
 describe('calendar groups and day counts', () => {
-  // One vocabulary for the cells, legend, day summary and card pills:
-  // running work is "in progress", waiting work is "scheduled".
   it('maps every real slot and generation status to a group', () => {
     for (const status of ['generating', 'publishing', 'running']) {
       expect(calendarGroupOf(status)).toBe('inProgress');
@@ -153,15 +146,12 @@ describe('calendar vocabulary', () => {
       expect(CALENDAR_GROUP_ICON[group]).toBeDefined();
       expect(CALENDAR_GROUP_PILL[group]).not.toBe('');
     }
-    // The card pill is a soft tint of the status hue, so a card does not
-    // shout the way a solid chip would.
     expect(CALENDAR_GROUP_PILL.inProgress).toBe('bg-info-soft text-info');
     expect(CALENDAR_GROUP_PILL.failed).toBe('bg-destructive-soft text-destructive');
   });
 
   it('keeps the detail page word for an awaiting post: scheduled, not pending', () => {
     expect(STATUS_KEY.awaiting).toBe('posts.groupScheduled');
-    // A standalone generation that has not started is still "pending".
     expect(STATUS_KEY.pending).toBe('posts.statusPending');
   });
 });

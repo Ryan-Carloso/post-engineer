@@ -1,13 +1,3 @@
-//---------------
-// telegram-i18n — copy of the Telegram section on the accounts screen,
-// including the channel/group setup guide (the "info" that walks the
-// user through @BotFather, adding the bot and granting it permission).
-//
-// The en/pt dictionaries are grandfathered over the 500-line file-size
-// cap and may not grow a single line, so this feature's copy lives here
-// and is merged in ./index.ts (same pattern as ./rumble-i18n).
-//---------------
-
 export const telegramStrings = {
   en: {
     accounts: {

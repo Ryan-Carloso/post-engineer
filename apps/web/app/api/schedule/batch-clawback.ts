@@ -1,23 +1,3 @@
-//---------------
-// batch-clawback — keeps a cancel from leaving a free batch video behind.
-//
-// The batch discount (issue #487) makes the cheapest face video of every 6
-// free by crediting its charge (a generation_refund under its own schedule).
-// That credit uses up the schedule's refund cap. Without this step, a user
-// could create 6, cancel the 5 paid ones and keep the free one.
-//
-// settle_batch_clawback (migration 046) does the money in one transaction:
-// it refunds the cancelled slots in full, then pulls the discount back out
-// of the free slot's discount refund row and moves that amount onto
-// charged_tokens. The net is the old withhold, and the cap has room again
-// so a later refund of the re-charged video returns the tokens. A failed
-// slot is not clawed: its discount is the refund for a video we did not
-// deliver.
-//
-// The slot update re-checks discount_tokens and charged_tokens. When two
-// cancels of the same batch race, only one of them claws a given discount.
-//---------------
-
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { logger } from '@/lib/logger';
@@ -106,18 +86,6 @@ async function readBatch(
   return { ok: true, slots };
 }
 
-/**
- * The refund each removed slot gets after the clawback. A slot outside any
- * batch keeps its full charge. A batch that cannot be read, or whose
- * settlement fails, fails the whole computation: refunding blind would let
- * the free video survive. Slots in `settledSlotIds` were already refunded
- * inside settle_batch_clawback; the caller must not refund them again.
- * `refundBySlot` is the net the user keeps (full charge minus the discount
- * pulled back), which is what `batchDiscountWithheld` is computed from.
- * The caller passes only slots whose generation never ran: a generated
- * slot keeps its charge and never enters the settlement, so cancelling it
- * cannot claw the free video's discount.
- */
 export async function refundsAfterClawback(
   supabase: SupabaseClient,
   userId: string,

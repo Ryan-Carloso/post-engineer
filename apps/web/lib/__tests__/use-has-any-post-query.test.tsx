@@ -4,12 +4,6 @@ import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 
-//---------------
-// Tests for useHasAnyPostQuery (lib/schedule-range): the hook behind the
-// calendar's "no posts this month" vs "no posts yet" distinction. It reads
-// the route's hasAnyPost field, which the lists alone cannot answer.
-//---------------
-
 vi.mock('@/lib/api', () => ({
   fetchScheduleStatus: vi.fn(),
   mapSlot: vi.fn((row: unknown) => row),

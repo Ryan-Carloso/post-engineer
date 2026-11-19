@@ -13,9 +13,6 @@ import { reportProfileFetched, reportProfileFetchFailed } from '@/lib/account-pr
 import { YOUTUBE_CHANNEL_NAME_FALLBACK } from '@/lib/providers/registry';
 import { resetYouTubeRetentionWindows } from '@/lib/metrics/reset-retention';
 
-//---------------
-// getSessionUserId — session user_id or null
-//---------------
 async function getSessionUserId(): Promise<string | null> {
   const supabase = await createSupabaseServerClient();
   const {
@@ -27,10 +24,6 @@ async function getSessionUserId(): Promise<string | null> {
   return user.id;
 }
 
-//---------------
-// GET /api/google-oauth/callback — exchanges code for tokens, encrypts
-// and persists in Supabase (owner: session user_id).
-//---------------
 async function getHandler(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const code = searchParams.get('code');
@@ -45,14 +38,10 @@ async function getHandler(request: NextRequest) {
     return oauthPopupResponse('youtube-oauth-error', { error: 'Missing authorization code' });
   }
 
-  // Callback auth — web flow (session + httpOnly nonce cookie)
-  // or MCP fallback (state stored server-side via POST /api/account/connect-url).
   const callbackAuth = await resolveOAuthCallbackAuth(
     request,
     state,
     await getSessionUserId(),
-    // Service role only for the server-side oauth_states table; ownership is
-    // enforced by the user_id predicate on the consume (session user only).
     () => createSupabaseServiceClient(),
     'youtube'
   );
@@ -60,7 +49,6 @@ async function getHandler(request: NextRequest) {
     return oauthPopupResponse('youtube-oauth-error', { error: callbackAuth.error });
   }
   const userId = callbackAuth.userId;
-  // redirectUri validated by the resolver (in the MCP flow it comes from the server-side store)
 
   try {
     const { createGoogleOAuth2Client } = await import('@/lib/youtube');
@@ -70,9 +58,6 @@ async function getHandler(request: NextRequest) {
     const { tokens } = await oauth2Client.getToken(code);
     oauth2Client.setCredentials(tokens);
 
-    // The channel is the account identity: a failed read or a Google
-    // account without a channel fails the connect instead of saving a
-    // placeholder id/name (two placeholder rows would overwrite each other).
     let channel: Awaited<ReturnType<typeof fetchYouTubeChannel>>;
     try {
       channel = await fetchYouTubeChannel(oauth2Client, { mine: true });
@@ -98,9 +83,6 @@ async function getHandler(request: NextRequest) {
     const customUrl = channel.customUrl ?? undefined;
     const statistics = channel.statistics ?? undefined;
 
-    // Both flows resolve to the signed-in session user (the connect-url
-    // fallback only accepts the state owner); upsertSocialAccount then writes
-    // with the service client (066 leaves the session client select-only).
     const supabase = await createSupabaseServerClient();
 
     await upsertSocialAccount(supabase, {
@@ -125,12 +107,8 @@ async function getHandler(request: NextRequest) {
 
     await touchSocialAccount(supabase, userId, 'youtube', channelId);
 
-    // A token granted before yt-analytics.readonly left those windows
-    // marked done. Clearing them lets the hourly metrics job backfill
-    // retention while each window is still open.
     await resetYouTubeRetentionWindows(userId, channelId);
 
-    // Returns only public data — tokens NEVER go to the client
     return oauthPopupResponse('youtube-oauth-success', {
       account: {
         channelId,
@@ -150,7 +128,4 @@ async function getHandler(request: NextRequest) {
   }
 }
 
-//---------------
-// 5xx reporting: handled server errors reach PostHog error tracking.
-//---------------
 export const GET = withApiErrorReporting('GET /api/google-oauth/callback', getHandler);

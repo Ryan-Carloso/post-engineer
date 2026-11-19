@@ -6,11 +6,6 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { AuthContext } from '../http-auth.js';
 import { main } from '../index.js';
 
-// Stryker rewrites index.ts, so a test that greps one physical line for
-// `new PostEngineerClient` and `'http'` fails the mutation dry run before
-// any mutant is scored. Call the HTTP startup instead and read the headers
-// the factory's client actually sends.
-
 const serveHttpTransport = vi.hoisted(() =>
   vi.fn(async (_factory: unknown, _options?: unknown, _auth?: unknown) => ({ close: async () => {} })),
 );

@@ -67,8 +67,6 @@ describe('narrowClonedVoiceRow', () => {
   });
 
   it('returns rows the shared ClonedVoiceRowSchema accepts', () => {
-    // The contract schema is the zod mirror of the narrowed row. A
-    // one-sided edit would make the MCP reject a row the route serves.
     const full = narrowClonedVoiceRow({
       id: 'clone-1',
       status: 'ready',

@@ -39,7 +39,6 @@ describe('mcp_tool_called', () => {
       mcp_version: '1.42.0',
       auth_method: 'api_key',
       method: 'GET',
-      // The query string never reaches telemetry.
       path: '/api/persona/list',
       status: 200,
       ok: true,

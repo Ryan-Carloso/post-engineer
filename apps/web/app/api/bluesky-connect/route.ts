@@ -11,12 +11,6 @@ import { fetchBlueskyPublicProfile } from '@/lib/bluesky-profile';
 import { reportProfileFetched, reportProfileFetchFailed } from '@/lib/account-profile-telemetry';
 import { logger } from '@/lib/logger';
 
-//---------------
-// readBlueskyProfileMetadata — display name and avatar for the card. The
-// login already succeeded, so a failed profile read does not block the
-// connect: it is logged and reported, and the stored row (no profileSyncedAt)
-// is retried by the GET /api/account profile resync.
-//---------------
 async function readBlueskyProfileMetadata(did: string): Promise<Record<string, unknown>> {
   try {
     const profile = await fetchBlueskyPublicProfile(did);
@@ -34,22 +28,6 @@ async function readBlueskyProfileMetadata(did: string): Promise<Record<string, u
     return {};
   }
 }
-
-//---------------
-// POST /api/bluesky-connect — connects a Bluesky account via app password.
-// Validates the credential against Bluesky BEFORE saving, encrypts the password
-// (equivalent to the account password) and inserts into social_accounts with
-// provider='bluesky' and provider_account_id=did.
-//
-// Two entry flows (same business logic):
-// - Web: Supabase session + FormData { handle, appPassword } (original).
-// - MCP: Post Engineer API key + JSON { handle, appPassword }.
-//
-// The "API key" here is Post Engineer's — it only identifies WHICH user
-// is connecting. The Bluesky credential remains handle + app password in
-// the body (Bluesky has no API keys); the password is validated against
-// Bluesky's servers before saving.
-//---------------
 
 function errorResponse(
   status: number,
@@ -115,8 +93,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
   }
   const { handle, appPassword } = credentials;
 
-  // Service role bypasses RLS. auth.userId is the owner. A cookie JWT must
-  // not write encrypted_tokens.
   const supabase = createSupabaseServiceClient();
 
   try {
@@ -130,9 +106,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
       did,
     });
 
-    // Upsert, not insert: a reconnect refreshes the token on the row the
-    // unique (user_id, provider, provider_account_id) key already holds
-    // (migration 040), so a plain insert fails with a constraint violation.
     const { data: upserted, error: upsertError } = await supabase
       .from('social_accounts')
       .upsert(
@@ -151,8 +124,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
       .single();
 
     if (upsertError || !upserted) {
-      // The full PostgREST error object (not just the message) is threaded
-      // as cause so the PostHog issue carries code/details/hint.
       return errorResponse(500, 'Could not save the Bluesky account.', 'POST /api/bluesky-connect', {
         cause: upsertError,
         metadata: { userId: auth.userId },
@@ -165,9 +136,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
       (error instanceof BlueskyError && error.code === 'invalid_credentials') ||
       (error instanceof Error && error.name === 'BlueskyError' && /Invalid Bluesky/i.test(error.message));
     if (isInvalidCredentials) {
-      // 422, not 401: Bluesky rejected the credential, the hub session is fine.
-      // 401 stays reserved for a missing/expired hub session so clients can
-      // react to every 401 as a session expiry.
       return errorResponse(422, errorMessage(ERROR_CODES.BLUESKY_CREDENTIAL_REJECTED), 'POST /api/bluesky-connect', {
         code: ERROR_CODES.BLUESKY_CREDENTIAL_REJECTED,
       });
@@ -180,7 +148,4 @@ async function postHandler(request: Request): Promise<NextResponse> {
   }
 }
 
-//---------------
-// 5xx reporting: handled server errors reach PostHog error tracking.
-//---------------
 export const POST = withApiErrorReporting('POST /api/bluesky-connect', postHandler, { getUserId: resolveReportingUserId });

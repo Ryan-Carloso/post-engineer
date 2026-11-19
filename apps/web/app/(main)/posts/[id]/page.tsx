@@ -32,15 +32,6 @@ import { Button } from '@/components/ui/button';
 import { STATUS_KEY, STATUS_STYLE } from '../status';
 import { PostFailureNotice } from './post-failure-notice';
 
-//---------------
-// PostDetailPage (/posts/[id]) — the full-page post detail: big video
-// player, live progress while generating, title editing and delete for
-// awaiting/ready/failed slots, download of the generated video, and
-// reschedule for pending/ready slots. Resolved by id through the unified
-// detail endpoint (GET /api/posts/[id]), never by scanning the history
-// lists.
-//---------------
-
 const GENERATION_ERROR_KEY: Record<string, TranslationKey> = {
   custom_audio_invalid: 'posts.errorCustomAudio',
   engine_unavailable: 'posts.errorEngineUnavailable',
@@ -62,8 +53,6 @@ export default function PostDetailPage() {
   const params = useParams();
   const id = typeof params.id === 'string' ? params.id : '';
 
-  // One lookup resolves the id: a scheduled post comes back as a slot,
-  // a direct generation as a generation. A 404 is a genuine miss.
   const postQuery = usePostDetailQuery(id);
   const accountOptions = usePostAccountCards();
 
@@ -79,8 +68,6 @@ export default function PostDetailPage() {
   }, [slotDetail, accountOptions]);
 
   const slot = slotDetail?.slot ?? null;
-  // A post created without a persona (migration 012) resolves no persona row
-  // and is not a removed persona: the fallback for that case is its own copy.
   const personaMissing =
     slotDetail !== null && slotDetail !== undefined && slotDetail.schedule.personaId === null;
   const personaName = slotDetail?.persona?.name
@@ -89,10 +76,6 @@ export default function PostDetailPage() {
 
   if (isLoading) return <DetailSkeleton />;
 
-  // Detail fetch failures carry the server's safe message; a null result
-  // means genuinely not found. The raw server message is never rendered —
-  // pt-BR users get the localized copy, and the English original stays in
-  // the server logs for diagnostics.
   const loadError = postQuery.isError
     ? (postQuery.error instanceof Error ? postQuery.error.message : null)
     : null;
@@ -162,13 +145,6 @@ export default function PostDetailPage() {
   );
 }
 
-/* -----------------
-   Local Components
------------------- */
-
-//---------------
-// DetailHeader — back link, title and status pill, shared by both views.
-//---------------
 const DetailHeader = ({
   title,
   statusLabel,
@@ -198,11 +174,6 @@ const DetailHeader = ({
   );
 };
 
-//---------------
-// PostIdSection — the post's own id with a copy button. The id is the
-// handle support and debugging use to locate the post; the copy follows
-// the same clipboard pattern as the API keys section.
-//---------------
 export const PostIdSection = ({ postId }: { postId: string }) => {
   const { t } = useI18n();
   const { copied, copy } = useCopyText();
@@ -228,16 +199,6 @@ export const PostIdSection = ({ postId }: { postId: string }) => {
 };
 
 
-//---------------
-// DetailPlayer — the full-width player section. The video keeps its
-// intrinsic aspect ratio (h-auto — faceless videos are often vertical
-// 9:16; a forced 16:9 box letterboxes them into a black rectangle). The
-// debug line below surfaces what the <video> element itself reports
-// (state, resolution, duration, media error code) so a black player is
-// never undiagnosable: if the proxy fails, the code shows up here.
-// No video yet (awaiting, generating, failed or a generation that never
-// completed) renders the reason, never a broken player.
-//---------------
 const DetailPlayer = ({ src, placeholder }: { src: string | null; placeholder: string }) => {
   const { t } = useI18n();
   const [debug, setDebug] = useState<{
@@ -259,9 +220,6 @@ const DetailPlayer = ({ src, placeholder }: { src: string | null; placeholder: s
     });
   };
 
-  // React nulls out event.currentTarget after the dispatch — capture the
-  // element (and its MediaError) synchronously, before the state updater
-  // runs, or Safari throws "null is not an object".
   const handleError = (event: React.SyntheticEvent<HTMLVideoElement>): void => {
     const el = event.target as HTMLVideoElement;
     const code = el.error?.code ?? null;
@@ -274,7 +232,6 @@ const DetailPlayer = ({ src, placeholder }: { src: string | null; placeholder: s
 
   return (
     <div className="mt-4">
-      {/* Media is capped: an uncapped 9:16 video (or an empty 16:9 box) pushed the facts below the fold. */}
       <div className="overflow-hidden rounded-2xl bg-black">
         {src ? (
           <video
@@ -301,15 +258,6 @@ const DetailPlayer = ({ src, placeholder }: { src: string | null; placeholder: s
   );
 };
 
-//---------------
-// PublishLinks — where the post went: one link per provider the engine
-// published to. Renders nothing when there are no links, so the section
-// never appears empty (a post that has not gone out, or an engine that
-// recorded nothing).
-//
-// The href comes from the server, which already restricted it to https;
-// target/rel keep the external site from reaching back into this tab.
-//---------------
 const PublishLinks = ({ links }: { links: PublishLink[] }) => {
   const { t } = useI18n();
   if (links.length === 0) return null;
@@ -336,12 +284,6 @@ const PublishLinks = ({ links }: { links: PublishLink[] }) => {
   );
 };
 
-//---------------
-// SlotDetail — the scheduled-post body: player or generating progress,
-// title (editable while awaiting or ready), target accounts, error, and the
-// per-status actions. Delete redirects back to /posts on success;
-// mutation errors render inline and never navigate away.
-//---------------
 export const SlotDetail = ({
   slot,
   accounts,
@@ -367,14 +309,10 @@ export const SlotDetail = ({
   const deleteSlot = useDeleteSlotMutation();
   const [editing, setEditing] = useState(false);
   const [titleDraft, setTitleDraft] = useState(slot.title ?? '');
-  // Two-step delete: the first click arms the confirmation button.
   const [armed, setArmed] = useState(false);
 
   const videoUrl = videoUrlFor(slot.taskId);
   const canWatch = SLOT_VIDEO_STATUSES.has(slot.status) && videoUrl !== null;
-  // Ready slots are generated but not yet dispatched: their label, time
-  // and row are still the owner's to change (issue #555). Deleting a ready
-  // slot removes the row the publisher claims, so it can never publish.
   const canEdit = slot.status === 'awaiting' || slot.status === 'ready';
   const canDelete =
     slot.status === 'awaiting' || slot.status === 'ready' || slot.status === 'failed';
@@ -410,7 +348,6 @@ export const SlotDetail = ({
         />
       )}
 
-      {/* The failure reason sits under the player: first thing the reader needs. */}
       <PostFailureNotice status={slot.status} error={slot.error} userNotices={slot.userNotices} />
       {canWatch && videoUrl && (
         <div className="mt-3">
@@ -538,14 +475,6 @@ export const SlotDetail = ({
   );
 };
 
-//---------------
-// ProgressHistory — the observed (progress, stage) transitions of this
-// post, oldest first. A row whose progress dropped since the previous
-// observation is tinted amber: that is the visible trace of regressions
-// like the 40% -> 0% reset. The stage renders in mono as technical
-// context (an engine pipeline name), never as UI copy. Renders nothing
-// when the post never started generating (or predates the history).
-//---------------
 export const ProgressHistory = ({ history }: { history: ProgressHistoryEntry[] }) => {
   const { t, locale } = useI18n();
   if (history.length === 0) return null;
@@ -585,11 +514,6 @@ export const ProgressHistory = ({ history }: { history: ProgressHistoryEntry[] }
   );
 };
 
-//---------------
-// DetailNotFound — unknown id (deleted slot, another user's post) or a
-// failed detail fetch: an honest message and a way back, never a blank
-// page.
-//---------------
 const DetailNotFound = ({ message }: { message?: string }) => {
   const { t } = useI18n();
   return (
@@ -602,9 +526,6 @@ const DetailNotFound = ({ message }: { message?: string }) => {
   );
 };
 
-//---------------
-// Skeleton
-//---------------
 const DetailSkeleton = () => (
   <div className="mx-auto max-w-3xl animate-pulse" data-testid="detail-skeleton">
     <div className="flex items-center gap-3">

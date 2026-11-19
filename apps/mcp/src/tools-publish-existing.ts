@@ -12,19 +12,6 @@ import { createRefResolvers } from './refs.js';
 import { sanitizeEngineError } from './tools.js';
 import { type McpToolResponse } from './tools-call.js';
 
-//---------------
-// Publish-existing handler (issue #384): publish or schedule media that
-// already exists (a finished generated video, a completed signed upload,
-// or an image) with no generation and no token charge. Every account
-// reference is resolved before the call (refs.ts: exact match, candidates
-// on ambiguity, never a guess) and echoed back; with no accounts, the
-// persona's bound accounts are used, like generate_video. Kept in a new
-// module so tools.ts stays under the file-size ratchet; the publish_video
-// tool registers it in intent-content.ts. sanitizeEngineError is imported
-// from tools.ts (an import cycle through tools.js that is safe: handlers
-// run after module init).
-//---------------
-
 function reconnectSentence(result: Extract<PublishExistingResult, { mode: 'scheduled' }>): string {
   const warning = result.warnings?.find((item) => item.code === 'account_needs_reconnect');
   if (warning === undefined) return '';
@@ -87,7 +74,6 @@ async function resolveMedia(args: PublishExistingArgs): Promise<Resolved<Publish
     }
     return { kind: 'ok', value: { kind: 'image', imageData: image.buffer.toString('base64'), contentType: image.mimeType } };
   }
-  // The strict schema already demanded the reference for the kind.
   return { kind: 'response', response: failure(`mediaKind ${args.mediaKind} needs its media reference.`) };
 }
 
@@ -142,8 +128,6 @@ export async function handlePublishExisting(client: PostEngineerClient, args: Pu
     const targets = await resolveTargets(client, input);
     if (targets.kind === 'response') return targets.response;
     const providers = [...targets.value.accounts.keys()];
-    // Images post only to the image networks: refuse before reading the file.
-    // (An image upload is checked by the server, which knows its type.)
     const videoOnly = providers.filter((provider) => !isImageProvider(provider));
     if (input.mediaKind === 'image' && videoOnly.length > 0) {
       return failure(`images go to ${IMAGE_PROVIDERS.join(', ')} only; drop the ${videoOnly.join(', ')} account(s).`);
@@ -163,8 +147,6 @@ export async function handlePublishExisting(client: PostEngineerClient, args: Pu
       tags: input.tags,
       privacyStatus: input.privacyStatus,
       boardId: input.boardId,
-      // A fresh key per call keeps a new publish a new one; the caller's
-      // key makes its retry replay instead of posting again.
       idempotencyKey: input.idempotencyKey ?? randomUUID(),
     });
     return { content: [{ type: 'text', text: summary(result, input.mediaKind, targets.value.note) }] };

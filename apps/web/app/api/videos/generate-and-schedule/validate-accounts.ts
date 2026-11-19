@@ -1,20 +1,3 @@
-//---------------
-// Social account validation, extracted from route.ts so the route module
-// stays under the file-size ratchet. All checks run BEFORE any token is
-// charged.
-//
-// One query loads all of the user's accounts; each requested id must
-// belong to the user AND to the requested provider, distinguishing "not
-// yours" from "yours but for another provider".
-//
-// Issue #572: when the post has a persona, every requested account must
-// also be bound to that persona (persona_default_accounts). A persona
-// with zero bound accounts cannot schedule at all — the caller gets a
-// clear error naming the missing binding instead of the generic
-// "select an account" message. Faceless posts (bound === null) keep the
-// ownership-only checks.
-//---------------
-
 import type { NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { accountNeedsReconnectWarning, type AccountNeedsReconnectWarning } from '@/lib/account-needs-reconnect';
@@ -94,9 +77,6 @@ export async function validateAccounts(
     }
     for (const id of ids) {
       if (byProvider.get(provider)?.has(id)) {
-        // Owned for this provider — now the binding check (issue #572):
-        // an owned account the persona is not bound to is refused here,
-        // before any token is charged.
         if (bound !== null && !bound[provider].includes(id)) {
           return validationFailed(
             ERROR_CODES.ACCOUNT_NOT_BOUND_TO_PERSONA,

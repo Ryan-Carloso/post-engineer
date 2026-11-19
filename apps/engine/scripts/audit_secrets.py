@@ -17,7 +17,6 @@ import tomllib
 from pathlib import Path
 
 ENGINE_ROOT = Path(__file__).resolve().parents[1]
-# The secrets tree lives in the parent repo (post-engineer-repos/secrets).
 DEFAULT_SECRETS_DIR = ENGINE_ROOT.parents[1].parent / "secrets"
 
 

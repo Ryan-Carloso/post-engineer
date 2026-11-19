@@ -1,9 +1,3 @@
-//---------------
-// Properties for the existing `experiment_results_fetched` success event
-// (the semantic name of GET /api/experiments/[id]). Provider codes and
-// label codes only: never variant names, hook text, or titles.
-//---------------
-
 import { isSocialProvider } from '@/lib/providers/registry';
 import type { ExperimentResultLabel, ExperimentResults } from './results';
 
@@ -11,8 +5,6 @@ export interface ExperimentResultsTelemetry {
   pairs_created: number;
   pairs_published: number;
   labels: Record<string, ExperimentResultLabel>;
-  // Index signature so the object can ride on attachApiErrorProperties,
-  // which stores Record<string, unknown>.
   [key: string]: unknown;
 }
 

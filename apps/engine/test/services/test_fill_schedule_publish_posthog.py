@@ -139,9 +139,6 @@ class FillSchedulePublishPostHogTests(TestCase):
         self.assertEqual(len(failed_calls[0][0][1]["response_body"]), 500)
 
     def test_response_body_secrets_are_scrubbed(self) -> None:
-        # The security property: remote-controlled response text must be
-        # scrubbed before reaching PostHog. Would fail if scrub_error_text
-        # were reverted to a raw slice.
         from app.services.upload_publisher import PublishError
 
         store = _FakeStore()
@@ -159,14 +156,9 @@ class FillSchedulePublishPostHogTests(TestCase):
         props = [
             c for c in track_mock.call_args_list if c[0][0] == "publish_provider_failed"
         ][0][0][1]
-        # The secret VALUE is gone; the key name remaining is expected
-        # (scrub_secret_values redacts values, not key names).
         self.assertNotIn("<redacted>", props["response_body"])
 
     def test_publish_video_oserror_emits_event(self) -> None:
-        # OSError from publish_video (inside the provider loop) has no
-        # status_code/response_body; the event still fires with safe
-        # defaults and the bound provider.
         store = _FakeStore()
         store.ready_due_slots = lambda now: [self._slot()]  # type: ignore[method-assign]
         publish_mock = MagicMock(side_effect=OSError("disk gone"))
@@ -186,9 +178,6 @@ class FillSchedulePublishPostHogTests(TestCase):
         self.assertTrue(props["reason"])
 
     def test_r2_read_failure_emits_event_with_unknown_provider(self) -> None:
-        # read_final_video_r2 raising BEFORE the provider loop is the case
-        # the provider=None initialization guards: the event must fire with
-        # provider="unknown" and the handler must not raise UnboundLocalError.
         store = _FakeStore()
         store.ready_due_slots = lambda now: [self._slot()]  # type: ignore[method-assign]
         scheduler = self._scheduler(store, MagicMock())

@@ -15,10 +15,6 @@ import {
   type VoiceOption,
 } from '@/lib/voice-catalog';
 
-//---------------
-// VoiceTags — the gender/origin chips shown under a voice name. Translated
-// here; the description itself stays in English (the voices are English).
-//---------------
 export function VoiceTags({ voice }: { voice: VoiceOption }) {
   const { t } = useI18n();
   const tags: string[] = [];
@@ -48,11 +44,6 @@ export function VoiceTags({ voice }: { voice: VoiceOption }) {
   );
 }
 
-//---------------
-// SegmentedControl — one row of mutually exclusive options, styled like the
-// "House voices / Clone my voice" tabs above it so the section reads as one
-// family of controls.
-//---------------
 function SegmentedControl<T extends string>({
   label,
   options,
@@ -91,12 +82,6 @@ function SegmentedControl<T extends string>({
   );
 }
 
-//---------------
-// VoicePickerDialog — searchable, filterable list of house voices. Each row
-// plays its sample from the round button and picks the voice when clicked
-// anywhere else; picking closes the dialog. Filters and search reset when it
-// closes so the next open starts from the full list.
-//---------------
 export function VoicePickerDialog({
   open,
   onOpenChange,
@@ -115,9 +100,7 @@ export function VoicePickerDialog({
   playingVoiceId: string | null;
   onPlay: (voice: VoiceOption) => void;
   onPick: (voice: VoiceOption) => void;
-  /** Display name (catalog label, or the parsed OpenRouter voice). */
   labelFor: (voice: VoiceOption) => string;
-  /** OpenRouter model line; '' when the voice has none. */
   modelFor: (voice: VoiceOption) => string;
 }) {
   const { t } = useI18n();

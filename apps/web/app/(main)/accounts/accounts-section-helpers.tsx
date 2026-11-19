@@ -11,10 +11,6 @@ import {
 import { reportAccountDisconnectFailed } from '@/lib/account-card-telemetry';
 import { useI18n } from '@/lib/i18n/provider';
 
-//---------------
-// Brand mark and the translated connected-count.
-//---------------
-
 export function BrandIcon({ className, children }: { className: string; children: ReactNode }): ReactNode {
   return <span className={`flex size-9 items-center justify-center rounded-lg ${className} [&>svg]:size-5`}>{children}</span>;
 }
@@ -26,13 +22,6 @@ export function connectedLabel(t: ReturnType<typeof useI18n>['t'], count: number
 export function errorLabel(t: ReturnType<typeof useI18n>['t'], count: number): string {
   return t(count === 1 ? 'accounts.accountWithIssue' : 'accounts.accountsWithIssues', { count });
 }
-
-//---------------
-// useDisconnectFlow — one dialog-backed disconnect flow per provider
-// section. The trash button on the card opens the confirmation dialog;
-// confirming runs the disconnect, and a throw or success:false is shown
-// in the section and sent to PostHog.
-//---------------
 
 interface PendingDisconnect {
   providerAccountId: string;
@@ -49,8 +38,6 @@ export function useDisconnectFlow(provider: DisconnectableProvider): {
   const [disconnectError, setDisconnectError] = useState<string | null>(null);
   const [pending, setPending] = useState<PendingDisconnect | null>(null);
 
-  // Opening the dialog clears a previous section error, so the fresh
-  // attempt starts from a clean panel.
   const onDisconnect = (providerAccountId: string, label: string): void => {
     setDisconnectError(null);
     setPending({ providerAccountId, label });
@@ -78,11 +65,6 @@ export function useDisconnectFlow(provider: DisconnectableProvider): {
 
   return { disconnectError, onDisconnect, dialog };
 }
-
-//---------------
-// handleDisconnect — runs the disconnect for one account. A throw or
-// success:false is shown in the section and sent to PostHog.
-//---------------
 
 async function handleDisconnect(
   t: ReturnType<typeof useI18n>['t'],

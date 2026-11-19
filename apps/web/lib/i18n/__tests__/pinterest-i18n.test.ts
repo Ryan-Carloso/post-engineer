@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { pinterestStrings } from '../pinterest-i18n';
 
-// The Pinterest section of the accounts screen: its copy lives here because
-// the main dictionaries may not grow. Pinned so a blanked string fails.
 describe('pinterestStrings', () => {
   it('carries the label and the description in both locales', () => {
     expect(pinterestStrings.en.accounts).toEqual({

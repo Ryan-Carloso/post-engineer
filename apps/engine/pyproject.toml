@@ -170,6 +170,7 @@ also_copy = [
     "local_tts/__init__.py",
     "local_tts/routing.py",
     "local_tts/backends.py",
+    "scripts/ast_changed.py",
     "scripts/changed_functions.py",
     "scripts/audit_secrets.py",
     "scripts/export_openapi.py",

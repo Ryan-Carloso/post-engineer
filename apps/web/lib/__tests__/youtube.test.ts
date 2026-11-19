@@ -1,9 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-//---------------
-// Hoisted mocks (vi.mock is hoisted above variable declarations)
-//---------------
-
 const { mockInsert, mockYoutube } = vi.hoisted(() => {
   const mockInsert = vi.fn().mockResolvedValue({
     data: { id: 'yt-123', snippet: { title: 't' } },
@@ -37,10 +33,6 @@ import {
   type YouTubeUploadOptions,
 } from '@/lib/youtube';
 import { logger } from '@/lib/logger';
-
-//---------------
-// YouTube module — unit tests
-//---------------
 
 describe('getYouTubeClient', () => {
   it('calls google.youtube with version v3 and the provided auth', () => {

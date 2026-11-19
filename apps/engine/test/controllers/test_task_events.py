@@ -57,7 +57,6 @@ class TaskEventsTests(unittest.TestCase):
     def _stream(self, **kwargs):
         kwargs.setdefault("poll_interval", 0.01)
         kwargs.setdefault("heartbeat_interval", 3600)
-        # Disconnect after a few polls so non-terminal streams terminate.
         return video_controller._task_event_stream(
             self.task_id, "u-1", _disconnect_after(5), **kwargs
         )
@@ -80,7 +79,6 @@ class TaskEventsTests(unittest.TestCase):
             self.task_id, state=const.TASK_STATE_PROCESSING, progress=30
         )
         events = _collect(self._stream(), limit=3)
-        # One snapshot, then silence (limit hit by breaking early).
         self.assertEqual(len(events), 1)
 
     def test_closes_after_terminal_state(self):
@@ -148,7 +146,6 @@ class TaskEventsTests(unittest.TestCase):
         self.assertEqual(ctx.exception.status_code, 404)
 
     def test_route_scopes_by_user(self):
-        # Another user's task must 404, not leak progress.
         sm.state.update_task("other-task", user_id="other-user")
         try:
             request = type(

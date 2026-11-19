@@ -36,8 +36,6 @@ class ClonedVoiceAudioTests(unittest.TestCase):
         self.assertEqual(ctx.exception.error_code, ERROR_AUDIO_TOO_LONG)
 
     def test_over_duration_source_is_rejected_before_any_ffmpeg_pass(self):
-        # The denoise filter chain is CPU-heavy: an over-long upload must be
-        # rejected from the cheap source probe, not after the full pass.
         calls = []
 
         def fake_run(args, **_kwargs):

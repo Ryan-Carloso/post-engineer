@@ -227,8 +227,6 @@ describe('uploadEngineTempAsset', () => {
   it.each([
     ['null body', 'null'],
     ['string body', '"just a string"'],
-    // The engine envelope is { status, body } — a `data` key is not a
-    // URL carrier, so a legacy-shaped payload must not resolve.
     ['null body field', '{"status":200,"body":null}'],
     ['missing url', '{"status":200,"body":{}}'],
     ['non-string url', '{"status":200,"body":{"url":42}}'],

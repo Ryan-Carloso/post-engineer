@@ -8,11 +8,6 @@ import { GET } from '@/app/api/moneyprint/health/route';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { NextResponse } from 'next/server';
 
-//---------------
-// GET /api/moneyprint/health — diagnóstico do proxy até o motor.
-// API interna: exige sessão Supabase.
-//---------------
-
 const fetchMock = vi.fn<typeof fetch>();
 
 describe('GET /api/moneyprint/health', () => {

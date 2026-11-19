@@ -27,7 +27,5 @@ class DropPostScriptPromptMigrationTests(unittest.TestCase):
         self.assertIn(
             "alter table public.schedules drop column post_script_prompt", sql
         )
-        # No backfill: the value fed only the deleted LLM script path.
         self.assertNotIn("update public.schedules", sql)
-        # Idempotent: guarded so re-applying after the drop is a no-op.
         self.assertIn("if exists", sql)

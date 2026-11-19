@@ -14,12 +14,6 @@ import { partitionPickedImages, runUploadsInParallel, type UploadOutcome } from 
 const ACCEPT = [...ALLOWED_IMAGE_MIME_TYPES].join(',');
 const MAX_IMAGE_MB = MAX_IMAGE_BYTES / (1024 * 1024);
 
-//---------------
-// PersonaPhotoPicker — multi-photo upload from the device. Creating: picks
-// are staged in the store (first = avatar, the rest = creation-time library)
-// and appended on every pick. Editing (`personaId`): picks go straight to
-// the persona's image library, so earlier photos are never replaced.
-//---------------
 export const PersonaPhotoPicker = ({ personaId }: { personaId?: string }) => {
   const photo = usePersonaStore((s) => s.photo);
   const extraPhotos = usePersonaStore((s) => s.extraPhotos);
@@ -94,8 +88,6 @@ export const PersonaPhotoPicker = ({ personaId }: { personaId?: string }) => {
     </button>
   );
 
-  // Edit mode with nothing picked: show the photo already stored, so the tab
-  // is not an empty uploader for a persona that clearly has a face.
   if (staged.length === 0 && storedPhotoUrl) {
     return (
       <div className="mt-4">

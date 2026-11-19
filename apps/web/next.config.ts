@@ -2,16 +2,6 @@ import type { NextConfig } from "next";
 import fs from "node:fs";
 import path from "node:path";
 
-//---------------
-// Build metadata: VERSION/PR_NUMBER/BUILD/COMMIT are injected at build
-// time. In production the VPS deploy generates them from the commit being
-// deployed: VERSION is MAJOR.MINOR.PR (e.g. 1.28.152), PR_NUMBER/BUILD are
-// that PR's number and COMMIT is the SHA (see apps/web/Dockerfile ARGs).
-// Local builds fall back to the VERSION file for the version; pr/build/
-// commit stay empty there. Inlined into the bundle via env — no external
-// service involved. Falls back to 'dev' when the file is unreadable (e.g. a
-// partial checkout).
-//---------------
 function readPlatformVersion(): string {
   const injected = process.env.VERSION?.trim();
   if (injected) return injected;
@@ -33,9 +23,6 @@ function readBuiltAt(): string {
 }
 
 const nextConfig: NextConfig = {
-  /* config options here */
-  // Standalone output: the Docker image (apps/web/Dockerfile) copies only
-  // the traced server + node_modules, keeping the image small.
   output: "standalone",
   env: {
     VERSION: readPlatformVersion(),
@@ -59,10 +46,6 @@ const nextConfig: NextConfig = {
         protocol: 'https',
         hostname: '**.cdninstagram.com',
       },
-      // Account avatars: new YouTube channels serve from googleusercontent,
-      // Instagram/Threads/Facebook Pages sometimes from fbcdn, plus Bluesky,
-      // LinkedIn and Pinterest. A host missing here makes next/image refuse
-      // the card picture.
       {
         protocol: 'https',
         hostname: 'yt3.googleusercontent.com',
@@ -83,9 +66,6 @@ const nextConfig: NextConfig = {
         protocol: 'https',
         hostname: 'i.pinimg.com',
       },
-      // Fanvue account avatars: the API returns avatarUrl, and Fanvue
-      // serves media from media.fanvue.com (API reference). A host
-      // missing here makes next/image refuse the card picture.
       {
         protocol: 'https',
         hostname: 'media.fanvue.com',
@@ -93,19 +73,9 @@ const nextConfig: NextConfig = {
     ],
   },
   async redirects() {
-    // The API key manager and the MCP setup prompt moved into the prompts
-    // hub. /api-keys stays a permanent redirect because the URL is
-    // published outside this app (npm README, MCP server.json, Apify).
     return [{ source: '/api-keys', destination: '/recipes', permanent: true }];
   },
   async headers() {
-    // Security headers applied to every route. `unsafe-eval` is only needed in
-    // dev (React refresh / Next dev overlay) and in the coverage-instrumented
-    // production build the Cypress job runs: the .babelrc istanbul plugin
-    // seeds `__coverage__` through `Function("return this")()` in every
-    // module, and a strict script-src throws EvalError on it, breaking
-    // hydration of every page (React #418). Production deployments never set
-    // CYPRESS_COVERAGE, so the header stays strict there.
     const dev = process.env.NODE_ENV !== 'production';
     const instrumented = process.env.CYPRESS_COVERAGE === '1';
     const evalException = dev || instrumented ? " 'unsafe-eval'" : '';

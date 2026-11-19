@@ -1,70 +1,3 @@
-//---------------
-// write-script — test-flight script writer.
-//
-// One flight needs one publishable script, and since MCP-first the server
-// no longer writes it: POST /api/videos/generate-and-schedule rejects
-// `topics` and requires `title` plus the full script in
-// `options.segments`. This step writes that script to a JSON file that
-// flight.mjs then sends unchanged.
-//
-// Quality matters because the ASAP leg publishes for real, on YouTube and
-// Instagram. The path is an LLM call with a complete, standalone
-// prompt: human voice, concrete Porto facts, anti-slop rules, and the
-// exact server segment contract. The prompt is standalone on purpose: it
-// must work from this file alone, never as a bare reference to another
-// prompt. The LLM output is validated with the same rules the server
-// enforces and retried once with the named error.
-//
-// There is deliberately NO hand-written fallback script. A fallback
-// would publish the same videos over and over, which is worse than a
-// failed job: a failed job is loud (GitHub failure plus a PostHog
-// test_flight_failed event, see report-posthog.mjs), while a fallback
-// publish looks green and quietly fills the channels with repeats.
-// When the LLM fails, this step fails, the flight never runs, and
-// nothing is published.
-//
-// Search grounding runs before the LLM: Tavily first, Exa as reserve
-// (see search.mjs). The LLM may use ONLY facts from those results.
-// Search configuration (keys are required in CI; no key means failure):
-//   TEST_FLIGHT_TAVILY_API_KEY  primary search key.
-//   TEST_FLIGHT_EXA_API_KEY     reserve search key.
-// LLM configuration (the key is required; missing key means failure):
-//   TEST_FLIGHT_LLM_API_KEY   OpenAI-compatible API key. The workflow
-//                             passes OPENROUTER_API_KEY here (repo secret).
-//                             Zen is NOT used: paid Zen was proven live
-//                             to fail with HTTP 402 (Insufficient account
-//                             funds, run 41323409879), and no OpenCode Go
-//                             key exists in repo secrets.
-//   TEST_FLIGHT_LLM_BASE_URL  default https://openrouter.ai/api/v1; the
-//                             workflow passes that same URL.
-//   TEST_FLIGHT_LLM_MODELS    comma-separated chain, default
-//                             nvidia/nemotron-3.5-lightning:free,
-//                             z-ai/glm-5.3-flash. The free step is a FIXED
-//                             model, not the openrouter/free router: the
-//                             router picks a free model at random, so a
-//                             run cannot say which model answered it, and
-//                             run 41325670131 got an empty completion from
-//                             an unknown router pick. z-ai/glm-5.3-flash
-//                             is paid GLM 5.3 Flash via OpenRouter only —
-//                             not the direct ZAI API and not Zen. A single
-//                             model set via TEST_FLIGHT_LLM_MODEL is
-//                             appended last, never first, never duplicated).
-//   TEST_FLIGHT_TOPIC         optional fixed topic; when set it wins
-//                             and the LLM topic step is skipped. When
-//                             empty, the LLM proposes a new topic from
-//                             the last 30 days of published titles (see
-//                             topic-llm.mjs): there is no hard-coded
-//                             topic list, because a day-rotated list
-//                             repeats the same topic all day.
-//   TEST_FLIGHT_POST_ENGINEER_API_KEY  test API key, used only to fetch
-//                             the 30-day title history for the topic
-//                             step (same key flight.mjs uses).
-//   TEST_FLIGHT_API_BASE_URL  default https://post-engineer.com.
-//   TEST_FLIGHT_RUN_ID        seed for the angle, so reruns differ.
-//   TEST_FLIGHT_SCRIPT_PATH   required output path for the script JSON.
-// The key never appears in logs or in the output file.
-//---------------
-
 import { writeFile } from 'node:fs/promises';
 import { searchFacts } from './search.mjs';
 import { pathToFileURL } from 'node:url';
@@ -73,38 +6,17 @@ import { fetchRecentTitles, generateTopic, resolveHistoryConfig } from './topic-
 
 export class ScriptError extends Error {}
 
-// Server segment contract, mirrored from
-// apps/web/lib/generation/script-segments.ts. Keep these in lockstep:
-// a script that passes here must pass the server, and a script that
-// fails here must never be sent.
 export const MIN_TOTAL_WORDS = 60;
 export const MAX_TOTAL_WORDS = 200;
 export const MIN_CONTENT_WORDS = 30;
 export const MIN_HOOK_WORDS = 25;
 export const MAX_HOOK_WORDS = 40;
 export const MAX_SEGMENTS = 12;
-// Streaming timeouts: abort only on silence (a thinking model sends
-// nothing while it thinks, so a total-only timeout kills it mid-thought),
-// with a total cap per attempt so a job can never hang forever. The
-// fetch phase shares the same total cap via an AbortController below.
 export const LLM_SILENCE_TIMEOUT_MS = 60000;
 export const LLM_TOTAL_TIMEOUT_MS = 300000;
 export const DEFAULT_LLM_BASE_URL = 'https://openrouter.ai/api/v1';
-// OpenRouter-only model chain with a FIXED free model. The previous
-// openrouter/free router pick was random, so a failed run could not say
-// which model answered it; nvidia/nemotron-3.5-lightning:free is pinned
-// instead (verified 2026-11-01 in OpenRouter's live catalog: $0/$0,
-// reasoning mandatory:false, so it returns content directly rather than
-// reasoning-only). The script is still gated by the segment validation
-// below and the paid fallback catches a bad or failed free attempt.
-// Paid z-ai/glm-5.3-flash runs only after the fixed free model fails.
-// A single model set via TEST_FLIGHT_LLM_MODEL is still appended last,
-// never first, and never duplicated if it is already in this chain.
 export const DEFAULT_LLM_MODELS = ['nvidia/nemotron-3.5-lightning:free', 'z-ai/glm-5.3-flash'];
 
-// One angle per run, picked from the run seed. The same topic on two runs
-// still gets a different script, because the angle changes what the
-// script argues, not just which words it swaps.
 export const SCRIPT_ANGLES = [
   'first-timer: what to do on a first visit, in order',
   'budget: the best version that costs little or nothing',
@@ -123,9 +35,6 @@ export function countWords(text) {
   return text.trim().split(/\s+/).filter((word) => word.length > 0).length;
 }
 
-// Phrases the shared prompt base bans. An LLM script containing one is
-// rejected and retried, not cleaned up silently: cleaning would hide a
-// bad script behind a patched one.
 export const BANNED_PHRASES = [
   'unlock',
   'elevate',
@@ -240,9 +149,6 @@ export function validateScript(script) {
   return { ok: true, value: { title, segments, totalWords, contentWords, hookWords } };
 }
 
-// Deterministic angle from the run seed, so the same topic still gets a
-// different script on different runs. The seed is the workflow run id
-// plus the date, never a random value the tests cannot reproduce.
 export function pickAngle(seed) {
   const text = String(seed ?? '');
   let hash = 0;
@@ -251,10 +157,6 @@ export function pickAngle(seed) {
   }
   return SCRIPT_ANGLES[hash % SCRIPT_ANGLES.length];
 }
-
-//---------------
-// The prompt: complete and standalone.
-//---------------
 
 export function buildPrompt({ topic, angle, facts = '' }) {
   return [
@@ -289,18 +191,6 @@ export function buildPrompt({ topic, angle, facts = '' }) {
   ].join('\n');
 }
 
-//---------------
-// LLM call
-//---------------
-
-// Thin wrapper over the shared streaming client in llm-stream.mjs:
-// thinking arrives as delta.reasoning chunks in real time, the final
-// script as delta.content chunks. Reasoning text is internal thinking
-// and is never logged, never parsed, and never used as the script. A
-// non-SSE body or an unparseable chunk throws here, so the attempt
-// fails and the next model in the chain catches it. The shared client
-// throws StreamError with the same messages the old inline call used,
-// so generateScript's failure reporting is unchanged.
 async function callLlm({ topic, angle, llm, model, fetchFn, attemptError, facts = '', streamTimeouts = {} }) {
   const prompt = buildPrompt({ topic, angle, facts });
   const userContent = attemptError
@@ -340,8 +230,6 @@ export async function generateScript({ topic, angle, llm, fetchFn = fetch, facts
     : (llm.model ? [llm.model] : DEFAULT_LLM_MODELS);
   const failures = [];
   for (const model of models) {
-    // One validation retry per model, with the named error fed back;
-    // a call failure moves straight to the next model in the chain.
     let lastError = null;
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
@@ -384,11 +272,6 @@ export async function writeScriptFile(env = process.env, options = {}) {
   const now = options.now ?? new Date();
   const runId = optionalEnv(env, 'TEST_FLIGHT_RUN_ID') || `manual-${Date.now()}`;
   const angle = pickAngle(`${runId}-${now.toISOString().slice(0, 10)}`);
-  // Topic, in order: an explicit TEST_FLIGHT_TOPIC wins and skips
-  // everything below; otherwise the LLM proposes a new topic from the
-  // last 30 days of published titles (topic-llm.mjs). A history fetch
-  // failure throws here, before search or script, so the job fails
-  // instead of proposing a topic blind and publishing a repeat.
   const explicitTopic = optionalEnv(env, 'TEST_FLIGHT_TOPIC');
   let topic;
   let topicSource;
@@ -405,10 +288,6 @@ export async function writeScriptFile(env = process.env, options = {}) {
     topicSource = 'llm';
     console.log(`write-script: topic source=llm model=${topicModel} recentTitles=${recentTitles.length} topic="${topic}"`);
   }
-  // Search first, Tavily primary with Exa as reserve; a search failure
-  // fails the job before any LLM call, so no ungrounded script is ever
-  // written. The search step is skipped only by tests that pass a
-  // pre-built search object through options.
   const search = options.search ?? await searchFacts({ topic, ...resolveSearch(env), fetchFn: options.fetchFn ?? fetch });
   console.log(`write-script: search provider=${search.provider} sources=${search.sources.length}`);
   const script = await generateScript({ topic, angle, llm: resolveLlm(env), fetchFn: options.fetchFn, facts: search.facts });

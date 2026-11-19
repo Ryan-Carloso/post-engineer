@@ -1,14 +1,3 @@
-//---------------
-// account-break — which provider failures mean the connected account
-// itself is broken (issue #558). Pure: no mailer, no PostHog, no
-// server-only import, so the publish and sync leaves can share it
-// without a cycle.
-//
-// A server misconfiguration (TOKEN_ENCRYPTION_KEY missing or the wrong
-// size) is not a broken account: that would email every user.
-// 403, 429, 5xx, network, and a local expiry date are not either.
-//---------------
-
 export type AccountBreakClass = 'token_undecryptable' | 'unauthorized' | 'email_not_verified';
 
 const KEY_MISCONFIG = /TOKEN_ENCRYPTION_KEY (is not defined|must decode to exactly 32 bytes)/;
@@ -21,11 +10,6 @@ function numericField(source: unknown, key: string): number | undefined {
   return typeof value === 'number' ? value : undefined;
 }
 
-//---------------
-// httpStatusOf — the HTTP status a provider SDK error carries, whichever shape
-// it uses (axios `response.status`, gaxios/Google `code`/`status`, our own
-// InstagramApiError `statusCode`).
-//---------------
 export function httpStatusOf(error: unknown): number | undefined {
   if (typeof error !== 'object' || error === null) return undefined;
   const response = 'response' in error ? (error as { response?: unknown }).response : undefined;
@@ -46,13 +30,6 @@ export function isUnauthorizedError(error: unknown): boolean {
   return error instanceof Error && /^unauthorized$/i.test(error.message.trim());
 }
 
-//---------------
-// isMetaInvalidToken — Meta (Instagram, Facebook, Threads) answers a dead
-// token with HTTP 400 + error.code 190 (OAuthException), never a 401, and
-// the libs preserve that code as providerCode on the thrown error. Without
-// this, a revoked token is invisible: no publish_account_unauthorized event
-// and no owner email, even though the publish handler reports it.
-//---------------
 export function isMetaInvalidToken(error: unknown): boolean {
   if (typeof error !== 'object' || error === null) return false;
   const record = error as Record<string, unknown>;
@@ -64,13 +41,6 @@ export function isMetaInvalidToken(error: unknown): boolean {
   );
 }
 
-//---------------
-// isNamedCode — duck-typed provider error (name + code) so this leaf stays
-// free of the Bluesky, 3Speak, and Rumble client imports.
-// Bluesky and 3Speak never carry a numeric 401: a dead credential surfaces
-// as code 'invalid_credentials'. Rumble answers a bad access token with
-// code 'invalid_token'.
-//---------------
 function isNamedCode(error: unknown, name: string, code: string): boolean {
   if (typeof error !== 'object' || error === null) return false;
   const record = error as Record<string, unknown>;
@@ -86,11 +56,6 @@ function errorText(error: unknown): string {
   return '';
 }
 
-//---------------
-// classifyAccountBreak — the three classes that email the owner.
-// Order: key misconfig (never), Bluesky email_not_verified, unauthorized,
-// then an undecryptable stored token. Anything else is null.
-//---------------
 export function classifyAccountBreak(error: unknown): AccountBreakClass | null {
   const message = errorText(error);
   if (KEY_MISCONFIG.test(message)) return null;

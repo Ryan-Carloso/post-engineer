@@ -15,7 +15,6 @@ class CountGraphemesTest(unittest.TestCase):
         self.assertEqual(caption_text.count_graphemes(""), 0)
 
     def test_counts_a_combining_mark_with_its_base(self) -> None:
-        # 'e' + combining acute accent is one user-perceived character.
         self.assertEqual(caption_text.count_graphemes("e\u0301"), 1)
 
     def test_counts_a_zwj_emoji_sequence_as_one(self) -> None:
@@ -39,10 +38,6 @@ class TruncateBlueskyCaptionTest(unittest.TestCase):
         family = zwj.join(chr(cp) for cp in (0x1F468, 0x1F469, 0x1F467, 0x1F466))
         caption = "a" * 298 + family * 3
         result = caption_text.truncate_bluesky_caption(caption)
-        # The family starts at grapheme 299 and cannot fit whole: the cut
-        # lands on the grapheme boundary, so the first person survives
-        # intact and no partial ZWJ sequence (nor a dangling joiner) is
-        # left in the result.
         self.assertEqual(result, "a" * 298 + chr(0x1F468) + "…")
         self.assertNotIn(zwj, result)
 

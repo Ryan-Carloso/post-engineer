@@ -47,9 +47,6 @@ class WebhookUrlValidationTests(unittest.TestCase):
             )
 
     def test_rejects_http_and_accepts_https_without_dns(self):
-        # Schema validation is shape-only: it never resolves the host, so a
-        # DNS outage at request time cannot reject a valid webhook. The
-        # resolver is armed to explode; validation must not reach it.
         with patch(
             "app.utils.ssrf.socket.getaddrinfo",
             side_effect=OSError("dns down"),
@@ -71,9 +68,6 @@ class WebhookUrlValidationTests(unittest.TestCase):
             self.assertEqual(request.webhook_url, "https://example.com/hook")
 
     def test_unresolvable_host_still_validates(self):
-        # A webhook whose host does not resolve still validates: resolution
-        # happens on the delivery path, where a failed delivery must not
-        # fail the task.
         with patch(
             "app.utils.ssrf.socket.getaddrinfo",
             side_effect=OSError("dns down"),
@@ -180,7 +174,6 @@ class NotifyTerminalTaskTests(unittest.TestCase):
                 "app.services.task_webhook.ssrf.post_public_url",
                 side_effect=RuntimeError("network down"),
             ):
-                # Must not raise: webhook delivery never affects the task.
                 thread = task_webhook.notify_terminal_task(
                     "t-5", status="completed", webhook_url="https://example.com/hook"
                 )
@@ -193,9 +186,6 @@ class NotifyTerminalTaskTests(unittest.TestCase):
         )
 
     def test_webhook_failure_log_redacts_path_token(self):
-        # requests embeds the target URL in str(exc); Discord/Slack-style
-        # path-embedded tokens do not match the key-anchored scrubber, so
-        # the known webhook URL is redacted before scrub-then-truncate.
         webhook_url = "https://discord.com/api/webhooks/123456789/abcdefGHIJKL-token-secret"
         response = MagicMock()
         response.raise_for_status.side_effect = requests.exceptions.HTTPError(
@@ -206,8 +196,6 @@ class NotifyTerminalTaskTests(unittest.TestCase):
             patch("app.services.task_webhook.logger") as mock_logger,
         ):
             task_webhook._post(webhook_url, {"task_id": "t-1"}, "t-1")
-        # logger.bind(task_id=...) returns a child mock; the error call
-        # lands on it, not on the module logger mock itself.
         error_mock = mock_logger.bind.return_value.error
         self.assertTrue(error_mock.call_args_list)
         logged = " ".join(str(c) for c in error_mock.call_args_list)
@@ -215,9 +203,6 @@ class NotifyTerminalTaskTests(unittest.TestCase):
         self.assertNotIn(webhook_url, logged)
 
     def test_webhook_failure_log_redacts_encoded_url_variant(self):
-        # requests requotes the target URL when preparing it (response.url),
-        # so the exception may carry the percent-encoded form instead of
-        # the configured string — both variants must be redacted.
         webhook_url = "https://example.com/hooks/path with space/secret-token"
         encoded = quote(webhook_url, safe=":/?&=%")
         response = MagicMock()
@@ -236,10 +221,6 @@ class NotifyTerminalTaskTests(unittest.TestCase):
         self.assertNotIn(encoded, logged)
 
     def test_webhook_failure_log_redacts_path_only_connection_error(self):
-        # Connection-phase errors (DNS/refused/TLS/timeout) embed only the
-        # path fragment — as requoted by requests — not the full URL. The
-        # path-embedded token must still be redacted before the log reaches
-        # PostHog.
         webhook_url = "https://example.com/hooks/path with space/secret-token"
         raw_path = urlparse(webhook_url).path
         encoded_path = requote_uri(raw_path)
@@ -263,11 +244,6 @@ class NotifyTerminalTaskTests(unittest.TestCase):
         self.assertNotIn(encoded_path, logged)
 
     def test_webhook_failure_log_redacts_query_string_variant(self):
-        # urllib3 connection-phase errors embed the full request target
-        # (/path?query=...) — a credential in the query string must be
-        # redacted even though the path-only variant does not cover it.
-        # The param name/value are chosen so the key-anchored scrubber
-        # cannot catch them: only the variant redaction can.
         webhook_url = "https://example.com/hooks/path?sig=abc123xyz"
         target = "/hooks/path?sig=abc123xyz"
         with (
@@ -289,8 +265,6 @@ class NotifyTerminalTaskTests(unittest.TestCase):
         self.assertNotIn(target, logged)
 
     def test_webhook_failure_empty_url_does_not_interleave_redacted(self):
-        # str.replace("", "[redacted]") interleaves the marker between
-        # every character — the emptiness guard keeps the log readable.
         with (
             patch(
                 "app.services.task_webhook.ssrf.post_public_url",
@@ -322,7 +296,6 @@ class FailTaskWebhookTests(unittest.TestCase):
                 webhook_url="https://example.com/hook",
             )
             task_service._fail_task("wt-1", "boom", params, stage="audio")
-            # The webhook POST runs on a worker thread: wait for it.
             deadline = time.time() + 10
             while mock_post.call_count == 0 and time.time() < deadline:
                 time.sleep(0.05)
@@ -440,10 +413,6 @@ class PinnedWebhookTests(unittest.TestCase):
                 self._request(url)
 
     def test_request_accepts_a_name_that_would_resolve_private(self):
-        # Shape-only validation: the request accepts any hostname and never
-        # resolves it. Whether the name resolves private is judged on the
-        # delivery path instead (see test_post_never_dials_a_private_target),
-        # where the failed delivery must not fail the task.
         with patch(
             "app.utils.ssrf.socket.getaddrinfo",
             side_effect=OSError("dns down"),
@@ -475,7 +444,6 @@ class PinnedWebhookTests(unittest.TestCase):
         ):
             for url in literals:
                 task_webhook._post(url, {"task_id": "t-priv"}, "t-priv")
-            # A public answer must still not be dialed: the scheme is http.
             with patch("app.utils.ssrf._resolve_global_ips", return_value=public):
                 task_webhook._post(
                     "http://example.com/hook", {"task_id": "t-http"}, "t-http"
@@ -509,8 +477,6 @@ class PinnedWebhookTests(unittest.TestCase):
             return _scripted_socket(response, seen)
 
         def wrap(sock, *args, **kwargs):
-            # Speak HTTP on the pinned socket. The production path still
-            # asks for TLS, and SNI is covered by the ssrf unit test.
             wrapped = type("Wrapped", (), {})()
             wrapped.socket = sock
             wrapped.is_verified = True

@@ -16,8 +16,6 @@ from app.services.cloned_voices.preview_text import (
     validate_preview_text,
 )
 
-# The stable client-facing message: pinned verbatim so a rewording is a
-# deliberate, visible change.
 EXPECTED_MESSAGE = "Preview text must be 1 to 300 characters after trimming."
 
 
@@ -44,8 +42,6 @@ class ValidatePreviewTextTests(unittest.TestCase):
         self.assertEqual(str(ctx.exception), EXPECTED_MESSAGE)
 
     def test_over_length_check_uses_the_trimmed_length(self):
-        # 300 chars plus surrounding spaces: over the cap before trimming,
-        # valid after — the bound applies to what is actually spoken.
         text = "   " + ("b" * 300) + "   "
         self.assertEqual(validate_preview_text(text), "b" * 300)
 

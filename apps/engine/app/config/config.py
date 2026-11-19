@@ -49,9 +49,6 @@ def _can_resolve_hostname(hostname: str) -> bool:
 
 
 def _decode_linux_route_gateway(hex_gateway: str) -> str:
-    # /proc/net/route 里的 Gateway 是 16 进制小端序，例如 010011AC 表示
-    # 172.17.0.1。这里单独解析，是为了在原生 Linux Docker 没有
-    # host.docker.internal DNS 记录时，还能尝试访问容器默认网关上的宿主机。
     if len(hex_gateway) != 8:
         raise ValueError("invalid gateway length")
 
@@ -125,7 +122,6 @@ def get_default_ollama_base_url() -> str:
 
 
 def load_config():
-    # fix: IsADirectoryError: [Errno 21] Is a directory: '<app-dir>/config.toml'
     if os.path.isdir(config_file):
         shutil.rmtree(config_file)
 
@@ -199,10 +195,6 @@ app["redis_host"] = os.getenv(
 )
 app["video_codec"] = os.getenv("MPT_VIDEO_CODEC", app.get("video_codec", "libx264"))
 
-# Local CPU TTS endpoints: docker-compose.yml sets these env vars so the engine
-# reaches the `tts` service even when a host's config.toml still carries a
-# stale (e.g. retired Modal) URL. A non-empty env value wins; an unset or
-# blank one keeps the config.toml value.
 _TTS_ENV_OVERRIDES = (
     ("MPT_CHATTERBOX_BASE_URL", "chatterbox", "base_url"),
     ("MPT_CHATTERBOX_API_KEY", "chatterbox", "api_key"),

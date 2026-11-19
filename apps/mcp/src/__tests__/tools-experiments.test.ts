@@ -10,12 +10,6 @@ import {
   shiftStartAt,
 } from '../tools-experiments.js';
 
-//---------------
-// Paired A/B experiment tools (issue #476). The client is mocked at its
-// boundary: request() for the /api/experiments routes and
-// generatePersonaVideo() for the two videos of a pair.
-//---------------
-
 const EXPERIMENT_ID = '7b0e6c1e-0000-4000-8000-000000000001';
 
 function scheduled(id: string) {

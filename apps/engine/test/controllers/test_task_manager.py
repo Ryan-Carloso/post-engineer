@@ -85,7 +85,6 @@ class OnAcceptedTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             manager.add_task(lambda: None, on_accepted=boom)
         self.assertEqual(manager.current_tasks, 0)
-        # The worker must not start after the callback rejected the accept.
         self.assertEqual(started, [])
 
 
@@ -134,8 +133,6 @@ class RunningReservationTests(unittest.TestCase):
             time.sleep(0.01)
         self.assertEqual(started, [True])
         self.assertEqual(manager.queue_size(), 0)
-        # The queued task now owns the running slot. Holding the worker
-        # open keeps the count at 1; a lambda that returns would drop it.
         self.assertEqual(manager.current_tasks, 1)
 
     def test_release_is_idempotent_and_starts_a_queued_direct_task(self):
@@ -159,9 +156,7 @@ class RunningReservationTests(unittest.TestCase):
             time.sleep(0.01)
         self.assertEqual(started, [True])
         self.assertEqual(manager.queue_size(), 0)
-        # The queued task now owns the running slot.
         self.assertEqual(manager.current_tasks, 1)
-        # A second release must not drop the slot that task holds.
         reservation.release()
         self.assertEqual(manager.current_tasks, 1)
         self.assertEqual(manager.queue_size(), 0)
@@ -199,8 +194,6 @@ class BurstReservationTests(unittest.TestCase):
         try:
             for index in range(3):
                 manager.add_task(work, index)
-            # Synchronous: the slot is reserved before add_task returns,
-            # so this does not race the worker.
             self.assertEqual(manager.current_tasks, 1)
             self.assertEqual(manager.queue_size(), 2)
             release.set()

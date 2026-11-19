@@ -1,13 +1,3 @@
-//---------------
-// merge-cobertura — one cobertura report from vitest shards.
-//
-// Shards load overlapping source files, so line hits are summed and the
-// line set is the union. The UI coverage gate (ui-gates/coverage.mjs)
-// only reads `<class filename>` and `<line number hits>`, in that attribute
-// order, so the writer matches that shape. Line coverage is hits > 0;
-// summing does not change which lines count as covered.
-//---------------
-
 import { readdir, readFile, writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -52,9 +42,6 @@ export function parseCoberturaFiles(xml) {
       const branch = attr(lineMatch[1], 'branch') === 'true';
       const condition = attr(lineMatch[1], 'condition-coverage');
       const prev = lines.get(lineNo);
-      // A cobertura class repeats some lines under <methods> and <lines>.
-      // Within one report that is the same execution, so keep the larger hit
-      // count instead of adding the line to itself.
       if (prev === undefined) {
         lines.set(lineNo, { hits: hitCount, branch, condition });
       } else if (hitCount > prev.hits) {

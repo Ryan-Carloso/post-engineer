@@ -13,12 +13,6 @@ import { PostEngineerClient } from '../client.js';
 import { GeneratePersonaVideoSchema } from '../single-video-shape.js';
 import { handleGeneratePersonaVideo } from '../tools-single-video.js';
 
-//---------------
-// description — the agent-supplied video description (issue #542
-// follow-up). REQUIRED: the publish copy, sent top-level to the web
-// route. There is no fallback to the title — a missing or blank
-// description is rejected at the shape, before any charge.
-//---------------
 const hook =
   'Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is still waiting nearby for you today.';
 const content =

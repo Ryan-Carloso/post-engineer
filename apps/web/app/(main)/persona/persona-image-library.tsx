@@ -21,13 +21,8 @@ import {
 import { logClientError } from '@/lib/client-logger';
 import { partitionPickedImages, runUploadsInParallel, type UploadOutcome } from './persona-image-upload-queue';
 
-// Single source of truth for the library cap; the picker limit, the
-// server count check, and the SQL trigger all derive from this value.
 const MAX_LIBRARY_IMAGES = MAX_PERSONA_IMAGES;
 
-// Module-level counter for pending-item ids when crypto.randomUUID is
-// unavailable (non-secure contexts). Collision-free within the session,
-// unlike Date.now()+Math.random().
 let nextPendingId = 0;
 
 interface PendingImage {
@@ -38,13 +33,6 @@ interface PendingImage {
   description: string;
 }
 
-// Map server warning codes to localized messages; unknown codes map to a
-// localized generic message so new server warnings are neither silently
-// dropped nor rendered as raw English slugs. Shared by the upload flow and
-// the card flows so a new code is added in one place.
-
-// Hoisted: the code→i18n-key map is static; rebuilding it per warning
-// message would re-allocate the object on every call.
 const WARNING_KEYS: Record<string, TranslationKey> = {
   [PERSONA_IMAGE_WARNING_CODES.PRIMARY_SWAP_FAILED]: 'persona.libraryWarningPrimarySwap',
   [PERSONA_IMAGE_WARNING_CODES.METADATA_SAVE_FAILED]: 'persona.libraryWarningMetadataSave',
@@ -57,18 +45,10 @@ export function mapPersonaImageWarnings(
 ): string {
   return codes.map((code) => {
     const key = WARNING_KEYS[code];
-    // Unknown codes are never silently dropped — but a raw English slug
-    // must never reach the UI either: a future server code the client
-    // doesn't know yet maps to a localized generic message.
     return key ? t(key) : t('persona.libraryWarningUnknown');
   }).join(' ');
 }
 
-// Server failure classes the UI renders with specific localized copy.
-// Dynamic server strings (interpolated limits) match by shape so a limit
-// change can't silently fall through to the generic message. Unknown
-// server errors fall back to the generic localized message: the raw
-// English server string must never reach the UI.
 const ERROR_CLASS_PATTERNS: Array<{
   test: (error: string) => boolean;
   key: TranslationKey;
@@ -82,9 +62,6 @@ const ERROR_CLASS_PATTERNS: Array<{
     key: 'persona.libraryErrorFaceless',
   },
   {
-    // The content-mismatch error may carry a batch file context suffix
-    // (" (image 2: foo.jpg)") appended at the creation call site; match
-    // the base message so the specific localized copy still applies.
     test: (error) =>
       /^The image content does not match its declared file type\.( \(image \d+(: [^)]+)?\))?$/.test(
         error,
@@ -113,31 +90,20 @@ export function mapPersonaImageError(
   return t(fallbackKey);
 }
 
-//---------------
-// PersonaImageLibrarySection — up to 10 tagged photos of the same person.
-// Shown when editing an existing persona. Each video generation picks the
-// best-matching image deterministically (explicit override, tag match,
-// primary, recent-use exclusion).
-//---------------
 export function PersonaImageLibrarySection({ personaId }: { personaId: string }) {
   const { t } = useI18n();
   const imagesQuery = usePersonaImagesQuery(personaId);
   const uploadMutation = useUploadPersonaImageMutation(personaId);
   const [pending, setPending] = useState<PendingImage[]>([]);
   const [error, setError] = useState<string | null>(null);
-  // Partial-success notes (e.g. the image uploaded but the primary swap
-  // failed): success:true with warnings must not look like a full success.
   const [warning, setWarning] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  // Tracks live preview URLs so they can be revoked if the component
-  // unmounts while items are still pending.
   const livePreviewsRef = useRef<Set<string>>(new Set());
 
   const images = imagesQuery.data ?? [];
   const full = images.length >= MAX_LIBRARY_IMAGES;
 
-  // Revoke any previews still alive on unmount (navigation away mid-queue).
   useEffect(() => {
     const live = livePreviewsRef.current;
 
@@ -161,17 +127,10 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
     setWarning(null);
     const room = MAX_LIBRARY_IMAGES - images.length - pending.length;
     const all = Array.from(event.target.files ?? []);
-    // Rejected files are a silent failure if dropped without feedback: tell
-    // the user which picks were skipped and why instead of losing them.
     const { picked, rejectedCount } = partitionPickedImages(all);
     const accepted = picked.slice(0, Math.max(room, 0));
-    // Both conditions are reported when they co-occur: otherwise a user
-    // whose picks were dropped for type/size reasons only sees the limit
-    // message and gets no signal about the real problem.
     const messages: string[] = [];
     if (picked.length > accepted.length) {
-      // Either the library is full or the picker selection overflowed the
-      // remaining room — the server re-validates on upload either way.
       messages.push(t('persona.libraryLimitReached', { max: MAX_LIBRARY_IMAGES }));
     }
     if (rejectedCount > 0) {
@@ -184,9 +143,6 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
         const preview = URL.createObjectURL(file);
         trackPreview(preview);
         return {
-          // crypto.randomUUID is undefined in non-secure contexts (plain
-          // HTTP): fall back to a module-level counter so file pick never
-          // throws and ids cannot collide.
           id: typeof crypto.randomUUID === 'function'
             ? crypto.randomUUID()
             : `pending-${nextPendingId++}`,
@@ -201,8 +157,6 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
   };
 
   const removePending = (id: string): void => {
-    // Side effects must not run inside the state updater: StrictMode invokes
-    // updaters twice, so revoke the preview outside the update.
     const target = pending.find((item) => item.id === id);
     if (target) dropPreview(target.preview);
     setPending((prev) => prev.filter((item) => item.id !== id));
@@ -220,9 +174,6 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
     const uploadedPreviews: string[] = [];
     const warnings: string[] = [];
     try {
-      // Bounded parallel: no new upload starts after the first failure, so
-      // the user sees one actionable error; completed items leave the queue
-      // while failed/untried ones stay retryable.
       const outcomes = await runUploadsInParallel(pending, async (item): Promise<UploadOutcome<string>> => {
         let result: ImageMutationResult;
         try {
@@ -248,18 +199,10 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
           return;
         }
         uploadedIds.add(item.id);
-        // Collect the preview for revocation AFTER setPending below: the
-        // item is still rendered until the queue updates, and revoking
-        // early would show a broken image on any re-render in between.
         uploadedPreviews.push(item.preview);
         warnings.push(...outcome.warnings);
       });
-      // On partial failure the already-uploaded items leave the queue; only
-      // the failed (and not-yet-tried) items stay so the user can retry.
       setPending((prev) => prev.filter((item) => !uploadedIds.has(item.id)));
-      // Defer revocation until after the queue update commits: setPending is
-      // async, so revoking synchronously here could let a removed card
-      // render one frame with a revoked blob URL (broken image flash).
       queueMicrotask(() => {
         for (const preview of uploadedPreviews) dropPreview(preview);
       });
@@ -271,8 +214,6 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
     }
   };
 
-  // Extracted so the JSX below has no nested ternary: the empty state
-  // shows only once loading finished without error.
   const showEmptyState =
     images.length === 0 && !imagesQuery.isPending && !imagesQuery.isError;
 
@@ -303,9 +244,6 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
         <p className="mt-3 text-sm text-muted-text">{t('persona.libraryEmpty', { max: MAX_LIBRARY_IMAGES })}</p>
       ) : null}
 
-      {/* The pending queue renders outside the full/partial conditional: a
-          refetch that fills the library must not silently hide queued items
-          (with their upload button) while their previews stay alive. */}
       {full ? (
         <p className="mt-3 text-sm text-warning">{t('persona.libraryLimitReached', { max: MAX_LIBRARY_IMAGES })}</p>
       ) : (
@@ -358,10 +296,6 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
                   className="w-full rounded-md border border-line px-2 py-1.5 text-sm disabled:opacity-50"
                 />
               </div>
-              {/* Disabled while uploading: removePending would revoke the
-                  preview and drop the item from state, but the upload loop
-                  captured the queue at render time and would still store
-                  the cancelled file on the server. */}
               <button
                 type="button"
                 onClick={() => removePending(item.id)}
@@ -386,10 +320,6 @@ export function PersonaImageLibrarySection({ personaId }: { personaId: string })
   );
 }
 
-//---------------
-// LibraryImageCard — thumbnail with tag/description, primary toggle,
-// inline metadata edit, and delete.
-//---------------
 function LibraryImageCard({
   image,
   personaId,
@@ -404,13 +334,8 @@ function LibraryImageCard({
   const [tag, setTag] = useState(image.tag ?? '');
   const [description, setDescription] = useState(image.description ?? '');
   const [cardError, setCardError] = useState<string | null>(null);
-  // Partial-success warnings (e.g. metadata saved but primary swap failed)
-  // are not errors; render them amber so the true state isn't misleading.
   const [cardWarning, setCardWarning] = useState<string | null>(null);
 
-  // The card keeps local copies for the inline editor. Sync them when the
-  // library refetches (mutation invalidation) so a later edit starts from
-  // fresh data — but never clobber an in-progress edit.
   useEffect(() => {
     if (!editing) {
       setTag(image.tag ?? '');
@@ -428,14 +353,9 @@ function LibraryImageCard({
         description: description.trim(),
       });
       if (result.success) {
-        // The metadata was NOT persisted on METADATA_SAVE_FAILED: keep the
-        // editor open so the user can retry instead of losing their input
-        // to the refetch sync.
         const metadataFailed =
           result.warnings?.includes(PERSONA_IMAGE_WARNING_CODES.METADATA_SAVE_FAILED) ?? false;
         if (!metadataFailed) setEditing(false);
-        // Partial success (e.g. primary swap failed after metadata save):
-        // surface the warning codes so the user knows the true state.
         if (result.warnings && result.warnings.length > 0) {
           setCardWarning(mapPersonaImageWarnings(result.warnings, t));
         }
@@ -456,8 +376,6 @@ function LibraryImageCard({
       if (!result.success) {
         setCardError(mapPersonaImageError(result.error, t, 'persona.libraryUpdateError'));
       } else if (result.warnings && result.warnings.length > 0) {
-        // Partial success: surface warning codes so the user knows the
-        // true state (e.g. primary swapped but something else failed).
         setCardWarning(mapPersonaImageWarnings(result.warnings, t));
       }
     } catch (primaryError) {
@@ -487,9 +405,6 @@ function LibraryImageCard({
         // eslint-disable-next-line @next/next/no-img-element
         <img src={image.image_url} alt={image.tag ?? ''} className="aspect-square w-full object-cover" />
       ) : (
-        // A null URL with image_url_error means signing failed transiently;
-        // a refetch re-signs, so tell the user it is retryable instead of
-        // rendering a silently broken thumbnail.
         <div className="flex aspect-square w-full items-center justify-center bg-sunken p-2 text-center text-xs text-muted-text">
           {image.image_url_error ? t('persona.libraryImageUrlError') : null}
         </div>

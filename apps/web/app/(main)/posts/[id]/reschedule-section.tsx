@@ -6,14 +6,6 @@ import { useI18n } from '@/lib/i18n/provider';
 import { parseZonedDateTime, utcToZonedInputValue } from '@/lib/timezone';
 import type { ScheduledSlot, SlotDetailPayload } from '@/lib/api';
 
-//---------------
-// RescheduleSection — move a pending/ready slot's publish time (issue
-// #555). The input shows the slot's current time as wall-clock in the
-// schedule timezone; saving parses it back in that zone and PATCHes the
-// UTC instant. The server re-validates the window (3h lead, 30-day max),
-// so the input's min/max are hints only. ASAP slots never render this
-// section (no scheduled time to move).
-//---------------
 export const RescheduleSection = ({
   slot,
   timezone,
@@ -43,8 +35,6 @@ export const RescheduleSection = ({
   if (!canReschedule) return null;
 
   const openEditor = (): void => {
-    // Re-read the slot's current time on every open: a saved reschedule
-    // refetches the slot, and the draft must not keep the old time.
     setDraft(utcToZonedInputValue(slot.slotAt, timezone) ?? '');
     setInvalid(false);
     setEditing(true);

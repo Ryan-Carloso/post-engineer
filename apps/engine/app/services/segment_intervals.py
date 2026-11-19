@@ -44,11 +44,6 @@ def segment_intervals(
         cursor = 0
         for tokens in segment_tokens:
             if not tokens:
-                # A segment with no spoken words (punctuation-only text
-                # passes validation in full lip sync; the images modes
-                # reject it before charging) has no interval of its own:
-                # inherit the previous boundary instead of indexing an
-                # empty slice, which raised IndexError and failed the video.
                 boundary = flat[cursor - 1][2] if cursor > 0 else 0.0
                 intervals.append((boundary, boundary))
                 continue
@@ -56,7 +51,6 @@ def segment_intervals(
             intervals.append((taken[0][1], taken[-1][2]))
             cursor += len(tokens)
         return intervals, False
-    # Proportional fallback: by token count, or evenly when nothing has words.
     intervals = []
     cursor = 0.0
     for index, count in enumerate(counts):

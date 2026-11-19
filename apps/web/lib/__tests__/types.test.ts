@@ -1,8 +1,3 @@
-//---------------
-// types — SOCIAL_PROVIDERS has a SINGLE source of truth
-// (lib/providers/registry). No duplicated list.
-//---------------
-
 import { describe, it, expect } from 'vitest';
 import {
   SOCIAL_PROVIDERS as socialProvidersFromTypes,

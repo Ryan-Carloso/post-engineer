@@ -7,27 +7,6 @@ import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { apiErrorResponse } from '@/lib/api-error';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
-//---------------
-// POST /api/rumble-connect — connects a Rumble channel with its manually
-// issued Simple Upload API access token.
-//
-// Rumble has no OAuth and no read API, so there is nothing to validate
-// the token against short of uploading a video: the route checks only
-// the token's shape (40 hex chars) and the channel id, then encrypts
-// and stores them (provider='rumble', provider_account_id=channel id).
-// A wrong token surfaces at first publish as an invalid_token error and
-// is reported for reconnecting (see lib/upload/rumble-handler.ts).
-//
-// Two entry flows (same business logic):
-// - Web: Supabase session + FormData { channelId, accessToken } (original).
-// - MCP: Post Engineer API key + JSON { channelId, accessToken }.
-//
-// The "API key" here is Post Engineer's — it only identifies WHICH user
-// is connecting. The Rumble credential remains the channel id + access
-// token in the body (Rumble has no API keys of its own beyond the token);
-// the token is validated for shape before saving, never logged.
-//---------------
-
 function errorResponse(
   status: number,
   error: string,
@@ -53,8 +32,6 @@ async function readCredentials(request: Request): Promise<
     } catch {
       return { ok: false, error: 'Invalid JSON payload.' };
     }
-    // A JSON `null` (or array) parses fine but is not an object: reading
-    // fields off it would throw a TypeError instead of returning the 400.
     if (!isRecord(body)) {
       return { ok: false, error: 'Invalid JSON payload.' };
     }
@@ -101,10 +78,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
   }
   const { channelId, accessToken } = credentials;
 
-  // The token cannot be validated against Rumble without uploading, so
-  // the shape check is the whole validation: 40 hex chars, issued by
-  // emailing bd@rumble.com. A mistyped token fails loudly here instead
-  // of being stored and failing every publish.
   if (!isValidRumbleAccessToken(accessToken)) {
     return errorResponse(
       400,
@@ -113,8 +86,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
     );
   }
 
-  // Service role bypasses RLS. auth.userId is the owner. A cookie JWT must
-  // not write encrypted_tokens.
   const supabase = createSupabaseServiceClient();
 
   try {
@@ -124,9 +95,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
       channel_id: channelId,
     });
 
-    // Upsert, not insert: a reconnect refreshes the token on the row the
-    // unique (user_id, provider, provider_account_id) key already holds
-    // (migration 040), so a plain insert fails with a constraint violation.
     const { data: upserted, error: upsertError } = await supabase
       .from('social_accounts')
       .upsert(
@@ -145,8 +113,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
       .single();
 
     if (upsertError || !upserted) {
-      // The full PostgREST error object (not just the message) is threaded
-      // as cause so the PostHog issue carries code/details/hint.
       return errorResponse(500, 'Could not save the Rumble account.', 'POST /api/rumble-connect', {
         cause: upsertError,
         metadata: { userId: auth.userId },
@@ -163,7 +129,4 @@ async function postHandler(request: Request): Promise<NextResponse> {
   }
 }
 
-//---------------
-// 5xx reporting: handled server errors reach PostHog error tracking.
-//---------------
 export const POST = withApiErrorReporting('POST /api/rumble-connect', postHandler, { getUserId: resolveReportingUserId });

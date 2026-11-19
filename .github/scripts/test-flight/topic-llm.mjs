@@ -1,31 +1,3 @@
-//---------------
-// topic-llm — the test-flight topic comes from the LLM, not from a list.
-//
-// The old MONITOR_TOPICS list (7 hard-coded Porto topics, rotated by
-// day-of-year) guaranteed a repeat: every dispatch on the same day
-// picked the same topic, and two near-identical videos were published
-// to the real test channels on 2026-11-01. There is no list here on
-// purpose. Instead, before the script step, this module:
-//   1. fetches the real history: GET /api/schedule/status on the test
-//      API base URL with the test API key, which returns recent
-//      published/failed slots and upcoming slots, each with a title;
-//   2. asks the LLM (same chain and streaming client as the script
-//      writer) to propose ONE new topic about food or travel in places
-//      in Portugal, in English, different from every title in the
-//      last 30 days;
-//   3. validates that proposal mechanically (never by asking the LLM
-//      whether it is a duplicate): exact match and token-overlap
-//      near-duplicates are rejected, as are topics with no Portugal
-//      place signal or no food/travel signal.
-// A history fetch failure fails the job before any script call: going
-// ahead blind is how duplicates get published. An empty history is
-// fine and is stated to the LLM as such. If every model fails, the job
-// throws: there is never a hard-coded fallback topic, and a proposed
-// topic is never published just because it was the only one available.
-// An explicit TEST_FLIGHT_TOPIC still wins over all of this and skips
-// both the history fetch and the LLM topic step.
-//---------------
-
 import { streamLlmJson } from './llm-stream.mjs';
 
 export class TopicError extends Error {}
@@ -35,18 +7,11 @@ export const DUPLICATE_JACCARD_THRESHOLD = 0.7;
 const HISTORY_TIMEOUT_MS = 30000;
 const DEFAULT_API_BASE_URL = 'https://post-engineer.com';
 
-// Stopwords removed before the overlap check so that "the best X in
-// Porto" and "best X in Porto" count as the same topic, not as two.
 const STOPWORDS = new Set([
   'a', 'an', 'the', 'in', 'on', 'of', 'to', 'and', 'or', 'for', 'with',
   'from', 'by', 'at', 'into', 'is', 'are', 'you', 'your', 'this', 'that',
 ]);
 
-// Portugal place/culture signals. This is a validation safety net, not
-// a topic list: any topic naming a place in Portugal passes the place
-// half, whatever the place is. The LLM prompt carries the niche; this
-// list only catches the obvious misses (a topic about another country,
-// or about nothing placeable at all).
 const PORTUGAL_SIGNALS = [
   'portugal', 'portuguese', 'porto', 'lisbon', 'lisboa', 'algarve',
   'douro', 'madeira', 'azores', 'acores', 'coimbra', 'braga', 'sintra',
@@ -83,7 +48,6 @@ export function normalizeTopic(text) {
 
 export function topicTokens(text) {
   const words = normalizeTopic(text).split(' ').filter(Boolean);
-  // Keep multi-word signals ("old town", "day trip") as single tokens.
   const tokens = new Set(words.filter((word) => !STOPWORDS.has(word)));
   for (const phrase of ['old town', 'day trip']) {
     if (normalizeTopic(text).includes(phrase)) tokens.add(phrase.replace(' ', '_'));
@@ -113,11 +77,6 @@ function inNiche(topic) {
   return hasPortugal && (hasFood || hasTravel);
 }
 
-// Mechanical validation only. It cannot prove a topic is in-niche in
-// the way a human could: it catches exact repeats, near-duplicates
-// (Jaccard >= 0.7 on content-word tokens), and topics with no Portugal
-// place signal or no food/travel signal. The LLM prompt carries the
-// niche; this check is the backstop, not the judge.
 export function validateTopic(topic, recentTitles = []) {
   if (typeof topic !== 'string' || topic.trim() === '') {
     return { ok: false, error: { field: 'topic', rule: 'topic must be a non-empty string', fix: 'Propose one specific topic.' } };
@@ -159,14 +118,6 @@ export function buildTopicPrompt({ recentTitles = [] }) {
   return lines.join('\n');
 }
 
-// Real history from GET /api/schedule/status: recent slots carry title,
-// slot_at, published_at and status; upcoming slots carry title and
-// slot_at. Only published titles inside the 30-day window count as
-// "already went out"; upcoming titles count too, because they are
-// queued to publish and picking the same topic would collide with
-// them. Failed slots never published, so they do not block a topic.
-// Any fetch or shape failure throws: the caller must fail the job
-// rather than propose a topic blind.
 export async function fetchRecentTitles({ apiBaseUrl, apiKey, fetchFn = fetch, now = new Date() }) {
   if (!apiKey) {
     throw new TopicError('topic history: missing TEST_FLIGHT_POST_ENGINEER_API_KEY — refusing to propose a topic blind');
@@ -211,10 +162,6 @@ export function resolveHistoryConfig(env) {
   };
 }
 
-// One topic proposal per model, with one validation retry per model
-// (the named failure fed back), then the next model. If every model
-// fails, throw: the job fails instead of publishing a repeat or a
-// hand-written topic.
 export async function generateTopic({ llm, recentTitles = [], fetchFn = fetch, streamTimeouts = {} }) {
   if (!llm || !llm.apiKey) {
     throw new TopicError('topic: missing TEST_FLIGHT_LLM_API_KEY — refusing to propose a topic without the LLM');

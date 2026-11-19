@@ -1,15 +1,5 @@
 'use client';
 
-//---------------
-// Telegram accounts section — one provider, two destinations. The
-// connect dialog opens with the setup guide (the "info" for the user):
-// pick Channel or Group first, because the steps and the permission
-// Telegram must prove differ — a channel bot must be an administrator
-// who can post, a group bot only a member allowed to send. The picked
-// kind is sent as chatType and validated server-side against the real
-// chat; the account card then badges the stored kind.
-//---------------
-
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import AccountCard from '@/components/account-card';
@@ -47,8 +37,6 @@ export function TelegramAccountsSection(): ReactNode {
       formData.append('chatType', kind);
       const response = await fetch('/api/telegram-connect', { method: 'POST', body: formData });
       if (!response.ok) {
-        // 401 is a dead hub session (Telegram rejections are 4xx with a
-        // TELEGRAM_* code), so only that triggers the session-expiry redirect.
         notifyIfSessionExpired(response);
         const body: unknown = await response.json().catch(() => null);
         const code = typeof body === 'object' && body !== null && 'code' in body ? body.code : undefined;

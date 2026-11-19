@@ -21,14 +21,6 @@ import { createPostEngineerMcpServer } from '../index.js';
 import { PostEngineerClient } from '../client.js';
 import type { McpToolResponse } from '../tools-call.js';
 
-//---------------
-// Recipe adoption: the nudges an agent sees before it meets the recipes,
-// and the X-MCP-* headers that carry the session state to the web API
-// (which records them on mcp_tool_called). Runs the real analytics module
-// and API client against a fetch mock answering the real route envelopes,
-// so the headers asserted are the ones that go on the wire.
-//---------------
-
 const BASE_URL = 'https://api.example.test';
 
 const hook =
@@ -45,7 +37,6 @@ const validSegments = [
   { kind: 'content' as const, text: content, media: photos(6, 'content') },
   { kind: 'content' as const, text: ctaTake, media: photos(2, 'ctaTake') },
 ];
-// Too short: the mechanical validator rejects it before any request.
 const rejectedSegments = [
   { kind: 'hook' as const, text: 'Short hook.' },
   { kind: 'content' as const, text: 'Short content.' },

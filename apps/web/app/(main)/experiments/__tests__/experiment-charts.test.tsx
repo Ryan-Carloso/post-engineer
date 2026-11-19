@@ -4,13 +4,6 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import * as React from 'react';
 import type { ReactNode } from 'react';
 
-//---------------
-// experiment-charts tests (issue #647). Recharts' ResponsiveContainer
-// never gets a size in jsdom: stub it with a fixed-size clone (same as
-// chart.test.tsx); the text totals, captions, empty states and the
-// Show-table fallback are the real rendered output.
-//---------------
-
 vi.mock('recharts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('recharts')>();
   function ResponsiveContainerStub({ children }: { children: ReactNode }): React.ReactElement {
@@ -106,8 +99,6 @@ describe('VariantComparisonChart', () => {
     );
     expect(screen.getByText('experiments.variantComparison')).toBeInTheDocument();
     expect(screen.getByText('Calm question: 1.500 · Direct hook: 750')).toBeInTheDocument();
-    // Both variants are named in the legend and the palette tokens are
-    // the chart theme tokens, not fixed hex colours.
     expect(screen.getByText(FIRST)).toBeInTheDocument();
     expect(screen.getByText(SECOND)).toBeInTheDocument();
     expect(container.querySelector('style')?.textContent).toContain('--color-a: var(--info);');
@@ -128,8 +119,6 @@ describe('VariantComparisonChart', () => {
     );
     expect(screen.getByText('experiments.excludedNullOne')).toBeInTheDocument();
     expect(screen.getByText('Calm question: — · Direct hook: 10')).toBeInTheDocument();
-    // Only the singular caption renders, the chart still draws (B has
-    // data) and the legend names only the drawn series.
     expect(screen.queryByText('experiments.excludedNullOther [1]')).toBeNull();
     expect(screen.queryByText('experiments.noMetricData')).toBeNull();
     expect(screen.queryByText('Calm question')).toBeNull();
@@ -294,10 +283,6 @@ describe('PerPairChart', () => {
     const paths = Array.from(container.querySelectorAll('.recharts-bar-rectangle path'));
     const fills = paths.map((path) => path.getAttribute('fill'));
     const opacities = paths.map((path) => path.getAttribute('fill-opacity') ?? path.getAttribute('fillOpacity'));
-    // Series A bars, then series B bars. The winner keeps its variant
-    // color at full opacity, the loser keeps its own variant color
-    // faded (0.35), both bars of a tie are grey. The null pair renders
-    // no path at all — never 0.
     expect(fills).toEqual([
       'var(--color-a)', 'var(--color-a)', 'var(--faint)',
       'var(--color-b)', 'var(--color-b)', 'var(--faint)', 'var(--color-b)',
@@ -335,7 +320,6 @@ describe('WinSplitChart', () => {
     );
     expect(screen.getByText('experiments.winSplit')).toBeInTheDocument();
     expect(screen.getByText('Calm question: 3 · experiments.tie: 0 · Direct hook: 0')).toBeInTheDocument();
-    // There is a non-zero total, so the chart draws (not the empty state).
     expect(screen.queryByText('experiments.noPairData')).toBeNull();
     expect(screen.getByText(FIRST)).toBeInTheDocument();
     expect(screen.getByText(SECOND)).toBeInTheDocument();
@@ -392,13 +376,11 @@ describe('ProviderCard charts', () => {
     renderCard();
     expect(screen.queryByRole('table')).toBeNull();
     expect(screen.getByText('Calm question: 1.500 · Direct hook: 750')).toBeInTheDocument();
-    // Radix Tabs activates on mouseDown + click in jsdom.
     fireEvent.mouseDown(screen.getByRole('tab', { name: 'experiments.metricLikes' }));
     fireEvent.click(screen.getByRole('tab', { name: 'experiments.metricLikes' }));
     expect(screen.getByText('Calm question: 6 · Direct hook: 3')).toBeInTheDocument();
     fireEvent.click(screen.getByText('experiments.showTable'));
     const table = screen.getByRole('table', { name: 'experiments.metricLikes' });
-    // The fallback table follows the selected metric: likes per pair, not views.
     const cells = within(table).getAllByRole('row').slice(1).map((row) =>
       within(row).getAllByRole('cell').slice(1, 3).map((cell) => cell.textContent));
     expect(cells).toEqual([['2', '1'], ['2', '1'], ['2', '1']]);
@@ -420,7 +402,6 @@ describe('ProviderCard charts', () => {
   it('shows the indicative badge, the p-value and no winner', () => {
     const { container } = renderCard();
     const section = container.querySelector('section');
-    // Theme-token card surface with the designed padding, not flat grey.
     expect(section?.className).toContain('bg-card');
     expect(section?.className).toContain('rounded-2xl');
     expect(section?.className).toContain('p-4');

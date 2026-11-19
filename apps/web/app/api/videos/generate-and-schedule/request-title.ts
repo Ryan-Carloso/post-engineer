@@ -1,14 +1,5 @@
 import { invalid, type Checked, type ValidationIssue } from './validation-issues';
 
-//---------------
-// Request title: the slot label for the one video in this request.
-// The topics and script-prompt keys are rejected explicitly, before the zod
-// parse: a plain zod object strips unknown keys silently, so without these
-// checks an old caller would get videos it never asked for under a
-// different script. Each 400 names the field and the replacement (title +
-// segments). A blank title is rejected the same way.
-//---------------
-
 export function rawKeyIssues(body: unknown): ValidationIssue[] {
   if (typeof body !== 'object' || body === null) return [];
   const issues: ValidationIssue[] = [];

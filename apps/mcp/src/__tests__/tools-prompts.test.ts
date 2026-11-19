@@ -14,14 +14,6 @@ import { PostEngineerClient } from '../client.js';
 import { MCP_ACTION_HEADER, MCP_TOOL_HEADER } from '../analytics.js';
 import { recipeRunText } from '../recipe-session.js';
 
-//---------------
-// Recipe prompts come from the web hub over the API: list_prompts and
-// get_prompt (tools) and prompts/list + prompts/get (slash commands) all
-// read GET /api/prompts and GET /api/prompts/[slug]. The fetch mock
-// answers with the real route bodies ({ success, prompts } / { success,
-// prompt } / 404 { success: false, error, code: 'PROMPT_NOT_FOUND' }).
-//---------------
-
 const BASE_URL = 'https://api.example.test';
 
 const CATALOG = [
@@ -70,8 +62,6 @@ function actionHeaders(): Array<string | undefined> {
 }
 
 function textOf(result: CallToolResult | { toolResult?: unknown }): string {
-  // client.callTool may answer an unstructured { toolResult } instead of a
-  // content block; only the content shape carries text.
   if (!('content' in result)) return '';
   const first = result.content[0];
   return first !== undefined && 'text' in first ? String(first.text) : '';
@@ -226,8 +216,6 @@ describe('prompt tools over MCP', () => {
 
   it('advertises the server instructions', async () => {
     await withMcpClient(async (mcp) => {
-      // The high-level client drops instructions when it caches only
-      // serverInfo, so run a second, raw initialize handshake.
       const result = await mcp.request(
         {
           method: 'initialize',

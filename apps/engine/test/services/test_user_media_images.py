@@ -13,7 +13,6 @@ from PIL import Image
 from app.models.schema import VideoAspect
 from app.services import image_coverage, image_fetch, segment_panels, segment_video, user_media
 
-# Hook spoken 0.0-1.2 s, CTA 5.0-5.9 s, audio 6.0 s.
 WORDS = [("Welcome", 0.0, 0.5), ("to", 0.5, 0.7), ("Porto", 0.7, 1.2), ("Visit", 5.0, 5.4), ("Porto", 5.4, 5.9)]
 SEGMENTS = [
     {"kind": "hook", "text": "Welcome to Porto.", "media": [{"url": "https://e.com/hook.jpg"}]},
@@ -31,8 +30,6 @@ def _subtitle(tmp_path, words=WORDS):
 
 
 def _download(url, dest_path, session=None, width=1080, height=1920):
-    # Distinct URLs are distinct photos: identical bytes under two URLs
-    # is a duplicate photo, skipped by prepare_segment_media.
     digest = hashlib.sha256(url.encode()).digest()
     buffer = io.BytesIO()
     Image.new("RGB", (width, height), tuple(digest[:3])).save(buffer, "JPEG")
@@ -62,7 +59,6 @@ def _run(task_dir, params, download=_download, words=WORDS):
 
 
 def test_images_material_photos_cover_the_whole_audio_and_zoom(task_dir):
-    # Three photos tile the 6 s audio at 2 s each, alternating zoom in/out.
     words = [
         ("Welcome", 0.0, 0.5), ("to", 0.5, 0.7), ("Porto", 0.7, 1.2),
         ("Where", 2.0, 2.3), ("the", 2.3, 2.5), ("river", 2.5, 3.0),
@@ -83,9 +79,6 @@ def test_images_material_photos_cover_the_whole_audio_and_zoom(task_dir):
 
 
 def test_a_long_silence_between_photos_fails_instead_of_stretching(task_dir):
-    # The hook photo used to run on over the 3.8 s silence before the CTA.
-    # At 2 s per photo the two photos cover 4 s of 6 s, so the task fails
-    # naming the missing photo instead of holding one photo over the gap.
     with pytest.raises(image_coverage.ImagesDoNotCoverAudio) as exc_info:
         _run(task_dir, _params())
     assert str(exc_info.value) == (
@@ -96,8 +89,6 @@ def test_a_long_silence_between_photos_fails_instead_of_stretching(task_dir):
 
 
 def test_a_dropped_photo_fails_the_task_naming_the_photo(task_dir):
-    # All-must-survive: one dropped photo fails the task even though the
-    # neighbour could cover its seconds. The error names the photo.
     segments = [
         {
             "kind": "hook",
@@ -136,9 +127,6 @@ def test_no_surviving_photo_reports_every_skip_reason(task_dir):
 
 
 def test_blocked_photos_fail_with_the_counts_and_every_skip_reason(task_dir):
-    # All-must-survive: four of the body's five photos are blocked, so
-    # the task fails even though one survivor remains to stretch over
-    # the audio. The error carries the counts and every skip line.
     body = (
         "Walk the Ribeira in the morning light, cross the Dom Luis bridge, taste "
         "francesinha where the locals eat, and finish with port wine as the river "
@@ -203,8 +191,6 @@ def test_full_lipsync_has_nothing_to_cover_and_never_fails(task_dir):
     assert len(warnings) == 2 and all("media skipped" in w for w in warnings)
 
 
-# ---- aspect ratio (issue #538): a photo that fills the frame must match it
-
 
 def test_images_material_landscape_photos_fail_the_video(task_dir):
     def landscape(url, dest_path, session=None):
@@ -217,8 +203,6 @@ def test_images_material_landscape_photos_fail_the_video(task_dir):
 
 
 def test_a_wrong_ratio_photo_fails_the_task_naming_the_ratios(task_dir):
-    # All-must-survive: one wrong-ratio photo fails the task, and the
-    # error names both ratios so the agent sends the right one next time.
     segments = [
         {
             "kind": "hook",
@@ -245,10 +229,6 @@ def test_a_wrong_ratio_photo_fails_the_task_naming_the_ratios(task_dir):
 
 
 def test_a_landscape_hook_photo_stays_a_panel_when_the_face_shows(task_dir):
-    # Hook (panel over the face) + body (full frame) + CTA (full frame):
-    # the landscape hook photo stays — a panel over the face is never
-    # aspect-gated — while every full-frame photo matches the aspect,
-    # so nothing is skipped and the task renders.
     words = [
         ("Welcome", 0.0, 0.5), ("to", 0.5, 0.7), ("Porto", 0.7, 1.2),
         ("Where", 2.0, 2.3), ("the", 2.3, 2.5), ("river", 2.5, 3.0),
@@ -281,8 +261,6 @@ def test_a_landscape_hook_photo_stays_a_panel_when_the_face_shows(task_dir):
     assert [(p.index, p.start, p.end) for p in full] == [(1, 1.5, 2.5), (1, 2.5, 4.5), (2, 4.5, 6.0)]
     assert warnings == []
 
-
-# ---- video clips (PR-B): a clip loops to fill its take, photos unchanged
 
 
 def _clip(tmp_path, name="clip.mp4", seconds=5, width=1080, height=1920,
@@ -344,8 +322,6 @@ def test_a_video_clip_loops_to_cover_its_whole_take(task_dir):
 
 
 def test_a_clip_and_photos_share_a_video_with_their_own_rules(task_dir):
-    # Clip 0-2s (its slice, past the 2s photo cap), then two photos at
-    # 2s each with alternating zoom: the clip never zooms, the photos do.
     blob = _clip_bytes(task_dir)
     words = [
         ("Welcome", 0.0, 1.0), ("to", 1.0, 1.5), ("Porto", 1.5, 2.0),
@@ -435,9 +411,6 @@ def test_a_landscape_clip_fails_for_a_portrait_video(task_dir):
 
 
 def test_a_clip_over_the_personas_face_is_skipped(task_dir):
-    # Full lip sync shows the face the whole time, so a full-frame clip
-    # can never play there: it is skipped (a warning in this mode, never
-    # a failure — the face is the picture).
     blob = _clip_bytes(task_dir)
     words = [("Welcome", 0.0, 2.0), ("to", 2.0, 3.0), ("Porto", 3.0, 4.0)]
     segments = [{"kind": "hook", "text": "Welcome to Porto.",
@@ -504,8 +477,6 @@ def test_an_overlay_on_a_clip_warns_and_the_clip_still_ships(task_dir):
         "segment 0 image 0 media overlay skipped: overlays are not supported on video clips"
     ]
 def test_a_requested_duration_rides_to_the_panel_and_sets_its_seconds(task_dir):
-    # The agent asked the hook photo to hold 3s and the CTA to flash 1s:
-    # the manifest panels carry the requests and the layout honors them.
     words = [
         ("Welcome", 0.0, 0.5), ("to", 0.5, 0.7), ("Porto", 0.7, 1.2),
         ("Where", 2.0, 2.3), ("the", 2.3, 2.5), ("river", 2.5, 3.0),
@@ -527,8 +498,6 @@ def test_a_requested_duration_rides_to_the_panel_and_sets_its_seconds(task_dir):
 
 
 def test_photos_without_a_request_carry_no_duration(task_dir):
-    # Backward compatible: a photo with no duration behaves exactly as
-    # before and the manifest carries no request for it.
     words = [
         ("Welcome", 0.0, 0.5), ("to", 0.5, 0.7), ("Porto", 0.7, 1.2),
         ("Where", 2.0, 2.3), ("the", 2.3, 2.5), ("river", 2.5, 3.0),

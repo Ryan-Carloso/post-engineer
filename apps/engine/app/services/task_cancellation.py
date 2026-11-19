@@ -55,8 +55,6 @@ def forget(task_id: str) -> None:
     with _CANCEL_LOCK:
         if task_id in _CANCELLED_IDS:
             _CANCELLED_IDS.discard(task_id)
-            # Keep the eviction order in step with the live marks: a stale
-            # copy would later evict a re-issued mark for the same id early.
             _CANCELLED_ORDER.remove(task_id)
 
 

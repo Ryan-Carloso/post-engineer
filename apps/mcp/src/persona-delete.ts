@@ -6,20 +6,6 @@ import type { ResponseOf } from './contracts/endpoint.js';
 import { getPersonaDeletePreview as getPersonaDeletePreviewContract } from './contracts/personas.js';
 import type { McpToolResponse } from './tools-call.js';
 
-//---------------
-// personas · delete — preview, then confirm, inside one action.
-//
-// Without confirmToken the action only reads: it returns what deleting the
-// persona would remove plus a confirmToken. With the token it deletes. The
-// token is a digest of the persona id and of that preview (the counts and the
-// video task ids, never the signed download links, which change per call), so
-// a persona that changed since the preview — a new schedule, a published
-// slot — invalidates it and the agent sees the new preview before anything
-// is removed. It is a check that the agent saw this exact preview, NOT an
-// authorisation boundary: the caller is already authorised to delete, and a
-// scoped API key behaves exactly as with the old two tools.
-//---------------
-
 type DeletePreview = ResponseOf<typeof getPersonaDeletePreviewContract>;
 
 function digest(personaId: string, preview: DeletePreview): string {
@@ -45,7 +31,6 @@ export async function handlePersonaDelete(
   try {
     preview = await client.getPersonaDeletePreview(args.personaId);
   } catch (error) {
-    // An API error keeps its structured contract (code, message, field), as the other persona tools.
     if (error instanceof ApiError && error.code !== null) {
       const body = JSON.stringify({ code: error.code, message: sanitizeEngineError(getErrorMessage(error)), field: error.field });
       return { content: [{ type: 'text', text: `Error previewing the persona deletion: ${body}` }], isError: true };

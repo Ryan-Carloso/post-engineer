@@ -1,8 +1,3 @@
-// personas (action: update): shape, schema and handler.
-//
-// Extracted from tools.ts so tools.ts stays under the file-size ratchet.
-// Re-exported from tools.ts, so existing import sites (`./tools.js`) keep
-// working, including the personas and accounts registration (intent-*.ts).
 import { z } from 'zod';
 
 import type { PostEngineerClient } from './client.js';
@@ -40,7 +35,6 @@ export async function handleUpdatePersona(
   client: PostEngineerClient,
   args: z.infer<typeof UpdatePersonaSchema>,
 ): Promise<McpToolResponse> {
-  // Full-schema parse, then voice routing BEFORE the POST; no voiceId keeps the stored voice (#353).
   return handleLibraryCall(
     async () => client.updatePersona(await withResolvedPersonaVoiceForUpdate(client, UpdatePersonaSchema.parse(args))),
     'updating persona', 'Persona updated successfully',

@@ -7,16 +7,6 @@ import { Button } from '@/components/ui/button';
 import { ComposeIcon, GlobeIcon } from '@/lib/ui';
 import type { PromptEntry } from '../prompts';
 
-//---------------
-// PromptCard — one grid card in the prompts hub: an icon tile
-// (Globe for news from the world, Compose for a PR write-up
-// turned into a script), a kind pill, the title, one objective
-// line, and a footer with two actions: copy the full prompt right
-// here, or open the prompt's detail page to read it first. The
-// card is an article, not one big link, because a button cannot
-// live inside a link. The list never links straight to GitHub.
-//---------------
-
 export default function PromptCard({ prompt }: { prompt: PromptEntry }) {
   const { t } = useI18n();
   const { copied, copy } = useCopyText();

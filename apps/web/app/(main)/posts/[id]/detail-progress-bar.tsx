@@ -2,11 +2,6 @@
 
 import { useI18n } from '@/lib/i18n/provider';
 
-//---------------
-// DetailProgressBar — the live generation progress bar shared by the slot
-// and direct-generation detail views. One component so the two post kinds
-// never drift in how they render progress.
-//---------------
 export function DetailProgressBar({ progress, stage }: { progress: number; stage: string | null }) {
   const { t } = useI18n();
   return (

@@ -67,7 +67,6 @@ def test_clean_subtitle_file_drops_cues_that_clean_to_nothing(tmp_path):
     srt_path = tmp_path / "subtitle.srt"
     srt_path.write_text(_DIRTY_SRT, encoding="utf-8")
     assert subtitle_cleanup.clean_subtitle_file(str(srt_path)) is True
-    # The "..." cue is gone and the remaining cues keep their timings.
     assert "Espera" in srt_path.read_text(encoding="utf-8")
     assert "..." not in srt_path.read_text(encoding="utf-8")
 

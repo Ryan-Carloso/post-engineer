@@ -4,11 +4,6 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 
-//---------------
-// Testes da tela de lista de personas via interface pública.
-// Apenas a rede (lib/api) é mockada; react-query real.
-//---------------
-
 vi.mock('next/image', () => ({
   // eslint-disable-next-line jsx-a11y/alt-text, @next/next/no-img-element
   default: (props: React.ComponentProps<'img'>) => <img {...props} />,
@@ -266,9 +261,6 @@ describe('app/(main)/personas/page — PersonasPage', () => {
     expect(screen.getAllByText('9:16').length).toBeGreaterThan(0);
   });
 
-  //---------------
-  // Issue #572 — the card shows where the persona publishes.
-  //---------------
   it('shows the bound publishing accounts on the card', () => {
     vi.mocked(usePersonaListQuery).mockReturnValue({
       data: [

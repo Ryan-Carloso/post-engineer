@@ -66,8 +66,6 @@ describe('replaySchedule', () => {
     expect(deletes).toHaveLength(1);
     expect(deletes[0]?.table).toBe('schedules');
     expect(deletes[0]?.lt?.column).toBe('created_at');
-    // The delete carries the same five-minute age predicate, so a row
-    // that is fresh at delete time survives even if the read was stale.
     const boundMs = Date.parse(deletes[0]?.lt?.value ?? '');
     expect(boundMs).toBeGreaterThan(Date.now() - 6 * 60_000);
     expect(boundMs).toBeLessThanOrEqual(Date.now() - 4 * 60_000);

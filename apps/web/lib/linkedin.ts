@@ -1,21 +1,8 @@
-//---------------
-// LinkedIn — API client to connect accounts (OAuth 2.0) and publish
-// videos on the member's profile (w_member_social, via the "Share on
-// LinkedIn" product). Profile/name come from OIDC (openid + profile, endpoint
-// /v2/userinfo). Organization pages require the "Community
-// Management API" (w_organization_social) — not yet approved in the app.
-//
-// Documentation (2026): Posts API (POST /rest/posts), Videos API
-// (initializeUpload / parts / finalize). ALL endpoints require the
-// headers Linkedin-Version: YYYYMM e X-Restli-Protocol-Version: 2.0.0.
-// The access token expires in 60 days (refreshed on reconnect).
-//---------------
-
 import { LinkedInError as LinkedinError } from '@/lib/errors';
 export { LinkedInError as LinkedinError } from '@/lib/errors';
 
 export const LINKEDIN_API_VERSION = '202609';
-export const LINKEDIN_VIDEO_MAX_BYTES = 5 * 1024 * 1024 * 1024; // 5GB
+export const LINKEDIN_VIDEO_MAX_BYTES = 5 * 1024 * 1024 * 1024;
 
 export const LINKEDIN_SCOPES = ['openid', 'profile', 'w_member_social'] as const;
 
@@ -38,10 +25,6 @@ function linkedinHeaders(accessToken: string): Record<string, string> {
   };
 }
 
-//---------------
-// buildLinkedInAuthorizationUrl — OAuth consent URL (post scopes for
-// member and organization)
-//---------------
 export function buildLinkedInAuthorizationUrl(state: string, redirectUriOverride?: string): string {
   const clientId = requireEnv('LINKEDIN_CLIENT_ID');
   const redirectUri = redirectUriOverride ?? requireEnv('LINKEDIN_REDIRECT_URI');
@@ -55,10 +38,6 @@ export function buildLinkedInAuthorizationUrl(state: string, redirectUriOverride
   return `${LINKEDIN_AUTH}/authorization?${params.toString()}`;
 }
 
-//---------------
-// exchangeLinkedInCodeForToken — exchanges the authorization code for the access token
-// (expires in ~60 days; reconnecting renews it — same model as Instagram)
-//---------------
 export interface LinkedinToken {
   access_token: string;
   expires_in: number;
@@ -93,10 +72,6 @@ export async function exchangeLinkedInCodeForToken(code: string, redirectUriOver
   };
 }
 
-//---------------
-// fetchLinkedInMemberProfile — member id (sub, the author URN of the
-// personal post), name and profile picture
-//---------------
 export async function fetchLinkedInMemberProfile(
   accessToken: string,
 ): Promise<{ id: string; name: string | null; picture: string | null }> {
@@ -115,10 +90,6 @@ export async function fetchLinkedInMemberProfile(
   return { id: body.sub, name: body.name ?? null, picture };
 }
 
-//---------------
-// fetchLinkedInAdminOrganizations — organizations where the member is admin (for
-// connect company pages). Returns the URN + localized name when available.
-//---------------
 export interface LinkedinOrganization {
   id: string;
   name: string | null;
@@ -152,10 +123,6 @@ export async function fetchLinkedInAdminOrganizations(accessToken: string): Prom
           : null,
     }));
 }
-
-//---------------
-// Videos API — initializeUpload → partes → finalizeUpload
-//---------------
 
 export interface LinkedinUploadInstruction {
   uploadUrl: string;
@@ -240,10 +207,6 @@ export async function finalizeLinkedInVideoUpload(
   }
 }
 
-//---------------
-// Images API — initializeUpload → one PUT of the bytes. The image URN is
-// the post's media id, exactly like a video URN.
-//---------------
 export async function uploadLinkedInImage(accessToken: string, ownerUrn: string, bytes: Uint8Array): Promise<string> {
   const response = await fetch(`${LINKEDIN_API}/rest/images?action=initializeUpload`, {
     method: 'POST',
@@ -269,10 +232,6 @@ export async function uploadLinkedInImage(accessToken: string, ownerUrn: string,
   }
   return image;
 }
-
-//---------------
-// Posts API — a post with one media item (a video or an image URN)
-//---------------
 
 interface PostRequestBody {
   author: string;
@@ -343,11 +302,6 @@ export async function createLinkedInOrganizationPost(
   });
 }
 
-//---------------
-// getLinkedInSocialActions — like/comment summary of one post
-// (GET /rest/socialActions/{urn}). Throws on HTTP errors so the metrics
-// collector logs and retries on the next run.
-//---------------
 export async function getLinkedInSocialActions(accessToken: string, postUrn: string): Promise<unknown> {
   const response = await fetch(`${LINKEDIN_API}/rest/socialActions/${encodeURIComponent(postUrn)}`, {
     headers: linkedinHeaders(accessToken),

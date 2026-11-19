@@ -35,11 +35,6 @@ function refundIssuedCalls(client: { captureAs: ReturnType<typeof vi.fn> }): [st
   ) as [string, string, Record<string, unknown>][];
 }
 
-//---------------
-// DELETE /api/schedule on a video of a discounted batch (issue #487): the
-// refund the route sends is the clawback-adjusted amount, end to end.
-//---------------
-
 const USER_ID = 'user-1';
 const BATCH = '33333333-3333-4333-8333-333333333333';
 
@@ -75,8 +70,6 @@ describe('DELETE /api/schedule on a discounted batch', () => {
     const json = (await res.json()) as { refunds: unknown[]; batchDiscountWithheld: number; cancelledSlotIds: string[] };
     expect(json.cancelledSlotIds).toEqual(['1']);
     expect(json.batchDiscountWithheld).toBe(2);
-    // The whole charge was pulled back inside the settlement, so the user
-    // keeps nothing — but the slot still gets an entry saying why.
     expect(json.refunds).toEqual([
       { slotId: '1', refunded: false, alreadyRefunded: false, reason: 'discount_withheld' },
     ]);
@@ -109,9 +102,6 @@ describe('DELETE /api/schedule on a discounted batch', () => {
 
   it('emits refund_issued for the net kept when the clawback withholds part of the charge', async () => {
     const client = mockPostHog();
-    // Free video discount is 1 token, the cancelled paid video was
-    // charged 2: the settlement refunds 2 and pulls 1 back, so the user
-    // keeps 1 — that net is the refund_issued amount, not the gross 2.
     const paid = ['1', '2', '3', '4', '5'].map((id) =>
       slotRow(id, { batch_id: BATCH, status: 'pending', task_id: null }),
     );
@@ -135,10 +125,6 @@ describe('DELETE /api/schedule on a discounted batch', () => {
   });
 
   it('reports not_charged for a charged-0 slot the settlement legitimately excluded', async () => {
-    // A charged-0 slot of a settled batch is in settledSlotIds (every
-    // inBatch slot is) but never in p_refunds, so the settlement reports
-    // no outcome for it by design — that is not a lost refund. The paid
-    // slot of the same schedule forces the settlement to run.
     const sharedSchedule = '00000000-0000-4000-8000-000000000099';
     const paid = slotRow('1', { batch_id: BATCH, status: 'pending', task_id: null, schedule_id: sharedSchedule });
     const freeZero = slotRow('7', { batch_id: BATCH, status: 'pending', task_id: null, charged_tokens: 0, schedule_id: sharedSchedule });
@@ -158,8 +144,6 @@ describe('DELETE /api/schedule on a discounted batch', () => {
       { slotId: '1', refunded: false, alreadyRefunded: false, reason: 'discount_withheld' },
       { slotId: '7', refunded: false, alreadyRefunded: false, reason: 'not_charged' },
     ]);
-    // The settlement ran, so the charged-0 slot went through the settled
-    // branch — yet no billing error was logged for it.
     expect(fake.rpcCalls.map((call) => call.name)).toEqual(['settle_batch_clawback']);
     expect(logger.error).not.toHaveBeenCalledWith(
       '[api/schedule] cancel refund missing settlement outcome',
@@ -194,12 +178,6 @@ describe('DELETE /api/schedule on a discounted batch', () => {
   });
 });
 
-//---------------
-// Cookie-session cancel: refund_batch_tokens and settle_batch_clawback are
-// service-role only (migration 065), and slot/schedule deletes are service-role
-// only (migration 066). The route runs both on the service client.
-//---------------
-
 describe('DELETE /api/schedule from a cookie session', () => {
   it('runs the clawback and refund RPCs on the service client, never the session client', async () => {
     const { fake, paid } = batchOfSix();
@@ -207,12 +185,9 @@ describe('DELETE /api/schedule from a cookie session', () => {
       auth: { userId: USER_ID, accessToken: 'jwt', isApiKey: false, isOAuth: false, personaIds: null },
       error: null,
     } as never);
-    // The session client can read the tables but holds no EXECUTE grant.
     const sessionRpc = vi.fn(async () => ({ data: null, error: { code: '42501', message: 'permission denied' } }));
     vi.mocked(createSupabaseServerClient).mockResolvedValue({ ...fake.client, rpc: sessionRpc } as never);
 
-    // First cancel withholds the discount (settlement only), the second
-    // refunds in full (refund only): together they reach both RPCs.
     const first = await cancel(paid[0]?.schedule_id);
     const second = await cancel(paid[1]?.schedule_id);
 

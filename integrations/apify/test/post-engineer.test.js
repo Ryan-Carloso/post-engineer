@@ -25,13 +25,11 @@ const baseInput = () => ({
   cta: 'Follow for more.',
   providers: ['youtube'],
   voiceId: 'chatterbox:kokoro_af_heart',
-  // One image per segment: the density rule needs exactly 3 here.
   images: urls(3),
 });
 
 const jsonResponse = (status, body) => new Response(JSON.stringify(body), { status });
 
-// A fetch double that answers by "METHOD path" and records every call.
 function fakeFetch(routes) {
   const calls = [];
   const fetchImpl = async (url, init) => {
@@ -76,9 +74,7 @@ describe('parseInput', () => {
     const input = parseInput(baseInput());
     assert.equal(input.apiUrl, DEFAULT_API_URL);
     assert.equal(input.mode, 'asap');
-    // No persona: faceless by default (generate-and-schedule refuses otherwise).
     assert.equal(input.videoType, 'faceless');
-    // Description defaults to the hook when omitted.
     assert.equal(input.description, 'Stop scrolling.');
     assert.equal(input.waitForCompletion, true);
     assert.equal(input.timeoutMinutes, 30);
@@ -293,8 +289,6 @@ describe('runActor', () => {
     assert.equal(result.slots[0].error, 'boom [redacted]');
   });
 
-  // The web proxy answers the same 410 for a delivered and a failed task;
-  // the slot status is what tells them apart.
   const gone = () => jsonResponse(410, { success: false, terminal: true, error: 'The video task no longer exists.' });
   const goneWithSlot = (slotResponse) =>
     runWith(
@@ -393,7 +387,6 @@ describe('Actor definition files', () => {
     assert.deepEqual([...schema.required].sort(), ['body', 'cta', 'hook', 'providers', 'title']);
   });
 
-  // The Store auto-tests the Actor daily with its default (prefilled) input.
   it('prefills every required field, so the default input is a valid dry run', () => {
     const defaults = Object.fromEntries(
       Object.entries(schema.properties)
@@ -405,8 +398,6 @@ describe('Actor definition files', () => {
     assert.equal(parseInput(defaults).apiKey, null);
   });
 
-  // The prefilled voice must be the web app's own default voice id, so the
-  // default input also works once a key is added.
   it('prefills the voice with the web default voice id', () => {
     const fallback = readFileSync(new URL('../../../apps/web/lib/voice-fallback.ts', import.meta.url), 'utf8');
     assert.ok(fallback.includes(`DEFAULT_VOICE_FEMALE = '${schema.properties.voiceId.prefill}'`));
@@ -430,13 +421,11 @@ describe('Actor definition files', () => {
     assert.equal(actor.output, './output_schema.json');
   });
 
-  // The Store refuses to publish an Actor without an output schema.
   it('declares an output schema that links the dataset items and the OUTPUT record', () => {
     const output = read('../.actor/output_schema.json');
     assert.equal(output.actorOutputSchemaVersion, 1);
     const templates = Object.values(output.properties).map((p) => p.template);
     assert.ok(templates.includes('{{links.apiDefaultDatasetUrl}}/items'));
-    // main.js saves the result under this key.
     assert.ok(templates.includes('{{links.apiDefaultKeyValueStoreUrl}}/records/OUTPUT'));
     assert.ok(readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').includes("Actor.setValue('OUTPUT'"));
   });
@@ -505,7 +494,6 @@ describe('images material', () => {
     await assert.rejects(promise);
     assert.equal(calls.length, 1);
     const sent = JSON.parse(calls[0].init.body);
-    // No persona in the input: the Actor's videoType is faceless.
     assert.equal(sent.videoType, 'faceless');
     assert.equal('facelessMaterial' in sent, false);
     assert.equal(sent.segments.length, 4);
@@ -518,7 +506,6 @@ describe('images material', () => {
     );
     await assert.rejects(promise);
     const sent = JSON.parse(calls[0].init.body);
-    // No persona in the input: the Actor's videoType is faceless.
     assert.equal(sent.videoType, 'faceless');
     assert.equal('facelessMaterial' in sent, false);
   });

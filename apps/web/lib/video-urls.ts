@@ -1,23 +1,5 @@
-//---------------
-// video-urls — maps engine file URIs to the authenticated web download
-// proxy. Single source of truth shared by the video-status route and the
-// persona delete-preview endpoint, so both produce identical download URLs.
-//---------------
-
-/**
- * Engine task ids are engine-generated uuid4-ish slugs. Guard interpolating
- * DB-sourced ids into engine URLs: encoding alone blocks `/` traversal, but
- * a visibly-malformed id is a caller bug worth skipping loudly, not a
- * request to send.
- */
 export const SAFE_TASK_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 
-/**
- * Rewrite engine `/api/v1/download|stream/...` URIs (relative or absolute
- * on the engine origin) to `/api/persona/video-download/:taskId/...`.
- * Absolute URLs from any other origin are nulled — the proxy must never
- * fetch third-party hosts. Non-URL values pass through untouched.
- */
 export function rewriteVideoUrls(body: unknown, taskId: string, baseUrl: string): unknown {
   if (typeof body === 'string') {
     let candidate = body;
@@ -29,7 +11,6 @@ export function rewriteVideoUrls(body: unknown, taskId: string, baseUrl: string)
         internalAbsolute = true;
       }
     } catch {
-      // Non-URL strings are ordinary status data.
     }
     const relative = candidate.match(/^\/api\/v1\/(download|stream)\/([^?]+)(\?.*)?$/);
     if (relative) {
@@ -45,21 +26,11 @@ export function rewriteVideoUrls(body: unknown, taskId: string, baseUrl: string)
   return Object.fromEntries(Object.entries(body).map(([key, value]) => [key, rewriteVideoUrls(value, taskId, baseUrl)]));
 }
 
-/**
- * Best-effort extraction of the first downloadable video URL from a
- * rewritten engine task body. Returns null when the body carries no
- * downloadable file (task gone, failed, or engine unreachable) — callers
- * must render "download unavailable", never a broken link.
- */
 export function firstDownloadUrl(rewrittenBody: unknown): string | null {
   const found: string[] = [];
   const visit = (value: unknown): void => {
     if (typeof value === 'string') {
       if (value.startsWith('/api/persona/video-download/') && !value.includes('?source=stream')) {
-        // Validate every segment: a pre-formed string from the engine body
-        // must not smuggle an arbitrary same-origin path into the href.
-        // Segments are percent-encoded by the encoder, so test the decoded
-        // form (a decode failure is itself a rejection).
         const segments = value.slice('/api/persona/video-download/'.length).split('/');
         const valid = segments.length > 0 && segments.every((s) => {
           if (s.length === 0) return false;

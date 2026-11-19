@@ -1,17 +1,3 @@
-//---------------
-// POST /api/media/check — mechanical image URL check (MCP media (action: check)).
-//
-// The caller authenticates with a session or API key; the route proxies
-// to the engine's /api/v1/media/check with the server secret, where the
-// SSRF-safe download and the mechanical checks run (download refusal,
-// real image type, size bounds). The response carries
-// the code plus the probed dimensions — never the checked URL, which
-// can hold credentials in its query string. With videoAspect given, a
-// photo that cannot fill the frame reports wrong_aspect instead of ok.
-// No LLM runs here and no relevance is judged: the agent, who sees the
-// image, decides relevance.
-//---------------
-
 import { NextResponse } from 'next/server';
 
 import { apiErrorResponse } from '@/lib/api-error';
@@ -32,8 +18,6 @@ const CHECK_CODES = new Set([
   'media_expired',
 ]);
 
-// Matches the engine VideoAspect enum (landscape 16:9, portrait 9:16,
-// square 1:1): the check must accept every aspect the engine does.
 const VIDEO_ASPECTS = new Set(['9:16', '16:9', '1:1']);
 
 async function postHandler(request: Request): Promise<NextResponse> {
@@ -118,10 +102,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
   if (typeof checked.height === 'number' && Number.isFinite(checked.height)) {
     response.height = checked.height;
   }
-  // has_face is the engine's face verdict (issue #589): pass it through
-  // so the MCP agent can pre-check the face requirement instead of
-  // learning it from the generation-time 400. A non-boolean value is
-  // dropped (older engines omit the key entirely).
   if (typeof checked.has_face === 'boolean' || checked.has_face === null) {
     response.has_face = checked.has_face;
   }

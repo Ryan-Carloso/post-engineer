@@ -9,9 +9,7 @@ generate_video applies it to a copy of the request params: scaling the
 caller's params in place would compound across several videos.
 """
 
-# Short side, in pixels, that `font_size` is defined for.
 REFERENCE_SHORT_SIDE = 1080
-# Lower bound of VideoParams.font_size (pinned by a test against the schema).
 MIN_FONT_SIZE = 8
 
 

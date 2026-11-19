@@ -105,7 +105,5 @@ class ValidatePublishPlanBindingTests(unittest.TestCase):
             validate_publish_plan(schedule, "Slot title", "Agent description.", bound_accounts={})
 
     def test_skips_the_binding_check_when_no_binding_is_given(self):
-        # Faceless schedules carry no persona, so the generate stage passes
-        # no binding and the ownership-only checks stand.
         schedule = dict(SCHEDULE, providers=["youtube"])
         validate_publish_plan(schedule, "Slot title", "Agent description.")

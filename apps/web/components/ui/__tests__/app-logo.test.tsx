@@ -29,9 +29,6 @@ describe('AppLogo', () => {
   });
 
   it('lets a caller radius override the base radius', () => {
-    // Tailwind resolves conflicting utilities by stylesheet order, not
-    // class-attribute order, so a naive string concat would let the base
-    // rounded-2xl win over the caller's rounded-lg everywhere.
     render(<AppLogo className="rounded-lg" />);
     const img = screen.getByTestId('app-logo');
     expect(img).toHaveClass('rounded-lg');
@@ -39,8 +36,6 @@ describe('AppLogo', () => {
   });
 
   it('does not preload the logo by default', () => {
-    // next/image turns `priority` into <link rel="preload"> tags; the mock
-    // swallows unknown DOM attrs, so pin at the prop level instead.
     capturedImageProps.length = 0;
     render(<AppLogo />);
     expect(capturedImageProps).toHaveLength(1);

@@ -53,16 +53,6 @@ vi.mock('@/lib/i18n/provider', () => {
   return { useI18n, I18nProvider };
 });
 
-//---------------
-// Load-error regression tests: real React Query + real lib/api, only the
-// network (fetch) is stubbed. The mocked-hooks suite in page.test.tsx
-// cannot catch this: the error page used to subscribe to the same queries
-// it guards, so mounting it refetched the errored query, flipped it back
-// to pending, and unmounted the error page — an infinite loop that never
-// showed the error. These tests pin the fixed behavior: the error page
-// renders stably, with exactly one failed fetch, and retry refetches once.
-//---------------
-
 import PersonaPage from '../page';
 import { I18nProvider } from '@/lib/i18n/provider';
 
@@ -108,8 +98,6 @@ describe('persona page load error (real queries)', () => {
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'persona.loadError' })).toBeInTheDocument();
     });
-    // Let any refetch loop spin up: with the bug, hundreds of voices
-    // requests fired within two seconds.
     await new Promise((resolve) => setTimeout(resolve, 500));
     expect(voicesCalls()).toBe(1);
   });
@@ -124,8 +112,6 @@ describe('persona page load error (real queries)', () => {
     await waitFor(() => {
       expect(voicesCalls()).toBe(2);
     });
-    // The retry fails too, so the error page comes back after the
-    // transient skeleton shown while the refetch is in flight.
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'persona.loadError' })).toBeInTheDocument();
     });

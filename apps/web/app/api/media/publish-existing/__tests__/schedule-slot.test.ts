@@ -26,7 +26,6 @@ describe('resolvePublishAtSlot', () => {
 
   it('reads a naive publishAt as wall-clock in the timezone', () => {
     const at = new Date(Date.now() + 72 * HOUR_MS);
-    // Tokyo is UTC+9 all year.
     const local = new Date(at.getTime() + 9 * HOUR_MS).toISOString().slice(0, 16);
     const result = resolvePublishAtSlot(local, 'Asia/Tokyo', ROUTE);
     if (result instanceof NextResponse) throw new Error('expected a slot');
@@ -35,9 +34,6 @@ describe('resolvePublishAtSlot', () => {
   });
 
   it('keeps an offset instant inside a DST fall-back hour on that exact instant', () => {
-    // 2026-11-01 01:30 happens twice in New York; the second one is 06:30Z.
-    // Re-deriving the slot from the wall-clock "01:30" would land on the
-    // first one (05:30Z), before publishAt, and roll to the next day.
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-10-25T00:00:00Z'));
     try {

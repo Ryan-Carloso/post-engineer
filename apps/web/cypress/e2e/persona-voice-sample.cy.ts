@@ -1,9 +1,3 @@
-//---------------
-// Persona voice sample E2E — on /persona, the play button of a house voice
-// in the voice picker dialog plays that voice's English sample
-// (/voice-samples/<name>.mp3). Network mocked with cy.intercept; the Audio
-// constructor is stubbed before page load.
-//---------------
 import { houseVoice } from '../support/voices';
 
 const VOICES = [
@@ -38,8 +32,6 @@ const stubAudio = (win: Cypress.AUTWindow): void => {
 
 describe('Persona — sample de voz ao clicar no card', () => {
   beforeEach(() => {
-    // Sessão REAL: o middleware rejeita visits sem cookie e devolve
-    // /landing, onde a query de vozes nunca dispara.
     cy.loginE2EUser();
 
     cy.intercept('GET', '/api/persona/voices', {
@@ -62,9 +54,6 @@ describe('Persona — sample de voz ao clicar no card', () => {
     cy.window().then((win) => {
       const audios = (win as unknown as { __fakeAudios: FakeAudioRecord[] }).__fakeAudios;
       expect(audios).to.have.length(1);
-      // Sample files are named after the catalog voice name, without the
-      // `chatterbox:` prefix (public/voice-samples/<name>.mp3); every
-      // sample is the English take.
       expect(audios[0].url).to.equal('/voice-samples/kokoro_am_michael.mp3');
       expect(audios[0].playCalled).to.be.true;
     });

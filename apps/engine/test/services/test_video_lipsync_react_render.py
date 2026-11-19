@@ -50,8 +50,6 @@ def _make_clips(workdir: Path) -> tuple[str, str]:
     background = workdir / "background.mp4"
     persona = workdir / "persona.mp4"
 
-    # Background: 4s of colour bars plus a 200Hz tone. The tone is what makes the
-    # audio-mapping bug detectable.
     _ffmpeg([
         "-f", "lavfi", "-i", f"testsrc=size={WIDTH}x{HEIGHT}:rate=30:duration={TOTAL_SECONDS}",
         "-f", "lavfi", "-i", f"sine=frequency={BACKGROUND_TONE_HZ}:sample_rate=44100:duration={TOTAL_SECONDS}",
@@ -59,7 +57,6 @@ def _make_clips(workdir: Path) -> tuple[str, str]:
         "-c:a", "aac", "-shortest", str(background),
     ])
 
-    # Persona: portrait-ish input the compositor has to fit, plus a 1000Hz tone.
     _ffmpeg([
         "-f", "lavfi", "-i", f"color=c=blue:size=306x736:rate=30:duration={TOTAL_SECONDS}",
         "-f", "lavfi", "-i", f"sine=frequency={PERSONA_TONE_HZ}:sample_rate=44100:duration={TOTAL_SECONDS}",
@@ -122,8 +119,6 @@ class ReactLayoutRenderTest(unittest.TestCase):
             self.assertEqual(probe, f"{WIDTH},{HEIGHT}")
 
             duration = vd.video_duration_seconds(str(out))
-            # The hook is spliced in front of the background, so the total is the
-            # background length, not hook+background.
             self.assertAlmostEqual(duration, TOTAL_SECONDS, delta=0.5)
 
     def test_react_keeps_the_persona_voice(self) -> None:

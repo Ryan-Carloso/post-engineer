@@ -1,7 +1,3 @@
-//---------------
-// i18n — unified dictionary exports and type utilities
-//---------------
-
 import { ptDictionary as basePtDictionary, type Dictionary as BaseDictionary } from './pt';
 import { enDictionary as baseEnDictionary } from './en';
 import { publishingAccountsStrings } from './publishing-accounts';
@@ -27,17 +23,6 @@ import { postsCalendarStrings } from './posts-calendar-i18n';
 import { hookPhotoStrings } from './hook-photo-i18n';
 import { onboardingStrings } from './onboarding-i18n';
 import type { Locale } from './types';
-
-//---------------
-// Per-persona default publishing accounts (issue #212): en.ts/pt.ts are
-// grandfathered over the 500-line file-size cap and may not grow a single
-// line, so the feature's copy lives in ./publishing-accounts and is merged
-// here. The persona layout hint follows the same pattern
-// (./persona-layout-hint-i18n, merged into personas below). The exported
-// dictionaries stay reference-identical per locale
-// (dictionaries.pt === ptDictionary), and the Dictionary/TranslationKey
-// contract below covers the merged keys.
-//---------------
 
 export const ptDictionary = {
   ...basePtDictionary,
@@ -172,10 +157,6 @@ export const LOCALES: ReadonlyArray<{ value: Locale; label: string }> = [
   { value: 'en', label: 'EN' },
 ];
 
-//---------------
-// TranslationKey — union of all translation keys in dot-notation
-// Ex.: "nav.posts" | "posts.statusPending" | "accounts.default" | ...
-//---------------
 export type TranslationKey = {
   [Section in keyof Dictionary]: {
     [Key in keyof Dictionary[Section]]: Key extends string

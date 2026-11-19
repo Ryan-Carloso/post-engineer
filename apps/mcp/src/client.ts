@@ -5,7 +5,6 @@ import {
   MAX_UPLOAD_VIDEO_BYTES, MAX_UPLOAD_VIDEO_GB, VIDEO_LAYOUTS,
 } from './limits.js';
 
-// Re-exported so existing import sites (`../client.js`) keep working.
 export {
   MAX_LIBRARY_IMAGE_BYTES,
   MAX_LIBRARY_IMAGE_MB,
@@ -81,7 +80,6 @@ import {
   updatePersonaImage as updatePersonaImageContract,
 } from './contracts/personas.js';
 
-// Re-exported so existing import sites (`./client.js`) keep working.
 export type {
   CreatePersonaInput,
   DirectPublishAccountResult,
@@ -99,36 +97,18 @@ import { randomUUID } from 'node:crypto';
 import { mcpTelemetryHeaders } from './analytics.js';
 
 const PRODUCTION_API_URL = 'https://post-engineer.com';
-// Hung requests must not block the stdio tool call (and the agent session) forever.
 const REQUEST_TIMEOUT_MS = 30_000;
-// Multipart uploads can exceed the 30s default (up to 10 10MB images).
 const UPLOAD_TIMEOUT_MS = 120_000;
-// Shared with tools.ts so the client-side guards, the Zod schema limits,
-// and the field description strings can't drift apart. The values live in
-// the shared personas contract; re-exported here so existing import sites
-// (`../client.js`) keep working.
 export {
   MAX_LIBRARY_DESCRIPTION_LENGTH,
   MAX_LIBRARY_IMAGES,
   MAX_LIBRARY_TAG_LENGTH,
 };
 
-// Re-exported from image-guards.ts so existing import sites
-// (`../client.js`) keep working after the extraction.
 export { assertImageSize } from './image-guards.js';
-// Re-exported so existing import sites (`../client.js`) keep working after
-// the direct-publish extraction (client-publish-uploaded.ts).
 export { assertVideoSize } from './client-publish-uploaded.js';
 import { appendPersonaAvatar, imageFormFile } from './persona-avatar.js';
 
-// Normalize library metadata: trim; empty/whitespace-only values normalize
-// to ''. Both upload paths (the create-persona imageTags/imageDescriptions
-// arrays and the add-persona-image tag/description fields) send '' for empty
-// metadata, and the server stores '' verbatim (the tag column is text not
-// null default ''), so the stored values are identical on both paths.
-// Lengths are checked here so an oversized tag fails before the multipart
-// upload, not server-side after all bytes transfer. The label (e.g.
-// filename) is included in the error when available.
 function checkLibraryMetadataLengths(
   tag: string | undefined,
   description: string | undefined,
@@ -155,10 +135,6 @@ function normalizeLibraryMetadata(
   return { tag, description };
 }
 
-// The bearer key is sent to this URL, so fail fast on a malformed or
-// non-https override instead of silently targeting it. Loopback http is
-// allowed for local staging; anything else must be https so the key never
-// travels in cleartext.
 function resolveBaseUrl(override: string | undefined): string {
   const raw = override ?? PRODUCTION_API_URL;
   let url: URL;
@@ -178,10 +154,6 @@ function resolveBaseUrl(override: string | undefined): string {
   if (url.protocol === 'http:' && !loopback) {
     throw new Error('Invalid POST_ENGINEER_API_URL: http: is only allowed for loopback hosts (use https:)');
   }
-  // Never echo the raw value: it may embed credentials (userinfo/query).
-  // Return the normalized form so the validated value and the used value are
-  // identical: origin drops userinfo, trailing slashes are stripped so
-  // `${baseUrl}${path}` never yields `//api/...`.
   return url.origin + url.pathname.replace(/\/+$/, '');
 }
 
@@ -197,8 +169,6 @@ export class PostEngineerClient {
   }
 
   getHeaders(includeContentType = true): Record<string, string> {
-    // Telemetry headers name the calling MCP tool; the web API records
-    // mcp_tool_called from them (see analytics.ts).
     const headers: Record<string, string> = { ...mcpTelemetryHeaders({ includeVersion: !this.suppressVersionHeader }), Accept: 'application/json' };
     if (includeContentType) headers['Content-Type'] = 'application/json';
     if (this.apiKey) {
@@ -215,17 +185,11 @@ export class PostEngineerClient {
   ): Promise<unknown> {
     const response = await fetch(`${this.baseUrl}${path}`, {
       ...init,
-      // init.signal, if provided, intentionally wins over timeoutMs; no
-      // current caller passes one, so UPLOAD_TIMEOUT_MS always applies on
-      // the upload paths this parameter exists for.
       signal: init.signal ?? AbortSignal.timeout(timeoutMs),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      // Structured bodies keep code/field; `errors` lists every validation
-      // problem. readApiFailure caps the text so nothing unbounded reaches
-      // agent output.
       const failure = readApiFailure(errorText);
       throw new ApiError(
         `Failed to ${action}: ${response.status} ${failure.detail}`,
@@ -233,10 +197,6 @@ export class PostEngineerClient {
       );
     }
 
-    // Some endpoints answer 204 No Content. An empty or non-JSON body on any
-    // other status is a real failure: surfacing it beats reporting success
-    // with an undefined payload (e.g. a paid video job the agent thinks started).
-    // The { ok: true } sentinel keeps handlers from rendering "undefined".
     if (response.status === 204) return { ok: true };
     const successText = await response.text();
     if (successText.length === 0) return { ok: true };
@@ -250,8 +210,6 @@ export class PostEngineerClient {
   async createPersona(input: CreatePersonaInput): Promise<ResponseOf<typeof createPersonaContract>> {
     const formData = new FormData();
     formData.set('publishingAccounts', JSON.stringify(requirePublishingAccounts(input.accounts)));
-    // Every persona has a face: exactly one of avatarUrl or avatarPath (the
-    // `photo` file), checked before any other file is read.
     await appendPersonaAvatar(formData, input, true);
     formData.set('name', input.name);
     formData.set('voiceId', input.voiceId);
@@ -263,9 +221,6 @@ export class PostEngineerClient {
     formData.set('niche', input.niche ?? 'General');
     formData.set('faceQuality', input.faceQuality ?? 'very_good');
     const images = input.images ?? [];
-    // An imagePrimaryIndex without images is a caller bug (typo'd `images`
-    // or a lone index): fail fast instead of a silent successful creation
-    // with no primary image.
     if (input.imagePrimaryIndex !== undefined && images.length === 0) {
       throw new Error('imagePrimaryIndex requires images: provide at least one library image.');
     }
@@ -274,7 +229,6 @@ export class PostEngineerClient {
         throw new Error(`At most ${MAX_LIBRARY_IMAGES} library images are allowed per persona.`);
       }
       if (input.imagePrimaryIndex !== undefined) {
-        // Fail fast before reading any file: pure-argument checks come first.
         if (input.imagePrimaryIndex < 0 || input.imagePrimaryIndex >= images.length) {
           throw new Error(
             `imagePrimaryIndex ${input.imagePrimaryIndex} is out of range: ${images.length} images provided.`,
@@ -284,10 +238,6 @@ export class PostEngineerClient {
       }
       const tags: string[] = [];
       const descriptions: string[] = [];
-      // Sequential reads bound memory: at most one 10MB image is resident at
-      // a time (10 in parallel would hold ~100MB in this stdio process), and
-      // upload time is dominated by network transfer anyway. Order is
-      // preserved, so tags/descriptions stay aligned with the entries.
       for (const image of images) {
         const { tag, description } = normalizeLibraryMetadata(image, basename(image.path));
         formData.append('images', await imageFormFile(image.path), basename(image.path));
@@ -340,7 +290,6 @@ export class PostEngineerClient {
     if (input.voiceId !== undefined) formData.set('voiceId', input.voiceId);
     if (input.language !== undefined) formData.set('language', input.language);
     if (input.videoAspect !== undefined) formData.set('videoAspect', input.videoAspect);
-    // Sent only when provided: never rewrite an untouched field with a default the caller never chose.
     if (input.videoLayout !== undefined) formData.set('videoLayout', input.videoLayout);
     if (input.scriptPrompt !== undefined) formData.set('scriptPrompt', input.scriptPrompt);
     if (input.paragraphNumber !== undefined) formData.set('paragraphNumber', String(input.paragraphNumber));
@@ -456,8 +405,6 @@ export class PostEngineerClient {
   }
 
   async deleteSlot(slotId: string): Promise<ResponseOf<typeof deleteSlotContract>> {
-    // Only pending (awaiting) or failed slots are deletable; the server
-    // 409s anything mid-flight or published, and the schedule's last slot.
     const raw = await this.request(
       `/api/schedule/slots/${encodeURIComponent(slotId)}`,
       { method: 'DELETE', headers: this.getHeaders() },
@@ -471,9 +418,6 @@ export class PostEngineerClient {
   }
 
   async listVideoGenerations(limit?: number): Promise<ResponseOf<typeof listVideoGenerationsContract>> {
-    // The server silently falls back to its default on an invalid limit —
-    // fail fast with the field named instead of sending a value the caller
-    // never meant.
     if (limit !== undefined && (!Number.isInteger(limit) || limit < 1 || limit > VIDEO_GENERATIONS_MAX_LIMIT)) {
       throw new Error(`limit must be an integer between 1 and ${VIDEO_GENERATIONS_MAX_LIMIT}.`);
     }
@@ -509,9 +453,6 @@ export class PostEngineerClient {
   }
 
   async deletePersona(personaId: string): Promise<ResponseOf<typeof deletePersonaContract>> {
-    // Destructive and irreversible: the persona, all its schedules, slots,
-    // generated videos, and image library are removed. No token refunds —
-    // prepaid tokens for pending slots are forfeited.
     const raw = await this.request(
       `/api/persona?personaId=${encodeURIComponent(personaId)}`,
       { method: 'DELETE', headers: this.getHeaders() },
@@ -521,8 +462,6 @@ export class PostEngineerClient {
   }
 
   async disconnectAccount(provider: string, providerAccountId: string): Promise<ResponseOf<typeof disconnectAccountContract>> {
-    // The route 400s INVALID_PROVIDER / INVALID_PARAMS — fail fast with the
-    // field named before any fetch goes out.
     if (!isSocialProvider(provider)) {
       throw new Error(`provider must be one of: ${SOCIAL_PROVIDERS.join(', ')}.`);
     }
@@ -542,8 +481,6 @@ export class PostEngineerClient {
   }
 
   async validateScript(segments: unknown, videoType: VideoType = 'hook_lipsync'): Promise<ResponseOf<typeof validateScriptContract>> {
-    // Mechanical validation only: the web route debits no tokens and
-    // schedules nothing — it re-runs the generate route's validation.
     const raw = await this.request(
       '/api/videos/validate-script',
       {
@@ -558,16 +495,9 @@ export class PostEngineerClient {
 
   async generatePersonaVideo(input: GeneratePersonaVideoInput): Promise<ResponseOf<typeof generateAndScheduleContract>> {
     const title = requireTitle(input.title);
-    // Map the per-provider account arrays into the publishing.accounts
-    // record. Only set entries the caller provided: the server enforces
-    // which providers need accounts and rejects unknown ones.
     const accounts: Record<string, string[]> = {};
     const byProvider = { youtube: input.youtubeAccountIds, instagram: input.instagramAccountIds, linkedin: input.linkedinAccountIds, bluesky: input.blueskyAccountIds, threads: input.threadsAccountIds, facebook: input.facebookAccountIds, pinterest: input.pinterestAccountIds, fanvue: input.fanvueAccountIds, '3speak': input.threespeakAccountIds, rumble: input.rumbleAccountIds, telegram: input.telegramAccountIds };
     for (const [provider, ids] of Object.entries(byProvider)) if (ids !== undefined) accounts[provider] = ids;
-    // A stray schedule plan in ASAP mode is a caller bug: the server 400s
-    // ("publishing.schedule must not be set"), so fail fast with the same
-    // rule before any fetch goes out. Conversely, scheduled mode without
-    // a plan would 400 ("publishing.schedule is required").
     const mode = input.mode ?? 'scheduled';
     if (mode === 'asap' && (input.startAt !== undefined || input.times !== undefined)) {
       throw new Error("startAt and times must not be set when mode is 'asap'.");
@@ -581,9 +511,6 @@ export class PostEngineerClient {
         method: 'POST',
         headers: this.getHeaders(),
         body: JSON.stringify({
-          // Omitted rather than sent empty: the API treats an absent
-          // personaId as "post without a persona" and an empty string as the
-          // same thing, but omitting keeps the payload honest.
           ...(input.personaId !== undefined ? { personaId: input.personaId } : {}),
           title,
           description: input.description,
@@ -591,8 +518,6 @@ export class PostEngineerClient {
             mode,
             providers: input.providers, ...(input.pinterestBoardId ? { pinterestBoardId: input.pinterestBoardId } : {}),
             accounts,
-            // ASAP mode carries no schedule plan: the timezone is kept for
-            // display, matching the API contract.
             ...(mode === 'asap'
               ? { timezone: input.timezone ?? 'UTC' }
               : {
@@ -605,7 +530,6 @@ export class PostEngineerClient {
           },
           options: input.options ?? undefined,
           ...(input.experiment !== undefined ? { experiment: input.experiment } : {}),
-          // No caller key: a fresh UUID per call (a retry needs a stable key).
           idempotencyKey: input.idempotencyKey ?? randomUUID(),
         }),
       },
@@ -639,16 +563,9 @@ export class PostEngineerClient {
     const formData = new FormData();
     formData.set('personaId', personaId);
     formData.append('image', await imageFormFile(image.path), basename(image.path));
-    // Empty/whitespace-only metadata normalizes to '' (see
-    // normalizeLibraryMetadata): the server stores '' verbatim on both
-    // upload paths, so the add path simply omits the keys — an empty tag
-    // can never match the deterministic keyword selection.
     const { tag, description } = normalizeLibraryMetadata(image);
     if (tag) formData.set('tag', tag);
     if (description) formData.set('description', description);
-    // isPrimary is typed as `true` only (swap-only, symmetric with
-    // persona_media (action: update_image)): an explicit false is rejected at schema parse
-    // time and can never reach this branch.
     if (image.isPrimary) formData.set('isPrimary', 'true');
     const raw = await this.request(
       '/api/persona/images',
@@ -672,27 +589,13 @@ export class PostEngineerClient {
     ) {
       throw new Error('updatePersonaImage requires at least one of tag, description, or isPrimary.');
     }
-    // The server PATCH is swap-only: isPrimary:false always 400s there.
-    // The tool schema already rejects false (z.literal(true)); this guard
-    // is for direct programmatic callers of the client library, where
-    // isPrimary?: boolean still permits false. Fail fast with an
-    // actionable message instead of the wasted round-trip.
     if (input.isPrimary === false) {
       throw new Error(
         'updatePersonaImage: isPrimary cannot be false — mark another image as primary instead (the swap atomically demotes the old one).'
       );
     }
-    // Trim metadata like the add paths do: an untrimmed tag can never match
-    // the deterministic keyword selection. undefined = leave unchanged (the
-    // key is dropped by JSON.stringify); empty string = clear the stored
-    // value (server convention). A whitespace-only value trims to '' and
-    // therefore clears too — the field descriptions in tools.ts say so,
-    // since a caller passing "   " likely did not intend to wipe the value.
     const tag = input.tag?.trim();
     const description = input.description?.trim();
-    // Fail fast on oversized metadata before the round-trip, symmetric with
-    // the add/create paths (undefined = leave unchanged, so the check must
-    // skip undefined instead of defaulting to '').
     checkLibraryMetadataLengths(tag, description);
     const raw = await this.request(
       '/api/persona/images',

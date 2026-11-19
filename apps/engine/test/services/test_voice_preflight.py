@@ -90,7 +90,7 @@ class VoiceProblemTests(unittest.TestCase):
 
     def test_a_voice_sample_means_no_tts_so_no_check(self):
         params = _sample_persona()
-        params.voice_name = "energetic"  # ignored: the sample is the narration
+        params.voice_name = "energetic"
         self.assertIsNone(voice_preflight.voice_problem(params))
 
     def test_custom_audio_means_no_tts_so_no_check(self):
@@ -102,7 +102,7 @@ class VoiceProblemTests(unittest.TestCase):
         with self.assertRaises(VoiceConfigError) as ctx:
             voice_preflight.check_voice(_params(voice_id="energetic"))
         self.assertIn("unknown voice 'energetic'", str(ctx.exception))
-        voice_preflight.check_voice(_params())  # a valid voice does not raise
+        voice_preflight.check_voice(_params())
 
 
 class StartPreflightOrderTests(unittest.TestCase):

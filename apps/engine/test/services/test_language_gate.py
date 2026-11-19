@@ -19,8 +19,6 @@ class IsEnglishLanguageTests(unittest.TestCase):
                 self.assertTrue(is_english_language(language))
 
     def test_accepts_the_full_english_language_name(self):
-        # Personas may store a language name instead of a code ("English");
-        # edge_tts has always accepted that form, so the gate must too.
         for language in ("English", "english", "ENGLISH", "inglês", "ingles"):
             with self.subTest(language=language):
                 self.assertTrue(is_english_language(language))

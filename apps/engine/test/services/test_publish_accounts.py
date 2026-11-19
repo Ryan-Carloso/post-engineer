@@ -237,11 +237,6 @@ class AccountRetryTests(unittest.TestCase):
         self.assertEqual(youtube["status"], "published")
 
     def test_in_progress_result_waits_for_the_first_attempt_then_replays_its_success(self) -> None:
-        # The web route is still publishing under the first request, which
-        # outlived the engine's 600s timeout. The engine re-asks; the web
-        # answers "in progress" instead of publishing again. The retry
-        # must not spend the account's 3-try budget, and the recorded
-        # success ends the slot with no refund and no second post.
         slot = self._slot(["instagram"])
         slot["schedules"]["instagram_account_ids"] = ["ig-1"]
         store = _MemoryStore(slot)
@@ -288,22 +283,11 @@ class AccountRetryTests(unittest.TestCase):
         self.assertEqual(store.slot["status"], "published")
         self.assertEqual(store.refund_batch_calls, [])
 
-        # Every call carries the same deterministic scope key, so the web
-        # route can tell the re-asks apart from a new publish.
         expected_key = f"slot:slot-1:video:{os.path.basename(self.video_path)}"
         self.assertEqual(len(calls), 3)
         self.assertTrue(all(item.get("publish_scope_key") == expected_key for item in calls))
 
     def test_in_progress_wait_capped_as_unknown_without_refund(self) -> None:
-        # The wait for an in-flight publish is bounded: the web answers
-        # publish_in_progress while the first request still holds the
-        # ledger claim, and the heartbeat renews that claim indefinitely
-        # while the handler lives — so without a cap the engine would
-        # re-ask (re-uploading the full video) every 60s forever. Past
-        # the cap the account fails terminally as publish_unknown: the
-        # first post may already be live, so the token is not refunded
-        # and only a human who checked the provider may post again.
-        # The cap is patched small here so two waits reach it.
         slot = self._slot(["instagram"])
         slot["schedules"]["instagram_account_ids"] = ["ig-1"]
         store = _MemoryStore(slot)
@@ -341,19 +325,13 @@ class AccountRetryTests(unittest.TestCase):
             self.assertIn("token was not refunded", outcome["notice"])
             self.assertEqual(store.slot["status"], "failed")
             self.assertEqual(store.refund_batch_calls, [])
-            # Two notices: the per-account unknown warning, then the
-            # slot-failed summary — the same pair the web-parked
-            # publish_unknown path already sends.
             self.assertEqual(notify.call_count, 2)
             self.assertIn("may already have published", notify.call_args_list[0].args[0])
             self.assertIn("❌ Slot failed", notify.call_args_list[1].args[0])
 
-            # The engine stopped re-asking: no third full-video upload.
             self.assertEqual(len(calls), 2)
 
     def test_transient_account_failure_inside_a_200_is_retried_then_exhausted(self) -> None:
-        # A provider 503 reported per account inside a 200 response carries
-        # errorCode transient: it gets the 30s / 2min retries, not one shot.
         slot = self._slot(["instagram"])
         slot["schedules"]["instagram_account_ids"] = ["ig-1"]
         store = _MemoryStore(slot)
@@ -385,9 +363,6 @@ class AccountRetryTests(unittest.TestCase):
         self.assertEqual(store.slot["status"], "failed")
 
     def test_one_unlabeled_rejection_applies_to_every_pending_account(self) -> None:
-        # A request-level rejection ("Caption is required") comes back as one
-        # result with no accountId. Each DID keeps its real code instead of a
-        # generic transient failure, so nothing is re-uploaded 3 times.
         slot = self._slot(["bluesky"])
         slot["schedules"]["bluesky_account_ids"] = ["bsky-1", "bsky-2"]
         store = _MemoryStore(slot)
@@ -476,12 +451,6 @@ class AccountRetryTests(unittest.TestCase):
         self.assertEqual(store.slot["status"], "failed")
 
     def test_unknown_publish_parks_the_account_without_refund_or_retry(self) -> None:
-        # The web route parked the claim as unknown: the post may already be
-        # live, but its ledger record was lost. The account must never be
-        # re-posted, and the slot must fail WITHOUT refunding the token:
-        # money must not move on an unknown outcome — if the post is live
-        # the user already got it, and if it is not, support refunds it
-        # after the human check. The user is told to verify first.
         slot = self._slot(["instagram"])
         slot["schedules"]["instagram_account_ids"] = ["ig-1"]
         store = _MemoryStore(slot)
@@ -508,11 +477,9 @@ class AccountRetryTests(unittest.TestCase):
         self.assertEqual(store.slot["status"], "failed")
         self.assertEqual(store.refund_batch_calls, [])
 
-        # The user is told to check the provider before posting again.
         messages = [str(call.args[0]) for call in notify.call_args_list]
         self.assertTrue(any("may already have published" in message for message in messages))
 
-        # A later tick never re-posts the parked account.
         scheduler.publish_due(NOW + timedelta(seconds=30))
         self.assertEqual(store.slot["status"], "failed")
         self.assertEqual(store.refund_batch_calls, [])
@@ -526,7 +493,6 @@ class AccountRetryTests(unittest.TestCase):
         with patch.object(video_storage, "read_final_video_r2") as read_mock:
             published = scheduler.publish_due(NOW)
         self.assertEqual(published, 1)
-        # No R2 bytes are downloaded: the web presigns the archive.
         read_mock.assert_not_called()
         kwargs = publish.call_args.kwargs
         self.assertIsNone(kwargs["video_bytes"])
@@ -554,7 +520,6 @@ class AccountRetryTests(unittest.TestCase):
         self.assertEqual(classify_failure("transient", 200), ("transient", False))
         self.assertEqual(classify_failure("publish_in_progress", 200), ("publish_in_progress", False))
         self.assertEqual(classify_failure("publish_unknown", 200), ("publish_unknown", True))
-        # No code: the status decides.
         self.assertEqual(classify_failure(None, 400), ("publish_rejected", False))
         self.assertEqual(classify_failure(None, 503), ("transient", False))
         self.assertEqual(classify_failure(None, 429), ("transient", False))

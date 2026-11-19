@@ -77,9 +77,6 @@ def test_same_string_as_media_id_and_url_is_not_the_same_photo():
 
 
 def test_images_mode_rejects_a_repeated_url_when_the_count_would_pass():
-    # The hook is 25 words, so four photos meet the images density rule.
-    # The third repeats the first, and that rule fires before a later
-    # segment that has no media at all.
     segments = _segments()
     segments[0]["media"] = [
         {"url": "https://example.com/a.jpg"},

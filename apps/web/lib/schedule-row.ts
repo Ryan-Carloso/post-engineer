@@ -1,10 +1,5 @@
-//---------------
-// schedule-row — the /api/schedule row shape and its client mapping.
-//---------------
-
 export interface ScheduleRow {
   id: string;
-  /** Null for a schedule created without a persona (migration 012). */
   persona_id: string | null;
   providers: string[];
   youtube_account_ids: string[];
@@ -14,7 +9,6 @@ export interface ScheduleRow {
   threads_account_ids: string[];
   facebook_account_ids: string[];
   pinterest_account_ids: string[];
-  /** The board a schedule's Pinterest pins go to (migration 050). */
   pinterest_board_id: string | null;
   threespeak_account_ids: string[];
   rumble_account_ids: string[];
@@ -26,15 +20,11 @@ export interface ScheduleRow {
   posts_per_day: number;
   timezone: string;
   active: boolean;
-  /** Migration 015. Read defensively: only the literal 'asap' counts. */
   publish_mode: string | null;
 }
 
-// A schedule as the dashboard reads it (re-exported by lib/api.ts).
 export interface ScheduleConfig {
   id: string;
-  /** Null for a schedule created without a persona (migration 012): the post
-      is faceless and carries its own voice. */
   personaId: string | null;
   providers: string[];
   youtubeAccountIds: string[];
@@ -55,8 +45,6 @@ export interface ScheduleConfig {
   postsPerDay: number;
   timezone: string;
   active: boolean;
-  /** How the post publishes (migration 015): at the slot times, or ASAP —
-      the moment generation finishes, with no scheduled time. */
   publishMode: 'scheduled' | 'asap';
 }
 

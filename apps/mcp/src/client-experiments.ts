@@ -8,16 +8,6 @@ import {
 } from './contracts/experiments.js';
 import type { BodyOf, ResponseOf } from './contracts/endpoint.js';
 
-//---------------
-// /api/experiments — paired content A/B tests (issue #476). Standalone
-// functions (not client methods) because client.ts is grandfathered over
-// the 500-line cap and may not grow. Inputs and responses are typed from
-// the shared contract (shared/contracts/experiments.ts), so a renamed
-// contract field fails typecheck here and in the web route together.
-// The request sites stay literal for the parity gate; client-experiments
-// tests pin each literal to its contract method + path.
-//---------------
-
 export async function createExperiment(
   client: PostEngineerClient,
   input: BodyOf<typeof createExperimentContract>,

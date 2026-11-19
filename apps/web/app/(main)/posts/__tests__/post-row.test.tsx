@@ -3,11 +3,6 @@ import { describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import type { ScheduledSlot } from '@/lib/api';
 
-//---------------
-// Tests for PostRow — the ONE dense row a scheduled post renders as, in the
-// calendar's day list and in the history list. i18n echoes keys.
-//---------------
-
 vi.mock('@/lib/i18n/provider', () => ({
   useI18n: () => ({ locale: 'en', t: (key: string) => key }),
 }));
@@ -56,8 +51,6 @@ describe('PostRow layout', () => {
     renderRow();
 
     expect(screen.getByText('Viva Leve')).toBeInTheDocument();
-    // Zone-agnostic: pin the slot's full date and time, not the wall-clock
-    // rendering of a UTC instant.
     expect(
       screen.getByText(`${formatDate('2030-06-01T13:05:00.000Z', 'en')} · ${formatTime('2030-06-01T13:05:00.000Z', 'en')}`),
     ).toBeInTheDocument();
@@ -71,9 +64,6 @@ describe('PostRow layout', () => {
   });
 
   it('dates a published post by when it went out, not by the planned slot', () => {
-    // Zone-agnostic: pin which instant is shown (published, not the slot),
-    // not the wall-clock rendering of a UTC instant. The two instants are
-    // 30 minutes apart, so their rendered times differ in every zone.
     renderRow({ status: 'published', publishedAt: '2030-06-02T09:30:00.000Z', slotAt: '2030-06-01T10:00:00.000Z' }, true);
 
     expect(screen.getByText(formatTime('2030-06-02T09:30:00.000Z', 'en'))).toBeInTheDocument();
@@ -94,9 +84,6 @@ describe('PostRow layout', () => {
   });
 
   it('exposes the targeted networks to assistive technology', () => {
-    // getByRole reads the accessibility tree, so it fails while the glyph
-    // wrapper hides the icons with aria-hidden; the DOM query above cannot
-    // catch that.
     renderRow();
 
     expect(screen.getByRole('img', { name: 'youtube' })).toBeInTheDocument();

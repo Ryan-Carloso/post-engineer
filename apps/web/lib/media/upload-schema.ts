@@ -2,19 +2,7 @@ import { z } from 'zod';
 import { detectMagicMimeType } from '@/lib/media/magic-bytes';
 import type { MediaUploadErrorCode, MediaUploadIssue } from '@/lib/types';
 
-//---------------
-// Upload Schema — media upload validation with Zod.
-// Rules: file present, non-empty, up to 100MB, allowed formats,
-// and real content (magic bytes) matching the declared type.
-// Failures produce stable codes (MediaUploadErrorCode) — translation
-// for the user lives in the frontend (lib/i18n).
-//---------------
-
-export const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
-
-// Formats accepted on upload: MP4/MOV videos and JPEG/PNG images.
-// Instagram Content Publishing only accepts MP4 and JPEG; conversion
-// happens in the handler when needed.
+export const MAX_FILE_SIZE = 100 * 1024 * 1024;
 export const ALLOWED_TYPES = [
   'video/mp4',
   'video/quicktime',
@@ -62,7 +50,6 @@ const mediaUploadSchema = z
       return;
     }
 
-    // Magic bytes: the content must match the declared type
     const detectedType = detectMagicMimeType(buffer);
 
     if (!detectedType) {
@@ -74,11 +61,6 @@ const mediaUploadSchema = z
       ctx.addIssue({ code: 'custom', path: ['file'], message: 'TYPE_MISMATCH' });
     }
   });
-
-//---------------
-// parseMediaUpload — validates { file, buffer }.
-// Returns the validated data or the list of issues (stable codes).
-//---------------
 
 export type MediaUploadParseResult =
   | { success: true; file: File; buffer: Buffer; detectedType: string }

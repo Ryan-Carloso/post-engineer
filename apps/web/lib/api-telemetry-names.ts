@@ -1,30 +1,3 @@
-//---------------
-// Semantic PostHog event names for web API responses.
-//
-// withApiErrorReporting used to report every 2xx as a generic
-// `server_success` and every 4xx as `server_warning`, with the route only
-// in the event properties — the events feed was a wall of identical
-// names. This table maps each route label to a deliberate semantic name
-// (noun + past-tense verb, matching the repo's existing PostHog names
-// like video_generated and refund_issued) so the feed reads as what
-// actually happened: billing_transactions_fetched, persona_created.
-//
-// Rules:
-// - One entry per withApiErrorReporting('METHOD /api/...') label. Keys
-//   must match the label strings exactly, including [id]-style segments.
-// - The value is the 2xx event name. The wrapper derives the 4xx name as
-//   `${name}_rejected` — "rejected", not "failed", because a 4xx is the
-//   caller erroring, not our system failing.
-// - 5xx are out of scope: they go to error tracking as $exception.
-// - api-telemetry-names-coverage.test.ts fails CI when a route label has
-//   no entry here, so a new route without a semantic name can never
-//   ship silently.
-//
-// The table is built with one assignment statement per route (not an
-// object literal): v8 emits no line-coverage entries for object-literal
-// properties, which would read as 0% patch coverage on this data.
-//---------------
-
 const table: Record<string, string> = {};
 table['DELETE /api/account'] = 'account_deleted';
 table['DELETE /api/api-keys/[id]'] = 'api_key_deleted';
@@ -118,15 +91,10 @@ table['PUT /api/tool-config'] = 'tool_config_saved';
 
 export const API_TELEMETRY_NAMES: Record<string, string> = table;
 
-// 2xx event name for a route label, or undefined when the label is not
-// mapped (the wrapper falls back to the generic server_success —
-// telemetry must never break on a missing entry).
 export function successEventName(route: string): string | undefined {
   return API_TELEMETRY_NAMES[route];
 }
 
-// 4xx event name for a route label, or undefined when the label is not
-// mapped (the wrapper falls back to the generic server_warning).
 export function rejectionEventName(route: string): string | undefined {
   const base = successEventName(route);
   return base === undefined ? undefined : `${base}_rejected`;

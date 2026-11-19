@@ -68,8 +68,6 @@ def _parse_denoise(raw: str) -> bool | None:
 
 
 def _read_bounded_upload(file: UploadFile) -> bytes | JSONResponse:
-    # Bound the read itself: normalize_reference_audio enforces the same
-    # limit, but only after the upload is fully buffered in memory.
     if file.size is not None and file.size > MAX_REFERENCE_BYTES:
         return _audio_too_large_response()
     try:
@@ -84,8 +82,6 @@ def _read_bounded_upload(file: UploadFile) -> bytes | JSONResponse:
     return source_bytes
 
 
-# Client-facing text per stable error code. The exception's own message is
-# never echoed: responses carry only these fixed strings plus the code.
 _PUBLIC_ERROR_MESSAGES: dict[str, str] = {
     ERROR_INVALID_AUDIO: "could not decode reference audio",
     ERROR_AUDIO_TOO_LARGE: f"reference audio exceeds {MAX_REFERENCE_BYTES // 1024 // 1024} MB",
@@ -189,17 +185,11 @@ def create_cloned_voice(
             status_code=400,
             content=utils.get_response(status=400, message="language is required"),
         )
-    # The language is persisted and later written into the Chatterbox
-    # voices.toml registry; only BCP-47-shaped codes are accepted (the
-    # registry volume re-validates the same shape at the sink). Keep this
-    # pattern in sync with _LANGUAGE_ID_RE in chatterbox_registry_volume.py.
     if not re.fullmatch(r"[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})?", lang):
         return JSONResponse(
             status_code=400,
             content=utils.get_response(status=400, message="language is invalid"),
         )
-    # English-only launch: cloning only ever worked well in English, so a
-    # non-English registration is rejected before any row or file exists.
     if not is_english_language(lang):
         return JSONResponse(
             status_code=400,
@@ -246,8 +236,6 @@ def create_cloned_voice(
     summary="Cleaned version of a reference recording (audio/wav), for A/B before cloning",
 )
 def denoise_preview(request: Request, file: UploadFile = File(...)):
-    # Auth only: nothing is stored, the cleaned WAV goes straight back so the
-    # user can compare it with the original before confirming the clone.
     base.get_auth_context(request)
     source_bytes = _read_bounded_upload(file)
     if isinstance(source_bytes, JSONResponse):
@@ -282,22 +270,14 @@ def preview_cloned_voice(
     body: ClonedVoicePreviewRequest | None = None,
 ):
     auth = base.get_auth_context(request)
-    # English-only launch: a preview renders the cloned voice speaking, so a
-    # non-English language override is rejected like a non-English
-    # registration. No override keeps the clone's registered language.
     if language and language.strip() and not is_english_language(language):
         return JSONResponse(
             status_code=400,
             content=utils.get_response(status=400, message=ENGLISH_ONLY_CLONE_MESSAGE),
         )
-    # Optional caller text: the clone speaks it instead of the fixed
-    # sample. Rejections carry the stable validator message, never the
-    # submitted text.
     try:
         preview_text = validate_preview_text(body.text if body is not None else None)
     except ValueError:
-        # Return the module's fixed message, never str(exc): an exception
-        # string must not flow to the client (CodeQL py/stack-trace-exposure).
         return JSONResponse(
             status_code=400,
             content=utils.get_response(status=400, message=PREVIEW_TEXT_INVALID_MESSAGE),

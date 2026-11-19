@@ -1,10 +1,3 @@
-//---------------
-// metrics-filters-i18n — copy for the shadcn filter toolbar on the
-// metrics dashboard (window Tabs caption, Filters Sheet, active-filter
-// chips). Merged into `metrics` in ./index.ts
-// (metrics-i18n.ts is over the file-size cap and may not grow).
-//---------------
-
 export const metricsFiltersStrings = {
   en: {
     metrics: {

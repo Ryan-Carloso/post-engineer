@@ -1,15 +1,3 @@
-//---------------
-// The one slot of a scheduled publish-existing call. Existing media is
-// published once, so the schedule is a single instant (`publishAt`), not
-// generate-and-schedule's start + daily times: a list of times would
-// accept several and silently use only the first.
-//
-// The slot is the instant itself, truncated to the minute, never re-derived
-// from a wall-clock time: re-deriving it would move a publishAt inside the
-// repeated hour of a DST fall-back to the other occurrence, or to the next
-// day. The same 3h–30d window as generate-and-schedule applies.
-//---------------
-
 import type { NextResponse } from 'next/server';
 
 import { apiErrorResponse } from '@/lib/api-error';
@@ -19,9 +7,7 @@ import { validateScheduleWindow } from '@/lib/schedule-window';
 import { isValidTimezone, parseZonedDateTime, utcToZonedInputValue } from '@/lib/timezone';
 
 export interface PublishAtSlot {
-  /** Exactly one slot, at publishAt's minute. */
   slots: DistributedSlot[];
-  /** The slot's wall-clock "HH:MM" in the timezone, for the schedule row. */
   time: string;
 }
 
@@ -56,8 +42,6 @@ export function resolvePublishAtSlot(
       field: 'publishing.schedule.publishAt',
     });
   }
-  // The timezone is valid and the instant is real, so the format never
-  // returns null here; the guard keeps the type honest without a cast.
   const local = utcToZonedInputValue(slotAt.toISOString(), timezone);
   if (local === null) {
     return apiErrorResponse(400, `Invalid timezone: "${timezone}".`, {

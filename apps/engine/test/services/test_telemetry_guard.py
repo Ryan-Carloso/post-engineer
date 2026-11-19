@@ -21,9 +21,6 @@ from app.services import analytics
 def test_track_event_with_api_key_set_never_builds_real_client(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # Even with a production-looking key in the environment, the client
-    # track_event captures through must be the fixture's mock — never a
-    # real SDK instance that would hit the network.
     monkeypatch.setenv("POSTHOG_API_KEY", "phc_guard_probe_key")
     analytics.reset_for_testing()
     analytics.track_event("guard_probe", {"user_id": "u1"})
@@ -36,7 +33,6 @@ def test_track_event_with_api_key_set_never_builds_real_client(
 def test_track_ai_request_with_api_key_set_never_builds_real_client(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # track_ai_request delegates to track_event — same guard must apply.
     monkeypatch.setenv("POSTHOG_API_KEY", "phc_guard_probe_key")
     analytics.reset_for_testing()
     analytics.track_ai_request({"backend": "llm", "success": True})

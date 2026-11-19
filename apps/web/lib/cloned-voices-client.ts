@@ -109,8 +109,6 @@ export function clonedVoicePreviewUrl(cloneId: string, language: string | null):
   return base;
 }
 
-// Cleaned (denoised) WAV of a reference recording, for the A/B listen
-// before cloning. Never throws on HTTP errors.
 export async function fetchDenoisePreview(
   file: Blob,
 ): Promise<{ success: true; audio: Blob } | { success: false; error: string }> {

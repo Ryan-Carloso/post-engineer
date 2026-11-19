@@ -1,20 +1,3 @@
-// Shared prompt base: single source of truth for the prompts hub. Every
-// served prompt is composed as
-// [...SHARED_PROMPT_BASE, '', ...specificLines].join('\n'), so the
-// delivered text is complete and standalone: the agent receives the
-// whole prompt in one paste, never a bare "see the base prompt"
-// reference.
-// The web reads this file through a symlink
-// (apps/web/lib/generation/prompt-base.ts); DO NOT EDIT this copy directly
-// there, edit this file. A direct import fails tsc
-// with TS6059 (web rootDir) and breaks Stryker's sandbox, which copies
-// only the app root. The MCP has no copy: it fetches the recipes from the
-// web API (GET /api/prompts, GET /api/prompts/[slug]). The web
-// prompt-base-shared test fails loudly if a copy ever reappears.
-// Rules that apply to every prompt go in SHARED_PROMPT_BASE. Topic-specific
-// steps go in the prompt that owns them, below, so the base stays short and
-// every prompt stays cheap. The web serves these exports unchanged.
-
 export const SHARED_PROMPT_BASE: string[] = [
   'Ask me, do not make me fill anything in:',
   'Before any step that costs tokens, call personas (action: list), accounts (action: list), and billing (action: balance), then ask only what you still need. Offer my real personas and accounts as choices. Ask one short question at a time, in the language I write in.',

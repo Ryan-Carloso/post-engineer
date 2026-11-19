@@ -11,13 +11,6 @@ vi.mock('@/lib/supabase/service', () => ({
   createSupabaseServiceClient: vi.fn(),
 }));
 
-//---------------
-// Tests for GET /api/billing/transactions — the current user's token
-// ledger, newest first, paginated. Auth (session, API key or OAuth)
-// is resolved by requireSupabaseSession; the route only picks the
-// right Supabase client and scopes every query by user_id.
-//---------------
-
 import { GET, parseTransactionsLimit, parseTransactionsOffset } from '../route';
 import { ListTokenTransactionsResponseSchema } from '@/lib/contracts/billing';
 import { requireSupabaseSession } from '@/lib/request-auth';
@@ -183,7 +176,6 @@ describe('GET /api/billing/transactions', () => {
       limit: 20,
       offset: 0,
     });
-    // The 200 body parses against the shared contract the MCP reads.
     expect(ListTokenTransactionsResponseSchema.safeParse(body).success).toBe(true);
   });
 

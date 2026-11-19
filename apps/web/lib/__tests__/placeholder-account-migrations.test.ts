@@ -8,13 +8,6 @@ import { isPlaceholderProviderAccountId } from '../social-accounts';
 const root = findRepoRoot(import.meta.url);
 const read = (name: string): string => readFileSync(join(root, 'supabase/migrations', name), 'utf8');
 
-//---------------
-// The 'unknown' placeholder account id is cleaned from two tables:
-// social_accounts (036) and persona_default_accounts (038, which has no FK to
-// the first, so 036 alone left dangling defaults). Both migrations must use
-// the same predicate as isPlaceholderProviderAccountId, or one of the three
-// places drifts and a placeholder survives.
-//---------------
 describe('placeholder account id cleanup migrations', () => {
   const PREDICATE = "lower(btrim(provider_account_id)) in ('unknown', '')";
 

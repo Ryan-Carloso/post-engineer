@@ -61,9 +61,6 @@ describe('/api/instagram-auth/start', () => {
     vi.stubEnv('INSTAGRAM_CLIENT_ID', undefined);
     const res = await GET();
     expect(res.status).toBe(500);
-    // The missing-credentials cause is logged so PostHog shows the reason
-    // instead of only the wrapper's generic "[route] 500", and the response
-    // is marked so the wrapper does not report a second synthetic exception.
     expect(logger.logOAuthError).toHaveBeenCalledWith(
       'log-1',
       expect.objectContaining({ message: expect.stringContaining('INSTAGRAM_CLIENT_ID') }),
@@ -101,8 +98,6 @@ describe('/api/instagram-auth/start', () => {
       'log-1',
       expect.objectContaining({ message: expect.stringContaining('ig config missing') }),
     );
-    // The logged cause is already reported to PostHog, so the response is
-    // marked so the wrapper does not report a second synthetic exception.
     expect(markApiErrorReported).toHaveBeenCalledWith(res);
   });
 });

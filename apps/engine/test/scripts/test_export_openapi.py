@@ -38,7 +38,6 @@ def test_build_spec_replaces_info_and_keeps_everything_else():
     assert spec["info"] == CONTRACT_INFO
     assert spec["paths"] == {"/a": {}}
     assert spec["openapi"] == "3.1.0"
-    # The input is not mutated (the FastAPI app caches its openapi dict).
     assert raw["info"]["title"] == "Operator Brand"
 
 

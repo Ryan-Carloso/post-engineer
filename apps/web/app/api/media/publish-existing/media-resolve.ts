@@ -1,11 +1,3 @@
-//---------------
-// Existing-media resolution (issue #384): turn a caller-supplied media
-// reference into verified bytes or a verified stored row, before any
-// publish runs. Every lookup answers 404 for an unknown or foreign-owned
-// id — the id's existence is itself owner-private, the same rule the
-// signed-upload flow uses.
-//---------------
-
 import { randomUUID } from 'node:crypto';
 
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -21,18 +13,12 @@ import {
   type VideoUploadStore,
 } from '@/lib/videos/signed-upload';
 
-/** Same 2 GB ceiling as the signed video upload and /api/upload-content. */
 export const MAX_VIDEO_DOWNLOAD_BYTES = 2 * 1024 * 1024 * 1024;
 
-/** Task-record fetch budget (mirrors the progress lookup: 10 s). */
 const TASK_RECORD_TIMEOUT_MS = 10_000;
 
-/** Video download budget: a finished render is small, but the fetch must
- *  survive a slow R2 redirect hop. */
 const VIDEO_DOWNLOAD_TIMEOUT_MS = 120_000;
 
-/** Durable home for scheduled images: the `uploads` bucket, where the
- *  Instagram handler already stages media. */
 export const SCHEDULED_IMAGE_BUCKET = 'uploads';
 export const SCHEDULED_IMAGE_PREFIX = 'scheduled-media';
 
@@ -78,12 +64,6 @@ function withTimeout(ms: number): { controller: AbortController; done: () => voi
   return { controller, done: () => clearTimeout(timer) };
 }
 
-/**
- * Read an engine task record (videos, final video URI, archive flag).
- * Ownership is enforced by the engine: it 404s a task of another user, so
- * a null here means "unknown or not yours" and never leaks which one.
- * A non-404 failure is the engine being unreachable (502), never a 404.
- */
 export async function fetchEngineTaskRecord(
   taskId: string,
   userId: string,
@@ -122,11 +102,6 @@ export async function fetchEngineTaskRecord(
   }
 }
 
-/**
- * fetchEngineTaskRecord after a persona-scope check. A scoped key that
- * cannot see the task gets null — the same answer as an unknown task —
- * and the engine is not called. A lookup error is a 500, not a 404.
- */
 export async function fetchScopedEngineTask(
   supabase: SupabaseClient,
   auth: { userId: string; isApiKey?: boolean; personaIds?: string[] | null },
@@ -145,12 +120,6 @@ export async function fetchScopedEngineTask(
   return fetchEngineTaskRecord(taskId, auth.userId, fetchFn);
 }
 
-/**
- * Download the finished video behind a task record's final_video URI.
- * The engine 302s to a signed R2 URL; the redirect is followed manually
- * WITHOUT the engine auth headers (the signed URL authenticates itself,
- * and the secret must never leave the engine's trust boundary for R2).
- */
 export async function downloadEngineTaskVideo(
   record: EngineTaskRecord,
   userId: string,
@@ -177,8 +146,6 @@ export async function downloadEngineTaskVideo(
       if (!location) {
         throw new ExistingMediaError('Video file not found.', 404, 'MEDIA_NOT_FOUND');
       }
-      // No auth headers on the second hop: the R2 URL carries its own
-      // signature, and the engine secret stays server-side.
       response = await fetchFn(location, { cache: 'no-store', signal: controller.signal });
     }
     if (response.status === 404) {
@@ -207,11 +174,6 @@ export async function downloadEngineTaskVideo(
   }
 }
 
-/**
- * Load a signed-upload video row for publishing: owner-checked, ready,
- * and unexpired. Consumed and pending rows answer 409 (the single-use
- * claim is the publish step's job, not this lookup's).
- */
 export async function loadReadyVideoUpload(
   store: VideoUploadStore,
   userId: string,
@@ -238,14 +200,6 @@ export async function loadReadyVideoUpload(
   return row;
 }
 
-/**
- * Store scheduled image bytes durably: the engine downloads them at
- * publish time, so a 1-hour temp asset cannot hold a post scheduled hours
- * ahead. The path (never a signed URL) rides the slot row; the object is
- * removed when the slot publishes, the schedule is cancelled, or the
- * slot insert fails (route.ts compensation). A crash between the image
- * upload and the slot insert can orphan the object; no sweeper covers it.
- */
 export async function storeScheduledImage(
   supabase: SupabaseClient,
   userId: string,
@@ -258,8 +212,6 @@ export async function storeScheduledImage(
     .from(SCHEDULED_IMAGE_BUCKET)
     .upload(path, buffer, { contentType, upsert: false });
   if (error !== null || data === null) {
-    // The upstream message stays server-side: the client gets the safe
-    // generic message, never the storage provider's error text.
     logger.error('[publish-existing] scheduled image storage failed', error ?? undefined, { userId });
     throw new ExistingMediaError(
       formatErrorMessage(ERROR_CODES.INTERNAL_ERROR),

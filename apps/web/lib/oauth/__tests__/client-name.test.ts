@@ -8,7 +8,6 @@ describe('sanitizeClientName', () => {
   });
 
   it('normalizes Unicode (NFC)', () => {
-    // "é" as e + combining acute must equal the precomposed form.
     expect(sanitizeClientName('Cafe\u0301')).toBe('Café');
   });
 
@@ -49,13 +48,11 @@ describe('sanitizeClientName', () => {
   });
 
   it('safely truncates names containing astral / surrogate-pair characters without splitting code points', () => {
-    // 78 ascii chars + 5 astral emoji (2 UTF-16 code units each)
     const emojiName = 'A'.repeat(78) + '🚀🎉🔥🌟✨';
     const out = sanitizeClientName(emojiName);
     const codePoints = Array.from(out);
     expect(codePoints.length).toBe(80);
     expect(out.endsWith('…')).toBe(true);
-    // Ensure no lone/unpaired surrogates in output
     expect(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(out)).toBe(false);
   });
 });

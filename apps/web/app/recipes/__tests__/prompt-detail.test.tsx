@@ -187,7 +187,6 @@ describe('prompt detail page', () => {
     render(<PromptDetail prompt={prompt} />);
     fireEvent.click(screen.getByRole('button', { name: 'Copy this prompt' }));
     await vi.waitFor(() => expect(writeText).toHaveBeenCalledOnce());
-    // Let the rejection handler run before asserting the label is unchanged.
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(
       screen.getByRole('button', { name: 'Copy this prompt' }),
@@ -212,7 +211,6 @@ describe('prompt detail page', () => {
 
   it('never names an internal style skill in user-facing copy', () => {
     const { container } = render(<PromptDetail prompt={prompt} />);
-    // The substring check covers any hyphenated internal skill name too.
     expect(container.textContent?.toLowerCase()).not.toContain('adhd');
   });
 

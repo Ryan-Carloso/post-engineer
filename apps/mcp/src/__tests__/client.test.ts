@@ -57,8 +57,6 @@ describe('PostEngineerClient', () => {
     const formData = request?.body as FormData;
     expect(formData.get('name')).toBe('Tech Creator');
     expect(formData.get('avatarUrl')).toBe('https://example.com/avatar.png');
-    // Faceless is a per-video choice now, never a persona field: the persona
-    // payload carries no mode or mix fields at all.
     expect(formData.get('personaMode')).toBeNull();
     expect(formData.get('faceMixPercent')).toBeNull();
     expect(formData.get('faceQuality')).toBe('very_good');
@@ -133,8 +131,6 @@ describe('PostEngineerClient', () => {
 
     const request = vi.mocked(global.fetch).mock.calls[0]?.[1];
     const formData = request?.body as FormData;
-    // Sent explicitly rather than omitted: the persona row's layout column
-    // would otherwise be NULL and every reader would need its own fallback.
     expect(formData.get('videoLayout')).toBe('standard');
   });
 
@@ -168,8 +164,6 @@ describe('PostEngineerClient', () => {
 
     const request = vi.mocked(global.fetch).mock.calls[0]?.[1];
     const formData = request?.body as FormData;
-    // An update must never rewrite an untouched field with a default the
-    // caller did not choose — that would silently revert a saved 'react'.
     expect(formData.has('videoLayout')).toBe(false);
   });
 
@@ -200,16 +194,12 @@ describe('PostEngineerClient', () => {
 
     await client.updatePersona({ personaId: 'p-1', name: 'Renamed' });
     const omitted = vi.mocked(global.fetch).mock.calls[1]?.[1]?.body as FormData;
-    // An update must never rewrite an untouched field with a default the
-    // caller did not choose — that would silently revert a saved quality.
     expect(omitted.has('faceQuality')).toBe(false);
   });
 
   it.each([undefined, null, ''])(
     'createPersona rejects %p avatarUrl with no avatarPath before any fetch',
     async (avatarUrl) => {
-      // Every persona has a face: the client fails fast with an actionable
-      // error instead of uploading bytes the server would reject.
       global.fetch = vi.fn();
       await expect(
         client.createPersona({ accounts: { youtube: ['acct-1'] }, name: 'No Face', avatarUrl } as never),
@@ -722,8 +712,6 @@ describe('PostEngineerClient', () => {
     await client.updateSlotTitle('slot-1', '  New title  ');
     const [, init] = vi.mocked(global.fetch).mock.calls[0] as [string, RequestInit];
     expect(init.method).toBe('PATCH');
-    // Trimmed before sending: the server stores the trimmed title, so the
-    // payload carries exactly what will be stored.
     expect(JSON.parse(String(init.body))).toEqual({ title: 'New title' });
   });
 
@@ -881,8 +869,6 @@ describe('PostEngineerClient', () => {
   });
 
   it('fails fast on out-of-range ledger paging without fetching', async () => {
-    // The server silently falls back to its defaults on bad paging; the
-    // client names the bad field instead.
     global.fetch = vi.fn();
     await expect(client.listTokenTransactions(0)).rejects.toThrow(/limit must be an integer between 1 and 100/);
     await expect(client.listTokenTransactions(101)).rejects.toThrow(/limit must be an integer between 1 and 100/);
@@ -974,8 +960,6 @@ describe('PostEngineerClient', () => {
   });
 
   it('fails fast on an unknown provider or empty account id without fetching', async () => {
-    // The route 400s INVALID_PROVIDER / INVALID_PARAMS — name the field
-    // before any fetch goes out.
     global.fetch = vi.fn();
     await expect(client.disconnectAccount('myspace', 'acc-1')).rejects.toThrow(
       /provider must be one of: youtube, instagram, bluesky, linkedin/
@@ -1003,9 +987,6 @@ describe('generate and schedule video client', () => {
     options: { videoType: 'hook_lipsync' as const },
   };
 
-  // Full production shapes: generatePersonaVideo and validateScript parse
-  // every 200 against the videos contract now, so the mock answers each
-  // endpoint with the shape its route returns.
   const GENERATE_RESPONSE = {
     success: true,
     schedule: { id: 'sch-1', mode: 'scheduled' },
@@ -1250,9 +1231,6 @@ describe('generate and schedule video client', () => {
   });
 
   it('omits personaId entirely when the caller sends no persona', async () => {
-    // A persona-less post is signalled by the ABSENT key, not by an empty
-    // string: the API reads absence as "no persona", and sending `""` would
-    // ship a value the caller never meant.
     const { personaId: _personaId, ...rest } = baseInput;
     await client.generatePersonaVideo({
       ...rest,
@@ -1260,7 +1238,6 @@ describe('generate and schedule video client', () => {
     });
     const body = lastRequestBody();
     expect('personaId' in body).toBe(false);
-    // The identity travels in options instead.
     expect(body.options).toEqual({ videoType: 'faceless', voiceId: 'calm', videoAspect: '16:9' });
   });
 
@@ -1307,16 +1284,12 @@ describe('generate and schedule video client', () => {
   });
 
   it("sends mode 'scheduled' explicitly by default", async () => {
-    // The API defaults an absent mode to 'scheduled'; the client sends it
-    // explicitly so the payload always says what the caller meant.
     await client.generatePersonaVideo(baseInput);
     const publishing = lastRequestBody().publishing as Record<string, unknown>;
     expect(publishing.mode).toBe('scheduled');
   });
 
   it("sends mode 'asap' with no schedule plan and a display timezone", async () => {
-    // In ASAP mode the video publishes the moment generation finishes: the
-    // request carries no schedule plan, only the display timezone.
     const { startAt: _startAt, times: _times, ...rest } = baseInput;
     await client.generatePersonaVideo({ ...rest, mode: 'asap' });
     const publishing = lastRequestBody().publishing as Record<string, unknown>;
@@ -1330,8 +1303,6 @@ describe('generate and schedule video client', () => {
   });
 
   it("fails fast when startAt or times ride along with mode 'asap'", async () => {
-    // A stray schedule plan in ASAP mode would 400 server-side ("must not
-    // be set"); fail fast with the same rule before any fetch goes out.
     const withStartAt: unknown = await client
       .generatePersonaVideo({ ...baseInput, mode: 'asap' })
       .catch((e: unknown) => e);
@@ -1348,8 +1319,6 @@ describe('generate and schedule video client', () => {
   });
 
   it("fails fast when startAt or times are missing in scheduled mode", async () => {
-    // Without a plan the server 400s ("publishing.schedule is required");
-    // name the missing fields before any fetch goes out.
     const { startAt: _startAt, ...noStartAt } = baseInput;
     const missingStartAt: unknown = await client
       .generatePersonaVideo(noStartAt)
@@ -1958,7 +1927,6 @@ describe('PostEngineerClient configuration', () => {
     expect(() => new PostEngineerClient({ apiKey: 'k', baseUrl: 'http://staging.example.com' })).toThrow(
       /POST_ENGINEER_API_URL/
     );
-    // Loopback http is fine for local staging.
     expect(() => new PostEngineerClient({ apiKey: 'k', baseUrl: 'http://localhost:3000' })).not.toThrow();
     expect(() => new PostEngineerClient({ apiKey: 'k', baseUrl: 'http://127.0.0.1:8080' })).not.toThrow();
   });
@@ -1975,9 +1943,6 @@ describe('PostEngineerClient configuration', () => {
   });
 
   it('cancelSchedule reports an empty 204 as a malformed response', async () => {
-    // The cancel route always returns the cancel facts; an empty body is
-    // not a production shape for this endpoint, so the contract parse
-    // rejects it instead of resolving the generic ok sentinel.
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 204,
@@ -1991,9 +1956,6 @@ describe('PostEngineerClient configuration', () => {
   });
 
   it('listPersonas reports an empty 200 body as a malformed response', async () => {
-    // The list route always returns the list envelope; an empty body is
-    // not a production shape for this endpoint, so the contract parse
-    // rejects it instead of resolving the generic ok sentinel.
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
@@ -2173,8 +2135,6 @@ describe('PostEngineerClient persona image library', () => {
   });
 
   it('createPersona validates imagePrimaryIndex before reading any file', async () => {
-    // A nonexistent path would fail the read; the range error must win,
-    // proving no file is read before the pure-argument check.
     await expect(
       client.createPersona({
         accounts: { youtube: ['acct-1'] },
@@ -2229,8 +2189,6 @@ describe('PostEngineerClient persona image library', () => {
   });
 
   it('createPersona rejects imagePrimaryIndex when no images are supplied', async () => {
-    // A lone index with no images is a caller bug: fail fast instead of a
-    // silent successful creation with no primary image.
     await expect(
       client.createPersona({
         accounts: { youtube: ['acct-1'] },
@@ -2244,8 +2202,6 @@ describe('PostEngineerClient persona image library', () => {
 
   it('createPersona reports the full path for zero-byte image files', async () => {
     const path = await writeTempImage('empty.jpg', 0);
-    // The full path (not just the basename) is reported so the agent can
-    // find the offending file when several images are uploaded at once.
     await expect(
       client.createPersona({
         accounts: { youtube: ['acct-1'] },
@@ -2271,9 +2227,6 @@ describe('PostEngineerClient persona image library', () => {
   });
 
   it('createPersona rejects oversized images with the typed ImageTooLargeError (never re-wrapped)', async () => {
-    // The stat pre-check throws inside the try/catch that wraps stat
-    // failures as "Failed to read image": the typed error must pass through
-    // by instanceof, not by matching the message text.
     const path = await writeTempImage('big.jpg', 11 * 1024 * 1024);
     const error: unknown = await client
       .createPersona({
@@ -2294,8 +2247,6 @@ describe('PostEngineerClient persona image library', () => {
   });
 
   it('createPersona still wraps stat failures as "Failed to read image"', async () => {
-    // A nonexistent path fails stat(): the typed size error is not involved,
-    // so the catch must still produce the actionable read-failure message.
     await expect(
       client.createPersona({
         accounts: { youtube: ['acct-1'] },
@@ -2387,8 +2338,6 @@ describe('PostEngineerClient persona image library', () => {
 
   it('addPersonaImage omits empty tag/description keys (the server stores \'\' on both upload paths)', async () => {
     mockFetchJson({ success: true, image: FULL_LIBRARY_IMAGE_ROW });
-    // An empty tag can never match the deterministic keyword selection;
-    // the server stores metadata verbatim, so the client must normalize.
     const path = await writeTempImage('d.png');
     await client.addPersonaImage('p-1', { path, tag: '   ', description: '' });
 
@@ -2418,9 +2367,6 @@ describe('PostEngineerClient persona image library', () => {
   });
 
   it('addPersonaImage rejects a dotfile (".PNG") as an unsupported extension', async () => {
-    // Node's extname('.PNG') is '' (a leading dot with no other dots is not
-    // an extension), so dotfiles are rejected here — the fail-fast promise
-    // holds, just via the unsupported-extension branch.
     const path = await writeTempImage('.PNG');
     await expect(client.addPersonaImage('p-1', { path })).rejects.toThrow(
       /Unsupported image extension "\(none\)"/
@@ -2429,7 +2375,6 @@ describe('PostEngineerClient persona image library', () => {
   });
 
   it('updatePersonaImage rejects an over-length tag locally instead of a server 400', async () => {
-    // Symmetric with the add/create paths: fail fast before the round-trip.
     await expect(
       client.updatePersonaImage({ id: 'img-1', tag: 'x'.repeat(MAX_LIBRARY_TAG_LENGTH + 1) })
     ).rejects.toThrow(/tag.*exceeds/);
@@ -2443,9 +2388,6 @@ describe('PostEngineerClient persona image library', () => {
   });
 
   it('updatePersonaImage rejects isPrimary:false locally instead of a server 400', async () => {
-    // The server PATCH is swap-only: isPrimary:false always 400s there.
-    // Failing fast here keeps the message actionable and avoids the
-    // wasted round-trip.
     await expect(
       client.updatePersonaImage({ id: 'img-1', isPrimary: false })
     ).rejects.toThrow(/cannot be false.*mark another image/i);
@@ -2630,10 +2572,6 @@ describe('publishVideoDirect', () => {
   });
 
   it('does not send a JSON content type with the multipart body', async () => {
-    // A FormData body with an explicit Content-Type: application/json
-    // reaches the server as JSON, so Next's request.formData() rejects it
-    // ("Content-Type was not one of multipart/form-data ...") and the
-    // publish fails with a 500. fetch must set the multipart boundary.
     const videoPath = await writeTempVideo('clip.mp4');
     await client.publishVideoDirect(youtubeInput(videoPath));
 

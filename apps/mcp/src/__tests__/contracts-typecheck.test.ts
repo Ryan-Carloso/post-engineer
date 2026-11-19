@@ -12,13 +12,6 @@ import { getPersonaPublishingAccounts } from '../client-publishing-accounts.js';
 import { cancelVideoTask } from '../client-video-task.js';
 import { createClonedVoiceFromUrl, deleteClonedVoice, getClonedVoice, listClonedVoices } from '../cloned-voice-client.js';
 
-//---------------
-// Type-level pins for the shared contracts, checked by
-// `tsc -p tsconfig.spec.json` (part of the MCP typecheck): each
-// ts-expect-error below must stay an error. If the contract stops
-// rejecting `nome`, the directive is unused and typecheck fails.
-//---------------
-
 type CreateResult = Awaited<ReturnType<typeof createExperiment>>;
 type ListPromptsResult = Awaited<ReturnType<typeof listPrompts>>;
 type GetPromptResult = Awaited<ReturnType<typeof getPrompt>>;

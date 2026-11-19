@@ -9,7 +9,6 @@ import re
 from typing import Any
 from urllib.parse import parse_qsl, quote, urlsplit, urlunsplit
 
-# Query parameter names whose values must never appear in logs.
 SENSITIVE_QUERY_PARAMS = frozenset(
     {
         "key",
@@ -29,7 +28,6 @@ SENSITIVE_QUERY_PARAMS = frozenset(
 
 _REDACTED = "***"
 
-# Rough matcher for http(s) URLs embedded in free text (log lines).
 _URL_RE = re.compile(r"https?://[^\s\"'<>]+")
 
 
@@ -54,8 +52,6 @@ def redact_url(url: str) -> str:
         (name, _REDACTED if name.lower() in SENSITIVE_QUERY_PARAMS else value)
         for name, value in query_pairs
     ]
-    # Build the query manually so the "***" marker stays human-readable
-    # instead of being percent-encoded to %2A%2A%2A.
     redacted_query = "&".join(
         f"{quote(name, safe='')}={quote(value, safe='*')}"
         for name, value in redacted_pairs

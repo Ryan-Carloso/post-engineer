@@ -10,20 +10,17 @@ vi.mock('@/lib/request-auth', () => ({
 }));
 
 vi.mock('@/lib/token-crypto', () => ({
-  // non-reversible mock: hides the content like the real cipher would
   encryptTokens: vi.fn(
     (payload: Record<string, unknown>) => `v1.mockcipher.${Buffer.from(JSON.stringify(payload)).toString('base64')}`,
   ),
   decryptTokens: vi.fn(),
 }));
 
-// The limiter has its own suite (rate-limit.test.ts); here it never throttles.
 vi.mock('@/lib/rate-limit', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/rate-limit')>();
   return { ...actual, applyRateLimit: vi.fn().mockResolvedValue(null) };
 });
 
-// The Bot API calls are doubled; lib/__tests__/telegram.test.ts pins them.
 vi.mock('@/lib/telegram', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/telegram')>()),
   getTelegramBot: vi.fn(),

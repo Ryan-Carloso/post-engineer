@@ -1,13 +1,3 @@
-//---------------
-// Prompts hub — the public /recipes list and detail pages.
-// No login: the hub is public by middleware, so these specs visit
-// without cy.loginE2EUser(). English is pinned via localStorage
-// before the app reads it, so assertions use the EN copy.
-// Visiting every page is also what the ui-coverage-gates cypress
-// gate measures: the list and detail route files must be executed
-// by E2E, not only by unit tests.
-//---------------
-
 function visitEnglish(path: string) {
   cy.visit(path, {
     onBeforeLoad(win) {
@@ -56,8 +46,6 @@ describe('Prompts hub', () => {
     cy.visit('/recipes', {
       onBeforeLoad(win) {
         win.localStorage.setItem('social-hub-locale', 'en');
-        // The real clipboard API is permission-gated in the runner; the
-        // label flips to Copied! only after this write resolves.
         cy.stub(win.navigator.clipboard, 'writeText').resolves();
       },
     });

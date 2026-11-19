@@ -11,11 +11,6 @@ interface CheckoutCancelDialogProps {
   onClose: () => void;
 }
 
-//---------------
-// CheckoutCancelDialog — opened when Stripe redirects back with
-// ?checkout=canceled. Asks why the user canceled (price / testing / other)
-// and offers a one-tap WhatsApp handoff with the reason pre-filled.
-//---------------
 export function CheckoutCancelDialog({ open, onClose }: CheckoutCancelDialogProps): ReactNode {
   const { t } = useI18n();
   const [reason, setReason] = useState<CancelReason>('price');

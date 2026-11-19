@@ -7,13 +7,6 @@ import { nextPollInSeconds } from './progress-poll-hint.js';
 import { narrowTaskProgress } from './tools.js';
 import { handleLibraryCall, type McpToolResponse } from './tools-call.js';
 
-//---------------
-// cancel_video — MCP tool over DELETE /api/persona/video-task/[taskId].
-//
-// Extracted from tools.ts so the tools module stays under the file-size
-// ratchet.
-//---------------
-
 export const CancelVideoTaskShape = {
   taskId: z
     .string()
@@ -31,23 +24,6 @@ export async function handleCancelVideoTask(
 ): Promise<McpToolResponse> {
   return handleLibraryCall(() => cancelVideoTask(client, args.taskId), 'cancelling video task');
 }
-
-//---------------
-// video_tasks (action: status) — one server-side wait, or a progress snapshot.
-//
-// waitSeconds above 0 is how an agent gets the final outcome: one call waits
-// for all taskIds (a single video, or every video of a batch) and only
-// returns when each is completed (state 1, or a 410 whose body says the
-// video was delivered before the engine lost it) or failed (state -1, gone
-// from the engine without delivery proof, or a task-scoped client error
-// such as a bad taskId), or when waitSeconds elapses. waitSeconds 0 is only
-// a progress snapshot. A still-running entry carries nextPollInSeconds
-// (progress-poll-hint.ts); a terminal entry omits it. A call-wide error
-// (bad key, wrong route) aborts the whole wait as a tool error instead of
-// failing any video. On timeout the results are partial — the still-running
-// entries keep their last known progress/stage — so the agent calls again
-// with the unfinished taskIds instead of polling from scratch.
-//---------------
 
 export const WaitForVideoTasksShape = {
   taskIds: z
@@ -68,7 +44,6 @@ export const WaitForVideoTasksShape = {
 
 export const WaitForVideoTasksSchema = z.object(WaitForVideoTasksShape);
 
-/** One task's wait outcome: completed/failed are terminal, running is not. */
 export interface TaskWaitResult {
   task_id: string | null;
   state: number | null;
@@ -76,14 +51,10 @@ export interface TaskWaitResult {
   progress: number | null;
   stage: string | null;
   error: string | null;
-  // The post detail link, when the video belongs to a scheduled slot
-  // (null for direct generations and for tasks with no slot yet).
   postUrl: string | null;
-  // Present only while the task is still running. Terminal states omit it.
   nextPollInSeconds?: number;
 }
 
-/** Clock and sleep injection (options, never test-only fields on the input). */
 export interface WaitForVideoTasksDeps {
   sleep?: (ms: number) => Promise<void>;
   now?: () => number;
@@ -92,7 +63,6 @@ export interface WaitForVideoTasksDeps {
 
 const POLL_INTERVAL_MS = 10_000;
 
-// Same message the web video-status route answers with on 410 Gone.
 const ENGINE_TASK_GONE_MESSAGE = 'The video task no longer exists on the generation engine.';
 
 function attachPollHint(result: TaskWaitResult): TaskWaitResult {
@@ -117,7 +87,6 @@ function toWaitResult(
   });
 }
 
-/** One poll round's outcome per task: a verdict, a call-wide error, or retry-later. */
 type PollOutcome =
   | { taskId: string; result: TaskWaitResult }
   | { taskId: string; callError: ApiError }
@@ -149,8 +118,6 @@ export async function handleWaitForVideoTasks(
       const known = last.get(taskId);
       return known === undefined || known.outcome === 'running';
     });
-    // One round polls every unfinished task concurrently: a slow engine
-    // response for one video must not stall the other eleven behind it.
     const settled = await Promise.allSettled(
       unfinished.map(async (taskId): Promise<PollOutcome> => {
         try {
@@ -158,10 +125,6 @@ export async function handleWaitForVideoTasks(
         } catch (error) {
           if (error instanceof ApiError && error.status === 410) {
             if (error.delivered) {
-              // The video finished (durable COMPLETE render, or a published
-              // slot) before the engine lost the task: the web route already
-              // recorded it completed and never refunded — report completed,
-              // not failed, so the agent never regenerates a published video.
               return {
                 taskId,
                 result: {
@@ -175,11 +138,6 @@ export async function handleWaitForVideoTasks(
                 } satisfies TaskWaitResult,
               };
             }
-            // The engine lost the task (restart with the in-memory state
-            // backend) and nothing proves the video finished: the web route
-            // already recorded the terminal failed verdict (refunding direct
-            // generations; batch charges are left to the billing reconcile
-            // cron), so this is terminal — waiting longer can never complete it.
             return {
               taskId,
               result: {
@@ -197,15 +155,9 @@ export async function handleWaitForVideoTasks(
             error instanceof ApiError &&
             (error.status === 401 || error.status === 403 || error.status === 404 || error.status === 405)
           ) {
-            // Call-wide: the key, route or method is wrong for every
-            // taskId, so this says nothing about the video itself. Report
-            // it as a tool error, never as a failed render — a revoked key
-            // must not make the agent regenerate a video that was never broken.
             return { taskId, callError: error };
           }
           if (error instanceof ApiError && (error.status === 400 || error.status === 422)) {
-            // Task-scoped client error (bad taskId): retrying can never
-            // succeed — fail this task now with the capped detail.
             return {
               taskId,
               result: {
@@ -219,9 +171,6 @@ export async function handleWaitForVideoTasks(
               } satisfies TaskWaitResult,
             };
           }
-          // Anything else (network errors, 5xx, 429, 408/425) is transient:
-          // keep the last known state and retry next round instead of
-          // failing the whole wait.
           return null;
         }
       }),

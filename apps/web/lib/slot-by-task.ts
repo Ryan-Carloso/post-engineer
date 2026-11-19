@@ -1,14 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from './logger';
 
-//---------------
-// lookupSlotIdForTask — the scheduled_posts id for one engine task, or
-// null when the task has no slot (a direct generation) or the lookup
-// fails. Scoped by user_id: another user's slot never matches, so the
-// postUrl built from it can only ever name the caller's own post. A failed
-// lookup degrades to null — the status itself still resolves, and the next
-// poll retries.
-//---------------
 export async function lookupSlotIdForTask(
   supabase: SupabaseClient,
   userId: string,

@@ -9,12 +9,6 @@ import {
 } from '../analytics.js';
 import { PostEngineerClient } from '../client.js';
 
-//---------------
-// MCP tool telemetry travels to the web API as request headers: the web
-// records mcp_tool_called against the authenticated user. These tests pin
-// the header contract and the per-invocation context isolation.
-//---------------
-
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 describe('mcpTelemetryHeaders', () => {

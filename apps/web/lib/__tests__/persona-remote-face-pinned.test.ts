@@ -52,9 +52,6 @@ describe('downloadPublicImage requestPinned', () => {
   });
 
   it('downloads through a hostname URL by connecting to the pinned address', async () => {
-    // Node skips the custom lookup for IP-literal hosts, so only a hostname
-    // exercises it. `face.invalid` never resolves in real DNS: success proves
-    // the socket used the pinned address from lookupImpl.
     const started = await listen((_req: IncomingMessage, res: ServerResponse) => {
       res.writeHead(200, { 'content-type': 'image/png' });
       res.end(Buffer.from(PNG_BYTES));

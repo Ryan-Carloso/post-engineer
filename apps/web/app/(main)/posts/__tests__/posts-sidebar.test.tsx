@@ -4,13 +4,6 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 
-//---------------
-// Tests for the /posts sidebar: the mini calendar, the persona toggles
-// ("Os meus calendários"), the views row (month only — week/day/year do
-// not exist yet) and the second-timezone box. The sidebar is a desktop
-// layout element: hidden below the lg breakpoint.
-//---------------
-
 vi.mock('@/lib/i18n/provider', () => {
   function I18nProvider({ children }: { children: ReactNode }) {
     return <>{children}</>;
@@ -21,11 +14,7 @@ vi.mock('@/lib/i18n/provider', () => {
 });
 
 vi.mock('@/hooks/use-now', () => ({
-  // The clock is unknown by default: the server-rendering and hydration
-  // state the sidebar must survive without rendering a time.
   useNow: vi.fn(() => null),
-  // A fixed "today" outside the shown June grid, so no day starts selected
-  // and picking one selects it (picking an already-selected day deselects).
   useToday: vi.fn(() => new Date(2030, 4, 17)),
 }));
 
@@ -125,9 +114,6 @@ describe('PostsSidebar', () => {
   });
 
   it('shows dashes, never a clock time, while the clock is not known yet', () => {
-    // The shared clock is null during server rendering and hydration: a
-    // live `new Date()` here renders a different minute whenever hydration
-    // straddles the boundary, and React fails the page with error #418.
     const { container } = renderSidebar();
     const sidebar = container.querySelector('[data-testid="posts-sidebar"]') as HTMLElement;
     expect(within(sidebar).getAllByText('—')).toHaveLength(2);
@@ -135,8 +121,6 @@ describe('PostsSidebar', () => {
   });
 
   it('shows the zone times once the clock is known', () => {
-    // 12:34 UTC is 13:34 in Lisbon (WEST in June); the mocked locale is
-    // en, so en-US renders it 12-hour.
     vi.mocked(useNow).mockReturnValue(new Date('2030-06-01T12:34:00.000Z'));
     renderSidebar();
     expect(screen.getByText('01:34 PM')).toBeInTheDocument();

@@ -1,73 +1,9 @@
-//---------------
-// test-flight — CI-only end-to-end smoke of generate + publish (production).
-//
-// Two legs, one topic, real tokens, real public posts:
-//   1. ASAP leg: POST /api/videos/generate-and-schedule with
-//      publishing.mode='asap', then poll the slot until it is published and
-//      assert every requested provider returned a post link.
-//   2. Scheduled leg: POST the same endpoint with publishing.mode='scheduled'
-//      for a slot ~3h10m out, assert the slot lands where expected, then
-//      cancel it (default) or leave it to fire
-//      (TEST_FLIGHT_SCHEDULED_ACTION=leave).
-//      generate-and-schedule dispatches immediately, so the slot is
-//      `generating` and DELETE /api/schedule/slots/:id refuses it (and
-//      refuses the last slot of a schedule). Cancel is DELETE /api/schedule
-//      with the schedule id from the create response, which removes
-//      unpublished slot rows. The flight only treats the slot as stopped
-//      when a follow-up GET returns 404. Cleanup runs even when the
-//      assertion fails. Do not run this until that cancel is deployed:
-//      an older server leaves the generating slot in place and the post
-//      still goes out ~3h later.
-//
-// Auth is a Post Engineer API key (TEST_FLIGHT_POST_ENGINEER_API_KEY) belonging to the
-// funded test account; the key only ever lives in CI secrets. Account ids
-// arrive via workflow_dispatch inputs (manual flight) or repo Variables/Secrets
-// (scheduled monitor) — at least one is required (issue #572: no
-// auto-discovery; a flight publishes only to accounts bound to its persona).
-// Nothing is hardcoded here.
-//
-// Configuration (environment, fail-fast — every missing value is an error):
-//   TEST_FLIGHT_POST_ENGINEER_API_KEY  required. Post Engineer API key of
-//                                  the test account.
-//   TEST_FLIGHT_PERSONA_ID         required. Persona UUID (must be in the
-//                                  key's persona scope).
-//   TEST_FLIGHT_BLUESKY_ACCOUNT_ID / TEST_FLIGHT_INSTAGRAM_ACCOUNT_ID /
-//   TEST_FLIGHT_YOUTUBE_ACCOUNT_ID optional per provider, but at least
-//                                  one is required: with none set the
-//                                  flight fails (issue #572 — no
-//                                  auto-discovery).
-//   TEST_FLIGHT_SCRIPT_PATH        path to the script JSON written by
-//                                  write-script.mjs: { title, segments,
-//                                  source }. TEST_FLIGHT_SCRIPT_JSON may
-//                                  hold the same JSON inline instead
-//                                  (tests and local runs). One of them is
-//                                  required: the server no longer accepts
-//                                  `topics` and generates no script itself.
-//   TEST_FLIGHT_API_BASE_URL       default https://post-engineer.com.
-//   TEST_FLIGHT_SCHEDULED_ACTION   'cancel' (default) or 'leave'.
-//   TEST_FLIGHT_FACELESS             'true' to generate faceless videos
-//                                  (persona kept for voice + account
-//                                  routing, but options.videoType='faceless'
-//                                  skips the GPU lipsync render). Used by
-//                                  the test-flight-faceless workflow;
-//                                  unset/false for the persona flight.
-//   TEST_FLIGHT_RUN_ID             idempotency base. The workflow passes
-//                                  `${github.run_id}-${github.run_attempt}`
-//                                  so a re-run is not treated as a replay.
-//   TEST_FLIGHT_POLL_TIMEOUT_MIN   default 60. TEST_FLIGHT_POLL_INTERVAL_SEC
-//                                  default 30.
-//
-// Dependency-free Node 20+ ESM (repo precedent: .github/scripts/api-naming/).
-// Pure logic is unit-tested in flight.test.mjs via `node --test`.
-//---------------
-
 import { readFileSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 
 export const DEFAULT_API_BASE_URL = 'https://post-engineer.com';
 export const PROVIDER_ORDER = ['bluesky', 'instagram', 'youtube'];
-// 3h10m: safely inside the [3h, 30d] schedule window (SCHEDULE_MIN_ADVANCE_HOURS).
 export const SCHEDULE_LEAD_MS = (3 * 60 + 10) * 60 * 1000;
 export const SLOT_AT_TOLERANCE_MS = 10 * 60 * 1000;
 export const DEFAULT_POLL_TIMEOUT_MS = 60 * 60 * 1000;
@@ -75,10 +11,6 @@ export const DEFAULT_POLL_INTERVAL_MS = 30 * 1000;
 export const REQUEST_TIMEOUT_MS = 60 * 1000;
 
 export class FlightError extends Error {}
-
-//---------------
-// Config
-//---------------
 
 function optionalEnv(env, name) {
   return (env[name] ?? '').trim();
@@ -107,9 +39,6 @@ export function resolveConfig(env) {
     const accountId = optionalEnv(env, `TEST_FLIGHT_${provider.toUpperCase()}_ACCOUNT_ID`);
     if (accountId !== '') accounts[provider] = [accountId];
   }
-  // Issue #572: no auto-discovery — a flight publishes only to accounts
-  // bound to its persona, so explicit account ids are required. A flight
-  // with none configured fails here, before spending any token.
   if (Object.keys(accounts).length === 0) {
     throw new FlightError(
       'test-flight: no explicit account ids configured — set TEST_FLIGHT_<PROVIDER>_ACCOUNT_ID for at least one provider (bluesky, instagram, youtube).',
@@ -129,14 +58,10 @@ export function resolveConfig(env) {
   } catch {
     throw new FlightError(`test-flight: TEST_FLIGHT_API_BASE_URL is not a valid URL, got '${apiBaseUrl}'`);
   }
-  // Same rule as the rest of the repo: HTTPS or loopback only.
   const isLoopback = ['localhost', '127.0.0.1', '::1'].includes(parsedUrl.hostname);
   if (parsedUrl.protocol !== 'https:' && !isLoopback) {
     throw new FlightError(`test-flight: TEST_FLIGHT_API_BASE_URL must be https (got '${apiBaseUrl}')`);
   }
-  // Faceless mode: persona is still passed (for voice + account routing) but
-  // options.videoType='faceless' skips the GPU lipsync render — used by the
-  // test-flight-faceless workflow when Modal/GPU is unavailable.
   const faceless = optionalEnv(env, 'TEST_FLIGHT_FACELESS') === 'true';
   return {
     apiKey,
@@ -151,11 +76,6 @@ export function resolveConfig(env) {
   };
 }
 
-// The script comes from write-script.mjs, never from a topic string:
-// the server rejects `topics` and generates no script itself. Fail fast
-// here, before any token is spent, if the script step did not run or
-// wrote something unusable. readFile is injectable so tests can supply
-// the file contents without touching disk.
 export function resolveScript(env, { readFile = readFileSync } = {}) {
   const inline = optionalEnv(env, 'TEST_FLIGHT_SCRIPT_JSON');
   const scriptPath = optionalEnv(env, 'TEST_FLIGHT_SCRIPT_PATH');
@@ -196,9 +116,6 @@ export function resolveScript(env, { readFile = readFileSync } = {}) {
       throw new FlightError('test-flight: every script segment must be { kind: hook|content, text: non-empty }');
     }
   }
-  // The script JSON carries no description, and the route requires one:
-  // the flight is a smoke test, so the script text itself is the publish
-  // caption (segments joined with blank lines, like the engine's script).
   return {
     title,
     description: segments.map((segment) => segment.text).join('\n\n'),
@@ -207,10 +124,6 @@ export function resolveScript(env, { readFile = readFileSync } = {}) {
     source: typeof parsed?.source === 'string' ? parsed.source : 'unknown',
   };
 }
-
-//---------------
-// Payloads
-//---------------
 
 export function buildAsapPayload({ personaId, title, description, segments, accounts, idempotencyKey, videoType = 'hook_lipsync' }) {
   return {
@@ -264,10 +177,6 @@ export function buildScheduledPayload({ personaId, title, description, segments,
   };
 }
 
-//---------------
-// HTTP (the API key never appears in an error message)
-//---------------
-
 async function apiRequest(client, path, { method = 'GET', body } = {}) {
   const doFetch = client.fetchFn ?? fetch;
   let res;
@@ -306,10 +215,6 @@ async function apiJson(client, path, options) {
   return result.parsed;
 }
 
-//---------------
-// Assertions
-//---------------
-
 export function singleSlot(body, leg) {
   const slots = body.slots;
   if (!Array.isArray(slots) || slots.length !== 1) {
@@ -320,11 +225,6 @@ export function singleSlot(body, leg) {
   return slots[0];
 }
 
-// The create response names the slot id `slotId`; the slot-detail
-// response (GET /api/schedule/slots/[slotId]) names it `id`. The ASAP
-// assertion runs against the detail shape (waitForPublished) and the
-// scheduled assertion against the create shape, so resolve the label
-// from either field instead of printing "undefined" (flight 2026-10-20).
 export function slotLabel(slot) {
   if (slot && typeof slot.slotId === 'string' && slot.slotId) return slot.slotId;
   if (slot && typeof slot.id === 'string' && slot.id) return slot.id;
@@ -350,10 +250,6 @@ export function assertPublishedSlot(slot, providers) {
   return links;
 }
 
-// Statuses a just-created scheduled slot may report. `generating` is the
-// normal one: generate-and-schedule dispatches every slot before it
-// responds. Cancellation is DELETE /api/schedule, not the per-slot DELETE
-// (that route 409s on generating and on the last slot).
 const SCHEDULED_LANDING_STATUSES = new Set(['pending', 'awaiting', 'generating', 'ready']);
 
 export function assertScheduledSlot(slot, target) {
@@ -402,11 +298,6 @@ export async function waitForPublished(client, slotId, providers, { timeoutMs, i
   }
 }
 
-// DELETE /api/schedule removes unpublished slot rows. A 2xx is not proof:
-// a server that only deletes the schedule row (or 409s) leaves a generating
-// slot that the publisher will post. Only a follow-up GET 404 means the
-// slot is gone. Never `return` from the caller's finally — that would
-// swallow the assertion error this cleanup runs beside.
 async function confirmScheduleCancelled(client, created) {
   const deletePath = `/api/schedule?id=${encodeURIComponent(created.scheduleId)}`;
   const deleted = await apiRequest(client, deletePath, { method: 'DELETE' });
@@ -456,10 +347,6 @@ async function confirmScheduleCancelled(client, created) {
   }
 }
 
-//---------------
-// Main flow
-//---------------
-
 export async function runFlight(env = process.env, options = {}) {
   const now = options.now ?? new Date();
   const cfg = resolveConfig(env);
@@ -469,8 +356,6 @@ export async function runFlight(env = process.env, options = {}) {
     apiKey: cfg.apiKey,
     fetchFn: options.fetchFn,
   };
-  // Explicit account ids only (issue #572): resolveConfig already fails
-  // when none are configured — there is no auto-discovery fallback.
   const accounts = cfg.accounts;
   const providers = Object.keys(accounts);
   const summary = [`script source: ${script.source}${script.topic ? ` (topic: ${script.topic})` : ''}`];

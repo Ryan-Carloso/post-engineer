@@ -28,8 +28,6 @@ def _near(pixel, color, tolerance=40):
     return all(abs(a - b) <= tolerance for a, b in zip(pixel[:3], color))
 
 
-# ---- geometry
-
 
 def test_panel_sits_30px_from_the_bottom_and_is_38_percent_of_the_frame():
     x, y, width, height = segment_panels.panel_rect(1080, 1920)
@@ -55,8 +53,6 @@ def test_landscape_panel_is_capped_instead_of_spanning_the_whole_width():
     _, _, width, _ = segment_panels.panel_rect(1920, 1080)
     assert width == 1000
 
-
-# ---- the drawn panel
 
 
 def test_built_panel_is_a_transparent_png_larger_than_the_panel_by_its_shadow(tmp_path):
@@ -85,7 +81,6 @@ def test_panel_has_a_white_border_and_rounded_corners(tmp_path):
 
 
 def test_whole_photo_is_shown_over_a_blurred_backdrop_nothing_cropped(tmp_path):
-    # A tall photo with a blue stripe at its very top and bottom: contain keeps both.
     path = str(tmp_path / "tall.jpg")
     photo = Image.new("RGB", (800, 1600), RED)
     for y in list(range(0, 40)) + list(range(1560, 1600)):
@@ -141,8 +136,6 @@ def test_unreadable_photo_gives_no_panel(tmp_path):
     )
 
 
-# ---- the overlay command
-
 
 def test_overlay_command_overlays_each_panel_only_for_its_seconds_and_keeps_the_audio():
     panels = [Panel(0, "/t/a.png", 0, -10, 1.0, 3.5), Panel(2, "/t/b.png", 0, -10, 5.0, 7.25)]
@@ -156,8 +149,6 @@ def test_overlay_command_overlays_each_panel_only_for_its_seconds_and_keeps_the_
     assert command[-1] == "/t/out.mp4"
     assert command.count("-loop") == 2
 
-
-# ---- manifest and the real overlay
 
 
 def _video(tmp_path, seconds=4):
@@ -265,8 +256,6 @@ def test_timed_out_overlay_is_a_failure_not_a_crash(task_dir):
 
 
 def test_a_failed_overlay_imposes_no_caption_band_on_the_panel_less_video(task_dir):
-    # Captions must keep the user's placement: lifting them above a panel that
-    # never reached the video leaves them floating over the footage.
     panel = Panel(0, "/t/a.png", 0, 0, 1.0, 2.0, caption_bottom=1100)
     segment_panels.write_manifest("t", [panel], [])
     assert segment_panels.caption_bands("t") == [(1.0, 2.0, 1100)]
@@ -274,8 +263,6 @@ def test_a_failed_overlay_imposes_no_caption_band_on_the_panel_less_video(task_d
         segment_panels.overlay_onto("t", "/t/in.mp4", lambda task_id, **k: None)
     assert segment_panels.caption_bands("t") == []
 
-
-# ---- full frame: faceless videos and the images after a hook-only intro
 
 
 def test_full_frame_photo_is_an_opaque_frame_sized_png_at_the_origin(tmp_path):
@@ -290,8 +277,6 @@ def test_full_frame_photo_is_an_opaque_frame_sized_png_at_the_origin(tmp_path):
 
 
 def test_a_photo_that_does_not_fill_the_frame_gets_a_blurred_backdrop_not_black_bars(tmp_path):
-    # A landscape photo contained in a portrait frame leaves bands above and
-    # below it: they must be the blurred photo, never black.
     out = str(tmp_path / "full.png")
     segment_panels.build_full(_photo(tmp_path, size=(1600, 1000)), None, None, VideoAspect.portrait, out)
     with Image.open(out) as image:
@@ -375,8 +360,6 @@ def test_a_full_frame_photo_and_a_panel_can_follow_each_other_in_one_video(task_
     second = _frame(out, 4, task_dir)
     assert _near(second.getpixel((540, 400)), (30, 200, 30)) and _near(second.getpixel((540, 1500)), (30, 200, 30))
 
-
-# ---- video clips (PR-B): a clip plays full-frame, looped, never zoomed
 
 
 def _clip_panel(index=0, start=1.0, end=3.5, seconds=5.0, path="/t/c.mp4"):

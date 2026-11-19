@@ -3,17 +3,6 @@ import { AccountNotFoundError, AuthError } from '@/lib/errors';
 import { httpStatusOf, isMetaInvalidToken } from './account-unauthorized';
 import type { UploadAccountErrorCode } from './account-error-codes';
 
-//---------------
-// account-error — stable code for one account's upload failure (issue #500).
-// The handler owns the classification and the engine trusts the code:
-//   - user codes fail the account once and tell the user only they can fix it;
-//   - transient (network, 408/429/5xx, rate limit) is retried by the engine;
-//   - publish_rejected (any other 4xx, bad input) fails once, no user copy.
-// The code comes from a typed error or the HTTP status, never from the text.
-// The English sentence stays in `error` for logs.
-//---------------
-
-// Mirrors engine upload_publisher.RETRYABLE_STATUS_CODES (sync-tested).
 export const TRANSIENT_HTTP_STATUSES: ReadonlySet<number> = new Set([408, 429, 500, 502, 503, 504]);
 
 export function classifyUploadAccountError(
@@ -47,16 +36,11 @@ function codeForError(error: unknown): UploadAccountErrorCode {
     if (error.code === 'invalid_credentials') return 'token_expired';
     if (error.code === 'rate_limited') return 'transient';
   }
-  // Meta answers a dead token with HTTP 400 + code 190, never a 401: without
-  // this the account reads as publish_rejected and the user is never told
-  // only they can fix it by reconnecting.
   if (isMetaInvalidToken(error)) return 'token_expired';
   return codeForStatus(httpStatusOf(error));
 }
 
 function codeForStatus(status: number | undefined): UploadAccountErrorCode {
-  // No status: a network error or an unknown throw. Retry it; the engine
-  // caps the account at 3 tries.
   if (status === undefined) return 'transient';
   if (status === 401) return 'token_expired';
   if (TRANSIENT_HTTP_STATUSES.has(status)) return 'transient';

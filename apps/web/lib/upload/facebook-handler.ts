@@ -8,18 +8,6 @@ import { getAccountIdsFromFormData } from '@/lib/upload/account-utils';
 import { cleanupPublishMedia } from '@/lib/upload/publish-media';
 import { stagePublishMedia } from '@/lib/upload/publish-media-file';
 
-//---------------
-// handleFacebookUpload — publishes the video or image to the user's Facebook Pages.
-// Facebook fetches the media from a URL, so the file is stored
-// on R2 first (presigned URL, lib/upload/publish-media.ts, same path as Threads).
-// FormData (multipart, coming from the engine or the UI):
-//   provider=facebook, video (File: MP4/MOV video or JPEG/PNG image), caption, facebookAccountIds (repeated),
-//   userId (internal engine call only).
-// The stored token is the Page access token (see lib/facebook.ts): Page
-// tokens derived from a long-lived user token carry no expiry of their
-// own, so there is no expiry_date check here.
-//---------------
-
 interface FacebookAccountResult {
   accountId: string;
   success: boolean;
@@ -69,7 +57,6 @@ export async function handleFacebookUpload(
 
   for (const accountId of accountIds) {
     try {
-      // Ownership: resolves only the user's own accounts.
       const { tokens } = await getSocialAccountTokens(supabase, ownerUserId, 'facebook', accountId);
       const pageAccessToken = tokens.access_token;
 
@@ -96,13 +83,10 @@ export async function handleFacebookUpload(
       });
     } catch (error) {
       reportAccountUnauthorized('facebook', accountId, ownerUserId, error);
-      // A non-Error throw stays generic: accountFailure would surface a
-      // thrown string as the message.
       results.push(accountFailure(accountId, error instanceof Error ? error : new Error('Unknown error')));
     }
   }
 
-  // Archive presign created no temp copy, so there is nothing to clean.
   if (!staged.usedArchive) {
     void cleanupPublishMedia('facebook');
   }

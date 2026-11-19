@@ -1,8 +1,3 @@
-// accounts (action: connect): shape, schema and handler.
-//
-// Extracted from tools.ts so tools.ts stays under the file-size ratchet.
-// Re-exported from tools.ts, so existing import sites (`./tools.js`) keep
-// working, including the personas and accounts registration (intent-*.ts).
 import { z } from 'zod';
 
 import type { PostEngineerClient } from './client.js';
@@ -12,8 +7,6 @@ import { getErrorMessage } from './errors.js';
 import { redactSecretFromError } from './secret-redaction.js';
 import { handleLibraryCall, type McpToolResponse } from './tools-call.js';
 
-// A credential present but blank is rejected with the same message the
-// route uses — the route trims and rejects blanks, so the tool does too.
 function nonBlank(message: string) {
   return z
     .string()
@@ -43,14 +36,6 @@ export async function handleConnectAccount(
   client: PostEngineerClient,
   args: z.infer<typeof ConnectAccountSchema>
 ): Promise<McpToolResponse> {
-  // One handler per direct-connect network (a record, not a chain): a new
-  // direct-connect network fails the typecheck until it has a handler,
-  // instead of falling through to the OAuth URL path. Bluesky and 3Speak
-  // project the upstream response to named fields (Telegram too, with the
-  // bot token redacted from any error); Rumble shares
-  // handleLibraryCall, which renders the same success/error text. Built
-  // inside the handler so the parity check, which follows calls from the
-  // action's own body, sees each network's client call.
   const DIRECT_CONNECT_HANDLERS: Record<DirectConnectProvider, DirectConnectHandler> = {
     bluesky: async (client, args) => {
       if (!args.handle || !args.appPassword) {
@@ -66,8 +51,6 @@ export async function handleConnectAccount(
       }
       try {
         const result = await client.connectBlueskyAccount(args.handle, args.appPassword);
-        // Project the upstream response to named fields: stringifying the
-        // whole body would surface any field the route adds later.
         const { accountId, did } = result;
         return {
           content: [
@@ -103,8 +86,6 @@ export async function handleConnectAccount(
       }
       try {
         const result = await client.connectThreespeakAccount(args.username, args.postingKey);
-        // Project the upstream response to named fields: stringifying the
-        // whole body would surface any field the route adds later.
         const { accountId, username } = result;
         return {
           content: [
@@ -160,8 +141,6 @@ export async function handleConnectAccount(
       }
       try {
         const result = await connectTelegramAccount(client, args.botToken, args.chatId, args.chatType);
-        // Project the upstream response to named fields: stringifying the
-        // whole body would surface any field the route adds later.
         const { accountId, chatId, chatType, title } = result;
         return {
           content: [
@@ -202,8 +181,6 @@ export async function handleConnectAccount(
       };
     }
     const result = parsed.data;
-    // Never echo a non-https URL as a "open in your browser" authorization
-    // link: z.string().url() accepts any scheme, including javascript:.
     if (new URL(result.auth_url).protocol !== 'https:') {
       return {
         content: [

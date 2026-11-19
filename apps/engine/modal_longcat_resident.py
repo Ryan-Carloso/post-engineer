@@ -49,11 +49,8 @@ AUDIO_STRIDE: Final = 1
 AUDIO_SAMPLE_RATE: Final = 16000
 SEED: Final = 42
 
-# --use_distill on avatar-v1.5: upstream overrides the step count and both
-# guidance scales, so these are fixed rather than tunable.
 DISTILL_STEPS: Final = 8
 DISTILL_GUIDANCE_SCALE: Final = 1.0
-# Upstream defaults that mitigate repeated gestures in longer clips.
 REF_IMG_INDEX: Final = 10
 MASK_FRAME_RANGE: Final = 3
 
@@ -170,8 +167,6 @@ class ResidentRenderer:
         )
         distill_lora = os.path.join(checkpoint_dir, "lora", "dmd_lora.safetensors")
         if not os.path.exists(distill_lora):
-            # Upstream silently skips a missing LoRA and renders at 8 steps with
-            # no distillation, which looks like a quality regression, not an error.
             raise FileNotFoundError(f"DMD distill LoRA missing: {distill_lora}")
         dit.load_lora(
             distill_lora, "dmd", multiplier=1.0,
@@ -213,8 +208,6 @@ class ResidentRenderer:
         try:
             self._render(image_path, audio_path, resolution, num_segments, output_dir)
         finally:
-            # A failed or finished clip must not leave its activations behind
-            # for the next job in this long-lived process.
             import torch
 
             torch.cuda.empty_cache()

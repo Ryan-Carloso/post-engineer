@@ -7,36 +7,19 @@ import { logger } from '@/lib/logger';
 import { withApiErrorReporting } from '@/lib/api-error-reporting';
 import { reportProfileFetched, reportProfileFetchFailed } from '@/lib/account-profile-telemetry';
 
-//---------------
-// getSessionUserId — session user_id or null
-//---------------
 async function getSessionUserId(): Promise<string | null> {
   const supabase = await createSupabaseServerClient();
-  // Single-line destructuring: the API naming lint only exempts
-  // destructured names on one line, and `data` here is the Supabase
-  // SDK shape, not a contract field we chose.
   const { data: { user }, error } = await supabase.auth.getUser();
 
   if (error || !user) return null;
   return user.id;
 }
 
-//---------------
-// GET /api/fanvue-auth/callback — exchanges the code for an access
-// token (~1 hour) + refresh token and persists the account
-// (provider='fanvue', providerAccountId = the /users/me uuid) with the
-// encrypted token pair. The profile read is the display name / username
-// and avatar; avatar/cover/bio are NOT managed (no endpoints for them).
-// The PKCE code verifier comes from the httpOnly cookie (web flow) or
-// the stored oauth_states row (MCP flow); without it the code cannot be
-// exchanged. ALWAYS returns the popup HTML (oauthPopupResponse).
-//---------------
 async function getHandler(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const code = searchParams.get('code');
   const state = searchParams.get('state');
 
-  // Direct error from Fanvue (e.g.: user denied permissions)
   if (searchParams.get('error')) {
     return oauthPopupResponse('fanvue-oauth-error', { error: 'Fanvue authorization was not completed.' });
   }
@@ -44,14 +27,10 @@ async function getHandler(request: NextRequest) {
     return oauthPopupResponse('fanvue-oauth-error', { error: 'Missing authorization code' });
   }
 
-  // Callback auth — web flow (session + httpOnly nonce cookie) or MCP fallback
-  // (state stored server-side via POST /api/account/connect-url).
   const callbackAuth = await resolveOAuthCallbackAuth(
     request,
     state,
     await getSessionUserId(),
-    // Service role only for the server-side oauth_states table; ownership is
-    // enforced by the user_id predicate on the consume (session user only).
     () => createSupabaseServiceClient(),
     'fanvue'
   );
@@ -59,10 +38,6 @@ async function getHandler(request: NextRequest) {
     return oauthPopupResponse('fanvue-oauth-error', { error: callbackAuth.error });
   }
 
-  // The PKCE verifier must have survived from /start (cookie) or from
-  // the connect-url store (oauth_states row): without it the token
-  // exchange cannot run, so fail as an incomplete authorization rather
-  // than exchanging without it.
   const codeVerifier = callbackAuth.codeVerifier;
   if (codeVerifier === undefined || codeVerifier === '') {
     logger.error('[fanvue-auth/callback] PKCE code verifier missing for this flow');
@@ -80,9 +55,6 @@ async function getHandler(request: NextRequest) {
     });
 
     const tokenExpiresAt = new Date(Date.now() + token.expires_in * 1000);
-    // Both flows resolve to the signed-in session user (the connect-url
-    // fallback only accepts the state owner); upsertSocialAccount then writes
-    // with the service client (066 leaves the session client select-only).
     const supabase = await createSupabaseServerClient();
     const { upsertSocialAccount } = await import('@/lib/social-accounts');
 
@@ -123,7 +95,4 @@ async function getHandler(request: NextRequest) {
   }
 }
 
-//---------------
-// 5xx reporting: handled server errors reach PostHog error tracking.
-//---------------
 export const GET = withApiErrorReporting('GET /api/fanvue-auth/callback', getHandler);

@@ -1,13 +1,3 @@
-//---------------
-// onboarding — first-visit wizard copy (issue #573).
-//
-// The en/pt dictionaries are grandfathered over the 500-line file-size cap
-// and may not grow a single line, so this copy lives here. It is merged
-// into the onboarding section in ./index.ts, which also extends the
-// Dictionary/TranslationKey contract — en.ts and pt.ts stay the same size.
-// Short lines only: the wizard explains in four steps, it does not lecture.
-//---------------
-
 export const onboardingStrings = {
   en: {
     onboarding: {

@@ -1,50 +1,3 @@
-// Streamable HTTP transport for the MCP server (Phase 6, P6-1).
-//
-// This module wires the McpServer built by createPostEngineerMcpServer()
-// to the SDK's StreamableHTTPServerTransport instead of stdio. The HTTP
-// endpoint serves the same 17 intent tools with the same handlers, minus
-// every action and field that would read a path from this host's filesystem
-// (see remote-shapes.ts and the `unavailable` options in intent-*.ts).
-//
-// Authentication (Phase 6, P6-2): when OAuth is configured
-// (MCP_OAUTH_ISSUER + MCP_RESOURCE, see http-auth.ts), every /mcp
-// request must present a valid Bearer access token with the mcp:tools
-// scope, and the listener may bind a non-loopback host. Without OAuth
-// configured the P6-1 behaviour stands: loopback only, and a remote
-// bind is refused at startup — an unauthenticated remote endpoint is
-// no longer possible, not merely warned about. The stdio default is
-// unchanged: without --http-transport, no port is opened.
-//
-// Regardless of authentication, it also validates request
-// origin and host against DNS rebinding: the SDK's own rebinding
-// protection defaults to off and validates nothing without configured
-// allowlists, so this module enforces it directly. A request with a
-// non-loopback Origin is rejected with 403 (non-browser clients send no
-// Origin and are unaffected), and while the listener is bound to
-// loopback, a non-loopback Host header is rejected too — a rebinding
-// request from a malicious page arrives with the attacker's domain as
-// Host, and binding 127.0.0.1 alone does not stop the browser on the
-// same machine from reaching it.
-//
-// Remote client identity: the per-request PostEngineerClient built for
-// HTTP suppresses its X-MCP-Version header (suppressVersionHeader in
-// client-types.ts, set only by the HTTP factory in index.ts). The package
-// version (MAJOR.MINOR.PATCH) never equals the web gate's generated
-// MAJOR.MINOR.PR requirement, so sending it would 426 the remote's own
-// calls; with no header the gate passes them as non-MCP callers. The
-// stdio client keeps sending the header. Abuse limit: /mcp requests are
-// rate-limited per client IP before OAuth verification (JWKS verifies
-// are asymmetric and must not be reachable without bound), then per
-// verified subject after auth (see http-rate-limit.ts).
-//
-// The transport is stateless (sessionIdGenerator: undefined): the SDK
-// keeps no session state in memory, no Mcp-Session-Id header is issued,
-// and no tool state is shared between requests beyond what the protocol
-// itself requires. The SDK forbids reusing a stateless transport across
-// requests ("Stateless transport cannot be reused across requests"), and
-// a server instance can only connect to one transport, so every /mcp
-// request builds a fresh server (from the factory) plus a fresh transport
-// and closes both when the request ends.
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -65,9 +18,6 @@ import {
   type HttpRateLimiter,
 } from './http-rate-limit.js';
 
-// Test seams for serveHttpTransport: production builds the real JWKS
-// authenticator and the default per-IP limiter; tests inject a spy
-// authenticator and a low-limit IP limiter to prove ordering.
 export interface HttpTransportDeps {
   authenticator?: HttpAuthenticator;
   ipRateLimiter?: HttpRateLimiter;
@@ -84,7 +34,6 @@ export interface HttpTransportHandle {
   close(): Promise<void>;
 }
 
-// Maximum JSON-RPC request body accepted on /mcp (1 MiB).
 const MAX_BODY_BYTES = 1024 * 1024;
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', '::1', 'localhost']);
@@ -94,9 +43,6 @@ function isLoopbackHost(host: string): boolean {
 }
 
 function parsePort(value: string): number {
-  // Number('') is 0: without this guard an empty --http-port= or
-  // MCP_HTTP_PORT='' would silently bind an ephemeral port instead of
-  // failing fast on the invalid value.
   if (value.trim() === '') {
     throw new Error(
       `Invalid MCP HTTP port: "${value}" — pass --http-port <0-65535> or set MCP_HTTP_PORT.`,
@@ -127,10 +73,6 @@ function flagValue(argv: string[], flag: string, envValue: string | undefined): 
   return envValue;
 }
 
-// Parse the HTTP transport startup options. Returns null unless the
-// explicit --http-transport flag is present: the stdio default and the
-// legacy --http flag never open a port. Throws on invalid input so the
-// process fails fast instead of binding an unintended address.
 export function parseHttpTransportOptions(
   argv: string[],
   env: NodeJS.ProcessEnv,
@@ -158,9 +100,6 @@ function formatHostForUrl(host: string): string {
   return host.includes(':') ? `[${host}]` : host;
 }
 
-// Hostname from a Host header: strips a trailing :port, unwraps [::1]
-// brackets, and tolerates a bare IPv6 literal (which has several colons
-// and no brackets). Returns undefined for a missing or malformed value.
 function hostHostname(host: string | undefined): string | undefined {
   if (host === undefined || host.length === 0) return undefined;
   if (host.startsWith('[')) {
@@ -172,16 +111,10 @@ function hostHostname(host: string | undefined): string | undefined {
   return colon === -1 ? host : host.slice(0, colon);
 }
 
-// DNS-rebinding guard (see the module header). Non-browser clients send
-// no Origin and pass; a browser Origin must name a loopback host. While
-// the listener is bound to loopback, the Host header must name one too.
 function isAllowedRequest(req: IncomingMessage, options: HttpTransportOptions): boolean {
   const origin = req.headers.origin;
   if (origin !== undefined) {
     try {
-      // URL keeps brackets on IPv6 literals: http://[::1]:5173 has
-      // hostname "[::1]", while LOOPBACK_HOSTS stores the bare "::1".
-      // Strip them so the Origin branch agrees with the Host branch.
       const originHost = new URL(origin).hostname.replace(/^\[|\]$/g, '');
       if (!LOOPBACK_HOSTS.has(originHost)) return false;
     } catch {
@@ -203,10 +136,6 @@ async function readBody(req: IncomingMessage, res: ServerResponse): Promise<unkn
     const buffer = chunk as Buffer;
     totalBytes += buffer.length;
     if (totalBytes > MAX_BODY_BYTES) {
-      // Do not return mid-stream: leaving a for-await loop destroys the
-      // request stream, which can reset the connection before the 413
-      // response flushes. Drain instead (discarding, never storing), and
-      // answer 413 after the body ends.
       tooLarge = true;
       continue;
     }
@@ -234,13 +163,6 @@ async function readBody(req: IncomingMessage, res: ServerResponse): Promise<unkn
   }
 }
 
-// Start the HTTP server. serverFactory builds one McpServer per /mcp
-// request (see the stateless note above); the HTTP listener itself holds
-// no server or tool state. Serves POST /mcp, a plain GET /health probe,
-// and GET /.well-known/oauth-protected-resource when auth is configured.
-// When auth is null the P6-1 loopback-only behaviour applies and any
-// remote bind is refused here, before listening: --allow-remote without
-// OAuth configured is a startup error, not a warning, since P6-2.
 export async function serveHttpTransport(
   serverFactory: (auth?: AuthContext) => McpServer,
   options: HttpTransportOptions,
@@ -297,10 +219,6 @@ export async function serveHttpTransport(
         res.end(JSON.stringify({ error: 'Not found' }));
         return;
       }
-      // Per-IP limit first, before any OAuth verification: JWKS
-      // verification is asymmetric, so unauthenticated traffic must not
-      // reach it without bound. A blocked IP gets 429 and the
-      // authenticator is never called for that request.
       if (auth !== null && ipRateLimiter !== null) {
         const ipLimited = ipRateLimiter.check(clientIpKey(req));
         if (!ipLimited.allowed) {
@@ -312,11 +230,6 @@ export async function serveHttpTransport(
           return;
         }
       }
-      // Authenticate before any tool is built or dispatched: an
-      // unauthenticated request never learns the tool list, and a
-      // request authenticated as one subject never runs as another.
-      // The rate limit is per verified subject, checked after auth so
-      // unauthenticated traffic cannot burn another subject's budget.
       let authContext: AuthContext | undefined;
       if (auth !== null && authenticator !== null && rateLimiter !== null) {
         const verified = await authenticateHttpRequest(req, authenticator);
@@ -335,26 +248,18 @@ export async function serveHttpTransport(
         }
         authContext = verified;
       }
-      // Fresh server + transport per request: the SDK's stateless
-      // transport cannot be reused, and a server binds to one transport.
-      // The factory receives the verified context so the per-request
-      // client forwards this subject's bearer to the web API — the
-      // server never falls back to another subject's credential.
       const server = serverFactory(authContext);
       const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
       let cleanedUp = false;
       const cleanup = (): void => {
         if (cleanedUp) return;
         cleanedUp = true;
-        // allSettled never rejects, so no rejection handler is needed here.
         void Promise.allSettled([transport.close(), server.close()]);
       };
       res.on('close', cleanup);
       await server.connect(transport);
       if (req.method === 'POST') {
         const parsedBody = await readBody(req, res);
-        // readBody already answered 400/413 on failure; res.writableEnded
-        // distinguishes that case from a successfully parsed body.
         if (res.writableEnded) {
           cleanup();
           return;
@@ -365,9 +270,6 @@ export async function serveHttpTransport(
       }
       cleanup();
     } catch (error) {
-      // Guard on headersSent, not writableEnded: if the handler already
-      // wrote response headers, writeHead would throw ERR_HTTP_HEADERS_SENT
-      // out of this catch and kill the process on an unhandled rejection.
       if (!res.headersSent) {
         res.writeHead(500, { 'content-type': 'application/json' });
         res.end(JSON.stringify({ error: 'Internal server error' }));

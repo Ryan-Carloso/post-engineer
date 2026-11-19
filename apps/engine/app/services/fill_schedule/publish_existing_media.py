@@ -19,12 +19,8 @@ from app.services.analytics import scrub_error_text
 from app.services.fill_schedule.account_outcomes import lease_iso
 from app.services.fill_schedule.support import slot_user_id
 
-# fail_permanently(error, refund_reason): the publisher's
-# _fail_slot_permanently bound to (slot, schedule).
 FailPermanently = Callable[[str, str], None]
 
-# (bucket, storage path) of single-use media to remove after a terminal
-# outcome, or None when the slot holds no stored bytes.
 MediaCleanup = tuple[str, str] | None
 
 MediaResolution = tuple[list[str], Callable[[], bytes], str, MediaCleanup]
@@ -59,9 +55,6 @@ def _slot_owns_upload_claim(slot: dict[str, Any], row: dict[str, Any]) -> bool:
     return claimed_at is not None and claimed_at == consumed_at
 
 
-# A signed upload carries a video or, for the image networks, a JPEG/PNG
-# image (web migration 068). The file name only labels the part: the web
-# handlers tell video from image by the bytes.
 UPLOAD_EXTENSIONS: dict[str, str] = {
     "video/mp4": "mp4",
     "video/quicktime": "mov",
@@ -189,7 +182,6 @@ def resolve_existing_media(
             and resumed
             and _slot_owns_upload_claim(slot, row)
         ):
-            # This slot's own first attempt claimed the row; re-use it.
             already_claimed = True
         elif row.get("status") != "ready":
             fail_permanently(
@@ -232,10 +224,6 @@ def resolve_existing_media(
             )
             return None
         if not already_claimed:
-            # Record the claim on the slot: a resume trusts a `consumed`
-            # row only when it is this claim (consumed_at matches). A
-            # claim that returns no consumed_at still publishes, but the
-            # resume cannot prove ownership and fails closed instead.
             claimed_at = claimed.get("consumed_at")
             if isinstance(claimed_at, str) and claimed_at:
                 store.update_slot(slot["id"], media_claimed_at=claimed_at)

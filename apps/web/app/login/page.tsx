@@ -37,22 +37,11 @@ export default function Login() {
   );
 }
 
-//---------------
-// safeNext — only accepts internal relative paths (?next=/oauth/...).
-// Absolute URLs and `//evil` are rejected (open redirect).
-//---------------
 const safeNext = (value: string | null): string | null => {
   if (!value || !value.startsWith('/') || value.startsWith('//')) return null;
   return value;
 };
 
-//---------------
-// resolveLoginRedirectUrl — where Supabase sends the user after the GitHub
-// OAuth round-trip, per environment. Localhost and this project's Vercel
-// previews relay through the production callback with ?next= pointing back
-// at the origin that started the login; production keeps a relative next
-// (e.g. returning from the MCP /oauth/authorize flow).
-//---------------
 export const PROD_AUTH_CALLBACK = 'https://post-engineer.com/auth/callback';
 const LOCAL_AUTH_CALLBACK = 'http://localhost:3434/auth/callback';
 
@@ -71,11 +60,6 @@ export function resolveLoginRedirectUrl(
   return next ? `${PROD_AUTH_CALLBACK}?next=${encodeURIComponent(next)}` : PROD_AUTH_CALLBACK;
 }
 
-//---------------
-// shouldShowOAuthDebug — shows the redirect URL on the login screen outside
-// production (localhost and this project's Vercel previews) to validate the
-// login flow.
-//---------------
 export function shouldShowOAuthDebug(hostname: string): boolean {
   return (
     hostname === 'localhost' ||
@@ -84,22 +68,10 @@ export function shouldShowOAuthDebug(hostname: string): boolean {
   );
 }
 
-//---------------
-// Browser origin as an external store. The server snapshot (null) also serves
-// the hydration render, so the markup matches; React then re-renders with the
-// real origin.
-//---------------
 const subscribeToOrigin = (): (() => void) => () => {};
 const getBrowserOrigin = (): string => window.location.origin;
 const getServerOrigin = (): null => null;
 
-//---------------
-// hostnameFromOrigin — hostname for a browser origin, or null when there
-// is no usable hostname: the server snapshot (null) and opaque origins
-// (sandboxed iframes, srcdoc and data: pages report the literal string
-// "null", which new URL() rejects). Returning null only hides the debug
-// line; the click handler re-reads window.location at click time.
-//---------------
 export function hostnameFromOrigin(origin: string | null): string | null {
   if (origin === null) return null;
   try {
@@ -109,11 +81,6 @@ export function hostnameFromOrigin(origin: string | null): string | null {
   }
 }
 
-//---------------
-// GithubLogin — OAuth button that preserves ?next= (e.g. returning from the
-// MCP OAuth flow at /oauth/authorize). On localhost it keeps the relay
-// behavior without appending next.
-//---------------
 const GithubLogin = () => {
   const supabase = useMemo(() => createSupabaseClient(), []);
   const [pending, setPending] = useState(false);
@@ -122,8 +89,6 @@ const GithubLogin = () => {
   const origin = useSyncExternalStore(subscribeToOrigin, getBrowserOrigin, getServerOrigin);
   const hostname = hostnameFromOrigin(origin);
 
-  // Outside production (localhost and Vercel previews) the redirect URL is
-  // shown on screen to validate the login flow.
   const debugRedirectTo =
     origin !== null && hostname !== null && shouldShowOAuthDebug(hostname)
       ? resolveLoginRedirectUrl(hostname, origin, next)
@@ -132,9 +97,6 @@ const GithubLogin = () => {
   const handleOAuthLogin = async (provider: 'github') => {
     if (pending) return;
     setPending(true);
-    // Opaque origins (sandboxed iframes, srcdoc) report hostname "" and
-    // origin "null": neither local nor a preview host, so they fall
-    // through to the production callback, same as any unknown host.
     const redirectTo = resolveLoginRedirectUrl(
       window.location.hostname,
       window.location.origin,
@@ -166,13 +128,6 @@ const GithubLogin = () => {
   );
 };
 
-/* -----------------
-   Local Components
------------------- */
-
-//---------------
-// LoginHero — dark left panel with the product pitch
-//---------------
 const LoginHero = () => {
   const { t } = useI18n();
   const features = [
@@ -232,9 +187,6 @@ const LoginHero = () => {
   );
 };
 
-//---------------
-// LoginTopBar — top row of the light panel with sign-up and language
-//---------------
 const LoginTopBar = () => {
   const { t, locale, setLocale } = useI18n();
   return (
@@ -271,18 +223,12 @@ const LoginTopBar = () => {
   );
 };
 
-//---------------
-// LoginCard — centered white card with the login buttons
-//---------------
 const LoginCard = ({ children }: { children: React.ReactNode }) => (
   <div className="w-full max-w-md rounded-3xl border border-hairline bg-card p-8 shadow-[0_20px_60px_rgba(20,32,51,0.08)] sm:p-10">
     {children}
   </div>
 );
 
-//---------------
-// LoginCardHeader — brand, title, and subtitle of the card
-//---------------
 const LoginCardHeader = () => {
   const { t } = useI18n();
   return (
@@ -301,12 +247,6 @@ const LoginCardHeader = () => {
   );
 };
 
-//---------------
-// LoginAuthNotice — explains an OAuth return without a session: user
-// cancellation (?error=cancelled) or a technical error (?error=auth).
-// Only renders for these two values; anything else is ignored (the param
-// is never displayed).
-//---------------
 const LoginAuthNotice = () => {
   const { t } = useI18n();
   const error = useSearchParams().get('error');
@@ -326,10 +266,6 @@ const LoginAuthNotice = () => {
   );
 };
 
-//---------------
-// LoginButton — OAuth (GitHub) button. Disables and shows "redirecting"
-// while the OAuth round-trip is in flight to prevent double clicks.
-//---------------
 const LoginButton = ({
   provider,
   disabled,
@@ -355,9 +291,6 @@ const LoginButton = ({
   );
 };
 
-//---------------
-// GithubMark — GitHub icon
-//---------------
 const GithubMark = () => (
   <svg className="size-5 text-ink" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
     <path
@@ -368,9 +301,6 @@ const GithubMark = () => (
   </svg>
 );
 
-//---------------
-// LoginAgreeNote — terms and privacy agreement notice
-//---------------
 const LoginAgreeNote = () => {
   const { t } = useI18n();
   return (
@@ -388,9 +318,6 @@ const LoginAgreeNote = () => {
   );
 };
 
-//---------------
-// LoginBottomBar — copyright and legal links at the bottom of the light panel
-//---------------
 const LoginBottomBar = () => {
   const { t } = useI18n();
   return (

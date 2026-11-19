@@ -1,41 +1,3 @@
-//---------------
-// billing/reconcile — daily billing reconciliation.
-//
-// Two jobs, one invariant: never take tokens for value the user did not
-// get, and never refund value the user did get.
-//
-//   1. Zombie schedules: a schedule older than ZOMBIE_SCHEDULE_AGE_HOURS
-//      with zero publish slots, zero generated videos, and a ledger spend
-//      is provably worthless (slot dispatch happens within minutes of
-//      creation). Refund automatically via the idempotent
-//      refund_generation_tokens RPC and emit `refund_issued`.
-//   2. Stuck video generations: rows in a non-terminal status older than
-//      the stuck threshold are verified against the live engine task,
-//      whose numeric state is terminal and self-describing:
-//        - engine 404 (task gone) -> refund unless a published slot
-//          proves the user got value.
-//        - engine state -1 (failed) -> refund with the categorized
-//          failure reason; the row is marked failed with the engine's
-//          error recorded.
-//        - engine state 1 (complete) -> backfill the row as completed;
-//          no refund, the user got the video.
-//        - task still active, or the engine unreachable -> wait. Past
-//          STUCK_MAX_DAYS with no video and no provable delivery, the
-//          user got nothing: auto-refund (a wrong refund costs ~$0.10 of
-//          GPU; charging a user for nothing is the worse error).
-//        - no engine task id (the engine never accepted the job) ->
-//          refund unless a published slot proves value was delivered.
-//
-// Every refund emits `refund_issued` attributed to the affected user —
-// that event is the audit trail. There is no human review queue: every
-// branch above is decided from the engine's own terminal state or from
-// the time-boxed absence of any provable delivery.
-//
-// The Supabase access is hidden behind ReconcileStore so the orchestration
-// below is unit-testable with a fake; createReconcileStore adapts a
-// service-role client (cron route only).
-//---------------
-
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getPostHogServer } from '@/lib/posthog-server';
 import { logger } from '@/lib/logger';
@@ -44,19 +6,8 @@ import { engineAuthHeaders } from '@/lib/request-auth';
 import { taskPayload, taskState, extractTaskError } from '@/lib/engine-task-state';
 import { categorizeGenerationError } from '@/lib/generation/generation-errors';
 
-//---------------
-// Tunables
-//---------------
-
-// ZOMBIE_SCHEDULE_AGE_HOURS — slot dispatch runs within minutes of
-// schedule creation; a schedule this old with zero slots will never
-// produce anything.
 export const ZOMBIE_SCHEDULE_AGE_HOURS = 24;
 
-// STUCK_GENERATION_DEFAULT_HOURS — deliberate default (not a fallback):
-// the daily job must keep running even when the operator never set the
-// knob. RECONCILE_STUCK_HOURS overrides it when it parses to a positive
-// number.
 export const STUCK_GENERATION_DEFAULT_HOURS = 6;
 
 export function stuckGenerationAgeHours(): number {
@@ -68,10 +19,6 @@ export function stuckGenerationAgeHours(): number {
   return STUCK_GENERATION_DEFAULT_HOURS;
 }
 
-// STUCK_MAX_DEFAULT_DAYS — deliberate default (not a fallback): a stuck
-// generation older than this, with no video and no provable delivery,
-// is refunded automatically. RECONCILE_STUCK_MAX_DAYS overrides it when
-// it parses to a positive number.
 export const STUCK_MAX_DEFAULT_DAYS = 3;
 
 export function stuckMaxDays(): number {
@@ -82,11 +29,6 @@ export function stuckMaxDays(): number {
   }
   return STUCK_MAX_DEFAULT_DAYS;
 }
-
-//---------------
-// Ledger / analytics literals (kept as constants so the migration sync
-// test can reference the same strings).
-//---------------
 
 export const ZOMBIE_REFUND_REASON = 'zombie_schedule_no_slots';
 export const STUCK_REFUND_REASON = 'stuck_generation_task_gone';
@@ -100,10 +42,6 @@ export function stuckUnresolvedRefundReason(): string {
 export function stuckUnverifiableRefundReason(): string {
   return `stuck_unverifiable_after_${stuckMaxDays()}_days`;
 }
-
-//---------------
-// Shapes
-//---------------
 
 export interface ZombieCandidate {
   id: string;
@@ -156,18 +94,12 @@ export interface SettleGenerationInput {
   status: 'failed' | 'completed';
   errorCode?: string;
   errorMessage?: string;
-  /** Only the RPC's refunded=true proves the tokens moved — never set optimistically. */
   refunded: boolean;
 }
-
-//---------------
-// ReconcileStore — the persistence boundary.
-//---------------
 
 export interface ReconcileStore {
   findZombieCandidates(cutoffIso: string): Promise<ZombieCandidate[]>;
   findStuckGenerations(cutoffIso: string): Promise<StuckGeneration[]>;
-  /** Calls the idempotent refund_generation_tokens RPC. False = no-op (already settled). */
   refund(userId: string, generationId: string, reason: string): Promise<boolean>;
   hasPublishedSlotForTask(userId: string, taskId: string): Promise<boolean>;
   hasPublishedSlotForGeneration(userId: string, generationId: string): Promise<boolean>;
@@ -212,17 +144,8 @@ function toStuckGeneration(row: Record<string, unknown>): StuckGeneration | null
   };
 }
 
-// BATCH_SCHEDULE_ID — the unified flow's generation ids are
-// `batch:<scheduleId>` (and `batch:<scheduleId>:slot:<slotId>` per slot),
-// so a generation maps back to the schedule whose slots prove delivery.
 const BATCH_SCHEDULE_ID =
   /^batch:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i;
-
-//---------------
-// createReconcileStore — Supabase adapter. The caller must hand over a
-// service-role client: the detector functions bypass RLS (security
-// definer) and every query below re-checks ownership explicitly.
-//---------------
 
 export function createReconcileStore(supabase: SupabaseClient): ReconcileStore {
   return {
@@ -270,8 +193,6 @@ export function createReconcileStore(supabase: SupabaseClient): ReconcileStore {
         logger.error('[reconcile] refund RPC failed', error, { userId, generationId });
         return false;
       }
-      // The RPC is idempotent: refunded=false means "nothing to refund"
-      // (already settled), not an error — the caller treats it as settled.
       return isRecord(data) && data.refunded === true;
     },
 
@@ -284,9 +205,6 @@ export function createReconcileStore(supabase: SupabaseClient): ReconcileStore {
         .eq('status', 'published')
         .limit(1);
       if (error) {
-        // Fail closed: a lookup error must never read as "no value
-        // delivered" — the caller records the error and the next run
-        // retries instead of refunding.
         throw new Error(`published-slot lookup failed: ${error.message}`);
       }
       return (data?.length ?? 0) > 0;
@@ -294,8 +212,6 @@ export function createReconcileStore(supabase: SupabaseClient): ReconcileStore {
 
     async hasPublishedSlotForGeneration(userId: string, generationId: string): Promise<boolean> {
       const match = BATCH_SCHEDULE_ID.exec(generationId);
-      // Not a batch generation id: no schedule to check, so no provable
-      // delivery. (A DB error below still throws — fail closed.)
       if (!match) return false;
       const { data, error } = await supabase
         .from('scheduled_posts')
@@ -321,12 +237,9 @@ export function createReconcileStore(supabase: SupabaseClient): ReconcileStore {
           input.errorMessage ??
           'Video generation stuck past the reconcile threshold; settled by billing reconciliation.';
       } else {
-        // Backfilled complete: clear any stale error detail.
         patch.error_code = null;
         patch.error_message = null;
       }
-      // Never write tokens_refunded=true optimistically: only the RPC's
-      // refunded=true proves the tokens moved.
       if (input.refunded) patch.tokens_refunded = true;
       const { error } = await supabase
         .from('video_generations')
@@ -336,16 +249,6 @@ export function createReconcileStore(supabase: SupabaseClient): ReconcileStore {
     },
   };
 }
-
-//---------------
-// checkEngineTask — no-throw engine lookup with terminal-state parsing.
-//
-// The engine's numeric state is self-describing: -1 failed, 1 complete,
-// anything else active. 'gone' (HTTP 404) and the parsed terminal states
-// are the only outcomes that settle a generation immediately; 'unknown'
-// (unreachable, unconfigured, unsafe id, malformed body) defers to the
-// time-box.
-//---------------
 
 const ENGINE_TASK_TIMEOUT_MS = 10_000;
 
@@ -378,8 +281,6 @@ export async function checkEngineTask(taskId: string, userId: string): Promise<E
     const state = task ? taskState(task) : null;
     if (state === -1) return { kind: 'failed', error: extractTaskError(body) };
     if (state === 1) return { kind: 'complete' };
-    // A 200 without a readable numeric state proves nothing about the
-    // task — treat it as unverifiable, not as active.
     if (state === null) return { kind: 'unknown' };
     return { kind: 'active' };
   } catch {
@@ -389,18 +290,6 @@ export async function checkEngineTask(taskId: string, userId: string): Promise<E
   }
 }
 
-//---------------
-// Analytics — server-side, attributed to the affected user (never the
-// shared service id), so refunds are per-person in PostHog.
-//
-// NOTE: these events intentionally bypass scrubSecrets. The scrubber
-// redacts every key containing "token" — including a plain token COUNT —
-// which would erase the audit value of refund_issued. That is safe here
-// because every property below is constructed from typed store outputs
-// (uuids, counts, fixed reason literals): no request input, no secrets,
-// no credential-shaped values can reach these calls.
-//---------------
-
 function trackRefundIssued(
   userId: string,
   properties: Record<string, unknown>,
@@ -408,13 +297,8 @@ function trackRefundIssued(
   try {
     getPostHogServer()?.captureAs(userId, 'refund_issued', properties);
   } catch {
-    // Telemetry must never break the reconciliation run.
   }
 }
-
-//---------------
-// runBillingReconciliation — the orchestrator.
-//---------------
 
 function emptyReport(): ReconcileReport {
   return {
@@ -432,7 +316,6 @@ export async function runBillingReconciliation(store: ReconcileStore): Promise<R
   const report = emptyReport();
   const now = Date.now();
 
-  // --- Phase 1: zombie schedules -------------------------------------
   const zombieCutoff = new Date(now - ZOMBIE_SCHEDULE_AGE_HOURS * 3600 * 1000).toISOString();
   let zombies: ZombieCandidate[];
   try {
@@ -460,8 +343,6 @@ export async function runBillingReconciliation(store: ReconcileStore): Promise<R
           reason: ZOMBIE_REFUND_REASON,
         });
       } else {
-        // Idempotent no-op: a previous run (or the request path) already
-        // settled this generation. Nothing to do, nothing to report.
         report.zombiesAlreadySettled.push(record);
       }
     } catch (error) {
@@ -470,7 +351,6 @@ export async function runBillingReconciliation(store: ReconcileStore): Promise<R
     }
   }
 
-  // --- Phase 2: stuck video generations ------------------------------
   const stuckCutoff = new Date(now - stuckGenerationAgeHours() * 3600 * 1000).toISOString();
   let stuck: StuckGeneration[];
   try {
@@ -494,9 +374,6 @@ export async function runBillingReconciliation(store: ReconcileStore): Promise<R
   return report;
 }
 
-// stuckAgeDays — total age of the stuck generation in days. An
-// unparseable created_at reads as 0 (never past the max): when the age
-// itself is unknowable, the time-box must not fire.
 function stuckAgeDays(s: StuckGeneration, now: number): number {
   const ageMs = now - Date.parse(s.createdAt);
   return Number.isFinite(ageMs) && ageMs > 0 ? ageMs / 86_400_000 : 0;
@@ -510,8 +387,6 @@ async function settleStuckGeneration(
 ): Promise<void> {
   const pastMaxAge = stuckAgeDays(s, now) > stuckMaxDays();
 
-  // No task id: the engine never accepted the job, so there is no task
-  // state to read. A published slot is the only proof of value.
   if (!s.engineTaskId) {
     const published = await store.hasPublishedSlotForGeneration(s.userId, s.generationId);
     if (published) {
@@ -534,10 +409,6 @@ async function settleStuckGeneration(
   const outcome = await checkEngineTask(s.engineTaskId, s.userId);
 
   if (outcome.kind === 'gone') {
-    // Provably dead task — but only refund when no published slot proves
-    // the user got value. The slot lookup throws on DB error (fail
-    // closed); the catch in runBillingReconciliation records the error
-    // and the next run retries.
     const published = await store.hasPublishedSlotForTask(s.userId, s.engineTaskId);
     if (published) {
       await store.settleGeneration({ generationId: s.generationId, status: 'completed', refunded: false });
@@ -559,8 +430,6 @@ async function settleStuckGeneration(
   }
 
   if (outcome.kind === 'failed') {
-    // The engine tells us why it failed: categorize the reason so the
-    // stored error_code stays inside GENERATION_ERROR_CODES.
     const category = categorizeGenerationError(outcome.error);
     await refundAndFail(
       store, s, `${STUCK_FAILED_REFUND_REASON_PREFIX}:${category}`, category,
@@ -571,8 +440,6 @@ async function settleStuckGeneration(
   }
 
   if (outcome.kind === 'complete') {
-    // The video exists: backfill the row the poll path never advanced.
-    // No refund — the user got the value.
     await store.settleGeneration({ generationId: s.generationId, status: 'completed', refunded: false });
     report.stuckCompletedBackfilled.push({
       generationId: s.generationId,
@@ -582,9 +449,6 @@ async function settleStuckGeneration(
     return;
   }
 
-  // 'active' or 'unknown': nothing provable yet. Inside the time-box the
-  // next daily run gets another look; past it, the absence of any
-  // provable delivery is itself the decision.
   if (!pastMaxAge) {
     report.stuckDeferred.push({
       generationId: s.generationId,
@@ -602,9 +466,6 @@ async function settleStuckGeneration(
   );
 }
 
-// refundAndFail — the shared terminal path for every auto-refund: move
-// the tokens via the idempotent RPC, mark the row failed (refunded flag
-// only when the RPC proved the tokens moved), and emit the audit event.
 async function refundAndFail(
   store: ReconcileStore,
   s: StuckGeneration,

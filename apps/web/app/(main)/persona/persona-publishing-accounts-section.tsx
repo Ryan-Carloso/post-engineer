@@ -28,21 +28,6 @@ import { PROVIDER_LABELS } from '@/lib/account-options';
 import { emptyPersonaDefaultAccounts, totalBoundAccounts } from '@/lib/persona-publishing-accounts';
 import { usePersonaStore } from '@/lib/store';
 
-//---------------
-// PersonaPublishingAccountsSection — per-persona bound publishing accounts
-// (issue #212; the binding became mandatory in issue #572: a persona
-// publishes ONLY to these accounts, at least one is required, and the
-// binding can never be emptied).
-//
-// Edit mode loads the saved binding with GET
-// /api/persona/publishing-accounts?personaId=<uuid> and persists the whole
-// selection with PUT to the same route. Toggling a checkbox only updates
-// local state — nothing is sent until Save.
-// Draft mode (no personaId, while creating) has no persisted row: the
-// picker writes straight into the persona store, which the create submit
-// sends as the `publishingAccounts` field. No fetch, no Save button.
-//---------------
-
 type PublishingProvider = SocialProvider;
 type PublishingBinding = Record<PublishingProvider, string[]>;
 
@@ -52,11 +37,6 @@ const PROVIDERS: readonly { provider: PublishingProvider; label: string }[] = SO
 }));
 
 const EMPTY_BINDING: PublishingBinding = emptyPersonaDefaultAccounts();
-
-//---------------
-// API helpers — the route is built in parallel (issue #212); the contract is
-// pinned here so the UI can be tested against mocks until it lands.
-//---------------
 
 interface BindingResponse {
   success: boolean;
@@ -82,15 +62,9 @@ function describeFailure(fallback: string, body: BindingResponse): string {
   return typeof body.error === 'string' && body.error !== '' ? body.error : fallback;
 }
 
-// Same uuid shape the API route validates server-side: a non-uuid id here is
-// a placeholder from an un-persisted persona, never a fetchable row.
 const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 async function fetchBinding(personaId: string, loadError: string): Promise<PublishingBinding> {
-  // The section only runs fetches for a persisted persona; a non-uuid id
-  // means a placeholder reached this component (the same caller that
-  // produced the 15 production "invalid uuid 'p-1'" warnings) — no fetch,
-  // no 400, the binding stays empty until the persona exists.
   if (!UUID_SHAPE.test(personaId)) {
     logger.warn('[persona-publishing-accounts] non-uuid personaId; skipping binding fetch', {
       personaId,
@@ -120,11 +94,6 @@ async function saveBinding(
   return normalizeBinding(body.defaults);
 }
 
-//---------------
-// Account id extraction — mirrors the post creation accounts field: the id
-// field differs per provider (channelId / igUserId / did / providerAccountId).
-//---------------
-
 interface CardAccount {
   id: string;
   card: React.ReactNode;
@@ -144,9 +113,6 @@ export function PersonaPublishingAccountsSection({ personaId }: { personaId?: st
   const fanvue = useFanvueAccountsQuery();
   const telegram = useTelegramAccountsQuery();
 
-  // Draft (create) mode has no persisted row: the picker writes straight
-  // into the persona store, which the create submit sends. Edit mode keeps
-  // the local selection until Save PUTs it.
   const isDraft = personaId === undefined;
   const draftSelection = usePersonaStore((s) => s.publishingAccounts);
   const setDraftSelection = usePersonaStore((s) => s.setPublishingAccounts);
@@ -211,11 +177,6 @@ export function PersonaPublishingAccountsSection({ personaId }: { personaId?: st
     }
   };
 
-  // The binding can never be empty (issue #572): in draft mode the error
-  // comes from the failed create submit; in edit mode it shows as soon as
-  // the last bound account is untoggled, and Save disables with it. After
-  // a failed load the saved binding is unknown, not empty, so the error
-  // stays hidden and only the load error shows.
   const mustSelectError = isDraft
     ? submitResult !== null && !submitResult.success && submitResult.error === t('publishing.mustSelectAccount')
     : !loading && loadError === null && totalBoundAccounts(selection) === 0;
@@ -431,8 +392,6 @@ export function PersonaPublishingAccountsSection({ personaId }: { personaId?: st
                 );
               })}
             </div>
-            {/* Draft mode has no persisted row to save to — the picker
-                already wrote the binding into the store. */}
             {isDraft ? null : (
               <div className="flex flex-wrap items-center gap-3">
                 <Button

@@ -11,11 +11,6 @@ export type PublicHostResult =
   | { ok: true; addresses: string[] }
   | { ok: false; reason: 'unresolved' | 'not-public' };
 
-// One DNS check for a URL host. Bracketed IPv6 literals skip DNS and are
-// classified as the address inside the brackets. Fail closed on resolver
-// errors, an empty answer, or any non-public address.
-// `isPublic` is the caller's isPublicIp binding so a test double on that
-// import (the avatar download suite) still applies.
 export async function resolvePublicHost(
   hostname: string,
   lookupImpl: PublicHostLookup,

@@ -1,36 +1,9 @@
-//---------------
-// draft-scoring — mechanical draft scoring.
-//
-// No LLM, no paid service, no external call: every signal is computed
-// from the draft text itself plus the caller's own stored post metrics.
-// The score is never a bare number: every rule that moves it appears in
-// `reasons` with the exact detail that fired, so the caller can fix the
-// draft instead of guessing what the number means. The per-network
-// publish gate lives in lib/publish-checks.ts and is re-exported here.
-//
-// Baseline honesty: post_metrics rows carry counters and script angles,
-// never the post text, so theme adherence is token overlap between the
-// draft and the user's top angles — a soft signal, not a claim that the
-// draft copies a past post. When the user has no measured posts yet,
-// the theme bucket scores 0 and says so; it never invents a baseline.
-//---------------
-
 import type { PublishNetwork } from '@/lib/contracts/videos';
 
-// The networks Post Engineer publishes to (post_metrics.provider
-// check constraint, re-created with the full list by the latest provider
-// migration, 053). The scorer buckets are universal;
-// only the publish check varies by network.
 export type { PublishNetwork };
 
-// What the text is: a post body, or a video script (segments joined by
-// newlines, hook first, then content takes). A script is spoken, so hashtags do not
-// apply and the caption publish check would be vacuous.
 export type DraftKind = 'post' | 'script';
 
-// Script ranges mirror the segments contract (hook 25-40 words, 60-200 in
-// total). The freed hashtag points go to hook, length and slop, so both
-// profiles still top out at exactly 100.
 const SCORE_PROFILES = {
   post: { hook: 20, hookWords: [3, 30], length: 15, words: [40, 400], nearWords: [20, 600], slop: 20 },
   script: { hook: 25, hookWords: [25, 40], length: 20, words: [60, 200], nearWords: [40, 250], slop: 25 },
@@ -49,15 +22,8 @@ export {
   YOUTUBE_DESCRIPTION_MAX_CHARS,
 } from './publish-checks';
 export type { PublishCheck } from './publish-checks';
-// The route rejects drafts over this input cap with a 400 instead of
-// silently truncating (repo rule: never silently truncate/coerce).
-// Bound the baseline fan-out: one capped metrics read per score call.
 export const BASELINE_ROW_LIMIT = 200;
 
-// Curated AI-slop markers (humanizer/anti-slop list). Each marker is
-// matched case-insensitively on word boundaries where it is a phrase;
-// the em dash is a character check. The list is deliberately short:
-// a marker here must be near-certain filler, not a word real posts use.
 export const SLOP_MARKERS = [
   'delve',
   'moreover',
@@ -100,8 +66,6 @@ export interface DraftBaseline {
   topAngles: TopAngle[];
   medianEngagement: number | null;
   bestEngagement: number | null;
-  // True when the capped read left rows out, so the numbers above describe
-  // only the most recent BASELINE_ROW_LIMIT snapshots.
   truncated: boolean;
 }
 
@@ -128,7 +92,6 @@ export interface DraftScore {
   reasons: DraftScoreReason[];
   counts: DraftCounts;
   baseline: DraftBaseline;
-  // Null for a script: caption limits do not apply to spoken text.
   publishCheck: PublishCheck | null;
 }
 
@@ -142,7 +105,6 @@ const STOPWORDS = new Set([
   'are', 'was', 'were', 'have', 'has', 'about', 'into', 'over', 'after',
   'before', 'when', 'what', 'which', 'their', 'them', 'they', 'then',
   'than', 'also', 'just', 'like', 'more', 'most', 'other', 'some',
-  // Portuguese (the product's default locale).
   'para', 'como', 'mais', 'pela', 'pelo', 'pelas', 'pelos', 'esse', 'essa',
   'isso', 'este', 'esta', 'isto', 'aqui', 'quando', 'sobre', 'entre',
   'muito', 'muita', 'você', 'vocês', 'suas', 'seus', 'nosso', 'nossa',
@@ -151,7 +113,6 @@ const STOPWORDS = new Set([
 
 function themeTokens(text: string): Set<string> {
   const tokens = new Set<string>();
-  // Unicode-aware: an ASCII split would cut "manhãs" into "manh" and "s".
   for (const raw of text.normalize('NFC').toLowerCase().split(/[^\p{L}\p{N}]+/u)) {
     if (raw.length >= 4 && !STOPWORDS.has(raw)) tokens.add(raw);
   }
@@ -161,10 +122,6 @@ function themeTokens(text: string): Set<string> {
 function findSlopHits(text: string): string[] {
   const hits: string[] = [];
   if (text.includes('—')) hits.push('em dash');
-  // Padded word search instead of an interpolated RegExp (repo rule):
-  // punctuation is flattened to spaces, so ' delve ' only matches the
-  // whole word, and multi-word markers match as whole phrases. Typographic
-  // apostrophes fold to ASCII first, or "it’s" would never match "it's".
   const flat = ` ${text.toLowerCase().replace(/[\u2018\u2019]/g, "'").replace(/[^a-z0-9' -]+/g, ' ').replace(/\s+/g, ' ')} `;
   for (const marker of SLOP_MARKERS) {
     if (flat.includes(` ${marker} `)) hits.push(marker);
@@ -172,15 +129,12 @@ function findSlopHits(text: string): string[] {
   return hits;
 }
 
-// Imperatives only count at the start of a sentence ("Read the guide"), so
-// a statement like "I read this on Sunday" is not a call to action.
 const CTA_IMPERATIVES = [
   'comment', 'share', 'follow', 'subscribe', 'download', 'read', 'try',
   'join', 'save',
   'comente', 'compartilhe', 'siga', 'inscreva', 'baixe', 'leia',
   'experimente', 'participe', 'salve',
 ];
-// Phrases are specific enough to count anywhere in the line.
 const CTA_PHRASES = [
   'check out', 'tell me', 'let me know', 'leave a comment', 'drop a comment',
   'me conta', 'me diga', 'deixe um comentário', 'deixe seu comentário',
@@ -200,8 +154,6 @@ function hasCallToAction(lastLine: string): boolean {
   });
 }
 
-// Trailing hashtags and links are not the closing line a reader answers:
-// "What is your ritual? #Porto" still ends with a question.
 function closingText(lines: string[]): string {
   for (let index = lines.length - 1; index >= 0; index -= 1) {
     let line = lines[index];
@@ -213,14 +165,6 @@ function closingText(lines: string[]): string {
   return '';
 }
 
-//---------------
-// summarizeBaseline — the caller's own best posts, from stored rows.
-//
-// Engagement of one row is the sum of its measured counters (null means
-// not measured for that counter, counted as 0 for ranking). Angles are
-// grouped exactly as stored; rows without an angle cannot name a theme,
-// so they count toward postsMeasured but never toward topAngles.
-//---------------
 export function summarizeBaseline(rows: BaselineRow[], truncated: boolean): DraftBaseline {
   const engagements: number[] = [];
   const byAngle = new Map<string, { engagement: number; posts: number }>();
@@ -256,15 +200,6 @@ export function summarizeBaseline(rows: BaselineRow[], truncated: boolean): Draf
   };
 }
 
-//---------------
-// scoreDraft — 0-100 from mechanical signals, every point explained.
-//
-// Post buckets: hook 20, length 15, hashtags 15, slop-free 20, links 10,
-// top-theme match 15, call to action 5. Script buckets: hook 25, length 20,
-// slop-free 25, links 10, top-theme match 15, call to action 5. Each bucket emits exactly one
-// reason inside its own range, so the reasons always sum to the score and
-// the score cannot leave 0-100.
-//---------------
 export function scoreDraft(
   draft: string,
   baseline: DraftBaseline,
@@ -305,7 +240,6 @@ export function scoreDraft(
   }
 
   if (kind === 'script') {
-    // No hashtag bucket: the script contract forbids them (check_script (action: validate)).
   } else if (hashtags.length >= 1 && hashtags.length <= 5) {
     reasons.push({ rule: 'hashtags', detail: `Draft has ${hashtags.length} hashtags.`, points: 15 });
   } else if (hashtags.length >= 6 && hashtags.length <= 10) {
@@ -322,7 +256,6 @@ export function scoreDraft(
     reasons.push({
       rule: 'slop_free',
       detail: `Slop markers found: ${slopHits.map((hit) => `"${hit}"`).join(', ')}.`,
-      // -5 per marker, floored at 0 so slop cannot eat other buckets' points.
       points: Math.max(0, profile.slop - slopHits.length * 5),
     });
   }

@@ -42,13 +42,6 @@ export default function PersonasPage() {
   );
 }
 
-/* -----------------
-   Local Components
------------------- */
-
-//---------------
-// PersonasHeader — title and subtitle of the personas screen
-//---------------
 const PersonasHeader = () => {
   const { t } = useI18n();
   return (
@@ -64,9 +57,6 @@ const PersonasHeader = () => {
   );
 };
 
-//---------------
-// PersonasEmptyState — convite para criar a primeira persona
-//---------------
 const PersonasEmptyState = () => {
   const { t } = useI18n();
   return (
@@ -91,9 +81,6 @@ const PersonasEmptyState = () => {
   );
 };
 
-//---------------
-// PersonasPageError — informa a falha da lista e oferece nova tentativa
-//---------------
 const PersonasPageError = () => {
   const { t } = useI18n();
   const personasQuery = usePersonaListQuery();
@@ -114,9 +101,6 @@ const PersonasPageError = () => {
   );
 };
 
-//---------------
-// PersonasList — the user's persona grid with a button to create new ones
-//---------------
 const PersonasList = ({ personas }: { personas: PersonaRecord[] }) => {
   const { t } = useI18n();
   const queryClient = useQueryClient();
@@ -149,11 +133,6 @@ const PersonasList = ({ personas }: { personas: PersonaRecord[] }) => {
   );
 };
 
-//---------------
-// PersonaCard — the persona card: entirely clickable, leads to details.
-// The delete button in the corner opens the confirmation modal (with a preview of
-// what will be deleted), without navigating to edit.
-//---------------
 const PersonaCard = ({
   persona,
   onDeleteRequest,
@@ -162,11 +141,6 @@ const PersonaCard = ({
   onDeleteRequest: (persona: PersonaRecord) => void;
 }) => {
   const { t } = useI18n();
-  // Issue #572: the card shows where the persona publishes. A persona
-  // with no bound accounts (legacy, or a binding that never landed) gets
-  // a warning instead — the card links to the edit page, where the
-  // binding can be fixed. Absent boundAccounts reads as unbound, never
-  // as publishing everywhere.
   const boundAccounts = persona.boundAccounts ?? emptyPersonaDefaultAccounts();
   const boundProviders = SOCIAL_PROVIDERS.filter(
     (provider) => boundAccounts[provider].length > 0,
@@ -179,8 +153,6 @@ const PersonaCard = ({
         aria-label={t('personas.details')}
         className="flex min-w-0 flex-1 items-center gap-4"
       >
-        {/* Avatar shared with the post-creation picker (same
-            fallback, same ring) — two copies of the block diverge. */}
         <div className="flex shrink-0 flex-col items-center gap-1">
           <PersonaAvatar
             avatarUrl={persona.avatarUrl}
@@ -189,10 +161,6 @@ const PersonaCard = ({
             name={persona.name}
             size={56}
           />
-          {/* Issue #589: the avatar is only a reference for the agent —
-              the hook opens with the first photo of each video, and this
-              photo is only the hook image when no photo was sent with
-              the video. */}
           <span className="text-[10px] font-medium whitespace-nowrap text-muted-text">
             {t('persona.photoLabel')}
           </span>
@@ -255,9 +223,6 @@ const PersonaCard = ({
   );
 };
 
-//---------------
-// PersonasPageSkeleton — loading placeholder for the screen
-//---------------
 const PersonasPageSkeleton = () => (
   <div aria-busy="true" aria-live="polite" className="space-y-8">
     <div className="flex items-center gap-3">

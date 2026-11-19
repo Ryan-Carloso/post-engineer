@@ -6,13 +6,6 @@ import {
   resolveGoneGenerationId,
 } from '../gone-generation-reconcile';
 
-//---------------
-// Minimal PostgREST query-builder double. Each `.eq()` narrows the row set
-// and is recorded, so a test can assert the fallback ORDER (task-id lookup
-// first, then the slot/batch lookup). Fixtures declare the table they
-// belong to, so the double scopes each query the way PostgREST does — a
-// scheduled_posts row can never satisfy the token_transactions lookup.
-//---------------
 interface Row {
   [key: string]: unknown;
   table: string;
@@ -47,8 +40,6 @@ function makeClient(rows: Row[], captures: Captures = []) {
   };
 }
 
-// The bare SupabaseClient is the project-blessed any-shaped double: the real
-// client carries 25+ members no unit test needs to reproduce.
 function asClient(client: unknown): SupabaseClient {
   return client as unknown as SupabaseClient;
 }

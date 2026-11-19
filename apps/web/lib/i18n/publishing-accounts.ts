@@ -1,14 +1,3 @@
-//---------------
-// publishing-accounts — per-persona bound publishing accounts (issue #212;
-// the binding became mandatory in issue #572: a persona publishes ONLY to
-// these accounts, at least one is required).
-//
-// The en/pt dictionaries are grandfathered over the 500-line file-size cap
-// and may not grow a single line, so this feature's copy lives here. It is
-// merged into the dictionaries in ./index.ts, which also extends the
-// Dictionary/TranslationKey contract — en.ts and pt.ts stay byte-identical.
-//---------------
-
 export const publishingAccountsStrings = {
   en: {
     persona: {

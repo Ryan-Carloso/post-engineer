@@ -9,14 +9,6 @@ import { RetentionCurveChart } from '@/components/ui/retention-curve-chart';
 import type { MetricsRowView } from '@/lib/metrics/metrics-query';
 import { useRetentionCurveQuery } from '@/lib/metrics/metrics-dashboard';
 
-//---------------
-// MetricsRow — one measured video in the metrics list: views as the
-// main number, likes/comments/saves inline as small numbers, and, for
-// YouTube, the Analytics retention line (engaged views, derived Stayed
-// to watch, provisional chip) plus an on-demand retention curve for
-// long-form videos.
-//---------------
-
 const AMBER_CHIP = 'rounded-full bg-warning-soft px-2 py-0.5 text-[11px] font-semibold text-warning';
 
 interface MetricsRowProps {
@@ -25,8 +17,6 @@ interface MetricsRowProps {
   subtitle: string;
   formatNumber: (value: number) => string;
   formatDate: (iso: string) => string;
-  // Anchor target for the top-videos chart: clicking a bar scrolls to
-  // this row in the list view.
   id?: string;
 }
 
@@ -69,7 +59,6 @@ function RetentionLine({ row, formatNumber }: Pick<MetricsRowProps, 'row' | 'for
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   if (row.analyticsStatus === 'scope_missing') {
-    // "—", never a zero: the numbers are unknown until the user reconnects.
     return (
       <p className="pl-13 text-xs text-muted-text">
         — <span className={AMBER_CHIP}>{t('metrics.reconnectNeeded')}</span>

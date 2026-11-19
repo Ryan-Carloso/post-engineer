@@ -31,7 +31,6 @@ import {
 import { createPostEngineerMcpServer } from '../index.js';
 import type { PostEngineerClient } from '../client.js';
 
-// Spy-able readFile: the over-size test proves the file is never read.
 vi.mock('node:fs/promises', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs/promises')>();
   return { ...actual, readFile: vi.fn(actual.readFile) };
@@ -39,8 +38,6 @@ vi.mock('node:fs/promises', async (importOriginal) => {
 
 const { httpsRequestMock } = vi.hoisted(() => ({ httpsRequestMock: vi.fn() }));
 
-// The remote download goes through node:https with a pinned lookup, not the
-// global fetch: the mock below stands in for the socket.
 vi.mock('node:https', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:https')>();
   return { ...actual, request: httpsRequestMock };
@@ -48,9 +45,6 @@ vi.mock('node:https', async (importOriginal) => {
 
 vi.mock('../analytics.js', () => ({
   mcpTelemetryHeaders: () => ({}),
-  // Passthrough stand-in for the real withTracking, which only opens the
-  // per-call context: mcp_tool_called is recorded by the web API from the
-  // request headers, not by the MCP (see analytics.test.ts).
   withTelemetryHeaders: (_headers: unknown, run: () => Promise<unknown>) => run(),
   withToolCall: (_tool: string, _action: string, run: () => Promise<unknown>) => run(),
   withTracking: (_toolName: string, handler: (args: unknown) => Promise<unknown>) => async (args: unknown) => {
@@ -88,8 +82,6 @@ function firstText(result: { content?: unknown }): string {
   return content?.[0]?.text ?? '';
 }
 
-// Fake IncomingMessage for the pinned remote download: an async-iterable
-// body plus the status, headers and stream controls the download reads.
 function httpsAudioResponse(chunks: Uint8Array[], statusCode = 200, contentType = 'audio/wav'): unknown {
   const stream = (async function* () {
     for (const chunk of chunks) yield chunk;
@@ -219,9 +211,6 @@ describe('fetchCloneReferenceAudio', () => {
       'Downloaded audio exceeds 20 MB'
     );
     expect(cancelled).toBe(true);
-    // The reader aborts as soon as the cap is crossed: pulling stops at
-    // the cap plus the runtime's small read-ahead — never the whole
-    // endless body.
     expect(pulledBytes).toBeLessThanOrEqual(23 * 1024 * 1024);
   });
 });
@@ -673,8 +662,6 @@ describe('readCloneReferenceFile / createClonedVoiceFromFile (audioPath)', () =>
   });
 });
 
-// Full production shape of a cloned-voice row (the web route narrows the
-// engine row to exactly these 8 fields; partial rows are malformed 200s).
 const FULL_CLONE_ROW = {
   id: 'clone-1',
   status: 'ready',
@@ -873,8 +860,6 @@ describe('cloned voice tools run through the MCP server', () => {
   it('voices create_clone rejects a non-English language (English-only launch)', async () => {
     const request = vi.fn().mockResolvedValue({ success: true, voice: FULL_CLONE_ROW });
     global.fetch = vi.fn().mockResolvedValue(audioResponse([5, 5, 5]));
-    // callTool asserts success, so this rejection case drives the linked
-    // pair directly: the schema gate must error before any handler runs.
     const apiClient = fakeHost(request) as unknown as PostEngineerClient;
     const server = createPostEngineerMcpServer(apiClient);
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -954,8 +939,6 @@ describe('cloned voice tools run through the MCP server', () => {
     const request = vi.fn();
     const fetchMock = vi.fn();
     global.fetch = fetchMock as typeof fetch;
-    // Same direct linked-pair drive as the create rejection above: the
-    // schema gate must error before the preview handler fetches anything.
     const apiClient = fakeHost(request) as unknown as PostEngineerClient;
     const server = createPostEngineerMcpServer(apiClient);
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();

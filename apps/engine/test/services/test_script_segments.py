@@ -91,9 +91,6 @@ def test_hook_must_be_first():
 
 
 def test_cta_take_may_sit_mid_video():
-    # Issue #577 acceptance: a CTA is just a content take, so it may
-    # sit anywhere after the hook — here in the middle — and the video
-    # still renders in take order.
     segments = [
         {"kind": "hook", "text": _hook()},
         {"kind": "content", "text": _cta_take()},
@@ -175,14 +172,14 @@ def test_emoji_is_400():
 @pytest.mark.parametrize(
     "emoji",
     [
-        "\U0001f600",  # emoticons, inside 1F300-1FAFF
-        "\U0001f300",  # start of 1F300-1FAFF
-        "\U0001faff",  # end of 1F300-1FAFF
-        "\U00002600",  # start of 2600-27BF
-        "\U000027bf",  # end of 2600-27BF
-        "\U0001f000",  # start of 1F000-1F2FF
-        "\U0001f2ff",  # end of 1F000-1F2FF
-        "\ufe0f",  # variation selector
+        "\U0001f600",
+        "\U0001f300",
+        "\U0001faff",
+        "\U00002600",
+        "\U000027bf",
+        "\U0001f000",
+        "\U0001f2ff",
+        "\ufe0f",
     ],
 )
 def test_emoji_rejected_across_all_ranges(emoji):
@@ -200,10 +197,10 @@ def test_emoji_rejected_across_all_ranges(emoji):
 @pytest.mark.parametrize(
     "char",
     [
-        "\u25ff",  # just below 2600
-        "\u27c0",  # just above 27BF
-        "\u1eff",  # just below 1F000
-        "\U0001fb00",  # just above 1FAFF
+        "\u25ff",
+        "\u27c0",
+        "\u1eff",
+        "\U0001fb00",
     ],
 )
 def test_boundary_chars_outside_emoji_ranges_pass(char):
@@ -255,7 +252,6 @@ def test_total_below_minimum_is_400():
         {"kind": "content", "text": " ".join(["word"] * 30) + "."},
         {"kind": "content", "text": "Save this video now."},
     ]
-    # Total is 59 words: below the 60-word minimum.
     assert (
         _word_count(segments[0]["text"])
         + _word_count(segments[1]["text"])
@@ -291,9 +287,6 @@ def test_content_below_minimum_is_400():
 
 
 def test_short_content_take_is_allowed():
-    # Issue #577: there is no CTA word rule anymore — a two-word
-    # content take passes as long as the content total reaches 30
-    # words (35 + 2) and the video total reaches 60 (25 + 37).
     segments = [
         {"kind": "hook", "text": _hook()},
         {"kind": "content", "text": " ".join(["word"] * 35) + "."},
@@ -305,8 +298,6 @@ def test_short_content_take_is_allowed():
 
 
 def test_long_content_take_is_allowed():
-    # Same: a 21-word content take is fine — the old 5-20 CTA range
-    # does not apply to content takes.
     segments = [
         {"kind": "hook", "text": _hook()},
         {"kind": "content", "text": _content()},
@@ -317,8 +308,6 @@ def test_long_content_take_is_allowed():
 
 
 def test_max_segments_is_400():
-    # 25 + 11*14 + 5 = 184 words: inside the 60-200 total, so the segment
-    # cap rule is what fires, not the total rule.
     segments = [{"kind": "hook", "text": " ".join(["word"] * 25) + "."}]
     for i in range(11):
         segments.append({"kind": "content", "text": " ".join(["body"] * 12) + f" number {i}."})
@@ -331,8 +320,6 @@ def test_max_segments_is_400():
 
 
 def test_max_medias_is_400():
-    # 25 + 7*14 + 5 = 128 words and 9 segments: inside the total and the
-    # segment cap, so the media cap rule is what fires.
     segments = [{"kind": "hook", "text": " ".join(["word"] * 25) + "."}]
     for i in range(7):
         segments.append(
@@ -387,9 +374,6 @@ def test_media_with_unknown_key_is_400():
 
 
 def test_media_shape_error_precedes_media_cap():
-    # Pins the documented rule order: the media shape loop runs before
-    # the media cap, so a shape violation in an over-cap request fires
-    # first instead of the cap error.
     segments = [{"kind": "hook", "text": _hook()}]
     for i in range(7):
         media = {"url": f"https://example.com/{i}.jpg"}
@@ -409,8 +393,6 @@ def test_media_shape_error_precedes_media_cap():
 
 
 def test_a_segment_terms_field_is_rejected_as_unknown():
-    # Per-segment search terms died with the stock path (issue #542):
-    # "terms" is no longer a known segment field.
     segments = [
         {"kind": "hook", "text": _hook()},
         {
@@ -577,8 +559,6 @@ def test_measure_hook_duration_calls_synthesizer_once_and_checks_window():
 
 
 def test_supplied_segments_script_calls_no_llm():
-    # The LLM core is deleted: there is no generate_script to patch
-    # anymore, only the mechanical pass-through in task.generate_script.
     assert not hasattr(task_service, "llm")
     joined = script_segments.segments_to_script(_valid_segments(), video_type="full_lipsync")
     params = VideoParams(
@@ -590,8 +570,6 @@ def test_supplied_segments_script_calls_no_llm():
     )
     assert task_service.generate_script("test-task", params) == joined
 
-
-# ---- images material: a list of photos, about one per 3 seconds
 
 
 def _photos(count, prefix):
@@ -643,7 +621,6 @@ def test_full_lipsync_still_allows_segments_without_media():
 
 
 def _many_media_segments(count):
-    # 25 + count*14 + 5 words: inside the total and the segment cap for count <= 10.
     segments = [
         {
             "kind": "hook",
@@ -683,9 +660,6 @@ def test_images_density_names_how_many_photos_a_segment_is_missing():
 
 
 def test_a_punctuation_only_segment_with_a_photo_is_rejected_before_charging():
-    # "..." counts as words for the density rule but has no spoken
-    # words, so at render its photo gets no seconds and the
-    # all-must-survive rule would fail the task after charging.
     segments = _images_segments()
     segments[2]["text"] = "... ... ... ... ..."
     segments[2]["media"] = _photos(1, "c")
@@ -701,9 +675,6 @@ def test_a_punctuation_only_segment_with_a_photo_is_rejected_before_charging():
 
 
 def test_a_punctuation_only_segment_is_still_allowed_in_full_lip_sync():
-    # Full lip sync only warns on a skipped photo, so validation does
-    # not need to reject it there. (One photo per segment: full mode
-    # caps the video at 6 medias.)
     segments = _images_segments()
     segments[0]["media"] = _photos(1, "h")
     segments[1]["media"] = _photos(1, "b")
@@ -719,12 +690,7 @@ def test_the_six_media_cap_still_holds_for_full_lipsync():
     assert exc_info.value.fix == "Remove medias until there are at most 6."
 
 
-def test_images_cap_fix_names_merging_when_minimums_exceed_the_cap():  # Hook 25 words + six 25-word content segments + a 20-word content take = 195
-    # words: every segment meets its density minimum (4, 4 x 6, 3 = 31
-    # photos) yet the 30-photo cap fires, and removing any photo
-    # re-triggers density. The cap fix must name the escape (merge
-    # segments) so fix-and-resubmit converges instead of bouncing
-    # between the two errors.
+def test_images_cap_fix_names_merging_when_minimums_exceed_the_cap():
     segments = [
         {"kind": "hook", "text": " ".join(["hook"] * 25) + ".", "media": _photos(4, "h")},
         *[
@@ -757,10 +723,6 @@ def test_legacy_media_list_wraps_a_single_object_media():
 
 
 def test_legacy_media_list_maps_old_kinds_to_content():
-    # Rows stored before the takes contract carry kind body/cta;
-    # persisted-row dispatch maps both to content, so a prepaid slot
-    # renders instead of failing on the renamed kind. Fresh requests
-    # still reject those kinds in validate_segments.
     segments = [
         {"kind": "hook", "text": "Hook text."},
         {"kind": "body", "text": "Body text."},
@@ -773,8 +735,6 @@ def test_legacy_media_list_maps_old_kinds_to_content():
 
 
 def test_fresh_single_object_media_is_still_rejected():
-    # Only persisted-row dispatch normalizes the legacy shape; a fresh
-    # request still sends media as a list, and a single object is a 400.
     segments = _images_segments()
     segments[1]["media"] = {"mediaId": "abc.jpg"}
     with pytest.raises(SegmentValidationError) as exc_info:
@@ -784,8 +744,6 @@ def test_fresh_single_object_media_is_still_rejected():
 
 
 def test_segments_to_script_forwards_full_lipsync_to_validation():
-    # Sparse on purpose: the hook carries no media, which the default
-    # images rules reject but full lip-sync allows.
     sparse = [
         {"kind": "hook", "text": _hook()},
         {"kind": "content", "text": _content(), "media": _photos(1, "b")},
@@ -799,8 +757,6 @@ def test_segments_to_script_forwards_full_lipsync_to_validation():
     )
 
 
-# ---- video clips (PR-B): one clip stands in for ~12s of speech
-
 
 def _clip_segments():
     return [
@@ -813,8 +769,6 @@ def _clip_segments():
 
 
 def test_one_clip_per_take_passes_the_density_minimum():
-    # Hook 25 words needs 4 images: one clip counts as 4. Content 42
-    # words needs 6: two clips count as 8. The raw media count stays 4.
     result = script_segments.validate_segments(_clip_segments())
     assert result["media_count"] == 4
 
@@ -832,8 +786,6 @@ def test_one_clip_in_a_long_take_still_fails_the_density_minimum():
 
 
 def test_the_density_maximum_counts_clips_one_for_one():
-    # A clip must not inflate the flicker cap: 1 clip + 2 photos in a
-    # 5-word take is 3 items against a max of 1, clip credit or not.
     segments = _clip_segments()
     segments[2]["media"] = [
         {"url": "https://example.com/c.mp4"},
@@ -885,8 +837,6 @@ def test_media_duration_in_range_passes(duration):
 
 @pytest.mark.parametrize("duration", [None])
 def test_media_duration_may_be_omitted(duration):
-    # Explicit null is the same as absent: the photo ticks at the
-    # default 2s pace.
     assert (
         script_segments.validate_segments(_with_duration(duration), video_type="full_lipsync")[
             "media_count"

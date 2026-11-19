@@ -1,11 +1,3 @@
-//---------------
-// fake-supabase — an in-memory PostgREST stand-in for the batch discount
-// tests. Filters (eq, in, is) really filter, update really patches the
-// matching rows (so check-then-act predicates are exercised), and the
-// builder is awaitable at any point of the chain like supabase-js. delete
-// removes the matching rows.
-//---------------
-
 export type Row = Record<string, unknown>;
 
 interface Filter {
@@ -22,9 +14,7 @@ export interface RpcCall {
 export interface FakeOptions {
   tables: Record<string, Row[]>;
   rpc?: (call: RpcCall) => { data: unknown; error: unknown };
-  /** Make a table's selects fail with this error. */
   selectError?: Record<string, unknown>;
-  /** Make a table's updates fail with this error. */
   updateError?: Record<string, unknown>;
 }
 
@@ -45,12 +35,6 @@ function asRows(value: unknown): Row[] {
   return Array.isArray(value) ? value.filter(isRow) : [];
 }
 
-/**
- * In-memory stand-in for settle_batch_clawback: refunds are recorded as
- * credited, and each recharge updates the slot only when the check-then-act
- * predicate still matches. The real cap lives in the SQL function; this
- * only has to move the slot the way that function does.
- */
 export function simulateSettleBatchClawback(
   tables: Record<string, Row[]>,
   params: Record<string, unknown>,
@@ -192,7 +176,6 @@ export function createFakeSupabase(options: FakeOptions) {
   return { client, rpcCalls, updates, tables: options.tables };
 }
 
-/** A scheduled_posts row with every column the batch rules read. */
 export function slotRow(id: string, overrides: Row = {}): Row {
   return {
     id,

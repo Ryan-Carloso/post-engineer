@@ -38,8 +38,6 @@ def test_generate_emits_requested_and_failed_event_names():
     import inspect
 
     source = inspect.getsource(gen_module)
-    # The event name itself lives in task.track_generation_requested;
-    # generate.py pins the call site.
     assert "track_generation_requested" in source
     assert "video_generation_failed" in source
 

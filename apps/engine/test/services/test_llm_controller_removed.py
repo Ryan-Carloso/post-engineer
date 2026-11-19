@@ -44,8 +44,6 @@ class LlmControllerRemovedTests(unittest.TestCase):
 
 class LlmCoreDeletedTests(unittest.TestCase):
     def test_llm_core_modules_are_gone(self):
-        # P5-6 deletes the core with its prompt-constant modules: importing
-        # any of them must fail, and task.py must not carry an llm attr.
         from app.services import task as tm
 
         for module in (
@@ -59,8 +57,6 @@ class LlmCoreDeletedTests(unittest.TestCase):
         self.assertFalse(hasattr(tm, "llm"))
 
     def test_task_still_serves_the_live_videos_pipeline(self):
-        # Deleting the core must not take the live pipeline with it:
-        # POST /videos stays, and scripts arrive as segments.
         from app.controllers.v1 import video as video_controller
 
         paths = {

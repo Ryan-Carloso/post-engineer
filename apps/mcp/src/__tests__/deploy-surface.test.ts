@@ -3,11 +3,6 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-// Deploy surface for the remote MCP (issue #561, workstream E). These are
-// file-parsing pins: the compose/Dockerfile/docs are the deliverable (no
-// deploy runs in CI), so the test asserts the safety properties the
-// runtime also enforces — loopback-only publish, OAuth env required,
-// and a health check on the unauthenticated /health probe.
 const here = dirname(fileURLToPath(import.meta.url));
 const mcpDir = join(here, '..', '..');
 const repoRoot = join(mcpDir, '..', '..');
@@ -48,12 +43,6 @@ describe('MCP HTTP deploy surface', () => {
   });
 
   it('keeps the host node_modules out of the image build context', () => {
-    // The context is the monorepo root, so `COPY apps/mcp ./apps/mcp` would
-    // copy the host's apps/mcp/node_modules over the install the Dockerfile
-    // just made. Those host links point into .pnpm directories the image never
-    // created, so a stale checkout fails the build with "Cannot find module
-    // 'zod'" (2026-11-15: every deploy logged that failure while a clean
-    // checkout built fine). apps/web/Dockerfile.dockerignore is the twin.
     expect(read('Dockerfile')).toContain('COPY apps/mcp ./apps/mcp');
     const ignore = read('Dockerfile.dockerignore');
     expect(ignore).toContain('**/node_modules');

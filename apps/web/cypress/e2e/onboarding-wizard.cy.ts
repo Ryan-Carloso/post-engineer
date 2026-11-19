@@ -1,20 +1,6 @@
-//---------------
-// First-visit onboarding wizard (issue #573): opens once per account on a
-// first visit to /posts, walks four steps, and stays closed once seen —
-// in this browser (localStorage) or on the account (Supabase
-// user_metadata, read and written through the intercepted /auth/v1/user). Every app-page spec logs in for real; the page's API
-// reads are intercepted with empty payloads so the wizard is the only
-// thing under test. PT is the default locale; EN is pinned via localStorage.
-//---------------
-
-// The wizard keys live in lib/onboarding-wizard.ts; a Cypress spec cannot
-// import the module, so the literals are pinned here.
 const SEEN_KEY = 'post-engineer-onboarding-wizard-seen';
 const SEEN_METADATA_KEY = 'onboarding_wizard_seen';
 
-// The Supabase auth user endpoint (GET reads the account, PUT writes the
-// seen flag). Stubbed so the real E2E account's flag never leaks between
-// runs: every run starts as an account that never saw the wizard.
 function stubAccount(userMetadata: Record<string, unknown>) {
   const user = { id: 'e2e-user', aud: 'authenticated', role: 'authenticated', app_metadata: {}, user_metadata: userMetadata };
   cy.intercept('GET', '**/auth/v1/user', { statusCode: 200, body: user }).as('authUser');
@@ -52,8 +38,6 @@ describe('Onboarding wizard', () => {
     cy.contains('button', 'Continuar').click();
     cy.contains('Conecte a sua conta').should('be.visible');
     cy.contains('Passo 2 de 4').should('be.visible');
-    // Step 2 connects inline: rows are buttons, never links to /accounts,
-    // and the duplicate "Conectar conta" button is gone.
     cy.get('[data-testid=onboarding-provider-youtube]').should('not.have.attr', 'href');
     cy.contains('a', 'Conectar conta').should('not.exist');
     cy.get('[data-testid=onboarding-provider-youtube]').click();

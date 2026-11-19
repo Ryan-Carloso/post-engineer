@@ -30,15 +30,8 @@ router = new_router()
 class AudioPreflightRequest(BaseModel):
     video_script: str = Field(max_length=20000)
     video_language: str = Field(default="", max_length=32)
-    # The resolved voice id (e.g. chatterbox:kokoro_af_heart), exactly as
-    # the video task receives it in persona.voice_id. Empty when the
-    # narration comes from voice_audio_url instead.
     voice_name: str = Field(default="", max_length=200)
     voice_audio_url: str | None = Field(default=None, max_length=2048)
-    # Matches the VideoParams default (1.0), NOT AudioRequest's 1.2: the
-    # video task synthesizes at 1.0 unless the caller sets a rate, and
-    # the web caller never does, so a different default here would
-    # measure a different duration than the video task produces.
     voice_rate: float = Field(default=1.0, ge=0.1, le=5.0)
 
 

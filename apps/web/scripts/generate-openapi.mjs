@@ -1,7 +1,3 @@
-// Generates apps/web/public/openapi.json from the MCP parity mapping.
-// The mapping (apps/mcp/src/__tests__/parity-endpoint-tools.json) is the
-// single list of Bearer-callable endpoints, so the spec never drifts from it.
-// Run: node apps/web/scripts/generate-openapi.mjs
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -13,19 +9,12 @@ const outPath = join(root, 'apps/web/public/openapi.json');
 
 const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'];
 
-// Version of the HTTP API contract, bumped by hand when the contract changes.
-// Deliberately not the MCP package version: the MCP auto-bump rewrites only
-// the MCP package.json and would leave the committed spec stale.
 export const API_SPEC_VERSION = '1.4.0';
 
-// The name an endpoint's first mapping entry gives it: `<tool>` for a tool
-// without actions, `<tool>_<action>` for an action of an intent tool.
 function entryName(entry) {
   return entry.action === undefined ? entry.tool : `${entry.tool}_${entry.action}`;
 }
 
-// `<method>_<first entry name>`; when two endpoints share it (one MCP tool
-// fronting two routes, e.g. accounts (action: connect)), the last route segment disambiguates.
 function buildOperationIds(mapping) {
   const base = (key) => `${key.split(' ')[0].toLowerCase()}_${entryName(mapping[key][0])}`;
   const counts = new Map();
@@ -47,7 +36,6 @@ export function buildSpec(mapping, version) {
       throw new Error(`Unexpected mapping key: ${key}`);
     }
     const params = [...route.matchAll(/\[(?:\.\.\.)?(\w+)\]/g)].map((m) => m[1]);
-    // OpenAPI path templating uses {name}; catch-all segments are flattened.
     const path = route.replace(/\[(?:\.\.\.)?(\w+)\]/g, '{$1}');
     const operation = {
       operationId: operationIds.get(key),
@@ -75,7 +63,6 @@ export function buildSpec(mapping, version) {
         content: { [schemas.responseContent ?? 'application/json']: { schema: schemas.response } },
       };
     }
-    // Route-specific statuses (402, 409, 410, 502, ...) a client must handle.
     for (const [status, description] of Object.entries(schemas?.extraResponses ?? {})) {
       operation.responses[status] = { description };
     }

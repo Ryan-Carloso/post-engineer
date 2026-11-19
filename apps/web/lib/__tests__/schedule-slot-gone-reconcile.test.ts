@@ -37,15 +37,6 @@ function engineResponse(status: number, body: unknown) {
   return { ok: status >= 200 && status < 300, status, json: async () => body };
 }
 
-//---------------
-// mockTables — per-table query results for the service client. The chain
-// supports the shapes the settle path uses: .select().eq()*.limit() →
-// .maybeSingle() (single row) or an awaited { data, error } (lists).
-//
-// Table results carry { data, error }; set the VIDEO row for
-// video_generations (the generation resolution), TASK for the durable
-// engine_task_state row, and SLOTS for scheduled_posts reads.
-//---------------
 type TableStub = { data?: unknown; error?: unknown };
 
 function tableNode(conf: TableStub | undefined) {
@@ -65,8 +56,6 @@ function mockTables(tables: Partial<Record<string, TableStub>>): void {
   serviceClient.from.mockImplementation((table: string) => tableNode(tables[table]));
 }
 
-// The generation the task belongs to (video_generations row) — a batch slot
-// row names the slot's generation directly.
 const RESOLVED_GENERATION = 'batch:11111111-2222-3333-4444-555555555555';
 
 const GENERATING_SLOT = {
@@ -78,9 +67,6 @@ const GENERATING_SLOT = {
 
 describe('enrichSlot — gone engine task', () => {
   it('presents a failed slot as completed and never retryable when the generation row was backfilled (M2)', async () => {
-    // Pre-fix behavior: the failed-slot tail refilled retryable from the
-    // slot's own error text, offering a retry for a video the backfill
-    // already recorded completed.
     fetchMock.mockResolvedValue(engineResponse(200, { body: { progress: 100, state: -1, stage: 'render', error: 'anything' } }));
     mockTables({
       video_generations: { data: [{ status: 'completed' }] },
@@ -96,10 +82,6 @@ describe('enrichSlot — gone engine task', () => {
   });
 
   it('refuses to settle on a batch-charge resolution key (M4)', async () => {
-    // The resolution fallback can land on the shared batch charge key
-    // (batch:<schedule_id>): that key belongs to the whole batch — stamping
-    // it from ONE slot's task verdict would rewrite every sibling's
-    // billing/history. The slot stays untouched and unresolved.
     fetchMock.mockResolvedValue(engineResponse(404, { message: 'task not found' }));
     mockTables({
       video_generations: { data: null },
@@ -118,7 +100,6 @@ describe('enrichSlot — gone engine task', () => {
   it('settles the generation row as failed when no durable proof contradicts the 404', async () => {
     fetchMock.mockResolvedValue(engineResponse(404, { message: 'task not found' }));
     mockTables({
-      // Resolution hit, task row absent, no published slot.
       video_generations: { data: { generation_id: RESOLVED_GENERATION } },
       scheduled_posts: { data: [] },
     });
@@ -160,9 +141,6 @@ describe('enrichSlot — gone engine task', () => {
       expect.objectContaining({ status: 'failed' }),
     );
     expect(result.status).toBe('completed');
-    // A delivered video is not retryable: false, never null — the failed-slot
-    // tail refills a null retryable, which would offer a retry on delivered
-    // work (review MAJOR 2).
     expect(result.retryable).toBe(false);
   });
 
@@ -185,9 +163,6 @@ describe('enrichSlot — gone engine task', () => {
   });
 
   it('leaves the history row untouched when the durable lookup errors even if no slot is published', async () => {
-    // Pre-fix: published === false after a durable READ error fell through
-    // to recordGenerationUpdate(failed) — a false terminal verdict that
-    // would lock out the completed backfill. This path never refunds.
     fetchMock.mockResolvedValue(engineResponse(404, { message: 'task not found' }));
     mockTables({
       video_generations: { data: { generation_id: RESOLVED_GENERATION } },
@@ -217,9 +192,6 @@ describe('enrichSlot — gone engine task', () => {
     const result = await enrichSlot(GENERATING_SLOT, 'user-1');
 
     expect(selectVideoGeneration).not.toHaveBeenCalled();
-    // The slot still reports the terminal engine answer so polling stops,
-    // but the written verdict stays unset: an unverifiable state must not
-    // record a false permanent failure.
     expect(result.status).toBe('failed');
   });
 
@@ -268,10 +240,6 @@ describe('enrichSlot — gone engine task', () => {
     fetchMock.mockResolvedValue(engineResponse(404, { message: 'task not found' }));
     serviceClient.from.mockReturnValue(tableNode({}));
     const result = await enrichSlot(GENERATING_SLOT, 'user-1');
-    // Unresolvable generation: the history write is skipped (nothing to name),
-    // but the slot still reports the terminal engine answer — showing
-    // `generating` for a task the engine dropped is exactly the lie this
-    // fixes. No settlement write is attempted against an unknown generation.
     expect(result.status).toBe('failed');
     expect(selectVideoGeneration).not.toHaveBeenCalled();
   });

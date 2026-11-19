@@ -46,11 +46,6 @@ describe('provider registry', () => {
   });
 });
 
-//---------------
-// toPublicAccount mapping tests — these pin the per-provider mappers and the
-// metadata narrowing helpers (kills Stryker survivors in registry.ts).
-//---------------
-
 function makeRecord(overrides: Partial<SocialAccountRecord> = {}): SocialAccountRecord {
   return {
     id: 'rec_1',
@@ -68,8 +63,6 @@ function makeRecord(overrides: Partial<SocialAccountRecord> = {}): SocialAccount
   };
 }
 
-// Narrowing helpers: toPublicAccount returns a union; assert the tag and
-// narrow so field assertions typecheck without casts.
 function asYoutube(record: SocialAccountRecord): AccountData {
   const result = toPublicAccount(record);
   expect(result.provider).toBe('youtube');
@@ -115,7 +108,7 @@ describe('toPublicAccount (youtube)', () => {
         accountMetadata: {
           statistics: {
             subscriberCount: '1000',
-            viewCount: 500, // wrong type on purpose
+            viewCount: 500,
             videoCount: '42',
             hiddenSubscriberCount: true,
           },
@@ -204,8 +197,6 @@ describe('toPublicAccount (linkedin)', () => {
 });
 
 describe('toPublicAccount / toPublicAccountSafe', () => {
-  // The cast below is intentional: it feeds an invalid provider to prove the
-  // loud failure / safe null contract.
   const unknownProvider = (provider: string): SocialAccountRecord =>
     makeRecord({ provider: provider as unknown as SocialProvider });
 

@@ -36,8 +36,6 @@ SPEECH_MODELS_RESPONSE = {
             "supported_voices": ["eve", "ara"],
         },
         {
-            # Voice cloning / prompt-driven models report no voice list. They
-            # are still reachable by id, they just cannot fill the picker.
             "id": "fish-audio/s2-pro",
             "supported_voices": None,
         },
@@ -105,10 +103,6 @@ class TestOpenRouterVoiceCatalog(unittest.TestCase):
     """Discovery is dynamic, but scoped to the configured models."""
 
     def setUp(self):
-        # The catalog is cached module-level keyed by configuration, so two
-        # tests that share a config would otherwise share an answer and the
-        # suite would depend on test order. Clearing the real dict keeps the
-        # production cache honest — there is no test-only reset hook to bypass.
         vs._openrouter_voice_cache.clear()
         self.config = {"api_key": "or-key", "models": ["x-ai/grok-voice-tts-1.0"]}
 

@@ -2,15 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-//---------------
-// useCopyText — one clipboard copy with a short "copied" confirmation.
-// `copied` turns true only after the write actually landed: outside a
-// secure context navigator.clipboard has no writeText, and the write can
-// reject (permission denied). In both cases the label stays un-copied so
-// the user never pastes an empty clipboard into their agent; a rejection
-// is logged. The confirmation resets after COPY_CONFIRM_MS.
-//---------------
-
 export const COPY_CONFIRM_MS = 2500;
 
 export function useCopyText(): { copied: boolean; copy: (text: string) => void } {

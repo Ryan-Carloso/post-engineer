@@ -1,27 +1,5 @@
-//---------------
-// Vendored CalendarCN files — third-party code copied into the repo by the
-// shadcn CLI registry from vmnog/calendarcn (MIT), pinned at upstream
-// commit 6e15924d (2026-11-17). The gates below treat these files as
-// third-party, not as code we wrote:
-// - the file-size ratchet exempts them (file-size/check.mjs): their line
-//   counts are upstream’s, not ours — splitting them would fork the lib;
-// - Stryker never mutates them (ui-gates/changed-ranges.mjs): no test in
-//   this repo targets lib internals, so mutating them can only produce
-//   survivors and timeouts;
-// - the UI coverage gates skip them (ui-gates/ui-files.mjs): their
-//   coverage is upstream’s, not ours.
-// - Codecov ignores them (codecov.yml coverage.ignore): their lines
-//   would fail the patch gate with zero coverage, since no test in this
-//   repo targets lib internals. The ignore list is pinned to this module
-//   by vendored-calendarcn.test.mjs.
-// Our own files in the same directories (posts/calendar-provider.tsx,
-// calendar-adapter.ts, page.tsx, the posts i18n module) are NOT on this
-// list and stay gated.
-//---------------
-
 export const VENDORED_CALENDARCN_COMMIT = '6e15924d';
 
-/** Repo-relative paths of every file vendored from CalendarCN. */
 export const VENDORED_CALENDARCN_FILES = new Set([
   'apps/web/components/agenda-view.tsx',
   'apps/web/components/availability-layer.tsx',
@@ -114,7 +92,6 @@ export const VENDORED_CALENDARCN_FILES = new Set([
   'apps/web/lib/timezone-label.ts',
 ]);
 
-/** True for a repo-relative path vendored from CalendarCN. */
 export function isVendoredCalendarCN(repoPath) {
   return VENDORED_CALENDARCN_FILES.has(repoPath);
 }

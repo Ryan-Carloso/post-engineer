@@ -57,8 +57,6 @@ LOCATION_LINE_RE = re.compile(r"^\*\*Location:\*\*\s*(.+?)\s*$")
 FENCE_OPEN_RE = re.compile(r"^```[a-zA-Z0-9+#.\-]*\s*$")
 SEVERITY_RE = re.compile(r"^(CRITICAL|MAJOR|MINOR)\b", re.IGNORECASE)
 TAIL_RE = re.compile(r"^(Verdict:|Refuted:|No material findings)", re.IGNORECASE)
-# A model (or a later pass) may copy an older same-line correction note.
-# Strip it before parsing so the path is not the whole sentence.
 CORRECTION_SUFFIX_RE = re.compile(
     r"\s+(?:_\(line numbers corrected from \d+\)_|_Line numbers corrected from \d+\._)\s*$",
     re.IGNORECASE,
@@ -71,27 +69,14 @@ UNPARSEABLE_HINT_RE = re.compile(
     re.IGNORECASE | re.MULTILINE,
 )
 
-# First line of every "this PR was not actually reviewed" stub. The
-# workflow fails the job when the posted comment starts with this, after
-# the comment is up, so the check is red and the findings stay visible.
 NOT_REVIEWED_MARKER = "<!-- review-grounding: not-reviewed -->"
 
-# Indent-only matches of a tiny quote (a brace, `pass`) are too weak to
-# re-anchor a finding onto. Exact whitespace matches are still accepted.
 MIN_SUBSTANTIVE_CHARS = 12
 
-# Visible section for findings whose cited file or lines could not be
-# matched. The heading is English, like every other script-generated line
-# that lands in the posted comment.
 UNVERIFIED_SECTION_HEADING = "## Unverified findings — location could not be matched"
 
-# Appended on its own line when a messy citation was resolved to a
-# different repo path. Not a suffix of the Location line.
 PATH_RESOLVED_NOTE = "_Path resolved from the cited location._"
 
-# `:12`, `:12-34`, and `#L12` / `#L12-L34` are line suffixes, not part of
-# the path. Trailing punctuation is stripped before this runs so
-# `file.ts:12.` still yields `file.ts`.
 _LINE_SUFFIX_RE = re.compile(
     r"(?:#L\d+(?:-L?\d+)?|:\d+(?:\s*[-–]\s*\d+)?)\s*$"
 )
@@ -397,8 +382,6 @@ def verify_finding(
         return Check(True, "", body)
 
     if _is_escape(path):
-        # Do not open the escaped path. A unique basename among changed
-        # files can still ground the quote, or serve as a best guess.
         return _resolve_fuzzy(
             raw_location,
             path,
@@ -420,7 +403,6 @@ def verify_finding(
         )
         if rewritten is not None:
             return Check(True, "", rewritten)
-        # The cited file is real. Do not substitute a different basename.
         return _fail(
             "quoted code not found verbatim in file",
             body,
@@ -581,7 +563,6 @@ def main(argv: list[str] | None = None) -> int:
     if namespace.files is not None and not namespace.files.is_file():
         print(f"changed-file list not found: {namespace.files}", file=sys.stderr)
     changed = load_changed_files(namespace.files)
-    # Raw model output can contain invalid bytes; degrade instead of crashing.
     text = src.read_text(encoding="utf-8", errors="replace")
     _preamble, findings, tail = split_findings(text)
     root = Path.cwd()
@@ -615,9 +596,6 @@ def main(argv: list[str] | None = None) -> int:
             print(f"unverified finding ({check.reason}): {heading}")
 
     parts: list[str] = []
-    # Process narration in the preamble is noise and, on PR #224, sat above
-    # the "no findings" stub so the comment looked like a finished review.
-    # Keep the verdict tail; drop the preamble.
     if kept:
         parts.append("\n\n".join(kept))
     else:

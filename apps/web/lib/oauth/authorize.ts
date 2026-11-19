@@ -4,13 +4,6 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { getMcpResource, normalizeScope } from './config';
 import { resolveClient, type ResolvedOAuthClient } from './resolve-client';
 
-//---------------
-// Validation of GET /oauth/authorize (OAuth 2.1 + RFC 8707).
-// Untrusted client_id/redirect_uri → 400 error without redirect (there is
-// no safe place to return to). Other errors → redirect with
-// error/error_description for the client to handle.
-//---------------
-
 export interface AuthorizeParams {
   clientId: string;
   redirectUri: string;

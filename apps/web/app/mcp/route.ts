@@ -9,37 +9,12 @@ import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-//---------------
-// POST/GET/DELETE /mcp — the hosted remote MCP endpoint (issue #561).
-//
-// The same deploy as the web API serves the remote (JSON-only) MCP server
-// over Streamable HTTP, so a hosted agent (ChatGPT) connects with a URL
-// instead of npx. The transport is the MCP package's Web Standard adapter
-// (handleMcpWebRequest): stateless, one fresh server per request, 1 MiB
-// body cap — the same shape as the standalone node:http listener, minus
-// the listener. The per-request server forwards the verified bearer to the
-// web API, so the MCP tools run as the token's subject and never as
-// another user.
-//
-// Order mirrors the standalone listener: Origin guard, pre-auth per-IP
-// rate limit (before any asymmetric verify), OAuth verification, then the
-// per-subject rate limit. The version gate does not apply here: the
-// per-request client suppresses X-MCP-Version exactly like the standalone
-// HTTP factory, and this endpoint is the deploy itself, not an npx client.
-//---------------
-
 const MCP_TOOL_SCOPE = 'mcp:tools';
 
-// Strip characters that would break out of a quoted header value.
-// Mirrors headerSafe in apps/mcp/src/http-auth.ts.
 function headerSafe(value: string): string {
   return value.replace(/["\r\n]/g, '');
 }
 
-// The protected-resource metadata URL for a resource identifier, when the
-// identifier is a URL: the origin serves the RFC 9728 document at
-// /.well-known/oauth-protected-resource. Null for opaque identifiers.
-// Mirrors protectedResourceMetadataUrl in apps/mcp/src/http-auth.ts.
 function protectedResourceMetadataUrl(resource: string): string | null {
   try {
     return `${new URL(resource).origin}/.well-known/oauth-protected-resource`;
@@ -48,12 +23,6 @@ function protectedResourceMetadataUrl(resource: string): string | null {
   }
 }
 
-// Answer 401 for an unauthenticated /mcp request. The WWW-Authenticate
-// header carries realm, resource, and (when derivable) resource_metadata
-// so an MCP-spec client can discover the authorization server; the
-// error="invalid_token" code is included only when a token was actually
-// presented (RFC 6750: no error code for a request lacking credentials).
-// Mirrors unauthorizedHttpResponse in apps/mcp/src/http-auth.ts.
 function unauthorizedResponse(resource: string, tokenPresented: boolean): NextResponse {
   const params = [
     'Bearer realm="post-engineer-mcp"',
@@ -69,9 +38,6 @@ function unauthorizedResponse(resource: string, tokenPresented: boolean): NextRe
   );
 }
 
-// DNS-rebinding guard, adapted from the standalone listener: a browser
-// Origin must name this app's own origin. Non-browser clients send no
-// Origin and pass. An unparseable Origin is rejected.
 function isAllowedOrigin(request: Request, issuer: string): boolean {
   const origin = request.headers.get('origin');
   if (origin === null) return true;
@@ -82,11 +48,6 @@ function isAllowedOrigin(request: Request, issuer: string): boolean {
   }
 }
 
-// Extract the Bearer token. Returns the token only when it has the JWT
-// shape (three parts); `presented` is true whenever a Bearer value was
-// sent at all, even a malformed one, so the 401 challenge can name it.
-// Mirrors authenticateHttpRequest + bearerTokenPresented in
-// apps/mcp/src/http-auth.ts.
 function extractBearer(request: Request): { token: string | null; presented: boolean } {
   const authorization = request.headers.get('authorization');
   if (authorization === null) return { token: null, presented: false };
@@ -106,9 +67,6 @@ async function handleMcpRequest(request: Request): Promise<Response> {
   try {
     resource = getMcpResource();
     issuer = getIssuer();
-    // Load the signing keys up front: without them this endpoint cannot
-    // authenticate anyone, so fail loudly instead of answering 401s that
-    // could never become 200s.
     keys = await getOAuthKeys();
   } catch (error) {
     logger.error(
@@ -130,8 +88,6 @@ async function handleMcpRequest(request: Request): Promise<Response> {
     if (token === null) return unauthorizedResponse(resource, presented);
     let claims: AccessTokenClaims;
     try {
-      // Same checks as the standalone verifier (apps/mcp/src/http-auth.ts):
-      // issuer, audience = resource, ES256, token_use = access.
       claims = await verifyAccessToken(keys, token, { resource });
     } catch {
       return unauthorizedResponse(resource, true);

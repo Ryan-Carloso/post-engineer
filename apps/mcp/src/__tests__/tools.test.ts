@@ -58,9 +58,6 @@ function textOf(response: McpToolResponse): string {
   return block.text;
 }
 
-// Full production-shaped schedule fixtures: the client methods now parse
-// 200s against the shared schedule contract, so a partial mock is a
-// malformed response at runtime and a type error under tsconfig.spec.
 const FULL_SCHEDULE_ROW: ResponseOf<typeof listSchedulesContract>['schedules'][number] = {
   id: 'sched-1',
   persona_id: 'persona-123',
@@ -548,7 +545,6 @@ describe('MCP Tool Handlers', () => {
     expect(text).toContain('https://www.instagram.com/oauth/authorize?state=abc');
     expect(text).toMatch(/open/i);
     expect(text).toMatch(/authorize/i);
-    // the callback only accepts a browser signed in as the connect URL owner
     expect(text).toMatch(/signed in to Post Engineer/i);
     expect(text).toContain('accounts (action: list)');
   });
@@ -573,8 +569,6 @@ describe('MCP Tool Handlers', () => {
   });
 
   it('ConnectAccountSchema accepts every network, pinterest included', async () => {
-    // The connect list used to be its own copy and missed pinterest,
-    // although POST /api/account/connect-url serves it.
     const { ConnectAccountSchema } = await import('../tools.js');
     const { SOCIAL_PROVIDERS } = await import('../contracts/providers.js');
     for (const provider of SOCIAL_PROVIDERS) {
@@ -639,7 +633,6 @@ describe('MCP Tool Handlers', () => {
     expect(response.isError).toBeUndefined();
     const text = textOf(response);
     expect(text).toMatch(/connected/i);
-    // The success text names the fields, it never dumps the raw response.
     expect(text).toContain('accountId=acc-1');
     expect(text).toContain('did=did:plc:xyz');
     expect(text).not.toContain('{');
@@ -693,7 +686,6 @@ describe('MCP Tool Handlers', () => {
     const text = textOf(response);
     expect(text).toMatch(/connected/i);
     expect(text).not.toContain('5Ksuper-secret-key');
-    // The success text names the fields, it never dumps the raw response.
     expect(text).toContain('username=alice');
     expect(text).toContain('accountId=acc-1');
     expect(text).not.toContain('{');
@@ -903,8 +895,6 @@ describe('schema bounds', () => {
 
   it('handleConnectAccount errors clearly when the response has no auth_url', async () => {
     const client = { getOAuthConnectUrl: vi.fn() } as unknown as PostEngineerClient;
-    // The typed client cannot return this; the cast stands in for a
-    // malformed 200 the handler guards against.
     vi.mocked(client.getOAuthConnectUrl).mockResolvedValue({ success: true } as never);
 
     const response = await handleConnectAccount(client, { provider: 'youtube' });
@@ -954,13 +944,6 @@ describe('persona image library tools', () => {
   });
 
   it('CreatePersonaSchema rejects a missing avatarUrl at parse time', () => {
-    // avatarUrl is always required: every persona has a face, and "no face"
-    // is a per-video choice (generate_video options.videoType 'faceless'),
-    // never a persona one. There is no images-specific rule anymore — the
-    // schema-level rule (avatarUrl or avatarPath) fails the parse on its own.
-    // voiceId is supplied so the parse fails on the face rule, not on it.
-    // accounts is supplied too: zod skips superRefine while any field is
-    // still invalid, so without it the parse would fail on accounts first.
     const accounts = { youtube: ['acct-1'] };
     expect(() =>
       CreatePersonaSchema.parse({ accounts, name: 'X', voiceId: 'none', images: [{ path: '/tmp/a.jpg' }] })
@@ -972,11 +955,9 @@ describe('persona image library tools', () => {
 
   it('CreatePersonaSchema rejects a persona with no bound account (issue #572)', () => {
     const base = { name: 'X', avatarUrl: 'https://example.com/a.png', voiceId: 'none' };
-    // Missing accounts: the required-field error names the field.
     const missing = CreatePersonaSchema.safeParse(base);
     expect(missing.success).toBe(false);
     expect(JSON.stringify(missing.error?.issues)).toContain('"accounts"');
-    // An empty map (or all providers empty): the refine names the rule.
     for (const accounts of [{}, { youtube: [] }]) {
       const parsed = CreatePersonaSchema.safeParse({ ...base, accounts });
       expect(parsed.success).toBe(false);
@@ -1009,13 +990,8 @@ describe('persona image library tools', () => {
   });
 
   it('personas (action: create) handler fails on a missing avatarUrl and avatarPath before the client call', async () => {
-    // Simulates args that bypassed the SDK's raw-shape validation: the
-    // handler re-parses with the full schema, so the required avatarUrl
-    // becomes a loud isError — no file is read, no fetch happens.
     vi.clearAllMocks();
     vi.mocked(mockClient.createPersona).mockResolvedValue({ success: true, personaId: 'p-1', imageIds: [] });
-    // voiceId is valid so the parse reaches the face refine (zod skips
-    // superRefine while any field is still invalid).
     const sdkArgs = {
       name: 'X',
       voiceId: 'en-US-AriaNeural',
@@ -1029,7 +1005,6 @@ describe('persona image library tools', () => {
   });
 
   it('CreatePersonaSchema rejects a missing or empty voiceId (no default voice)', () => {
-    // Fail fast: the MCP never picks a voice on the agent's behalf.
     const base = { name: 'X', avatarUrl: 'https://example.com/a.png', accounts: { youtube: ['acct-1'] } };
     expect(() => CreatePersonaSchema.parse(base)).toThrow(/voiceId is required/);
     expect(() => CreatePersonaSchema.parse({ ...base, voiceId: '' })).toThrow(/voiceId is required/);
@@ -1050,9 +1025,6 @@ describe('persona image library tools', () => {
   });
 
   it('persona_media (action: update_image) documents that whitespace-only metadata clears the stored value', () => {
-    // Server convention: undefined = keep, '' = clear. A whitespace-only
-    // value trims to '' client-side, so the field docs must say so —
-    // otherwise a caller passing "   " wipes the value unknowingly.
     for (const field of [UpdatePersonaImageShape.tag, UpdatePersonaImageShape.description]) {
       expect(field.description).toMatch(/whitespace/i);
       expect(field.description).toMatch(/clear/i);
@@ -1083,9 +1055,6 @@ describe('persona image library tools', () => {
   });
 
   it('persona_media (action: add_image) rejects isPrimary:false at parse time', async () => {
-    // Symmetric with persona_media (action: update_image) (swap-only): isPrimary:false on a
-    // brand-new image is meaningless — the image is never primary unless
-    // explicitly marked. Reject loudly instead of silently dropping it.
     expect(() =>
       AddPersonaImageSchema.parse({ personaId: 'p-1', path: '/tmp/a.jpg', isPrimary: false }),
     ).toThrow();
@@ -1103,9 +1072,6 @@ describe('persona image library tools', () => {
   });
 
   it('persona_media (action: update_image) rejects a no-op update with only an id', async () => {
-    // The refine encodes the domain rule "at least one of tag/description/
-    // isPrimary" in the schema: an id-only call must fail at parse time,
-    // before any client call.
     vi.clearAllMocks();
     expect(() => UpdatePersonaImageSchema.parse({ id: 'img-1' })).toThrow(
       /At least one of tag, description, or isPrimary/
@@ -1118,16 +1084,10 @@ describe('persona image library tools', () => {
     ['description', { id: 'img-1', description: 'Studio headshot' }],
     ['isPrimary', { id: 'img-1', isPrimary: true }],
   ])('persona_media (action: update_image) accepts when only %s is set', (_field, args) => {
-    // Each || branch of the refine must independently accept: a mutant
-    // dropping any branch must be caught.
     expect(() => UpdatePersonaImageSchema.parse(args)).not.toThrow();
   });
 
   it('persona_media (action: update_image) re-parses raw handler args with the refined schema', async () => {
-    // The MCP SDK parses tool args against the raw UpdatePersonaImageShape,
-    // so the .refine would never fire on the tool path. The handler
-    // re-parses (like handleCreatePersona) so the id-only call fails at
-    // parse time with the schema message, before any client call.
     vi.clearAllMocks();
     const result = await handleUpdatePersonaImage(mockClient, { id: 'img-1' });
     expect(result.isError).toBe(true);
@@ -1138,9 +1098,6 @@ describe('persona image library tools', () => {
   });
 
   it('persona_media (action: update_image) rejects isPrimary:false at parse time', async () => {
-    // The server PATCH is swap-only and 400s isPrimary:false. The schema
-    // is z.literal(true) so an agent learns the constraint from the tool
-    // contract instead of a server error.
     expect(() =>
       UpdatePersonaImageSchema.parse({ id: 'img-1', isPrimary: false })
     ).toThrow();
@@ -1164,7 +1121,6 @@ describe('persona image library tools', () => {
   });
 });
 
-// The progress narrowing every video_tasks status result is built from, as a response for textOf().
 async function progressResponse(client: PostEngineerClient, taskId: string): Promise<McpToolResponse> {
   const { narrowTaskProgress } = await import('../tools.js');
   return { content: [{ type: 'text', text: JSON.stringify(narrowTaskProgress(await client.getVideoStatus(taskId)), null, 2) }] };
@@ -1239,7 +1195,6 @@ describe('video task progress narrowing', () => {
     expect(text).not.toContain('abc123XYZ');
     expect(text).not.toContain('s3cret');
     expect(text).not.toContain('SECRET123');
-    // The human-readable failure reason survives redaction.
     expect(text).toContain('upload failed');
   });
 
@@ -1277,10 +1232,6 @@ describe('video task progress narrowing', () => {
 
 
 describe('handleLibraryCall message contracts', () => {
-  // The error-verb and success-prefix strings are user-facing (surfaced to
-  // the AI agent calling the tool). Pin them so a reword or a dropped
-  // prefix breaks CI instead of silently changing the agent-visible
-  // contract — Stryker's StringLiteral mutants survived here.
   const mockClient = {
     createPersona: vi.fn(),
     cancelSchedule: vi.fn(),
@@ -1337,9 +1288,6 @@ describe('handleLibraryCall message contracts', () => {
 });
 
 describe('narrowTaskProgress type narrowing', () => {
-  // narrowTaskProgress coerces every field to its declared type or null.
-  // Wrong-typed values must become null (not pass through), and a
-  // non-object payload must yield all nulls.
   const mockClient = {
     getVideoStatus: vi.fn(),
   } as unknown as PostEngineerClient;
@@ -1430,8 +1378,6 @@ describe('slot tools', () => {
 
   it('handleGetSlot narrows the detail envelope and summarizes', async () => {
     const { handleGetSlot } = await import('../tools.js');
-    // The extra top-level field is not a production shape: the cast keeps
-    // the pin that the presentation drops it instead of echoing it.
     vi.mocked(mockClient.getSlot).mockResolvedValue({
       ...FULL_SLOT_DETAIL,
       extraUnpinnedField: 'rides through unparsed',
@@ -1930,8 +1876,6 @@ describe('new tool error paths and narrowing fallbacks', () => {
 
   it('handleListTokenTransactions surfaces a malformed 200 as a plain failure', async () => {
     const { handleListTokenTransactions } = await import('../tools.js');
-    // The contract-typed client rejects a missing envelope with a
-    // malformed-response error instead of rendering an empty ledger.
     vi.mocked(mockClient.listTokenTransactions).mockRejectedValue(
       new Error('Malformed response from GET /api/billing/transactions.'),
     );
@@ -2024,7 +1968,6 @@ describe('publish video direct tool', () => {
     expect(text).toContain('1/2');
     expect(text).toContain('chan-1');
     expect(text).toContain('quota exceeded');
-    // Machine-readable results for the agent.
     expect(text).toContain('"successCount":1');
   });
 

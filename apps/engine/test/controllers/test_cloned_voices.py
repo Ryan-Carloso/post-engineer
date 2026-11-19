@@ -57,8 +57,6 @@ class ClonedVoicesControllerTests(unittest.TestCase):
         self.assertEqual(body["status"], 202)
         self.assertEqual(body["body"]["id"], "clone-1")
         service.create_from_upload.assert_called_once()
-        # TestClient runs background tasks before returning, so the scheduled
-        # registration must already have fired with the created payload.
         service.complete_registration.assert_called_once_with(
             "user-uuid-1", "clone-1", b"wav", "en"
         )
@@ -394,8 +392,6 @@ class ClonedVoicesControllerTests(unittest.TestCase):
     @patch("app.services.cloned_voices.service.chatterbox_tts")
     @patch("app.services.cloned_voices.service.ClonedVoiceStore")
     def test_preview_text_is_spoken_by_chatterbox(self, mock_store_cls, mock_tts):
-        # Real service: the caller's text must reach chatterbox, not just
-        # the service boundary.
         mock_store_cls.return_value.get_for_user.return_value = {
             "id": "clone-1",
             "status": STATUS_READY,
@@ -436,7 +432,6 @@ class ClonedVoicesControllerTests(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        # "en" has no sample of its own: the en-us sample is the fallback.
         mock_tts.assert_called_once_with(
             VOICE_SAMPLE_TEXTS["en-us"],
             "uabc_clone1",
@@ -492,8 +487,6 @@ class ClonedVoicesControllerTests(unittest.TestCase):
             json={"text": 123},
         )
 
-        # The pydantic body model rejects the type; the app maps request
-        # validation errors to 400.
         self.assertEqual(response.status_code, 400)
         service.preview_mp3.assert_not_called()
 

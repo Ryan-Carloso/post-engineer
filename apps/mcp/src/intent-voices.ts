@@ -21,12 +21,6 @@ import {
 import { DESTRUCTIVE } from './tool-annotations.js';
 import { ListVoicesShape, handleListVoices } from './tools.js';
 
-//---------------
-// voices (issue #566): the house voices and the voice clones of the account.
-// create_clone from a local audio file exists only on the stdio server; the
-// remote server takes an HTTPS audioUrl.
-//---------------
-
 const VOICES_SPECS = {
   list: ListVoicesShape,
   preview: PreviewHouseVoiceShape,
@@ -38,7 +32,6 @@ const VOICES_SPECS = {
 };
 
 export function registerVoiceTools(server: McpServer, client: PostEngineerClient, remote: boolean): void {
-  // The remote create_clone takes audioUrl only (a path would resolve on the server).
   const options: ActionOptions<typeof VOICES_SPECS> = remote ? { variants: { create_clone: CreateClonedVoiceRemoteShape } } : {};
   const offered = offeredSpecs(VOICES_SPECS, options);
   server.tool(

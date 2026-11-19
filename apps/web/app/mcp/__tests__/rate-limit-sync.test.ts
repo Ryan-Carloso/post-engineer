@@ -4,17 +4,6 @@ import { join } from 'node:path';
 import { findRepoRoot } from '@/test/repo-root';
 import { RATE_LIMITS } from '@/lib/rate-limit';
 
-//---------------
-// The hosted /mcp route duplicates literals the standalone MCP listener
-// enforces (apps/mcp/src/http-auth.ts + http-rate-limit.ts): the rate
-// limits, the required OAuth scope, and the scopes the protected-resource
-// document advertises. A drift between the two lets one path be stricter
-// than the other for the same caller, so this test pins each shared
-// literal to one value, parsed from both sides' sources. (Literal
-// regexes only — no dynamic RegExp construction, per the repo's CodeQL
-// rule.)
-//---------------
-
 function readSource(...parts: string[]): string {
   return readFileSync(join(findRepoRoot(import.meta.url), ...parts), 'utf8');
 }

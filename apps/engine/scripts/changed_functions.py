@@ -40,11 +40,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-# ---------------
-# Mutable-function rule — mirrors mutmut (mutation/file_mutation.py): a
-# function is mutable when it has no decorators, or exactly one bare
-# @staticmethod / @classmethod.
-# ---------------
 MUTABLE_BARE_DECORATORS = {"staticmethod", "classmethod"}
 
 
@@ -139,11 +134,6 @@ def map_changed_lines(
     {"mode": "file", "reason": ...}.
     """
     if not changed_lines:
-        # Explicit guard: zero extracted lines from a diff the caller
-        # considers changed is a parser anomaly, not "nothing to do" —
-        # running 0 mutants would silently weaken the gate. Fall back to
-        # the whole-file scope (the caller's own "no diff hunks at all"
-        # case never reaches here — that returns file mode earlier).
         return {"mode": "file", "reason": "no changed lines extracted from the diff"}
     try:
         functions = collect_mutable_functions(source)
@@ -158,13 +148,6 @@ def map_changed_lines(
                 "mode": "file",
                 "reason": f"changed line {line} is outside any function (module-level change)",
             }
-        # Candidates come from collect_mutable_functions in source order,
-        # so the first mutable candidate is the OUTERMOST mutable
-        # function containing the line — an inner non-mutable nested
-        # helper (or decorated method) inside a mutable parent maps to
-        # that parent. mutmut never mutates decorated functions, so a
-        # change pinned to non-mutable code only falls back to the whole
-        # file.
         mutable_candidates = [f for f in candidates if f["mutable"]]
         target = mutable_candidates[0] if mutable_candidates else None
         if target is None:
@@ -179,9 +162,6 @@ def map_changed_lines(
 
     globs = sorted(
         {
-            # The trampoline name is mangled + "__mutmut" and each mutant
-            # appends "_<n>" (e.g. x_generate_video__mutmut_1) — a
-            # __mutmut_* glob matches every variant of the function.
             mutant_key(path, mangled_function_name(name, class_name)) + "__mutmut_*"
             for name, class_name in changed_functions
         }
@@ -211,16 +191,12 @@ def parse_diff_changed_lines(diff_text: str) -> list[int]:
         elif line.startswith("-") and not line.startswith("---"):
             pass
         else:
-            # Context line (starts with a space; an empty context line
-            # shows as "" after splitlines) — advances the new-side line.
             new_line += 1
     return sorted(set(changed))
 
 
 def file_is_new(base: str, path: str, cwd: str | None = None) -> bool:
     """True when the file does not exist in the base ref (new file)."""
-    # `git cat-file <ref>:<path>` resolves <path> from the REPO ROOT, not
-    # from the working directory — resolve the cwd offset first.
     repo_relative = path
     if cwd:
         try:
@@ -237,13 +213,6 @@ def file_is_new(base: str, path: str, cwd: str | None = None) -> bool:
                 offset = cwd_abs.relative_to(root_abs).as_posix()
                 repo_relative = (Path(offset) / path).as_posix()
         except (ValueError, OSError):
-            # Deliberately silent: the naive fallback below (path treated
-            # as repo-root-relative) is safe in every failure mode. If
-            # the offset cannot be resolved, cat-file simply fails and
-            # file_is_new returns "new file" — which sends the shard to
-            # the WHOLE-file scope. That is the conservative direction
-            # (wider scope, never fewer mutants), so the loss of the
-            # precise new-file check costs nothing.
             pass
     result = subprocess.run(
         ["git", "cat-file", "-e", f"{base}:{repo_relative}", "--"],
@@ -296,8 +265,6 @@ def changed_functions_for_file(
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--file", required=True, help="file relative to the working directory")
-    # Not required by argparse: --check-mutable reads only --file (the
-    # workflow calls it without a base); the diff mapping enforces it below.
     parser.add_argument(
         "--base", help="base ref (e.g. origin/main); required unless --check-mutable"
     )
@@ -324,13 +291,10 @@ def main(argv: list[str] | None = None) -> int:
     result = changed_functions_for_file(
         base=args.base, head=args.head, path=args.file, cwd=os.getcwd()
     )
-    # Uniform output shape: the workflow reads both keys unconditionally,
-    # so "file" mode carries an empty globs list.
     if result["mode"] == "file":
         result["globs"] = []
     json.dump(result, sys.stdout)
     sys.stdout.write("\n")
-    # Exit 0 in both modes: "file" is the conservative fallback, not an error.
     return 0
 
 

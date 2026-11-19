@@ -31,11 +31,6 @@ PROTECTED = (
     ".cursor/skills/review/SKILL.md",
 )
 
-# Strong assertions name an expected value. Weak ones only check truthiness,
-# so a rewrite that swaps the first for the second can stay green while the
-# test stops pinning the behavior.
-# Plain `assert x == 1` is the engine suite's value check. A bare `assert x`
-# is only truthiness. Both have to be classified or the swap stays green.
 _PY_COMPARE = r"(?:==|!=|<=|>=|<|>|\bis\s+not\b|\bis\b|\bnot\s+in\b|\bin\b)"
 _STRONG = re.compile(
     r"\.toEqual\s*\(|\.toStrictEqual\s*\(|\.toBe\s*\(|\.toThrow\s*\(|"
@@ -72,9 +67,6 @@ _INFO_TRUE = re.compile(r"informational:\s*true")
 _BARE_SKIP = re.compile(r"(?<![\w.])pytest\.skip\s*\(")
 _GUARD = re.compile(r"^\s*(?:if|elif|else)\b.*:\s*$")
 
-# Unconditional skips and exclusive focus hide every other case. Conditional
-# skips (missing ffmpeg, an opt-in integration flag) are warnings: they are
-# visible, and they do not fail a job that still runs the rest of the suite.
 _UNCONDITIONAL: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("test-skipped", re.compile(r"\b(?:it|test|describe)\.(?:skip|todo)\s*\(")),
     ("test-skipped", re.compile(r"(?<![\w.])x(?:it|test|describe)\s*\(")),
@@ -177,7 +169,6 @@ def _protected(change: FileChange) -> list[Finding]:
     if not old_protected and not new_protected:
         return []
     if change.status == "D" or (change.status == "R" and old_protected):
-        # A rename away from a protected path removes the file just as surely as a delete.
         return [Finding(
             "fail",
             "verifier-deleted",
@@ -270,7 +261,6 @@ def _deleted_test_file(change: FileChange, exists) -> list[Finding]:
             "test file deleted while a mapped product file is still in the tree",
             1,
         )]
-    # A mapped product file that no longer exists is not a clean deletion: the mapper only guesses by name.
     return [Finding(
         "warn",
         "tests-deleted-unmapped",
@@ -443,7 +433,6 @@ def _weakened_line_numbers(base: str, head: str) -> list[int]:
             continue
         if not any(_STRONG.search(line) for line in base_lines[i1:i2]):
             continue
-        # Check each added line on its own: a strong addition elsewhere in the block must not hide a weak swap.
         for offset, line in enumerate(head_lines[j1:j2]):
             if _WEAK.search(line) and not _STRONG.search(line):
                 hits.append(j1 + offset + 1)

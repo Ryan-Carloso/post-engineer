@@ -39,8 +39,6 @@ class BatchReconciler:
             try:
                 updated += self._reconcile_slot(slot, const)
             except CONNECTION_FAILURES:
-                # A transport outage is the scheduler's to report once per
-                # incident (_report_outage); per-slot logging would spam it.
                 raise
             except Exception as exc:  # noqa: BLE001 — one bad slot must not stall the stage
                 logger.error(
@@ -65,34 +63,16 @@ class BatchReconciler:
             slot_user = slot_user_id(slot)
             if slot_user is not None:
                 properties["user_id"] = slot_user
-            # Batch discount (issue #487): the batch id lets PostHog check
-            # that a batch's videos share a warm Modal container
-            # (videos_per_container > 1 across one batch_id).
             batch_id = slot.get("batch_id")
             if isinstance(batch_id, str) and batch_id:
                 properties["batch_id"] = batch_id
-            # GPU cost (USD) is calculated by the Modal app and persisted
-            # flat on the task row by the task pipeline. Include it for
-            # unit-economics tracking (or the reason it is missing).
-            # Never in API responses — PostHog dashboard only.
             properties.update(cost_event_props(task))
-            # The resolved BGM mood rides the task row (task.py stores it
-            # at the music_mood phase); "unknown" when the row has none,
-            # mirroring the direct-flow event in _complete_task.
             properties["music_mood"] = task.get("music_mood") or "unknown"
             track_event("video_generated", properties)
             return 1
         elif task.get("state") == const.TASK_STATE_FAILED:
             user_id = slot_user_id(slot)
-            # The batch was prepaid under `batch:{scheduleId}` — refund
-            # just this video's cost; the batch id keeps the other
-            # videos' charges intact.
             if user_id is not None:
-                # The stored charge needs no persona or snapshot, so a
-                # slot whose identity is gone is still refunded. A free
-                # slot (charged 0) has nothing to refund.
-                # The batch id comes from the slot's own schedule_id: the
-                # schedules embed can be missing (left join).
                 cost = slot_refund_amount(slot)
                 if cost is not None:
                     batch_generation_id = f"batch:{slot['schedule_id']}"
@@ -107,10 +87,6 @@ class BatchReconciler:
                         "Batch generation failed",
                         engine_task_id=engine_task_id,
                     )
-                    # The RPC is idempotent: a False answer means this slot
-                    # was already refunded (or had nothing to refund), so
-                    # refund_issued fires only on a landed refund — never
-                    # optimistically, or dashboards double-count it.
                     if refunded:
                         track_refund_issued(
                             user_id=user_id,
@@ -125,10 +101,6 @@ class BatchReconciler:
                     "fill_schedule: cannot refund failed batch slot without user_id",
                     slot_id=slot.get("id"),
                 )
-            # The error column is client-visible (/api/schedule/status spreads
-            # the row into the response): scrub the full message before
-            # truncating — engine task errors can echo bearer tokens or
-            # DSNs (AGENTS.md PR #17).
             reason = scrub_secret_values(str(task.get("error") or ""))[:500]
             self.store.update_slot(
                 slot["id"],

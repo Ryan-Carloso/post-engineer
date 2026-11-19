@@ -4,13 +4,6 @@ import { listDefaultPersonaFaces } from '@/lib/persona-faces';
 import { logger } from '@/lib/logger';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
-//---------------
-// GET /api/persona/faces — default house character/face catalog
-// (public/caracter-samples). Same list as the UI picker.
-// Includes gender/age/ethnicity/hair/description for MCP (cannot show photos).
-// Auth = Supabase session (cookie) OR personal API key (Bearer/x-api-key, MCP).
-//---------------
-
 function appBaseUrl(): string {
   const url = process.env.NEXT_PUBLIC_APP_URL;
   if (!url) {
@@ -50,7 +43,4 @@ async function getHandler(request?: Request): Promise<NextResponse> {
   return NextResponse.json({ faces });
 }
 
-//---------------
-// 5xx reporting: handled server errors reach PostHog error tracking.
-//---------------
 export const GET = withApiErrorReporting('GET /api/persona/faces', getHandler, { getUserId: resolveReportingUserId });

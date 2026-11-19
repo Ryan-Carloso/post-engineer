@@ -1,14 +1,3 @@
-//---------------
-// Experiment reads for /api/experiments (issue #476). Service role bypasses
-// RLS: every query filters by user_id explicitly, and a persona-scoped API
-// key sees only experiments of its personas (or with no persona) — an
-// out-of-scope experiment is a 404 like an unknown id.
-//
-// Reads are bounded: list LIST_LIMIT experiments, SLOT_LIMIT slots and
-// METRIC_ROW_LIMIT metric rows per experiment, deterministic order, with
-// `truncated` exposed when a cap was hit.
-//---------------
-
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { computeExperimentResults, type ExperimentMetricFact, type ExperimentResults } from './results';
@@ -102,9 +91,6 @@ export async function listExperiments(
     .select('id, name, variable, persona_id, target_pairs, created_at')
     .eq('user_id', userId);
   if (scope !== null) {
-    // Same policy as GET /api/metrics: a scoped key sees its personas'
-    // rows plus persona-less ones. Only UUIDs reach the filter string, so a
-    // malformed stored id cannot corrupt the PostgREST syntax.
     const personaIds = scope.filter((id) => UUID.test(id));
     select = personaIds.length > 0
       ? select.or(`persona_id.in.(${personaIds.join(',')}),persona_id.is.null`)
@@ -135,13 +121,6 @@ export interface ExperimentDetail {
   truncated: boolean;
 }
 
-//---------------
-// ExperimentFacts — the raw rows behind a detail read: the snapshot
-// metric facts per post/provider. loadExperimentResults computes the
-// paired results from these; the live read (lib/experiments/live.ts)
-// swaps snapshot facts for freshly fetched provider counters and
-// recomputes from the same facts, so both paths share one loader.
-//---------------
 export interface ExperimentFacts {
   experiment: ExperimentView;
   window: MetricsWindow;
@@ -209,7 +188,6 @@ export async function loadExperimentFacts(
     views: metric.views,
     likes: metric.likes,
     comments: metric.comments,
-    // numeric columns come back from PostgREST as numbers or strings.
     averageViewDurationSeconds: numericOrNull(metric.average_view_duration_seconds),
   }));
   return {
@@ -224,12 +202,6 @@ export async function loadExperimentFacts(
   };
 }
 
-//---------------
-// loadExperimentTaskIds — the engine task id per slot of an experiment.
-// The live read needs it to fetch publish_results (the provider video
-// ids); the snapshot read never does, so it stays a separate query
-// instead of leaking task ids into the detail response.
-//---------------
 export async function loadExperimentTaskIds(
   supabase: SupabaseClient,
   input: { userId: string; experimentId: string },

@@ -15,11 +15,6 @@ import { PROMPTS } from '@/app/recipes/prompts';
 import { recipesI18nEn } from '@/lib/i18n/recipes-i18n-en';
 import { DAILY_NEWS_PROMPT } from '@/lib/generation/prompt-base';
 
-//---------------
-// GET /api/prompts and GET /api/prompts/[slug] — recipe prompts served to
-// the MCP from the web hub (PROMPTS + English recipes copy).
-//---------------
-
 function authenticated(): void {
   requireSupabaseSession.mockResolvedValue({ auth: { userId: 'user-1', accessToken: 't', isApiKey: true }, error: null });
 }
@@ -60,7 +55,6 @@ describe('GET /api/prompts', () => {
       })),
     });
     expect(JSON.stringify(body)).not.toContain(DAILY_NEWS_PROMPT.slice(0, 200));
-    // The 200 body parses against the shared contract the MCP reads.
     expect(ListPromptsResponseSchema.safeParse(body).success).toBe(true);
     expect(body).toMatchObject({
       prompts: expect.arrayContaining([
@@ -105,7 +99,6 @@ describe('GET /api/prompts/[slug]', () => {
         prompt: DAILY_NEWS_PROMPT,
       },
     });
-    // The 200 body parses against the shared contract the MCP reads.
     expect(GetPromptResponseSchema.safeParse(body).success).toBe(true);
   });
 

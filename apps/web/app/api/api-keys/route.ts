@@ -30,8 +30,6 @@ async function getHandler(request: Request): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
 
-  // Key management (listing included) requires a full browser session: a
-  // bearer caller (API key or MCP OAuth token) must not even enumerate keys.
   if (auth.isApiKey === true || auth.isOAuth === true) {
     return NextResponse.json(
       { success: false, error: 'API keys cannot manage API keys. Sign in to manage keys.' },
@@ -75,10 +73,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
 
-  // Key management requires a full browser session. Any API-key- or
-  // OAuth-authenticated request is rejected here — a bearer caller could
-  // otherwise mint new keys (a credential that outlives its own revocation)
-  // or revoke the keys that control it (self-escalation / lockout).
   if (auth.isApiKey === true || auth.isOAuth === true) {
     return NextResponse.json(
       { success: false, error: 'API keys cannot manage API keys. Sign in to manage keys.' },
@@ -108,7 +102,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
 
   const supabase = createSupabaseServiceClient();
 
-  // Scope may only reference the user's own personas.
   if (scope.personaIds !== null) {
     const { data: owned, error: ownedError } = await supabase
       .from('personas')
@@ -162,8 +155,5 @@ async function postHandler(request: Request): Promise<NextResponse> {
   );
 }
 
-//---------------
-// 5xx reporting: handled server errors reach PostHog error tracking.
-//---------------
 export const GET = withApiErrorReporting('GET /api/api-keys', getHandler, { getUserId: resolveReportingUserId });
 export const POST = withApiErrorReporting('POST /api/api-keys', postHandler, { getUserId: resolveReportingUserId });

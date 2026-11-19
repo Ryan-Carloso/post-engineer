@@ -8,18 +8,6 @@ import type {
 import { isRecord, narrowDirectPublishAccountResult } from './direct-publish-narrowing.js';
 import { isSocialProvider } from './contracts/providers.js';
 
-//---------------
-// Publish-existing client call (issue #384). Standalone function (not a
-// client method) because client.ts is grandfathered over the 500-line cap
-// and may not grow — the same pattern as client-publish-uploaded.ts. One
-// call publishes or schedules media that already exists (a finished engine
-// video, a ready signed-upload video, or an inline image) with no
-// generation and no token charge. JSON only: no local path ever crosses
-// this surface. The input arrives validated and resolved (the handler's
-// strict schema, then the account references), so this module only
-// builds the body and narrows the answer: the server re-checks every rule.
-//---------------
-
 const PUBLISH_EXISTING_TIMEOUT_MS = 120_000;
 
 function narrowReconnectWarnings(value: unknown): PublishExistingReconnectWarning[] | undefined {
@@ -53,8 +41,6 @@ function narrowScheduledSlot(value: unknown): { id: string; slot_at: string; tit
   return { id: value.id, slot_at: value.slot_at, title: value.title, status: typeof value.status === 'string' ? value.status : 'ready' };
 }
 
-// A 200 with a malformed body is an error, never a silent success: the
-// agent must not report "scheduled" or "published" on a body it can't read.
 function narrowPublishExistingResult(value: unknown): PublishExistingResult {
   if (!isRecord(value) || (value.mode !== 'scheduled' && value.mode !== 'asap')) {
     throw new Error('Malformed publish-existing response from the API.');

@@ -9,13 +9,6 @@ import { refundsAfterClawback, type ClawbackSlot } from '../batch-clawback';
 import { logger } from '@/lib/logger';
 import { createFakeSupabase, slotRow, type Row } from '@/app/api/videos/batch-discount/__tests__/fake-supabase';
 
-//---------------
-// The cancel side of the batch discount (issue #487): a cancel that leaves
-// the batch below 6 face videos takes the free video's discount back out
-// of the cancelled video's refund, so "create 6, cancel the 5 paid ones,
-// keep the free one" nets the user nothing.
-//---------------
-
 const USER_ID = 'user-1';
 const SCHEDULE = 'sched-1';
 const BATCH = '22222222-2222-4222-8222-222222222222';
@@ -59,8 +52,6 @@ describe('refundsAfterClawback', () => {
   });
 
   it('withholds the free video discount when the batch drops below 6 face videos', async () => {
-    // After the delete: 4 paid + the free one remain (the cancelled paid
-    // slot is already gone).
     const remaining = [
       ...['1', '2', '3', '4'].map((id) => batchSlot(id)),
       batchSlot('free', { charged_tokens: 0, discount_tokens: 2 }),
@@ -82,7 +73,6 @@ describe('refundsAfterClawback', () => {
     ]);
     expect(recharges?.[0]?.take).toBe(2);
     expect(recharges?.[0]?.discount_key).toContain(':slot:free:discount');
-    // The free video is paid again: its discount moved into its charge.
     expect(fake.tables.scheduled_posts?.find((row) => row.id === 'free')).toMatchObject({
       charged_tokens: 2,
       discount_tokens: 0,
@@ -97,14 +87,12 @@ describe('refundsAfterClawback', () => {
     const fake = createFakeSupabase({ tables: { scheduled_posts: rows } });
     let refunded = 0;
     for (const id of ['1', '2', '3', '4', '5']) {
-      // Simulate the route's delete, then ask for the refund.
       const table = fake.tables.scheduled_posts ?? [];
       table.splice(table.findIndex((row) => row.id === id), 1);
       const result = await settle(fake, [removed(id, 2)]);
       if (!result.ok) throw new Error('clawback failed');
       refunded += result.refundBySlot.get(id) ?? 0;
     }
-    // Paid 10 for 6 videos; 5 cancelled; the one left is no longer free.
     expect(refunded).toBe(8);
     expect(fake.tables.scheduled_posts).toEqual([
       expect.objectContaining({ id: 'free', charged_tokens: 2, discount_tokens: 0 }),
@@ -150,8 +138,6 @@ describe('refundsAfterClawback', () => {
       batchSlot('free', { charged_tokens: 0, discount_tokens: 2 }),
     ];
     const fake = createFakeSupabase({ tables: { scheduled_posts: remaining } });
-    // The other cancel's update lands after our read, inside the settlement
-    // RPC: the predicate must see the moved discount and skip the recharge.
     const original = fake.client.rpc.bind(fake.client);
     fake.client.rpc = async (name: string, params: Record<string, unknown>) => {
       const free = fake.tables.scheduled_posts?.find((row) => row.id === 'free');
@@ -160,7 +146,6 @@ describe('refundsAfterClawback', () => {
     };
     const result = await settle(fake, [removed('5', 2)]);
     expectNet(result, [['5', 2]], ['5']);
-    // The concurrent writer's values stand: nothing was clawed back twice.
     expect(fake.tables.scheduled_posts?.find((row) => row.id === 'free')).toMatchObject({
       charged_tokens: 2,
       discount_tokens: 0,
@@ -195,7 +180,6 @@ describe('refundsAfterClawback', () => {
       { message: 'write down' },
       expect.objectContaining({ batchId: BATCH, userId: USER_ID }),
     );
-    // The free slot is untouched: a failed settlement must not re-charge it.
     expect(fake.tables.scheduled_posts?.find((row) => row.id === 'free')).toMatchObject({
       charged_tokens: 0,
       discount_tokens: 2,

@@ -20,8 +20,6 @@ from app.services.fill_schedule.metadata import metadata_for, validate_publish_p
 
 
 def _repo_root() -> Path:
-    # Walk up instead of counting parents: mutmut runs the suite from a
-    # copied tree (mutants/), which shifts every fixed parent index.
     for parent in Path(__file__).resolve().parents:
         if (parent / "apps/web/lib/telegram.ts").is_file():
             return parent
@@ -63,7 +61,6 @@ class PublishTelegramModuleTest(unittest.TestCase):
             validate(publish_telegram.TelegramMetadata(caption="  ", account_ids=("-100",)))
         with self.assertRaisesRegex(ValueError, "telegram caption exceeds 1024 characters"):
             validate(publish_telegram.TelegramMetadata(caption="a" * 1025, account_ids=("-100",)))
-        # At the limit is valid.
         validate(publish_telegram.TelegramMetadata(caption="a" * 1024, account_ids=("-100",)))
 
     def test_account_ids_are_normalized_to_a_tuple(self) -> None:
@@ -107,7 +104,6 @@ class TelegramPublisherWiringTest(unittest.TestCase):
         self.assertEqual(field_name, "video")
 
     def test_validate_publish_metadata_accepts_telegram_without_a_gate_here(self) -> None:
-        # Telegram's gate is fill_schedule.metadata.validate_publish_plan.
         upload_publisher.validate_publish_metadata(["telegram"], None, None)
 
 

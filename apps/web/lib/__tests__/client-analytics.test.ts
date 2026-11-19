@@ -1,7 +1,3 @@
-//---------------
-// trackClientEvent — browser product analytics via posthog-js.
-//---------------
-
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 vi.mock('posthog-js', () => ({

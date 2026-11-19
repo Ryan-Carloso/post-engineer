@@ -21,7 +21,6 @@ function metric(postId: string, provider: string, views: number | null, extra: P
   return { postId, provider, views, likes: null, comments: null, averageViewDurationSeconds: null, ...extra };
 }
 
-/** One YouTube metric per video; `aggressiveWins` pairs go to the aggressive hook. */
 function youtubeMetrics(pairs: number, aggressiveWins: number): ExperimentMetricFact[] {
   const rows: ExperimentMetricFact[] = [];
   for (let pair = 1; pair <= pairs; pair += 1) {

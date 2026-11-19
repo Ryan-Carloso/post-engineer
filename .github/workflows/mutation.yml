@@ -145,6 +145,13 @@ jobs:
               -- 'apps/${{ matrix.app }}/**/*.ts' 'apps/${{ matrix.app }}/**/*.tsx' \
               | grep -v '/__tests__/' | grep -v '/cypress/' \
               | grep -vE '\.(test|cy)\.tsx?$' | grep -vE '\.gen\.tsx?$' || true)"
+            # Drop files whose code tokens match the base (comment-only
+            # changes produce the same mutants as main). On any filter
+            # error, keep the unfiltered list: the scope only widens.
+            if [ -n "$files" ]; then
+              filtered="$(printf '%s\n' "$files" | node .github/scripts/ui-gates/code-changed.mjs \
+                --base "origin/${{ github.base_ref }}" --head HEAD)" && files="$filtered"
+            fi
             # Strip the app prefix for Stryker's working directory.
             files="$(echo "$files" | sed "s|^apps/${{ matrix.app }}/||" | paste -sd ',' -)"
           fi
@@ -326,10 +333,18 @@ jobs:
           set -uo pipefail
           files_json="[]"
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            files_json="$(git diff --name-only --diff-filter=ACMR \
+            changed="$(git diff --name-only --diff-filter=ACMR \
               "origin/${{ github.base_ref }}...HEAD" \
               -- 'apps/engine/app/**/*.py' \
-              | sed 's|^apps/engine/||' \
+              | sed 's|^apps/engine/||')"
+            # Drop files whose AST matches the base (comment-only changes
+            # produce the same mutants as main). On any filter error, keep
+            # the unfiltered list: the scope only widens.
+            if [ -n "$changed" ]; then
+              filtered="$(printf '%s\n' "$changed" | python3 apps/engine/scripts/ast_changed.py \
+                --base "origin/${{ github.base_ref }}" --head HEAD --prefix apps/engine/)" && changed="$filtered"
+            fi
+            files_json="$(printf '%s\n' "$changed" \
               | jq -R -s -c 'split("\n") | map(select(length > 0))')"
           elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             if [ -n "${{ inputs.scope }}" ]; then

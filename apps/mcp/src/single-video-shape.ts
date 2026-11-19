@@ -1,7 +1,3 @@
-// Shapes for the singular MCP-first tools (Phase 1): generate_video
-// and check_script (action: validate). Kept in a new module so tools.ts stays under the
-// file-size ratchet; intent-video.ts and intent-content.ts register the
-// tools with the handlers in tools-single-video.ts and generate-video.ts.
 import { z } from 'zod';
 import { isEnglishLanguage, ONLY_ENGLISH_VIDEOS_MESSAGE } from './language.js';
 import { GeneratePersonaVideoOptionsShape } from './schedule-shapes.js';
@@ -36,7 +32,6 @@ export const ScriptSegmentShape = {
     .describe('Photos for this segment. Each item is mediaId (from media (action: upload)) or url (a public image URL). One image per ~3s of speech (~8 words); a 60s video needs ~20 images, split across segments (max 30). Full lip sync: max 6 images total. Each photo shows while its share of the segment is spoken: full frame on faceless videos, or a framed panel (~38% of the frame) at the bottom, face still showing. Optional duration (0.5-6s): on-screen seconds for a full-frame photo; omit for the 2s default. Optional overlay: an info card (title, subtitle, badge), e.g. a place name, address and price; a spoken caption sits above it, never on the photo.'),
 };
 
-/** Paired A/B experiment link (issue #476): one variant of one pair. */
 export const ExperimentLinkShape = z
   .object({
     experimentId: z.string().uuid().describe('Experiment id from experiments (action: create) / experiments (action: list).'),
@@ -57,10 +52,6 @@ export const GeneratePersonaVideoShape = {
     .max(12, 'At most 12 segments per video')
     .describe('The complete script as segments (takes): first hook, then content takes in order. Total 60-200 words, content at least 30, hook 25-40 words before TTS. The hook must end with terminal punctuation. A CTA is just a content take, placed anywhere. No LLM expands this script.'),
   title: z.string().min(1, 'title must be a non-empty string').max(100, 'title must be at most 100 characters').describe('Video title: the slot label sent to the web route (one call is one video).'),
-  // Agent-supplied video description (issue #542 follow-up): REQUIRED —
-  // the publish copy, sent top-level to the web route. The 5000-char cap
-  // mirrors the engine's VideoParams.video_description max_length. There
-  // is no fallback: a missing or blank description is rejected.
   description: z
     .string()
     .trim()
@@ -110,9 +101,6 @@ export const GeneratePersonaVideoShape = {
   options: z.object(GeneratePersonaVideoOptionsShape).optional().describe('Generation options applied to this video.'),
   idempotencyKey: z.string().min(1).optional().describe('Idempotency key: retrying the call with the same key returns the original schedule (replayed: true) instead of generating again.'),
   experiment: ExperimentLinkShape.optional().describe('Join a paired A/B experiment (experiments (action: create)): this video is one variant of one pair. The server rejects it when the pair partner differs in: the same providers and accounts, the same title, voice (id and audio URL), video type, video aspect and layout, paragraph number, face quality, language, niche and CTA text, and identical content segments, with a different hook. The pinned options.imageId is not stored, so it is not compared: pass the same imageId (or none) to both videos yourself. Prefer experiments (action: add_pair), which creates both videos of a pair.'),
-  // Telemetry-only: the recipe the script came from. Never forwarded in the
-  // request body (handleGeneratePersonaVideo builds it field by field);
-  // recipe-session.ts sends it as the X-MCP-Recipe header.
   recipe: z
     .string()
     .regex(RECIPE_SLUG_PATTERN, 'recipe must be a recipe slug from prompts (action: list) (lowercase letters, digits and hyphens)')
@@ -121,9 +109,6 @@ export const GeneratePersonaVideoShape = {
 };
 
 export const GeneratePersonaVideoSchema = z.object(GeneratePersonaVideoShape).superRefine((value, ctx) => {
-  // options itself is optional in the shape, but the mode is not: a call
-  // with no options carries no videoType, and the web would reject it.
-  // Fail here, locally, with the same values + costs message instead.
   if (value.options === undefined) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,

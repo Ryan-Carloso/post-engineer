@@ -1,8 +1,3 @@
-//---------------
-// Account card display diagnostics — the facts PostHog gets so a clipped
-// name can be told apart from a missing one.
-//---------------
-
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -122,8 +117,6 @@ describe('buildAccountCardDisplayReport', () => {
   });
 
   it('flags a blocked image host, a failed load, and an expired Instagram URL without sending the URL', () => {
-    // The facebook CDN hosts are allowed (next.config.ts matches `**.fbcdn.net`),
-    // so an unknown host is what the blocked flag covers.
     const url = 'https://scontent.xx.fbcdn.net/v/pic.jpg?oe=1&access_token=secret-token';
     const report = buildAccountCardDisplayReport(input({
       provider: 'instagram',

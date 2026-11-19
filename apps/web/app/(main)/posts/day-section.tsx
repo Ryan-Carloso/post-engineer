@@ -18,20 +18,9 @@ import {
   calendarGroupOf,
 } from './status';
 
-// The shared empty-state block lives in components/ui (one definition for
-// every list and panel); re-exported here so the posts screens keep their
-// existing import path.
 export { EmptyState } from '@/components/ui/empty-state';
 
-// The recipes hub is where the API key and the agent setup prompt live,
-// so New post and the failure notice both link there.
 export const CREATE_POSTS_HREF = '/recipes';
-
-//---------------
-// New post is a link to the recipes hub, not a button: the web app has
-// no create form. A post is created when the user's agent sends it
-// through the MCP server.
-//---------------
 
 export function NewPostButton({ className, testId }: { className?: string; testId?: string }) {
   const { t } = useI18n();
@@ -45,16 +34,6 @@ export function NewPostButton({ className, testId }: { className?: string; testI
   );
 }
 
-//---------------
-// The posts calendar's states around the grid: the summary of the selected
-// day and the empty states (account, month, day, filter). Presentational —
-// the page decides which one shows. There is no create form: New post
-// links to the recipes hub, where the MCP setup lives.
-//---------------
-
-// An account with no post in any month (no schedule yet, or schedules
-// that never produced a post). The page keeps the filters and a faint
-// calendar, and shows this in the side panel.
 export function AccountEmptyState() {
   const { t } = useI18n();
   return (
@@ -67,22 +46,11 @@ export function AccountEmptyState() {
   );
 }
 
-//---------------
-// DayListRow — one post as a single summarized line for the mobile week
-// panel (Alternative A): time, persona, title and the status chip, no
-// thumbnail, no progress bar — the chip carries the progress
-// ("Generating video · 62%"). The whole row opens the post detail, like
-// PostRow's card. The desktop day list keeps PostRow's card.
-//---------------
-
 export function DayListRow({ slot, joins }: { slot: ScheduledSlot; joins: PostJoins }) {
   const { t, locale } = useI18n();
   const schedule = joins.scheduleById.get(slot.scheduleId);
-  // Same persona fallback as SlotCard: a post without a persona never had
-  // one, a missing name is a removed one.
   const personaId = schedule?.personaId ?? null;
   const personaName = personaId === null ? t('posts.noPersona') : joins.personaNameById.get(personaId) ?? t('posts.personaFallback');
-  // A published or failed post shows when it actually went out, like PostRow.
   const isHistory = slot.status === 'published' || slot.status === 'failed';
   const shownAt = isHistory && slot.publishedAt ? slot.publishedAt : slot.slotAt;
   const group = calendarGroupOf(slot.status);
@@ -111,11 +79,6 @@ export function DayListRow({ slot, joins }: { slot: ScheduledSlot; joins: PostJo
   );
 }
 
-// What the list under the calendar shows when it has no posts, scoped like
-// its heading: a whole month (the heading names the month) that is empty or
-// emptied by a filter, or one empty day in a month that has posts (the
-// heading names the day). Every state offers a next step that is not a
-// dead end: clear the filters, go back to today, or schedule posts.
 export function DayEmptyState({
   reason,
   monthLabel,

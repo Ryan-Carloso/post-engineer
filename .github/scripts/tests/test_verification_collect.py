@@ -229,8 +229,6 @@ def test_deleted_test_file_fails_while_product_code_remains_and_warns_when_it_is
     gone = analyze(path, "D", base, exists=lambda _item: False)
     assert fails(gone) == []
     assert any(finding.code == "tests-deleted-unmapped" for finding in gone)
-    # The mapper only guesses by name: test_asgi_health.py maps to a
-    # module that does not exist, so deleting it must still warn.
     asgi = analyze("apps/engine/test/test_asgi_health.py", "D", base, exists=lambda _item: False)
     assert any(finding.code == "tests-deleted-unmapped" for finding in asgi)
 
@@ -429,7 +427,6 @@ def test_cli_flags_a_skip_and_a_rename_passes(tmp_path):
     _git(repo, ["commit", "-m", "rename"])
     renamed_head = _git(repo, ["rev-parse", "HEAD"]).strip()
     renamed_out = tmp_path / "rename.json"
-    # Grade only the rename commit against its parent, not the earlier skip.
     parent = _git(repo, ["rev-parse", "HEAD~1"]).strip()
     code = collect.main([
         "--repo", str(repo),

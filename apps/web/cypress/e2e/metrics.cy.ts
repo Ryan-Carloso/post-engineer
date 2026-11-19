@@ -1,10 +1,3 @@
-//---------------
-// E2E: the metrics dashboard renders the caller's per-video snapshots
-// as totals and a list sorted by views, with the API stubbed at the
-// network boundary so no real account data is needed. Also drives the
-// Filters Sheet, the window Tabs and the empty/error states.
-//---------------
-
 const PERSONA_ID = '11111111-2222-4333-8444-555555555555';
 
 const PUBLISHED_AT = '2026-10-20T12:00:00Z';
@@ -72,41 +65,30 @@ describe('metrics dashboard', () => {
     cy.contains('h1', 'Métricas').should('be.visible');
     cy.contains('Medições').should('be.visible');
     cy.contains('Uma por vídeo por rede').should('be.visible');
-    // Totals, not averages: 1200 + 300 views, engagement 90 + 12 + 4
-    // + 10 + 1 + 0 = 117 (nulls skipped).
     cy.contains('1.500').should('be.visible');
     cy.contains('117').should('be.visible');
-    // The default view is the chart; switch to the list to see rows.
     cy.get('.recharts-wrapper').should('exist');
     cy.contains('button', 'Lista').click();
     cy.get('.recharts-wrapper').should('not.exist');
-    // Rows sorted by views: the 1200-view video first, then 300, then n/d.
     cy.contains('myth-busting').should('be.visible');
     cy.contains('YouTube · 21 de out. de 2026').scrollIntoView().should('be.visible');
     cy.contains('Sem ângulo').should('not.exist');
-    // The truncated note and the not-reported counters render too.
     cy.contains('Mostrando só as').scrollIntoView().should('be.visible');
     cy.contains('n/d').scrollIntoView().should('be.visible');
 
-    // Window Tabs re-fetch (24h is the default window, so switch to 7
-    // days to force a refetch).
     cy.contains('button', '7d').click();
     cy.wait('@getMetrics');
-    // 28d (final YouTube Analytics values) is a third window.
     cy.contains('button', '28d').click();
     cy.wait('@getMetrics').its('request.url').should('include', 'window=28d');
 
-    // Network filter through the Filters Sheet.
     cy.contains('button', 'Filtros').click();
     cy.get('button[aria-label="Rede"]').click();
     cy.get('[role="option"]').contains('Instagram').click();
     cy.contains('button', 'Aplicar filtros').click();
     cy.wait('@getMetrics').its('request.url').should('include', 'provider=instagram');
-    // The applied filter shows as a chip; clearing removes it.
     cy.contains('button', 'Limpar filtros').click();
     cy.contains('button', 'Limpar filtros').should('not.exist');
 
-    // Persona filter through the Sheet's searchable Combobox.
     cy.contains('button', 'Filtros').click();
     cy.get('button[aria-label="Persona"]').click();
     cy.get('[role="option"]').contains('Alpha').click();
@@ -121,22 +103,16 @@ describe('metrics dashboard', () => {
     cy.visit('/metrics');
     cy.wait('@getMetrics');
 
-    // The chart is the default view: no toggle click needed.
     cy.get('.recharts-wrapper').should('have.length', 3);
     cy.contains('Ao longo do tempo').scrollIntoView().should('be.visible');
     cy.contains('Distribuição de views').scrollIntoView().should('be.visible');
     cy.contains('Vídeos mais vistos').scrollIntoView().should('be.visible');
-    // The charts say they cover truncated data and skip the null row.
     cy.contains('Os gráficos cobrem só as').scrollIntoView().should('be.visible');
     cy.contains('1 vídeo sem dados de views').scrollIntoView().should('be.visible');
-    // The views-by-day area and the top bars render (one provider only,
-    // so the breakdown is a donut, not bars).
     cy.get('.recharts-wrapper').should('have.length', 3);
     cy.get('.recharts-wrapper').last().find('.recharts-bar-rectangle').first().click();
-    // Clicking a bar returns to the list on the clicked video's row.
     cy.contains('myth-busting').scrollIntoView().should('be.visible');
     cy.contains('button', 'Lista').should('have.attr', 'data-state', 'active');
-    // The bar click only peeks at the list: the saved preference is untouched.
     cy.window().then((win) => {
       expect(win.localStorage.getItem('metrics-view-mode')).to.not.equal('list');
     });
@@ -152,13 +128,11 @@ describe('metrics dashboard', () => {
     });
     cy.visit('/metrics');
     cy.wait('@getMetrics');
-    // Retention lives on the list rows: switch over from the default chart view.
     cy.contains('button', 'Lista').click();
     cy.contains('641 views engajadas').scrollIntoView().should('be.visible');
     cy.contains('Ficaram para assistir (derivado: views engajadas / views)').should('be.visible');
     cy.contains('64,1%').should('be.visible');
     cy.contains('Provisório').should('be.visible');
-    // The banner sits above the rows; bring it back after scrolling the list.
     cy.contains('Reconecte o YouTube para ativar as estatísticas de retenção').scrollIntoView().should('be.visible');
     cy.contains('a', 'Ir para Contas').should('have.attr', 'href', '/accounts');
   });
@@ -184,16 +158,11 @@ describe('metrics dashboard', () => {
 
     cy.visit('/metrics');
     cy.wait('@getMetrics');
-    // The retention curve lives in the list view: switch over from the
-    // default chart view, where its charts would otherwise count here.
     cy.contains('button', 'Lista').click();
-    // No chart renders until the curve is opened.
     cy.get('.recharts-wrapper').should('have.length', 0);
-    // Nothing is read from Analytics until the user asks for the curve.
     cy.get('@getCurve.all').should('have.length', 0);
     cy.contains('button', 'Curva de retenção').scrollIntoView().click();
     cy.wait('@getCurve');
-    // Only the retention line chart renders now.
     cy.get('.recharts-wrapper').should('have.length', 1);
     cy.get('.recharts-wrapper').last().trigger('mousemove', { clientX: 200, clientY: 90 });
     cy.contains('Público assistindo:').should('be.visible');
@@ -223,8 +192,6 @@ describe('metrics dashboard', () => {
     cy.contains('button', 'Lista').click();
     cy.contains('Não foi possível carregar as métricas', { timeout: 15_000 }).scrollIntoView().should('be.visible');
 
-    // Flip the stub inside the command queue: a plain assignment here
-    // would run synchronously before any queued command executes.
     cy.then(() => {
       fail = false;
     });

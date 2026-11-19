@@ -4,13 +4,6 @@ import type { ReactNode } from 'react';
 import { useI18n } from '@/lib/i18n/provider';
 import { whatsappUrl } from '@/lib/whatsapp';
 
-//---------------
-// WhatsAppFloatingButton — persistent access to WhatsApp support.
-// Rendered in the root layout, shown on all pages (landing, login,
-// logged-in area). Raised on mobile so it does not cover the logged-in
-// area's bottom navigation. Renders nothing when the support number is
-// not configured (NEXT_PUBLIC_WHATSAPP_NUMBER unset).
-//---------------
 export default function WhatsAppFloatingButton(): ReactNode {
   const { t } = useI18n();
   const message = t('pricing.whatsappHelp');

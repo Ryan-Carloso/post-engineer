@@ -2,9 +2,6 @@
 
 import { useOAuthFlow } from './oauth-flow';
 
-//---------------
-// usePinterestOAuth — Pinterest OAuth flow.
-//---------------
 export function usePinterestOAuth() {
   return useOAuthFlow({
     startUrl: '/api/pinterest-auth/start',

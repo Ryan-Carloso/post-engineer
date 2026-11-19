@@ -7,11 +7,6 @@ import { mcpTelemetryHeaders } from '../analytics.js';
 import { actionDescription, actionShape, byAction, offeredSpecs } from '../action-tool.js';
 import type { McpToolResponse } from '../tools-call.js';
 
-// Issue #566: one tool, many actions. The tools/list schema is one flat
-// object (a root union advertises no fields), and a strict per-action schema
-// re-parses the arguments inside the handler so a wrong-branch field fails
-// loudly, naming the action and the field.
-
 const SPECS = {
   list: { limit: z.number().int().min(1).max(10).optional().describe('Max rows.') },
   create: { name: z.string().min(1).describe('Display name.'), limit: z.number().int().min(1).max(10).optional().describe('Max rows.') },

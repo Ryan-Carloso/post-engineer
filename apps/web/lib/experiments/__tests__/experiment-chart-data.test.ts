@@ -78,7 +78,6 @@ describe('variantMetricTotals', () => {
   });
 
   it('averages non-null view duration, never drawing nulls as 0', () => {
-    // A: (10 + 12) / 2 = 11, one null excluded; B: 20 / 1.
     expect(variantMetricTotals(COMPARISONS, A, 'averageViewDurationSeconds').total).toBe(11);
     expect(variantMetricTotals(COMPARISONS, B, 'averageViewDurationSeconds').total).toBe(14);
   });

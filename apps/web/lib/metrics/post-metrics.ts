@@ -7,31 +7,9 @@ import { isMetricsWindow, type AnalyticsStatus, type MetricsWindow } from './met
 import { findReopenedPosts } from './post-metrics-reopen';
 import { classifySnapshotFailure, snapshotFailureDetails } from './snapshot-failure';
 
-//---------------
-// post-metrics — per-video performance snapshots for A/B content tests.
-//
-// Hourly (in-app scheduler -> runPostMetricsTick in lib/scheduler-jobs.ts), every published slot is
-// snapshotted three times: 24-48h after publish ('24h'), 168-192h after
-// publish ('7d'), and 672-696h after publish ('28d', when YouTube
-// Analytics numbers are final). A window that was missed (engine down, token
-// expired for the whole 24h) is skipped, never back-filled with a late
-// number that would not be comparable. The windows live in SQL
-// (public.find_post_metrics_due, migrations 025 and 039).
-//
-// Every provider in SOCIAL_PROVIDERS is measured: TARGET_EXTRACTORS here
-// and COUNTER_FETCHERS (provider-counters.ts) are exhaustive Records, so a
-// new provider does not typecheck until it is measured too.
-//
-// Pure orchestration: the store and the provider fetchers are injected so
-// tests never reach Supabase, the engine, or a social API.
-//---------------
-
 export type { MetricsWindow };
 export type MeasuredProvider = SocialProvider;
 
-// Bound the fan-out of one run: each post costs one engine read plus one
-// provider call per published video. Which posts are due (the 24h/7d/28d
-// windows) is decided in SQL: public.find_post_metrics_due (migration 039).
 export const MAX_POSTS_PER_RUN = 50;
 export const RUN_TIME_BUDGET_MS = 45_000;
 
@@ -40,7 +18,6 @@ export interface MetricsCounters {
   likes: number | null;
   comments: number | null;
   saves: number | null;
-  // YouTube only: the Analytics API half of the snapshot (youtube-retention.ts).
   retention?: RetentionSnapshot;
 }
 
@@ -51,7 +28,6 @@ export interface RetentionSnapshot {
   averageViewDurationSeconds: number | null;
   averageViewPercentage: number | null;
   contentType: string | null;
-  // YYYY-MM-DD range the Analytics numbers cover; null when not queried.
   startDate: string | null;
   endDate: string | null;
 }
@@ -66,14 +42,11 @@ export interface DuePost {
   userId: string;
   taskId: string;
   window: MetricsWindow;
-  // `${provider}:${externalId}` of the videos already snapshotted for this
-  // window: a partially collected post only retries the missing videos.
   collectedKeys: Set<string>;
 }
 
 export interface MetricsRow extends MetricsCounters {
   postId: string;
-  // The engine's script angle for the post (null when none was recorded).
   scriptAngle: string | null;
   userId: string;
   provider: MeasuredProvider;
@@ -88,7 +61,6 @@ export interface MetricsTarget {
   externalId: string;
 }
 
-/** The snapshot's experiment link, filled by the post_metrics trigger (migration 041). */
 export interface ExperimentTag {
   experimentId: string | null;
   variantId: string | null;
@@ -99,10 +71,6 @@ export interface PostMetricsDeps {
   listDuePosts: (now: Date, limit: number) => Promise<DuePost[]>;
   fetchTaskSource: (taskId: string, userId: string) => Promise<{ publishResults: unknown[]; scriptAngle: string | null }>;
   fetchCounters: (userId: string, target: MetricsTarget, context: CounterContext) => Promise<MetricsCounters>;
-  // Resolves a target's account before fetching: a placeholder YouTube
-  // account id ('unknown' from the old OAuth flow) maps to the user's
-  // connected account, or null when no connected account owns the video —
-  // a terminal skip, never a failure that keeps the window open.
   resolveTarget: (userId: string, target: MetricsTarget) => Promise<MetricsTarget | null>;
   saveMetrics: (row: MetricsRow) => Promise<ExperimentTag>;
   markDone: (postId: string, window: MetricsWindow) => Promise<void>;
@@ -117,7 +85,6 @@ export interface PostMetricsReport {
   truncated: boolean;
 }
 
-// The 039 columns: null for every non-YouTube row (no retention snapshot).
 function retentionColumns(retention: RetentionSnapshot | undefined): Record<string, string | number | null> {
   return {
     analytics_status: retention?.status ?? null,
@@ -135,10 +102,6 @@ export function targetKey(target: Pick<MetricsTarget, 'provider' | 'externalId'>
   return `${target.provider}:${target.externalId}`;
 }
 
-//---------------
-// youtubeVideoId — the video id from a recorded YouTube link
-// (watch?v=, youtu.be/, /shorts/). Null when the link is not YouTube.
-//---------------
 export function youtubeVideoId(link: string): string | null {
   let url: URL;
   try {
@@ -160,8 +123,6 @@ function readString(record: Record<string, unknown>, key: string): string | null
   return typeof value === 'string' && value !== '' ? value : null;
 }
 
-// TARGET_EXTRACTORS — the provider video id recorded in one publish_results
-// entry (see lib/publish-links.ts for the per-provider shapes).
 const TARGET_EXTRACTORS: Record<MeasuredProvider, (record: Record<string, unknown>) => string | null> = {
   youtube: (record) => {
     const link = readString(record, 'videoUrl');
@@ -173,14 +134,9 @@ const TARGET_EXTRACTORS: Record<MeasuredProvider, (record: Record<string, unknow
   threads: (record) => readString(record, 'postId'),
   facebook: (record) => readString(record, 'postId'),
   pinterest: (record) => readString(record, 'postId'),
-  // The 3Speak publish result stores the video id as postId, like the
-  // other non-YouTube providers (see lib/threespeak.ts).
   '3speak': (record) => readString(record, 'postId'),
   rumble: (record) => readString(record, 'postId'),
-  // Same shape as the other non-YouTube providers: the publish result
-  // stores the video id as postId.
   fanvue: (record) => readString(record, 'postId'),
-  // The Telegram publish result stores the message id as postId.
   telegram: (record) => readString(record, 'postId'),
 };
 
@@ -190,15 +146,9 @@ function isMeasuredProvider(value: unknown): value is MeasuredProvider {
 
 export interface MetricsTargetsResult {
   targets: MetricsTarget[];
-  // Providers in publish_results this collector does not know: reported,
-  // never silently skipped.
   unknownProviders: string[];
 }
 
-//---------------
-// metricsTargets — the measurable videos in an engine task's
-// publish_results: every published entry with an account and a video id.
-//---------------
 export function metricsTargets(publishResults: unknown[]): MetricsTargetsResult {
   const result: MetricsTargetsResult = { targets: [], unknownProviders: [] };
   for (const entry of publishResults) {
@@ -217,11 +167,6 @@ export function metricsTargets(publishResults: unknown[]): MetricsTargetsResult 
   return result;
 }
 
-//---------------
-// collectPostMetrics — one cron run. Per-video failures are logged and
-// reported, never thrown: one expired token must not block every other
-// user's snapshot. The next hourly run retries while the window is open.
-//---------------
 export async function collectPostMetrics(deps: PostMetricsDeps): Promise<PostMetricsReport> {
   const startedAt = deps.now();
   const report: PostMetricsReport = { checked: 0, recorded: 0, errors: [], truncated: false };
@@ -255,18 +200,12 @@ export async function collectPostMetrics(deps: PostMetricsDeps): Promise<PostMet
     }
 
     let failed = false;
-    // A token without yt-analytics.readonly is not terminal: leave the
-    // window open so the next hourly run retries with the new token after
-    // the user reconnects. The Data API counters are already saved.
     let missingAnalyticsScope = false;
     for (const target of targets) {
       if (post.collectedKeys.has(targetKey(target))) continue;
       try {
         const resolved = await deps.resolveTarget(post.userId, target);
         if (resolved === null) {
-          // Terminal skip: no connected account owns this video, so it
-          // can never be measured — report it once and let the window
-          // close instead of retrying it every hour.
           logger.warn('[post-metrics] snapshot skipped', {
             postId: post.id,
             provider: target.provider,
@@ -281,14 +220,6 @@ export async function collectPostMetrics(deps: PostMetricsDeps): Promise<PostMet
           postId: post.id, userId: post.userId, window: post.window, scriptAngle, ...resolved, ...counters,
         });
         report.recorded += 1;
-        // script_angle lets PostHog break performance down by the angle the
-        // script used (the same value the dashboard filters on). Deliberate
-        // exception to analytics.ts's "ids, counts, validated enums" rule:
-        // the angle is free-text model output, and breaking performance
-        // down by it is the point of collecting it. trackApiEvent applies
-        // scrubSecrets (key-name redaction), then redacts credential
-        // fragments from string values and caps them at 500 chars before
-        // capture.
         deps.track('post_metrics_collected', {
           task_id: post.taskId,
           script_angle: scriptAngle,
@@ -302,7 +233,6 @@ export async function collectPostMetrics(deps: PostMetricsDeps): Promise<PostMet
           saves: counters.saves,
           engaged_views: counters.retention?.engagedViews ?? null,
           analytics_status: counters.retention?.status ?? null,
-          // Paired A/B split (issue #476): ids only, never variant names.
           experiment_id: tag.experimentId,
           variant_id: tag.variantId,
           experiment_pair: tag.experimentPair,
@@ -312,8 +242,6 @@ export async function collectPostMetrics(deps: PostMetricsDeps): Promise<PostMet
         const kind = classifySnapshotFailure(error);
         const { status, metaCode } = snapshotFailureDetails(error);
         if (kind === 'token_dead') {
-          // Dead token: keep the window open so a later run measures
-          // the video after the user reconnects the account.
           logger.warn('[post-metrics] snapshot failed: token dead', {
             postId: post.id,
             provider: target.provider,
@@ -324,8 +252,6 @@ export async function collectPostMetrics(deps: PostMetricsDeps): Promise<PostMet
           report.errors.push(`${post.id}/${target.provider}: snapshot failed`);
           failed = true;
         } else if (kind === 'media_gone') {
-          // Deleted media: terminal skip, reusing the "snapshot skipped"
-          // pattern — report once and let the window close.
           logger.warn('[post-metrics] snapshot skipped', {
             postId: post.id,
             provider: target.provider,
@@ -347,9 +273,6 @@ export async function collectPostMetrics(deps: PostMetricsDeps): Promise<PostMet
         }
       }
     }
-    // Every video is in (or there is none to measure): stop re-reading this
-    // post for the window. A failed video and a missing Analytics scope keep
-    // it open for the next run.
     if (!failed && !missingAnalyticsScope) {
       try {
         await deps.markDone(post.id, post.window);
@@ -363,16 +286,11 @@ export async function collectPostMetrics(deps: PostMetricsDeps): Promise<PostMet
   return report;
 }
 
-//---------------
-// createPostMetricsStore — Supabase-backed store (service role: the cron
-// has no user session; every row carries the post owner's user_id).
-//---------------
 export function createPostMetricsStore(
   supabase: SupabaseClient,
 ): Pick<PostMetricsDeps, 'listDuePosts' | 'saveMetrics' | 'markDone'> {
   return {
     async listDuePosts(now, limit) {
-      // supabase-js rpc() never throws: the error must be checked.
       const { data, error } = await supabase.rpc('find_post_metrics_due', {
         p_now: now.toISOString(),
         p_limit: limit,
@@ -402,9 +320,6 @@ export function createPostMetricsStore(
         });
         seen.add(`${row.post_id}:${window}`);
       }
-      // The re-open budget counts against what this run processes
-      // (MAX_POSTS_PER_RUN), not the +1 probe limit: a re-opened post
-      // appended past MAX would be dropped by collectPostMetrics' slice.
       const reopened = await findReopenedPosts(
         supabase,
         now,
@@ -433,8 +348,6 @@ export function createPostMetricsStore(
         },
         { onConflict: 'post_id,provider,external_id,metrics_window' },
       )
-        // The trigger fills the experiment link; reading it back here
-        // saves a second query per snapshot.
         .select('experiment_id, variant_id, experiment_pair')
         .single();
       if (error) throw new Error(`metrics write failed: ${error.message}`);
