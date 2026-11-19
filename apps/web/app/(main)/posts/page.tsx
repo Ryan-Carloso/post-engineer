@@ -300,8 +300,10 @@ export default function PostsPage() {
       ? t('posts.calendarDayPostCountOne')
       : t('posts.calendarDayPostCountMany', { count: selectedSlots.length });
   // The panel is hidden on a phone until a day is tapped; everywhere else
-  // it always shows.
-  const showDaySection = !mobileWeek || mobilePanelOpen;
+  // it always shows. Account empty is not a tappable day — the calendar is
+  // muted and the sidebar mini calendar is desktop-only, so no tap could
+  // ever open it: its panel shows on a phone too.
+  const showDaySection = !mobileWeek || mobilePanelOpen || isAccountEmpty;
   // Only the weeks the month spans, like the calendar itself.
   const monthWeeks = gridDays.filter((week) => week.some((day) => day.inMonth)).length;
 

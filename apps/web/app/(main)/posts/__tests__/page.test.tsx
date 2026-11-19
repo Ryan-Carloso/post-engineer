@@ -1230,6 +1230,22 @@ describe('PostsPage week view', () => {
     expect(document.querySelector('section[aria-live="polite"]')).not.toBeInTheDocument();
   });
 
+  it('shows the account empty state on a narrow screen without a tap, so an empty account is never a dead end', async () => {
+    // An empty account mutes the calendar (no tap registers, Today disabled)
+    // and the sidebar mini calendar is desktop-only: without this, the panel
+    // could never open on a phone and the New post CTA would be unreachable.
+    mockQueries({ schedules: [], range: [] });
+    vi.stubGlobal('matchMedia', vi.fn(mobileMatchMedia));
+    render(<PostsPage />);
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'posts.calendarPrevWeek' })).toBeInTheDocument(),
+    );
+    expect(screen.getByText('posts.accountEmptyTitle')).toBeInTheDocument();
+    const accountEmpty = screen.getByText('posts.accountEmptyTitle').closest('[data-empty-state]');
+    expect(within(accountEmpty as HTMLElement).getByRole('link', { name: 'posts.newPostAction' })).toBeInTheDocument();
+  });
+
   it('puts the day panel below the week grid on a narrow screen, once a day is tapped', async () => {
     vi.stubGlobal('matchMedia', vi.fn(mobileMatchMedia));
     render(<PostsPage />);
