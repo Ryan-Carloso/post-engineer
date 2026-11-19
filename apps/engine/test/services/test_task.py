@@ -184,11 +184,6 @@ class TestTaskService(unittest.TestCase):
 
         try:
             with (
-                patch.object(
-                    tm.config,
-                    "app",
-                    dict(tm.config.app, subtitle_provider="whisper"),
-                ),
                 patch.object(tm.subtitle, "create", side_effect=fake_whisper_create) as create,
                 patch.object(tm.subtitle, "correct") as correct,
             ):
@@ -206,13 +201,12 @@ class TestTaskService(unittest.TestCase):
         create.assert_called_once_with(audio_file=audio_file, subtitle_file=subtitle_path)
         correct.assert_called_once_with(subtitle_file=subtitle_path, video_script="Hello world.")
 
-    def test_generate_subtitle_skips_edge_provider_without_sub_maker(self):
+    def test_generate_subtitle_ships_none_when_whisper_fails_on_custom_audio(self):
         """
-        Edge subtitles depend on the sub_maker timeline returned by TTS.
-        Custom audio lacks that object, so it should keep being skipped to
-        avoid producing an untrustworthy subtitle timeline.
+        Custom audio has no TTS timeline, so when Whisper produces nothing
+        there is no estimate to fall back to and no subtitle is written.
         """
-        task_id = "test-custom-audio-edge-no-submaker"
+        task_id = "test-custom-audio-whisper-fails"
         task_dir = utils.task_dir(task_id)
         audio_file = os.path.join(task_dir, "custom-audio.mp3")
         Path(audio_file).write_bytes(b"fake audio")
@@ -226,13 +220,8 @@ class TestTaskService(unittest.TestCase):
 
         try:
             with (
-                patch.object(
-                    tm.config,
-                    "app",
-                    dict(tm.config.app, subtitle_provider="edge"),
-                ),
                 patch.object(tm.voice, "create_subtitle") as create_subtitle,
-                patch.object(tm.subtitle, "create") as whisper_create,
+                patch.object(tm.subtitle, "create", return_value=None) as whisper_create,
             ):
                 subtitle_path = tm.generate_subtitle(
                     task_id=task_id,
@@ -246,7 +235,7 @@ class TestTaskService(unittest.TestCase):
 
         self.assertEqual(subtitle_path, "")
         create_subtitle.assert_not_called()
-        whisper_create.assert_not_called()
+        whisper_create.assert_called_once()
 
 
 class TestGetVideoMaterials(unittest.TestCase):

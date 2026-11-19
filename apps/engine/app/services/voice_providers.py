@@ -321,8 +321,8 @@ def chatterbox_tts(
     optional ``api_key``).
 
     Like ElevenLabs, Chatterbox does not return word-level timestamps, so the
-    subtitle path falls back to the full-text SubMaker. For tighter subtitle
-    sync set ``subtitle_provider = "whisper"``.
+    captions are timed by Whisper; the full-text SubMaker is only the
+    fallback when Whisper produces no subtitle.
 
     Long scripts are split into per-sentence chunks (see ``chatterbox_chunks``):
     each chunk gets its own POST, in script order, then the audios are joined.
