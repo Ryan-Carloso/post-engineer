@@ -16,14 +16,15 @@
 //              https://www.pinterest.com/pin/<id>/
 //   3speak    → permalink  ready-made watch URL (best-effort; the video id alone builds no URL)
 //   rumble    → permalink  the monetized URL from the upload response (best-effort; no URL can be derived from the id)
-//   fanvue    → permalink  ready-made post URL (best-effort; no URL can be derived from the id —
-//              the Fanvue post-URL format is unknown, so no derivation is attempted)
+//   fanvue    → postId     the Fanvue post uuid (no URL is returned, and the
+//              post-URL format is unknown, so no derivation is attempted)
 //   telegram  → permalink  t.me/<username>/<message_id> (public chats only;
 //              a private chat has no URL and no derivation)
 //
-// So nine of the eleven arrive with a ready-made URL, and the three that can
-// fall back to a bare post id have a derivation: Bluesky and LinkedIn
-// always (they carry no URL), Pinterest only when the entry has no
+// So eight of the eleven arrive with a ready-made URL. Bluesky, LinkedIn
+// and Fanvue arrive with only a bare post id: Bluesky and LinkedIn always
+// have a derivation (they carry no URL), and Fanvue has none, so its entry
+// renders no link. Pinterest derives one only when the entry has no
 // permalink. A provider entry with neither is omitted rather than rendered
 // as a dead link.
 // An entry whose status is "failed" is omitted even when it also carries
