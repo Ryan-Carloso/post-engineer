@@ -64,6 +64,47 @@ describe('PostEngineerClient', () => {
     expect(result).toEqual(mockResponse);
   });
 
+  it('createPersona sends the CTA intent as flat fields (issue #639)', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ success: true, personaId: 'persona-123', imageIds: [] }),
+    });
+
+    await client.createPersona({
+      accounts: { youtube: ['acct-1'] },
+      name: 'Tech Creator',
+      avatarUrl: 'https://example.com/avatar.png',
+      voiceId: 'voice-alloy',
+      cta: { type: 'link', url: 'https://example.com/course' },
+    });
+
+    const formData = vi.mocked(global.fetch).mock.calls[0]?.[1]?.body as FormData;
+    expect(formData.get('ctaType')).toBe('link');
+    expect(formData.get('ctaUrl')).toBe('https://example.com/course');
+    expect(formData.get('ctaInstruction')).toBeNull();
+  });
+
+  it('createPersona omits CTA fields when no cta is given', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ success: true, personaId: 'persona-123', imageIds: [] }),
+    });
+
+    await client.createPersona({
+      accounts: { youtube: ['acct-1'] },
+      name: 'Tech Creator',
+      avatarUrl: 'https://example.com/avatar.png',
+      voiceId: 'voice-alloy',
+    });
+
+    const formData = vi.mocked(global.fetch).mock.calls[0]?.[1]?.body as FormData;
+    expect(formData.has('ctaType')).toBe(false);
+    expect(formData.has('ctaUrl')).toBe(false);
+    expect(formData.has('ctaInstruction')).toBe(false);
+  });
+
   it('rejects a malformed create 200 without imageIds', async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -195,6 +236,27 @@ describe('PostEngineerClient', () => {
     await client.updatePersona({ personaId: 'p-1', name: 'Renamed' });
     const omitted = vi.mocked(global.fetch).mock.calls[1]?.[1]?.body as FormData;
     expect(omitted.has('faceQuality')).toBe(false);
+  });
+
+  it('updatePersona sends only the provided CTA facts (issue #639)', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ success: true }),
+    });
+
+    await client.updatePersona({
+      personaId: 'p-1',
+      cta: { type: 'other', instruction: 'Invite to the WhatsApp group' },
+    });
+    const sent = vi.mocked(global.fetch).mock.calls[0]?.[1]?.body as FormData;
+    expect(sent.get('ctaType')).toBe('other');
+    expect(sent.get('ctaInstruction')).toBe('Invite to the WhatsApp group');
+    expect(sent.has('ctaUrl')).toBe(false);
+
+    await client.updatePersona({ personaId: 'p-1', name: 'Renamed' });
+    const omitted = vi.mocked(global.fetch).mock.calls[1]?.[1]?.body as FormData;
+    expect(omitted.has('ctaType')).toBe(false);
   });
 
   it.each([undefined, null, ''])(
@@ -1055,6 +1117,21 @@ describe('generate and schedule video client', () => {
       },
     });
     expect(result).toEqual(GENERATE_RESPONSE);
+  });
+
+  it('generatePersonaVideo forwards the per-video CTA override, including an explicit null (issue #639)', async () => {
+    await client.generatePersonaVideo({
+      ...baseInput,
+      cta: { type: 'comment' },
+      options: { videoType: 'hook_lipsync', segments: [{ kind: 'hook', text: 'Hook here.' }, { kind: 'content', text: 'What did you think?', cta: true }] },
+    });
+    expect(lastRequestBody().cta).toEqual({ type: 'comment' });
+
+    await client.generatePersonaVideo({ ...baseInput, cta: null });
+    expect(lastRequestBody().cta).toBeNull();
+
+    await client.generatePersonaVideo(baseInput);
+    expect(lastRequestBody()).not.toHaveProperty('cta');
   });
 
   it('posts segments to the validate-script endpoint and returns its payload', async () => {

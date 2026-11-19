@@ -24,6 +24,12 @@ export const MAX_UPLOAD_VIDEO_GB = MAX_VIDEO_UPLOAD_BYTES / (1024 * 1024 * 1024)
 export { VIDEO_LAYOUTS } from './contracts/personas.js';
 
 export {
+  PERSONA_CTA_INSTRUCTION_MAX_LENGTH,
+  PERSONA_CTA_TYPES,
+  PERSONA_CTA_URL_MAX_LENGTH,
+} from './contracts/personas.js';
+
+export {
   METRICS_FILTER_MAX_LENGTH,
   METRICS_NONE,
   METRICS_WINDOWS,

@@ -11,6 +11,7 @@ import { VIDEO_TYPES } from '@/lib/tokens';
 import { VIDEO_UPLOAD_STATUSES } from '@/lib/videos/signed-upload';
 import { UPLOAD_CONTENT_TYPES } from '@/lib/contracts/videos';
 import { SCHEDULED_MEDIA_KINDS } from '@/app/api/media/publish-existing/schema';
+import { PERSONA_CTA_TYPES } from '@/lib/contracts/personas';
 import { TOOL_CONFIG_SEARCH_TOOLS, TOOL_CONFIG_STOCK_SOURCES } from '@/lib/tool-config';
 
 interface SnapshotTable {
@@ -74,6 +75,8 @@ const EXPECTED: Record<string, readonly string[]> = {
   video_uploads_declared_content_type_check: UPLOAD_CONTENT_TYPES,
   video_uploads_detected_content_type_check: UPLOAD_CONTENT_TYPES,
   scheduled_posts_media_kind_check: SCHEDULED_MEDIA_KINDS,
+  personas_cta_type_check: PERSONA_CTA_TYPES,
+  schedules_post_cta_type_check: PERSONA_CTA_TYPES,
   user_tool_configs_search_tool_check: TOOL_CONFIG_SEARCH_TOOLS,
   user_tool_configs_stock_sources_check: TOOL_CONFIG_STOCK_SOURCES,
 };

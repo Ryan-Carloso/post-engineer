@@ -1,5 +1,6 @@
 import { VIDEO_LAYOUTS } from './limits.js';
 import type { FaceQuality, VideoAspect } from './contracts/personas.js';
+import type { PersonaCtaType } from './contracts/personas.js';
 import type { VideoType } from './video-type.js';
 import type { SocialProvider } from './contracts/providers.js';
 
@@ -20,6 +21,12 @@ export interface PersonaLibraryImageInput {
 
 export type VideoLayout = (typeof VIDEO_LAYOUTS)[number];
 
+export interface PersonaCtaInput {
+  type: PersonaCtaType;
+  url?: string;
+  instruction?: string;
+}
+
 export interface CreatePersonaInput {
   name: string;
   avatarUrl?: string;
@@ -32,6 +39,7 @@ export interface CreatePersonaInput {
   paragraphNumber?: number;
   niche?: string;
   faceQuality?: FaceQuality;
+  cta?: PersonaCtaInput;
   accounts: Record<string, string[]>;
   images?: PersonaLibraryImageInput[];
   imagePrimaryIndex?: number;
@@ -42,6 +50,7 @@ export interface GeneratePersonaVideoInput {
   title: string;
   description: string;
   experiment?: { experimentId: string; variantId: string; pair: number };
+  cta?: PersonaCtaInput | null;
   providers: SocialProvider[];
   youtubeAccountIds?: string[];
   instagramAccountIds?: string[];
@@ -74,6 +83,7 @@ export interface GeneratePersonaVideoInput {
     segments?: Array<{
       kind: 'hook' | 'content';
       text: string;
+      cta?: boolean;
       media?: Array<{ mediaId?: string; url?: string; overlay?: { title: string; subtitle?: string; badge?: string } }>;
     }>;
   };
@@ -93,6 +103,7 @@ export interface UpdatePersonaInput {
   paragraphNumber?: number;
   niche?: string;
   faceQuality?: FaceQuality;
+  cta?: PersonaCtaInput;
 }
 
 export interface PublishVideoDirectInput {

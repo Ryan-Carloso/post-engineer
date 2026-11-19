@@ -1,7 +1,9 @@
 import { z } from 'zod';
 import {
   FACE_QUALITIES,
-  PERSONA_CTA_MAX_LENGTH,
+  PERSONA_CTA_INSTRUCTION_MAX_LENGTH,
+  PERSONA_CTA_TYPES,
+  PERSONA_CTA_URL_MAX_LENGTH,
   VALID_VIDEO_ASPECTS,
   VIDEO_LAYOUTS,
 } from './contracts/personas';
@@ -11,7 +13,7 @@ import {
   type PersonaDefaultAccounts,
 } from './persona-publishing-accounts';
 
-export { FACE_QUALITIES, PERSONA_CTA_MAX_LENGTH, VALID_VIDEO_ASPECTS, VIDEO_LAYOUTS };
+export { FACE_QUALITIES, PERSONA_CTA_TYPES, PERSONA_CTA_URL_MAX_LENGTH, PERSONA_CTA_INSTRUCTION_MAX_LENGTH, VALID_VIDEO_ASPECTS, VIDEO_LAYOUTS };
 
 export const PHOTO_EXTENSIONS: Record<string, string> = {
   'image/png': 'png',
@@ -30,7 +32,9 @@ export const personaFormSchema = z.object({
   videoAspect: optionalText(z.enum(VALID_VIDEO_ASPECTS)),
   videoLayout: optionalText(z.enum(VIDEO_LAYOUTS)),
   scriptPrompt: optionalText(z.string().max(2000)),
-  ctaText: optionalText(z.string().max(PERSONA_CTA_MAX_LENGTH)),
+  ctaType: optionalText(z.enum(PERSONA_CTA_TYPES)),
+  ctaUrl: optionalText(z.string().max(PERSONA_CTA_URL_MAX_LENGTH).url()),
+  ctaInstruction: optionalText(z.string().max(PERSONA_CTA_INSTRUCTION_MAX_LENGTH)),
   niche: optionalText(z.string().max(300)),
   paragraphNumber: optionalText(z.coerce.number().int().min(1).max(10)),
   faceQuality: optionalText(z.enum(FACE_QUALITIES)),
@@ -42,7 +46,9 @@ const FIELD_ERRORS: Record<string, (value: unknown) => string> = {
   videoLayout: (value) => `Invalid videoLayout: ${String(value)}. Use one of ${VIDEO_LAYOUTS.join(', ')}.`,
   niche: () => 'Invalid niche: use at most 300 characters.',
   scriptPrompt: () => 'Invalid scriptPrompt: use at most 2000 characters.',
-  ctaText: () => `Invalid ctaText: use at most ${PERSONA_CTA_MAX_LENGTH} characters.`,
+  ctaType: (value) => `Invalid ctaType: ${String(value)}. Use one of ${PERSONA_CTA_TYPES.join(', ')}.`,
+  ctaUrl: () => `Invalid ctaUrl: use a valid URL of at most ${PERSONA_CTA_URL_MAX_LENGTH} characters.`,
+  ctaInstruction: () => `Invalid ctaInstruction: use at most ${PERSONA_CTA_INSTRUCTION_MAX_LENGTH} characters.`,
   paragraphNumber: () => 'Invalid paragraphNumber: use an integer between 1 and 10.',
   faceQuality: () => 'Invalid faceQuality: use "ok" or "very_good".',
   video_subject: () => 'Invalid video_subject: use at most 300 characters.',
@@ -73,7 +79,9 @@ export type ParsedPersonaForm = {
     videoAspect: string | null;
     videoLayout: (typeof VIDEO_LAYOUTS)[number] | null;
     scriptPrompt: string | null;
-    ctaText: string | null;
+    ctaType: (typeof PERSONA_CTA_TYPES)[number];
+    ctaUrl: string | null;
+    ctaInstruction: string | null;
     paragraphNumber: number | null;
     niche: string | null;
     faceQuality: (typeof FACE_QUALITIES)[number] | null;
@@ -118,6 +126,11 @@ export function parsePersonaForm(formData: FormData, mode: PersonaFormMode): Par
   }
   const values = parsed.data;
 
+  const ctaError = validateCtaCoherence(values.ctaType ?? null, values.ctaUrl ?? null, values.ctaInstruction ?? null);
+  if (ctaError) {
+    return { ok: false, error: ctaError };
+  }
+
   const photo = fileFrom(formData, 'photo');
   const photoError = imageExtensionError(photo);
   if (photoError) {
@@ -156,7 +169,9 @@ export function parsePersonaForm(formData: FormData, mode: PersonaFormMode): Par
         videoAspect: values.videoAspect ?? null,
         videoLayout: values.videoLayout ?? null,
         scriptPrompt: values.scriptPrompt ?? null,
-        ctaText: values.ctaText ?? null,
+        ctaType: values.ctaType ?? 'follow',
+        ctaUrl: values.ctaUrl ?? null,
+        ctaInstruction: values.ctaInstruction ?? null,
         paragraphNumber: values.paragraphNumber ?? null,
         niche: values.niche ?? null,
         faceQuality: values.faceQuality ?? null,
@@ -167,6 +182,31 @@ export function parsePersonaForm(formData: FormData, mode: PersonaFormMode): Par
       photoExtension,
     },
   };
+}
+
+export function validateCtaCoherence(
+  type: (typeof PERSONA_CTA_TYPES)[number] | null,
+  url: string | null,
+  instruction: string | null,
+): string | null {
+  if (type === 'link' || type === 'buy') {
+    if (!url) return `A ${type} CTA needs a URL.`;
+    if (instruction) return `A ${type} CTA takes a URL, not an instruction.`;
+    return null;
+  }
+  if (type === 'other') {
+    if (!instruction) return 'An other CTA needs an instruction.';
+    if (url) return 'An other CTA takes an instruction, not a URL.';
+    return null;
+  }
+  if (url || instruction) return 'A follow, comment, share or save CTA takes no URL or instruction.';
+  return null;
+}
+
+export function parsePersonaCtaType(value: string | null | undefined): (typeof PERSONA_CTA_TYPES)[number] {
+  return (PERSONA_CTA_TYPES as readonly string[]).includes(value ?? '')
+    ? (value as (typeof PERSONA_CTA_TYPES)[number])
+    : 'follow';
 }
 
 export function validateVisualCues(hasPhoto: boolean, hasAvatarUrl: boolean): string | null {

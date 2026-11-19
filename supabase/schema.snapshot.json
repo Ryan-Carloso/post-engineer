@@ -106,7 +106,19 @@
                     "notNull": false
                 },
                 {
-                    "name": "cta_text",
+                    "name": "cta_type",
+                    "type": "text",
+                    "default": "'follow'::text",
+                    "notNull": true
+                },
+                {
+                    "name": "cta_url",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "cta_instruction",
                     "type": "text",
                     "default": null,
                     "notNull": false
@@ -121,9 +133,11 @@
             },
             "constraints": {
                 "personas_pkey": "PRIMARY KEY (id)",
+                "personas_cta_type_check": "CHECK ((cta_type = ANY (ARRAY['follow'::text, 'comment'::text, 'share'::text, 'save'::text, 'link'::text, 'buy'::text, 'other'::text])))",
                 "personas_video_layout_check": "CHECK (((video_layout IS NULL) OR (video_layout = ANY (ARRAY['standard'::text, 'react'::text]))))",
-                "personas_cta_text_length_check": "CHECK (((cta_text IS NULL) OR (char_length(cta_text) <= 200)))",
-                "personas_visual_identity_check": "CHECK (((photo_path IS NULL) OR (avatar_url IS NULL))) NOT VALID"
+                "personas_cta_url_length_check": "CHECK (((cta_url IS NULL) OR (char_length(cta_url) <= 2048)))",
+                "personas_visual_identity_check": "CHECK (((photo_path IS NULL) OR (avatar_url IS NULL))) NOT VALID",
+                "personas_cta_instruction_length_check": "CHECK (((cta_instruction IS NULL) OR (char_length(cta_instruction) <= 500)))"
             }
         },
         "schedules": {
@@ -292,12 +306,6 @@
                     "notNull": false
                 },
                 {
-                    "name": "post_cta_text",
-                    "type": "text",
-                    "default": null,
-                    "notNull": false
-                },
-                {
                     "name": "threads_account_ids",
                     "type": "text[]",
                     "default": "'{}'::text[]",
@@ -344,6 +352,24 @@
                     "type": "text[]",
                     "default": "'{}'::text[]",
                     "notNull": true
+                },
+                {
+                    "name": "post_cta_type",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "post_cta_url",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "post_cta_instruction",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
                 }
             ],
             "policies": {
@@ -356,7 +382,9 @@
             "constraints": {
                 "schedules_pkey": "PRIMARY KEY (id)",
                 "schedules_publish_mode_check": "CHECK ((publish_mode = ANY (ARRAY['scheduled'::text, 'asap'::text])))",
-                "schedules_post_cta_text_length_check": "CHECK (((post_cta_text IS NULL) OR (char_length(post_cta_text) <= 200)))"
+                "schedules_post_cta_type_check": "CHECK ((post_cta_type = ANY (ARRAY['follow'::text, 'comment'::text, 'share'::text, 'save'::text, 'link'::text, 'buy'::text, 'other'::text])))",
+                "schedules_post_cta_url_length_check": "CHECK (((post_cta_url IS NULL) OR (char_length(post_cta_url) <= 2048)))",
+                "schedules_post_cta_instruction_length_check": "CHECK (((post_cta_instruction IS NULL) OR (char_length(post_cta_instruction) <= 500)))"
             }
         },
         "experiments": {

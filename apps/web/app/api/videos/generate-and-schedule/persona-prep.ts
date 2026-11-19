@@ -11,6 +11,7 @@ import { IMAGE_BUCKET } from '@/lib/persona-images';
 import { logger } from '@/lib/logger';
 import type { FaceQuality } from '@/lib/tokens';
 import type { VoiceFallbackInfo } from '@/lib/voice-fallback';
+import type { ResolvedCta } from './cta-validation';
 
 export const SIGNED_URL_TTL_SECONDS = 24 * 3600;
 
@@ -43,7 +44,7 @@ export interface PersonaPrep {
   avatarUrl: string | null;
   photoPath: string | null;
   niche: string | null;
-  ctaText: string | null;
+  cta: ResolvedCta | null;
   language: string | null;
   videoAspect: string | null;
   videoLayout: string | null;
@@ -118,7 +119,7 @@ export function resolvePostWithoutPersona(opts: {
     avatarUrl: null,
     photoPath: null,
     niche: opts.niche ?? null,
-    ctaText: null,
+    cta: null,
     language: opts.language ?? null,
     videoAspect: opts.videoAspect ?? null,
     videoLayout: opts.videoLayout ?? null,

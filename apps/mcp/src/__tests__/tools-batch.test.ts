@@ -101,6 +101,22 @@ describe('generate_persona_video_batch', () => {
     expect(text(response)).toContain('6 face video(s); 1 free (2 token(s) credited back); 10 token(s) charged in total.');
   });
 
+  it('forwards each video’s own CTA override, including an explicit null (issue #639)', async () => {
+    const client = mockClient();
+    const args = GeneratePersonaVideoBatchSchema.parse({
+      batchKey: 'launch-week',
+      videos: [
+        { ...video('Video 1'), cta: { type: 'follow' } },
+        { ...video('Video 2'), cta: null },
+      ],
+    });
+    await handleGeneratePersonaVideoBatch(client, args);
+    const calls = client.generatePersonaVideo.mock.calls.map((call) => call[0]);
+    expect(calls).toHaveLength(2);
+    expect(calls[0].cta).toEqual({ type: 'follow' });
+    expect(calls[1].cta).toBeNull();
+  });
+
   it('tells how many more face videos earn the next free one', async () => {
     const client = mockClient({ request: vi.fn(async () => ({ ...DISCOUNT, videos: 4, faceVideos: 4, earnedFreeVideos: 0, freeVideos: [], discountTokens: 0 })) });
     const response = await handleGeneratePersonaVideoBatch(client, batchArgs(4));

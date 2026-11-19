@@ -339,7 +339,9 @@ export interface Database {
         face_quality: 'ok' | 'very_good' | null;
         recent_image_ids: string[];
         video_layout: 'standard' | 'react' | null;
-        cta_text: string | null;
+        cta_type: 'follow' | 'comment' | 'share' | 'save' | 'link' | 'buy' | 'other';
+        cta_url: string | null;
+        cta_instruction: string | null;
         };
         Insert: {
         id?: string;
@@ -358,7 +360,9 @@ export interface Database {
         face_quality?: 'ok' | 'very_good' | null;
         recent_image_ids?: string[];
         video_layout?: 'standard' | 'react' | null;
-        cta_text?: string | null;
+        cta_type?: 'follow' | 'comment' | 'share' | 'save' | 'link' | 'buy' | 'other';
+        cta_url?: string | null;
+        cta_instruction?: string | null;
         };
         Update: {
         id?: string;
@@ -377,7 +381,9 @@ export interface Database {
         face_quality?: 'ok' | 'very_good' | null;
         recent_image_ids?: string[];
         video_layout?: 'standard' | 'react' | null;
-        cta_text?: string | null;
+        cta_type?: 'follow' | 'comment' | 'share' | 'save' | 'link' | 'buy' | 'other';
+        cta_url?: string | null;
+        cta_instruction?: string | null;
         };
         Relationships: [];
       };
@@ -707,7 +713,6 @@ export interface Database {
         post_face_quality: string | null;
         publish_mode: 'scheduled' | 'asap';
         post_video_layout: string | null;
-        post_cta_text: string | null;
         threads_account_ids: string[];
         facebook_account_ids: string[];
         pinterest_account_ids: string[];
@@ -716,6 +721,9 @@ export interface Database {
         rumble_account_ids: string[];
         fanvue_account_ids: string[];
         telegram_account_ids: string[];
+        post_cta_type: 'follow' | 'comment' | 'share' | 'save' | 'link' | 'buy' | 'other' | null;
+        post_cta_url: string | null;
+        post_cta_instruction: string | null;
         };
         Insert: {
         id?: string;
@@ -745,7 +753,6 @@ export interface Database {
         post_face_quality?: string | null;
         publish_mode?: 'scheduled' | 'asap';
         post_video_layout?: string | null;
-        post_cta_text?: string | null;
         threads_account_ids?: string[];
         facebook_account_ids?: string[];
         pinterest_account_ids?: string[];
@@ -754,6 +761,9 @@ export interface Database {
         rumble_account_ids?: string[];
         fanvue_account_ids?: string[];
         telegram_account_ids?: string[];
+        post_cta_type?: 'follow' | 'comment' | 'share' | 'save' | 'link' | 'buy' | 'other' | null;
+        post_cta_url?: string | null;
+        post_cta_instruction?: string | null;
         };
         Update: {
         id?: string;
@@ -783,7 +793,6 @@ export interface Database {
         post_face_quality?: string | null;
         publish_mode?: 'scheduled' | 'asap';
         post_video_layout?: string | null;
-        post_cta_text?: string | null;
         threads_account_ids?: string[];
         facebook_account_ids?: string[];
         pinterest_account_ids?: string[];
@@ -792,6 +801,9 @@ export interface Database {
         rumble_account_ids?: string[];
         fanvue_account_ids?: string[];
         telegram_account_ids?: string[];
+        post_cta_type?: 'follow' | 'comment' | 'share' | 'save' | 'link' | 'buy' | 'other' | null;
+        post_cta_url?: string | null;
+        post_cta_instruction?: string | null;
         };
         Relationships: [];
       };

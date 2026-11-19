@@ -658,6 +658,9 @@ describe('POST /api/media/publish-existing', () => {
     expect(body.schedule.id).toBe(deterministicUuid('publish-existing/v1', `${USER_ID}:key-1`));
     expect(client.__insertedSchedules).toHaveLength(1);
     expect(client.__insertedSchedules[0]?.publish_mode).toBe('scheduled');
+    expect(client.__insertedSchedules[0]?.post_cta_type).toBeNull();
+    expect(client.__insertedSchedules[0]?.post_cta_url).toBeNull();
+    expect(client.__insertedSchedules[0]?.post_cta_instruction).toBeNull();
     expect(client.__insertedSlots).toHaveLength(1);
     const slot = client.__insertedSlots[0] as Record<string, unknown>;
     expect(slot.status).toBe('ready');

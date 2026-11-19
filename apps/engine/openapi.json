@@ -301,6 +301,20 @@
         "title": "ClonedVoicePreviewRequest",
         "type": "object"
       },
+      "CtaType": {
+        "description": "The seven CTA intents a persona can carry.\n\nfollow/comment/share/save carry no facts; link/buy carry a URL;\nother carries a free-text instruction. The wording is written per\nvideo by the agent from the video's topic, never stored.",
+        "enum": [
+          "follow",
+          "comment",
+          "share",
+          "save",
+          "link",
+          "buy",
+          "other"
+        ],
+        "title": "CtaType",
+        "type": "string"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -534,6 +548,11 @@
       "ScriptSegment": {
         "additionalProperties": false,
         "properties": {
+          "cta": {
+            "default": false,
+            "title": "Cta",
+            "type": "boolean"
+          },
           "kind": {
             "enum": [
               "hook",
@@ -973,6 +992,16 @@
             "default": 0.09,
             "title": "Bgm Volume"
           },
+          "cta_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CtaType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "custom_audio_file": {
             "anyOf": [
               {
@@ -1211,12 +1240,6 @@
               }
             ],
             "default": "random"
-          },
-          "video_cta": {
-            "default": "",
-            "maxLength": 200,
-            "title": "Video Cta",
-            "type": "string"
           },
           "video_description": {
             "maxLength": 5000,

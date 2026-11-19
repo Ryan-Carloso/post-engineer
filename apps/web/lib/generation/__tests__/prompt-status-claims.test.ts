@@ -166,6 +166,17 @@ describe('prompt status claims', () => {
   });
 });
 
+describe('CTA rule (issue #639)', () => {
+  it('tells the agent to read the persona cta and mark the take', () => {
+    const base = promptBase.SHARED_PROMPT_BASE.join('\n');
+    expect(base).toContain("read the persona's cta");
+    expect(base).toContain('personas (action: get)');
+    expect(base).toContain('Mark that take cta: true');
+    expect(base).toContain('ends with "?"');
+    expect(base).toContain('link in bio');
+  });
+});
+
 describe('prompt tool names match registered MCP tools', () => {
   it('finds registered tools, their actions and the tool names the prompts mention', () => {
     const registered = registeredTools();

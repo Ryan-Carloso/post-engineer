@@ -44,6 +44,7 @@ export type SegmentMedia = {
 export type ScriptSegment = {
   kind: SegmentKind;
   text: string;
+  cta?: boolean;
   media?: SegmentMedia[];
 };
 
@@ -238,7 +239,7 @@ export function validateSegments(input: unknown, videoType: VideoType = 'hook_li
       );
     }
     const unknown = Object.keys(segment)
-      .filter((key) => key !== 'kind' && key !== 'text' && key !== 'media')
+      .filter((key) => key !== 'kind' && key !== 'text' && key !== 'media' && key !== 'cta')
       .sort();
     if (unknown.length > 0) {
       return fail(

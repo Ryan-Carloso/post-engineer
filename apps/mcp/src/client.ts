@@ -23,6 +23,8 @@ import type {
   UpdatePersonaInput, VideoType,
 } from './client-types.js';
 import { requirePublishingAccounts } from './require-publishing-accounts.js';
+import { resolveBaseUrl } from './client-base-url.js';
+import { appendPersonaCtaFields } from './persona-cta-shape.js';
 import { publishVideoDirect } from './client-publish-uploaded.js';
 import {
   getTokenBalance,
@@ -96,7 +98,6 @@ import { basename } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { mcpTelemetryHeaders } from './analytics.js';
 
-const PRODUCTION_API_URL = 'https://post-engineer.com';
 const REQUEST_TIMEOUT_MS = 30_000;
 const UPLOAD_TIMEOUT_MS = 120_000;
 export {
@@ -133,28 +134,6 @@ function normalizeLibraryMetadata(
   const description = image.description?.trim() ?? '';
   checkLibraryMetadataLengths(tag, description, label);
   return { tag, description };
-}
-
-function resolveBaseUrl(override: string | undefined): string {
-  const raw = override ?? PRODUCTION_API_URL;
-  let url: URL;
-  try {
-    url = new URL(raw);
-  } catch {
-    throw new Error('Invalid POST_ENGINEER_API_URL: not an absolute URL (use https:)');
-  }
-  if (url.protocol !== 'https:' && url.protocol !== 'http:') {
-    throw new Error(`Invalid POST_ENGINEER_API_URL: protocol "${url.protocol}" is not allowed (use https:)`);
-  }
-  const loopback =
-    url.hostname === 'localhost' ||
-    url.hostname === '127.0.0.1' ||
-    url.hostname === '::1' ||
-    url.hostname === '[::1]';
-  if (url.protocol === 'http:' && !loopback) {
-    throw new Error('Invalid POST_ENGINEER_API_URL: http: is only allowed for loopback hosts (use https:)');
-  }
-  return url.origin + url.pathname.replace(/\/+$/, '');
 }
 
 export class PostEngineerClient {
@@ -220,6 +199,7 @@ export class PostEngineerClient {
     formData.set('paragraphNumber', String(input.paragraphNumber ?? 1));
     formData.set('niche', input.niche ?? 'General');
     formData.set('faceQuality', input.faceQuality ?? 'very_good');
+    appendPersonaCtaFields(formData, input.cta);
     const images = input.images ?? [];
     if (input.imagePrimaryIndex !== undefined && images.length === 0) {
       throw new Error('imagePrimaryIndex requires images: provide at least one library image.');
@@ -295,6 +275,7 @@ export class PostEngineerClient {
     if (input.paragraphNumber !== undefined) formData.set('paragraphNumber', String(input.paragraphNumber));
     if (input.niche !== undefined) formData.set('niche', input.niche);
     if (input.faceQuality !== undefined) formData.set('faceQuality', input.faceQuality);
+    appendPersonaCtaFields(formData, input.cta);
     const raw = await this.request(
       `/api/persona?personaId=${encodeURIComponent(input.personaId)}`,
       { method: 'PATCH', headers: this.getHeaders(false), body: formData },
@@ -530,6 +511,7 @@ export class PostEngineerClient {
           },
           options: input.options ?? undefined,
           ...(input.experiment !== undefined ? { experiment: input.experiment } : {}),
+          ...(input.cta !== undefined ? { cta: input.cta } : {}),
           idempotencyKey: input.idempotencyKey ?? randomUUID(),
         }),
       },

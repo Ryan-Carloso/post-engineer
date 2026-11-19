@@ -85,6 +85,10 @@
           "text": {
             "type": "string"
           },
+          "cta": {
+            "type": "boolean",
+            "description": "Marks the take that performs this video's CTA (issue #639)."
+          },
           "media": {
             "type": "array",
             "maxItems": 30,
@@ -1642,7 +1646,13 @@
                           "scriptPrompt": {
                             "type": "string"
                           },
-                          "ctaText": {
+                          "ctaType": {
+                            "type": "string"
+                          },
+                          "ctaUrl": {
+                            "type": "string"
+                          },
+                          "ctaInstruction": {
                             "type": "string"
                           },
                           "paragraphNumber": {
@@ -1846,9 +1856,25 @@
                     "type": "string",
                     "maxLength": 2000
                   },
-                  "ctaText": {
+                  "ctaType": {
                     "type": "string",
-                    "maxLength": 200
+                    "enum": [
+                      "follow",
+                      "comment",
+                      "share",
+                      "save",
+                      "link",
+                      "buy",
+                      "other"
+                    ]
+                  },
+                  "ctaUrl": {
+                    "type": "string",
+                    "maxLength": 2048
+                  },
+                  "ctaInstruction": {
+                    "type": "string",
+                    "maxLength": 500
                   },
                   "niche": {
                     "type": "string",
@@ -1995,9 +2021,25 @@
                     "type": "string",
                     "maxLength": 2000
                   },
-                  "ctaText": {
+                  "ctaType": {
                     "type": "string",
-                    "maxLength": 200
+                    "enum": [
+                      "follow",
+                      "comment",
+                      "share",
+                      "save",
+                      "link",
+                      "buy",
+                      "other"
+                    ]
+                  },
+                  "ctaUrl": {
+                    "type": "string",
+                    "maxLength": 2048
+                  },
+                  "ctaInstruction": {
+                    "type": "string",
+                    "maxLength": 500
                   },
                   "niche": {
                     "type": "string",
@@ -6703,6 +6745,37 @@
                   },
                   "idempotencyKey": {
                     "type": "string"
+                  },
+                  "cta": {
+                    "type": "object",
+                    "nullable": true,
+                    "description": "Per-video CTA override (issue #639): explicit wins over the persona default; null disables the CTA for this video.",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "follow",
+                          "comment",
+                          "share",
+                          "save",
+                          "link",
+                          "buy",
+                          "other"
+                        ]
+                      },
+                      "url": {
+                        "type": "string",
+                        "maxLength": 2048
+                      },
+                      "instruction": {
+                        "type": "string",
+                        "maxLength": 500
+                      }
+                    },
+                    "required": [
+                      "type"
+                    ],
+                    "additionalProperties": false
                   }
                 },
                 "required": [

@@ -1,23 +1,14 @@
 import warnings
 from enum import Enum
-from typing import Any, Literal, Optional, Union
+from typing import Any, Optional, Union
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.config import config
 from app.utils.ssrf import UnsafeUrlError, assert_public_url
 from app.models import publish as publish_models
-from app.services.script_segments import (
-    MAX_IMAGES_MODE_MEDIAS,
-    MAX_OVERLAY_BADGE_CHARS,
-    MAX_OVERLAY_SUBTITLE_CHARS,
-    MAX_OVERLAY_TITLE_CHARS,
-)
-from app.services.segment_photo_duration import (
-    MAX_REQUESTED_PHOTO_SECONDS,
-    MIN_REQUESTED_PHOTO_SECONDS,
-    duration_error,
-)
+from app.models.cta import CtaType
+from app.models.segments import ScriptSegment, SegmentMedia, SegmentOverlay  # noqa: F401 — re-exported for existing import sites
 
 warnings.filterwarnings(
     "ignore",
@@ -220,7 +211,6 @@ class VideoParams(BaseModel):
     stroke_width: float = Field(default=config.ui.get("stroke_width", 1.5), ge=0, le=20)
     n_threads: Optional[int] = Field(default=2, ge=1, le=64)
     paragraph_number: Optional[int] = Field(default=None, ge=1, le=10)
-    video_cta: str = Field(default="", max_length=200)
 
 
 class SubtitleRequest(BaseModel):
@@ -269,54 +259,10 @@ def _validate_webhook_url(value: Optional[str]) -> Optional[str]:
     return value
 
 
-class SegmentOverlay(BaseModel):
-    """Info card painted inside a segment photo's panel: real name, address, price."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    title: str = Field(min_length=1, max_length=MAX_OVERLAY_TITLE_CHARS)
-    subtitle: Optional[str] = Field(default=None, min_length=1, max_length=MAX_OVERLAY_SUBTITLE_CHARS)
-    badge: Optional[str] = Field(default=None, min_length=1, max_length=MAX_OVERLAY_BADGE_CHARS)
-
-    @field_validator("title", "subtitle", "badge", mode="before")
-    @classmethod
-    def _strip_text(cls, value: Optional[str]) -> Optional[str]:
-        """Measure the trimmed text, like check_script (action: validate) and the TS validators."""
-        return value.strip() if isinstance(value, str) else value
-
-
-class SegmentMedia(BaseModel):
-    """Media reference shape for a segment's photo (media (action: upload) uploads it, media (action: check) verifies it)."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    mediaId: Optional[str] = None
-    url: Optional[str] = None
-    overlay: Optional["SegmentOverlay"] = None
-    duration: Optional[float] = Field(
-        default=None, ge=MIN_REQUESTED_PHOTO_SECONDS, le=MAX_REQUESTED_PHOTO_SECONDS
-    )
-
-    @field_validator("duration", mode="before")
-    @classmethod
-    def _validate_duration(cls, value: Any) -> Any:
-        error = duration_error(value)
-        if error is not None:
-            raise ValueError(error[0])
-        return value
-
-
-class ScriptSegment(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    kind: Literal["hook", "content"]
-    text: str
-    media: Optional[list[SegmentMedia]] = Field(None, max_length=MAX_IMAGES_MODE_MEDIAS)
-
-
 class TaskVideoRequest(VideoParams, BaseModel):
     webhook_url: Optional[str] = None
     segments: Optional[list[ScriptSegment]] = None
+    cta_type: Optional[CtaType] = None
     generation_id: Optional[str] = None
     slot_id: Optional[str] = None
 
@@ -337,8 +283,9 @@ class TaskVideoRequest(VideoParams, BaseModel):
             return self
         from app.services import script_segments
 
+        dumped = [segment.model_dump(exclude_none=True) for segment in self.segments]
         joined = script_segments.segments_to_script(
-            [segment.model_dump(exclude_none=True) for segment in self.segments],
+            dumped,
             video_type=self.video_type,
         )
         max_chars = next((c.max_length for c in TaskVideoRequest.model_fields["video_script"].metadata if hasattr(c, "max_length")), None)
@@ -346,6 +293,9 @@ class TaskVideoRequest(VideoParams, BaseModel):
             raise ValueError(f"segments join to a script longer than video_script allows ({max_chars} characters)")
         if self.video_script and self.video_script != joined:
             raise ValueError("video_script must match the segments script")
+        from app.services import cta_validation
+
+        cta_validation.validate_cta_take(dumped, self.cta_type)
         self.video_script = joined
         return self
 

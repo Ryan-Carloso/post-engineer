@@ -7,7 +7,6 @@ const PERSONA_PREFERENCE_FIELDS: ReadonlyArray<{
   { personaKey: 'language', jobKey: 'video_language' },
   { personaKey: 'video_aspect', jobKey: 'video_aspect' },
   { personaKey: 'video_layout', jobKey: 'video_layout' },
-  { personaKey: 'cta_text', jobKey: 'video_cta' },
   { personaKey: 'paragraph_number', jobKey: 'paragraph_number' },
 ];
 
@@ -26,6 +25,7 @@ const REQUEST_FORWARD_FIELDS: ReadonlyArray<EngineVideoRequestField> = [
   'slot_id',
   'music_mood',
   'segments',
+  'cta_type',
 ];
 const REQUEST_FORWARD_FIELD_SET: ReadonlySet<string> = new Set(REQUEST_FORWARD_FIELDS);
 
@@ -37,7 +37,6 @@ export interface JobPersona {
   language?: string | null;
   video_aspect?: string | null;
   video_layout?: string | null;
-  cta_text?: string | null;
   paragraph_number?: number | null;
   niche?: string | null;
   face_quality?: string | null;
