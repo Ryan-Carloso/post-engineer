@@ -239,18 +239,15 @@ describe('prompts hub data', () => {
       'voiceId',
       'language "en-US"',
       'Remember the persona name',
+      'Check the saved tool configuration first with tool_config',
       'Ask which licensed stock video sources I have keys for, in order',
-      'The search tool was',
-      'already asked above',
+      'Coverr, or none)',
       'if only one is',
       'configured, use it without asking which',
-      'Reuse the stock answers',
-      'for later videos in this',
+      'tool_config (action: save)',
+      'Reuse those answers for later videos in this',
       'conversation',
       'uses images only',
-      'There is no saved',
-      'tool or source configuration',
-      'never claim the answers were saved',
       'YOUR_TAVILY_API_KEY',
       'YOUR_EXA_API_KEY',
       'YOUR_PEXELS_API_KEY',
@@ -278,15 +275,15 @@ describe('prompts hub data', () => {
     expect(text).toContain('Pexels');
     expect(text).toContain('Pixabay');
     expect(text).toContain('Coverr');
-    expect(text).toContain('Reuse the stock answers');
-    expect(text).toContain('never claim the answers were saved');
+    expect(text).toContain('Reuse those answers for later videos in this');
+    expect(text).toContain('a later session reuses them instead of asking again');
     // The search-tool ask lives in the base; step 4 must not repeat it,
     // so the composed prompt asks it exactly once.
     expect(fullText.split('Ask me once which search tool you already have').length - 1).toBe(1);
     expect(text).not.toContain('issue #');
   });
 
-  it('never claims the setup answers are saved, and scopes them to this conversation', () => {
+  it('saves the setup answers and reuses them in later conversations', () => {
     const fullText = getPrompt('full-setup')?.prompt ?? '';
     const baseText = SHARED_PROMPT_BASE.join('\n');
     expect(fullText.startsWith(baseText)).toBe(true);
@@ -294,8 +291,8 @@ describe('prompts hub data', () => {
     expect(text).toContain('later videos in this conversation');
     expect(text).toContain('the first video in this setup follows the base and');
     expect(text).toContain('uses images only');
-    expect(text).toContain('There is no saved tool or source configuration');
-    expect(text).toContain('never claim the answers were saved');
+    expect(text).toContain('tool_config (action: save)');
+    expect(text).toContain('are stored encrypted and are never shown back in full');
     expect(text).toContain('If a key is missing, tell');
     expect(text).toContain('me to set it and keep going with the sources that are configured');
     // This phrase really spans a line break.

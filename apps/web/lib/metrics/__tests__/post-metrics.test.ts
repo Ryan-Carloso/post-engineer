@@ -149,8 +149,8 @@ describe('post_metrics provider check (migrations 034, 049, 050 and 052)', () =>
     expect(listedProviders('057_fanvue-provider.sql').sort()).toEqual(['3speak', 'bluesky', 'facebook', 'fanvue', 'instagram', 'linkedin', 'pinterest', 'rumble', 'threads', 'youtube']);
   });
 
-  it('070 allows exactly the eleven providers it shipped with', () => {
-    expect(listedProviders('070_telegram-provider.sql').sort()).toEqual(['3speak', 'bluesky', 'facebook', 'fanvue', 'instagram', 'linkedin', 'pinterest', 'rumble', 'telegram', 'threads', 'youtube']);
+  it('071 allows exactly the eleven providers it shipped with', () => {
+    expect(listedProviders('071_telegram-provider.sql').sort()).toEqual(['3speak', 'bluesky', 'facebook', 'fanvue', 'instagram', 'linkedin', 'pinterest', 'rumble', 'telegram', 'threads', 'youtube']);
   });
 });
 

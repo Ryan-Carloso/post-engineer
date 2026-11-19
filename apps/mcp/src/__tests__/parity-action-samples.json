@@ -564,6 +564,23 @@
       }
     }
   ],
+  "tool_config.get": [
+    {
+      "args": {
+        "action": "get"
+      }
+    }
+  ],
+  "tool_config.save": [
+    {
+      "args": {
+        "action": "save",
+        "searchTool": "tavily",
+        "stockSources": ["pexels"],
+        "keys": { "tavily": "tvly-fake-key-1234", "pexels": "pxls-fake-key-5678" }
+      }
+    }
+  ],
   "video_tasks.get_generation": [
     {
       "args": {

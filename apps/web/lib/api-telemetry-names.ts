@@ -79,6 +79,7 @@ table['GET /api/prompts/[slug]'] = 'prompt_fetched';
 table['GET /api/schedule'] = 'schedule_fetched';
 table['GET /api/schedule/slots/[slotId]'] = 'schedule_slot_fetched';
 table['GET /api/schedule/status'] = 'schedule_status_fetched';
+table['GET /api/tool-config'] = 'tool_config_fetched';
 table['GET /api/version'] = 'version_fetched';
 table['PATCH /api/persona'] = 'persona_updated';
 table['PATCH /api/persona/images'] = 'persona_image_updated';
@@ -113,6 +114,7 @@ table['POST /api/videos/upload-url'] = 'video_upload_signed_url_created';
 table['POST /api/videos/uploads/[uploadId]/complete'] = 'video_upload_completed';
 table['POST /api/videos/publish-by-id'] = 'video_published_by_id';
 table['PUT /api/persona/publishing-accounts'] = 'persona_publishing_accounts_updated';
+table['PUT /api/tool-config'] = 'tool_config_saved';
 
 export const API_TELEMETRY_NAMES: Record<string, string> = table;
 

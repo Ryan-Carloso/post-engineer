@@ -1,5 +1,5 @@
 -- ============================================================================
--- 070 — Telegram as a publishing provider.
+-- 071 — Telegram as a publishing provider.
 -- One provider covers both destinations: a channel and a group/supergroup
 -- are the same Bot API publish (sendVideo/sendPhoto/sendAudio on a chat_id);
 -- the destination kind lives in social_accounts.account_metadata.chatType

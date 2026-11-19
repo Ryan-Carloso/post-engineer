@@ -269,3 +269,49 @@ describe('malformed API payloads are reported, not turned into empty results', (
     expect(result.text).toContain('Malformed response from GET /api/persona/list');
   });
 });
+
+describe('tool_config', () => {
+  const PRESENCE = {
+    success: true,
+    configured: true,
+    searchTool: 'tavily',
+    stockSources: ['pexels'],
+    keysPresent: { tavily: true, exa: false, pexels: true, pixabay: false, coverr: false },
+    keysLast4: { tavily: '1234', exa: null, pexels: '5678', pixabay: null, coverr: null },
+  };
+
+  it('get reads the saved configuration and never sees a key value', async () => {
+    const { call, seen } = setup({
+      'GET /api/tool-config': { ...PRESENCE, keys: { tavily: 'tvly-fake-key-1234' } },
+    });
+    const result = await call('tool_config', { action: 'get' });
+    expect(result.isError).toBe(false);
+    expect(seen.map((request) => `${request.method} ${request.path}`)).toEqual(['GET /api/tool-config']);
+    expect(result.text).toContain('"tavily": true');
+    expect(result.text).not.toContain('tvly-fake-key-1234');
+  });
+
+  it('save sends the whole configuration and reports presence only', async () => {
+    const { call, seen } = setup({ 'PUT /api/tool-config': PRESENCE });
+    const config = {
+      searchTool: 'tavily',
+      stockSources: ['pexels'],
+      keys: { tavily: 'tvly-fake-key-1234', pexels: 'pxls-fake-key-5678' },
+    };
+    const result = await call('tool_config', { action: 'save', ...config });
+    expect(result.isError).toBe(false);
+    expect(seen).toHaveLength(1);
+    expect(seen[0]?.method).toBe('PUT');
+    expect(seen[0]?.path).toBe('/api/tool-config');
+    expect(seen[0]?.body).toEqual(config);
+    expect(result.text).toContain('Tool configuration saved successfully');
+    expect(result.text).not.toContain('tvly-fake-key-1234');
+  });
+
+  it('save fails fast in the tool when a required field is missing, sending nothing', async () => {
+    const { call, seen } = setup({ 'PUT /api/tool-config': PRESENCE });
+    const result = await call('tool_config', { action: 'save', searchTool: 'tavily' });
+    expect(result.isError).toBe(true);
+    expect(seen).toHaveLength(0);
+  });
+});

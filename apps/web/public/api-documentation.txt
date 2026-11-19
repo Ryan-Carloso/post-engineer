@@ -119,6 +119,8 @@ POST   /api/telegram-connect                                  connect account (T
 GET    /api/schedule                                          list schedules
 DELETE /api/schedule                                          cancel schedule
 GET    /api/schedule/status                                   list posts
+GET    /api/tool-config                                       get tool configuration
+PUT    /api/tool-config                                       save tool configuration
 GET    /api/schedule/slots/{slotId}                           get slot
 PATCH  /api/schedule/slots/{slotId}                           update slot title
 DELETE /api/schedule/slots/{slotId}                           delete slot

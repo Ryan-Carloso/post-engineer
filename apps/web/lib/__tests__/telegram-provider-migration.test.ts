@@ -4,22 +4,22 @@ import { join } from 'node:path';
 import { findRepoRoot } from '@/test/repo-root';
 
 //---------------
-// supabase/migrations/070_telegram-provider.sql — the schema the Telegram
+// supabase/migrations/071_telegram-provider.sql — the schema the Telegram
 // connect and publish paths depend on. Each provider check is dropped and
 // re-created with the full list (the lesson of 037: a live constraint the
 // chain no longer defines can linger in production, so a plain add would
 // leave the old list in force). A shipped migration is never edited, so
-// this test pins the eleven providers 070 shipped with; the file is
+// this test pins the eleven providers 071 shipped with; the file is
 // frozen, so it must NOT track SOCIAL_PROVIDERS. Channel and group are
 // one provider: the chat kind lives in account_metadata, never in the
 // provider value, so no 'telegram_channel' / 'telegram_group' appears.
 //---------------
 
-// The eleven providers 070 shipped with, in the order the migration lists them.
-const PROVIDERS_AT_070 = ['youtube', 'instagram', 'bluesky', 'linkedin', 'threads', 'facebook', 'pinterest', '3speak', 'rumble', 'fanvue', 'telegram'];
+// The eleven providers 071 shipped with, in the order the migration lists them.
+const PROVIDERS_AT_071 = ['youtube', 'instagram', 'bluesky', 'linkedin', 'threads', 'facebook', 'pinterest', '3speak', 'rumble', 'fanvue', 'telegram'];
 
 const sql = readFileSync(
-  join(findRepoRoot(import.meta.url), 'supabase', 'migrations', '070_telegram-provider.sql'),
+  join(findRepoRoot(import.meta.url), 'supabase', 'migrations', '071_telegram-provider.sql'),
   'utf8',
 );
 
@@ -31,7 +31,7 @@ function checkProviders(constraint: string): string[] {
   return match[1].split(',').map((entry) => entry.trim().replace(/^'|'$/g, ''));
 }
 
-describe('supabase/migrations/070_telegram-provider.sql', () => {
+describe('supabase/migrations/071_telegram-provider.sql', () => {
   it('adds the schedules telegram account column with an empty default', () => {
     expect(sql).toContain("add column if not exists telegram_account_ids text[] not null default '{}'");
   });
@@ -52,9 +52,9 @@ describe('supabase/migrations/070_telegram-provider.sql', () => {
   );
 
   it.each(['post_metrics_provider_check', 'social_accounts_provider_check'])(
-    '%s allows exactly the providers 070 shipped with',
+    '%s allows exactly the providers 071 shipped with',
     (constraint) => {
-      expect(checkProviders(constraint)).toEqual(PROVIDERS_AT_070);
+      expect(checkProviders(constraint)).toEqual(PROVIDERS_AT_071);
     },
   );
 });
