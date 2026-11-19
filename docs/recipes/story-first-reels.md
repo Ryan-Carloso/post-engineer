@@ -30,7 +30,8 @@ before it is asserted — mechanisms, hormones, numbers, deadlines —
 never invented; a fact that cannot be confirmed is cut from the script.
 Every story picks one archetype for the value it delivers —
 informative, funny, inspirational, relatable, or provocative — never
-basic content.
+basic content. The archetype must be obvious, never subtle: the viewer
+recognizes it instantly, without thinking.
 Media is mixed: AI photos, real photos, licensed stock photos, and
 licensed stock video (b-roll) from the sources configured for this
 account (Pexels, Pixabay, Coverr) — on faceless videos and on the

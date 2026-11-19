@@ -749,6 +749,12 @@ describe('prompts hub data', () => {
     expect(text).toContain('provocative');
     expect(text).toContain('One archetype only');
     expect(text).toContain('adds nothing to the viewer');
+    // The archetype must be OBVIOUS, not subtle: the viewer recognizes
+    // it instantly, without thinking. If it could be any archetype, it
+    // is none of them.
+    expect(text).toContain('The archetype must be OBVIOUS');
+    expect(text).toContain('without thinking');
+    expect(text).toContain('it is none of them');
     expect(text).toContain('the day it happened to me');
     expect(text).toContain('one valid form, not the only one');
     expect(text).toContain('the first time I');
