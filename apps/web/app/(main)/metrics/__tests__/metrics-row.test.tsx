@@ -46,7 +46,7 @@ function row(overrides: Partial<MetricsRowView> = {}): MetricsRowView {
   };
 }
 
-function renderRow(overrides: Partial<MetricsRowView> = {}): ReturnType<typeof render> {
+function renderRow(overrides: Partial<MetricsRowView> = {}, id?: string): ReturnType<typeof render> {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
@@ -57,6 +57,7 @@ function renderRow(overrides: Partial<MetricsRowView> = {}): ReturnType<typeof r
           subtitle="Alpha · Chan One"
           formatNumber={(value) => value.toLocaleString('en-US')}
           formatDate={() => 'Oct 21, 2026'}
+          id={id}
         />
       </ul>
     </QueryClientProvider>,
@@ -193,5 +194,10 @@ describe('MetricsRow', () => {
     renderRow({ analyticsStatus: 'ok', contentType: 'SHORTS', stayedToWatchPct: null });
     expect(screen.getByText('metrics.stayedToWatchDerived:')).toBeInTheDocument();
     expect(screen.getByText('metrics.notReported')).toBeInTheDocument();
+  });
+
+  it('renders the anchor id the charts scroll to when the page passes one', () => {
+    renderRow({}, 'metric-row-post-1-youtube-v1');
+    expect(screen.getByRole('listitem')).toHaveAttribute('id', 'metric-row-post-1-youtube-v1');
   });
 });

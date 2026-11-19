@@ -37,6 +37,59 @@ vi.mock('@/components/provider-icon', () => ({
   ProviderIcon: ({ provider }: { provider: string }) => <span data-testid={`provider-${provider}`} />,
 }));
 
+// Recharts needs a layout jsdom has no size for, so the real charts
+// render nothing there. Data-driven stand-ins keep the chart titles
+// and the top-videos bar clicks drivable (same pattern as
+// metrics-charts.test.tsx).
+vi.mock('recharts', async () => {
+  const { Children, cloneElement, isValidElement } = await vi.importActual<typeof import('react')>('react');
+  function DatumButtons({ data, onClick }: { data?: Array<Record<string, unknown>>; onClick?: (data: unknown, index: number) => void }): ReactNode {
+    return (
+      <div>
+        {(data ?? []).map((datum, index) => (
+          <button
+            key={index}
+            type="button"
+            onClick={() => onClick?.(datum, index)}
+          >
+            {String(datum.label ?? datum.day ?? index)} {String(datum.value)}
+          </button>
+        ))}
+      </div>
+    );
+  }
+  const nullComponent = (): null => null;
+  return {
+    Area: nullComponent,
+    AreaChart: ({ data, children }: { data?: Array<Record<string, unknown>>; children?: ReactNode }) => (
+      <div data-testid="area-chart"><DatumButtons data={data} />{children}</div>
+    ),
+    // Mirrors Recharts: the series (<Bar>) gets (datum, index, event) on
+    // click; the chart-level BarChart onClick gets (chartState, event) and
+    // is never a per-bar handler, so the stand-in ignores it. BarChart
+    // hands its data to the series the way the real chart does.
+    Bar: ({ chartData, onClick }: { chartData?: Array<Record<string, unknown>>; onClick?: (data: unknown, index: number) => void }) => (
+      <DatumButtons data={chartData} onClick={onClick} />
+    ),
+    BarChart: ({ data, children }: { data?: Array<Record<string, unknown>>; children?: ReactNode }) => (
+      <div data-testid="bar-chart">
+        {Children.map(children, (child) => (isValidElement(child) ? cloneElement(child, { chartData: data } as Record<string, unknown>) : child))}
+      </div>
+    ),
+    CartesianGrid: nullComponent,
+    Cell: nullComponent,
+    Pie: nullComponent,
+    PieChart: ({ data, children }: { data?: Array<Record<string, unknown>>; children?: ReactNode }) => (
+      <div data-testid="pie-chart"><DatumButtons data={data} />{children}</div>
+    ),
+    ResponsiveContainer: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+    Legend: nullComponent,
+    Tooltip: nullComponent,
+    XAxis: nullComponent,
+    YAxis: nullComponent,
+  };
+});
+
 import MetricsPage from '../page';
 import { usePersonasQuery, useSocialAccountsQuery } from '@/lib/api';
 import { useI18n } from '@/lib/i18n/provider';
@@ -133,6 +186,11 @@ async function applyProviderFilter(label: string): Promise<void> {
 }
 
 beforeEach(() => {
+  // The saved preference defaults the suite to the list view the
+  // row-focused tests below assert against; the view tests that
+  // cover the default and the stored choice set their own value.
+  window.localStorage.clear();
+  window.localStorage.setItem('metrics-view-mode', 'list');
   setLocale('en');
   vi.mocked(usePersonasQuery).mockReturnValue({
     data: [
@@ -248,6 +306,153 @@ describe('MetricsPage', () => {
     expect(screen.getByText('metrics.filterProvider')).toBeInTheDocument();
     expect(screen.queryByText('metrics.filterAccount')).toBeNull();
     expect(screen.queryByText('metrics.filterAngle')).toBeNull();
+  });
+
+  it('switches between the list and the chart view, remembering the choice', async () => {
+    window.localStorage.clear();
+    stubMetricsFetch({
+      success: true,
+      rows: [row({ views: 1200 }), row({ postId: 'post-2', views: 300 })],
+      truncated: false,
+    });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('metrics.chartsOverTimeTitle')).toBeInTheDocument());
+    // Default view (nothing stored) is the chart.
+    expect(screen.queryByText('metrics.tableTitle')).toBeNull();
+    expect(screen.getByText('metrics.chartsBreakdownTitle')).toBeInTheDocument();
+    expect(screen.getByText('metrics.chartsTopTitle')).toBeInTheDocument();
+    activateTab('metrics.viewList');
+    expect(screen.getByText('metrics.tableTitle')).toBeInTheDocument();
+    expect(screen.queryByText('metrics.chartsOverTimeTitle')).toBeNull();
+    expect(window.localStorage.getItem('metrics-view-mode')).toBe('list');
+    activateTab('metrics.viewChart');
+    expect(screen.getByText('metrics.chartsOverTimeTitle')).toBeInTheDocument();
+    expect(window.localStorage.getItem('metrics-view-mode')).toBe('chart');
+  });
+
+  it('opens in the chart view when it is the stored choice', async () => {
+    window.localStorage.setItem('metrics-view-mode', 'chart');
+    stubMetricsFetch({
+      success: true,
+      rows: [row({ views: 1200 }), row({ postId: 'post-2', views: 300 })],
+      truncated: false,
+    });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('metrics.chartsOverTimeTitle')).toBeInTheDocument());
+  });
+
+  it('opens in the list view when list is the stored choice', async () => {
+    window.localStorage.setItem('metrics-view-mode', 'list');
+    stubMetricsFetch({
+      success: true,
+      rows: [row({ views: 1200 })],
+      truncated: false,
+    });
+    renderPage();
+    // The stored list is applied after mount (never during the first
+    // render), so the list shows once effects run.
+    await waitFor(() => expect(screen.getByText('metrics.tableTitle')).toBeInTheDocument());
+    expect(screen.queryByText('metrics.chartsOverTimeTitle')).toBeNull();
+  });
+
+  it('shows the truncation caption in the chart view when the payload was truncated', async () => {
+    window.localStorage.clear();
+    stubMetricsFetch({
+      success: true,
+      rows: [row({ views: 1200 }), row({ postId: 'post-2', views: 300 })],
+      truncated: true,
+    });
+    renderPage();
+    // Wait for the rows to load: only then do the chart bodies (and
+    // their footnotes) render — the titles render while loading too.
+    await waitFor(() => expect(screen.getByRole('button', { name: /myth 1200/ })).toBeInTheDocument());
+    expect(screen.getAllByText(/metrics\.chartsTruncated/)).toHaveLength(3);
+  });
+
+  it('shows the error state in the chart view when the metrics load fails', async () => {
+    window.localStorage.clear();
+    stubMetricsFetch({ success: false, error: 'nope' }, 500);
+    renderPage();
+    await waitFor(() => expect(screen.getAllByText('metrics.loadError')).toHaveLength(3));
+  });
+
+  it('shows no truncation caption while the chart data is still loading', async () => {
+    window.localStorage.clear();
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => {})));
+    renderPage();
+    await waitFor(() => expect(screen.getAllByText('metrics.chartsLoading')).toHaveLength(3));
+    expect(screen.queryByText(/metrics\.chartsTruncated/)).toBeNull();
+  });
+
+  it('renders each list row with the scroll anchor id the charts use', async () => {
+    stubMetricsFetch({
+      success: true,
+      rows: [row({ postId: 'post-1' }), row({ postId: 'post-2', provider: 'instagram', accountId: 'ig1', externalId: 'v2' })],
+      truncated: false,
+    });
+    renderPage();
+    // Wait for the rows themselves (the list heading renders while loading).
+    await waitFor(() => expect(document.getElementById('metric-row-post-1-youtube-v1')).toBeInTheDocument());
+    expect(document.getElementById('metric-row-post-2-instagram-v2')).toBeInTheDocument();
+  });
+
+  it('shows no truncation caption in the list view when the payload was not truncated', async () => {
+    stubMetricsFetch({ success: true, rows: [row()], truncated: false });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('metrics.tableTitle')).toBeInTheDocument());
+    expect(screen.queryByText(/metrics\.truncated/)).toBeNull();
+  });
+
+  it('shows the chart view when localStorage throws', async () => {
+    const getItem = vi.spyOn(window.localStorage, 'getItem').mockImplementation(() => {
+      throw new Error('storage unavailable');
+    });
+    try {
+      window.localStorage.clear();
+      stubMetricsFetch({
+        success: true,
+        rows: [row({ views: 1200 })],
+        truncated: false,
+      });
+      renderPage();
+      await waitFor(() => expect(screen.getByText('metrics.chartsOverTimeTitle')).toBeInTheDocument());
+    } finally {
+      getItem.mockRestore();
+    }
+  });
+
+  it('clicking a top-videos bar shows the list without overwriting the saved preference', async () => {
+    window.localStorage.clear();
+    // Capture the scrolled-to element: the bar click must center the
+    // clicked row in the list view.
+    const scrolled: HTMLElement[] = [];
+    const scrollIntoView = vi.fn(function scrollCapture(this: HTMLElement) {
+      scrolled.push(this);
+    });
+    window.HTMLElement.prototype.scrollIntoView = scrollIntoView as never;
+    stubMetricsFetch({
+      success: true,
+      rows: [row({ views: 1200 }), row({ postId: 'post-2', views: 300 })],
+      truncated: false,
+    });
+    renderPage();
+    await waitFor(() => expect(screen.getByText('metrics.chartsOverTimeTitle')).toBeInTheDocument());
+    // Wait for the rows to load: only then do the top bars render (the
+    // chart titles render while loading too).
+    await waitFor(() => expect(screen.getByRole('button', { name: /myth 1200/ })).toBeInTheDocument());
+    // The top bar for the 1200-view row (its label is the script angle).
+    fireEvent.click(screen.getByRole('button', { name: /myth 1200/ }));
+    expect(screen.getByText('metrics.tableTitle')).toBeInTheDocument();
+    expect(screen.queryByText('metrics.chartsOverTimeTitle')).toBeNull();
+    // The peek at the list must not persist: nothing was ever saved,
+    // so the stored preference stays absent rather than becoming 'list'.
+    expect(window.localStorage.getItem('metrics-view-mode')).toBeNull();
+    // The list tab is the active one now.
+    expect(screen.getByText('metrics.viewList')).toHaveAttribute('data-state', 'active');
+    // The clicked row is centered in the viewport.
+    await waitFor(() => expect(scrollIntoView).toHaveBeenCalledWith({ block: 'center' }));
+    expect(scrolled).toHaveLength(1);
+    expect(scrolled[0]?.id).toBe('metric-row-post-1-youtube-v1');
   });
 
   it('shows the coverage card below the list, with attention and waiting groups, and the as-of line', async () => {
@@ -404,7 +609,10 @@ describe('MetricsPage', () => {
       { status: 200 },
     ));
     fireEvent.click(screen.getByText('metrics.retry'));
-    await waitFor(() => expect(screen.getByText('metrics.tableTitle')).toBeInTheDocument());
+    // The retry must actually refetch: waiting for the rows (the tiles
+    // only exist with rows) proves recovery, not the always-rendered
+    // list heading.
+    await waitFor(() => expect(screen.getByText('metrics.statMeasurements')).toBeInTheDocument());
   });
 
   it('sends the window and the sheet filters to the API, and clears them from the chips', async () => {

@@ -67,6 +67,9 @@ describe('metrics dashboard', () => {
     cy.contains('Uma por vídeo por rede').should('be.visible');
     cy.contains('1.500').should('be.visible');
     cy.contains('117').should('be.visible');
+    // The default view is the chart; switch to the list to see rows.
+    cy.get('.recharts-wrapper').should('exist');
+    cy.contains('button', 'Lista').click();
     cy.get('.recharts-wrapper').should('not.exist');
     cy.contains('myth-busting').should('be.visible');
     cy.contains('YouTube · 21 de out. de 2026').scrollIntoView().should('be.visible');
@@ -96,6 +99,34 @@ describe('metrics dashboard', () => {
     cy.contains('button', 'Limpar filtros').should('not.exist');
   });
 
+  it('shows the three charts in the chart view; clicking a top bar scrolls to its row', () => {
+    interceptMetrics({ success: true, truncated: true, rows: ROWS });
+    cy.visit('/metrics');
+    cy.wait('@getMetrics');
+
+    // The chart is the default view: no toggle click needed.
+    cy.get('.recharts-wrapper').should('have.length', 3);
+    cy.contains('Ao longo do tempo').scrollIntoView().should('be.visible');
+    cy.contains('Distribuição de views').scrollIntoView().should('be.visible');
+    cy.contains('Vídeos mais vistos').scrollIntoView().should('be.visible');
+    // The charts say they cover truncated data and skip the null row.
+    cy.contains('Os gráficos cobrem só as').scrollIntoView().should('be.visible');
+    cy.contains('1 vídeo sem dados de views').scrollIntoView().should('be.visible');
+    // The views-by-day area and the top bars render (one provider only,
+    // so the breakdown is a donut, not bars).
+    cy.get('.recharts-wrapper').should('have.length', 3);
+    cy.get('.recharts-wrapper').last().find('.recharts-bar-rectangle').first().click();
+    // Clicking a bar returns to the list on the clicked video's row.
+    cy.contains('myth-busting').scrollIntoView().should('be.visible');
+    cy.contains('button', 'Lista').should('have.attr', 'data-state', 'active');
+    // The bar click only peeks at the list: the saved preference is untouched.
+    cy.window().then((win) => {
+      expect(win.localStorage.getItem('metrics-view-mode')).to.not.equal('list');
+    });
+    cy.contains('button', 'Gráficos').click();
+    cy.get('.recharts-wrapper').should('have.length', 3);
+  });
+
   it('shows YouTube retention on a row and the reconnect prompt for an old token', () => {
     interceptMetrics({
       success: true,
@@ -104,6 +135,8 @@ describe('metrics dashboard', () => {
     });
     cy.visit('/metrics');
     cy.wait('@getMetrics');
+    // Retention lives on the list rows: switch over from the default chart view.
+    cy.contains('button', 'Lista').click();
     cy.contains('641 views engajadas').scrollIntoView().should('be.visible');
     cy.contains('Ficaram para assistir (derivado: views engajadas / views)').should('be.visible');
     cy.contains('64,1%').should('be.visible');
@@ -133,6 +166,10 @@ describe('metrics dashboard', () => {
 
     cy.visit('/metrics');
     cy.wait('@getMetrics');
+    // The retention curve lives in the list view: switch over from the
+    // default chart view, where its charts would otherwise count here.
+    cy.contains('button', 'Lista').click();
+    // No chart renders until the curve is opened.
     cy.get('.recharts-wrapper').should('have.length', 0);
     cy.get('@getCurve.all').should('have.length', 0);
     cy.contains('button', 'Curva de retenção').scrollIntoView().click();
@@ -148,6 +185,7 @@ describe('metrics dashboard', () => {
     interceptMetrics({ success: true, truncated: false, rows: [] });
     cy.visit('/metrics');
     cy.wait('@getMetrics');
+    cy.contains('button', 'Lista').click();
     cy.contains('Nenhum vídeo medido ainda').scrollIntoView().should('be.visible');
   });
 
@@ -162,6 +200,7 @@ describe('metrics dashboard', () => {
     }).as('getMetricsFlaky');
 
     cy.visit('/metrics');
+    cy.contains('button', 'Lista').click();
     cy.contains('Não foi possível carregar as métricas', { timeout: 15_000 }).scrollIntoView().should('be.visible');
 
     cy.then(() => {

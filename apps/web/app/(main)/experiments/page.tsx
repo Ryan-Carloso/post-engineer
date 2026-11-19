@@ -4,27 +4,18 @@ import { useEffect, useMemo, useState } from 'react';
 import { useI18n } from '@/lib/i18n/provider';
 import { AlertIcon, ChartIcon, SpinnerIcon } from '@/lib/ui';
 import { cn } from '@/lib/utils';
-import { PROVIDER_LABELS } from '@/lib/account-options';
-import { isSocialProvider } from '@/lib/providers/registry';
 import {
   useExperimentDetailQuery,
   useExperimentsQuery,
   type ExperimentDetailResult,
-  type ExperimentProviderResult,
   type ExperimentsWindow,
 } from '@/lib/experiments/experiments-dashboard';
-import type { ExperimentResultLabel } from '@/lib/experiments/results';
+import { ProviderCard } from './experiment-charts';
 
 const CARD_CLASS = 'rounded-2xl border border-hairline bg-card shadow-[0_8px_24px_rgba(20,32,51,0.04)]';
 const SELECT_CLASS =
   "w-full appearance-none rounded-xl border border-line bg-card bg-[url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%23718096'%3E%3Cpath d='M5.5 7.5 10 12l4.5-4.5'/%3E%3C/svg%3E\")] bg-[length:16px] bg-[right_10px_center] bg-no-repeat py-2.5 pr-9 pl-3 text-sm font-medium text-ink transition-colors hover:border-line focus:border-ink focus:ring-2 focus:ring-ink/10 focus:outline-none";
 const WINDOWS: ExperimentsWindow[] = ['24h', '7d'];
-
-const LABEL_BADGE_CLASS: Record<ExperimentResultLabel, string> = {
-  pending: 'bg-surface text-muted-text',
-  indicative: 'bg-warning-soft text-warning',
-  clear: 'bg-success-soft text-success',
-};
 
 export default function ExperimentsPage(): React.ReactElement {
   const { t, locale } = useI18n();
@@ -163,77 +154,6 @@ function ExperimentDetail({ detail, formatNumber, formatDateTime }: {
         ))
       )}
     </>
-  );
-}
-
-function ProviderCard({ provider, firstName, secondName, firstId, secondId, variantName, pairsCreated, formatNumber }: {
-  provider: ExperimentProviderResult;
-  firstName: string;
-  secondName: string;
-  firstId: string;
-  secondId: string;
-  variantName: (variantId: string) => string;
-  pairsCreated: number;
-  formatNumber: (value: number) => string;
-}): React.ReactElement {
-  const { t } = useI18n();
-  const labelKey = provider.label === 'clear'
-    ? 'experiments.labelClear'
-    : provider.label === 'indicative'
-      ? 'experiments.labelIndicative'
-      : 'experiments.labelPending';
-  const winsFirst = provider.wins[firstId] ?? 0;
-  const winsSecond = provider.wins[secondId] ?? 0;
-  return (
-    <section className={cn(CARD_CLASS, 'p-4 lg:p-6')}>
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-lg font-semibold tracking-[-0.02em] text-ink">
-          {isSocialProvider(provider.provider) ? PROVIDER_LABELS[provider.provider] : provider.provider}
-        </h2>
-        <span className={cn('rounded-full px-3 py-1 text-xs font-semibold', LABEL_BADGE_CLASS[provider.label])}>
-          {t(labelKey)}
-        </span>
-      </div>
-      <p className="text-sm text-ink">
-        {t('experiments.wins')}: {firstName} {formatNumber(winsFirst)} — {formatNumber(winsSecond)} {secondName}
-      </p>
-      <p className="mt-1 text-sm text-muted-text">
-        {t('experiments.pValue', { value: provider.pValue === null ? '—' : provider.pValue.toFixed(3) })}
-      </p>
-      <p className="mt-1 text-sm font-semibold text-ink">
-        {provider.label === 'clear' && provider.leader !== null
-          ? t('experiments.winner', { name: variantName(provider.leader) })
-          : t('experiments.noWinner')}
-      </p>
-      <table className="mt-4 w-full text-sm">
-        <thead>
-          <tr className="border-b border-hairline text-left text-xs font-semibold text-muted-text">
-            <th scope="col" className="py-2 pr-2">{t('experiments.pairHeader')}</th>
-            <th scope="col" className="py-2 pr-2 text-right">{firstName}</th>
-            <th scope="col" className="py-2 pr-2 text-right">{secondName}</th>
-            <th scope="col" className="py-2 text-right">{t('experiments.winnerHeader')}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {Array.from({ length: pairsCreated }, (_, index) => index + 1).map((pair) => {
-            const comparison = provider.comparisons.find((entry) => entry.pair === pair);
-            const viewsFirst = comparison?.values[firstId]?.views ?? null;
-            const viewsSecond = comparison?.values[secondId]?.views ?? null;
-            const winner = comparison?.winner ?? null;
-            return (
-              <tr key={pair} className="border-b border-hairline last:border-b-0">
-                <td className="py-2 pr-2 text-muted-text tabular-nums">{pair}</td>
-                <td className="py-2 pr-2 text-right text-ink tabular-nums">{viewsFirst === null ? '—' : formatNumber(viewsFirst)}</td>
-                <td className="py-2 pr-2 text-right text-ink tabular-nums">{viewsSecond === null ? '—' : formatNumber(viewsSecond)}</td>
-                <td className="py-2 text-right font-medium text-ink">
-                  {winner === null ? (comparison === undefined ? t('experiments.noData') : t('experiments.tie')) : variantName(winner)}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </section>
   );
 }
 

@@ -17,9 +17,12 @@ interface MetricsRowProps {
   subtitle: string;
   formatNumber: (value: number) => string;
   formatDate: (iso: string) => string;
+  // Anchor target for the top-videos chart: clicking a bar scrolls to
+  // this row in the list view.
+  id?: string;
 }
 
-export function MetricsRow({ row, title, subtitle, formatNumber, formatDate }: MetricsRowProps): React.ReactElement {
+export function MetricsRow({ row, title, subtitle, formatNumber, formatDate, id }: MetricsRowProps): React.ReactElement {
   const { t } = useI18n();
   const engagement = [
     row.likes === null ? null : t('metrics.likesValue', { count: formatNumber(row.likes) }),
@@ -27,7 +30,7 @@ export function MetricsRow({ row, title, subtitle, formatNumber, formatDate }: M
     row.saves === null ? null : t('metrics.savesValue', { count: formatNumber(row.saves) }),
   ].filter((value): value is string => value !== null);
   return (
-    <li className="flex flex-col gap-2 py-3">
+    <li id={id} className="flex flex-col gap-2 py-3">
       <div className="flex items-center gap-3">
         <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-surface">
           <ProviderIcon provider={row.provider} />
