@@ -65,8 +65,7 @@ function encryptPlaintext(plaintext: string): string {
   ].join('.');
 }
 
-function decryptPlaintext(encrypted: string): string {
-  const key = getEncryptionKey();
+function decryptPlaintext(encrypted: string, key: Buffer): string {
   const parts = encrypted.split('.');
 
   if (parts.length !== 4 || parts[0] !== VERSION) {
@@ -120,11 +119,14 @@ export class TokenDecryptError extends Error {
 
 //---------------
 // decryptTokens — decrypts and validates format/version/tag
-// Throws TokenDecryptError on tampering or invalid format.
+// Throws TokenDecryptError on tampering or invalid format. A missing or
+// wrong-size TOKEN_ENCRYPTION_KEY throws a plain Error before the try:
+// a key-config error is a server misconfiguration, not a dead token.
 //---------------
 export function decryptTokens(encrypted: string): EncryptedTokenPayload {
+  const key = getEncryptionKey();
   try {
-    return parseDecryptedObject(decryptPlaintext(encrypted)) as EncryptedTokenPayload;
+    return parseDecryptedObject(decryptPlaintext(encrypted, key)) as EncryptedTokenPayload;
   } catch (error) {
     throw new TokenDecryptError(
       error instanceof Error ? error.message : 'Failed to decrypt stored tokens',
@@ -144,8 +146,9 @@ export function encryptJson(payload: Record<string, unknown>): string {
 }
 
 export function decryptJson(encrypted: string): Record<string, unknown> {
+  const key = getEncryptionKey();
   try {
-    return parseDecryptedObject(decryptPlaintext(encrypted));
+    return parseDecryptedObject(decryptPlaintext(encrypted, key));
   } catch (error) {
     throw new TokenDecryptError(
       error instanceof Error ? error.message : 'Failed to decrypt stored data',

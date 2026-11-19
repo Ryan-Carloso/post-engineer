@@ -3,8 +3,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 //---------------
-// GET/PUT /api/tool-config (issue #669): auth, unconfigured shape, full
-// keys on GET for the owner, presence-only on PUT, validation 400s, and
+// GET/PUT /api/tool-config (issue #669): auth, unconfigured shape,
+// presence-only on GET and PUT, validation 400s, and
 // generic 500s that never leak a raw DB message or a key value.
 // Only fake keys below — never a real one.
 //---------------

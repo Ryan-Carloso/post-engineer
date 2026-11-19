@@ -281,7 +281,9 @@ describe('tool_config', () => {
   };
 
   it('get reads the saved configuration and never sees a key value', async () => {
-    const { call, seen } = setup({ 'GET /api/tool-config': PRESENCE });
+    const { call, seen } = setup({
+      'GET /api/tool-config': { ...PRESENCE, keys: { tavily: 'tvly-fake-key-1234' } },
+    });
     const result = await call('tool_config', { action: 'get' });
     expect(result.isError).toBe(false);
     expect(seen.map((request) => `${request.method} ${request.path}`)).toEqual(['GET /api/tool-config']);

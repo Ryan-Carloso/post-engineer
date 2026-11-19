@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { encryptTokens, decryptTokens, encryptJson, decryptJson, TokenDecryptError } from '@/lib/token-crypto';
 
 const VALID_KEY = Buffer.alloc(32).toString('base64');
@@ -125,6 +125,38 @@ describe('token-crypto', () => {
     it('throws when key decodes to wrong length', () => {
       process.env.TOKEN_ENCRYPTION_KEY = SHORT_KEY;
       expect(() => encryptTokens({ access_token: 'tok' })).toThrow('32 bytes');
+    });
+  });
+
+  describe('decrypt with a missing or invalid key', () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it('decryptTokens throws a plain Error, not TokenDecryptError, when the key is missing', () => {
+      process.env.TOKEN_ENCRYPTION_KEY = VALID_KEY;
+      const encrypted = encryptTokens({ access_token: 'tok' });
+      vi.stubEnv('TOKEN_ENCRYPTION_KEY', undefined);
+      expect(() => decryptTokens(encrypted)).toThrow('TOKEN_ENCRYPTION_KEY is not defined');
+      expect(() => decryptTokens(encrypted)).not.toThrow(TokenDecryptError);
+    });
+
+    it('decryptJson throws a plain Error, not TokenDecryptError, when the key is missing', () => {
+      process.env.TOKEN_ENCRYPTION_KEY = VALID_KEY;
+      const encrypted = encryptJson({ tavily: 'tvly-fake-key-1234' });
+      vi.stubEnv('TOKEN_ENCRYPTION_KEY', undefined);
+      expect(() => decryptJson(encrypted)).toThrow('TOKEN_ENCRYPTION_KEY is not defined');
+      expect(() => decryptJson(encrypted)).not.toThrow(TokenDecryptError);
+    });
+
+    it('decryptTokens throws a plain Error, not TokenDecryptError, when the key is the wrong length', () => {
+      process.env.TOKEN_ENCRYPTION_KEY = VALID_KEY;
+      const encrypted = encryptTokens({ access_token: 'tok' });
+      vi.stubEnv('TOKEN_ENCRYPTION_KEY', SHORT_KEY);
+      expect(() => decryptTokens(encrypted)).toThrow(
+        'TOKEN_ENCRYPTION_KEY must decode to exactly 32 bytes',
+      );
+      expect(() => decryptTokens(encrypted)).not.toThrow(TokenDecryptError);
     });
   });
 });

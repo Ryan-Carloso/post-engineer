@@ -13,6 +13,9 @@ import { SaveToolConfigBodySchema } from '../contracts/tool-config.js';
 //   tool/source it belongs to). The route's lib validation owns that rule
 //   and 400s a mismatched key, so both schemas accept one and the save
 //   fails server-side.
+// - Neither schema trims a key; the route's lib trims and rejects a
+//   whitespace-only key, so both schemas accept one and the save fails
+//   server-side.
 //---------------
 
 const VALID = {
@@ -68,5 +71,11 @@ describe('tool_config tool-contract equivalence', () => {
     };
     expect(SaveToolConfigSchema.safeParse(mismatched).success).toBe(true);
     expect(SaveToolConfigBodySchema.safeParse(mismatched).success).toBe(true);
+  });
+
+  it('both sides accept a whitespace-only key at the shape level; the route trims and 400s it', () => {
+    const whitespace = { ...VALID, keys: { tavily: '   ' } };
+    expect(SaveToolConfigSchema.safeParse(whitespace).success).toBe(true);
+    expect(SaveToolConfigBodySchema.safeParse(whitespace).success).toBe(true);
   });
 });
