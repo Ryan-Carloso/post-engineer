@@ -34,6 +34,7 @@ interface StoredPrompt {
 let stored: StoredPrompt[];
 let requests: Array<{ method: string; path: string; body: unknown }>;
 let nextFailure: { status: number; body: unknown } | null;
+let failDetail: boolean;
 
 function own(slug: string, visibility: StoredPrompt['visibility'], extra: Partial<StoredPrompt> = {}): StoredPrompt {
   return { slug, title: `Title ${slug}`, description: `About ${slug}`, prompt: `Text of ${slug}`, source: 'own', visibility, ...extra };
@@ -53,6 +54,7 @@ async function handle(url: string, init: RequestInit | undefined): Promise<Respo
     nextFailure = null;
     return Response.json(failure.body, { status: failure.status });
   }
+  if (failDetail && method === 'GET' && url !== '/api/prompts') return Response.json({ success: false }, { status: 500 });
   if (url === '/api/prompts' && method === 'GET') return Response.json({ success: true, prompts: stored.map(summary) });
   if (url === '/api/prompts' && method === 'POST') {
     const draft = body as { slug: string; title: string; description: string; prompt: string; visibility: StoredPrompt['visibility'] };
@@ -87,6 +89,7 @@ beforeEach(() => {
   stored = [];
   requests = [];
   nextFailure = null;
+  failDetail = false;
   vi.stubGlobal('fetch', vi.fn<typeof fetch>(async (input, init) => handle(String(input), init)));
   Object.defineProperty(window.navigator, 'clipboard', {
     value: { writeText: vi.fn().mockResolvedValue(undefined) },
@@ -278,5 +281,59 @@ describe('MyPromptsSection', () => {
     await waitFor(() => expect(within(row).getByRole('button', { name: 'Edit' })).toBeDisabled());
     expect(within(row).getByRole('button', { name: 'Delete' })).toBeDisabled();
     release(Response.json({ success: true, prompt: own('mine', 'public') }));
+  });
+
+  it('shows a localized error and keeps the form closed when the prompt text cannot be loaded for editing', async () => {
+    stored = [own('mine', 'private')];
+    renderSection();
+    const row = await screen.findByTestId('user-prompt-mine');
+    failDetail = true;
+    fireEvent.click(within(row).getByRole('button', { name: 'Edit' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Something went wrong. Try again.');
+    expect(screen.queryByTestId('user-prompt-form')).not.toBeInTheDocument();
+  });
+
+  it('shows a localized error and copies nothing when the prompt text cannot be loaded for copying', async () => {
+    stored = [own('mine', 'private')];
+    renderSection();
+    const row = await screen.findByTestId('user-prompt-mine');
+    failDetail = true;
+    fireEvent.click(within(row).getByRole('button', { name: 'Copy' }));
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    expect(window.navigator.clipboard.writeText).not.toHaveBeenCalled();
+  });
+
+  it('keeps the prompt and shows an error when deleting fails', async () => {
+    stored = [own('mine', 'private')];
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    renderSection();
+    const row = await screen.findByTestId('user-prompt-mine');
+    nextFailure = { status: 500, body: { success: false, error: 'internal detail' } };
+    fireEvent.click(within(row).getByRole('button', { name: 'Delete' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Something went wrong. Try again.');
+    expect(screen.queryByText(/internal detail/)).not.toBeInTheDocument();
+    expect(screen.getByTestId('user-prompt-mine')).toBeInTheDocument();
+  });
+
+  it('keeps the edit form open with the error when saving an edit fails, and closes it on Cancel', async () => {
+    stored = [own('mine', 'private')];
+    renderSection();
+    const row = await screen.findByTestId('user-prompt-mine');
+    fireEvent.click(within(row).getByRole('button', { name: 'Edit' }));
+    await screen.findByTestId('user-prompt-form');
+    nextFailure = { status: 429, body: { success: false } };
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Too many requests');
+    expect(screen.getByTestId('user-prompt-form')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByTestId('user-prompt-form')).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('locks the new prompt button while the form is open', async () => {
+    renderSection();
+    await screen.findByText('You have no prompts yet.');
+    fireEvent.click(screen.getByTestId('new-user-prompt-btn'));
+    expect(screen.getByTestId('new-user-prompt-btn')).toBeDisabled();
   });
 });

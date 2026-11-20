@@ -130,3 +130,28 @@ describe('public reads', () => {
     expect(await findPublicUserPrompt(db.client, 'hidden')).toBeNull();
   });
 });
+
+describe('database failures', () => {
+  const failing: Array<[string, (db: ReturnType<typeof createFakeUserPromptsDb>) => Promise<unknown>]> = [
+    ['finding an own prompt', (db) => findOwnUserPrompt(db.client, ALICE, 'mine')],
+    ['listing own prompts', (db) => listOwnUserPrompts(db.client, ALICE)],
+    ['listing public prompts', (db) => listPublicUserPrompts(db.client)],
+    ['finding a public prompt', (db) => findPublicUserPrompt(db.client, 'shared')],
+    ['updating a prompt', (db) => updateOwnUserPrompt(db.client, ALICE, 'mine', { title: 'T' })],
+    ['deleting a prompt', (db) => deleteOwnUserPrompt(db.client, ALICE, 'mine')],
+  ];
+
+  it.each(failing)('throws a store error when %s fails, never a silent empty result', async (_label, run) => {
+    const db = createFakeUserPromptsDb([{ owner_id: ALICE, slug: 'mine', title: 'T', body: 'a', visibility: 'public' }]);
+    db.failNext('XX000');
+    await expect(run(db)).rejects.toBeInstanceOf(UserPromptStoreError);
+  });
+
+  it('keeps the original database error as the cause of the store error', async () => {
+    const db = createFakeUserPromptsDb();
+    db.failNext('XX000');
+    const error = await listOwnUserPrompts(db.client, ALICE).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(UserPromptStoreError);
+    expect((error as UserPromptStoreError).cause).toMatchObject({ code: 'XX000' });
+  });
+});

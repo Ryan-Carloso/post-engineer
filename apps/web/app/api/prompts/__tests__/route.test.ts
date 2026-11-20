@@ -480,3 +480,59 @@ describe('DELETE /api/prompts/[slug]', () => {
     expect(db.rows).toHaveLength(1);
   });
 });
+
+describe('database failures answer a logged 500, never a partial success', () => {
+  const body = { slug: 'my-prompt', title: 'T', prompt: 'P' };
+
+  it('on create, update and delete', async () => {
+    const db = seedDb([{ owner_id: ALICE, slug: 'mine', title: 'T', body: 'a' }]);
+    authenticatedAs(ALICE);
+    db.failNext('XX000');
+    expect((await createPrompt(request('/api/prompts', { method: 'POST', body }))).status).toBe(500);
+    db.failNext('XX000');
+    expect((await patchPrompt(request('/api/prompts/mine', { method: 'PATCH', body: { title: 'New' } }), slugContext('mine'))).status).toBe(500);
+    db.failNext('XX000');
+    expect((await deletePrompt(request('/api/prompts/mine', { method: 'DELETE' }), slugContext('mine'))).status).toBe(500);
+    expect(db.rows[0].title).toBe('T');
+  });
+
+  it('on reading one prompt, own or public', async () => {
+    const db = seedDb([{ owner_id: ALICE, slug: 'mine', title: 'T', body: 'a' }]);
+    authenticatedAs(ALICE);
+    db.failNext('XX000');
+    expect((await getPrompt(request('/api/prompts/mine'), slugContext('mine'))).status).toBe(500);
+    signedOut();
+    db.failNext('XX000');
+    expect((await getPrompt(request('/api/prompts/mine', { credentials: false }), slugContext('mine'))).status).toBe(500);
+  });
+
+  it('on an unexpected error that is not a store error', async () => {
+    holder.db = { from: (): never => { throw new Error('connection reset'); } };
+    authenticatedAs(ALICE);
+    const response = await listPrompts(request('/api/prompts'));
+    expect(response.status).toBe(500);
+    expect(JSON.stringify(await response.json())).not.toContain('connection reset');
+  });
+
+  it('returns 400 on a malformed percent-encoded slug for update and delete', async () => {
+    const db = seedDb();
+    authenticatedAs(ALICE);
+    expect((await patchPrompt(request('/api/prompts/%E0%A4%A', { method: 'PATCH', body: { title: 'T' } }), slugContext('%E0%A4%A'))).status).toBe(400);
+    expect((await deletePrompt(request('/api/prompts/%E0%A4%A', { method: 'DELETE' }), slugContext('%E0%A4%A'))).status).toBe(400);
+    expect(db.queries).toEqual([]);
+  });
+
+  it('returns 404 for a slug that cannot be a prompt on update and delete, without querying', async () => {
+    const db = seedDb();
+    authenticatedAs(ALICE);
+    expect((await patchPrompt(request('/api/prompts/Bad%20Slug', { method: 'PATCH', body: { title: 'T' } }), slugContext('Bad%20Slug'))).status).toBe(404);
+    expect((await deletePrompt(request('/api/prompts/Bad%20Slug', { method: 'DELETE' }), slugContext('Bad%20Slug'))).status).toBe(404);
+    expect(db.queries).toEqual([]);
+  });
+
+  it('returns 404 when updating an unknown own prompt', async () => {
+    seedDb();
+    authenticatedAs(ALICE);
+    expect((await patchPrompt(request('/api/prompts/nope', { method: 'PATCH', body: { title: 'T' } }), slugContext('nope'))).status).toBe(404);
+  });
+});
