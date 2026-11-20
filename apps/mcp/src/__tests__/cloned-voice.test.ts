@@ -33,7 +33,7 @@ import type { PostEngineerClient } from '../client.js';
 
 vi.mock('node:fs/promises', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs/promises')>();
-  return { ...actual, readFile: vi.fn(actual.readFile) };
+  return { ...actual, open: vi.fn(actual.open) };
 });
 
 const { httpsRequestMock } = vi.hoisted(() => ({ httpsRequestMock: vi.fn() }));
@@ -547,7 +547,7 @@ describe('readCloneReferenceFile / createClonedVoiceFromFile (audioPath)', () =>
   });
 
   afterEach(() => {
-    vi.mocked(fsPromises.readFile).mockClear();
+    vi.mocked(fsPromises.open).mockClear();
   });
 
   it('reads a local recording into a typed Blob named by its basename', async () => {
@@ -569,11 +569,11 @@ describe('readCloneReferenceFile / createClonedVoiceFromFile (audioPath)', () =>
     expect((await readCloneReferenceFile(path)).blob.type).toBe(mime);
   });
 
-  it('rejects an over-size file before reading it', async () => {
+  it('rejects an over-size file from its handle size', async () => {
     const path = join(dir, 'huge.wav');
     await writeFile(path, Buffer.alloc(20 * 1024 * 1024 + 1));
     await expect(readCloneReferenceFile(path)).rejects.toThrow('Audio "huge.wav" exceeds 20 MB.');
-    expect(fsPromises.readFile).not.toHaveBeenCalled();
+    expect(fsPromises.open).toHaveBeenCalledTimes(1);
   });
 
   it('rejects an unsupported extension before touching the file', async () => {
@@ -582,7 +582,7 @@ describe('readCloneReferenceFile / createClonedVoiceFromFile (audioPath)', () =>
     await expect(readCloneReferenceFile(path)).rejects.toThrow(
       'Audio "notes.txt" must be an MP3, WAV, M4A, or WebM file.',
     );
-    expect(fsPromises.readFile).not.toHaveBeenCalled();
+    expect(fsPromises.open).not.toHaveBeenCalled();
   });
 
   it('rejects an empty file', async () => {
@@ -604,7 +604,7 @@ describe('readCloneReferenceFile / createClonedVoiceFromFile (audioPath)', () =>
   it('rejects a directory', async () => {
     const path = join(dir, 'folder.wav');
     await fsPromises.mkdir(path);
-    await expect(readCloneReferenceFile(path)).rejects.toThrow('Audio "folder.wav" is not a file.');
+    await expect(readCloneReferenceFile(path)).rejects.toThrow('Audio "folder.wav" is not a regular file.');
   });
 
   it('requires consent before reading anything', async () => {
@@ -612,7 +612,7 @@ describe('readCloneReferenceFile / createClonedVoiceFromFile (audioPath)', () =>
     await expect(
       createClonedVoiceFromFile(fakeHost(request), join(dir, 'My Voice.MP3'), 'en', false, true),
     ).rejects.toThrow('consent must be true to create a voice clone');
-    expect(fsPromises.readFile).not.toHaveBeenCalled();
+    expect(fsPromises.open).not.toHaveBeenCalled();
     expect(request).not.toHaveBeenCalled();
   });
 

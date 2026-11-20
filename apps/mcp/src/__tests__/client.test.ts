@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { connectTelegramAccount } from '../client-telegram.js';
 import {
   PostEngineerClient,
-  assertImageSize,
   MAX_LIBRARY_IMAGE_BYTES,
   MAX_LIBRARY_TAG_LENGTH,
   MAX_LIBRARY_DESCRIPTION_LENGTH,
@@ -2335,27 +2334,29 @@ describe('PostEngineerClient persona image library', () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
-  it('assertImageSize throws the typed error with the full path and a unified message', () => {
+  it('addPersonaImage throws the typed size error with the full path before uploading', async () => {
     const size = MAX_LIBRARY_IMAGE_BYTES + 1;
+    const path = await writeTempImage('over.jpg', size);
     let error: unknown;
     try {
-      assertImageSize(size, '/tmp/photos/a.jpg');
+      await client.addPersonaImage('p-1', { path });
     } catch (e: unknown) {
       error = e;
     }
     if (!(error instanceof ImageTooLargeError)) {
       throw new Error(`expected ImageTooLargeError, got: ${String(error)}`);
     }
-    expect(error.path).toBe('/tmp/photos/a.jpg');
+    expect(error.path).toBe(path);
     expect(error.sizeBytes).toBe(size);
-    expect(error.message).toBe(
-      `Image "/tmp/photos/a.jpg" is too large (${size} bytes; max 10MB).`
-    );
+    expect(error.message).toBe(`Image "${path}" is too large (${size} bytes; max 10MB).`);
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 
-  it('assertImageSize accepts sizes at or under the limit', () => {
-    expect(() => assertImageSize(MAX_LIBRARY_IMAGE_BYTES, '/tmp/photos/a.jpg')).not.toThrow();
-    expect(() => assertImageSize(0, '/tmp/photos/a.jpg')).not.toThrow();
+  it('addPersonaImage uploads an image of exactly the size limit', async () => {
+    mockFetchJson({ success: true, image: FULL_LIBRARY_IMAGE_ROW });
+    const path = await writeTempImage('edge.png', MAX_LIBRARY_IMAGE_BYTES);
+    await client.addPersonaImage('p-1', { path });
+    expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 
   it('addPersonaImage rejects unsupported file extensions', async () => {
@@ -3007,10 +3008,20 @@ describe('publishVideoDirect', () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
-  it('fails fast when the video exceeds the 2GB server limit', async () => {
-    const { assertVideoSize } = await import('../client.js');
-    expect(() => assertVideoSize(2 * 1024 * 1024 * 1024 + 1, '/tmp/clip.mp4')).toThrow(/2GB/);
+  it('fails fast without fetching when the video exceeds the 2GB server limit', async () => {
+    const { truncate } = await import('node:fs/promises');
+    const { VideoTooLargeError } = await import('../errors.js');
+    const videoPath = await writeTempVideo('huge.mp4');
+    await truncate(videoPath, 2 * 1024 * 1024 * 1024 + 1);
+    const failure = client.publishVideoDirect(youtubeInput(videoPath));
+    await expect(failure).rejects.toBeInstanceOf(VideoTooLargeError);
+    await expect(failure).rejects.toThrow(/2GB/);
     expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('names the 2GB server limit in the video size error', async () => {
+    const { VideoTooLargeError } = await import('../errors.js');
+    expect(new VideoTooLargeError('/tmp/clip.mp4', 2 * 1024 * 1024 * 1024 + 1).message).toMatch(/2GB/);
   });
 
   it('fails fast when the extension is not a supported video type', async () => {

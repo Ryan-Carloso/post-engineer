@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, symlinkSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -99,6 +99,16 @@ describe('persona avatar from a local file (avatarPath)', () => {
     await expect(
       client.createPersona({ accounts: { youtube: ['acct-1'] }, name: 'Ryan', voiceId: 'voice-1', avatarPath: missing }),
     ).rejects.toThrow(`Failed to read image "${missing}"`);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it.skipIf(process.platform === 'win32')('createPersona rejects an avatarPath that is not a regular file before any fetch', async () => {
+    const fetchMock = okFetch();
+    const zero = join(dir, 'zero.jpg');
+    symlinkSync('/dev/zero', zero);
+    await expect(
+      client.createPersona({ accounts: { youtube: ['acct-1'] }, name: 'Ryan', voiceId: 'voice-1', avatarPath: zero }),
+    ).rejects.toThrow(`Image "${zero}" is not a regular file.`);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 

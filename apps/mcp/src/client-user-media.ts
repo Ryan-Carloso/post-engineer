@@ -1,5 +1,5 @@
-import { readFile, stat } from 'node:fs/promises';
 import { basename } from 'node:path';
+import { readBoundedRegularFile } from './bounded-file-read.js';
 import type { PostEngineerClient } from './client.js';
 import { parseContractResponse } from './contract-response.js';
 import { checkMedia as checkMediaContract, uploadMedia as uploadMediaContract } from './contracts/media.js';
@@ -23,32 +23,26 @@ export function detectSegmentImageMimeType(buffer: Buffer): string | null {
   return null;
 }
 
-function assertSegmentMediaSize(sizeBytes: number, path: string): void {
-  if (sizeBytes > MAX_SEGMENT_MEDIA_BYTES) {
-    throw new Error(
-      `Image "${basename(path)}" is too large (${sizeBytes} bytes; max ${MAX_SEGMENT_MEDIA_MB}MB).`,
-    );
-  }
-}
 
 export async function readLocalImage(path: string): Promise<{ buffer: Buffer; mimeType: string }> {
-  let fileStat;
+  let read;
   try {
-    fileStat = await stat(path);
+    read = await readBoundedRegularFile(path, MAX_SEGMENT_MEDIA_BYTES);
   } catch {
     throw new Error(`Failed to read image "${basename(path)}".`);
   }
-  assertSegmentMediaSize(fileStat.size, path);
-  let buffer: Buffer;
-  try {
-    buffer = await readFile(path);
-  } catch {
-    throw new Error(`Failed to read image "${basename(path)}".`);
+  if (read.status === 'not-file') {
+    throw new Error(`Image "${basename(path)}" is not a regular file.`);
   }
+  if (read.status === 'too-large') {
+    throw new Error(
+      `Image "${basename(path)}" is too large (${read.sizeBytes} bytes; max ${MAX_SEGMENT_MEDIA_MB}MB).`,
+    );
+  }
+  const { buffer } = read;
   if (buffer.length === 0) {
     throw new Error(`Image "${basename(path)}" is empty.`);
   }
-  assertSegmentMediaSize(buffer.length, path);
   const mimeType = detectSegmentImageMimeType(buffer);
   if (mimeType === null) {
     throw new Error(
