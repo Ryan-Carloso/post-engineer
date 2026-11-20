@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { PostEngineerClient } from './client.js';
-import { checkSegmentMedia, uploadSegmentMedia } from './client-user-media.js';
+import { checkSegmentMedia, uploadSegmentMedia, uploadSegmentMediaFromUrl } from './client-user-media.js';
+import { UploadMediaRemoteShape } from './remote-shapes-images.js';
 import { VIDEO_ASPECTS, isHttpUrl } from './contracts/media.js';
 import { handleLibraryCall, type McpToolResponse } from './tools-call.js';
 
@@ -54,5 +55,21 @@ export async function handleCheckMedia(
     },
     'checking segment media',
     'Segment media check complete',
+  );
+}
+
+export const UploadMediaRemoteSchema = z.object(UploadMediaRemoteShape);
+
+export async function handleUploadMediaFromUrl(
+  client: PostEngineerClient,
+  args: z.infer<typeof UploadMediaRemoteSchema>,
+): Promise<McpToolResponse> {
+  return handleLibraryCall(
+    async () => {
+      const parsed = UploadMediaRemoteSchema.parse(args);
+      return uploadSegmentMediaFromUrl(client, parsed.imageUrl);
+    },
+    'uploading segment media',
+    'Segment media uploaded successfully',
   );
 }

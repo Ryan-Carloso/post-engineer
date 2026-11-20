@@ -132,7 +132,7 @@ describe('parseHttpTransportOptions', () => {
   });
 });
 
-const FILE_ONLY_ACTIONS: Array<[string, string]> = [['media', 'upload'], ['persona_media', 'add_image'], ['publish_video', 'from_file']];
+const FILE_ONLY_ACTIONS: Array<[string, string]> = [['publish_video', 'from_file']];
 
 async function listedNames(client: PostEngineerClient, transport: 'stdio' | 'http'): Promise<string[]> {
   const server = createPostEngineerMcpServer(client, transport);

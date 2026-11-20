@@ -31,8 +31,8 @@ credits is billed by Modal.
 ## Remote (HTTP) surface
 
 With `--http-transport` the same server speaks Streamable HTTP, but it
-never reads files from the host it runs on: `media (action: upload)`,
-`persona_media (action: add_image)` and `publish_video (action: from_file)` are not registered, and
+never reads files from the host it runs on: `publish_video (action: from_file)` is not registered,
+`media (action: upload)` and `persona_media (action: add_image)` take a public `imageUrl`, and
 `personas (action: create)`, `personas (action: update)` and `voices (action: create_clone)` accept only
 public URLs (`avatarUrl` / `audioUrl`) — no `avatarPath`, `audioPath` or
 library image files. The server downloads a remote `audioUrl` itself, so it
@@ -210,7 +210,7 @@ The server offers **18 intent tools**, not one tool per API endpoint. A tool is 
 | `check_script` | `validate`, `score` | Check a script before spending tokens. |
 | `publish_video` | `from_file`, `create_upload`, `complete_upload`, `publish_upload`, `publish_existing` | Publish media that already exists, with no generation and no charge. `publish_existing` takes a finished video (`taskId`), a completed upload (`uploadId`) or a local image (`imagePath`, stdio only; over HTTP an image goes through `create_upload` like a video, never as base64), sends it to every network of its `accounts` (names or ids, or the persona's bound accounts) in one call, and needs `mode`: `asap`, or `scheduled` once at `publishAt`. A retry with the same `idempotencyKey` replays the original result in both modes. Images (JPEG/PNG, 8 MB) post to Instagram, Bluesky (1 MB), LinkedIn, Threads, Facebook and Pinterest. |
 
-Actions that read a file from the disk (`persona_media` `add_image`, `media` `upload`, `publish_video` `from_file`, and a local `audioPath`/`avatarPath`) exist only on the stdio server: a path served over HTTP would resolve on the server's host. Over HTTP use public URLs, or the signed upload of `publish_video`.
+Actions that read a file from the disk (`publish_video` `from_file`, and a local `audioPath`/`avatarPath`/`path`) exist only on the stdio server: a path served over HTTP would resolve on the server's host. Over HTTP `persona_media` `add_image` and `media` `upload` take a public https `imageUrl` instead (JPG, PNG or WebP; the server resolves the host, refuses a non-public address, never follows a redirect and checks the real image bytes), and a video goes through the signed upload of `publish_video`.
 
 ### Names instead of ids
 

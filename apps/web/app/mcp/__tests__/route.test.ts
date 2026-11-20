@@ -222,8 +222,8 @@ describe('POST /mcp', () => {
     expect(names).toContain('check_script');
     expect(names).toContain('publish_video');
     expect(toolActions(listResult.result ?? {}, 'publish_video')).toEqual(['create_upload', 'complete_upload', 'publish_upload', 'publish_existing']);
-    expect(toolActions(listResult.result ?? {}, 'media')).not.toContain('upload');
-    expect(toolActions(listResult.result ?? {}, 'persona_media')).not.toContain('add_image');
+    expect(toolActions(listResult.result ?? {}, 'media')).toEqual(['upload', 'check']);
+    expect(toolActions(listResult.result ?? {}, 'persona_media')).toContain('add_image');
     expect(toolActions(listResult.result ?? {}, 'publish_video')).not.toContain('from_file');
   });
 

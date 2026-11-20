@@ -11,7 +11,8 @@ import { handlePublishExisting } from './tools-publish-existing.js';
 import { DESTRUCTIVE, MUTATING, READ_ONLY } from './tool-annotations.js';
 import { PublishVideoDirectShape, handlePublishVideoDirect } from './tools.js';
 import { AddExperimentPairShape, CreateExperimentShape, GetExperimentResultsShape, ListExperimentsShape, handleAddExperimentPair, handleCreateExperiment, handleGetExperimentResults, handleListExperiments } from './tools-experiments.js';
-import { CheckMediaShape, UploadMediaShape, handleCheckMedia, handleUploadMedia } from './tools-user-media.js';
+import { UploadMediaRemoteShape } from './remote-shapes-images.js';
+import { CheckMediaShape, UploadMediaRemoteSchema, UploadMediaShape, handleCheckMedia, handleUploadMedia, handleUploadMediaFromUrl } from './tools-user-media.js';
 import { ValidateScriptSchema } from './single-video-shape.js';
 import { ScoreDraftShape, ValidateScriptShape, handleScoreDraft, handleValidateScript } from './tools-single-video.js';
 import { handleCompleteVideoUpload, handleCreateVideoUpload, handlePublishUploadedVideo } from './tools-publish-uploaded.js';
@@ -56,18 +57,18 @@ export function registerContentTools(server: McpServer, client: PostEngineerClie
     ),
   );
 
-  const mediaOptions: ActionOptions<typeof MEDIA_SPECS> = remote ? { unavailable: ['upload'] } : {};
+  const mediaOptions: ActionOptions<typeof MEDIA_SPECS> = remote ? { variants: { upload: UploadMediaRemoteShape } } : {};
   server.tool(
     'media',
     actionDescription(
-      `Images for video segments. check: mechanically check one public image URL (no LLM, relevance is for you to judge): returns one code (ok, blocked_403 when the host blocks the download — ${remote ? 'use another public URL for that photo' : 'then use upload with bytes fetched on your own machine'} — and the size, type and aspect failures)${remote ? '.' : '. upload: a local image becomes a mediaId for a segment (a temporary asset, 1 hour: upload shortly before generating).'}`,
+      `Images for video segments. check: mechanically check one public image URL (no LLM, relevance is for you to judge): returns one code (ok, blocked_403 when the host blocks the download — ${remote ? 'use another public URL for that photo' : 'then use upload with bytes fetched on your own machine'} — and the size, type and aspect failures). upload: ${remote ? 'a public https imageUrl is downloaded by the server' : 'a local image'} and becomes a mediaId for a segment (a temporary asset, 1 hour: upload shortly before generating).`,
       offeredSpecs(MEDIA_SPECS, mediaOptions),
     ),
     actionShape(offeredSpecs(MEDIA_SPECS, mediaOptions)),
     MUTATING,
     byAction(
       {
-        upload: async (args) => handleUploadMedia(client, args),
+        upload: async (args) => (remote ? handleUploadMediaFromUrl(client, UploadMediaRemoteSchema.parse(args)) : handleUploadMedia(client, args)),
         check: async (args) => handleCheckMedia(client, args),
       },
       MEDIA_SPECS,

@@ -16,7 +16,7 @@ vi.mock('../analytics.js', () => ({
   },
 }));
 
-const FILE_ONLY_ACTIONS: Array<[string, string]> = [['media', 'upload'], ['persona_media', 'add_image'], ['publish_video', 'from_file']];
+const FILE_ONLY_ACTIONS: Array<[string, string]> = [['publish_video', 'from_file']];
 
 const hook =
   'Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is still waiting nearby for you today.';
