@@ -23,6 +23,7 @@ const ACTIONS: Record<string, string[]> = {
   voices: ['list', 'preview', 'list_clones', 'create_clone', 'get_clone', 'preview_clone', 'delete_clone'],
   accounts: ['list', 'connect', 'disconnect', 'get_persona_publishing', 'set_persona_publishing', 'list_boards'],
   tool_config: ['get', 'save'],
+  prompt_library: ['create', 'update', 'delete'],
   schedules: ['list', 'cancel', 'get_slot', 'update_slot_title', 'delete_slot'],
   posts: ['list', 'get'],
   insights: ['post_metrics', 'retention_curve'],
@@ -57,7 +58,7 @@ function actionsOf(tool: Tool | undefined): string[] {
 }
 
 describe('createPostEngineerMcpServer', () => {
-  it.each(['stdio', 'http'] as const)('registers exactly the 17 intent tools on the %s server', async (transport) => {
+  it.each(['stdio', 'http'] as const)('registers exactly the 18 intent tools on the %s server', async (transport) => {
     expect([...(await listTools(transport)).keys()].sort()).toEqual(EXPECTED_TOOLS);
   });
 

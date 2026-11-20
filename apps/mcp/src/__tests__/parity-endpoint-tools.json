@@ -342,6 +342,24 @@
       "action": "get"
     }
   ],
+  "POST /api/prompts": [
+    {
+      "tool": "prompt_library",
+      "action": "create"
+    }
+  ],
+  "PATCH /api/prompts/[slug]": [
+    {
+      "tool": "prompt_library",
+      "action": "update"
+    }
+  ],
+  "DELETE /api/prompts/[slug]": [
+    {
+      "tool": "prompt_library",
+      "action": "delete"
+    }
+  ],
   "POST /api/experiments": [
     {
       "tool": "experiments",

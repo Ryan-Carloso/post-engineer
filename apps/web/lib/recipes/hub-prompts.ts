@@ -39,3 +39,7 @@ export function findHubPrompt(slug: string): HubPrompt | null {
     prompt: entry.prompt,
   };
 }
+
+export function isOfficialPromptSlug(slug: string): boolean {
+  return PROMPTS.some((candidate) => candidate.slug === slug);
+}

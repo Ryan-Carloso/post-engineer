@@ -407,6 +407,35 @@
       }
     }
   ],
+  "prompt_library.create": [
+    {
+      "args": {
+        "action": "create",
+        "slug": "my-prompt",
+        "title": "My prompt",
+        "description": "What it is for",
+        "prompt": "Write the script in three beats.",
+        "visibility": "public"
+      }
+    }
+  ],
+  "prompt_library.update": [
+    {
+      "args": {
+        "action": "update",
+        "slug": "my-prompt",
+        "title": "My renamed prompt"
+      }
+    }
+  ],
+  "prompt_library.delete": [
+    {
+      "args": {
+        "action": "delete",
+        "slug": "my-prompt"
+      }
+    }
+  ],
   "prompts.get": [
     {
       "args": {

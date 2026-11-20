@@ -41,7 +41,7 @@
 
 ## MCP tools
 
-17 intent tools; each takes an `action`, except `generate_video` and `cancel_video`. Personas and
+18 intent tools; each takes an `action`, except `generate_video` and `cancel_video`. Personas and
 accounts are given by name or id.
 
 - `generate_video`: one video or a batch of 2-12 (script as segments — hook first, then content takes in
@@ -59,5 +59,6 @@ accounts are given by name or id.
   `publish_upload`), `prompts` (`list`, `get`).
 - Tool configuration: `tool_config` (`get`, `save`) — the saved search tool and licensed stock
   sources; keys are stored encrypted and only presence + last 4 are ever returned.
+- Prompt library: `prompt_library` (`create`, `update`, `delete`) writes the caller's own prompts; read any prompt with `prompts`.
 - Prompts: `/daily-news` (daily news becomes a video), `/github-prs`
   (GitHub PRs become videos), `/full-setup` (full setup becomes videos).

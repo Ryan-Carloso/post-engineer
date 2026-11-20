@@ -44,6 +44,8 @@ vi.mock('@/lib/i18n/provider', () => {
     'recipes.kindRecipe': 'Recipe',
     'recipes.kindPrompt': 'Prompt',
     'recipes.openPrompt': 'Open prompt',
+    'userPrompts.stepTitle': 'Your prompts',
+    'userPrompts.stepHint': 'Write your own prompts.',
     'recipes.addYourPrompt': 'Add your prompt',
     'recipes.addYourPromptHint': 'Got a prompt that works? Send it in.',
   };
@@ -56,6 +58,10 @@ vi.mock('@/lib/i18n/provider', () => {
     }),
   };
 });
+
+vi.mock('../components/my-prompts-section', () => ({
+  default: () => <div data-testid="my-prompts-section" />,
+}));
 
 vi.mock('@/components/ui/api-keys-section', () => ({
   default: ({ onKeyCreated }: { onKeyCreated?: (key: string) => void }) => (
@@ -111,17 +117,21 @@ describe('/recipes prompts hub', () => {
     const step1 = screen.getByRole('heading', { name: 'Create your API key' });
     expect(hero.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(heading.compareDocumentPosition(step1) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(screen.getAllByRole('region')).toHaveLength(3);
+    expect(screen.getAllByRole('region')).toHaveLength(4);
   });
 
-  it('lays out three numbered steps in order: key, setup, recipes', () => {
+  it('lays out numbered steps in order: key, setup, recipes, then your prompts', () => {
     renderHub(true);
     const steps = screen.getAllByRole('region');
     expect(steps.map((step) => step.getAttribute('aria-labelledby'))).toEqual([
       'hub-step-1',
       'hub-step-2',
       'hub-step-3',
+      'hub-step-4',
     ]);
+    expect(within(steps[3]).getByRole('heading', { name: 'Your prompts' })).toBeInTheDocument();
+    expect(within(steps[3]).getByTestId('my-prompts-section')).toBeInTheDocument();
+    expect(within(steps[3]).getByText('4')).toBeInTheDocument();
     expect(within(steps[0]).getByRole('heading', { name: 'Create your API key' })).toBeInTheDocument();
     expect(within(steps[0]).getByText('It connects your agent to your account.')).toBeInTheDocument();
     expect(within(steps[0]).getByText('1')).toBeInTheDocument();
@@ -133,6 +143,13 @@ describe('/recipes prompts hub', () => {
     expect(within(steps[2]).getByRole('heading', { name: 'Pick a recipe' })).toBeInTheDocument();
     expect(within(steps[2]).getByText('Copy a prompt and paste it into your agent.')).toBeInTheDocument();
     expect(within(steps[2]).getByText('3')).toBeInTheDocument();
+  });
+
+  it('hides the prompt manager from a visitor who is not signed in, so nothing fetches for them', () => {
+    renderHub(false);
+    expect(screen.queryByTestId('my-prompts-section')).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Your prompts' })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('region')).toHaveLength(3);
   });
 
   it('shows the key manager to a signed-in visitor', () => {

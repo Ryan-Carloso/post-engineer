@@ -12,13 +12,15 @@ import {
 import { createPostEngineerMcpServer } from '../index.js';
 import { PostEngineerClient } from '../client.js';
 import { MCP_ACTION_HEADER, MCP_TOOL_HEADER } from '../analytics.js';
-import { recipeRunText } from '../recipe-session.js';
+import { COMMUNITY_PROMPT_NOTICE, recipeRunText } from '../recipe-session.js';
 
 const BASE_URL = 'https://api.example.test';
 
+const SHAPE = { source: 'official', visibility: 'public' } as const;
+
 const CATALOG = [
-  { slug: 'daily-news', title: 'Daily news becomes a video', description: 'Turn one news story into a video.' },
-  { slug: 'full-setup', title: 'Full setup becomes videos', description: 'Connect accounts and publish.' },
+  { slug: 'daily-news', title: 'Daily news becomes a video', description: 'Turn one news story into a video.', ...SHAPE },
+  { slug: 'full-setup', title: 'Full setup becomes videos', description: 'Connect accounts and publish.', ...SHAPE },
 ];
 
 const PROMPT_TEXT: Record<string, string> = {
@@ -120,7 +122,7 @@ describe('handleGetPrompt', () => {
   it('returns the prompt text from the API plus the declare-the-recipe footer', async () => {
     const result = await handleGetPrompt(client(), { slug: 'daily-news' });
     expect(result.isError).toBeFalsy();
-    expect(textOf(result)).toBe(recipeRunText('daily-news', PROMPT_TEXT['daily-news'] ?? ''));
+    expect(textOf(result)).toBe(recipeRunText('daily-news', PROMPT_TEXT['daily-news'] ?? '', 'official'));
     expect(textOf(result).startsWith(PROMPT_TEXT['daily-news'] ?? '-')).toBe(true);
     expect(textOf(result)).toContain('pass recipe: "daily-news"');
     expect(requestedPaths()).toEqual(['/api/prompts/daily-news']);
@@ -197,7 +199,7 @@ describe('prompt tools over MCP', () => {
       const listed = await mcp.callTool({ name: 'prompts', arguments: { action: 'list' } });
       expect(JSON.parse(textOf(listed))).toEqual(CATALOG);
       const fetched = await mcp.callTool({ name: 'prompts', arguments: { action: 'get', slug: 'full-setup' } });
-      expect(textOf(fetched)).toBe(recipeRunText('full-setup', PROMPT_TEXT['full-setup'] ?? ''));
+      expect(textOf(fetched)).toBe(recipeRunText('full-setup', PROMPT_TEXT['full-setup'] ?? '', 'official'));
       expect(toolHeaders()).toEqual(['prompts', 'prompts']);
       expect(actionHeaders()).toEqual(['list', 'get']);
     });
@@ -248,7 +250,7 @@ describe('slash commands over MCP', () => {
     await withMcpClient(async (mcp) => {
       const result = await mcp.getPrompt({ name: 'daily-news' });
       expect(result.messages).toEqual([
-        { role: 'user', content: { type: 'text', text: recipeRunText('daily-news', PROMPT_TEXT['daily-news'] ?? '') } },
+        { role: 'user', content: { type: 'text', text: recipeRunText('daily-news', PROMPT_TEXT['daily-news'] ?? '', 'official') } },
       ]);
       expect(toolHeaders()).toEqual(['slash_get_prompt']);
     });
@@ -272,5 +274,59 @@ describe('slash commands over MCP', () => {
     await withMcpClient(async (mcp) => {
       await expect(mcp.getPrompt({ name: 'daily-news' })).rejects.toThrow('Failed to get prompt');
     });
+  });
+});
+
+describe('prompts from users', () => {
+  function userPrompt(source: 'own' | 'community'): Response {
+    return json(200, {
+      success: true,
+      prompt: {
+        slug: 'their-prompt',
+        title: 'Their prompt',
+        description: 'About',
+        source,
+        visibility: source === 'own' ? 'private' : 'public',
+        prompt: 'Follow these steps.',
+      },
+    });
+  }
+
+  it('puts the unverified-content notice in front of a community prompt and declares no recipe', async () => {
+    fetchMock.mockResolvedValueOnce(userPrompt('community'));
+    const result = await handleGetPrompt(client(), { slug: 'their-prompt' });
+    expect(textOf(result)).toBe(`${COMMUNITY_PROMPT_NOTICE}\n\nFollow these steps.`);
+    expect(textOf(result)).not.toContain('pass recipe');
+  });
+
+  it('returns the caller own prompt as written, without a notice and without a recipe footer', async () => {
+    fetchMock.mockResolvedValueOnce(userPrompt('own'));
+    const result = await handleGetPrompt(client(), { slug: 'their-prompt' });
+    expect(textOf(result)).toBe('Follow these steps.');
+  });
+
+  it('labels a community prompt in the slash prompt list so it is not mistaken for an official one', async () => {
+    const community = { slug: 'shared', title: 'Shared', description: 'By someone', source: 'community', visibility: 'public' };
+    fetchMock.mockResolvedValueOnce(json(200, { success: true, prompts: [...CATALOG, community] }));
+    const { listSlashPrompts } = await import('../prompts.js');
+    const listed = await listSlashPrompts(client());
+    expect(listed.prompts.map((prompt) => prompt.title)).toEqual([CATALOG[0]?.title, CATALOG[1]?.title, 'Shared (community)']);
+  });
+
+  it('does not record a user prompt as a fetched recipe, so its slug never reaches generate_video telemetry', async () => {
+    const server = createPostEngineerMcpServer(client(), 'stdio');
+    const [a, b] = InMemoryTransport.createLinkedPair();
+    const mcp = new Client({ name: 't', version: '0.0.0' });
+    await Promise.all([server.connect(b), mcp.connect(a)]);
+    try {
+      fetchMock.mockResolvedValueOnce(userPrompt('own'));
+      await mcp.callTool({ name: 'prompts', arguments: { action: 'get', slug: 'their-prompt' } });
+      fetchMock.mockResolvedValueOnce(json(200, { success: true }));
+      await mcp.callTool({ name: 'billing', arguments: { action: 'balance' } });
+      const lastHeaders = fetchMock.mock.calls.at(-1)?.[1].headers as Record<string, string>;
+      expect(Object.values(lastHeaders)).not.toContain('their-prompt');
+    } finally {
+      await mcp.close();
+    }
   });
 });

@@ -675,6 +675,76 @@
                 "post_metrics_post_id_provider_external_id_metrics_window_key": "UNIQUE (post_id, provider, external_id, metrics_window)"
             }
         },
+        "user_prompts": {
+            "rls": true,
+            "columns": [
+                {
+                    "name": "id",
+                    "type": "uuid",
+                    "default": "gen_random_uuid()",
+                    "notNull": true
+                },
+                {
+                    "name": "owner_id",
+                    "type": "uuid",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "slug",
+                    "type": "text",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "title",
+                    "type": "text",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "description",
+                    "type": "text",
+                    "default": "''::text",
+                    "notNull": true
+                },
+                {
+                    "name": "body",
+                    "type": "text",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "visibility",
+                    "type": "text",
+                    "default": "'private'::text",
+                    "notNull": true
+                },
+                {
+                    "name": "created_at",
+                    "type": "timestamp with time zone",
+                    "default": "now()",
+                    "notNull": true
+                },
+                {
+                    "name": "updated_at",
+                    "type": "timestamp with time zone",
+                    "default": "now()",
+                    "notNull": true
+                }
+            ],
+            "policies": {
+            },
+            "constraints": {
+                "user_prompts_pkey": "PRIMARY KEY (id)",
+                "user_prompts_body_check": "CHECK (((char_length(body) >= 1) AND (char_length(body) <= 20000)))",
+                "user_prompts_slug_check": "CHECK ((slug ~ '^[a-z0-9][a-z0-9-]{0,63}$'::text))",
+                "user_prompts_title_check": "CHECK (((char_length(title) >= 1) AND (char_length(title) <= 120)))",
+                "user_prompts_visibility_check": "CHECK ((visibility = ANY (ARRAY['private'::text, 'public'::text])))",
+                "user_prompts_description_check": "CHECK ((char_length(description) <= 500))",
+                "user_prompts_owner_slug_unique": "UNIQUE (owner_id, slug)"
+            }
+        },
         "cloned_voices": {
             "rls": true,
             "columns": [

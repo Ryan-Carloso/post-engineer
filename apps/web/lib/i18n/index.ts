@@ -23,6 +23,7 @@ import { themeStrings } from './theme-i18n';
 import { postsCalendarStrings } from './posts-calendar-i18n';
 import { hookPhotoStrings } from './hook-photo-i18n';
 import { onboardingStrings } from './onboarding-i18n';
+import { userPromptsStrings } from './user-prompts-i18n';
 import type { Locale } from './types';
 
 export const ptDictionary = {
@@ -40,6 +41,7 @@ export const ptDictionary = {
   landing: { ...basePtDictionary.landing, ...pricingContactStrings.pt.landing },
   theme: themeStrings.pt.theme,
   onboarding: onboardingStrings.pt.onboarding,
+  userPrompts: userPromptsStrings.pt.userPrompts,
 };
 
 export const enDictionary = {
@@ -57,6 +59,7 @@ export const enDictionary = {
   landing: { ...baseEnDictionary.landing, ...pricingContactStrings.en.landing },
   theme: themeStrings.en.theme,
   onboarding: onboardingStrings.en.onboarding,
+  userPrompts: userPromptsStrings.en.userPrompts,
 };
 
 type PublishingAccountsKeys = typeof publishingAccountsStrings.en;
@@ -77,6 +80,7 @@ type ThemeKeys = typeof themeStrings.en;
 type PostsCalendarKeys = typeof postsCalendarStrings.en;
 type HookPhotoKeys = typeof hookPhotoStrings.en;
 type OnboardingKeys = typeof onboardingStrings.en;
+type UserPromptsKeys = typeof userPromptsStrings.en;
 export type Dictionary = BaseDictionary & {
   [Section in keyof ThreadsKeys]: {
     [Key in keyof ThreadsKeys[Section]]: string;
@@ -144,6 +148,10 @@ export type Dictionary = BaseDictionary & {
 } & {
   [Section in keyof OnboardingKeys]: {
     [Key in keyof OnboardingKeys[Section]]: string;
+  };
+} & {
+  [Section in keyof UserPromptsKeys]: {
+    [Key in keyof UserPromptsKeys[Section]]: string;
   };
 } & {
   [Section in keyof ThemeKeys]: {

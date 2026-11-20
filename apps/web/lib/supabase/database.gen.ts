@@ -999,6 +999,42 @@ export interface Database {
         };
         Relationships: [];
       };
+      user_prompts: {
+        Row: {
+        id: string;
+        owner_id: string;
+        slug: string;
+        title: string;
+        description: string;
+        body: string;
+        visibility: 'private' | 'public';
+        created_at: string;
+        updated_at: string;
+        };
+        Insert: {
+        id?: string;
+        owner_id: string;
+        slug: string;
+        title: string;
+        description?: string;
+        body: string;
+        visibility?: 'private' | 'public';
+        created_at?: string;
+        updated_at?: string;
+        };
+        Update: {
+        id?: string;
+        owner_id?: string;
+        slug?: string;
+        title?: string;
+        description?: string;
+        body?: string;
+        visibility?: 'private' | 'public';
+        created_at?: string;
+        updated_at?: string;
+        };
+        Relationships: [];
+      };
       user_tool_configs: {
         Row: {
         user_id: string;
