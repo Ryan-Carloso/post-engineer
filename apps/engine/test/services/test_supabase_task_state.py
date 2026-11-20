@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from app.models import const
 from app.services import orphan_requeue
 from app.services import state as state_module
+from app.services import state_persistence
 from app.services.task_cancellation import is_cancelled, request_cancel
 
 ENV = {
@@ -653,6 +654,11 @@ class SupabaseStateLockTests(unittest.TestCase):
 
 
 class PersistStateUpdateTests(unittest.TestCase):
+    def setUp(self):
+        sleep_patch = patch.object(state_persistence.time, "sleep")
+        self.sleep = sleep_patch.start()
+        self.addCleanup(sleep_patch.stop)
+
     def test_success_returns_true_single_call(self):
         state = MagicMock()
         self.assertTrue(state_module.persist_state_update(state, "t-1", progress=5))
@@ -663,6 +669,7 @@ class PersistStateUpdateTests(unittest.TestCase):
         state.update_task.side_effect = [RuntimeError("blip"), None]
         self.assertTrue(state_module.persist_state_update(state, "t-1", progress=5))
         self.assertEqual(state.update_task.call_count, 2)
+        self.sleep.assert_called_once_with(state_persistence.RETRY_DELAYS_SECONDS[0])
 
     def test_permanent_failure_returns_false_and_logs_loudly(self):
         from loguru import logger
@@ -678,7 +685,9 @@ class PersistStateUpdateTests(unittest.TestCase):
         finally:
             logger.remove(handler)
         self.assertFalse(result)
-        self.assertEqual(state.update_task.call_count, 2)
+        self.assertEqual(
+            state.update_task.call_count, len(state_persistence.RETRY_DELAYS_SECONDS) + 1
+        )
         errors = [r for r in records if r["level"].name == "ERROR"]
         self.assertTrue(
             any("t-1" in r["message"] for r in errors),
