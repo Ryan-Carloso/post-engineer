@@ -361,12 +361,30 @@ class StartupWarmClientTests(unittest.TestCase):
             patch("app.asgi.warm_client") as warm,
             patch("app.asgi.start_fill_schedule_scheduler"),
             patch(
-                "app.services.engine_heartbeat.start_heartbeat_thread"
+                "app.services.engine_heartbeat.start_heartbeat_after_autopsy"
             ) as heartbeat,
         ):
             asgi.startup_event()
         warm.assert_called_once_with()
-        heartbeat.assert_called_once_with()
+        heartbeat.assert_called_once_with(asgi.sm.state)
+
+    def test_startup_event_reconciles_before_the_boot_autopsy(self):
+        from unittest.mock import MagicMock
+
+        calls: list[str] = []
+        mock_state = MagicMock()
+        mock_state.reconcile_orphaned_tasks.side_effect = lambda: calls.append("reconcile") or 0
+        with (
+            patch("app.asgi.warm_client"),
+            patch("app.asgi.start_fill_schedule_scheduler"),
+            patch(
+                "app.services.engine_heartbeat.start_heartbeat_after_autopsy",
+                side_effect=lambda state: calls.append("autopsy"),
+            ),
+            patch.object(asgi.sm, "state", mock_state),
+        ):
+            asgi.startup_event()
+        self.assertEqual(calls, ["reconcile", "autopsy"])
 
     def test_startup_event_runs_orphan_reconcile(self):
         from unittest.mock import MagicMock
@@ -376,8 +394,7 @@ class StartupWarmClientTests(unittest.TestCase):
         with (
             patch("app.asgi.warm_client"),
             patch("app.asgi.start_fill_schedule_scheduler"),
-            patch("app.services.engine_heartbeat.start_heartbeat_thread"),
-            patch("app.services.engine_heartbeat.report_boot_event"),
+            patch("app.services.engine_heartbeat.start_heartbeat_after_autopsy"),
             patch.object(asgi.sm, "state", mock_state),
         ):
             asgi.startup_event()
@@ -390,8 +407,7 @@ class StartupWarmClientTests(unittest.TestCase):
         with (
             patch("app.asgi.warm_client"),
             patch("app.asgi.start_fill_schedule_scheduler"),
-            patch("app.services.engine_heartbeat.start_heartbeat_thread"),
-            patch("app.services.engine_heartbeat.report_boot_event"),
+            patch("app.services.engine_heartbeat.start_heartbeat_after_autopsy"),
             patch.object(asgi.sm, "state", plain_state),
         ):
             asgi.startup_event()
@@ -404,8 +420,7 @@ class StartupWarmClientTests(unittest.TestCase):
         with (
             patch("app.asgi.warm_client"),
             patch("app.asgi.start_fill_schedule_scheduler"),
-            patch("app.services.engine_heartbeat.start_heartbeat_thread"),
-            patch("app.services.engine_heartbeat.report_boot_event"),
+            patch("app.services.engine_heartbeat.start_heartbeat_after_autopsy"),
             patch.object(asgi.sm, "state", mock_state),
         ):
             asgi.startup_event()
