@@ -30,7 +30,7 @@ async function getHandler(request: Request): Promise<NextResponse> {
     const official = listHubPrompts().map((entry) => ({ ...entry, source: 'official' as const, visibility: 'public' as const }));
     const taken = new Set([...official, ...own].map((entry) => entry.slug));
     const community = publicPrompts
-      .filter((row) => row.owner_id !== caller.userId && !taken.has(row.slug))
+      .filter((row) => (caller.scopedKey || row.owner_id !== caller.userId) && !taken.has(row.slug))
       .map((row) => promptSummaryBody(row, 'community'));
     return NextResponse.json({
       success: true,

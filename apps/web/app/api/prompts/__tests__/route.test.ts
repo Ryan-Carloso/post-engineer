@@ -147,6 +147,15 @@ describe('GET /api/prompts', () => {
     expect(body.prompts.map((entry) => entry.slug)).not.toContain('mine');
   });
 
+  it('shows a persona-scoped key the account own public prompt, as community', async () => {
+    seedDb([{ owner_id: ALICE, slug: 'mine-shared', title: 'Mine shared', body: 'Community text', visibility: 'public' }]);
+    scopedKeyOf(ALICE);
+    const body = (await (await listPrompts(request('/api/prompts'))).json()) as { prompts: Array<{ slug: string; source: string }> };
+    expect(body.prompts.filter((entry) => entry.slug === 'mine-shared')).toEqual([
+      { slug: 'mine-shared', title: 'Mine shared', description: '', source: 'community', visibility: 'public' },
+    ]);
+  });
+
   it('serves the official and public prompts to a caller with no credentials, limited by IP, and never a private one', async () => {
     seedDb([
       { owner_id: ALICE, slug: 'mine', title: 'Mine', body: 'secret text' },
