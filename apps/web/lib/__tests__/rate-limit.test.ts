@@ -5,7 +5,7 @@ vi.mock('@/lib/supabase/service', () => ({
   createSupabaseServiceClient: vi.fn(),
 }));
 
-import { applyRateLimit, getClientIp, RATE_LIMITS } from '@/lib/rate-limit';
+import { applyRateLimit, getClientIp, MAX_TRACKED_KEYS, RATE_LIMITS } from '@/lib/rate-limit';
 
 function makeRequest(headers: Record<string, string> = {}): NextRequest {
   return new NextRequest('http://localhost/api/test', {
@@ -168,6 +168,128 @@ describe('rate-limit', () => {
         profile,
       );
       expect(second?.status).toBe(429);
+    });
+  });
+
+  describe('table eviction', () => {
+    const START = 1_800_000_000_000;
+    let now = START;
+
+    beforeEach(() => {
+      now = START;
+      vi.spyOn(Date, 'now').mockImplementation(() => now);
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    async function fill(profile: { name: string; limit: number; windowMs: number }, count: number, prefix: string): Promise<void> {
+      for (let i = 0; i < count; i++) {
+        await applyRateLimit(makeRequest(), profile, `${prefix}-${i}`);
+      }
+    }
+
+    it('keeps every live counter except the least recently used one when the table is full', async () => {
+      const profile = { name: 'test-full', limit: 1, windowMs: 60_000 };
+      await applyRateLimit(makeRequest(), profile, 'victim');
+      await fill(profile, MAX_TRACKED_KEYS - 1, 'filler');
+      expect(g.__rateLimitStore?.size).toBe(MAX_TRACKED_KEYS);
+      expect((await applyRateLimit(makeRequest(), profile, 'victim'))?.status).toBe(429);
+
+      await applyRateLimit(makeRequest(), profile, 'newcomer');
+
+      expect(g.__rateLimitStore?.size).toBe(MAX_TRACKED_KEYS);
+      expect(g.__rateLimitStore?.has('test-full:filler-0')).toBe(false);
+      expect((await applyRateLimit(makeRequest(), profile, 'victim'))?.status).toBe(429);
+      expect((await applyRateLimit(makeRequest(), profile, 'filler-5'))?.status).toBe(429);
+      expect((await applyRateLimit(makeRequest(), profile, 'newcomer'))?.status).toBe(429);
+    });
+
+    it('evicts the least recently used entry when every entry is still live', async () => {
+      const profile = { name: 'test-lru', limit: 1, windowMs: 60_000 };
+      const watched = { name: 'test-lru', limit: 5, windowMs: 60_000 };
+      await applyRateLimit(makeRequest(), watched, 'oldest-but-touched');
+      await fill(profile, MAX_TRACKED_KEYS - 1, 'filler');
+      await applyRateLimit(makeRequest(), watched, 'oldest-but-touched');
+
+      await applyRateLimit(makeRequest(), profile, 'newcomer');
+
+      expect(g.__rateLimitStore?.has('test-lru:oldest-but-touched')).toBe(true);
+      expect(g.__rateLimitStore?.has('test-lru:filler-0')).toBe(false);
+      expect(g.__rateLimitStore?.has('test-lru:filler-1')).toBe(true);
+    });
+
+    it('sweeps entries expired by their own window before evicting live ones', async () => {
+      const short = { name: 'test-short', limit: 1, windowMs: 1_000 };
+      const long = { name: 'test-long', limit: 1, windowMs: 60_000 };
+      await fill(long, 10, 'live');
+      await fill(short, MAX_TRACKED_KEYS - 10, 'stale');
+      now += 2_000;
+
+      await applyRateLimit(makeRequest(), long, 'newcomer');
+
+      expect(g.__rateLimitStore?.size).toBe(11);
+      expect((await applyRateLimit(makeRequest(), long, 'live-0'))?.status).toBe(429);
+    });
+
+    it('does not evict 1h-window entries when a 60s-window request fills the table', async () => {
+      const hourly = { name: 'test-hourly', limit: 1, windowMs: 60 * 60 * 1000 };
+      const minute = { name: 'test-minute', limit: 1, windowMs: 60_000 };
+      await applyRateLimit(makeRequest(), hourly, 'victim');
+      await fill(minute, MAX_TRACKED_KEYS - 1, 'filler');
+      now += 5 * 60_000;
+
+      await applyRateLimit(makeRequest(), minute, 'newcomer');
+
+      expect(g.__rateLimitStore?.has('test-hourly:victim')).toBe(true);
+      expect((await applyRateLimit(makeRequest(), hourly, 'victim'))?.status).toBe(429);
+      expect(g.__rateLimitStore?.size).toBe(2);
+    });
+
+    it('keeps a long-window counter blocked after a shorter time than its window', async () => {
+      const hourly = { name: 'test-hourly-window', limit: 1, windowMs: 60 * 60 * 1000 };
+      await applyRateLimit(makeRequest(), hourly, 'user');
+      now += 30 * 60_000;
+      const blocked = await applyRateLimit(makeRequest(), hourly, 'user');
+      expect(blocked?.status).toBe(429);
+      expect(blocked?.headers.get('Retry-After')).toBe(String(30 * 60));
+      now += 30 * 60_000;
+      expect(await applyRateLimit(makeRequest(), hourly, 'user')).toBeNull();
+    });
+  });
+
+  describe('client address buckets', () => {
+    it('shares one bucket between two IPv6 addresses of one /64', async () => {
+      const profile = { name: 'test-v6', limit: 1, windowMs: 60_000 };
+      expect(await applyRateLimit(makeRequest({ 'x-forwarded-for': '2001:db8:1:2::1' }), profile)).toBeNull();
+      const second = await applyRateLimit(makeRequest({ 'x-forwarded-for': '2001:db8:1:2:aaaa:bbbb:cccc:dddd' }), profile);
+      expect(second?.status).toBe(429);
+    });
+
+    it('keeps IPv6 addresses of different /64 prefixes apart', async () => {
+      const profile = { name: 'test-v6-apart', limit: 1, windowMs: 60_000 };
+      expect(await applyRateLimit(makeRequest({ 'x-forwarded-for': '2001:db8:1:2::1' }), profile)).toBeNull();
+      expect(await applyRateLimit(makeRequest({ 'x-forwarded-for': '2001:db8:1:3::1' }), profile)).toBeNull();
+    });
+
+    it('counts an IPv4-mapped IPv6 address against the IPv4 bucket', async () => {
+      const profile = { name: 'test-v4-mapped', limit: 1, windowMs: 60_000 };
+      expect(await applyRateLimit(makeRequest({ 'x-forwarded-for': '1.2.3.4' }), profile)).toBeNull();
+      const mapped = await applyRateLimit(makeRequest({ 'x-forwarded-for': '::ffff:1.2.3.4' }), profile);
+      expect(mapped?.status).toBe(429);
+    });
+
+    it('keeps distinct IPv4 addresses apart', async () => {
+      const profile = { name: 'test-v4', limit: 1, windowMs: 60_000 };
+      expect(await applyRateLimit(makeRequest({ 'x-forwarded-for': '1.2.3.4' }), profile)).toBeNull();
+      expect(await applyRateLimit(makeRequest({ 'x-forwarded-for': '1.2.3.5' }), profile)).toBeNull();
+    });
+
+    it('never buckets an explicit identifier', async () => {
+      const profile = { name: 'test-explicit', limit: 1, windowMs: 60_000 };
+      await applyRateLimit(makeRequest(), profile, '2001:db8:1:2::1');
+      expect(g.__rateLimitStore?.has('test-explicit:2001:db8:1:2::1')).toBe(true);
     });
   });
 });
