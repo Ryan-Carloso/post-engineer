@@ -9,11 +9,12 @@ import { ERROR_CODES, formatErrorMessage } from '@/lib/error-codes';
 import { type DistributedSlot } from '@/lib/schedule/slot-distribution';
 import { validateSlots } from './slot-validation';
 import { isValidTimezone } from '@/lib/timezone';
-import { computeVideoTokens, netLedgerSpent, toFiniteNumber } from '@/lib/tokens';
+import { computeVideoTokens, toFiniteNumber } from '@/lib/tokens';
 import { refundSlotTokens } from '@/lib/billing/refund-tokens';
 import { buildSlotRows } from './slot-rows';
 import { answerSchedulePkRace } from './pk-race';
 import { fetchReplay } from './replay';
+import { resolvePriorSpend } from './prior-spend';
 import { refundRollbackSpend } from './rollback-refund';
 import { buildPairFacts, checkExperimentLink, verifyExperimentPairAfterInsert } from './experiment-link';
 import { buildIdentitySnapshot } from './identity-snapshot';
@@ -42,6 +43,7 @@ import {
 } from '@/lib/generation/video-job-payload';
 import { recordGenerationStart, recordGenerationUpdate, startEngineVideoTask } from '@/lib/generation/video-generation';
 import { checkCustomAudioUrl } from '@/lib/generation/custom-audio';
+import { deleteInsertedSlots } from './rollback-slots';
 import { recordRecentImageId, resolveVideoImage } from '@/lib/persona-images';
 import { resolveIdempotency } from '@/lib/idempotency';
 import { trackApiEvent } from '@/lib/analytics';
@@ -300,24 +302,14 @@ async function postHandler(request: Request): Promise<NextResponse> {
       if (replayed) return replayed;
     }
   }
-  const { data: ledgerRows, error: ledgerError } = await supabase
-    .from('token_transactions')
-    .select('type, amount')
-    .eq('generation_id', idem.generationId);
-  if (ledgerError) {
-    logger.error('[generate-and-schedule] spend ledger lookup failed', ledgerError, {
-      generationId: idem.generationId,
-      userId,
-    });
-    return coded(500, ERROR_CODES.INTERNAL_ERROR, formatErrorMessage(ERROR_CODES.INTERNAL_ERROR));
-  }
-  const alreadySpent = netLedgerSpent(ledgerRows ?? []) > 0;
-  if (alreadySpent) {
-    logger.warn('[generate-and-schedule] spend ledger already has this generation_id; resuming without charging', {
-      generationId: idem.generationId,
-      userId,
-    });
-  }
+  const priorSpend = await resolvePriorSpend(supabase, {
+    userId,
+    scheduleId: idem.scheduleId,
+    generationId: idem.generationId,
+    scheduleWasLive: existingSchedule !== null && existingSchedule !== undefined,
+  });
+  if (!('alreadySpent' in priorSpend)) return priorSpend;
+  const { alreadySpent } = priorSpend;
 
   if (!alreadySpent) {
     try {
@@ -467,7 +459,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
       scheduleId: idem.scheduleId,
       userId,
     });
-    await supabase.from('scheduled_posts').delete().eq('schedule_id', idem.scheduleId).eq('user_id', userId);
+    await deleteInsertedSlots(supabase, userId, slotRows);
     await supabase.from('schedules').delete().eq('id', idem.scheduleId).eq('user_id', userId);
     await refundRollbackSpend(supabase, {
       userId,
@@ -483,7 +475,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
     const recheck = await verifyExperimentPairAfterInsert(supabase, { link: experiment, userId, facts: pairFacts });
     if (!recheck.ok) {
       logger.error('[generate-and-schedule] experiment pair re-check failed after insert; rolling back', undefined, { scheduleId: idem.scheduleId, userId, field: recheck.field });
-      await supabase.from('scheduled_posts').delete().eq('schedule_id', idem.scheduleId).eq('user_id', userId);
+      await deleteInsertedSlots(supabase, userId, slotRows);
       await supabase.from('schedules').delete().eq('id', idem.scheduleId).eq('user_id', userId);
       await refundRollbackSpend(supabase, {
         userId,

@@ -28,6 +28,7 @@ export const ERROR_CODES = {
   ENGINE_UNAVAILABLE: 'ENGINE_UNAVAILABLE',
   IMAGE_PROVIDER_UNSUPPORTED: 'IMAGE_PROVIDER_UNSUPPORTED',
   VIDEO_UPLOAD_CONSUMED: 'VIDEO_UPLOAD_CONSUMED',
+  IDEMPOTENCY_KEY_CONSUMED: 'IDEMPOTENCY_KEY_CONSUMED',
   VIDEO_UPLOAD_SCHEDULED: 'VIDEO_UPLOAD_SCHEDULED',
   MCP_VERSION_MISMATCH: 'MCP_VERSION_MISMATCH',
   PROMPT_NOT_FOUND: 'PROMPT_NOT_FOUND',
@@ -70,6 +71,8 @@ const DEFAULT_MESSAGES: Record<ErrorCode, string> = {
   ENGINE_UNAVAILABLE: 'Video generation is temporarily unavailable. Please try again later.',
   IMAGE_PROVIDER_UNSUPPORTED: 'Images can only be published to Instagram, Bluesky, LinkedIn, Threads, Facebook, Pinterest and Telegram.',
   VIDEO_UPLOAD_CONSUMED: 'This video upload was already used. Upload it again to publish.',
+  IDEMPOTENCY_KEY_CONSUMED:
+    'This idempotency key belongs to a schedule that was deleted. Send the request again with a new idempotency key.',
   VIDEO_UPLOAD_SCHEDULED:
     'This video upload is already scheduled. An upload publishes once: schedule it to every network in one call, or upload it again.',
   MCP_VERSION_MISMATCH: 'This post-engineer-mcp version does not match the server. Restart the MCP with the version the server requires.',

@@ -205,7 +205,7 @@ export const operationSchemas = {
   'POST /api/videos/generate-and-schedule': {
     extraResponses: {
       402: 'INSUFFICIENT_TOKENS: the balance does not cover the video.',
-      409: 'PERSONA_ALREADY_SCHEDULED: this persona already has an active schedule.',
+      409: 'PERSONA_ALREADY_SCHEDULED: this persona already has an active schedule. IDEMPOTENCY_KEY_CONSUMED: the idempotency key belongs to a deleted schedule; send a new key.',
       502: 'The engine did not accept any video (each one refunded); retry with backoff.',
     },
     request: generateBody,
