@@ -4,25 +4,15 @@ import type { PostEngineerClient } from './client.js';
 import { parseContractResponse } from './contract-response.js';
 import { checkMedia as checkMediaContract, uploadMedia as uploadMediaContract } from './contracts/media.js';
 import type { CheckMediaCode, VideoAspect } from './contracts/media.js';
+import { detectSegmentImageMimeType } from './image-mime.js';
 import { MAX_SEGMENT_MEDIA_BYTES, MAX_SEGMENT_MEDIA_MB } from './limits.js';
+import type { HostLookup } from './public-fetch.js';
+import { fetchRemoteImage } from './remote-image-fetch.js';
 
 export { CHECK_MEDIA_CODES } from './contracts/media.js';
 export type { CheckMediaCode } from './contracts/media.js';
 
 const UPLOAD_TIMEOUT_MS = 120_000;
-
-export function detectSegmentImageMimeType(buffer: Buffer): string | null {
-  if (buffer.length < 12) return null;
-  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return 'image/jpeg';
-  if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47) {
-    return 'image/png';
-  }
-  if (buffer.subarray(0, 4).toString('ascii') === 'RIFF' && buffer.subarray(8, 12).toString('ascii') === 'WEBP') {
-    return 'image/webp';
-  }
-  return null;
-}
-
 
 export async function readLocalImage(path: string): Promise<{ buffer: Buffer; mimeType: string }> {
   let read;
@@ -52,13 +42,12 @@ export async function readLocalImage(path: string): Promise<{ buffer: Buffer; mi
   return { buffer, mimeType };
 }
 
-export async function uploadSegmentMedia(
+async function postSegmentMedia(
   client: PostEngineerClient,
-  path: string,
+  image: { buffer: Buffer; mimeType: string; filename: string },
 ): Promise<{ mediaId: string }> {
-  const { buffer, mimeType } = await readLocalImage(path);
   const formData = new FormData();
-  formData.append('file', new Blob([buffer], { type: mimeType }), basename(path));
+  formData.append('file', new Blob([image.buffer], { type: image.mimeType }), image.filename);
   const result = await client.request(
     '/api/media/upload',
     {
@@ -71,6 +60,22 @@ export async function uploadSegmentMedia(
   );
   const parsed = parseContractResponse(uploadMediaContract, result);
   return { mediaId: parsed.mediaId };
+}
+
+export async function uploadSegmentMedia(
+  client: PostEngineerClient,
+  path: string,
+): Promise<{ mediaId: string }> {
+  const { buffer, mimeType } = await readLocalImage(path);
+  return postSegmentMedia(client, { buffer, mimeType, filename: basename(path) });
+}
+
+export async function uploadSegmentMediaFromUrl(
+  client: PostEngineerClient,
+  imageUrl: string,
+  lookup?: HostLookup,
+): Promise<{ mediaId: string }> {
+  return postSegmentMedia(client, await fetchRemoteImage(imageUrl, { maxBytes: MAX_SEGMENT_MEDIA_BYTES, lookup }));
 }
 
 export async function checkSegmentMedia(

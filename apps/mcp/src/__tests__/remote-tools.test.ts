@@ -31,7 +31,7 @@ vi.mock('../analytics.js', () => ({
   },
 }));
 
-const FILE_ONLY_ACTIONS: Array<[string, string]> = [['media', 'upload'], ['persona_media', 'add_image'], ['publish_video', 'from_file']];
+const FILE_ONLY_ACTIONS: Array<[string, string]> = [['publish_video', 'from_file']];
 const PERSONA = '11111111-1111-4111-8111-111111111111';
 
 function actionsOf(tools: Awaited<ReturnType<typeof listTools>>, name: string): string[] {
@@ -66,7 +66,7 @@ describe('remote (http) tool surface', () => {
     for (const tool of ['personas', 'voices', 'media', 'generate_video']) expect(names).toContain(tool);
     expect(actionsOf(tools, 'personas')).toEqual(expect.arrayContaining(['create', 'update', 'list']));
     expect(actionsOf(tools, 'voices')).toContain('create_clone');
-    expect(actionsOf(tools, 'media')).toEqual(['check']);
+    expect(actionsOf(tools, 'media')).toEqual(['upload', 'check']);
     expect(actionsOf(tools, 'publish_video')).toEqual(['create_upload', 'complete_upload', 'publish_upload', 'publish_existing']);
   });
 
@@ -75,6 +75,18 @@ describe('remote (http) tool surface', () => {
     for (const [tool, action] of FILE_ONLY_ACTIONS) {
       expect(actionsOf(tools, tool)).toContain(action);
     }
+  });
+
+  it('offers imageUrl instead of path on the remote image actions', async () => {
+    const tools = await listTools('http');
+    const fields = new Map(tools.map((t) => [t.name, Object.keys(t.inputSchema.properties ?? {})]));
+    expect(fields.get('media')).toContain('imageUrl');
+    expect(fields.get('persona_media')).toContain('imageUrl');
+    expect(fields.get('media')).not.toContain('path');
+    expect(fields.get('persona_media')).not.toContain('path');
+    const stdio = new Map((await listTools('stdio')).map((t) => [t.name, Object.keys(t.inputSchema.properties ?? {})]));
+    expect(stdio.get('media')).toContain('path');
+    expect(stdio.get('media')).not.toContain('imageUrl');
   });
 
   it('exposes no local-path field on http schemas', async () => {

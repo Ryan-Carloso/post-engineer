@@ -9,7 +9,9 @@ import { UpdatePersonaShape, handleUpdatePersona } from './persona-update.js';
 import { PERSONA_REF, personaRefShape, withPersona } from './refs.js';
 import { withRecipeNudge, type RecipeSession } from './recipe-session.js';
 import { CreatePersonaRemoteSchema, CreatePersonaRemoteShape, UpdatePersonaRemoteSchema, UpdatePersonaRemoteShape } from './remote-shapes.js';
+import { AddPersonaImageRemoteShape } from './remote-shapes-images.js';
 import { DESTRUCTIVE } from './tool-annotations.js';
+import { AddPersonaImageRemoteSchema, handleAddPersonaImageFromUrl } from './tools-persona-image-url.js';
 import {
   AddPersonaImageShape,
   CreatePersonaSchema,
@@ -104,12 +106,12 @@ const MEDIA_SPECS = {
 };
 
 export function registerPersonaMediaTools(server: McpServer, client: PostEngineerClient, remote: boolean): void {
-  const options: ActionOptions<typeof MEDIA_SPECS> = remote ? { unavailable: ['add_image'] } : {};
+  const options: ActionOptions<typeof MEDIA_SPECS> = remote ? { variants: { add_image: personaRefShape(AddPersonaImageRemoteShape) } } : {};
   const offered = offeredSpecs(MEDIA_SPECS, options);
   server.tool(
     'persona_media',
     actionDescription(
-      `A persona's face and image library. list_faces: the stock faces to pick an avatar from (id, url, description). list_images${remote ? '' : ' / add_image (reads a local file)'} / update_image / remove_image: the library images used for the per-video image selection.`,
+      `A persona's face and image library. list_faces: the stock faces to pick an avatar from (id, url, description). list_images / add_image (${remote ? 'downloads a public https imageUrl' : 'reads a local file'}) / update_image / remove_image: the library images used for the per-video image selection.`,
       offered,
     ),
     actionShape(offered),
@@ -118,7 +120,7 @@ export function registerPersonaMediaTools(server: McpServer, client: PostEnginee
       {
         list_faces: async () => handleListFaces(client),
         list_images: (args) => withPersona(client, args, (resolved) => handleListPersonaImages(client, resolved)),
-        add_image: (args) => withPersona(client, args, (resolved) => handleAddPersonaImage(client, resolved)),
+        add_image: (args) => withPersona(client, args, (resolved) => (remote ? handleAddPersonaImageFromUrl(client, AddPersonaImageRemoteSchema.parse(resolved)) : handleAddPersonaImage(client, resolved))),
         update_image: async (args) => handleUpdatePersonaImage(client, args),
         remove_image: async (args) => handleRemovePersonaImage(client, args),
       },

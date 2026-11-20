@@ -37,7 +37,7 @@ const ACTIONS: Record<string, string[]> = {
 const SINGLE_TOOLS: Record<string, string[]> = { generate_video: ['videos'], cancel_video: ['taskId'] };
 const EXPECTED_TOOLS = [...Object.keys(ACTIONS), ...Object.keys(SINGLE_TOOLS)].sort();
 
-const LOCAL_ONLY: Record<string, string[]> = { persona_media: ['add_image'], media: ['upload'], publish_video: ['from_file'] };
+const LOCAL_ONLY: Record<string, string[]> = { publish_video: ['from_file'] };
 
 async function listTools(transport: 'stdio' | 'http'): Promise<Map<string, Tool>> {
   const server = createPostEngineerMcpServer({} as unknown as PostEngineerClient, transport);
@@ -117,7 +117,9 @@ describe('action tools advertise one flat schema', () => {
     const remote = await listTools('http');
     expect(remote.get('media')?.description).not.toContain('use upload');
     expect(remote.get('media')?.description).toContain('another public URL');
-    expect(remote.get('persona_media')?.description).not.toContain('add_image');
+    expect(remote.get('persona_media')?.description).toContain('imageUrl');
+    expect(remote.get('persona_media')?.description).not.toContain('reads a local file');
+    expect(remote.get('media')?.description).toContain('imageUrl');
     expect(remote.get('publish_video')?.description).not.toContain('from_file');
     const stdio = await listTools('stdio');
     expect(stdio.get('media')?.description).toContain('use upload');

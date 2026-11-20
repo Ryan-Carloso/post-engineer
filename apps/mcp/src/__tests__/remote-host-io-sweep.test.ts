@@ -98,6 +98,9 @@ function smuggledLocalPaths(): Record<string, unknown> {
   };
 }
 
+const INTERNAL_IMAGE_URLS = ['http://127.0.0.1:9/a.png', 'https://169.254.169.254/a.png', 'https://10.0.0.1/a.png', 'https://internal.example/a.png'];
+const IMAGE_URL_ACTIONS = new Set(['media.upload', 'persona_media.add_image']);
+
 const INTERNAL_AUDIO_URLS = ['http://127.0.0.1:9/a.mp3', 'https://169.254.169.254/a.mp3', 'https://10.0.0.1/a.mp3', 'https://internal.example/a.mp3'];
 
 interface ToolCall {
@@ -188,7 +191,8 @@ function hostileCalls(tool: string, action: string | null): ToolCall[] {
     ...samples.flatMap((call) => {
       const smuggled = { ...call, args: { ...call.args, ...smuggledLocalPaths() } };
       const internalUrls = typeof call.args.audioUrl === 'string' ? INTERNAL_AUDIO_URLS.map((audioUrl) => ({ ...call, args: { ...call.args, audioUrl } })) : [];
-      return [call, smuggled, ...localFieldVariants(call), ...internalUrls];
+      const internalImages = IMAGE_URL_ACTIONS.has(`${tool}.${action}`) ? INTERNAL_IMAGE_URLS.map((imageUrl) => ({ ...call, args: { ...call.args, imageUrl } })) : [];
+      return [call, smuggled, ...localFieldVariants(call), ...internalUrls, ...internalImages];
     }),
     ...imageAccountVariants(tool, action, samples),
   ];
@@ -292,6 +296,20 @@ describe('remote (http) host I/O sweep', () => {
     expect(lookups).toEqual(['example.com']);
     expect(io.httpsRequests).toEqual([]);
     expect(io.foreignFetches).toEqual([]);
+  });
+});
+
+describe('remote image URL actions', () => {
+  it.each([...IMAGE_URL_ACTIONS])('resolves the image host and refuses a private answer on http for %s', async (key) => {
+    const [tool, action] = key.split('.');
+    const call = sampleCalls(tool, action)[0];
+    const withUrl: ToolCall = { ...call, args: { ...call.args, imageUrl: 'https://example.com/a.png' } };
+    lookups.length = 0;
+    const io = await hostIoOf('http', withUrl);
+    expect(lookups).toEqual(['example.com']);
+    expect(io.httpsRequests).toEqual([]);
+    expect(io.foreignFetches).toEqual([]);
+    expect(io.fileReads).toEqual([]);
   });
 });
 
