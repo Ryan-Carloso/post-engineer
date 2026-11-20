@@ -209,7 +209,7 @@ def openrouter_tts(
         logger.error("OpenRouter TTS text is empty")
         return TtsResult(error="OpenRouter TTS failed: text is empty")
 
-    text = _preprocess_text_for_tts(text)
+    spoken_text = _preprocess_text_for_tts(text)
     api_key = config.openrouter.get("api_key", "")
     if not api_key:
         logger.error("OpenRouter API key is not set")
@@ -217,7 +217,7 @@ def openrouter_tts(
 
     payload = {
         "model": model,
-        "input": text,
+        "input": spoken_text,
         "voice": voice,
         "response_format": "mp3",
     }

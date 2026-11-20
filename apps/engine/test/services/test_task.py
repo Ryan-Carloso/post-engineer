@@ -181,6 +181,7 @@ class TestTaskService(unittest.TestCase):
                 "1\n00:00:00,000 --> 00:00:01,000\nHello world.\n\n",
                 encoding="utf-8",
             )
+            return subtitle_file
 
         try:
             with (

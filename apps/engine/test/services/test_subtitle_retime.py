@@ -175,7 +175,7 @@ def test_whisper_word_boundaries_are_kept_next_to_the_srt(tmp_path, monkeypatch)
     monkeypatch.setattr(subtitle, "WhisperModel", object)
     monkeypatch.setattr(subtitle, "model", _FakeModel([_Segment(words)]))
     srt = tmp_path / "subtitle.srt"
-    subtitle.create("audio.mp3", str(srt))
+    assert subtitle.create("audio.mp3", str(srt)) == str(srt)
     assert subtitle.file_to_words(str(srt)) == [
         ("Stop", 0.1, 0.4),
         ("here.", 0.4, 0.9),

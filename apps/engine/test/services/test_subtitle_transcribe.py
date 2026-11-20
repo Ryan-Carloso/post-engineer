@@ -147,3 +147,10 @@ def test_create_still_returns_empty_when_library_missing(
     monkeypatch.setattr(subtitle, "WhisperModel", None)
     monkeypatch.setattr(subtitle, "model", None)
     assert subtitle.create("/tmp/audio.mp3", "/tmp/sub.srt") == ""
+
+
+def test_create_returns_none_when_the_model_fails_to_load(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_fake_model(monkeypatch, _FailingModel)
+    assert subtitle.create("/tmp/audio.mp3", "/tmp/sub.srt") is None
