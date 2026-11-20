@@ -35,7 +35,11 @@ never reads files from the host it runs on: `media (action: upload)`,
 `persona_media (action: add_image)` and `publish_video (action: from_file)` are not registered, and
 `personas (action: create)`, `personas (action: update)` and `voices (action: create_clone)` accept only
 public URLs (`avatarUrl` / `audioUrl`) — no `avatarPath`, `audioPath` or
-library image files. Local paths stay available on the default stdio
+library image files. The server downloads a remote `audioUrl` itself, so it
+fetches only `https`, only from a host whose every DNS answer is a public
+address (loopback, private and link-local are refused before connecting),
+pinned to those addresses for the connection, with no redirects and a
+timeout. Local paths stay available on the default stdio
 server, where the disk is the agent's own machine. Signed upload
 replaces them on the remote surface: `publish_video (action: create_upload)` mints a
 short-lived signed URL, the caller PUTs the video bytes to it directly,
