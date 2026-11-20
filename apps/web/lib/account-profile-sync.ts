@@ -48,6 +48,11 @@ const CREDENTIAL_FAILURE_REASONS: ReadonlySet<string> = new Set([
   'TokenDecryptError',
 ]);
 
+function isHeldCredentialFailure(error: unknown): boolean {
+  const reason = classifyAccountBreak(error);
+  return reason !== null && CREDENTIAL_FAILURE_REASONS.has(reason);
+}
+
 export function credentialFailureHeld(record: SocialAccountRecord, now: Date): boolean {
   const reason = record.accountMetadata.profileSyncFailedReason;
   return failureCooldownActive(record, now) && typeof reason === 'string' && CREDENTIAL_FAILURE_REASONS.has(reason);
@@ -112,7 +117,9 @@ async function probeStoredCredential(
   } catch (error) {
     reportProfileFetchFailed(record.provider, 'sync', error);
     reportOwnerAccountBreak(record, error);
-    await writeFailureMarker(supabase, userId, record, error, now);
+    if (isHeldCredentialFailure(error)) {
+      await writeFailureMarker(supabase, userId, record, error, now);
+    }
     throw error;
   }
 }

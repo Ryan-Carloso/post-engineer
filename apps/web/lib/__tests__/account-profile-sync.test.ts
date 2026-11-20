@@ -417,6 +417,23 @@ describe('syncAccountProfile', () => {
     expect(reportProfileFetchFailed).toHaveBeenCalledTimes(1);
   });
 
+  it('writes no marker for a transient probe failure, so the next load still fetches an expired picture', async () => {
+    const failure = new Error('Failed to get social account: connection reset');
+    vi.mocked(getSocialAccountTokens).mockRejectedValueOnce(failure);
+    const rec = record();
+    await expect(syncAccountProfile(supabase, 'u1', rec, { now: () => NOW })).rejects.toBe(failure);
+    expect(reportProfileFetchFailed).toHaveBeenCalledWith('instagram', 'sync', failure);
+    expect(updateSocialAccountMetadata).not.toHaveBeenCalled();
+    expect(profileNeedsSync({ ...rec, accountMetadata: { ...rec.accountMetadata, profilePictureUrl: EXPIRED_PIC } }, 'profilePictureUrl', NOW)).toBe(true);
+  });
+
+  it('writes no marker when the probe fails with a break the cooldown does not hold', async () => {
+    const failure = Object.assign(new Error('Email not verified'), { name: 'BlueskyError', code: 'email_not_verified' });
+    vi.mocked(getSocialAccountTokens).mockRejectedValueOnce(failure);
+    await expect(syncAccountProfile(supabase, 'u1', record(), { now: () => NOW })).rejects.toBe(failure);
+    expect(updateSocialAccountMetadata).not.toHaveBeenCalled();
+  });
+
   it('logs a failed probe marker write and still rethrows the probe error', async () => {
     const failure = new Error('Invalid authentication tag length: 2');
     vi.mocked(getSocialAccountTokens).mockRejectedValueOnce(failure);
