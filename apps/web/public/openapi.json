@@ -6555,7 +6555,7 @@
             }
           },
           "409": {
-            "description": "PERSONA_ALREADY_SCHEDULED: this persona already has an active schedule.",
+            "description": "PERSONA_ALREADY_SCHEDULED: this persona already has an active schedule. IDEMPOTENCY_KEY_CONSUMED: the idempotency key belongs to a deleted schedule; send a new key.",
             "content": {
               "application/json": {
                 "schema": {

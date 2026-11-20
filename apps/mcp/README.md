@@ -211,7 +211,7 @@ Actions that read a file from the disk (`persona_media` `add_image`, `media` `up
 
 `mode: "scheduled"` (the default) slots a video 3h-30d ahead (`startAt` and `times`); `mode: "asap"` publishes it when generation finishes.
 
-Batch (2-12 videos) needs a `batchKey` and rejects `idempotencyKey`; one video takes an `idempotencyKey` and rejects `batchKey`. A batch is created video by video: if one fails, the earlier videos stay created; call again with the same `batchKey` and the same videos and the created ones replay without a new charge.
+Batch (2-12 videos) needs a `batchKey` and rejects `idempotencyKey`; one video takes an `idempotencyKey` and rejects `batchKey`. A batch is created video by video: if one fails, the earlier videos stay created; call again with the same `batchKey` and the same videos and the created ones replay without a new charge. A key whose schedule was deleted (cancelled or delivered) is spent: reusing it answers 409 `IDEMPOTENCY_KEY_CONSUMED` and generates nothing, so send a new key.
 
 ### Measuring the size of `tools/list`
 

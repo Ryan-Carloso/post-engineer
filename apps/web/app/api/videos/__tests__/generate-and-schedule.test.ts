@@ -132,7 +132,9 @@ interface DbConfig {
   replaySlots?: Array<{ id: string; slot_at: string; title: string; task_id: string | null; status: string }>;
   slotCount?: number | null;
   ledgerIds?: string[];
-  ledgerRows?: Array<{ id: string; type: string; amount: number }>;
+  ledgerRows?: Array<{ id: string; type: string; amount: number; reference_id?: string | null }>;
+  ledgerFilters?: Array<{ op: string; column: string; value: unknown }>;
+  slotCountError?: boolean;
   ledgerError?: boolean;
   spend?: { spent: boolean; balance: number };
   spendErrorCode?: string;
@@ -183,8 +185,14 @@ function makeClient(cfg: DbConfig): unknown {
         isCountQuery = opts?.count === 'exact' && opts?.head === true;
         return builder;
       },
-      eq: () => builder,
-      in: () => builder,
+      eq: (column: string, value: unknown) => {
+        if (name === 'token_transactions') cfg.ledgerFilters?.push({ op: 'eq', column, value });
+        return builder;
+      },
+      in: (column: string, value: unknown) => {
+        if (name === 'token_transactions') cfg.ledgerFilters?.push({ op: 'in', column, value });
+        return builder;
+      },
       limit: () => builder,
       order: () => builder,
       maybeSingle: async () => {
@@ -305,6 +313,9 @@ function makeClient(cfg: DbConfig): unknown {
         }
         if (name === 'scheduled_posts') {
           if (isCountQuery) {
+            if (cfg.slotCountError) {
+              return Promise.resolve({ data: null, count: null, error: { code: 'XX000', message: 'db down' } }).then(resolve, reject);
+            }
             const count = cfg.slotCount === undefined ? (cfg.replaySlots ?? []).length : cfg.slotCount;
             return Promise.resolve({ data: [], count, error: null }).then(resolve, reject);
           }
@@ -426,6 +437,14 @@ function post(body: unknown, headers?: Record<string, string>): Promise<NextResp
       body: JSON.stringify(body),
     }),
   ) as Promise<NextResponse>;
+}
+
+function generationIdFor(key: string): string {
+  return `batch:${deterministicUuid(IDEMPOTENCY_NAMESPACE, `${USER_ID}:${key}`)}`;
+}
+
+function rollbackRefund(key: string, amount: number): { id: string; type: string; amount: number; reference_id: string } {
+  return { id: 'tx-refund', type: 'generation_refund', amount, reference_id: `${generationIdFor(key)}:rollback:r-1` };
 }
 
 const DEFAULT_CFG: DbConfig = {
@@ -1092,7 +1111,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
         ...DEFAULT_CFG,
         ledgerRows: [
           { id: 'tx-spend', type: 'video_generation', amount: -2 },
-          { id: 'tx-refund', type: 'generation_refund', amount: 2 },
+          rollbackRefund('spent-and-refunded-key', 2),
         ],
       });
       const res = await post(baseBody({ idempotencyKey: 'spent-and-refunded-key' }));
@@ -1119,7 +1138,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
         ...DEFAULT_CFG,
         ledgerRows: [
           { id: 'tx-spend', type: 'video_generation', amount: -2 },
-          { id: 'tx-refund', type: 'generation_refund', amount: 1 },
+          rollbackRefund('spend-partial-refund-key', 1),
         ],
       });
       const res = await post(baseBody({ idempotencyKey: 'spend-partial-refund-key' }));
@@ -1127,6 +1146,79 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(res.status).toBe(200);
       expect(json.success).toBe(true);
       expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
+    });
+
+    it('409s without charging or dispatching when the key belongs to a schedule deleted after a cancel refund', async () => {
+      const key = 'deleted-after-cancel-key';
+      const generationId = generationIdFor(key);
+      setup({
+        ...DEFAULT_CFG,
+        ledgerRows: [
+          { id: 'tx-spend', type: 'video_generation', amount: -2, reference_id: null },
+          { id: 'tx-refund', type: 'generation_refund', amount: 2, reference_id: `${generationId}:slot:slot-0` },
+        ],
+      });
+      const res = await post(baseBody({ idempotencyKey: key }));
+      const json = await res.json();
+      expect(res.status).toBe(409);
+      expect(json.code).toBe('IDEMPOTENCY_KEY_CONSUMED');
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
+      expect(inserts['schedules']).toBeUndefined();
+      expect(inserts['scheduled_posts']).toBeUndefined();
+      expect(vi.mocked(startEngineVideoTask)).not.toHaveBeenCalled();
+    });
+
+    it('409s without charging or dispatching when the key belongs to a schedule deleted after delivery', async () => {
+      const key = 'deleted-after-delivery-key';
+      setup({
+        ...DEFAULT_CFG,
+        ledgerRows: [{ id: 'tx-spend', type: 'video_generation', amount: -2, reference_id: null }],
+        replaySlots: [{ id: 'slot-published', slot_at: futureISO(-24), title: 'Porto trip', task_id: 'task-1', status: 'published' }],
+      });
+      const res = await post(baseBody({ idempotencyKey: key }));
+      const json = await res.json();
+      expect(res.status).toBe(409);
+      expect(json.code).toBe('IDEMPOTENCY_KEY_CONSUMED');
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
+      expect(inserts['schedules']).toBeUndefined();
+      expect(vi.mocked(startEngineVideoTask)).not.toHaveBeenCalled();
+    });
+
+    it('returns 500 without charging when the orphan slot lookup fails', async () => {
+      setup({
+        ...DEFAULT_CFG,
+        ledgerRows: [{ id: 'tx-spend', type: 'video_generation', amount: -2, reference_id: null }],
+        slotCountError: true,
+      });
+      const res = await post(baseBody({ idempotencyKey: 'orphan-lookup-err-key' }));
+      expect(res.status).toBe(500);
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
+      expect(inserts['schedules']).toBeUndefined();
+      expect(vi.mocked(startEngineVideoTask)).not.toHaveBeenCalled();
+    });
+
+    it('resumes a charge whose schedule was never inserted, dispatching once without charging again', async () => {
+      setup({
+        ...DEFAULT_CFG,
+        ledgerRows: [{ id: 'tx-spend', type: 'video_generation', amount: -2, reference_id: null }],
+      });
+      const res = await post(baseBody({ idempotencyKey: 'crash-before-schedule-key' }));
+      expect(res.status).toBe(200);
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
+      expect(inserts['schedules']).toHaveLength(1);
+      expect(vi.mocked(startEngineVideoTask)).toHaveBeenCalledTimes(1);
+    });
+
+    it('reads only charge and refund rows of this user for the generation id', async () => {
+      const key = 'ledger-filter-key';
+      const ledgerFilters: Array<{ op: string; column: string; value: unknown }> = [];
+      setup({ ...DEFAULT_CFG, ledgerFilters });
+      await post(baseBody({ idempotencyKey: key }));
+      expect(ledgerFilters).toEqual([
+        { op: 'eq', column: 'generation_id', value: generationIdFor(key) },
+        { op: 'eq', column: 'user_id', value: USER_ID },
+        { op: 'in', column: 'type', value: ['video_generation', 'generation_refund'] },
+      ]);
     });
 
     it('accepts the Idempotency-Key header', async () => {
@@ -1262,6 +1354,28 @@ describe('POST /api/videos/generate-and-schedule', () => {
       const spends = rpcCalls.filter((c) => c.name === 'spend_tokens');
       expect(spends).toHaveLength(1);
       expect(spends[0].args.p_amount).toBe(2);
+    });
+
+    it('re-charges a 0-slot zombie whose slot was refunded instead of answering 409', async () => {
+      const key = 'refunded-zombie-key';
+      const scheduleId = deterministicUuid(IDEMPOTENCY_NAMESPACE, `${USER_ID}:${key}`);
+      setup({
+        ...DEFAULT_CFG,
+        existingScheduleId: scheduleId,
+        replaySlots: [],
+        slotCount: 0,
+        ledgerRows: [
+          { id: 'tx-spend', type: 'video_generation', amount: -2, reference_id: null },
+          { id: 'tx-refund', type: 'generation_refund', amount: 2, reference_id: `batch:${scheduleId}:slot:slot-0` },
+        ],
+      });
+      const res = await post(baseBody({ idempotencyKey: key }));
+      const json = await res.json();
+      expect(res.status).toBe(200);
+      expect(json.replayed).toBe(false);
+      expect(deletes).toContain('schedules');
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(1);
+      expect(vi.mocked(startEngineVideoTask)).toHaveBeenCalledTimes(1);
     });
 
     it('treats a null slot count as a 0-slot zombie and runs fresh', async () => {
@@ -1403,7 +1517,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
         ...DEFAULT_CFG,
         ledgerRows: [
           { id: 'tx-spend', type: 'video_generation', amount: -2 },
-          { id: 'tx-refund', type: 'generation_refund', amount: 2 },
+          rollbackRefund('refunded-retry-dispatch-key', 2),
         ],
         engineFailSubjects: ['Porto trip'],
       });
@@ -2381,7 +2495,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
         ...DEFAULT_CFG,
         ledgerRows: [
           { id: 'tx-spend', type: 'video_generation', amount: -2 },
-          { id: 'tx-refund', type: 'generation_refund', amount: 2 },
+          rollbackRefund('rollback-key-freshness', 2),
         ],
         slotInsertFails: true,
       });
