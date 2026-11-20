@@ -8,6 +8,11 @@ import {
   fetchCimdDocument,
   isBlockedIpAddress,
 } from '../clients';
+import {
+  DCR_MAX_CLIENT_NAME_LENGTH,
+  DCR_MAX_REDIRECT_URIS,
+  DCR_MAX_REDIRECT_URI_LENGTH,
+} from '../dcr-limits';
 
 describe('oauth clients', () => {
   it('accepts valid dynamic client registration metadata', () => {
@@ -61,6 +66,57 @@ function okFetch(body: unknown) {
       ({ ok: true, json: async () => body }) as Response,
   );
 }
+
+describe('validateDcrMetadata size caps', () => {
+  const uriOfLength = (length: number): string => {
+    const prefix = 'https://a.example/';
+    return `${prefix}${'x'.repeat(length - prefix.length)}`;
+  };
+
+  it('accepts the maximum number of redirect_uris', () => {
+    const uris = Array.from({ length: DCR_MAX_REDIRECT_URIS }, (_, i) => `https://a.example/${i}`);
+    const result = validateDcrMetadata({ redirect_uris: uris });
+    expect(result).toEqual({ ok: true, redirectUris: uris, clientName: 'MCP client' });
+  });
+
+  it('rejects one redirect_uri over the count cap', () => {
+    const uris = Array.from({ length: DCR_MAX_REDIRECT_URIS + 1 }, (_, i) => `https://a.example/${i}`);
+    expect(validateDcrMetadata({ redirect_uris: uris })).toEqual({
+      ok: false,
+      error: `redirect_uris must contain at most ${DCR_MAX_REDIRECT_URIS} entries.`,
+    });
+  });
+
+  it('accepts a redirect_uri of exactly the maximum length', () => {
+    const uri = uriOfLength(DCR_MAX_REDIRECT_URI_LENGTH);
+    expect(uri.length).toBe(DCR_MAX_REDIRECT_URI_LENGTH);
+    expect(validateDcrMetadata({ redirect_uris: [uri] }).ok).toBe(true);
+  });
+
+  it('rejects a redirect_uri one character over the length cap instead of truncating it', () => {
+    const uri = uriOfLength(DCR_MAX_REDIRECT_URI_LENGTH + 1);
+    expect(validateDcrMetadata({ redirect_uris: ['https://a.example/ok', uri] })).toEqual({
+      ok: false,
+      error: `Each redirect_uri must be at most ${DCR_MAX_REDIRECT_URI_LENGTH} characters.`,
+    });
+  });
+
+  it('accepts a client_name of exactly the maximum length', () => {
+    const name = 'n'.repeat(DCR_MAX_CLIENT_NAME_LENGTH);
+    const result = validateDcrMetadata({ redirect_uris: ['https://a.example/cb'], client_name: name });
+    expect(result).toEqual({ ok: true, redirectUris: ['https://a.example/cb'], clientName: name });
+  });
+
+  it('rejects an over-length client_name instead of truncating it', () => {
+    const name = 'n'.repeat(DCR_MAX_CLIENT_NAME_LENGTH + 1);
+    expect(
+      validateDcrMetadata({ redirect_uris: ['https://a.example/cb'], client_name: name }),
+    ).toEqual({
+      ok: false,
+      error: `client_name must be at most ${DCR_MAX_CLIENT_NAME_LENGTH} characters.`,
+    });
+  });
+});
 
 describe('isBlockedIpAddress', () => {
   it.each([

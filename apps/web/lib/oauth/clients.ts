@@ -4,6 +4,11 @@ import { lookup as dnsLookup } from 'node:dns/promises';
 import type { LookupAddress } from 'node:dns';
 
 import { isLocalHostname } from '@/lib/oauth-utils';
+import {
+  DCR_MAX_CLIENT_NAME_LENGTH,
+  DCR_MAX_REDIRECT_URIS,
+  DCR_MAX_REDIRECT_URI_LENGTH,
+} from '@/lib/oauth/dcr-limits';
 import { requestPinned } from '@/lib/ssrf/pinned-request';
 import { isPublicIp } from '@/lib/ssrf/public-ip';
 import { resolvePublicHost } from '@/lib/ssrf/resolve-public-host';
@@ -43,8 +48,16 @@ export function validateDcrMetadata(body: unknown): DcrValidation {
   if (!Array.isArray(redirectUris) || redirectUris.length === 0) {
     return invalid('redirect_uris must be a non-empty array.');
   }
+  if (redirectUris.length > DCR_MAX_REDIRECT_URIS) {
+    return invalid(`redirect_uris must contain at most ${DCR_MAX_REDIRECT_URIS} entries.`);
+  }
   const uris: string[] = [];
   for (const entry of redirectUris) {
+    if (typeof entry === 'string' && entry.length > DCR_MAX_REDIRECT_URI_LENGTH) {
+      return invalid(
+        `Each redirect_uri must be at most ${DCR_MAX_REDIRECT_URI_LENGTH} characters.`,
+      );
+    }
     if (typeof entry !== 'string' || !redirectUriAllowed(entry)) {
       return invalid(
         'Each redirect_uri must be https (or http on localhost) without fragment.',
@@ -58,7 +71,10 @@ export function validateDcrMetadata(body: unknown): DcrValidation {
     if (typeof clientName !== 'string' || clientName.trim().length === 0) {
       return invalid('client_name must be a non-empty string.');
     }
-    name = clientName.trim().slice(0, 128);
+    name = clientName.trim();
+    if (name.length > DCR_MAX_CLIENT_NAME_LENGTH) {
+      return invalid(`client_name must be at most ${DCR_MAX_CLIENT_NAME_LENGTH} characters.`);
+    }
   }
 
   return { ok: true, redirectUris: uris, clientName: name };
