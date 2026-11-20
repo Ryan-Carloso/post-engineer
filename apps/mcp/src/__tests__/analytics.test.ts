@@ -2,12 +2,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import pkg from '../../package.json' with { type: 'json' };
 import {
   MCP_CALL_ID_HEADER,
+  MCP_CALL_REQUEST_HEADER,
   MCP_TOOL_HEADER,
   MCP_VERSION_HEADER,
   mcpTelemetryHeaders,
+  withToolCall,
   withTracking,
 } from '../analytics.js';
 import { PostEngineerClient } from '../client.js';
+import { handleWaitForVideoTasks } from '../video-task-tools.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
@@ -56,6 +59,36 @@ describe('mcpTelemetryHeaders', () => {
   });
 });
 
+describe('mcpTelemetryHeaders call request ordinal', () => {
+  it('numbers each request of one call from 1 and restarts at 1 for the next call', async () => {
+    const wrapped = withTracking('personas', async () => [
+      mcpTelemetryHeaders()[MCP_CALL_REQUEST_HEADER],
+      mcpTelemetryHeaders()[MCP_CALL_REQUEST_HEADER],
+      mcpTelemetryHeaders()[MCP_CALL_REQUEST_HEADER],
+    ]);
+    await expect(wrapped({})).resolves.toEqual(['1', '2', '3']);
+    await expect(wrapped({})).resolves.toEqual(['1', '2', '3']);
+  });
+
+  it('gives concurrent requests of one call distinct ordinals and keeps concurrent calls apart', async () => {
+    const call = (): Promise<string[]> =>
+      withToolCall('video_tasks', 'status', async () => {
+        const ordinals = await Promise.all(
+          [0, 1, 2].map(async () => {
+            await new Promise((resolve) => setTimeout(resolve, 1));
+            return mcpTelemetryHeaders()[MCP_CALL_REQUEST_HEADER] ?? '';
+          }),
+        );
+        return ordinals.sort();
+      });
+    await expect(Promise.all([call(), call()])).resolves.toEqual([['1', '2', '3'], ['1', '2', '3']]);
+  });
+
+  it('sends no ordinal outside a tool call', () => {
+    expect(mcpTelemetryHeaders()[MCP_CALL_REQUEST_HEADER]).toBeUndefined();
+  });
+});
+
 describe('mcpTelemetryHeaders version suppression', () => {
   it('omits the version header when includeVersion is false', () => {
     expect(mcpTelemetryHeaders({ includeVersion: false })).toEqual({});
@@ -88,6 +121,27 @@ describe('PostEngineerClient telemetry headers', () => {
     expect(headers[MCP_CALL_ID_HEADER]).toMatch(UUID);
     expect(headers[MCP_VERSION_HEADER]).toBe(pkg.version);
     expect(headers.Authorization).toBe('Bearer pe_test');
+  });
+
+  it('numbers every status request of a server-side wait under one call id', async () => {
+    let polls = 0;
+    const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => {
+      polls += 1;
+      const state = polls >= 3 ? 1 : 4;
+      return new Response(
+        JSON.stringify({ status: 200, message: 'success', body: { task_id: 'task-1', state, progress: state === 1 ? 100 : 50, stage: null } }),
+        { status: 200 },
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const client = new PostEngineerClient({ apiKey: 'pe_test', baseUrl: 'https://api.example.test' });
+    await withToolCall('video_tasks', 'status', () =>
+      handleWaitForVideoTasks(client, { taskIds: ['task-1'], waitSeconds: 600 }, { sleep: async () => {}, now: () => 0 }),
+    );
+    const headers = fetchMock.mock.calls.map((call) => call[1].headers as Record<string, string>);
+    expect(headers).toHaveLength(3);
+    expect(new Set(headers.map((entry) => entry[MCP_CALL_ID_HEADER])).size).toBe(1);
+    expect(headers.map((entry) => entry[MCP_CALL_REQUEST_HEADER])).toEqual(['1', '2', '3']);
   });
 
   it('sends the version header by default (stdio identity)', () => {
