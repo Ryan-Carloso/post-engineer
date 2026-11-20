@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { findRepoRoot } from '@/test/repo-root';
 
@@ -21,5 +21,15 @@ describe('the MCP tool count is the same everywhere it is quoted', () => {
     const quoted = [...read(path).matchAll(pattern)].map((match) => Number(match[1]));
     expect(quoted.length).toBeGreaterThan(0);
     expect(quoted.every((count) => count === registeredCount)).toBe(true);
+  });
+
+  it('names every registered MCP tool in llms.txt', () => {
+    const sourceDir = 'apps/mcp/src';
+    const registered = readdirSync(join(root, sourceDir))
+      .filter((file) => file.endsWith('.ts'))
+      .flatMap((file) => [...read(`${sourceDir}/${file}`).matchAll(/server\.tool\(\s*'([a-z_]+)'/g)].map((match) => match[1]));
+    const llms = read('apps/web/public/llms.txt');
+    expect(registered.length).toBe(registeredCount);
+    expect(registered.filter((name) => !llms.includes(`\`${name}\``))).toEqual([]);
   });
 });
