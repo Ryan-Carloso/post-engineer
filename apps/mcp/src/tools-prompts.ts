@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { PostEngineerClient } from './client.js';
 import { UnknownPromptSlugError, getPrompt, listPrompts } from './client-prompts.js';
 import { getErrorMessage } from './errors.js';
+import type { PromptSource } from './contracts/prompts.js';
 import type { McpToolResponse } from './tools-call.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { actionDescription, actionShape, byAction } from './action-tool.js';
@@ -40,21 +41,30 @@ export const GetPromptShape = {
 
 const GetPromptSchema = z.object(GetPromptShape);
 
-export async function handleGetPrompt(client: PostEngineerClient, args: unknown): Promise<McpToolResponse> {
+interface FetchedPrompt {
+  response: McpToolResponse;
+  source: PromptSource | null;
+}
+
+async function fetchPromptResponse(client: PostEngineerClient, args: unknown): Promise<FetchedPrompt> {
   const parsed = GetPromptSchema.safeParse(args);
   if (!parsed.success) {
-    return errorResponse('getting prompt', 'slug is required. Call prompts (action: list) for the valid slugs.');
+    return { response: errorResponse('getting prompt', 'slug is required. Call prompts (action: list) for the valid slugs.'), source: null };
   }
   try {
     const prompt = await getPrompt(client, parsed.data.slug);
     return {
-      content: [{ type: 'text', text: recipeRunText(prompt.slug, prompt.prompt, prompt.source) }],
-      _meta: { promptSource: prompt.source },
+      response: { content: [{ type: 'text', text: recipeRunText(prompt.slug, prompt.prompt, prompt.source) }] },
+      source: prompt.source,
     };
   } catch (error) {
-    if (error instanceof UnknownPromptSlugError) return errorResponse('getting prompt', error.message);
-    return errorResponse('getting prompt', getErrorMessage(error));
+    const message = error instanceof UnknownPromptSlugError ? error.message : getErrorMessage(error);
+    return { response: errorResponse('getting prompt', message), source: null };
   }
+}
+
+export async function handleGetPrompt(client: PostEngineerClient, args: unknown): Promise<McpToolResponse> {
+  return (await fetchPromptResponse(client, args)).response;
 }
 
 function errorResponse(action: string, message: string): McpToolResponse {
@@ -78,11 +88,11 @@ export function registerPromptTools(server: McpServer, client: PostEngineerClien
           return response;
         },
         get: async (args) => {
-          const response = await session.run(args.slug, () => handleGetPrompt(client, args));
-          if (response.isError !== true && response._meta?.promptSource === 'official' && isRecipeSlug(args.slug)) {
+          const fetched = await session.run(args.slug, () => fetchPromptResponse(client, args));
+          if (fetched.response.isError !== true && fetched.source === 'official' && isRecipeSlug(args.slug)) {
             session.recordRecipeFetched(args.slug);
           }
-          return response;
+          return fetched.response;
         },
       },
       PROMPTS_SPECS,

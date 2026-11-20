@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useI18n } from '@/lib/i18n/provider';
 import { Button } from '@/components/ui/button';
 import { INPUT_CLASS, SECTION_LABEL_CLASS } from '@/lib/ui';
@@ -26,6 +26,10 @@ export default function UserPromptForm({
 }: UserPromptFormProps): React.ReactElement {
   const { t } = useI18n();
   const [draft, setDraft] = useState<PromptDraft>(initial);
+  const firstField = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    firstField.current?.focus();
+  }, []);
   const slugValid = USER_PROMPT_SLUG_PATTERN.test(draft.slug);
   const canSubmit =
     !pending && slugValid && draft.title.trim().length > 0 && draft.prompt.trim().length > 0;
@@ -53,11 +57,11 @@ export default function UserPromptForm({
       <label className="block">
         <span className={SECTION_LABEL_CLASS}>{t('userPrompts.slugLabel')}</span>
         <input
+          ref={mode === 'new' ? firstField : undefined}
           value={draft.slug}
           onChange={field('slug')}
           disabled={mode === 'edit' || pending}
           maxLength={USER_PROMPT_LIMITS.slug}
-          autoFocus={mode === 'new'}
           aria-invalid={draft.slug.length > 0 && !slugValid}
           className={INPUT_CLASS}
         />
@@ -66,11 +70,11 @@ export default function UserPromptForm({
       <label className="block">
         <span className={SECTION_LABEL_CLASS}>{t('userPrompts.titleLabel')}</span>
         <input
+          ref={mode === 'edit' ? firstField : undefined}
           value={draft.title}
           onChange={field('title')}
           disabled={pending}
           maxLength={USER_PROMPT_LIMITS.title}
-          autoFocus={mode === 'edit'}
           className={INPUT_CLASS}
         />
       </label>
