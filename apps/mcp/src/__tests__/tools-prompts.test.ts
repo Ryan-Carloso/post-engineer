@@ -121,7 +121,7 @@ describe('handleListPrompts', () => {
 
   it('sends the search words and the source as query parameters', async () => {
     const result = await handleListPrompts(client(), { query: '  daily news ', source: 'community' });
-    expect(result.isError).toBeFalsy();
+    expect(JSON.parse(textOf(result))).toEqual(CATALOG);
     expect(requestedUrls()).toEqual(['/api/prompts?q=daily+news&source=community']);
   });
 
