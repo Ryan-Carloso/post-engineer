@@ -3,7 +3,7 @@
 release-mcp.yml holds `id-token: write` (npm trusted publishing and the MCP
 Registry GitHub OIDC login). Issue #456: no fork PR, other branch, tag push or
 dispatch on another ref may make an OIDC-bearing job build or publish code
-that is not main's HEAD, and no job that holds the OIDC token may run code
+that is not on main, and no job that holds the OIDC token may run code
 from the repository tree (install/build/test scripts).
 """
 
@@ -77,7 +77,7 @@ def test_build_checks_out_main_by_full_ref_and_verifies_it(workflow):
     checkout = next(s for s in build["steps"] if s.get("uses", "").startswith("actions/checkout@"))
     assert checkout["with"]["ref"] == "refs/heads/main"
     assert checkout["with"]["fetch-depth"] == 0
-    verify = next(s for s in build["steps"] if s.get("name") == "Verify the checkout is main's HEAD")
+    verify = next(s for s in build["steps"] if s.get("name") == "Verify the checkout is on main")
     assert "git merge-base --is-ancestor" in verify["run"]
     assert "refs/remotes/origin/main" in verify["run"]
     assert build["outputs"]["commit"] == "${{ steps.main.outputs.commit }}"

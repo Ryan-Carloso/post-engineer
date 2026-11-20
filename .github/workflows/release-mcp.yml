@@ -43,7 +43,7 @@ name: release-mcp
 #     schedule or dispatch event: a dispatch on another branch, a fork or a
 #     tag push never reaches a job that holds a token
 #   - `build` (contents: read, no OIDC) checks out refs/heads/main, verifies
-#     the checkout is origin/main's HEAD, and runs every repository script:
+#     the checkout is on origin/main, and runs every repository script:
 #     pnpm install, stamp, build, lint, typecheck, tests, npm pack. It hands
 #     over only the packed tarball and the stamped server.json
 #   - `publish` and `registry` hold id-token: write and never check out the
@@ -93,15 +93,15 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 pinned 2026-09-25
         with:
-          # Always main's HEAD, by full ref name so a tag called "main" can
-          # never shadow the branch: a scheduled or re-run job publishes what
-          # is merged now, which is also what the deploy computes.
+          # Always the tip of main, by full ref name so a tag called "main"
+          # can never shadow the branch: a scheduled or re-run job publishes
+          # what is merged now, which is also what the deploy computes.
           ref: refs/heads/main
           # git log over apps/mcp/ needs the history.
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Verify the checkout is main's HEAD
+      - name: Verify the checkout is on main
         id: main
         run: |
           set -euo pipefail
