@@ -190,16 +190,18 @@ describe('rate-limit', () => {
       }
     }
 
-    it('keeps the unexpired counters of other principals when the table is full', async () => {
+    it('keeps every live counter except the least recently used one when the table is full', async () => {
       const profile = { name: 'test-full', limit: 1, windowMs: 60_000 };
       await applyRateLimit(makeRequest(), profile, 'victim');
-      expect((await applyRateLimit(makeRequest(), profile, 'victim'))?.status).toBe(429);
       await fill(profile, MAX_TRACKED_KEYS - 1, 'filler');
       expect(g.__rateLimitStore?.size).toBe(MAX_TRACKED_KEYS);
+      expect((await applyRateLimit(makeRequest(), profile, 'victim'))?.status).toBe(429);
 
       await applyRateLimit(makeRequest(), profile, 'newcomer');
 
       expect(g.__rateLimitStore?.size).toBe(MAX_TRACKED_KEYS);
+      expect(g.__rateLimitStore?.has('test-full:filler-0')).toBe(false);
+      expect((await applyRateLimit(makeRequest(), profile, 'victim'))?.status).toBe(429);
       expect((await applyRateLimit(makeRequest(), profile, 'filler-5'))?.status).toBe(429);
       expect((await applyRateLimit(makeRequest(), profile, 'newcomer'))?.status).toBe(429);
     });
