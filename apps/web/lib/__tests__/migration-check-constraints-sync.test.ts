@@ -12,6 +12,7 @@ import { VIDEO_UPLOAD_STATUSES } from '@/lib/videos/signed-upload';
 import { UPLOAD_CONTENT_TYPES } from '@/lib/contracts/videos';
 import { SCHEDULED_MEDIA_KINDS } from '@/app/api/media/publish-existing/schema';
 import { PERSONA_CTA_TYPES } from '@/lib/contracts/personas';
+import { USER_PROMPT_STATUSES } from '@/lib/contracts/prompts';
 import { TOOL_CONFIG_SEARCH_TOOLS, TOOL_CONFIG_STOCK_SOURCES } from '@/lib/tool-config';
 
 interface SnapshotTable {
@@ -79,6 +80,8 @@ const EXPECTED: Record<string, readonly string[]> = {
   schedules_post_cta_type_check: PERSONA_CTA_TYPES,
   user_tool_configs_search_tool_check: TOOL_CONFIG_SEARCH_TOOLS,
   user_tool_configs_stock_sources_check: TOOL_CONFIG_STOCK_SOURCES,
+  user_prompts_status_check: USER_PROMPT_STATUSES,
+  user_prompts_approved_iff_hash: ['approved'],
 };
 
 describe('database enum checks match the code', () => {

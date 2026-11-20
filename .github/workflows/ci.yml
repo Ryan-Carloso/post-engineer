@@ -699,6 +699,13 @@ jobs:
           # operation. See scripts/db/check-core-tables-rls.sql.
           psql "postgresql://postgres:postgres@localhost:5432/postgres?sslmode=disable" -v ON_ERROR_STOP=1 -f scripts/db/check-core-tables-rls.sql
 
+      - name: Check user_prompts behaviour
+        run: |
+          set -euo pipefail
+          # Content hash, approval reset on edit, slug uniqueness and the
+          # service-role-only grants of 076_user-prompts.sql.
+          psql "postgresql://postgres:postgres@localhost:5432/postgres?sslmode=disable" -v ON_ERROR_STOP=1 -f scripts/db/check-user-prompts.sql
+
       - name: Check the schema snapshot is up to date
         run: |
           set -euo pipefail

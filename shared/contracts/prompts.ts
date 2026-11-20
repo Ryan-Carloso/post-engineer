@@ -2,6 +2,10 @@ import { z } from 'zod';
 
 import { defineEndpoint } from './endpoint.js';
 
+export const USER_PROMPT_STATUSES = ['private', 'pending', 'approved', 'rejected'] as const;
+
+export type UserPromptStatus = (typeof USER_PROMPT_STATUSES)[number];
+
 export const PromptSummarySchema = z.object({
   slug: z.string(),
   title: z.string(),
