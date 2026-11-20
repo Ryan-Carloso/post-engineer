@@ -252,6 +252,22 @@ describe('app/login/page — resolveLoginRedirectUrl', () => {
   });
 });
 
+describe('app/login/page — safeNext', () => {
+  it('keeps a relative path that stays on this origin', async () => {
+    const { safeNext } = await import('../page');
+    expect(safeNext('/oauth/authorize')).toBe('/oauth/authorize');
+    expect(safeNext('/dashboard?tab=1#top')).toBe('/dashboard?tab=1#top');
+  });
+
+  it('drops a path that leaves the origin or is missing', async () => {
+    const { safeNext } = await import('../page');
+    expect(safeNext('//evil.com')).toBeNull();
+    expect(safeNext('/\\evil.com')).toBeNull();
+    expect(safeNext('https://evil.com')).toBeNull();
+    expect(safeNext(null)).toBeNull();
+  });
+});
+
 describe('app/login/page — hydration', () => {
   it('hydrates the server markup without a mismatch and keeps the button usable', async () => {
     const container = document.createElement('div');

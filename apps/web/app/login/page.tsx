@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { createSupabaseClient } from '@/lib/supabase/client';
 import { isOwnVercelPreviewHost } from '@/lib/vercel-preview-host';
+import { isSafeNextPath } from '@/lib/safe-next-path';
 import { useI18n } from '@/lib/i18n/provider';
 import { LOCALES } from '@/lib/i18n';
 import { BoltIcon } from '@/lib/ui';
@@ -37,10 +38,7 @@ export default function Login() {
   );
 }
 
-const safeNext = (value: string | null): string | null => {
-  if (!value || !value.startsWith('/') || value.startsWith('//')) return null;
-  return value;
-};
+export const safeNext = (value: string | null): string | null => (isSafeNextPath(value) ? value : null);
 
 export const PROD_AUTH_CALLBACK = 'https://post-engineer.com/auth/callback';
 const LOCAL_AUTH_CALLBACK = 'http://localhost:3434/auth/callback';

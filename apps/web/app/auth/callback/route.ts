@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
-import { isLocalHostname } from '@/lib/oauth-utils'
-import { isOwnVercelPreviewHost } from '@/lib/vercel-preview-host'
+import { isCodeRelayTarget } from '@/lib/auth-code-relay'
+import { safeNextPath } from '@/lib/safe-next-path'
 
 function getSupabaseEnv() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -15,54 +15,6 @@ function getSupabaseEnv() {
   }
 
   return { url, key }
-}
-
-function isLocalDevUrl(value: string): boolean {
-  try {
-    const parsed = new URL(value)
-    return (
-      parsed.protocol === 'http:' &&
-      isLocalHostname(parsed.hostname)
-    )
-  } catch {
-    return false
-  }
-}
-
-function isVercelPreviewUrl(value: string): boolean {
-  try {
-    const parsed = new URL(value)
-    return (
-      parsed.protocol === 'https:' &&
-      isOwnVercelPreviewHost(parsed.hostname) &&
-      parsed.pathname === '/auth/callback'
-    )
-  } catch {
-    return false
-  }
-}
-
-export function safeNextPath(value: string | null): string {
-  if (!value || !value.startsWith('/') || value.startsWith('//') || value.includes('\\')) {
-    return '/';
-  }
-  try {
-    const dummy = new URL(value, 'http://localhost');
-    if (dummy.origin !== 'http://localhost') return '/';
-    return value;
-  } catch {
-    return '/';
-  }
-}
-
-function isCodeRelayTarget(value: string): boolean {
-  try {
-    const parsed = new URL(value)
-    if (parsed.pathname !== '/auth/callback') return false
-    return isLocalDevUrl(value) || isVercelPreviewUrl(value)
-  } catch {
-    return false
-  }
 }
 
 export async function GET(request: NextRequest) {

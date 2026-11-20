@@ -7,7 +7,8 @@ vi.mock('@supabase/ssr', () => ({
   createServerClient: (...args: unknown[]) => mockCreateServerClient(...args),
 }));
 
-import { GET, safeNextPath } from '@/app/auth/callback/route';
+import { GET } from '@/app/auth/callback/route';
+import { safeNextPath } from '@/lib/safe-next-path';
 
 function makeRequest(url: string): NextRequest {
   return new NextRequest(url);
@@ -211,6 +212,22 @@ describe('GET /auth/callback — Vercel preview relay', () => {
     const res = await GET(makeRequest(requestUrl));
     expect(res.headers.get('location')).toBe('https://post-engineer.com/');
     expect(mockCreateServerClient).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    'https://post-enginner-ryan-carlosos-projects.vercel.app-not-ours-post-enginner-ryan-carlosos-projects.vercel.app/auth/callback',
+    'https://post-enginner-x.evil-ryan-carlosos-projects.vercel.app/auth/callback',
+    'https://user:pass@post-enginner-git-fix-xyz-ryan-carlosos-projects.vercel.app/auth/callback',
+    'https://post-enginner-git-fix-xyz-ryan-carlosos-projects.vercel.app:8443/auth/callback',
+    'http://post-enginner-git-fix-xyz-ryan-carlosos-projects.vercel.app/auth/callback',
+  ])('does NOT relay to %s and exchanges the code on the request origin instead', async (target) => {
+    const exchangeCodeForSession = vi.fn().mockResolvedValue({ error: null });
+    mockCreateServerClient.mockReturnValue({ auth: { exchangeCodeForSession } });
+    const requestUrl = `https://post-engineer.com/auth/callback?code=abc&next=${encodeURIComponent(target)}`;
+
+    const res = await GET(makeRequest(requestUrl));
+    expect(res.headers.get('location')).toBe('https://post-engineer.com/');
+    expect(exchangeCodeForSession).toHaveBeenCalledWith('abc');
   });
 
   it('does NOT relay to a lookalike vercel domain', async () => {
