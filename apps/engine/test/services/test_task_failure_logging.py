@@ -19,6 +19,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from app.models.schema import TaskVideoRequest
 from app.services import task as task_service
+from app.services import state_persistence
 from app.services import task_outcome
 
 
@@ -107,6 +108,7 @@ class FailTaskLoggingTests(unittest.TestCase):
             patch.object(task_service.sm, "state", failing_state),
             patch.object(task_service, "send_discord", return_value=True),
             patch.object(task_service.task_webhook, "notify_terminal_task"),
+            patch.object(state_persistence.time, "sleep"),
         ):
             task_service._fail_task("t-9", "boom", stage="audio")
         loud = [

@@ -17,6 +17,7 @@ from datetime import UTC, datetime
 from unittest import TestCase
 from unittest.mock import MagicMock, patch
 
+from app.services import state_persistence
 from app.services.fill_schedule import publish as publish_module
 
 
@@ -388,11 +389,12 @@ class FillSchedulePublishResultsTests(TestCase):
                 ],
             }
         )
-        store, _state = self._run(
-            ["youtube"],
-            publish_mock,
-            update_task_side_effect=_fail_publish_results_write,
-        )
+        with patch.object(state_persistence.time, "sleep"):
+            store, _state = self._run(
+                ["youtube"],
+                publish_mock,
+                update_task_side_effect=_fail_publish_results_write,
+            )
         partial_calls = [
             call
             for call in self.track_mock.call_args_list
