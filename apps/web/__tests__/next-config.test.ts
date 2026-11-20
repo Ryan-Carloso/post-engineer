@@ -31,7 +31,7 @@ describe('next.config headers', () => {
   it('keeps script-src strict in production', async () => {
     const headers = await headersFor({ NODE_ENV: 'production', CYPRESS_COVERAGE: undefined });
     const csp = headers.find((h) => h.key === 'Content-Security-Policy')?.value ?? '';
-    expect(csp).toContain("script-src 'self' 'unsafe-inline';");
+    expect(csp).toContain("script-src 'self' 'unsafe-inline' https://*.posthog.com;");
     expect(csp).not.toContain('unsafe-eval');
     expect(headers).toContainEqual({ key: 'X-Frame-Options', value: 'DENY' });
   });
@@ -43,8 +43,16 @@ describe('next.config headers', () => {
     ]) {
       const headers = await headersFor({ ...env });
       const csp = headers.find((h) => h.key === 'Content-Security-Policy')?.value ?? '';
-      expect(csp).toContain("script-src 'self' 'unsafe-inline' 'unsafe-eval'");
+      expect(csp).toContain("script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.posthog.com;");
     }
+  });
+
+  it('lets posthog-js load its lazy bundles and start the recorder worker', async () => {
+    const headers = await headersFor({ NODE_ENV: 'production', CYPRESS_COVERAGE: undefined });
+    const directives = (headers.find((h) => h.key === 'Content-Security-Policy')?.value ?? '').split('; ');
+    const scriptSrc = directives.find((d) => d.startsWith('script-src ')) ?? '';
+    expect(scriptSrc.split(' ')).toContain('https://*.posthog.com');
+    expect(directives).toContain("worker-src 'self' blob:");
   });
 });
 
