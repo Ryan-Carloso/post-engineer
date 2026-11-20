@@ -4,7 +4,9 @@ import { useState } from 'react';
 import { useI18n } from '@/lib/i18n/provider';
 import { useCopyText } from '@/lib/use-copy-text';
 import { Button } from '@/components/ui/button';
-import { SpinnerIcon } from '@/lib/ui';
+import { INPUT_CLASS, SpinnerIcon } from '@/lib/ui';
+import { filterPromptSummaries } from '@/lib/prompt-search';
+import { PROMPT_SEARCH_MAX_LENGTH } from '@/lib/contracts/prompts';
 import {
   useCreatePromptMutation,
   useDeletePromptMutation,
@@ -32,10 +34,13 @@ export default function MyPromptsSection(): React.ReactElement {
   const [failure, setFailure] = useState<PromptCallFailure | null>(null);
   const [copiedSlug, setCopiedSlug] = useState<string | null>(null);
   const [loadingSlug, setLoadingSlug] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
 
   const listing = query.data !== undefined && query.data.success ? query.data.body.prompts : null;
-  const own = (listing ?? []).filter((prompt) => prompt.source === 'own');
-  const community = (listing ?? []).filter((prompt) => prompt.source === 'community');
+  const visible = filterPromptSummaries(listing ?? [], { q: search });
+  const own = visible.filter((prompt) => prompt.source === 'own');
+  const community = visible.filter((prompt) => prompt.source === 'community');
+  const searching = search.trim() !== '';
   const busy =
     createMutation.isPending ||
     updateMutation.isPending ||
@@ -159,6 +164,19 @@ export default function MyPromptsSection(): React.ReactElement {
         </p>
       ) : null}
 
+      {listing === null || listing.length === 0 ? null : (
+        <input
+          type="search"
+          value={search}
+          maxLength={PROMPT_SEARCH_MAX_LENGTH}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder={t('userPrompts.searchPlaceholder')}
+          aria-label={t('userPrompts.searchPlaceholder')}
+          data-testid="user-prompts-search"
+          className={INPUT_CLASS}
+        />
+      )}
+
       {query.isPending ? (
         <p className="flex items-center gap-2 text-sm text-muted-text">
           <SpinnerIcon />
@@ -175,7 +193,7 @@ export default function MyPromptsSection(): React.ReactElement {
           </Button>
         </div>
       ) : own.length === 0 ? (
-        <p className="text-sm text-muted-text">{t('userPrompts.empty')}</p>
+        <p className="text-sm text-muted-text">{searching ? t('userPrompts.noResults') : t('userPrompts.empty')}</p>
       ) : (
         <ul className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           {own.map((prompt) => (

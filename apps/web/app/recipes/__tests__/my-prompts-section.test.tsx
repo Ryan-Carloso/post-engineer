@@ -249,6 +249,27 @@ describe('MyPromptsSection', () => {
     expect(await within(row).findByRole('button', { name: 'Copied!' })).toBeInTheDocument();
   });
 
+  it('filters the own and community prompts by what the user types and says when nothing matches', async () => {
+    stored = [own('alpha', 'private'), own('beta', 'public'), own('gamma-shared', 'public', { source: 'community' })];
+    renderSection();
+    const box = await screen.findByTestId('user-prompts-search');
+    fireEvent.change(box, { target: { value: 'ALPHA' } });
+    expect(screen.getByTestId('user-prompt-alpha')).toBeInTheDocument();
+    expect(screen.queryByTestId('user-prompt-beta')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('user-prompt-gamma-shared')).not.toBeInTheDocument();
+    fireEvent.change(box, { target: { value: 'gamma' } });
+    expect(screen.getByTestId('user-prompt-gamma-shared')).toBeInTheDocument();
+    expect(screen.getByText('No prompt matches your search.')).toBeInTheDocument();
+    fireEvent.change(box, { target: { value: '' } });
+    expect(screen.getByTestId('user-prompt-beta')).toBeInTheDocument();
+  });
+
+  it('hides the search box while the user has no prompts', async () => {
+    renderSection();
+    await screen.findByText('You have no prompts yet.');
+    expect(screen.queryByTestId('user-prompts-search')).not.toBeInTheDocument();
+  });
+
   it('shows community prompts under their own heading with a copy button only', async () => {
     stored = [own('mine', 'private'), own('theirs', 'public', { source: 'community' })];
     renderSection();

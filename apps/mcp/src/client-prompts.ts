@@ -6,6 +6,7 @@ import {
   listPrompts as listPromptsContract,
 } from './contracts/prompts.js';
 import type { ResponseOf } from './contracts/endpoint.js';
+import type { PromptSource } from './contracts/prompts.js';
 
 export type PromptSummary = ResponseOf<typeof listPromptsContract>['prompts'][number];
 export type PromptDetail = ResponseOf<typeof getPromptContract>['prompt'];
@@ -17,9 +18,18 @@ export class UnknownPromptSlugError extends Error {
   }
 }
 
-export async function listPrompts(client: PostEngineerClient): Promise<PromptSummary[]> {
+export interface PromptListFilter {
+  query?: string;
+  source?: PromptSource;
+}
+
+export async function listPrompts(client: PostEngineerClient, filter: PromptListFilter = {}): Promise<PromptSummary[]> {
+  const params = new URLSearchParams();
+  if (filter.query !== undefined && filter.query.trim() !== '') params.set('q', filter.query.trim());
+  if (filter.source !== undefined) params.set('source', filter.source);
+  const search = params.size > 0 ? `?${params.toString()}` : '';
   const raw = await client.request(
-    '/api/prompts',
+    `/api/prompts${search}`,
     { method: 'GET', headers: client.getHeaders() },
     'list prompts',
   );

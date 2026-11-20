@@ -147,6 +147,35 @@ describe('GET /api/prompts', () => {
     expect(body.prompts.map((entry) => entry.slug)).not.toContain('mine');
   });
 
+  it('filters the list by search words across slug, title and description, case-insensitively', async () => {
+    seedDb([
+      { owner_id: ALICE, slug: 'weekly-report', title: 'Weekly Report', body: 'a', description: 'for the team' },
+      { owner_id: ALICE, slug: 'other', title: 'Other', body: 'b' },
+    ]);
+    authenticatedAs(ALICE);
+    const body = (await (await listPrompts(request('/api/prompts?q=WEEKLY%20team'))).json()) as { prompts: Array<{ slug: string }> };
+    expect(body.prompts.map((entry) => entry.slug)).toEqual(['weekly-report']);
+  });
+
+  it('filters the list by source', async () => {
+    seedDb([{ owner_id: ALICE, slug: 'mine', title: 'Mine', body: 'a' }, publicRow(BOB, 'theirs')]);
+    authenticatedAs(ALICE);
+    const own = (await (await listPrompts(request('/api/prompts?source=own'))).json()) as { prompts: Array<{ slug: string }> };
+    const community = (await (await listPrompts(request('/api/prompts?source=community'))).json()) as { prompts: Array<{ slug: string }> };
+    expect(own.prompts.map((entry) => entry.slug)).toEqual(['mine']);
+    expect(community.prompts.map((entry) => entry.slug)).toEqual(['theirs']);
+  });
+
+  it('rejects an unknown source, an unknown parameter and an over-long query with 400 before reading the database', async () => {
+    const db = seedDb();
+    authenticatedAs(ALICE);
+    for (const path of ['/api/prompts?source=mine', '/api/prompts?sort=asc', `/api/prompts?q=${'x'.repeat(101)}`]) {
+      const response = await listPrompts(request(path));
+      expect(response.status).toBe(400);
+    }
+    expect(db.queries).toEqual([]);
+  });
+
   it('shows a persona-scoped key the account own public prompt, as community', async () => {
     seedDb([{ owner_id: ALICE, slug: 'mine-shared', title: 'Mine shared', body: 'Community text', visibility: 'public' }]);
     scopedKeyOf(ALICE);

@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { PostEngineerClient } from './client.js';
 import { UnknownPromptSlugError, getPrompt, listPrompts } from './client-prompts.js';
 import { getErrorMessage } from './errors.js';
-import type { PromptSource } from './contracts/prompts.js';
+import { PROMPT_SEARCH_MAX_LENGTH, PROMPT_SOURCES, type PromptSource } from './contracts/prompts.js';
 import type { McpToolResponse } from './tools-call.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { actionDescription, actionShape, byAction } from './action-tool.js';
@@ -21,11 +21,18 @@ export const SERVER_INSTRUCTIONS = [
 export const ListPromptsDescription =
   'List the available prompts (slug, title, description, source): official recipes, your own, and other users\' public ones. Call this BEFORE writing or generating a video script when the user\'s request describes a topic rather than a ready script — news of the day, a real place with its own photos, a concrete subject like a car or a product, GitHub pull requests, or first-time account setup. Then call prompts (action: get) with the matching slug to load the full validated workflow for that recipe.';
 
-export const ListPromptsShape = {};
+export const ListPromptsShape = {
+  query: z.string().max(PROMPT_SEARCH_MAX_LENGTH).optional().describe('Words to find in slug, title or description.'),
+  source: z.enum(PROMPT_SOURCES).optional().describe('Only official, own or community prompts.'),
+};
 
-export async function handleListPrompts(client: PostEngineerClient): Promise<McpToolResponse> {
+const ListPromptsSchema = z.object(ListPromptsShape);
+
+export async function handleListPrompts(client: PostEngineerClient, args: unknown = {}): Promise<McpToolResponse> {
+  const parsed = ListPromptsSchema.safeParse(args);
+  if (!parsed.success) return errorResponse('listing prompts', 'query must be at most 100 characters and source one of official, own, community.');
   try {
-    const prompts = await listPrompts(client);
+    const prompts = await listPrompts(client, parsed.data);
     return { content: [{ type: 'text', text: JSON.stringify(prompts, null, 2) }] };
   } catch (error) {
     return errorResponse('listing prompts', getErrorMessage(error));
@@ -82,8 +89,8 @@ export function registerPromptTools(server: McpServer, client: PostEngineerClien
     READ_ONLY,
     byAction(
       {
-        list: async () => {
-          const response = await session.run(undefined, () => handleListPrompts(client));
+        list: async (args) => {
+          const response = await session.run(undefined, () => handleListPrompts(client, args));
           if (response.isError !== true) session.recordRecipesListed();
           return response;
         },

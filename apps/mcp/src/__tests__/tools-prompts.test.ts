@@ -55,6 +55,13 @@ function requestedPaths(): string[] {
   return fetchMock.mock.calls.map(([url]) => new URL(url).pathname);
 }
 
+function requestedUrls(): string[] {
+  return fetchMock.mock.calls.map(([url]) => {
+    const parsed = new URL(url);
+    return `${parsed.pathname}${parsed.search}`;
+  });
+}
+
 function toolHeaders(): Array<string | undefined> {
   return fetchMock.mock.calls.map(([, init]) => (init.headers as Record<string, string>)[MCP_TOOL_HEADER]);
 }
@@ -112,8 +119,27 @@ describe('handleListPrompts', () => {
     expect(textOf(result)).toContain('Malformed response from GET /api/prompts');
   });
 
-  it('keeps both shapes argument-only', () => {
-    expect(ListPromptsShape).toEqual({});
+  it('sends the search words and the source as query parameters', async () => {
+    const result = await handleListPrompts(client(), { query: '  daily news ', source: 'community' });
+    expect(result.isError).toBeFalsy();
+    expect(requestedUrls()).toEqual(['/api/prompts?q=daily+news&source=community']);
+  });
+
+  it('sends no query string when the filters are empty', async () => {
+    await handleListPrompts(client(), { query: '   ' });
+    expect(requestedPaths()).toEqual(['/api/prompts']);
+  });
+
+  it('rejects an unknown source and an over-long query before any request', async () => {
+    const unknownSource = await handleListPrompts(client(), { source: 'mine' });
+    const longQuery = await handleListPrompts(client(), { query: 'x'.repeat(101) });
+    expect(unknownSource.isError).toBe(true);
+    expect(longQuery.isError).toBe(true);
+    expect(requestedPaths()).toEqual([]);
+  });
+
+  it('takes an optional query and source for list and only a slug for get', () => {
+    expect(Object.keys(ListPromptsShape)).toEqual(['query', 'source']);
     expect(Object.keys(GetPromptShape)).toEqual(['slug']);
   });
 });
@@ -174,11 +200,11 @@ describe('SERVER_INSTRUCTIONS', () => {
 });
 
 describe('prompt tools over MCP', () => {
-  it('registers one prompts tool with the list and get actions, and a slug for get', async () => {
+  it('registers one prompts tool with the list and get actions, a query and source for list, and a slug for get', async () => {
     await withMcpClient(async (mcp) => {
       const { tools } = await mcp.listTools();
       const prompts = tools.find((tool) => tool.name === 'prompts');
-      expect(Object.keys(prompts?.inputSchema.properties ?? {}).sort()).toEqual(['action', 'slug']);
+      expect(Object.keys(prompts?.inputSchema.properties ?? {}).sort()).toEqual(['action', 'query', 'slug', 'source']);
       expect(prompts?.inputSchema.required).toEqual(['action']);
       expect(prompts?.description).toContain('get (slug)');
       expect(tools.some((tool) => tool.name === 'list_prompts' || tool.name === 'get_prompt')).toBe(false);

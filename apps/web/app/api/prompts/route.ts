@@ -3,6 +3,7 @@ import { apiErrorResponse } from '@/lib/api-error';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 import { CreateUserPromptBodySchema } from '@/lib/contracts/prompts';
 import { ERROR_CODES, errorMessage } from '@/lib/error-codes';
+import { filterPromptSummaries } from '@/lib/prompt-search';
 import { isOfficialPromptSlug, listHubPrompts } from '@/lib/recipes/hub-prompts';
 import { RATE_LIMITS } from '@/lib/rate-limit';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
@@ -11,6 +12,7 @@ import {
   promptDetailBody,
   promptSummaryBody,
   readJsonBody,
+  readListFilter,
   requireOwner,
   resolvePromptCaller,
   slugTaken,
@@ -23,6 +25,8 @@ const POST_ROUTE = 'POST /api/prompts';
 async function getHandler(request: Request): Promise<NextResponse> {
   const caller = await resolvePromptCaller(request, GET_ROUTE, RATE_LIMITS.promptsRead, { allowAnonymous: true });
   if (caller instanceof NextResponse) return caller;
+  const filter = readListFilter(request, GET_ROUTE);
+  if (!filter.ok) return filter.response;
   try {
     const db = createSupabaseServiceClient();
     const own = caller.userId === null || caller.scopedKey ? [] : await listOwnUserPrompts(db, caller.userId);
@@ -34,7 +38,10 @@ async function getHandler(request: Request): Promise<NextResponse> {
       .map((row) => promptSummaryBody(row, 'community'));
     return NextResponse.json({
       success: true,
-      prompts: [...official, ...own.map((row) => promptSummaryBody(row, 'own')), ...community],
+      prompts: filterPromptSummaries(
+        [...official, ...own.map((row) => promptSummaryBody(row, 'own')), ...community],
+        filter.filter,
+      ),
     });
   } catch (error) {
     return storeFailure(GET_ROUTE, error);
