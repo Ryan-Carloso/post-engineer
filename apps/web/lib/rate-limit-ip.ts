@@ -38,7 +38,7 @@ function parseIpv6(value: string): number[] | null {
   if (head === null || tail === null) return null;
   const missing = 8 - head.length - tail.length;
   if (missing < 1) return null;
-  return [...head, ...new Array<number>(missing).fill(0), ...tail];
+  return [...head, ...Array.from({ length: missing }, () => 0), ...tail];
 }
 
 function stripDecorations(value: string): string {
