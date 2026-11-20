@@ -7,8 +7,6 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { readBoundedRegularFile } from '../bounded-file-read.js';
 
-const posixOnly = process.platform === 'win32' ? it.skip : it;
-const linuxOnly = process.platform === 'linux' ? it : it.skip;
 
 describe('readBoundedRegularFile', () => {
   let dir: string;
@@ -48,7 +46,7 @@ describe('readBoundedRegularFile', () => {
     expect(await readBoundedRegularFile(path, 4)).toEqual({ status: 'too-large', sizeBytes: 5 });
   });
 
-  linuxOnly('stops reading at cap + 1 bytes when the reported size understates the content', async () => {
+  it.skipIf(process.platform !== 'linux')('stops reading at cap + 1 bytes when the reported size understates the content', async () => {
     expect(await readBoundedRegularFile('/proc/self/status', 8)).toEqual({ status: 'too-large', sizeBytes: 9 });
   });
 
@@ -58,13 +56,13 @@ describe('readBoundedRegularFile', () => {
     expect(await readBoundedRegularFile(path, 4)).toEqual({ status: 'not-file' });
   });
 
-  posixOnly('rejects /dev/zero behind a symlink without reading it', async () => {
+  it.skipIf(process.platform === 'win32')('rejects /dev/zero behind a symlink without reading it', async () => {
     const path = join(dir, 'zero.png');
     symlinkSync('/dev/zero', path);
     expect(await readBoundedRegularFile(path, 4)).toEqual({ status: 'not-file' });
   });
 
-  posixOnly('rejects a FIFO without blocking on a writer', async () => {
+  it.skipIf(process.platform === 'win32')('rejects a FIFO without blocking on a writer', async () => {
     const path = join(dir, 'pipe.png');
     execFileSync('mkfifo', [path]);
     expect(await readBoundedRegularFile(path, 4)).toEqual({ status: 'not-file' });
