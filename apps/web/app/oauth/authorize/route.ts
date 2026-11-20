@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { parseAuthorizeRequest, buildErrorRedirect } from '@/lib/oauth/authorize';
+import { REDIRECT_URI_NOT_ALLOWED } from '@/lib/oauth/redirect-uri';
 import { getOAuthKeys } from '@/lib/oauth/keys';
 import { mintConsentRequest } from '@/lib/oauth/tokens';
 import { getIssuer } from '@/lib/oauth/config';
@@ -13,14 +14,16 @@ export async function GET(request: Request): Promise<NextResponse> {
 
   if (!validation.ok) {
     if (validation.redirectUri) {
-      return NextResponse.redirect(
-        buildErrorRedirect(
-          validation.redirectUri,
-          validation.error,
-          validation.state,
-          validation.description,
-        ),
+      const target = buildErrorRedirect(
+        validation.redirectUri,
+        validation.error,
+        validation.state,
+        validation.description,
       );
+      if (target === null) {
+        return NextResponse.json({ error: REDIRECT_URI_NOT_ALLOWED }, { status: 400 });
+      }
+      return NextResponse.redirect(target);
     }
     return NextResponse.json({ error: validation.error }, { status: 400 });
   }

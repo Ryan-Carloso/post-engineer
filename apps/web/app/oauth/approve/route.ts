@@ -2,11 +2,16 @@ import { NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { getOAuthKeys } from '@/lib/oauth/keys';
 import { verifyConsentRequest, mintAuthorizationCode } from '@/lib/oauth/tokens';
+import { clientRedirectUrl, REDIRECT_URI_NOT_ALLOWED } from '@/lib/oauth/redirect-uri';
 
-function errorRedirect(redirectUri: string, error: string, state: string): NextResponse {
-  const url = new URL(redirectUri);
-  url.searchParams.set('error', error);
-  url.searchParams.set('state', state);
+function redirectToClient(
+  redirectUri: string,
+  params: Record<string, string | undefined>,
+): NextResponse {
+  const url = clientRedirectUrl(redirectUri, params);
+  if (url === null) {
+    return NextResponse.json({ error: REDIRECT_URI_NOT_ALLOWED }, { status: 400 });
+  }
   return NextResponse.redirect(url);
 }
 
@@ -39,7 +44,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
 
   if (decision !== 'approve') {
-    return errorRedirect(claims.redirectUri, 'access_denied', claims.state);
+    return redirectToClient(claims.redirectUri, { error: 'access_denied', state: claims.state });
   }
 
   const code = await mintAuthorizationCode(keys, {
@@ -50,8 +55,5 @@ export async function POST(request: Request): Promise<NextResponse> {
     resource: claims.resource,
     codeChallenge: claims.codeChallenge,
   });
-  const url = new URL(claims.redirectUri);
-  url.searchParams.set('code', code);
-  url.searchParams.set('state', claims.state);
-  return NextResponse.redirect(url);
+  return redirectToClient(claims.redirectUri, { code, state: claims.state });
 }

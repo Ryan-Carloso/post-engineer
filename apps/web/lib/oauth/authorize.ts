@@ -3,6 +3,7 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getMcpResource, normalizeScope } from './config';
 import { resolveClient, type ResolvedOAuthClient } from './resolve-client';
+import { clientRedirectUrl, redirectUriAllowed, REDIRECT_URI_NOT_ALLOWED } from './redirect-uri';
 
 export interface AuthorizeParams {
   clientId: string;
@@ -22,12 +23,9 @@ export function buildErrorRedirect(
   error: string,
   state?: string,
   description?: string,
-): string {
-  const url = new URL(redirectUri);
-  url.searchParams.set('error', error);
-  if (description) url.searchParams.set('error_description', description);
-  if (state) url.searchParams.set('state', state);
-  return url.toString();
+): string | null {
+  const url = clientRedirectUrl(redirectUri, { error, error_description: description, state });
+  return url === null ? null : url.toString();
 }
 
 export async function parseAuthorizeRequest(
@@ -48,6 +46,9 @@ export async function parseAuthorizeRequest(
   const redirectUri = params.get('redirect_uri');
   if (!redirectUri || !client.redirectUris.includes(redirectUri)) {
     return { ok: false, error: 'redirect_uri is not registered for this client.' };
+  }
+  if (!redirectUriAllowed(redirectUri)) {
+    return { ok: false, error: REDIRECT_URI_NOT_ALLOWED };
   }
 
   const state = params.get('state') ?? '';
