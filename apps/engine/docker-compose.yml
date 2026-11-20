@@ -56,6 +56,11 @@ services:
       - "host.docker.internal:host-gateway"
     volumes:
       - engine_storage:/app/storage
+      # Whisper models: faster-whisper downloads the configured model_size
+      # from HuggingFace on first subtitle use. Persisted so a redeploy
+      # does not re-download it (~3 GB for large-v3, ~500 MB for small).
+      # The model itself is never committed (models/ is gitignored).
+      - whisper_models:/app/models
       - ./config.toml:/app/config.toml:ro
       # Platform version fallback: the repo-root VERSION file (the
       # MAJOR.MINOR release baseline, e.g. `1.28`) is mounted read-only so
@@ -126,3 +131,4 @@ volumes:
   engine_storage:
   tts_voices:
   tts_models:
+  whisper_models:
