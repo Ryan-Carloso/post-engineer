@@ -16,7 +16,7 @@ export interface RemoteImage {
 }
 
 function filenameFor(parsed: URL, mimeType: string): string {
-  const last = decodeURIComponent(parsed.pathname.split('/').filter((part) => part !== '').pop() ?? '');
+  const last = decodeURIComponent(parsed.pathname.split('/').reverse().find((part) => part !== '') ?? '');
   const safe = last.replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 80);
   if (/\.(jpe?g|png|webp)$/i.test(safe)) return safe;
   return `image.${EXTENSIONS[mimeType]}`;
