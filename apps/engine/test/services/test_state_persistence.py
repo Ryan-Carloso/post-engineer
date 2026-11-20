@@ -83,12 +83,6 @@ def test_persist_backs_off_until_the_backend_recovers(clock, failures):
     assert clock.sleeps == list(RETRY_DELAYS_SECONDS[:failures])
 
 
-def test_persist_waits_before_the_second_attempt(clock):
-    backend = FlakyBackend(clock, failures=1)
-    assert persist_state_update(backend, "t-1", progress=5) is True
-    assert clock.sleeps[0] > 0
-
-
 def test_persist_retry_window_outlasts_a_multi_second_outage(clock):
     outage_ends_at = clock.now + 10.0
 
