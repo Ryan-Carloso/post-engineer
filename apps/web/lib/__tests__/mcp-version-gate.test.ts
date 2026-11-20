@@ -2,15 +2,35 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { findRepoRoot } from '@/test/repo-root';
-import { checkMcpVersion, MCP_VERSION_HEADER } from '../mcp-version-gate';
+import { withApiErrorReporting } from '../api-error-reporting';
+import { getPostHogServer } from '../posthog-server';
+import {
+  checkMcpVersion as liveGate,
+  createMcpVersionGate,
+  MCP_VERSION_HEADER,
+  MISMATCH_WARNING_WINDOW_MS,
+} from '../mcp-version-gate';
 
 const warn = vi.hoisted(() => vi.fn(() => 'log-id-1'));
 vi.mock('../logger', () => ({
   logger: { warn, error: vi.fn(() => 'log-id-2'), info: vi.fn(), generateLogId: vi.fn() },
 }));
+vi.mock('../posthog-server', () => ({ getPostHogServer: vi.fn() }));
+vi.mock('../request-auth', () => ({ requireSupabaseSession: vi.fn() }));
+
+let currentTime = 0;
+let checkMcpVersion: (request: Request) => Response | null;
+
+function loggedMessages(): unknown[] {
+  return warn.mock.calls.map((call) => (call as unknown[])[0]);
+}
+
+function loggedVersions(): unknown[] {
+  return warn.mock.calls.map((call) => ((call as unknown[])[1] as Record<string, unknown>).clientVersion);
+}
 
 function mcpRequest(version?: string): Request {
   const headers: Record<string, string> = { authorization: 'Bearer pe_live_x' };
@@ -23,6 +43,11 @@ async function body(response: Response): Promise<Record<string, unknown>> {
 }
 
 describe('checkMcpVersion', () => {
+  beforeEach(() => {
+    currentTime = 1_000_000;
+    checkMcpVersion = createMcpVersionGate({ now: () => currentTime });
+  });
+
   afterEach(() => {
     vi.unstubAllEnvs();
     warn.mockClear();
@@ -82,15 +107,84 @@ describe('checkMcpVersion', () => {
     expect(JSON.stringify(json)).not.toContain('<script>');
   });
 
-  it('logs every mismatch under one stable message', () => {
+  it('logs each new mismatch under one stable message', () => {
     vi.stubEnv('REQUIRED_MCP_VERSION', '1.52.560');
     checkMcpVersion(mcpRequest('1.52.0'));
     checkMcpVersion(mcpRequest('1.52.561'));
-    expect(warn).toHaveBeenCalledTimes(2);
-    expect(warn.mock.calls.map((call) => (call as unknown[])[0])).toEqual([
+    expect(loggedMessages()).toEqual([
       '[mcp-version-gate] 426 MCP version mismatch',
       '[mcp-version-gate] 426 MCP version mismatch',
     ]);
+  });
+
+  it('rejects every call from a stale client but warns only once per window', async () => {
+    vi.stubEnv('REQUIRED_MCP_VERSION', '1.52.560');
+    const first = checkMcpVersion(mcpRequest('1.52.0'));
+    const second = checkMcpVersion(mcpRequest('1.52.0'));
+    expect(first?.status).toBe(426);
+    expect(second?.status).toBe(426);
+    expect((await body(second as Response)).error).toBe((await body(first as Response)).error);
+    expect(loggedVersions()).toEqual(['1.52.0']);
+  });
+
+  it('still logs the first warning of a different client version', () => {
+    vi.stubEnv('REQUIRED_MCP_VERSION', '1.52.560');
+    checkMcpVersion(mcpRequest('1.52.0'));
+    checkMcpVersion(mcpRequest('1.52.0'));
+    checkMcpVersion(mcpRequest('1.51.9'));
+    expect(loggedVersions()).toEqual(['1.52.0', '1.51.9']);
+  });
+
+  it('warns again for the same client version once the required version changes', () => {
+    vi.stubEnv('REQUIRED_MCP_VERSION', '1.52.560');
+    checkMcpVersion(mcpRequest('1.52.0'));
+    vi.stubEnv('REQUIRED_MCP_VERSION', '1.52.561');
+    checkMcpVersion(mcpRequest('1.52.0'));
+    expect(loggedVersions()).toEqual(['1.52.0', '1.52.0']);
+  });
+
+  it('warns once more when the quiet window ends, then goes quiet again', () => {
+    vi.stubEnv('REQUIRED_MCP_VERSION', '1.52.560');
+    checkMcpVersion(mcpRequest('1.52.0'));
+    currentTime += MISMATCH_WARNING_WINDOW_MS - 1;
+    checkMcpVersion(mcpRequest('1.52.0'));
+    expect(warn).toHaveBeenCalledTimes(1);
+    currentTime += 1;
+    checkMcpVersion(mcpRequest('1.52.0'));
+    checkMcpVersion(mcpRequest('1.52.0'));
+    expect(warn).toHaveBeenCalledTimes(2);
+  });
+
+  it('quiets the window for one hour', () => {
+    expect(MISMATCH_WARNING_WINDOW_MS).toBe(60 * 60 * 1000);
+  });
+
+  it('groups every malformed header under one warning', () => {
+    vi.stubEnv('REQUIRED_MCP_VERSION', '1.52.560');
+    checkMcpVersion(mcpRequest('<script>'));
+    checkMcpVersion(mcpRequest('garbage'));
+    expect(loggedVersions()).toEqual(['malformed']);
+  });
+
+  it('keeps a silenced rejection out of the server_warning telemetry', async () => {
+    vi.stubEnv('REQUIRED_MCP_VERSION', '1.52.560');
+    const client = { capture: vi.fn(), captureAs: vi.fn(), captureException: vi.fn(), captureExceptionAs: vi.fn() };
+    vi.mocked(getPostHogServer).mockReturnValue(client as unknown as ReturnType<typeof getPostHogServer>);
+    const route = withApiErrorReporting('GET /api/account', (request: Request) => {
+      return checkMcpVersion(request) ?? new Response(null, { status: 204 });
+    });
+    checkMcpVersion(mcpRequest('1.52.0'));
+    const response = await route(mcpRequest('1.52.0'));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(response.status).toBe(426);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(client.capture).not.toHaveBeenCalled();
+    expect(client.captureAs).not.toHaveBeenCalled();
+  });
+
+  it('exports a live gate that rejects a mismatch', () => {
+    vi.stubEnv('REQUIRED_MCP_VERSION', '1.52.560');
+    expect(liveGate(mcpRequest('1.52.0'))?.status).toBe(426);
   });
 
   it('throws when REQUIRED_MCP_VERSION is missing', () => {
