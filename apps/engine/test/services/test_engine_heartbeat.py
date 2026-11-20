@@ -7,6 +7,7 @@ the next boot (gap since last heartbeat, clean/unclean shutdown, last RSS).
 
 import sys
 import tempfile
+import threading
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -264,20 +265,19 @@ class BootEventTests(unittest.TestCase):
         }
         return state
 
-    def test_boot_event_carries_autopsy(self):
+    def _previous_beat(self):
         now = datetime.now(timezone.utc)
-        beat = {
+        return {
             "updated_at": (now - timedelta(minutes=40)).isoformat(),
             "clean_shutdown_at": None,
             "uptime_s": 3600.0,
             "rss_mb": 6100.5,
             "vram_mb": None,
         }
-        with (
-            patch.object(engine_heartbeat, "read_beat", return_value=beat),
-            patch.object(engine_heartbeat, "track_event") as track,
-        ):
-            engine_heartbeat.report_boot_event(self._state())
+
+    def test_boot_event_carries_autopsy(self):
+        with patch.object(engine_heartbeat, "track_event") as track:
+            engine_heartbeat.report_boot_event(self._state(), self._previous_beat())
         track.assert_called_once()
         name, props = track.call_args[0]
         self.assertEqual(name, "engine_boot")
@@ -290,20 +290,139 @@ class BootEventTests(unittest.TestCase):
         self.assertEqual(props["prev_uptime_s"], 3600.0)
         self.assertEqual(props["rss_last_heartbeat_mb"], 6100.5)
 
-    def test_boot_event_without_beat(self):
+    def test_boot_event_does_not_read_the_heartbeat_row_itself(self):
         with (
-            patch.object(engine_heartbeat, "read_beat", return_value=None),
-            patch.object(engine_heartbeat, "track_event") as track,
+            patch.object(engine_heartbeat, "read_beat") as read,
+            patch.object(engine_heartbeat, "track_event"),
         ):
-            engine_heartbeat.report_boot_event(self._state())
+            engine_heartbeat.report_boot_event(self._state(), self._previous_beat())
+        read.assert_not_called()
+
+    def test_boot_event_without_beat(self):
+        with patch.object(engine_heartbeat, "track_event") as track:
+            engine_heartbeat.report_boot_event(self._state(), None)
         _, props = track.call_args[0]
         self.assertEqual(props["orphan_count"], 2)
         self.assertNotIn("clean_shutdown", props)
         self.assertNotIn("gap_since_last_heartbeat_s", props)
+        self.assertNotIn("prev_uptime_s", props)
 
     def test_boot_event_never_raises(self):
-        with patch.object(engine_heartbeat, "read_beat", side_effect=RuntimeError("down")):
-            engine_heartbeat.report_boot_event(MagicMock())
+        with patch.object(
+            engine_heartbeat, "track_event", side_effect=RuntimeError("down")
+        ):
+            engine_heartbeat.report_boot_event(MagicMock(), self._previous_beat())
+
+
+class ReadPreviousBeatTests(unittest.TestCase):
+    def test_returns_the_row(self):
+        row = {"updated_at": "2026-11-20T10:00:00+00:00", "uptime_s": 12.0}
+        with patch.object(engine_heartbeat, "read_beat", return_value=row):
+            self.assertEqual(engine_heartbeat.read_previous_beat(), row)
+
+    def test_read_failure_logs_and_returns_none(self):
+        with (
+            patch.object(engine_heartbeat, "read_beat", side_effect=RuntimeError("down")),
+            patch.object(engine_heartbeat.logger, "warning") as warning,
+        ):
+            self.assertIsNone(engine_heartbeat.read_previous_beat())
+        warning.assert_called_once_with("engine_boot: could not read heartbeat: down")
+
+
+class BootHeartbeatTests(unittest.TestCase):
+    def _state(self):
+        state = MagicMock()
+        state.last_reconcile_stats = {"orphans": 0, "requeued": 0, "failed": 0}
+        return state
+
+    def test_reads_previous_beat_before_the_first_new_beat(self):
+        calls: list[str] = []
+        with (
+            patch.object(
+                engine_heartbeat, "read_beat", side_effect=lambda: calls.append("read")
+            ),
+            patch.object(
+                engine_heartbeat, "write_beat", side_effect=lambda: calls.append("write")
+            ),
+            patch.object(engine_heartbeat, "track_event"),
+        ):
+            thread = engine_heartbeat.start_heartbeat_after_autopsy(
+                self._state(), interval_s=3600
+            )
+            engine_heartbeat.stop_heartbeat_thread()
+            thread.join(timeout=5)
+        self.assertEqual(calls, ["read", "write"])
+
+    def test_autopsy_describes_the_previous_process_not_the_new_one(self):
+        now = datetime.now(timezone.utc)
+        row = {
+            "id": 1,
+            "updated_at": (now - timedelta(minutes=40)).isoformat(),
+            "clean_shutdown_at": (now - timedelta(minutes=40)).isoformat(),
+            "uptime_s": 7200.0,
+            "rss_mb": 6100.5,
+            "vram_mb": None,
+        }
+        first_beat = threading.Event()
+
+        def write_new_process_beat():
+            row.update(
+                {
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                    "uptime_s": 1.0,
+                    "rss_mb": 300.0,
+                }
+            )
+            first_beat.set()
+
+        def read_row():
+            return dict(row)
+
+        original_start = engine_heartbeat.start_heartbeat_thread
+
+        def start_and_wait_for_first_beat(interval_s):
+            thread = original_start(interval_s)
+            first_beat.wait(timeout=5)
+            return thread
+
+        with (
+            patch.object(engine_heartbeat, "read_beat", side_effect=read_row),
+            patch.object(engine_heartbeat, "write_beat", side_effect=write_new_process_beat),
+            patch.object(
+                engine_heartbeat,
+                "start_heartbeat_thread",
+                side_effect=start_and_wait_for_first_beat,
+            ),
+            patch.object(engine_heartbeat, "track_event") as track,
+        ):
+            thread = engine_heartbeat.start_heartbeat_after_autopsy(
+                self._state(), interval_s=3600
+            )
+            engine_heartbeat.stop_heartbeat_thread()
+            thread.join(timeout=5)
+        self.assertTrue(first_beat.is_set())
+        self.assertEqual(row["uptime_s"], 1.0)
+        _, props = track.call_args[0]
+        self.assertEqual(props["prev_uptime_s"], 7200.0)
+        self.assertEqual(props["rss_last_heartbeat_mb"], 6100.5)
+        self.assertTrue(props["clean_shutdown"])
+        self.assertAlmostEqual(props["gap_since_last_heartbeat_s"], 2400, delta=120)
+
+    def test_starts_the_heartbeat_when_the_previous_beat_is_unreadable(self):
+        with (
+            patch.object(engine_heartbeat, "read_beat", side_effect=RuntimeError("down")),
+            patch.object(engine_heartbeat, "write_beat") as write,
+            patch.object(engine_heartbeat, "track_event") as track,
+            patch.object(engine_heartbeat.logger, "warning"),
+        ):
+            thread = engine_heartbeat.start_heartbeat_after_autopsy(
+                self._state(), interval_s=3600
+            )
+            engine_heartbeat.stop_heartbeat_thread()
+            thread.join(timeout=5)
+        write.assert_called_once()
+        _, props = track.call_args[0]
+        self.assertNotIn("prev_uptime_s", props)
 
 
 class MigrationPathTests(unittest.TestCase):

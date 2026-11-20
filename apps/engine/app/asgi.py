@@ -355,8 +355,7 @@ def startup_event():
                 logger.info(f"marked {failed} orphaned task(s) failed at boot")
         from app.services import engine_heartbeat
 
-        engine_heartbeat.start_heartbeat_thread()
-        engine_heartbeat.report_boot_event(sm.state)
+        engine_heartbeat.start_heartbeat_after_autopsy(sm.state)
     except Exception as exc:  # noqa: BLE001 - startup continues regardless
         logger.warning(f"engine heartbeat/boot event failed: {exc}")
     start_fill_schedule_scheduler()

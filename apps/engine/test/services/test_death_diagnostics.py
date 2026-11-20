@@ -15,6 +15,7 @@ from unittest.mock import MagicMock, patch
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from app.services import engine_heartbeat
+from app.services import orphan_requeue
 from app.services import state as state_module
 from app.services.death_diagnostics import DeathDiagnosticTaskState
 from test.services.test_supabase_task_state import ENV, _response
@@ -72,6 +73,7 @@ class DeathDiagnosticStateTests(unittest.TestCase):
         stats = backend.last_reconcile_stats
         self.assertEqual(stats["orphans"], 3)
         self.assertEqual(stats["by_stage"], {"audio": 1, "render": 1, "unknown": 1})
+        self.assertEqual(stats["requeued"], 0)
         self.assertEqual(stats["failed"], 3)
 
     def test_reconcile_without_orphans_records_zero_stats(self):
@@ -87,6 +89,78 @@ class DeathDiagnosticStateTests(unittest.TestCase):
         self.assertEqual(stats["orphans"], 0)
         self.assertEqual(stats["by_stage"], {})
         self.assertEqual(stats["failed"], 0)
+
+    def _reconcile_one_batch_orphan(self, backend, slot_status):
+        orphans = [
+            {
+                "task_id": "t-1",
+                "data": {"stage": "audio", "slot_id": "slot-1", "flow": "batch"},
+            }
+        ]
+        slot_store = MagicMock()
+        slot_store.get_slot.return_value = {
+            "id": "slot-1",
+            "status": slot_status,
+            "task_id": "t-1",
+        }
+        self.requests.request.side_effect = [
+            _response(json_data=orphans),
+            _response(json_data=orphans),
+            _response(json_data=[]),
+            _response(json_data=[{}]),
+        ]
+        with (
+            patch.object(orphan_requeue, "slot_store_or_none", return_value=slot_store),
+            patch.object(orphan_requeue, "track_event"),
+        ):
+            return backend.reconcile_orphaned_tasks()
+
+    def test_reconcile_reports_a_requeued_orphan_as_requeued(self):
+        backend = _make_diag_state(self.requests)
+        failed = self._reconcile_one_batch_orphan(backend, "generating")
+        self.assertEqual(failed, 0)
+        stats = backend.last_reconcile_stats
+        self.assertEqual(stats["orphans"], 1)
+        self.assertEqual(stats["requeued"], 1)
+        self.assertEqual(stats["failed"], 0)
+
+    def test_reconcile_does_not_count_an_already_tick_owned_orphan_as_requeued(self):
+        backend = _make_diag_state(self.requests)
+        failed = self._reconcile_one_batch_orphan(backend, "pending")
+        self.assertEqual(failed, 0)
+        self.assertEqual(backend.last_reconcile_stats["requeued"], 0)
+
+    def test_requeue_count_restarts_on_every_reconcile(self):
+        backend = _make_diag_state(self.requests)
+        self._reconcile_one_batch_orphan(backend, "generating")
+        self.requests.request.side_effect = [
+            _response(json_data=[]),
+            _response(json_data=[]),
+        ]
+        with patch.object(state_module.logger, "warning"):
+            backend.reconcile_orphaned_tasks()
+        self.assertEqual(backend.last_reconcile_stats["requeued"], 0)
+
+    def test_update_task_counts_a_persisted_requeue_marker(self):
+        backend = _make_diag_state(self.requests)
+        self.requests.request.side_effect = [
+            _response(json_data=[]),
+            _response(json_data=[{}]),
+        ]
+        backend.update_task("t-1", state=4, progress=0, auto_requeued=True, requeue_count=1)
+        self.assertEqual(backend._requeued_orphans, 1)
+
+    def test_update_task_outside_a_requeue_does_not_count(self):
+        backend = _make_diag_state(self.requests)
+        self.requests.request.side_effect = [
+            _response(json_data=[]),
+            _response(json_data=[{}]),
+            _response(json_data=[]),
+            _response(json_data=[{}]),
+        ]
+        backend.update_task("t-1", auto_requeued=False)
+        backend.update_task("t-1", progress=10)
+        self.assertEqual(backend._requeued_orphans, 0)
 
     def test_update_task_samples_rss_on_stage(self):
         backend = _make_diag_state(self.requests)

@@ -9,7 +9,8 @@ into the task state:
   (``update_task``), so the task row carries per-phase memory pressure for
   the next boot's triage;
 - it snapshots the orphan rows at boot reconcile and records
-  ``last_reconcile_stats`` (orphan count, orphans by stage, failed count),
+  ``last_reconcile_stats`` (orphan count, orphans by stage, requeued and
+  failed counts),
   which ``engine_heartbeat.report_boot_event`` reads for the PostHog
   ``engine_boot`` autopsy event.
 
@@ -66,6 +67,7 @@ class DeathDiagnosticTaskState(SupabaseTaskState):
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         self.last_reconcile_stats: dict[str, object] = {}
+        self._requeued_orphans = 0
         super().__init__(*args, **kwargs)
 
     def update_task(
@@ -80,14 +82,26 @@ class DeathDiagnosticTaskState(SupabaseTaskState):
             if rss_mb is not None:
                 kwargs["stage_rss_mb"] = round(rss_mb, 1)
         super().update_task(task_id, state=state, progress=progress, **kwargs)
+        if kwargs.get("auto_requeued") is True:
+            self._requeued_orphans += 1
 
     def reconcile_orphaned_tasks(self) -> int:
+        """Run the base reconcile and record its stats for the boot autopsy.
+
+        ``requeued`` counts the orphans the boot triage actually sent back
+        for another try: both triage paths (batch slot reset to pending,
+        direct generation marked for redispatch) persist
+        ``auto_requeued=True`` through ``update_task``. An orphan whose slot
+        was already tick-owned is claimed without a requeue and is not
+        counted.
+        """
         rows = _orphan_rows(self)
+        self._requeued_orphans = 0
         failed = super().reconcile_orphaned_tasks()
         self.last_reconcile_stats = {
             "orphans": len(rows),
             "by_stage": _count_by_stage(rows),
-            "requeued": 0,
+            "requeued": self._requeued_orphans,
             "completed": 0,
             "failed": failed,
         }
