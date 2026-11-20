@@ -48,6 +48,11 @@ const CREDENTIAL_FAILURE_REASONS: ReadonlySet<string> = new Set([
   'TokenDecryptError',
 ]);
 
+function isHeldCredentialFailure(error: unknown): boolean {
+  const reason = classifyAccountBreak(error);
+  return reason !== null && CREDENTIAL_FAILURE_REASONS.has(reason);
+}
+
 export function credentialFailureHeld(record: SocialAccountRecord, now: Date): boolean {
   const reason = record.accountMetadata.profileSyncFailedReason;
   return failureCooldownActive(record, now) && typeof reason === 'string' && CREDENTIAL_FAILURE_REASONS.has(reason);
@@ -79,20 +84,6 @@ export function mergeProfileMetadata(
   return merged;
 }
 
-async function probeStoredCredential(
-  supabase: SupabaseClient,
-  userId: string,
-  record: SocialAccountRecord,
-): Promise<void> {
-  try {
-    await getSocialAccountTokens(supabase, userId, record.provider, record.providerAccountId);
-  } catch (error) {
-    reportProfileFetchFailed(record.provider, 'sync', error);
-    reportOwnerAccountBreak(record, error);
-    throw error;
-  }
-}
-
 async function writeFailureMarker(
   supabase: SupabaseClient,
   userId: string,
@@ -115,6 +106,24 @@ async function writeFailureMarker(
   }
 }
 
+async function probeStoredCredential(
+  supabase: SupabaseClient,
+  userId: string,
+  record: SocialAccountRecord,
+  now: Date,
+): Promise<void> {
+  try {
+    await getSocialAccountTokens(supabase, userId, record.provider, record.providerAccountId);
+  } catch (error) {
+    reportProfileFetchFailed(record.provider, 'sync', error);
+    reportOwnerAccountBreak(record, error);
+    if (isHeldCredentialFailure(error)) {
+      await writeFailureMarker(supabase, userId, record, error, now);
+    }
+    throw error;
+  }
+}
+
 export async function syncAccountProfile(
   supabase: SupabaseClient,
   userId: string,
@@ -125,13 +134,12 @@ export async function syncAccountProfile(
   if (source === undefined) {
     return record;
   }
-  if (!source.applies(record)) {
-    await probeStoredCredential(supabase, userId, record);
+  const now = (options.now ?? (() => new Date()))();
+  if (credentialFailureHeld(record, now)) {
     return record;
   }
-  const now = (options.now ?? (() => new Date()))();
-  if (!profileNeedsSync(record, source.pictureKey, now)) {
-    await probeStoredCredential(supabase, userId, record);
+  if (!source.applies(record) || !profileNeedsSync(record, source.pictureKey, now)) {
+    await probeStoredCredential(supabase, userId, record, now);
     return record;
   }
 
@@ -146,7 +154,7 @@ export async function syncAccountProfile(
   }
 
   if (record.provider === 'bluesky') {
-    await probeStoredCredential(supabase, userId, record);
+    await probeStoredCredential(supabase, userId, record, now);
   }
 
   const previousPicture = record.accountMetadata[source.pictureKey];

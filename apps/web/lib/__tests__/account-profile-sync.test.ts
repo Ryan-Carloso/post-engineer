@@ -390,8 +390,103 @@ describe('syncAccountProfile', () => {
     ).rejects.toBe(failure);
     expect(reportProfileFetchFailed).toHaveBeenCalledWith('bluesky', 'sync', failure);
     expect(sources.bluesky.fetch).toHaveBeenCalledWith(supabase, 'u1', rec);
-    expect(updateSocialAccountMetadata).not.toHaveBeenCalled();
+    expect(updateSocialAccountMetadata).toHaveBeenCalledTimes(1);
+    expect(updateSocialAccountMetadata).toHaveBeenCalledWith(
+      supabase,
+      'u1',
+      'bluesky',
+      'did:plc:x',
+      { ...rec.accountMetadata, profileSyncFailedAt: NOW.toISOString(), profileSyncFailedReason: 'token_undecryptable' },
+    );
     expect(reportProfileFetched).not.toHaveBeenCalled();
+  });
+
+  it('writes the failure marker with the credential reason when the probe fails', async () => {
+    const failure = new Error('Invalid authentication tag length: 2');
+    vi.mocked(getSocialAccountTokens).mockRejectedValueOnce(failure);
+    const rec = record();
+    await expect(syncAccountProfile(supabase, 'u1', rec, { now: () => NOW })).rejects.toBe(failure);
+    expect(updateSocialAccountMetadata).toHaveBeenCalledTimes(1);
+    expect(updateSocialAccountMetadata).toHaveBeenCalledWith(
+      supabase,
+      'u1',
+      'instagram',
+      'ig-1',
+      { profilePictureUrl: FRESH_PIC, profileSyncedAt: RECENT, profileSyncFailedAt: NOW.toISOString(), profileSyncFailedReason: 'token_undecryptable' },
+    );
+    expect(reportProfileFetchFailed).toHaveBeenCalledTimes(1);
+  });
+
+  it('writes no marker for a transient probe failure, so the next load still fetches an expired picture', async () => {
+    const failure = new Error('Failed to get social account: connection reset');
+    vi.mocked(getSocialAccountTokens).mockRejectedValueOnce(failure);
+    const rec = record();
+    await expect(syncAccountProfile(supabase, 'u1', rec, { now: () => NOW })).rejects.toBe(failure);
+    expect(reportProfileFetchFailed).toHaveBeenCalledWith('instagram', 'sync', failure);
+    expect(updateSocialAccountMetadata).not.toHaveBeenCalled();
+    expect(profileNeedsSync({ ...rec, accountMetadata: { ...rec.accountMetadata, profilePictureUrl: EXPIRED_PIC } }, 'profilePictureUrl', NOW)).toBe(true);
+  });
+
+  it('writes no marker when the probe fails with a break the cooldown does not hold', async () => {
+    const failure = Object.assign(new Error('Email not verified'), { name: 'BlueskyError', code: 'email_not_verified' });
+    vi.mocked(getSocialAccountTokens).mockRejectedValueOnce(failure);
+    await expect(syncAccountProfile(supabase, 'u1', record(), { now: () => NOW })).rejects.toBe(failure);
+    expect(updateSocialAccountMetadata).not.toHaveBeenCalled();
+  });
+
+  it('logs a failed probe marker write and still rethrows the probe error', async () => {
+    const failure = new Error('Invalid authentication tag length: 2');
+    vi.mocked(getSocialAccountTokens).mockRejectedValueOnce(failure);
+    const markerError = new Error('database down');
+    vi.mocked(updateSocialAccountMetadata).mockRejectedValueOnce(markerError);
+    await expect(syncAccountProfile(supabase, 'u1', record(), { now: () => NOW })).rejects.toBe(failure);
+    expect(logger.error).toHaveBeenCalledWith(
+      '[ACCOUNT] Profile sync failure marker write failed',
+      markerError,
+      { recordId: 'rec-1', provider: 'instagram' },
+    );
+  });
+
+  it.each([
+    ['a fresh row', record()],
+    ['a non-applies row (Rumble)', record({ provider: 'rumble', providerAccountId: 'chan-1' })],
+  ])('reports a broken stored token once across two list calls inside the cooldown for %s', async (_label, rec) => {
+    const failure = new Error('Invalid authentication tag length: 2');
+    vi.mocked(getSocialAccountTokens).mockRejectedValue(failure);
+    await expect(syncAccountProfile(supabase, 'u1', rec, { now: () => NOW })).rejects.toBe(failure);
+    const written = vi.mocked(updateSocialAccountMetadata).mock.calls[0][4] as Record<string, unknown>;
+    const second = { ...rec, accountMetadata: written };
+    const later = new Date(NOW.getTime() + 10 * 60_000);
+    expect(await syncAccountProfile(supabase, 'u1', second, { now: () => later })).toBe(second);
+    expect(getSocialAccountTokens).toHaveBeenCalledTimes(1);
+    expect(reportProfileFetchFailed).toHaveBeenCalledTimes(1);
+    expect(notifyAccountBreak).toHaveBeenCalledTimes(1);
+    expect(updateSocialAccountMetadata).toHaveBeenCalledTimes(1);
+    expect(credentialFailureHeld(second, later)).toBe(true);
+  });
+
+  it('probes a held credential failure again once the cooldown has passed', async () => {
+    const failure = new Error('Invalid authentication tag length: 2');
+    vi.mocked(getSocialAccountTokens).mockRejectedValue(failure);
+    const rec = record({}, { profileSyncFailedAt: TWO_HOURS_AGO, profileSyncFailedReason: 'token_undecryptable' });
+    await expect(syncAccountProfile(supabase, 'u1', rec, { now: () => NOW })).rejects.toBe(failure);
+    expect(getSocialAccountTokens).toHaveBeenCalledTimes(1);
+    expect(reportProfileFetchFailed).toHaveBeenCalledTimes(1);
+    expect(updateSocialAccountMetadata).toHaveBeenCalledWith(
+      supabase,
+      'u1',
+      'instagram',
+      'ig-1',
+      expect.objectContaining({ profileSyncFailedAt: NOW.toISOString(), profileSyncFailedReason: 'token_undecryptable' }),
+    );
+  });
+
+  it('does not write a marker when the probe of a healthy row succeeds', async () => {
+    const rec = record();
+    expect(await syncAccountProfile(supabase, 'u1', rec, { now: () => NOW })).toBe(rec);
+    expect(getSocialAccountTokens).toHaveBeenCalledTimes(1);
+    expect(updateSocialAccountMetadata).not.toHaveBeenCalled();
+    expect(reportProfileFetchFailed).not.toHaveBeenCalled();
   });
 
   it('probes the stored token after a successful Bluesky fetch', async () => {
