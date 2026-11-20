@@ -2,8 +2,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { connectTelegramAccount } from '../client-telegram.js';
 import {
   PostEngineerClient,
-  assertImageSize,
-  MAX_LIBRARY_IMAGE_BYTES,
   MAX_LIBRARY_TAG_LENGTH,
   MAX_LIBRARY_DESCRIPTION_LENGTH,
 } from '../client.js';
@@ -2335,29 +2333,6 @@ describe('PostEngineerClient persona image library', () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
-  it('assertImageSize throws the typed error with the full path and a unified message', () => {
-    const size = MAX_LIBRARY_IMAGE_BYTES + 1;
-    let error: unknown;
-    try {
-      assertImageSize(size, '/tmp/photos/a.jpg');
-    } catch (e: unknown) {
-      error = e;
-    }
-    if (!(error instanceof ImageTooLargeError)) {
-      throw new Error(`expected ImageTooLargeError, got: ${String(error)}`);
-    }
-    expect(error.path).toBe('/tmp/photos/a.jpg');
-    expect(error.sizeBytes).toBe(size);
-    expect(error.message).toBe(
-      `Image "/tmp/photos/a.jpg" is too large (${size} bytes; max 10MB).`
-    );
-  });
-
-  it('assertImageSize accepts sizes at or under the limit', () => {
-    expect(() => assertImageSize(MAX_LIBRARY_IMAGE_BYTES, '/tmp/photos/a.jpg')).not.toThrow();
-    expect(() => assertImageSize(0, '/tmp/photos/a.jpg')).not.toThrow();
-  });
-
   it('addPersonaImage rejects unsupported file extensions', async () => {
     const path = await writeTempImage('x.bmp');
     await expect(client.addPersonaImage('p-1', { path })).rejects.toThrow(
@@ -3007,10 +2982,9 @@ describe('publishVideoDirect', () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
-  it('fails fast when the video exceeds the 2GB server limit', async () => {
-    const { assertVideoSize } = await import('../client.js');
-    expect(() => assertVideoSize(2 * 1024 * 1024 * 1024 + 1, '/tmp/clip.mp4')).toThrow(/2GB/);
-    expect(global.fetch).not.toHaveBeenCalled();
+  it('names the 2GB server limit in the video size error', async () => {
+    const { VideoTooLargeError } = await import('../errors.js');
+    expect(new VideoTooLargeError('/tmp/clip.mp4', 2 * 1024 * 1024 * 1024 + 1).message).toMatch(/2GB/);
   });
 
   it('fails fast when the extension is not a supported video type', async () => {

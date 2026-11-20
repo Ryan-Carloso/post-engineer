@@ -1,11 +1,11 @@
 import { request as httpsRequest } from 'node:https';
 import { lookup } from 'node:dns/promises';
-import { readFile, stat } from 'node:fs/promises';
 import { isIP } from 'node:net';
 import { basename, extname } from 'node:path';
 import type { LookupFunction } from 'node:net';
 import type { IncomingMessage } from 'node:http';
 
+import { readBoundedRegularFile } from './bounded-file-read.js';
 import { readApiFailure } from './errors.js';
 import { MAX_CLONE_AUDIO_BYTES, MAX_CLONE_AUDIO_MB } from './limits.js';
 import { isPublicIp, unbracketIpLiteral } from './public-ip.js';
@@ -232,12 +232,6 @@ const CLONE_AUDIO_MIME_TYPES: ReadonlyMap<string, string> = new Map([
   ['.webm', 'audio/webm'],
 ]);
 
-function assertCloneAudioSize(bytes: number, name: string): void {
-  if (bytes > MAX_CLONE_AUDIO_BYTES) {
-    throw new Error(`Audio "${name}" exceeds ${MAX_CLONE_AUDIO_MB} MB.`);
-  }
-}
-
 export async function readCloneReferenceFile(
   path: string,
 ): Promise<{ blob: Blob; filename: string }> {
@@ -246,27 +240,18 @@ export async function readCloneReferenceFile(
   if (mimeType === undefined) {
     throw new Error(`Audio "${name}" must be an MP3, WAV, M4A, or WebM file.`);
   }
-  let fileStat;
+  let read;
   try {
-    fileStat = await stat(path);
+    read = await readBoundedRegularFile(path, MAX_CLONE_AUDIO_BYTES);
   } catch {
     throw new Error(`Failed to read audio "${name}".`);
   }
-  if (!fileStat.isFile()) {
-    throw new Error(`Audio "${name}" is not a file.`);
-  }
-  assertCloneAudioSize(fileStat.size, name);
-  let buffer: Buffer;
-  try {
-    buffer = await readFile(path);
-  } catch {
-    throw new Error(`Failed to read audio "${name}".`);
-  }
-  if (buffer.length === 0) {
+  if (read.status === 'not-file') throw new Error(`Audio "${name}" is not a regular file.`);
+  if (read.status === 'too-large') throw new Error(`Audio "${name}" exceeds ${MAX_CLONE_AUDIO_MB} MB.`);
+  if (read.buffer.length === 0) {
     throw new Error(`Audio "${name}" is empty.`);
   }
-  assertCloneAudioSize(buffer.length, name);
-  return { blob: new Blob([buffer], { type: mimeType }), filename: name };
+  return { blob: new Blob([read.buffer], { type: mimeType }), filename: name };
 }
 
 export async function listClonedVoices(client: ClonedVoiceClientHost): Promise<ResponseOf<typeof listClonedVoicesContract>> {

@@ -1,5 +1,5 @@
-import { readFile, stat } from 'node:fs/promises';
 import { basename, extname } from 'node:path';
+import { readBoundedRegularFile } from './bounded-file-read.js';
 import type { PostEngineerClient } from './client.js';
 import type {
   CompletedVideoUpload,
@@ -109,12 +109,6 @@ export async function publishUploadedVideo(
   };
 }
 
-export function assertVideoSize(sizeBytes: number, path: string): void {
-  if (sizeBytes > MAX_UPLOAD_VIDEO_BYTES) {
-    throw new VideoTooLargeError(path, sizeBytes);
-  }
-}
-
 function mimeTypeForVideoPath(path: string): string {
   const extension = extname(path).toLowerCase();
   if (extension === '.mp4') return 'video/mp4';
@@ -126,24 +120,18 @@ function mimeTypeForVideoPath(path: string): string {
 
 async function videoFormFile(path: string): Promise<Blob> {
   const mimeType = mimeTypeForVideoPath(path);
+  let read;
   try {
-    const fileStat = await stat(path);
-    assertVideoSize(fileStat.size, path);
-  } catch (error) {
-    if (error instanceof VideoTooLargeError) throw error;
-    throw new Error(`Failed to read video "${path}": ${getErrorMessage(error)}`);
-  }
-  let buffer: Buffer;
-  try {
-    buffer = await readFile(path);
+    read = await readBoundedRegularFile(path, MAX_UPLOAD_VIDEO_BYTES);
   } catch (error) {
     throw new Error(`Failed to read video "${path}": ${getErrorMessage(error)}`);
   }
-  if (buffer.length === 0) {
+  if (read.status === 'not-file') throw new Error(`Video "${path}" is not a regular file.`);
+  if (read.status === 'too-large') throw new VideoTooLargeError(path, read.sizeBytes);
+  if (read.buffer.length === 0) {
     throw new Error(`Video "${path}" is empty.`);
   }
-  assertVideoSize(buffer.length, path);
-  return new Blob([buffer], { type: mimeType });
+  return new Blob([read.buffer], { type: mimeType });
 }
 
 export async function publishVideoDirect(

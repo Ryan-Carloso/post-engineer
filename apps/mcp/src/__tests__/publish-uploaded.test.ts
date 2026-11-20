@@ -1,9 +1,12 @@
+import { mkdtempSync, rmSync, symlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 
 import type { PostEngineerClient } from '../client.js';
-import { completeVideoUpload, createVideoUpload, publishUploadedVideo } from '../client-publish-uploaded.js';
+import { completeVideoUpload, createVideoUpload, publishUploadedVideo, publishVideoDirect } from '../client-publish-uploaded.js';
 import { ApiError } from '../errors.js';
 import {
   CompleteVideoUploadSchema,
@@ -434,6 +437,24 @@ describe('signed-upload tools on both transports', () => {
       expect(published.isError).toBeFalsy();
     } finally {
       await client.close();
+    }
+  });
+});
+
+describe('publishVideoDirect local file read', () => {
+  it.skipIf(process.platform === 'win32')('rejects a video path that is not a regular file before any request', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'pe-direct-video-'));
+    try {
+      const path = join(dir, 'zero.mp4');
+      symlinkSync('/dev/zero', path);
+      const request = vi.fn();
+      const client = { request, getHeaders: () => ({}) } as unknown as PostEngineerClient;
+      await expect(
+        publishVideoDirect(client, { provider: 'bluesky', videoPath: path, accountIds: ['acc-1'], caption: 'hi' }),
+      ).rejects.toThrow(`Video "${path}" is not a regular file.`);
+      expect(request).not.toHaveBeenCalled();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 });
