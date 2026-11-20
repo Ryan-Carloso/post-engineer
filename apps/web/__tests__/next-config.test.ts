@@ -28,10 +28,11 @@ const headersFor = async (env: Record<string, string | undefined>): Promise<Arra
 };
 
 describe('next.config headers', () => {
-  it('keeps script-src strict in production', async () => {
+  it('keeps script-src strict in production except for the PostHog asset host and blob workers', async () => {
     const headers = await headersFor({ NODE_ENV: 'production', CYPRESS_COVERAGE: undefined });
     const csp = headers.find((h) => h.key === 'Content-Security-Policy')?.value ?? '';
-    expect(csp).toContain("script-src 'self' 'unsafe-inline';");
+    expect(csp).toContain("script-src 'self' 'unsafe-inline' https://*.posthog.com;");
+    expect(csp).toContain("worker-src 'self' blob:;");
     expect(csp).not.toContain('unsafe-eval');
     expect(headers).toContainEqual({ key: 'X-Frame-Options', value: 'DENY' });
   });
@@ -43,7 +44,7 @@ describe('next.config headers', () => {
     ]) {
       const headers = await headersFor({ ...env });
       const csp = headers.find((h) => h.key === 'Content-Security-Policy')?.value ?? '';
-      expect(csp).toContain("script-src 'self' 'unsafe-inline' 'unsafe-eval'");
+      expect(csp).toContain("script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.posthog.com;");
     }
   });
 });

@@ -81,7 +81,8 @@ const nextConfig: NextConfig = {
     const evalException = dev || instrumented ? " 'unsafe-eval'" : '';
     const csp = [
       "default-src 'self'",
-      `script-src 'self' 'unsafe-inline'${evalException}`,
+      `script-src 'self' 'unsafe-inline'${evalException} https://*.posthog.com`,
+      "worker-src 'self' blob:",
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob: https:",
       "media-src 'self' data: blob: https:",
