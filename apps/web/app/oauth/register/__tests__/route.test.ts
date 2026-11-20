@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { POST } from '../route';
+import { DCR_MAX_BODY_BYTES, DCR_MAX_REDIRECT_URIS } from '@/lib/oauth/dcr-limits';
 
 vi.mock('@/lib/supabase/service', () => ({
   createSupabaseServiceClient: vi.fn(),
@@ -110,5 +111,62 @@ describe('POST /oauth/register rate limiting', () => {
     }
     const blocked = await POST(new Request(url, { method: 'POST', headers, body: '{}' }));
     expect(blocked.status).toBe(429);
+  });
+});
+
+describe('POST /oauth/register size caps', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  beforeEach(() => {
+    vi.stubEnv('VERCEL', '1');
+  });
+
+  function registerRequest(ip: string, body: string): Request {
+    return new Request('https://post-engineer.com/oauth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-vercel-forwarded-for': ip },
+      body,
+    });
+  }
+
+  it('returns 413 for a body over the byte cap before parsing or inserting', async () => {
+    const supabase = serviceClient({ error: null });
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(
+      supabase as unknown as ReturnType<typeof createSupabaseServiceClient>,
+    );
+    const padding = 'x'.repeat(DCR_MAX_BODY_BYTES);
+    const body = JSON.stringify({
+      redirect_uris: ['https://chatgpt.com/connector/callback'],
+      client_name: 'ChatGPT',
+      padding,
+    });
+    const response = await POST(registerRequest('10.250.1.1', body));
+    expect(response.status).toBe(413);
+    expect(await response.json()).toEqual({
+      error: `Request body must be at most ${DCR_MAX_BODY_BYTES} bytes.`,
+    });
+    expect(supabase.__insert).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 for too many redirect_uris without inserting', async () => {
+    const supabase = serviceClient({ error: null });
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(
+      supabase as unknown as ReturnType<typeof createSupabaseServiceClient>,
+    );
+    const uris = Array.from({ length: DCR_MAX_REDIRECT_URIS + 1 }, (_, i) => `https://a.example/${i}`);
+    const response = await POST(registerRequest('10.250.1.2', JSON.stringify({ redirect_uris: uris })));
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: `redirect_uris must contain at most ${DCR_MAX_REDIRECT_URIS} entries.`,
+    });
+    expect(supabase.__insert).not.toHaveBeenCalled();
+  });
+
+  it('still returns 400 for a malformed body within the cap', async () => {
+    const response = await POST(registerRequest('10.250.1.3', '{not json'));
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: 'Request body must be JSON.' });
   });
 });

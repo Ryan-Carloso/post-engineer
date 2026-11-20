@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { randomBytes } from 'crypto';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { validateDcrMetadata } from '@/lib/oauth/clients';
+import { DCR_MAX_BODY_BYTES, readBoundedText } from '@/lib/oauth/dcr-limits';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { logger } from '@/lib/logger';
 
@@ -9,9 +10,17 @@ export async function POST(request: Request): Promise<NextResponse> {
   const limited = await applyRateLimit(request, RATE_LIMITS.oauthRegister);
   if (limited) return limited;
 
+  const raw = await readBoundedText(request, DCR_MAX_BODY_BYTES);
+  if (!raw.ok) {
+    return NextResponse.json(
+      { error: `Request body must be at most ${DCR_MAX_BODY_BYTES} bytes.` },
+      { status: 413 },
+    );
+  }
+
   let body: unknown;
   try {
-    body = (await request.json()) as unknown;
+    body = JSON.parse(raw.text) as unknown;
   } catch {
     return NextResponse.json({ error: 'Request body must be JSON.' }, { status: 400 });
   }
