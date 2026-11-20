@@ -9,7 +9,7 @@ name: release-mcp
 #   MAJOR.MINOR from the repo-root VERSION file + the ordinal of the last commit
 #   touching apps/mcp/ in main's history (e.g. 1.53.219), so the patch follows
 #   merge order and can never drop below the version npm already serves. No
-#   version-bump commit, no bump PR, no manual tag. The publish job stamps the
+#   version-bump commit, no bump PR, no manual tag. The build job stamps the
 #   version into package.json/server.json in its own workspace only.
 #
 # ONE VERSION, WEB AND MCP — the web accepts exactly one MCP version

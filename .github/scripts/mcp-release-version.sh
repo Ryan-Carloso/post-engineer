@@ -16,7 +16,7 @@
 # npm never gets — #655, #661 and #662 all stalled that way on 2026-11-19.
 #
 # e.g. 1.53.219. Nothing is committed: release-mcp.yml stamps this version
-# into package.json/server.json only inside the publish job.
+# into package.json/server.json only inside the build job (no OIDC token).
 #
 # The VPS deploy computes REQUIRED_MCP_VERSION for the web with the SAME rule
 # (deployment repo, deploy-version.sh resolve_required_mcp_version) and
