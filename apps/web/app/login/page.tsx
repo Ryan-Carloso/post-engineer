@@ -38,7 +38,7 @@ export default function Login() {
   );
 }
 
-const safeNext = (value: string | null): string | null => (isSafeNextPath(value) ? value : null);
+export const safeNext = (value: string | null): string | null => (isSafeNextPath(value) ? value : null);
 
 export const PROD_AUTH_CALLBACK = 'https://post-engineer.com/auth/callback';
 const LOCAL_AUTH_CALLBACK = 'http://localhost:3434/auth/callback';
