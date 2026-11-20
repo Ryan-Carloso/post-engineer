@@ -3,7 +3,7 @@ import { apiErrorResponse } from '@/lib/api-error';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 import { CreateUserPromptBodySchema } from '@/lib/contracts/prompts';
 import { ERROR_CODES, errorMessage } from '@/lib/error-codes';
-import { filterPromptSummaries } from '@/lib/prompt-search';
+import { filterPromptSummaries, searchTerms } from '@/lib/prompt-search';
 import { isOfficialPromptSlug, listHubPrompts } from '@/lib/recipes/hub-prompts';
 import { RATE_LIMITS } from '@/lib/rate-limit';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
@@ -29,8 +29,13 @@ async function getHandler(request: Request): Promise<NextResponse> {
   if (!filter.ok) return filter.response;
   try {
     const db = createSupabaseServiceClient();
-    const own = caller.userId === null || caller.scopedKey ? [] : await listOwnUserPrompts(db, caller.userId);
-    const publicPrompts = await listPublicUserPrompts(db);
+    const { source } = filter.filter;
+    const terms = searchTerms(filter.filter.q);
+    const wantsOwn = source === undefined || source === 'own';
+    const wantsCommunity = source === undefined || source === 'community';
+    const own =
+      !wantsOwn || caller.userId === null || caller.scopedKey ? [] : await listOwnUserPrompts(db, caller.userId, terms);
+    const publicPrompts = wantsCommunity ? await listPublicUserPrompts(db, terms) : [];
     const official = listHubPrompts().map((entry) => ({ ...entry, source: 'official' as const, visibility: 'public' as const }));
     const taken = new Set([...official, ...own].map((entry) => entry.slug));
     const community = publicPrompts

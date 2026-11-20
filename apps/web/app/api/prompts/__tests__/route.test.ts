@@ -157,6 +157,35 @@ describe('GET /api/prompts', () => {
     expect(body.prompts.map((entry) => entry.slug)).toEqual(['weekly-report']);
   });
 
+  it('finds a prompt beyond the newest 200 because the search runs in the database before the cap', async () => {
+    const filler = Array.from({ length: 205 }, (_, index) => ({
+      owner_id: BOB,
+      slug: `filler-${index}`,
+      title: `Filler ${index}`,
+      body: 'x',
+      visibility: 'public' as const,
+    }));
+    const oldest = { owner_id: BOB, slug: 'needle-prompt', title: 'Needle', body: 'x', visibility: 'public' as const, created_at: '2020-01-01T00:00:00.000Z' };
+    seedDb([oldest, ...filler]);
+    authenticatedAs(ALICE);
+    const everything = (await (await listPrompts(request('/api/prompts?source=community'))).json()) as { prompts: Array<{ slug: string }> };
+    const searched = (await (await listPrompts(request('/api/prompts?q=needle'))).json()) as { prompts: Array<{ slug: string }> };
+    expect(everything.prompts.map((entry) => entry.slug)).not.toContain('needle-prompt');
+    expect(searched.prompts.map((entry) => entry.slug)).toEqual(['needle-prompt']);
+  });
+
+  it('reads only the lists the requested source needs', async () => {
+    const db = seedDb([{ owner_id: ALICE, slug: 'mine', title: 'Mine', body: 'a' }, publicRow(BOB, 'theirs')]);
+    authenticatedAs(ALICE);
+    await listPrompts(request('/api/prompts?source=official'));
+    expect(db.queries).toEqual([]);
+    await listPrompts(request('/api/prompts?source=own'));
+    expect(db.queries.some((query) => query.includes('eq visibility=public'))).toBe(false);
+    db.queries.length = 0;
+    await listPrompts(request('/api/prompts?source=community'));
+    expect(db.queries.some((query) => query.includes('eq owner_id='))).toBe(false);
+  });
+
   it('filters the list by source', async () => {
     seedDb([{ owner_id: ALICE, slug: 'mine', title: 'Mine', body: 'a' }, publicRow(BOB, 'theirs')]);
     authenticatedAs(ALICE);

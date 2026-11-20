@@ -3,6 +3,7 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/supabase/database.gen';
 import type { PromptVisibility } from '@/lib/contracts/prompts';
+import { searchOrClause } from '@/lib/prompt-search';
 
 type Db = SupabaseClient<Database>;
 
@@ -83,22 +84,20 @@ export async function findOwnUserPrompt(db: Db, ownerId: string, slug: string): 
   return data;
 }
 
-export async function listOwnUserPrompts(db: Db, ownerId: string): Promise<UserPromptRow[]> {
-  const { data, error } = await db
-    .from('user_prompts')
-    .select(COLUMNS)
-    .eq('owner_id', ownerId)
+function withSearchTerms<Query extends { or: (filters: string) => Query }>(query: Query, terms: string[]): Query {
+  return terms.reduce((next, term) => next.or(searchOrClause(term)), query);
+}
+
+export async function listOwnUserPrompts(db: Db, ownerId: string, terms: string[] = []): Promise<UserPromptRow[]> {
+  const { data, error } = await withSearchTerms(db.from('user_prompts').select(COLUMNS).eq('owner_id', ownerId), terms)
     .order('created_at', { ascending: false })
     .limit(USER_PROMPT_LIST_LIMIT);
   if (error !== null) return fail('list own', error);
   return data;
 }
 
-export async function listPublicUserPrompts(db: Db): Promise<UserPromptRow[]> {
-  const { data, error } = await db
-    .from('user_prompts')
-    .select(COLUMNS)
-    .eq('visibility', 'public')
+export async function listPublicUserPrompts(db: Db, terms: string[] = []): Promise<UserPromptRow[]> {
+  const { data, error } = await withSearchTerms(db.from('user_prompts').select(COLUMNS).eq('visibility', 'public'), terms)
     .order('created_at', { ascending: false })
     .limit(USER_PROMPT_LIST_LIMIT);
   if (error !== null) return fail('list public', error);

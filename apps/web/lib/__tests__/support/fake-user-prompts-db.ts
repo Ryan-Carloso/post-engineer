@@ -107,6 +107,17 @@ export function createFakeUserPromptsDb(seed: Partial<UserPromptRow>[] = []): Fa
       return this;
     }
 
+    or(expression: string): this {
+      const conditions = expression.split(',').map((condition) => {
+        const [column, operator, pattern] = condition.split('.');
+        if (operator !== 'ilike') throw new Error(`unsupported or condition ${condition}`);
+        return { column: column as keyof UserPromptRow, needle: pattern.split('%').join('').toLowerCase() };
+      });
+      this.filters.push((row) => conditions.some(({ column, needle }) => String(row[column]).toLowerCase().includes(needle)));
+      this.label.push(`or ${expression}`);
+      return this;
+    }
+
     order(column: keyof UserPromptRow, options: { ascending: boolean }): this {
       this.sorting = { column, ascending: options.ascending };
       return this;

@@ -12,9 +12,13 @@ interface Searchable {
   source: PromptSource;
 }
 
-function searchTerms(q: string | undefined): string[] {
+export function searchTerms(q: string | undefined): string[] {
   if (q === undefined) return [];
-  return q.toLowerCase().split(/\s+/).filter((term) => term.length > 0);
+  return q.toLowerCase().split(/[^\p{L}\p{N}-]+/u).filter((term) => term.length > 0);
+}
+
+export function searchOrClause(term: string): string {
+  return ['slug', 'title', 'description'].map((column) => `${column}.ilike.%${term}%`).join(',');
 }
 
 export function filterPromptSummaries<Prompt extends Searchable>(prompts: Prompt[], filter: PromptListFilter): Prompt[] {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { filterPromptSummaries } from '@/lib/prompt-search';
+import { filterPromptSummaries, searchOrClause, searchTerms } from '@/lib/prompt-search';
 
 const PROMPTS = [
   { slug: 'daily-news', title: 'Daily News', description: 'Headlines of the day', source: 'official' as const },
@@ -26,5 +26,15 @@ describe('filterPromptSummaries', () => {
   it('combines the source with the search words', () => {
     expect(filterPromptSummaries(PROMPTS, { q: 'report', source: 'own' }).map((prompt) => prompt.slug)).toEqual(['my-report']);
     expect(filterPromptSummaries(PROMPTS, { q: 'news', source: 'own' })).toEqual([]);
+  });
+
+  it('splits the search text on anything that is not a letter, digit or hyphen, so database filters need no escaping', () => {
+    expect(searchTerms('Weekly,report (v2) 50%_off')).toEqual(['weekly', 'report', 'v2', '50', 'off']);
+    expect(searchTerms('café-news')).toEqual(['café-news']);
+    expect(searchTerms(undefined)).toEqual([]);
+  });
+
+  it('builds one case-insensitive match over the slug, title and description', () => {
+    expect(searchOrClause('news')).toBe('slug.ilike.%news%,title.ilike.%news%,description.ilike.%news%');
   });
 });
