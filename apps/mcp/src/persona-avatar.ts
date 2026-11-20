@@ -1,32 +1,26 @@
-import { readFile, stat } from 'node:fs/promises';
 import { basename } from 'node:path';
 
 import { z } from 'zod';
 
+import { readBoundedRegularFile } from './bounded-file-read.js';
 import { getErrorMessage, ImageTooLargeError } from './errors.js';
-import { assertImageSize, mimeTypeForImagePath } from './image-guards.js';
-import { MAX_LIBRARY_IMAGE_MB } from './limits.js';
+import { mimeTypeForImagePath } from './image-guards.js';
+import { MAX_LIBRARY_IMAGE_BYTES, MAX_LIBRARY_IMAGE_MB } from './limits.js';
 
 export async function imageFormFile(path: string): Promise<Blob> {
   const mimeType = mimeTypeForImagePath(path);
+  let read;
   try {
-    const fileStat = await stat(path);
-    assertImageSize(fileStat.size, path);
-  } catch (error) {
-    if (error instanceof ImageTooLargeError) throw error;
-    throw new Error(`Failed to read image "${path}": ${getErrorMessage(error)}`);
-  }
-  let buffer: Buffer;
-  try {
-    buffer = await readFile(path);
+    read = await readBoundedRegularFile(path, MAX_LIBRARY_IMAGE_BYTES);
   } catch (error) {
     throw new Error(`Failed to read image "${path}": ${getErrorMessage(error)}`);
   }
-  if (buffer.length === 0) {
+  if (read.status === 'not-file') throw new Error(`Image "${path}" is not a regular file.`);
+  if (read.status === 'too-large') throw new ImageTooLargeError(path, read.sizeBytes);
+  if (read.buffer.length === 0) {
     throw new Error(`Image "${path}" is empty.`);
   }
-  assertImageSize(buffer.length, path);
-  return new Blob([buffer], { type: mimeType });
+  return new Blob([read.buffer], { type: mimeType });
 }
 
 const AVATAR_PATH_DESCRIPTION = `Local file path to the persona face photo (JPG/JPEG, PNG, or WebP, max ${MAX_LIBRARY_IMAGE_MB}MB), uploaded directly. Use instead of avatarUrl for your own photo.`;

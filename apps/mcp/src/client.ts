@@ -106,8 +106,6 @@ export {
   MAX_LIBRARY_TAG_LENGTH,
 };
 
-export { assertImageSize } from './image-guards.js';
-export { assertVideoSize } from './client-publish-uploaded.js';
 import { appendPersonaAvatar, imageFormFile } from './persona-avatar.js';
 
 function checkLibraryMetadataLengths(

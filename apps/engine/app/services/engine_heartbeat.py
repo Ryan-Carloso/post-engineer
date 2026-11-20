@@ -10,10 +10,14 @@ A dead process cannot report its own death, so this module records telemetry
 - ``mark_clean_shutdown`` stamps ``clean_shutdown_at``; the ASGI shutdown
   hook calls it. A boot that finds no fresh stamp is an unclean death
   (SIGKILL / OOM-killer) — the hook never runs for those.
-- ``report_boot_event`` reads the row at startup and emits the PostHog
-  ``engine_boot`` event: orphan counts from the boot reconcile, time since
-  the last heartbeat, whether the shutdown was clean, and the last RSS
-  reading. The dashboard then answers "OOM or restart?" with no VPS logs.
+- ``start_heartbeat_after_autopsy`` is the single boot entry point: it
+  reads the previous process's row, only then starts the heartbeat loop
+  (whose first beat overwrites that row), and hands the captured row to
+  ``report_boot_event``, which emits the PostHog ``engine_boot`` event:
+  orphan counts from the boot reconcile, time since the last heartbeat,
+  whether the shutdown was clean, and the last RSS reading. The dashboard
+  then answers "OOM or restart?" with no VPS logs. The report never reads
+  the row itself, so it cannot describe the new process's own first beat.
 
 All entry points are defensive: diagnostics must never break boot, shutdown,
 or the heartbeat loop itself.
@@ -241,8 +245,21 @@ def is_clean_shutdown(beat: dict[str, Any]) -> bool:
     return abs((clean_at - updated_at).total_seconds()) < 5
 
 
-def report_boot_event(task_state: Any) -> None:
-    """Emit the PostHog ``engine_boot`` autopsy event. Never raises."""
+def read_previous_beat() -> dict[str, Any] | None:
+    """The previous process's heartbeat row, or None when unreadable."""
+    try:
+        return read_beat()
+    except Exception as exc:  # noqa: BLE001 - boot continues regardless
+        logger.warning(f"engine_boot: could not read heartbeat: {exc}")
+        return None
+
+
+def report_boot_event(task_state: Any, previous_beat: dict[str, Any] | None) -> None:
+    """Emit the PostHog ``engine_boot`` autopsy event. Never raises.
+
+    ``previous_beat`` is the row captured before this process started its
+    heartbeat loop; this function never reads the row itself.
+    """
     try:
         stats = getattr(task_state, "last_reconcile_stats", None) or {}
         props: dict[str, object] = {
@@ -252,20 +269,29 @@ def report_boot_event(task_state: Any) -> None:
             "orphans_completed": int(stats.get("completed") or 0),
             "orphans_failed": int(stats.get("failed") or 0),
         }
-        try:
-            beat = read_beat()
-        except Exception as exc:  # noqa: BLE001 - boot continues regardless
-            logger.warning(f"engine_boot: could not read heartbeat: {exc}")
-            beat = None
-        if beat is not None:
-            updated_at = _parse_ts(beat.get("updated_at"))
+        if previous_beat is not None:
+            updated_at = _parse_ts(previous_beat.get("updated_at"))
             if updated_at is not None:
                 gap = (datetime.now(timezone.utc) - updated_at).total_seconds()
                 props["gap_since_last_heartbeat_s"] = max(0.0, round(gap, 1))
-                props["clean_shutdown"] = is_clean_shutdown(beat)
-            props["prev_uptime_s"] = beat.get("uptime_s")
-            props["rss_last_heartbeat_mb"] = beat.get("rss_mb")
-            props["vram_last_heartbeat_mb"] = beat.get("vram_mb")
+                props["clean_shutdown"] = is_clean_shutdown(previous_beat)
+            props["prev_uptime_s"] = previous_beat.get("uptime_s")
+            props["rss_last_heartbeat_mb"] = previous_beat.get("rss_mb")
+            props["vram_last_heartbeat_mb"] = previous_beat.get("vram_mb")
         track_event("engine_boot", props)
     except Exception as exc:  # noqa: BLE001 - diagnostics never break boot
         logger.warning(f"engine_boot event failed: {exc}")
+
+
+def start_heartbeat_after_autopsy(
+    task_state: Any, interval_s: float = HEARTBEAT_INTERVAL_S
+) -> threading.Thread:
+    """Capture the previous beat, start the heartbeat loop, report the boot.
+
+    The read returns before the loop exists, so the new process's first
+    beat cannot reach the autopsy.
+    """
+    previous_beat = read_previous_beat()
+    thread = start_heartbeat_thread(interval_s)
+    report_boot_event(task_state, previous_beat)
+    return thread

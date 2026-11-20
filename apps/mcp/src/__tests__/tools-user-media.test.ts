@@ -1,4 +1,5 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, basename } from 'node:path';
 import { describe, it, expect, vi, afterEach } from 'vitest';
@@ -88,6 +89,29 @@ describe('upload_media tool', () => {
     expect(client.request).not.toHaveBeenCalled();
     expect(textOf(response)).not.toContain(path);
   });
+
+  it.skipIf(process.platform === 'win32')('rejects /dev/zero as not a regular file before any request goes out', async () => {
+    dir = mkdtempSync(join(tmpdir(), 'pe-user-media-'));
+    const path = join(dir, 'zero.png');
+    symlinkSync('/dev/zero', path);
+    const client = fakeClient(async () => ({ success: true, mediaId: 'x.jpg' }));
+    const response = await handleUploadMedia(client, { path });
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toContain('Image "zero.png" is not a regular file.');
+    expect(textOf(response)).not.toContain(path);
+    expect(client.request).not.toHaveBeenCalled();
+  });
+
+  it.skipIf(process.platform === 'win32')('rejects a FIFO without waiting for a writer', async () => {
+    dir = mkdtempSync(join(tmpdir(), 'pe-user-media-'));
+    const path = join(dir, 'pipe.png');
+    execFileSync('mkfifo', [path]);
+    const client = fakeClient(async () => ({ success: true, mediaId: 'x.jpg' }));
+    const response = await handleUploadMedia(client, { path });
+    expect(response.isError).toBe(true);
+    expect(textOf(response)).toContain('Image "pipe.png" is not a regular file.');
+    expect(client.request).not.toHaveBeenCalled();
+  }, 2_000);
 
   it('rejects a missing file without leaking the full path', async () => {
     const client = fakeClient(async () => ({ success: true, mediaId: 'x.jpg' }));

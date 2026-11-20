@@ -373,8 +373,7 @@ class RedispatchStartupTests(unittest.TestCase):
                 patch.object(direct_redispatch, "track_event"),
                 patch("app.asgi.warm_client"),
                 patch("app.asgi.start_fill_schedule_scheduler"),
-                patch("app.services.engine_heartbeat.start_heartbeat_thread"),
-                patch("app.services.engine_heartbeat.report_boot_event"),
+                patch("app.services.engine_heartbeat.start_heartbeat_after_autopsy"),
                 patch.object(
                     saved_state,
                     "reconcile_orphaned_tasks",

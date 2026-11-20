@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { NextResponse } from 'next/server';
+import { clientBucket } from '@/lib/rate-limit-ip';
 
 export interface RateLimitProfile {
   name: string;
@@ -54,7 +55,7 @@ export const RATE_LIMITS = {
 
 interface WindowCounter {
   count: number;
-  windowStart: number;
+  expiresAt: number;
 }
 
 interface RateLimitGlobal {
@@ -62,30 +63,41 @@ interface RateLimitGlobal {
 }
 
 const globalForRateLimit = globalThis as unknown as RateLimitGlobal;
-const store: Map<string, WindowCounter> =
-  globalForRateLimit.__rateLimitStore ?? new Map<string, WindowCounter>();
-globalForRateLimit.__rateLimitStore = store;
 
-const MAX_TRACKED_KEYS = 10_000;
+function rateLimitStore(): Map<string, WindowCounter> {
+  const existing = globalForRateLimit.__rateLimitStore;
+  if (existing !== undefined) return existing;
+  const created = new Map<string, WindowCounter>();
+  globalForRateLimit.__rateLimitStore = created;
+  return created;
+}
+
+export const MAX_TRACKED_KEYS = 10_000;
+
+function makeRoom(store: Map<string, WindowCounter>, now: number): void {
+  for (const [key, entry] of store) {
+    if (now >= entry.expiresAt) store.delete(key);
+  }
+  for (const key of store.keys()) {
+    if (store.size < MAX_TRACKED_KEYS) return;
+    store.delete(key);
+  }
+}
 
 function hit(key: string, profile: RateLimitProfile, now: number): { allowed: boolean; remaining: number; retryAfterSeconds: number } {
-  if (store.size >= MAX_TRACKED_KEYS) {
-    for (const [k, entry] of store) {
-      if (now - entry.windowStart >= profile.windowMs) store.delete(k);
-    }
-    if (store.size >= MAX_TRACKED_KEYS) store.clear();
-  }
-
+  const store = rateLimitStore();
   const existing = store.get(key);
-  const isNewWindow = !existing || now - existing.windowStart >= profile.windowMs;
+  store.delete(key);
 
-  if (isNewWindow) {
-    store.set(key, { count: 1, windowStart: now });
+  if (existing === undefined || now >= existing.expiresAt) {
+    if (store.size >= MAX_TRACKED_KEYS) makeRoom(store, now);
+    store.set(key, { count: 1, expiresAt: now + profile.windowMs });
     return { allowed: true, remaining: profile.limit - 1, retryAfterSeconds: 0 };
   }
 
+  store.set(key, existing);
   if (existing.count >= profile.limit) {
-    const retryAfterSeconds = Math.max(1, Math.ceil((existing.windowStart + profile.windowMs - now) / 1000));
+    const retryAfterSeconds = Math.max(1, Math.ceil((existing.expiresAt - now) / 1000));
     return { allowed: false, remaining: 0, retryAfterSeconds };
   }
 
@@ -122,7 +134,7 @@ export async function applyRateLimit(
   profile: RateLimitProfile,
   identifier?: string
 ): Promise<NextResponse | null> {
-  const id = identifier ?? getClientIp(request);
+  const id = identifier ?? clientBucket(getClientIp(request));
   const result = hit(`${profile.name}:${id}`, profile, Date.now());
 
   if (!result.allowed) {

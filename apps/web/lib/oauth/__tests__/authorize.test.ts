@@ -68,6 +68,37 @@ describe('parseAuthorizeRequest', () => {
     if (!result.ok) expect(result.redirectUri).toBeUndefined();
   });
 
+  it.each([
+    'javascript:alert(1)',
+    'data:text/html,x',
+    'http://evil.example/cb',
+    'https://chatgpt.com/connector/callback#frag',
+  ])('refuses a registered but unsafe redirect_uri %s without redirecting', async (unsafe) => {
+    vi.mocked(resolveClient).mockResolvedValue({ clientName: 'Bad', redirectUris: [unsafe] });
+    const result = await parseAuthorizeRequest(
+      authorizeUrl({ redirect_uri: unsafe, response_type: 'token' }),
+      {} as never,
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBe('redirect_uri is not allowed.');
+      expect(result.redirectUri).toBeUndefined();
+    }
+  });
+
+  it('builds no error redirect for an unsafe redirect_uri', () => {
+    expect(buildErrorRedirect('javascript:alert(1)', 'invalid_request', 'xyz')).toBeNull();
+    expect(buildErrorRedirect('data:text/html,x', 'invalid_request')).toBeNull();
+    expect(buildErrorRedirect('http://evil.example/cb', 'invalid_request')).toBeNull();
+    expect(buildErrorRedirect('https://ok.example/cb#f', 'invalid_request')).toBeNull();
+  });
+
+  it('builds the error redirect with description and state', () => {
+    expect(buildErrorRedirect('https://ok.example/cb', 'invalid_scope', 'xyz', 'bad scope')).toBe(
+      'https://ok.example/cb?error=invalid_scope&error_description=bad+scope&state=xyz',
+    );
+  });
+
   it('redirects validation errors back to the client', async () => {
     vi.mocked(resolveClient).mockResolvedValue(CLIENT);
     const cases: Array<[Record<string, string>, string]> = [
@@ -82,7 +113,7 @@ describe('parseAuthorizeRequest', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.redirectUri).toBe('https://chatgpt.com/connector/callback');
-        const redirect = buildErrorRedirect(result.redirectUri as string, error, 'xyz');
+        const redirect = buildErrorRedirect(result.redirectUri as string, error, 'xyz') ?? '';
         expect(redirect).toContain(`error=${error}`);
       }
     }

@@ -87,4 +87,34 @@ describe('GET /oauth/authorize', () => {
     const location = response.headers.get('location') ?? '';
     expect(location).toContain('https://oauth-tunnel.ngrok.app/oauth/consent?request=');
   });
+
+  it('redirects validation errors to a safe registered redirect_uri', async () => {
+    vi.mocked(resolveClient).mockResolvedValue(CLIENT);
+    const url = new URL(authorizeUrl());
+    url.searchParams.set('response_type', 'token');
+    const response = await GET(new Request(url));
+    expect(response.status).toBe(307);
+    expect(response.headers.get('location')).toBe(
+      'https://chatgpt.com/connector/callback?error=unsupported_response_type&error_description=Only+response_type%3Dcode+is+supported.&state=xyz',
+    );
+  });
+
+  it.each([
+    'javascript:alert(1)',
+    'data:text/html,x',
+    'http://evil.example/cb',
+    'https://chatgpt.com/connector/callback#frag',
+  ])(
+    'answers 400 without a redirect for the unsafe registered redirect_uri %s',
+    async (unsafe) => {
+      vi.mocked(resolveClient).mockResolvedValue({ clientName: 'Bad', redirectUris: [unsafe] });
+      const url = new URL(authorizeUrl());
+      url.searchParams.set('redirect_uri', unsafe);
+      url.searchParams.set('response_type', 'token');
+      const response = await GET(new Request(url));
+      expect(response.status).toBe(400);
+      expect(response.headers.get('location')).toBeNull();
+      expect(await response.json()).toEqual({ error: 'redirect_uri is not allowed.' });
+    },
+  );
 });

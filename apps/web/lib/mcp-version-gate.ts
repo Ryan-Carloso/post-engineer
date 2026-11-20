@@ -2,10 +2,13 @@ import type { NextResponse } from 'next/server';
 
 import { apiErrorResponse } from './api-error';
 import { ERROR_CODES } from './error-codes';
+import { createWarnOnce } from './warn-once';
 
 export const MCP_VERSION_HEADER = 'x-mcp-version';
 
 const ROUTE = 'mcp-version-gate';
+export const MISMATCH_WARNING_WINDOW_MS = 60 * 60 * 1000;
+export const MISMATCH_WARNING_MAX_PAIRS = 100;
 const VERSION_SHAPE = /^(\d{1,4})\.(\d{1,4})\.(\d{1,6})$/;
 
 type VersionParts = [number, number, number];
@@ -51,17 +54,33 @@ function mismatchMessage(clientVersion: string, required: string): string {
   return `post-engineer-mcp ${clientVersion} is out of date: this server requires ${required}. Restart the MCP with ${install}.`;
 }
 
-export function checkMcpVersion(request: Request): NextResponse | null {
-  const clientVersion = request.headers.get(MCP_VERSION_HEADER);
-  if (clientVersion === null) return null;
-  const required = requiredMcpVersion();
-  if (clientVersion === required.text) return null;
-  const versionShaped = parseVersion(clientVersion) !== null;
-  return apiErrorResponse(426, mismatchMessage(clientVersion, required.text), {
-    route: ROUTE,
-    code: ERROR_CODES.MCP_VERSION_MISMATCH,
-    logMessage: 'MCP version mismatch',
-    metadata: { clientVersion: versionShaped ? clientVersion : 'malformed' },
-    extra: { requiredVersion: required.text },
-  });
+export interface McpVersionGateOptions {
+  now: () => number;
 }
+
+export function createMcpVersionGate(
+  options: McpVersionGateOptions,
+): (request: Request) => NextResponse | null {
+  const shouldWarn = createWarnOnce({
+    windowMs: MISMATCH_WARNING_WINDOW_MS,
+    maxKeys: MISMATCH_WARNING_MAX_PAIRS,
+    now: options.now,
+  });
+  return (request: Request): NextResponse | null => {
+    const clientVersion = request.headers.get(MCP_VERSION_HEADER);
+    if (clientVersion === null) return null;
+    const required = requiredMcpVersion();
+    if (clientVersion === required.text) return null;
+    const loggedVersion = parseVersion(clientVersion) !== null ? clientVersion : 'malformed';
+    return apiErrorResponse(426, mismatchMessage(clientVersion, required.text), {
+      route: ROUTE,
+      code: ERROR_CODES.MCP_VERSION_MISMATCH,
+      logMessage: 'MCP version mismatch',
+      metadata: { clientVersion: loggedVersion },
+      extra: { requiredVersion: required.text },
+      suppressLog: !shouldWarn(`${loggedVersion} ${required.text}`),
+    });
+  };
+}
+
+export const checkMcpVersion = createMcpVersionGate({ now: Date.now });

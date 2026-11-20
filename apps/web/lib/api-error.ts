@@ -12,6 +12,7 @@ export interface ApiErrorOptions {
   code?: string;
   leaveReportingToWrapper?: boolean;
   field?: string;
+  suppressLog?: boolean;
 }
 
 function fallbackErrorId(): string {
@@ -48,7 +49,9 @@ export function apiErrorResponse(
   const leaveReportingToWrapper =
     options?.leaveReportingToWrapper === true && status < 500;
   try {
-    if (status >= 500) {
+    if (options?.suppressLog === true) {
+      errorId = fallbackErrorId();
+    } else if (status >= 500) {
       errorId = logger.error(message, options?.cause, metadata);
     } else if (status === 401 || status === 403 || leaveReportingToWrapper) {
       console.warn('%s', `[${route}] ${status} ${logMessage}`, metadata);

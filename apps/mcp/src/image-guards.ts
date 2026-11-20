@@ -1,12 +1,4 @@
 import { extname } from 'node:path';
-import { ImageTooLargeError } from './errors.js';
-import { MAX_LIBRARY_IMAGE_BYTES } from './limits.js';
-
-export function assertImageSize(sizeBytes: number, path: string): void {
-  if (sizeBytes > MAX_LIBRARY_IMAGE_BYTES) {
-    throw new ImageTooLargeError(path, sizeBytes);
-  }
-}
 
 export function mimeTypeForImagePath(path: string): string {
   const extension = extname(path).toLowerCase();

@@ -252,4 +252,31 @@ describe('apiErrorResponse', () => {
     const loggedMetadata = warnCall[1] as Record<string, unknown>;
     expect(loggedMetadata['cause']).toBe('No signatures found matching the expected signature');
   });
+
+  it('skips every log when suppressLog is set but still returns the full error body', async () => {
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const res = apiErrorResponse(426, 'Upgrade the MCP.', {
+        route: 'mcp-version-gate',
+        code: 'MCP_VERSION_MISMATCH',
+        extra: { requiredVersion: '1.2.3' },
+        suppressLog: true,
+      });
+
+      expect(res.status).toBe(426);
+      expect(logger.warn).not.toHaveBeenCalled();
+      expect(logger.error).not.toHaveBeenCalled();
+      expect(consoleWarn).not.toHaveBeenCalled();
+      const body = await res.json();
+      expect(body).toMatchObject({
+        success: false,
+        error: 'Upgrade the MCP.',
+        code: 'MCP_VERSION_MISMATCH',
+        requiredVersion: '1.2.3',
+      });
+      expect(typeof body.errorId).toBe('string');
+    } finally {
+      consoleWarn.mockRestore();
+    }
+  });
 });
