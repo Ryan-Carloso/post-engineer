@@ -7,7 +7,7 @@ import { filterPromptSummaries, searchTerms } from '@/lib/prompt-search';
 import { isOfficialPromptSlug, listHubPrompts } from '@/lib/recipes/hub-prompts';
 import { RATE_LIMITS } from '@/lib/rate-limit';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
-import { createUserPrompt, listOwnUserPrompts, listPublicUserPrompts } from '@/lib/user-prompts';
+import { createUserPrompt, listOwnPromptSlugs, listOwnUserPrompts, listPublicUserPrompts } from '@/lib/user-prompts';
 import {
   promptDetailBody,
   promptSummaryBody,
@@ -37,7 +37,10 @@ async function getHandler(request: Request): Promise<NextResponse> {
       !wantsOwn || caller.userId === null || caller.scopedKey ? [] : await listOwnUserPrompts(db, caller.userId, terms);
     const publicPrompts = wantsCommunity ? await listPublicUserPrompts(db, terms) : [];
     const official = listHubPrompts().map((entry) => ({ ...entry, source: 'official' as const, visibility: 'public' as const }));
-    const taken = new Set([...official, ...own].map((entry) => entry.slug));
+    const slugOwner = wantsCommunity && !caller.scopedKey ? caller.userId : null;
+    const ownSlugs =
+      slugOwner === null ? [] : wantsOwn && terms.length === 0 ? own.map((row) => row.slug) : await listOwnPromptSlugs(db, slugOwner);
+    const taken = new Set([...official.map((entry) => entry.slug), ...ownSlugs]);
     const community = publicPrompts
       .filter((row) => (caller.scopedKey || row.owner_id !== caller.userId) && !taken.has(row.slug))
       .map((row) => promptSummaryBody(row, 'community'));

@@ -96,6 +96,12 @@ export async function listOwnUserPrompts(db: Db, ownerId: string, terms: string[
   return data;
 }
 
+export async function listOwnPromptSlugs(db: Db, ownerId: string): Promise<string[]> {
+  const { data, error } = await db.from('user_prompts').select('slug').eq('owner_id', ownerId).limit(USER_PROMPT_LIST_LIMIT);
+  if (error !== null) return fail('list own slugs', error);
+  return data.map((row) => row.slug);
+}
+
 export async function listPublicUserPrompts(db: Db, terms: string[] = []): Promise<UserPromptRow[]> {
   const { data, error } = await withSearchTerms(db.from('user_prompts').select(COLUMNS).eq('visibility', 'public'), terms)
     .order('created_at', { ascending: false })

@@ -127,7 +127,7 @@ describe('handleListPrompts', () => {
 
   it('sends no query string when the filters are empty', async () => {
     await handleListPrompts(client(), { query: '   ' });
-    expect(requestedPaths()).toEqual(['/api/prompts']);
+    expect(requestedUrls()).toEqual(['/api/prompts']);
   });
 
   it('rejects an unknown source and an over-long query before any request', async () => {

@@ -174,6 +174,18 @@ describe('GET /api/prompts', () => {
     expect(searched.prompts.map((entry) => entry.slug)).toEqual(['needle-prompt']);
   });
 
+  it('keeps hiding a public prompt that an own prompt of the same slug shadows, even when the own prompt does not match the search or the source', async () => {
+    seedDb([
+      { owner_id: ALICE, slug: 'shadowed', title: 'Alpha', body: 'a' },
+      { owner_id: BOB, slug: 'shadowed', title: 'Beta words', body: 'b', visibility: 'public' },
+    ]);
+    authenticatedAs(ALICE);
+    for (const path of ['/api/prompts?q=beta', '/api/prompts?source=community']) {
+      const body = (await (await listPrompts(request(path))).json()) as { prompts: Array<{ slug: string }> };
+      expect(body.prompts.map((entry) => entry.slug)).not.toContain('shadowed');
+    }
+  });
+
   it('reads only the lists the requested source needs', async () => {
     const db = seedDb([{ owner_id: ALICE, slug: 'mine', title: 'Mine', body: 'a' }, publicRow(BOB, 'theirs')]);
     authenticatedAs(ALICE);
@@ -183,7 +195,7 @@ describe('GET /api/prompts', () => {
     expect(db.queries.some((query) => query.includes('eq visibility=public'))).toBe(false);
     db.queries.length = 0;
     await listPrompts(request('/api/prompts?source=community'));
-    expect(db.queries.some((query) => query.includes('eq owner_id='))).toBe(false);
+    expect(db.queries.filter((query) => query.includes('eq owner_id=')).every((query) => query.startsWith('select slug '))).toBe(true);
   });
 
   it('filters the list by source', async () => {
