@@ -20,7 +20,10 @@ export function promptOperationSchemas({ success, object, str }) {
   const owned = { 403: 'A persona-scoped API key cannot manage prompts.', 404: 'Unknown prompt, or not yours.' };
   const taken = 'The slug is reserved by an official prompt (PROMPT_SLUG_RESERVED), already yours, or used by another public prompt (PROMPT_SLUG_TAKEN).';
   return {
-    'GET /api/prompts': { response: success({ prompts: { type: 'array', items: summary } }) },
+    'GET /api/prompts': {
+      query: [{ name: 'q', required: false }, { name: 'source', required: false }],
+      response: success({ prompts: { type: 'array', items: summary } }),
+    },
     'GET /api/prompts/[slug]': { response: success({ prompt: detail }) },
     'POST /api/prompts': {
       request: { ...object({ slug, title, description, prompt: text, visibility }, ['slug', 'title', 'prompt']), additionalProperties: false },

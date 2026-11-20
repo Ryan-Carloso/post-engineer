@@ -147,6 +147,76 @@ describe('GET /api/prompts', () => {
     expect(body.prompts.map((entry) => entry.slug)).not.toContain('mine');
   });
 
+  it('filters the list by search words across slug, title and description, case-insensitively', async () => {
+    seedDb([
+      { owner_id: ALICE, slug: 'weekly-report', title: 'Weekly Report', body: 'a', description: 'for the team' },
+      { owner_id: ALICE, slug: 'other', title: 'Other', body: 'b' },
+    ]);
+    authenticatedAs(ALICE);
+    const body = (await (await listPrompts(request('/api/prompts?q=WEEKLY%20team'))).json()) as { prompts: Array<{ slug: string }> };
+    expect(body.prompts.map((entry) => entry.slug)).toEqual(['weekly-report']);
+  });
+
+  it('finds a prompt beyond the newest 200 because the search runs in the database before the cap', async () => {
+    const filler = Array.from({ length: 205 }, (_, index) => ({
+      owner_id: BOB,
+      slug: `filler-${index}`,
+      title: `Filler ${index}`,
+      body: 'x',
+      visibility: 'public' as const,
+    }));
+    const oldest = { owner_id: BOB, slug: 'needle-prompt', title: 'Needle', body: 'x', visibility: 'public' as const, created_at: '2020-01-01T00:00:00.000Z' };
+    seedDb([oldest, ...filler]);
+    authenticatedAs(ALICE);
+    const everything = (await (await listPrompts(request('/api/prompts?source=community'))).json()) as { prompts: Array<{ slug: string }> };
+    const searched = (await (await listPrompts(request('/api/prompts?q=needle'))).json()) as { prompts: Array<{ slug: string }> };
+    expect(everything.prompts.map((entry) => entry.slug)).not.toContain('needle-prompt');
+    expect(searched.prompts.map((entry) => entry.slug)).toEqual(['needle-prompt']);
+  });
+
+  it('keeps hiding a public prompt that an own prompt of the same slug shadows, even when the own prompt does not match the search or the source', async () => {
+    seedDb([
+      { owner_id: ALICE, slug: 'shadowed', title: 'Alpha', body: 'a' },
+      { owner_id: BOB, slug: 'shadowed', title: 'Beta words', body: 'b', visibility: 'public' },
+    ]);
+    authenticatedAs(ALICE);
+    for (const path of ['/api/prompts?q=beta', '/api/prompts?source=community']) {
+      const body = (await (await listPrompts(request(path))).json()) as { prompts: Array<{ slug: string }> };
+      expect(body.prompts.map((entry) => entry.slug)).not.toContain('shadowed');
+    }
+  });
+
+  it('reads only the lists the requested source needs', async () => {
+    const db = seedDb([{ owner_id: ALICE, slug: 'mine', title: 'Mine', body: 'a' }, publicRow(BOB, 'theirs')]);
+    authenticatedAs(ALICE);
+    await listPrompts(request('/api/prompts?source=official'));
+    expect(db.queries).toEqual([]);
+    await listPrompts(request('/api/prompts?source=own'));
+    expect(db.queries.some((query) => query.includes('eq visibility=public'))).toBe(false);
+    db.queries.length = 0;
+    await listPrompts(request('/api/prompts?source=community'));
+    expect(db.queries.filter((query) => query.includes('eq owner_id=')).every((query) => query.startsWith('select slug '))).toBe(true);
+  });
+
+  it('filters the list by source', async () => {
+    seedDb([{ owner_id: ALICE, slug: 'mine', title: 'Mine', body: 'a' }, publicRow(BOB, 'theirs')]);
+    authenticatedAs(ALICE);
+    const own = (await (await listPrompts(request('/api/prompts?source=own'))).json()) as { prompts: Array<{ slug: string }> };
+    const community = (await (await listPrompts(request('/api/prompts?source=community'))).json()) as { prompts: Array<{ slug: string }> };
+    expect(own.prompts.map((entry) => entry.slug)).toEqual(['mine']);
+    expect(community.prompts.map((entry) => entry.slug)).toEqual(['theirs']);
+  });
+
+  it('rejects an unknown source, an unknown parameter and an over-long query with 400 before reading the database', async () => {
+    const db = seedDb();
+    authenticatedAs(ALICE);
+    for (const path of ['/api/prompts?source=mine', '/api/prompts?sort=asc', `/api/prompts?q=${'x'.repeat(101)}`]) {
+      const response = await listPrompts(request(path));
+      expect(response.status).toBe(400);
+    }
+    expect(db.queries).toEqual([]);
+  });
+
   it('shows a persona-scoped key the account own public prompt, as community', async () => {
     seedDb([{ owner_id: ALICE, slug: 'mine-shared', title: 'Mine shared', body: 'Community text', visibility: 'public' }]);
     scopedKeyOf(ALICE);

@@ -12,7 +12,7 @@ import {
 import { createPostEngineerMcpServer } from '../index.js';
 import { PostEngineerClient } from '../client.js';
 import { MCP_ACTION_HEADER, MCP_TOOL_HEADER } from '../analytics.js';
-import { COMMUNITY_PROMPT_NOTICE, recipeRunText } from '../recipe-session.js';
+import { COMMUNITY_PROMPT_NOTICE, MCP_RECIPES_KNOWN_HEADER, recipeRunText } from '../recipe-session.js';
 
 const BASE_URL = 'https://api.example.test';
 
@@ -53,6 +53,13 @@ function client(): PostEngineerClient {
 
 function requestedPaths(): string[] {
   return fetchMock.mock.calls.map(([url]) => new URL(url).pathname);
+}
+
+function requestedUrls(): string[] {
+  return fetchMock.mock.calls.map(([url]) => {
+    const parsed = new URL(url);
+    return `${parsed.pathname}${parsed.search}`;
+  });
 }
 
 function toolHeaders(): Array<string | undefined> {
@@ -112,8 +119,27 @@ describe('handleListPrompts', () => {
     expect(textOf(result)).toContain('Malformed response from GET /api/prompts');
   });
 
-  it('keeps both shapes argument-only', () => {
-    expect(ListPromptsShape).toEqual({});
+  it('sends the search words and the source as query parameters', async () => {
+    const result = await handleListPrompts(client(), { query: '  daily news ', source: 'community' });
+    expect(JSON.parse(textOf(result))).toEqual(CATALOG);
+    expect(requestedUrls()).toEqual(['/api/prompts?q=daily+news&source=community']);
+  });
+
+  it('sends no query string when the filters are empty', async () => {
+    await handleListPrompts(client(), { query: '   ' });
+    expect(requestedUrls()).toEqual(['/api/prompts']);
+  });
+
+  it('rejects an unknown source and an over-long query before any request', async () => {
+    const unknownSource = await handleListPrompts(client(), { source: 'mine' });
+    const longQuery = await handleListPrompts(client(), { query: 'x'.repeat(101) });
+    expect(unknownSource.isError).toBe(true);
+    expect(longQuery.isError).toBe(true);
+    expect(requestedPaths()).toEqual([]);
+  });
+
+  it('takes an optional query and source for list and only a slug for get', () => {
+    expect(Object.keys(ListPromptsShape)).toEqual(['query', 'source']);
     expect(Object.keys(GetPromptShape)).toEqual(['slug']);
   });
 });
@@ -174,11 +200,11 @@ describe('SERVER_INSTRUCTIONS', () => {
 });
 
 describe('prompt tools over MCP', () => {
-  it('registers one prompts tool with the list and get actions, and a slug for get', async () => {
+  it('registers one prompts tool with the list and get actions, a query and source for list, and a slug for get', async () => {
     await withMcpClient(async (mcp) => {
       const { tools } = await mcp.listTools();
       const prompts = tools.find((tool) => tool.name === 'prompts');
-      expect(Object.keys(prompts?.inputSchema.properties ?? {}).sort()).toEqual(['action', 'slug']);
+      expect(Object.keys(prompts?.inputSchema.properties ?? {}).sort()).toEqual(['action', 'query', 'slug', 'source']);
       expect(prompts?.inputSchema.required).toEqual(['action']);
       expect(prompts?.description).toContain('get (slug)');
       expect(tools.some((tool) => tool.name === 'list_prompts' || tool.name === 'get_prompt')).toBe(false);
@@ -203,6 +229,26 @@ describe('prompt tools over MCP', () => {
       expect(toolHeaders()).toEqual(['prompts', 'prompts']);
       expect(actionHeaders()).toEqual(['list', 'get']);
     });
+  });
+
+  it('counts the recipes as listed only when the list carried an official prompt', async () => {
+    const community = [{ slug: 'theirs', title: 'Theirs', description: 'Shared.', source: 'community', visibility: 'public' }];
+    fetchMock.mockImplementation(async (url) => {
+      const parsed = new URL(url);
+      if (parsed.pathname === '/api/prompts' && parsed.searchParams.get('source') === 'community') {
+        return json(200, { success: true, prompts: community });
+      }
+      return apiResponse(url);
+    });
+    const knownHeaders = (): Array<string | undefined> =>
+      fetchMock.mock.calls.map(([, init]) => (init.headers as Record<string, string>)[MCP_RECIPES_KNOWN_HEADER]);
+    await withMcpClient(async (mcp) => {
+      await mcp.callTool({ name: 'prompts', arguments: { action: 'list', source: 'community' } });
+      await mcp.callTool({ name: 'prompts', arguments: { action: 'list', source: 'community' } });
+      await mcp.callTool({ name: 'prompts', arguments: { action: 'list' } });
+      await mcp.callTool({ name: 'prompts', arguments: { action: 'list' } });
+    });
+    expect(knownHeaders()).toEqual(['false', 'false', 'false', 'true']);
   });
 
   it('keeps generate_video pointing topic-shaped requests back at the recipes', async () => {

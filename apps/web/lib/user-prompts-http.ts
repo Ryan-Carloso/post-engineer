@@ -9,7 +9,8 @@ import { logger } from '@/lib/logger';
 import { applyRateLimit, type RateLimitProfile } from '@/lib/rate-limit';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { UserPromptStoreError, type UserPromptRow } from '@/lib/user-prompts';
-import { PromptVisibilitySchema, type PromptSource, type PromptVisibility } from '@/lib/contracts/prompts';
+import { ListPromptsQuerySchema, PromptVisibilitySchema, type PromptSource, type PromptVisibility } from '@/lib/contracts/prompts';
+import type { PromptListFilter } from '@/lib/prompt-search';
 
 export interface PromptCaller {
   userId: string | null;
@@ -132,4 +133,17 @@ export function promptSummaryBody(row: UserPromptRow, source: PromptSource): Pro
 
 export function promptDetailBody(row: UserPromptRow, source: PromptSource): PromptSummaryBody & { prompt: string } {
   return { ...promptSummaryBody(row, source), prompt: row.body };
+}
+
+export function readListFilter(request: Request, route: string): { ok: true; filter: PromptListFilter } | { ok: false; response: NextResponse } {
+  const raw: Record<string, string> = {};
+  for (const [key, value] of new URL(request.url).searchParams) raw[key] = value;
+  const parsed = ListPromptsQuerySchema.safeParse(raw);
+  if (parsed.success) return { ok: true, filter: parsed.data };
+  const issue = parsed.error.issues[0];
+  const field = issue.path.length > 0 ? issue.path.join('.') : undefined;
+  return {
+    ok: false,
+    response: apiErrorResponse(400, issue.message, { route, code: ERROR_CODES.VALIDATION_FAILED, field }),
+  };
 }

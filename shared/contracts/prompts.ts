@@ -73,9 +73,19 @@ export const DeleteUserPromptResponseSchema = z.object({
   success: z.literal(true),
 });
 
+export const PROMPT_SEARCH_MAX_LENGTH = 100;
+
+export const ListPromptsQuerySchema = z
+  .object({
+    q: z.string().max(PROMPT_SEARCH_MAX_LENGTH).optional(),
+    source: PromptSourceSchema.optional(),
+  })
+  .strict();
+
 export const listPrompts = defineEndpoint({
   method: 'GET',
   path: '/api/prompts',
+  query: ListPromptsQuerySchema,
   response: ListPromptsResponseSchema,
 });
 

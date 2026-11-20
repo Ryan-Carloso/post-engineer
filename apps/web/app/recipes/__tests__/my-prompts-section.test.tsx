@@ -27,7 +27,7 @@ interface StoredPrompt {
   title: string;
   description: string;
   prompt: string;
-  source: 'own' | 'community';
+  source: 'official' | 'own' | 'community';
   visibility: 'private' | 'public';
 }
 
@@ -247,6 +247,30 @@ describe('MyPromptsSection', () => {
     fireEvent.click(within(row).getByRole('button', { name: 'Copy' }));
     await waitFor(() => expect(window.navigator.clipboard.writeText).toHaveBeenCalledWith('Text of mine'));
     expect(await within(row).findByRole('button', { name: 'Copied!' })).toBeInTheDocument();
+  });
+
+  it('filters the own and community prompts by what the user types and says when nothing matches', async () => {
+    stored = [own('alpha', 'private'), own('beta', 'public'), own('gamma-shared', 'public', { source: 'community' })];
+    renderSection();
+    const box = await screen.findByTestId('user-prompts-search');
+    fireEvent.change(box, { target: { value: 'ALPHA' } });
+    expect(screen.getByTestId('user-prompt-alpha')).toBeInTheDocument();
+    expect(screen.queryByTestId('user-prompt-beta')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('user-prompt-gamma-shared')).not.toBeInTheDocument();
+    fireEvent.change(box, { target: { value: 'gamma' } });
+    expect(screen.getByTestId('user-prompt-gamma-shared')).toBeInTheDocument();
+    expect(screen.queryByText('No prompt matches your search.')).not.toBeInTheDocument();
+    fireEvent.change(box, { target: { value: 'zzz-nothing' } });
+    expect(screen.getByText('No prompt matches your search.')).toBeInTheDocument();
+    fireEvent.change(box, { target: { value: '' } });
+    expect(screen.getByTestId('user-prompt-beta')).toBeInTheDocument();
+  });
+
+  it('hides the search box while the user has no own or community prompts, even though the list carries the official ones', async () => {
+    stored = [own('daily-news', 'public', { source: 'official' })];
+    renderSection();
+    await screen.findByText('You have no prompts yet.');
+    expect(screen.queryByTestId('user-prompts-search')).not.toBeInTheDocument();
   });
 
   it('shows community prompts under their own heading with a copy button only', async () => {
