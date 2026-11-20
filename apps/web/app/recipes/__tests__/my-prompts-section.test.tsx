@@ -28,16 +28,15 @@ interface StoredPrompt {
   description: string;
   prompt: string;
   source: 'own' | 'community';
-  status: 'private' | 'pending' | 'approved' | 'rejected' | null;
-  rejectionReason: string | null;
+  visibility: 'private' | 'public';
 }
 
 let stored: StoredPrompt[];
 let requests: Array<{ method: string; path: string; body: unknown }>;
 let nextFailure: { status: number; body: unknown } | null;
 
-function own(slug: string, status: StoredPrompt['status'], extra: Partial<StoredPrompt> = {}): StoredPrompt {
-  return { slug, title: `Title ${slug}`, description: `About ${slug}`, prompt: `Text of ${slug}`, source: 'own', status, rejectionReason: null, ...extra };
+function own(slug: string, visibility: StoredPrompt['visibility'], extra: Partial<StoredPrompt> = {}): StoredPrompt {
+  return { slug, title: `Title ${slug}`, description: `About ${slug}`, prompt: `Text of ${slug}`, source: 'own', visibility, ...extra };
 }
 
 function summary(entry: StoredPrompt): Record<string, unknown> {
@@ -56,21 +55,16 @@ async function handle(url: string, init: RequestInit | undefined): Promise<Respo
   }
   if (url === '/api/prompts' && method === 'GET') return Response.json({ success: true, prompts: stored.map(summary) });
   if (url === '/api/prompts' && method === 'POST') {
-    const draft = body as { slug: string; title: string; description: string; prompt: string };
-    const created = own(draft.slug, 'private', { title: draft.title, description: draft.description, prompt: draft.prompt });
+    const draft = body as { slug: string; title: string; description: string; prompt: string; visibility: StoredPrompt['visibility'] };
+    const created = own(draft.slug, draft.visibility, { title: draft.title, description: draft.description, prompt: draft.prompt });
     stored.push(created);
     return Response.json({ success: true, prompt: created }, { status: 201 });
   }
-  const match = /^\/api\/prompts\/([^/]+)(\/visibility)?$/.exec(url);
+  const match = /^\/api\/prompts\/([^/]+)$/.exec(url);
   const entry = match === null ? undefined : stored.find((candidate) => candidate.slug === decodeURIComponent(match[1]));
   if (match === null || entry === undefined) return Response.json({ success: false, code: 'PROMPT_NOT_FOUND' }, { status: 404 });
-  if (match[2] !== undefined) {
-    entry.status = (body as { visibility: string }).visibility === 'public' ? 'pending' : 'private';
-    return Response.json({ success: true, prompt: entry });
-  }
   if (method === 'PATCH') {
     Object.assign(entry, body);
-    if (entry.status === 'approved') entry.status = 'pending';
     return Response.json({ success: true, prompt: entry });
   }
   if (method === 'DELETE') {
@@ -117,14 +111,11 @@ describe('MyPromptsSection', () => {
     expect(await screen.findByText('You have no prompts yet.')).toBeInTheDocument();
   });
 
-  it('lists the own prompts with their status and no community prompt among them', async () => {
-    stored = [own('mine', 'private'), own('waiting', 'pending'), own('shared', 'approved'), own('nope', 'rejected', { rejectionReason: 'Too vague' })];
+  it('lists the own prompts with their visibility badge', async () => {
+    stored = [own('mine', 'private'), own('shared', 'public')];
     renderSection();
-    expect(await screen.findByTestId('user-prompt-status-mine')).toHaveTextContent('Private');
-    expect(screen.getByTestId('user-prompt-status-waiting')).toHaveTextContent('Waiting for review');
-    expect(screen.getByTestId('user-prompt-status-shared')).toHaveTextContent('Public');
-    expect(screen.getByTestId('user-prompt-status-nope')).toHaveTextContent('Rejected');
-    expect(screen.getByText('Reviewer note: Too vague')).toBeInTheDocument();
+    expect(await screen.findByTestId('user-prompt-visibility-mine')).toHaveTextContent('Private');
+    expect(screen.getByTestId('user-prompt-visibility-shared')).toHaveTextContent('Public');
   });
 
   it('creates a prompt, closes the form and shows it as private', async () => {
@@ -138,13 +129,29 @@ describe('MyPromptsSection', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     expect(await screen.findByTestId('user-prompt-my-prompt')).toBeInTheDocument();
     expect(screen.queryByTestId('user-prompt-form')).not.toBeInTheDocument();
-    expect(screen.getByTestId('user-prompt-status-my-prompt')).toHaveTextContent('Private');
+    expect(screen.getByTestId('user-prompt-visibility-my-prompt')).toHaveTextContent('Private');
     expect(requests.find((request) => request.method === 'POST')?.body).toEqual({
       slug: 'my-prompt',
       title: 'My prompt',
       description: 'About it',
       prompt: 'Write three beats.',
+      visibility: 'private',
     });
+  });
+
+  it('creates a public prompt in one step and warns that anyone can read it', async () => {
+    renderSection();
+    await screen.findByText('You have no prompts yet.');
+    fireEvent.click(screen.getByTestId('new-user-prompt-btn'));
+    expect(screen.queryByRole('note')).not.toBeInTheDocument();
+    fill('Slug', 'open-one');
+    fill('Title', 'Open one');
+    fill('Prompt text', 'Anyone may read this.');
+    fireEvent.click(screen.getByLabelText(/Public: anyone can read and copy it/));
+    expect(screen.getByRole('note')).toHaveTextContent('Do not put secrets in it');
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(await screen.findByTestId('user-prompt-visibility-open-one')).toHaveTextContent('Public');
+    expect(requests.find((request) => request.method === 'POST')?.body).toMatchObject({ visibility: 'public' });
   });
 
   it('keeps Save disabled until the slug is valid and the title and text are filled', async () => {
@@ -188,39 +195,31 @@ describe('MyPromptsSection', () => {
     await waitFor(() => expect(screen.queryByTestId('user-prompt-form')).not.toBeInTheDocument());
     expect(requests.find((request) => request.method === 'PATCH')).toMatchObject({
       path: '/api/prompts/mine',
-      body: { title: 'Renamed', description: 'About mine', prompt: 'Text of mine' },
+      body: { title: 'Renamed', description: 'About mine', prompt: 'Text of mine', visibility: 'private' },
     });
     expect(await screen.findByText('Renamed')).toBeInTheDocument();
   });
 
-  it('warns before editing an approved prompt and shows it waiting for review afterwards', async () => {
-    stored = [own('shared', 'approved')];
-    renderSection();
-    const row = await screen.findByTestId('user-prompt-shared');
-    fireEvent.click(within(row).getByRole('button', { name: 'Edit' }));
-    expect(await screen.findByRole('note')).toHaveTextContent('goes back to review');
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-    await waitFor(() => expect(screen.getByTestId('user-prompt-status-shared')).toHaveTextContent('Waiting for review'));
-  });
-
-  it('asks to publish a private prompt and offers to withdraw it once pending', async () => {
+  it('makes a private prompt public and back to private with the row button, no review in between', async () => {
     stored = [own('mine', 'private')];
     renderSection();
     const row = await screen.findByTestId('user-prompt-mine');
     expect(within(row).queryByRole('button', { name: 'Make private' })).not.toBeInTheDocument();
-    fireEvent.click(within(row).getByRole('button', { name: 'Ask to publish' }));
-    await waitFor(() => expect(screen.getByTestId('user-prompt-status-mine')).toHaveTextContent('Waiting for review'));
-    expect(requests.find((request) => request.path.endsWith('/visibility'))?.body).toEqual({ visibility: 'public' });
+    fireEvent.click(within(row).getByRole('button', { name: 'Make public' }));
+    await waitFor(() => expect(screen.getByTestId('user-prompt-visibility-mine')).toHaveTextContent('Public'));
+    expect(requests.find((request) => request.method === 'PATCH')?.body).toEqual({ visibility: 'public' });
     fireEvent.click(within(screen.getByTestId('user-prompt-mine')).getByRole('button', { name: 'Make private' }));
-    await waitFor(() => expect(screen.getByTestId('user-prompt-status-mine')).toHaveTextContent('Private'));
+    await waitFor(() => expect(screen.getByTestId('user-prompt-visibility-mine')).toHaveTextContent('Private'));
   });
 
-  it('lets a rejected prompt be sent for review again', async () => {
-    stored = [own('nope', 'rejected', { rejectionReason: 'Too vague' })];
+  it('shows a localized message when making a prompt public fails because the slug is taken', async () => {
+    stored = [own('mine', 'private')];
     renderSection();
-    const row = await screen.findByTestId('user-prompt-nope');
-    fireEvent.click(within(row).getByRole('button', { name: 'Ask to publish' }));
-    await waitFor(() => expect(screen.getByTestId('user-prompt-status-nope')).toHaveTextContent('Waiting for review'));
+    const row = await screen.findByTestId('user-prompt-mine');
+    nextFailure = { status: 409, body: { success: false, error: 'duplicate key value', code: 'PROMPT_SLUG_TAKEN' } };
+    fireEvent.click(within(row).getByRole('button', { name: 'Make public' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('another public prompt uses it');
+    expect(screen.getByTestId('user-prompt-visibility-mine')).toHaveTextContent('Private');
   });
 
   it('deletes only after the user confirms', async () => {
@@ -248,13 +247,13 @@ describe('MyPromptsSection', () => {
   });
 
   it('shows community prompts under their own heading with a copy button only', async () => {
-    stored = [own('mine', 'private'), own('theirs', null, { source: 'community' })];
+    stored = [own('mine', 'private'), own('theirs', 'public', { source: 'community' })];
     renderSection();
     const community = await screen.findByTestId('user-prompt-theirs');
-    expect(screen.getByRole('heading', { name: 'Community prompts' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Public prompts from the community' })).toBeInTheDocument();
     expect(within(community).getByText('Community')).toBeInTheDocument();
     expect(within(community).getByRole('button', { name: 'Copy' })).toBeInTheDocument();
-    for (const name of ['Edit', 'Delete', 'Ask to publish', 'Make private']) {
+    for (const name of ['Edit', 'Delete', 'Make public', 'Make private']) {
       expect(within(community).queryByRole('button', { name })).not.toBeInTheDocument();
     }
   });
@@ -275,9 +274,9 @@ describe('MyPromptsSection', () => {
     const row = await screen.findByTestId('user-prompt-mine');
     let release: (response: Response) => void = () => undefined;
     vi.stubGlobal('fetch', vi.fn<typeof fetch>(() => new Promise<Response>((resolve) => { release = resolve; })));
-    fireEvent.click(within(row).getByRole('button', { name: 'Ask to publish' }));
+    fireEvent.click(within(row).getByRole('button', { name: 'Make public' }));
     await waitFor(() => expect(within(row).getByRole('button', { name: 'Edit' })).toBeDisabled());
     expect(within(row).getByRole('button', { name: 'Delete' })).toBeDisabled();
-    release(Response.json({ success: true, prompt: own('mine', 'pending') }));
+    release(Response.json({ success: true, prompt: own('mine', 'public') }));
   });
 });

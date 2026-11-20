@@ -189,7 +189,7 @@ The server offers **18 intent tools**, not one tool per API endpoint. A tool is 
 | `voices` | `list`, `preview`, `list_clones`, `create_clone`, `get_clone`, `preview_clone`, `delete_clone` | House voices and voice clones. |
 | `accounts` | `list`, `connect`, `disconnect`, `get_persona_publishing`, `set_persona_publishing`, `list_boards` | Social accounts and the accounts each persona publishes to. |
 | `tool_config` | `get`, `save` | The saved research/stock tool configuration: which search tool (Tavily/Exa/own) and stock sources (Pexels/Pixabay/Coverr) the account has keys for. `save` replaces the whole set; keys are stored encrypted and are never returned in full — `get` shows presence and last 4 characters only. |
-| `prompt_library` | `create`, `update`, `delete`, `set_visibility`, `review_queue`, `review` | The account's own prompts, private by default. `set_visibility` `public` asks the reviewers to publish a prompt and it stays private until one approves it; editing an approved prompt sends it back to review. `review_queue` and `review` are for prompt reviewers (`PROMPT_REVIEWER_USER_IDS` on the server): `review` approves or rejects only the text whose `contentHash` was read in `review_queue`. Read and follow a prompt with `prompts`; prompts from other users come back with an unverified-content notice. |
+| `prompt_library` | `create`, `update`, `delete` | The account's own prompts, private by default; only the owner can change one. `visibility` `public` makes a prompt readable by anyone (no review while the product is in beta), `private` keeps it to the account. Read and follow prompts with `prompts`: `list` and `get` return the official prompts, the account's own (private ones included) and other users' public ones, which come back with an unverified-content notice. |
 | `schedules` | `list`, `cancel`, `get_slot`, `update_slot_title`, `delete_slot` | Future slots. |
 | `posts` | `list`, `get` | Published and scheduled posts. |
 | `insights` | `post_metrics`, `retention_curve` | How posts performed. |
@@ -216,7 +216,7 @@ Batch (2-12 videos) needs a `batchKey` and rejects `idempotencyKey`; one video t
 
 ### Measuring the size of `tools/list`
 
-See "Measuring the `tools/list` payload" above. The 18 tools weigh about 66 KB on the stdio server (the 56 tools they replace weighed about 102 KB).
+See "Measuring the `tools/list` payload" above. The 18 tools weigh about 65 KB on the stdio server (the 56 tools they replace weighed about 102 KB).
 
 ### Breaking change: the 56 old tool names are gone
 

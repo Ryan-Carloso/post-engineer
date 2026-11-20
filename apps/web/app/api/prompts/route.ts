@@ -6,13 +6,14 @@ import { ERROR_CODES, errorMessage } from '@/lib/error-codes';
 import { isOfficialPromptSlug, listHubPrompts } from '@/lib/recipes/hub-prompts';
 import { RATE_LIMITS } from '@/lib/rate-limit';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
-import { createUserPrompt, listApprovedUserPrompts, listOwnUserPrompts } from '@/lib/user-prompts';
+import { createUserPrompt, listOwnUserPrompts, listPublicUserPrompts } from '@/lib/user-prompts';
 import {
   promptDetailBody,
   promptSummaryBody,
   readJsonBody,
+  requireOwner,
   resolvePromptCaller,
-  scopedKeyDenied,
+  slugTaken,
   storeFailure,
 } from '@/lib/user-prompts-http';
 
@@ -20,20 +21,15 @@ const GET_ROUTE = 'GET /api/prompts';
 const POST_ROUTE = 'POST /api/prompts';
 
 async function getHandler(request: Request): Promise<NextResponse> {
-  const caller = await resolvePromptCaller(request, GET_ROUTE, RATE_LIMITS.promptsRead);
+  const caller = await resolvePromptCaller(request, GET_ROUTE, RATE_LIMITS.promptsRead, { allowAnonymous: true });
   if (caller instanceof NextResponse) return caller;
   try {
     const db = createSupabaseServiceClient();
-    const own = caller.scopedKey ? [] : await listOwnUserPrompts(db, caller.userId);
-    const approved = await listApprovedUserPrompts(db);
-    const official = listHubPrompts().map((entry) => ({
-      ...entry,
-      source: 'official' as const,
-      status: null,
-      rejectionReason: null,
-    }));
+    const own = caller.userId === null || caller.scopedKey ? [] : await listOwnUserPrompts(db, caller.userId);
+    const publicPrompts = await listPublicUserPrompts(db);
+    const official = listHubPrompts().map((entry) => ({ ...entry, source: 'official' as const, visibility: 'public' as const }));
     const taken = new Set([...official, ...own].map((entry) => entry.slug));
-    const community = approved
+    const community = publicPrompts
       .filter((row) => row.owner_id !== caller.userId && !taken.has(row.slug))
       .map((row) => promptSummaryBody(row, 'community'));
     return NextResponse.json({
@@ -46,12 +42,13 @@ async function getHandler(request: Request): Promise<NextResponse> {
 }
 
 async function postHandler(request: Request): Promise<NextResponse> {
-  const caller = await resolvePromptCaller(request, POST_ROUTE, RATE_LIMITS.promptsWrite);
+  const caller = await resolvePromptCaller(request, POST_ROUTE, RATE_LIMITS.promptsWrite, { allowAnonymous: false });
   if (caller instanceof NextResponse) return caller;
-  if (caller.scopedKey) return scopedKeyDenied(POST_ROUTE);
+  const owner = requireOwner(caller, POST_ROUTE);
+  if (owner instanceof NextResponse) return owner;
   const parsed = await readJsonBody(request, CreateUserPromptBodySchema, POST_ROUTE);
   if (!parsed.ok) return parsed.response;
-  const { slug, title, description, prompt } = parsed.body;
+  const { slug, title, description, prompt, visibility } = parsed.body;
   if (isOfficialPromptSlug(slug)) {
     return apiErrorResponse(409, errorMessage(ERROR_CODES.PROMPT_SLUG_RESERVED), {
       route: POST_ROUTE,
@@ -60,19 +57,14 @@ async function postHandler(request: Request): Promise<NextResponse> {
     });
   }
   try {
-    const outcome = await createUserPrompt(createSupabaseServiceClient(), caller.userId, {
+    const outcome = await createUserPrompt(createSupabaseServiceClient(), owner.userId, {
       slug,
       title,
       description: description ?? '',
       prompt,
+      visibility: visibility ?? 'private',
     });
-    if (outcome.kind === 'slug_taken') {
-      return apiErrorResponse(409, errorMessage(ERROR_CODES.PROMPT_SLUG_TAKEN), {
-        route: POST_ROUTE,
-        code: ERROR_CODES.PROMPT_SLUG_TAKEN,
-        field: 'slug',
-      });
-    }
+    if (outcome.kind !== 'saved') return slugTaken(POST_ROUTE);
     return NextResponse.json({ success: true, prompt: promptDetailBody(outcome.row, 'own') }, { status: 201 });
   } catch (error) {
     return storeFailure(POST_ROUTE, error);

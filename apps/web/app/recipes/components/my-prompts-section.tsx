@@ -8,7 +8,6 @@ import { SpinnerIcon } from '@/lib/ui';
 import {
   useCreatePromptMutation,
   useDeletePromptMutation,
-  useSetPromptVisibilityMutation,
   useUpdatePromptMutation,
   useUserPromptsQuery,
 } from '@/lib/use-user-prompts';
@@ -17,9 +16,9 @@ import type { PromptSummary } from '@/lib/user-prompts-types';
 import UserPromptForm from './user-prompt-form';
 import UserPromptRow from './user-prompt-row';
 
-const EMPTY_DRAFT: PromptDraft = { slug: '', title: '', description: '', prompt: '' };
+const EMPTY_DRAFT: PromptDraft = { slug: '', title: '', description: '', prompt: '', visibility: 'private' };
 
-type FormState = { mode: 'new' } | { mode: 'edit'; draft: PromptDraft; approved: boolean };
+type FormState = { mode: 'new' } | { mode: 'edit'; draft: PromptDraft };
 
 export default function MyPromptsSection(): React.ReactElement {
   const { t } = useI18n();
@@ -27,7 +26,6 @@ export default function MyPromptsSection(): React.ReactElement {
   const createMutation = useCreatePromptMutation();
   const updateMutation = useUpdatePromptMutation();
   const deleteMutation = useDeletePromptMutation();
-  const visibilityMutation = useSetPromptVisibilityMutation();
   const { copied, copy } = useCopyText();
 
   const [form, setForm] = useState<FormState | null>(null);
@@ -42,7 +40,6 @@ export default function MyPromptsSection(): React.ReactElement {
     createMutation.isPending ||
     updateMutation.isPending ||
     deleteMutation.isPending ||
-    visibilityMutation.isPending ||
     loadingSlug !== null;
 
   const closeForm = (): void => {
@@ -67,8 +64,13 @@ export default function MyPromptsSection(): React.ReactElement {
     const detail = result.body.prompt;
     setForm({
       mode: 'edit',
-      approved: prompt.status === 'approved',
-      draft: { slug: detail.slug, title: detail.title, description: detail.description, prompt: detail.prompt },
+      draft: {
+        slug: detail.slug,
+        title: detail.title,
+        description: detail.description,
+        prompt: detail.prompt,
+        visibility: detail.visibility,
+      },
     });
   };
 
@@ -91,7 +93,12 @@ export default function MyPromptsSection(): React.ReactElement {
       form?.mode === 'edit'
         ? await updateMutation.mutateAsync({
           slug: draft.slug,
-          changes: { title: draft.title, description: draft.description, prompt: draft.prompt },
+          changes: {
+            title: draft.title,
+            description: draft.description,
+            prompt: draft.prompt,
+            visibility: draft.visibility,
+          },
         })
         : await createMutation.mutateAsync(draft);
     if (result.success) {
@@ -108,9 +115,12 @@ export default function MyPromptsSection(): React.ReactElement {
     if (!result.success) setFailure(result);
   };
 
-  const setVisibility = async (prompt: PromptSummary, visibility: 'public' | 'private'): Promise<void> => {
+  const toggleVisibility = async (prompt: PromptSummary): Promise<void> => {
     setFailure(null);
-    const result = await visibilityMutation.mutateAsync({ slug: prompt.slug, visibility });
+    const result = await updateMutation.mutateAsync({
+      slug: prompt.slug,
+      changes: { visibility: prompt.visibility === 'public' ? 'private' : 'public' },
+    });
     if (!result.success) setFailure(result);
   };
 
@@ -136,7 +146,6 @@ export default function MyPromptsSection(): React.ReactElement {
           key={form.mode === 'edit' ? form.draft.slug : 'new'}
           mode={form.mode}
           initial={form.mode === 'edit' ? form.draft : EMPTY_DRAFT}
-          approved={form.mode === 'edit' && form.approved}
           pending={formPending}
           errorMessage={errorMessage}
           onSubmit={(draft) => void submit(draft)}
@@ -177,8 +186,7 @@ export default function MyPromptsSection(): React.ReactElement {
               copied={copied && copiedSlug === prompt.slug}
               onCopy={() => void copyPrompt(prompt)}
               onEdit={() => void openEdit(prompt)}
-              onPublish={() => void setVisibility(prompt, 'public')}
-              onWithdraw={() => void setVisibility(prompt, 'private')}
+              onToggleVisibility={() => void toggleVisibility(prompt)}
               onDelete={() => void remove(prompt)}
             />
           ))}

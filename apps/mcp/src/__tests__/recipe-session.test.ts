@@ -52,12 +52,12 @@ function json(status: number, payload: unknown): Response {
 function apiResponse(url: string): Response {
   const path = new URL(url).pathname;
   if (path === '/api/prompts') {
-    return json(200, { success: true, prompts: [{ slug: 'place-spotlight', title: 'Place', description: 'A place.', source: 'official', status: null, rejectionReason: null }] });
+    return json(200, { success: true, prompts: [{ slug: 'place-spotlight', title: 'Place', description: 'A place.', source: 'official', visibility: 'public' }] });
   }
   if (path === '/api/prompts/place-spotlight') {
     return json(200, {
       success: true,
-      prompt: { slug: 'place-spotlight', title: 'Place', description: 'A place.', source: 'official', status: null, rejectionReason: null, prompt: 'Place recipe text.' },
+      prompt: { slug: 'place-spotlight', title: 'Place', description: 'A place.', source: 'official', visibility: 'public', prompt: 'Place recipe text.' },
     });
   }
   if (path.startsWith('/api/prompts/')) {

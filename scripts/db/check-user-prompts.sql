@@ -48,78 +48,42 @@ values (
 );
 
 select pg_temp.expect_value(
-  $$select status from public.user_prompts where id = 'cccccccc-cccc-cccc-cccc-cccccccccc01'$$,
+  $$select visibility from public.user_prompts where id = 'cccccccc-cccc-cccc-cccc-cccccccccc01'$$,
   'private', 'a new prompt starts private');
+
+update public.user_prompts set created_at = now() - interval '1 day', updated_at = now() - interval '1 day'
+  where id = 'cccccccc-cccc-cccc-cccc-cccccccccc01';
+update public.user_prompts set title = 'Renamed' where id = 'cccccccc-cccc-cccc-cccc-cccccccccc01';
 select pg_temp.expect_value(
-  $$select length(content_hash)::text from public.user_prompts where id = 'cccccccc-cccc-cccc-cccc-cccccccccc01'$$,
-  '64', 'the trigger fills a sha256 content hash on insert');
+  $$select (updated_at > created_at)::text from public.user_prompts where id = 'cccccccc-cccc-cccc-cccc-cccccccccc01'$$,
+  'true', 'an update moves updated_at forward');
 
-create temp table first_hash as
-  select content_hash from public.user_prompts where id = 'cccccccc-cccc-cccc-cccc-cccccccccc01';
-
-update public.user_prompts set body = 'Second body' where id = 'cccccccc-cccc-cccc-cccc-cccccccccc01';
+update public.user_prompts set visibility = 'public' where id = 'cccccccc-cccc-cccc-cccc-cccccccccc01';
 select pg_temp.expect_value(
-  $$select (content_hash <> (select content_hash from first_hash))::text from public.user_prompts where id = 'cccccccc-cccc-cccc-cccc-cccccccccc01'$$,
-  'true', 'editing the body changes the content hash');
-
-insert into public.user_prompts (id, owner_id, slug, title, description, body) values
-  ('cccccccc-cccc-cccc-cccc-cccccccccc11', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'shift-a', 'AB', 'C', 'same'),
-  ('cccccccc-cccc-cccc-cccc-cccccccccc12', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'shift-b', 'A', 'BC', 'same');
-select pg_temp.expect_value(
-  $$select (count(distinct content_hash))::text from public.user_prompts where id in ('cccccccc-cccc-cccc-cccc-cccccccccc11', 'cccccccc-cccc-cccc-cccc-cccccccccc12')$$,
-  '2', 'moving a character between title and description changes the content hash');
-
-select pg_temp.expect_state(
-  $$update public.user_prompts set status = 'approved' where id = 'cccccccc-cccc-cccc-cccc-cccccccccc01'$$,
-  '23514', 'approved without an approved hash is rejected');
-select pg_temp.expect_state(
-  $$update public.user_prompts set status = 'approved', approved_hash = content_hash where id = 'cccccccc-cccc-cccc-cccc-cccccccccc01'$$,
-  '23514', 'approved without a reviewer is rejected');
-select pg_temp.expect_state(
-  $$update public.user_prompts set status = 'rejected', reviewed_by = 'dddddddd-dddd-dddd-dddd-dddddddddddd', reviewed_at = now() where id = 'cccccccc-cccc-cccc-cccc-cccccccccc01'$$,
-  '23514', 'rejected without a reason is rejected');
-select pg_temp.expect_state(
-  $$update public.user_prompts set approved_hash = content_hash where id = 'cccccccc-cccc-cccc-cccc-cccccccccc01'$$,
-  '23514', 'an approved hash on a non-approved prompt is rejected');
-select pg_temp.expect_state(
-  $$update public.user_prompts set status = 'banana' where id = 'cccccccc-cccc-cccc-cccc-cccccccccc01'$$,
-  '23514', 'an unknown status is rejected');
-
-update public.user_prompts
-set status = 'approved', approved_hash = content_hash,
-    reviewed_by = 'dddddddd-dddd-dddd-dddd-dddddddddddd', reviewed_at = now()
-where id = 'cccccccc-cccc-cccc-cccc-cccccccccc01';
-select pg_temp.expect_value(
-  $$select status from public.user_prompts where id = 'cccccccc-cccc-cccc-cccc-cccccccccc01'$$,
-  'approved', 'a reviewer can approve a prompt');
-
-update public.user_prompts set updated_at = now() where id = 'cccccccc-cccc-cccc-cccc-cccccccccc01';
-select pg_temp.expect_value(
-  $$select status from public.user_prompts where id = 'cccccccc-cccc-cccc-cccc-cccccccccc01'$$,
-  'approved', 'a write that keeps the text keeps the approval');
-
-update public.user_prompts set body = 'Sneaky body' where id = 'cccccccc-cccc-cccc-cccc-cccccccccc01';
-select pg_temp.expect_value(
-  $$select status || ':' || (approved_hash is null)::text || ':' || (reviewed_by is null)::text from public.user_prompts where id = 'cccccccc-cccc-cccc-cccc-cccccccccc01'$$,
-  'pending:true:true', 'editing an approved prompt sends it back to pending and clears the approval');
-
-update public.user_prompts
-set status = 'approved', approved_hash = content_hash,
-    reviewed_by = 'dddddddd-dddd-dddd-dddd-dddddddddddd', reviewed_at = now()
-where id = 'cccccccc-cccc-cccc-cccc-cccccccccc01';
+  $$select visibility from public.user_prompts where id = 'cccccccc-cccc-cccc-cccc-cccccccccc01'$$,
+  'public', 'an owner can make a prompt public without a review');
 
 insert into public.user_prompts (id, owner_id, slug, title, body)
 values ('cccccccc-cccc-cccc-cccc-cccccccccc02', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'my-prompt', 'Other', 'Other body');
+select pg_temp.expect_value(
+  $$select visibility from public.user_prompts where id = 'cccccccc-cccc-cccc-cccc-cccccccccc02'$$,
+  'private', 'two owners can keep the same private slug while one slug is public');
 select pg_temp.expect_state(
-  $$update public.user_prompts
-    set status = 'approved', approved_hash = content_hash,
-        reviewed_by = 'dddddddd-dddd-dddd-dddd-dddddddddddd', reviewed_at = now()
-    where id = 'cccccccc-cccc-cccc-cccc-cccccccccc02'$$,
-  '23505', 'two approved prompts cannot share a slug');
+  $$update public.user_prompts set visibility = 'public' where id = 'cccccccc-cccc-cccc-cccc-cccccccccc02'$$,
+  '23505', 'two public prompts cannot share a slug');
+
+update public.user_prompts set visibility = 'private' where id = 'cccccccc-cccc-cccc-cccc-cccccccccc01';
+select pg_temp.expect_state(
+  $$update public.user_prompts set visibility = 'public' where id = 'cccccccc-cccc-cccc-cccc-cccccccccc02'$$,
+  'ok', 'a public slug is free again once its prompt goes private');
+
 select pg_temp.expect_state(
   $$insert into public.user_prompts (owner_id, slug, title, body)
     values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'my-prompt', 'Dup', 'Dup body')$$,
   '23505', 'an owner cannot reuse a slug');
+select pg_temp.expect_state(
+  $$update public.user_prompts set visibility = 'approved' where id = 'cccccccc-cccc-cccc-cccc-cccccccccc01'$$,
+  '23514', 'an unknown visibility is rejected');
 select pg_temp.expect_state(
   $$insert into public.user_prompts (owner_id, slug, title, body)
     values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Bad Slug', 'T', 'B')$$,
@@ -142,9 +106,6 @@ select pg_temp.expect_state(
   $$insert into public.user_prompts (owner_id, slug, title, body)
     values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'from-session', 'T', 'B')$$,
   '42501', 'authenticated cannot write user_prompts');
-select pg_temp.expect_state(
-  $$update public.user_prompts set status = 'approved'$$,
-  '42501', 'authenticated cannot approve its own prompt');
 
 reset role;
 set local role anon;

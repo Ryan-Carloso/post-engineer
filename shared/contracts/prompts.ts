@@ -2,11 +2,11 @@ import { z } from 'zod';
 
 import { defineEndpoint } from './endpoint.js';
 
-export const USER_PROMPT_STATUSES = ['private', 'pending', 'approved', 'rejected'] as const;
+export const PROMPT_VISIBILITIES = ['private', 'public'] as const;
 
-export type UserPromptStatus = (typeof USER_PROMPT_STATUSES)[number];
+export type PromptVisibility = (typeof PROMPT_VISIBILITIES)[number];
 
-export const UserPromptStatusSchema = z.enum(USER_PROMPT_STATUSES);
+export const PromptVisibilitySchema = z.enum(PROMPT_VISIBILITIES);
 
 export const PROMPT_SOURCES = ['official', 'own', 'community'] as const;
 
@@ -21,18 +21,7 @@ export const USER_PROMPT_LIMITS = {
   title: 120,
   description: 500,
   prompt: 20000,
-  rejectionReason: 500,
 } as const;
-
-export const PROMPT_VISIBILITIES = ['public', 'private'] as const;
-
-export const PromptVisibilitySchema = z.enum(PROMPT_VISIBILITIES);
-
-export const PROMPT_REVIEW_DECISIONS = ['approve', 'reject'] as const;
-
-export const PromptReviewDecisionSchema = z.enum(PROMPT_REVIEW_DECISIONS);
-
-export const PROMPT_CONTENT_HASH_PATTERN = /^[0-9a-f]{64}$/;
 
 export const PromptSlugSchema = z
   .string()
@@ -44,8 +33,7 @@ export const PromptSummarySchema = z.object({
   title: z.string(),
   description: z.string(),
   source: PromptSourceSchema,
-  status: UserPromptStatusSchema.nullable(),
-  rejectionReason: z.string().nullable(),
+  visibility: PromptVisibilitySchema,
 });
 
 export const PromptDetailSchema = PromptSummarySchema.extend({
@@ -68,6 +56,7 @@ export const CreateUserPromptBodySchema = z
     title: z.string().min(1).max(USER_PROMPT_LIMITS.title),
     description: z.string().max(USER_PROMPT_LIMITS.description).optional(),
     prompt: z.string().min(1).max(USER_PROMPT_LIMITS.prompt),
+    visibility: PromptVisibilitySchema.optional(),
   })
   .strict();
 
@@ -76,44 +65,12 @@ export const UpdateUserPromptBodySchema = z
     title: z.string().min(1).max(USER_PROMPT_LIMITS.title).optional(),
     description: z.string().max(USER_PROMPT_LIMITS.description).optional(),
     prompt: z.string().min(1).max(USER_PROMPT_LIMITS.prompt).optional(),
-  })
-  .strict();
-
-export const SetPromptVisibilityBodySchema = z.object({ visibility: PromptVisibilitySchema }).strict();
-
-export const ReviewPromptBodySchema = z
-  .object({
-    decision: PromptReviewDecisionSchema,
-    contentHash: z.string().regex(PROMPT_CONTENT_HASH_PATTERN),
-    reason: z.string().min(1).max(USER_PROMPT_LIMITS.rejectionReason).optional(),
+    visibility: PromptVisibilitySchema.optional(),
   })
   .strict();
 
 export const DeleteUserPromptResponseSchema = z.object({
   success: z.literal(true),
-});
-
-export const PromptReviewEntrySchema = z.object({
-  id: z.string(),
-  slug: z.string(),
-  title: z.string(),
-  description: z.string(),
-  prompt: z.string(),
-  contentHash: z.string(),
-  authorId: z.string(),
-  requestedAt: z.string(),
-});
-
-export const ListPromptReviewQueueResponseSchema = z.object({
-  success: z.literal(true),
-  prompts: z.array(PromptReviewEntrySchema),
-  truncated: z.boolean(),
-});
-
-export const ReviewPromptResponseSchema = z.object({
-  success: z.literal(true),
-  slug: z.string(),
-  status: UserPromptStatusSchema,
 });
 
 export const listPrompts = defineEndpoint({
@@ -146,24 +103,4 @@ export const deleteUserPrompt = defineEndpoint({
   method: 'DELETE',
   path: '/api/prompts/:slug',
   response: DeleteUserPromptResponseSchema,
-});
-
-export const setPromptVisibility = defineEndpoint({
-  method: 'POST',
-  path: '/api/prompts/:slug/visibility',
-  body: SetPromptVisibilityBodySchema,
-  response: GetPromptResponseSchema,
-});
-
-export const listPromptReviewQueue = defineEndpoint({
-  method: 'GET',
-  path: '/api/admin/prompts',
-  response: ListPromptReviewQueueResponseSchema,
-});
-
-export const reviewPrompt = defineEndpoint({
-  method: 'POST',
-  path: '/api/admin/prompts/:id/review',
-  body: ReviewPromptBodySchema,
-  response: ReviewPromptResponseSchema,
 });

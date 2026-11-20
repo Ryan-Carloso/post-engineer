@@ -24,10 +24,6 @@ describe('user_prompts limits match the contract', () => {
     expect(checks.user_prompts_body_check).toContain(`char_length(body) <= ${USER_PROMPT_LIMITS.prompt}`);
   });
 
-  it('caps the rejection reason at the contract length', () => {
-    expect(checks.user_prompts_rejection_reason_check).toContain(`char_length(rejection_reason) <= ${USER_PROMPT_LIMITS.rejectionReason}`);
-  });
-
   it('accepts slugs with the same pattern the contract validates', () => {
     expect(checks.user_prompts_slug_check).toContain(`slug ~ '${USER_PROMPT_SLUG_PATTERN.source}'`);
     expect(USER_PROMPT_LIMITS.slug).toBe(64);

@@ -7382,23 +7382,15 @@
                               "own",
                               "community"
                             ],
-                            "description": "official: shipped with post-engineer. own: written by the caller. community: written by another user and approved by a reviewer, not verified by post-engineer."
+                            "description": "official: shipped with post-engineer. own: written by the caller. community: a public prompt written by another user, not verified by post-engineer."
                           },
-                          "status": {
+                          "visibility": {
                             "type": "string",
                             "enum": [
                               "private",
-                              "pending",
-                              "approved",
-                              "rejected"
+                              "public"
                             ],
-                            "nullable": true,
-                            "description": "The review status of an own prompt; null for official and community prompts."
-                          },
-                          "rejectionReason": {
-                            "type": "string",
-                            "nullable": true,
-                            "description": "Why a reviewer rejected an own prompt; null otherwise."
+                            "description": "Official and community prompts are public; an own prompt is private until its owner makes it public."
                           }
                         },
                         "required": [
@@ -7406,8 +7398,7 @@
                           "title",
                           "description",
                           "source",
-                          "status",
-                          "rejectionReason"
+                          "visibility"
                         ]
                       }
                     }
@@ -7505,23 +7496,15 @@
                             "own",
                             "community"
                           ],
-                          "description": "official: shipped with post-engineer. own: written by the caller. community: written by another user and approved by a reviewer, not verified by post-engineer."
+                          "description": "official: shipped with post-engineer. own: written by the caller. community: a public prompt written by another user, not verified by post-engineer."
                         },
-                        "status": {
+                        "visibility": {
                           "type": "string",
                           "enum": [
                             "private",
-                            "pending",
-                            "approved",
-                            "rejected"
+                            "public"
                           ],
-                          "nullable": true,
-                          "description": "The review status of an own prompt; null for official and community prompts."
-                        },
-                        "rejectionReason": {
-                          "type": "string",
-                          "nullable": true,
-                          "description": "Why a reviewer rejected an own prompt; null otherwise."
+                          "description": "Official and community prompts are public; an own prompt is private until its owner makes it public."
                         },
                         "prompt": {
                           "type": "string"
@@ -7532,8 +7515,7 @@
                         "title",
                         "description",
                         "source",
-                        "status",
-                        "rejectionReason",
+                        "visibility",
                         "prompt"
                       ]
                     }
@@ -7586,7 +7568,7 @@
             }
           },
           "409": {
-            "description": "The slug is reserved by an official prompt (PROMPT_SLUG_RESERVED) or already yours (PROMPT_SLUG_TAKEN).",
+            "description": "The slug is reserved by an official prompt (PROMPT_SLUG_RESERVED), already yours, or used by another public prompt (PROMPT_SLUG_TAKEN).",
             "content": {
               "application/json": {
                 "schema": {
@@ -7631,6 +7613,13 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 20000
+                  },
+                  "visibility": {
+                    "type": "string",
+                    "enum": [
+                      "private",
+                      "public"
+                    ]
                   }
                 },
                 "required": [
@@ -7690,23 +7679,15 @@
                             "own",
                             "community"
                           ],
-                          "description": "official: shipped with post-engineer. own: written by the caller. community: written by another user and approved by a reviewer, not verified by post-engineer."
+                          "description": "official: shipped with post-engineer. own: written by the caller. community: a public prompt written by another user, not verified by post-engineer."
                         },
-                        "status": {
+                        "visibility": {
                           "type": "string",
                           "enum": [
                             "private",
-                            "pending",
-                            "approved",
-                            "rejected"
+                            "public"
                           ],
-                          "nullable": true,
-                          "description": "The review status of an own prompt; null for official and community prompts."
-                        },
-                        "rejectionReason": {
-                          "type": "string",
-                          "nullable": true,
-                          "description": "Why a reviewer rejected an own prompt; null otherwise."
+                          "description": "Official and community prompts are public; an own prompt is private until its owner makes it public."
                         },
                         "prompt": {
                           "type": "string"
@@ -7717,8 +7698,7 @@
                         "title",
                         "description",
                         "source",
-                        "status",
-                        "rejectionReason",
+                        "visibility",
                         "prompt"
                       ]
                     }
@@ -7826,23 +7806,15 @@
                             "own",
                             "community"
                           ],
-                          "description": "official: shipped with post-engineer. own: written by the caller. community: written by another user and approved by a reviewer, not verified by post-engineer."
+                          "description": "official: shipped with post-engineer. own: written by the caller. community: a public prompt written by another user, not verified by post-engineer."
                         },
-                        "status": {
+                        "visibility": {
                           "type": "string",
                           "enum": [
                             "private",
-                            "pending",
-                            "approved",
-                            "rejected"
+                            "public"
                           ],
-                          "nullable": true,
-                          "description": "The review status of an own prompt; null for official and community prompts."
-                        },
-                        "rejectionReason": {
-                          "type": "string",
-                          "nullable": true,
-                          "description": "Why a reviewer rejected an own prompt; null otherwise."
+                          "description": "Official and community prompts are public; an own prompt is private until its owner makes it public."
                         },
                         "prompt": {
                           "type": "string"
@@ -7853,8 +7825,7 @@
                         "title",
                         "description",
                         "source",
-                        "status",
-                        "rejectionReason",
+                        "visibility",
                         "prompt"
                       ]
                     }
@@ -7906,6 +7877,16 @@
               }
             }
           },
+          "409": {
+            "description": "The slug is reserved by an official prompt (PROMPT_SLUG_RESERVED), already yours, or used by another public prompt (PROMPT_SLUG_TAKEN).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "429": {
             "description": "Rate limited.",
             "content": {
@@ -7937,6 +7918,13 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 20000
+                  },
+                  "visibility": {
+                    "type": "string",
+                    "enum": [
+                      "private",
+                      "public"
+                    ]
                   }
                 },
                 "additionalProperties": false,
@@ -8043,474 +8031,6 @@
         "parameters": [
           {
             "name": "slug",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ]
-      }
-    },
-    "/api/prompts/{slug}/visibility": {
-      "post": {
-        "operationId": "post_prompt_library_set_visibility",
-        "summary": "prompt library set visibility",
-        "tags": [
-          "prompts"
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Success.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": {
-                      "type": "boolean",
-                      "enum": [
-                        true
-                      ]
-                    },
-                    "prompt": {
-                      "type": "object",
-                      "properties": {
-                        "slug": {
-                          "type": "string"
-                        },
-                        "title": {
-                          "type": "string"
-                        },
-                        "description": {
-                          "type": "string"
-                        },
-                        "source": {
-                          "type": "string",
-                          "enum": [
-                            "official",
-                            "own",
-                            "community"
-                          ],
-                          "description": "official: shipped with post-engineer. own: written by the caller. community: written by another user and approved by a reviewer, not verified by post-engineer."
-                        },
-                        "status": {
-                          "type": "string",
-                          "enum": [
-                            "private",
-                            "pending",
-                            "approved",
-                            "rejected"
-                          ],
-                          "nullable": true,
-                          "description": "The review status of an own prompt; null for official and community prompts."
-                        },
-                        "rejectionReason": {
-                          "type": "string",
-                          "nullable": true,
-                          "description": "Why a reviewer rejected an own prompt; null otherwise."
-                        },
-                        "prompt": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "slug",
-                        "title",
-                        "description",
-                        "source",
-                        "status",
-                        "rejectionReason",
-                        "prompt"
-                      ]
-                    }
-                  },
-                  "required": [
-                    "success"
-                  ]
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid input.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Missing or invalid API key.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "A persona-scoped API key cannot manage prompts.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Unknown prompt, or not yours.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "The prompt cannot move to that visibility from its current status (PROMPT_STATE_CONFLICT).",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Rate limited.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        },
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "visibility": {
-                    "type": "string",
-                    "enum": [
-                      "public",
-                      "private"
-                    ]
-                  }
-                },
-                "required": [
-                  "visibility"
-                ],
-                "additionalProperties": false
-              }
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "slug",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ]
-      }
-    },
-    "/api/admin/prompts": {
-      "get": {
-        "operationId": "get_prompt_library_review_queue",
-        "summary": "prompt library review queue",
-        "tags": [
-          "admin"
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Success.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": {
-                      "type": "boolean",
-                      "enum": [
-                        true
-                      ]
-                    },
-                    "truncated": {
-                      "type": "boolean"
-                    },
-                    "prompts": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "id": {
-                            "type": "string",
-                            "format": "uuid"
-                          },
-                          "slug": {
-                            "type": "string"
-                          },
-                          "title": {
-                            "type": "string"
-                          },
-                          "description": {
-                            "type": "string"
-                          },
-                          "prompt": {
-                            "type": "string"
-                          },
-                          "contentHash": {
-                            "type": "string"
-                          },
-                          "authorId": {
-                            "type": "string"
-                          },
-                          "requestedAt": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "id",
-                          "slug",
-                          "title",
-                          "description",
-                          "prompt",
-                          "contentHash",
-                          "authorId",
-                          "requestedAt"
-                        ]
-                      }
-                    }
-                  },
-                  "required": [
-                    "success"
-                  ]
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid input.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Missing or invalid API key.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "The caller is not a prompt reviewer (PROMPT_REVIEWER_REQUIRED).",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Resource not found.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Rate limited.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/admin/prompts/{id}/review": {
-      "post": {
-        "operationId": "post_prompt_library_review",
-        "summary": "prompt library review",
-        "tags": [
-          "admin"
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Success.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": {
-                      "type": "boolean",
-                      "enum": [
-                        true
-                      ]
-                    },
-                    "slug": {
-                      "type": "string"
-                    },
-                    "status": {
-                      "type": "string",
-                      "enum": [
-                        "private",
-                        "pending",
-                        "approved",
-                        "rejected"
-                      ]
-                    }
-                  },
-                  "required": [
-                    "success"
-                  ]
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid input.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Missing or invalid API key.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "The caller is not a prompt reviewer (PROMPT_REVIEWER_REQUIRED).",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Unknown prompt id.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "The text changed or the prompt was already reviewed (PROMPT_REVIEW_STALE), or another approved prompt owns the slug (PROMPT_SLUG_TAKEN).",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Rate limited.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        },
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "decision": {
-                    "type": "string",
-                    "enum": [
-                      "approve",
-                      "reject"
-                    ]
-                  },
-                  "contentHash": {
-                    "type": "string",
-                    "pattern": "^[0-9a-f]{64}$",
-                    "description": "The contentHash read from GET /api/admin/prompts; the decision applies only if the text still has it."
-                  },
-                  "reason": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 500,
-                    "description": "Required for reject; shown to the owner."
-                  }
-                },
-                "required": [
-                  "decision",
-                  "contentHash"
-                ],
-                "additionalProperties": false
-              }
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "id",
             "in": "path",
             "required": true,
             "schema": {

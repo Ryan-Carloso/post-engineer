@@ -21,19 +21,14 @@ vi.mock('@/lib/api-error-reporting', async (importOriginal) => ({
 
 import { GET as listPrompts, POST as createPrompt } from '../route';
 import { GET as getPrompt, PATCH as patchPrompt, DELETE as deletePrompt } from '../[slug]/route';
-import {
-  GetPromptResponseSchema,
-  ListPromptsResponseSchema,
-  USER_PROMPT_LIMITS,
-} from '@/lib/contracts/prompts';
+import { GetPromptResponseSchema, ListPromptsResponseSchema, USER_PROMPT_LIMITS } from '@/lib/contracts/prompts';
 import { PROMPTS } from '@/app/recipes/prompts';
 import { recipesI18nEn } from '@/lib/i18n/recipes-i18n-en';
 import { DAILY_NEWS_PROMPT } from '@/lib/generation/prompt-base';
-import { contentHashOf, createFakeUserPromptsDb, type FakeUserPromptsDb } from '@/lib/__tests__/support/fake-user-prompts-db';
+import { createFakeUserPromptsDb, type FakeUserPromptsDb } from '@/lib/__tests__/support/fake-user-prompts-db';
 
 const ALICE = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const BOB = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
-const REVIEWER = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 
 function authenticatedAs(userId: string, extra: Record<string, unknown> = {}): void {
   requireSupabaseSession.mockResolvedValue({ auth: { userId, accessToken: 't', ...extra }, error: null });
@@ -43,11 +38,21 @@ function scopedKeyOf(userId: string): void {
   authenticatedAs(userId, { isApiKey: true, personaIds: [] });
 }
 
-function request(path: string, init?: { method?: string; body?: unknown; rawBody?: string }): Request {
+function signedOut(status = 401): void {
+  requireSupabaseSession.mockResolvedValue({
+    auth: null,
+    error: NextResponse.json({ success: false, error: 'Authentication required.' }, { status }),
+  });
+}
+
+function request(path: string, init?: { method?: string; body?: unknown; rawBody?: string; credentials?: boolean }): Request {
   const hasBody = init?.body !== undefined || init?.rawBody !== undefined;
+  const headers: Record<string, string> = {};
+  if (init?.credentials !== false) headers.authorization = 'Bearer pe_test';
+  if (hasBody) headers['content-type'] = 'application/json';
   return new Request(`https://post-engineer.test${path}`, {
     method: init?.method ?? 'GET',
-    headers: { authorization: 'Bearer pe_test', ...(hasBody ? { 'content-type': 'application/json' } : {}) },
+    headers,
     body: init?.rawBody ?? (init?.body === undefined ? undefined : JSON.stringify(init.body)),
   });
 }
@@ -62,18 +67,8 @@ function seedDb(seed: Parameters<typeof createFakeUserPromptsDb>[0] = []): FakeU
   return db;
 }
 
-function approvedRow(owner: string, slug: string, title = 'Shared'): Record<string, unknown> {
-  return {
-    owner_id: owner,
-    slug,
-    title,
-    description: 'About',
-    body: 'Community text',
-    status: 'approved',
-    approved_hash: contentHashOf(title, 'About', 'Community text'),
-    reviewed_by: REVIEWER,
-    reviewed_at: new Date().toISOString(),
-  };
+function publicRow(owner: string, slug: string, title = 'Shared'): Record<string, unknown> {
+  return { owner_id: owner, slug, title, description: 'About', body: 'Community text', visibility: 'public' };
 }
 
 beforeEach(() => {
@@ -84,17 +79,6 @@ beforeEach(() => {
 });
 
 describe('GET /api/prompts', () => {
-  it('returns 401 without auth and never queries the database', async () => {
-    const db = seedDb();
-    requireSupabaseSession.mockResolvedValue({
-      auth: null,
-      error: NextResponse.json({ success: false, error: 'Authentication required.' }, { status: 401 }),
-    });
-    const response = await listPrompts(request('/api/prompts'));
-    expect(response.status).toBe(401);
-    expect(db.queries).toEqual([]);
-  });
-
   it('lists the official prompts first, in order, without prompt text', async () => {
     authenticatedAs(ALICE);
     const response = await listPrompts(request('/api/prompts'));
@@ -108,8 +92,7 @@ describe('GET /api/prompts', () => {
         title: expect.any(String),
         description: expect.any(String),
         source: 'official',
-        status: null,
-        rejectionReason: null,
+        visibility: 'public',
       })),
     });
     expect(JSON.stringify(body)).not.toContain(DAILY_NEWS_PROMPT.slice(0, 200));
@@ -120,25 +103,24 @@ describe('GET /api/prompts', () => {
     });
   });
 
-  it('adds the caller own prompts with their status and other owners approved prompts as community', async () => {
+  it('adds the caller own prompts, private ones included, and other users public prompts as community', async () => {
     seedDb([
-      { owner_id: ALICE, slug: 'mine', title: 'Mine', body: 'a', status: 'rejected', rejection_reason: 'Too vague' },
+      { owner_id: ALICE, slug: 'mine', title: 'Mine', body: 'a' },
       { owner_id: BOB, slug: 'bobs-private', title: 'Bobs private', body: 'b' },
-      approvedRow(BOB, 'bobs-shared', 'Bobs shared'),
+      publicRow(BOB, 'bobs-shared', 'Bobs shared'),
     ]);
     authenticatedAs(ALICE);
     const body = (await (await listPrompts(request('/api/prompts'))).json()) as { prompts: Array<Record<string, unknown>> };
-    const extra = body.prompts.slice(PROMPTS.length);
-    expect(extra).toEqual([
-      { slug: 'mine', title: 'Mine', description: '', source: 'own', status: 'rejected', rejectionReason: 'Too vague' },
-      { slug: 'bobs-shared', title: 'Bobs shared', description: 'About', source: 'community', status: null, rejectionReason: null },
+    expect(body.prompts.slice(PROMPTS.length)).toEqual([
+      { slug: 'mine', title: 'Mine', description: '', source: 'own', visibility: 'private' },
+      { slug: 'bobs-shared', title: 'Bobs shared', description: 'About', source: 'community', visibility: 'public' },
     ]);
     expect(JSON.stringify(body)).not.toContain('bobs-private');
     expect(JSON.stringify(body)).not.toContain('Community text');
   });
 
-  it('shows the caller own approved prompt once, as own', async () => {
-    seedDb([approvedRow(ALICE, 'mine-shared', 'Mine shared')]);
+  it('shows the caller own public prompt once, as own', async () => {
+    seedDb([publicRow(ALICE, 'mine-shared', 'Mine shared')]);
     authenticatedAs(ALICE);
     const body = (await (await listPrompts(request('/api/prompts'))).json()) as { prompts: Array<{ slug: string; source: string }> };
     expect(body.prompts.filter((entry) => entry.slug === 'mine-shared')).toEqual([
@@ -146,11 +128,11 @@ describe('GET /api/prompts', () => {
     ]);
   });
 
-  it('hides a community prompt whose slug an official or own prompt already uses', async () => {
+  it('hides a public prompt whose slug an official or own prompt already uses', async () => {
     seedDb([
-      approvedRow(BOB, 'daily-news', 'Fake official'),
+      publicRow(BOB, 'daily-news', 'Fake official'),
       { owner_id: ALICE, slug: 'clash', title: 'Own clash', body: 'a' },
-      approvedRow(BOB, 'clash', 'Community clash'),
+      publicRow(BOB, 'clash', 'Community clash'),
     ]);
     authenticatedAs(ALICE);
     const body = (await (await listPrompts(request('/api/prompts'))).json()) as { prompts: Array<{ slug: string; source: string }> };
@@ -165,6 +147,37 @@ describe('GET /api/prompts', () => {
     expect(body.prompts.map((entry) => entry.slug)).not.toContain('mine');
   });
 
+  it('serves the official and public prompts to a caller with no credentials, limited by IP, and never a private one', async () => {
+    seedDb([
+      { owner_id: ALICE, slug: 'mine', title: 'Mine', body: 'secret text' },
+      publicRow(BOB, 'bobs-shared'),
+    ]);
+    signedOut();
+    const response = await listPrompts(request('/api/prompts', { credentials: false }));
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { prompts: Array<{ slug: string; source: string }> };
+    expect(body.prompts.map((entry) => entry.slug)).toContain('bobs-shared');
+    expect(body.prompts.map((entry) => entry.slug)).toContain('daily-news');
+    expect(JSON.stringify(body)).not.toContain('mine');
+    expect(applyRateLimit).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ name: 'prompts-read' }));
+  });
+
+  it('answers 401 to a caller whose API key is invalid instead of falling back to the public view', async () => {
+    signedOut();
+    expect((await listPrompts(request('/api/prompts'))).status).toBe(401);
+  });
+
+  it('passes a non-401 auth response through, such as an MCP version mismatch', async () => {
+    signedOut(426);
+    expect((await listPrompts(request('/api/prompts', { credentials: false }))).status).toBe(426);
+  });
+
+  it('returns the rate limit response when an anonymous caller is limited', async () => {
+    signedOut();
+    applyRateLimit.mockResolvedValueOnce(NextResponse.json({ success: false }, { status: 429 }) as never);
+    expect((await listPrompts(request('/api/prompts', { credentials: false }))).status).toBe(429);
+  });
+
   it('returns a logged 500 when the database read fails', async () => {
     const db = seedDb();
     db.failNext('XX000');
@@ -176,7 +189,7 @@ describe('GET /api/prompts', () => {
 describe('POST /api/prompts', () => {
   const valid = { slug: 'my-prompt', title: 'Title', description: 'About', prompt: 'Body text' };
 
-  it('creates a private prompt and returns it with status private', async () => {
+  it('creates a private prompt by default and returns it', async () => {
     const db = seedDb();
     authenticatedAs(ALICE);
     const response = await createPrompt(request('/api/prompts', { method: 'POST', body: valid }));
@@ -185,10 +198,19 @@ describe('POST /api/prompts', () => {
     expect(GetPromptResponseSchema.safeParse(body).success).toBe(true);
     expect(body).toEqual({
       success: true,
-      prompt: { slug: 'my-prompt', title: 'Title', description: 'About', source: 'own', status: 'private', rejectionReason: null, prompt: 'Body text' },
+      prompt: { slug: 'my-prompt', title: 'Title', description: 'About', source: 'own', visibility: 'private', prompt: 'Body text' },
     });
     expect(db.rows).toHaveLength(1);
     expect(db.rows[0].owner_id).toBe(ALICE);
+  });
+
+  it('creates a public prompt in one call, with no review', async () => {
+    const db = seedDb();
+    authenticatedAs(ALICE);
+    const response = await createPrompt(request('/api/prompts', { method: 'POST', body: { ...valid, visibility: 'public' } }));
+    expect(response.status).toBe(201);
+    expect(await response.json()).toMatchObject({ prompt: { visibility: 'public' } });
+    expect(db.rows[0].visibility).toBe('public');
   });
 
   it('stores an empty description when none is sent', async () => {
@@ -205,7 +227,8 @@ describe('POST /api/prompts', () => {
     ['an over-long description', { ...valid, description: 'x'.repeat(USER_PROMPT_LIMITS.description + 1) }, 'description'],
     ['an empty prompt', { ...valid, prompt: '' }, 'prompt'],
     ['an over-long prompt', { ...valid, prompt: 'x'.repeat(USER_PROMPT_LIMITS.prompt + 1) }, 'prompt'],
-    ['an unknown field', { ...valid, status: 'approved' }, undefined],
+    ['an unknown visibility', { ...valid, visibility: 'approved' }, 'visibility'],
+    ['an unknown field', { ...valid, owner_id: BOB }, undefined],
   ])('returns 400 for %s without writing anything', async (_label, body, field) => {
     const db = seedDb();
     authenticatedAs(ALICE);
@@ -219,8 +242,7 @@ describe('POST /api/prompts', () => {
   it('returns 400 for a body that is not JSON', async () => {
     const db = seedDb();
     authenticatedAs(ALICE);
-    const response = await createPrompt(request('/api/prompts', { method: 'POST', rawBody: '{nope' }));
-    expect(response.status).toBe(400);
+    expect((await createPrompt(request('/api/prompts', { method: 'POST', rawBody: '{nope' }))).status).toBe(400);
     expect(db.queries).toEqual([]);
   });
 
@@ -233,19 +255,27 @@ describe('POST /api/prompts', () => {
     expect(db.queries).toEqual([]);
   });
 
-  it('returns 409 PROMPT_SLUG_TAKEN when the owner already has the slug', async () => {
+  it('returns 409 PROMPT_SLUG_TAKEN when the owner already has the slug, and when the slug is public and taken', async () => {
     seedDb([{ owner_id: ALICE, slug: 'my-prompt', title: 'Old', body: 'a' }]);
     authenticatedAs(ALICE);
-    const response = await createPrompt(request('/api/prompts', { method: 'POST', body: valid }));
+    expect((await createPrompt(request('/api/prompts', { method: 'POST', body: valid }))).status).toBe(409);
+    seedDb([publicRow(BOB, 'my-prompt')]);
+    const response = await createPrompt(request('/api/prompts', { method: 'POST', body: { ...valid, visibility: 'public' } }));
     expect(response.status).toBe(409);
     expect(await response.json()).toMatchObject({ code: 'PROMPT_SLUG_TAKEN' });
+  });
+
+  it('answers 401 to a caller with no credentials before touching the database', async () => {
+    const db = seedDb();
+    signedOut();
+    expect((await createPrompt(request('/api/prompts', { method: 'POST', body: valid, credentials: false }))).status).toBe(401);
+    expect(db.queries).toEqual([]);
   });
 
   it('returns 403 to a persona-scoped key before touching the database', async () => {
     const db = seedDb();
     scopedKeyOf(ALICE);
-    const response = await createPrompt(request('/api/prompts', { method: 'POST', body: valid }));
-    expect(response.status).toBe(403);
+    expect((await createPrompt(request('/api/prompts', { method: 'POST', body: valid }))).status).toBe(403);
     expect(db.queries).toEqual([]);
   });
 
@@ -254,23 +284,12 @@ describe('POST /api/prompts', () => {
     await createPrompt(request('/api/prompts', { method: 'POST', body: valid }));
     expect(applyRateLimit).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ name: 'prompts-write' }), ALICE);
   });
-
-  it('returns the rate limit response untouched when the caller is limited', async () => {
-    const db = seedDb();
-    authenticatedAs(ALICE);
-    applyRateLimit.mockResolvedValueOnce(NextResponse.json({ success: false }, { status: 429 }) as never);
-    expect((await createPrompt(request('/api/prompts', { method: 'POST', body: valid }))).status).toBe(429);
-    expect(db.queries).toEqual([]);
-  });
 });
 
 describe('GET /api/prompts/[slug]', () => {
-  it('returns 401 without auth and never reads the slug', async () => {
+  it('returns 401 without a valid API key and never reads the slug', async () => {
     const params = vi.fn();
-    requireSupabaseSession.mockResolvedValue({
-      auth: null,
-      error: NextResponse.json({ success: false, error: 'Authentication required.' }, { status: 401 }),
-    });
+    signedOut();
     const context = { get params(): Promise<{ slug: string }> { params(); return Promise.resolve({ slug: 'daily-news' }); } };
     const response = await getPrompt(request('/api/prompts/daily-news'), context);
     expect(response.status).toBe(401);
@@ -290,13 +309,29 @@ describe('GET /api/prompts/[slug]', () => {
         title: recipesI18nEn.dailyNewsTitle,
         description: recipesI18nEn.dailyNewsObjective,
         source: 'official',
-        status: null,
-        rejectionReason: null,
+        visibility: 'public',
         prompt: DAILY_NEWS_PROMPT,
       },
     });
     expect(GetPromptResponseSchema.safeParse(body).success).toBe(true);
     expect(db.queries).toEqual([]);
+  });
+
+  it('serves an official prompt and a public one to a caller with no credentials', async () => {
+    seedDb([publicRow(BOB, 'bobs-shared')]);
+    signedOut();
+    expect((await getPrompt(request('/api/prompts/daily-news', { credentials: false }), slugContext('daily-news'))).status).toBe(200);
+    const response = await getPrompt(request('/api/prompts/bobs-shared', { credentials: false }), slugContext('bobs-shared'));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ prompt: { slug: 'bobs-shared', source: 'community', visibility: 'public', prompt: 'Community text' } });
+  });
+
+  it('returns 404 to a caller with no credentials for a private prompt', async () => {
+    seedDb([{ owner_id: ALICE, slug: 'mine', title: 'Mine', body: 'secret text' }]);
+    signedOut();
+    const response = await getPrompt(request('/api/prompts/mine', { credentials: false }), slugContext('mine'));
+    expect(response.status).toBe(404);
+    expect(JSON.stringify(await response.json())).not.toContain('secret text');
   });
 
   it('decodes a percent-encoded slug before matching', async () => {
@@ -311,13 +346,11 @@ describe('GET /api/prompts/[slug]', () => {
     expect((await getPrompt(request('/api/prompts/%E0%A4%A'), slugContext('%E0%A4%A'))).status).toBe(400);
   });
 
-  it('returns the caller own prompt with its status, even while private', async () => {
+  it('returns the caller own private prompt with its visibility', async () => {
     seedDb([{ owner_id: ALICE, slug: 'mine', title: 'Mine', body: 'secret text' }]);
     authenticatedAs(ALICE);
     const response = await getPrompt(request('/api/prompts/mine'), slugContext('mine'));
-    expect(await response.json()).toMatchObject({
-      prompt: { slug: 'mine', source: 'own', status: 'private', prompt: 'secret text' },
-    });
+    expect(await response.json()).toMatchObject({ prompt: { slug: 'mine', source: 'own', visibility: 'private', prompt: 'secret text' } });
   });
 
   it('returns 404 for another owner private prompt, same as an unknown slug', async () => {
@@ -325,23 +358,16 @@ describe('GET /api/prompts/[slug]', () => {
     authenticatedAs(ALICE);
     const response = await getPrompt(request('/api/prompts/bobs'), slugContext('bobs'));
     expect(response.status).toBe(404);
-    expect(await response.json()).toMatchObject({ code: 'PROMPT_NOT_FOUND' });
-    expect(JSON.stringify(await getPrompt(request('/api/prompts/bobs'), slugContext('bobs')).then((r) => r.json()))).not.toContain('secret text');
+    const body = await response.json();
+    expect(body).toMatchObject({ code: 'PROMPT_NOT_FOUND' });
+    expect(JSON.stringify(body)).not.toContain('secret text');
   });
 
-  it('returns another owner approved prompt as community with no status', async () => {
-    seedDb([approvedRow(BOB, 'bobs-shared')]);
+  it('returns another owner public prompt as community', async () => {
+    seedDb([publicRow(BOB, 'bobs-shared')]);
     authenticatedAs(ALICE);
     const response = await getPrompt(request('/api/prompts/bobs-shared'), slugContext('bobs-shared'));
-    expect(await response.json()).toMatchObject({
-      prompt: { slug: 'bobs-shared', source: 'community', status: null, rejectionReason: null, prompt: 'Community text' },
-    });
-  });
-
-  it('returns 404 for a community prompt whose approved hash no longer matches the text', async () => {
-    seedDb([{ ...approvedRow(BOB, 'bobs-shared'), approved_hash: 'f'.repeat(64) }]);
-    authenticatedAs(ALICE);
-    expect((await getPrompt(request('/api/prompts/bobs-shared'), slugContext('bobs-shared'))).status).toBe(404);
+    expect(await response.json()).toMatchObject({ prompt: { slug: 'bobs-shared', source: 'community', visibility: 'public', prompt: 'Community text' } });
   });
 
   it('returns 404 for a slug that cannot be a prompt without querying the database', async () => {
@@ -366,42 +392,62 @@ describe('GET /api/prompts/[slug]', () => {
 });
 
 describe('PATCH /api/prompts/[slug]', () => {
-  it('edits the supplied fields of the caller prompt', async () => {
+  it('edits the supplied fields of the caller prompt and keeps the rest', async () => {
     const db = seedDb([{ owner_id: ALICE, slug: 'mine', title: 'Old', description: 'Keep', body: 'old body' }]);
     authenticatedAs(ALICE);
     const response = await patchPrompt(request('/api/prompts/mine', { method: 'PATCH', body: { title: 'New', prompt: 'new body' } }), slugContext('mine'));
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({ prompt: { title: 'New', description: 'Keep', prompt: 'new body' } });
+    expect(await response.json()).toMatchObject({ prompt: { title: 'New', description: 'Keep', prompt: 'new body', visibility: 'private' } });
     expect(db.rows[0]).toMatchObject({ title: 'New', description: 'Keep', body: 'new body' });
   });
 
-  it('answers pending when the edited prompt was approved, so the old approval cannot cover new text', async () => {
-    const db = seedDb([approvedRow(ALICE, 'mine')]);
+  it('makes a prompt public and private again with no review in between', async () => {
+    const db = seedDb([{ owner_id: ALICE, slug: 'mine', title: 'T', body: 'a' }]);
     authenticatedAs(ALICE);
-    const response = await patchPrompt(request('/api/prompts/mine', { method: 'PATCH', body: { prompt: 'changed' } }), slugContext('mine'));
-    expect(await response.json()).toMatchObject({ prompt: { status: 'pending' } });
-    expect(db.rows[0]).toMatchObject({ status: 'pending', approved_hash: null });
+    const published = await patchPrompt(request('/api/prompts/mine', { method: 'PATCH', body: { visibility: 'public' } }), slugContext('mine'));
+    expect(await published.json()).toMatchObject({ prompt: { visibility: 'public' } });
+    expect(db.rows[0].visibility).toBe('public');
+    await patchPrompt(request('/api/prompts/mine', { method: 'PATCH', body: { visibility: 'private' } }), slugContext('mine'));
+    expect(db.rows[0].visibility).toBe('private');
+  });
+
+  it('keeps a public prompt public when its text changes', async () => {
+    const db = seedDb([publicRow(ALICE, 'mine')]);
+    authenticatedAs(ALICE);
+    await patchPrompt(request('/api/prompts/mine', { method: 'PATCH', body: { prompt: 'changed' } }), slugContext('mine'));
+    expect(db.rows[0]).toMatchObject({ visibility: 'public', body: 'changed' });
+  });
+
+  it('returns 409 PROMPT_SLUG_TAKEN when another public prompt already owns the slug', async () => {
+    const db = seedDb([publicRow(BOB, 'same'), { owner_id: ALICE, slug: 'same', title: 'Mine', body: 'a' }]);
+    authenticatedAs(ALICE);
+    const response = await patchPrompt(request('/api/prompts/same', { method: 'PATCH', body: { visibility: 'public' } }), slugContext('same'));
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ code: 'PROMPT_SLUG_TAKEN' });
+    expect(db.rows[1].visibility).toBe('private');
   });
 
   it('returns 400 for an empty patch and for a field the caller may not set', async () => {
     const db = seedDb([{ owner_id: ALICE, slug: 'mine', title: 'Old', body: 'old body' }]);
     authenticatedAs(ALICE);
-    expect((await patchPrompt(request('/api/prompts/mine', { method: 'PATCH', body: {} }), slugContext('mine'))).status).toBe(400);
-    expect((await patchPrompt(request('/api/prompts/mine', { method: 'PATCH', body: { status: 'approved' } }), slugContext('mine'))).status).toBe(400);
-    expect((await patchPrompt(request('/api/prompts/mine', { method: 'PATCH', body: { slug: 'renamed' } }), slugContext('mine'))).status).toBe(400);
+    for (const body of [{}, { slug: 'renamed' }, { owner_id: BOB }, { visibility: 'approved' }]) {
+      expect((await patchPrompt(request('/api/prompts/mine', { method: 'PATCH', body }), slugContext('mine'))).status).toBe(400);
+    }
     expect(db.queries).toEqual([]);
   });
 
-  it('returns 404 and changes nothing for another owner prompt', async () => {
-    const db = seedDb([{ owner_id: BOB, slug: 'bobs', title: 'Bobs', body: 'b' }]);
+  it('returns 404 and changes nothing for another owner prompt, even a public one', async () => {
+    const db = seedDb([publicRow(BOB, 'bobs-shared', 'Bobs')]);
     authenticatedAs(ALICE);
-    const response = await patchPrompt(request('/api/prompts/bobs', { method: 'PATCH', body: { title: 'Mine now' } }), slugContext('bobs'));
+    const response = await patchPrompt(request('/api/prompts/bobs-shared', { method: 'PATCH', body: { title: 'Mine now', prompt: 'hijacked' } }), slugContext('bobs-shared'));
     expect(response.status).toBe(404);
-    expect(db.rows[0].title).toBe('Bobs');
+    expect(db.rows[0]).toMatchObject({ title: 'Bobs', body: 'Community text', owner_id: BOB });
   });
 
-  it('returns 403 to a persona-scoped key', async () => {
+  it('answers 401 to a caller with no credentials and 403 to a persona-scoped key, without querying', async () => {
     const db = seedDb([{ owner_id: ALICE, slug: 'mine', title: 'Old', body: 'old' }]);
+    signedOut();
+    expect((await patchPrompt(request('/api/prompts/mine', { method: 'PATCH', body: { title: 'New' }, credentials: false }), slugContext('mine'))).status).toBe(401);
     scopedKeyOf(ALICE);
     expect((await patchPrompt(request('/api/prompts/mine', { method: 'PATCH', body: { title: 'New' } }), slugContext('mine'))).status).toBe(403);
     expect(db.queries).toEqual([]);
@@ -418,15 +464,17 @@ describe('DELETE /api/prompts/[slug]', () => {
     expect(db.rows).toEqual([]);
   });
 
-  it('returns 404 and keeps another owner prompt', async () => {
-    const db = seedDb([{ owner_id: BOB, slug: 'bobs', title: 'Bobs', body: 'b' }]);
+  it('returns 404 and keeps another owner prompt, even a public one', async () => {
+    const db = seedDb([publicRow(BOB, 'bobs-shared')]);
     authenticatedAs(ALICE);
-    expect((await deletePrompt(request('/api/prompts/bobs', { method: 'DELETE' }), slugContext('bobs'))).status).toBe(404);
+    expect((await deletePrompt(request('/api/prompts/bobs-shared', { method: 'DELETE' }), slugContext('bobs-shared'))).status).toBe(404);
     expect(db.rows).toHaveLength(1);
   });
 
-  it('returns 403 to a persona-scoped key and keeps the prompt', async () => {
+  it('answers 401 to a caller with no credentials and 403 to a persona-scoped key, keeping the prompt', async () => {
     const db = seedDb([{ owner_id: ALICE, slug: 'mine', title: 'Mine', body: 'a' }]);
+    signedOut();
+    expect((await deletePrompt(request('/api/prompts/mine', { method: 'DELETE', credentials: false }), slugContext('mine'))).status).toBe(401);
     scopedKeyOf(ALICE);
     expect((await deletePrompt(request('/api/prompts/mine', { method: 'DELETE' }), slugContext('mine'))).status).toBe(403);
     expect(db.rows).toHaveLength(1);

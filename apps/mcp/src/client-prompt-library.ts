@@ -3,9 +3,6 @@ import { parseContractResponse } from './contract-response.js';
 import {
   createUserPrompt as createUserPromptContract,
   deleteUserPrompt as deleteUserPromptContract,
-  listPromptReviewQueue as listPromptReviewQueueContract,
-  reviewPrompt as reviewPromptContract,
-  setPromptVisibility as setPromptVisibilityContract,
   updateUserPrompt as updateUserPromptContract,
 } from './contracts/prompts.js';
 import type { BodyOf, ResponseOf } from './contracts/endpoint.js';
@@ -45,41 +42,4 @@ export async function deleteUserPrompt(
     'delete prompt',
   );
   return parseContractResponse(deleteUserPromptContract, raw);
-}
-
-export async function setPromptVisibility(
-  client: PostEngineerClient,
-  slug: string,
-  visibility: BodyOf<typeof setPromptVisibilityContract>['visibility'],
-): Promise<ResponseOf<typeof setPromptVisibilityContract>> {
-  const raw = await client.request(
-    `/api/prompts/${encodeURIComponent(slug)}/visibility`,
-    { method: 'POST', headers: client.getHeaders(), body: JSON.stringify({ visibility }) },
-    'set prompt visibility',
-  );
-  return parseContractResponse(setPromptVisibilityContract, raw);
-}
-
-export async function listPromptReviewQueue(
-  client: PostEngineerClient,
-): Promise<ResponseOf<typeof listPromptReviewQueueContract>> {
-  const raw = await client.request(
-    '/api/admin/prompts',
-    { method: 'GET', headers: client.getHeaders() },
-    'list prompts waiting for review',
-  );
-  return parseContractResponse(listPromptReviewQueueContract, raw);
-}
-
-export async function reviewPrompt(
-  client: PostEngineerClient,
-  id: string,
-  decision: BodyOf<typeof reviewPromptContract>,
-): Promise<ResponseOf<typeof reviewPromptContract>> {
-  const raw = await client.request(
-    `/api/admin/prompts/${encodeURIComponent(id)}/review`,
-    { method: 'POST', headers: client.getHeaders(), body: JSON.stringify(decision) },
-    'review prompt',
-  );
-  return parseContractResponse(reviewPromptContract, raw);
 }

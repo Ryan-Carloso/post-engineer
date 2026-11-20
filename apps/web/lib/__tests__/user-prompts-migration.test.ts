@@ -12,10 +12,10 @@ function read(...segments: string[]): string {
 const sql = read('supabase', 'migrations', '076_user-prompts.sql');
 
 describe('supabase/migrations/076_user-prompts.sql', () => {
-  it('creates the table idempotently with a private default status', () => {
+  it('creates the table idempotently with a private default', () => {
     expect(sql).toContain('create table if not exists public.user_prompts');
-    expect(sql).toContain("status text not null default 'private'");
-    expect(sql).toContain("check (status in ('private', 'pending', 'approved', 'rejected'))");
+    expect(sql).toContain("visibility text not null default 'private'");
+    expect(sql).toContain("check (visibility in ('private', 'public'))");
   });
 
   it('is service-role only: RLS on, no policy, grants revoked from session roles', () => {
@@ -24,36 +24,20 @@ describe('supabase/migrations/076_user-prompts.sql', () => {
     expect(sql).toContain('revoke all on table public.user_prompts from anon, authenticated');
   });
 
-  it('keeps approved slugs globally unique with a partial unique index', () => {
-    expect(sql).toContain('create unique index if not exists user_prompts_approved_slug_unique');
-    expect(sql).toMatch(/\(slug\)\s+where status = 'approved'/);
+  it('keeps public slugs globally unique with a partial unique index', () => {
+    expect(sql).toContain('create unique index if not exists user_prompts_public_slug_unique');
+    expect(sql).toMatch(/\(slug\)\s+where visibility = 'public'/);
   });
 
-  it('ties the approved status to an approved hash and a decision to a reviewer', () => {
-    expect(sql).toContain("check ((status = 'approved') = (approved_hash is not null))");
-    expect(sql).toContain("check (status not in ('approved', 'rejected') or (reviewed_by is not null and reviewed_at is not null))");
-    expect(sql).toContain("check (status <> 'rejected' or rejection_reason is not null)");
-  });
-
-  it('hashes title, description and body with length prefixes in a before-write trigger', () => {
-    expect(sql).toContain('create trigger user_prompts_before_write');
-    expect(sql).toContain('before insert or update on public.user_prompts');
-    expect(sql).toContain('length(new.title)::text');
-    expect(sql).toContain('length(new.description)::text');
-    expect(sql).toContain('length(new.body)::text');
-  });
-
-  it('sends an edited approved prompt back to pending and clears the approval', () => {
-    expect(sql).toContain("new.status := 'pending'");
-    expect(sql).toContain('new.approved_hash := null');
-    expect(sql).toContain('new.reviewed_by := null');
-    expect(sql).toContain('new.reviewed_at := null');
+  it('has no review columns, since publishing needs no approval in beta', () => {
+    for (const column of ['status', 'approved_hash', 'content_hash', 'reviewed_by', 'rejection_reason']) {
+      expect(sql, column).not.toMatch(new RegExp(`\\b${column}\\b\\s+(text|uuid|timestamptz)`));
+    }
   });
 
   it('is listed in the migration README and exercised by the CI behaviour check', () => {
     expect(read('supabase', 'README.md')).toContain('`migrations/076_user-prompts.sql`');
-    const workflow = read('.github', 'workflows', 'ci.yml');
-    expect(workflow).toContain('scripts/db/check-user-prompts.sql');
-    expect(read('scripts', 'db', 'check-user-prompts.sql')).toContain('editing an approved prompt sends it back to pending');
+    expect(read('.github', 'workflows', 'ci.yml')).toContain('scripts/db/check-user-prompts.sql');
+    expect(read('scripts', 'db', 'check-user-prompts.sql')).toContain('two public prompts cannot share a slug');
   });
 });

@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/supabase/database.gen';
 import type { UserPromptRow } from '@/lib/user-prompts';
@@ -15,11 +15,6 @@ interface Outcome {
 
 type Operation = 'select' | 'insert' | 'update' | 'delete';
 
-export function contentHashOf(title: string, description: string, body: string): string {
-  const text = `${title.length}:${title}\n${description.length}:${description}\n${body.length}:${body}`;
-  return createHash('sha256').update(text, 'utf8').digest('hex');
-}
-
 export interface FakeUserPromptsDb {
   client: SupabaseClient<Database>;
   rows: UserPromptRow[];
@@ -33,10 +28,6 @@ export function createFakeUserPromptsDb(seed: Partial<UserPromptRow>[] = []): Fa
   let pendingFailure: string | null = null;
   const now = (): string => new Date().toISOString();
 
-  function withHash(row: UserPromptRow): UserPromptRow {
-    return { ...row, content_hash: contentHashOf(row.title, row.description, row.body) };
-  }
-
   function insertRow(values: Partial<UserPromptRow>): UserPromptRow {
     const base: UserPromptRow = {
       id: randomUUID(),
@@ -45,17 +36,12 @@ export function createFakeUserPromptsDb(seed: Partial<UserPromptRow>[] = []): Fa
       title: '',
       description: '',
       body: '',
-      status: 'private',
-      content_hash: '',
-      approved_hash: null,
-      rejection_reason: null,
-      reviewed_by: null,
-      reviewed_at: null,
+      visibility: 'private',
       created_at: now(),
       updated_at: now(),
       ...values,
     };
-    return withHash(base);
+    return base;
   }
 
   for (const entry of seed) rows.push(insertRow(entry));
@@ -65,17 +51,12 @@ export function createFakeUserPromptsDb(seed: Partial<UserPromptRow>[] = []): Fa
       (other) =>
         other.id !== ignoreId &&
         ((other.owner_id === candidate.owner_id && other.slug === candidate.slug) ||
-          (candidate.status === 'approved' && other.status === 'approved' && other.slug === candidate.slug)),
+          (candidate.visibility === 'public' && other.visibility === 'public' && other.slug === candidate.slug)),
     );
   }
 
   function applyUpdate(before: UserPromptRow, values: Partial<UserPromptRow>): UserPromptRow {
-    let next = withHash({ ...before, ...values, updated_at: now() });
-    const textChanged = next.content_hash !== before.content_hash;
-    if (before.status === 'approved' && next.status === 'approved' && textChanged) {
-      next = { ...next, status: 'pending', approved_hash: null, reviewed_by: null, reviewed_at: null };
-    }
-    return next;
+    return { ...before, ...values, updated_at: now() };
   }
 
   class Query implements PromiseLike<Outcome> {

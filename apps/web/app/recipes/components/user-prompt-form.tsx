@@ -10,7 +10,6 @@ import type { PromptDraft } from '@/lib/user-prompts-client';
 export interface UserPromptFormProps {
   mode: 'new' | 'edit';
   initial: PromptDraft;
-  approved: boolean;
   pending: boolean;
   errorMessage: string | null;
   onSubmit: (draft: PromptDraft) => void;
@@ -20,7 +19,6 @@ export interface UserPromptFormProps {
 export default function UserPromptForm({
   mode,
   initial,
-  approved,
   pending,
   errorMessage,
   onSubmit,
@@ -52,11 +50,6 @@ export default function UserPromptForm({
       <h3 className="text-base font-bold tracking-tight text-ink">
         {t(mode === 'new' ? 'userPrompts.formTitleNew' : 'userPrompts.formTitleEdit')}
       </h3>
-      {approved ? (
-        <p role="note" className="rounded-xl border border-line bg-surface px-3.5 py-2.5 text-sm text-ink-soft">
-          {t('userPrompts.editApprovedWarning')}
-        </p>
-      ) : null}
       <label className="block">
         <span className={SECTION_LABEL_CLASS}>{t('userPrompts.slugLabel')}</span>
         <input
@@ -102,6 +95,26 @@ export default function UserPromptForm({
           className={`${INPUT_CLASS} font-mono`}
         />
       </label>
+      <fieldset className="flex flex-col gap-2" disabled={pending}>
+        <legend className={SECTION_LABEL_CLASS}>{t('userPrompts.visibilityLabel')}</legend>
+        {(['private', 'public'] as const).map((visibility) => (
+          <label key={visibility} className="flex items-center gap-2 text-sm text-ink">
+            <input
+              type="radio"
+              name="user-prompt-visibility"
+              value={visibility}
+              checked={draft.visibility === visibility}
+              onChange={() => setDraft((current) => ({ ...current, visibility }))}
+            />
+            {t(visibility === 'private' ? 'userPrompts.visibilityPrivate' : 'userPrompts.visibilityPublic')}
+          </label>
+        ))}
+        {draft.visibility === 'public' ? (
+          <p role="note" className="rounded-xl border border-line bg-surface px-3.5 py-2.5 text-sm text-ink-soft">
+            {t('userPrompts.publicWarning')}
+          </p>
+        ) : null}
+      </fieldset>
       {errorMessage === null ? null : (
         <p role="alert" className="text-sm font-medium text-destructive">
           {errorMessage}

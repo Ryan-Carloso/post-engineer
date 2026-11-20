@@ -8,16 +8,17 @@ import { RATE_LIMITS } from '@/lib/rate-limit';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import {
   deleteOwnUserPrompt,
-  findApprovedUserPrompt,
   findOwnUserPrompt,
+  findPublicUserPrompt,
   updateOwnUserPrompt,
 } from '@/lib/user-prompts';
 import {
   promptDetailBody,
   promptNotFound,
   readJsonBody,
+  requireOwner,
   resolvePromptCaller,
-  scopedKeyDenied,
+  slugTaken,
   storeFailure,
 } from '@/lib/user-prompts-http';
 
@@ -37,25 +38,22 @@ async function readSlug(context: RouteContext, route: string): Promise<string | 
 }
 
 async function getHandler(request: Request, context: RouteContext): Promise<NextResponse> {
-  const caller = await resolvePromptCaller(request, GET_ROUTE, RATE_LIMITS.promptsRead);
+  const caller = await resolvePromptCaller(request, GET_ROUTE, RATE_LIMITS.promptsRead, { allowAnonymous: true });
   if (caller instanceof NextResponse) return caller;
   const slug = await readSlug(context, GET_ROUTE);
   if (slug instanceof NextResponse) return slug;
 
   const official = findHubPrompt(slug);
   if (official !== null) {
-    return NextResponse.json({
-      success: true,
-      prompt: { ...official, source: 'official', status: null, rejectionReason: null },
-    });
+    return NextResponse.json({ success: true, prompt: { ...official, source: 'official', visibility: 'public' } });
   }
   if (!USER_PROMPT_SLUG_PATTERN.test(slug)) return promptNotFound(GET_ROUTE);
 
   try {
     const db = createSupabaseServiceClient();
-    const own = caller.scopedKey ? null : await findOwnUserPrompt(db, caller.userId, slug);
+    const own = caller.userId === null || caller.scopedKey ? null : await findOwnUserPrompt(db, caller.userId, slug);
     if (own !== null) return NextResponse.json({ success: true, prompt: promptDetailBody(own, 'own') });
-    const community = await findApprovedUserPrompt(db, slug);
+    const community = await findPublicUserPrompt(db, slug);
     if (community === null) return promptNotFound(GET_ROUTE);
     return NextResponse.json({ success: true, prompt: promptDetailBody(community, 'community') });
   } catch (error) {
@@ -64,38 +62,41 @@ async function getHandler(request: Request, context: RouteContext): Promise<Next
 }
 
 async function patchHandler(request: Request, context: RouteContext): Promise<NextResponse> {
-  const caller = await resolvePromptCaller(request, PATCH_ROUTE, RATE_LIMITS.promptsWrite);
+  const caller = await resolvePromptCaller(request, PATCH_ROUTE, RATE_LIMITS.promptsWrite, { allowAnonymous: false });
   if (caller instanceof NextResponse) return caller;
-  if (caller.scopedKey) return scopedKeyDenied(PATCH_ROUTE);
+  const owner = requireOwner(caller, PATCH_ROUTE);
+  if (owner instanceof NextResponse) return owner;
   const slug = await readSlug(context, PATCH_ROUTE);
   if (slug instanceof NextResponse) return slug;
   const parsed = await readJsonBody(request, UpdateUserPromptBodySchema, PATCH_ROUTE);
   if (!parsed.ok) return parsed.response;
   if (Object.keys(parsed.body).length === 0) {
-    return apiErrorResponse(400, 'Send at least one of title, description or prompt.', {
+    return apiErrorResponse(400, 'Send at least one of title, description, prompt or visibility.', {
       route: PATCH_ROUTE,
       code: ERROR_CODES.VALIDATION_FAILED,
     });
   }
   if (!USER_PROMPT_SLUG_PATTERN.test(slug)) return promptNotFound(PATCH_ROUTE);
   try {
-    const row = await updateOwnUserPrompt(createSupabaseServiceClient(), caller.userId, slug, parsed.body);
-    if (row === null) return promptNotFound(PATCH_ROUTE);
-    return NextResponse.json({ success: true, prompt: promptDetailBody(row, 'own') });
+    const outcome = await updateOwnUserPrompt(createSupabaseServiceClient(), owner.userId, slug, parsed.body);
+    if (outcome.kind === 'not_found') return promptNotFound(PATCH_ROUTE);
+    if (outcome.kind === 'slug_taken') return slugTaken(PATCH_ROUTE);
+    return NextResponse.json({ success: true, prompt: promptDetailBody(outcome.row, 'own') });
   } catch (error) {
     return storeFailure(PATCH_ROUTE, error);
   }
 }
 
 async function deleteHandler(request: Request, context: RouteContext): Promise<NextResponse> {
-  const caller = await resolvePromptCaller(request, DELETE_ROUTE, RATE_LIMITS.promptsWrite);
+  const caller = await resolvePromptCaller(request, DELETE_ROUTE, RATE_LIMITS.promptsWrite, { allowAnonymous: false });
   if (caller instanceof NextResponse) return caller;
-  if (caller.scopedKey) return scopedKeyDenied(DELETE_ROUTE);
+  const owner = requireOwner(caller, DELETE_ROUTE);
+  if (owner instanceof NextResponse) return owner;
   const slug = await readSlug(context, DELETE_ROUTE);
   if (slug instanceof NextResponse) return slug;
   if (!USER_PROMPT_SLUG_PATTERN.test(slug)) return promptNotFound(DELETE_ROUTE);
   try {
-    const deleted = await deleteOwnUserPrompt(createSupabaseServiceClient(), caller.userId, slug);
+    const deleted = await deleteOwnUserPrompt(createSupabaseServiceClient(), owner.userId, slug);
     if (!deleted) return promptNotFound(DELETE_ROUTE);
     return NextResponse.json({ success: true });
   } catch (error) {

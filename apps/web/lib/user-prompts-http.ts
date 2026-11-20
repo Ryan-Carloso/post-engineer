@@ -9,33 +9,46 @@ import { logger } from '@/lib/logger';
 import { applyRateLimit, type RateLimitProfile } from '@/lib/rate-limit';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { UserPromptStoreError, type UserPromptRow } from '@/lib/user-prompts';
-import { UserPromptStatusSchema, type PromptSource, type UserPromptStatus } from '@/lib/contracts/prompts';
-import { isPromptReviewer, PromptReviewerConfigError } from '@/lib/prompt-reviewers';
+import { PromptVisibilitySchema, type PromptSource, type PromptVisibility } from '@/lib/contracts/prompts';
 
 export interface PromptCaller {
-  userId: string;
+  userId: string | null;
   scopedKey: boolean;
+}
+
+function carriesCredentials(request: Request): boolean {
+  return request.headers.has('authorization') || request.headers.has('x-api-key');
 }
 
 export async function resolvePromptCaller(
   request: Request,
   route: string,
   limit: RateLimitProfile,
+  options: { allowAnonymous: boolean },
 ): Promise<PromptCaller | NextResponse> {
   const session = await requireSupabaseSession(request);
   if (session.error !== null || session.auth === null) {
-    return session.error ?? apiErrorResponse(401, 'Unauthorized.', { route });
+    const anonymous =
+      options.allowAnonymous && session.error?.status === 401 && !carriesCredentials(request);
+    if (!anonymous) return session.error ?? apiErrorResponse(401, 'Unauthorized.', { route });
+    const limited = await applyRateLimit(request, limit);
+    if (limited) return limited;
+    return { userId: null, scopedKey: false };
   }
   const limited = await applyRateLimit(request, limit, session.auth.userId);
   if (limited) return limited;
   return { userId: session.auth.userId, scopedKey: isScopedApiKey(session.auth) };
 }
 
-export function scopedKeyDenied(route: string): NextResponse {
-  return apiErrorResponse(403, 'A persona-scoped API key cannot manage prompts.', {
-    route,
-    code: ERROR_CODES.PERSONA_SCOPE_DENIED,
-  });
+export function requireOwner(caller: PromptCaller, route: string): { userId: string } | NextResponse {
+  if (caller.userId === null) return apiErrorResponse(401, 'Unauthorized.', { route });
+  if (caller.scopedKey) {
+    return apiErrorResponse(403, 'A persona-scoped API key cannot manage prompts.', {
+      route,
+      code: ERROR_CODES.PERSONA_SCOPE_DENIED,
+    });
+  }
+  return { userId: caller.userId };
 }
 
 export type BodyOutcome<Body> = { ok: true; body: Body } | { ok: false; response: NextResponse };
@@ -57,15 +70,7 @@ export async function readJsonBody<Schema extends z.ZodType>(
       }),
     };
   }
-  return parseBody(schema, raw, route);
-}
-
-function parseBody<Schema extends z.ZodType>(
-  schema: Schema,
-  body: unknown,
-  route: string,
-): BodyOutcome<z.output<Schema>> {
-  const parsed = schema.safeParse(body);
+  const parsed = schema.safeParse(raw);
   if (parsed.success) return { ok: true, body: parsed.data };
   const issue = parsed.error.issues[0];
   const field = issue.path.length > 0 ? issue.path.join('.') : undefined;
@@ -83,6 +88,14 @@ export function promptNotFound(route: string): NextResponse {
   return apiErrorResponse(404, errorMessage(ERROR_CODES.PROMPT_NOT_FOUND), {
     route,
     code: ERROR_CODES.PROMPT_NOT_FOUND,
+  });
+}
+
+export function slugTaken(route: string): NextResponse {
+  return apiErrorResponse(409, errorMessage(ERROR_CODES.PROMPT_SLUG_TAKEN), {
+    route,
+    code: ERROR_CODES.PROMPT_SLUG_TAKEN,
+    field: 'slug',
   });
 }
 
@@ -104,8 +117,7 @@ export interface PromptSummaryBody {
   title: string;
   description: string;
   source: PromptSource;
-  status: UserPromptStatus | null;
-  rejectionReason: string | null;
+  visibility: PromptVisibility;
 }
 
 export function promptSummaryBody(row: UserPromptRow, source: PromptSource): PromptSummaryBody {
@@ -114,43 +126,10 @@ export function promptSummaryBody(row: UserPromptRow, source: PromptSource): Pro
     title: row.title,
     description: row.description,
     source,
-    status: source === 'own' ? UserPromptStatusSchema.parse(row.status) : null,
-    rejectionReason: source === 'own' ? row.rejection_reason : null,
+    visibility: PromptVisibilitySchema.parse(row.visibility),
   };
 }
 
 export function promptDetailBody(row: UserPromptRow, source: PromptSource): PromptSummaryBody & { prompt: string } {
   return { ...promptSummaryBody(row, source), prompt: row.body };
-}
-
-export async function resolveReviewer(
-  request: Request,
-  route: string,
-  limit: RateLimitProfile,
-): Promise<{ userId: string } | NextResponse> {
-  const session = await requireSupabaseSession(request);
-  if (session.error !== null || session.auth === null) {
-    return session.error ?? apiErrorResponse(401, 'Unauthorized.', { route });
-  }
-  const limited = await applyRateLimit(request, limit, session.auth.userId);
-  if (limited) return limited;
-  try {
-    if (!isPromptReviewer(session.auth)) {
-      return apiErrorResponse(403, errorMessage(ERROR_CODES.PROMPT_REVIEWER_REQUIRED), {
-        route,
-        code: ERROR_CODES.PROMPT_REVIEWER_REQUIRED,
-      });
-    }
-  } catch (error) {
-    if (error instanceof PromptReviewerConfigError) {
-      logger.error('[user-prompts] reviewer list is not configured', error, { route });
-      return apiErrorResponse(500, 'Prompt review is not configured on this server.', {
-        route,
-        code: ERROR_CODES.INTERNAL_ERROR,
-        leaveReportingToWrapper: true,
-      });
-    }
-    throw error;
-  }
-  return { userId: session.auth.userId };
 }

@@ -2,10 +2,8 @@ import type { z } from 'zod';
 import {
   DeleteUserPromptResponseSchema,
   GetPromptResponseSchema,
-  ListPromptReviewQueueResponseSchema,
   ListPromptsResponseSchema,
-  ReviewPromptResponseSchema,
-  type PromptVisibilitySchema,
+  type PromptVisibility,
 } from '@/lib/contracts/prompts';
 import type { TranslationKey } from '@/lib/i18n';
 import { notifyIfSessionExpired } from '@/lib/session-expiry';
@@ -23,13 +21,10 @@ export interface PromptDraft {
   title: string;
   description: string;
   prompt: string;
+  visibility: PromptVisibility;
 }
 
 export type PromptChanges = Partial<Omit<PromptDraft, 'slug'>>;
-
-export type PromptReview =
-  | { decision: 'approve'; contentHash: string }
-  | { decision: 'reject'; contentHash: string; reason: string };
 
 const NETWORK_FAILURE: PromptCallFailure = { success: false, status: 0, code: null };
 
@@ -81,29 +76,12 @@ export const updatePrompt = (
 export const deletePrompt = (slug: string): Promise<PromptCall<z.output<typeof DeleteUserPromptResponseSchema>>> =>
   call(promptPath(slug), DeleteUserPromptResponseSchema, { method: 'DELETE' });
 
-export const setPromptVisibility = (
-  slug: string,
-  visibility: z.output<typeof PromptVisibilitySchema>,
-): Promise<PromptCall<z.output<typeof GetPromptResponseSchema>>> =>
-  call(`${promptPath(slug)}/visibility`, GetPromptResponseSchema, { method: 'POST', body: { visibility } });
-
-export const fetchReviewQueue = (): Promise<PromptCall<z.output<typeof ListPromptReviewQueueResponseSchema>>> =>
-  call('/api/admin/prompts', ListPromptReviewQueueResponseSchema);
-
-export const reviewPrompt = (
-  id: string,
-  review: PromptReview,
-): Promise<PromptCall<z.output<typeof ReviewPromptResponseSchema>>> =>
-  call(`/api/admin/prompts/${encodeURIComponent(id)}/review`, ReviewPromptResponseSchema, { method: 'POST', body: review });
-
 export function promptFailureKey(failure: PromptCallFailure): TranslationKey {
   switch (failure.code) {
     case 'PROMPT_SLUG_TAKEN':
       return 'userPrompts.errorSlugTaken';
     case 'PROMPT_SLUG_RESERVED':
       return 'userPrompts.errorSlugReserved';
-    case 'PROMPT_STATE_CONFLICT':
-      return 'userPrompts.errorStateConflict';
     case 'VALIDATION_FAILED':
       return 'userPrompts.errorValidation';
     default:

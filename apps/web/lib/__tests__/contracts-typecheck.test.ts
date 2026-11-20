@@ -108,12 +108,12 @@ describe('contracts typecheck', () => {
   });
 
   it('pins the prompts response field names', () => {
-    const list: ListPromptsResponse = { success: true, prompts: [{ slug: 'daily-news', title: 'News', description: 'News', source: 'official', status: null, rejectionReason: null }] };
+    const list: ListPromptsResponse = { success: true, prompts: [{ slug: 'daily-news', title: 'News', description: 'News', source: 'official', visibility: 'public' }] };
     expect(list.prompts[0]?.title).toBe('News');
     // @ts-expect-error -- the list item field is `title`, not `name`
     expect(list.prompts[0]?.name).toBeUndefined();
 
-    const detail: GetPromptResponse = { success: true, prompt: { slug: 'daily-news', title: 'News', description: 'News', source: 'official', status: null, rejectionReason: null, prompt: 'Write...' } };
+    const detail: GetPromptResponse = { success: true, prompt: { slug: 'daily-news', title: 'News', description: 'News', source: 'official', visibility: 'public', prompt: 'Write...' } };
     expect(detail.prompt.prompt).toBe('Write...');
     // @ts-expect-error -- the detail field is `prompt`, not `text`
     expect(detail.prompt.text).toBeUndefined();

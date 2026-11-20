@@ -16,7 +16,7 @@ import { COMMUNITY_PROMPT_NOTICE, recipeRunText } from '../recipe-session.js';
 
 const BASE_URL = 'https://api.example.test';
 
-const SHAPE = { source: 'official', status: null, rejectionReason: null } as const;
+const SHAPE = { source: 'official', visibility: 'public' } as const;
 
 const CATALOG = [
   { slug: 'daily-news', title: 'Daily news becomes a video', description: 'Turn one news story into a video.', ...SHAPE },
@@ -286,8 +286,7 @@ describe('prompts from users', () => {
         title: 'Their prompt',
         description: 'About',
         source,
-        status: source === 'own' ? 'private' : null,
-        rejectionReason: null,
+        visibility: source === 'own' ? 'private' : 'public',
         prompt: 'Follow these steps.',
       },
     });
@@ -307,7 +306,7 @@ describe('prompts from users', () => {
   });
 
   it('labels a community prompt in the slash prompt list so it is not mistaken for an official one', async () => {
-    const community = { slug: 'shared', title: 'Shared', description: 'By someone', source: 'community', status: null, rejectionReason: null };
+    const community = { slug: 'shared', title: 'Shared', description: 'By someone', source: 'community', visibility: 'public' };
     fetchMock.mockResolvedValueOnce(json(200, { success: true, prompts: [...CATALOG, community] }));
     const { listSlashPrompts } = await import('../prompts.js');
     const listed = await listSlashPrompts(client());
