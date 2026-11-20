@@ -10,10 +10,6 @@ import {
 } from './contracts/prompts.js';
 import type { BodyOf, ResponseOf } from './contracts/endpoint.js';
 
-function promptPath(slug: string): string {
-  return `/api/prompts/${encodeURIComponent(slug)}`;
-}
-
 export async function createUserPrompt(
   client: PostEngineerClient,
   prompt: BodyOf<typeof createUserPromptContract>,
@@ -32,7 +28,7 @@ export async function updateUserPrompt(
   changes: BodyOf<typeof updateUserPromptContract>,
 ): Promise<ResponseOf<typeof updateUserPromptContract>> {
   const raw = await client.request(
-    promptPath(slug),
+    `/api/prompts/${encodeURIComponent(slug)}`,
     { method: 'PATCH', headers: client.getHeaders(), body: JSON.stringify(changes) },
     'update prompt',
   );
@@ -44,7 +40,7 @@ export async function deleteUserPrompt(
   slug: string,
 ): Promise<ResponseOf<typeof deleteUserPromptContract>> {
   const raw = await client.request(
-    promptPath(slug),
+    `/api/prompts/${encodeURIComponent(slug)}`,
     { method: 'DELETE', headers: client.getHeaders() },
     'delete prompt',
   );
@@ -57,7 +53,7 @@ export async function setPromptVisibility(
   visibility: BodyOf<typeof setPromptVisibilityContract>['visibility'],
 ): Promise<ResponseOf<typeof setPromptVisibilityContract>> {
   const raw = await client.request(
-    `${promptPath(slug)}/visibility`,
+    `/api/prompts/${encodeURIComponent(slug)}/visibility`,
     { method: 'POST', headers: client.getHeaders(), body: JSON.stringify({ visibility }) },
     'set prompt visibility',
   );

@@ -216,7 +216,7 @@ Batch (2-12 videos) needs a `batchKey` and rejects `idempotencyKey`; one video t
 
 ### Measuring the size of `tools/list`
 
-See "Measuring the `tools/list` payload" above. The 17 tools weigh about 62 KB on the stdio server (the 56 tools they replace weighed about 102 KB).
+See "Measuring the `tools/list` payload" above. The 18 tools weigh about 66 KB on the stdio server (the 56 tools they replace weighed about 102 KB).
 
 ### Breaking change: the 56 old tool names are gone
 
