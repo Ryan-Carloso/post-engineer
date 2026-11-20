@@ -28,15 +28,32 @@ export const ListPromptsShape = {
 
 const ListPromptsSchema = z.object(ListPromptsShape);
 
-export async function handleListPrompts(client: PostEngineerClient, args: unknown = {}): Promise<McpToolResponse> {
+interface ListedPrompts {
+  response: McpToolResponse;
+  includesOfficial: boolean;
+}
+
+async function fetchPromptList(client: PostEngineerClient, args: unknown): Promise<ListedPrompts> {
   const parsed = ListPromptsSchema.safeParse(args);
-  if (!parsed.success) return errorResponse('listing prompts', 'query must be at most 100 characters and source one of official, own, community.');
+  if (!parsed.success) {
+    return {
+      response: errorResponse('listing prompts', 'query must be at most 100 characters and source one of official, own, community.'),
+      includesOfficial: false,
+    };
+  }
   try {
     const prompts = await listPrompts(client, parsed.data);
-    return { content: [{ type: 'text', text: JSON.stringify(prompts, null, 2) }] };
+    return {
+      response: { content: [{ type: 'text', text: JSON.stringify(prompts, null, 2) }] },
+      includesOfficial: prompts.some((prompt) => prompt.source === 'official'),
+    };
   } catch (error) {
-    return errorResponse('listing prompts', getErrorMessage(error));
+    return { response: errorResponse('listing prompts', getErrorMessage(error)), includesOfficial: false };
   }
+}
+
+export async function handleListPrompts(client: PostEngineerClient, args: unknown = {}): Promise<McpToolResponse> {
+  return (await fetchPromptList(client, args)).response;
 }
 
 export const GetPromptDescription =
@@ -90,9 +107,9 @@ export function registerPromptTools(server: McpServer, client: PostEngineerClien
     byAction(
       {
         list: async (args) => {
-          const response = await session.run(undefined, () => handleListPrompts(client, args));
-          if (response.isError !== true) session.recordRecipesListed();
-          return response;
+          const listed = await session.run(undefined, () => fetchPromptList(client, args));
+          if (listed.response.isError !== true && listed.includesOfficial) session.recordRecipesListed();
+          return listed.response;
         },
         get: async (args) => {
           const fetched = await session.run(args.slug, () => fetchPromptResponse(client, args));

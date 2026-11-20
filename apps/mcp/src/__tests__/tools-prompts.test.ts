@@ -12,7 +12,7 @@ import {
 import { createPostEngineerMcpServer } from '../index.js';
 import { PostEngineerClient } from '../client.js';
 import { MCP_ACTION_HEADER, MCP_TOOL_HEADER } from '../analytics.js';
-import { COMMUNITY_PROMPT_NOTICE, recipeRunText } from '../recipe-session.js';
+import { COMMUNITY_PROMPT_NOTICE, MCP_RECIPES_KNOWN_HEADER, recipeRunText } from '../recipe-session.js';
 
 const BASE_URL = 'https://api.example.test';
 
@@ -229,6 +229,26 @@ describe('prompt tools over MCP', () => {
       expect(toolHeaders()).toEqual(['prompts', 'prompts']);
       expect(actionHeaders()).toEqual(['list', 'get']);
     });
+  });
+
+  it('counts the recipes as listed only when the list carried an official prompt', async () => {
+    const community = [{ slug: 'theirs', title: 'Theirs', description: 'Shared.', source: 'community', visibility: 'public' }];
+    fetchMock.mockImplementation(async (url) => {
+      const parsed = new URL(url);
+      if (parsed.pathname === '/api/prompts' && parsed.searchParams.get('source') === 'community') {
+        return json(200, { success: true, prompts: community });
+      }
+      return apiResponse(url);
+    });
+    const knownHeaders = (): Array<string | undefined> =>
+      fetchMock.mock.calls.map(([, init]) => (init.headers as Record<string, string>)[MCP_RECIPES_KNOWN_HEADER]);
+    await withMcpClient(async (mcp) => {
+      await mcp.callTool({ name: 'prompts', arguments: { action: 'list', source: 'community' } });
+      await mcp.callTool({ name: 'prompts', arguments: { action: 'list', source: 'community' } });
+      await mcp.callTool({ name: 'prompts', arguments: { action: 'list' } });
+      await mcp.callTool({ name: 'prompts', arguments: { action: 'list' } });
+    });
+    expect(knownHeaders()).toEqual(['false', 'false', 'false', 'true']);
   });
 
   it('keeps generate_video pointing topic-shaped requests back at the recipes', async () => {
