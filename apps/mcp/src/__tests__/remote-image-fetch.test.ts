@@ -38,6 +38,12 @@ describe('fetchRemoteImage', () => {
     expect(image.buffer.equals(PNG)).toBe(true);
   });
 
+  it('keeps a stray percent sign in the url path from failing the download', async () => {
+    arm([PNG]);
+    const image = await fetchRemoteImage('https://cdn.example.com/photos/100%.png', { maxBytes: MAX_SEGMENT_MEDIA_BYTES, lookup: PUBLIC_LOOKUP });
+    expect(image.filename).toBe('100_.png');
+  });
+
   it('derives the extension from the bytes when the url has none', async () => {
     arm([JPEG]);
     const image = await fetchRemoteImage('https://cdn.example.com/download', { maxBytes: MAX_SEGMENT_MEDIA_BYTES, lookup: PUBLIC_LOOKUP });

@@ -31,8 +31,8 @@ credits is billed by Modal.
 ## Remote (HTTP) surface
 
 With `--http-transport` the same server speaks Streamable HTTP, but it
-never reads files from the host it runs on: `media (action: upload)`,
-`persona_media (action: add_image)` and `publish_video (action: from_file)` are not registered, and
+never reads files from the host it runs on: `publish_video (action: from_file)` is not registered,
+`media (action: upload)` and `persona_media (action: add_image)` take a public `imageUrl`, and
 `personas (action: create)`, `personas (action: update)` and `voices (action: create_clone)` accept only
 public URLs (`avatarUrl` / `audioUrl`) — no `avatarPath`, `audioPath` or
 library image files. The server downloads a remote `audioUrl` itself, so it

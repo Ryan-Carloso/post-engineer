@@ -15,9 +15,18 @@ export interface RemoteImage {
   readonly filename: string;
 }
 
+function safeDecode(segment: string): string {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
+}
+
 function filenameFor(parsed: URL, mimeType: string): string {
   const segments = parsed.pathname.split('/').filter((part) => part !== '');
-  const last = decodeURIComponent(segments.at(-1) ?? '');
+  const raw = segments.at(-1) ?? '';
+  const last = safeDecode(raw);
   const safe = last.replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 80);
   if (/\.(jpe?g|png|webp)$/i.test(safe)) return safe;
   return `image.${EXTENSIONS[mimeType]}`;
