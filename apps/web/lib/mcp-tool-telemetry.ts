@@ -28,6 +28,7 @@ export const RECIPE_NUDGE_SURFACES: ReadonlySet<string> = new Set([
 const TRANSPORTS: ReadonlySet<string> = new Set(['stdio', 'http']);
 const HUB_SLUGS: ReadonlySet<string> = new Set(PROMPTS.map((entry) => entry.slug));
 const SCRIPT_REJECTIONS = /^\d{1,3}$/;
+const CALL_REQUEST = /^[1-9]\d{0,5}$/;
 
 function headerInSet(request: Request, name: string, allowed: ReadonlySet<string>): string | undefined {
   const value = request.headers.get(name);
@@ -96,6 +97,10 @@ export function recordMcpToolCall(request: Request | undefined, status: number):
     const tool = headerMatching(request, 'x-mcp-tool', TOOL_NAME);
     if (tool === undefined) return;
     recorded.add(request);
+    const ok = status >= 200 && status < 300;
+    const callRequest = headerMatching(request, 'x-mcp-call-request', CALL_REQUEST);
+    const followUp = callRequest !== undefined && callRequest !== '1';
+    if (followUp && ok) return;
     const client = getPostHogServer();
     if (client === null) return;
     const properties: Record<string, unknown> = {
@@ -105,7 +110,7 @@ export function recordMcpToolCall(request: Request | undefined, status: number):
       method: request.method,
       path: telemetryPath(request.url),
       status,
-      ok: status >= 200 && status < 300,
+      ok,
     };
     const action = headerMatching(request, 'x-mcp-action', TOOL_NAME);
     if (action !== undefined) properties.action = action;
@@ -113,6 +118,11 @@ export function recordMcpToolCall(request: Request | undefined, status: number):
     if (callId !== undefined) properties.call_id = callId;
     const version = headerMatching(request, 'x-mcp-version', VERSION);
     if (version !== undefined) properties.mcp_version = version;
+    if (followUp) {
+      properties.call_request = Number(callRequest);
+      client.captureAs(caller.userId, 'mcp_tool_request_failed', properties);
+      return;
+    }
     client.captureAs(caller.userId, 'mcp_tool_called', properties);
   } catch {
   }

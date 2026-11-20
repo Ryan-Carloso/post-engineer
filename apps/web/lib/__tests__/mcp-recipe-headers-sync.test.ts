@@ -41,4 +41,11 @@ describe('MCP recipe-adoption headers stay in sync with the web telemetry', () =
     expect(header).toBe('X-MCP-Action');
     expect(webSource).toContain(`'${header?.toLowerCase()}'`);
   });
+
+  it('reads the X-MCP-Call-Request ordinal the MCP sends on every request of a call', () => {
+    const analytics = readFileSync(join(repoRoot, 'apps/mcp/src/analytics.ts'), 'utf8');
+    const header = /export const MCP_CALL_REQUEST_HEADER = '(X-MCP-[A-Za-z-]+)';/.exec(analytics)?.[1];
+    expect(header).toBe('X-MCP-Call-Request');
+    expect(webSource).toContain(`'${header?.toLowerCase()}'`);
+  });
 });

@@ -7,11 +7,13 @@ export const MCP_TOOL_HEADER = 'X-MCP-Tool';
 export const MCP_CALL_ID_HEADER = 'X-MCP-Call-Id';
 export const MCP_ACTION_HEADER = 'X-MCP-Action';
 export const MCP_VERSION_HEADER = 'X-MCP-Version';
+export const MCP_CALL_REQUEST_HEADER = 'X-MCP-Call-Request';
 
 interface ToolCallContext {
   toolName: string;
   action?: string;
   callId: string;
+  requests: number;
 }
 
 const toolCallContext = new AsyncLocalStorage<ToolCallContext>();
@@ -30,16 +32,18 @@ export function mcpTelemetryHeaders(options?: { includeVersion?: boolean }): Rec
   if (context !== undefined) {
     headers[MCP_TOOL_HEADER] = context.toolName;
     headers[MCP_CALL_ID_HEADER] = context.callId;
+    context.requests += 1;
+    headers[MCP_CALL_REQUEST_HEADER] = String(context.requests);
     if (context.action !== undefined) headers[MCP_ACTION_HEADER] = context.action;
   }
   return headers;
 }
 
 export function withToolCall<TResult>(toolName: string, action: string, run: () => Promise<TResult>): Promise<TResult> {
-  return toolCallContext.run({ toolName, action, callId: randomUUID() }, run);
+  return toolCallContext.run({ toolName, action, callId: randomUUID(), requests: 0 }, run);
 }
 
 export function withTracking<TArgs extends Record<string, unknown>, TResult>(toolName: string, handler: (args: TArgs) => Promise<TResult>): (args: TArgs) => Promise<TResult> {
   return async (args: TArgs): Promise<TResult> =>
-    toolCallContext.run({ toolName, callId: randomUUID() }, () => handler(args));
+    toolCallContext.run({ toolName, callId: randomUUID(), requests: 0 }, () => handler(args));
 }

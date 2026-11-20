@@ -147,6 +147,52 @@ describe('mcp_tool_called', () => {
     expect(captureAs).toHaveBeenCalledTimes(2);
   });
 
+  describe('one mcp_tool_called per tool call', () => {
+    function callRequest(ordinal: string): Request {
+      return mcpRequest(
+        { 'x-mcp-tool': 'video_tasks', 'x-mcp-action': 'status', 'x-mcp-call-id': CALL_ID, 'x-mcp-call-request': ordinal },
+        'https://post-engineer.test/api/persona/video-status/0b9f6a52-2f43-4c8e-9a51-6f0d1c2e3a4b',
+      );
+    }
+
+    it('records a wait with several status requests as one mcp_tool_called', () => {
+      for (const ordinal of ['1', '2', '3', '4', '5']) record(callRequest(ordinal));
+      expect(captureAs).toHaveBeenCalledTimes(1);
+      expect(captureAs).toHaveBeenCalledWith('user-1', 'mcp_tool_called', expect.objectContaining({
+        tool: 'video_tasks',
+        action: 'status',
+        call_id: CALL_ID,
+        path: '/api/persona/video-status/:param',
+        status: 200,
+        ok: true,
+      }));
+      expect(captureAs.mock.calls[0]?.[2]).not.toHaveProperty('call_request');
+    });
+
+    it('records a failed follow-up request as mcp_tool_request_failed with its ordinal', () => {
+      record(callRequest('1'));
+      record(callRequest('2'), 'api_key', 502);
+      record(callRequest('3'), 'api_key', 404);
+      expect(captureAs.mock.calls.map((call) => call[1])).toEqual([
+        'mcp_tool_called',
+        'mcp_tool_request_failed',
+        'mcp_tool_request_failed',
+      ]);
+      expect(captureAs.mock.calls[1]?.[2]).toMatchObject({ call_id: CALL_ID, status: 502, ok: false, call_request: 2 });
+      expect(captureAs.mock.calls[2]?.[2]).toMatchObject({ call_id: CALL_ID, status: 404, ok: false, call_request: 3 });
+    });
+
+    it('records a failed first request as mcp_tool_called with ok false', () => {
+      record(callRequest('1'), 'api_key', 500);
+      expect(captureAs).toHaveBeenCalledWith('user-1', 'mcp_tool_called', expect.objectContaining({ status: 500, ok: false }));
+    });
+
+    it.each([['0'], ['01'], ['-2'], ['two'], ['1234567']])('treats a malformed ordinal %s as the first request', (ordinal) => {
+      record(callRequest(ordinal));
+      expect(captureAs).toHaveBeenCalledWith('user-1', 'mcp_tool_called', expect.objectContaining({ tool: 'video_tasks' }));
+    });
+  });
+
   it('is a no-op when PostHog is not configured', () => {
     getPostHogServer.mockReturnValue(null);
     expect(() => record(mcpRequest({ 'x-mcp-tool': 'personas' }))).not.toThrow();
