@@ -65,19 +65,21 @@ describe('release workflow keeps server.json in step', () => {
     expect(stamp.includes('server.packages[0].version = version;')).toBe(true);
   });
 
-  it('stamps before building, and in the registry job before publishing metadata', () => {
+  it('stamps before building, and the registry job publishes the stamped server.json from the build', () => {
     const stampStep = release.indexOf('bash .github/scripts/mcp-release-stamp.sh');
     const build = release.indexOf('run: pnpm build');
     expect(stampStep).toBeGreaterThan(-1);
     expect(stampStep).toBeLessThan(build);
+    const upload = release.indexOf('name: mcp-server-json');
+    expect(upload).toBeGreaterThan(stampStep);
     const registryJob = release.indexOf('\n  registry:\n');
-    const registryStamp = release.indexOf('bash .github/scripts/mcp-release-stamp.sh', registryJob);
-    expect(registryStamp).toBeGreaterThan(registryJob);
-    expect(registryStamp).toBeLessThan(release.indexOf('./mcp-publisher publish'));
+    const registryDownload = release.indexOf('name: mcp-server-json', registryJob);
+    expect(registryDownload).toBeGreaterThan(registryJob);
+    expect(registryDownload).toBeLessThan(release.indexOf('./mcp-publisher publish'));
   });
 
   it('release publishes to the MCP Registry after npm, with OIDC login', () => {
-    const npmPublish = release.indexOf('npm publish --provenance --access public');
+    const npmPublish = release.indexOf('npm publish "$TARBALL" --provenance --access public');
     const registryPublish = release.indexOf('./mcp-publisher publish');
     expect(npmPublish).toBeGreaterThan(-1);
     expect(registryPublish).toBeGreaterThan(npmPublish);
