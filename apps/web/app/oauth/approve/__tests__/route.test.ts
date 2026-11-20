@@ -36,12 +36,15 @@ function sessionWith(user: { id: string } | null) {
   } as never);
 }
 
-async function consentToken(sub = 'user-1'): Promise<string> {
+async function consentToken(
+  sub = 'user-1',
+  redirectUri = 'https://chatgpt.com/connector/callback',
+): Promise<string> {
   const keys = await getOAuthKeys();
   return mintConsentRequest(keys, {
     sub,
     clientId: 'mcp_client_abc',
-    redirectUri: 'https://chatgpt.com/connector/callback',
+    redirectUri,
     scope: 'mcp:tools',
     resource: getMcpResource(),
     state: 'xyz',
@@ -83,4 +86,17 @@ describe('POST /oauth/approve', () => {
     const invalid = await POST(approveForm('not-a-token', 'approve'));
     expect(invalid.status).toBe(400);
   });
+
+  it.each(['javascript:alert(1)', 'data:text/html,x', 'http://evil.example/cb', 'https://ok.example/cb#f'])(
+    'never redirects to the unsafe redirect_uri %s',
+    async (unsafe) => {
+      sessionWith({ id: 'user-1' });
+      for (const decision of ['approve', 'deny']) {
+        const response = await POST(approveForm(await consentToken('user-1', unsafe), decision));
+        expect(response.status).toBe(400);
+        expect(response.headers.get('location')).toBeNull();
+        expect(await response.json()).toEqual({ error: 'redirect_uri is not allowed.' });
+      }
+    },
+  );
 });

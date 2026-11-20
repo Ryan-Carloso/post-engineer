@@ -346,6 +346,46 @@ describe('fetchCimdDocument SSRF guards', () => {
     }
   });
 
+  it.each([
+    ['javascript:alert(1)'],
+    ['data:text/html,x'],
+    ['http://evil.example/cb'],
+    ['https://ok.example/cb#frag'],
+    ['not a url'],
+  ])('rejects a document whose redirect_uris contain %s', async (unsafe) => {
+    const fetchImpl = okFetch({ redirect_uris: ['https://ok.example/cb', unsafe] });
+    const result = await fetchCimdDocument(
+      'https://public.example/client.json',
+      fetchImpl,
+      lookupReturning('93.184.216.34'),
+    );
+    expect(fetchImpl).toHaveBeenCalledOnce();
+    expect(result).toBeNull();
+  });
+
+  it('rejects a document with an empty or non-string redirect_uris list', async () => {
+    for (const redirectUris of [[], ['https://ok.example/cb', 42], 'https://ok.example/cb']) {
+      const fetchImpl = okFetch({ redirect_uris: redirectUris });
+      const result = await fetchCimdDocument(
+        'https://public.example/client.json',
+        fetchImpl,
+        lookupReturning('93.184.216.34'),
+      );
+      expect(fetchImpl).toHaveBeenCalledOnce();
+      expect(result).toBeNull();
+    }
+  });
+
+  it('accepts https and loopback http redirect_uris', async () => {
+    const uris = ['https://ok.example/cb', 'http://127.0.0.1:33418/cb', 'http://localhost/cb'];
+    const result = await fetchCimdDocument(
+      'https://public.example/client.json',
+      okFetch({ redirect_uris: uris }),
+      lookupReturning('93.184.216.34'),
+    );
+    expect(result).toEqual({ redirect_uris: uris });
+  });
+
   it('returns null when the response is not ok', async () => {
     const fetchImpl = vi.fn(
       async (): Promise<Response> => ({ ok: false }) as Response,
