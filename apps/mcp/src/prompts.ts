@@ -23,7 +23,11 @@ export async function listSlashPrompts(client: PostEngineerClient): Promise<List
   try {
     const prompts = await trackedList({ client });
     return {
-      prompts: prompts.map((prompt) => ({ name: prompt.slug, title: prompt.title, description: prompt.description })),
+      prompts: prompts.map((prompt) => ({
+        name: prompt.slug,
+        title: prompt.source === 'community' ? `${prompt.title} (community)` : prompt.title,
+        description: prompt.description,
+      })),
     };
   } catch (error) {
     throw new McpError(ErrorCode.InternalError, `Failed to list prompts: ${getErrorMessage(error)}`);
@@ -35,7 +39,7 @@ export async function getSlashPrompt(client: PostEngineerClient, slug: string): 
     const prompt = await trackedGet({ client, slug });
     return {
       description: prompt.description,
-      messages: [{ role: 'user', content: { type: 'text', text: recipeRunText(prompt.slug, prompt.prompt) } }],
+      messages: [{ role: 'user', content: { type: 'text', text: recipeRunText(prompt.slug, prompt.prompt, prompt.source) } }],
     };
   } catch (error) {
     if (error instanceof UnknownPromptSlugError) {

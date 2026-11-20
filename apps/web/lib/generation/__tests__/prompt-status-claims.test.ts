@@ -180,7 +180,7 @@ describe('CTA rule (issue #639)', () => {
 describe('prompt tool names match registered MCP tools', () => {
   it('finds registered tools, their actions and the tool names the prompts mention', () => {
     const registered = registeredTools();
-    expect(registered.size).toBe(17);
+    expect(registered.size).toBe(18);
     expect(registered.has('generate_video')).toBe(true);
     expect([...(registered.get('personas') ?? [])].sort()).toEqual(['create', 'delete', 'get', 'list', 'update']);
     expect([...(registered.get('tool_config') ?? [])].sort()).toEqual(['get', 'save']);

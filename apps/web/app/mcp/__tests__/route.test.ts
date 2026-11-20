@@ -216,7 +216,7 @@ describe('POST /mcp', () => {
     expect(list.status).toBe(200);
     const listResult = (await readSseJson(list)) as { result?: Record<string, unknown> };
     const names = toolNames(listResult.result ?? {});
-    expect(names).toHaveLength(17);
+    expect(names).toHaveLength(18);
     expect(names).toContain('personas');
     expect(names).toContain('tool_config');
     expect(names).toContain('check_script');

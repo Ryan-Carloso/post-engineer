@@ -30,6 +30,12 @@ export const ERROR_CODES = {
   VIDEO_UPLOAD_CONSUMED: 'VIDEO_UPLOAD_CONSUMED',
   VIDEO_UPLOAD_SCHEDULED: 'VIDEO_UPLOAD_SCHEDULED',
   MCP_VERSION_MISMATCH: 'MCP_VERSION_MISMATCH',
+  PROMPT_NOT_FOUND: 'PROMPT_NOT_FOUND',
+  PROMPT_SLUG_TAKEN: 'PROMPT_SLUG_TAKEN',
+  PROMPT_SLUG_RESERVED: 'PROMPT_SLUG_RESERVED',
+  PROMPT_STATE_CONFLICT: 'PROMPT_STATE_CONFLICT',
+  PROMPT_REVIEW_STALE: 'PROMPT_REVIEW_STALE',
+  PROMPT_REVIEWER_REQUIRED: 'PROMPT_REVIEWER_REQUIRED',
 } as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];
@@ -70,6 +76,12 @@ const DEFAULT_MESSAGES: Record<ErrorCode, string> = {
   VIDEO_UPLOAD_SCHEDULED:
     'This video upload is already scheduled. An upload publishes once: schedule it to every network in one call, or upload it again.',
   MCP_VERSION_MISMATCH: 'This post-engineer-mcp version does not match the server. Restart the MCP with the version the server requires.',
+  PROMPT_NOT_FOUND: 'Unknown prompt slug.',
+  PROMPT_SLUG_TAKEN: 'You already have a prompt with this slug, or another approved prompt uses it.',
+  PROMPT_SLUG_RESERVED: 'This slug belongs to an official prompt. Pick another slug.',
+  PROMPT_STATE_CONFLICT: 'This prompt cannot move to that visibility from its current status.',
+  PROMPT_REVIEW_STALE: 'The prompt changed or was already reviewed. Reload the queue and review the current text.',
+  PROMPT_REVIEWER_REQUIRED: 'Only prompt reviewers can do this.',
 };
 
 export function errorMessage(code: ErrorCode): string {

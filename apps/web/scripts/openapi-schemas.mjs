@@ -1,4 +1,4 @@
-import { experimentLinkSchema, metricsOperationSchemas } from './openapi-metrics-schemas.mjs'; import { videoOperationSchemas } from './openapi-videos-schemas.mjs'; import { OAUTH_CONNECT_PROVIDERS, SCHEDULE_ACCOUNT_COLUMNS, SOCIAL_PROVIDERS as providers } from '../../../shared/contracts/providers.ts';
+import { experimentLinkSchema, metricsOperationSchemas } from './openapi-metrics-schemas.mjs'; import { videoOperationSchemas } from './openapi-videos-schemas.mjs'; import { promptOperationSchemas } from './openapi-prompts-schemas.mjs'; import { OAUTH_CONNECT_PROVIDERS, SCHEDULE_ACCOUNT_COLUMNS, SOCIAL_PROVIDERS as providers } from '../../../shared/contracts/providers.ts';
 
 const object = (properties, required = []) => ({
   type: 'object',
@@ -508,7 +508,7 @@ export const operationSchemas = {
     request: object({ url: { type: 'string', format: 'uri', description: 'http(s) URL.' } }, ['url']),
     response: success({ code: str }),
   },
-  ...metricsOperationSchemas({ success, object, anyObject, str }), ...videoOperationSchemas({ success, object, str }),
+  ...metricsOperationSchemas({ success, object, anyObject, str }), ...videoOperationSchemas({ success, object, str }), ...promptOperationSchemas({ success, object, str }),
   'GET /api/posts/[id]': {
     response: success({
       kind: { type: 'string', enum: ['generation', 'slot'] },
@@ -552,8 +552,6 @@ export const operationSchemas = {
     responseContent: 'audio/mpeg',
     response: { type: 'string', format: 'binary' },
   },
-  'GET /api/prompts': { response: success({ prompts: { type: 'array', items: object(fields(str, ['slug', 'title', 'description'])) } }) },
-  'GET /api/prompts/[slug]': { response: success({ prompt: object(fields(str, ['slug', 'title', 'description', 'prompt'])) }) },
   'GET /api/schedule/status': {
     query: [{ name: 'limit', required: false }, { name: 'from', required: false }, { name: 'to', required: false }],
     response: success({

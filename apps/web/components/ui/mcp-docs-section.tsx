@@ -42,6 +42,7 @@ const MCP_TOOL_CARDS: McpToolCard[] = [
   { id: 'voices', actions: ['list', 'preview', 'list_clones', 'create_clone', 'get_clone', 'preview_clone', 'delete_clone'], descKey: 'apiKeys.toolDescVoices', Icon: MicIcon },
   { id: 'accounts', actions: ['list', 'connect', 'disconnect', 'get_persona_publishing', 'set_persona_publishing', 'list_boards'], descKey: 'apiKeys.toolDescAccounts', Icon: AccountsIcon },
   { id: 'tool_config', actions: ['get', 'save'], descKey: 'apiKeys.toolDescToolConfig', Icon: KeyIcon },
+  { id: 'prompt_library', actions: ['create', 'update', 'delete', 'set_visibility', 'review_queue', 'review'], descKey: 'apiKeys.toolDescPromptLibrary', Icon: ComposeIcon },
   { id: 'schedules', actions: ['list', 'cancel', 'get_slot', 'update_slot_title', 'delete_slot'], descKey: 'apiKeys.toolDescSchedules', Icon: CalendarIcon },
   { id: 'posts', actions: ['list', 'get'], descKey: 'apiKeys.toolDescPosts', Icon: ExternalLinkIcon },
   { id: 'insights', actions: ['post_metrics', 'retention_curve'], descKey: 'apiKeys.toolDescInsights', Icon: HistoryIcon },

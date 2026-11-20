@@ -11,6 +11,7 @@ import HubStep from './components/hub-step';
 import SignInCta from './components/sign-in-cta';
 import PromptCard from './components/prompt-card';
 import AddPromptLink from './components/add-prompt-link';
+import MyPromptsSection from './components/my-prompts-section';
 
 export default function RecipesPage() {
   const { t } = useI18n();
@@ -53,6 +54,11 @@ export default function RecipesPage() {
         </ul>
         <AddPromptLink />
       </HubStep>
+      {signedIn ? (
+        <HubStep number={4} title={t('userPrompts.stepTitle')} hint={t('userPrompts.stepHint')}>
+          <MyPromptsSection />
+        </HubStep>
+      ) : null}
     </div>
   );
 }

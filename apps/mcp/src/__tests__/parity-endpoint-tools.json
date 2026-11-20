@@ -342,6 +342,42 @@
       "action": "get"
     }
   ],
+  "POST /api/prompts": [
+    {
+      "tool": "prompt_library",
+      "action": "create"
+    }
+  ],
+  "PATCH /api/prompts/[slug]": [
+    {
+      "tool": "prompt_library",
+      "action": "update"
+    }
+  ],
+  "DELETE /api/prompts/[slug]": [
+    {
+      "tool": "prompt_library",
+      "action": "delete"
+    }
+  ],
+  "POST /api/prompts/[slug]/visibility": [
+    {
+      "tool": "prompt_library",
+      "action": "set_visibility"
+    }
+  ],
+  "GET /api/admin/prompts": [
+    {
+      "tool": "prompt_library",
+      "action": "review_queue"
+    }
+  ],
+  "POST /api/admin/prompts/[id]/review": [
+    {
+      "tool": "prompt_library",
+      "action": "review"
+    }
+  ],
   "POST /api/experiments": [
     {
       "tool": "experiments",

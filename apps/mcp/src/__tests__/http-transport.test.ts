@@ -169,7 +169,7 @@ describe('serveHttpTransport', () => {
 
       expect(httpNames).toEqual(memoryNames);
       expect(stdioNames).toEqual(httpNames);
-      expect(httpNames).toHaveLength(17);
+      expect(httpNames).toHaveLength(18);
       expect(httpNames).toContain('prompts');
       expect(httpNames).toContain('check_script');
       const actionsOf = (tools: typeof httpTools.tools, name: string): string[] =>

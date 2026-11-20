@@ -47,7 +47,10 @@ export async function handleGetPrompt(client: PostEngineerClient, args: unknown)
   }
   try {
     const prompt = await getPrompt(client, parsed.data.slug);
-    return { content: [{ type: 'text', text: recipeRunText(prompt.slug, prompt.prompt) }] };
+    return {
+      content: [{ type: 'text', text: recipeRunText(prompt.slug, prompt.prompt, prompt.source) }],
+      _meta: { promptSource: prompt.source },
+    };
   } catch (error) {
     if (error instanceof UnknownPromptSlugError) return errorResponse('getting prompt', error.message);
     return errorResponse('getting prompt', getErrorMessage(error));
@@ -76,7 +79,9 @@ export function registerPromptTools(server: McpServer, client: PostEngineerClien
         },
         get: async (args) => {
           const response = await session.run(args.slug, () => handleGetPrompt(client, args));
-          if (response.isError !== true && isRecipeSlug(args.slug)) session.recordRecipeFetched(args.slug);
+          if (response.isError !== true && response._meta?.promptSource === 'official' && isRecipeSlug(args.slug)) {
+            session.recordRecipeFetched(args.slug);
+          }
           return response;
         },
       },

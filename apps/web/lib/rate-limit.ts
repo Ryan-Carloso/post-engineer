@@ -48,6 +48,9 @@ export const RATE_LIMITS = {
   publishById: { name: 'publish-by-id', limit: 10, windowMs: 60_000 },
   mcpRemote: { name: 'mcp-remote', limit: 120, windowMs: 60_000 },
   mcpRemotePreAuth: { name: 'mcp-remote-pre-auth', limit: 300, windowMs: 60_000 },
+  promptsRead: { name: 'prompts-read', limit: 120, windowMs: 60_000 },
+  promptsWrite: { name: 'prompts-write', limit: 30, windowMs: 60_000 },
+  promptsReview: { name: 'prompts-review', limit: 60, windowMs: 60_000 },
 } as const satisfies Record<string, RateLimitProfile>;
 
 interface WindowCounter {
