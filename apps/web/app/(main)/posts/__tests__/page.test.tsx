@@ -213,6 +213,36 @@ describe('PostsPage', () => {
     expect(screen.queryByText('posts.personaFallback')).not.toBeInTheDocument();
   });
 
+  it('draws one calendar only: no sidebar mini calendar beside the month grid', () => {
+    render(<PostsPage />);
+
+    expect(document.querySelectorAll('[data-calendar-card]')).toHaveLength(1);
+    expect(document.querySelector('[data-slot="mini-calendar"]')).toBeNull();
+    expect(document.querySelector('[data-testid="posts-sidebar"]')).toBeNull();
+    expect(screen.queryByText('posts.sidebarCalendars')).not.toBeInTheDocument();
+  });
+
+  it('keeps every persona’s posts on the one calendar, with no persona toggles to switch off', () => {
+    mockQueries({
+      range: [
+        UPCOMING_SLOT,
+        { ...UPCOMING_SLOT, id: 'u2', scheduleId: 's2', slotAt: '2030-06-01T14:00:00.000Z', title: 'Second topic' },
+      ],
+      schedules: [SCHEDULE, { ...SCHEDULE, id: 's2', personaId: 'p2' }],
+      personas: [
+        { id: 'p1', name: 'Viva Leve', avatarUrl: 'https://example.test/viva.jpg' },
+        { id: 'p2', name: 'Daily Dose', avatarUrl: 'https://example.test/daily.jpg' },
+      ],
+    });
+    render(<PostsPage />);
+
+    expect(dayPanelCardText('Upcoming topic')).toBeInTheDocument();
+    expect(dayPanelCardText('Second topic')).toBeInTheDocument();
+    expect(dayPanelCardText('Viva Leve')).toBeInTheDocument();
+    expect(dayPanelCardText('Daily Dose')).toBeInTheDocument();
+    expect(screen.queryAllByRole('switch')).toHaveLength(0);
+  });
+
   it('reads title first, then persona, time and networks, with the status chip last', () => {
     render(<PostsPage />);
 
@@ -243,28 +273,6 @@ describe('PostsPage', () => {
     expect(screen.getByText('posts.filterMonthEmptyTitle')).toBeInTheDocument();
     expect(screen.getByText('posts.calendarMonthHeading')).toBeInTheDocument();
     expect(screen.queryByText('Upcoming topic')).not.toBeInTheDocument();
-  });
-
-  it('hides a persona’s posts from the grid and the day list when its sidebar row is toggled off', async () => {
-    const user = userEvent.setup();
-    mockQueries({
-      range: [
-        UPCOMING_SLOT,
-        { ...UPCOMING_SLOT, id: 'u2', scheduleId: 's2', slotAt: '2030-06-01T14:00:00.000Z', title: 'Second topic' },
-      ],
-      schedules: [SCHEDULE, { ...SCHEDULE, id: 's2', personaId: 'p2' }],
-      personas: [
-        { id: 'p1', name: 'Viva Leve', avatarUrl: 'https://example.test/viva.jpg' },
-        { id: 'p2', name: 'Daily Dose', avatarUrl: 'https://example.test/daily.jpg' },
-      ],
-    });
-    render(<PostsPage />);
-
-    expect(dayPanelCardText('Upcoming topic')).toBeInTheDocument();
-    expect(dayPanelCardText('Second topic')).toBeInTheDocument();
-    await user.click(screen.getByRole('switch', { name: 'Viva Leve' }));
-    expect(screen.queryByText('Upcoming topic')).not.toBeInTheDocument();
-    expect(dayPanelCardText('Second topic')).toBeInTheDocument();
   });
 
   it('shows the filter empty state, not the day empty state, when a filter empties the selected day', async () => {
@@ -1064,25 +1072,29 @@ describe('PostsPage week view', () => {
     expect(screen.getByRole('button', { name: 'posts.calendarViewWeek' })).toBeInTheDocument();
   });
 
-  it('opens the week view on a narrow screen, with no switcher', async () => {
+  it('opens the month view on a narrow screen, with the view switcher', async () => {
     vi.stubGlobal('matchMedia', vi.fn(mobileMatchMedia));
     render(<PostsPage />);
 
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'posts.calendarPrevWeek' })).toBeInTheDocument(),
+      expect(screen.getByRole('button', { name: 'posts.calendarPrevMonth' })).toBeInTheDocument(),
     );
-    expect(screen.queryByRole('button', { name: 'posts.calendarViewMonth' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'posts.calendarViewWeek' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'posts.calendarViewMonth' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'posts.calendarViewWeek' })).toBeInTheDocument();
   });
 
-  it('hides the day panel on a narrow screen until a day is tapped', async () => {
+  it('lists the selected day below the month grid on a narrow screen', async () => {
     vi.stubGlobal('matchMedia', vi.fn(mobileMatchMedia));
     render(<PostsPage />);
 
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'posts.calendarPrevWeek' })).toBeInTheDocument(),
+      expect(screen.getByRole('button', { name: 'posts.calendarPrevMonth' })).toBeInTheDocument(),
     );
-    expect(document.querySelector('section[aria-live="polite"]')).not.toBeInTheDocument();
+    const panel = document.querySelector('section[aria-live="polite"]') as HTMLElement;
+    expect(panel).not.toBeNull();
+    expect(dayPanelCardText('Upcoming topic')).toBeInTheDocument();
+    const card = document.querySelector('[data-calendar-card]') as HTMLElement;
+    expect(card.parentElement?.nextElementSibling).toBe(panel);
   });
 
   it('shows the account empty state on a narrow screen without a tap, so an empty account is never a dead end', async () => {
@@ -1091,7 +1103,7 @@ describe('PostsPage week view', () => {
     render(<PostsPage />);
 
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'posts.calendarPrevWeek' })).toBeInTheDocument(),
+      expect(screen.getByRole('button', { name: 'posts.calendarPrevMonth' })).toBeInTheDocument(),
     );
     expect(screen.getByText('posts.accountEmptyTitle')).toBeInTheDocument();
     const accountEmpty = screen.getByText('posts.accountEmptyTitle').closest('[data-empty-state]');
@@ -1101,6 +1113,7 @@ describe('PostsPage week view', () => {
   it('puts the day panel below the week grid on a narrow screen, once a day is tapped', async () => {
     vi.stubGlobal('matchMedia', vi.fn(mobileMatchMedia));
     render(<PostsPage />);
+    fireEvent.click(screen.getByRole('button', { name: 'posts.calendarViewWeek' }));
 
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'posts.calendarPrevWeek' })).toBeInTheDocument(),
@@ -1122,6 +1135,7 @@ describe('PostsPage week view', () => {
   it('collapses the day panel when the same day is tapped again', async () => {
     vi.stubGlobal('matchMedia', vi.fn(mobileMatchMedia));
     render(<PostsPage />);
+    fireEvent.click(screen.getByRole('button', { name: 'posts.calendarViewWeek' }));
 
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'posts.calendarPrevWeek' })).toBeInTheDocument(),
@@ -1141,6 +1155,7 @@ describe('PostsPage week view', () => {
   it('keeps today\'s day panel open from the Hoje button on a narrow screen, never toggling it shut', async () => {
     vi.stubGlobal('matchMedia', vi.fn(mobileMatchMedia));
     render(<PostsPage />);
+    fireEvent.click(screen.getByRole('button', { name: 'posts.calendarViewWeek' }));
 
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'posts.calendarPrevWeek' })).toBeInTheDocument(),
@@ -1159,6 +1174,7 @@ describe('PostsPage week view', () => {
     mockQueries({ range: [UPCOMING_SLOT, maySlot] });
     vi.stubGlobal('matchMedia', vi.fn(mobileMatchMedia));
     render(<PostsPage />);
+    fireEvent.click(screen.getByRole('button', { name: 'posts.calendarViewWeek' }));
 
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'posts.calendarPrevWeek' })).toBeInTheDocument(),
@@ -1178,6 +1194,7 @@ describe('PostsPage week view', () => {
   it('shows the tapped day as a summarized card: one line per video, no thumbnails', async () => {
     vi.stubGlobal('matchMedia', vi.fn(mobileMatchMedia));
     render(<PostsPage />);
+    fireEvent.click(screen.getByRole('button', { name: 'posts.calendarViewWeek' }));
 
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'posts.calendarPrevWeek' })).toBeInTheDocument(),
@@ -1207,6 +1224,7 @@ describe('PostsPage week view', () => {
   it('moves the month cursor with the shown week so the range read stays within the API span', async () => {
     vi.stubGlobal('matchMedia', vi.fn(mobileMatchMedia));
     render(<PostsPage />);
+    fireEvent.click(screen.getByRole('button', { name: 'posts.calendarViewWeek' }));
 
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'posts.calendarNextWeek' })).toBeInTheDocument(),
@@ -1223,6 +1241,7 @@ describe('PostsPage week view', () => {
   it('keeps the range read within the API span when browsing many weeks ahead', async () => {
     vi.stubGlobal('matchMedia', vi.fn(mobileMatchMedia));
     render(<PostsPage />);
+    fireEvent.click(screen.getByRole('button', { name: 'posts.calendarViewWeek' }));
 
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'posts.calendarNextWeek' })).toBeInTheDocument(),
@@ -1241,6 +1260,7 @@ describe('PostsPage week view', () => {
     mockQueries({ range: [UPCOMING_SLOT, julySlot] });
     vi.stubGlobal('matchMedia', vi.fn(mobileMatchMedia));
     render(<PostsPage />);
+    fireEvent.click(screen.getByRole('button', { name: 'posts.calendarViewWeek' }));
 
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'posts.calendarPrevWeek' })).toBeInTheDocument(),
@@ -1255,32 +1275,6 @@ describe('PostsPage week view', () => {
       fireEvent.click(screen.getByRole('button', { name: 'posts.calendarNextWeek' }));
     }
     expect(dayPanelCardText('July topic')).toBeInTheDocument();
-  });
-
-  it('follows a mini-calendar pick back to today in week view, so the read covers the picked day', async () => {
-    const julySlot = { ...UPCOMING_SLOT, id: 'u2', slotAt: '2030-07-08T10:00:00.000Z', title: 'July topic' };
-    mockQueries({ range: [UPCOMING_SLOT, julySlot] });
-    render(<PostsPage />);
-
-    fireEvent.click(screen.getByRole('button', { name: 'posts.calendarViewWeek' }));
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'posts.calendarNextWeek' })).toBeInTheDocument(),
-    );
-    for (let i = 0; i < 6; i++) {
-      fireEvent.click(screen.getByRole('button', { name: 'posts.calendarNextWeek' }));
-    }
-    expect(dayPanelCardText('July topic')).toBeInTheDocument();
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Go back to today' })).toBeInTheDocument(),
-    );
-    fireEvent.click(screen.getByRole('button', { name: 'Go back to today' }));
-    expect(dayPanelCardText('Upcoming topic')).toBeInTheDocument();
-    const calls = vi.mocked(useScheduleRangeQuery).mock.calls;
-    const last = calls[calls.length - 1];
-    expect(Date.parse(last[1] as string)).toBeLessThanOrEqual(Date.parse('2030-06-01T00:00:00.000Z'));
-    expect(Date.parse(last[2] as string)).toBeGreaterThan(Date.parse('2030-06-01T00:00:00.000Z'));
-    const spanDays = (Date.parse(last[2] as string) - Date.parse(last[1] as string)) / 86400000;
-    expect(spanDays).toBeLessThanOrEqual(62);
   });
 
   it('keeps the range read within the API span when switching to week from an empty month', async () => {
@@ -1299,6 +1293,7 @@ describe('PostsPage week view', () => {
     mockQueries({ range: [maySlot] });
     vi.stubGlobal('matchMedia', vi.fn(mobileMatchMedia));
     render(<PostsPage />);
+    fireEvent.click(screen.getByRole('button', { name: 'posts.calendarViewWeek' }));
 
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'posts.calendarPrevWeek' })).toBeInTheDocument(),
@@ -1317,6 +1312,7 @@ describe('PostsPage week view', () => {
       matches: query === '(max-width: 767px)' || query === '(max-width: 639px)',
     })));
     render(<PostsPage />);
+    fireEvent.click(screen.getByRole('button', { name: 'posts.calendarViewWeek' }));
 
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'posts.calendarPrevWeek' })).toBeInTheDocument(),
@@ -1334,6 +1330,7 @@ describe('PostsPage week view', () => {
   it('scrolls the day panel into view after a column pick at 700px, where only the mobile query matches', async () => {
     vi.stubGlobal('matchMedia', vi.fn(mobileMatchMedia));
     render(<PostsPage />);
+    fireEvent.click(screen.getByRole('button', { name: 'posts.calendarViewWeek' }));
 
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'posts.calendarPrevWeek' })).toBeInTheDocument(),

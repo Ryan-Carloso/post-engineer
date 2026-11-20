@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { RefreshCw, TriangleAlert } from 'lucide-react';
 import { useI18n } from '@/lib/i18n/provider';
 import type { TranslationKey } from '@/lib/i18n';
-import type { ScheduledSlot } from '@/lib/api';
 import { RANGE_MAX_SLOTS, useHasAnyPostQuery, useScheduleRangeQuery } from '@/lib/schedule-range';
 import { cn } from '@/lib/utils';
 import { PostsCalendar } from './calendar-provider';
@@ -28,8 +27,6 @@ import {
 import { AccountEmptyState, DayEmptyState, DayListRow, NewPostButton } from './day-section';
 import { CALENDAR_LAYOUT_CLASS, CalendarLoadingSkeleton } from './loading-skeleton';
 import { PostFiltersBar, SlotCard, usePostFilters, usePostJoins } from './post-joins';
-import { usePersonaFilter } from './persona-filter';
-import { PostsSidebar } from './posts-sidebar';
 import { PageHeader } from '@/components/ui/page-header';
 import { Button } from '@/components/ui/button';
 import { OnboardingWizard, OnboardingWizardButton } from './onboarding-wizard';
@@ -59,14 +56,13 @@ export default function PostsPage() {
   const [pickedKey, setPickedKey] = useState<string | null>(todayKey);
   const isMobile = useIsMobile();
   const [viewOverride, setViewOverride] = useState<'month' | 'week' | null>(null);
-  const view = isMobile ? 'week' : (viewOverride ?? 'month');
+  const view = viewOverride ?? 'month';
   const [weekDate, setWeekDate] = useState(() => new Date());
   const mobileWeek = isMobile && view === 'week';
   const [mobilePanelOpen, setMobilePanelOpen] = useState(false);
   const daySectionRef = useRef<HTMLElement>(null);
   const joins = usePostJoins();
   const filters = usePostFilters(joins);
-  const personaFilter = usePersonaFilter(joins, t('posts.noPersona'), t('posts.personaFallback'));
 
   const firstWeekday = FIRST_WEEKDAY[locale];
   const gridDays = useMemo(() => buildMonthGrid(cursor.year, cursor.month, firstWeekday), [cursor, firstWeekday]);
@@ -76,12 +72,7 @@ export default function PostsPage() {
     [view, monthRange, weekDate, firstWeekday],
   );
   const rangeQuery = useScheduleRangeQuery(monthKey(cursor.year, cursor.month), range.from, range.to, true);
-  const { passes: networkPasses } = filters;
-  const { passes: personaPasses } = personaFilter;
-  const passes = useCallback(
-    (slot: ScheduledSlot) => networkPasses(slot) && personaPasses(slot),
-    [networkPasses, personaPasses],
-  );
+  const passes = filters.passes;
   const slotsByDay = useMemo(
     () => bucketByDay((rangeQuery.data?.slots ?? []).filter(passes)),
     [rangeQuery.data, passes],
@@ -191,11 +182,8 @@ export default function PostsPage() {
   const monthLabel = new Intl.DateTimeFormat(INTL_TAG[locale], { month: 'long', year: 'numeric' }).format(
     new Date(cursor.year, cursor.month, 1),
   );
-  const hasActiveFilter = filters.hasActiveFilter || personaFilter.hasActiveFilter;
-  const handleClearFilters = useCallback(() => {
-    filters.clear();
-    personaFilter.clear();
-  }, [filters, personaFilter]);
+  const hasActiveFilter = filters.hasActiveFilter;
+  const handleClearFilters = filters.clear;
   const emptyReason = hasActiveFilter ? 'filter' : !monthIsEmpty ? 'day' : 'month';
   const mobileDayFormat = new Intl.DateTimeFormat(INTL_TAG[locale], { weekday: 'long', day: 'numeric', month: 'short' });
   const mobileDayDate = selectedKey === null ? monthLabel : mobileDayFormat.format(dateFromKey(selectedKey));
@@ -238,16 +226,7 @@ export default function PostsPage() {
         unavailable={isError}
       />
 
-      <div className="mt-4 flex items-start gap-6 sm:mt-6">
-        <PostsSidebar
-          calendars={personaFilter.calendars}
-          hiddenIds={personaFilter.hiddenIds}
-          onTogglePersona={personaFilter.togglePersona}
-          currentDate={new Date(cursor.year, cursor.month, 1)}
-          weekStartsOn={firstWeekday}
-          locale={locale}
-          onSelectDay={handleSelect}
-        />
+      <div className="mt-4 sm:mt-6">
         <div className="min-w-0 flex-1">
           {isLoading ? (
             <CalendarLoadingSkeleton weeks={monthWeeks} />
@@ -274,7 +253,7 @@ export default function PostsPage() {
                     date={view === 'week' ? weekStart(weekDate, firstWeekday) : new Date(cursor.year, cursor.month, 1)}
                     view={view}
                     mobileWeek={mobileWeek}
-                    showViewSwitcher={!isMobile}
+                    showViewSwitcher
                     weekStartsOn={firstWeekday}
                     locale={locale}
                     loading={rangeQuery.isFetching}

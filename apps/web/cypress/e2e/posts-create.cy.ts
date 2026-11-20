@@ -144,6 +144,8 @@ describe('Posts list progress', () => {
   it('scrolls the day panel into view when picking a day on a narrow screen', () => {
     cy.viewport(390, 844);
     visitPosts();
+    cy.get('[data-calendar-card]').contains('button', 'Semana').click();
+    cy.get('[data-posts-calendar-week]').should('exist');
     cy.get('[data-calendar-card]').find('button[aria-label="Próxima semana"]').click();
     const nextSunday = new Date();
     nextSunday.setDate(nextSunday.getDate() - nextSunday.getDay() + 7);

@@ -189,46 +189,8 @@ export function PostsCalendar({
       data-calendar-card
       className={cn('relative max-w-full min-w-0 rounded-xl border border-line bg-card p-2 sm:p-3', muted && 'pointer-events-none')}
     >
-      <div className="mb-2 flex min-h-10 w-full items-center justify-between gap-2">
-        <div className="min-w-0">
-          <div className="truncate text-base font-bold text-primary">{captionLabel}</div>
-          {view === 'week' && (
-            <div className="truncate text-xs font-medium text-muted-foreground">{weekSubtitle}</div>
-          )}
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {showViewSwitcher && (
-            <div
-              role="group"
-              aria-label={t('posts.calendarViewSwitcher')}
-              className="hidden items-center gap-0.5 rounded-md border border-input bg-card p-0.5 md:flex"
-            >
-              <button
-                type="button"
-                onClick={() => onViewChange('month')}
-                disabled={muted}
-                aria-pressed={view === 'month'}
-                className={cn(
-                  'h-9 rounded-md px-3 text-sm font-semibold transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
-                  view === 'month' ? 'bg-brand text-white hover:bg-brand-hover' : 'text-primary hover:bg-sunken',
-                )}
-              >
-                {t('posts.calendarViewMonth')}
-              </button>
-              <button
-                type="button"
-                onClick={() => onViewChange('week')}
-                disabled={muted}
-                aria-pressed={view === 'week'}
-                className={cn(
-                  'h-9 rounded-md px-3 text-sm font-semibold transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
-                  view === 'week' ? 'bg-brand text-white hover:bg-brand-hover' : 'text-primary hover:bg-sunken',
-                )}
-              >
-                {t('posts.calendarViewWeek')}
-              </button>
-            </div>
-          )}
+      <div className="mb-2 flex w-full flex-wrap items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-1">
           <nav className="flex shrink-0 items-center gap-0.5" aria-label={captionLabel}>
             <button
               type="button"
@@ -248,19 +210,59 @@ export function PostsCalendar({
             >
               <ChevronRight aria-hidden />
             </button>
-            <button
-              type="button"
-              onClick={onGoToToday}
-              disabled={muted}
-              aria-pressed={todayPressed}
-              className={cn(
-                'h-10 rounded-md px-3 text-sm font-semibold transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
-                todayPressed ? 'bg-brand text-white hover:bg-brand-hover' : 'border border-input bg-card text-primary hover:bg-sunken',
-              )}
-            >
-              {t('posts.calendarGoToToday')}
-            </button>
           </nav>
+          <div className="min-w-0">
+            <div className="truncate text-[15px] font-bold text-primary sm:text-base">{captionLabel}</div>
+            {view === 'week' && (
+              <div className="truncate text-xs font-medium text-muted-foreground">{weekSubtitle}</div>
+            )}
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {showViewSwitcher && (
+            <div
+              role="group"
+              aria-label={t('posts.calendarViewSwitcher')}
+              className="flex items-center gap-0.5 rounded-md border border-input bg-card p-0.5"
+            >
+              <button
+                type="button"
+                onClick={() => onViewChange('month')}
+                disabled={muted}
+                aria-pressed={view === 'month'}
+                className={cn(
+                  'h-9 rounded-md px-2 text-[13px] font-semibold transition-colors sm:px-3 sm:text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
+                  view === 'month' ? 'bg-brand text-white hover:bg-brand-hover' : 'text-primary hover:bg-sunken',
+                )}
+              >
+                {t('posts.calendarViewMonth')}
+              </button>
+              <button
+                type="button"
+                onClick={() => onViewChange('week')}
+                disabled={muted}
+                aria-pressed={view === 'week'}
+                className={cn(
+                  'h-9 rounded-md px-2 text-[13px] font-semibold transition-colors sm:px-3 sm:text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
+                  view === 'week' ? 'bg-brand text-white hover:bg-brand-hover' : 'text-primary hover:bg-sunken',
+                )}
+              >
+                {t('posts.calendarViewWeek')}
+              </button>
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={onGoToToday}
+            disabled={muted}
+            aria-pressed={todayPressed}
+            className={cn(
+              'hidden h-10 rounded-md px-3 text-sm font-semibold transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none sm:inline-flex sm:items-center',
+              todayPressed ? 'bg-brand text-white hover:bg-brand-hover' : 'border border-input bg-card text-primary hover:bg-sunken',
+            )}
+          >
+            {t('posts.calendarGoToToday')}
+          </button>
         </div>
       </div>
       <CalendarProvider
