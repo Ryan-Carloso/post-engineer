@@ -43,6 +43,7 @@ import {
 } from '@/lib/generation/video-job-payload';
 import { recordGenerationStart, recordGenerationUpdate, startEngineVideoTask } from '@/lib/generation/video-generation';
 import { checkCustomAudioUrl } from '@/lib/generation/custom-audio';
+import { deleteInsertedSlots } from './rollback-slots';
 import { recordRecentImageId, resolveVideoImage } from '@/lib/persona-images';
 import { resolveIdempotency } from '@/lib/idempotency';
 import { trackApiEvent } from '@/lib/analytics';
@@ -458,7 +459,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
       scheduleId: idem.scheduleId,
       userId,
     });
-    await supabase.from('scheduled_posts').delete().eq('schedule_id', idem.scheduleId).eq('user_id', userId);
+    await deleteInsertedSlots(supabase, userId, slotRows);
     await supabase.from('schedules').delete().eq('id', idem.scheduleId).eq('user_id', userId);
     await refundRollbackSpend(supabase, {
       userId,
@@ -474,7 +475,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
     const recheck = await verifyExperimentPairAfterInsert(supabase, { link: experiment, userId, facts: pairFacts });
     if (!recheck.ok) {
       logger.error('[generate-and-schedule] experiment pair re-check failed after insert; rolling back', undefined, { scheduleId: idem.scheduleId, userId, field: recheck.field });
-      await supabase.from('scheduled_posts').delete().eq('schedule_id', idem.scheduleId).eq('user_id', userId);
+      await deleteInsertedSlots(supabase, userId, slotRows);
       await supabase.from('schedules').delete().eq('id', idem.scheduleId).eq('user_id', userId);
       await refundRollbackSpend(supabase, {
         userId,

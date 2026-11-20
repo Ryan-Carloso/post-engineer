@@ -280,6 +280,7 @@ function makeClient(cfg: DbConfig): unknown {
         deletes.push(name);
         const q: Record<string, unknown> = {
           eq: () => q,
+          in: () => q,
           then: (resolve: (v: unknown) => void) => Promise.resolve({ error: null }).then(resolve),
         };
         return q;
@@ -1148,7 +1149,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
     });
 
-    it('409s without charging or dispatching when the key belongs to a schedule deleted after a cancel refund', async () => {
+    it('charges again when the key belongs to a schedule deleted after a full cancel refund and no slot survives', async () => {
       const key = 'deleted-after-cancel-key';
       const generationId = generationIdFor(key);
       setup({
@@ -1160,11 +1161,27 @@ describe('POST /api/videos/generate-and-schedule', () => {
       });
       const res = await post(baseBody({ idempotencyKey: key }));
       const json = await res.json();
+      expect(res.status).toBe(200);
+      expect(json.success).toBe(true);
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(1);
+    });
+
+    it('409s without charging when a slot survives a refund and its schedule was deleted', async () => {
+      const key = 'deleted-with-refunded-slot-key';
+      const generationId = generationIdFor(key);
+      setup({
+        ...DEFAULT_CFG,
+        ledgerRows: [
+          { id: 'tx-spend', type: 'video_generation', amount: -2, reference_id: null },
+          { id: 'tx-refund', type: 'generation_refund', amount: 2, reference_id: `${generationId}:slot:slot-0` },
+        ],
+        replaySlots: [{ id: 'slot-failed', slot_at: futureISO(-24), title: 'Porto trip', task_id: 'task-1', status: 'failed' }],
+      });
+      const res = await post(baseBody({ idempotencyKey: key }));
+      const json = await res.json();
       expect(res.status).toBe(409);
       expect(json.code).toBe('IDEMPOTENCY_KEY_CONSUMED');
       expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
-      expect(inserts['schedules']).toBeUndefined();
-      expect(inserts['scheduled_posts']).toBeUndefined();
       expect(vi.mocked(startEngineVideoTask)).not.toHaveBeenCalled();
     });
 
@@ -2481,7 +2498,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
       const json = await res.json();
       expect(res.status).toBe(500);
       expect(json.code).toBe('INTERNAL_ERROR');
-      expect(deletes).toContain('scheduled_posts');
+      expect(deletes).not.toContain('scheduled_posts');
       expect(deletes).toContain('schedules');
       const refunds = rpcCalls.filter((c) => c.name === 'refund_batch_tokens');
       expect(refunds).toHaveLength(1);

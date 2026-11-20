@@ -16,18 +16,6 @@ export interface SpendLedgerRow {
   reference_id: unknown;
 }
 
-export function isRollbackRefund(row: SpendLedgerRow, generationId: string): boolean {
-  return (
-    row.type === 'generation_refund' &&
-    typeof row.reference_id === 'string' &&
-    row.reference_id.startsWith(`${generationId}:rollback:`)
-  );
-}
-
-export function hasSlotRefund(rows: SpendLedgerRow[], generationId: string): boolean {
-  return rows.some((row) => row.type === 'generation_refund' && !isRollbackRefund(row, generationId));
-}
-
 export async function resolvePriorSpend(
   supabase: SupabaseClient,
   input: { userId: string; scheduleId: string; generationId: string; scheduleWasLive: boolean },
@@ -47,19 +35,16 @@ export async function resolvePriorSpend(
   }
   const rows: SpendLedgerRow[] = data ?? [];
   if (!input.scheduleWasLive && rows.length > 0) {
-    let consumed = hasSlotRefund(rows, generationId);
-    if (!consumed) {
-      const { count, error: slotError } = await supabase
-        .from('scheduled_posts')
-        .select('id', { count: 'exact', head: true })
-        .eq('schedule_id', scheduleId)
-        .eq('user_id', userId);
-      if (slotError !== null) {
-        logger.error('[generate-and-schedule] orphan slot lookup failed', slotError, { scheduleId, userId });
-        return internalError();
-      }
-      consumed = (count ?? 0) > 0;
+    const { count, error: slotError } = await supabase
+      .from('scheduled_posts')
+      .select('id', { count: 'exact', head: true })
+      .eq('schedule_id', scheduleId)
+      .eq('user_id', userId);
+    if (slotError !== null) {
+      logger.error('[generate-and-schedule] orphan slot lookup failed', slotError, { scheduleId, userId });
+      return internalError();
     }
+    const consumed = (count ?? 0) > 0;
     if (consumed) {
       logger.warn('[generate-and-schedule] idempotency key belongs to a deleted schedule; refusing to dispatch', {
         scheduleId,
