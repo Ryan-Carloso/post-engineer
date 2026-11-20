@@ -27,7 +27,7 @@ interface StoredPrompt {
   title: string;
   description: string;
   prompt: string;
-  source: 'own' | 'community';
+  source: 'official' | 'own' | 'community';
   visibility: 'private' | 'public';
 }
 
@@ -259,12 +259,15 @@ describe('MyPromptsSection', () => {
     expect(screen.queryByTestId('user-prompt-gamma-shared')).not.toBeInTheDocument();
     fireEvent.change(box, { target: { value: 'gamma' } });
     expect(screen.getByTestId('user-prompt-gamma-shared')).toBeInTheDocument();
+    expect(screen.queryByText('No prompt matches your search.')).not.toBeInTheDocument();
+    fireEvent.change(box, { target: { value: 'zzz-nothing' } });
     expect(screen.getByText('No prompt matches your search.')).toBeInTheDocument();
     fireEvent.change(box, { target: { value: '' } });
     expect(screen.getByTestId('user-prompt-beta')).toBeInTheDocument();
   });
 
-  it('hides the search box while the user has no prompts', async () => {
+  it('hides the search box while the user has no own or community prompts, even though the list carries the official ones', async () => {
+    stored = [own('daily-news', 'public', { source: 'official' })];
     renderSection();
     await screen.findByText('You have no prompts yet.');
     expect(screen.queryByTestId('user-prompts-search')).not.toBeInTheDocument();

@@ -37,10 +37,13 @@ export default function MyPromptsSection(): React.ReactElement {
   const [search, setSearch] = useState('');
 
   const listing = query.data !== undefined && query.data.success ? query.data.body.prompts : null;
-  const visible = filterPromptSummaries(listing ?? [], { q: search });
+  const displayable = (listing ?? []).filter((prompt) => prompt.source !== 'official');
+  const visible = filterPromptSummaries(displayable, { q: search });
   const own = visible.filter((prompt) => prompt.source === 'own');
   const community = visible.filter((prompt) => prompt.source === 'community');
   const searching = search.trim() !== '';
+  const emptyMessage =
+    own.length > 0 ? null : !searching ? t('userPrompts.empty') : community.length === 0 ? t('userPrompts.noResults') : null;
   const busy =
     createMutation.isPending ||
     updateMutation.isPending ||
@@ -164,7 +167,7 @@ export default function MyPromptsSection(): React.ReactElement {
         </p>
       ) : null}
 
-      {listing === null || listing.length === 0 ? null : (
+      {listing === null || displayable.length === 0 ? null : (
         <input
           type="search"
           value={search}
@@ -193,7 +196,7 @@ export default function MyPromptsSection(): React.ReactElement {
           </Button>
         </div>
       ) : own.length === 0 ? (
-        <p className="text-sm text-muted-text">{searching ? t('userPrompts.noResults') : t('userPrompts.empty')}</p>
+        emptyMessage === null ? null : <p className="text-sm text-muted-text">{emptyMessage}</p>
       ) : (
         <ul className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           {own.map((prompt) => (
