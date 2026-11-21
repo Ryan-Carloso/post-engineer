@@ -50,14 +50,20 @@ jobs:
 
       - name: Run file-size ratchet
         id: lint
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.sha }}
+          INPUT_BASE: ${{ inputs.base }}
+          INPUT_HEAD: ${{ inputs.head }}
         run: |
           set -euo pipefail
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            base="${{ github.event.pull_request.base.sha }}"
-            head="${{ github.sha }}"
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            base="$PR_BASE_SHA"
+            head="$HEAD_SHA"
           else
-            base="${{ inputs.base }}"
-            head="${{ inputs.head }}"
+            base="$INPUT_BASE"
+            head="$INPUT_HEAD"
           fi
           set +e
           node .github/scripts/file-size/check.mjs --base "$base" --head "$head"

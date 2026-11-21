@@ -14,19 +14,19 @@ name: api-naming
 # Findings become ::error/::warning annotations, fail the job on errors,
 # and are posted as an upserted PR comment.
 
+# Security model: pull_request_target. The workflow file, the checker, its
+# config and its tests always come from the base sha. The PR head is fetched
+# into the repository as git objects and only diffed; nothing from the PR is
+# checked out, installed or executed. The LLM key is only passed for
+# same-repo PRs.
+
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, synchronize, reopened]
-  workflow_dispatch:
-    inputs:
-      base:
-        description: 'Base ref for the diff'
-        required: false
-        default: 'origin/main'
-      head:
-        description: 'Head ref for the diff'
-        required: false
-        default: 'HEAD'
+
+concurrency:
+  group: api-naming-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
   lint:
@@ -36,15 +36,32 @@ jobs:
       contents: read
       pull-requests: write
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 pinned 2026-09-25
+      - name: Check out the base (trusted checker and config)
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 pinned 2026-09-25
         with:
-          fetch-depth: 0
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 pinned 2026-09-25
         with:
           node-version: '22'
 
-      - name: Unit tests (api-naming lint)
+      - name: Download the PR diff as data
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          current=$(gh api "repos/$REPO/pulls/$PR_NUMBER" --jq .head.sha)
+          if [ "$current" != "$HEAD_SHA" ]; then
+            echo "::error::The PR head moved while this run started ($HEAD_SHA -> $current); the run for the new head decides."
+            exit 2
+          fi
+          gh api "repos/$REPO/pulls/$PR_NUMBER" -H "Accept: application/vnd.github.diff" > /tmp/api-naming-pr.diff
+
+      - name: Unit tests (api-naming lint, base version)
         run: node --test .github/scripts/api-naming/*.test.mjs
 
       - name: Run API naming lint
@@ -53,20 +70,16 @@ jobs:
           # Optional: when unset, the LLM layer skips with a warning and the
           # deterministic denylist layer still runs. Set in repo Settings >
           # Secrets and variables > Actions.
-          API_NAMING_LLM_API_KEY: ${{ secrets.API_NAMING_LLM_API_KEY }}
+          BASH_ENV: ""
+          API_NAMING_LLM_API_KEY: ${{ github.event.pull_request.head.repo.full_name == github.repository && secrets.API_NAMING_LLM_API_KEY || '' }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            base="${{ github.event.pull_request.base.sha }}"
-            head="${{ github.sha }}"
-          else
-            base="${{ inputs.base }}"
-            head="${{ inputs.head }}"
-          fi
+          head="$PR_HEAD_SHA"
           echo "head_sha=$head" >> "$GITHUB_OUTPUT"
           set +e
           node .github/scripts/api-naming/run.mjs \
-            --base "$base" --head "$head" \
+            --diff-file /tmp/api-naming-pr.diff \
             --findings-out /tmp/api-naming-findings.json
           code=$?
           set -e
@@ -74,15 +87,18 @@ jobs:
           echo "lint failed with exit $code (reported as a job failure below, after the PR comment)"
 
       - name: Post/update PR comment
-        if: always() && github.event_name == 'pull_request'
+        if: always()
         env:
           GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ steps.lint.outputs.head_sha }}
         run: |
           set -euo pipefail
           findings=/tmp/api-naming-findings.json
-          pr="${{ github.event.pull_request.number }}"
-          repo="${{ github.repository }}"
-          head_sha="${{ steps.lint.outputs.head_sha }}"
+          pr="$PR_NUMBER"
+          repo="$REPO"
+          head_sha="$HEAD_SHA"
           if [[ ! -f "$findings" ]]; then
             echo "no findings file; skipping PR comment"
             exit 0
@@ -105,8 +121,10 @@ jobs:
 
       - name: Fail on naming errors
         if: always()
+        env:
+          LINT_EXIT: ${{ steps.lint.outputs.lint_exit }}
         run: |
-          if [[ "${{ steps.lint.outputs.lint_exit }}" != "0" ]]; then
+          if [[ "$LINT_EXIT" != "0" ]]; then
             echo "::error::API naming lint found error-severity findings (see annotations and the PR comment)."
             exit 1
           fi

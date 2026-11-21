@@ -44,9 +44,12 @@ def main() -> int:
     text = WORKFLOW.read_text()
     doc = yaml.safe_load(text)
 
-    triggers = doc.get(True, {}).get("pull_request", {}).get("types", [])
+    events = doc.get(True, {})
+    check("workflow runs on pull_request_target", "pull_request_target" in events)
+    check("workflow has no pull_request trigger", "pull_request" not in events)
+    triggers = events.get("pull_request_target", {}).get("types", [])
     for event in ("opened", "synchronize", "reopened", "ready_for_review"):
-        check(f"trigger includes pull_request:{event}", event in triggers)
+        check(f"trigger includes pull_request_target:{event}", event in triggers)
 
     uses = re.findall(r"^\s*uses:\s*(\S+)", text, re.M)
     check("no anomalyco/opencode action", not any("anomalyco/opencode" in u for u in uses))
@@ -288,11 +291,11 @@ def main() -> int:
     )
     check(
         "pass 1 grounding receives the changed-file list",
-        "review.md pass1.md --context pr-context.md --files pr-files.txt" in text,
+        "../review.md ../pass1.md --context ../pr-context.md --files ../pr-files.txt" in text,
     )
     check(
         "pass 2 grounding receives the changed-file list",
-        "pass2-raw.md pass2.md --context pr-context.md --files pr-files.txt" in text,
+        "../pass2-raw.md ../pass2.md --context ../pr-context.md --files ../pr-files.txt" in text,
     )
     check(
         "mechanical checks script invoked in workflow",

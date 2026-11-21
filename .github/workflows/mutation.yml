@@ -195,6 +195,7 @@ jobs:
           # spaces, $ or backticks.
           MUTATE_GLOBS: ${{ steps.ranges.outputs.mutate }}
           CHANGED_FILES: ${{ steps.changed.outputs.files }}
+          INPUT_SCOPE: ${{ inputs.scope }}
         run: |
           set -euo pipefail
           if [ -n "$MUTATE_GLOBS" ]; then
@@ -238,17 +239,17 @@ jobs:
           if [ -n "$CHANGED_FILES" ]; then
             echo "Mutating whole changed files (fallback)."
             pnpm exec stryker run --mutate "$stryker_files"
-          elif [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.scope }}" ]; then
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "$INPUT_SCOPE" ]; then
             # Manual scoped run: the glob resolves relative to the app
             # directory. Skip gracefully when it matches nothing here so a
             # folder that exists in only one app keeps the dispatch green.
             shopt -s globstar nullglob
-            matches=( ${{ inputs.scope }} )
+            matches=( $INPUT_SCOPE )
             if [ "${#matches[@]}" -eq 0 ]; then
-              echo "Scope '${{ inputs.scope }}' matches no files in ${{ matrix.app }} — skipping."
+              echo "Scope '$INPUT_SCOPE' matches no files in ${{ matrix.app }} — skipping."
             else
-              echo "Scoped dispatch: mutating '${{ inputs.scope }}' (${#matches[@]} path(s))."
-              pnpm exec stryker run --mutate "${{ inputs.scope }}"
+              echo "Scoped dispatch: mutating '$INPUT_SCOPE' (${#matches[@]} path(s))."
+              pnpm exec stryker run --mutate "$INPUT_SCOPE"
             fi
           else
             pnpm exec stryker run
@@ -329,6 +330,8 @@ jobs:
       #   file means "full app/ scope, don't pin only_mutate".
       - name: Compute engine files to mutate
         id: changed
+        env:
+          INPUT_SCOPE: ${{ inputs.scope }}
         run: |
           set -uo pipefail
           files_json="[]"
@@ -347,10 +350,10 @@ jobs:
             files_json="$(printf '%s\n' "$changed" \
               | jq -R -s -c 'split("\n") | map(select(length > 0))')"
           elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            if [ -n "${{ inputs.scope }}" ]; then
+            if [ -n "$INPUT_SCOPE" ]; then
               cd apps/engine || exit 1
               shopt -s globstar nullglob
-              matches=( ${{ inputs.scope }} )
+              matches=( $INPUT_SCOPE )
               files_json="$(printf '%s\n' "${matches[@]}" \
                 | jq -R -s -c 'split("\n") | map(select(length > 0))')"
             else

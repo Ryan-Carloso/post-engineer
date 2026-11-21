@@ -896,10 +896,11 @@ jobs:
         if: always() && github.event_name == 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
           findings=/tmp/ui-gates/findings.json
-          pr="${{ github.event.pull_request.number }}"
+          pr="$PR_NUMBER"
           repo="${{ github.repository }}"
           existing_id=$(gh api "repos/$repo/issues/$pr/comments" --jq '.[] | select(.body | contains("<!-- ui-coverage-gates -->")) | .id' | head -n 1 || true)
           if [[ ! -f "$findings" ]]; then

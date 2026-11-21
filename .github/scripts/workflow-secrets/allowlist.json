@@ -1,0 +1,12 @@
+[
+  {
+    "workflow": ".github/workflows/ci.yml",
+    "job": "cypress",
+    "reason": "pull_request job: the workflow file comes from the PR merge commit, so a same-repo branch can read these values. Accepted (issue 457): they are the dedicated low-privilege E2E test account plus the public Supabase URL and anon key."
+  },
+  {
+    "workflow": ".github/workflows/ci.yml",
+    "job": "cypress-coverage",
+    "reason": "Same accepted risk as the cypress job: a same-repo branch can read the low-privilege E2E test account and the public Supabase values."
+  }
+]

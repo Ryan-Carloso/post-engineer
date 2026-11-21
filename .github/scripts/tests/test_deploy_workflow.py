@@ -1,7 +1,7 @@
 """Pin the deploy workflow's trigger semantics.
 
 deploy.yml applies pending Supabase migrations to production. It must run on
-PR merge to main (the user's ship decision), not gated on the full CI suite
+every push to main, which is the PR merge (the user's ship decision), not gated on the full CI suite
 going green on main — branch protection already encodes the quality bar via
 required checks, and gating on CI held migrations back whenever a
 non-required job (e.g. cypress) went red after merge.
@@ -24,28 +24,30 @@ def workflow():
     return data
 
 
-def test_triggers_on_pull_request_closed_to_main(workflow):
+def test_triggers_on_push_to_main_and_dispatch(workflow):
     on = workflow["on"]
-    pr = on["pull_request"]
-    assert "closed" in pr["types"]
-    assert "main" in pr["branches"]
+    assert on["push"]["branches"] == ["main"]
+    assert "workflow_dispatch" in on
+    assert "pull_request" not in on
     assert "workflow_run" not in on
 
 
-def test_migrate_job_only_runs_for_merged_prs(workflow):
-    condition = workflow["jobs"]["migrate"]["if"]
-    assert "github.event.pull_request.merged == true" in condition
+def test_migrate_job_runs_in_the_production_environment(workflow):
+    assert workflow["jobs"]["migrate"]["environment"] == "production"
 
 
-def test_migrate_job_skips_fork_prs(workflow):
-    condition = workflow["jobs"]["migrate"]["if"]
-    assert "github.event.pull_request.head.repo.full_name == github.repository" in condition
+def test_migrate_job_has_no_pull_request_dependency(workflow):
+    text = WORKFLOW.read_text()
+    assert "github.event.pull_request" not in text
+    assert "if" not in workflow["jobs"]["migrate"]
 
 
-def test_checks_out_the_merge_commit(workflow):
+def test_checks_out_the_pushed_commit_or_main_on_dispatch(workflow):
     steps = workflow["jobs"]["migrate"]["steps"]
     checkout = next(s for s in steps if s.get("uses", "").startswith("actions/checkout@"))
-    assert "github.event.pull_request.merge_commit_sha" in checkout["with"]["ref"]
+    ref = checkout["with"]["ref"]
+    assert "'refs/heads/main'" in ref
+    assert "github.sha" in ref
 
 
 def test_deploy_runs_serialized(workflow):
