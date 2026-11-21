@@ -29,6 +29,21 @@ on:
         default: 'HEAD'
 
 jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 pinned 2026-09-25
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 pinned 2026-09-25
+        with:
+          node-version: '22'
+
+      - name: Unit tests (api-naming lint)
+        run: node --test .github/scripts/api-naming/*.test.mjs
+
   lint:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -50,15 +65,13 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Unit tests (api-naming lint)
-        run: node --test .github/scripts/api-naming/*.test.mjs
-
       - name: Run API naming lint
         id: lint
         env:
           # Optional: when unset, the LLM layer skips with a warning and the
           # deterministic denylist layer still runs. Set in repo Settings >
           # Secrets and variables > Actions.
+          BASH_ENV: ""
           API_NAMING_LLM_API_KEY: ${{ secrets.API_NAMING_LLM_API_KEY }}
           EVENT_NAME: ${{ github.event_name }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}

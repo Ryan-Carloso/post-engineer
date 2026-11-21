@@ -1,6 +1,8 @@
 const RISKY_TRIGGERS = ['pull_request', 'pull_request_target', 'workflow_dispatch'];
 const UNTRUSTED_CONTEXT = /\$\{\{[^}]*\b(?:inputs|github\.event)\./;
 const SECRET_REFERENCE = /\bsecrets\.([A-Za-z0-9_]+)/g;
+const BARE_ENV_VALUE = /^\s+(?!run:)[A-Za-z_]\w*:\s*["']?\$[A-Za-z_]\w*["']?\s*$/;
+const REPO_SCRIPT = /\b(?:python3?|node|bash|sh)\s+(?:-\S+\s+)*(\.?\/?(?:\.base\/)?\.github\/scripts\/\S+)/;
 const BLOCK_SCALAR = /^[|>][+-]?\d*$/;
 
 const indentOf = (line) => line.length - line.trimStart().length;
@@ -42,6 +44,15 @@ function runBlocks(lines, from, to) {
   return blocks;
 }
 
+function bareEnvValues(lines, runs) {
+  const inRun = new Set(runs.map((run) => run.line));
+  const found = [];
+  lines.forEach((line, index) => {
+    if (!isComment(line) && !inRun.has(index + 1) && BARE_ENV_VALUE.test(line)) found.push({ line: index + 1, text: line.trim() });
+  });
+  return found;
+}
+
 function secretsIn(lines, from, to) {
   const found = [];
   for (let index = from; index < to; index += 1) {
@@ -68,14 +79,18 @@ export function parseWorkflow(text) {
     const environment = lines.slice(start.index + 1, end).some((line) => /^ {4}environment:/.test(line));
     return { id: start.id, environment, secrets: secretsIn(lines, start.index, end), runs: runBlocks(lines, start.index, end) };
   });
-  return { triggers: parseTriggers(lines), workflowSecrets: secretsIn(lines, 0, headerEnd), jobs };
+  const bareEnv = bareEnvValues(lines, jobs.flatMap((job) => job.runs));
+  return { triggers: parseTriggers(lines), workflowSecrets: secretsIn(lines, 0, headerEnd), jobs, bareEnv };
 }
 
 const riskyTriggersOf = (triggers) => [...triggers].filter((name) => RISKY_TRIGGERS.includes(name));
 
 export function violationsOf(file, text, allowlist) {
-  const { triggers, workflowSecrets, jobs } = parseWorkflow(text);
+  const { triggers, workflowSecrets, jobs, bareEnv } = parseWorkflow(text);
   const violations = [];
+  for (const value of bareEnv) {
+    violations.push({ file, line: value.line, message: `env value "${value.text}" is a bare shell variable, not a ${'$'}{{ }} expression; GitHub passes it as a literal string` });
+  }
   const risky = riskyTriggersOf(triggers);
   const allowed = (job) => allowlist.some((entry) => entry.workflow === file && entry.job === job);
   if (risky.length > 0 && workflowSecrets.length > 0) {
@@ -86,6 +101,10 @@ export function violationsOf(file, text, allowlist) {
       violations.push({ file, line: job.secrets[0].line, message: `job ${job.id} reads secrets.${job.secrets[0].name} under ${risky.join('/')} with no environment: and no allowlist entry` });
     }
     for (const run of job.runs) {
+      const script = REPO_SCRIPT.exec(run.text);
+      if (script !== null && job.secrets.length > 0 && allowed(job.id) && !script[1].startsWith('.base/')) {
+        violations.push({ file, line: run.line, message: `allowlisted job ${job.id} runs ${script[1]} from the PR tree beside its secrets; run it from .base/` });
+      }
       if (UNTRUSTED_CONTEXT.test(run.text)) {
         violations.push({ file, line: run.line, message: `job ${job.id} interpolates an inputs.* or github.event.* expression inside run:; pass it through env: instead` });
       }

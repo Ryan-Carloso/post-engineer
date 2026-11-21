@@ -12,11 +12,11 @@
   {
     "workflow": ".github/workflows/opencode-review.yml",
     "job": "review",
-    "reason": "Needs the provider keys on every pull request. Scripts and the reviewer agent are checked out from the base sha into .base, so no code from the PR tree runs beside the keys."
+    "reason": "Needs the provider keys on every pull request. Every script and the reviewer agent run from a base sha checkout in .base, the key steps clear BASH_ENV, and the PR tree is only read as the diff under review."
   },
   {
     "workflow": ".github/workflows/api-naming.yml",
     "job": "lint",
-    "reason": "The LLM key is optional and the checker, its config and the comment script run from a base sha checkout in .base; the PR tree is only the diff under review."
+    "reason": "The LLM key is optional and the checker, its config and the comment script run from a base sha checkout in .base, the PR unit tests run in a separate job without the key, and the PR tree is only the diff under review."
   }
 ]

@@ -104,6 +104,7 @@ jobs:
       - name: Check for review API keys
         id: check
         env:
+          BASH_ENV: ""
           ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           OPENCODE_ZEN_API_KEY: ${{ secrets.OPENCODE_ZEN_API_KEY }}
@@ -136,6 +137,7 @@ jobs:
       - name: Mask provider secrets
         if: steps.check.outputs.has_zai_key == 'true' || steps.check.outputs.has_openrouter_key == 'true' || steps.check.outputs.has_opencode_key == 'true'
         env:
+          BASH_ENV: ""
           ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           OPENCODE_ZEN_API_KEY: ${{ secrets.OPENCODE_ZEN_API_KEY }}
@@ -178,6 +180,7 @@ jobs:
         if: steps.check.outputs.has_key == 'true'
         id: select_models
         env:
+          BASH_ENV: ""
           ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           OPENCODE_ZEN_API_KEY: ${{ secrets.OPENCODE_ZEN_API_KEY }}
@@ -198,6 +201,7 @@ jobs:
       - name: Configure review providers
         if: steps.check.outputs.has_key == 'true'
         env:
+          BASH_ENV: ""
           ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           OPENCODE_ZEN_API_KEY: ${{ secrets.OPENCODE_ZEN_API_KEY }}
@@ -330,7 +334,7 @@ jobs:
           # comment and the job fails explicitly at the end, so the section
           # is always posted even when a check fails.
           set +e
-          python3 .github/scripts/review-mechanical-checks.py \
+          python3 .base/.github/scripts/review-mechanical-checks.py \
             --diff pr.diff --files pr-files.txt \
             --migrations supabase/migrations > mechanical-checks.md
           echo "status=$?" >> "$GITHUB_OUTPUT"
@@ -344,7 +348,7 @@ jobs:
           # Heuristics never fail the job. A crash becomes a warning line so
           # the rest of the review still posts.
           set +e
-          python3 .github/scripts/review-heuristics.py --diff pr.diff --root . > heuristics.md
+          python3 .base/.github/scripts/review-heuristics.py --diff pr.diff --root . > heuristics.md
           status=$?
           set -e
           if [ "$status" -ne 0 ]; then
@@ -360,7 +364,7 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
-          python3 .github/scripts/review-context.py \
+          python3 .base/.github/scripts/review-context.py \
             --repo "$REPO" \
             --pr "$PR_NUMBER" \
             --files pr-files.txt \
@@ -371,6 +375,7 @@ jobs:
         id: pass1
         if: steps.check.outputs.has_key == 'true'
         env:
+          BASH_ENV: ""
           ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           OPENCODE_ZEN_API_KEY: ${{ secrets.OPENCODE_ZEN_API_KEY }}
@@ -471,7 +476,7 @@ jobs:
           # Do not fail this step — the comment is posted first, and the
           # final step fails the job.
           set +e
-          python3 .github/scripts/verify-review-grounding.py \
+          python3 .base/.github/scripts/verify-review-grounding.py \
             review.md pass1.md --context pr-context.md --files pr-files.txt
           status=$?
           set -e
@@ -483,6 +488,7 @@ jobs:
         if: steps.check.outputs.has_key == 'true' && steps.pass1.outcome == 'success'
         continue-on-error: true
         env:
+          BASH_ENV: ""
           ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           OPENCODE_ZEN_API_KEY: ${{ secrets.OPENCODE_ZEN_API_KEY }}
@@ -598,6 +604,7 @@ jobs:
       - name: Scrub secrets from review output
         if: always() && steps.check.outputs.has_key == 'true'
         env:
+          BASH_ENV: ""
           ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           OPENCODE_ZEN_API_KEY: ${{ secrets.OPENCODE_ZEN_API_KEY }}

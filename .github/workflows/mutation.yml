@@ -195,7 +195,7 @@ jobs:
           # spaces, $ or backticks.
           MUTATE_GLOBS: ${{ steps.ranges.outputs.mutate }}
           CHANGED_FILES: ${{ steps.changed.outputs.files }}
-          INPUT_SCOPE: $INPUT_SCOPE
+          INPUT_SCOPE: ${{ inputs.scope }}
         run: |
           set -euo pipefail
           if [ -n "$MUTATE_GLOBS" ]; then
