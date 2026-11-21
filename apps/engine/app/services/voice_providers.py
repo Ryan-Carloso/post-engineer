@@ -215,7 +215,7 @@ def elevenlabs_tts(
         logger.error("ElevenLabs TTS text is empty")
         return TtsResult(error="ElevenLabs TTS failed: text is empty")
 
-    text = _preprocess_text_for_tts(text)
+    spoken_text = _preprocess_text_for_tts(text)
     api_key = config.elevenlabs.get("api_key", "")
     if not api_key:
         logger.error("ElevenLabs API key is not set")
@@ -230,7 +230,7 @@ def elevenlabs_tts(
         "Content-Type": "application/json",
     }
     payload = {
-        "text": text,
+        "text": spoken_text,
         "model_id": model_id,
         "voice_settings": {
             "stability": 0.5,
@@ -332,7 +332,7 @@ def chatterbox_tts(
         logger.error("Chatterbox TTS text is empty")
         return TtsResult(error="Chatterbox TTS failed: text is empty")
 
-    text = _preprocess_text_for_tts(text)
+    spoken_text = _preprocess_text_for_tts(text)
     base_url = (config.chatterbox.get("base_url", "") or "").strip().rstrip("/")
     if not base_url:
         logger.error(
@@ -394,13 +394,13 @@ def chatterbox_tts(
 
         return f"Chatterbox TTS failed after 3 attempts ({last_error or 'unknown error'})"
 
-    chunks = split_chatterbox_script(text)
+    chunks = split_chatterbox_script(spoken_text)
     if len(chunks) == 1:
         error = _synthesize_chunk(chunks[0], voice_file)
         if error is not None:
             return TtsResult(error=error)
     else:
-        logger.info(f"chatterbox tts: {len(chunks)} chunks for {len(text)} chars, voice: {voice}")
+        logger.info(f"chatterbox tts: {len(chunks)} chunks for {len(spoken_text)} chars, voice: {voice}")
         with tempfile.TemporaryDirectory() as tmp_dir:
             part_files = []
             for index, chunk in enumerate(chunks):

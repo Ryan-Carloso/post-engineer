@@ -4,9 +4,6 @@ export const publishingAccountsStrings = {
       publishingAccountsLabel: 'Publishing accounts',
       publishingAccountsHint:
         'This persona publishes only to these accounts — at least one is required. When a video is generated without choosing accounts, it publishes to all of them.',
-      publishingAccountsSave: 'Save accounts',
-      publishingAccountsSaving: 'Saving…',
-      publishingAccountsSaved: 'Accounts saved.',
       publishingAccountsLoadError: 'Could not load the publishing accounts.',
       publishingAccountsSaveError: 'Could not save the publishing accounts.',
       publishingAccountsNoAccounts: 'No {provider} accounts connected.',
@@ -18,9 +15,6 @@ export const publishingAccountsStrings = {
       publishingAccountsLabel: 'Contas de publicação',
       publishingAccountsHint:
         'Esta persona publica apenas nestas contas — pelo menos uma é obrigatória. Quando um vídeo é gerado sem escolher contas, ele publica em todas elas.',
-      publishingAccountsSave: 'Salvar contas',
-      publishingAccountsSaving: 'Salvando…',
-      publishingAccountsSaved: 'Contas salvas.',
       publishingAccountsLoadError: 'Não foi possível carregar as contas de publicação.',
       publishingAccountsSaveError: 'Não foi possível salvar as contas de publicação.',
       publishingAccountsNoAccounts: 'Nenhuma conta de {provider} conectada.',

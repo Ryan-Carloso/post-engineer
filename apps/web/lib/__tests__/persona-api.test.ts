@@ -61,6 +61,16 @@ describe('lib/api — persona', () => {
       expect(result.error).toBe('Nome obrigatório');
     });
 
+    it('returns success:false on a non-JSON body instead of throwing', async () => {
+      fetchMock.mockResolvedValue(
+        new Response('<html>502 Bad Gateway</html>', { status: 502 }),
+      );
+
+      const result = await createPersona(new FormData());
+
+      expect(result.success).toBe(false);
+    });
+
     it('passes through imageIds and warnings string arrays', async () => {
       fetchMock.mockResolvedValue(
         jsonResponse({

@@ -8,9 +8,6 @@ vi.mock('@/lib/i18n/provider', () => {
   const dictionary: Record<string, string> = {
     'persona.publishingAccountsLabel': 'Publishing accounts',
     'persona.publishingAccountsHint': 'Hint text.',
-    'persona.publishingAccountsSave': 'Save accounts',
-    'persona.publishingAccountsSaving': 'Saving…',
-    'persona.publishingAccountsSaved': 'Accounts saved.',
     'persona.publishingAccountsLoadError': 'Could not load the publishing accounts.',
     'persona.publishingAccountsSaveError': 'Could not save the publishing accounts.',
     'persona.publishingAccountsNoAccounts': 'No {provider} accounts connected.',
@@ -189,8 +186,7 @@ describe('PersonaPublishingAccountsSection', () => {
     mockFetchOnce(serverDefaults);
     render(<PersonaPublishingAccountsSection personaId={PERSONA_ID} />);
 
-    const saveButton = await screen.findByTestId('publishing-accounts-save');
-    expect(saveButton).toBeInTheDocument();
+    expect(await screen.findAllByTestId('account-card-select')).toHaveLength(5);
     expect(screen.getByText('Publishing accounts')).toBeInTheDocument();
 
     const checkboxes = screen.getAllByTestId('account-card-select') as HTMLInputElement[];
@@ -205,7 +201,7 @@ describe('PersonaPublishingAccountsSection', () => {
     mockQueries.threespeak = { data: { authenticated: true, accounts: [{ provider: '3speak', recordId: 'r2', providerAccountId: 'bob', accountName: null, connectedAt: 0, lastUsed: 0 }] }, isLoading: false, error: null };
     mockFetchOnce({ success: true, defaults: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], '3speak': [] } });
     render(<PersonaPublishingAccountsSection personaId={PERSONA_ID} />);
-    await screen.findByTestId('publishing-accounts-save');
+    await screen.findAllByTestId('account-card-select');
 
     expect(screen.getByText('3Speak')).toBeInTheDocument();
     expect(screen.getByText('bob')).toBeInTheDocument();
@@ -226,7 +222,7 @@ describe('PersonaPublishingAccountsSection', () => {
     mockQueries.threespeak = { data: undefined, isLoading: false, error: null } as unknown as typeof mockQueries.threespeak;
     mockFetchOnce(serverDefaults);
     render(<PersonaPublishingAccountsSection personaId={PERSONA_ID} />);
-    await screen.findByTestId('publishing-accounts-save');
+    await screen.findAllByTestId('account-card-select');
 
     const checkboxes = screen.getAllByTestId('account-card-select') as HTMLInputElement[];
     expect(checkboxes).toHaveLength(4);
@@ -238,7 +234,7 @@ describe('PersonaPublishingAccountsSection', () => {
 
     expect(await screen.findByText('boom')).toBeInTheDocument();
     expect(screen.queryByText('Select at least one account to publish to.')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('publishing-accounts-save')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('account-card-select')).not.toBeInTheDocument();
 
     fetchMock.mockResolvedValueOnce({
       ok: true,
@@ -246,7 +242,7 @@ describe('PersonaPublishingAccountsSection', () => {
       json: () => Promise.resolve(serverDefaults),
     });
     fireEvent.click(screen.getByTestId('publishing-accounts-retry'));
-    expect(await screen.findByTestId('publishing-accounts-save')).toBeInTheDocument();
+    expect(await screen.findAllByTestId('account-card-select')).toHaveLength(5);
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock).toHaveBeenNthCalledWith(2, DEFAULTS_URL);
   });
@@ -266,22 +262,113 @@ describe('PersonaPublishingAccountsSection', () => {
     await waitFor(() => expect(notify).toHaveBeenCalledTimes(1));
   });
 
-  it('notifies the session-expiry handler when the PUT save answers 401', async () => {
-    const notify = vi.mocked(notifyIfSessionExpired);
-    notify.mockClear();
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce({ ok: true, status: 200, json: () => Promise.resolve(serverDefaults) })
-      .mockResolvedValueOnce({ ok: false, status: 401, json: () => Promise.resolve({ success: false }) });
-    vi.stubGlobal('fetch', fetchMock);
+  it('loads the stored binding into the persona store for the single save', async () => {
+    mockFetchOnce(serverDefaults);
     render(<PersonaPublishingAccountsSection personaId={PERSONA_ID} />);
-    fireEvent.click(await screen.findByTestId('publishing-accounts-save'));
-    await waitFor(() => expect(notify).toHaveBeenCalledTimes(1));
+    await waitFor(() => {
+      expect(usePersonaStore.getState().publishingAccounts).toEqual(
+        expect.objectContaining({ youtube: ['UC-1'], bluesky: ['did:plc:abc'], '3speak': ['alice'] }),
+      );
+    });
+    expect(screen.queryByTestId('publishing-accounts-save')).not.toBeInTheDocument();
   });
 
-  it('toggling a checkbox updates the local selection only', async () => {
+  it('marks the draft unloaded while the stored binding loads', async () => {
+    mockFetchOnce(new Promise(() => {}));
+    render(<PersonaPublishingAccountsSection personaId={PERSONA_ID} />);
+    expect(screen.getByTestId('publishing-accounts-loading')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(usePersonaStore.getState().publishingAccountsLoaded).toBe(false);
+    });
+  });
+
+  it('marks the draft loaded once the stored binding lands', async () => {
+    usePersonaStore.getState().setPublishingAccountsLoaded(false);
+    mockFetchOnce(serverDefaults);
+    render(<PersonaPublishingAccountsSection personaId={PERSONA_ID} />);
+    await screen.findAllByTestId('account-card-select');
+    expect(usePersonaStore.getState().publishingAccountsLoaded).toBe(true);
+  });
+
+  it('drops a stored id whose account is no longer connected', async () => {
+    mockFetchOnce({
+      success: true,
+      defaults: { youtube: ['UC-1', 'UC-gone'], instagram: [], bluesky: ['did:plc:abc'], linkedin: [], threads: [] },
+    });
+    render(<PersonaPublishingAccountsSection personaId={PERSONA_ID} />);
+    await waitFor(() => {
+      expect(usePersonaStore.getState().publishingAccounts.youtube).toEqual(['UC-1']);
+    });
+    expect(usePersonaStore.getState().loadedPublishingAccounts).toEqual(
+      expect.objectContaining({ youtube: ['UC-1', 'UC-gone'] }),
+    );
+  });
+
+  it('ignores a late binding response for a previous persona', async () => {
+    let resolveFirst!: (body: unknown) => void;
+    const firstBody = new Promise((resolve) => {
+      resolveFirst = resolve;
+    });
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(() => Promise.resolve({ ok: true, status: 200, json: () => firstBody }))
+      .mockImplementationOnce(() =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              success: true,
+              defaults: { youtube: ['UC-2'], instagram: [], bluesky: [], linkedin: [], threads: [] },
+            }),
+        }),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+    const { rerender } = render(<PersonaPublishingAccountsSection personaId={PERSONA_ID} />);
+    rerender(<PersonaPublishingAccountsSection personaId="22222222-3333-4444-5555-666666666666" />);
+    await waitFor(() => {
+      expect(usePersonaStore.getState().publishingAccounts.youtube).toEqual(['UC-2']);
+    });
+    resolveFirst({
+      success: true,
+      defaults: { youtube: ['UC-1'], instagram: [], bluesky: [], linkedin: [], threads: [] },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(usePersonaStore.getState().publishingAccounts.youtube).toEqual(['UC-2']);
+    expect(usePersonaStore.getState().loadedPublishingAccounts).toEqual(
+      expect.objectContaining({ youtube: ['UC-2'] }),
+    );
+  });
+
+  it('leaves the draft untouched and marks it loaded for a non-uuid personaId', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    usePersonaStore.getState().setPublishingAccountsLoaded(false);
+    usePersonaStore
+      .getState()
+      .setPublishingAccounts({ ...usePersonaStore.getState().publishingAccounts, youtube: ['UC-2'] });
+    render(<PersonaPublishingAccountsSection personaId="p-1" />);
+    await waitFor(() => {
+      expect(usePersonaStore.getState().publishingAccountsLoaded).toBe(true);
+    });
+    expect(usePersonaStore.getState().publishingAccounts.youtube).toEqual(['UC-2']);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('keeps the draft unloaded after a failed defaults load', async () => {
+    mockFetchOnce({ success: false, error: 'boom' }, false, 500);
+    render(<PersonaPublishingAccountsSection personaId={PERSONA_ID} />);
+    expect(await screen.findByText('boom')).toBeInTheDocument();
+    expect(usePersonaStore.getState().publishingAccountsLoaded).toBe(false);
+  });
+
+  it('toggling a checkbox updates the persona store draft and never PUTs', async () => {
     const fetchMock = mockFetchOnce(serverDefaults);
     render(<PersonaPublishingAccountsSection personaId={PERSONA_ID} />);
-    await screen.findByTestId('publishing-accounts-save');
+    await screen.findAllByTestId('account-card-select');
+
+    expect(usePersonaStore.getState().publishingAccounts.youtube).toEqual(['UC-1']);
+    expect(usePersonaStore.getState().publishingAccounts['3speak']).toEqual(['alice']);
 
     const checkboxes = () => screen.getAllByTestId('account-card-select') as HTMLInputElement[];
     expect(checkboxes()[1].checked).toBe(false);
@@ -296,59 +383,16 @@ describe('PersonaPublishingAccountsSection', () => {
     expect(checkboxes()[3].checked).toBe(true);
     fireEvent.click(checkboxes()[3]);
     expect(checkboxes()[3].checked).toBe(false);
+    expect(usePersonaStore.getState().publishingAccounts.youtube).toEqual(['UC-2']);
+    expect(usePersonaStore.getState().publishingAccounts.instagram).toEqual(['ig-9']);
     expect(fetchMock).toHaveBeenCalledTimes(1);
-  });
-
-  it('saves the full selection with PUT and shows the confirmation', async () => {
-    const fetchMock = mockFetchOnce(serverDefaults);
-    render(<PersonaPublishingAccountsSection personaId={PERSONA_ID} />);
-    await screen.findByTestId('publishing-accounts-save');
-
-    fireEvent.click((screen.getAllByTestId('account-card-select') as HTMLInputElement[])[1]);
-    fetchMock.mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: () =>
-        Promise.resolve({
-          success: true,
-          defaults: { youtube: ['UC-1', 'UC-2'], instagram: [], bluesky: ['did:plc:abc'], linkedin: [], threads: [], '3speak': ['alice'] },
-        }),
-    });
-    fireEvent.click(screen.getByTestId('publishing-accounts-save'));
-
-    await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith(
-        DEFAULTS_URL,
-        expect.objectContaining({
-          method: 'PUT',
-          body: JSON.stringify({
-            accounts: { youtube: ['UC-1', 'UC-2'], instagram: [], bluesky: ['did:plc:abc'], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': ['alice'], rumble: [], fanvue: [], telegram: [] },
-          }),
-        }),
-      );
-    });
-    expect(await screen.findByText('Accounts saved.')).toBeInTheDocument();
-  });
-
-  it('shows the server error message when saving fails', async () => {
-    const fetchMock = mockFetchOnce(serverDefaults);
-    render(<PersonaPublishingAccountsSection personaId={PERSONA_ID} />);
-    await screen.findByTestId('publishing-accounts-save');
-
-    fetchMock.mockResolvedValueOnce({
-      ok: false,
-      status: 500,
-      json: () => Promise.resolve({ success: false, error: 'db exploded' }),
-    });
-    fireEvent.click(screen.getByTestId('publishing-accounts-save'));
-    expect(await screen.findByText('db exploded')).toBeInTheDocument();
-    expect(screen.queryByText('Accounts saved.')).not.toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(DEFAULTS_URL);
   });
 
   it('shows a per-provider "none connected" hint with a link to /accounts', async () => {
     mockFetchOnce(serverDefaults);
     render(<PersonaPublishingAccountsSection personaId={PERSONA_ID} />);
-    await screen.findByTestId('publishing-accounts-save');
+    await screen.findAllByTestId('account-card-select');
 
     expect(screen.getByText('No LinkedIn accounts connected.')).toBeInTheDocument();
     expect(screen.getByText('No Threads accounts connected.')).toBeInTheDocument();
@@ -359,18 +403,10 @@ describe('PersonaPublishingAccountsSection', () => {
     }
   });
 
-  it('disables Save while the connected accounts are still loading', async () => {
-    mockFetchOnce(serverDefaults);
-    mockQueries.youtube = { data: null, isLoading: true };
-    render(<PersonaPublishingAccountsSection personaId={PERSONA_ID} />);
-    const saveButton = await screen.findByTestId('publishing-accounts-save');
-    expect(saveButton).toBeDisabled();
-  });
-
   it('refetches the defaults when the personaId changes', async () => {
     const fetchMock = mockFetchOnce(serverDefaults);
     const { rerender } = render(<PersonaPublishingAccountsSection personaId={PERSONA_ID} />);
-    await screen.findByTestId('publishing-accounts-save');
+    await screen.findAllByTestId('account-card-select');
 
     fetchMock.mockResolvedValueOnce({
       ok: true,
@@ -406,7 +442,7 @@ describe('PersonaPublishingAccountsSection', () => {
       error: null,
     };
     render(<PersonaPublishingAccountsSection personaId={PERSONA_ID} />);
-    await screen.findByTestId('publishing-accounts-save');
+    await screen.findAllByTestId('account-card-select');
 
     const checkboxes = () => screen.getAllByTestId('account-card-select') as HTMLInputElement[];
     expect(checkboxes()).toHaveLength(9);
@@ -436,8 +472,8 @@ describe('PersonaPublishingAccountsSection', () => {
     }));
   });
 
-  it('renders facebook pages, preselects saved ones and saves the toggled selection', async () => {
-    const fetchMock = mockFetchOnce({
+  it('renders facebook pages, preselects saved ones and toggles the selection in the store', async () => {
+    mockFetchOnce({
       success: true,
       defaults: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: ['fb-1'] },
     });
@@ -457,7 +493,7 @@ describe('PersonaPublishingAccountsSection', () => {
       error: null,
     };
     render(<PersonaPublishingAccountsSection personaId={PERSONA_ID} />);
-    await screen.findByTestId('publishing-accounts-save');
+    await screen.findAllByTestId('account-card-select');
 
     const checkboxes = () => screen.getAllByTestId('account-card-select') as HTMLInputElement[];
     expect(checkboxes()).toHaveLength(2);
@@ -471,27 +507,11 @@ describe('PersonaPublishingAccountsSection', () => {
     }));
 
     fireEvent.click(checkboxes()[1]);
-    fetchMock.mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: () => Promise.resolve({ success: true, defaults: { facebook: ['fb-1', 'fb-2'] } }),
-    });
-    fireEvent.click(screen.getByTestId('publishing-accounts-save'));
-    await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith(
-        DEFAULTS_URL,
-        expect.objectContaining({
-          method: 'PUT',
-          body: JSON.stringify({
-            accounts: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: ['fb-1', 'fb-2'], pinterest: [], '3speak': [], rumble: [], fanvue: [], telegram: [] },
-          }),
-        }),
-      );
-    });
+    expect(usePersonaStore.getState().publishingAccounts.facebook).toEqual(['fb-1', 'fb-2']);
   });
 
-  it('renders pinterest accounts, preselects saved ones and saves the toggled selection', async () => {
-    const fetchMock = mockFetchOnce({
+  it('renders pinterest accounts, preselects saved ones and toggles the selection in the store', async () => {
+    mockFetchOnce({
       success: true,
       defaults: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: ['pin-1'] },
     });
@@ -512,7 +532,7 @@ describe('PersonaPublishingAccountsSection', () => {
       error: null,
     };
     render(<PersonaPublishingAccountsSection personaId={PERSONA_ID} />);
-    await screen.findByTestId('publishing-accounts-save');
+    await screen.findAllByTestId('account-card-select');
 
     const checkboxes = () => screen.getAllByTestId('account-card-select') as HTMLInputElement[];
     expect(checkboxes()).toHaveLength(2);
@@ -526,27 +546,11 @@ describe('PersonaPublishingAccountsSection', () => {
     }));
 
     fireEvent.click(checkboxes()[1]);
-    fetchMock.mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: () => Promise.resolve({ success: true, defaults: { pinterest: ['pin-1', 'pin-2'] } }),
-    });
-    fireEvent.click(screen.getByTestId('publishing-accounts-save'));
-    await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith(
-        DEFAULTS_URL,
-        expect.objectContaining({
-          method: 'PUT',
-          body: JSON.stringify({
-            accounts: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: ['pin-1', 'pin-2'], '3speak': [], rumble: [], fanvue: [], telegram: [] },
-          }),
-        }),
-      );
-    });
+    expect(usePersonaStore.getState().publishingAccounts.pinterest).toEqual(['pin-1', 'pin-2']);
   });
 
-  it('renders fanvue accounts, preselects saved ones and saves the toggled selection', async () => {
-    const fetchMock = mockFetchOnce({
+  it('renders fanvue accounts, preselects saved ones and toggles the selection in the store', async () => {
+    mockFetchOnce({
       success: true,
       defaults: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], fanvue: ['fv-1'] },
     });
@@ -568,7 +572,7 @@ describe('PersonaPublishingAccountsSection', () => {
       error: null,
     };
     render(<PersonaPublishingAccountsSection personaId={PERSONA_ID} />);
-    await screen.findByTestId('publishing-accounts-save');
+    await screen.findAllByTestId('account-card-select');
 
     const checkboxes = () => screen.getAllByTestId('account-card-select') as HTMLInputElement[];
     expect(checkboxes()).toHaveLength(2);
@@ -582,27 +586,11 @@ describe('PersonaPublishingAccountsSection', () => {
     }));
 
     fireEvent.click(checkboxes()[1]);
-    fetchMock.mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: () => Promise.resolve({ success: true, defaults: { fanvue: ['fv-1', 'fv-2'] } }),
-    });
-    fireEvent.click(screen.getByTestId('publishing-accounts-save'));
-    await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith(
-        DEFAULTS_URL,
-        expect.objectContaining({
-          method: 'PUT',
-          body: JSON.stringify({
-            accounts: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: ['fv-1', 'fv-2'], telegram: [] },
-          }),
-        }),
-      );
-    });
+    expect(usePersonaStore.getState().publishingAccounts.fanvue).toEqual(['fv-1', 'fv-2']);
   });
 
-  it('renders rumble channels, preselects saved ones and saves the toggled selection', async () => {
-    const fetchMock = mockFetchOnce({
+  it('renders rumble channels, preselects saved ones and toggles the selection in the store', async () => {
+    mockFetchOnce({
       success: true,
       defaults: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], rumble: ['chan-1'] },
     });
@@ -622,7 +610,7 @@ describe('PersonaPublishingAccountsSection', () => {
       error: null,
     };
     render(<PersonaPublishingAccountsSection personaId={PERSONA_ID} />);
-    await screen.findByTestId('publishing-accounts-save');
+    await screen.findAllByTestId('account-card-select');
 
     const checkboxes = () => screen.getAllByTestId('account-card-select') as HTMLInputElement[];
     expect(checkboxes()).toHaveLength(2);
@@ -636,30 +624,7 @@ describe('PersonaPublishingAccountsSection', () => {
     }));
 
     fireEvent.click(checkboxes()[1]);
-    fetchMock.mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: () => Promise.resolve({ success: true, defaults: { rumble: ['chan-1', 'chan-2'] } }),
-    });
-    fireEvent.click(screen.getByTestId('publishing-accounts-save'));
-    await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith(
-        DEFAULTS_URL,
-        expect.objectContaining({
-          method: 'PUT',
-          body: JSON.stringify({
-            accounts: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: ['chan-1', 'chan-2'], fanvue: [], telegram: [] },
-          }),
-        }),
-      );
-    });
-  });
-
-  it('disables Save while the facebook pages are still loading', async () => {
-    mockFetchOnce(serverDefaults);
-    mockQueries.facebook = { data: { authenticated: true, accounts: [] }, isLoading: true, error: null };
-    render(<PersonaPublishingAccountsSection personaId={PERSONA_ID} />);
-    expect(await screen.findByTestId('publishing-accounts-save')).toBeDisabled();
+    expect(usePersonaStore.getState().publishingAccounts.rumble).toEqual(['chan-1', 'chan-2']);
   });
 
   it('ignores non-string ids in the server defaults', async () => {
@@ -668,7 +633,7 @@ describe('PersonaPublishingAccountsSection', () => {
       defaults: { youtube: ['UC-1', 42, null], instagram: [], bluesky: [], linkedin: [], threads: [] },
     });
     render(<PersonaPublishingAccountsSection personaId={PERSONA_ID} />);
-    await screen.findByTestId('publishing-accounts-save');
+    await screen.findAllByTestId('account-card-select');
     const checkboxes = screen.getAllByTestId('account-card-select') as HTMLInputElement[];
     expect(checkboxes[0].checked).toBe(true);
     expect(checkboxes[1].checked).toBe(false);
@@ -686,6 +651,15 @@ describe('PersonaPublishingAccountsSection — draft mode (issue #572)', () => {
     expect(screen.queryByTestId('publishing-accounts-save')).not.toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
     expect(screen.getAllByTestId('account-card-select')).toHaveLength(5);
+  });
+
+  it('marks the draft loaded in draft mode without fetching', () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    usePersonaStore.getState().setPublishingAccountsLoaded(false);
+    render(<PersonaPublishingAccountsSection />);
+    expect(usePersonaStore.getState().publishingAccountsLoaded).toBe(true);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('toggling a card writes the binding to the persona store', () => {
@@ -710,18 +684,17 @@ describe('PersonaPublishingAccountsSection — draft mode (issue #572)', () => {
     expect(screen.getByText('Select at least one account to publish to.')).toBeInTheDocument();
   });
 
-  it('disables Save in edit mode when the last bound account is untoggled', async () => {
+  it('shows the must-select error in edit mode when the last bound account is untoggled', async () => {
     mockFetchOnce({
       success: true,
       defaults: { youtube: ['UC-1'], instagram: [], bluesky: [], linkedin: [], threads: [] },
     });
     render(<PersonaPublishingAccountsSection personaId={PERSONA_ID} />);
-    const saveButton = await screen.findByTestId('publishing-accounts-save');
-    expect(saveButton).not.toBeDisabled();
+    const checkboxes = await screen.findAllByTestId('account-card-select') as HTMLInputElement[];
+    expect(screen.queryByText('Select at least one account to publish to.')).not.toBeInTheDocument();
 
-    const checkboxes = screen.getAllByTestId('account-card-select') as HTMLInputElement[];
     fireEvent.click(checkboxes[0]);
-    expect(saveButton).toBeDisabled();
     expect(screen.getByText('Select at least one account to publish to.')).toBeInTheDocument();
+    expect(screen.queryByTestId('publishing-accounts-save')).not.toBeInTheDocument();
   });
 });
