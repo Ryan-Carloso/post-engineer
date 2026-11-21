@@ -14,7 +14,7 @@ import {
   type SocialTokenPayload,
 } from '@/lib/social-accounts';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
-import { parseMediaUpload } from '@/lib/media/upload-schema';
+import { MAX_FILE_SIZE, parseMediaUpload } from '@/lib/media/upload-schema';
 import { InstagramService } from '@/lib/instagram';
 import { cleanupPublishMedia, presignPublishMedia, uploadPublishMedia } from '@/lib/upload/publish-media';
 import { httpStatusOf, rememberDeadCredential, reportAccountUnauthorized } from './account-unauthorized';
@@ -242,7 +242,9 @@ export async function handleInstagramUpload(
     let buffer: Buffer = Buffer.alloc(0);
     if (rawFile instanceof File) {
       file = rawFile;
-      buffer = Buffer.from(await file.arrayBuffer());
+      if (file.size <= MAX_FILE_SIZE) {
+        buffer = Buffer.from(await file.arrayBuffer());
+      }
     }
     const parsed = parseMediaUpload(file, buffer);
     if (!parsed.success) {

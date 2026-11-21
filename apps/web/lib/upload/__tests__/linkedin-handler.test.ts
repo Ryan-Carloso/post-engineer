@@ -18,6 +18,7 @@ vi.mock('@/lib/supabase/service', () => ({
 
 import { trackApiEvent } from '@/lib/analytics';
 import { handleLinkedinUpload } from '@/lib/upload/linkedin-handler';
+import { LINKEDIN_VIDEO_MAX_BYTES } from '@/lib/linkedin';
 import { getSocialAccountTokens, touchSocialAccount } from '@/lib/social-accounts';
 import { markAccountNeedsReconnect } from '@/lib/account-needs-reconnect';
 
@@ -109,6 +110,16 @@ describe('handleLinkedinUpload', () => {
   it('returns failure without linkedinAccountIds', async () => {
     const res = await handleLinkedinUpload(formData({ linkedinAccountIds: [] }), USER_ID);
     expect(res.success).toBe(false);
+  });
+
+  it('rejects an oversize file from its size without copying it', async () => {
+    const file = makeFile(10);
+    Object.defineProperty(file, 'size', { value: LINKEDIN_VIDEO_MAX_BYTES + 1 });
+    const arrayBuffer = vi.spyOn(file, 'arrayBuffer');
+    const res = await handleLinkedinUpload(formData({ video: file }), USER_ID);
+    expect(res.success).toBe(false);
+    expect(res.results[0]?.error).toBe('LinkedIn video exceeds the 5 GB limit');
+    expect(arrayBuffer).not.toHaveBeenCalled();
   });
 
   it('returns failure without caption', async () => {

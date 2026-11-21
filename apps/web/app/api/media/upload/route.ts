@@ -6,6 +6,11 @@ import { uploadEngineTempAsset } from '@/lib/generation/video-generation';
 import { detectMagicMimeType } from '@/lib/media/magic-bytes';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { requireSupabaseSession } from '@/lib/request-auth';
+import {
+  MULTIPART_OVERHEAD_BYTES,
+  boundedFormDataFailureResponse,
+  readBoundedFormData,
+} from '@/lib/upload/bounded-form-data';
 
 const ROUTE = 'POST /api/media/upload';
 
@@ -36,12 +41,9 @@ async function postHandler(request: Request): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
 
-  let formData: FormData;
-  try {
-    formData = await request.formData();
-  } catch {
-    return apiErrorResponse(400, 'Invalid multipart payload.', { route: ROUTE });
-  }
+  const bounded = await readBoundedFormData(request, MAX_SEGMENT_MEDIA_BYTES + MULTIPART_OVERHEAD_BYTES);
+  if (!bounded.ok) return boundedFormDataFailureResponse(bounded);
+  const formData = bounded.formData;
 
   const file = formData.get('file');
   if (!isFileLike(file) || file.size === 0) {

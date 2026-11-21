@@ -143,6 +143,15 @@ describe('handleBlueskyUpload', () => {
     expect(res.success).toBe(false);
   });
 
+  it('rejects an oversize file from its size without copying it', async () => {
+    const file = makeFile(10);
+    Object.defineProperty(file, 'size', { value: 100_000_001 });
+    const arrayBuffer = vi.spyOn(file, 'arrayBuffer');
+    const res = await handleBlueskyUpload(formData({ video: file }), USER_ID);
+    expect(res.success).toBe(false);
+    expect(arrayBuffer).not.toHaveBeenCalled();
+  });
+
   it('rejects videos above 100MB before touching any network', async () => {
     mockHappyFetch();
     const res = await handleBlueskyUpload(formData({ video: makeFile(100_000_001) }), USER_ID);

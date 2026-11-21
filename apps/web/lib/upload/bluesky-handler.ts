@@ -3,6 +3,7 @@ import { getSocialAccountTokens, touchSocialAccount } from '@/lib/social-account
 import { accountFailure } from '@/lib/upload/account-error';
 import { getAccountIdsFromFormData } from '@/lib/upload/account-utils';
 import {
+  BLUESKY_VIDEO_MAX_BYTES,
   BlueskyError,
   countBlueskyGraphemes,
   loginToBlueskySession,
@@ -61,6 +62,10 @@ export async function handleBlueskyUpload(
   }
   if (!(rawFile instanceof File)) {
     return { success: false, results: [accountFailure('', 'A video or image file is required', 'publish_rejected')] };
+  }
+
+  if (rawFile.size > BLUESKY_VIDEO_MAX_BYTES) {
+    return { success: false, results: [accountFailure('', 'Bluesky video limit is 100MB.', 'publish_rejected')] };
   }
 
   const buffer = Buffer.from(await rawFile.arrayBuffer());

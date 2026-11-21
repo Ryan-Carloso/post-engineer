@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { lyingContentLengthRequest, multipartRequest, withoutContentLength } from '@/test/multipart-request';
 
 vi.mock('@/lib/request-auth', () => ({
   requireSupabaseSession: vi.fn(),
@@ -183,10 +184,10 @@ function imageFile(name = 'photo.png', type = 'image/png', size = 1024): File {
   return new File([bytes], name, { type });
 }
 
-function postForm(fields: Record<string, string | File>): Request {
+function postForm(fields: Record<string, string | File>): Promise<Request> {
   const form = new FormData();
   for (const [key, value] of Object.entries(fields)) form.append(key, value);
-  return new Request('http://localhost/api/persona/images', { method: 'POST', body: form });
+  return multipartRequest('http://localhost/api/persona/images', form);
 }
 
 beforeEach(() => {
@@ -302,11 +303,51 @@ describe('GET /api/persona/images', () => {
 });
 
 describe('POST /api/persona/images', () => {
+  const GATE_URL = 'http://localhost/api/persona/images';
+  const OVER_CAP = 11 * 1024 * 1024;
+
+  it('answers 401 for an unauthenticated large body without reading it', async () => {
+    mockAuth(null);
+    mockClient();
+    const formData = vi.spyOn(Request.prototype, 'formData');
+    const res = await POST(await withoutContentLength(GATE_URL, { 'content-length': String(OVER_CAP * 10) }));
+    expect(res.status).toBe(401);
+    expect(formData).not.toHaveBeenCalled();
+    formData.mockRestore();
+  });
+
+  it('answers 413 before parsing when Content-Length is over the cap', async () => {
+    mockAuth({ userId: USER_ID });
+    mockClient();
+    const formData = vi.spyOn(Request.prototype, 'formData');
+    const res = await POST(await withoutContentLength(GATE_URL, { 'content-length': String(OVER_CAP + 1) }));
+    expect(res.status).toBe(413);
+    expect(await res.json()).toMatchObject({ success: false, code: 'PAYLOAD_TOO_LARGE' });
+    expect(formData).not.toHaveBeenCalled();
+    formData.mockRestore();
+  });
+
+  it('aborts a body larger than its declared Content-Length', async () => {
+    mockAuth({ userId: USER_ID });
+    mockClient();
+    const res = await POST(await lyingContentLengthRequest(GATE_URL, OVER_CAP + 1024, 200));
+    expect(res.status).toBe(413);
+    expect(await res.json()).toMatchObject({ success: false, code: 'PAYLOAD_TOO_LARGE' });
+  });
+
+  it('answers 411 when Content-Length is missing', async () => {
+    mockAuth({ userId: USER_ID });
+    mockClient();
+    const res = await POST(await withoutContentLength(GATE_URL));
+    expect(res.status).toBe(411);
+    expect(await res.json()).toMatchObject({ success: false, code: 'LENGTH_REQUIRED' });
+  });
+
   it('rejects the 11th image', async () => {
     mockAuth({ userId: USER_ID });
     mockClient({ imageCount: 10 });
     const res = await POST(
-      postForm({ personaId: PERSONA_ID, image: imageFile() }),
+      await postForm({ personaId: PERSONA_ID, image: imageFile() }),
     );
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: string; code?: string; field?: string };
@@ -324,7 +365,7 @@ describe('POST /api/persona/images', () => {
     const res = await POST(
       new Request('http://localhost/api/persona/images', {
         method: 'POST',
-        headers: { 'content-type': 'multipart/form-data' },
+        headers: { 'content-type': 'multipart/form-data', 'content-length': '20' },
         body: 'not multipart at all',
       }),
     );
@@ -338,7 +379,7 @@ describe('POST /api/persona/images', () => {
   it('returns 400 without personaId', async () => {
     mockAuth({ userId: USER_ID });
     mockClient();
-    const res = await POST(postForm({ image: imageFile() }));
+    const res = await POST(await postForm({ image: imageFile() }));
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: string; code?: string; field?: string };
     expect(body.error).toBe('personaId is required.');
@@ -350,7 +391,7 @@ describe('POST /api/persona/images', () => {
   it('returns 400 without an image file', async () => {
     mockAuth({ userId: USER_ID });
     mockClient();
-    const res = await POST(postForm({ personaId: PERSONA_ID }));
+    const res = await POST(await postForm({ personaId: PERSONA_ID }));
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: string; code?: string; field?: string };
     expect(body.error).toBe('An image file is required.');
@@ -363,7 +404,7 @@ describe('POST /api/persona/images', () => {
     mockAuth({ userId: USER_ID });
     mockClient();
     const empty = new File([], 'empty.png', { type: 'image/png' });
-    const res = await POST(postForm({ personaId: PERSONA_ID, image: empty }));
+    const res = await POST(await postForm({ personaId: PERSONA_ID, image: empty }));
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: string; code?: string; field?: string };
     expect(body.error).toBe('An image file is required.');
@@ -375,7 +416,7 @@ describe('POST /api/persona/images', () => {
     mockAuth({ userId: USER_ID });
     mockClient();
     const res = await POST(
-      postForm({ personaId: PERSONA_ID, image: imageFile(), description: imageFile() }),
+      await postForm({ personaId: PERSONA_ID, image: imageFile(), description: imageFile() }),
     );
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: string; code?: string; field?: string };
@@ -391,7 +432,7 @@ describe('POST /api/persona/images', () => {
     mockAuth({ userId: USER_ID });
     mockClient();
     const res = await POST(
-      postForm({ personaId: PERSONA_ID, image: imageFile(), tag: imageFile() }),
+      await postForm({ personaId: PERSONA_ID, image: imageFile(), tag: imageFile() }),
     );
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: string; code?: string; field?: string };
@@ -405,7 +446,7 @@ describe('POST /api/persona/images', () => {
     mockAuth({ userId: USER_ID });
     mockClient();
     const res = await POST(
-      postForm({ personaId: PERSONA_ID, image: imageFile('doc.pdf', 'application/pdf') }),
+      await postForm({ personaId: PERSONA_ID, image: imageFile('doc.pdf', 'application/pdf') }),
     );
     expect(res.status).toBe(400);
     const body = (await res.json()) as { code?: string; field?: string };
@@ -417,7 +458,7 @@ describe('POST /api/persona/images', () => {
     mockAuth({ userId: USER_ID });
     mockClient();
     const res = await POST(
-      postForm({ personaId: PERSONA_ID, image: imageFile('photo.bmp', 'image/bmp') }),
+      await postForm({ personaId: PERSONA_ID, image: imageFile('photo.bmp', 'image/bmp') }),
     );
     expect(res.status).toBe(400);
   });
@@ -426,7 +467,7 @@ describe('POST /api/persona/images', () => {
     mockAuth({ userId: USER_ID });
     mockClient({ insertedRow: IMAGE_ROW });
     const res = await POST(
-      postForm({ personaId: PERSONA_ID, image: imageFile(), tag: 'x'.repeat(101) }),
+      await postForm({ personaId: PERSONA_ID, image: imageFile(), tag: 'x'.repeat(101) }),
     );
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: string; code?: string; field?: string };
@@ -442,7 +483,7 @@ describe('POST /api/persona/images', () => {
     mockAuth({ userId: USER_ID });
     mockClient({ insertedRow: IMAGE_ROW });
     const res = await POST(
-      postForm({ personaId: PERSONA_ID, image: imageFile(), description: 'x'.repeat(501) }),
+      await postForm({ personaId: PERSONA_ID, image: imageFile(), description: 'x'.repeat(501) }),
     );
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: string; code?: string; field?: string };
@@ -458,7 +499,7 @@ describe('POST /api/persona/images', () => {
     mockAuth({ userId: USER_ID });
     mockClient({ insertedRow: IMAGE_ROW, failPrimarySwap: true });
     const res = await POST(
-      postForm({ personaId: PERSONA_ID, image: imageFile(), isPrimary: 'true' }),
+      await postForm({ personaId: PERSONA_ID, image: imageFile(), isPrimary: 'true' }),
     );
     expect(res.status).toBe(201);
     const body = (await res.json()) as {
@@ -475,7 +516,7 @@ describe('POST /api/persona/images', () => {
     mockAuth({ userId: USER_ID });
     mockClient({ insertedRow: IMAGE_ROW });
     const res = await POST(
-      postForm({ personaId: PERSONA_ID, image: imageFile(), isPrimary: 'true' }),
+      await postForm({ personaId: PERSONA_ID, image: imageFile(), isPrimary: 'true' }),
     );
     expect(res.status).toBe(201);
     const body = (await res.json()) as { success: boolean; warnings?: string[] };
@@ -488,7 +529,7 @@ describe('POST /api/persona/images', () => {
     try {
       mockAuth({ userId: USER_ID });
       mockClient({ insertedRow: null, storageRemoveError: { message: 'remove boom' } });
-      const res = await POST(postForm({ personaId: PERSONA_ID, image: imageFile() }));
+      const res = await POST(await postForm({ personaId: PERSONA_ID, image: imageFile() }));
       expect(res.status).toBe(500);
       const leftoverLogged = errorSpy.mock.calls.some(
         (call) =>
@@ -509,7 +550,7 @@ describe('POST /api/persona/images', () => {
     mockAuth({ userId: USER_ID });
     mockClient({ insertedRow: IMAGE_ROW });
     const res = await POST(
-      postForm({
+      await postForm({
         personaId: PERSONA_ID,
         image: imageFile(),
         tag: 'casual',
@@ -527,7 +568,7 @@ describe('POST /api/persona/images', () => {
     mockAuth({ userId: USER_ID });
     mockClient({ insertedRow: IMAGE_ROW });
     const res = await POST(
-      postForm({ personaId: PERSONA_ID, image: imageFile(), isPrimary: '1' }),
+      await postForm({ personaId: PERSONA_ID, image: imageFile(), isPrimary: '1' }),
     );
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: string; code?: string; field?: string };
@@ -543,7 +584,7 @@ describe('POST /api/persona/images', () => {
     mockAuth({ userId: USER_ID });
     const { client } = mockClient({ persona: { id: PERSONA_ID }, insertedRow: IMAGE_ROW });
     const res = await POST(
-      postForm({ personaId: PERSONA_ID, image: imageFile() }),
+      await postForm({ personaId: PERSONA_ID, image: imageFile() }),
     );
     expect(res.status).toBe(201);
     const personaQueries = client.from.mock.calls.filter(
