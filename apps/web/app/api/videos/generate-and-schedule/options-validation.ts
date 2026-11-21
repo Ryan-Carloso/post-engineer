@@ -22,6 +22,7 @@ export interface OptionsInput {
   voiceId?: string;
   videoAspect?: '9:16' | '16:9' | '1:1';
   videoLayout?: 'standard' | 'react';
+  hookPanel?: boolean;
   paragraphNumber?: number;
   language?: string;
   niche?: string;
@@ -36,10 +37,14 @@ export interface ValidatedOptions {
   voiceId?: string;
   videoAspect?: '9:16' | '16:9' | '1:1';
   videoLayout?: 'standard' | 'react';
+  hookPanel?: boolean;
   paragraphNumber?: number;
   language?: string;
   niche?: string;
 }
+
+export const HOOK_PANEL_ONLY_HOOK_LIPSYNC_MESSAGE =
+  "options.hookPanel applies only to videoType 'hook_lipsync': the other modes have no lip-sync hook.";
 
 export function validateOptions(options: OptionsInput): Checked<ValidatedOptions> {
   const {
@@ -50,6 +55,8 @@ export function validateOptions(options: OptionsInput): Checked<ValidatedOptions
     webhookUrl,
     voiceId,
     videoAspect,
+    videoLayout,
+    hookPanel,
     paragraphNumber,
     language,
     niche,
@@ -90,6 +97,9 @@ export function validateOptions(options: OptionsInput): Checked<ValidatedOptions
   if (niche !== undefined && niche.length > MAX_TITLE_CHARS) {
     issues.push(invalid(`options.niche must be at most ${MAX_TITLE_CHARS} characters.`, 'options.niche'));
   }
+  if (hookPanel !== undefined && mode !== undefined && mode !== 'hook_lipsync') {
+    issues.push(invalid(HOOK_PANEL_ONLY_HOOK_LIPSYNC_MESSAGE, 'options.hookPanel'));
+  }
   if (issues.length > 0) return { ok: false, issues };
   if (mode === undefined) {
     return { ok: false, issues: [invalid(VIDEO_TYPE_REQUIRED_MESSAGE, 'options.videoType')] };
@@ -104,6 +114,8 @@ export function validateOptions(options: OptionsInput): Checked<ValidatedOptions
       webhookUrl,
       voiceId: voiceId?.trim(),
       videoAspect,
+      videoLayout,
+      hookPanel,
       paragraphNumber,
       language,
       niche,

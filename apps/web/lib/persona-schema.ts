@@ -12,6 +12,7 @@ import {
   parsePublishingAccountsField,
   type PersonaDefaultAccounts,
 } from './persona-publishing-accounts';
+import { HOOK_PANEL_FORM_VALUES, invalidHookPanelMessage } from './hook-panel-form';
 
 export { FACE_QUALITIES, PERSONA_CTA_TYPES, PERSONA_CTA_URL_MAX_LENGTH, PERSONA_CTA_INSTRUCTION_MAX_LENGTH, VALID_VIDEO_ASPECTS, VIDEO_LAYOUTS };
 
@@ -31,6 +32,7 @@ export const personaFormSchema = z.object({
   language: optionalText(z.string().max(35)),
   videoAspect: optionalText(z.enum(VALID_VIDEO_ASPECTS)),
   videoLayout: optionalText(z.enum(VIDEO_LAYOUTS)),
+  hookPanel: optionalText(z.enum(HOOK_PANEL_FORM_VALUES)),
   scriptPrompt: optionalText(z.string().max(2000)),
   ctaType: optionalText(z.enum(PERSONA_CTA_TYPES)),
   ctaUrl: optionalText(z.string().max(PERSONA_CTA_URL_MAX_LENGTH).url()),
@@ -44,6 +46,7 @@ export const personaFormSchema = z.object({
 const FIELD_ERRORS: Record<string, (value: unknown) => string> = {
   videoAspect: (value) => `Invalid videoAspect: ${String(value)}. Use one of ${VALID_VIDEO_ASPECTS.join(', ')}.`,
   videoLayout: (value) => `Invalid videoLayout: ${String(value)}. Use one of ${VIDEO_LAYOUTS.join(', ')}.`,
+  hookPanel: (value) => invalidHookPanelMessage(value),
   niche: () => 'Invalid niche: use at most 300 characters.',
   scriptPrompt: () => 'Invalid scriptPrompt: use at most 2000 characters.',
   ctaType: (value) => `Invalid ctaType: ${String(value)}. Use one of ${PERSONA_CTA_TYPES.join(', ')}.`,
@@ -78,6 +81,7 @@ export type ParsedPersonaForm = {
     language: string | null;
     videoAspect: string | null;
     videoLayout: (typeof VIDEO_LAYOUTS)[number] | null;
+    hookPanel: boolean | null;
     scriptPrompt: string | null;
     ctaType: (typeof PERSONA_CTA_TYPES)[number];
     ctaUrl: string | null;
@@ -168,6 +172,7 @@ export function parsePersonaForm(formData: FormData, mode: PersonaFormMode): Par
         language: values.language ?? null,
         videoAspect: values.videoAspect ?? null,
         videoLayout: values.videoLayout ?? null,
+        hookPanel: values.hookPanel === undefined ? null : values.hookPanel === 'true',
         scriptPrompt: values.scriptPrompt ?? null,
         ctaType: values.ctaType ?? 'follow',
         ctaUrl: values.ctaUrl ?? null,

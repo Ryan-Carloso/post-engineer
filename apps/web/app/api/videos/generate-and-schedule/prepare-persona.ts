@@ -68,6 +68,7 @@ export async function preparePersona(
     voiceId?: string;
     videoAspect?: '9:16' | '16:9' | '1:1';
     videoLayout?: 'standard' | 'react';
+    hookPanel?: boolean;
     paragraphNumber?: number;
     language?: string;
     niche?: string;
@@ -76,7 +77,7 @@ export async function preparePersona(
   const { data: persona, error: personaError } = await supabase
     .from('personas')
     .select(
-      'id, name, photo_path, avatar_url, voice_id, voice_audio_path, language, video_aspect, video_layout, cta_type, cta_url, cta_instruction, paragraph_number, niche, face_quality',
+      'id, name, photo_path, avatar_url, voice_id, voice_audio_path, language, video_aspect, video_layout, hook_panel, cta_type, cta_url, cta_instruction, paragraph_number, niche, face_quality',
     )
     .eq('id', personaId)
     .eq('user_id', userId)
@@ -182,6 +183,7 @@ export async function preparePersona(
     language: effectiveLanguage,
     videoAspect: opts.videoAspect ?? ((persona.video_aspect as string | null) ?? null),
     videoLayout: opts.videoLayout ?? ((persona.video_layout as string | null) ?? null),
+    hookPanel: opts.hookPanel ?? persona.hook_panel !== false,
     paragraphNumber: opts.paragraphNumber ?? paragraphNumber,
     photoRequired: !faceless,
   };
@@ -234,6 +236,7 @@ export async function preparePost(
     voiceId?: string;
     videoAspect?: '9:16' | '16:9' | '1:1';
     videoLayout?: 'standard' | 'react';
+    hookPanel?: boolean;
     paragraphNumber?: number;
     language?: string;
     niche?: string;

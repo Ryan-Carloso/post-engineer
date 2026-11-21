@@ -16,6 +16,7 @@ export function buildIdentitySnapshot(
     post_language: prep.language,
     post_video_aspect: prep.videoAspect,
     post_video_layout: prep.videoLayout,
+    post_hook_panel: prep.hookPanel,
     post_paragraph_number: prep.paragraphNumber,
     post_face_quality: prep.faceQuality,
   };

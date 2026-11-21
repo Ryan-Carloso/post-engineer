@@ -9,6 +9,7 @@ const PREP = {
   language: 'en-US',
   videoAspect: '9:16',
   videoLayout: 'standard',
+  hookPanel: false,
   paragraphNumber: 3,
   faceQuality: 'ok',
 } as unknown as PersonaPrep;
@@ -31,13 +32,14 @@ describe('buildIdentitySnapshot', () => {
       post_language: 'en-US',
       post_video_aspect: '9:16',
       post_video_layout: 'standard',
+      post_hook_panel: false,
       post_paragraph_number: 3,
       post_face_quality: 'ok',
     });
   });
 
   it('snapshots nulls when there is no voice, no audio URL and no CTA', () => {
-    const faceless = { ...PREP, voiceIdValue: null, niche: null, language: null, videoAspect: null, videoLayout: null, paragraphNumber: null, faceQuality: null } as unknown as PersonaPrep;
+    const faceless = { ...PREP, voiceIdValue: null, niche: null, language: null, videoAspect: null, videoLayout: null, hookPanel: true, paragraphNumber: null, faceQuality: null } as unknown as PersonaPrep;
     expect(buildIdentitySnapshot(faceless, undefined, null)).toEqual({
       post_voice_id: null,
       post_voice_audio_url: null,
@@ -48,6 +50,7 @@ describe('buildIdentitySnapshot', () => {
       post_language: null,
       post_video_aspect: null,
       post_video_layout: null,
+      post_hook_panel: true,
       post_paragraph_number: null,
       post_face_quality: null,
     });

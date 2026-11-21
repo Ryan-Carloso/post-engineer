@@ -353,8 +353,13 @@ def prepare_segment_media(
     video_script: str = "",
     session=None,
     font_for: Optional[media_overlay.FontFor] = None,
+    hook_panel: bool = True,
 ) -> tuple[list[Panel], list[str]]:
     """Drawn photos (panels or full frame) with spoken intervals, plus skip warnings.
+
+    hook_panel=False keeps the hook-only lip sync face alone on screen: a
+    photo that would start over the face is not drawn (the first one still
+    opens the video as the lip-sync image).
 
     A warning carries only the segment index, the image index within that
     segment, and a stable reason, never a URL, a path or a mediaId, and
@@ -382,7 +387,10 @@ def prepare_segment_media(
         for image_index, (media, (slice_start, slice_end)) in enumerate(zip(items, split_interval(start, end, len(items)))):
             if not isinstance(media, dict):
                 continue
-            on_face = face == segment_panels.FACE_FULL or (face == segment_panels.FACE_HOOK and slice_start < hook_end)
+            over_hook = face == segment_panels.FACE_HOOK and slice_start < hook_end
+            if over_hook and not hook_panel:
+                continue
+            on_face = face == segment_panels.FACE_FULL or over_hook
             if segment_video.is_video_ref(media):
                 panel, lines = segment_video.clip_panel(
                     media, index, image_index, slice_start, slice_end, task_dir,
@@ -459,6 +467,7 @@ def prepare_segment_panels(task_id: str, params: Any, subtitle_path: str, audio_
         task_id, segments, subtitle_path, audio_duration, utils.task_dir(task_id), aspect,
         face=face, video_script=video_script,
         font_for=_overlay_font(params, segments),
+        hook_panel=getattr(params, "hook_panel", True) is not False,
     )
     hook_end = _hook_end(video_script, subtitle_path, audio_duration) if face == segment_panels.FACE_HOOK else 0.0
     sent = sum(len(_media_list(_segment_dict(s).get("media"))) for s in segments)
