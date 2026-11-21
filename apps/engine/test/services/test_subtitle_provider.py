@@ -35,6 +35,7 @@ def _params(enabled=True):
 def _write(path_arg, content=_SRT):
     def writer(**kwargs):
         Path(kwargs[path_arg]).write_text(content, encoding="utf-8")
+        return kwargs[path_arg]
 
     return writer
 
@@ -91,7 +92,7 @@ def test_the_provider_setting_no_longer_selects_the_tts_estimate(task_dir):
 
 def test_whisper_without_a_file_falls_back_to_the_estimate_and_logs_an_error(task_dir):
     with (
-        patch.object(subtitle_provider.subtitle, "create", return_value=None),
+        patch.object(subtitle_provider.subtitle, "create", return_value=""),
         patch.object(subtitle_provider.subtitle, "correct") as correct,
         patch.object(
             subtitle_provider.voice, "create_subtitle", side_effect=_write("subtitle_file")
@@ -107,6 +108,23 @@ def test_whisper_without_a_file_falls_back_to_the_estimate_and_logs_an_error(tas
     log_error.assert_any_call(
         "whisper produced no subtitle; falling back to the estimated TTS timeline"
     )
+
+
+def test_whisper_model_load_failure_is_logged_and_falls_back_to_the_estimate(task_dir):
+    with (
+        patch.object(subtitle_provider.subtitle, "create", return_value=None),
+        patch.object(subtitle_provider.subtitle, "correct") as correct,
+        patch.object(
+            subtitle_provider.voice, "create_subtitle", side_effect=_write("subtitle_file")
+        ) as estimate,
+        patch.object(subtitle_provider.logger, "error") as log_error,
+    ):
+        result = _build(object())
+    assert result == str(task_dir / "subtitle.srt")
+    assert estimate.call_count == 1
+    assert correct.call_count == 0
+    log_error.assert_any_call("whisper model could not load; see the failed to load model error")
+    assert "whisper wrote no subtitle file" not in [call.args[0] for call in log_error.call_args_list]
 
 
 def test_whisper_raising_falls_back_to_the_estimate_and_logs_an_error(task_dir):

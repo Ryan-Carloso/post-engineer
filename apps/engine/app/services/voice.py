@@ -422,8 +422,9 @@ def create_subtitle(sub_maker: SubMaker, text: str, subtitle_file: str):
         )
 
         if len(sub_items) != len(script_lines):
-            logger.warning(
-                f"failed, sub_items len: {len(sub_items)}, script_lines len: {len(script_lines)}"
+            logger.error(
+                "TTS timeline does not match the script, no subtitle file written: "
+                f"matched lines: {len(sub_items)}, script lines: {len(script_lines)}"
             )
             return
 

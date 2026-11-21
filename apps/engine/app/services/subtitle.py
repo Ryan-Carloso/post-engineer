@@ -190,6 +190,7 @@ def create(audio_file, subtitle_file: str = ""):
     with open(words_path(subtitle_file), "w", encoding="utf-8") as f:
         json.dump(spoken_words, f)
     logger.info(f"subtitle file created: {subtitle_file}")
+    return subtitle_file
 
 
 def words_path(subtitle_file: str) -> str:

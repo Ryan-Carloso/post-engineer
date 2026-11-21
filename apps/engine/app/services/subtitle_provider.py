@@ -23,7 +23,9 @@ def _has_cues(subtitle_path: str) -> bool:
 
 def _whisper(audio_file: str, video_script: str, subtitle_path: str) -> bool:
     try:
-        subtitle.create(audio_file=audio_file, subtitle_file=subtitle_path)
+        if subtitle.create(audio_file=audio_file, subtitle_file=subtitle_path) is None:
+            logger.error("whisper model could not load; see the failed to load model error")
+            return False
         if not os.path.exists(subtitle_path):
             logger.error("whisper wrote no subtitle file")
             return False
