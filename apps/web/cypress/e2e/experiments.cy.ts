@@ -1,51 +1,43 @@
-const EXPERIMENT_ID = '7b0e6c1e-0000-4000-8000-000000000001';
-
-const EXPERIMENT = {
-  id: EXPERIMENT_ID,
-  name: 'Hook test',
-  variable: 'hook',
-  personaId: null,
-  targetPairs: 3,
-  createdAt: '2026-11-10T09:00:00Z',
-  variants: [
-    { variantId: 'hook-calm', name: 'Calm question', description: 'Calm, curious opening.' },
-    { variantId: 'hook-aggressive', name: 'Direct hook', description: 'Direct, provocative opening.' },
-  ],
-};
-
-const DETAIL = {
+const COMPARISON = {
   success: true,
-  experiment: EXPERIMENT,
   window: '7d',
-  videos: [],
-  results: {
-    targetPairs: 3,
-    pairsCreated: 3,
-    pairsPublished: 3,
-    providers: [
-      {
-        provider: 'youtube',
-        comparisons: [1, 2, 3].map((pair) => ({
-          pair,
-          values: {
-            'hook-calm': { views: 500, likes: 2, comments: 1, averageViewDurationSeconds: 12 },
-            'hook-aggressive': { views: 250, likes: 1, comments: 0, averageViewDurationSeconds: 20 },
-          },
-          winner: 'hook-calm',
-        })),
-        wins: { 'hook-calm': 3, 'hook-aggressive': 0 },
-        ties: 0,
-        pValue: 0.25,
-        leader: 'hook-calm',
-        label: 'indicative',
-      },
-    ],
-  },
   truncated: false,
-  source: 'live',
-  liveAt: '2026-11-10T12:00:00.000Z',
-  liveFailures: [],
-  frozen: false,
+  accounts: [
+    {
+      provider: 'youtube',
+      accountId: 'yt-1',
+      videos: 12,
+      baselineViews: 900,
+      prompts: [
+        {
+          versionId: '11111111-1111-4111-8111-111111111111',
+          slug: 'calm-hook',
+          title: 'Calm hook',
+          version: 2,
+          source: 'user',
+          videos: 6,
+          medianViews: 1500,
+          lift: 1.5,
+          pValue: 0.03,
+          label: 'clear',
+          direction: 'above',
+        },
+        {
+          versionId: '22222222-2222-4222-8222-222222222222',
+          slug: 'story-first-reels',
+          title: 'Story first',
+          version: 1,
+          source: 'official',
+          videos: 6,
+          medianViews: 600,
+          lift: 0.7,
+          pValue: 0.2,
+          label: 'no_signal',
+          direction: 'below',
+        },
+      ],
+    },
+  ],
 };
 
 function interceptShell(): void {
@@ -53,107 +45,59 @@ function interceptShell(): void {
     statusCode: 200,
     body: { authenticated: true, accounts: [], message: 'ok' },
   });
-
-  cy.intercept('GET', '/api/billing/tokens', {
-    statusCode: 200,
-    body: { success: true, balance: 100 },
-  });
-
-  cy.intercept('GET', '/api/schedule', {
-    statusCode: 200,
-    body: { success: true, schedules: [] },
-  });
-
-  cy.intercept('GET', '/api/schedule/status**', {
-    statusCode: 200,
-    body: { success: true, upcoming: [], recent: [] },
-  });
-
-  cy.intercept('GET', '/api/persona/video-generations**', {
-    statusCode: 200,
-    body: { success: true, generations: [] },
-  });
+  cy.intercept('GET', '/api/billing/tokens', { statusCode: 200, body: { success: true, balance: 100 } });
+  cy.intercept('GET', '/api/schedule', { statusCode: 200, body: { success: true, schedules: [] } });
+  cy.intercept('GET', '/api/schedule/status**', { statusCode: 200, body: { success: true, upcoming: [], recent: [] } });
+  cy.intercept('GET', '/api/persona/video-generations**', { statusCode: 200, body: { success: true, generations: [] } });
 }
 
-function interceptExperiments(listBody: unknown, detailBody: unknown = DETAIL): void {
-  cy.intercept('GET', '/api/experiments', { statusCode: 200, body: listBody }).as('getExperiments');
-  cy.intercept('GET', '/api/experiments/**', { statusCode: 200, body: detailBody }).as('getDetail');
-}
-
-describe('experiments results page', () => {
+describe('experiments page (prompt comparison)', () => {
   beforeEach(() => {
     cy.viewport(1280, 1100);
     cy.loginE2EUser();
     interceptShell();
   });
 
-  it('shows the live results with human variant names only', () => {
-    interceptExperiments({ success: true, experiments: [EXPERIMENT], truncated: false });
+  it('shows each prompt of the account with its lift and label', () => {
+    cy.intercept('GET', '/api/experiments?window=7d', { statusCode: 200, body: COMPARISON }).as('getComparison');
     cy.visit('/experiments');
-    cy.wait('@getExperiments');
-    cy.wait('@getDetail');
+    cy.wait('@getComparison');
 
-    cy.contains('h1', 'Testes A/B').should('be.visible');
-    cy.contains('Ao vivo').should('be.visible');
-    cy.contains('Calm question').should('be.visible');
-    cy.contains('Direct hook').should('be.visible');
-    cy.contains('Indicativo').should('be.visible');
-    cy.contains('YouTube').should('be.visible');
-    cy.contains('Comparação de variantes').should('be.visible');
-    cy.contains('Calm question: 1.500').should('be.visible');
-    cy.contains('Mostrar tabela').scrollIntoView().should('be.visible');
-    cy.contains('button', 'Mostrar tabela').click();
-    cy.contains('td', '500').scrollIntoView().should('be.visible');
-    cy.contains('td', '250').should('be.visible');
-    cy.contains(/variante a/i).should('not.exist');
-    cy.contains(/variant a/i).should('not.exist');
-    cy.contains('Ainda sem vencedor').scrollIntoView().should('be.visible');
+    cy.contains('h1', 'Experimentos').should('be.visible');
+    cy.contains('Calm hook').should('be.visible');
+    cy.contains('Story first').should('be.visible');
+    cy.contains('Oficial').should('be.visible');
+    cy.contains('Claro').should('be.visible');
+    cy.contains('Sem diferença ainda').should('be.visible');
+    cy.contains('1,5×').should('be.visible');
+    cy.contains('12 vídeos · mediana de 900 views').should('be.visible');
   });
 
-  it('shows the three charts and switches the metric', () => {
-    interceptExperiments({ success: true, experiments: [EXPERIMENT], truncated: false });
+  it('switches the window to 28d', () => {
+    cy.intercept('GET', '/api/experiments?window=7d', { statusCode: 200, body: COMPARISON }).as('getComparison');
+    cy.intercept('GET', '/api/experiments?window=28d', { statusCode: 200, body: { ...COMPARISON, window: '28d' } }).as('get28d');
     cy.visit('/experiments');
-    cy.wait('@getDetail');
+    cy.wait('@getComparison');
 
-    cy.contains('Divisão de vitórias').should('be.visible');
-    cy.contains('Comparação de variantes').should('be.visible');
-    cy.contains('Por par').should('be.visible');
-    cy.contains('Calm question: 1.500').should('be.visible');
-    cy.get('[role="tab"]', { timeout: 10000 }).should('have.length', 4);
-    cy.contains('[role="tab"]', 'Curtidas').click();
-    cy.contains('Calm question: 6').should('be.visible');
-    cy.contains('[role="tab"]', 'Curtidas').should('have.attr', 'data-state', 'active');
+    cy.contains('[role="tab"]', '28d').click();
+    cy.wait('@get28d');
+    cy.contains('[role="tab"]', '28d').should('have.attr', 'data-state', 'active');
   });
 
-  it('switches the window to 24h and reloads the live results', () => {
-    interceptExperiments({ success: true, experiments: [EXPERIMENT], truncated: false });
+  it('shows the empty state when no video names a prompt', () => {
+    cy.intercept('GET', '/api/experiments?window=7d', { statusCode: 200, body: { ...COMPARISON, accounts: [] } }).as('getComparison');
     cy.visit('/experiments');
-    cy.wait('@getDetail');
+    cy.wait('@getComparison');
 
-    cy.contains('button', '24h').click();
-    cy.wait('@getDetail');
-    cy.get('@getDetail').its('request.url').should('include', 'window=24h');
-    cy.contains('button', '24h').should('have.attr', 'aria-pressed', 'true');
-    cy.contains('button', '7d').should('have.attr', 'aria-pressed', 'false');
+    cy.contains('Nenhum experimento ainda').should('be.visible');
   });
 
-  it('shows the empty state with no experiments', () => {
-    interceptExperiments({ success: true, experiments: [], truncated: false });
+  it('shows the error state with a retry when the read fails', () => {
+    cy.intercept('GET', '/api/experiments?window=7d', { statusCode: 500, body: { success: false, error: 'down' } }).as('getComparison');
     cy.visit('/experiments');
-    cy.wait('@getExperiments');
+    cy.wait('@getComparison');
 
-    cy.contains('Nenhum teste A/B ainda').should('be.visible');
-  });
-
-  it('shows the error panel when the list fails', () => {
-    cy.intercept('GET', '/api/experiments', {
-      statusCode: 500,
-      body: { success: false, error: 'down' },
-    }).as('getExperiments');
-    cy.visit('/experiments');
-    cy.wait('@getExperiments');
-
-    cy.contains('Não foi possível carregar os testes').should('be.visible');
+    cy.contains('Não foi possível carregar os experimentos').should('be.visible');
     cy.contains('button', 'Tentar de novo').should('be.visible');
   });
 });

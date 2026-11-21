@@ -178,24 +178,24 @@ export const recipesI18nPt = {
   fullSetupExampleInput: 'Começando sem nenhuma conta e sem persona.',
   fullSetupExampleOutput:
       'Contas conectadas, persona criada, roteiro validado, um vídeo publicado.',
-  abHookTestTitle: 'Teste dois hooks (A/B)',
-  abHookTestObjective:
-      'Compare dois estilos de hook nos mesmos vídeos. Sem rosto é o teste mais barato. Uma variante só é vencedora quando o rótulo é clear.',
-  abHookTestStep1: 'Para quem quer comparar dois estilos de hook no mesmo vídeo.',
-  abHookTestStep2:
-      'Sem rosto é o teste mais barato: 1 token por vídeo, criado sem persona.',
-  abHookTestStep3:
-      'Crie o experimento com 6 pares. 6 é o menor alvo que pode ficar clear. Um efeito moderado pede cerca de 10 a 12.',
-  abHookTestStep4:
-      'Escreva os dois hooks de cada par no estilo de cada variante. Dentro do par, só o hook muda.',
-  abHookTestStep5:
-      'Espere a publicação e as métricas, depois leia o resultado. Só chame um vencedor quando o rótulo for clear.',
-  abHookTestDeliver1: 'Um experimento sem rosto com duas variantes de hook.',
-  abHookTestDeliver2: 'Pares de vídeos a 1 token cada, com a mesma voz em todos.',
-  abHookTestDeliver3: 'Um resultado que só aponta vencedor quando o rótulo é clear.',
-  abHookTestExampleInput: 'Um hook calmo contra um hook direto, sem rosto, no meu nicho.',
-  abHookTestExampleOutput:
-      'Experimento com 6 pares. Nenhum vencedor enquanto o rótulo não for clear.',
+  comparePromptsTitle: 'Compare dois prompts (A/B)',
+  comparePromptsObjective:
+      'Alterne dois prompts na mesma conta e veja qual vai melhor. Um prompt só vence quando o rótulo é claro.',
+  comparePromptsStep1: 'Para quem testa uma mudança, como o estilo do hook, escrita como dois prompts.',
+  comparePromptsStep2:
+      'Cada vídeo guarda a versão do prompt com que foi escrito, então a comparação não precisa de configuração.',
+  comparePromptsStep3:
+      'Mesma conta, voz e tipo de vídeo em todos os vídeos: outra conta é outro público.',
+  comparePromptsStep4:
+      'Alterne os prompts no calendário e troque os horários todo dia, com pelo menos 5 vídeos por prompt.',
+  comparePromptsStep5:
+      'Espere a publicação e as métricas e leia o resultado. Nunca chame um prompt de vencedor se o rótulo não for claro.',
+  comparePromptsDeliver1: 'Um calendário que alterna dois prompts em uma conta.',
+  comparePromptsDeliver2: 'Vídeos que guardam cada um a sua versão de prompt.',
+  comparePromptsDeliver3: 'Uma comparação que só aponta vencedor quando o rótulo é claro.',
+  comparePromptsExampleInput: 'Meu prompt de hook calmo contra meu prompt de hook direto, sem rosto, no meu YouTube.',
+  comparePromptsExampleOutput:
+      '10 vídeos alternados em 5 dias. Nenhum vencedor sem rótulo claro.',
   storyFirstReelsTitle: 'Story-first Reels',
   storyFirstReelsObjective:
       'Escreva cada roteiro como uma história primeiro: um micro-arco fechado, feito para segurar a atenção.',

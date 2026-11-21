@@ -27,7 +27,7 @@ const ACTIONS: Record<string, string[]> = {
   schedules: ['list', 'cancel', 'get_slot', 'update_slot_title', 'delete_slot'],
   posts: ['list', 'get'],
   insights: ['post_metrics', 'retention_curve'],
-  experiments: ['create', 'list', 'add_pair', 'results'],
+  experiments: ['results'],
   media: ['upload', 'check'],
   billing: ['balance', 'transactions'],
   prompts: ['list', 'get'],

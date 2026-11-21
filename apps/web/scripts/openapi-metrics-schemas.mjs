@@ -1,11 +1,7 @@
-import { experimentLinkSchema, experimentOperationSchemas } from './openapi-experiments-schemas.mjs';
 import { batchOperationSchemas } from './openapi-batch-schemas.mjs';
-
-export { experimentLinkSchema };
 
 export function metricsOperationSchemas({ success, object, anyObject, str }) {
   return {
-    ...experimentOperationSchemas({ success, object, anyObject, str }),
     ...batchOperationSchemas({ success, object, str }),
     'GET /api/metrics': {
       query: [

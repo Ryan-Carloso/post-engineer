@@ -387,66 +387,6 @@
                 "schedules_post_cta_instruction_length_check": "CHECK (((post_cta_instruction IS NULL) OR (char_length(post_cta_instruction) <= 500)))"
             }
         },
-        "experiments": {
-            "rls": true,
-            "columns": [
-                {
-                    "name": "id",
-                    "type": "uuid",
-                    "default": "gen_random_uuid()",
-                    "notNull": true
-                },
-                {
-                    "name": "user_id",
-                    "type": "uuid",
-                    "default": null,
-                    "notNull": true
-                },
-                {
-                    "name": "name",
-                    "type": "text",
-                    "default": null,
-                    "notNull": true
-                },
-                {
-                    "name": "variable",
-                    "type": "text",
-                    "default": null,
-                    "notNull": true
-                },
-                {
-                    "name": "target_pairs",
-                    "type": "integer",
-                    "default": null,
-                    "notNull": true
-                },
-                {
-                    "name": "created_at",
-                    "type": "timestamp with time zone",
-                    "default": "now()",
-                    "notNull": true
-                },
-                {
-                    "name": "persona_id",
-                    "type": "uuid",
-                    "default": null,
-                    "notNull": false
-                }
-            ],
-            "policies": {
-                "experiments_select_own": {
-                    "cmd": "r",
-                    "qual": "(auth.uid() = user_id)",
-                    "withCheck": null
-                }
-            },
-            "constraints": {
-                "experiments_pkey": "PRIMARY KEY (id)",
-                "experiments_variable_check": "CHECK ((variable = 'hook'::text))",
-                "experiments_name_length_check": "CHECK (((char_length(name) >= 1) AND (char_length(name) <= 120)))",
-                "experiments_target_pairs_check": "CHECK (((target_pairs >= 3) AND (target_pairs <= 20)))"
-            }
-        },
         "oauth_states": {
             "rls": true,
             "columns": [
@@ -641,20 +581,8 @@
                     "notNull": false
                 },
                 {
-                    "name": "experiment_id",
+                    "name": "prompt_version_id",
                     "type": "uuid",
-                    "default": null,
-                    "notNull": false
-                },
-                {
-                    "name": "variant_id",
-                    "type": "text",
-                    "default": null,
-                    "notNull": false
-                },
-                {
-                    "name": "experiment_pair",
-                    "type": "integer",
                     "default": null,
                     "notNull": false
                 }
@@ -1164,6 +1092,85 @@
                 "publish_ledger_status_check": "CHECK ((status = ANY (ARRAY['in_progress'::text, 'published'::text, 'failed'::text, 'unknown'::text])))"
             }
         },
+        "prompt_versions": {
+            "rls": true,
+            "columns": [
+                {
+                    "name": "id",
+                    "type": "uuid",
+                    "default": "gen_random_uuid()",
+                    "notNull": true
+                },
+                {
+                    "name": "prompt_id",
+                    "type": "uuid",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "owner_id",
+                    "type": "uuid",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "source",
+                    "type": "text",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "slug",
+                    "type": "text",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "title",
+                    "type": "text",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "version",
+                    "type": "integer",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "body",
+                    "type": "text",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "body_hash",
+                    "type": "text",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "created_at",
+                    "type": "timestamp with time zone",
+                    "default": "now()",
+                    "notNull": true
+                }
+            ],
+            "policies": {
+            },
+            "constraints": {
+                "prompt_versions_pkey": "PRIMARY KEY (id)",
+                "prompt_versions_body_check": "CHECK ((char_length(body) >= 1))",
+                "prompt_versions_slug_check": "CHECK ((slug ~ '^[a-z0-9][a-z0-9-]{0,63}$'::text))",
+                "prompt_versions_title_check": "CHECK (((char_length(title) >= 1) AND (char_length(title) <= 120)))",
+                "prompt_versions_source_check": "CHECK ((source = ANY (ARRAY['official'::text, 'user'::text])))",
+                "prompt_versions_version_check": "CHECK ((version >= 1))",
+                "prompt_versions_prompt_id_fkey": "FOREIGN KEY (prompt_id) REFERENCES user_prompts(id) ON DELETE SET NULL",
+                "prompt_versions_body_hash_check": "CHECK ((body_hash ~ '^[0-9a-f]{64}$'::text))",
+                "prompt_versions_owner_source_check": "CHECK (((owner_id IS NOT NULL) = (source <> 'official'::text)))",
+                "prompt_versions_prompt_version_unique": "UNIQUE (prompt_id, version)"
+            }
+        },
         "scheduled_posts": {
             "rls": true,
             "columns": [
@@ -1270,24 +1277,6 @@
                     "notNull": true
                 },
                 {
-                    "name": "experiment_id",
-                    "type": "uuid",
-                    "default": null,
-                    "notNull": false
-                },
-                {
-                    "name": "variant_id",
-                    "type": "text",
-                    "default": null,
-                    "notNull": false
-                },
-                {
-                    "name": "experiment_pair",
-                    "type": "integer",
-                    "default": null,
-                    "notNull": false
-                },
-                {
                     "name": "charged_tokens",
                     "type": "integer",
                     "default": null,
@@ -1352,6 +1341,12 @@
                     "type": "timestamp with time zone",
                     "default": null,
                     "notNull": false
+                },
+                {
+                    "name": "prompt_version_id",
+                    "type": "uuid",
+                    "default": null,
+                    "notNull": false
                 }
             ],
             "policies": {
@@ -1368,10 +1363,8 @@
                 "scheduled_posts_video_type_check": "CHECK ((video_type = ANY (ARRAY['full_lipsync'::text, 'hook_lipsync'::text, 'faceless'::text])))",
                 "scheduled_posts_charged_tokens_check": "CHECK ((charged_tokens >= 0))",
                 "scheduled_posts_discount_tokens_check": "CHECK ((discount_tokens >= 0))",
-                "scheduled_posts_experiment_link_check": "CHECK ((((experiment_id IS NULL) = (variant_id IS NULL)) AND ((experiment_id IS NULL) OR (experiment_pair IS NOT NULL)) AND ((experiment_pair IS NULL) OR (experiment_pair >= 1))))",
-                "scheduled_posts_experiment_variant_fkey": "FOREIGN KEY (experiment_id, variant_id) REFERENCES experiment_variants(experiment_id, variant_id) ON DELETE SET NULL",
-                "scheduled_posts_faceless_material_check": "CHECK ((faceless_material = 'images'::text))",
-                "scheduled_posts_experiment_pair_variant_key": "UNIQUE (experiment_id, experiment_pair, variant_id)"
+                "scheduled_posts_prompt_version_id_fkey": "FOREIGN KEY (prompt_version_id) REFERENCES prompt_versions(id) ON DELETE SET NULL",
+                "scheduled_posts_faceless_material_check": "CHECK ((faceless_material = 'images'::text))"
             }
         },
         "social_accounts": {
@@ -1911,63 +1904,6 @@
             },
             "constraints": {
                 "token_transactions_pkey": "PRIMARY KEY (id)"
-            }
-        },
-        "experiment_variants": {
-            "rls": true,
-            "columns": [
-                {
-                    "name": "experiment_id",
-                    "type": "uuid",
-                    "default": null,
-                    "notNull": true
-                },
-                {
-                    "name": "variant_id",
-                    "type": "text",
-                    "default": null,
-                    "notNull": true
-                },
-                {
-                    "name": "position",
-                    "type": "integer",
-                    "default": null,
-                    "notNull": true
-                },
-                {
-                    "name": "name",
-                    "type": "text",
-                    "default": null,
-                    "notNull": true
-                },
-                {
-                    "name": "description",
-                    "type": "text",
-                    "default": null,
-                    "notNull": true
-                },
-                {
-                    "name": "created_at",
-                    "type": "timestamp with time zone",
-                    "default": "now()",
-                    "notNull": true
-                }
-            ],
-            "policies": {
-                "experiment_variants_select_own": {
-                    "cmd": "r",
-                    "qual": "(EXISTS ( SELECT 1\n   FROM experiments e\n  WHERE ((e.id = experiment_variants.experiment_id) AND (e.user_id = auth.uid()))))",
-                    "withCheck": null
-                }
-            },
-            "constraints": {
-                "experiment_variants_pkey": "PRIMARY KEY (experiment_id, variant_id)",
-                "experiment_variants_position_key": "UNIQUE (experiment_id, \"position\")",
-                "experiment_variants_position_check": "CHECK (((\"position\" >= 0) AND (\"position\" <= 1)))",
-                "experiment_variants_name_length_check": "CHECK (((char_length(name) >= 1) AND (char_length(name) <= 80)))",
-                "experiment_variants_experiment_id_fkey": "FOREIGN KEY (experiment_id) REFERENCES experiments(id) ON DELETE CASCADE",
-                "experiment_variants_variant_id_format_check": "CHECK ((variant_id ~ '^[a-z0-9][a-z0-9-]{0,47}$'::text))",
-                "experiment_variants_description_length_check": "CHECK (((char_length(description) >= 1) AND (char_length(description) <= 500)))"
             }
         },
         "owner_alert_notices": {

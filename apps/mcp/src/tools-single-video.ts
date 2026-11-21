@@ -135,7 +135,7 @@ export async function generatePersonaVideoOutcome(
           ...(language === undefined ? {} : { language }),
         },
         idempotencyKey: args.idempotencyKey,
-        experiment: args.experiment,
+        promptVersionId: args.promptVersionId,
         cta: args.cta,
       });
     const scheduleId = narrowed.schedule.id;

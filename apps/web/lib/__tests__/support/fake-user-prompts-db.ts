@@ -15,15 +15,26 @@ interface Outcome {
 
 type Operation = 'select' | 'insert' | 'update' | 'delete';
 
+export interface FakePromptVersion {
+  id: string;
+  prompt_id: string | null;
+  source: 'official' | 'user';
+  slug: string;
+  version: number;
+  body: string;
+}
+
 export interface FakeUserPromptsDb {
   client: SupabaseClient<Database>;
   rows: UserPromptRow[];
+  versions: FakePromptVersion[];
   queries: string[];
   failNext: (code: string) => void;
 }
 
 export function createFakeUserPromptsDb(seed: Partial<UserPromptRow>[] = []): FakeUserPromptsDb {
   const rows: UserPromptRow[] = [];
+  const versions: FakePromptVersion[] = [];
   const queries: string[] = [];
   let pendingFailure: string | null = null;
   const now = (): string => new Date().toISOString();
@@ -44,7 +55,17 @@ export function createFakeUserPromptsDb(seed: Partial<UserPromptRow>[] = []): Fa
     return base;
   }
 
-  for (const entry of seed) rows.push(insertRow(entry));
+  function recordVersion(row: UserPromptRow): void {
+    const latest = versions.filter((entry) => entry.prompt_id === row.id).sort((a, b) => b.version - a.version)[0];
+    if (latest !== undefined && latest.body === row.body) return;
+    versions.push({ id: randomUUID(), prompt_id: row.id, source: 'user', slug: row.slug, version: (latest?.version ?? 0) + 1, body: row.body });
+  }
+
+  for (const entry of seed) {
+    const row = insertRow(entry);
+    rows.push(row);
+    recordVersion(row);
+  }
 
   function violatesUnique(candidate: UserPromptRow, ignoreId: string | null): boolean {
     return rows.some(
@@ -153,6 +174,7 @@ export function createFakeUserPromptsDb(seed: Partial<UserPromptRow>[] = []): Fa
           return { data: null, error: { code: '23505', message: 'duplicate key value' } };
         }
         rows.push(created);
+        recordVersion(created);
         affected = [created];
       } else if (this.operation === 'update') {
         const updated: UserPromptRow[] = [];
@@ -162,6 +184,7 @@ export function createFakeUserPromptsDb(seed: Partial<UserPromptRow>[] = []): Fa
             return { data: null, error: { code: '23505', message: 'duplicate key value' } };
           }
           rows[rows.indexOf(row)] = next;
+          recordVersion(next);
           updated.push(next);
         }
         affected = updated;
@@ -196,16 +219,67 @@ export function createFakeUserPromptsDb(seed: Partial<UserPromptRow>[] = []): Fa
     }
   }
 
+  class VersionQuery implements PromiseLike<Outcome> {
+    private promptId: string | null = null;
+
+    select(columns: string): this {
+      queries.push(`prompt_versions select ${columns}`);
+      return this;
+    }
+
+    eq(column: string, value: string): this {
+      if (column !== 'prompt_id') throw new Error(`unsupported prompt_versions filter ${column}`);
+      this.promptId = value;
+      return this;
+    }
+
+    order(): this {
+      return this;
+    }
+
+    limit(): this {
+      return this;
+    }
+
+    maybeSingle(): this {
+      return this;
+    }
+
+    then<Result1 = Outcome, Result2 = never>(
+      onfulfilled?: ((value: Outcome) => Result1 | PromiseLike<Result1>) | null,
+      onrejected?: ((reason: unknown) => Result2 | PromiseLike<Result2>) | null,
+    ): PromiseLike<Result1 | Result2> {
+      const latest = versions.filter((entry) => entry.prompt_id === this.promptId).sort((a, b) => b.version - a.version)[0];
+      const outcome: Outcome = { data: latest === undefined ? null : { id: latest.id, version: latest.version }, error: null };
+      return Promise.resolve(outcome).then(onfulfilled, onrejected);
+    }
+  }
+
+  function ensureOfficialVersion(args: { p_slug: string; p_body: string }): Outcome {
+    queries.push(`rpc ensure_official_prompt_version ${args.p_slug}`);
+    const official = versions.filter((entry) => entry.source === 'official' && entry.slug === args.p_slug);
+    const same = official.find((entry) => entry.body === args.p_body);
+    const row = same ?? { id: randomUUID(), prompt_id: null, source: 'official' as const, slug: args.p_slug, version: official.length + 1, body: args.p_body };
+    if (same === undefined) versions.push(row);
+    return { data: [{ version_id: row.id, version: row.version }], error: null };
+  }
+
   const client = {
-    from(table: string): Query {
+    from(table: string): Query | VersionQuery {
+      if (table === 'prompt_versions') return new VersionQuery();
       if (table !== 'user_prompts') throw new Error(`unexpected table ${table}`);
       return new Query();
+    },
+    rpc(name: string, args: { p_slug: string; p_body: string }): Promise<Outcome> {
+      if (name !== 'ensure_official_prompt_version') throw new Error(`unexpected rpc ${name}`);
+      return Promise.resolve(ensureOfficialVersion(args));
     },
   };
 
   return {
     client: client as unknown as SupabaseClient<Database>,
     rows,
+    versions,
     queries,
     failNext: (code: string) => {
       pendingFailure = code;

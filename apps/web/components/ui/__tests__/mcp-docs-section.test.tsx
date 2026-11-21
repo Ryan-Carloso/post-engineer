@@ -114,7 +114,7 @@ describe('McpDocsSection', () => {
       schedules: 'list · cancel · get_slot · update_slot_title · delete_slot',
       posts: 'list · get',
       insights: 'post_metrics · retention_curve',
-      experiments: 'create · add_pair · list · results',
+      experiments: 'results',
       media: 'upload · check',
       billing: 'balance · transactions',
       prompts: 'list · get',

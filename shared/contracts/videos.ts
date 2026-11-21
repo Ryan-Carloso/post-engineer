@@ -1,7 +1,6 @@
 import { z } from 'zod';
 
 import { defineEndpoint } from './endpoint.js';
-import { EXPERIMENT_TARGET_PAIRS_MAX, EXPERIMENT_VARIANT_ID_PATTERN } from './experiments.js';
 import { UploadContentResponseSchema } from './media.js';
 import { UUID } from './metrics.js';
 import { PersonaCtaSchema } from './personas.js';
@@ -80,16 +79,6 @@ export const segmentsRequestSchema = z.array(
     .strict(),
 ).max(MAX_SEGMENTS);
 
-export const ExperimentLinkSchema = z
-  .object({
-    experimentId: z.string().uuid(),
-    variantId: z.string().regex(EXPERIMENT_VARIANT_ID_PATTERN),
-    pair: z.number().int().min(1).max(EXPERIMENT_TARGET_PAIRS_MAX),
-  })
-  .strict();
-
-export type ExperimentLink = z.infer<typeof ExperimentLinkSchema>;
-
 const PublishingScheduleSchema = z.object({
   startAt: z.string(),
   times: z.array(z.string()),
@@ -131,7 +120,8 @@ export const GenerateAndScheduleBodySchema = z.object({
   publishing: PublishingSchema,
   options: OptionsSchema,
   idempotencyKey: z.string().optional(),
-  experiment: ExperimentLinkSchema.optional(), cta: PersonaCtaSchema.nullable().optional(),
+  promptVersionId: z.string().uuid('promptVersionId must be the versionId returned with the prompt.').optional(),
+  cta: PersonaCtaSchema.nullable().optional(),
 });
 
 export type GenerateAndScheduleBody = z.infer<typeof GenerateAndScheduleBodySchema>;

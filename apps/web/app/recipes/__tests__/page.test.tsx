@@ -39,7 +39,7 @@ vi.mock('@/lib/i18n/provider', () => {
     'recipes.viralShortsTitle': 'A viral video becomes your Short',
     'recipes.viralShortsObjective': 'Learn from the most-viewed video in your niche.',
     'recipes.fullSetupTitle': 'Full setup becomes videos',
-    'recipes.abHookTestTitle': 'Test two hooks (A/B)',
+    'recipes.comparePromptsTitle': 'Compare two prompts (A/B)',
     'recipes.storyFirstReelsTitle': 'Story-first Reels',
     'recipes.kindRecipe': 'Recipe',
     'recipes.kindPrompt': 'Prompt',
@@ -196,7 +196,7 @@ describe('/recipes prompts hub', () => {
       [/One week, one video per network/, '/recipes/multi-rede'],
       [/A viral video becomes your Short/, '/recipes/viral-shorts'],
       [/Full setup becomes videos/, '/recipes/full-setup'],
-      [/Test two hooks \(A\/B\)/, '/recipes/ab-hook-test'],
+      [/Compare two prompts \(A\/B\)/, '/recipes/compare-prompts'],
       [/Story-first Reels/, '/recipes/story-first-reels'],
     ] as const) {
       expect(screen.getByRole('link', { name })).toHaveAttribute('href', href);

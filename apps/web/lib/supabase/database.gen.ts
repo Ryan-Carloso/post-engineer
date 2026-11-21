@@ -105,63 +105,6 @@ export interface Database {
         };
         Relationships: [];
       };
-      experiment_variants: {
-        Row: {
-        experiment_id: string;
-        variant_id: string;
-        position: number;
-        name: string;
-        description: string;
-        created_at: string;
-        };
-        Insert: {
-        experiment_id: string;
-        variant_id: string;
-        position: number;
-        name: string;
-        description: string;
-        created_at?: string;
-        };
-        Update: {
-        experiment_id?: string;
-        variant_id?: string;
-        position?: number;
-        name?: string;
-        description?: string;
-        created_at?: string;
-        };
-        Relationships: [];
-      };
-      experiments: {
-        Row: {
-        id: string;
-        user_id: string;
-        name: string;
-        variable: string;
-        target_pairs: number;
-        created_at: string;
-        persona_id: string | null;
-        };
-        Insert: {
-        id?: string;
-        user_id: string;
-        name: string;
-        variable: string;
-        target_pairs: number;
-        created_at?: string;
-        persona_id?: string | null;
-        };
-        Update: {
-        id?: string;
-        user_id?: string;
-        name?: string;
-        variable?: string;
-        target_pairs?: number;
-        created_at?: string;
-        persona_id?: string | null;
-        };
-        Relationships: [];
-      };
       mcp_oauth_clients: {
         Row: {
         client_id: string;
@@ -411,9 +354,7 @@ export interface Database {
         analytics_start_date: string | null;
         analytics_end_date: string | null;
         analytics_status: 'ok' | 'scope_missing' | 'not_owned' | 'no_data' | null;
-        experiment_id: string | null;
-        variant_id: string | null;
-        experiment_pair: number | null;
+        prompt_version_id: string | null;
         };
         Insert: {
         id?: string;
@@ -438,9 +379,7 @@ export interface Database {
         analytics_start_date?: string | null;
         analytics_end_date?: string | null;
         analytics_status?: 'ok' | 'scope_missing' | 'not_owned' | 'no_data' | null;
-        experiment_id?: string | null;
-        variant_id?: string | null;
-        experiment_pair?: number | null;
+        prompt_version_id?: string | null;
         };
         Update: {
         id?: string;
@@ -465,9 +404,7 @@ export interface Database {
         analytics_start_date?: string | null;
         analytics_end_date?: string | null;
         analytics_status?: 'ok' | 'scope_missing' | 'not_owned' | 'no_data' | null;
-        experiment_id?: string | null;
-        variant_id?: string | null;
-        experiment_pair?: number | null;
+        prompt_version_id?: string | null;
         };
         Relationships: [];
       };
@@ -486,6 +423,45 @@ export interface Database {
         post_id?: string;
         metrics_window?: '24h' | '7d' | '28d';
         done_at?: string;
+        };
+        Relationships: [];
+      };
+      prompt_versions: {
+        Row: {
+        id: string;
+        prompt_id: string | null;
+        owner_id: string | null;
+        source: 'official' | 'user';
+        slug: string;
+        title: string;
+        version: number;
+        body: string;
+        body_hash: string;
+        created_at: string;
+        };
+        Insert: {
+        id?: string;
+        prompt_id?: string | null;
+        owner_id?: string | null;
+        source: 'official' | 'user';
+        slug: string;
+        title: string;
+        version: number;
+        body: string;
+        body_hash: string;
+        created_at?: string;
+        };
+        Update: {
+        id?: string;
+        prompt_id?: string | null;
+        owner_id?: string | null;
+        source?: 'official' | 'user';
+        slug?: string;
+        title?: string;
+        version?: number;
+        body?: string;
+        body_hash?: string;
+        created_at?: string;
         };
         Relationships: [];
       };
@@ -580,9 +556,6 @@ export interface Database {
         segments: Json | null;
         title: string | null;
         full_lipsync: boolean;
-        experiment_id: string | null;
-        variant_id: string | null;
-        experiment_pair: number | null;
         charged_tokens: number;
         batch_id: string | null;
         discount_tokens: number;
@@ -594,6 +567,7 @@ export interface Database {
         media_ref: string | null;
         media_content_type: string | null;
         media_claimed_at: string | null;
+        prompt_version_id: string | null;
         };
         Insert: {
         id?: string;
@@ -613,9 +587,6 @@ export interface Database {
         segments?: Json | null;
         title?: string | null;
         full_lipsync?: boolean;
-        experiment_id?: string | null;
-        variant_id?: string | null;
-        experiment_pair?: number | null;
         charged_tokens: number;
         batch_id?: string | null;
         discount_tokens?: number;
@@ -627,6 +598,7 @@ export interface Database {
         media_ref?: string | null;
         media_content_type?: string | null;
         media_claimed_at?: string | null;
+        prompt_version_id?: string | null;
         };
         Update: {
         id?: string;
@@ -646,9 +618,6 @@ export interface Database {
         segments?: Json | null;
         title?: string | null;
         full_lipsync?: boolean;
-        experiment_id?: string | null;
-        variant_id?: string | null;
-        experiment_pair?: number | null;
         charged_tokens?: number;
         batch_id?: string | null;
         discount_tokens?: number;
@@ -660,6 +629,7 @@ export interface Database {
         media_ref?: string | null;
         media_content_type?: string | null;
         media_claimed_at?: string | null;
+        prompt_version_id?: string | null;
         };
         Relationships: [];
       };

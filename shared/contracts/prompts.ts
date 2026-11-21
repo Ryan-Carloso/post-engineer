@@ -38,6 +38,8 @@ export const PromptSummarySchema = z.object({
 
 export const PromptDetailSchema = PromptSummarySchema.extend({
   prompt: z.string(),
+  versionId: z.string().uuid(),
+  version: z.number().int().min(1),
 });
 
 export const ListPromptsResponseSchema = z.object({

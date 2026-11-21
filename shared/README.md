@@ -130,8 +130,7 @@ SOCIAL_PROVIDERS.
 `contracts/*.ts` are the shared endpoint contracts: one `defineEndpoint`
 per web API exchange (`method`, `path`, optional `body`/`query`, `response`
 schemas) plus the `BodyOf`/`QueryOf`/`ResponseOf`/`ParamsOf` types derived
-from it. The pilot is the experiments API (`POST /api/experiments`,
-`GET /api/experiments`, `GET /api/experiments/:id`); the prompts catalog
+from it. The prompt comparison (`GET /api/experiments`), the prompts catalog
 (`GET /api/prompts`, `GET /api/prompts/[slug]`), the billing wallet
 (`GET /api/billing/tokens`, `GET /api/billing/transactions`), the post
 detail (`GET /api/posts/[id]`) and the metrics reads

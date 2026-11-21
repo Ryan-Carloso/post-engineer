@@ -769,6 +769,7 @@ describe('api', () => {
         schedule: { id: 's1' },
         persona: null,
         generation: {
+          prompt: { slug: 'story-first', title: 'Story first', version: 3, source: 'official' },
           faceless: true,
           language: 'pt-BR',
           voiceId: 'ana_neural',
@@ -783,6 +784,7 @@ describe('api', () => {
     const payload = await fetchPostDetail('slot-1');
     if (payload?.kind !== 'slot') throw new Error('expected slot');
     expect(payload.generation).toEqual({
+      prompt: { slug: 'story-first', title: 'Story first', version: 3, source: 'official' },
       faceless: true,
       language: 'pt-BR',
       voiceId: 'ana_neural',
@@ -853,6 +855,7 @@ describe('api', () => {
         schedule: { id: 's1' },
         persona: null,
         generation: {
+          prompt: { slug: 'story-first', title: 'Story first', version: '3', source: 'official' },
           faceless: 'yes',
           language: 42,
           voiceId: null,
@@ -864,6 +867,7 @@ describe('api', () => {
     const payload = await fetchPostDetail('slot-1');
     if (payload?.kind !== 'slot') throw new Error('expected slot');
     expect(payload.generation).toEqual({
+      prompt: null,
       faceless: false,
       language: null,
       voiceId: null,
@@ -889,6 +893,7 @@ describe('api', () => {
     const payload = await fetchPostDetail('slot-1');
     if (payload?.kind !== 'slot') throw new Error('expected slot');
     expect(payload.generation).toEqual({
+      prompt: null,
       faceless: false,
       language: null,
       voiceId: null,

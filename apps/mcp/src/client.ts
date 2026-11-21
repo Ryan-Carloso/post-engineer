@@ -508,7 +508,7 @@ export class PostEngineerClient {
                 }),
           },
           options: input.options ?? undefined,
-          ...(input.experiment !== undefined ? { experiment: input.experiment } : {}),
+          ...(input.promptVersionId !== undefined ? { promptVersionId: input.promptVersionId } : {}),
           ...(input.cta !== undefined ? { cta: input.cta } : {}),
           idempotencyKey: input.idempotencyKey ?? randomUUID(),
         }),

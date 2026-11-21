@@ -11,7 +11,7 @@ export const mcpToolDescPt = {
   toolDescSchedules: 'Seus posts agendados: liste, cancele, edite',
   toolDescPosts: 'Seus posts futuros e publicados',
   toolDescInsights: 'Métricas dos posts e curvas de retenção do YouTube',
-  toolDescExperiments: 'Testes A/B de dois estilos de hook',
+  toolDescExperiments: 'Compara seus prompts em cada conta',
   toolDescMedia: 'Envie e verifique imagens de segmentos',
   toolDescBilling: 'Saldo e extrato de tokens',
   toolDescPrompts: 'As receitas de prompt que este servidor executa',

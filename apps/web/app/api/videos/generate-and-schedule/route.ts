@@ -3,7 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { requireSupabaseSession } from '@/lib/request-auth';
-import { isPersonaAllowed } from '@/lib/api-keys';
+import { isPersonaAllowed, isScopedApiKey } from '@/lib/api-keys';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { ERROR_CODES, formatErrorMessage } from '@/lib/error-codes';
 import { type DistributedSlot } from '@/lib/schedule/slot-distribution';
@@ -16,7 +16,7 @@ import { answerSchedulePkRace } from './pk-race';
 import { fetchReplay } from './replay';
 import { resolvePriorSpend } from './prior-spend';
 import { refundRollbackSpend } from './rollback-refund';
-import { buildPairFacts, checkExperimentLink, verifyExperimentPairAfterInsert } from './experiment-link';
+import { checkPromptVersion } from './prompt-version';
 import { buildIdentitySnapshot } from './identity-snapshot';
 import { resolveEffectiveCta, validateCtaTake } from './cta-validation';
 import { scheduleAccountColumns } from './account-columns';
@@ -129,7 +129,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
   const rawIssues = rawKeyIssues(body);
   const parsed = GenerateAndScheduleBodySchema.safeParse(body);
   if (!parsed.success) return rejectInvalidRequest([...rawIssues, ...shapeIssues(parsed.error)]);
-  const { publishing, options, idempotencyKey, experiment, cta: ctaOverride } = parsed.data;
+  const { publishing, options, idempotencyKey, promptVersionId, cta: ctaOverride } = parsed.data;
 
   const personaId = parsed.data.personaId?.trim() || null;
   const checked = checkSemantics({
@@ -241,11 +241,10 @@ async function postHandler(request: Request): Promise<NextResponse> {
   if (preflight instanceof NextResponse) return preflight;
 
   const idem = resolveIdempotency(userId, idempotencyKey, request);
-  const pairFacts = buildPairFacts({ providers, accountIds, pinterestBoardId, prep, title, segments: options?.segments, videoType: validatedOptions.videoType, audioUrl: validatedOptions.audioUrl, cta: effectiveCta });
-  if (experiment !== undefined) {
-    const link = await checkExperimentLink(supabase, { link: experiment, userId, personaId, replayScheduleId: idem.scheduleId, facts: pairFacts });
-    if (!link.ok && link.status === 500) return coded(500, ERROR_CODES.INTERNAL_ERROR, formatErrorMessage(ERROR_CODES.INTERNAL_ERROR));
-    if (!link.ok) return validationFailed(ERROR_CODES.VALIDATION_FAILED, link.message, link.field, link.status);
+  if (promptVersionId !== undefined) {
+    const version = await checkPromptVersion(supabase, { versionId: promptVersionId, userId, allowOwn: !isScopedApiKey(auth) });
+    if (version === 'error') return coded(500, ERROR_CODES.INTERNAL_ERROR, formatErrorMessage(ERROR_CODES.INTERNAL_ERROR));
+    if (version === 'not_found') return validationFailed(ERROR_CODES.PROMPT_NOT_FOUND, 'Unknown promptVersionId: pass the versionId returned with a prompt you can read.', 'promptVersionId', 404);
   }
 
   const perVideoCost = computeVideoTokens(validatedOptions.videoType, prep.faceQuality);
@@ -450,7 +449,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
         musicMood: validatedOptions.musicMood,
         chargedTokens: perVideoCost,
         segments: options?.segments,
-        experiment,
+        promptVersionId,
       }),
     )
     .select('id, slot_at, title');
@@ -471,23 +470,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
     return coded(500, ERROR_CODES.INTERNAL_ERROR, formatErrorMessage(ERROR_CODES.INTERNAL_ERROR));
   }
   trackApiEvent('video_slots_created', { userId, scheduleId: idem.scheduleId, numberOfVideos: 1 });
-  if (experiment !== undefined) {
-    const recheck = await verifyExperimentPairAfterInsert(supabase, { link: experiment, userId, facts: pairFacts });
-    if (!recheck.ok) {
-      logger.error('[generate-and-schedule] experiment pair re-check failed after insert; rolling back', undefined, { scheduleId: idem.scheduleId, userId, field: recheck.field });
-      await deleteInsertedSlots(supabase, userId, slotRows);
-      await supabase.from('schedules').delete().eq('id', idem.scheduleId).eq('user_id', userId);
-      await refundRollbackSpend(supabase, {
-        userId,
-        generationId: idem.generationId,
-        amount: perVideoCost,
-        reason: 'Unified generate+schedule: experiment pair mismatch; tokens refunded',
-      });
-      trackApiEvent('video_creation_failed', { userId, scheduleId: idem.scheduleId, errorCode: ERROR_CODES.VALIDATION_FAILED, failureStage: 'experiment_pair' });
-      if (recheck.status === 500) return coded(500, ERROR_CODES.INTERNAL_ERROR, formatErrorMessage(ERROR_CODES.INTERNAL_ERROR));
-      return validationFailed(ERROR_CODES.VALIDATION_FAILED, recheck.message, recheck.field, recheck.status);
-    }
-  }
 
   const results: SlotResult[] = [];
   let accepted = 0;

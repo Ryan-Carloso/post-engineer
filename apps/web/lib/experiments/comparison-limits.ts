@@ -1,0 +1,1 @@
+export const COMPARISON_ROW_LIMIT = 2000;

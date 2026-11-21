@@ -8,7 +8,7 @@ import {
   PLACE_SPOTLIGHT_PROMPT,
   SUBJECT_SPOTLIGHT_PROMPT,
   VIRAL_SHORTS_PROMPT,
-  AB_HOOK_TEST_PROMPT,
+  COMPARE_PROMPTS_PROMPT,
   STORY_FIRST_REELS_PROMPT,
 } from '@/lib/generation/prompt-base';
 
@@ -21,7 +21,7 @@ export {
   PLACE_SPOTLIGHT_PROMPT,
   SUBJECT_SPOTLIGHT_PROMPT,
   VIRAL_SHORTS_PROMPT,
-  AB_HOOK_TEST_PROMPT,
+  COMPARE_PROMPTS_PROMPT,
   STORY_FIRST_REELS_PROMPT,
 };
 
@@ -235,28 +235,28 @@ export const PROMPTS: PromptEntry[] = [
     prompt: FULL_SETUP_PROMPT,
   },
   {
-    slug: 'ab-hook-test',
+    slug: 'compare-prompts',
     icon: 'compose',
-    titleKey: 'recipes.abHookTestTitle',
-    objectiveKey: 'recipes.abHookTestObjective',
+    titleKey: 'recipes.comparePromptsTitle',
+    objectiveKey: 'recipes.comparePromptsObjective',
     kindKey: 'recipes.kindRecipe',
     stepKeys: [
-      'recipes.abHookTestStep1',
-      'recipes.abHookTestStep2',
-      'recipes.abHookTestStep3',
-      'recipes.abHookTestStep4',
-      'recipes.abHookTestStep5',
+      'recipes.comparePromptsStep1',
+      'recipes.comparePromptsStep2',
+      'recipes.comparePromptsStep3',
+      'recipes.comparePromptsStep4',
+      'recipes.comparePromptsStep5',
     ],
     deliverKeys: [
-      'recipes.abHookTestDeliver1',
-      'recipes.abHookTestDeliver2',
-      'recipes.abHookTestDeliver3',
+      'recipes.comparePromptsDeliver1',
+      'recipes.comparePromptsDeliver2',
+      'recipes.comparePromptsDeliver3',
     ],
-    exampleInputKey: 'recipes.abHookTestExampleInput',
-    exampleOutputKey: 'recipes.abHookTestExampleOutput',
+    exampleInputKey: 'recipes.comparePromptsExampleInput',
+    exampleOutputKey: 'recipes.comparePromptsExampleOutput',
     docHref:
-      'https://github.com/Ryan-Carloso/post-engineer/blob/main/docs/recipes/ab-hook-test.md',
-    prompt: AB_HOOK_TEST_PROMPT,
+      'https://github.com/Ryan-Carloso/post-engineer/blob/main/docs/recipes/compare-prompts.md',
+    prompt: COMPARE_PROMPTS_PROMPT,
   },
   {
     slug: 'story-first-reels',

@@ -12,6 +12,9 @@ export function buildGenerationRows(
   t: (key: TranslationKey) => string,
 ): GenerationRow[] {
   const rows: GenerationRow[] = [
+    ...(generation.prompt === null
+      ? []
+      : [{ label: t('postPrompt.label'), value: `${generation.prompt.title} · v${generation.prompt.version}` }]),
     { label: t('posts.generationPersonaLabel'), value: personaName },
     {
       label: t('posts.generationFaceLabel'),

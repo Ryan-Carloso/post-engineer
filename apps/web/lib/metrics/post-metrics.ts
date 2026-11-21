@@ -61,10 +61,8 @@ export interface MetricsTarget {
   externalId: string;
 }
 
-export interface ExperimentTag {
-  experimentId: string | null;
-  variantId: string | null;
-  experimentPair: number | null;
+export interface PromptTag {
+  promptVersionId: string | null;
 }
 
 export interface PostMetricsDeps {
@@ -72,7 +70,7 @@ export interface PostMetricsDeps {
   fetchTaskSource: (taskId: string, userId: string) => Promise<{ publishResults: unknown[]; scriptAngle: string | null }>;
   fetchCounters: (userId: string, target: MetricsTarget, context: CounterContext) => Promise<MetricsCounters>;
   resolveTarget: (userId: string, target: MetricsTarget) => Promise<MetricsTarget | null>;
-  saveMetrics: (row: MetricsRow) => Promise<ExperimentTag>;
+  saveMetrics: (row: MetricsRow) => Promise<PromptTag>;
   markDone: (postId: string, window: MetricsWindow) => Promise<void>;
   track: (event: string, properties: Record<string, unknown>) => void;
   now: () => Date;
@@ -233,9 +231,7 @@ export async function collectPostMetrics(deps: PostMetricsDeps): Promise<PostMet
           saves: counters.saves,
           engaged_views: counters.retention?.engagedViews ?? null,
           analytics_status: counters.retention?.status ?? null,
-          experiment_id: tag.experimentId,
-          variant_id: tag.variantId,
-          experiment_pair: tag.experimentPair,
+          prompt_version_id: tag.promptVersionId,
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -348,10 +344,10 @@ export function createPostMetricsStore(
         },
         { onConflict: 'post_id,provider,external_id,metrics_window' },
       )
-        .select('experiment_id, variant_id, experiment_pair')
+        .select('prompt_version_id')
         .single();
       if (error) throw new Error(`metrics write failed: ${error.message}`);
-      return { experimentId: data.experiment_id, variantId: data.variant_id, experimentPair: data.experiment_pair };
+      return { promptVersionId: data.prompt_version_id };
     },
     async markDone(postId, window) {
       const { error } = await supabase

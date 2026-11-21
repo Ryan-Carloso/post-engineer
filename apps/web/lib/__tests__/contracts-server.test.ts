@@ -1,27 +1,23 @@
 import { describe, expect, it } from 'vitest';
 import { readBody } from '@/lib/contracts-server';
-import { createExperiment } from '@/lib/contracts/experiments';
+import { createUserPrompt } from '@/lib/contracts/prompts';
+import { generateAndSchedule } from '@/lib/contracts/videos';
 
-const VARIANTS = [
-  { variantId: 'hook-calm', name: 'Calm', description: 'calm' },
-  { variantId: 'hook-aggressive', name: 'Aggressive', description: 'direct' },
-];
-
-const VALID = { name: 'Hook test', variable: 'hook', personaId: '11111111-2222-4333-8444-555555555555', targetPairs: 6, variants: VARIANTS };
+const VALID = { slug: 'hook-test', title: 'Hook test', prompt: 'Write a hook.', visibility: 'private' };
 
 function postRequest(body: unknown): Request {
-  return new Request('http://localhost/api/experiments', { method: 'POST', body: typeof body === 'string' ? body : JSON.stringify(body) });
+  return new Request('http://localhost/api/prompts', { method: 'POST', body: typeof body === 'string' ? body : JSON.stringify(body) });
 }
 
 describe('readBody', () => {
   it('returns the validated body for a valid payload', async () => {
-    const result = await readBody(createExperiment, postRequest(VALID), { logMessage: 'Invalid experiment request.' });
+    const result = await readBody(createUserPrompt, postRequest(VALID), { logMessage: 'Invalid prompt request.' });
     expect(result.ok).toBe(true);
-    if (result.ok) expect(result.body.name).toBe('Hook test');
+    if (result.ok) expect(result.body.title).toBe('Hook test');
   });
 
   it('returns the exact Invalid JSON payload response', async () => {
-    const result = await readBody(createExperiment, postRequest('nope'), { logMessage: 'Invalid experiment request.' });
+    const result = await readBody(createUserPrompt, postRequest('nope'), { logMessage: 'Invalid prompt request.' });
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.response.status).toBe(400);
@@ -30,19 +26,19 @@ describe('readBody', () => {
   });
 
   it('returns the first issue with its field on a validation failure', async () => {
-    const result = await readBody(createExperiment, postRequest({ ...VALID, targetPairs: 2 }), { logMessage: 'Invalid experiment request.' });
+    const result = await readBody(createUserPrompt, postRequest({ ...VALID, visibility: 'approved' }), { logMessage: 'Invalid prompt request.' });
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.response.status).toBe(400);
       const json = await result.response.json() as { code: string; field: string; error: string };
       expect(json.code).toBe('VALIDATION_FAILED');
-      expect(json.field).toBe('targetPairs');
-      expect(json.error.startsWith('Invalid request: targetPairs: ')).toBe(true);
+      expect(json.field).toBe('visibility');
+      expect(json.error.startsWith('Invalid request: visibility: ')).toBe(true);
     }
   });
 
   it('has no field prefix for a root-level issue', async () => {
-    const result = await readBody(createExperiment, postRequest([]), { logMessage: 'Invalid experiment request.' });
+    const result = await readBody(createUserPrompt, postRequest([]), { logMessage: 'Invalid prompt request.' });
     expect(result.ok).toBe(false);
     if (!result.ok) {
       const json = await result.response.json() as { field: string; error: string };
@@ -53,18 +49,18 @@ describe('readBody', () => {
   });
 
   it('joins a nested path with dots', async () => {
-    const body = { ...VALID, variants: [VARIANTS[0], { ...VARIANTS[1], variantId: 'A' }] };
-    const result = await readBody(createExperiment, postRequest(body), { logMessage: 'Invalid experiment request.' });
+    const body = { title: 'T', description: 'D', publishing: { providers: ['youtube', 1] } };
+    const result = await readBody(generateAndSchedule, postRequest(body), { logMessage: 'Invalid video request.' });
     expect(result.ok).toBe(false);
     if (!result.ok) {
       const json = await result.response.json() as { field: string; error: string };
-      expect(json.field).toBe('variants.1.variantId');
+      expect(json.field).toBe('publishing.providers.1');
     }
   });
 
   it('truncates an over-long message to 500 characters and the field to 200', async () => {
     const longKey = 'k'.repeat(600);
-    const result = await readBody(createExperiment, postRequest({ ...VALID, [longKey]: true }), { logMessage: 'Invalid experiment request.' });
+    const result = await readBody(createUserPrompt, postRequest({ ...VALID, [longKey]: true }), { logMessage: 'Invalid prompt request.' });
     expect(result.ok).toBe(false);
     if (!result.ok) {
       const json = await result.response.json() as { field: string; error: string };
@@ -74,7 +70,7 @@ describe('readBody', () => {
   });
 
   it('rejects an unknown key without renaming a field', async () => {
-    const result = await readBody(createExperiment, postRequest({ ...VALID, nome: 'Hook test' }), { logMessage: 'Invalid experiment request.' });
+    const result = await readBody(createUserPrompt, postRequest({ ...VALID, nome: 'Hook test' }), { logMessage: 'Invalid prompt request.' });
     expect(result.ok).toBe(false);
   });
 });

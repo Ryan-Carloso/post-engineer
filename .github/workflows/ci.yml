@@ -706,6 +706,15 @@ jobs:
           # slug uniqueness and the service-role-only grants of 076_user-prompts.sql.
           psql "postgresql://postgres:postgres@localhost:5432/postgres?sslmode=disable" -v ON_ERROR_STOP=1 -f scripts/db/check-user-prompts.sql
 
+      - name: Check prompt_versions behaviour
+        run: |
+          set -euo pipefail
+          # Versions recorded on create and body change only, immutable rows,
+          # kept after the prompt is deleted, official versions by body hash,
+          # the post_metrics snapshot and the service-role-only grants of
+          # 077_prompt-versions.sql.
+          psql "postgresql://postgres:postgres@localhost:5432/postgres?sslmode=disable" -v ON_ERROR_STOP=1 -f scripts/db/check-prompt-versions.sql
+
       - name: Check the schema snapshot is up to date
         run: |
           set -euo pipefail

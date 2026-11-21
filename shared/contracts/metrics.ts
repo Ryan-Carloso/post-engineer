@@ -1,9 +1,9 @@
 import { z } from 'zod';
 import { defineEndpoint } from './endpoint.js';
 import { SOCIAL_PROVIDERS, isSocialProvider, type SocialProvider } from './providers.js';
-import { METRICS_WINDOWS, type MetricsWindow } from './experiments.js';
 
-export { METRICS_WINDOWS };
+export const METRICS_WINDOWS = ['24h', '7d', '28d'] as const;
+export type MetricsWindow = (typeof METRICS_WINDOWS)[number];
 
 export const METRICS_NONE = '^@none';
 

@@ -12,7 +12,39 @@ export function promptOperationSchemas({ success, object, str }) {
     visibility: { ...visibility, description: 'Official and community prompts are public; an own prompt is private until its owner makes it public.' },
   };
   const summary = object(summaryFields, Object.keys(summaryFields));
-  const detail = object({ ...summaryFields, prompt: str }, [...Object.keys(summaryFields), 'prompt']);
+  const detailFields = {
+    ...summaryFields,
+    prompt: str,
+    versionId: { type: 'string', format: 'uuid', description: 'The current version of this prompt text. Pass it as promptVersionId when generating a video from this prompt.' },
+    version: { type: 'integer', minimum: 1, description: 'Version number: a new one each time the prompt text changes.' },
+  };
+  const detail = object(detailFields, Object.keys(detailFields));
+  const promptResult = object(
+    {
+      versionId: { type: 'string', format: 'uuid', nullable: true, description: 'null groups the videos made without a prompt.' },
+      slug: { type: 'string', nullable: true },
+      title: { type: 'string', nullable: true },
+      version: { type: 'integer', nullable: true },
+      source: { type: 'string', enum: ['official', 'user'], nullable: true },
+      videos: { type: 'integer' },
+      medianViews: { type: 'number', nullable: true },
+      lift: { type: 'number', nullable: true, description: 'Median of each video views divided by the median views of the other videos of the same account.' },
+      pValue: { type: 'number', nullable: true, description: 'Two-sided sign test of the lifts against 1.' },
+      label: { type: 'string', enum: ['insufficient', 'no_signal', 'indicative', 'clear'] },
+      direction: { type: 'string', enum: ['above', 'below'], nullable: true },
+    },
+    ['versionId', 'slug', 'title', 'version', 'source', 'videos', 'medianViews', 'lift', 'pValue', 'label', 'direction'],
+  );
+  const accountResult = object(
+    {
+      provider: str,
+      accountId: str,
+      videos: { type: 'integer' },
+      baselineViews: { type: 'number', nullable: true },
+      prompts: { type: 'array', items: promptResult },
+    },
+    ['provider', 'accountId', 'videos', 'baselineViews', 'prompts'],
+  );
   const slug = { type: 'string', maxLength: 64, pattern: '^[a-z0-9][a-z0-9-]{0,63}$' };
   const title = { type: 'string', minLength: 1, maxLength: 120 };
   const description = { type: 'string', maxLength: 500 };
@@ -36,5 +68,13 @@ export function promptOperationSchemas({ success, object, str }) {
       extraResponses: { ...owned, 409: taken },
     },
     'DELETE /api/prompts/[slug]': { response: success({}), extraResponses: owned },
+    'GET /api/experiments': {
+      query: [{ name: 'window', required: false, enum: ['24h', '7d', '28d'] }],
+      response: success({
+        window: str,
+        accounts: { type: 'array', items: accountResult, description: 'One entry per publishing account: prompts are compared only inside one account.' },
+        truncated: { type: 'boolean' },
+      }),
+    },
   };
 }

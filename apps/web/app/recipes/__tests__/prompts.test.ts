@@ -13,7 +13,7 @@ describe('prompts hub data', () => {
       'multi-rede',
       'viral-shorts',
       'full-setup',
-      'ab-hook-test',
+      'compare-prompts',
       'story-first-reels',
     ]);
     for (const prompt of PROMPTS) {
@@ -180,7 +180,7 @@ describe('prompts hub data', () => {
       'multi-rede',
       'viral-shorts',
       'full-setup',
-      'ab-hook-test',
+      'compare-prompts',
       'story-first-reels',
     ]);
     const fullSetup = getPrompt('full-setup');
@@ -574,61 +574,52 @@ describe('prompts hub data', () => {
     expect([...order].sort((a, b) => a - b)).toEqual(order);
   });
 
-  it('adds ab-hook-test before story-first-reels and describes only the experiment actions that exist', () => {
-    expect(PROMPTS.map((prompt) => prompt.slug).at(-2)).toBe('ab-hook-test');
-    const entry = getPrompt('ab-hook-test');
+  it('adds compare-prompts before story-first-reels and walks the prompt comparison in order', () => {
+    expect(PROMPTS.map((prompt) => prompt.slug).at(-2)).toBe('compare-prompts');
+    const entry = getPrompt('compare-prompts');
     if (entry === undefined) {
-      throw new Error('ab-hook-test prompt entry is missing');
+      throw new Error('compare-prompts prompt entry is missing');
     }
     expect(entry.icon).toBe('compose');
     expect(entry.kindKey).toBe('recipes.kindRecipe');
-    expect(entry.titleKey).toBe('recipes.abHookTestTitle');
-    expect(entry.objectiveKey).toBe('recipes.abHookTestObjective');
+    expect(entry.titleKey).toBe('recipes.comparePromptsTitle');
+    expect(entry.objectiveKey).toBe('recipes.comparePromptsObjective');
     expect(entry.stepKeys).toEqual([
-      'recipes.abHookTestStep1',
-      'recipes.abHookTestStep2',
-      'recipes.abHookTestStep3',
-      'recipes.abHookTestStep4',
-      'recipes.abHookTestStep5',
+      'recipes.comparePromptsStep1',
+      'recipes.comparePromptsStep2',
+      'recipes.comparePromptsStep3',
+      'recipes.comparePromptsStep4',
+      'recipes.comparePromptsStep5',
     ]);
     expect(entry.deliverKeys).toEqual([
-      'recipes.abHookTestDeliver1',
-      'recipes.abHookTestDeliver2',
-      'recipes.abHookTestDeliver3',
+      'recipes.comparePromptsDeliver1',
+      'recipes.comparePromptsDeliver2',
+      'recipes.comparePromptsDeliver3',
     ]);
-    expect(entry.exampleInputKey).toBe('recipes.abHookTestExampleInput');
-    expect(entry.exampleOutputKey).toBe('recipes.abHookTestExampleOutput');
+    expect(entry.exampleInputKey).toBe('recipes.comparePromptsExampleInput');
+    expect(entry.exampleOutputKey).toBe('recipes.comparePromptsExampleOutput');
     expect(entry.docHref).toEqual(
-      'https://github.com/Ryan-Carloso/post-engineer/blob/main/docs/recipes/ab-hook-test.md',
+      'https://github.com/Ryan-Carloso/post-engineer/blob/main/docs/recipes/compare-prompts.md',
     );
     const baseText = SHARED_PROMPT_BASE.join('\n');
     expect(entry.prompt.startsWith(baseText)).toBe(true);
     const text = entry.prompt.slice(baseText.length + 2);
     const positions = [
-      'experiments (action: create)',
-      'targetPairs 6',
-      'experiments (action: add_pair)',
-      'next free pair number',
-      'experiments (action: list)',
-      'experiments (action: results)',
+      'prompts (action: get)',
+      'Never compare the',
+      'swap',
+      'check_script',
+      'promptVersionId',
+      'Never call a prompt the winner',
     ].map((needle) => text.indexOf(needle));
     expect(positions.every((index) => index >= 0)).toBe(true);
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);
-    expect(text).toContain('no persona');
     expect(text).toContain('1 token per video');
-    expect(text).toContain("options.videoType 'faceless'");
-    expect(text).toContain('same voiceId');
-    expect(text).toContain('smallest target that can ever be clear');
-    expect(text).toContain('10-12');
-    expect(text).toContain("each variant's style");
-    expect(text).toContain('Only the hook differs inside a pair');
+    expect(text).toContain('5 per prompt');
     expect(text).toContain('Wait for publication and metrics');
-    expect(text).toContain('unless the label is clear');
-    expect(text).toContain('never generate the variants by hand');
-    expect(text).not.toContain('add_pairs');
-    expect(text).not.toContain('attach');
-    expect(text).not.toContain('nextStep');
-    expect(text).not.toContain('CTA variable');
+    expect(text).toContain('unless its');
+    expect(text).not.toContain('add_pair');
+    expect(text).not.toContain('targetPairs');
   });
 
   it('adds story-first-reels last with the compose icon and prompt kind', () => {
