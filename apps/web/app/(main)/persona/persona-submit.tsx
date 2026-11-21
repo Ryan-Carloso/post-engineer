@@ -95,7 +95,7 @@ export const PersonaSubmit = ({ editId }: { editId: string | null }) => {
               usePersonaStore.getState().setResult({
                 success: false,
                 error:
-                  error instanceof Error && error.message !== ''
+                  error instanceof Error && !(error instanceof TypeError) && error.message !== ''
                     ? error.message
                     : t('persona.publishingAccountsSaveError'),
               });
@@ -121,7 +121,10 @@ export const PersonaSubmit = ({ editId }: { editId: string | null }) => {
     } catch (error) {
       usePersonaStore.getState().setResult({
         success: false,
-        error: error instanceof Error && error.message !== '' ? error.message : t('persona.errServer'),
+        error:
+          error instanceof Error && !(error instanceof TypeError) && error.message !== ''
+            ? error.message
+            : t('persona.errServer'),
       });
     } finally {
       setIsPending(false);
