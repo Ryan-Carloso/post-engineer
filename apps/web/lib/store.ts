@@ -182,7 +182,13 @@ interface PersonaFormState {
   result: CreatePersonaResult | null;
   faceQuality: FaceQuality;
   publishingAccounts: PersonaDefaultAccounts;
+  // True once the publishing-accounts selection is ready to save: in the
+  // create flow there is no fetch, so it starts true; the accounts section
+  // flips it false while it loads the stored binding in edit mode, so the
+  // single save button cannot run on a still-empty draft.
+  publishingAccountsLoaded: boolean;
   setPublishingAccounts: (accounts: PersonaDefaultAccounts) => void;
+  setPublishingAccountsLoaded: (loaded: boolean) => void;
   setName: (value: string) => void;
   setPhoto: (file: File | null) => void;
   addPhotos: (files: File[]) => void;
@@ -223,6 +229,7 @@ const initialPersonaState = {
   result: null,
   faceQuality: 'ok' as FaceQuality,
   publishingAccounts: emptyPersonaDefaultAccounts(),
+  publishingAccountsLoaded: true,
 };
 
 export const usePersonaStore = create<PersonaFormState>()(
@@ -258,6 +265,7 @@ export const usePersonaStore = create<PersonaFormState>()(
     setResult: (result) => set({ result }),
     setFaceQuality: (faceQuality) => set({ faceQuality }),
     setPublishingAccounts: (publishingAccounts) => set({ publishingAccounts }),
+    setPublishingAccountsLoaded: (publishingAccountsLoaded) => set({ publishingAccountsLoaded }),
     resetForm: () => set({ ...initialPersonaState, publishingAccounts: emptyPersonaDefaultAccounts() }),
     buildPersonaFormData: (language?: string) => {
       const s = get();

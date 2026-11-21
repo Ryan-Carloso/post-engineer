@@ -21,7 +21,6 @@ import { useRumbleAccountsQuery, useTelegramAccountsQuery } from '@/lib/social-a
 import { usePinterestAccountsQuery } from '@/lib/pinterest-accounts';
 import { useFanvueAccountsQuery } from '@/lib/fanvue-accounts';
 import { useI18n } from '@/lib/i18n/provider';
-import { SpinnerIcon } from '@/lib/ui';
 import { InlineFieldError, SectionDivider } from './persona-section-parts';
 import { SOCIAL_PROVIDERS, type SocialProvider } from '@/lib/providers/registry';
 import { PROVIDER_LABELS } from '@/lib/account-options';
@@ -78,22 +77,6 @@ async function fetchBinding(personaId: string, loadError: string): Promise<Publi
   return normalizeBinding(body.defaults);
 }
 
-async function saveBinding(
-  personaId: string,
-  accounts: PublishingBinding,
-  saveError: string,
-): Promise<PublishingBinding> {
-  const res = await fetch(`/api/persona/publishing-accounts?personaId=${encodeURIComponent(personaId)}`, {
-    method: 'PUT',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ accounts }),
-  });
-  if (!res.ok) notifyIfSessionExpired(res);
-  const body = (await res.json()) as BindingResponse;
-  if (!res.ok || body.success !== true) throw new Error(describeFailure(saveError, body));
-  return normalizeBinding(body.defaults);
-}
-
 interface CardAccount {
   id: string;
   card: React.ReactNode;
@@ -116,65 +99,50 @@ export function PersonaPublishingAccountsSection({ personaId }: { personaId?: st
   const isDraft = personaId === undefined;
   const draftSelection = usePersonaStore((s) => s.publishingAccounts);
   const setDraftSelection = usePersonaStore((s) => s.setPublishingAccounts);
+  const setPublishingAccountsLoaded = usePersonaStore((s) => s.setPublishingAccountsLoaded);
   const submitResult = usePersonaStore((s) => s.result);
-  const [storedSelection, setStoredSelection] = useState<PublishingBinding>(EMPTY_BINDING);
-  const selection = isDraft ? draftSelection : storedSelection;
+  // Single source of truth for the selection in both modes: the persona
+  // store. The page's single save button persists it (create sends it in
+  // the create FormData, edit PUTs it after the persona update), so this
+  // section has no save button of its own.
+  const selection = draftSelection;
   const [loading, setLoading] = useState(!isDraft);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
 
   const load = useCallback(async () => {
     if (personaId === undefined) return;
     setLoading(true);
     setLoadError(null);
     try {
-      setStoredSelection(await fetchBinding(personaId, t('persona.publishingAccountsLoadError')));
+      const binding = await fetchBinding(personaId, t('persona.publishingAccountsLoadError'));
+      // A non-UUID id is never fetched (placeholder callers): leave the
+      // draft untouched instead of wiping it with the empty fallback.
+      if (UUID_SHAPE.test(personaId)) setDraftSelection(binding);
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : t('persona.publishingAccountsLoadError'));
     } finally {
       setLoading(false);
+      setPublishingAccountsLoaded(true);
     }
-  }, [personaId, t]);
+  }, [personaId, t, setDraftSelection, setPublishingAccountsLoaded]);
 
   useEffect(() => {
-    if (!isDraft) void load();
-  }, [load, isDraft]);
-
-  const toggle = (provider: PublishingProvider, id: string) => {
-    setSaved(false);
-    setSaveError(null);
     if (isDraft) {
-      const current = draftSelection[provider];
-      setDraftSelection({
-        ...draftSelection,
-        [provider]: current.includes(id) ? current.filter((item) => item !== id) : [...current, id],
-      });
+      setPublishingAccountsLoaded(true);
       return;
     }
-    setStoredSelection((prev) => {
-      const current = prev[provider];
-      return {
-        ...prev,
-        [provider]: current.includes(id) ? current.filter((item) => item !== id) : [...current, id],
-      };
-    });
-  };
+    // The single save button stays disabled until the stored binding lands
+    // in the draft, so it can never save on a still-empty selection.
+    setPublishingAccountsLoaded(false);
+    void load();
+  }, [load, isDraft, setPublishingAccountsLoaded]);
 
-  const save = async () => {
-    if (personaId === undefined) return;
-    setSaving(true);
-    setSaveError(null);
-    setSaved(false);
-    try {
-      setStoredSelection(await saveBinding(personaId, selection, t('persona.publishingAccountsSaveError')));
-      setSaved(true);
-    } catch (error) {
-      setSaveError(error instanceof Error ? error.message : t('persona.publishingAccountsSaveError'));
-    } finally {
-      setSaving(false);
-    }
+  const toggle = (provider: PublishingProvider, id: string) => {
+    const current = draftSelection[provider];
+    setDraftSelection({
+      ...draftSelection,
+      [provider]: current.includes(id) ? current.filter((item) => item !== id) : [...current, id],
+    });
   };
 
   const mustSelectError = isDraft
@@ -334,9 +302,6 @@ export function PersonaPublishingAccountsSection({ personaId }: { personaId?: st
     })),
   };
 
-  const accountsLoading =
-    youtube.isLoading || instagram.isLoading || bluesky.isLoading || linkedin.isLoading || threads.isLoading || facebook.isLoading || pinterest.isLoading || threespeak.isLoading || rumble.isLoading || fanvue.isLoading || telegram.isLoading;
-
   return (
     <section data-error-field="accounts">
       <SectionDivider label={t('persona.publishingAccountsLabel')} />
@@ -392,25 +357,6 @@ export function PersonaPublishingAccountsSection({ personaId }: { personaId?: st
                 );
               })}
             </div>
-            {isDraft ? null : (
-              <div className="flex flex-wrap items-center gap-3">
-                <Button
-                  type="button"
-                  onClick={() => void save()}
-                  disabled={saving || accountsLoading || totalBoundAccounts(selection) === 0}
-                  data-testid="publishing-accounts-save"
-                >
-                  {saving && <SpinnerIcon />}
-                  {t(saving ? 'persona.publishingAccountsSaving' : 'persona.publishingAccountsSave')}
-                </Button>
-                {saved && (
-                  <p role="status" className="text-sm font-medium text-success">
-                    {t('persona.publishingAccountsSaved')}
-                  </p>
-                )}
-              </div>
-            )}
-            {saveError !== null && <InlineFieldError message={saveError} />}
           </>
         )}
       </div>

@@ -30,7 +30,8 @@ import { PersonaPhotoPicker } from './persona-photo-picker';
 import { isPersonaVoiceHydrated, PersonaVoiceSection } from './persona-voice-section';
 import { InlineFieldError, SectionDivider } from './persona-section-parts';
 import { scrollToErrorField } from '@/lib/scroll-to-error';
-import { totalBoundAccounts } from '@/lib/persona-publishing-accounts';
+import { notifyIfSessionExpired } from '@/lib/session-expiry';
+import { totalBoundAccounts, type PersonaDefaultAccounts } from '@/lib/persona-publishing-accounts';
 import { DEFAULT_PERSONA_FACE_IDS } from '@/lib/persona-faces';
 import {
   AlertIcon,
@@ -372,6 +373,32 @@ const PersonaNameField = () => {
   );
 };
 
+interface PublishingAccountsResponse {
+  success: boolean;
+  error?: string;
+}
+
+// savePublishingAccounts persists the draft account selection for an
+// existing persona. The create flow sends the selection in the create
+// FormData instead, so this runs only after a successful persona update —
+// the page has a single save button and no section-level save anymore.
+async function savePublishingAccounts(
+  personaId: string,
+  accounts: PersonaDefaultAccounts,
+  saveError: string,
+): Promise<void> {
+  const res = await fetch(`/api/persona/publishing-accounts?personaId=${encodeURIComponent(personaId)}`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ accounts }),
+  });
+  if (!res.ok) notifyIfSessionExpired(res);
+  const body = (await res.json()) as PublishingAccountsResponse;
+  if (!res.ok || body.success !== true) {
+    throw new Error(typeof body.error === 'string' && body.error !== '' ? body.error : saveError);
+  }
+}
+
 const PersonaSubmit = ({ editId }: { editId: string | null }) => {
   const { t, locale } = useI18n();
   const pathname = usePathname();
@@ -380,6 +407,7 @@ const PersonaSubmit = ({ editId }: { editId: string | null }) => {
   const updateMutation = useUpdatePersonaMutation();
   const { handleSubmit: validateForm } = useFormContext();
   const [isPending, setIsPending] = useState(false);
+  const accountsLoaded = usePersonaStore((s) => s.publishingAccountsLoaded);
 
   const editingPersonaId = resolveEditingPersonaId(pathname, editId);
   const isEditing = Boolean(editingPersonaId);
@@ -401,7 +429,7 @@ const PersonaSubmit = ({ editId }: { editId: string | null }) => {
       scrollToErrorField('voice');
       return;
     }
-    if (!isEditing && totalBoundAccounts(state.publishingAccounts) === 0) {
+    if (totalBoundAccounts(state.publishingAccounts) === 0) {
       state.setResult({ success: false, error: t('publishing.mustSelectAccount') });
       scrollToErrorField('accounts');
       return;
@@ -418,6 +446,16 @@ const PersonaSubmit = ({ editId }: { editId: string | null }) => {
         const result = await updateMutation.mutateAsync({ personaId, formData });
         usePersonaStore.getState().setResult(result);
         if (result.success) {
+          // The persona fields are saved; now persist the account selection
+          // with the same save. A failed accounts save keeps the user on
+          // the page with the error instead of navigating away half-saved.
+          try {
+            await savePublishingAccounts(personaId, state.publishingAccounts, t('persona.publishingAccountsSaveError'));
+          } catch {
+            usePersonaStore.getState().setResult({ success: false, error: t('persona.publishingAccountsSaveError') });
+            scrollToErrorField('accounts');
+            return;
+          }
           await queryClient.invalidateQueries({ queryKey: ['persona-list'] });
           router.back();
         } else if (result.error === 'prompt_rejected') {
@@ -445,7 +483,7 @@ const PersonaSubmit = ({ editId }: { editId: string | null }) => {
       <button
         type="button"
         onClick={validateForm(() => void handleSubmit())}
-        disabled={isPending || updateMutation.isPending}
+        disabled={isPending || updateMutation.isPending || (isEditing && !accountsLoaded)}
         className="flex w-full items-center justify-center gap-2 rounded-lg bg-accent px-4 py-3 text-sm font-semibold text-on-ink transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
       >
         {isPending ? (

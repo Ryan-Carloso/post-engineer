@@ -109,6 +109,7 @@ import type { AccountData, InstagramAccountData } from '@/lib/types';
 import type { BlueskyAccountData, LinkedinAccountData } from '@/lib/providers/registry';
 import { I18nProvider, useI18n } from '@/lib/i18n/provider';
 import { usePersonaStore } from '@/lib/store';
+import { emptyPersonaDefaultAccounts } from '@/lib/persona-publishing-accounts';
 import { scrollToErrorField } from '@/lib/scroll-to-error';
 
 let lastQueryClient: QueryClient | null = null;
@@ -207,6 +208,15 @@ function mockNoAccounts() {
   vi.mocked(useLinkedinAccountsQuery, { partial: true }).mockReturnValue({
     data: { authenticated: true, accounts: [] },
     isLoading: false,
+  });
+}
+
+// Edit-mode tests start with one bound account, like a real persona: the
+// single save blocks when the selection is empty.
+function seedBoundAccount() {
+  usePersonaStore.getState().setPublishingAccounts({
+    ...emptyPersonaDefaultAccounts(),
+    youtube: ['yt-1'],
   });
 }
 
@@ -624,6 +634,7 @@ describe('app/(main)/persona/page — modo edição (mesma página do create)', 
       data: [EDIT_PERSONA],
       isLoading: false,
     } as never);
+    seedBoundAccount();
   }
 
   it('botão de submit mostra "Salvar alterações" em vez de "Criar persona"', () => {
@@ -652,6 +663,7 @@ describe('app/(main)/persona/page — modo edição (mesma página do create)', 
       data: [{ ...EDIT_PERSONA, videoLayout: 'react' }],
       isLoading: false,
     } as never);
+    seedBoundAccount();
     render(<PersonaPage />, { wrapper: createWrapper() });
 
     await waitFor(() =>
@@ -673,6 +685,7 @@ describe('app/(main)/persona/page — modo edição (mesma página do create)', 
       data: [{ ...EDIT_PERSONA, videoLayout: undefined }],
       isLoading: false,
     } as never);
+    seedBoundAccount();
     render(<PersonaPage />, { wrapper: createWrapper() });
 
     await waitFor(() =>
@@ -715,6 +728,7 @@ describe('app/(main)/persona/page — modo edição (mesma página do create)', 
       ],
       isLoading: false,
     } as never);
+    seedBoundAccount();
     const user = userEvent.setup();
     render(<PersonaPage />, { wrapper: createWrapper() });
 
@@ -905,6 +919,7 @@ function mockEditMode(persona: Record<string, unknown>) {
     data: [persona],
     isLoading: false,
   } as never);
+  seedBoundAccount();
 }
 
 afterEach(() => {
@@ -1900,6 +1915,89 @@ describe('app/(main)/persona/page — submit em edição', () => {
 
     await waitFor(() => expect(navigation.back).toHaveBeenCalledTimes(1));
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['persona-list'] });
+  });
+
+  it('edição salva as contas junto: PUT dos vínculos antes de voltar', async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({ success: true });
+    vi.mocked(useUpdatePersonaMutation).mockReturnValue({ mutateAsync, isPending: false } as never);
+    mockEditMode(EDIT_PERSONA_FULL);
+    const user = userEvent.setup();
+    render(<PersonaPage />, { wrapper: createWrapper() });
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'personas.save' })).toBeEnabled(),
+    );
+    await user.click(screen.getByRole('button', { name: 'personas.save' }));
+
+    await waitFor(() => expect(navigation.back).toHaveBeenCalledTimes(1));
+    const putCall = vi
+      .mocked(fetch)
+      .mock.calls.find(([url]) => url === '/api/persona/publishing-accounts?personaId=p-9');
+    expect(putCall).toBeDefined();
+    expect((putCall?.[1] as RequestInit | undefined)?.method).toBe('PUT');
+    expect(JSON.parse(String((putCall?.[1] as RequestInit | undefined)?.body))).toEqual({
+      accounts: expect.objectContaining({ youtube: ['yt-1'] }),
+    });
+  });
+
+  it('edição com falha no PUT das contas mostra o erro e não volta', async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({ success: true });
+    vi.mocked(useUpdatePersonaMutation).mockReturnValue({ mutateAsync, isPending: false } as never);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+        json: () => Promise.resolve({ success: false, error: 'db exploded' }),
+      }),
+    );
+    mockEditMode(EDIT_PERSONA_FULL);
+    const user = userEvent.setup();
+    render(<PersonaPage />, { wrapper: createWrapper() });
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'personas.save' })).toBeEnabled(),
+    );
+    await user.click(screen.getByRole('button', { name: 'personas.save' }));
+
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText('persona.publishingAccountsSaveError')).toBeTruthy();
+    expect(navigation.back).not.toHaveBeenCalled();
+  });
+
+  it('edição com falha no update não PUTa as contas', async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({ success: false, error: 'deu ruim' });
+    vi.mocked(useUpdatePersonaMutation).mockReturnValue({ mutateAsync, isPending: false } as never);
+    mockEditMode(EDIT_PERSONA_FULL);
+    const user = userEvent.setup();
+    render(<PersonaPage />, { wrapper: createWrapper() });
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'personas.save' })).toBeEnabled(),
+    );
+    await user.click(screen.getByRole('button', { name: 'personas.save' }));
+
+    expect(await screen.findByText('deu ruim')).toBeTruthy();
+    const fetchUrls = vi.mocked(fetch).mock.calls.map(([url]) => url);
+    expect(fetchUrls).not.toContain('/api/persona/publishing-accounts?personaId=p-9');
+  });
+
+  it('edição sem conta vinculada bloqueia e não atualiza', async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({ success: true });
+    vi.mocked(useUpdatePersonaMutation).mockReturnValue({ mutateAsync, isPending: false } as never);
+    mockEditMode(EDIT_PERSONA_FULL);
+    usePersonaStore.getState().setPublishingAccounts(emptyPersonaDefaultAccounts());
+    const user = userEvent.setup();
+    render(<PersonaPage />, { wrapper: createWrapper() });
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'personas.save' })).toBeEnabled(),
+    );
+    await user.click(screen.getByRole('button', { name: 'personas.save' }));
+
+    expect(mutateAsync).not.toHaveBeenCalled();
+    expect(screen.getByText('publishing.mustSelectAccount')).toBeInTheDocument();
+    expect(scrollToErrorField).toHaveBeenCalledWith('accounts');
   });
 
   it('edição com prompt_rejected mostra erro inline no roteiro', async () => {
