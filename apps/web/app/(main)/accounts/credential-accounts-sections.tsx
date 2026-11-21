@@ -51,8 +51,8 @@ export function BlueskyAccountsSection(): ReactNode {
       setHandle('');
       setAppPassword('');
       void query.refetch();
-    } catch {
-      setError(t('accounts.blueskyConnectError'));
+    } catch (error) {
+      setError(error instanceof Error ? error.message : t('accounts.blueskyConnectError'));
       setAppPassword('');
     } finally {
       setPending(false);
@@ -119,8 +119,8 @@ export function RumbleAccountsSection(): ReactNode {
       setChannelId('');
       setAccessToken('');
       void query.refetch();
-    } catch {
-      setError(t('accounts.rumbleConnectError'));
+    } catch (error) {
+      setError(error instanceof Error ? error.message : t('accounts.rumbleConnectError'));
       setAccessToken('');
     } finally {
       setPending(false);

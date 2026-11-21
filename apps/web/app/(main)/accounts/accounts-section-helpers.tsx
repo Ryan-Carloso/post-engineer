@@ -79,8 +79,8 @@ async function handleDisconnect(
       reportAccountDisconnectFailed(provider, 'rejected');
       onError(t('accounts.disconnectError'));
     }
-  } catch {
+  } catch (error) {
     reportAccountDisconnectFailed(provider, 'threw');
-    onError(t('accounts.disconnectError'));
+    onError(error instanceof Error ? error.message : t('accounts.disconnectError'));
   }
 }

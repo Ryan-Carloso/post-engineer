@@ -472,7 +472,7 @@ describe('app/(main)/accounts/page — AccountsPage', () => {
     await screen.findByTestId('disconnect-dialog');
     fireEvent.click(screen.getByTestId('disconnect-confirm-button'));
     await waitFor(() => expect(screen.getByTestId('disconnect-error')).toBeInTheDocument());
-    expect(screen.getByTestId('disconnect-error')).toHaveTextContent('accounts.disconnectError');
+    expect(screen.getByTestId('disconnect-error')).toHaveTextContent('db fail');
     expect(reportAccountDisconnectFailed).toHaveBeenCalledWith('youtube', 'threw');
   });
 
@@ -1246,7 +1246,7 @@ describe('Rumble accounts section', () => {
     fireEvent.change(await screen.findByTestId('rumble-handle-input'), { target: { value: 'chan-1' } });
     fireEvent.change(screen.getByTestId('rumble-password-input'), { target: { value: 'a'.repeat(40) } });
     fireEvent.click(screen.getByTestId('rumble-connect-button'));
-    expect(await screen.findByTestId('rumble-connect-error')).toHaveTextContent('accounts.rumbleConnectError');
+    expect(await screen.findByTestId('rumble-connect-error')).toHaveTextContent('network down');
   });
 
   it('names the stored channel in the disconnect dialog', async () => {

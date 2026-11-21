@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { fetchExperimentDetail, fetchExperiments } from '../experiments-dashboard';
 
@@ -142,5 +142,30 @@ describe('fetchExperimentDetail', () => {
     await expect(fetchExperimentDetail(EXPERIMENT.id, '7d')).resolves.toEqual({ success: false, error: 'unexpected response' });
     mockFetch.mockRejectedValue(new Error('offline'));
     await expect(fetchExperimentDetail(EXPERIMENT.id, '7d')).resolves.toEqual({ success: false, error: 'offline' });
+  });
+});
+
+describe('fetchExperiments session expiry', () => {
+  const assign = vi.fn();
+  const originalWindow = globalThis.window;
+  beforeEach(() => {
+    assign.mockClear();
+    vi.stubGlobal('window', { location: { pathname: '/experiments', search: '', assign } });
+  });
+  afterEach(() => {
+    vi.stubGlobal('window', originalWindow);
+  });
+
+  it('keeps the failure contract on a 401 but notifies the session-expiry handler once', async () => {
+    mockFetch.mockResolvedValue(new Response(JSON.stringify({ success: false }), { status: 401 }));
+    await expect(fetchExperiments()).resolves.toEqual({ success: false, error: 'unexpected response' });
+    expect(assign).toHaveBeenCalledTimes(1);
+    expect(assign).toHaveBeenCalledWith('/login?next=%2Fexperiments');
+  });
+
+  it('does not notify on non-401 failures', async () => {
+    mockFetch.mockResolvedValue(new Response('nope', { status: 500 }));
+    await expect(fetchExperiments()).resolves.toEqual({ success: false, error: 'unexpected response' });
+    expect(assign).not.toHaveBeenCalled();
   });
 });

@@ -433,8 +433,8 @@ const PersonaSubmit = ({ editId }: { editId: string | null }) => {
           scrollToErrorField('script');
         }
       }
-    } catch {
-      usePersonaStore.getState().setResult({ success: false, error: t('persona.errServer') });
+    } catch (error) {
+      usePersonaStore.getState().setResult({ success: false, error: error instanceof Error ? error.message : t('persona.errServer') });
     } finally {
       setIsPending(false);
     }

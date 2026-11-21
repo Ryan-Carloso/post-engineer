@@ -48,8 +48,8 @@ export function TelegramAccountsSection(): ReactNode {
       setChatId('');
       setBotToken('');
       void query.refetch();
-    } catch {
-      setError(t('accounts.telegramConnectError'));
+    } catch (error) {
+      setError(error instanceof Error ? error.message : t('accounts.telegramConnectError'));
       setBotToken('');
     } finally {
       setPending(false);

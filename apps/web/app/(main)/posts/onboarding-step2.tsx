@@ -352,8 +352,8 @@ function useCredentialConnect(provider: CredentialProvider) {
       setHandle('');
       setAppPassword('');
       await queryClient.invalidateQueries({ queryKey: ['social-accounts'] });
-    } catch {
-      setError(t(config.errorKey));
+    } catch (error) {
+      setError(error instanceof Error ? error.message : t(config.errorKey));
       setAppPassword('');
     } finally {
       setPending(false);

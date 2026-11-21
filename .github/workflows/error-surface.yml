@@ -1,0 +1,38 @@
+name: error-surface
+
+# A catch that reports a user-facing error must surface the thrown error.
+#
+# PR #704 review rounds found the accounts PUT catch discarding the server's
+# INVALID_PROVIDER_ACCOUNT detail behind a generic key, and the same shape
+# was already live in 9 places on main (account connects, checkout, persona
+# save, mic capture, onboarding, disconnect). The lint scans apps/web
+# production sources for a catch block that reports the failure
+# (setError/setResult/onError) while its thrown error is unbound or never
+# used, and fails on it. Surfacing error.message with the generic key as
+# the fallback is the fix; logging the error also counts as using it.
+# Findings become ::error annotations and fail the job.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 pinned 2026-09-25
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 pinned 2026-09-25
+        with:
+          node-version: '22'
+
+      - name: Unit tests (error-surface lint)
+        run: node --test .github/scripts/error-surface/check.test.mjs
+
+      - name: Run error-surface lint
+        run: node .github/scripts/error-surface/check.mjs

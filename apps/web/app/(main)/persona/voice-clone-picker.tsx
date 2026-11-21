@@ -195,8 +195,8 @@ export const PersonaVoiceClonePanel = () => {
           return next;
         });
       }, 1000);
-    } catch {
-      setError(t('persona.voiceCloneMicDenied'));
+    } catch (error) {
+      setError(error instanceof Error ? error.message : t('persona.voiceCloneMicDenied'));
     }
   };
 

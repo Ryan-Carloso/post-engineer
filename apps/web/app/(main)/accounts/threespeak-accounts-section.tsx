@@ -51,8 +51,8 @@ export function ThreespeakAccountsSection(): ReactNode {
       setHandle('');
       setAppPassword('');
       void query.refetch();
-    } catch {
-      setError(t('accounts.threespeakConnectError'));
+    } catch (error) {
+      setError(error instanceof Error ? error.message : t('accounts.threespeakConnectError'));
       setAppPassword('');
     } finally {
       setPending(false);

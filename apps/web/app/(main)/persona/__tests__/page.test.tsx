@@ -968,7 +968,7 @@ describe('app/(main)/persona/page — validação do submit (guards do store)', 
     expect(screen.queryByText('persona.errAvatar')).toBeNull();
   });
 
-  it('rejeição do servidor mostra errServer no diálogo', async () => {
+  it('rejeição do servidor mostra a mensagem do erro no diálogo', async () => {
     const user = userEvent.setup();
     vi.mocked(createPersona).mockRejectedValue(new Error('boom'));
     render(<PersonaPage />, { wrapper: createWrapper() });
@@ -976,7 +976,7 @@ describe('app/(main)/persona/page — validação do submit (guards do store)', 
     await preencherFormularioValido(user);
     await user.click(screen.getByText('persona.submit'));
 
-    expect(await screen.findByText('persona.errServer')).toBeTruthy();
+    expect(await screen.findByText('boom')).toBeTruthy();
     expect(screen.getByRole('alertdialog')).toBeTruthy();
   });
 

@@ -1,0 +1,38 @@
+name: session-expiry
+
+# Every notifyIfSessionExpired call site needs a 401 test.
+#
+# PR #704 moved the publishing-accounts PUT from the section to the page and
+# deleted the section test asserting the session-expiry handler fires on a
+# 401, without adding its replacement at the new call site. The lint scans
+# apps/web production sources for notifyIfSessionExpired call sites and fails
+# when no test in the call site's import closure (depth 3, so a test that
+# renders the page covers the section it renders) asserts the 401 behavior,
+# either the handler call or the login redirect. The experiments-dashboard
+# 401 test is the precedent for the redirect style.
+# Findings become ::error annotations and fail the job.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 pinned 2026-09-25
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 pinned 2026-09-25
+        with:
+          node-version: '22'
+
+      - name: Unit tests (session-expiry lint)
+        run: node --test .github/scripts/session-expiry/check.test.mjs
+
+      - name: Run session-expiry lint
+        run: node .github/scripts/session-expiry/check.mjs

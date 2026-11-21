@@ -95,6 +95,9 @@ Trigger: any changed test file.
 - The risky path has a test: the security property (scrubbing), the
   empty-input path, the all-failed path, telemetry failure not breaking the
   main path.
+- A deleted test assertion has a replacement asserting the same behavior at
+  the new call site (the `session-expiry` lint checks this mechanically for
+  `notifyIfSessionExpired`; the rest is manual).
 - Web tests mocking an engine upstream must mock the real envelope
   `{status, message, body}`.
 
@@ -105,6 +108,17 @@ Trigger: `apps/web/**`, `apps/mcp/**`.
 - No `any`; strict types. Server-only secrets never imported into client
   components. Supabase RLS / service-role usage only server-side.
 - UI changes: loading/empty/error states exist.
+- A `catch` that reports a user-facing error surfaces the thrown error's
+  message (mechanically checked by the `error-surface` lint); a loaded flag
+  is set only on the success path, never in `finally` (`loaded-flag` lint).
+- A save that re-persists a related resource skips the write when the
+  selection is unchanged and prunes ids the UI cannot display; an async
+  loader that writes into a shared store ignores stale responses (requested
+  id vs current id after await) and the draft is reset when the mode
+  switches to create.
+- Every production call site of `notifyIfSessionExpired` has a test
+  asserting the 401 behavior (mechanically checked by the `session-expiry`
+  lint).
 - **MCP parity:** a new or changed `apps/web/app/api/**/route.ts` endpoint
   is reachable through an MCP intent tool: mapped as `{ tool, action }` in
   `apps/mcp/src/__tests__/parity-endpoint-tools.json` (the parity test proves

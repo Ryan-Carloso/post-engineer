@@ -591,7 +591,7 @@ describe('PersonaVoiceClonePanel', () => {
     renderPanel();
     await user.click(screen.getByRole('button', { name: 'persona.voiceCloneRecord' }));
     await waitFor(() =>
-      expect(screen.getByRole('alert')).toHaveTextContent('persona.voiceCloneMicDenied'),
+      expect(screen.getByRole('alert')).toHaveTextContent('Permission denied'),
     );
   });
 

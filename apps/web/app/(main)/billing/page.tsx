@@ -138,7 +138,7 @@ const BillingPacks = () => {
       const result = typeof data === 'object' && data !== null ? data as { url?: unknown; error?: unknown } : {};
       if (!response.ok || typeof result.url !== 'string') { setError(typeof result.error === 'string' ? result.error : t('pricing.checkoutError')); return; }
       router.push(result.url);
-    } catch { setError(t('pricing.checkoutError')); } finally { setLoading(null); }
+    } catch (error) { setError(error instanceof Error ? error.message : t('pricing.checkoutError')); } finally { setLoading(null); }
   };
   return (
     <section className="pt-12 lg:pt-14">

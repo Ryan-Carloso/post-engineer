@@ -1,0 +1,36 @@
+name: loaded-flag
+
+# A loaded flag must never be set in a finally block.
+#
+# PR #704 (single save button on the persona editor) failed a binding load
+# and still set publishingAccountsLoaded to true in finally, which re-enabled
+# the save while the store held a stale selection from another persona. The
+# lint scans apps/web production sources for set*Loaded(true) inside a
+# finally block and fails on it. Setting the flag from a variable (loaded
+# only on success) is allowed, as is setting it on the success path.
+# Findings become ::error annotations and fail the job.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 pinned 2026-09-25
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 pinned 2026-09-25
+        with:
+          node-version: '22'
+
+      - name: Unit tests (loaded-flag lint)
+        run: node --test .github/scripts/loaded-flag/check.test.mjs
+
+      - name: Run loaded-flag lint
+        run: node .github/scripts/loaded-flag/check.mjs
