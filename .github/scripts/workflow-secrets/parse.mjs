@@ -1,8 +1,9 @@
-const RISKY_TRIGGERS = ['pull_request', 'pull_request_target', 'workflow_dispatch'];
-const UNTRUSTED_CONTEXT = /\$\{\{[^}]*\b(?:inputs|github\.event)\./;
-const SECRET_REFERENCE = /\bsecrets\.([A-Za-z0-9_]+)/g;
+import { pullRequestTargetViolations } from './pr-checkout.mjs';
+
+const RISKY_TRIGGERS = ['pull_request', 'workflow_dispatch'];
+const UNTRUSTED_CONTEXT = /\$\{\{[^}]*\b(?:inputs|github\.event)(?:\.|\[)/;
+const SECRET_REFERENCE = /\bsecrets(?:\.|\[\s*['"])([A-Za-z0-9_]+)/g;
 const BARE_ENV_VALUE = /^\s+(?!run:)[A-Za-z_]\w*:\s*["']?\$[A-Za-z_]\w*["']?\s*$/;
-const REPO_SCRIPT = /\b(?:python3?|node|bash|sh)\s+(?:-\S+\s+)*(\.?\/?(?:\.base\/)?\.github\/scripts\/\S+)/;
 const BLOCK_SCALAR = /^[|>][+-]?\d*$/;
 
 const indentOf = (line) => line.length - line.trimStart().length;
@@ -77,7 +78,7 @@ export function parseWorkflow(text) {
   const jobs = starts.map((start, position) => {
     const end = position + 1 < starts.length ? starts[position + 1].index : lines.length;
     const environment = lines.slice(start.index + 1, end).some((line) => /^ {4}environment:/.test(line));
-    return { id: start.id, environment, secrets: secretsIn(lines, start.index, end), runs: runBlocks(lines, start.index, end) };
+    return { id: start.id, environment, lines: lines.slice(start.index, end), firstLine: start.index + 1, secrets: secretsIn(lines, start.index, end), runs: runBlocks(lines, start.index, end) };
   });
   const bareEnv = bareEnvValues(lines, jobs.flatMap((job) => job.runs));
   return { triggers: parseTriggers(lines), workflowSecrets: secretsIn(lines, 0, headerEnd), jobs, bareEnv };
@@ -97,14 +98,11 @@ export function violationsOf(file, text, allowlist) {
     violations.push({ file, line: workflowSecrets[0].line, message: `workflow-level env reads secrets.${workflowSecrets[0].name} under ${risky.join('/')}` });
   }
   for (const job of jobs) {
+    if (triggers.has('pull_request_target')) violations.push(...pullRequestTargetViolations(file, job));
     if (risky.length > 0 && job.secrets.length > 0 && !job.environment && !allowed(job.id)) {
       violations.push({ file, line: job.secrets[0].line, message: `job ${job.id} reads secrets.${job.secrets[0].name} under ${risky.join('/')} with no environment: and no allowlist entry` });
     }
     for (const run of job.runs) {
-      const script = REPO_SCRIPT.exec(run.text);
-      if (script !== null && job.secrets.length > 0 && allowed(job.id) && !script[1].startsWith('.base/')) {
-        violations.push({ file, line: run.line, message: `allowlisted job ${job.id} runs ${script[1]} from the PR tree beside its secrets; run it from .base/` });
-      }
       if (UNTRUSTED_CONTEXT.test(run.text)) {
         violations.push({ file, line: run.line, message: `job ${job.id} interpolates an inputs.* or github.event.* expression inside run:; pass it through env: instead` });
       }

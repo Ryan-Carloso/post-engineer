@@ -75,8 +75,7 @@ describe('violationsOf', () => {
   });
 });
 
-describe('bare env values and allowlisted scripts', () => {
-  const allow = [{ workflow: 'w.yml', job: 'deploy', reason: 'r' }];
+describe('bare env values', () => {
   it('flags an env value that is a bare shell variable', () => {
     const text = 'on: push\njobs:\n  a:\n    steps:\n      - env:\n          INPUT_SCOPE: $INPUT_SCOPE\n          OK: ${{ inputs.x }}\n        run: echo\n';
     const found = violationsOf('w.yml', text, []);
@@ -86,30 +85,104 @@ describe('bare env values and allowlisted scripts', () => {
   it('does not flag a shell assignment inside a run block', () => {
     assert.deepEqual(violationsOf('w.yml', 'on: push\njobs:\n  a:\n    steps:\n      - run: |\n          cat <<EOF\n          key: $VALUE\n          EOF\n', []), []);
   });
-  it('flags an allowlisted secret job that runs a script from the PR tree', () => {
-    const found = violationsOf('w.yml', workflow({ step: '          python3 .github/scripts/x.py\n' }), allow);
-    assert.match(found[0].message, /runs \.github\/scripts\/x\.py from the PR tree/);
-    assert.equal(violationsOf('w.yml', workflow({ step: '          node --test .github/scripts/x/*.test.mjs\n' }), allow).length, 1);
-  });
-  it('passes an allowlisted secret job that runs scripts from .base', () => {
-    assert.deepEqual(violationsOf('w.yml', workflow({ step: '          python3 .base/.github/scripts/x.py\n' }), allow), []);
-  });
   it('fails when mutation.yml self-references INPUT_SCOPE again', () => {
     const file = '.github/workflows/mutation.yml';
     const text = readFileSync(join(root, file), 'utf8').replace('INPUT_SCOPE: ${{ inputs.scope }}', 'INPUT_SCOPE: $INPUT_SCOPE');
     assert.match(violationsOf(file, text, [])[0].message, /bare shell variable/);
   });
-  it('fails when opencode-review runs a helper from the PR tree again', () => {
-    const file = '.github/workflows/opencode-review.yml';
-    const allowlist = JSON.parse(readFileSync(join(root, '.github/scripts/workflow-secrets/allowlist.json'), 'utf8'));
-    const text = readFileSync(join(root, file), 'utf8').replace('python3 .base/.github/scripts/review-context.py', 'python3 .github/scripts/review-context.py');
-    assert.match(violationsOf(file, text, allowlist)[0].message, /review-context\.py from the PR tree/);
+});
+
+describe('bracket syntax', () => {
+  it('reads secrets[...] as a secret reference', () => {
+    const text = "on: pull_request\njobs:\n  a:\n    steps:\n      - env:\n          K: ${{ secrets['K'] }}\n        run: echo\n";
+    assert.match(violationsOf('w.yml', text, [])[0].message, /reads secrets\.K/);
   });
-  it('fails when api-naming runs its unit tests in the key job again', () => {
+  it('flags inputs[...] and github.event[...] inside run', () => {
+    const one = 'on: push\njobs:\n  a:\n    steps:\n      - run: echo ${{ inputs[\'x\'] }}\n';
+    const two = 'on: push\njobs:\n  a:\n    steps:\n      - run: echo ${{ github.event[\'pull_request\'].title }}\n';
+    assert.equal(violationsOf('w.yml', one, []).length, 1);
+    assert.equal(violationsOf('w.yml', two, []).length, 1);
+  });
+});
+
+const targetWorkflow = ({ checkout = '          ref: refs/pull/${{ github.event.pull_request.number }}/merge\n          path: pr\n', run = '          python3 "$GITHUB_WORKSPACE/.github/scripts/x.py"\n' } = {}) => `name: x
+on:
+  pull_request_target:
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@abc
+        with:
+${checkout}      - name: go
+        env:
+          K: \${{ secrets.K }}
+        run: |
+${run}`;
+
+describe('pull_request_target jobs', () => {
+  it('pass when the PR is checked out as data and only base scripts run, with no environment', () => {
+    assert.deepEqual(violationsOf('w.yml', targetWorkflow(), []), []);
+  });
+  it('flag a PR checkout at the workspace root', () => {
+    const found = violationsOf('w.yml', targetWorkflow({ checkout: '          ref: ${{ github.event.pull_request.head.sha }}\n' }), []);
+    assert.match(found[0].message, /checks out the PR at the workspace root/);
+  });
+  it('flag running a script from the PR directory', () => {
+    assert.match(violationsOf('w.yml', targetWorkflow({ run: '          python3 pr/.github/scripts/x.py\n' }), [])[0].message, /runs python3 on a path from the checked-out PR/);
+    assert.equal(violationsOf('w.yml', targetWorkflow({ run: '          node ./pr/x.mjs\n' }), []).length, 1);
+  });
+  it('flag a relative interpreter call after cd into the PR directory', () => {
+    assert.equal(violationsOf('w.yml', targetWorkflow({ run: '          cd pr\n          python3 -c "print(1)"\n' }), []).length, 1);
+    assert.equal(violationsOf('w.yml', targetWorkflow({ run: '          (cd pr && node scripts/x.mjs)\n' }), []).length, 1);
+  });
+  it('allow a base script by absolute path and other tools after cd into the PR directory', () => {
+    const run = '          (cd pr && python3 "$GITHUB_WORKSPACE/.github/scripts/x.py" ../a.md)\n          (\n            cd pr\n            git diff HEAD^1 HEAD > ../pr.diff\n            opencode run --agent reviewer\n          )\n';
+    assert.deepEqual(violationsOf('w.yml', targetWorkflow({ run }), []), []);
+  });
+  it('leave the PR directory on cd ..', () => {
+    assert.deepEqual(violationsOf('w.yml', targetWorkflow({ run: '          cd pr\n          cd ..\n          python3 .github/scripts/x.py\n' }), []), []);
+  });
+  it('flag installing dependencies next to a PR checkout', () => {
+    assert.match(violationsOf('w.yml', targetWorkflow({ run: '          pnpm install --frozen-lockfile\n' }), [])[0].message, /installs dependencies/);
+  });
+});
+
+describe('the repository pull_request_target workflows', () => {
+  const read = (file) => readFileSync(join(root, file), 'utf8');
+  const review = '.github/workflows/opencode-review.yml';
+  it('opencode-review reads only the PR as data', () => {
+    const text = read(review);
+    assert.ok(text.includes('pull_request_target:'));
+    assert.deepEqual(violationsOf(review, text, []), []);
+  });
+  it('opencode-review fails when the PR is checked out at the root', () => {
+    const text = read(review).replace('          path: pr\n', '');
+    assert.match(violationsOf(review, text, [])[0].message, /workspace root/);
+  });
+  it('opencode-review fails when a helper script runs from the PR directory again', () => {
+    const text = read(review).replace('python3 .github/scripts/review-context.py', 'python3 pr/.github/scripts/review-context.py');
+    assert.match(violationsOf(review, text, [])[0].message, /path from the checked-out PR/);
+  });
+  it('opencode-review fails when it goes back to a pull_request trigger', () => {
+    const text = read(review).replace('pull_request_target:', 'pull_request:');
+    assert.match(violationsOf(review, text, [])[0].message, /reads secrets\./);
+  });
+  it('api-naming fails when it goes back to a pull_request trigger', () => {
     const file = '.github/workflows/api-naming.yml';
-    const allowlist = JSON.parse(readFileSync(join(root, '.github/scripts/workflow-secrets/allowlist.json'), 'utf8'));
-    const text = readFileSync(join(root, file), 'utf8').replace('  lint:\n', '  lint:\n    x: y\n').replace('      - name: Run API naming lint\n', '      - run: node --test .github/scripts/api-naming/x.test.mjs\n      - name: Run API naming lint\n');
-    assert.match(violationsOf(file, text, allowlist)[0].message, /from the PR tree/);
+    const text = read(file).replace('pull_request_target:', 'pull_request:');
+    assert.match(violationsOf(file, text, [])[0].message, /reads secrets\./);
+  });
+  it('api-naming has no workflow_dispatch trigger', () => {
+    assert.ok(!read('.github/workflows/api-naming.yml').includes('workflow_dispatch'));
+  });
+  it('deploy runs on push to main with no pull_request dependency', () => {
+    const text = read('.github/workflows/deploy.yml');
+    assert.ok(text.includes('  push:\n    branches: [main]'));
+    assert.ok(!text.includes('github.event.pull_request'));
+  });
+  it('the reviewer agent does not tell the agent to read the checkout copies of the review prompts', () => {
+    assert.ok(!read('.opencode/agent/reviewer.md').includes('First read'));
   });
 });
 
@@ -139,18 +212,5 @@ describe('the repository workflows', () => {
     const file = '.github/workflows/test-flight-faceless.yml';
     const text = readFileSync(join(root, file), 'utf8').replace('    environment: test-flight\n', '');
     assert.equal(violationsOf(file, text, []).length, 1);
-  });
-  it('fail when api-naming interpolates its inputs into the shell again', () => {
-    const file = '.github/workflows/api-naming.yml';
-    const text = readFileSync(join(root, file), 'utf8').replace('base="$INPUT_BASE"', 'base="${{ inputs.base }}"');
-    assert.match(violationsOf(file, text, JSON.parse(readFileSync(join(root, '.github/scripts/workflow-secrets/allowlist.json'), 'utf8')))[0].message, /interpolates/);
-  });
-  it('run the review scripts from the base checkout', () => {
-    const text = readFileSync(join(root, '.github/workflows/opencode-review.yml'), 'utf8');
-    assert.ok(text.includes('python3 .base/.github/scripts/select-review-models.py'));
-    assert.ok(text.includes('cp .base/.opencode/agent/reviewer.md'));
-    assert.ok(text.includes('python3 .base/.github/scripts/verify-review-grounding.py'));
-    assert.ok(!text.includes('cp .opencode/agent/reviewer.md'));
-    assert.ok(!text.includes('python3 .github/scripts/'));
   });
 });

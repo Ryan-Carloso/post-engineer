@@ -14,36 +14,21 @@ name: api-naming
 # Findings become ::error/::warning annotations, fail the job on errors,
 # and are posted as an upserted PR comment.
 
+# Security model: pull_request_target. The workflow file, the checker, its
+# config and its tests always come from the base sha. The PR head is fetched
+# into the repository as git objects and only diffed; nothing from the PR is
+# checked out, installed or executed. The LLM key is only passed for
+# same-repo PRs.
+
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, synchronize, reopened]
-  workflow_dispatch:
-    inputs:
-      base:
-        description: 'Base ref for the diff'
-        required: false
-        default: 'origin/main'
-      head:
-        description: 'Head ref for the diff'
-        required: false
-        default: 'HEAD'
+
+concurrency:
+  group: api-naming-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
-  tests:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 pinned 2026-09-25
-
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 pinned 2026-09-25
-        with:
-          node-version: '22'
-
-      - name: Unit tests (api-naming lint)
-        run: node --test .github/scripts/api-naming/*.test.mjs
-
   lint:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -51,19 +36,32 @@ jobs:
       contents: read
       pull-requests: write
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 pinned 2026-09-25
+      - name: Check out the base (trusted checker and config)
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 pinned 2026-09-25
         with:
+          ref: ${{ github.event.pull_request.base.sha }}
           fetch-depth: 0
-
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 pinned 2026-09-25
-        with:
-          ref: ${{ github.event.pull_request.base.sha || 'refs/heads/main' }}
-          path: .base
           persist-credentials: false
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 pinned 2026-09-25
         with:
           node-version: '22'
+
+      - name: Fetch the PR head as data
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "+refs/pull/${PR_NUMBER}/head:refs/remotes/pr/head"
+          fetched=$(git rev-parse refs/remotes/pr/head)
+          if [ "$fetched" != "$HEAD_SHA" ]; then
+            echo "::error::The PR head moved while this run started ($HEAD_SHA -> $fetched); the run for the new head decides."
+            exit 2
+          fi
+
+      - name: Unit tests (api-naming lint, base version)
+        run: node --test .github/scripts/api-naming/*.test.mjs
 
       - name: Run API naming lint
         id: lint
@@ -72,26 +70,16 @@ jobs:
           # deterministic denylist layer still runs. Set in repo Settings >
           # Secrets and variables > Actions.
           BASH_ENV: ""
-          API_NAMING_LLM_API_KEY: ${{ secrets.API_NAMING_LLM_API_KEY }}
-          EVENT_NAME: ${{ github.event_name }}
+          API_NAMING_LLM_API_KEY: ${{ github.event.pull_request.head.repo.full_name == github.repository && secrets.API_NAMING_LLM_API_KEY || '' }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.sha }}
-          INPUT_BASE: ${{ inputs.base }}
-          INPUT_HEAD: ${{ inputs.head }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
-          if [[ "$EVENT_NAME" == "pull_request" ]]; then
-            base="$PR_BASE_SHA"
-            head="$HEAD_SHA"
-          else
-            base="$INPUT_BASE"
-            head="$INPUT_HEAD"
-          fi
+          base="$PR_BASE_SHA"
+          head="$PR_HEAD_SHA"
           echo "head_sha=$head" >> "$GITHUB_OUTPUT"
           set +e
-          node .base/.github/scripts/api-naming/run.mjs \
-            --repo-root "$GITHUB_WORKSPACE" \
-            --config .base/.github/api-naming.yml \
+          node .github/scripts/api-naming/run.mjs \
             --base "$base" --head "$head" \
             --findings-out /tmp/api-naming-findings.json
           code=$?
@@ -100,7 +88,7 @@ jobs:
           echo "lint failed with exit $code (reported as a job failure below, after the PR comment)"
 
       - name: Post/update PR comment
-        if: always() && github.event_name == 'pull_request'
+        if: always()
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -123,7 +111,7 @@ jobs:
             exit 0
           fi
           body_file="$(mktemp)"
-          node .base/.github/scripts/api-naming/comment.mjs --findings "$findings" --head-sha "$head_sha" > "$body_file"
+          node .github/scripts/api-naming/comment.mjs --findings "$findings" --head-sha "$head_sha" > "$body_file"
           if [[ -n "$existing_id" ]]; then
             gh api -X PATCH "repos/$repo/issues/comments/$existing_id" -F body=@"$body_file" > /dev/null
             echo "updated PR comment $existing_id"

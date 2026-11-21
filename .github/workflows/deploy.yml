@@ -1,7 +1,7 @@
 name: Deploy
 
-# Applies pending Supabase migrations right after a PR merges to main (or
-# via workflow_dispatch, e.g. to recover after a failed deploy).
+# Applies pending Supabase migrations on every push to main, which is a PR
+# merge (or via workflow_dispatch, e.g. to recover after a failed deploy).
 #
 # Flow:
 #   1. This workflow runs `supabase db push --linked --include-all`, which
@@ -19,7 +19,9 @@ name: Deploy
 # schema. The merge is the ship decision; the migration SQL itself was
 # already validated by CI on the PR (supabase-migrations job).
 #
-# Required repository secrets (Settings > Secrets and variables > Actions):
+# The job runs in the `production` environment, limited to `main` (push to
+# main and a dispatch pinned to main both satisfy it; a pull_request merge ref
+# would not). Move these secrets into it (Settings > Environments > production):
 #   SUPABASE_ACCESS_TOKEN  - Supabase personal access token (for `supabase link`)
 #   SUPABASE_PROJECT_ID    - Supabase project ref (for `supabase link`)
 #   SUPABASE_DB_PASSWORD   - Database password (direct Postgres connection for `db push`)
@@ -31,8 +33,7 @@ name: Deploy
 #     --db-url "postgresql://postgres:<DB_PASSWORD>@db.<PROJECT_REF>.supabase.co:5432/postgres"
 
 on:
-  pull_request:
-    types: [closed]
+  push:
     branches: [main]
   workflow_dispatch:
 
@@ -42,16 +43,6 @@ concurrency:
 
 jobs:
   migrate:
-    # Merged PRs only (not plain closes), and only for PRs from this repo:
-    # the pull_request event does not expose secrets to fork PRs, so
-    # without the repo guard a fork merge would fail loudly on the secret
-    # checks below instead of skipping quietly. workflow_dispatch always
-    # deploys the main branch (pinned in checkout below) to re-run a
-    # failed deploy without waiting for the next merge.
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (github.event.pull_request.merged == true &&
-      github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 10
@@ -60,10 +51,10 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 pinned 2026-09-25
         with:
-          # Deployed code is always a merged main commit (or main itself on
-          # workflow_dispatch — a dispatch from another branch must not
-          # deploy that branch).
-          ref: ${{ github.event_name == 'workflow_dispatch' && 'refs/heads/main' || github.event.pull_request.merge_commit_sha }}
+          # Deployed code is always the main commit that triggered the push
+          # (or main itself on workflow_dispatch — a dispatch from another
+          # branch must not deploy that branch).
+          ref: ${{ github.event_name == 'workflow_dispatch' && 'refs/heads/main' || github.sha }}
 
       - uses: supabase/setup-cli@45a513f8c64c0bc8e0e3dfe572b5c95be85f6359 # v3.0.1 pinned 2026-10-03
         with:

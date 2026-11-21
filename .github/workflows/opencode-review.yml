@@ -3,6 +3,11 @@ name: opencode-review
 # Automatic PR review with OpenCode (replaces CodeRabbit).
 #
 # How it works:
+# - Security model: pull_request_target. The workflow file, the scripts, the
+#   review prompts and the reviewer agent come from the base sha at the
+#   workspace root. The PR merge commit is checked out into pr/ as data: git
+#   diffs it, the heuristics read it and the agent (bash denied) reads it. It
+#   is never executed, installed or sourced. Same-repo PRs only.
 # - Runs on GitHub-hosted runners — no VPS needed.
 # - Installs a pinned OpenCode CLI release (version + sha256 checksum against
 #   the official sst/opencode artifacts), then runs `opencode run` directly —
@@ -59,7 +64,7 @@ name: opencode-review
 #    and REVIEW_MODEL_CHAIN_OVERRIDE (comma-separated attempt list).
 
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, synchronize, reopened, ready_for_review]
 
 # Cancel a superseded review when new pushes arrive.
@@ -81,6 +86,7 @@ env:
 
 jobs:
   review:
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     # Sized for maxChainLength (8) in model-preferences.json: 30m + 7*20m pass 1,
     # 20m pass 2, plus install/post overhead. The validator recomputes this.
@@ -89,16 +95,18 @@ jobs:
       contents: read
       pull-requests: write
     steps:
-      - name: Checkout PR head
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          persist-credentials: false
-
-      - name: Checkout base for trusted scripts
+      - name: Checkout base (trusted scripts, prompts and agent)
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           ref: ${{ github.event.pull_request.base.sha }}
-          path: .base
+          persist-credentials: false
+
+      - name: Checkout PR merge commit as data (never executed)
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: refs/pull/${{ github.event.pull_request.number }}/merge
+          path: pr
+          fetch-depth: 2
           persist-credentials: false
 
       - name: Check for review API keys
@@ -193,7 +201,7 @@ jobs:
           OPENROUTER_FREE_MODEL: ${{ env.OPENROUTER_FREE_MODEL }}
         run: |
           set -euo pipefail
-          python3 .base/.github/scripts/select-review-models.py \
+          python3 .github/scripts/select-review-models.py \
             --output review-model-chain.json | tee review-model-chain-summary.json
           echo "Selected chain:"
           python3 -c "import json; c=json.load(open('review-model-chain.json')); print('\n'.join('  - '+m for m in c['attempts']))"
@@ -213,7 +221,7 @@ jobs:
           # copied into that dir so CI loads it and nothing else.
           cfg="${RUNNER_TEMP}/opencode-review"
           mkdir -p "$cfg/agent"
-          cp .base/.opencode/agent/reviewer.md "$cfg/agent/reviewer.md"
+          cp .opencode/agent/reviewer.md "$cfg/agent/reviewer.md"
           export REVIEW_CONFIG="${cfg}/opencode.json"
           python3 <<'EOF'
           import json, os
@@ -302,17 +310,18 @@ jobs:
           # Real secrets are never committed (see AGENTS.md env policy).
           # Scrub any .env / key material from the working tree before the
           # agent runs, in case one was left behind accidentally.
+          cd pr
           find . -path ./.git -prune -o -type f \( -name '.env*' -o -name '*.pem' -o -name '*.key' \) -exec rm -f {} +
           find . -path ./.git -prune -o -type d \( -name secrets -o -name private \) -prune -exec rm -rf {} +
           # Build the diff from the local checkout, never via the GitHub
           # patch-diff CDN: it can serve a stale diff in the minutes after
           # a push, which once made the mechanical secret scan fail the job
-          # on a fixture line that was already fixed at HEAD. Two-dot diff
-          # against the base branch needs no history beyond the two trees,
-          # so it works with the default shallow checkout.
-          git fetch --quiet origin "${{ github.base_ref }}"
-          git diff --patch "origin/${{ github.base_ref }}" HEAD > pr.diff
-          git diff --name-only "origin/${{ github.base_ref }}" HEAD > pr-files.txt
+          # on a fixture line that was already fixed at HEAD. The PR is the
+          # merge commit: its first parent is the base, so the diff against
+          # HEAD^1 is exactly the PR and needs only the depth-2 checkout.
+          git diff --no-ext-diff --no-textconv --patch HEAD^1 HEAD > ../pr.diff
+          git diff --no-ext-diff --no-textconv --name-only HEAD^1 HEAD > ../pr-files.txt
+          cd ..
           # Keep the diff within a sane size for the model context.
           MAX_BYTES=200000
           SIZE=$(wc -c < pr.diff)
@@ -334,9 +343,9 @@ jobs:
           # comment and the job fails explicitly at the end, so the section
           # is always posted even when a check fails.
           set +e
-          python3 .base/.github/scripts/review-mechanical-checks.py \
+          python3 .github/scripts/review-mechanical-checks.py \
             --diff pr.diff --files pr-files.txt \
-            --migrations supabase/migrations > mechanical-checks.md
+            --migrations pr/supabase/migrations > mechanical-checks.md
           echo "status=$?" >> "$GITHUB_OUTPUT"
           set -e
           cat mechanical-checks.md
@@ -348,7 +357,7 @@ jobs:
           # Heuristics never fail the job. A crash becomes a warning line so
           # the rest of the review still posts.
           set +e
-          python3 .base/.github/scripts/review-heuristics.py --diff pr.diff --root . > heuristics.md
+          python3 .github/scripts/review-heuristics.py --diff pr.diff --root pr > heuristics.md
           status=$?
           set -e
           if [ "$status" -ne 0 ]; then
@@ -364,7 +373,7 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
-          python3 .base/.github/scripts/review-context.py \
+          python3 .github/scripts/review-context.py \
             --repo "$REPO" \
             --pr "$PR_NUMBER" \
             --files pr-files.txt \
@@ -403,14 +412,17 @@ jobs:
             local limit="$2"
             local rc=0
             set +e
-            timeout "$limit" opencode run \
-              --agent reviewer \
-              --model "$model" \
-              --file pr.diff \
-              --file pr-context.md \
-              --file .github/review/review-checklist.md \
-              --title "PR #$PR_NUMBER review" \
-              "$(cat .github/review/review-prompt.md)" < /dev/null > review-raw.md 2> review-stderr.txt
+            (
+              cd pr
+              timeout "$limit" opencode run \
+                --agent reviewer \
+                --model "$model" \
+                --file ../pr.diff \
+                --file ../pr-context.md \
+                --file "$GITHUB_WORKSPACE/.github/review/review-checklist.md" \
+                --title "PR #$PR_NUMBER review" \
+                "$(cat "$GITHUB_WORKSPACE/.github/review/review-prompt.md")" < /dev/null > ../review-raw.md 2> ../review-stderr.txt
+            )
             rc=$?
             set -e
             if grep -q 'Falling back to default agent' review-raw.md review-stderr.txt; then
@@ -476,8 +488,8 @@ jobs:
           # Do not fail this step — the comment is posted first, and the
           # final step fails the job.
           set +e
-          python3 .base/.github/scripts/verify-review-grounding.py \
-            review.md pass1.md --context pr-context.md --files pr-files.txt
+          (cd pr && python3 "$GITHUB_WORKSPACE/.github/scripts/verify-review-grounding.py" \
+            ../review.md ../pass1.md --context ../pr-context.md --files ../pr-files.txt)
           status=$?
           set -e
           echo "status=$status" >> "$GITHUB_OUTPUT"
@@ -552,15 +564,18 @@ jobs:
             exit 0
           fi
           set +e
-          timeout 20m opencode run \
-            --agent reviewer \
-            --model "$verify" \
-            --file pr.diff \
-            --file pr-context.md \
-            --file .github/review/review-checklist.md \
-            --file pass1.md \
-            --title "PR #$PR_NUMBER verify" \
-            "$(cat .github/review/verify-prompt.md)" < /dev/null > pass2-raw.md 2> pass2-stderr.txt
+          (
+            cd pr
+            timeout 20m opencode run \
+              --agent reviewer \
+              --model "$verify" \
+              --file ../pr.diff \
+              --file ../pr-context.md \
+              --file "$GITHUB_WORKSPACE/.github/review/review-checklist.md" \
+              --file ../pass1.md \
+              --title "PR #$PR_NUMBER verify" \
+              "$(cat "$GITHUB_WORKSPACE/.github/review/verify-prompt.md")" < /dev/null > ../pass2-raw.md 2> ../pass2-stderr.txt
+          )
           rc=$?
           set -e
           if grep -q 'Falling back to default agent' pass2-raw.md pass2-stderr.txt; then
@@ -572,8 +587,8 @@ jobs:
             exit 1
           fi
           set +e
-          python3 .base/.github/scripts/verify-review-grounding.py \
-            pass2-raw.md pass2.md --context pr-context.md --files pr-files.txt
+          (cd pr && python3 "$GITHUB_WORKSPACE/.github/scripts/verify-review-grounding.py" \
+            ../pass2-raw.md ../pass2.md --context ../pr-context.md --files ../pr-files.txt)
           ground_rc=$?
           set -e
           # An all-unverified pass 2 must not replace a grounded pass 1.
