@@ -93,7 +93,7 @@ async function reviewOne(c, config, fetchImpl, apiKey) {
 /**
  * @param {Array<{ file: string, line: number, name: string, context: string, renamedFrom: string | null }>} candidates
  * @param {{ llm: { enabled: boolean, baseUrl: string, model: string, maxNames: number, timeoutMs: number } }} config
- * @param {{ fetchImpl?: typeof fetch, apiKey?: string }} [options] fetch injected via options (test seam)
+ * @param {{ fetchImpl?: typeof fetch, apiKey?: string }} [options]
  * @returns {Promise<{ findings: Array<{ file: string, line: number, name: string, severity: 'error' | 'warn', reason: string, alternatives: string[], source: 'llm', renamedFrom: string | null }>, skipped: number, warnings: string[] }>}
  */
 export async function reviewNames(candidates, config, options = {}) {

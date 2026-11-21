@@ -17,7 +17,6 @@ export function readTimings(timings) {
 }
 
 /**
- * Lower median, so an even count does not invent a value between two files.
  * @param {number[]} values
  */
 function lowerMedian(values) {
@@ -30,7 +29,7 @@ function lowerMedian(values) {
  * @param {string[]} files
  * @param {unknown} timings
  * @param {number} total
- * @returns {string[][]} one array per shard, index 0 is shard 1
+ * @returns {string[][]}
  */
 export function assignShards(files, timings, total) {
   if (!Number.isInteger(total) || total < 1) {

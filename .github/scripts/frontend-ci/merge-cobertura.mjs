@@ -3,7 +3,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 /**
- * @param {string} tag the inside of a tag, without `<line` / `>`
+ * @param {string} tag
  * @param {string} name
  */
 function attr(tag, name) {

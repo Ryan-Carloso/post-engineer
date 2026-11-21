@@ -33,7 +33,7 @@ test('removes whole-line and trailing ts comments', () => {
 });
 
 test('keeps directives', () => {
-  const src = '// @vitest-environment node\n// eslint-disable-next-line no-console\nconsole.log(1);\n// @ts-expect-error bad\nconst x: number = "";\n';
+  const src = '// @vitest-environment node\n// eslint-disable-next-line no-console\nconsole.log(1);\n// @ts-expect-error\nconst x: number = "";\n';
   assert.equal(strip(src, 'a.test.ts'), src);
 });
 
@@ -43,8 +43,8 @@ test('keeps webpackIgnore and vite-ignore inside import()', () => {
 });
 
 test('keeps a jsx directive sharing its wrapper with a note comment', () => {
-  const src = 'const el = (\n  <div>\n    {/* eslint-disable-next-line */ /* note */}\n    <span />\n  </div>\n);\n';
-  assert.equal(runFix('a.tsx', src), 'const el = (\n  <div>\n    {/* eslint-disable-next-line */ }\n    <span />\n  </div>\n);\n');
+  const src = 'const el = (\n  <div>\n    {/* eslint-disable-next-line no-console */ /* note */}\n    <span />\n  </div>\n);\n';
+  assert.equal(runFix('a.tsx', src), 'const el = (\n  <div>\n    {/* eslint-disable-next-line no-console */ }\n    <span />\n  </div>\n);\n');
 });
 
 test('strips a prose comment that only mentions webpackIgnore', () => {
@@ -95,8 +95,8 @@ test('keeps combined, regex and array webpack magic comments', () => {
   assert.equal(runFix('a.ts', src), src);
 });
 
-test('keeps refresh, eslint-env, stylelint and tslint directives but strips prose that mentions them', () => {
-  const kept = '// @refresh reset\n/* eslint-env node */\n/* stylelint-disable */\n// tslint:disable-next-line\nconst a = 1;\n';
+test('keeps refresh, eslint-env and stylelint directives but strips prose that mentions them', () => {
+  const kept = '// @refresh reset\n/* eslint-env node */\n/* stylelint-disable color-no-invalid-hex */\nconst a = 1;\n';
   assert.equal(runFix('a.ts', kept), kept);
   assert.equal(runFix('b.ts', '// the @refresh reset trick and eslint-env\nconst a = 1;\n'), 'const a = 1;\n');
 });
@@ -144,6 +144,32 @@ test('a file the tokenizer cannot read is reported and the run continues', () =>
     assert.equal(code, 1);
     assert.ok(logs.some((line) => line.startsWith('bad.py: could not be scanned')));
     assert.ok(logs.some((line) => line.includes('good.ts') && line.includes('// note')));
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('--fix strips the prose after a directive and keeps the directive', () => {
+  const src = '// eslint-disable-next-line no-console -- debugging aid\nconsole.log(1);\n';
+  assert.equal(runFix('a.ts', src), '// eslint-disable-next-line no-console\nconsole.log(1);\n');
+  assert.equal(runFix('a.py', 'import os  # noqa: F401 - re-exported\n'), 'import os  # noqa: F401\n');
+});
+
+test('--fix reports a blanket or correctness suppression it cannot fix and exits 1', () => {
+  const src = '// @ts-ignore\nconst a: number = "x";\n';
+  const result = runFixWithCode('a.ts', src);
+  assert.equal(result.code, 1);
+  assert.equal(result.text, src);
+  assert.ok(result.logs.some((line) => line.includes('a.ts:1: blanket suppression `@ts-ignore`')));
+});
+
+test('the check reports a prose directive with its bare form', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'comments-'));
+  try {
+    fs.writeFileSync(path.join(dir, 'a.ts'), '// @vitest-environment node: drives the server SDK\nconst a = 1;\n');
+    const logs = [];
+    assert.equal(run(['a.ts'], dir, (line) => logs.push(line)), 1);
+    assert.ok(logs.some((line) => line.startsWith('a.ts:1: directive carries prose, keep only `// @vitest-environment node`')));
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

@@ -14,8 +14,6 @@ import { addPersonaImage, createPersona, deletePersona, deletePersonaImage, getP
 import { applyBatchDiscount, completeVideoUpload, generateAndSchedule, mintVideoUpload, publishUploadedVideo, scoreDraft, validateScript } from '@/lib/contracts/videos';
 import type { BodyOf, ResponseOf } from '@/lib/contracts/endpoint';
 
-// contract field makes this file fail typecheck. The @ts-expect-error
-
 type CreateBody = BodyOf<typeof createExperiment>;
 type CreateResponse = ResponseOf<typeof createExperiment>;
 type ListPromptsResponse = ResponseOf<typeof listPrompts>;
@@ -86,14 +84,14 @@ describe('contracts typecheck', () => {
     };
     expect(validBody.name).toBe('Hook test');
 
-    // @ts-expect-error -- strict body: `nome` is not a field of the create body
+    // @ts-expect-error
     const badBody: CreateBody = { nome: 'x', variable: 'hook', targetPairs: 6, variants: [] };
     expect(badBody).toBeDefined();
 
     const response = { success: true, experiment: { id: '1', name: 'Hook test', variable: 'hook', personaId: '11111111-2222-4333-8444-555555555555' as string | null, targetPairs: 6, variants: [] } } as CreateResponse;
     expect(response.experiment.name).toBe('Hook test');
 
-    // @ts-expect-error -- response experiment field is `name`, not `nome`
+    // @ts-expect-error
     const badName = response.experiment.nome;
     expect(badName).toBeUndefined();
 
@@ -102,7 +100,7 @@ describe('contracts typecheck', () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.body.name).toBe('Hook test');
-      // @ts-expect-error -- readBody body field is `name`, not `nome`
+      // @ts-expect-error
       expect(result.body.nome).toBeUndefined();
     }
   });
@@ -110,19 +108,19 @@ describe('contracts typecheck', () => {
   it('pins the prompts response field names', () => {
     const list: ListPromptsResponse = { success: true, prompts: [{ slug: 'daily-news', title: 'News', description: 'News', source: 'official', visibility: 'public' }] };
     expect(list.prompts[0]?.title).toBe('News');
-    // @ts-expect-error -- the list item field is `title`, not `name`
+    // @ts-expect-error
     expect(list.prompts[0]?.name).toBeUndefined();
 
     const detail: GetPromptResponse = { success: true, prompt: { slug: 'daily-news', title: 'News', description: 'News', source: 'official', visibility: 'public', prompt: 'Write...' } };
     expect(detail.prompt.prompt).toBe('Write...');
-    // @ts-expect-error -- the detail field is `prompt`, not `text`
+    // @ts-expect-error
     expect(detail.prompt.text).toBeUndefined();
   });
 
   it('pins the billing response field names', () => {
     const balance: TokenBalanceResponse = { success: true, balance: 8, free: 3 };
     expect(balance.balance).toBe(8);
-    // @ts-expect-error -- the balance field is `balance`, not `total`
+    // @ts-expect-error
     expect(balance.total).toBeUndefined();
 
     const ledger: TokenTransactionsResponse = {
@@ -133,7 +131,7 @@ describe('contracts typecheck', () => {
       offset: 0,
     };
     expect(ledger.transactions[0]?.generationId).toBeNull();
-    // @ts-expect-error -- the transaction field is `generationId`, not `generation_id`
+    // @ts-expect-error
     expect(ledger.transactions[0]?.generation_id).toBeUndefined();
   });
 
@@ -159,7 +157,7 @@ describe('contracts typecheck', () => {
     };
     expect(detail.generation.videoSubject).toBe('Gym');
     if (detail.kind !== 'generation') throw new Error('expected a generation detail');
-    // @ts-expect-error -- the generation field is `videoSubject`, not `subject`
+    // @ts-expect-error
     expect(detail.generation.subject).toBeUndefined();
   });
 
@@ -196,7 +194,7 @@ describe('contracts typecheck', () => {
       asOf: '2026-11-14T10:00:00.000Z',
     };
     expect(metrics.rows[0]?.postId).toBe('p-1');
-    // @ts-expect-error -- the row field is `postId`, not `post_id`
+    // @ts-expect-error
     expect(metrics.rows[0]?.post_id).toBeUndefined();
     const curve: RetentionCurveResponse = {
       success: true,
@@ -206,7 +204,7 @@ describe('contracts typecheck', () => {
       provisional: false,
     };
     expect(curve.points[0]?.ratio).toBe(0.01);
-    // @ts-expect-error -- the point field is `audienceWatchRatio`, not `watchRatio`
+    // @ts-expect-error
     expect(curve.points[0]?.watchRatio).toBeUndefined();
   });
 
@@ -217,14 +215,14 @@ describe('contracts typecheck', () => {
       expiresInSeconds: 3600,
     };
     expect(upload.mediaId).toContain('.png');
-    // @ts-expect-error -- the upload field is `mediaId`, not `media_id`
+    // @ts-expect-error
     expect(upload.media_id).toBeUndefined();
     const check: MediaCheckResponse = { success: true, code: 'ok', width: 1920, height: 1080, has_face: true };
     expect(check.code).toBe('ok');
     expect(check.has_face).toBe(true);
-    // @ts-expect-error -- the check field is `code`, not `status`
+    // @ts-expect-error
     expect(check.status).toBeUndefined();
-    // @ts-expect-error -- the check response field is `has_face`, not `hasFace`
+    // @ts-expect-error
     expect(check.hasFace).toBeUndefined();
     const content: UploadContentResponse = {
       success: true,
@@ -234,7 +232,7 @@ describe('contracts typecheck', () => {
       logId: 'log-1',
     };
     expect(content.results[0]?.accountId).toBe('chan-1');
-    // @ts-expect-error -- the account field is `accountId`, not `account_id`
+    // @ts-expect-error
     expect(content.results[0]?.account_id).toBeUndefined();
   });
 
@@ -245,22 +243,22 @@ describe('contracts typecheck', () => {
       message: 'Accounts retrieved from Supabase',
     };
     expect(list.accounts[0]?.provider).toBe('youtube');
-    // @ts-expect-error -- the account field is `channelId`, not `channel_id`
+    // @ts-expect-error
     expect(list.accounts[0]?.channel_id).toBeUndefined();
     const connectUrl: ConnectUrlResponse = { success: true, auth_url: 'https://example.com/oauth' };
     expect(connectUrl.auth_url).toContain('oauth');
-    // @ts-expect-error -- the connect field is `auth_url`, not `authUrl`
+    // @ts-expect-error
     expect(connectUrl.authUrl).toBeUndefined();
     const body: BlueskyConnectBody = { handle: 'user.bsky.social', appPassword: 'secret' };
     expect(body.handle).toBe('user.bsky.social');
-    // @ts-expect-error -- the connect body field is `appPassword`, not `app_password`
+    // @ts-expect-error
     expect(body.app_password).toBeUndefined();
     const publishing: PublishingAccountsResponse = {
       success: true,
       defaults: { youtube: ['UC-1'], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [], telegram: [] },
     };
     expect(publishing.defaults.youtube).toEqual(['UC-1']);
-    // @ts-expect-error -- the defaults field is `youtube`, not `youtube_id`
+    // @ts-expect-error
     expect(publishing.defaults.youtube_id).toBeUndefined();
   });
 
@@ -280,17 +278,17 @@ describe('contracts typecheck', () => {
       ],
     };
     expect(list.schedules[0]?.providers).toEqual(['youtube']);
-    // @ts-expect-error -- the schedule row keeps its snake_case `persona_id`
+    // @ts-expect-error
     expect(list.schedules[0]?.personaId).toBeUndefined();
     const cancel: CancelScheduleResponse = {
       success: true, cancelledSlotIds: [], refunds: [], batchDiscountWithheld: 0,
     };
     expect(cancel.cancelledSlotIds).toEqual([]);
-    // @ts-expect-error -- the cancel field is `cancelledSlotIds`, not `cancelled_slot_ids`
+    // @ts-expect-error
     expect(cancel.cancelled_slot_ids).toBeUndefined();
     const posts: ListPostsResponse = { success: true, upcoming: [], recent: [], hasAnyPost: false };
     expect(posts.hasAnyPost).toBe(false);
-    // @ts-expect-error -- the posts field is `hasAnyPost`, not `has_any_post`
+    // @ts-expect-error
     expect(posts.has_any_post).toBeUndefined();
     const slot: GetSlotResponse = {
       success: true,
@@ -314,11 +312,11 @@ describe('contracts typecheck', () => {
       },
     };
     expect(slot.slot.title).toBe('T');
-    // @ts-expect-error -- the slot field is `scheduleId`, not `schedule_id`
+    // @ts-expect-error
     expect(slot.slot.schedule_id).toBeUndefined();
     const body: UpdateSlotBody = { title: 'New title' };
     expect(body.title).toBe('New title');
-    // @ts-expect-error -- the update body field is `slotAt`, not `slot_at`
+    // @ts-expect-error
     expect(body.slot_at).toBeUndefined();
     const updated: UpdateSlotResponse = { success: true, title: 'New title' };
     expect(updated.title).toBe('New title');
@@ -338,7 +336,7 @@ describe('contracts typecheck', () => {
       ],
     };
     expect(list.generations[0]?.generationId).toBe('gen-1');
-    // @ts-expect-error -- the generation row field is `generationId`, not `generation_id`
+    // @ts-expect-error
     expect(list.generations[0]?.generation_id).toBeUndefined();
     const detail: GetVideoGenerationResponse = {
       success: true,
@@ -349,7 +347,7 @@ describe('contracts typecheck', () => {
       },
     };
     expect(detail.generation.status).toBe('failed');
-    // @ts-expect-error -- the generation row field is `engineTaskId`, not `engine_task_id`
+    // @ts-expect-error
     expect(detail.generation.engine_task_id).toBeUndefined();
     const status: GetVideoStatusResponse = {
       status: 200,
@@ -357,9 +355,9 @@ describe('contracts typecheck', () => {
       body: { task_id: 'task-1', state: 1, progress: 100, stage: null, postUrl: null },
     };
     expect(status.body.task_id).toBe('task-1');
-    // @ts-expect-error -- the task body keeps its snake_case `task_id`
+    // @ts-expect-error
     expect(status.body.taskId).toBeUndefined();
-    // @ts-expect-error -- the engine envelope carries `status`, not `success`
+    // @ts-expect-error
     expect(status.success).toBeUndefined();
     const cancelled: CancelVideoTaskResponse = {
       status: 200,
@@ -367,7 +365,7 @@ describe('contracts typecheck', () => {
       body: { task_id: 'task-1', state: 1, progress: 100, videos: [], combined_videos: [] },
     };
     expect(cancelled.status).toBe(200);
-    // @ts-expect-error -- the delete response has no `deleted` flag
+    // @ts-expect-error
     expect(cancelled.deleted).toBeUndefined();
   });
 
@@ -386,7 +384,7 @@ describe('contracts typecheck', () => {
       ],
     };
     expect(list.voices[0]?.id).toBe('chatterbox:kokoro_af_heart');
-    // @ts-expect-error -- the voice row field is `kind`, not `type`
+    // @ts-expect-error
     expect(list.voices[0]?.type).toBeUndefined();
     const cloneRow = {
       id: 'clone-1',
@@ -403,25 +401,25 @@ describe('contracts typecheck', () => {
       voices: [cloneRow],
     };
     expect(clones.voices[0]?.voice_id).toBe('chatterbox:u1');
-    // @ts-expect-error -- the cloned row keeps its snake_case `voice_id`
+    // @ts-expect-error
     expect(clones.voices[0]?.voiceId).toBeUndefined();
     const detail: GetClonedVoiceResponse = {
       success: true,
       voice: cloneRow,
     };
     expect(detail.voice.id).toBe('clone-1');
-    // @ts-expect-error -- the get response carries `voice`, not `body`
+    // @ts-expect-error
     expect(detail.body).toBeUndefined();
     const body: CreateClonedVoiceBody = { consent: 'true', denoise: 'false', language: 'en' };
     expect(body.consent).toBe('true');
-    // @ts-expect-error -- the form body takes the string literal 'true', not a boolean
+    // @ts-expect-error
     const wrongBody: CreateClonedVoiceBody = { consent: true, denoise: 'false', language: 'en' };
     expect(typeof wrongBody).toBe('object');
     const created: CreateClonedVoiceResponse = { success: true, voice: cloneRow };
     expect(created.voice.id).toBe('clone-1');
     const deleted: DeleteClonedVoiceResponse = { success: true };
     expect(deleted.success).toBe(true);
-    // @ts-expect-error -- the delete response has no `voice` field
+    // @ts-expect-error
     expect(deleted.voice).toBeUndefined();
   });
 
@@ -442,35 +440,35 @@ describe('contracts typecheck', () => {
     };
     expect(list.personas[0]?.createdAt).toBe('2026-01-01T00:00:00Z');
     expect(list.personas[0]?.boundAccounts.youtube).toEqual(['acct-1']);
-    // @ts-expect-error -- the list item field is `createdAt`, not `created_at`
+    // @ts-expect-error
     expect(list.personas[0]?.created_at).toBeUndefined();
-    // @ts-expect-error -- the list response carries `authenticated`, not `success`
+    // @ts-expect-error
     expect(list.success).toBeUndefined();
     const faces: ListFacesResponse = {
       faces: [{ id: 'f1', url: 'https://example.test/f1.png', name: 'Ava', gender: 'female', age: 30, ethnicity: 'asian', hair: 'black', description: 'Smiling.' }],
     };
     expect(faces.faces[0]?.url).toBe('https://example.test/f1.png');
-    // @ts-expect-error -- the face row field is `url`, not `path`
+    // @ts-expect-error
     expect(faces.faces[0]?.path).toBeUndefined();
     const images: ListPersonaImagesResponse = {
       success: true,
       images: [{ id: 'img-1', tag: 'casual', description: 'Smiling.', is_primary: false, created_at: '2026-01-01T00:00:00Z', image_url: 'https://example.test/signed' }],
     };
     expect(images.images[0]?.is_primary).toBe(false);
-    // @ts-expect-error -- the library row keeps its snake_case `created_at`
+    // @ts-expect-error
     expect(images.images[0]?.createdAt).toBeUndefined();
     const created: CreatePersonaResponse = { success: true, personaId: 'p1', imageIds: ['img-1'] };
     expect(created.imageIds).toEqual(['img-1']);
-    // @ts-expect-error -- the create response field is `imageIds`, not `image_ids`
+    // @ts-expect-error
     expect(created.image_ids).toBeUndefined();
     const body: CreatePersonaBody = { name: 'Ava', paragraphNumber: '3', imagePrimaryIndex: '0' };
     expect(body.paragraphNumber).toBe('3');
-    // @ts-expect-error -- the create body takes the digit string, not a number
+    // @ts-expect-error
     const wrongBody: CreatePersonaBody = { name: 'Ava', imagePrimaryIndex: 0 };
     expect(typeof wrongBody).toBe('object');
     const updated: UpdatePersonaResponse = { success: true };
     expect(updated.success).toBe(true);
-    // @ts-expect-error -- the update response carries only `success`
+    // @ts-expect-error
     expect(updated.personaId).toBeUndefined();
     const deleted: DeletePersonaResponse = { success: true };
     expect(deleted.success).toBe(true);
@@ -484,11 +482,11 @@ describe('contracts typecheck', () => {
     };
     expect(preview.counts.schedules).toBe(1);
     expect(preview.videos[0]?.taskId).toBe('task-1');
-    // @ts-expect-error -- the delete-preview flag is `videosTruncated`, not `truncated`
+    // @ts-expect-error
     expect(preview.truncated).toBeUndefined();
     const addBody: AddPersonaImageBody = { personaId: 'p1', isPrimary: 'true' };
     expect(addBody.isPrimary).toBe('true');
-    // @ts-expect-error -- the add-image form field takes the string literal 'true', not a boolean
+    // @ts-expect-error
     const wrongAddBody: AddPersonaImageBody = { personaId: 'p1', isPrimary: true };
     expect(typeof wrongAddBody).toBe('object');
     const added: AddPersonaImageResponse = {
@@ -496,7 +494,7 @@ describe('contracts typecheck', () => {
       image: { id: 'img-1', tag: 'casual', description: 'Smiling.', is_primary: false, created_at: '2026-01-01T00:00:00Z' },
     };
     expect(added.image.id).toBe('img-1');
-    // @ts-expect-error -- the mutation row has no `image_path` field
+    // @ts-expect-error
     expect(added.image.image_path).toBeUndefined();
     const updateBody: UpdatePersonaBody = { ctaType: 'comment', ctaUrl: 'https://example.com/x' };
     expect(updateBody.ctaType).toBe('comment');
@@ -517,7 +515,7 @@ describe('contracts typecheck', () => {
       options: { videoType: 'hook_lipsync' },
     };
     expect(body.publishing.providers).toEqual(['youtube']);
-    // @ts-expect-error -- the generate body field is `publishing.providers`, not `publishing.provider`
+    // @ts-expect-error
     expect(body.publishing.provider).toBeUndefined();
     const generated: GenerateAndScheduleResponse = {
       success: true,
@@ -534,13 +532,13 @@ describe('contracts typecheck', () => {
       schedule: { id: 'sch-1', mode: 'scheduled' },
       slots: [{ slotId: 'slot-1', slotAt: '2026-10-05T20:00:00Z', title: 'Launch', taskId: 'task-1', status: 'scheduled' }],
       replayed: false,
-      // @ts-expect-error -- the generate warnings are objects, not strings
+      // @ts-expect-error
       warnings: ['voice_fallback_applied'],
     };
     expect(typeof wrongWarnings).toBe('object');
-    // @ts-expect-error -- the slot field is `taskId`, not `task_id`
+    // @ts-expect-error
     expect(generated.slots[0]?.task_id).toBeUndefined();
-    // @ts-expect-error -- the response flag is `replayed`, not `isReplay`
+    // @ts-expect-error
     expect(generated.isReplay).toBeUndefined();
     const validated: ValidateScriptResponse = {
       success: true, valid: true, segmentCount: 1, totalWords: 3, hookWords: 3, contentWords: 0, mediaCount: 0,
@@ -549,7 +547,7 @@ describe('contracts typecheck', () => {
     };
     expect(validated.hookWindowSeconds.min).toBe(8);
     expect(validated.measured).toBe('pending');
-    // @ts-expect-error -- the validate response field is `hookWindowSeconds`, not `hookWindow`
+    // @ts-expect-error
     expect(validated.hookWindow).toBeUndefined();
     const scored: ScoreDraftResponse = {
       success: true, score: 100, reasons: [],
@@ -558,11 +556,11 @@ describe('contracts typecheck', () => {
       publishCheck: { network: 'linkedin', ok: true, failures: [], warnings: [] },
     };
     expect(scored.counts.topThemeMatch).toBe('Porto mornings');
-    // @ts-expect-error -- the score response field is `publishCheck`, not `check`
+    // @ts-expect-error
     expect(scored.check).toBeUndefined();
     const batchBody: BatchDiscountBody = { batchKey: 'batch-1', scheduleIds: ['11111111-2222-4333-8444-555555555555'] };
     expect(batchBody.batchKey).toBe('batch-1');
-    // @ts-expect-error -- the batch body field is `scheduleIds`, not `schedule_ids`
+    // @ts-expect-error
     expect(batchBody.schedule_ids).toBeUndefined();
     const batch: BatchDiscountResponse = {
       success: true, batchId: 'batch-1', videos: 6, faceVideos: 6, earnedFreeVideos: 1,
@@ -570,22 +568,22 @@ describe('contracts typecheck', () => {
       discountTokens: 8, chargedTokens: 40, warnings: [],
     };
     expect(batch.freeVideos[0]?.slotId).toBe('slot-1');
-    // @ts-expect-error -- the free-video field is `slotId`, not `id`
+    // @ts-expect-error
     expect(batch.freeVideos[0]?.id).toBeUndefined();
     const minted: MintVideoUploadResponse = {
       success: true, uploadId: 'up-1', signedUrl: 'https://storage.test/upload', token: 'tok',
       storagePath: 'user-1/direct-uploads/up-1.mp4', expiresAt: '2026-11-12T00:15:00.000Z', maxBytes: 8,
     };
     expect(minted.storagePath).toBe('user-1/direct-uploads/up-1.mp4');
-    // @ts-expect-error -- the mint response field is `uploadId`, not `id`
+    // @ts-expect-error
     expect(minted.id).toBeUndefined();
     const completed: CompleteVideoUploadResponse = { success: true, uploadId: 'up-1', status: 'ready', contentType: 'video/mp4', sizeBytes: 8 };
     expect(completed.status).toBe('ready');
-    // @ts-expect-error -- the complete response field is `status`, not `state`
+    // @ts-expect-error
     expect(completed.state).toBeUndefined();
     const publishBody: PublishByIdBody = { uploadId: '11111111-2222-4333-8444-555555555555', provider: 'instagram', accountIds: ['ig-1'] };
     expect(publishBody.uploadId).toBe('11111111-2222-4333-8444-555555555555');
-    // @ts-expect-error -- the publish body field is `uploadId`, not `id`
+    // @ts-expect-error
     const wrongPublish: PublishByIdBody = { id: 'up-1', provider: 'instagram', accountIds: ['ig-1'] };
     expect(typeof wrongPublish).toBe('object');
   });

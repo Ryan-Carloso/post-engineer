@@ -105,7 +105,7 @@ def lookup_account_names(
             ):
                 names[(provider, account)] = name.strip()
         return names
-    except Exception as exc:  # noqa: BLE001 — a name lookup must not fail the email
+    except Exception as exc:  # noqa: BLE001
         logger.warning(f"owner alert account lookup failed: {type(exc).__name__}")
         return {}
     finally:
@@ -143,7 +143,7 @@ def lookup_persona_name(session: Any, schedule_id: str) -> str | None:
         if not isinstance(name, str) or not name.strip():
             return None
         return name.strip()
-    except Exception as exc:  # noqa: BLE001 — a name lookup must not fail the email
+    except Exception as exc:  # noqa: BLE001
         logger.warning(f"owner alert persona lookup failed: {type(exc).__name__}")
         return None
     finally:

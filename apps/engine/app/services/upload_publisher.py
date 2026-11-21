@@ -42,21 +42,21 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from app.services.caption_text import (  # noqa: F401 - re-exported for callers
+from app.services.caption_text import (  # noqa: F401
     BLUESKY_CAPTION_MAX_GRAPHEMES, count_graphemes, truncate_bluesky_caption,
 )
-from app.services.publish_facebook import (  # noqa: F401 - re-exported for callers
+from app.services.publish_facebook import (  # noqa: F401
     FACEBOOK_CAPTION_MAX_LENGTH, FACEBOOK_PROVIDER, FacebookMetadata,
     facebook_fields, validate_facebook_metadata,
 )
-from app.services.publish_pinterest import PINTEREST_DESCRIPTION_MAX_LENGTH, PINTEREST_PROVIDER, PINTEREST_TITLE_MAX_LENGTH, PinterestMetadata, pinterest_fields  # noqa: F401 - re-exported for callers
-from app.services.publish_fanvue import FANVUE_DESCRIPTION_MAX_LENGTH, FANVUE_PROVIDER, FANVUE_TITLE_MAX_LENGTH, FanvueMetadata, fanvue_fields  # noqa: F401 - re-exported for callers
-from app.services.publish_telegram import TELEGRAM_CAPTION_MAX_LENGTH, TELEGRAM_PROVIDER, TelegramMetadata, telegram_fields  # noqa: F401 - re-exported for callers
-from app.services.publish_threespeak import (  # noqa: F401 - re-exported for callers
+from app.services.publish_pinterest import PINTEREST_DESCRIPTION_MAX_LENGTH, PINTEREST_PROVIDER, PINTEREST_TITLE_MAX_LENGTH, PinterestMetadata, pinterest_fields  # noqa: F401
+from app.services.publish_fanvue import FANVUE_DESCRIPTION_MAX_LENGTH, FANVUE_PROVIDER, FANVUE_TITLE_MAX_LENGTH, FanvueMetadata, fanvue_fields  # noqa: F401
+from app.services.publish_telegram import TELEGRAM_CAPTION_MAX_LENGTH, TELEGRAM_PROVIDER, TelegramMetadata, telegram_fields  # noqa: F401
+from app.services.publish_threespeak import (  # noqa: F401
     THREESPEAK_PROVIDER, ThreespeakMetadata,
     threespeak_fields, validate_threespeak_metadata,
 )
-from app.services.publish_rumble import RUMBLE_PROVIDER, RUMBLE_TITLE_MAX_LENGTH, RumbleMetadata, rumble_fields, validate_rumble_metadata  # noqa: F401 - re-exported for callers
+from app.services.publish_rumble import RUMBLE_PROVIDER, RUMBLE_TITLE_MAX_LENGTH, RumbleMetadata, rumble_fields, validate_rumble_metadata  # noqa: F401
 from app.services.upload_publisher_failure import application_failure_reason
 from app.providers import SOCIAL_PROVIDERS, URL_MEDIA_PROVIDERS
 

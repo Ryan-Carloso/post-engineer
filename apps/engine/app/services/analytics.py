@@ -204,7 +204,7 @@ def _get_client() -> Any:
         host = os.environ.get("POSTHOG_HOST", DEFAULT_POSTHOG_HOST)
         _client = Posthog(api_key, host=host)
         return _client
-    except Exception as exc:  # noqa: BLE001 - telemetry must never break
+    except Exception as exc:  # noqa: BLE001
         if not _warned:
             _warned = True
             logger.warning("PostHog init failed — engine analytics disabled: %s", exc)
@@ -266,7 +266,7 @@ def track_event(
         )
         if immediate:
             client.flush()
-    except Exception:  # noqa: BLE001 - telemetry must never break
+    except Exception:  # noqa: BLE001
         pass
 
 
@@ -368,7 +368,7 @@ def track_ai_generation(props: dict[str, Any]) -> None:
             event="$ai_generation",
             properties=generation,
         )
-    except Exception:  # noqa: BLE001 - telemetry must never break
+    except Exception:  # noqa: BLE001
         pass
 
 

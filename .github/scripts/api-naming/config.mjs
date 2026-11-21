@@ -2,7 +2,7 @@ import fs from 'node:fs';
 
 /**
  * @param {string} raw
- * @returns {string} line with comments stripped (respects quotes)
+ * @returns {string}
  */
 function stripComment(raw) {
   let inSingle = false;
@@ -53,7 +53,6 @@ function parseScalar(value) {
 }
 
 /**
- * Split `key: value` on the first colon. Returns [key, rest].
  * @param {string} text
  * @returns {[string, string]}
  */
@@ -64,7 +63,6 @@ function splitKeyValue(text) {
 }
 
 /**
- * Parse the restricted YAML subset into plain JS values.
  * @param {string} text
  * @returns {Record<string, unknown>}
  */
@@ -139,10 +137,6 @@ function isRecord(v) {
 }
 
 /**
- * Load and validate the versioned api-naming.yml config.
- *
- * The config surface is closed: unknown top-level keys are rejected so the
- * exceptions mechanism cannot be reintroduced through the config file.
  * @param {string} filePath
  * @returns {{
  *   apiPaths: string[],

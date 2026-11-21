@@ -62,11 +62,11 @@ describe('contracts typecheck', () => {
   it('rejects an unknown body field and an unknown response field at compile time', () => {
     const client = { request: vi.fn(), getHeaders: () => ({}) } as unknown as PostEngineerClient;
     const run = (): void => {
-      // @ts-expect-error -- the create body field is `name`, not `nome`
+      // @ts-expect-error
       void createExperiment(client, { nome: 'x', variable: 'hook', targetPairs: 6, variants: [] });
     };
     const read = (result: CreateResult): unknown => {
-      // @ts-expect-error -- the response experiment field is `name`, not `nome`
+      // @ts-expect-error
       return result.experiment.nome;
     };
     expect(typeof run).toBe('function');
@@ -76,11 +76,11 @@ describe('contracts typecheck', () => {
 
   it('rejects unknown prompt fields at compile time', () => {
     const list = (result: ListPromptsResult): unknown => {
-      // @ts-expect-error -- the list item field is `title`, not `name`
+      // @ts-expect-error
       return result[0]?.name;
     };
     const detail = (result: GetPromptResult): unknown => {
-      // @ts-expect-error -- the detail field is `prompt`, not `text`
+      // @ts-expect-error
       return result.text;
     };
     expect(typeof list).toBe('function');
@@ -89,11 +89,11 @@ describe('contracts typecheck', () => {
 
   it('rejects unknown billing fields at compile time', () => {
     const balance = (result: TokenBalanceResult): unknown => {
-      // @ts-expect-error -- the balance field is `balance`, not `total`
+      // @ts-expect-error
       return result.total;
     };
     const ledger = (result: TokenTransactionsResult): unknown => {
-      // @ts-expect-error -- the transaction field is `generationId`, not `generation_id`
+      // @ts-expect-error
       return result.transactions[0]?.generation_id;
     };
     expect(typeof balance).toBe('function');
@@ -103,7 +103,7 @@ describe('contracts typecheck', () => {
   it('rejects unknown post detail fields at compile time', () => {
     const detail = (result: GetPostResult): unknown => {
       if (result.kind !== 'generation') return undefined;
-      // @ts-expect-error -- the generation field is `videoSubject`, not `subject`
+      // @ts-expect-error
       return result.generation.subject;
     };
     expect(typeof detail).toBe('function');
@@ -111,11 +111,11 @@ describe('contracts typecheck', () => {
 
   it('rejects unknown metrics fields at compile time', () => {
     const row = (result: PostMetricsResult): unknown => {
-      // @ts-expect-error -- the row field is `postId`, not `post_id`
+      // @ts-expect-error
       return result.rows[0]?.post_id;
     };
     const curve = (result: RetentionCurveResult): unknown => {
-      // @ts-expect-error -- the point field is `audienceWatchRatio`, not `watchRatio`
+      // @ts-expect-error
       return result.points[0]?.watchRatio;
     };
     expect(typeof row).toBe('function');
@@ -124,19 +124,19 @@ describe('contracts typecheck', () => {
 
   it('rejects unknown media fields at compile time', () => {
     const upload = (result: UploadMediaResult): unknown => {
-      // @ts-expect-error -- the result field is `mediaId`, not `media_id`
+      // @ts-expect-error
       return result.media_id;
     };
     const check = (result: CheckMediaResult): unknown => {
-      // @ts-expect-error -- the result field is `code`, not `status`
+      // @ts-expect-error
       return result.status;
     };
     const checkFace = (result: CheckMediaResult): unknown => {
-      // @ts-expect-error -- the check response field is `has_face`, not `hasFace`
+      // @ts-expect-error
       return result.hasFace;
     };
     const direct = (result: DirectPublishResult): unknown => {
-      // @ts-expect-error -- the account field is `accountId`, not `account_id`
+      // @ts-expect-error
       return result.results[0]?.account_id;
     };
     expect(typeof upload).toBe('function');
@@ -147,15 +147,15 @@ describe('contracts typecheck', () => {
 
   it('rejects unknown accounts fields at compile time', () => {
     const list = (result: ListAccountsResult): unknown => {
-      // @ts-expect-error -- the account field is `channelId`, not `channel_id`
+      // @ts-expect-error
       return result.accounts[0]?.channel_id;
     };
     const connectUrl = (result: ConnectUrlResult): unknown => {
-      // @ts-expect-error -- the connect field is `auth_url`, not `authUrl`
+      // @ts-expect-error
       return result.authUrl;
     };
     const publishing = (result: PublishingAccountsResult): unknown => {
-      // @ts-expect-error -- the defaults field is `youtube`, not `youtube_id`
+      // @ts-expect-error
       return result.defaults.youtube_id;
     };
     expect(typeof list).toBe('function');
@@ -165,23 +165,23 @@ describe('contracts typecheck', () => {
 
   it('rejects unknown schedule fields at compile time', () => {
     const schedules = (result: ListSchedulesResult): unknown => {
-      // @ts-expect-error -- the schedule row keeps its snake_case `persona_id`
+      // @ts-expect-error
       return result.schedules[0]?.personaId;
     };
     const posts = (result: ListPostsResult): unknown => {
-      // @ts-expect-error -- the status slot keeps its snake_case `slot_at`
+      // @ts-expect-error
       return result.upcoming[0]?.slotAt;
     };
     const cancel = (result: CancelScheduleResult): unknown => {
-      // @ts-expect-error -- the cancel field is `cancelledSlotIds`, not `cancelled_slot_ids`
+      // @ts-expect-error
       return result.cancelled_slot_ids;
     };
     const slot = (result: GetSlotResult): unknown => {
-      // @ts-expect-error -- the slot field is `scheduleId`, not `schedule_id`
+      // @ts-expect-error
       return result.slot.schedule_id;
     };
     const update = (result: UpdateSlotResult): unknown => {
-      // @ts-expect-error -- the update field is `slotAt`, not `slot_at`
+      // @ts-expect-error
       return result.slot_at;
     };
     expect(typeof schedules).toBe('function');
@@ -193,23 +193,23 @@ describe('contracts typecheck', () => {
 
   it('rejects unknown video-tasks fields at compile time', () => {
     const list = (result: ListVideoGenerationsResult): unknown => {
-      // @ts-expect-error -- the generation row field is `generationId`, not `generation_id`
+      // @ts-expect-error
       return result.generations[0]?.generation_id;
     };
     const detail = (result: GetVideoGenerationResult): unknown => {
-      // @ts-expect-error -- the generation row field is `engineTaskId`, not `engine_task_id`
+      // @ts-expect-error
       return result.generation.engine_task_id;
     };
     const status = (result: GetVideoStatusResult): unknown => {
-      // @ts-expect-error -- the task body keeps its snake_case `task_id`
+      // @ts-expect-error
       return result.body.taskId;
     };
     const statusEnvelope = (result: GetVideoStatusResult): unknown => {
-      // @ts-expect-error -- the engine envelope carries `status`, not `success`
+      // @ts-expect-error
       return result.success;
     };
     const cancel = (result: CancelVideoTaskResult): unknown => {
-      // @ts-expect-error -- the delete response has no `deleted` flag
+      // @ts-expect-error
       return result.deleted;
     };
     expect(typeof list).toBe('function');
@@ -221,27 +221,27 @@ describe('contracts typecheck', () => {
 
   it('rejects unknown voices fields at compile time', () => {
     const list = (result: ListVoicesResult): unknown => {
-      // @ts-expect-error -- the voice row field is `kind`, not `type`
+      // @ts-expect-error
       return result.voices[0]?.type;
     };
     const listId = (result: ListVoicesResult): unknown => {
-      // @ts-expect-error -- the voice row field is `id`, not `voiceId`
+      // @ts-expect-error
       return result.voices[0]?.voiceId;
     };
     const clones = (result: ListClonedVoicesResult): unknown => {
-      // @ts-expect-error -- the cloned row keeps its snake_case `voice_id`
+      // @ts-expect-error
       return result.voices[0]?.voiceId;
     };
     const detail = (result: GetClonedVoiceResult): unknown => {
-      // @ts-expect-error -- the create/get response carries `voice`, not `body`
+      // @ts-expect-error
       return result.body;
     };
     const created = (result: CreateClonedVoiceResult): unknown => {
-      // @ts-expect-error -- the create response carries `voice`, not `body`
+      // @ts-expect-error
       return result.body;
     };
     const deleted = (result: DeleteClonedVoiceResult): unknown => {
-      // @ts-expect-error -- the delete response has no `voice` field
+      // @ts-expect-error
       return result.voice;
     };
     expect(typeof list).toBe('function');
@@ -254,51 +254,51 @@ describe('contracts typecheck', () => {
 
   it('rejects unknown personas fields at compile time', () => {
     const list = (result: ListPersonasResult): unknown => {
-      // @ts-expect-error -- the list item field is `createdAt`, not `created_at`
+      // @ts-expect-error
       return result.personas[0]?.created_at;
     };
     const listAccounts = (result: ListPersonasResult): unknown => {
-      // @ts-expect-error -- the list item field is `boundAccounts`, not `accounts`
+      // @ts-expect-error
       return result.personas[0]?.accounts;
     };
     const faces = (result: ListFacesResult): unknown => {
-      // @ts-expect-error -- the face row field is `url`, not `path`
+      // @ts-expect-error
       return result.faces[0]?.path;
     };
     const images = (result: ListPersonaImagesResult): unknown => {
-      // @ts-expect-error -- the library row keeps its snake_case `is_primary`
+      // @ts-expect-error
       return result.images[0]?.isPrimary;
     };
     const imagesCreated = (result: ListPersonaImagesResult): unknown => {
-      // @ts-expect-error -- the library row keeps its snake_case `created_at`
+      // @ts-expect-error
       return result.images[0]?.createdAt;
     };
     const created = (result: CreatePersonaResult): unknown => {
-      // @ts-expect-error -- the create response field is `imageIds`, not `image_ids`
+      // @ts-expect-error
       return result.image_ids;
     };
     const updated = (result: UpdatePersonaResult): unknown => {
-      // @ts-expect-error -- the update response carries only `success`
+      // @ts-expect-error
       return result.personaId;
     };
     const deleted = (result: DeletePersonaResult): unknown => {
-      // @ts-expect-error -- the delete response carries only `success`
+      // @ts-expect-error
       return result.personaId;
     };
     const preview = (result: GetPersonaDeletePreviewResult): unknown => {
-      // @ts-expect-error -- the delete-preview flag is `videosTruncated`, not `truncated`
+      // @ts-expect-error
       return result.truncated;
     };
     const added = (result: AddPersonaImageResult): unknown => {
-      // @ts-expect-error -- the mutation row has no `image_path` field
+      // @ts-expect-error
       return result.image.image_path;
     };
     const updatedImage = (result: UpdatePersonaImageResult): unknown => {
-      // @ts-expect-error -- the mutation row has no `image_url` field
+      // @ts-expect-error
       return result.image?.image_url;
     };
     const deletedImage = (result: DeletePersonaImageResult): unknown => {
-      // @ts-expect-error -- the delete-image response carries only `success`
+      // @ts-expect-error
       return result.image;
     };
     expect(typeof list).toBe('function');
@@ -318,55 +318,55 @@ describe('contracts typecheck', () => {
   it('rejects unknown videos fields at compile time', () => {
     const client = { request: vi.fn(), getHeaders: () => ({}) } as unknown as PostEngineerClient;
     const run = (): void => {
-      // @ts-expect-error -- the generate input takes flat `providers`, not a nested `publishing` object
+      // @ts-expect-error
       void client.generatePersonaVideo({ publishing: { providers: ['youtube'] } });
     };
     const schedule = (result: GenerateAndScheduleResult): unknown => {
-      // @ts-expect-error -- the response schedule field is `id`, not `scheduleId`
+      // @ts-expect-error
       return result.schedule.scheduleId;
     };
     const slot = (result: GenerateAndScheduleResult): unknown => {
-      // @ts-expect-error -- the slot field is `taskId`, not `task_id`
+      // @ts-expect-error
       return result.slots[0]?.task_id;
     };
     const replayed = (result: GenerateAndScheduleResult): unknown => {
-      // @ts-expect-error -- the response flag is `replayed`, not `isReplay`
+      // @ts-expect-error
       return result.isReplay;
     };
     const validate = (result: ValidateScriptResult): unknown => {
-      // @ts-expect-error -- the validate response field is `hookWindowSeconds`, not `hookWindow`
+      // @ts-expect-error
       return result.hookWindow;
     };
     const measured = (result: ValidateScriptResult): unknown => {
-      // @ts-expect-error -- the validate response field is `measured`, not `status`
+      // @ts-expect-error
       return result.status;
     };
     const score = (result: ScoreDraftResult): unknown => {
-      // @ts-expect-error -- the counts field is `topThemeMatch`, not `theme`
+      // @ts-expect-error
       return result.counts.theme;
     };
     const check = (result: ScoreDraftResult): unknown => {
-      // @ts-expect-error -- the score response field is `publishCheck`, not `check`
+      // @ts-expect-error
       return result.check;
     };
     const free = (result: BatchDiscountResult): unknown => {
-      // @ts-expect-error -- the free-video field is `slotId`, not `id`
+      // @ts-expect-error
       return result.freeVideos[0]?.id;
     };
     const minted = (result: MintVideoUploadResult): unknown => {
-      // @ts-expect-error -- the client drops `storagePath`; the mint response keeps it server-side only
+      // @ts-expect-error
       return result.storagePath;
     };
     const completed = (result: CompleteVideoUploadResult): unknown => {
-      // @ts-expect-error -- the complete response field is `status`, not `state`
+      // @ts-expect-error
       return result.state;
     };
     const published = (result: PublishUploadedResult): unknown => {
-      // @ts-expect-error -- the publish-by-id response field is `successCount`, not `count`
+      // @ts-expect-error
       return result.count;
     };
     const warnings = (result: GenerateAndScheduleResult): unknown => {
-      // @ts-expect-error -- the generate warnings are objects, not strings
+      // @ts-expect-error
       return result.warnings?.[0]?.toUpperCase();
     };
     expect(typeof run).toBe('function');

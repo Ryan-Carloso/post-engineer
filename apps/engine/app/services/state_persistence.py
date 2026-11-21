@@ -51,7 +51,7 @@ def persist_state_update(backend: "BaseState", task_id: str, **kwargs: object) -
         try:
             backend.update_task(task_id, **kwargs)
             return True
-        except Exception as exc:  # noqa: BLE001 - retried until the window closes
+        except Exception as exc:  # noqa: BLE001
             last_error = exc
             logger.warning(f"task state write failed for {task_id} (attempt {attempts}): {exc}")
     logger.error(

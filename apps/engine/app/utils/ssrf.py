@@ -252,7 +252,7 @@ def _send_pinned(method: str, url: str, ip: str, **kwargs):
     session.mount("http://", adapter)
     session.mount("https://", adapter)
     try:
-        # codeql[py/full-ssrf]: guarded — dials only the IP just validated
+        # codeql[py/full-ssrf]
         response = session.request(method, url, allow_redirects=False, **kwargs)
     except Exception:
         session.close()
@@ -346,10 +346,10 @@ def download_public_file(
                 current_url = urljoin(current_url, location)
                 continue
             break
-        else:  # pragma: no cover - loop always breaks or raises
+        else:  # pragma: no cover
             raise UnsafeUrlError(f"{what} redirected too many times.")
 
-        if response is None:  # pragma: no cover - defensive
+        if response is None:  # pragma: no cover
             raise UnsafeUrlError(f"{what} could not be downloaded.")
         if response.status_code >= 300:
             raise UnsafeUrlError(

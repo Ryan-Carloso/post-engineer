@@ -10,6 +10,7 @@ export default [
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
       ],
       '@typescript-eslint/no-explicit-any': 'error',
+      '@typescript-eslint/ban-ts-comment': ['error', { 'ts-expect-error': false }],
     },
   },
 ];

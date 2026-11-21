@@ -8,7 +8,7 @@ from app.config import config
 from app.utils.ssrf import UnsafeUrlError, assert_public_url
 from app.models import publish as publish_models
 from app.models.cta import CtaType
-from app.models.segments import ScriptSegment, SegmentMedia, SegmentOverlay  # noqa: F401 — re-exported for existing import sites
+from app.models.segments import ScriptSegment, SegmentMedia, SegmentOverlay  # noqa: F401
 
 warnings.filterwarnings(
     "ignore",

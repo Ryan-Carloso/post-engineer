@@ -1,7 +1,4 @@
-// @vitest-environment node: getPostHogServer() returns null in browsers
-/**
- * @vitest-environment node
- */
+// @vitest-environment node
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { __resetPostHogServerForTests } from '@/lib/posthog-server';

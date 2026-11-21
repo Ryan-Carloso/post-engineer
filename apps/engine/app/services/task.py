@@ -7,7 +7,7 @@ from threading import Lock
 
 from loguru import logger
 
-from app.config import config  # noqa: F401 - re-exported for tests (tm.config)
+from app.config import config  # noqa: F401
 from app.models import const
 from app.models.schema import VideoConcatMode, VideoParams
 from app.services import (
@@ -26,7 +26,7 @@ from app.services import (
 )
 from app.services import state as sm
 from app.services import image_coverage, task_webhook, user_media
-from app.services.lipsync_active import lip_sync_cap_seconds, persona_lipsync_active  # noqa: F401 - re-exported for existing callers
+from app.services.lipsync_active import lip_sync_cap_seconds, persona_lipsync_active  # noqa: F401
 from app.services import full_lipsync
 from app.services.music_mood import resolve_music_mood
 from app.services.task_cleanup import _first_http_url, abort_if_cancelled
@@ -37,8 +37,8 @@ from app.services.longcat_cost import ModalJobCost
 from app.services.persona_hook import (
     PERSONA_HOOK_MAX_SECONDS,
     PERSONA_HOOK_MIN_SECONDS,
-    PERSONA_HOOK_TARGET_WORDS_MAX,  # noqa: F401 - pinned by tests
-    PERSONA_HOOK_TARGET_WORDS_MIN,  # noqa: F401 - pinned by tests
+    PERSONA_HOOK_TARGET_WORDS_MAX,  # noqa: F401
+    PERSONA_HOOK_TARGET_WORDS_MIN,  # noqa: F401
     _find_hook_end_seconds,
     _limit_generated_script,
 )
@@ -173,7 +173,7 @@ def _task_already_failed(task_id: str) -> bool:
     """
     try:
         task = sm.state.get_task(task_id)
-    except Exception:  # noqa: BLE001 — a failed read must not hide the failure
+    except Exception:  # noqa: BLE001
         return False
     return bool(task) and task.get("state") == const.TASK_STATE_FAILED
 
@@ -199,7 +199,7 @@ def _task_tracking_context(task_id: str) -> dict[str, object]:
     """
     try:
         task = sm.state.get_task(task_id) or {}
-    except Exception:  # noqa: BLE001 — tracking degrades, the pipeline continues
+    except Exception:  # noqa: BLE001
         task = {}
     context: dict[str, object] = {
         "task_id": task_id,

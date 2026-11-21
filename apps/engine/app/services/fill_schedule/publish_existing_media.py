@@ -108,7 +108,7 @@ def claimed_upload_cleanup(store: Any, slot: dict[str, Any], resumed: bool) -> M
         return None
     try:
         row = store.get_video_upload(str(slot.get("media_ref")))
-    except Exception as exc:  # noqa: BLE001 - best-effort cleanup
+    except Exception as exc:  # noqa: BLE001
         logger.warning(
             f"fill_schedule: slot {slot['id']} claimed-upload lookup failed, "
             f"leaving the bytes in place: {scrub_error_text(str(exc), max_chars=200)}"
@@ -200,7 +200,7 @@ def resolve_existing_media(
             return None
         try:
             video_bytes = store.download_storage_object("videos", storage_path)
-        except Exception as exc:  # noqa: BLE001 - transient: retry next tick
+        except Exception as exc:  # noqa: BLE001
             if _is_not_found(exc):
                 fail_permanently(
                     "scheduled video upload file is gone",
@@ -249,7 +249,7 @@ def resolve_existing_media(
         extension = "png" if content_type == "image/png" else "jpg"
         try:
             image_bytes = store.download_storage_object("uploads", str(slot["media_ref"]))
-        except Exception as exc:  # noqa: BLE001 - transient: retry next tick
+        except Exception as exc:  # noqa: BLE001
             if _is_not_found(exc):
                 fail_permanently(
                     "scheduled image file is gone",

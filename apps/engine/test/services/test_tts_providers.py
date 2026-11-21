@@ -72,7 +72,7 @@ def _edge_tts_import_or_use() -> list[str]:
         source = path.read_text(encoding="utf-8")
         try:
             tokens = list(tokenize.generate_tokens(io.StringIO(source).readline))
-        except tokenize.TokenError as exc:  # pragma: no cover - defensive
+        except tokenize.TokenError as exc:  # pragma: no cover
             offenders.append(f"{path.name}: unparseable ({exc})")
             continue
 

@@ -237,5 +237,5 @@ def track_refund_issued(
                 "engine_task_id": engine_task_id,
             },
         )
-    except Exception:  # noqa: BLE001 - telemetry must never break the tick
+    except Exception:  # noqa: BLE001
         logger.warning("fill_schedule: refund_issued telemetry failed")

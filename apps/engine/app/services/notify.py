@@ -122,7 +122,7 @@ def send_discord(message: str, post: PostFn | None = None) -> bool:
         response = (post or _default_post)(url, {"content": message})
         response.raise_for_status()
         return True
-    except Exception as exc:  # noqa: BLE001 — notifier never takes down the caller
+    except Exception as exc:  # noqa: BLE001
         logger.warning(f"discord notify failed: {type(exc).__name__}")
         return False
 

@@ -251,7 +251,7 @@ def send_owner_email(
         return
     try:
         _deliver(user_id, dedup_key, subject, html_body, text, session)
-    except Exception as exc:  # noqa: BLE001 — an email must not fail the tick
+    except Exception as exc:  # noqa: BLE001
         logger.warning(f"owner alert failed: {type(exc).__name__}")
 
 
@@ -448,7 +448,7 @@ def _email_direct_generation_failure(task_id: str, error: str, params: Any) -> N
 
     try:
         task = state_module.state.get_task(task_id) or {}
-    except Exception as exc:  # noqa: BLE001 — email must not hide the failure
+    except Exception as exc:  # noqa: BLE001
         logger.warning(f"owner alert task read failed: {type(exc).__name__}")
         return
     user_id = direct_task_email_user(task if isinstance(task, dict) else None)

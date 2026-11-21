@@ -6,7 +6,7 @@ import { WEB_SHARD_TOTAL } from './shard-tests.mjs';
 /**
  * @param {object} input
  * @param {{ shard: number, selected: number }[]} input.markers
- * @param {number[]} input.coverageShards shard numbers that uploaded cobertura
+ * @param {number[]} input.coverageShards
  * @param {number} input.total
  * @returns {{ ok: boolean, reason: string }}
  */

@@ -62,5 +62,5 @@ class PhaseTracker:
         self._completed = phase
         try:
             self._persist(phase)
-        except Exception:  # noqa: BLE001 — stage tracking must not break the pipeline
+        except Exception:  # noqa: BLE001
             logger.warning(f"could not persist stage for task {self._task_id}")

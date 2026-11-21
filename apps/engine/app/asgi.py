@@ -335,7 +335,7 @@ def shutdown_event():
         from app.services import engine_heartbeat
 
         engine_heartbeat.mark_clean_shutdown()
-    except Exception as exc:  # noqa: BLE001 - shutdown continues regardless
+    except Exception as exc:  # noqa: BLE001
         logger.warning(f"clean-shutdown stamp failed: {exc}")
 
 
@@ -356,18 +356,18 @@ def startup_event():
         from app.services import engine_heartbeat
 
         engine_heartbeat.start_heartbeat_after_autopsy(sm.state)
-    except Exception as exc:  # noqa: BLE001 - startup continues regardless
+    except Exception as exc:  # noqa: BLE001
         logger.warning(f"engine heartbeat/boot event failed: {exc}")
     start_fill_schedule_scheduler()
     try:
         from app.services.direct_redispatch import start_pending_direct_redispatches
 
         start_pending_direct_redispatches()
-    except Exception as exc:  # noqa: BLE001 - startup continues regardless
+    except Exception as exc:  # noqa: BLE001
         logger.warning(f"direct orphan redispatch failed: {exc}")
     try:
         from app.services.cloned_voices.service import reconcile_pending_registrations
 
         reconcile_pending_registrations()
-    except Exception as exc:  # noqa: BLE001 - startup continues regardless
+    except Exception as exc:  # noqa: BLE001
         logger.warning(f"cloned voice pending reconcile failed: {exc}")

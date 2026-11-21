@@ -69,7 +69,7 @@ def current_rss_mb() -> float | None:
         if sys.platform == "darwin":
             return ru_maxrss / 1024 / 1024
         return ru_maxrss / 1024
-    except Exception:  # noqa: BLE001 - diagnostics only
+    except Exception:  # noqa: BLE001
         return None
 
 
@@ -96,7 +96,7 @@ def current_vram_mb() -> float | None:
         )
         if completed.returncode == 0 and completed.stdout.strip():
             value = float(completed.stdout.strip().split()[0])
-    except Exception:  # noqa: BLE001 - GPU simply absent/unreachable
+    except Exception:  # noqa: BLE001
         value = None
     _vram_cache["at"] = now
     _vram_cache["value"] = value
@@ -209,7 +209,7 @@ def start_heartbeat_thread(interval_s: float = HEARTBEAT_INTERVAL_S) -> threadin
         while True:
             try:
                 write_beat()
-            except Exception as exc:  # noqa: BLE001 - keep beating
+            except Exception as exc:  # noqa: BLE001
                 logger.warning(f"engine heartbeat write failed: {exc}")
             if _heartbeat_stop.wait(interval_s):
                 return
@@ -249,7 +249,7 @@ def read_previous_beat() -> dict[str, Any] | None:
     """The previous process's heartbeat row, or None when unreadable."""
     try:
         return read_beat()
-    except Exception as exc:  # noqa: BLE001 - boot continues regardless
+    except Exception as exc:  # noqa: BLE001
         logger.warning(f"engine_boot: could not read heartbeat: {exc}")
         return None
 
@@ -279,7 +279,7 @@ def report_boot_event(task_state: Any, previous_beat: dict[str, Any] | None) -> 
             props["rss_last_heartbeat_mb"] = previous_beat.get("rss_mb")
             props["vram_last_heartbeat_mb"] = previous_beat.get("vram_mb")
         track_event("engine_boot", props)
-    except Exception as exc:  # noqa: BLE001 - diagnostics never break boot
+    except Exception as exc:  # noqa: BLE001
         logger.warning(f"engine_boot event failed: {exc}")
 
 

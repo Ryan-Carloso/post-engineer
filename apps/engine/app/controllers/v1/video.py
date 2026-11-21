@@ -319,7 +319,7 @@ def _generation_id_for_task(task_id: str) -> str | None:
             value = rows[0].get("generation_id")
             return value if isinstance(value, str) and value else None
         return None
-    except Exception:  # noqa: BLE001 — telemetry degrades, the 404 still goes out
+    except Exception:  # noqa: BLE001
         return None
 
 

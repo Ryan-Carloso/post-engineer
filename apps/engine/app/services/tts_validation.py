@@ -131,7 +131,7 @@ def validate_audio(script: str, audio_file: str) -> ValidationOutcome:
 
     try:
         transcript = transcribe_text(audio_file)
-    except Exception as exc:  # noqa: BLE001 - a crashing check must not crash TTS
+    except Exception as exc:  # noqa: BLE001
         logger.error(f"tts validation transcription crashed: {type(exc).__name__}")
         return ValidationOutcome(status="unavailable")
     if transcript is None:

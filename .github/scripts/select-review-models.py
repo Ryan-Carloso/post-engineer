@@ -388,7 +388,7 @@ def collect_available(
     discovery_failed = False
     try:
         available.update(discover_opencode(run_cli=run_cli))
-    except Exception as exc:  # noqa: BLE001 — discovery failure is a fallback path
+    except Exception as exc:  # noqa: BLE001
         log(f"OpenCode discovery failed: {exc}")
         discovery_failed = True
     if env.get("HAS_OPENROUTER_KEY") == "true":

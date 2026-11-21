@@ -257,7 +257,7 @@ class SupabaseTaskState(BaseState):
     def _raise_for_status(response: Any) -> None:
         try:
             response.raise_for_status()
-        except Exception as exc:  # noqa: BLE001 - translated below when 401
+        except Exception as exc:  # noqa: BLE001
             status = getattr(getattr(exc, "response", None), "status_code", None)
             if status == 401:
                 raise _SupabaseAuthError(
@@ -271,7 +271,7 @@ class SupabaseTaskState(BaseState):
     def _verify_table(self) -> None:
         try:
             self._request("GET", "select=task_id&limit=1")
-        except Exception as exc:  # noqa: BLE001 - inspected for 404 below
+        except Exception as exc:  # noqa: BLE001
             status = getattr(getattr(exc, "response", None), "status_code", None)
             if status == 404:
                 raise RuntimeError(
@@ -426,7 +426,7 @@ class SupabaseTaskState(BaseState):
             try:
                 if orphan_requeue.triage_orphan(self, task_id, data, slot_store):
                     continue
-            except Exception as exc:  # noqa: BLE001 - loud log, next boot retries
+            except Exception as exc:  # noqa: BLE001
                 logger.error(f"failed to triage orphaned task {task_id}: {exc}")
                 continue
             try:
@@ -442,7 +442,7 @@ class SupabaseTaskState(BaseState):
                     },
                 )
                 failed += 1
-            except Exception as exc:  # noqa: BLE001 - loud log, next boot retries
+            except Exception as exc:  # noqa: BLE001
                 logger.error(f"failed to reconcile orphaned task {task_id}: {exc}")
         return failed
 
@@ -490,7 +490,7 @@ class SupabaseTaskState(BaseState):
                     },
                 )
                 refunded = bool((rpc_response.json() or {}).get("refunded"))
-            except Exception as exc:  # noqa: BLE001 - recorded below; web poll retries
+            except Exception as exc:  # noqa: BLE001
                 logger.error(
                     f"refund RPC failed for generation {gen['generation_id']}: {exc}"
                 )

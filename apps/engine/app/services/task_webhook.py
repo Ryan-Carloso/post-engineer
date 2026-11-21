@@ -55,7 +55,7 @@ def _post(webhook_url: str, payload: dict, task_id: str) -> None:
             response.raise_for_status()
         finally:
             response.close()
-    except Exception as exc:  # noqa: BLE001 — delivery is best-effort by design
+    except Exception as exc:  # noqa: BLE001
         message = redact_known_url(str(exc), webhook_url)
         error = scrub_secret_values(message)[:500]
         logger.bind(task_id=task_id).error(

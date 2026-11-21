@@ -3,8 +3,7 @@ export const MIN_PROVIDERS = 3;
 /**
  * @param {{ file: string, line: number, kind: 'list'|'chain'|'map'|'text', providers: string[] }} group
  * @param {{ providers: readonly string[], subsets: Record<string, readonly string[]>, home: boolean }} context
- *   home: the group is in the shared list's file or a mirror, where lists live
- * @returns {string | null} the violation message, or null when the group is allowed
+ * @returns {string | null}
  */
 export function violationOf(group, context) {
   const named = [...new Set(group.providers)];

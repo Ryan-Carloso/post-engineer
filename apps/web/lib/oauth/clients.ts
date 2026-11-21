@@ -115,7 +115,7 @@ export async function fetchCimdDocument(
   let response: Response;
   try {
     if (fetchImpl) {
-      // codeql[js/request-forgery]: false positive on the injected fetch — the
+      // codeql[js/request-forgery]
       response = await fetchImpl(fetchUrl, {
         headers: { Accept: 'application/json' },
         redirect: 'error',

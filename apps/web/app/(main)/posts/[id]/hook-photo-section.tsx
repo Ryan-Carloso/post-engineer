@@ -22,7 +22,7 @@ export const HookPhotoSection = ({
   if (hookPhoto.source === 'segment' && hookPhoto.url !== null && position !== null) {
     body = (
       <>
-        {/* eslint-disable-next-line @next/next/no-img-element -- user-provided photo URL, arbitrary host, next/image needs remotePatterns */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={hookPhoto.url}
           alt={t('posts.hookPhotoAlt')}
