@@ -930,6 +930,11 @@ export interface components {
             font_size?: number;
             /** Generation Id */
             generation_id?: string | null;
+            /**
+             * Hook Panel
+             * @default true
+             */
+            hook_panel?: boolean;
             /** Music Mood */
             music_mood?: string | null;
             /**

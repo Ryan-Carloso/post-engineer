@@ -107,6 +107,7 @@ const OptionsSchema = z
     voiceId: z.string().optional(),
     videoAspect: z.enum(['9:16', '16:9', '1:1']).optional(),
     videoLayout: z.enum(['standard', 'react']).optional(),
+    hookPanel: z.boolean().optional(),
     paragraphNumber: z.number().int().min(1).max(10).optional(),
     language: z.string().optional(),
     niche: z.string().optional(),

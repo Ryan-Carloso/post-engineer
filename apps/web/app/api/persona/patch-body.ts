@@ -1,6 +1,7 @@
 import { FACE_QUALITIES, PERSONA_CTA_INSTRUCTION_MAX_LENGTH, PERSONA_CTA_TYPES, PERSONA_CTA_URL_MAX_LENGTH, photoExtensionOf, VALID_VIDEO_ASPECTS, VIDEO_LAYOUTS } from '@/lib/persona-schema';
 import { isEnglishLanguage, ONLY_ENGLISH_VIDEOS_MESSAGE } from '@/lib/language-gate';
 import { isFileLike } from '@/lib/persona-images';
+import { invalidHookPanelMessage, parseHookPanelFormValue } from '@/lib/hook-panel-form';
 
 function isVideoLayout(value: string): value is (typeof VIDEO_LAYOUTS)[number] {
   return (VIDEO_LAYOUTS as readonly string[]).includes(value);
@@ -15,6 +16,7 @@ export interface PersonaPatchBody {
   language: string | null;
   videoAspect: string | null;
   videoLayout: (typeof VIDEO_LAYOUTS)[number] | null;
+  hookPanel: boolean | null;
   scriptPrompt: string | null;
   ctaType: (typeof PERSONA_CTA_TYPES)[number] | null;
   ctaUrl: string | null;
@@ -68,6 +70,11 @@ export async function parsePatchBody(request: Request): Promise<ParsePatchResult
       error: `Invalid videoLayout: ${videoLayout}. Use one of ${VIDEO_LAYOUTS.join(', ')}.`,
       logMessage: `Invalid videoLayout. Use one of ${VIDEO_LAYOUTS.join(', ')}.`,
     };
+  }
+  const rawHookPanel = optionalString(formData.get('hookPanel'));
+  const hookPanel = parseHookPanelFormValue(rawHookPanel);
+  if (!hookPanel.ok) {
+    return { ok: false, error: invalidHookPanelMessage(rawHookPanel), logMessage: 'Invalid hookPanel. Use true or false.' };
   }
   const scriptPrompt = optionalString(formData.get('scriptPrompt'));
   const ctaType = optionalString(formData.get('ctaType'));
@@ -130,6 +137,7 @@ export async function parsePatchBody(request: Request): Promise<ParsePatchResult
       language,
       videoAspect,
       videoLayout,
+      hookPanel: hookPanel.value,
       scriptPrompt,
       ctaType: ctaType as (typeof PERSONA_CTA_TYPES)[number] | null,
       ctaUrl,

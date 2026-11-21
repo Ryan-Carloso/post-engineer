@@ -38,6 +38,7 @@ import { trackApiEvent } from '@/lib/analytics';
 import { SAFE_TASK_ID } from '@/lib/video-urls';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
+import { personaPreferenceColumns } from './preference-columns';
 
 const ENGINE_CLEANUP_BUDGET_MS = 20_000;
 
@@ -159,14 +160,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
       photo_path: photoPathToRollback,
       avatar_url: avatarUrl,
       voice_id: body.values.voiceId,
-      language: body.values.language,
-      video_aspect: body.values.videoAspect,
-      video_layout: body.values.videoLayout,
-      script_prompt: body.values.scriptPrompt,
-      cta_type: body.values.ctaType, cta_url: body.values.ctaUrl, cta_instruction: body.values.ctaInstruction,
-      paragraph_number: body.values.paragraphNumber,
-      niche: body.values.niche,
-      face_quality: body.values.faceQuality,
+      ...personaPreferenceColumns(body.values),
       recent_image_ids: [],
     })
     .select('id')

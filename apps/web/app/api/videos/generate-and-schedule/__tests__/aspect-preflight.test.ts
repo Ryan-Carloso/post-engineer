@@ -74,6 +74,7 @@ const PREP: PersonaPrep = {
   language: 'en',
   videoAspect: '9:16',
   videoLayout: null,
+  hookPanel: true,
   paragraphNumber: null,
   photoRequired: false,
 };

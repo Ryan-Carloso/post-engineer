@@ -184,17 +184,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
   if (personaId !== null && !isPersonaAllowed(auth.personaIds, personaId)) {
     return validationFailed(ERROR_CODES.PERSONA_SCOPE_DENIED, formatErrorMessage(ERROR_CODES.PERSONA_SCOPE_DENIED), 'personaId', 403);
   }
-  const prep = await preparePost(supabase, userId, personaId, {
-    videoType: validatedOptions.videoType,
-    audioUrl: validatedOptions.audioUrl,
-    imageId: validatedOptions.imageId,
-    voiceId: validatedOptions.voiceId,
-    videoAspect: validatedOptions.videoAspect,
-    videoLayout: validatedOptions.videoLayout,
-    paragraphNumber: validatedOptions.paragraphNumber,
-    language: validatedOptions.language,
-    niche: validatedOptions.niche,
-  });
+  const prep = await preparePost(supabase, userId, personaId, validatedOptions);
   if (prep instanceof NextResponse) return prep;
 
   const effectiveCta = resolveEffectiveCta(ctaOverride, prep.cta);
@@ -524,6 +514,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
         language: prep.language,
         video_aspect: prep.videoAspect,
         video_layout: prep.videoLayout,
+        hook_panel: prep.hookPanel,
         paragraph_number: prep.paragraphNumber,
         niche: prep.niche,
         face_quality: prep.faceQuality,

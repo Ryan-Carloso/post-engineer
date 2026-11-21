@@ -7,6 +7,7 @@ const PERSONA_PREFERENCE_FIELDS: ReadonlyArray<{
   { personaKey: 'language', jobKey: 'video_language' },
   { personaKey: 'video_aspect', jobKey: 'video_aspect' },
   { personaKey: 'video_layout', jobKey: 'video_layout' },
+  { personaKey: 'hook_panel', jobKey: 'hook_panel' },
   { personaKey: 'paragraph_number', jobKey: 'paragraph_number' },
 ];
 
@@ -17,6 +18,7 @@ const REQUEST_FORWARD_FIELDS: ReadonlyArray<EngineVideoRequestField> = [
   'video_language',
   'video_aspect',
   'video_layout',
+  'hook_panel',
   'video_script',
   'video_quality',
   'paragraph_number',
@@ -37,6 +39,7 @@ export interface JobPersona {
   language?: string | null;
   video_aspect?: string | null;
   video_layout?: string | null;
+  hook_panel?: boolean | null;
   paragraph_number?: number | null;
   niche?: string | null;
   face_quality?: string | null;

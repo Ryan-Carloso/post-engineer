@@ -285,6 +285,7 @@ export interface Database {
         cta_type: 'follow' | 'comment' | 'share' | 'save' | 'link' | 'buy' | 'other';
         cta_url: string | null;
         cta_instruction: string | null;
+        hook_panel: boolean;
         };
         Insert: {
         id?: string;
@@ -306,6 +307,7 @@ export interface Database {
         cta_type?: 'follow' | 'comment' | 'share' | 'save' | 'link' | 'buy' | 'other';
         cta_url?: string | null;
         cta_instruction?: string | null;
+        hook_panel?: boolean;
         };
         Update: {
         id?: string;
@@ -327,6 +329,7 @@ export interface Database {
         cta_type?: 'follow' | 'comment' | 'share' | 'save' | 'link' | 'buy' | 'other';
         cta_url?: string | null;
         cta_instruction?: string | null;
+        hook_panel?: boolean;
         };
         Relationships: [];
       };
@@ -694,6 +697,7 @@ export interface Database {
         post_cta_type: 'follow' | 'comment' | 'share' | 'save' | 'link' | 'buy' | 'other' | null;
         post_cta_url: string | null;
         post_cta_instruction: string | null;
+        post_hook_panel: boolean | null;
         };
         Insert: {
         id?: string;
@@ -734,6 +738,7 @@ export interface Database {
         post_cta_type?: 'follow' | 'comment' | 'share' | 'save' | 'link' | 'buy' | 'other' | null;
         post_cta_url?: string | null;
         post_cta_instruction?: string | null;
+        post_hook_panel?: boolean | null;
         };
         Update: {
         id?: string;
@@ -774,6 +779,7 @@ export interface Database {
         post_cta_type?: 'follow' | 'comment' | 'share' | 'save' | 'link' | 'buy' | 'other' | null;
         post_cta_url?: string | null;
         post_cta_instruction?: string | null;
+        post_hook_panel?: boolean | null;
         };
         Relationships: [];
       };

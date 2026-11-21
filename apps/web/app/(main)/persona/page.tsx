@@ -82,6 +82,7 @@ const PersonaPageContent = () => {
     store.setLanguage(persona.language ?? null);
     store.setVideoAspect(persona.videoAspect ?? '9:16');
     store.setVideoLayout(persona.videoLayout ?? 'standard');
+    store.setHookPanel(persona.hookPanel !== false);
     store.setFaceQuality(persona.faceQuality === 'very_good' ? 'very_good' : 'ok');
     store.setScriptPrompt(persona.scriptPrompt ?? '');
     store.setCta({

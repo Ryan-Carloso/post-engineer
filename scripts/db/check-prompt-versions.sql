@@ -1,4 +1,4 @@
--- Behaviour check for 077_prompt-versions.sql.
+-- Behaviour check for 078_prompt-versions.sql.
 -- Run as a superuser after the migration chain, on a database whose
 -- anon/authenticated/service_role roles exist (same fixture as
 -- check-core-tables-rls.sql). Rolls the fixture back. Exits non-zero when an

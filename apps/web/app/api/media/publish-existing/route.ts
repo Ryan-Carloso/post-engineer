@@ -137,6 +137,7 @@ async function scheduleExistingMedia(ctx: PublishExistingContext): Promise<NextR
     post_language: null,
     post_video_aspect: null,
     post_video_layout: null,
+    post_hook_panel: null,
     post_paragraph_number: null,
     post_face_quality: null,
   });

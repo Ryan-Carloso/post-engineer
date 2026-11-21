@@ -35,6 +35,7 @@ export interface CreatePersonaInput {
   language?: string;
   videoAspect?: VideoAspect;
   videoLayout?: VideoLayout;
+  hookPanel?: boolean;
   scriptPrompt?: string;
   paragraphNumber?: number;
   niche?: string;
@@ -77,6 +78,7 @@ export interface GeneratePersonaVideoInput {
     webhookUrl?: string;
     videoAspect?: '9:16' | '16:9' | '1:1';
     videoLayout?: VideoLayout;
+    hookPanel?: boolean;
     paragraphNumber?: number;
     language?: string;
     niche?: string;
@@ -99,6 +101,7 @@ export interface UpdatePersonaInput {
   language?: string;
   videoAspect?: VideoAspect;
   videoLayout?: VideoLayout;
+  hookPanel?: boolean;
   scriptPrompt?: string;
   paragraphNumber?: number;
   niche?: string;
