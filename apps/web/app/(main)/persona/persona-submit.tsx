@@ -1,0 +1,140 @@
+'use client';
+
+import { useState } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
+import { useFormContext } from 'react-hook-form';
+import { createPersona, useUpdatePersonaMutation } from '@/lib/api';
+import { resolveScriptLanguage, usePersonaStore } from '@/lib/store';
+import { useI18n } from '@/lib/i18n/provider';
+import { scrollToErrorField } from '@/lib/scroll-to-error';
+import { notifyIfSessionExpired } from '@/lib/session-expiry';
+import { totalBoundAccounts, type PersonaDefaultAccounts } from '@/lib/persona-publishing-accounts';
+import { SpinnerIcon } from '@/lib/ui';
+
+export function resolveEditingPersonaId(pathname: string, editId: string | null): string | null {
+  const editMatch = pathname.match(/^\/personas\/([^/]+)\/edit$/);
+  return editMatch?.[1] ?? editId;
+}
+
+interface PublishingAccountsResponse {
+  success: boolean;
+  error?: string;
+}
+
+async function savePublishingAccounts(
+  personaId: string,
+  accounts: PersonaDefaultAccounts,
+  saveError: string,
+): Promise<void> {
+  const res = await fetch(`/api/persona/publishing-accounts?personaId=${encodeURIComponent(personaId)}`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ accounts }),
+  });
+  if (!res.ok) notifyIfSessionExpired(res);
+  const body = (await res.json()) as PublishingAccountsResponse;
+  if (!res.ok || body.success !== true) {
+    throw new Error(typeof body.error === 'string' && body.error !== '' ? body.error : saveError);
+  }
+}
+
+export const PersonaSubmit = ({ editId }: { editId: string | null }) => {
+  const { t, locale } = useI18n();
+  const pathname = usePathname();
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const updateMutation = useUpdatePersonaMutation();
+  const { handleSubmit: validateForm } = useFormContext();
+  const [isPending, setIsPending] = useState(false);
+  const accountsLoaded = usePersonaStore((s) => s.publishingAccountsLoaded);
+
+  const editingPersonaId = resolveEditingPersonaId(pathname, editId);
+  const isEditing = Boolean(editingPersonaId);
+
+  const handleSubmit = async () => {
+    const state = usePersonaStore.getState();
+    if (!state.name.trim()) {
+      state.setResult({ success: false, error: t('persona.errName') });
+      scrollToErrorField('name');
+      return;
+    }
+    if (!state.photo && !state.avatarUrl && !state.storedPhotoUrl) {
+      state.setResult({ success: false, error: t('persona.errAvatar') });
+      scrollToErrorField('avatar');
+      return;
+    }
+    if (!state.voiceId) {
+      state.setResult({ success: false, error: t('persona.errVoice') });
+      scrollToErrorField('voice');
+      return;
+    }
+    if (totalBoundAccounts(state.publishingAccounts) === 0) {
+      state.setResult({ success: false, error: t('publishing.mustSelectAccount') });
+      scrollToErrorField('accounts');
+      return;
+    }
+
+    const language = resolveScriptLanguage(locale);
+
+    state.setResult(null);
+    setIsPending(true);
+    try {
+      const personaId = editingPersonaId;
+      if (personaId) {
+        const formData = state.buildPersonaEditFormData();
+        const result = await updateMutation.mutateAsync({ personaId, formData });
+        usePersonaStore.getState().setResult(result);
+        if (result.success) {
+          try {
+            await savePublishingAccounts(personaId, state.publishingAccounts, t('persona.publishingAccountsSaveError'));
+          } catch {
+            usePersonaStore.getState().setResult({ success: false, error: t('persona.publishingAccountsSaveError') });
+            scrollToErrorField('accounts');
+            return;
+          }
+          await queryClient.invalidateQueries({ queryKey: ['persona-list'] });
+          router.back();
+        } else if (result.error === 'prompt_rejected') {
+          scrollToErrorField('script');
+        }
+      } else {
+        const result = await createPersona(state.buildPersonaFormData(language));
+        usePersonaStore.getState().setResult(result);
+        if (result.success) {
+          await queryClient.invalidateQueries({ queryKey: ['persona-list'] });
+          router.push('/personas');
+        } else if (result.error === 'prompt_rejected') {
+          scrollToErrorField('script');
+        }
+      }
+    } catch {
+      usePersonaStore.getState().setResult({ success: false, error: t('persona.errServer') });
+    } finally {
+      setIsPending(false);
+    }
+  };
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={validateForm(() => void handleSubmit())}
+        disabled={isPending || updateMutation.isPending || (isEditing && !accountsLoaded)}
+        className="flex w-full items-center justify-center gap-2 rounded-lg bg-accent px-4 py-3 text-sm font-semibold text-on-ink transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        {isPending ? (
+          <>
+            <SpinnerIcon />
+            {t(isEditing ? 'personas.saving' : 'persona.submitting')}
+          </>
+        ) : (
+          t(isEditing ? 'personas.save' : 'persona.submit')
+        )}
+      </button>
+      <p className="mt-3 text-center text-sm leading-5 text-muted-text">
+        {t(isEditing ? 'personas.saveHint' : 'persona.submitHint')}
+      </p>
+    </div>
+  );
+};

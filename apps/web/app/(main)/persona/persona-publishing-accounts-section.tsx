@@ -101,10 +101,6 @@ export function PersonaPublishingAccountsSection({ personaId }: { personaId?: st
   const setDraftSelection = usePersonaStore((s) => s.setPublishingAccounts);
   const setPublishingAccountsLoaded = usePersonaStore((s) => s.setPublishingAccountsLoaded);
   const submitResult = usePersonaStore((s) => s.result);
-  // Single source of truth for the selection in both modes: the persona
-  // store. The page's single save button persists it (create sends it in
-  // the create FormData, edit PUTs it after the persona update), so this
-  // section has no save button of its own.
   const selection = draftSelection;
   const [loading, setLoading] = useState(!isDraft);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -115,8 +111,6 @@ export function PersonaPublishingAccountsSection({ personaId }: { personaId?: st
     setLoadError(null);
     try {
       const binding = await fetchBinding(personaId, t('persona.publishingAccountsLoadError'));
-      // A non-UUID id is never fetched (placeholder callers): leave the
-      // draft untouched instead of wiping it with the empty fallback.
       if (UUID_SHAPE.test(personaId)) setDraftSelection(binding);
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : t('persona.publishingAccountsLoadError'));
@@ -131,8 +125,6 @@ export function PersonaPublishingAccountsSection({ personaId }: { personaId?: st
       setPublishingAccountsLoaded(true);
       return;
     }
-    // The single save button stays disabled until the stored binding lands
-    // in the draft, so it can never save on a still-empty selection.
     setPublishingAccountsLoaded(false);
     void load();
   }, [load, isDraft, setPublishingAccountsLoaded]);

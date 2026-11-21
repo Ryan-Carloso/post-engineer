@@ -211,8 +211,6 @@ function mockNoAccounts() {
   });
 }
 
-// Edit-mode tests start with one bound account, like a real persona: the
-// single save blocks when the selection is empty.
 function seedBoundAccount() {
   usePersonaStore.getState().setPublishingAccounts({
     ...emptyPersonaDefaultAccounts(),
