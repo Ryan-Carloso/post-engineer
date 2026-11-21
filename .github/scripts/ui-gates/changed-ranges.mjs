@@ -2,6 +2,7 @@
 
 import { execFileSync } from 'node:child_process';
 import { isVendoredCalendarCN } from '../file-size/vendored-calendarcn.mjs';
+import { isVendoredUiDiff } from '../file-size/vendored-uidiff.mjs';
 import { filterCodeChanged } from './code-changed.mjs';
 
 const DEFAULT_MERGE_GAP = 3;
@@ -102,7 +103,7 @@ export function parseChangedRanges(
   flushFile();
 
   return [...files.values()].filter(
-    (entry) => (!filterTestish || !isTestishPath(entry.path)) && !isVendoredCalendarCN(entry.path),
+    (entry) => (!filterTestish || !isTestishPath(entry.path)) && !isVendoredCalendarCN(entry.path) && !isVendoredUiDiff(entry.path),
   );
 }
 

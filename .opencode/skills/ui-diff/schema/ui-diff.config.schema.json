@@ -1,0 +1,1348 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "baseUrl": {
+      "default": "http://localhost:{port}",
+      "description": "URL of the local server; {port} is replaced with a free port. For loopback hosts the other loopback addresses are tried too",
+      "type": "string"
+    },
+    "startCommand": {
+      "description": "Starts the app; {port} is replaced and PORT is set",
+      "type": "string"
+    },
+    "buildCommand": {
+      "type": "string"
+    },
+    "install": {
+      "default": "auto",
+      "anyOf": [
+        {
+          "type": "string",
+          "const": "auto"
+        },
+        {
+          "type": "boolean",
+          "const": false
+        },
+        {
+          "type": "string"
+        }
+      ]
+    },
+    "cwd": {
+      "default": ".",
+      "description": "Directory (relative to this file) where commands run",
+      "type": "string"
+    },
+    "readyPath": {
+      "default": "/",
+      "type": "string"
+    },
+    "startTimeoutMs": {
+      "default": 120000,
+      "type": "integer",
+      "minimum": 1000,
+      "maximum": 9007199254740991
+    },
+    "env": {
+      "default": {},
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "copyFiles": {
+      "default": [
+        ".env",
+        ".env.local",
+        ".env.development.local"
+      ],
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "routes": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "anyOf": [
+          {
+            "type": "string",
+            "format": "starts_with",
+            "pattern": "^\\/.*"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "format": "starts_with",
+                "pattern": "^\\/.*"
+              },
+              "name": {
+                "type": "string"
+              },
+              "files": {
+                "description": "Globs (relative to the config file) whose changes affect this route",
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "waitFor": {
+                "type": "string"
+              },
+              "actions": {
+                "description": "Steps to run before the static screenshot",
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "hover": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "hover"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "click": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "click"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "focus": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "focus"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "press": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "press"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "fill": {
+                          "type": "string"
+                        },
+                        "value": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "fill",
+                        "value"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "scroll": {
+                          "type": [
+                            "number",
+                            "string"
+                          ]
+                        },
+                        "smooth": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "scroll"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "wait": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 15000
+                        }
+                      },
+                      "required": [
+                        "wait"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "waitFor": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "waitFor"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "mouse": {
+                          "type": "array",
+                          "prefixItems": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "number"
+                            }
+                          ],
+                          "items": false,
+                          "minItems": 2,
+                          "maxItems": 2
+                        }
+                      },
+                      "required": [
+                        "mouse"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              },
+              "mask": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "hide": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "fullPage": {
+                "type": "boolean"
+              },
+              "viewports": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "themes": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "variants": {
+                "type": "object",
+                "properties": {
+                  "param": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "values": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": [
+                            "string",
+                            "number"
+                          ]
+                        }
+                      }
+                    ],
+                    "description": "\"1..4\", \"a,b,c\" or an array"
+                  },
+                  "viewports": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "themes": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "param",
+                  "values"
+                ],
+                "additionalProperties": false
+              },
+              "motion": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "steps": {
+                        "type": "array",
+                        "items": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "hover": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "hover"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "click": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "click"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "focus": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "focus"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "press": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "press"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "fill": {
+                                  "type": "string"
+                                },
+                                "value": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "fill",
+                                "value"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "scroll": {
+                                  "type": [
+                                    "number",
+                                    "string"
+                                  ]
+                                },
+                                "smooth": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": [
+                                "scroll"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "wait": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 15000
+                                }
+                              },
+                              "required": [
+                                "wait"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "waitFor": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "waitFor"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "mouse": {
+                                  "type": "array",
+                                  "prefixItems": [
+                                    {
+                                      "type": "number"
+                                    },
+                                    {
+                                      "type": "number"
+                                    }
+                                  ],
+                                  "items": false,
+                                  "minItems": 2,
+                                  "maxItems": 2
+                                }
+                              },
+                              "required": [
+                                "mouse"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        }
+                      },
+                      "durationMs": {
+                        "type": "integer",
+                        "minimum": 500,
+                        "maximum": 15000
+                      },
+                      "viewport": {
+                        "type": "string"
+                      },
+                      "theme": {
+                        "type": "string"
+                      },
+                      "fromNavigation": {
+                        "type": "boolean"
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            },
+            "required": [
+              "path"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      }
+    },
+    "globalFiles": {
+      "default": [],
+      "description": "Globs whose changes affect every route",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "detect": {
+      "default": {},
+      "type": "object",
+      "properties": {
+        "conventions": {
+          "default": true,
+          "type": "boolean"
+        },
+        "imports": {
+          "default": true,
+          "type": "boolean"
+        },
+        "aliases": {
+          "default": {},
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "maxRoutes": {
+          "default": 12,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "include": {
+          "default": [
+            "**/*.{html,htm,css,scss,sass,less,styl,pcss,vue,svelte,astro,jsx,tsx,mdx,js,ts,mjs,cjs}",
+            "**/*.{svg,png,jpg,jpeg,gif,webp,avif,ico,woff,woff2,ttf,otf}",
+            "**/*.json"
+          ],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "exclude": {
+          "default": [
+            "**/node_modules/**",
+            "**/{dist,build,out,coverage,.next,.nuxt,.svelte-kit}/**",
+            "**/*.{test,spec}.*",
+            "**/{__tests__,__mocks__,test,tests,e2e,cypress}/**",
+            "**/*.stories.*",
+            "**/*.d.ts",
+            "**/{package-lock,tsconfig,jsconfig}.json",
+            "**/package.json",
+            "**/.github/**",
+            "**/ui-diff.config.json"
+          ],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "viewports": {
+      "default": [
+        {
+          "name": "desktop",
+          "width": 1280,
+          "height": 800,
+          "deviceScaleFactor": 1
+        },
+        {
+          "name": "mobile",
+          "width": 390,
+          "height": 844,
+          "deviceScaleFactor": 2,
+          "isMobile": true,
+          "hasTouch": true
+        }
+      ],
+      "minItems": 1,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+          },
+          "width": {
+            "type": "integer",
+            "minimum": 200,
+            "maximum": 4096
+          },
+          "height": {
+            "type": "integer",
+            "minimum": 200,
+            "maximum": 4096
+          },
+          "device": {
+            "description": "Playwright device descriptor name, e.g. \"iPhone 13\"",
+            "type": "string"
+          },
+          "deviceScaleFactor": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 4
+          },
+          "isMobile": {
+            "type": "boolean"
+          },
+          "hasTouch": {
+            "type": "boolean"
+          },
+          "userAgent": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "themes": {
+      "default": [
+        {
+          "name": "light",
+          "colorScheme": "light"
+        }
+      ],
+      "minItems": 1,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+          },
+          "query": {
+            "description": "Query params added to every URL, e.g. { \"theme\": \"dark\" }",
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "colorScheme": {
+            "type": "string",
+            "enum": [
+              "light",
+              "dark",
+              "no-preference"
+            ]
+          },
+          "localStorage": {
+            "description": "localStorage entries set before the page loads",
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "capture": {
+      "default": {},
+      "type": "object",
+      "properties": {
+        "fullPage": {
+          "default": true,
+          "type": "boolean"
+        },
+        "maxHeight": {
+          "default": 4000,
+          "type": "integer",
+          "minimum": 200,
+          "maximum": 16000
+        },
+        "disableAnimations": {
+          "default": true,
+          "type": "boolean"
+        },
+        "waitForFonts": {
+          "default": true,
+          "type": "boolean"
+        },
+        "fixedTime": {
+          "default": false,
+          "description": "Freeze Date: an ISO timestamp, \"run-start\" (same instant on both sides) or false",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "boolean",
+              "const": false
+            }
+          ]
+        },
+        "stableRandom": {
+          "default": true,
+          "description": "Seed Math.random so random content renders the same on both sides",
+          "type": "boolean"
+        },
+        "mask": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "maskColor": {
+          "default": "#A3A3A3",
+          "type": "string"
+        },
+        "hide": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "hideDevOverlays": {
+          "default": true,
+          "type": "boolean"
+        },
+        "scrollToLoad": {
+          "default": true,
+          "description": "Scroll through the page first to trigger lazy content, then back to the top",
+          "type": "boolean"
+        },
+        "stableShots": {
+          "default": 2,
+          "description": "Retake until this many consecutive screenshots match",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5
+        },
+        "settleMs": {
+          "default": 250,
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000
+        },
+        "timeoutMs": {
+          "default": 30000,
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 9007199254740991
+        },
+        "waitUntil": {
+          "default": "load",
+          "type": "string",
+          "enum": [
+            "load",
+            "domcontentloaded",
+            "networkidle"
+          ]
+        },
+        "networkIdleTimeoutMs": {
+          "default": 3000,
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "locale": {
+          "default": "en-US",
+          "type": "string"
+        },
+        "timezoneId": {
+          "default": "UTC",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "diff": {
+      "default": {},
+      "type": "object",
+      "properties": {
+        "threshold": {
+          "default": 0.1,
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "includeAA": {
+          "default": false,
+          "type": "boolean"
+        },
+        "minChangedPixels": {
+          "default": 8,
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "focusPadding": {
+          "default": 32,
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "maxFocusCrops": {
+          "default": 2,
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 6
+        },
+        "compositeMaxWidth": {
+          "default": 2400,
+          "type": "integer",
+          "minimum": 600,
+          "maximum": 9007199254740991
+        },
+        "highlightColor": {
+          "default": "#FF0080",
+          "type": "string"
+        },
+        "alignShifts": {
+          "default": true,
+          "description": "Match content that only moved up or down (e.g. below a taller hero) and report it as shifted instead of changed",
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "preview": {
+      "description": "Use already-deployed preview URLs instead of local worktrees",
+      "default": {},
+      "type": "object",
+      "properties": {
+        "base": {
+          "type": "string"
+        },
+        "head": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "auth": {
+      "description": "Credentials for protected previews, read from environment variables",
+      "type": "object",
+      "properties": {
+        "headers": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "env": {
+                "type": "string",
+                "pattern": "^[A-Z_][A-Z0-9_]{0,127}$"
+              },
+              "prefix": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "env"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "cookies": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "env": {
+                "type": "string",
+                "pattern": "^[A-Z_][A-Z0-9_]{0,127}$"
+              },
+              "domain": {
+                "type": "string"
+              },
+              "path": {
+                "default": "/",
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "env"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "origins": {
+          "description": "Origins that may receive the credentials; default: the preview URL origins",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "variants": {
+      "default": {},
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "default": true,
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "motion": {
+      "default": {},
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "type": "boolean"
+        },
+        "all": {
+          "default": false,
+          "description": "Record clips for routes without visual changes too (same as --motion-all)",
+          "type": "boolean"
+        },
+        "format": {
+          "default": "gif",
+          "type": "string",
+          "enum": [
+            "gif",
+            "webm",
+            "gif+webm"
+          ]
+        },
+        "durationMs": {
+          "default": 3000,
+          "type": "integer",
+          "minimum": 500,
+          "maximum": 15000
+        },
+        "fps": {
+          "default": 10,
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 30
+        },
+        "viewport": {
+          "type": "string"
+        },
+        "theme": {
+          "type": "string"
+        },
+        "scale": {
+          "default": 0.6,
+          "type": "number",
+          "minimum": 0.2,
+          "maximum": 1
+        },
+        "steps": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "hover": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "hover"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "click": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "click"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "focus": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "focus"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "press": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "press"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "fill": {
+                    "type": "string"
+                  },
+                  "value": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "fill",
+                  "value"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "scroll": {
+                    "type": [
+                      "number",
+                      "string"
+                    ]
+                  },
+                  "smooth": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "scroll"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "wait": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 15000
+                  }
+                },
+                "required": [
+                  "wait"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "waitFor": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "waitFor"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "mouse": {
+                    "type": "array",
+                    "prefixItems": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "number"
+                      }
+                    ],
+                    "items": false,
+                    "minItems": 2,
+                    "maxItems": 2
+                  }
+                },
+                "required": [
+                  "mouse"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "tokens": {
+      "default": {},
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "type": "boolean"
+        },
+        "files": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "scope": {
+          "default": "changed-regions",
+          "type": "string",
+          "enum": [
+            "changed-regions",
+            "page"
+          ]
+        },
+        "properties": {
+          "default": [
+            "color",
+            "background-color",
+            "border-color",
+            "spacing",
+            "radius",
+            "font-size",
+            "font-weight",
+            "font-family"
+          ],
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "color",
+              "background-color",
+              "border-color",
+              "spacing",
+              "radius",
+              "font-size",
+              "font-weight",
+              "font-family",
+              "line-height"
+            ]
+          }
+        },
+        "colorTolerance": {
+          "default": 2,
+          "type": "number",
+          "minimum": 0,
+          "maximum": 50
+        },
+        "pxTolerance": {
+          "default": 0.5,
+          "type": "number",
+          "minimum": 0,
+          "maximum": 4
+        },
+        "remBase": {
+          "default": 16,
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "allow": {
+          "default": [],
+          "description": "Extra allowed values, e.g. \"0px\", \"1px\", \"#ffffff\"",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "categories": {
+          "default": {},
+          "description": "Map token names to categories when their names do not say it, e.g. { \"spacing\": [\"--s-*\"], \"font-size\": [\"--fs-*\"] }",
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "enum": [
+              "color",
+              "spacing",
+              "radius",
+              "font-size",
+              "font-weight",
+              "font-family",
+              "line-height"
+            ]
+          },
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "ignoreSelectors": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "maxElements": {
+          "default": 2500,
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 9007199254740991
+        },
+        "maxFindings": {
+          "default": 40,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      },
+      "additionalProperties": false
+    },
+    "a11y": {
+      "default": {},
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "type": "boolean"
+        },
+        "tags": {
+          "default": [
+            "wcag2a",
+            "wcag2aa",
+            "wcag21a",
+            "wcag21aa",
+            "wcag22aa"
+          ],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "rules": {
+          "default": {
+            "tabindex": true
+          },
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "boolean"
+          }
+        },
+        "focusOrder": {
+          "default": true,
+          "type": "boolean"
+        },
+        "maxTabStops": {
+          "default": 40,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200
+        },
+        "viewports": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "themes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "publish": {
+      "default": {},
+      "type": "object",
+      "properties": {
+        "mode": {
+          "default": "branch",
+          "type": "string",
+          "enum": [
+            "branch",
+            "none"
+          ]
+        },
+        "branch": {
+          "default": "ui-diff-assets",
+          "type": "string"
+        },
+        "remote": {
+          "default": "origin",
+          "type": "string"
+        },
+        "keepRuns": {
+          "default": 1,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "allowPublicRepo": {
+          "default": false,
+          "type": "boolean"
+        },
+        "linkBase": {
+          "description": "Override the image URL prefix (e.g. for GitHub Enterprise)",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "comment": {
+      "default": {},
+      "type": "object",
+      "properties": {
+        "id": {
+          "default": "default",
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "title": {
+          "default": "UI diff",
+          "type": "string"
+        },
+        "showUnchanged": {
+          "default": true,
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "title": "ui-diff configuration",
+  "description": "Configuration for the ui-diff skill (before/after screenshots and pixel diffs for pull requests)."
+}

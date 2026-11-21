@@ -8,6 +8,7 @@ import {
   VENDORED_CALENDARCN_FILES,
   isVendoredCalendarCN,
 } from './vendored-calendarcn.mjs';
+import { VENDORED_UIDIFF_FILES } from './vendored-uidiff.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(HERE, '..', '..', '..');
@@ -46,7 +47,7 @@ describe('vendored CalendarCN list', () => {
 });
 
 describe('codecov ignore list', () => {
-  it('matches the vendored list exactly', () => {
+  it('matches the vendored lists exactly', () => {
     const yml = fs.readFileSync(path.join(REPO_ROOT, 'codecov.yml'), 'utf8');
     const lines = yml.split('\n');
     const coverageIdx = lines.findIndex((l) => l === 'coverage:');
@@ -59,6 +60,7 @@ describe('codecov ignore list', () => {
       if (!m) break;
       ignored.add(m[1]);
     }
-    assert.deepEqual([...ignored].sort(), [...VENDORED_CALENDARCN_FILES].sort());
+    const expected = new Set([...VENDORED_CALENDARCN_FILES, ...VENDORED_UIDIFF_FILES]);
+    assert.deepEqual([...ignored].sort(), [...expected].sort());
   });
 });

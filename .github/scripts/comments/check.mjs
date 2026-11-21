@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { isVendoredCalendarCN } from '../file-size/vendored-calendarcn.mjs';
+import { isVendoredUiDiff } from '../file-size/vendored-uidiff.mjs';
 import { findComments, lineOf, pySameAst } from './scan.mjs';
 import { stripComments } from './strip.mjs';
 import { sameCode } from './code-tokens.mjs';
@@ -26,6 +27,7 @@ const CODE_OWNED = [
 
 export function isExempt(p) {
   if (isVendoredCalendarCN(p)) return true;
+  if (isVendoredUiDiff(p)) return true;
   if (CODE_OWNED.some((owned) => p.startsWith(owned))) return true;
   if (/\.gen\.[^.]+$/.test(p)) return true;
   if (p.endsWith('next-env.d.ts')) return true;
