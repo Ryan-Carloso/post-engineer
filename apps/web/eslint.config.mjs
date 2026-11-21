@@ -71,6 +71,12 @@ const eslintConfig = [
     },
   },
   {
+    files: ['**/__tests__/**/*.tsx'],
+    rules: {
+      '@next/next/no-img-element': 'off',
+    },
+  },
+  {
     files: ['app/layout.tsx'],
     rules: {
       '@typescript-eslint/no-require-imports': 'off',

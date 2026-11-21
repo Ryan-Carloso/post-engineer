@@ -97,7 +97,7 @@ class ScheduleStore:
         )
         try:
             response.raise_for_status()
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             status = getattr(getattr(exc, "response", None), "status_code", None)
             if status == 401:
                 raise SupabaseAuthError(
@@ -364,7 +364,7 @@ class ScheduleStore:
                 timeout=REQUEST_TIMEOUT_SECONDS,
             )
             response.raise_for_status()
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning(
                 f"fill_schedule: storage object removal failed for {bucket}/{path}: {exc}"
             )

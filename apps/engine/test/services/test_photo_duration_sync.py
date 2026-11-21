@@ -11,7 +11,7 @@ from, and the MCP zod shape reads the same constants from its copy.
 import re
 from pathlib import Path
 
-from app.models.schema import SegmentMedia
+from app.models.segments import SegmentMedia
 from app.services import segment_photo_duration
 
 

@@ -433,6 +433,23 @@ def test_a_public_redirect_is_followed_and_pinned_again(tmp_path):
     assert b"Host: two.example" in seen[1]
 
 
+def test_a_redirect_chain_past_the_limit_is_rejected_and_writes_nothing(tmp_path):
+    dials = []
+    seen = []
+
+    def body_for(_ip):
+        return _http_response(302, "Found", {"Location": "http://one.example/loop.png"}, b"")
+
+    dest = tmp_path / "out.png"
+    patches = _patch_connect(dials, seen, body_for, lambda _host: [ipaddress.ip_address(CHECKED_IP)])
+    with patches[0], patches[1], patches[2]:
+        with pytest.raises(ssrf.UnsafeUrlError, match="redirected too many times"):
+            ssrf.download_public_file("http://one.example/a.png", str(dest))
+    assert len(dials) == ssrf.MAX_REDIRECTS + 1
+    assert not dest.exists()
+    assert list(tmp_path.iterdir()) == []
+
+
 def test_a_refused_address_falls_through_to_the_next_public_one(tmp_path):
     def resolve(_host):
         return [ipaddress.ip_address("1.1.1.1"), ipaddress.ip_address(SECOND_IP)]

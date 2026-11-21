@@ -94,7 +94,6 @@ export function isBlockedIpAddress(address: string): boolean {
 
 export async function fetchCimdDocument(
   clientId: string,
-  fetchImpl?: typeof fetch,
   lookupImpl: DnsLookup = defaultLookup,
 ): Promise<CimdDocument | null> {
   let parsed: URL;
@@ -114,20 +113,11 @@ export async function fetchCimdDocument(
   const fetchUrl = parsed.toString();
   let response: Response;
   try {
-    if (fetchImpl) {
-      // codeql[js/request-forgery]
-      response = await fetchImpl(fetchUrl, {
-        headers: { Accept: 'application/json' },
-        redirect: 'error',
-        signal: AbortSignal.timeout(CIMD_FETCH_TIMEOUT_MS),
-      });
-    } else {
-      response = await requestPinned(fetchUrl, safety.addresses, {
-        headers: { Accept: 'application/json' },
-        timeoutMs: CIMD_FETCH_TIMEOUT_MS,
-        maxBytes: CIMD_MAX_BYTES,
-      });
-    }
+    response = await requestPinned(fetchUrl, safety.addresses, {
+      headers: { Accept: 'application/json' },
+      timeoutMs: CIMD_FETCH_TIMEOUT_MS,
+      maxBytes: CIMD_MAX_BYTES,
+    });
   } catch {
     return null;
   }

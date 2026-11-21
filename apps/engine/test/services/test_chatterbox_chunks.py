@@ -200,12 +200,12 @@ def test_concatenate_audio_files_joins_in_order(tmp_path: Path) -> None:
                 return _FakeSegment(other.name)
             return _FakeSegment(f"{self.name}+{other.name}")
 
-        def export(self, out: str, format: str) -> None:  # noqa: A002
+        def export(self, out: str, format: str) -> None:
             exported["out"] = out
             exported["format"] = format
             exported["combined"] = self.name
 
-    def _fake_from_file(path: str, format: str) -> _FakeSegment:  # noqa: A002
+    def _fake_from_file(path: str, format: str) -> _FakeSegment:
         loaded.append(path)
         return _FakeSegment(Path(path).name)
 
@@ -242,10 +242,10 @@ def test_concatenate_audio_files_restores_pydub_converter(tmp_path: Path) -> Non
         def __add__(self, other: _FakeSegment) -> _FakeSegment:
             return _FakeSegment()
 
-        def export(self, out: str, format: str) -> None:  # noqa: A002
+        def export(self, out: str, format: str) -> None:
             pass
 
-    def _fake_from_file(path: str, format: str) -> _FakeSegment:  # noqa: A002
+    def _fake_from_file(path: str, format: str) -> _FakeSegment:
         seen_during_call.append(AudioSegment.converter)
         return _FakeSegment()
 
@@ -331,7 +331,7 @@ def _run_chatterbox(
 
     def _fake_post(
         url: str, json: dict | None = None, headers: dict | None = None, timeout: int | None = None
-    ):  # noqa: A002
+    ):
         calls.append({"url": url, "json": json, "headers": headers, "timeout": timeout})
         return next(response_iter)
 

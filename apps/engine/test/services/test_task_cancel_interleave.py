@@ -77,7 +77,7 @@ class _ContentionProbe:
 def _guard(fn, errors: list[BaseException]) -> None:
     try:
         fn()
-    except BaseException as exc:  # noqa: BLE001
+    except BaseException as exc:
         errors.append(exc)
 
 

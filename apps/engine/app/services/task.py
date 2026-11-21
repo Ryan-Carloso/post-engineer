@@ -7,7 +7,6 @@ from threading import Lock
 
 from loguru import logger
 
-from app.config import config  # noqa: F401
 from app.models import const
 from app.models.schema import VideoConcatMode, VideoParams
 from app.services import (
@@ -26,10 +25,10 @@ from app.services import (
 )
 from app.services import state as sm
 from app.services import image_coverage, task_webhook, user_media
-from app.services.lipsync_active import lip_sync_cap_seconds, persona_lipsync_active  # noqa: F401
+from app.services.lipsync_active import lip_sync_cap_seconds, persona_lipsync_active
 from app.services import full_lipsync
 from app.services.music_mood import resolve_music_mood
-from app.services.task_cleanup import _first_http_url, abort_if_cancelled
+from app.services.task_cleanup import _first_http_url, abort_if_cancelled, cleanup_task_intermediates
 from app.services.task_outcome import crash_or_stop, fail_or_stop, finish_or_stop
 from app.services.pipeline_stage import PhaseTracker
 from app.services.intro_cost import IntroCostReport, completion_cost_kwargs, cost_event_props, report_from_job_cost
@@ -37,8 +36,6 @@ from app.services.longcat_cost import ModalJobCost
 from app.services.persona_hook import (
     PERSONA_HOOK_MAX_SECONDS,
     PERSONA_HOOK_MIN_SECONDS,
-    PERSONA_HOOK_TARGET_WORDS_MAX,  # noqa: F401
-    PERSONA_HOOK_TARGET_WORDS_MIN,  # noqa: F401
     _find_hook_end_seconds,
     _limit_generated_script,
 )
@@ -173,7 +170,8 @@ def _task_already_failed(task_id: str) -> bool:
     """
     try:
         task = sm.state.get_task(task_id)
-    except Exception:  # noqa: BLE001
+    except Exception as exc:
+        logger.warning(f"could not read task {task_id} to check its failed state: {type(exc).__name__}")
         return False
     return bool(task) and task.get("state") == const.TASK_STATE_FAILED
 
@@ -199,7 +197,8 @@ def _task_tracking_context(task_id: str) -> dict[str, object]:
     """
     try:
         task = sm.state.get_task(task_id) or {}
-    except Exception:  # noqa: BLE001
+    except Exception as exc:
+        logger.warning(f"could not read task {task_id} for tracking context: {type(exc).__name__}")
         task = {}
     context: dict[str, object] = {
         "task_id": task_id,
@@ -458,8 +457,6 @@ def resolve_custom_audio_file(task_id: str, custom_audio_file: str | None) -> st
         "storage directory"
     )
 
-
-from app.services.task_cleanup import cleanup_task_intermediates  # noqa: F401,E402
 
 
 def resolve_persona_audio(params: VideoParams) -> tuple[str, str | None]:

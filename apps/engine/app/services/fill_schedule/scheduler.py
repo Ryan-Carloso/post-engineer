@@ -74,7 +74,7 @@ class FillScheduleScheduler:
         ):
             try:
                 results[stage_name] = stage(now)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 diagnostic = notify_module.safe_diagnostic(exc)
                 if isinstance(exc, CONNECTION_FAILURES):
                     connection_failed = True

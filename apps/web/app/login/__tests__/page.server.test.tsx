@@ -3,8 +3,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { renderToString } from 'react-dom/server';
 
 vi.mock('next/image', () => ({
-  // eslint-disable-next-line jsx-a11y/alt-text, @next/next/no-img-element
-  default: (props: React.ComponentProps<'img'>) => <img {...props} />,
+  default: ({ alt, ...props }: React.ComponentProps<'img'>) => <img alt={alt} {...props} />,
 }));
 
 vi.mock('@/lib/supabase/client', () => ({

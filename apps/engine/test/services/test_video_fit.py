@@ -11,7 +11,7 @@ try:
 except Exception:
     MOVIEPY_AVAILABLE = False
 
-from app.services import video as vd  # noqa: E402
+from app.services import video as vd
 
 
 @unittest.skipUnless(MOVIEPY_AVAILABLE, "moviepy not available")

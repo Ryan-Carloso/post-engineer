@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from 'vitest';
 import { readBody } from '@/lib/contracts-server';
 import { createExperiment } from '@/lib/contracts/experiments';
 import { getPrompt, listPrompts } from '@/lib/contracts/prompts';
@@ -84,44 +84,36 @@ describe('contracts typecheck', () => {
     };
     expect(validBody.name).toBe('Hook test');
 
-    // @ts-expect-error
-    const badBody: CreateBody = { nome: 'x', variable: 'hook', targetPairs: 6, variants: [] };
-    expect(badBody).toBeDefined();
+    expectTypeOf<CreateBody>().not.toHaveProperty('nome');
 
     const response = { success: true, experiment: { id: '1', name: 'Hook test', variable: 'hook', personaId: '11111111-2222-4333-8444-555555555555' as string | null, targetPairs: 6, variants: [] } } as CreateResponse;
     expect(response.experiment.name).toBe('Hook test');
 
-    // @ts-expect-error
-    const badName = response.experiment.nome;
-    expect(badName).toBeUndefined();
+    expectTypeOf(response.experiment).not.toHaveProperty('nome');
 
     const request = new Request('http://localhost/api/experiments', { method: 'POST', body: JSON.stringify(validBody) });
     const result = await readBody(createExperiment, request);
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.body.name).toBe('Hook test');
-      // @ts-expect-error
-      expect(result.body.nome).toBeUndefined();
+      expectTypeOf(result.body).exclude<undefined>().not.toHaveProperty('nome');
     }
   });
 
   it('pins the prompts response field names', () => {
     const list: ListPromptsResponse = { success: true, prompts: [{ slug: 'daily-news', title: 'News', description: 'News', source: 'official', visibility: 'public' }] };
     expect(list.prompts[0]?.title).toBe('News');
-    // @ts-expect-error
-    expect(list.prompts[0]?.name).toBeUndefined();
+    expectTypeOf(list.prompts[0]).exclude<undefined>().not.toHaveProperty('name');
 
     const detail: GetPromptResponse = { success: true, prompt: { slug: 'daily-news', title: 'News', description: 'News', source: 'official', visibility: 'public', prompt: 'Write...' } };
     expect(detail.prompt.prompt).toBe('Write...');
-    // @ts-expect-error
-    expect(detail.prompt.text).toBeUndefined();
+    expectTypeOf(detail.prompt).exclude<undefined>().not.toHaveProperty('text');
   });
 
   it('pins the billing response field names', () => {
     const balance: TokenBalanceResponse = { success: true, balance: 8, free: 3 };
     expect(balance.balance).toBe(8);
-    // @ts-expect-error
-    expect(balance.total).toBeUndefined();
+    expectTypeOf(balance).exclude<undefined>().not.toHaveProperty('total');
 
     const ledger: TokenTransactionsResponse = {
       success: true,
@@ -131,8 +123,7 @@ describe('contracts typecheck', () => {
       offset: 0,
     };
     expect(ledger.transactions[0]?.generationId).toBeNull();
-    // @ts-expect-error
-    expect(ledger.transactions[0]?.generation_id).toBeUndefined();
+    expectTypeOf(ledger.transactions[0]).exclude<undefined>().not.toHaveProperty('generation_id');
   });
 
   it('pins the post detail response field names', () => {
@@ -157,8 +148,7 @@ describe('contracts typecheck', () => {
     };
     expect(detail.generation.videoSubject).toBe('Gym');
     if (detail.kind !== 'generation') throw new Error('expected a generation detail');
-    // @ts-expect-error
-    expect(detail.generation.subject).toBeUndefined();
+    expectTypeOf(detail.generation).exclude<undefined>().not.toHaveProperty('subject');
   });
 
   it('pins the metrics response field names', () => {
@@ -194,8 +184,7 @@ describe('contracts typecheck', () => {
       asOf: '2026-11-14T10:00:00.000Z',
     };
     expect(metrics.rows[0]?.postId).toBe('p-1');
-    // @ts-expect-error
-    expect(metrics.rows[0]?.post_id).toBeUndefined();
+    expectTypeOf(metrics.rows[0]).exclude<undefined>().not.toHaveProperty('post_id');
     const curve: RetentionCurveResponse = {
       success: true,
       points: [{ ratio: 0.01, audienceWatchRatio: 0.5, relativeRetentionPerformance: 1.2 }],
@@ -204,8 +193,7 @@ describe('contracts typecheck', () => {
       provisional: false,
     };
     expect(curve.points[0]?.ratio).toBe(0.01);
-    // @ts-expect-error
-    expect(curve.points[0]?.watchRatio).toBeUndefined();
+    expectTypeOf(curve.points[0]).exclude<undefined>().not.toHaveProperty('watchRatio');
   });
 
   it('pins the media response field names', () => {
@@ -215,15 +203,12 @@ describe('contracts typecheck', () => {
       expiresInSeconds: 3600,
     };
     expect(upload.mediaId).toContain('.png');
-    // @ts-expect-error
-    expect(upload.media_id).toBeUndefined();
+    expectTypeOf(upload).exclude<undefined>().not.toHaveProperty('media_id');
     const check: MediaCheckResponse = { success: true, code: 'ok', width: 1920, height: 1080, has_face: true };
     expect(check.code).toBe('ok');
     expect(check.has_face).toBe(true);
-    // @ts-expect-error
-    expect(check.status).toBeUndefined();
-    // @ts-expect-error
-    expect(check.hasFace).toBeUndefined();
+    expectTypeOf(check).exclude<undefined>().not.toHaveProperty('status');
+    expectTypeOf(check).exclude<undefined>().not.toHaveProperty('hasFace');
     const content: UploadContentResponse = {
       success: true,
       provider: 'youtube',
@@ -232,8 +217,7 @@ describe('contracts typecheck', () => {
       logId: 'log-1',
     };
     expect(content.results[0]?.accountId).toBe('chan-1');
-    // @ts-expect-error
-    expect(content.results[0]?.account_id).toBeUndefined();
+    expectTypeOf(content.results[0]).exclude<undefined>().not.toHaveProperty('account_id');
   });
 
   it('pins the accounts response field names', () => {
@@ -243,23 +227,19 @@ describe('contracts typecheck', () => {
       message: 'Accounts retrieved from Supabase',
     };
     expect(list.accounts[0]?.provider).toBe('youtube');
-    // @ts-expect-error
-    expect(list.accounts[0]?.channel_id).toBeUndefined();
+    expectTypeOf(list.accounts[0]).exclude<undefined>().not.toHaveProperty('channel_id');
     const connectUrl: ConnectUrlResponse = { success: true, auth_url: 'https://example.com/oauth' };
     expect(connectUrl.auth_url).toContain('oauth');
-    // @ts-expect-error
-    expect(connectUrl.authUrl).toBeUndefined();
+    expectTypeOf(connectUrl).exclude<undefined>().not.toHaveProperty('authUrl');
     const body: BlueskyConnectBody = { handle: 'user.bsky.social', appPassword: 'secret' };
     expect(body.handle).toBe('user.bsky.social');
-    // @ts-expect-error
-    expect(body.app_password).toBeUndefined();
+    expectTypeOf(body).exclude<undefined>().not.toHaveProperty('app_password');
     const publishing: PublishingAccountsResponse = {
       success: true,
       defaults: { youtube: ['UC-1'], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [], telegram: [] },
     };
     expect(publishing.defaults.youtube).toEqual(['UC-1']);
-    // @ts-expect-error
-    expect(publishing.defaults.youtube_id).toBeUndefined();
+    expectTypeOf(publishing.defaults).exclude<undefined>().not.toHaveProperty('youtube_id');
   });
 
   it('pins the schedule response field names', () => {
@@ -278,18 +258,15 @@ describe('contracts typecheck', () => {
       ],
     };
     expect(list.schedules[0]?.providers).toEqual(['youtube']);
-    // @ts-expect-error
-    expect(list.schedules[0]?.personaId).toBeUndefined();
+    expectTypeOf(list.schedules[0]).exclude<undefined>().not.toHaveProperty('personaId');
     const cancel: CancelScheduleResponse = {
       success: true, cancelledSlotIds: [], refunds: [], batchDiscountWithheld: 0,
     };
     expect(cancel.cancelledSlotIds).toEqual([]);
-    // @ts-expect-error
-    expect(cancel.cancelled_slot_ids).toBeUndefined();
+    expectTypeOf(cancel).exclude<undefined>().not.toHaveProperty('cancelled_slot_ids');
     const posts: ListPostsResponse = { success: true, upcoming: [], recent: [], hasAnyPost: false };
     expect(posts.hasAnyPost).toBe(false);
-    // @ts-expect-error
-    expect(posts.has_any_post).toBeUndefined();
+    expectTypeOf(posts).exclude<undefined>().not.toHaveProperty('has_any_post');
     const slot: GetSlotResponse = {
       success: true,
       slot: {
@@ -312,12 +289,10 @@ describe('contracts typecheck', () => {
       },
     };
     expect(slot.slot.title).toBe('T');
-    // @ts-expect-error
-    expect(slot.slot.schedule_id).toBeUndefined();
+    expectTypeOf(slot.slot).exclude<undefined>().not.toHaveProperty('schedule_id');
     const body: UpdateSlotBody = { title: 'New title' };
     expect(body.title).toBe('New title');
-    // @ts-expect-error
-    expect(body.slot_at).toBeUndefined();
+    expectTypeOf(body).exclude<undefined>().not.toHaveProperty('slot_at');
     const updated: UpdateSlotResponse = { success: true, title: 'New title' };
     expect(updated.title).toBe('New title');
     const deleted: DeleteSlotResponse = { success: true };
@@ -336,8 +311,7 @@ describe('contracts typecheck', () => {
       ],
     };
     expect(list.generations[0]?.generationId).toBe('gen-1');
-    // @ts-expect-error
-    expect(list.generations[0]?.generation_id).toBeUndefined();
+    expectTypeOf(list.generations[0]).exclude<undefined>().not.toHaveProperty('generation_id');
     const detail: GetVideoGenerationResponse = {
       success: true,
       generation: {
@@ -347,26 +321,22 @@ describe('contracts typecheck', () => {
       },
     };
     expect(detail.generation.status).toBe('failed');
-    // @ts-expect-error
-    expect(detail.generation.engine_task_id).toBeUndefined();
+    expectTypeOf(detail.generation).exclude<undefined>().not.toHaveProperty('engine_task_id');
     const status: GetVideoStatusResponse = {
       status: 200,
       message: 'success',
       body: { task_id: 'task-1', state: 1, progress: 100, stage: null, postUrl: null },
     };
     expect(status.body.task_id).toBe('task-1');
-    // @ts-expect-error
-    expect(status.body.taskId).toBeUndefined();
-    // @ts-expect-error
-    expect(status.success).toBeUndefined();
+    expectTypeOf(status.body).exclude<undefined>().not.toHaveProperty('taskId');
+    expectTypeOf(status).exclude<undefined>().not.toHaveProperty('success');
     const cancelled: CancelVideoTaskResponse = {
       status: 200,
       message: 'success',
       body: { task_id: 'task-1', state: 1, progress: 100, videos: [], combined_videos: [] },
     };
     expect(cancelled.status).toBe(200);
-    // @ts-expect-error
-    expect(cancelled.deleted).toBeUndefined();
+    expectTypeOf(cancelled).exclude<undefined>().not.toHaveProperty('deleted');
   });
 
   it('pins the voices field names', () => {
@@ -384,8 +354,7 @@ describe('contracts typecheck', () => {
       ],
     };
     expect(list.voices[0]?.id).toBe('chatterbox:kokoro_af_heart');
-    // @ts-expect-error
-    expect(list.voices[0]?.type).toBeUndefined();
+    expectTypeOf(list.voices[0]).exclude<undefined>().not.toHaveProperty('type');
     const cloneRow = {
       id: 'clone-1',
       status: 'ready',
@@ -401,26 +370,21 @@ describe('contracts typecheck', () => {
       voices: [cloneRow],
     };
     expect(clones.voices[0]?.voice_id).toBe('chatterbox:u1');
-    // @ts-expect-error
-    expect(clones.voices[0]?.voiceId).toBeUndefined();
+    expectTypeOf(clones.voices[0]).exclude<undefined>().not.toHaveProperty('voiceId');
     const detail: GetClonedVoiceResponse = {
       success: true,
       voice: cloneRow,
     };
     expect(detail.voice.id).toBe('clone-1');
-    // @ts-expect-error
-    expect(detail.body).toBeUndefined();
+    expectTypeOf(detail).exclude<undefined>().not.toHaveProperty('body');
     const body: CreateClonedVoiceBody = { consent: 'true', denoise: 'false', language: 'en' };
     expect(body.consent).toBe('true');
-    // @ts-expect-error
-    const wrongBody: CreateClonedVoiceBody = { consent: true, denoise: 'false', language: 'en' };
-    expect(typeof wrongBody).toBe('object');
+    expectTypeOf<true>().not.toExtend<CreateClonedVoiceBody['consent']>();
     const created: CreateClonedVoiceResponse = { success: true, voice: cloneRow };
     expect(created.voice.id).toBe('clone-1');
     const deleted: DeleteClonedVoiceResponse = { success: true };
     expect(deleted.success).toBe(true);
-    // @ts-expect-error
-    expect(deleted.voice).toBeUndefined();
+    expectTypeOf(deleted).exclude<undefined>().not.toHaveProperty('voice');
   });
 
   it('pins the personas field names', () => {
@@ -440,36 +404,28 @@ describe('contracts typecheck', () => {
     };
     expect(list.personas[0]?.createdAt).toBe('2026-01-01T00:00:00Z');
     expect(list.personas[0]?.boundAccounts.youtube).toEqual(['acct-1']);
-    // @ts-expect-error
-    expect(list.personas[0]?.created_at).toBeUndefined();
-    // @ts-expect-error
-    expect(list.success).toBeUndefined();
+    expectTypeOf(list.personas[0]).exclude<undefined>().not.toHaveProperty('created_at');
+    expectTypeOf(list).exclude<undefined>().not.toHaveProperty('success');
     const faces: ListFacesResponse = {
       faces: [{ id: 'f1', url: 'https://example.test/f1.png', name: 'Ava', gender: 'female', age: 30, ethnicity: 'asian', hair: 'black', description: 'Smiling.' }],
     };
     expect(faces.faces[0]?.url).toBe('https://example.test/f1.png');
-    // @ts-expect-error
-    expect(faces.faces[0]?.path).toBeUndefined();
+    expectTypeOf(faces.faces[0]).exclude<undefined>().not.toHaveProperty('path');
     const images: ListPersonaImagesResponse = {
       success: true,
       images: [{ id: 'img-1', tag: 'casual', description: 'Smiling.', is_primary: false, created_at: '2026-01-01T00:00:00Z', image_url: 'https://example.test/signed' }],
     };
     expect(images.images[0]?.is_primary).toBe(false);
-    // @ts-expect-error
-    expect(images.images[0]?.createdAt).toBeUndefined();
+    expectTypeOf(images.images[0]).exclude<undefined>().not.toHaveProperty('createdAt');
     const created: CreatePersonaResponse = { success: true, personaId: 'p1', imageIds: ['img-1'] };
     expect(created.imageIds).toEqual(['img-1']);
-    // @ts-expect-error
-    expect(created.image_ids).toBeUndefined();
+    expectTypeOf(created).exclude<undefined>().not.toHaveProperty('image_ids');
     const body: CreatePersonaBody = { name: 'Ava', paragraphNumber: '3', imagePrimaryIndex: '0' };
     expect(body.paragraphNumber).toBe('3');
-    // @ts-expect-error
-    const wrongBody: CreatePersonaBody = { name: 'Ava', imagePrimaryIndex: 0 };
-    expect(typeof wrongBody).toBe('object');
+    expectTypeOf<number>().not.toExtend<CreatePersonaBody['imagePrimaryIndex']>();
     const updated: UpdatePersonaResponse = { success: true };
     expect(updated.success).toBe(true);
-    // @ts-expect-error
-    expect(updated.personaId).toBeUndefined();
+    expectTypeOf(updated).exclude<undefined>().not.toHaveProperty('personaId');
     const deleted: DeletePersonaResponse = { success: true };
     expect(deleted.success).toBe(true);
     const preview: GetPersonaDeletePreviewResponse = {
@@ -482,20 +438,16 @@ describe('contracts typecheck', () => {
     };
     expect(preview.counts.schedules).toBe(1);
     expect(preview.videos[0]?.taskId).toBe('task-1');
-    // @ts-expect-error
-    expect(preview.truncated).toBeUndefined();
+    expectTypeOf(preview).exclude<undefined>().not.toHaveProperty('truncated');
     const addBody: AddPersonaImageBody = { personaId: 'p1', isPrimary: 'true' };
     expect(addBody.isPrimary).toBe('true');
-    // @ts-expect-error
-    const wrongAddBody: AddPersonaImageBody = { personaId: 'p1', isPrimary: true };
-    expect(typeof wrongAddBody).toBe('object');
+    expectTypeOf<true>().not.toExtend<AddPersonaImageBody['isPrimary']>();
     const added: AddPersonaImageResponse = {
       success: true,
       image: { id: 'img-1', tag: 'casual', description: 'Smiling.', is_primary: false, created_at: '2026-01-01T00:00:00Z' },
     };
     expect(added.image.id).toBe('img-1');
-    // @ts-expect-error
-    expect(added.image.image_path).toBeUndefined();
+    expectTypeOf(added.image).exclude<undefined>().not.toHaveProperty('image_path');
     const updateBody: UpdatePersonaBody = { ctaType: 'comment', ctaUrl: 'https://example.com/x' };
     expect(updateBody.ctaType).toBe('comment');
     expect(updateBody.ctaUrl).toBe('https://example.com/x');
@@ -515,8 +467,7 @@ describe('contracts typecheck', () => {
       options: { videoType: 'hook_lipsync' },
     };
     expect(body.publishing.providers).toEqual(['youtube']);
-    // @ts-expect-error
-    expect(body.publishing.provider).toBeUndefined();
+    expectTypeOf(body.publishing).exclude<undefined>().not.toHaveProperty('provider');
     const generated: GenerateAndScheduleResponse = {
       success: true,
       schedule: { id: 'sch-1', mode: 'scheduled' },
@@ -527,19 +478,9 @@ describe('contracts typecheck', () => {
     expect(generated.schedule.id).toBe('sch-1');
     expect(generated.slots[0]?.taskId).toBe('task-1');
     expect(generated.warnings?.[0]?.code).toBe('voice_fallback_applied');
-    const wrongWarnings: GenerateAndScheduleResponse = {
-      success: true,
-      schedule: { id: 'sch-1', mode: 'scheduled' },
-      slots: [{ slotId: 'slot-1', slotAt: '2026-10-05T20:00:00Z', title: 'Launch', taskId: 'task-1', status: 'scheduled' }],
-      replayed: false,
-      // @ts-expect-error
-      warnings: ['voice_fallback_applied'],
-    };
-    expect(typeof wrongWarnings).toBe('object');
-    // @ts-expect-error
-    expect(generated.slots[0]?.task_id).toBeUndefined();
-    // @ts-expect-error
-    expect(generated.isReplay).toBeUndefined();
+    expectTypeOf<string>().not.toExtend<NonNullable<GenerateAndScheduleResponse['warnings']>[number]>();
+    expectTypeOf(generated.slots[0]).exclude<undefined>().not.toHaveProperty('task_id');
+    expectTypeOf(generated).exclude<undefined>().not.toHaveProperty('isReplay');
     const validated: ValidateScriptResponse = {
       success: true, valid: true, segmentCount: 1, totalWords: 3, hookWords: 3, contentWords: 0, mediaCount: 0,
       hookWindowSeconds: { min: 8, max: 12 }, measuredDurationSeconds: null, measured: 'pending',
@@ -547,8 +488,7 @@ describe('contracts typecheck', () => {
     };
     expect(validated.hookWindowSeconds.min).toBe(8);
     expect(validated.measured).toBe('pending');
-    // @ts-expect-error
-    expect(validated.hookWindow).toBeUndefined();
+    expectTypeOf(validated).exclude<undefined>().not.toHaveProperty('hookWindow');
     const scored: ScoreDraftResponse = {
       success: true, score: 100, reasons: [],
       counts: { chars: 400, words: 54, hashtags: 2, links: 0, firstLineWords: 10, slopHits: [], topThemeMatch: 'Porto mornings' },
@@ -556,35 +496,28 @@ describe('contracts typecheck', () => {
       publishCheck: { network: 'linkedin', ok: true, failures: [], warnings: [] },
     };
     expect(scored.counts.topThemeMatch).toBe('Porto mornings');
-    // @ts-expect-error
-    expect(scored.check).toBeUndefined();
+    expectTypeOf(scored).exclude<undefined>().not.toHaveProperty('check');
     const batchBody: BatchDiscountBody = { batchKey: 'batch-1', scheduleIds: ['11111111-2222-4333-8444-555555555555'] };
     expect(batchBody.batchKey).toBe('batch-1');
-    // @ts-expect-error
-    expect(batchBody.schedule_ids).toBeUndefined();
+    expectTypeOf(batchBody).exclude<undefined>().not.toHaveProperty('schedule_ids');
     const batch: BatchDiscountResponse = {
       success: true, batchId: 'batch-1', videos: 6, faceVideos: 6, earnedFreeVideos: 1,
       freeVideos: [{ scheduleId: '11111111-2222-4333-8444-555555555555', slotId: 'slot-1', discountTokens: 8 }],
       discountTokens: 8, chargedTokens: 40, warnings: [],
     };
     expect(batch.freeVideos[0]?.slotId).toBe('slot-1');
-    // @ts-expect-error
-    expect(batch.freeVideos[0]?.id).toBeUndefined();
+    expectTypeOf(batch.freeVideos[0]).exclude<undefined>().not.toHaveProperty('id');
     const minted: MintVideoUploadResponse = {
       success: true, uploadId: 'up-1', signedUrl: 'https://storage.test/upload', token: 'tok',
       storagePath: 'user-1/direct-uploads/up-1.mp4', expiresAt: '2026-11-12T00:15:00.000Z', maxBytes: 8,
     };
     expect(minted.storagePath).toBe('user-1/direct-uploads/up-1.mp4');
-    // @ts-expect-error
-    expect(minted.id).toBeUndefined();
+    expectTypeOf(minted).exclude<undefined>().not.toHaveProperty('id');
     const completed: CompleteVideoUploadResponse = { success: true, uploadId: 'up-1', status: 'ready', contentType: 'video/mp4', sizeBytes: 8 };
     expect(completed.status).toBe('ready');
-    // @ts-expect-error
-    expect(completed.state).toBeUndefined();
+    expectTypeOf(completed).exclude<undefined>().not.toHaveProperty('state');
     const publishBody: PublishByIdBody = { uploadId: '11111111-2222-4333-8444-555555555555', provider: 'instagram', accountIds: ['ig-1'] };
     expect(publishBody.uploadId).toBe('11111111-2222-4333-8444-555555555555');
-    // @ts-expect-error
-    const wrongPublish: PublishByIdBody = { id: 'up-1', provider: 'instagram', accountIds: ['ig-1'] };
-    expect(typeof wrongPublish).toBe('object');
+    expectTypeOf<PublishByIdBody>().not.toHaveProperty('id');
   });
 });

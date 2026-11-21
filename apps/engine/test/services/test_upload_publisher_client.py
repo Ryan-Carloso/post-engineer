@@ -32,7 +32,7 @@ class _MockHandler(BaseHTTPRequestHandler):
     responses: list[tuple[int, dict[str, Any]]] = []
     requests: list[dict[str, Any]] = []
 
-    def do_POST(self) -> None:  # noqa: N802
+    def do_POST(self) -> None:
         content_length = int(self.headers.get("Content-Length", 0))
         body = self.rfile.read(content_length)
         type(self).requests.append(
@@ -238,7 +238,7 @@ class PublishVideoClientTest(unittest.TestCase):
 
     def test_publish_video_times_out_against_slow_server(self) -> None:
         class SlowHandler(_MockHandler):
-            def do_POST(self) -> None:  # noqa: N802
+            def do_POST(self) -> None:
                 import time as time_module
 
                 time_module.sleep(2)
@@ -302,7 +302,7 @@ class PublishVideoClientTest(unittest.TestCase):
 
     def test_publish_video_retries_connection_errors_with_backoff(self) -> None:
         class FlakyHandler(_MockHandler):
-            def do_POST(self) -> None:  # noqa: N802
+            def do_POST(self) -> None:
                 self.rfile.read(int(self.headers.get("Content-Length", 0)))
                 type(self).requests.append({"path": self.path})
                 if len(type(self).requests) < 3:
@@ -342,7 +342,7 @@ class PublishVideoClientTest(unittest.TestCase):
         _MockHandler.responses.pop()
 
         class RawHandler(_MockHandler):
-            def do_POST(self) -> None:  # noqa: N802
+            def do_POST(self) -> None:
                 self.rfile.read(int(self.headers.get("Content-Length", 0)))
                 type(self).requests.append({"path": self.path})
                 body = b"this is not json"

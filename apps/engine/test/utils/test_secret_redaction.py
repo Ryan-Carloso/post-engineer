@@ -51,8 +51,8 @@ class TestRedactUrl:
         assert redact_url("") == ""
 
     def test_non_string_is_returned_as_is(self):
-        assert redact_url(None) is None  # type: ignore[arg-type]
-        assert redact_url(42) == 42  # type: ignore[arg-type]
+        assert redact_url(None) is None
+        assert redact_url(42) == 42
 
     def test_invalid_ipv6_url_is_returned_as_is(self):
         assert redact_url("http://[::1") == "http://[::1"
@@ -76,7 +76,7 @@ class TestRedactText:
         assert redact_text("nothing secret here") == "nothing secret here"
 
     def test_non_string_is_returned_as_is(self):
-        assert redact_text(None) is None  # type: ignore[arg-type]
+        assert redact_text(None) is None
 
 
 class TestRedactValue:

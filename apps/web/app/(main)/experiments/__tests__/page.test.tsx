@@ -22,9 +22,8 @@ vi.mock('@/lib/providers/registry', () => ({
   isSocialProvider: (value: string) => value === 'youtube',
 }));
 
-vi.mock('@/lib/i18n/provider', () => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const react = require('react') as typeof import('react');
+vi.mock('@/lib/i18n/provider', async () => {
+  const react = await vi.importActual<typeof import('react')>('react');
   const t = (key: string, params?: Record<string, unknown>) => {
     if (params === undefined) return key;
     return `${key} [${Object.values(params).join(', ')}]`;

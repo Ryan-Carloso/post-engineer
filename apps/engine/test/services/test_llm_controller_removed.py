@@ -8,14 +8,15 @@ no longer imports llm: scripts arrive as segments from the calling agent.
 Issue #542: the search module and its place-photos client are gone too.
 """
 
+import importlib
 import sys
 import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from app.models import schema  # noqa: E402
-from app.router import root_api_router  # noqa: E402
+from app.models import schema
+from app.router import root_api_router
 
 DELETED_ROUTES = {"/api/v1/scripts", "/api/v1/terms", "/api/v1/social-metadata"}
 DELETED_MODELS = (
@@ -31,7 +32,7 @@ DELETED_MODELS = (
 class LlmControllerRemovedTests(unittest.TestCase):
     def test_controller_module_is_gone(self):
         with self.assertRaises(ModuleNotFoundError):
-            import app.controllers.v1.llm  # noqa: F401
+            importlib.import_module("app.controllers.v1.llm")
 
     def test_router_has_no_llm_routes(self):
         paths = {route.path for route in root_api_router.routes}

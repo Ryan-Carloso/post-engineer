@@ -18,10 +18,10 @@ VERIFICATION = Path(__file__).resolve().parents[1] / "verification"
 if str(VERIFICATION) not in sys.path:
     sys.path.append(str(VERIFICATION))
 
-import collect  # noqa: E402
-import honesty  # noqa: E402
-import report  # noqa: E402
-import scope  # noqa: E402
+import collect
+import honesty
+import report
+import scope
 
 ROOT = Path(__file__).resolve().parents[3]
 

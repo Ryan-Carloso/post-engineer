@@ -8,7 +8,7 @@ from app.config import config
 from app.utils.ssrf import UnsafeUrlError, assert_public_url
 from app.models import publish as publish_models
 from app.models.cta import CtaType
-from app.models.segments import ScriptSegment, SegmentMedia, SegmentOverlay  # noqa: F401
+from app.models.segments import ScriptSegment
 
 warnings.filterwarnings(
     "ignore",
@@ -163,7 +163,7 @@ class VideoParams(BaseModel):
         if isinstance(value, VideoType):
             return value
         try:
-            return VideoType(value)  # type: ignore[arg-type]
+            return VideoType(value)
         except (ValueError, TypeError):
             raise ValueError(unknown_video_type_message(value)) from None
 
@@ -371,8 +371,3 @@ class TaskDeletionResponse(BaseResponse):
             },
         }
 
-
-from app.models.media_responses import (  # noqa: E402,F401
-    BgmRetrieveResponse,
-    BgmUploadResponse,
-)

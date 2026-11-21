@@ -19,10 +19,9 @@ from app.controllers.manager.redis_manager import RedisTaskManager
 from app.controllers.v1.base import new_router
 from app.models.exception import HttpException
 from app.models import const
+from app.models.media_responses import BgmRetrieveResponse, BgmUploadResponse
 from app.models.schema import (
     AudioRequest,
-    BgmRetrieveResponse,
-    BgmUploadResponse,
     SubtitleRequest,
     TaskDeletionResponse,
     TaskQueryRequest,
@@ -319,7 +318,8 @@ def _generation_id_for_task(task_id: str) -> str | None:
             value = rows[0].get("generation_id")
             return value if isinstance(value, str) and value else None
         return None
-    except Exception:  # noqa: BLE001
+    except Exception as exc:
+        logger.warning(f"generation id lookup failed for task {task_id}: {type(exc).__name__}")
         return None
 
 

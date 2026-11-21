@@ -94,7 +94,7 @@ def _to_pil_frames(output: object) -> list[object]:
 
     return [
         PIL.Image.fromarray((frame * 255).astype(np.uint8))
-        for frame in output  # type: ignore[attr-defined]
+        for frame in output
     ]
 
 
@@ -276,7 +276,7 @@ class ResidentRenderer:
         video = _to_pil_frames(output[0])
         del output
 
-        width, height = video[0].size  # type: ignore[attr-defined]
+        width, height = video[0].size
         current_video = video
         ref_latent = latent[:, :, :1].clone()
         all_frames = video

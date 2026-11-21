@@ -20,8 +20,7 @@ vi.mock('@/lib/schedule-range', () => ({
 }));
 
 vi.mock('next/image', () => ({
-  // eslint-disable-next-line jsx-a11y/alt-text, @next/next/no-img-element
-  default: (props: React.ComponentProps<'img'>) => <img {...props} />,
+  default: ({ alt, ...props }: React.ComponentProps<'img'>) => <img alt={alt} {...props} />,
 }));
 
 const pushMock = vi.fn();

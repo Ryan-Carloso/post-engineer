@@ -6,7 +6,7 @@ All helpers are pure and never mutate their input.
 """
 
 import re
-from typing import Any
+from typing import Any, TypeVar, overload
 from urllib.parse import parse_qsl, quote, urlsplit, urlunsplit
 
 SENSITIVE_QUERY_PARAMS = frozenset(
@@ -27,11 +27,20 @@ SENSITIVE_QUERY_PARAMS = frozenset(
 )
 
 _REDACTED = "***"
+_T = TypeVar("_T")
 
 _URL_RE = re.compile(r"https?://[^\s\"'<>]+")
 
 
-def redact_url(url: str) -> str:
+@overload
+def redact_url(url: str) -> str: ...
+
+
+@overload
+def redact_url(url: _T) -> _T: ...
+
+
+def redact_url(url: object) -> object:
     """Return *url* with sensitive query-parameter values replaced by ``***``.
 
     Non-URL strings and URLs without sensitive parameters are returned
@@ -61,7 +70,15 @@ def redact_url(url: str) -> str:
     )
 
 
-def redact_text(text: str) -> str:
+@overload
+def redact_text(text: str) -> str: ...
+
+
+@overload
+def redact_text(text: _T) -> _T: ...
+
+
+def redact_text(text: object) -> object:
     """Redact sensitive query parameters in every URL found in *text*."""
     if not isinstance(text, str):
         return text

@@ -2,9 +2,8 @@ import '@testing-library/jest-dom/vitest';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 
-vi.mock('@/lib/i18n/provider', () => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const react = require('react') as typeof import('react');
+vi.mock('@/lib/i18n/provider', async () => {
+  const react = await vi.importActual<typeof import('react')>('react');
   const t = (key: string) => key;
   const useI18n = () => {
     const [locale, setLocale] = react.useState<'pt' | 'en'>('pt');

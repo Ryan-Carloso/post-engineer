@@ -2,6 +2,16 @@ import { EventEmitter } from 'node:events';
 import https from 'node:https';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import type { LookupAddress } from 'node:dns';
+
+const realRequestPinned = vi.hoisted(() => ({ current: null as null | typeof import('@/lib/ssrf/pinned-request').requestPinned }));
+
+vi.mock('@/lib/ssrf/pinned-request', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/ssrf/pinned-request')>();
+  realRequestPinned.current = actual.requestPinned;
+  return { ...actual, requestPinned: vi.fn(actual.requestPinned) };
+});
+
+import { requestPinned } from '@/lib/ssrf/pinned-request';
 import {
   validateDcrMetadata,
   isCimdClientId,
@@ -58,12 +68,8 @@ function lookupReturning(...addresses: string[]) {
 }
 
 function okFetch(body: unknown) {
-  return vi.fn(
-    async (
-      _url: string | URL | Request,
-      _init?: RequestInit,
-    ): Promise<Response> =>
-      ({ ok: true, json: async () => body }) as Response,
+  return vi.mocked(requestPinned).mockClear().mockImplementation(
+    async (): Promise<Response> => new Response(JSON.stringify(body), { status: 200 }),
   );
 }
 
@@ -157,24 +163,27 @@ describe('isBlockedIpAddress', () => {
 describe('fetchCimdDocument SSRF guards', () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    const real = realRequestPinned.current;
+    if (real === null) throw new Error('pinned-request mock did not load');
+    vi.mocked(requestPinned).mockReset().mockImplementation(real);
   });
   it('never follows redirects', async () => {
-    const fetchImpl = okFetch({ redirect_uris: ['https://x/callback'] });
-    await fetchCimdDocument(
+    const fetchImpl = vi.mocked(requestPinned).mockImplementation(
+      async (): Promise<Response> => new Response(null, { status: 302, headers: { location: 'https://evil.example/x' } }),
+    );
+    const result = await fetchCimdDocument(
       'https://public.example/.well-known/client.json',
-      fetchImpl,
       lookupReturning('93.184.216.34'),
     );
     expect(fetchImpl).toHaveBeenCalledOnce();
-    const init = fetchImpl.mock.calls[0]?.[1];
-    expect(init?.redirect).toBe('error');
+    expect(fetchImpl.mock.calls[0]?.[1]).toEqual(['93.184.216.34']);
+    expect(result).toBeNull();
   });
 
   it('refuses hosts resolving to loopback without fetching', async () => {
     const fetchImpl = okFetch({ redirect_uris: ['https://x/callback'] });
     const result = await fetchCimdDocument(
       'https://evil.example/client.json',
-      fetchImpl,
       lookupReturning('127.0.0.1'),
     );
     expect(result).toBeNull();
@@ -185,7 +194,6 @@ describe('fetchCimdDocument SSRF guards', () => {
     const fetchImpl = okFetch({ redirect_uris: ['https://x/callback'] });
     const result = await fetchCimdDocument(
       'https://169.254.169.254/latest/meta-data/',
-      fetchImpl,
       lookupReturning('169.254.169.254'),
     );
     expect(result).toBeNull();
@@ -196,7 +204,6 @@ describe('fetchCimdDocument SSRF guards', () => {
     const fetchImpl = okFetch({ redirect_uris: ['https://x/callback'] });
     const result = await fetchCimdDocument(
       'https://evil.example/client.json',
-      fetchImpl,
       lookupReturning('93.184.216.34', '10.0.0.5'),
     );
     expect(result).toBeNull();
@@ -210,7 +217,6 @@ describe('fetchCimdDocument SSRF guards', () => {
     });
     const result = await fetchCimdDocument(
       'https://public.example/client.json',
-      fetchImpl,
       lookupImpl,
     );
     expect(result).toBeNull();
@@ -221,7 +227,6 @@ describe('fetchCimdDocument SSRF guards', () => {
     const fetchImpl = okFetch({ redirect_uris: ['https://x/callback'] });
     const result = await fetchCimdDocument(
       'https://public.example/.well-known/client.json',
-      fetchImpl,
       lookupReturning('93.184.216.34'),
     );
     expect(result).toEqual({ redirect_uris: ['https://x/callback'] });
@@ -232,7 +237,6 @@ describe('fetchCimdDocument SSRF guards', () => {
     const fetchImpl = okFetch({ redirect_uris: ['https://x/callback'] });
     const result = await fetchCimdDocument(
       'http://public.example/client.json',
-      fetchImpl,
       lookupReturning('93.184.216.34'),
     );
     expect(result).toBeNull();
@@ -248,7 +252,6 @@ describe('fetchCimdDocument SSRF guards', () => {
       const fetchImpl = okFetch({ redirect_uris: ['https://x/callback'] });
       const result = await fetchCimdDocument(
         url,
-        fetchImpl,
         lookupReturning('93.184.216.34'),
       );
       expect(result).toBeNull();
@@ -260,7 +263,6 @@ describe('fetchCimdDocument SSRF guards', () => {
     const fetchImpl = okFetch({ redirect_uris: ['https://x/callback'] });
     const result = await fetchCimdDocument(
       'https://public.example:443/client.json',
-      fetchImpl,
       lookupReturning('93.184.216.34'),
     );
     expect(result).toEqual({ redirect_uris: ['https://x/callback'] });
@@ -274,7 +276,6 @@ describe('fetchCimdDocument SSRF guards', () => {
       const fetchImpl = okFetch({ redirect_uris: ['https://x/callback'] });
       const result = await fetchCimdDocument(
         'https://evil.example/client.json',
-        fetchImpl,
         lookupReturning(address),
       );
       expect(result).toBeNull();
@@ -324,7 +325,6 @@ describe('fetchCimdDocument SSRF guards', () => {
     try {
       const result = await fetchCimdDocument(
         'https://public.example/client.json',
-        undefined,
         lookup,
       );
       expect(result).toEqual({ redirect_uris: ['https://x/callback'] });
@@ -356,7 +356,6 @@ describe('fetchCimdDocument SSRF guards', () => {
     const fetchImpl = okFetch({ redirect_uris: ['https://ok.example/cb', unsafe] });
     const result = await fetchCimdDocument(
       'https://public.example/client.json',
-      fetchImpl,
       lookupReturning('93.184.216.34'),
     );
     expect(fetchImpl).toHaveBeenCalledOnce();
@@ -368,7 +367,6 @@ describe('fetchCimdDocument SSRF guards', () => {
       const fetchImpl = okFetch({ redirect_uris: redirectUris });
       const result = await fetchCimdDocument(
         'https://public.example/client.json',
-        fetchImpl,
         lookupReturning('93.184.216.34'),
       );
       expect(fetchImpl).toHaveBeenCalledOnce();
@@ -378,21 +376,18 @@ describe('fetchCimdDocument SSRF guards', () => {
 
   it('accepts https and loopback http redirect_uris', async () => {
     const uris = ['https://ok.example/cb', 'http://127.0.0.1:33418/cb', 'http://localhost/cb'];
+    okFetch({ redirect_uris: uris });
     const result = await fetchCimdDocument(
       'https://public.example/client.json',
-      okFetch({ redirect_uris: uris }),
       lookupReturning('93.184.216.34'),
     );
     expect(result).toEqual({ redirect_uris: uris });
   });
 
   it('returns null when the response is not ok', async () => {
-    const fetchImpl = vi.fn(
-      async (): Promise<Response> => ({ ok: false }) as Response,
-    );
+    vi.mocked(requestPinned).mockImplementation(async (): Promise<Response> => new Response(null, { status: 500 }));
     const result = await fetchCimdDocument(
       'https://public.example/client.json',
-      fetchImpl,
       lookupReturning('93.184.216.34'),
     );
     expect(result).toBeNull();

@@ -17,8 +17,8 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from app.config import config  # noqa: E402
-from app.services import persona_hook  # noqa: E402
+from app.config import config
+from app.services import persona_hook
 
 
 class TestClosingSafeTrim:

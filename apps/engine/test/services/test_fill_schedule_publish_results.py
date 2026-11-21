@@ -26,14 +26,14 @@ class _FakeStore:
         self.updates: list[tuple[str, dict]] = []
         self.claimed: list[str] = []
 
-    def ready_due_slots(self, now):  # type: ignore[no-untyped-def]
+    def ready_due_slots(self, now):
         return []
 
     def claim_ready_slot(self, slot_id: str, now_utc=None) -> bool:
         self.claimed.append(slot_id)
         return True
 
-    def update_slot(self, slot_id: str, **kwargs) -> None:  # type: ignore[no-untyped-def]
+    def update_slot(self, slot_id: str, **kwargs) -> None:
         self.updates.append((slot_id, kwargs))
 
 
@@ -52,7 +52,7 @@ class FillSchedulePublishResultsTests(TestCase):
         self.addCleanup(os.unlink, self.video_path)
         self.video_name = os.path.basename(self.video_path)
 
-    def _slot(self, providers):  # type: ignore[no-untyped-def]
+    def _slot(self, providers):
         return {
             "id": "slot-1",
             "title": "Porto coffee",
@@ -69,7 +69,7 @@ class FillSchedulePublishResultsTests(TestCase):
             },
         }
 
-    def _run(  # type: ignore[no-untyped-def]
+    def _run(
         self,
         providers,
         publish_mock,
@@ -80,7 +80,7 @@ class FillSchedulePublishResultsTests(TestCase):
         from app.services.fill_schedule import scheduler as scheduler_module
 
         store = _FakeStore()
-        store.ready_due_slots = lambda now: [self._slot(providers)]  # type: ignore[method-assign]
+        store.ready_due_slots = lambda now: [self._slot(providers)]
         state = MagicMock()
         state.get_task.return_value = {
             "state": 1,
@@ -93,14 +93,14 @@ class FillSchedulePublishResultsTests(TestCase):
         if events is not None:
             record_update_slot = store.update_slot
 
-            def _update_slot(slot_id, **kwargs):  # type: ignore[no-untyped-def]
+            def _update_slot(slot_id, **kwargs):
                 events.append(("slot", kwargs.get("status")))
                 record_update_slot(slot_id, **kwargs)
 
-            store.update_slot = _update_slot  # type: ignore[method-assign]
+            store.update_slot = _update_slot
             record_update_task = state.update_task
 
-            def _update_task(task_id, **kwargs):  # type: ignore[no-untyped-def]
+            def _update_task(task_id, **kwargs):
                 events.append(("state", "publish_results" in kwargs))
                 return record_update_task(task_id, **kwargs)
 
@@ -115,7 +115,7 @@ class FillSchedulePublishResultsTests(TestCase):
             sched.publish_due(datetime(2026, 10, 20, 12, 0, tzinfo=UTC))
         return store, state
 
-    def _recorded_results(self, state):  # type: ignore[no-untyped-def]
+    def _recorded_results(self, state):
         recorded = None
         for call in state.update_task.call_args_list:
             if "publish_results" in call.kwargs:
@@ -240,7 +240,7 @@ class FillSchedulePublishResultsTests(TestCase):
     def test_partial_failure_records_failed_and_published_entries(self) -> None:
         from app.services.upload_publisher import PublishError
 
-        def _publish(**kwargs):  # type: ignore[no-untyped-def]
+        def _publish(**kwargs):
             metadata = kwargs["metadata"]
             if type(metadata).__name__ == "BlueskyMetadata":
                 raise PublishError(
@@ -282,7 +282,7 @@ class FillSchedulePublishResultsTests(TestCase):
 
         secret = "abcdefghijklmnopqrstuvwxyz0123456789"
 
-        def _publish(**kwargs):  # type: ignore[no-untyped-def]
+        def _publish(**kwargs):
             metadata = kwargs["metadata"]
             if type(metadata).__name__ == "BlueskyMetadata":
                 raise PublishError(
@@ -376,7 +376,7 @@ class FillSchedulePublishResultsTests(TestCase):
         self.assertIn("publishing", statuses)
 
     def test_lost_state_write_fires_partial_failure_event(self) -> None:
-        def _fail_publish_results_write(task_id, **kwargs):  # type: ignore[no-untyped-def]
+        def _fail_publish_results_write(task_id, **kwargs):
             if "publish_results" in kwargs:
                 raise RuntimeError("supabase unreachable")
             return None

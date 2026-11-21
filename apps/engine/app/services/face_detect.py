@@ -26,7 +26,7 @@ def _load_cv2():
         if _FACE_MODULE_LOADED:
             return _FACE_MODULE
         try:
-            import cv2  # noqa: PLC0415
+            import cv2
 
             _FACE_MODULE = cv2
             _FACE_MODULE_LOADED = True

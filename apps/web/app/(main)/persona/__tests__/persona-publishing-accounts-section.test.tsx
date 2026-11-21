@@ -2,9 +2,8 @@ import '@testing-library/jest-dom/vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-vi.mock('@/lib/i18n/provider', () => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const react = require('react') as typeof import('react');
+vi.mock('@/lib/i18n/provider', async () => {
+  const react = await vi.importActual<typeof import('react')>('react');
   const dictionary: Record<string, string> = {
     'persona.publishingAccountsLabel': 'Publishing accounts',
     'persona.publishingAccountsHint': 'Hint text.',
@@ -39,8 +38,7 @@ vi.mock('@/lib/i18n/provider', () => {
 });
 
 vi.mock('next/image', () => ({
-  // eslint-disable-next-line jsx-a11y/alt-text, @next/next/no-img-element
-  default: (props: React.ComponentProps<'img'>) => <img {...props} />,
+  default: ({ alt, ...props }: React.ComponentProps<'img'>) => <img alt={alt} {...props} />,
 }));
 
 vi.mock('next/link', () => ({

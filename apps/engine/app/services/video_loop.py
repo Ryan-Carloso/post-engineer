@@ -32,7 +32,7 @@ def _trimmed(clip, take, output_dir, width, height, fps, threads):
             fps=fps,
             threads=threads,
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.warning(f"loop trim failed, keeping the whole clip: {type(exc).__name__}")
         return clip
     return type(clip)(

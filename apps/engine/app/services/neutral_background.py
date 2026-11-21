@@ -78,6 +78,6 @@ def render_neutral_clip(
         return image_material.render_image_file_to_mp4(
             png_path, clip_duration=max(1, int(clip_duration))
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.warning(f"neutral clip render failed: {exc}")
         return ""

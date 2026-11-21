@@ -240,7 +240,8 @@ def check_media_detail(
     raw_path = os.path.join(work_dir, "check-media.raw")
     try:
         image_fetch.download_image(url, raw_path)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
+        logger.warning(f"check-media image download failed: {type(exc).__name__}")
         return {"code": _download_failure_code(exc), "width": None, "height": None, "has_face": None}
     try:
         size = photo_content.probe_size(raw_path)
@@ -288,7 +289,8 @@ def _resolve_url(
     raw_path = os.path.join(task_dir, f"segment-media-{token}.raw")
     try:
         image_fetch.download_image(url, raw_path, session=session)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
+        logger.warning(f"segment image download failed: {type(exc).__name__}")
         return "", _CODE_TO_REASON.get(_download_failure_code(exc), "download failed")
     failure = image_fetch.validate_photo(raw_path, aspect)
     if failure is None:

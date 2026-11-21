@@ -11,8 +11,7 @@ vi.mock('next/link', () => ({
 }));
 
 vi.mock('next/image', () => ({
-  // eslint-disable-next-line jsx-a11y/alt-text, @next/next/no-img-element
-  default: (props: React.ComponentProps<'img'>) => <img {...props} />,
+  default: ({ alt, ...props }: React.ComponentProps<'img'>) => <img alt={alt} {...props} />,
 }));
 
 vi.mock('next/navigation', () => ({
@@ -36,9 +35,8 @@ vi.mock('@/lib/ui', () => ({
   CoinsIcon: () => <span data-testid="icon-coins" />,
 }));
 
-vi.mock('@/lib/i18n/provider', () => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const react = require('react') as typeof import('react');
+vi.mock('@/lib/i18n/provider', async () => {
+  const react = await vi.importActual<typeof import('react')>('react');
   const t = (key: string) => key;
   const useI18n = () => {
     const [locale, setLocale] = react.useState<'pt' | 'en'>('pt');

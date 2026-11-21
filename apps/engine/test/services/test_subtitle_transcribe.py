@@ -24,7 +24,7 @@ class _FakeSegments:
     def __init__(self, texts: list[str]) -> None:
         self._texts = texts
 
-    def __iter__(self):  # type: ignore[no-untyped-def]
+    def __iter__(self):
         return iter(SimpleNamespace(text=text) for text in self._texts)
 
 
@@ -34,7 +34,7 @@ class _FakeModel:
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         pass
 
-    def transcribe(self, audio_file: str, **kwargs: Any):  # type: ignore[no-untyped-def]
+    def transcribe(self, audio_file: str, **kwargs: Any):
         info = SimpleNamespace(language="en", language_probability=0.99)
         return _FakeSegments(["hello ", "world"]), info
 
@@ -75,7 +75,7 @@ def test_transcribe_text_returns_none_when_transcribe_raises(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class _ExplodingModel(_FakeModel):
-        def transcribe(self, audio_file: str, **kwargs: Any):  # type: ignore[no-untyped-def]
+        def transcribe(self, audio_file: str, **kwargs: Any):
             raise RuntimeError("transcription crashed")
 
     _install_fake_model(monkeypatch, _ExplodingModel)
@@ -89,12 +89,12 @@ def test_transcribe_text_returns_none_when_generator_raises_mid_iteration(
     inference runs while it is consumed, so a failure mid-stream must also
     yield None instead of raising out of this helper (OpenCode review)."""
 
-    def _raising_segments():  # type: ignore[no-untyped-def]
+    def _raising_segments():
         yield SimpleNamespace(text="hello ")
         raise RuntimeError("inference crashed mid-stream")
 
     class _LazyFailingModel(_FakeModel):
-        def transcribe(self, audio_file: str, **kwargs: Any):  # type: ignore[no-untyped-def]
+        def transcribe(self, audio_file: str, **kwargs: Any):
             info = SimpleNamespace(language="en", language_probability=0.99)
             return _raising_segments(), info
 
