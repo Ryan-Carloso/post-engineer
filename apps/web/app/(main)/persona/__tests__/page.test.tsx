@@ -2100,6 +2100,37 @@ describe('app/(main)/persona/page — submit em edição', () => {
     });
   });
 
+  it('voltar para criação após editar limpa os vínculos do rascunho', async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({ success: true });
+    vi.mocked(useUpdatePersonaMutation).mockReturnValue({ mutateAsync, isPending: false } as never);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            success: true,
+            defaults: { youtube: ['yt-1'], instagram: [], bluesky: [], linkedin: [], threads: [] },
+          }),
+      }),
+    );
+    mockEditMode({ ...EDIT_PERSONA_FULL, id: '11111111-2222-3333-4444-555555555555' });
+    const { rerender } = render(<PersonaPage />, { wrapper: createWrapper() });
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'personas.save' })).toBeEnabled(),
+    );
+    expect(usePersonaStore.getState().publishingAccounts.youtube).toEqual(['yt-1']);
+
+    searchParams.value = new URLSearchParams();
+    rerender(<PersonaPage />);
+    await waitFor(() => {
+      expect(usePersonaStore.getState().publishingAccounts).toEqual(emptyPersonaDefaultAccounts());
+    });
+    expect(screen.getByRole('button', { name: 'persona.submit' })).toBeTruthy();
+  });
+
   it('edição com falha no update não PUTa as contas', async () => {
     const mutateAsync = vi.fn().mockResolvedValue({ success: false, error: 'deu ruim' });
     vi.mocked(useUpdatePersonaMutation).mockReturnValue({ mutateAsync, isPending: false } as never);

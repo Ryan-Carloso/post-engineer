@@ -304,6 +304,42 @@ describe('PersonaPublishingAccountsSection', () => {
     );
   });
 
+  it('ignores a late binding response for a previous persona', async () => {
+    let resolveFirst!: (body: unknown) => void;
+    const firstBody = new Promise((resolve) => {
+      resolveFirst = resolve;
+    });
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(() => Promise.resolve({ ok: true, status: 200, json: () => firstBody }))
+      .mockImplementationOnce(() =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              success: true,
+              defaults: { youtube: ['UC-2'], instagram: [], bluesky: [], linkedin: [], threads: [] },
+            }),
+        }),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+    const { rerender } = render(<PersonaPublishingAccountsSection personaId={PERSONA_ID} />);
+    rerender(<PersonaPublishingAccountsSection personaId="22222222-3333-4444-5555-666666666666" />);
+    await waitFor(() => {
+      expect(usePersonaStore.getState().publishingAccounts.youtube).toEqual(['UC-2']);
+    });
+    resolveFirst({
+      success: true,
+      defaults: { youtube: ['UC-1'], instagram: [], bluesky: [], linkedin: [], threads: [] },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(usePersonaStore.getState().publishingAccounts.youtube).toEqual(['UC-2']);
+    expect(usePersonaStore.getState().loadedPublishingAccounts).toEqual(
+      expect.objectContaining({ youtube: ['UC-2'] }),
+    );
+  });
+
   it('leaves the draft untouched and marks it loaded for a non-uuid personaId', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);

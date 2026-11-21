@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { logger } from '@/lib/logger';
 import { notifyIfSessionExpired } from '@/lib/session-expiry';
 import Link from 'next/link';
@@ -102,26 +102,31 @@ export function PersonaPublishingAccountsSection({ personaId }: { personaId?: st
   const setPublishingAccountsLoaded = usePersonaStore((s) => s.setPublishingAccountsLoaded);
   const setLoadedPublishingAccounts = usePersonaStore((s) => s.setLoadedPublishingAccounts);
   const submitResult = usePersonaStore((s) => s.result);
+  const currentPersonaId = useRef(personaId);
+  currentPersonaId.current = personaId;
   const selection = draftSelection;
   const [loading, setLoading] = useState(!isDraft);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (personaId === undefined) return;
+    const requested = personaId;
     setLoading(true);
     setLoadError(null);
     try {
-      const binding = await fetchBinding(personaId, t('persona.publishingAccountsLoadError'));
-      if (UUID_SHAPE.test(personaId)) {
+      const binding = await fetchBinding(requested, t('persona.publishingAccountsLoadError'));
+      if (requested !== currentPersonaId.current) return;
+      if (UUID_SHAPE.test(requested)) {
         setDraftSelection(binding);
         setLoadedPublishingAccounts(binding);
       }
       setPublishingAccountsLoaded(true);
     } catch (error) {
+      if (requested !== currentPersonaId.current) return;
       setLoadError(error instanceof Error ? error.message : t('persona.publishingAccountsLoadError'));
       setPublishingAccountsLoaded(false);
     } finally {
-      setLoading(false);
+      if (requested === currentPersonaId.current) setLoading(false);
     }
   }, [personaId, t, setDraftSelection, setLoadedPublishingAccounts, setPublishingAccountsLoaded]);
 

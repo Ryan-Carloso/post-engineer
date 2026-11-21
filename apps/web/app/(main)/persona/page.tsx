@@ -14,6 +14,7 @@ import {
   CarouselPrevious,
 } from '@/components/ui/carousel';
 import { useVoicesQuery, usePersonaListQuery } from '@/lib/api';
+import { emptyPersonaDefaultAccounts } from '@/lib/persona-publishing-accounts';
 import { usePersonaStore } from '@/lib/store';
 import { personaFormSchema, parsePersonaCtaType } from '@/lib/persona-schema';
 import { useI18n } from '@/lib/i18n/provider';
@@ -94,6 +95,14 @@ const PersonaPageContent = () => {
     methods.setValue('scriptPrompt', persona.scriptPrompt ?? '');
     methods.setValue('niche', persona.niche ?? '');
   }, [editingPersona, methods]);
+
+  useEffect(() => {
+    if (editingPersonaId !== null) return;
+    const store = usePersonaStore.getState();
+    store.setPublishingAccounts(emptyPersonaDefaultAccounts());
+    store.setLoadedPublishingAccounts(emptyPersonaDefaultAccounts());
+    store.setPublishingAccountsLoaded(true);
+  }, [editingPersonaId]);
 
   const retryFailedQueries = async (): Promise<void> => {
     const failed = [voicesQuery, personasQuery].filter((query) => query.isError);
