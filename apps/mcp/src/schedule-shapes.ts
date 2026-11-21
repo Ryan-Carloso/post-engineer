@@ -129,6 +129,10 @@ export const GeneratePersonaVideoOptionsShape = {
     .enum(VIDEO_LAYOUTS)
     .optional()
     .describe('How the persona hook is composed with the video material (the agent images). Overrides the persona when one is given; a post without a persona defaults to "standard". Same render cost either way.'),
+  hookPanel: z
+    .boolean()
+    .optional()
+    .describe('hook_lipsync only: false keeps the face alone during the hook (no photo panel under it). Omitted uses the persona default; rejected for other video types.'),
   paragraphNumber: z.number().int().min(1).max(10).optional().describe('Paragraph count (1-10). Overrides the persona when one is given.'),
   language: z
     .string()

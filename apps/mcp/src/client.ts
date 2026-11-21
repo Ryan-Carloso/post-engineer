@@ -24,7 +24,7 @@ import type {
 } from './client-types.js';
 import { requirePublishingAccounts } from './require-publishing-accounts.js';
 import { resolveBaseUrl } from './client-base-url.js';
-import { appendPersonaCtaFields } from './persona-cta-shape.js';
+import { appendCreatePersonaFields, appendUpdatePersonaFields } from './persona-form-fields.js';
 import { publishVideoDirect } from './client-publish-uploaded.js';
 import {
   getTokenBalance,
@@ -188,16 +188,7 @@ export class PostEngineerClient {
     const formData = new FormData();
     formData.set('publishingAccounts', JSON.stringify(requirePublishingAccounts(input.accounts)));
     await appendPersonaAvatar(formData, input, true);
-    formData.set('name', input.name);
-    formData.set('voiceId', input.voiceId);
-    formData.set('language', input.language ?? 'en-US');
-    formData.set('videoAspect', input.videoAspect ?? '9:16');
-    formData.set('videoLayout', input.videoLayout ?? 'standard');
-    if (input.scriptPrompt !== undefined) formData.set('scriptPrompt', input.scriptPrompt);
-    formData.set('paragraphNumber', String(input.paragraphNumber ?? 1));
-    formData.set('niche', input.niche ?? 'General');
-    formData.set('faceQuality', input.faceQuality ?? 'very_good');
-    appendPersonaCtaFields(formData, input.cta);
+    appendCreatePersonaFields(formData, input);
     const images = input.images ?? [];
     if (input.imagePrimaryIndex !== undefined && images.length === 0) {
       throw new Error('imagePrimaryIndex requires images: provide at least one library image.');
@@ -265,15 +256,7 @@ export class PostEngineerClient {
     const formData = new FormData();
     if (input.name !== undefined) formData.set('name', input.name);
     await appendPersonaAvatar(formData, input, false);
-    if (input.voiceId !== undefined) formData.set('voiceId', input.voiceId);
-    if (input.language !== undefined) formData.set('language', input.language);
-    if (input.videoAspect !== undefined) formData.set('videoAspect', input.videoAspect);
-    if (input.videoLayout !== undefined) formData.set('videoLayout', input.videoLayout);
-    if (input.scriptPrompt !== undefined) formData.set('scriptPrompt', input.scriptPrompt);
-    if (input.paragraphNumber !== undefined) formData.set('paragraphNumber', String(input.paragraphNumber));
-    if (input.niche !== undefined) formData.set('niche', input.niche);
-    if (input.faceQuality !== undefined) formData.set('faceQuality', input.faceQuality);
-    appendPersonaCtaFields(formData, input.cta);
+    appendUpdatePersonaFields(formData, input);
     const raw = await this.request(
       `/api/persona?personaId=${encodeURIComponent(input.personaId)}`,
       { method: 'PATCH', headers: this.getHeaders(false), body: formData },

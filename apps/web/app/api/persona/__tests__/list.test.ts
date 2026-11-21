@@ -31,6 +31,7 @@ const PERSONAS = [
     created_at: '2026-08-29T00:00:00Z',
     language: 'pt',
     video_aspect: '9:16',
+    hook_panel: true,
     script_prompt: 'Storytelling.',
     paragraph_number: 2,
     niche: 'finanças pessoais',
@@ -45,6 +46,7 @@ const PERSONAS = [
     created_at: '2026-08-29T01:00:00Z',
     language: null,
     video_aspect: null,
+    hook_panel: false,
     script_prompt: null,
     paragraph_number: null,
   },
@@ -137,6 +139,7 @@ function mockSupabase(
       created_at: string;
       language: string | null;
       video_aspect: string | null;
+      hook_panel: boolean;
       script_prompt: string | null;
       paragraph_number: number | null;
       niche?: string;
@@ -297,6 +300,7 @@ describe('GET /api/persona/list', () => {
     expect(body.personas[0]).toMatchObject({
       language: 'pt',
       videoAspect: '9:16',
+      hookPanel: true,
       scriptPrompt: 'Storytelling.',
       paragraphNumber: 2,
     });
@@ -349,6 +353,7 @@ describe('GET /api/persona/list', () => {
           created_at: '2026-08-29T00:00:00Z',
           language: null,
           video_aspect: null,
+          hook_panel: true,
           script_prompt: null,
           paragraph_number: null,
         },
@@ -417,6 +422,7 @@ describe('GET /api/persona/list', () => {
       voiceId: 'voz-1',
       language: 'pt',
       videoAspect: '9:16',
+      hookPanel: true,
       scriptPrompt: 'Storytelling.',
       paragraphNumber: 2,
       niche: 'finanças pessoais',
@@ -429,6 +435,7 @@ describe('GET /api/persona/list', () => {
       avatarUrl: 'data:image/png;base64,IA',
       libraryUrl: `https://supabase.test/signed/${USER_ID}/p-2/other.png`,
       voiceAudioUrl: `https://supabase.test/signed/${USER_ID}/voz.mp3`,
+      hookPanel: false,
       boundAccounts: { ...EMPTY_BINDING, youtube: ['yt-2'] },
     });
     expect(signed.sort()).toEqual(

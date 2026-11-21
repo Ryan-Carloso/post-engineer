@@ -2,6 +2,7 @@
 
 import { useFormContext } from 'react-hook-form';
 import { INPUT_CLASS } from '@/lib/ui';
+import { Switch } from '@/components/ui/switch';
 import { VIDEO_LAYOUTS } from '@/lib/persona-schema';
 import { usePersonaStore } from '@/lib/store';
 import { useI18n } from '@/lib/i18n/provider';
@@ -38,6 +39,28 @@ const PersonaLayoutFieldset = () => {
   );
 };
 
+const PersonaHookPanelField = () => {
+  const hookPanel = usePersonaStore((s) => s.hookPanel);
+  const { t } = useI18n();
+  return (
+    <div className="flex items-start justify-between gap-4">
+      <div>
+        <label htmlFor="persona-hook-panel" className="text-sm font-semibold text-ink">
+          {t('personas.hookPanelLabel')}
+        </label>
+        <p className="mt-1 text-xs leading-5 text-muted-text">{t('personas.hookPanelHint')}</p>
+      </div>
+      <Switch
+        id="persona-hook-panel"
+        data-testid="persona-hook-panel"
+        checked={hookPanel}
+        onCheckedChange={(checked) => usePersonaStore.getState().setHookPanel(checked)}
+        className="mt-0.5"
+      />
+    </div>
+  );
+};
+
 export function PersonaPreferencesSection() {
   const videoAspect = usePersonaStore((s) => s.videoAspect);
   const result = usePersonaStore((s) => s.result);
@@ -71,6 +94,7 @@ export function PersonaPreferencesSection() {
           </div>
         </fieldset>
         <PersonaLayoutFieldset />
+        <PersonaHookPanelField />
         <label className="block text-sm font-semibold text-ink">
           {t('personas.nicheLabel')}
           <input

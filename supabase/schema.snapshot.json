@@ -122,6 +122,12 @@
                     "type": "text",
                     "default": null,
                     "notNull": false
+                },
+                {
+                    "name": "hook_panel",
+                    "type": "boolean",
+                    "default": "true",
+                    "notNull": true
                 }
             ],
             "policies": {
@@ -368,6 +374,12 @@
                 {
                     "name": "post_cta_instruction",
                     "type": "text",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "post_hook_panel",
+                    "type": "boolean",
                     "default": null,
                     "notNull": false
                 }
