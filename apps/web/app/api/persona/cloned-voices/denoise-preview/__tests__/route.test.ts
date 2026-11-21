@@ -127,6 +127,30 @@ describe('POST /api/persona/cloned-voices/denoise-preview', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it('rejects an empty reference file by its size before copying it', async () => {
+    const body = new FormData();
+    body.set('file', new Blob([], { type: 'audio/webm' }), 'a.webm');
+    const arrayBuffer = vi.spyOn(File.prototype, 'arrayBuffer');
+
+    const response = await POST(await multipartRequest(URL_, body));
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ success: false, error: 'Reference audio is empty.' });
+    expect(arrayBuffer).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+    arrayBuffer.mockRestore();
+  });
+
+  it('returns 500 when the engine URL is not configured', async () => {
+    vi.stubEnv('MONEYPRINT_API_URL', undefined);
+
+    const response = await POST(await multipartRequest(URL_, form()));
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ success: false, error: 'Configuration error.' });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('surfaces the engine message and status on upstream failure', async () => {
     fetchMock.mockResolvedValue(Response.json({ status: 400, message: 'could not decode reference audio' }, { status: 400 }));
     const response = await POST(await multipartRequest(URL_, form()));

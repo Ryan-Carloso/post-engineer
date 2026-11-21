@@ -190,6 +190,37 @@ describe('POST /api/upload-content', () => {
     expect(mockHandleYoutubeUpload).not.toHaveBeenCalled();
   });
 
+  it('returns 401 with a valid secret and an empty userId in the form', async () => {
+    mockRequireSupabaseSession.mockResolvedValue({
+      auth: null,
+      error: NextResponse.json({ success: false }, { status: 401 }),
+    });
+    const form = new FormData();
+    form.append('provider', 'youtube');
+    form.append('userId', '');
+    const req = new NextRequest(await multipartRequest('http://localhost/api/upload-content', form));
+    req.headers.set('authorization', `Bearer ${API_SECRET}`);
+
+    const res = await POST(req);
+
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ success: false, error: 'Authentication required.' });
+    expect(mockHandleYoutubeUpload).not.toHaveBeenCalled();
+  });
+
+  it('answers its own 401 when the session check denies without an error response', async () => {
+    mockRequireSupabaseSession.mockResolvedValue({ auth: null, error: null });
+    const formData = vi.spyOn(Request.prototype, 'formData');
+
+    const res = await POST(await makeRequest());
+
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ success: false, error: 'Authentication required.' });
+    expect(formData).not.toHaveBeenCalled();
+    expect(mockHandleYoutubeUpload).not.toHaveBeenCalled();
+    formData.mockRestore();
+  });
+
   it('rejects a bearer that is not the shared secret', async () => {
     mockRequireSupabaseSession.mockResolvedValue({
       auth: null,
