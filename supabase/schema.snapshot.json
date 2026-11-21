@@ -1825,6 +1825,90 @@
                 "video_generations_publish_mode_check": "CHECK ((publish_mode = ANY (ARRAY['asap'::text, 'scheduled'::text])))"
             }
         },
+        "post_metrics_daily": {
+            "rls": true,
+            "columns": [
+                {
+                    "name": "id",
+                    "type": "uuid",
+                    "default": "gen_random_uuid()",
+                    "notNull": true
+                },
+                {
+                    "name": "post_id",
+                    "type": "uuid",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "user_id",
+                    "type": "uuid",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "provider",
+                    "type": "text",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "external_id",
+                    "type": "text",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "snapshot_date",
+                    "type": "date",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "views",
+                    "type": "bigint",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "likes",
+                    "type": "bigint",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "comments",
+                    "type": "bigint",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "saves",
+                    "type": "bigint",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "collected_at",
+                    "type": "timestamp with time zone",
+                    "default": "now()",
+                    "notNull": true
+                }
+            ],
+            "policies": {
+                "post_metrics_daily_select_own": {
+                    "cmd": "r",
+                    "qual": "(auth.uid() = user_id)",
+                    "withCheck": null
+                }
+            },
+            "constraints": {
+                "post_metrics_daily_pkey": "PRIMARY KEY (id)",
+                "post_metrics_daily_post_id_fkey": "FOREIGN KEY (post_id) REFERENCES scheduled_posts(id) ON DELETE CASCADE",
+                "post_metrics_daily_provider_check": "CHECK ((provider = ANY (ARRAY['youtube'::text, 'instagram'::text, 'bluesky'::text, 'linkedin'::text, 'threads'::text, 'facebook'::text, 'pinterest'::text, '3speak'::text, 'rumble'::text, 'fanvue'::text, 'telegram'::text])))",
+                "post_metrics_daily_post_id_provider_external_id_snapshot_da_key": "UNIQUE (post_id, provider, external_id, snapshot_date)"
+            }
+        },
         "token_transactions": {
             "rls": true,
             "columns": [

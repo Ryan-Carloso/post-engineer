@@ -411,6 +411,48 @@ export interface Database {
         };
         Relationships: [];
       };
+      post_metrics_daily: {
+        Row: {
+        id: string;
+        post_id: string;
+        user_id: string;
+        provider: 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook' | 'pinterest' | '3speak' | 'rumble' | 'fanvue' | 'telegram';
+        external_id: string;
+        snapshot_date: string;
+        views: number | null;
+        likes: number | null;
+        comments: number | null;
+        saves: number | null;
+        collected_at: string;
+        };
+        Insert: {
+        id?: string;
+        post_id: string;
+        user_id: string;
+        provider: 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook' | 'pinterest' | '3speak' | 'rumble' | 'fanvue' | 'telegram';
+        external_id: string;
+        snapshot_date: string;
+        views?: number | null;
+        likes?: number | null;
+        comments?: number | null;
+        saves?: number | null;
+        collected_at?: string;
+        };
+        Update: {
+        id?: string;
+        post_id?: string;
+        user_id?: string;
+        provider?: 'youtube' | 'instagram' | 'bluesky' | 'linkedin' | 'threads' | 'facebook' | 'pinterest' | '3speak' | 'rumble' | 'fanvue' | 'telegram';
+        external_id?: string;
+        snapshot_date?: string;
+        views?: number | null;
+        likes?: number | null;
+        comments?: number | null;
+        saves?: number | null;
+        collected_at?: string;
+        };
+        Relationships: [];
+      };
       post_metrics_done: {
         Row: {
         post_id: string;
