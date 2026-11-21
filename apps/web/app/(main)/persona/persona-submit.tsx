@@ -33,7 +33,12 @@ async function savePublishingAccounts(
     body: JSON.stringify({ accounts }),
   });
   if (!res.ok) notifyIfSessionExpired(res);
-  const body = (await res.json()) as PublishingAccountsResponse;
+  let body: PublishingAccountsResponse;
+  try {
+    body = (await res.json()) as PublishingAccountsResponse;
+  } catch {
+    throw new Error(saveError);
+  }
   if (!res.ok || body.success !== true) {
     throw new Error(typeof body.error === 'string' && body.error !== '' ? body.error : saveError);
   }
@@ -110,7 +115,11 @@ export const PersonaSubmit = ({ editId }: { editId: string | null }) => {
         }
       } else {
         const result = await createPersona(state.buildPersonaFormData(language));
-        usePersonaStore.getState().setResult(result);
+        usePersonaStore.getState().setResult(
+          result.success || result.error
+            ? result
+            : { success: false, error: t('persona.errServer') },
+        );
         if (result.success) {
           await queryClient.invalidateQueries({ queryKey: ['persona-list'] });
           router.push('/personas');
