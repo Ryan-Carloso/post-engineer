@@ -47,7 +47,7 @@ class PreviewHouseVoiceTests(unittest.TestCase):
     def test_bare_catalog_name_is_accepted(self):
         with patch("app.services.persona.voice_service.tts", side_effect=_ok_tts()) as mock_tts:
             persona_service.preview_house_voice_mp3("user-1", "kokoro_af_heart", text="Hello world")
-        self.assertEqual(mock_tts.call_args.args[1], "kokoro_af_heart")
+        self.assertEqual(mock_tts.call_args.args[1], "chatterbox:kokoro_af_heart")
 
     def test_legacy_alias_resolves_to_catalog_voice(self):
         with patch("app.services.persona.voice_service.tts", side_effect=_ok_tts()) as mock_tts:

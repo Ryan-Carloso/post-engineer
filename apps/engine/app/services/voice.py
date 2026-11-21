@@ -14,6 +14,7 @@ from moviepy.video.tools import subtitles
 from app.services import subtitle_cues
 from app.services.tts_validation import synthesize_chatterbox_with_validation
 from app.services.openrouter_tts import dispatch_openrouter_tts
+from app.services.voice_catalog import resolve_catalog_voice_name
 from app.services.voice_providers import (
     SubMaker,
     TtsResult,
@@ -70,7 +71,9 @@ def get_elevenlabs_voices(api_key: str) -> list[str]:
 
 def parse_voice_name(name: str):
     name = name.replace("-Female", "").replace("-Male", "").strip()
-    return name
+    if is_no_voice(name):
+        return name
+    return resolve_catalog_voice_name(name)
 
 def is_elevenlabs_voice(voice_name: str) -> bool:
     return (voice_name or "").startswith("elevenlabs:")

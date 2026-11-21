@@ -120,3 +120,17 @@ def find_voice(name: str) -> CatalogVoice | None:
         if voice["name"] == resolved:
             return voice
     return None
+
+
+def resolve_catalog_voice_name(name: str) -> str:
+    """Turn a plain catalog name or legacy alias into ``chatterbox:<name>``.
+
+    A name with a provider prefix, or one the catalog does not know, is
+    returned unchanged so an unknown voice still fails loudly downstream.
+    """
+    if ":" in name:
+        return name
+    entry = find_voice(name)
+    if entry is None:
+        return name
+    return f"chatterbox:{entry['name']}"
