@@ -1,4 +1,5 @@
-"""The engine batch path forwards the persona face quality as video_quality.
+"""The engine batch path forwards the persona face quality as video_quality,
+and the hook panel choice (post snapshot first, persona second) as hook_panel.
 
 The web prices a slot by face quality (hook lip-sync 2 tokens ok / 3 very_good,
 full lip-sync 8 / 15) and its direct dispatch sends video_quality="very-good"
@@ -143,6 +144,30 @@ class BatchDispatchFaceQualityTests(unittest.TestCase):
             slot["schedules"]["personas"]["face_quality"] = value
             request = self._dispatched_request(slot)
             self.assertEqual(request.video_quality, LipSyncQuality.ok, value)
+
+
+class BatchDispatchHookPanelTests(unittest.TestCase):
+    _dispatched_request = BatchDispatchFaceQualityTests._dispatched_request
+
+    def test_legacy_schedule_and_persona_without_the_field_keep_the_hook_panel(self):
+        self.assertIs(self._dispatched_request(_slot()).hook_panel, True)
+
+    def test_persona_off_turns_the_hook_panel_off(self):
+        slot = _slot()
+        slot["schedules"]["personas"]["hook_panel"] = False
+        self.assertIs(self._dispatched_request(slot).hook_panel, False)
+
+    def test_post_snapshot_off_wins_over_a_persona_that_keeps_it_on(self):
+        slot = _slot()
+        slot["schedules"]["personas"]["hook_panel"] = True
+        slot["schedules"]["post_hook_panel"] = False
+        self.assertIs(self._dispatched_request(slot).hook_panel, False)
+
+    def test_post_snapshot_on_wins_over_a_persona_that_turns_it_off(self):
+        slot = _slot()
+        slot["schedules"]["personas"]["hook_panel"] = False
+        slot["schedules"]["post_hook_panel"] = True
+        self.assertIs(self._dispatched_request(slot).hook_panel, True)
 
 
 if __name__ == "__main__":

@@ -19,6 +19,7 @@ export function applyPersonaPatchFields(
   if (patch.language !== null) updates.language = patch.language;
   if (patch.videoAspect !== null) updates.video_aspect = patch.videoAspect;
   if (patch.videoLayout !== null) updates.video_layout = patch.videoLayout;
+  if (patch.hookPanel !== null) updates.hook_panel = patch.hookPanel;
   if (patch.scriptPrompt !== null) updates.script_prompt = patch.scriptPrompt;
   if (patch.ctaType !== null) updates.cta_type = patch.ctaType;
   if (patch.ctaUrl !== null) updates.cta_url = patch.ctaUrl === '' ? null : patch.ctaUrl;

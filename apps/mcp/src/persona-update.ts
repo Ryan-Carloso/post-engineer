@@ -21,6 +21,10 @@ export const UpdatePersonaShape = {
     .describe('New language code — English only for now (e.g. en-US, en-GB)'),
   videoAspect: z.enum(VIDEO_ASPECTS).optional().describe('New video aspect ratio'),
   videoLayout: z.enum(VIDEO_LAYOUTS).optional().describe('New persona-hook layout (standard or react)'),
+  hookPanel: z
+    .boolean()
+    .optional()
+    .describe('New hook_lipsync default: true shows the photo panel under the face during the hook, false keeps the face alone.'),
   scriptPrompt: z.string().optional().describe('New system prompt instructions for video scripts'),
   paragraphNumber: z.number().int().min(1).max(10).optional().describe('New number of paragraphs'),
   niche: z.string().max(300).optional().describe('New content niche'),

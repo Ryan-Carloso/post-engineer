@@ -62,7 +62,7 @@ def _font_for(size):
     return ImageFont.load_default(size)
 
 
-def _prepare(tmp_path, segments, font_for=_font_for, face=segment_panels.FACE_FULL):
+def _prepare(tmp_path, segments, font_for=_font_for, face=segment_panels.FACE_FULL, hook_panel=True):
     with patch.object(image_fetch, "download_image", side_effect=_download):
         return user_media.prepare_segment_media(
             "task-1",
@@ -74,6 +74,7 @@ def _prepare(tmp_path, segments, font_for=_font_for, face=segment_panels.FACE_FU
             face=face,
             video_script="\n\n".join(segment["text"] for segment in segments),
             font_for=font_for,
+            hook_panel=hook_panel,
         )
 
 
@@ -300,6 +301,43 @@ def test_hook_only_lipsync_puts_the_hook_photo_over_the_face_and_the_background_
     assert _is_full_frame(panels[1]) is True, (
         "after the hook it is background footage, so the photo is full frame"
     )
+
+
+def test_hook_panel_off_leaves_the_face_alone_and_keeps_the_background_photo(tmp_path):
+    panels, skipped = _prepare(
+        tmp_path, _two_media_segments(), face=segment_panels.FACE_HOOK, hook_panel=False
+    )
+    assert skipped == []
+    assert [panel.index for panel in panels] == [1]
+    assert _is_full_frame(panels[0]) is True
+
+
+def test_hook_panel_off_changes_nothing_on_full_lipsync(tmp_path):
+    panels, _ = _prepare(
+        tmp_path, _two_media_segments(), face=segment_panels.FACE_FULL, hook_panel=False
+    )
+    assert [_is_full_frame(panel) for panel in panels] == [False, False]
+
+
+def test_hook_panel_off_changes_nothing_on_faceless(tmp_path):
+    panels, _ = _prepare(
+        tmp_path, _two_media_segments(), face=segment_panels.FACE_NONE, hook_panel=False
+    )
+    assert [_is_full_frame(panel) for panel in panels] == [True, True]
+
+
+@pytest.mark.parametrize(("value", "expected"), [(True, True), (False, False)])
+def test_prepare_segment_panels_forwards_the_hook_panel_choice(tmp_path, value, expected):
+    params = SimpleNamespace(
+        segments=_two_media_segments(), video_aspect="9:16", video_script="", hook_panel=value
+    )
+    with patch.object(user_media, "prepare_segment_media", return_value=([], [])) as prepare, patch.object(
+        user_media, "_face_mode", return_value=segment_panels.FACE_FULL
+    ), patch.object(user_media.image_coverage, "ensure_coverage", return_value=[]), patch.object(
+        user_media.segment_panels, "write_manifest"
+    ), patch.object(user_media.utils, "task_dir", return_value=str(tmp_path)):
+        user_media.prepare_segment_panels("task-1", params, _subtitle(tmp_path), 6.0)
+    assert prepare.call_args.kwargs["hook_panel"] is expected
 
 
 def _timed_subtitle(tmp_path, words, name="timed.srt"):

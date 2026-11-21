@@ -140,6 +140,7 @@ class BatchGenerator:
                     persona=build_persona_params(identity, self.store, video_type),
                     video_aspect=identity.get("video_aspect") or "9:16",
                     video_layout=identity.get("video_layout") or "standard",
+                    hook_panel=identity.get("hook_panel") is not False,
                     music_mood=slot_music_mood(slot),
                     segments=segments,
                     cta_type=(

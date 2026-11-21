@@ -1049,6 +1049,11 @@
             ],
             "title": "Generation Id"
           },
+          "hook_panel": {
+            "default": true,
+            "title": "Hook Panel",
+            "type": "boolean"
+          },
           "music_mood": {
             "anyOf": [
               {

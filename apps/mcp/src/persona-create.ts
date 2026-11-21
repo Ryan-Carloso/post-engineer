@@ -38,6 +38,7 @@ export const CreatePersonaShape = {
     .describe(
       'How the persona hook is composed with the video material: "standard" fills the frame with the avatar, "react" splits it in half (persona on top, video material below: real clips or drawings). Same render cost either way.',
     ),
+  hookPanel: z.boolean().default(true).describe('hook_lipsync default: true shows the segment photo in a panel under the talking face during the hook, false keeps the face alone.'),
   scriptPrompt: z.string().optional().default('').describe('System prompt instructions for video scripts'),
   paragraphNumber: z.number().int().min(1).max(10).default(1).describe('Number of paragraphs'),
   niche: z.string().optional().default('General').describe('Content niche'),

@@ -48,6 +48,7 @@ export interface PersonaPrep {
   language: string | null;
   videoAspect: string | null;
   videoLayout: string | null;
+  hookPanel: boolean;
   paragraphNumber: number | null;
   photoRequired: boolean;
 }
@@ -106,6 +107,7 @@ export function resolvePostWithoutPersona(opts: {
   voiceId?: string;
   videoAspect?: '9:16' | '16:9' | '1:1';
   videoLayout?: 'standard' | 'react';
+  hookPanel?: boolean;
   paragraphNumber?: number;
   language?: string;
   niche?: string;
@@ -123,6 +125,7 @@ export function resolvePostWithoutPersona(opts: {
     language: opts.language ?? null,
     videoAspect: opts.videoAspect ?? null,
     videoLayout: opts.videoLayout ?? null,
+    hookPanel: opts.hookPanel ?? true,
     paragraphNumber: opts.paragraphNumber ?? null,
     photoRequired: false,
   };

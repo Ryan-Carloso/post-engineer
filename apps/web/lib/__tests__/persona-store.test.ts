@@ -230,6 +230,16 @@ describe('usePersonaStore', () => {
     expect(formData.get('videoLayout')).toBe('react');
   });
 
+  it('sends hookPanel on create and edit, true by default and false once turned off', () => {
+    expect(usePersonaStore.getState().buildPersonaFormData().get('hookPanel')).toBe('true');
+    usePersonaStore.getState().setHookPanel(false);
+    expect(usePersonaStore.getState().hookPanel).toBe(false);
+    expect(usePersonaStore.getState().buildPersonaFormData().get('hookPanel')).toBe('false');
+    expect(usePersonaStore.getState().buildPersonaEditFormData().get('hookPanel')).toBe('false');
+    usePersonaStore.getState().resetForm();
+    expect(usePersonaStore.getState().hookPanel).toBe(true);
+  });
+
   it('buildPersonaFormData omits videoLayout when it is empty', () => {
     const s = usePersonaStore.getState();
     s.setVideoLayout('');

@@ -221,6 +221,16 @@ describe('buildJobPayload — persona preference defaults', () => {
     expect(buildJobPayload(persona({}), {})).not.toHaveProperty('video_cta');
   });
 
+  it('forwards the persona hook_panel default, including false', () => {
+    expect(buildJobPayload(persona({ hook_panel: false }), {}).hook_panel).toBe(false);
+    expect(buildJobPayload(persona({ hook_panel: true }), {}).hook_panel).toBe(true);
+    expect(buildJobPayload(persona({}), {})).not.toHaveProperty('hook_panel');
+  });
+
+  it('lets a request hook_panel win over the persona default', () => {
+    expect(buildJobPayload(persona({ hook_panel: true }), { hook_panel: false }).hook_panel).toBe(false);
+  });
+
   it('never forwards null or empty persona preferences verbatim', () => {
     const payload = buildJobPayload(
       persona({ language: null, video_aspect: '' }),
