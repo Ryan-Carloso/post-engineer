@@ -305,12 +305,11 @@ describe('PersonaPublishingAccountsSection', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('marks the draft loaded after a failed defaults load', async () => {
-    usePersonaStore.getState().setPublishingAccountsLoaded(false);
+  it('keeps the draft unloaded after a failed defaults load', async () => {
     mockFetchOnce({ success: false, error: 'boom' }, false, 500);
     render(<PersonaPublishingAccountsSection personaId={PERSONA_ID} />);
     expect(await screen.findByText('boom')).toBeInTheDocument();
-    expect(usePersonaStore.getState().publishingAccountsLoaded).toBe(true);
+    expect(usePersonaStore.getState().publishingAccountsLoaded).toBe(false);
   });
 
   it('toggling a checkbox updates the persona store draft and never PUTs', async () => {

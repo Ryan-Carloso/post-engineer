@@ -112,11 +112,12 @@ export function PersonaPublishingAccountsSection({ personaId }: { personaId?: st
     try {
       const binding = await fetchBinding(personaId, t('persona.publishingAccountsLoadError'));
       if (UUID_SHAPE.test(personaId)) setDraftSelection(binding);
+      setPublishingAccountsLoaded(true);
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : t('persona.publishingAccountsLoadError'));
+      setPublishingAccountsLoaded(false);
     } finally {
       setLoading(false);
-      setPublishingAccountsLoaded(true);
     }
   }, [personaId, t, setDraftSelection, setPublishingAccountsLoaded]);
 

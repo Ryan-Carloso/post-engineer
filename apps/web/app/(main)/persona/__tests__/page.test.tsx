@@ -43,6 +43,14 @@ vi.mock('@/lib/scroll-to-error', () => ({
   scrollToErrorField: vi.fn(),
 }));
 
+vi.mock('@/lib/session-expiry', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/session-expiry')>();
+  return {
+    ...actual,
+    notifyIfSessionExpired: vi.fn(),
+  };
+});
+
 vi.mock('@/lib/api', () => ({
   useVoicesQuery: vi.fn(),
   createPersona: vi.fn(),
@@ -111,6 +119,7 @@ import { I18nProvider, useI18n } from '@/lib/i18n/provider';
 import { usePersonaStore } from '@/lib/store';
 import { emptyPersonaDefaultAccounts } from '@/lib/persona-publishing-accounts';
 import { scrollToErrorField } from '@/lib/scroll-to-error';
+import { notifyIfSessionExpired } from '@/lib/session-expiry';
 
 let lastQueryClient: QueryClient | null = null;
 
@@ -1961,6 +1970,66 @@ describe('app/(main)/persona/page — submit em edição', () => {
     await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
     expect(await screen.findByText('persona.publishingAccountsSaveError')).toBeTruthy();
     expect(navigation.back).not.toHaveBeenCalled();
+  });
+
+  it('edição com PUT 401 das contas notifica a expiração de sessão e não volta', async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({ success: true });
+    vi.mocked(useUpdatePersonaMutation).mockReturnValue({ mutateAsync, isPending: false } as never);
+    const notify = vi.mocked(notifyIfSessionExpired);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: unknown, init?: RequestInit) => {
+        if (typeof url === 'string' && init?.method === 'PUT') {
+          return Promise.resolve({
+            ok: false,
+            status: 401,
+            json: () => Promise.resolve({ success: false }),
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              success: true,
+              defaults: { youtube: ['yt-1'], instagram: [], bluesky: [], linkedin: [] },
+            }),
+        });
+      }),
+    );
+    mockEditMode(EDIT_PERSONA_FULL);
+    const user = userEvent.setup();
+    render(<PersonaPage />, { wrapper: createWrapper() });
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'personas.save' })).toBeEnabled(),
+    );
+    await user.click(screen.getByRole('button', { name: 'personas.save' }));
+
+    await waitFor(() => expect(notify).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText('persona.publishingAccountsSaveError')).toBeTruthy();
+    expect(navigation.back).not.toHaveBeenCalled();
+  });
+
+  it('edição com falha no carregamento dos vínculos mantém o salvar desativado e não PUTa', async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({ success: true });
+    vi.mocked(useUpdatePersonaMutation).mockReturnValue({ mutateAsync, isPending: false } as never);
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      json: () => Promise.resolve({ success: false, error: 'boom' }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    mockEditMode({ ...EDIT_PERSONA_FULL, id: '11111111-2222-3333-4444-555555555555' });
+    render(<PersonaPage />, { wrapper: createWrapper() });
+
+    expect(await screen.findByText('boom')).toBeTruthy();
+    expect(usePersonaStore.getState().publishingAccountsLoaded).toBe(false);
+    expect(screen.getByRole('button', { name: 'personas.save' })).toBeDisabled();
+    expect(mutateAsync).not.toHaveBeenCalled();
+    expect(
+      fetchMock.mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === 'PUT'),
+    ).toHaveLength(0);
   });
 
   it('edição com falha no update não PUTa as contas', async () => {
