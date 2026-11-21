@@ -110,7 +110,8 @@ vi.mock('@/lib/timeout', () => ({
   withUploadTimeout: vi.fn((p: Promise<unknown>) => p),
 }));
 
-vi.mock('@/lib/media/upload-schema', () => ({
+vi.mock('@/lib/media/upload-schema', async (importOriginal) => ({
+  MAX_FILE_SIZE: (await importOriginal<typeof import('@/lib/media/upload-schema')>()).MAX_FILE_SIZE,
   parseMediaUpload: vi.fn((_file: unknown, buffer: unknown) => ({
     success: true,
     detectedType: 'image/jpeg',
@@ -228,6 +229,22 @@ describe('handleInstagramUpload', () => {
       expect(response.results[0].success).toBe(true);
       expect(response.results[0].permalink).toBe('https://ig.com/p/abc');
     }
+  });
+
+  it('rejects a file above the size cap without copying it into memory', async () => {
+    const { MAX_FILE_SIZE, parseMediaUpload } = await vi.importActual<
+      typeof import('@/lib/media/upload-schema')
+        >('@/lib/media/upload-schema');
+    const file = new File([new Uint8Array(10)], 'big.jpg', { type: 'image/jpeg' });
+    Object.defineProperty(file, 'size', { value: MAX_FILE_SIZE + 1 });
+    const arrayBuffer = vi.spyOn(file, 'arrayBuffer');
+    const mocked = await import('@/lib/media/upload-schema');
+    vi.mocked(mocked.parseMediaUpload).mockImplementationOnce(parseMediaUpload);
+
+    await expect(
+      handleInstagramUpload(makeFormData({ caption: 'x' }, file), OWNER_USER_ID, logId, startTime),
+    ).rejects.toThrow(ValidationError);
+    expect(arrayBuffer).not.toHaveBeenCalled();
   });
 
   it('throws ValidationError when caption is missing', async () => {

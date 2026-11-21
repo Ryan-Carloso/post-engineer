@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -81,32 +82,33 @@ vi.mock('@/lib/upload/linkedin-handler', () => ({
   handleLinkedinUpload: (...args: unknown[]) => mockHandleLinkedinUpload(...args),
 }));
 
+vi.mock('@/lib/upload/upload-content-limits', () => ({ UPLOAD_CONTENT_MAX_BODY_BYTES: 8192 }));
+
 import { logger } from '@/lib/logger';
 import { RATE_LIMITS } from '@/lib/rate-limit';
 import type { ValidationError } from '@/lib/errors';
 import { POST } from '@/app/api/upload-content/route';
+import { lyingContentLengthRequest, withoutContentLength } from '@/test/multipart-request';
 import { UploadContentResponseSchema } from '@/lib/contracts/media';
+import { multipartRequest } from '@/test/multipart-request';
 
 const USER_ID = 'user-1';
 const API_SECRET = 'engine-shared-secret';
 
-function makeRequest(opts?: {
+async function makeRequest(opts?: {
   provider?: string | null;
   authorization?: string;
   userId?: string;
   accountIds?: string[];
   scopeKey?: string;
-}): NextRequest {
+}): Promise<NextRequest> {
   const form = new FormData();
   if (opts?.provider !== null) form.append('provider', opts?.provider ?? 'youtube');
   if (opts?.provider === 'instagram') form.append('caption', 'hello');
   if (opts?.userId) form.append('userId', opts.userId);
   for (const accountId of opts?.accountIds ?? []) form.append('accountIds', accountId);
   if (opts?.scopeKey) form.append('publishScopeKey', opts.scopeKey);
-  const req = new NextRequest('http://localhost/api/upload-content', {
-    method: 'POST',
-    body: form,
-  });
+  const req = new NextRequest(await multipartRequest('http://localhost/api/upload-content', form));
   if (opts?.authorization) req.headers.set('authorization', opts.authorization);
   return req;
 }
@@ -132,13 +134,13 @@ describe('POST /api/upload-content', () => {
       error: NextResponse.json({ success: false }, { status: 401 }),
     });
 
-    const res = await POST(makeRequest());
+    const res = await POST(await makeRequest());
     expect(res.status).toBe(401);
     expect(mockHandleYoutubeUpload).not.toHaveBeenCalled();
   });
 
   it('uses the user session and forwards the userId to the handler', async () => {
-    const res = await POST(makeRequest());
+    const res = await POST(await makeRequest());
 
     expect(res.status).toBe(200);
     expect(mockHandleYoutubeUpload).toHaveBeenCalledTimes(1);
@@ -166,7 +168,7 @@ describe('POST /api/upload-content', () => {
       error: NextResponse.json({ success: false }, { status: 401 }),
     });
 
-    const res = await POST(makeRequest({
+    const res = await POST(await makeRequest({
       authorization: `Bearer ${API_SECRET}`,
       userId: 'engine-owner',
     }));
@@ -182,10 +184,41 @@ describe('POST /api/upload-content', () => {
       error: NextResponse.json({ success: false }, { status: 401 }),
     });
 
-    const res = await POST(makeRequest({ authorization: `Bearer ${API_SECRET}` }));
+    const res = await POST(await makeRequest({ authorization: `Bearer ${API_SECRET}` }));
 
     expect(res.status).toBe(401);
     expect(mockHandleYoutubeUpload).not.toHaveBeenCalled();
+  });
+
+  it('returns 401 with a valid secret and an empty userId in the form', async () => {
+    mockRequireSupabaseSession.mockResolvedValue({
+      auth: null,
+      error: NextResponse.json({ success: false }, { status: 401 }),
+    });
+    const form = new FormData();
+    form.append('provider', 'youtube');
+    form.append('userId', '');
+    const req = new NextRequest(await multipartRequest('http://localhost/api/upload-content', form));
+    req.headers.set('authorization', `Bearer ${API_SECRET}`);
+
+    const res = await POST(req);
+
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ success: false, error: 'Authentication required.' });
+    expect(mockHandleYoutubeUpload).not.toHaveBeenCalled();
+  });
+
+  it('answers its own 401 when the session check denies without an error response', async () => {
+    mockRequireSupabaseSession.mockResolvedValue({ auth: null, error: null });
+    const formData = vi.spyOn(Request.prototype, 'formData');
+
+    const res = await POST(await makeRequest());
+
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ success: false, error: 'Authentication required.' });
+    expect(formData).not.toHaveBeenCalled();
+    expect(mockHandleYoutubeUpload).not.toHaveBeenCalled();
+    formData.mockRestore();
   });
 
   it('rejects a bearer that is not the shared secret', async () => {
@@ -194,7 +227,7 @@ describe('POST /api/upload-content', () => {
       error: NextResponse.json({ success: false }, { status: 401 }),
     });
 
-    const res = await POST(makeRequest({ authorization: 'Bearer post-engineer_some-key' }));
+    const res = await POST(await makeRequest({ authorization: 'Bearer post-engineer_some-key' }));
 
     expect(res.status).toBe(401);
     expect(mockHandleYoutubeUpload).not.toHaveBeenCalled();
@@ -207,7 +240,7 @@ describe('POST /api/upload-content', () => {
       error: NextResponse.json({ success: false }, { status: 401 }),
     });
 
-    const res = await POST(makeRequest({ authorization: 'Bearer x', userId: 'engine-owner' }));
+    const res = await POST(await makeRequest({ authorization: 'Bearer x', userId: 'engine-owner' }));
 
     expect(res.status).toBe(401);
     expect(mockHandleYoutubeUpload).not.toHaveBeenCalled();
@@ -216,7 +249,7 @@ describe('POST /api/upload-content', () => {
   it('returns the authentication-required fallback when the auth helper yields no auth and no error', async () => {
     mockRequireSupabaseSession.mockResolvedValue({ auth: null, error: null });
 
-    const res = await POST(makeRequest());
+    const res = await POST(await makeRequest());
     expect(res.status).toBe(401);
     expect(await res.json()).toEqual({ success: false, error: 'Authentication required.' });
     expect(mockHandleYoutubeUpload).not.toHaveBeenCalled();
@@ -228,7 +261,7 @@ describe('POST /api/upload-content', () => {
       error: NextResponse.json({ success: false }, { status: 401 }),
     });
 
-    const res = await POST(makeRequest({
+    const res = await POST(await makeRequest({
       authorization: `BEARER ${API_SECRET}`,
       userId: 'engine-owner',
     }));
@@ -243,7 +276,7 @@ describe('POST /api/upload-content', () => {
       error: NextResponse.json({ success: false }, { status: 401 }),
     });
 
-    const res = await POST(makeRequest({
+    const res = await POST(await makeRequest({
       authorization: `Bearer   ${API_SECRET}  `,
       userId: 'engine-owner',
     }));
@@ -258,16 +291,102 @@ describe('POST /api/upload-content', () => {
 
     const form = new FormData();
     form.append('provider', 'youtube');
-    form.append('userId', new File(['x'], 'id.txt', { type: 'text/plain' }));
-    const req = {
-      headers: new Headers({ authorization: `Bearer ${API_SECRET}` }),
-      formData: async () => form,
-    } as unknown as NextRequest;
+    form.append('userId', new Blob(['x'], { type: 'text/plain' }), 'id.txt');
+    const req = new NextRequest(
+      await multipartRequest('http://localhost/api/upload-content', form, {
+        authorization: `Bearer ${API_SECRET}`,
+      }),
+    );
 
     const res = await POST(req);
     expect(res.status).toBe(401);
     expect(await res.json()).toEqual({ success: false, error: 'Authentication required.' });
     expect(mockHandleYoutubeUpload).not.toHaveBeenCalled();
+  });
+
+  describe('body gate', () => {
+    const URL_ = 'http://localhost/api/upload-content';
+
+    it('answers 401 for an unauthenticated large body without reading the body', async () => {
+      mockRequireSupabaseSession.mockResolvedValue({
+        auth: null,
+        error: NextResponse.json({ success: false }, { status: 401 }),
+      });
+      const formData = vi.spyOn(Request.prototype, 'formData');
+      const request = new NextRequest(await lyingContentLengthRequest(URL_, 65536, 65536));
+
+      const res = await POST(request);
+
+      expect(res.status).toBe(401);
+      expect(formData).not.toHaveBeenCalled();
+      expect(mockHandleYoutubeUpload).not.toHaveBeenCalled();
+      formData.mockRestore();
+    });
+
+    it('answers 401 for a wrong bearer secret with a large body without reading the body', async () => {
+      mockRequireSupabaseSession.mockResolvedValue({
+        auth: null,
+        error: NextResponse.json({ success: false }, { status: 401 }),
+      });
+      const formData = vi.spyOn(Request.prototype, 'formData');
+      const request = new NextRequest(
+        await lyingContentLengthRequest(URL_, 65536, 65536, { authorization: 'Bearer wrong-secret' }),
+      );
+
+      const res = await POST(request);
+
+      expect(res.status).toBe(401);
+      expect(formData).not.toHaveBeenCalled();
+      formData.mockRestore();
+    });
+
+    it('answers 413 before parsing when Content-Length is over the cap', async () => {
+      const formData = vi.spyOn(Request.prototype, 'formData');
+      const request = new NextRequest(await withoutContentLength(URL_, { 'content-length': '8193' }));
+
+      const res = await POST(request);
+
+      expect(res.status).toBe(413);
+      expect(await res.json()).toMatchObject({ success: false, code: 'PAYLOAD_TOO_LARGE' });
+      expect(formData).not.toHaveBeenCalled();
+      expect(mockHandleYoutubeUpload).not.toHaveBeenCalled();
+      expect(mockApplyRateLimit).not.toHaveBeenCalled();
+      formData.mockRestore();
+    });
+
+    it('aborts a body larger than its declared Content-Length', async () => {
+      const request = new NextRequest(await lyingContentLengthRequest(URL_, 65536, 200));
+
+      const res = await POST(request);
+
+      expect(res.status).toBe(413);
+      expect(await res.json()).toMatchObject({ success: false, code: 'PAYLOAD_TOO_LARGE' });
+      expect(mockHandleYoutubeUpload).not.toHaveBeenCalled();
+    });
+
+    it('answers 411 when Content-Length is missing', async () => {
+      const request = new NextRequest(await withoutContentLength(URL_));
+
+      const res = await POST(request);
+
+      expect(res.status).toBe(411);
+      expect(await res.json()).toMatchObject({ success: false, code: 'LENGTH_REQUIRED' });
+      expect(mockHandleYoutubeUpload).not.toHaveBeenCalled();
+    });
+
+    it('still reads userId from the form on the engine service-secret path', async () => {
+      mockRequireSupabaseSession.mockResolvedValue({
+        auth: null,
+        error: NextResponse.json({ success: false }, { status: 401 }),
+      });
+
+      const res = await POST(
+        await makeRequest({ authorization: `Bearer ${API_SECRET}`, userId: 'engine-owner' }),
+      );
+
+      expect(res.status).toBe(200);
+      expect(mockHandleYoutubeUpload.mock.calls[0]?.[1]).toBe('engine-owner');
+    });
   });
 
   it('registers the route label with the API error-reporting wrapper', () => {
@@ -277,7 +396,7 @@ describe('POST /api/upload-content', () => {
   });
 
   it('returns 400 when provider is missing', async () => {
-    const req = makeRequest({ provider: null });
+    const req = await makeRequest({ provider: null });
     mockBuildUploadErrorResponse.mockReturnValue(
       NextResponse.json({ success: false, error: 'bad provider' }, { status: 400 }),
     );
@@ -288,7 +407,7 @@ describe('POST /api/upload-content', () => {
   });
 
   it('rejects an unknown provider listing the supported providers (no hardcode)', async () => {
-    const req = makeRequest({ provider: 'tiktok' });
+    const req = await makeRequest({ provider: 'tiktok' });
     mockBuildUploadErrorResponse.mockReturnValue(
       NextResponse.json({ success: false, error: 'bad provider' }, { status: 400 }),
     );
@@ -306,7 +425,7 @@ describe('POST /api/upload-content', () => {
     const limited = NextResponse.json({ success: false }, { status: 429 });
     mockApplyRateLimit.mockResolvedValue(limited);
 
-    const res = await POST(makeRequest());
+    const res = await POST(await makeRequest());
     expect(res.status).toBe(429);
     expect(mockHandleYoutubeUpload).not.toHaveBeenCalled();
     const [, profile, identity] = mockApplyRateLimit.mock.calls[0] as unknown[];
@@ -315,7 +434,7 @@ describe('POST /api/upload-content', () => {
   });
 
   it('handles the instagram upload', async () => {
-    const res = await POST(makeRequest({ provider: 'instagram' }));
+    const res = await POST(await makeRequest({ provider: 'instagram' }));
 
     expect(mockHandleInstagramUpload).toHaveBeenCalledTimes(1);
     expect(mockHandleYoutubeUpload).not.toHaveBeenCalled();
@@ -327,7 +446,7 @@ describe('POST /api/upload-content', () => {
   });
 
   it('handles the bluesky upload', async () => {
-    const res = await POST(makeRequest({ provider: 'bluesky' }));
+    const res = await POST(await makeRequest({ provider: 'bluesky' }));
 
     expect(mockHandleBlueskyUpload).toHaveBeenCalledTimes(1);
     expect(mockHandleYoutubeUpload).not.toHaveBeenCalled();
@@ -338,7 +457,7 @@ describe('POST /api/upload-content', () => {
   });
 
   it('handles the linkedin upload', async () => {
-    const res = await POST(makeRequest({ provider: 'linkedin' }));
+    const res = await POST(await makeRequest({ provider: 'linkedin' }));
 
     expect(mockHandleLinkedinUpload).toHaveBeenCalledTimes(1);
     expect(mockHandleYoutubeUpload).not.toHaveBeenCalled();
@@ -350,7 +469,7 @@ describe('POST /api/upload-content', () => {
 
   it('handles the facebook upload with the caller as the Page owner', async () => {
     mockHandleFacebookUpload.mockResolvedValue({ success: true, results: [{ accountId: '111', success: true, postId: 'vid-1' }] });
-    const res = await POST(makeRequest({ provider: 'facebook' }));
+    const res = await POST(await makeRequest({ provider: 'facebook' }));
 
     expect(mockHandleFacebookUpload).toHaveBeenCalledTimes(1);
     const [formData, userId] = mockHandleFacebookUpload.mock.calls[0] as [FormData, string];
@@ -366,7 +485,7 @@ describe('POST /api/upload-content', () => {
 
   it('handles the 3speak upload with the caller as the Hive owner', async () => {
     mockHandleThreespeakUpload.mockResolvedValue({ success: true, results: [{ accountId: 'alice', success: true, postId: 'video-1' }] });
-    const res = await POST(makeRequest({ provider: '3speak' }));
+    const res = await POST(await makeRequest({ provider: '3speak' }));
 
     expect(mockHandleThreespeakUpload).toHaveBeenCalledTimes(1);
     const [formData, userId] = mockHandleThreespeakUpload.mock.calls[0] as [FormData, string];
@@ -380,7 +499,7 @@ describe('POST /api/upload-content', () => {
 
   it('handles the rumble upload with the caller as the channel owner', async () => {
     mockHandleRumbleUpload.mockResolvedValue({ success: true, results: [{ accountId: 'chan-1', success: true, postId: 'vid-1' }] });
-    const res = await POST(makeRequest({ provider: 'rumble' }));
+    const res = await POST(await makeRequest({ provider: 'rumble' }));
 
     expect(mockHandleRumbleUpload).toHaveBeenCalledTimes(1);
     const [formData, userId] = mockHandleRumbleUpload.mock.calls[0] as [FormData, string];
@@ -397,7 +516,7 @@ describe('POST /api/upload-content', () => {
       NextResponse.json({ success: false, error: 'boom' }, { status: 500 }),
     );
 
-    const res = await POST(makeRequest());
+    const res = await POST(await makeRequest());
     expect(res.status).toBe(500);
     expect(mockBuildUploadErrorResponse).toHaveBeenCalled();
   });
@@ -408,7 +527,7 @@ describe('POST /api/upload-content', () => {
       NextResponse.json({ success: false, error: 'boom' }, { status: 500 }),
     );
 
-    const res = await POST(makeRequest());
+    const res = await POST(await makeRequest());
     expect(res.status).toBe(500);
     expect(mockBuildUploadErrorResponse).toHaveBeenCalled();
     expect(vi.mocked(logger.error)).toHaveBeenCalledWith(
@@ -437,7 +556,7 @@ describe('POST /api/upload-content with a personal API key', () => {
       error: null,
     });
 
-    const req = makeRequest({ userId: 'someone-else' });
+    const req = await makeRequest({ userId: 'someone-else' });
     const res = await POST(req);
 
     expect(res.status).toBe(200);
@@ -453,7 +572,7 @@ describe('POST /api/upload-content with a personal API key', () => {
       error: NextResponse.json({ success: false }, { status: 401 }),
     });
 
-    const res = await POST(makeRequest({
+    const res = await POST(await makeRequest({
       authorization: `Bearer ${API_SECRET}`,
       userId: 'engine-owner',
     }));
@@ -580,7 +699,7 @@ describe('POST /api/upload-content with a publish scope key', () => {
       results: [{ accountId: 'acc-2', success: true, videoUrl: 'https://youtu.be/def' }],
     });
 
-    const res = await POST(makeRequest({
+    const res = await POST(await makeRequest({
       accountIds: ['acc-1', 'acc-2'],
       scopeKey: SCOPE_KEY,
     }));
@@ -612,7 +731,7 @@ describe('POST /api/upload-content with a publish scope key', () => {
       userId: USER_ID,
     });
 
-    const res = await POST(makeRequest({ accountIds: ['acc-1'], scopeKey: SCOPE_KEY }));
+    const res = await POST(await makeRequest({ accountIds: ['acc-1'], scopeKey: SCOPE_KEY }));
 
     expect(mockHandleYoutubeUpload).not.toHaveBeenCalled();
     expect(await res.json()).toEqual({
@@ -643,7 +762,7 @@ describe('POST /api/upload-content with a publish scope key', () => {
       NextResponse.json({ success: false, error: 'boom' }, { status: 500 }),
     );
 
-    const res = await POST(makeRequest({ accountIds: ['acc-1'], scopeKey: SCOPE_KEY }));
+    const res = await POST(await makeRequest({ accountIds: ['acc-1'], scopeKey: SCOPE_KEY }));
 
     expect(res.status).toBe(500);
     expect(mockHandleYoutubeUpload).not.toHaveBeenCalled();
@@ -663,11 +782,11 @@ describe('POST /api/upload-content with a publish scope key', () => {
         results: [{ accountId: 'acc-1', success: true, videoUrl: 'https://youtu.be/abc' }],
       });
 
-    const first = await POST(makeRequest({ accountIds: ['acc-1'], scopeKey: SCOPE_KEY }));
+    const first = await POST(await makeRequest({ accountIds: ['acc-1'], scopeKey: SCOPE_KEY }));
     expect((await first.json() as { success: boolean }).success).toBe(false);
     expect(ledger.rows.get(ledgerKey('acc-1'))?.status).toBe('failed');
 
-    const second = await POST(makeRequest({ accountIds: ['acc-1'], scopeKey: SCOPE_KEY }));
+    const second = await POST(await makeRequest({ accountIds: ['acc-1'], scopeKey: SCOPE_KEY }));
     expect(mockHandleYoutubeUpload).toHaveBeenCalledTimes(2);
     expect(await second.json()).toEqual({
       success: true,
@@ -691,11 +810,11 @@ describe('POST /api/upload-content with a publish scope key', () => {
         results: [{ accountId: 'acc-1', success: true, videoUrl: 'https://youtu.be/abc' }],
       });
 
-    const first = await POST(makeRequest({ accountIds: ['acc-1'], scopeKey: SCOPE_KEY }));
+    const first = await POST(await makeRequest({ accountIds: ['acc-1'], scopeKey: SCOPE_KEY }));
     expect((await first.json() as { success: boolean }).success).toBe(false);
     expect(ledger.rows.get(ledgerKey('acc-1'))?.status).toBe('failed');
 
-    const second = await POST(makeRequest({ accountIds: ['acc-1'], scopeKey: SCOPE_KEY }));
+    const second = await POST(await makeRequest({ accountIds: ['acc-1'], scopeKey: SCOPE_KEY }));
     expect(mockHandleYoutubeUpload).toHaveBeenCalledTimes(2);
     expect(await second.json()).toEqual({
       success: true,
@@ -714,11 +833,11 @@ describe('POST /api/upload-content with a publish scope key', () => {
       results: [{ accountId: 'acc-1', success: true, videoUrl: 'https://youtu.be/abc' }],
     });
 
-    const first = await POST(makeRequest({ accountIds: ['acc-1'], scopeKey: SCOPE_KEY }));
+    const first = await POST(await makeRequest({ accountIds: ['acc-1'], scopeKey: SCOPE_KEY }));
     expect((await first.json() as { success: boolean }).success).toBe(true);
     expect(ledger.rows.get(ledgerKey('acc-1'))?.status).toBe('unknown');
 
-    const second = await POST(makeRequest({ accountIds: ['acc-1'], scopeKey: SCOPE_KEY }));
+    const second = await POST(await makeRequest({ accountIds: ['acc-1'], scopeKey: SCOPE_KEY }));
     expect(mockHandleYoutubeUpload).toHaveBeenCalledTimes(1);
     expect(await second.json()).toEqual({
       success: false,
@@ -747,7 +866,7 @@ describe('POST /api/upload-content with a publish scope key', () => {
       results: [{ accountId: 'acc-1', success: true, videoUrl: 'https://youtu.be/abc' }],
     });
 
-    const res = await POST(makeRequest({ accountIds: ['acc-1'], scopeKey: SCOPE_KEY }));
+    const res = await POST(await makeRequest({ accountIds: ['acc-1'], scopeKey: SCOPE_KEY }));
 
     expect(mockHandleYoutubeUpload).toHaveBeenCalledTimes(1);
     expect((await res.json() as { success: boolean }).success).toBe(true);
@@ -761,7 +880,7 @@ describe('POST /api/upload-content with a publish scope key', () => {
       results: [{ accountId: 'acc-1', success: true, videoUrl: 'https://youtu.be/abc' }],
     });
 
-    const res = await POST(makeRequest({ accountIds: ['acc-1', 'acc-2'] }));
+    const res = await POST(await makeRequest({ accountIds: ['acc-1', 'acc-2'] }));
 
     expect(mockHandleYoutubeUpload).toHaveBeenCalledTimes(1);
     const [formData] = mockHandleYoutubeUpload.mock.calls[0] as [FormData, string];
@@ -776,7 +895,7 @@ describe('POST /api/upload-content with a publish scope key', () => {
       NextResponse.json({ success: false, error: 'boom' }, { status: 500 }),
     );
 
-    const res = await POST(makeRequest({ accountIds: ['acc-1'], scopeKey: SCOPE_KEY }));
+    const res = await POST(await makeRequest({ accountIds: ['acc-1'], scopeKey: SCOPE_KEY }));
 
     expect(res.status).toBe(500);
     expect(ledger.rows.get(ledgerKey('acc-1'))?.status).toBe('failed');
@@ -790,7 +909,7 @@ describe('POST /api/upload-content with a publish scope key', () => {
         resolveHandler = resolve;
       });
       mockHandleYoutubeUpload.mockImplementation(() => handlerDone);
-      const resPromise = POST(makeRequest({ accountIds: ['acc-1'], scopeKey: SCOPE_KEY }));
+      const resPromise = POST(await makeRequest({ accountIds: ['acc-1'], scopeKey: SCOPE_KEY }));
       await vi.advanceTimersByTimeAsync(0);
       expect(mockHandleYoutubeUpload).toHaveBeenCalledTimes(1);
       const before = ledger.rows.get(ledgerKey('acc-1'))?.leaseUntil;

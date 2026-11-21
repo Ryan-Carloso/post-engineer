@@ -1,11 +1,16 @@
 import { NextResponse } from 'next/server';
 
-import { validateCloneReferenceBuffer } from '@/lib/cloned-voice-audio';
+import { MAX_CLONE_REFERENCE_BYTES, cloneReferenceSizeError, validateCloneReferenceBuffer } from '@/lib/cloned-voice-audio';
 import { engineBaseUrl, parseEngineJson } from '@/lib/engine-proxy';
 import { logger } from '@/lib/logger';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { engineAuthHeaders, requireSupabaseSession } from '@/lib/request-auth';
+import {
+  MULTIPART_OVERHEAD_BYTES,
+  boundedFormDataFailureResponse,
+  readBoundedFormData,
+} from '@/lib/upload/bounded-form-data';
 
 const POST_ROUTE = 'POST /api/persona/cloned-voices/denoise-preview';
 
@@ -20,15 +25,16 @@ async function postHandler(request: Request): Promise<NextResponse> {
     return limited;
   }
 
-  let formData: FormData;
-  try {
-    formData = await request.formData();
-  } catch {
-    return NextResponse.json({ success: false, error: 'Invalid multipart body.' }, { status: 400 });
-  }
+  const bounded = await readBoundedFormData(request, MAX_CLONE_REFERENCE_BYTES + MULTIPART_OVERHEAD_BYTES);
+  if (!bounded.ok) return boundedFormDataFailureResponse(bounded);
+  const formData = bounded.formData;
   const fileEntry = formData.get('file');
   if (typeof fileEntry === 'string' || fileEntry === null) {
     return NextResponse.json({ success: false, error: 'Reference audio file is required.' }, { status: 400 });
+  }
+  const sizeError = cloneReferenceSizeError(fileEntry.size);
+  if (sizeError !== null) {
+    return NextResponse.json({ success: false, error: sizeError }, { status: 400 });
   }
   const buffer = Buffer.from(await fileEntry.arrayBuffer());
   const validation = validateCloneReferenceBuffer(buffer);
