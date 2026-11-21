@@ -1014,6 +1014,30 @@ describe('app/(main)/persona/page — validação do submit (guards do store)', 
     expect(screen.getByRole('alertdialog')).toBeTruthy();
   });
 
+  it('falha de rede na criação mostra errServer no diálogo', async () => {
+    const user = userEvent.setup();
+    vi.mocked(createPersona).mockRejectedValue(new TypeError('Failed to fetch'));
+    render(<PersonaPage />, { wrapper: createWrapper() });
+
+    await preencherFormularioValido(user);
+    await user.click(screen.getByText('persona.submit'));
+
+    expect(await screen.findByText('persona.errServer')).toBeTruthy();
+    expect(screen.getByRole('alertdialog')).toBeTruthy();
+  });
+
+  it('criação com resposta sem erro mostra errServer no diálogo', async () => {
+    const user = userEvent.setup();
+    vi.mocked(createPersona).mockResolvedValue({ success: false } as never);
+    render(<PersonaPage />, { wrapper: createWrapper() });
+
+    await preencherFormularioValido(user);
+    await user.click(screen.getByText('persona.submit'));
+
+    expect(await screen.findByText('persona.errServer')).toBeTruthy();
+    expect(screen.getByRole('alertdialog')).toBeTruthy();
+  });
+
   it('prompt_rejected na criação mostra erro inline no roteiro', async () => {
     const user = userEvent.setup();
     vi.mocked(createPersona).mockResolvedValue({ success: false, error: 'prompt_rejected' } as never);
@@ -2019,6 +2043,78 @@ describe('app/(main)/persona/page — submit em edição', () => {
     await user.click(screen.getByRole('button', { name: 'personas.save' }));
 
     await waitFor(() => expect(notify).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText('persona.publishingAccountsSaveError')).toBeTruthy();
+    expect(navigation.back).not.toHaveBeenCalled();
+  });
+
+  it('edição com falha de rede no PUT das contas mostra o erro genérico e não volta', async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({ success: true });
+    vi.mocked(useUpdatePersonaMutation).mockReturnValue({ mutateAsync, isPending: false } as never);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: unknown, init?: RequestInit) => {
+        if (typeof url === 'string' && init?.method === 'PUT') {
+          return Promise.reject(new TypeError('Failed to fetch'));
+        }
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              success: true,
+              defaults: { youtube: ['yt-1'], instagram: [], bluesky: [], linkedin: [] },
+            }),
+        });
+      }),
+    );
+    mockEditMode(EDIT_PERSONA_FULL);
+    const user = userEvent.setup();
+    render(<PersonaPage />, { wrapper: createWrapper() });
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'personas.save' })).toBeEnabled(),
+    );
+    await user.click(screen.getByRole('button', { name: 'personas.save' }));
+
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText('persona.publishingAccountsSaveError')).toBeTruthy();
+    expect(navigation.back).not.toHaveBeenCalled();
+  });
+
+  it('edição com resposta não-JSON no PUT das contas mostra o erro genérico e não volta', async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({ success: true });
+    vi.mocked(useUpdatePersonaMutation).mockReturnValue({ mutateAsync, isPending: false } as never);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: unknown, init?: RequestInit) => {
+        if (typeof url === 'string' && init?.method === 'PUT') {
+          return Promise.resolve({
+            ok: false,
+            status: 502,
+            json: () => Promise.reject(new SyntaxError("Unexpected token '<'")),
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              success: true,
+              defaults: { youtube: ['yt-1'], instagram: [], bluesky: [], linkedin: [] },
+            }),
+        });
+      }),
+    );
+    mockEditMode(EDIT_PERSONA_FULL);
+    const user = userEvent.setup();
+    render(<PersonaPage />, { wrapper: createWrapper() });
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'personas.save' })).toBeEnabled(),
+    );
+    await user.click(screen.getByRole('button', { name: 'personas.save' }));
+
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
     expect(await screen.findByText('persona.publishingAccountsSaveError')).toBeTruthy();
     expect(navigation.back).not.toHaveBeenCalled();
   });

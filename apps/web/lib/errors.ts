@@ -274,3 +274,10 @@ export class HttpStatusError extends Error {
     this.name = 'HttpStatusError';
   }
 }
+
+export function surfaceAppErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && !(error instanceof TypeError) && error.message !== '') {
+    return error.message;
+  }
+  return fallback;
+}

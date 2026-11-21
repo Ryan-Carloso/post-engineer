@@ -41,7 +41,7 @@ export type { BlueskyAccountResponse, ProviderAccountsResponse } from './social-
 async function createPersona(formData: FormData): Promise<CreatePersonaResult> {
   const response = await fetch('/api/persona', { method: 'POST', body: formData });
   notifyIfSessionExpired(response);
-  const data = (await response.json()) as CreatePersonaResult;
+  const data = (await parseJsonBody<CreatePersonaResult>(response)) ?? { success: false };
   return {
     ...data,
     imageIds: toStringArray(data.imageIds),
