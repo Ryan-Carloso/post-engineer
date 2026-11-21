@@ -8,7 +8,7 @@ export const OUTPUT_PATH = join(root, 'apps/web/lib/schema-expectations.gen.ts')
 
 const HEADER = [
   '// GENERATED FILE — do not edit by hand.',
-  '// Source: supabase/migrations/*.sql (columns added by `alter table ... add column`).',
+  '// Source: supabase/migrations/*.sql (columns added by `alter table ... add column`, tables removed by `drop table`).',
   '// Regenerate: node apps/web/scripts/generate-schema-expectations.mjs',
   '',
   '',
@@ -17,6 +17,8 @@ const HEADER = [
 const ALTER_TABLE = /alter\s+table\s+(?:if\s+exists\s+)?(?:only\s+)?(?:public\.)?"?([a-z_][a-z0-9_]*)"?\s+([^;]*);/gi;
 const ADD_COLUMN = /add\s+column\s+(?:if\s+not\s+exists\s+)?"?([a-z_][a-z0-9_]*)"?/gi;
 const DROP_COLUMN = /drop\s+column\s+(?:if\s+exists\s+)?"?([a-z_][a-z0-9_]*)"?/gi;
+const DROP_TABLE = /drop\s+table\s+(?:if\s+exists\s+)?([^;]*);/gi;
+const TABLE_NAME = /(?:public\.)?"?([a-z_][a-z0-9_]*)"?/g;
 
 function stripComments(sql) {
   return sql.replace(/--[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
@@ -25,7 +27,16 @@ function stripComments(sql) {
 export function extractRequiredColumns(sqlFiles) {
   const tables = new Map();
   for (const sql of sqlFiles) {
-    for (const match of stripComments(sql).matchAll(ALTER_TABLE)) {
+    const stripped = stripComments(sql);
+    const statements = [
+      ...[...stripped.matchAll(ALTER_TABLE)].map((match) => ({ kind: 'alter', match })),
+      ...[...stripped.matchAll(DROP_TABLE)].map((match) => ({ kind: 'drop', match })),
+    ].sort((a, b) => a.match.index - b.match.index);
+    for (const { kind, match } of statements) {
+      if (kind === 'drop') {
+        for (const name of match[1].matchAll(TABLE_NAME)) tables.delete(name[1].toLowerCase());
+        continue;
+      }
       const [, table, body] = match;
       const columns = tables.get(table) ?? new Set();
       for (const added of body.matchAll(ADD_COLUMN)) columns.add(added[1].toLowerCase());
