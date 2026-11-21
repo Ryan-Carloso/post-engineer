@@ -9,6 +9,7 @@ import { resolveScriptLanguage, usePersonaStore } from '@/lib/store';
 import { useI18n } from '@/lib/i18n/provider';
 import { scrollToErrorField } from '@/lib/scroll-to-error';
 import { notifyIfSessionExpired } from '@/lib/session-expiry';
+import { surfaceAppErrorMessage } from '@/lib/errors';
 import { totalBoundAccounts, type PersonaDefaultAccounts, samePublishingAccounts } from '@/lib/persona-publishing-accounts';
 import { SpinnerIcon } from '@/lib/ui';
 
@@ -99,10 +100,7 @@ export const PersonaSubmit = ({ editId }: { editId: string | null }) => {
             } catch (error) {
               usePersonaStore.getState().setResult({
                 success: false,
-                error:
-                  error instanceof Error && !(error instanceof TypeError) && error.message !== ''
-                    ? error.message
-                    : t('persona.publishingAccountsSaveError'),
+                error: surfaceAppErrorMessage(error, t('persona.publishingAccountsSaveError')),
               });
               scrollToErrorField('accounts');
               return;
@@ -115,11 +113,8 @@ export const PersonaSubmit = ({ editId }: { editId: string | null }) => {
         }
       } else {
         const result = await createPersona(state.buildPersonaFormData(language));
-        usePersonaStore.getState().setResult(
-          result.success || result.error
-            ? result
-            : { success: false, error: t('persona.errServer') },
-        );
+        const createResult = result.success || result.error ? result : { success: false, error: t('persona.errServer') };
+        usePersonaStore.getState().setResult(createResult);
         if (result.success) {
           await queryClient.invalidateQueries({ queryKey: ['persona-list'] });
           router.push('/personas');
@@ -130,10 +125,7 @@ export const PersonaSubmit = ({ editId }: { editId: string | null }) => {
     } catch (error) {
       usePersonaStore.getState().setResult({
         success: false,
-        error:
-          error instanceof Error && !(error instanceof TypeError) && error.message !== ''
-            ? error.message
-            : t('persona.errServer'),
+        error: surfaceAppErrorMessage(error, t('persona.errServer')),
       });
     } finally {
       setIsPending(false);
