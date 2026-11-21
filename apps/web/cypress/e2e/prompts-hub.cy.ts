@@ -17,7 +17,7 @@ describe('Prompts hub', () => {
     cy.contains('Last 30 days become a video').should('be.visible');
     cy.contains('One week, one video per network').should('be.visible');
     cy.contains('A viral video becomes your Short').should('be.visible');
-    cy.contains('Test two hooks (A/B)').should('be.visible');
+    cy.contains('Compare two prompts (A/B)').should('be.visible');
     cy.contains('Story-first Reels').should('be.visible');
     cy.get('a[href="/recipes/daily-news"]').should('be.visible');
     cy.get('a[href="/recipes/place-spotlight"]').should('be.visible');

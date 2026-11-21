@@ -41,7 +41,7 @@ describe('Your prompts on the hub', () => {
       prompts = [...prompts, ownPrompt('fresh-one', 'private')];
       request.reply({
         statusCode: 201,
-        body: { success: true, prompt: { ...ownPrompt('fresh-one', 'private'), prompt: request.body.prompt } },
+        body: { success: true, prompt: { ...ownPrompt('fresh-one', 'private'), prompt: request.body.prompt, versionId: '44444444-4444-4444-8444-444444444444', version: 1 } },
       });
     }).as('createPrompt');
 
@@ -76,7 +76,7 @@ describe('Your prompts on the hub', () => {
     }).as('listPrompts');
     cy.intercept('PATCH', '/api/prompts/mine', (request) => {
       prompts = [OFFICIAL, ownPrompt('mine', 'public')];
-      request.reply({ statusCode: 200, body: { success: true, prompt: { ...ownPrompt('mine', 'public'), prompt: 'Text' } } });
+      request.reply({ statusCode: 200, body: { success: true, prompt: { ...ownPrompt('mine', 'public'), prompt: 'Text', versionId: '44444444-4444-4444-8444-444444444444', version: 1 } } });
     }).as('makePublic');
 
     visitEnglish('/recipes');
