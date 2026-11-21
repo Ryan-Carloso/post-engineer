@@ -13,6 +13,7 @@ from pydantic import ValidationError
 from app.config import config
 from app.models.schema import PersonaParams, VideoParams
 from app.services.intro_cost import IntroCostReport
+from app.services import persona_hook
 from app.services import task as task_service
 from app.services import video as video_service
 from app.services.task import (
@@ -284,8 +285,8 @@ class TestPersonaPacingConstants:
     def test_constants_are_the_approved_product_values(self):
         assert task_service.PERSONA_HOOK_MIN_SECONDS == 8.0
         assert task_service.PERSONA_HOOK_MAX_SECONDS == 12.0
-        assert task_service.PERSONA_HOOK_TARGET_WORDS_MIN == 25
-        assert task_service.PERSONA_HOOK_TARGET_WORDS_MAX == 35
+        assert persona_hook.PERSONA_HOOK_TARGET_WORDS_MIN == 25
+        assert persona_hook.PERSONA_HOOK_TARGET_WORDS_MAX == 35
         assert task_service.PERSONA_LIPSYNC_MAX_SECONDS == 12.0
 
     def test_hook_constants_stay_inside_the_gpu_ceiling(self):

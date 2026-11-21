@@ -252,7 +252,7 @@ def _send_pinned(method: str, url: str, ip: str, **kwargs):
     session.mount("http://", adapter)
     session.mount("https://", adapter)
     try:
-        # codeql[py/full-ssrf]: guarded — dials only the IP just validated
+        # codeql[py/full-ssrf]
         response = session.request(method, url, allow_redirects=False, **kwargs)
     except Exception:
         session.close()
@@ -300,6 +300,28 @@ def _open(method: str, url: str, ips: list, *, session=None, **kwargs):
     raise last_error
 
 
+def _open_following_redirects(url: str, *, what: str, session, timeout: int, tls_verify: bool, headers: Optional[dict]):
+    current_url = url
+    for _ in range(MAX_REDIRECTS + 1):
+        ips = _public_ips(current_url, what=what)
+        response = _open(
+            "get",
+            current_url,
+            ips,
+            session=session,
+            stream=True,
+            timeout=timeout,
+            verify=tls_verify,
+            headers=headers,
+        )
+        location = _header(response.headers, "Location")
+        if response.status_code not in _REDIRECT_STATUSES or not location:
+            return response
+        response.close()
+        current_url = urljoin(current_url, location)
+    raise UnsafeUrlError(f"{what} redirected too many times.")
+
+
 def download_public_file(
     url: str,
     dest_path: str,
@@ -324,33 +346,16 @@ def download_public_file(
     Returns *dest_path*. Raises :class:`UnsafeUrlError` on any rejection and
     :class:`OSError` on local I/O failures.
     """
-    current_url = url
     response = None
     try:
-        for _ in range(MAX_REDIRECTS + 1):
-            ips = _public_ips(current_url, what=what)
-            response = _open(
-                "get",
-                current_url,
-                ips,
-                session=session,
-                stream=True,
-                timeout=timeout,
-                verify=tls_verify,
-                headers=headers,
-            )
-            location = _header(response.headers, "Location")
-            if response.status_code in _REDIRECT_STATUSES and location:
-                response.close()
-                response = None
-                current_url = urljoin(current_url, location)
-                continue
-            break
-        else:  # pragma: no cover - loop always breaks or raises
-            raise UnsafeUrlError(f"{what} redirected too many times.")
-
-        if response is None:  # pragma: no cover - defensive
-            raise UnsafeUrlError(f"{what} could not be downloaded.")
+        response = _open_following_redirects(
+            url,
+            what=what,
+            session=session,
+            timeout=timeout,
+            tls_verify=tls_verify,
+            headers=headers,
+        )
         if response.status_code >= 300:
             raise UnsafeUrlError(
                 f"{what} download failed: HTTP {response.status_code}."

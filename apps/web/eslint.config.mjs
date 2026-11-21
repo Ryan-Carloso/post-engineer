@@ -34,6 +34,7 @@ const eslintConfig = [
         },
       ],
       'no-unused-vars': 'off',
+      '@typescript-eslint/ban-ts-comment': ['error', { 'ts-expect-error': false }],
       'no-unused-expressions': [
         'error',
         {
@@ -67,6 +68,12 @@ const eslintConfig = [
           ],
         },
       ],
+    },
+  },
+  {
+    files: ['**/__tests__/**/*.tsx'],
+    rules: {
+      '@next/next/no-img-element': 'off',
     },
   },
   {

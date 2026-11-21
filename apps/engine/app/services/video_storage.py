@@ -81,7 +81,7 @@ def _verify_r2_object(client, object_path: str, expected_bytes: int) -> bool:
     """
     try:
         head = client.head_object(Bucket=STORAGE_BUCKET, Key=object_path)
-    except Exception as exc:  # noqa: BLE001 — verification is a gate
+    except Exception as exc:
         logger.error(f"video_storage: R2 verify HEAD failed for {object_path}: {exc}")
         return False
     remote_bytes = int(head.get("ContentLength") or 0)
@@ -117,7 +117,7 @@ def upload_final_video_r2(object_path: str, local_path: str) -> Optional[str]:
                 Body=handle,
                 ContentType="video/mp4",
             )
-    except Exception as exc:  # noqa: BLE001 — reported to the caller as None
+    except Exception as exc:
         logger.error(f"video_storage: R2 upload failed for {object_path}: {exc}")
         return None
     if not _verify_r2_object(client, object_path, expected_bytes):
@@ -140,7 +140,7 @@ def create_signed_url_r2(
             Params={"Bucket": STORAGE_BUCKET, "Key": object_path},
             ExpiresIn=expires_in,
         )
-    except Exception as exc:  # noqa: BLE001 — caller falls back to the 404
+    except Exception as exc:
         logger.error(f"video_storage: R2 signed URL failed for {object_path}: {exc}")
         return None
 
@@ -155,7 +155,7 @@ def read_final_video_r2(object_path: str) -> bytes:
             content = body.read()
         finally:
             body.close()
-    except Exception as exc:  # noqa: BLE001 — publishing requires the durable copy
+    except Exception as exc:
         logger.error(f"video_storage: R2 read failed for {object_path}: {exc}")
         raise RuntimeError(f"could not read archived video {object_path} from R2") from exc
     if not content:

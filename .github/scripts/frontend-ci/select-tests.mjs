@@ -35,14 +35,14 @@ const ROOT_OUTPUT_DIRS = new Set(['coverage', 'coverage-unit']);
 const SKIP_DIRS = new Set(['node_modules', '.next', 'dist']);
 
 /**
- * @param {string} relativePath path relative to apps/web, posix separators
+ * @param {string} relativePath
  */
 export function isWebTestFile(relativePath) {
   return WEB_TEST_FILE.test(`/${relativePath}`);
 }
 
 /**
- * @param {string[]} changedPaths repo-relative
+ * @param {string[]} changedPaths
  */
 export function shouldRunAll(changedPaths) {
   for (const file of changedPaths) {
@@ -55,7 +55,7 @@ export function shouldRunAll(changedPaths) {
 }
 
 /**
- * @param {string} file repo-relative
+ * @param {string} file
  */
 export function isRelevantSource(file) {
   if (file.endsWith('.d.ts')) return false;
@@ -93,8 +93,6 @@ export function selectTestFiles({
 }
 
 /**
- * `git diff --name-status` output. A deletion under the web app or shared
- * prompts a full run: vitest --changed does not follow a removed import.
  * @param {string} text
  * @returns {{ changed: string[], forceAll: boolean }}
  */
@@ -118,8 +116,8 @@ export function parseNameStatus(text) {
 }
 
 /**
- * @param {string} appRoot absolute path of apps/web
- * @returns {Promise<string[]>} posix paths relative to appRoot
+ * @param {string} appRoot
+ * @returns {Promise<string[]>}
  */
 export async function listAllTestFiles(appRoot) {
   /** @type {string[]} */

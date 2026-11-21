@@ -257,7 +257,7 @@ def _generate_intro_tracked(
     captured even when the job fails after submit, so post-submit
     failures stay correlatable in PostHog.
     """
-    resolution_for_quality(quality)  # noqa: B018 — called for the raise
+    resolution_for_quality(quality)
     start = time.monotonic()
     job_ids: list[str] = []
     try:

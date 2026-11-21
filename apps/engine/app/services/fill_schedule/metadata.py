@@ -5,10 +5,13 @@ from __future__ import annotations
 from typing import Any
 
 from app.services import upload_publisher
+from app.services.caption_text import truncate_bluesky_caption
+from app.services.publish_facebook import FACEBOOK_CAPTION_MAX_LENGTH
+from app.services.publish_rumble import RUMBLE_TITLE_MAX_LENGTH
 from app.services.fill_schedule.youtube_tags import derive_tags_from_title
-from app.services.publish_fanvue import validate_fanvue_metadata
-from app.services.publish_pinterest import validate_pinterest_metadata
-from app.services.publish_telegram import validate_telegram_metadata
+from app.services.publish_fanvue import FANVUE_DESCRIPTION_MAX_LENGTH, FANVUE_TITLE_MAX_LENGTH, validate_fanvue_metadata
+from app.services.publish_pinterest import PINTEREST_DESCRIPTION_MAX_LENGTH, PINTEREST_TITLE_MAX_LENGTH, validate_pinterest_metadata
+from app.services.publish_telegram import TELEGRAM_CAPTION_MAX_LENGTH, validate_telegram_metadata
 
 
 class AccountNotBoundError(RuntimeError):
@@ -47,15 +50,15 @@ def _threads_metadata(title: str, schedule: dict[str, Any], copy: str):
 
 def _facebook_metadata(title: str, schedule: dict[str, Any], copy: str):
     return upload_publisher.FacebookMetadata(
-        caption=copy[: upload_publisher.FACEBOOK_CAPTION_MAX_LENGTH],
+        caption=copy[: FACEBOOK_CAPTION_MAX_LENGTH],
         account_ids=tuple(str(value) for value in schedule.get("facebook_account_ids", [])),
     )
 
 
 def _pinterest_metadata(title: str, schedule: dict[str, Any], copy: str):
     return upload_publisher.PinterestMetadata(
-        title=title[: upload_publisher.PINTEREST_TITLE_MAX_LENGTH],
-        description=copy[: upload_publisher.PINTEREST_DESCRIPTION_MAX_LENGTH],
+        title=title[: PINTEREST_TITLE_MAX_LENGTH],
+        description=copy[: PINTEREST_DESCRIPTION_MAX_LENGTH],
         board_id=str(schedule.get("pinterest_board_id") or ""),
         account_ids=tuple(str(value) for value in schedule.get("pinterest_account_ids", [])),
     )
@@ -63,15 +66,15 @@ def _pinterest_metadata(title: str, schedule: dict[str, Any], copy: str):
 
 def _fanvue_metadata(title: str, schedule: dict[str, Any], copy: str):
     return upload_publisher.FanvueMetadata(
-        title=title[: upload_publisher.FANVUE_TITLE_MAX_LENGTH],
-        description=copy[: upload_publisher.FANVUE_DESCRIPTION_MAX_LENGTH],
+        title=title[: FANVUE_TITLE_MAX_LENGTH],
+        description=copy[: FANVUE_DESCRIPTION_MAX_LENGTH],
         account_ids=tuple(str(value) for value in schedule.get("fanvue_account_ids", [])),
     )
 
 
 def _telegram_metadata(title: str, schedule: dict[str, Any], copy: str):
     return upload_publisher.TelegramMetadata(
-        caption=copy[: upload_publisher.TELEGRAM_CAPTION_MAX_LENGTH],
+        caption=copy[: TELEGRAM_CAPTION_MAX_LENGTH],
         account_ids=tuple(str(value) for value in schedule.get("telegram_account_ids", [])),
     )
 
@@ -85,7 +88,7 @@ def _threespeak_metadata(title: str, schedule: dict[str, Any], copy: str):
 
 def _rumble_metadata(title: str, schedule: dict[str, Any], copy: str):
     return upload_publisher.RumbleMetadata(
-        title=title[: upload_publisher.RUMBLE_TITLE_MAX_LENGTH],
+        title=title[: RUMBLE_TITLE_MAX_LENGTH],
         description=copy,
         account_ids=tuple(str(value) for value in schedule.get("rumble_account_ids", [])),
     )
@@ -100,7 +103,7 @@ def _instagram_metadata(title: str, schedule: dict[str, Any], copy: str):
 
 def _bluesky_metadata(title: str, schedule: dict[str, Any], copy: str):
     return upload_publisher.BlueskyMetadata(
-        caption=upload_publisher.truncate_bluesky_caption(copy),
+        caption=truncate_bluesky_caption(copy),
         account_ids=tuple(str(value) for value in schedule.get("bluesky_account_ids", [])),
     )
 

@@ -82,14 +82,14 @@ class RssFallbackUnitTests(unittest.TestCase):
             return real_open(path, *args, **kwargs)
 
         fake_resource = types.ModuleType("resource")
-        fake_resource.RUSAGE_SELF = 0  # type: ignore[attr-defined]
+        fake_resource.RUSAGE_SELF = 0
 
         def fake_getrusage(_who: int):
             usage = types.SimpleNamespace()
             usage.ru_maxrss = self.RU_MAXRSS
             return usage
 
-        fake_resource.getrusage = fake_getrusage  # type: ignore[attr-defined]
+        fake_resource.getrusage = fake_getrusage
 
         with (
             patch.object(builtins, "open", fake_open),

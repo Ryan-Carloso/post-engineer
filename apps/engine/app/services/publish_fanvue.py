@@ -8,7 +8,7 @@ The web handler publishes subscribers-only (``audience: 'subscribers'``,
 the 18+ paywall rule) — the engine does NOT set that; it only passes
 title, description and account ids. There is no board concept for Fanvue.
 
-Kept out of ``upload_publisher`` (which re-exports these names) so that
+Kept out of ``upload_publisher`` (which imports the provider contract from here) so that
 module stays under the file-size cap; it owns only the Fanvue types,
 validation and multipart fields.
 """

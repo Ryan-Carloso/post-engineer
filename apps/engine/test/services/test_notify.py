@@ -4,6 +4,7 @@ The notifier is fire-and-forget: it never raises, never logs the webhook
 URL, and becomes a no-op when DISCORD_WEBHOOK_URL is not set.
 """
 
+import importlib
 import sys
 import unittest
 from contextlib import contextmanager
@@ -57,7 +58,7 @@ class SendDiscordTests(unittest.TestCase):
         default_post.assert_not_called()
 
     def test_bare_pytest_import_is_not_treated_as_test_run(self):
-        import pytest  # noqa: F401
+        importlib.import_module("pytest")
         env = {
             k: v
             for k, v in os_environ().items()

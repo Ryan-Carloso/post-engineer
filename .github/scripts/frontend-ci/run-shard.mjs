@@ -21,7 +21,7 @@ export { WEB_SHARD_TOTAL };
  * @param {string[]} input.listedChanged
  * @param {boolean} input.listChangedFailed
  * @param {unknown} input.timings
- * @param {number} input.shard 1-based
+ * @param {number} input.shard
  * @param {number} input.total
  */
 export function planShard({
@@ -51,7 +51,6 @@ export function planShard({
 }
 
 /**
- * Keep lines that look like test files and make them relative to apps/web.
  * @param {string} stdout
  * @param {string} appRoot
  */

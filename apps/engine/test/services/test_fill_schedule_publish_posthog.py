@@ -22,14 +22,14 @@ class _FakeStore:
         self.updates: list[tuple[str, dict]] = []
         self.claimed: list[str] = []
 
-    def ready_due_slots(self, now):  # type: ignore[no-untyped-def]
+    def ready_due_slots(self, now):
         return []
 
     def claim_ready_slot(self, slot_id: str, now_utc=None) -> bool:
         self.claimed.append(slot_id)
         return True
 
-    def update_slot(self, slot_id: str, **kwargs) -> None:  # type: ignore[no-untyped-def]
+    def update_slot(self, slot_id: str, **kwargs) -> None:
         self.updates.append((slot_id, kwargs))
 
 
@@ -47,7 +47,7 @@ class FillSchedulePublishPostHogTests(TestCase):
             video_file.write(b"fake-video-bytes")
         self.addCleanup(os.unlink, self.video_path)
 
-    def _slot(self, **overrides):  # type: ignore[no-untyped-def]
+    def _slot(self, **overrides):
         slot = {
             "id": "slot-1",
             "title": "Porto coffee",
@@ -66,7 +66,7 @@ class FillSchedulePublishPostHogTests(TestCase):
         slot.update(overrides)
         return slot
 
-    def _scheduler(self, store, publish_mock):  # type: ignore[no-untyped-def]
+    def _scheduler(self, store, publish_mock):
         from app.services.fill_schedule import scheduler as scheduler_module
 
         state = MagicMock()
@@ -88,7 +88,7 @@ class FillSchedulePublishPostHogTests(TestCase):
         from app.services.upload_publisher import PublishError
 
         store = _FakeStore()
-        store.ready_due_slots = lambda now: [self._slot()]  # type: ignore[method-assign]
+        store.ready_due_slots = lambda now: [self._slot()]
         publish_mock = MagicMock(
             side_effect=PublishError(
                 "upload API returned HTTP 400",
@@ -119,7 +119,7 @@ class FillSchedulePublishPostHogTests(TestCase):
         from app.services.upload_publisher import PublishError
 
         store = _FakeStore()
-        store.ready_due_slots = lambda now: [self._slot()]  # type: ignore[method-assign]
+        store.ready_due_slots = lambda now: [self._slot()]
         publish_mock = MagicMock(
             side_effect=PublishError(
                 "upload API returned HTTP 500",
@@ -142,7 +142,7 @@ class FillSchedulePublishPostHogTests(TestCase):
         from app.services.upload_publisher import PublishError
 
         store = _FakeStore()
-        store.ready_due_slots = lambda now: [self._slot()]  # type: ignore[method-assign]
+        store.ready_due_slots = lambda now: [self._slot()]
         publish_mock = MagicMock(
             side_effect=PublishError(
                 "upload API returned HTTP 400",
@@ -160,7 +160,7 @@ class FillSchedulePublishPostHogTests(TestCase):
 
     def test_publish_video_oserror_emits_event(self) -> None:
         store = _FakeStore()
-        store.ready_due_slots = lambda now: [self._slot()]  # type: ignore[method-assign]
+        store.ready_due_slots = lambda now: [self._slot()]
         publish_mock = MagicMock(side_effect=OSError("disk gone"))
         scheduler = self._scheduler(store, publish_mock)
         with patch.object(
@@ -179,7 +179,7 @@ class FillSchedulePublishPostHogTests(TestCase):
 
     def test_r2_read_failure_emits_event_with_unknown_provider(self) -> None:
         store = _FakeStore()
-        store.ready_due_slots = lambda now: [self._slot()]  # type: ignore[method-assign]
+        store.ready_due_slots = lambda now: [self._slot()]
         scheduler = self._scheduler(store, MagicMock())
         self.read_r2_mock.side_effect = OSError("r2 down")
         with patch.object(publish_module, "track_event") as track_mock:
@@ -196,7 +196,7 @@ class FillSchedulePublishPostHogTests(TestCase):
 
     def test_success_emits_no_provider_failed_event(self) -> None:
         store = _FakeStore()
-        store.ready_due_slots = lambda now: [self._slot()]  # type: ignore[method-assign]
+        store.ready_due_slots = lambda now: [self._slot()]
         publish_mock = MagicMock(return_value={"postId": "yt-123"})
         scheduler = self._scheduler(store, publish_mock)
         with patch.object(

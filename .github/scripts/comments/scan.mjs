@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { classifyPy, classifyTs } from './directives.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(HERE, '../../..');
@@ -15,25 +16,9 @@ export function loadTypeScript() {
   return tsModule;
 }
 
-const TS_DIRECTIVE =
-  /eslint-(disable|enable)|^\s*\/[/*]\s*eslint\s|@ts-(expect-error|ignore|nocheck|check)|@(vitest|jest)-environment|@vite-ignore|(istanbul|c8|v8) ignore|Stryker (disable|restore)|prettier-ignore|oxlint-(disable|enable)|[@#]__PURE__|codeql\[|lgtm\[|biome-ignore|@jsx|@license|@preserve|^\/\/\/\s*<(reference|amd)|^\s*\/[/*]\s*(eslint-env\s|@refresh reset\b|stylelint-(disable|enable)\b|tslint:(disable|enable)\b)/;
-const WEBPACK_VALUE = String.raw`(?:true|false|-?\d+|"[^"]*"|'[^']*'|\/(?:\\.|[^/\\\n])+\/[a-z]*|\[[^\]]*\])`;
-const WEBPACK_PAIR = String.raw`webpack[A-Z]\w*\s*:\s*${WEBPACK_VALUE}`;
-const WEBPACK_DIRECTIVE = new RegExp(
-  String.raw`^\s*(?:\/\/|\/\*+)\s*${WEBPACK_PAIR}(?:\s*,\s*${WEBPACK_PAIR})*\s*,?\s*(?:\*\/)?\s*$`,
-);
-const JS_TYPE_DIRECTIVE = /@(type|typedef|satisfies|template)\s*[{\s]|@param\s*\{|@returns?\s*\{/;
-
-export function isTsDirective(commentText, file) {
-  if (TS_DIRECTIVE.test(commentText) || WEBPACK_DIRECTIVE.test(commentText)) return true;
-  return /\.(c|m)?jsx?$/.test(file) && JS_TYPE_DIRECTIVE.test(commentText);
-}
-
-const PY_DIRECTIVE =
-  /^#!|^#.*-\*-\s*coding|^#\s*(noqa|type:|pragma|fmt:|nosec|pyright:|mypy:|ruff:|isort:)|codeql\[|lgtm\[|#\s*noqa/;
-
-export function isPyDirective(commentText) {
-  return PY_DIRECTIVE.test(commentText);
+function withVerdict(comment, found) {
+  if (found === null) return { ...comment, directive: false, bare: null, problem: null, detail: null };
+  return { ...comment, directive: true, ...found };
 }
 
 export function scriptKind(ts, file) {
@@ -77,7 +62,7 @@ export function tsComments(text, file) {
     .map((c) => {
       const body = text.slice(c.start, c.end);
       const wrapper = emptyJsxExpressions.find(([s, e]) => s < c.start && c.end <= e);
-      return { ...c, text: body, directive: isTsDirective(body, file), jsxWrapper: wrapper ?? null };
+      return withVerdict({ ...c, text: body, jsxWrapper: wrapper ?? null }, classifyTs(body, file));
     });
 }
 
@@ -87,7 +72,7 @@ export function pyComments(text) {
     encoding: 'utf8',
     maxBuffer: 64 * 1024 * 1024,
   });
-  return JSON.parse(out).map((c) => ({ ...c, directive: isPyDirective(c.text), jsxWrapper: null }));
+  return JSON.parse(out).map((c) => withVerdict({ ...c, jsxWrapper: null }, classifyPy(c.text, c.start)));
 }
 
 export function pySameAst(before, after) {

@@ -114,7 +114,7 @@ class BatchGenerator:
             if schedule.get("persona_id"):
                 try:
                     bound_accounts = self.store.persona_bound_accounts(str(schedule["persona_id"]))
-                except Exception as exc:  # noqa: BLE001 — fail closed, retry later
+                except Exception as exc:
                     logger.warning(
                         f"fill_schedule: slot {slot['id']} binding read failed, "
                         f"leaving it for the next tick: {scrub_secret_values(str(exc))}"
@@ -204,7 +204,7 @@ class BatchGenerator:
                         "Batch generation could not be dispatched",
                         engine_task_id=task_id,
                     )
-                except Exception as refund_exc:  # noqa: BLE001 — refund is best-effort here
+                except Exception as refund_exc:
                     logger.error(
                         f"fill_schedule: refund failed for undispatched slot "
                         f"{slot['id']}: {scrub_secret_values(str(refund_exc))}"

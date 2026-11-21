@@ -17,7 +17,7 @@ VERIFICATION = Path(__file__).resolve().parents[1] / "verification"
 if str(VERIFICATION) not in sys.path:
     sys.path.append(str(VERIFICATION))
 
-import scope  # noqa: E402
+import scope
 
 WORKFLOW = Path(__file__).resolve().parents[2] / "workflows" / "verification.yml"
 

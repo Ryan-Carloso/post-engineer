@@ -51,52 +51,89 @@ function parseArgs(argv) {
   return { fix, files };
 }
 
+export function bareDirectives(text, comments) {
+  let out = text;
+  for (const c of [...comments].reverse()) {
+    if (c.directive && c.problem === null && c.bare !== c.text) out = out.slice(0, c.start) + c.bare + out.slice(c.end);
+  }
+  return out;
+}
+
+const PROBLEM_HINT = {
+  blanket: (c) => `blanket suppression \`${c.detail}\`: name the exact rule or code`,
+  correctness: (c) => `suppresses a correctness or safety rule (${c.detail}): fix the code instead`,
+};
+
+export function findings(text, file) {
+  const out = [];
+  for (const c of findComments(text, file)) {
+    const preview = c.text.split('\n')[0].slice(0, 100);
+    if (!c.directive) out.push({ c, fixable: true, message: `comment: ${preview}` });
+    else if (c.problem !== null) out.push({ c, fixable: false, message: PROBLEM_HINT[c.problem](c) });
+    else if (c.bare !== c.text) out.push({ c, fixable: true, message: `directive carries prose, keep only \`${c.bare.replace(/\s+/g, ' ').slice(0, 100)}\`: ${preview}` });
+  }
+  return out;
+}
+
+function fixFile(text, file) {
+  const debared = bareDirectives(text, findComments(text, file));
+  const stripped = stripComments(debared, findComments(debared, file));
+  const unchanged = file.endsWith('.py') ? pySameAst(text, stripped) : sameCode(text, stripped, file);
+  return unchanged ? stripped : null;
+}
+
 export function run(argv, root = REPO_ROOT, log = console.log) {
   const { fix, files } = parseArgs(argv);
   const targets = files.length > 0 ? files.filter((f) => SOURCE.test(f) && !isExempt(f)) : trackedFiles(root);
+  const report = (file, text, f) => {
+    const line = lineOf(text, f.c.start);
+    log(process.env.GITHUB_ACTIONS === 'true' ? `::error file=${file},line=${line}::${f.message}` : `${file}:${line}: ${f.message}`);
+  };
   let found = 0;
   let fixedFiles = 0;
   let refused = 0;
   let unreadable = 0;
+  let unfixable = 0;
   for (const file of targets) {
     const abs = path.join(root, file);
     if (!fs.existsSync(abs)) continue;
     const text = fs.readFileSync(abs, 'utf8');
     let all;
     try {
-      all = findComments(text, file);
+      all = findings(text, file);
     } catch (error) {
       unreadable++;
       log(`${file}: could not be scanned: ${String(error.message).split('\n')[0]}`);
       continue;
     }
-    const comments = all.filter((c) => !c.directive);
-    if (comments.length === 0) continue;
+    if (all.length === 0) continue;
     if (fix) {
-      const stripped = stripComments(text, all);
-      const unchanged = file.endsWith('.py') ? pySameAst(text, stripped) : sameCode(text, stripped, file);
-      if (!unchanged) {
+      for (const f of all.filter((x) => !x.fixable)) {
+        unfixable++;
+        report(file, text, f);
+      }
+      if (!all.some((x) => x.fixable)) continue;
+      const fixed = fixFile(text, file);
+      if (fixed === null) {
         refused++;
         log(`${file}: not fixed, stripping would change the code; remove these comments by hand`);
         continue;
       }
-      fs.writeFileSync(abs, stripped);
+      fs.writeFileSync(abs, fixed);
       fixedFiles++;
       continue;
     }
-    for (const c of comments) {
+    for (const f of all) {
       found++;
-      const line = lineOf(text, c.start);
-      const preview = c.text.split('\n')[0].slice(0, 100);
-      log(process.env.GITHUB_ACTIONS === 'true' ? `::error file=${file},line=${line}::comment: ${preview}` : `${file}:${line}: ${preview}`);
+      report(file, text, f);
     }
   }
   if (fix) {
     log(`comments: stripped comments from ${fixedFiles} file(s)`);
-    return refused > 0 || unreadable > 0 ? 1 : 0;
+    return refused > 0 || unreadable > 0 || unfixable > 0 ? 1 : 0;
   }
   if (found > 0 || unreadable > 0) {
-    log(`comments: ${found} comment(s) found. Remove them, or run: node .github/scripts/comments/check.mjs --fix`);
+    log(`comments: ${found} finding(s). Remove them, or run: node .github/scripts/comments/check.mjs --fix`);
     return 1;
   }
   log('comments: clean');

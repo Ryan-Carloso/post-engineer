@@ -22,7 +22,6 @@ const PY_KEYWORDS = new Set([
 ]);
 
 /**
- * Minimal glob matcher: `*` stays inside a segment, `**` crosses segments.
  * @param {string} filePath
  * @param {string} pattern
  * @returns {boolean}
@@ -69,10 +68,9 @@ function isDestructuringLine(line) {
 }
 
 /**
- * Extract candidate field names from one added line.
- * @param {string} line line content without the diff `+` prefix
- * @param {boolean} inPyClass whether the line sits inside a Python class body
- * @returns {string[]} candidate names
+ * @param {string} line
+ * @param {boolean} inPyClass
+ * @returns {string[]}
  */
 function extractNamesFromLine(line, filePath, inPyClass) {
   const names = [];
@@ -97,7 +95,7 @@ function extractNamesFromLine(line, filePath, inPyClass) {
 }
 
 /**
- * @param {string} diffText unified diff (git diff format)
+ * @param {string} diffText
  * @param {{ apiPaths: string[] }} config
  * @returns {{
  *   candidates: Array<{ file: string, line: number, name: string, context: string, renamedFrom: string | null }>,

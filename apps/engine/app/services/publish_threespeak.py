@@ -4,7 +4,7 @@ Wire contract (multipart/form-data, ``POST /api/upload-content``):
 ``provider=3speak``, ``video`` (file), ``caption``, repeated
 ``threespeakAccountIds`` fields (Hive usernames).
 
-Kept out of ``upload_publisher`` (which re-exports these names) so that
+Kept out of ``upload_publisher`` (which imports the provider contract from here) so that
 module stays under the file-size cap; it owns only the 3Speak types,
 validation and multipart fields.
 """

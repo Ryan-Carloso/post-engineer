@@ -8,8 +8,7 @@ const capturedImageProps: Record<string, unknown>[] = vi.hoisted(() => []);
 vi.mock('next/image', () => ({
   default: (props: React.ComponentProps<'img'>) => {
     capturedImageProps.push(props as Record<string, unknown>);
-    // eslint-disable-next-line jsx-a11y/alt-text, @next/next/no-img-element
-    return <img {...props} />;
+    return <img alt={props.alt} {...props} />;
   },
 }));
 

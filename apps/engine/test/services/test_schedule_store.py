@@ -291,10 +291,10 @@ class _JsonHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def do_GET(self):  # noqa: N802 - http.server API
+    def do_GET(self):
         self._respond([{"id": "slot-1"}])
 
-    def do_POST(self):  # noqa: N802 - http.server API
+    def do_POST(self):
         self._respond({"spent": True, "refunded": True})
 
     def log_message(self, *args):

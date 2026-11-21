@@ -135,7 +135,7 @@ def notify_safe(notify: Any, message: str) -> None:
     """Discord fire-and-forget — a notification failure never kills the tick."""
     try:
         notify(message)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.warning(f"fill_schedule: notify failed: {exc}")
 
 
@@ -238,5 +238,5 @@ def track_refund_issued(
                 "engine_task_id": engine_task_id,
             },
         )
-    except Exception:  # noqa: BLE001 - telemetry must never break the tick
+    except Exception:
         logger.warning("fill_schedule: refund_issued telemetry failed")

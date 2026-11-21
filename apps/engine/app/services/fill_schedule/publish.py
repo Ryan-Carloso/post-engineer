@@ -98,7 +98,7 @@ class BatchPublisher:
         if callable(fetch):
             try:
                 resumable = [row for row in fetch(now) if isinstance(row, dict)]
-            except Exception as exc:  # noqa: BLE001 — resume is best-effort
+            except Exception as exc:
                 logger.warning(
                     f"fill_schedule: resumable publish lookup failed: {notify_module.safe_diagnostic(exc)}"
                 )
@@ -125,7 +125,7 @@ class BatchPublisher:
         if isinstance(persona_id, str) and persona_id:
             try:
                 bound = self.store.persona_bound_accounts(persona_id)
-            except Exception as exc:  # noqa: BLE001 — fail closed, retry later
+            except Exception as exc:
                 logger.warning(
                     f"fill_schedule: slot {slot['id']} binding read failed, "
                     f"leaving it for the next tick: {notify_module.safe_diagnostic(exc)}"
@@ -426,7 +426,7 @@ class BatchPublisher:
                         refund_reason,
                         engine_task_id=engine_task_id,
                     )
-                except Exception as exc:  # noqa: BLE001 — refund is best-effort here
+                except Exception as exc:
                     logger.error(
                         f"fill_schedule: refund failed for publish-failed slot {slot['id']}: {exc}"
                     )

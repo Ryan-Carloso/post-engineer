@@ -2,7 +2,7 @@ import path from 'node:path';
 
 /**
  * @param {unknown} report
- * @param {string} root absolute directory the paths should be relative to
+ * @param {string} root
  * @returns {{ version: 1, files: Record<string, number> }}
  */
 export function durationsFromVitestJson(report, root) {

@@ -196,7 +196,7 @@ class PostHogSinkTests(unittest.TestCase):
     def test_sink_never_raises(self):
         class BadMessage:
             @property
-            def record(self):  # noqa: D102 - test double
+            def record(self):
                 raise RuntimeError("nope")
 
         with patch("app.asgi.track_event", side_effect=RuntimeError("posthog down")):

@@ -97,5 +97,12 @@
     // emoji detector's character class includes variation selectors on purpose.
     "no-new": "off",
     "no-misleading-character-class": "off"
-  }
+  },
+  "overrides": [
+    {
+      // A next/image test double renders a plain <img> by definition.
+      "files": ["**/__tests__/**/*.tsx"],
+      "rules": { "nextjs/no-img-element": "off" }
+    }
+  ]
 }

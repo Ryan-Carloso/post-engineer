@@ -1,8 +1,9 @@
 """Grapheme-aware caption text helpers (Bluesky's 300-grapheme cap).
 
 Extracted from ``upload_publisher`` so that module stays under the
-file-size cap; ``upload_publisher`` re-exports these names for existing
-callers.
+file-size cap; ``upload_publisher`` imports ``BLUESKY_CAPTION_MAX_GRAPHEMES``
+and ``count_graphemes`` from here, import ``truncate_bluesky_caption``
+from this module.
 """
 
 from __future__ import annotations

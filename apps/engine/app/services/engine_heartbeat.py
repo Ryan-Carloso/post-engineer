@@ -69,7 +69,8 @@ def current_rss_mb() -> float | None:
         if sys.platform == "darwin":
             return ru_maxrss / 1024 / 1024
         return ru_maxrss / 1024
-    except Exception:  # noqa: BLE001 - diagnostics only
+    except Exception as exc:
+        logger.warning(f"engine heartbeat: rss probe failed: {type(exc).__name__}")
         return None
 
 
@@ -81,7 +82,7 @@ def current_vram_mb() -> float | None:
     """
     now = time.monotonic()
     if now - float(_vram_cache["at"]) < 60:
-        return _vram_cache["value"]  # type: ignore[no-any-return]
+        return _vram_cache["value"]
     value: float | None = None
     try:
         completed = subprocess.run(
@@ -96,7 +97,8 @@ def current_vram_mb() -> float | None:
         )
         if completed.returncode == 0 and completed.stdout.strip():
             value = float(completed.stdout.strip().split()[0])
-    except Exception:  # noqa: BLE001 - GPU simply absent/unreachable
+    except Exception as exc:
+        logger.warning(f"engine heartbeat: vram probe failed: {type(exc).__name__}")
         value = None
     _vram_cache["at"] = now
     _vram_cache["value"] = value
@@ -209,7 +211,7 @@ def start_heartbeat_thread(interval_s: float = HEARTBEAT_INTERVAL_S) -> threadin
         while True:
             try:
                 write_beat()
-            except Exception as exc:  # noqa: BLE001 - keep beating
+            except Exception as exc:
                 logger.warning(f"engine heartbeat write failed: {exc}")
             if _heartbeat_stop.wait(interval_s):
                 return
@@ -249,7 +251,7 @@ def read_previous_beat() -> dict[str, Any] | None:
     """The previous process's heartbeat row, or None when unreadable."""
     try:
         return read_beat()
-    except Exception as exc:  # noqa: BLE001 - boot continues regardless
+    except Exception as exc:
         logger.warning(f"engine_boot: could not read heartbeat: {exc}")
         return None
 
@@ -279,7 +281,7 @@ def report_boot_event(task_state: Any, previous_beat: dict[str, Any] | None) -> 
             props["rss_last_heartbeat_mb"] = previous_beat.get("rss_mb")
             props["vram_last_heartbeat_mb"] = previous_beat.get("vram_mb")
         track_event("engine_boot", props)
-    except Exception as exc:  # noqa: BLE001 - diagnostics never break boot
+    except Exception as exc:
         logger.warning(f"engine_boot event failed: {exc}")
 
 

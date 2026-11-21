@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 import type { PostEngineerClient } from '../client.js';
 import { getPromptComparison } from '../client-experiments.js';
 import { getPrompt, listPrompts } from '../client-prompts.js';
@@ -62,12 +62,10 @@ describe('contracts typecheck', () => {
   it('rejects an unknown query value and an unknown response field at compile time', () => {
     const client = { request: vi.fn(), getHeaders: () => ({}) } as unknown as PostEngineerClient;
     const run = (): void => {
-      // @ts-expect-error -- the comparison window is 24h, 7d or 28d, not 30d
-      void getPromptComparison(client, '30d');
+      expectTypeOf<'30d'>().not.toExtend<Parameters<typeof getPromptComparison>[1]>();
     };
     const read = (result: ComparisonResult): unknown => {
-      // @ts-expect-error -- the comparison field is `accounts`, not `experiments`
-      return result.experiments;
+      return expectTypeOf(result).not.toHaveProperty('experiments');
     };
     expect(typeof run).toBe('function');
     expect(typeof read).toBe('function');
@@ -76,12 +74,10 @@ describe('contracts typecheck', () => {
 
   it('rejects unknown prompt fields at compile time', () => {
     const list = (result: ListPromptsResult): unknown => {
-      // @ts-expect-error -- the list item field is `title`, not `name`
-      return result[0]?.name;
+      return expectTypeOf(result[0]).exclude<undefined>().not.toHaveProperty('name');
     };
     const detail = (result: GetPromptResult): unknown => {
-      // @ts-expect-error -- the detail field is `prompt`, not `text`
-      return result.text;
+      return expectTypeOf(result).exclude<undefined>().not.toHaveProperty('text');
     };
     expect(typeof list).toBe('function');
     expect(typeof detail).toBe('function');
@@ -89,12 +85,10 @@ describe('contracts typecheck', () => {
 
   it('rejects unknown billing fields at compile time', () => {
     const balance = (result: TokenBalanceResult): unknown => {
-      // @ts-expect-error -- the balance field is `balance`, not `total`
-      return result.total;
+      return expectTypeOf(result).exclude<undefined>().not.toHaveProperty('total');
     };
     const ledger = (result: TokenTransactionsResult): unknown => {
-      // @ts-expect-error -- the transaction field is `generationId`, not `generation_id`
-      return result.transactions[0]?.generation_id;
+      return expectTypeOf(result.transactions[0]).exclude<undefined>().not.toHaveProperty('generation_id');
     };
     expect(typeof balance).toBe('function');
     expect(typeof ledger).toBe('function');
@@ -103,20 +97,17 @@ describe('contracts typecheck', () => {
   it('rejects unknown post detail fields at compile time', () => {
     const detail = (result: GetPostResult): unknown => {
       if (result.kind !== 'generation') return undefined;
-      // @ts-expect-error -- the generation field is `videoSubject`, not `subject`
-      return result.generation.subject;
+      return expectTypeOf(result.generation).exclude<undefined>().not.toHaveProperty('subject');
     };
     expect(typeof detail).toBe('function');
   });
 
   it('rejects unknown metrics fields at compile time', () => {
     const row = (result: PostMetricsResult): unknown => {
-      // @ts-expect-error -- the row field is `postId`, not `post_id`
-      return result.rows[0]?.post_id;
+      return expectTypeOf(result.rows[0]).exclude<undefined>().not.toHaveProperty('post_id');
     };
     const curve = (result: RetentionCurveResult): unknown => {
-      // @ts-expect-error -- the point field is `audienceWatchRatio`, not `watchRatio`
-      return result.points[0]?.watchRatio;
+      return expectTypeOf(result.points[0]).exclude<undefined>().not.toHaveProperty('watchRatio');
     };
     expect(typeof row).toBe('function');
     expect(typeof curve).toBe('function');
@@ -124,20 +115,16 @@ describe('contracts typecheck', () => {
 
   it('rejects unknown media fields at compile time', () => {
     const upload = (result: UploadMediaResult): unknown => {
-      // @ts-expect-error -- the result field is `mediaId`, not `media_id`
-      return result.media_id;
+      return expectTypeOf(result).exclude<undefined>().not.toHaveProperty('media_id');
     };
     const check = (result: CheckMediaResult): unknown => {
-      // @ts-expect-error -- the result field is `code`, not `status`
-      return result.status;
+      return expectTypeOf(result).exclude<undefined>().not.toHaveProperty('status');
     };
     const checkFace = (result: CheckMediaResult): unknown => {
-      // @ts-expect-error -- the check response field is `has_face`, not `hasFace`
-      return result.hasFace;
+      return expectTypeOf(result).exclude<undefined>().not.toHaveProperty('hasFace');
     };
     const direct = (result: DirectPublishResult): unknown => {
-      // @ts-expect-error -- the account field is `accountId`, not `account_id`
-      return result.results[0]?.account_id;
+      return expectTypeOf(result.results[0]).exclude<undefined>().not.toHaveProperty('account_id');
     };
     expect(typeof upload).toBe('function');
     expect(typeof check).toBe('function');
@@ -147,16 +134,13 @@ describe('contracts typecheck', () => {
 
   it('rejects unknown accounts fields at compile time', () => {
     const list = (result: ListAccountsResult): unknown => {
-      // @ts-expect-error -- the account field is `channelId`, not `channel_id`
-      return result.accounts[0]?.channel_id;
+      return expectTypeOf(result.accounts[0]).exclude<undefined>().not.toHaveProperty('channel_id');
     };
     const connectUrl = (result: ConnectUrlResult): unknown => {
-      // @ts-expect-error -- the connect field is `auth_url`, not `authUrl`
-      return result.authUrl;
+      return expectTypeOf(result).exclude<undefined>().not.toHaveProperty('authUrl');
     };
     const publishing = (result: PublishingAccountsResult): unknown => {
-      // @ts-expect-error -- the defaults field is `youtube`, not `youtube_id`
-      return result.defaults.youtube_id;
+      return expectTypeOf(result.defaults).exclude<undefined>().not.toHaveProperty('youtube_id');
     };
     expect(typeof list).toBe('function');
     expect(typeof connectUrl).toBe('function');
@@ -165,24 +149,19 @@ describe('contracts typecheck', () => {
 
   it('rejects unknown schedule fields at compile time', () => {
     const schedules = (result: ListSchedulesResult): unknown => {
-      // @ts-expect-error -- the schedule row keeps its snake_case `persona_id`
-      return result.schedules[0]?.personaId;
+      return expectTypeOf(result.schedules[0]).exclude<undefined>().not.toHaveProperty('personaId');
     };
     const posts = (result: ListPostsResult): unknown => {
-      // @ts-expect-error -- the status slot keeps its snake_case `slot_at`
-      return result.upcoming[0]?.slotAt;
+      return expectTypeOf(result.upcoming[0]).exclude<undefined>().not.toHaveProperty('slotAt');
     };
     const cancel = (result: CancelScheduleResult): unknown => {
-      // @ts-expect-error -- the cancel field is `cancelledSlotIds`, not `cancelled_slot_ids`
-      return result.cancelled_slot_ids;
+      return expectTypeOf(result).exclude<undefined>().not.toHaveProperty('cancelled_slot_ids');
     };
     const slot = (result: GetSlotResult): unknown => {
-      // @ts-expect-error -- the slot field is `scheduleId`, not `schedule_id`
-      return result.slot.schedule_id;
+      return expectTypeOf(result.slot).exclude<undefined>().not.toHaveProperty('schedule_id');
     };
     const update = (result: UpdateSlotResult): unknown => {
-      // @ts-expect-error -- the update field is `slotAt`, not `slot_at`
-      return result.slot_at;
+      return expectTypeOf(result).exclude<undefined>().not.toHaveProperty('slot_at');
     };
     expect(typeof schedules).toBe('function');
     expect(typeof posts).toBe('function');
@@ -193,24 +172,19 @@ describe('contracts typecheck', () => {
 
   it('rejects unknown video-tasks fields at compile time', () => {
     const list = (result: ListVideoGenerationsResult): unknown => {
-      // @ts-expect-error -- the generation row field is `generationId`, not `generation_id`
-      return result.generations[0]?.generation_id;
+      return expectTypeOf(result.generations[0]).exclude<undefined>().not.toHaveProperty('generation_id');
     };
     const detail = (result: GetVideoGenerationResult): unknown => {
-      // @ts-expect-error -- the generation row field is `engineTaskId`, not `engine_task_id`
-      return result.generation.engine_task_id;
+      return expectTypeOf(result.generation).exclude<undefined>().not.toHaveProperty('engine_task_id');
     };
     const status = (result: GetVideoStatusResult): unknown => {
-      // @ts-expect-error -- the task body keeps its snake_case `task_id`
-      return result.body.taskId;
+      return expectTypeOf(result.body).exclude<undefined>().not.toHaveProperty('taskId');
     };
     const statusEnvelope = (result: GetVideoStatusResult): unknown => {
-      // @ts-expect-error -- the engine envelope carries `status`, not `success`
-      return result.success;
+      return expectTypeOf(result).exclude<undefined>().not.toHaveProperty('success');
     };
     const cancel = (result: CancelVideoTaskResult): unknown => {
-      // @ts-expect-error -- the delete response has no `deleted` flag
-      return result.deleted;
+      return expectTypeOf(result).exclude<undefined>().not.toHaveProperty('deleted');
     };
     expect(typeof list).toBe('function');
     expect(typeof detail).toBe('function');
@@ -221,28 +195,22 @@ describe('contracts typecheck', () => {
 
   it('rejects unknown voices fields at compile time', () => {
     const list = (result: ListVoicesResult): unknown => {
-      // @ts-expect-error -- the voice row field is `kind`, not `type`
-      return result.voices[0]?.type;
+      return expectTypeOf(result.voices[0]).exclude<undefined>().not.toHaveProperty('type');
     };
     const listId = (result: ListVoicesResult): unknown => {
-      // @ts-expect-error -- the voice row field is `id`, not `voiceId`
-      return result.voices[0]?.voiceId;
+      return expectTypeOf(result.voices[0]).exclude<undefined>().not.toHaveProperty('voiceId');
     };
     const clones = (result: ListClonedVoicesResult): unknown => {
-      // @ts-expect-error -- the cloned row keeps its snake_case `voice_id`
-      return result.voices[0]?.voiceId;
+      return expectTypeOf(result.voices[0]).exclude<undefined>().not.toHaveProperty('voiceId');
     };
     const detail = (result: GetClonedVoiceResult): unknown => {
-      // @ts-expect-error -- the create/get response carries `voice`, not `body`
-      return result.body;
+      return expectTypeOf(result).exclude<undefined>().not.toHaveProperty('body');
     };
     const created = (result: CreateClonedVoiceResult): unknown => {
-      // @ts-expect-error -- the create response carries `voice`, not `body`
-      return result.body;
+      return expectTypeOf(result).exclude<undefined>().not.toHaveProperty('body');
     };
     const deleted = (result: DeleteClonedVoiceResult): unknown => {
-      // @ts-expect-error -- the delete response has no `voice` field
-      return result.voice;
+      return expectTypeOf(result).exclude<undefined>().not.toHaveProperty('voice');
     };
     expect(typeof list).toBe('function');
     expect(typeof listId).toBe('function');
@@ -254,52 +222,40 @@ describe('contracts typecheck', () => {
 
   it('rejects unknown personas fields at compile time', () => {
     const list = (result: ListPersonasResult): unknown => {
-      // @ts-expect-error -- the list item field is `createdAt`, not `created_at`
-      return result.personas[0]?.created_at;
+      return expectTypeOf(result.personas[0]).exclude<undefined>().not.toHaveProperty('created_at');
     };
     const listAccounts = (result: ListPersonasResult): unknown => {
-      // @ts-expect-error -- the list item field is `boundAccounts`, not `accounts`
-      return result.personas[0]?.accounts;
+      return expectTypeOf(result.personas[0]).exclude<undefined>().not.toHaveProperty('accounts');
     };
     const faces = (result: ListFacesResult): unknown => {
-      // @ts-expect-error -- the face row field is `url`, not `path`
-      return result.faces[0]?.path;
+      return expectTypeOf(result.faces[0]).exclude<undefined>().not.toHaveProperty('path');
     };
     const images = (result: ListPersonaImagesResult): unknown => {
-      // @ts-expect-error -- the library row keeps its snake_case `is_primary`
-      return result.images[0]?.isPrimary;
+      return expectTypeOf(result.images[0]).exclude<undefined>().not.toHaveProperty('isPrimary');
     };
     const imagesCreated = (result: ListPersonaImagesResult): unknown => {
-      // @ts-expect-error -- the library row keeps its snake_case `created_at`
-      return result.images[0]?.createdAt;
+      return expectTypeOf(result.images[0]).exclude<undefined>().not.toHaveProperty('createdAt');
     };
     const created = (result: CreatePersonaResult): unknown => {
-      // @ts-expect-error -- the create response field is `imageIds`, not `image_ids`
-      return result.image_ids;
+      return expectTypeOf(result).exclude<undefined>().not.toHaveProperty('image_ids');
     };
     const updated = (result: UpdatePersonaResult): unknown => {
-      // @ts-expect-error -- the update response carries only `success`
-      return result.personaId;
+      return expectTypeOf(result).exclude<undefined>().not.toHaveProperty('personaId');
     };
     const deleted = (result: DeletePersonaResult): unknown => {
-      // @ts-expect-error -- the delete response carries only `success`
-      return result.personaId;
+      return expectTypeOf(result).exclude<undefined>().not.toHaveProperty('personaId');
     };
     const preview = (result: GetPersonaDeletePreviewResult): unknown => {
-      // @ts-expect-error -- the delete-preview flag is `videosTruncated`, not `truncated`
-      return result.truncated;
+      return expectTypeOf(result).exclude<undefined>().not.toHaveProperty('truncated');
     };
     const added = (result: AddPersonaImageResult): unknown => {
-      // @ts-expect-error -- the mutation row has no `image_path` field
-      return result.image.image_path;
+      return expectTypeOf(result.image).exclude<undefined>().not.toHaveProperty('image_path');
     };
     const updatedImage = (result: UpdatePersonaImageResult): unknown => {
-      // @ts-expect-error -- the mutation row has no `image_url` field
-      return result.image?.image_url;
+      return expectTypeOf(result.image).exclude<undefined>().not.toHaveProperty('image_url');
     };
     const deletedImage = (result: DeletePersonaImageResult): unknown => {
-      // @ts-expect-error -- the delete-image response carries only `success`
-      return result.image;
+      return expectTypeOf(result).exclude<undefined>().not.toHaveProperty('image');
     };
     expect(typeof list).toBe('function');
     expect(typeof listAccounts).toBe('function');
@@ -318,56 +274,43 @@ describe('contracts typecheck', () => {
   it('rejects unknown videos fields at compile time', () => {
     const client = { request: vi.fn(), getHeaders: () => ({}) } as unknown as PostEngineerClient;
     const run = (): void => {
-      // @ts-expect-error -- the generate input takes flat `providers`, not a nested `publishing` object
-      void client.generatePersonaVideo({ publishing: { providers: ['youtube'] } });
+      expectTypeOf<Parameters<PostEngineerClient['generatePersonaVideo']>[0]>().not.toHaveProperty('publishing');
     };
     const schedule = (result: GenerateAndScheduleResult): unknown => {
-      // @ts-expect-error -- the response schedule field is `id`, not `scheduleId`
-      return result.schedule.scheduleId;
+      return expectTypeOf(result.schedule).exclude<undefined>().not.toHaveProperty('scheduleId');
     };
     const slot = (result: GenerateAndScheduleResult): unknown => {
-      // @ts-expect-error -- the slot field is `taskId`, not `task_id`
-      return result.slots[0]?.task_id;
+      return expectTypeOf(result.slots[0]).exclude<undefined>().not.toHaveProperty('task_id');
     };
     const replayed = (result: GenerateAndScheduleResult): unknown => {
-      // @ts-expect-error -- the response flag is `replayed`, not `isReplay`
-      return result.isReplay;
+      return expectTypeOf(result).exclude<undefined>().not.toHaveProperty('isReplay');
     };
     const validate = (result: ValidateScriptResult): unknown => {
-      // @ts-expect-error -- the validate response field is `hookWindowSeconds`, not `hookWindow`
-      return result.hookWindow;
+      return expectTypeOf(result).exclude<undefined>().not.toHaveProperty('hookWindow');
     };
     const measured = (result: ValidateScriptResult): unknown => {
-      // @ts-expect-error -- the validate response field is `measured`, not `status`
-      return result.status;
+      return expectTypeOf(result).exclude<undefined>().not.toHaveProperty('status');
     };
     const score = (result: ScoreDraftResult): unknown => {
-      // @ts-expect-error -- the counts field is `topThemeMatch`, not `theme`
-      return result.counts.theme;
+      return expectTypeOf(result.counts).exclude<undefined>().not.toHaveProperty('theme');
     };
     const check = (result: ScoreDraftResult): unknown => {
-      // @ts-expect-error -- the score response field is `publishCheck`, not `check`
-      return result.check;
+      return expectTypeOf(result).exclude<undefined>().not.toHaveProperty('check');
     };
     const free = (result: BatchDiscountResult): unknown => {
-      // @ts-expect-error -- the free-video field is `slotId`, not `id`
-      return result.freeVideos[0]?.id;
+      return expectTypeOf(result.freeVideos[0]).exclude<undefined>().not.toHaveProperty('id');
     };
     const minted = (result: MintVideoUploadResult): unknown => {
-      // @ts-expect-error -- the client drops `storagePath`; the mint response keeps it server-side only
-      return result.storagePath;
+      return expectTypeOf(result).exclude<undefined>().not.toHaveProperty('storagePath');
     };
     const completed = (result: CompleteVideoUploadResult): unknown => {
-      // @ts-expect-error -- the complete response field is `status`, not `state`
-      return result.state;
+      return expectTypeOf(result).exclude<undefined>().not.toHaveProperty('state');
     };
     const published = (result: PublishUploadedResult): unknown => {
-      // @ts-expect-error -- the publish-by-id response field is `successCount`, not `count`
-      return result.count;
+      return expectTypeOf(result).exclude<undefined>().not.toHaveProperty('count');
     };
     const warnings = (result: GenerateAndScheduleResult): unknown => {
-      // @ts-expect-error -- the generate warnings are objects, not strings
-      return result.warnings?.[0]?.toUpperCase();
+      return expectTypeOf(result.warnings?.[0]).exclude<undefined>().not.toHaveProperty('toUpperCase');
     };
     expect(typeof run).toBe('function');
     expect(typeof schedule).toBe('function');

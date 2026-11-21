@@ -309,7 +309,8 @@ def check_media_url(url: str, aspect: Optional[VideoAspect] = None, work_dir: st
     raw_path = os.path.join(work_dir, "check-media-clip.raw")
     try:
         download_video(url, raw_path)
-    except Exception as exc:  # noqa: BLE001 - every download failure maps to a code
+    except Exception as exc:
+        logger.warning(f"check-media clip download failed: {type(exc).__name__}")
         return {"code": _download_failure_code(exc), "width": None, "height": None, "has_face": None}
     try:
         return check_media_file(raw_path, aspect)
@@ -372,7 +373,8 @@ def clip_panel(
         source = os.path.join(task_dir, f"segment-media-{index}-{image_index}.raw")
         try:
             download_video(url, source)
-        except Exception as exc:  # noqa: BLE001 - one bad URL costs only this segment
+        except Exception as exc:
+            logger.warning(f"segment clip download failed: {type(exc).__name__}")
             return None, [f"{label} media skipped: {_download_failure_reason(exc)}"]
         downloaded = source
     else:

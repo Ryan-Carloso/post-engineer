@@ -3,7 +3,7 @@
 import pytest
 from pydantic import ValidationError
 
-from app.models.schema import ScriptSegment, SegmentMedia, SegmentOverlay
+from app.models.segments import ScriptSegment, SegmentMedia, SegmentOverlay
 from app.services import script_segments
 
 

@@ -62,7 +62,7 @@ def _direct_generation_row(state: Any, task_id: str) -> dict[str, Any] | None:
             table="video_generations",
         )
         rows = response.json()
-    except Exception as exc:  # noqa: BLE001 - loud; the non-terminal task retries next boot
+    except Exception as exc:
         logger.warning(f"orphan {task_id}: video_generations lookup failed: {exc}")
         return None
     if not rows:
@@ -193,7 +193,7 @@ def start_pending_direct_redispatches(manager: Any | None = None) -> int:
     _pending_direct_redispatches.clear()
     try:
         start = _load_pipeline_start()
-    except Exception as exc:  # noqa: BLE001 - counter already persisted; next boot fail+refunds
+    except Exception as exc:
         logger.error(
             f"orphan redispatch: pipeline import failed; "
             f"{len(pending)} marked task(s) keep stage cleared and are "
@@ -221,7 +221,7 @@ def start_pending_direct_redispatches(manager: Any | None = None) -> int:
                 f"failed+refunded on the next boot"
             )
             break
-        except Exception as exc:  # noqa: BLE001 - one bad job must not block the rest
+        except Exception as exc:
             logger.error(f"orphan {job.task_id}: redispatch start failed: {exc}")
             continue
         accepted += 1

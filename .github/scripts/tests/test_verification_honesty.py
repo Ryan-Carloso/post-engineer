@@ -15,8 +15,8 @@ VERIFICATION = Path(__file__).resolve().parents[1] / "verification"
 if str(VERIFICATION) not in sys.path:
     sys.path.append(str(VERIFICATION))
 
-import honesty  # noqa: E402
-import scope  # noqa: E402
+import honesty
+import scope
 
 
 def glue(*parts: str) -> str:

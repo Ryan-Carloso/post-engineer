@@ -40,7 +40,7 @@ class BatchReconciler:
                 updated += self._reconcile_slot(slot, const)
             except CONNECTION_FAILURES:
                 raise
-            except Exception as exc:  # noqa: BLE001 — one bad slot must not stall the stage
+            except Exception as exc:
                 logger.error(
                     f"fill_schedule: reconcile failed for slot {slot.get('id')}: "
                     f"{scrub_secret_values(str(exc))}"
