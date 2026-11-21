@@ -148,6 +148,13 @@ automatically and forwards to the two apps:
 
 ```caddy
 APP_DOMAIN {
+    # Edge body cap: Caddy streams request bodies with no default limit.
+    # 6GB covers the largest provider upload (LinkedIn, 5GB) plus multipart
+    # overhead; the web routes enforce tighter per-route caps themselves.
+    request_body {
+        max_size 6GB
+    }
+
     # Web dashboard (Next.js). If you host the web app on Vercel instead,
     # point your DNS there and keep only the /engine/* block below.
     reverse_proxy 127.0.0.1:3434

@@ -22,6 +22,12 @@ import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { logger } from '@/lib/logger';
 import { parseDeletePersonaImageQuery, parseListPersonaImagesQuery } from '@/lib/contracts/personas';
 import { signImageUrl } from './sign-image-url';
+import { MAX_IMAGE_BYTES } from '@/lib/persona-image-select';
+import {
+  MULTIPART_OVERHEAD_BYTES,
+  boundedFormDataFailureResponse,
+  readBoundedFormData,
+} from '@/lib/upload/bounded-form-data';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
 function errorResponse(
@@ -242,12 +248,13 @@ async function postHandler(request: Request): Promise<NextResponse> {
   if ('response' in authed) return authed.response;
   const { auth, supabase } = authed;
 
-  let formData: FormData;
-  try {
-    formData = await request.formData();
-  } catch {
-    return personaValidationError('Invalid multipart payload.', 'POST /api/persona/images');
+  const bounded = await readBoundedFormData(request, MAX_IMAGE_BYTES + MULTIPART_OVERHEAD_BYTES);
+  if (!bounded.ok) {
+    return bounded.code === 'INVALID_MULTIPART'
+      ? personaValidationError('Invalid multipart payload.', 'POST /api/persona/images')
+      : boundedFormDataFailureResponse(bounded);
   }
+  const formData = bounded.formData;
 
   const personaId = formData.get('personaId');
   if (typeof personaId !== 'string' || personaId.length === 0) {

@@ -16,30 +16,31 @@ import {
   type PublishLedgerPartition,
 } from '@/lib/upload/publish-ledger';
 import { releaseGrantedClaims, settlePartition } from '@/lib/upload/publish-ledger-settle';
+import { boundedFormDataFailureResponse, readBoundedFormData } from '@/lib/upload/bounded-form-data';
+import { UPLOAD_CONTENT_MAX_BODY_BYTES } from '@/lib/upload/upload-content-limits';
 import { startLedgerHeartbeat } from '@/lib/upload/publish-ledger-heartbeat';
 
-async function resolveUploadUserId(
-  request: NextRequest,
-  formData: FormData,
-): Promise<{ userId: string | null; error: NextResponse | null }> {
+type UploadAuth =
+  | { kind: 'session'; userId: string }
+  | { kind: 'service' }
+  | { kind: 'denied'; error: NextResponse };
+
+async function authenticateUpload(request: NextRequest): Promise<UploadAuth> {
   const session = await requireSupabaseSession(request);
-  if (session.auth) return { userId: session.auth.userId, error: null };
+  if (session.auth) return { kind: 'session', userId: session.auth.userId };
 
   const apiSecret = process.env.MONEYPRINT_API_SECRET;
   const authorization = request.headers.get('authorization');
   const bearer = authorization?.startsWith('Bearer ')
     ? authorization.slice('Bearer '.length).trim()
     : null;
-  if (apiSecret && bearer && secretsMatch(bearer, apiSecret)) {
-    const userId = formData.get('userId');
-    if (typeof userId === 'string' && userId.length > 0) {
-      return { userId, error: null };
-    }
-  }
+  if (apiSecret && bearer && secretsMatch(bearer, apiSecret)) return { kind: 'service' };
 
   return {
-    userId: null,
-    error: session.error,
+    kind: 'denied',
+    error:
+      session.error ??
+      NextResponse.json({ success: false, error: 'Authentication required.' }, { status: 401 }),
   };
 }
 
@@ -48,10 +49,22 @@ async function postHandler(request: NextRequest) {
   const startTime = Date.now();
 
   try {
-    const formData = await request.formData();
-    const { userId, error: authError } = await resolveUploadUserId(request, formData);
-    if (authError || !userId) {
-      return authError ?? NextResponse.json(
+    const upload = await authenticateUpload(request);
+    if (upload.kind === 'denied') return upload.error;
+
+    const bounded = await readBoundedFormData(request, UPLOAD_CONTENT_MAX_BODY_BYTES);
+    if (!bounded.ok) return boundedFormDataFailureResponse(bounded);
+    const formData = bounded.formData;
+
+    const formUserId = formData.get('userId');
+    const userId =
+      upload.kind === 'session'
+        ? upload.userId
+        : typeof formUserId === 'string' && formUserId.length > 0
+          ? formUserId
+          : null;
+    if (userId === null) {
+      return NextResponse.json(
         { success: false, error: 'Authentication required.' },
         { status: 401 },
       );

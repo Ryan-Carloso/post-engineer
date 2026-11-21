@@ -1,5 +1,7 @@
 // @vitest-environment node
 import { NextResponse } from 'next/server';
+import { MAX_CLONE_REFERENCE_BYTES } from '@/lib/cloned-voice-audio';
+import { lyingContentLengthRequest, multipartRequest, withoutContentLength } from '@/test/multipart-request';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { GET, POST } from '../route';
@@ -24,7 +26,8 @@ vi.mock('@/lib/api-error-reporting', () => ({
   resolveReportingUserId: () => 'user-1',
 }));
 
-vi.mock('@/lib/cloned-voice-audio', () => ({
+vi.mock('@/lib/cloned-voice-audio', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/cloned-voice-audio')>()),
   validateCloneReferenceBuffer: vi.fn(() => ({ ok: true as const })),
 }));
 
@@ -128,7 +131,7 @@ describe('POST /api/persona/cloned-voices', () => {
     form.set('language', 'en');
     form.set('file', new Blob([new Uint8Array(44)], { type: 'audio/wav' }), 'a.wav');
     const response = await POST(
-      new Request('http://localhost/api/persona/cloned-voices', { method: 'POST', body: form }),
+      await multipartRequest('http://localhost/api/persona/cloned-voices', form),
     );
     expect(response.status).toBe(201);
     const json = await response.json();
@@ -149,7 +152,7 @@ describe('POST /api/persona/cloned-voices', () => {
         form.set('denoise', value);
       }
       const response = await POST(
-        new Request('http://localhost/api/persona/cloned-voices', { method: 'POST', body: form }),
+        await multipartRequest('http://localhost/api/persona/cloned-voices', form),
       );
       expect(response.status).toBe(400);
     }
@@ -162,7 +165,7 @@ describe('POST /api/persona/cloned-voices', () => {
     form.set('language', 'en');
     form.set('file', new Blob([new Uint8Array(12)], { type: 'audio/wav' }), 'a.wav');
     const response = await POST(
-      new Request('http://localhost/api/persona/cloned-voices', { method: 'POST', body: form }),
+      await multipartRequest('http://localhost/api/persona/cloned-voices', form),
     );
     expect(response.status).toBe(400);
   });
@@ -174,7 +177,7 @@ describe('POST /api/persona/cloned-voices', () => {
     form.set('language', '   ');
     form.set('file', new Blob([new Uint8Array(12)], { type: 'audio/wav' }), 'a.wav');
     const response = await POST(
-      new Request('http://localhost/api/persona/cloned-voices', { method: 'POST', body: form }),
+      await multipartRequest('http://localhost/api/persona/cloned-voices', form),
     );
     expect(response.status).toBe(400);
     const json = await response.json();
@@ -185,10 +188,7 @@ describe('POST /api/persona/cloned-voices', () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
     const response = await POST(
-      new Request('http://localhost/api/persona/cloned-voices', {
-        method: 'POST',
-        body: validForm({ language: 'pt' }),
-      }),
+      await multipartRequest('http://localhost/api/persona/cloned-voices', validForm({ language: 'pt' })),
     );
     expect(response.status).toBe(400);
     const json = await response.json();
@@ -200,18 +200,39 @@ describe('POST /api/persona/cloned-voices', () => {
     const { validateCloneReferenceBuffer } = await import('@/lib/cloned-voice-audio');
     vi.mocked(validateCloneReferenceBuffer).mockReturnValueOnce({
       ok: false,
-      error: 'Reference audio is empty.',
+      error: 'Only MP3, WAV, M4A, or WebM reference audio is accepted.',
     });
-    const form = new FormData();
-    form.set('consent', 'true');
-    form.set('denoise', 'true');
-    form.set('language', 'en');
-    form.set('file', new Blob([], { type: 'audio/wav' }), 'a.wav');
     const response = await POST(
-      new Request('http://localhost/api/persona/cloned-voices', { method: 'POST', body: form }),
+      await multipartRequest('http://localhost/api/persona/cloned-voices', validForm()),
+    );
+    expect(response.status).toBe(400);
+    expect((await response.json()).error).toBe('Only MP3, WAV, M4A, or WebM reference audio is accepted.');
+  });
+
+  it('rejects an empty reference file from its size without copying it', async () => {
+    const form = validForm();
+    form.set('file', new Blob([], { type: 'audio/wav' }), 'a.wav');
+    const arrayBuffer = vi.spyOn(Blob.prototype, 'arrayBuffer');
+    const response = await POST(
+      await multipartRequest('http://localhost/api/persona/cloned-voices', form),
     );
     expect(response.status).toBe(400);
     expect((await response.json()).error).toBe('Reference audio is empty.');
+    expect(arrayBuffer).not.toHaveBeenCalled();
+    arrayBuffer.mockRestore();
+  });
+
+  it('rejects an oversize reference file from its size without copying it', async () => {
+    const form = validForm();
+    form.set('file', new Blob([new Uint8Array(MAX_CLONE_REFERENCE_BYTES + 1)], { type: 'audio/wav' }), 'a.wav');
+    const arrayBuffer = vi.spyOn(Blob.prototype, 'arrayBuffer');
+    const response = await POST(
+      await multipartRequest('http://localhost/api/persona/cloned-voices', form),
+    );
+    expect(response.status).toBe(400);
+    expect((await response.json()).error).toBe('Reference audio exceeds the 20 MB limit.');
+    expect(arrayBuffer).not.toHaveBeenCalled();
+    arrayBuffer.mockRestore();
   });
 
   it('returns 502 when list upstream is not ok', async () => {
@@ -382,7 +403,7 @@ describe('POST /api/persona/cloned-voices error branches', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     const response = await POST(
-      new Request('http://localhost/api/persona/cloned-voices', { method: 'POST', body: validForm() }),
+      await multipartRequest('http://localhost/api/persona/cloned-voices', validForm()),
     );
     expect(response.status).toBe(401);
     expect((await response.json()).error).toBe('Unauthorized.');
@@ -397,7 +418,7 @@ describe('POST /api/persona/cloned-voices error branches', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     const response = await POST(
-      new Request('http://localhost/api/persona/cloned-voices', { method: 'POST', body: validForm() }),
+      await multipartRequest('http://localhost/api/persona/cloned-voices', validForm()),
     );
     expect(response.status).toBe(429);
     expect((await response.json()).error).toBe('Rate limit exceeded.');
@@ -409,7 +430,7 @@ describe('POST /api/persona/cloned-voices error branches', () => {
       new Request('http://localhost/api/persona/cloned-voices', {
         method: 'POST',
         body: 'plain text body',
-        headers: { 'content-type': 'text/plain' },
+        headers: { 'content-type': 'text/plain', 'content-length': '15' },
       }),
     );
     expect(response.status).toBe(400);
@@ -422,7 +443,7 @@ describe('POST /api/persona/cloned-voices error branches', () => {
     form.set('denoise', 'true');
     form.set('language', 'en');
     const response = await POST(
-      new Request('http://localhost/api/persona/cloned-voices', { method: 'POST', body: form }),
+      await multipartRequest('http://localhost/api/persona/cloned-voices', form),
     );
     expect(response.status).toBe(400);
     expect((await response.json()).error).toBe('Reference audio file is required.');
@@ -435,7 +456,7 @@ describe('POST /api/persona/cloned-voices error branches', () => {
     form.set('language', 'en');
     form.set('file', 'not-a-file');
     const response = await POST(
-      new Request('http://localhost/api/persona/cloned-voices', { method: 'POST', body: form }),
+      await multipartRequest('http://localhost/api/persona/cloned-voices', form),
     );
     expect(response.status).toBe(400);
     expect((await response.json()).error).toBe('Reference audio file is required.');
@@ -447,7 +468,7 @@ describe('POST /api/persona/cloned-voices error branches', () => {
     form.set('denoise', 'true');
     form.set('file', new Blob([new Uint8Array(12)], { type: 'audio/wav' }), 'a.wav');
     const response = await POST(
-      new Request('http://localhost/api/persona/cloned-voices', { method: 'POST', body: form }),
+      await multipartRequest('http://localhost/api/persona/cloned-voices', form),
     );
     expect(response.status).toBe(400);
     expect((await response.json()).error).toBe('Language is required.');
@@ -459,7 +480,7 @@ describe('POST /api/persona/cloned-voices error branches', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     const response = await POST(
-      new Request('http://localhost/api/persona/cloned-voices', { method: 'POST', body: validForm() }),
+      await multipartRequest('http://localhost/api/persona/cloned-voices', validForm()),
     );
     expect(response.status).toBe(500);
     expect((await response.json()).error).toBe('Configuration error.');
@@ -477,10 +498,7 @@ describe('POST /api/persona/cloned-voices error branches', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     const response = await POST(
-      new Request('http://localhost/api/persona/cloned-voices', {
-        method: 'POST',
-        body: validForm({ language: ' en ' }),
-      }),
+      await multipartRequest('http://localhost/api/persona/cloned-voices', validForm({ language: ' en ' })),
     );
     expect(response.status).toBe(201);
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -509,7 +527,7 @@ describe('POST /api/persona/cloned-voices error branches', () => {
     );
 
     const response = await POST(
-      new Request('http://localhost/api/persona/cloned-voices', { method: 'POST', body: validForm() }),
+      await multipartRequest('http://localhost/api/persona/cloned-voices', validForm()),
     );
     expect(response.status).toBe(422);
     expect((await response.json()).error).toBe('Reference audio is too short.');
@@ -526,7 +544,7 @@ describe('POST /api/persona/cloned-voices error branches', () => {
     );
 
     const response = await POST(
-      new Request('http://localhost/api/persona/cloned-voices', { method: 'POST', body: validForm() }),
+      await multipartRequest('http://localhost/api/persona/cloned-voices', validForm()),
     );
     expect(response.status).toBe(503);
     expect((await response.json()).error).toBe('Could not start voice clone.');
@@ -543,7 +561,7 @@ describe('POST /api/persona/cloned-voices error branches', () => {
     );
 
     const response = await POST(
-      new Request('http://localhost/api/persona/cloned-voices', { method: 'POST', body: validForm() }),
+      await multipartRequest('http://localhost/api/persona/cloned-voices', validForm()),
     );
     expect(response.status).toBe(502);
     expect((await response.json()).error).toBe('Invalid clone response.');
@@ -560,7 +578,7 @@ describe('POST /api/persona/cloned-voices error branches', () => {
     );
 
     const response = await POST(
-      new Request('http://localhost/api/persona/cloned-voices', { method: 'POST', body: validForm() }),
+      await multipartRequest('http://localhost/api/persona/cloned-voices', validForm()),
     );
     expect(response.status).toBe(502);
     expect((await response.json()).error).toBe('Invalid clone response.');
@@ -575,9 +593,55 @@ describe('POST /api/persona/cloned-voices error branches', () => {
     );
 
     const response = await POST(
-      new Request('http://localhost/api/persona/cloned-voices', { method: 'POST', body: validForm() }),
+      await multipartRequest('http://localhost/api/persona/cloned-voices', validForm()),
     );
     expect(response.status).toBe(502);
     expect((await response.json()).error).toBe('Cloned voices service unreachable.');
+  });
+});
+
+describe('body gate', () => {
+  const upstreamFetch = vi.fn();
+  beforeEach(() => {
+    upstreamFetch.mockReset();
+    vi.stubGlobal('fetch', upstreamFetch);
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+  const GATE_URL = 'http://localhost/api/persona/cloned-voices';
+  const OVER_CAP = 21 * 1024 * 1024;
+
+  it('answers 401 for an unauthenticated large body without reading it', async () => {
+    mockAuthErrorOnce();
+    const formData = vi.spyOn(Request.prototype, 'formData');
+    const response = await POST(await withoutContentLength(GATE_URL, { 'content-length': String(OVER_CAP * 10) }));
+    expect(response.status).toBe(401);
+    expect(formData).not.toHaveBeenCalled();
+    formData.mockRestore();
+  });
+
+  it('answers 413 before parsing when Content-Length is over the cap', async () => {
+    const formData = vi.spyOn(Request.prototype, 'formData');
+    const response = await POST(await withoutContentLength(GATE_URL, { 'content-length': String(OVER_CAP + 1) }));
+    expect(response.status).toBe(413);
+    expect(await response.json()).toMatchObject({ success: false, code: 'PAYLOAD_TOO_LARGE' });
+    expect(formData).not.toHaveBeenCalled();
+    expect(upstreamFetch).not.toHaveBeenCalled();
+    formData.mockRestore();
+  });
+
+  it('aborts a body larger than its declared Content-Length', async () => {
+    const response = await POST(await lyingContentLengthRequest(GATE_URL, OVER_CAP + 1024, 200));
+    expect(response.status).toBe(413);
+    expect(await response.json()).toMatchObject({ success: false, code: 'PAYLOAD_TOO_LARGE' });
+    expect(upstreamFetch).not.toHaveBeenCalled();
+  });
+
+  it('answers 411 when Content-Length is missing', async () => {
+    const response = await POST(await withoutContentLength(GATE_URL));
+    expect(response.status).toBe(411);
+    expect(await response.json()).toMatchObject({ success: false, code: 'LENGTH_REQUIRED' });
+    expect(upstreamFetch).not.toHaveBeenCalled();
   });
 });

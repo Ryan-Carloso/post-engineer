@@ -72,14 +72,18 @@ export function detectCloneReferenceMime(buffer: ByteSource): AllowedCloneRefere
   return null;
 }
 
+export function cloneReferenceSizeError(sizeBytes: number): string | null {
+  if (sizeBytes === 0) return 'Reference audio is empty.';
+  if (sizeBytes > MAX_CLONE_REFERENCE_BYTES) return 'Reference audio exceeds the 20 MB limit.';
+  return null;
+}
+
 export function validateCloneReferenceBuffer(
   buffer: ByteSource,
 ): { ok: true } | { ok: false; error: string } {
-  if (buffer.length === 0) {
-    return { ok: false, error: 'Reference audio is empty.' };
-  }
-  if (buffer.length > MAX_CLONE_REFERENCE_BYTES) {
-    return { ok: false, error: 'Reference audio exceeds the 20 MB limit.' };
+  const sizeError = cloneReferenceSizeError(buffer.length);
+  if (sizeError !== null) {
+    return { ok: false, error: sizeError };
   }
   const detected = detectCloneReferenceMime(buffer);
   if (detected === null) {

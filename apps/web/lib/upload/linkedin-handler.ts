@@ -1,6 +1,7 @@
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { getSocialAccountTokens, touchSocialAccount } from '@/lib/social-accounts';
 import {
+  LINKEDIN_VIDEO_MAX_BYTES,
   initializeLinkedInVideoUpload,
   uploadLinkedInVideoParts,
   finalizeLinkedInVideoUpload,
@@ -44,6 +45,10 @@ export async function handleLinkedinUpload(
   }
   if (!(rawFile instanceof File)) {
     return { success: false, results: [accountFailure('', 'A video or image file is required', 'publish_rejected')] };
+  }
+
+  if (rawFile.size > LINKEDIN_VIDEO_MAX_BYTES) {
+    return { success: false, results: [accountFailure('', 'LinkedIn video exceeds the 5 GB limit', 'publish_rejected')] };
   }
 
   const buffer = new Uint8Array(await rawFile.arrayBuffer());
