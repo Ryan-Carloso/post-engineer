@@ -54,7 +54,7 @@ function parseArgs(argv) {
 export function bareDirectives(text, comments) {
   let out = text;
   for (const c of [...comments].reverse()) {
-    if (c.directive && c.bare !== c.text) out = out.slice(0, c.start) + c.bare + out.slice(c.end);
+    if (c.directive && c.problem === null && c.bare !== c.text) out = out.slice(0, c.start) + c.bare + out.slice(c.end);
   }
   return out;
 }

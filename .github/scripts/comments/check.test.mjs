@@ -160,7 +160,23 @@ test('--fix reports a blanket or correctness suppression it cannot fix and exits
   const result = runFixWithCode('a.ts', src);
   assert.equal(result.code, 1);
   assert.equal(result.text, src);
-  assert.ok(result.logs.some((line) => line.includes('a.ts:1: blanket suppression `@ts-ignore`')));
+  assert.ok(result.logs.some((line) => line.includes('blanket suppression `@ts-ignore`')));
+});
+
+test('--fix in a mixed file leaves a blanket suppression verbatim and still strips plain comments', () => {
+  const src = '// @ts-ignore -- the field is `name`, not `nome`\nconst a: number = "x";\n// note\nconst b = 2;\n';
+  const result = runFixWithCode('a.ts', src);
+  assert.equal(result.code, 1);
+  assert.equal(result.text, '// @ts-ignore -- the field is `name`, not `nome`\nconst a: number = "x";\nconst b = 2;\n');
+  assert.ok(result.logs.some((line) => line.includes('blanket suppression `@ts-ignore`')));
+});
+
+test('--fix in a mixed file leaves a scoped nosec suppression verbatim and still strips plain comments', () => {
+  const src = 'import os  # nosec B101 - pinned request, see clients.ts\n# note\nx = 1\n';
+  const result = runFixWithCode('a.py', src);
+  assert.equal(result.code, 1);
+  assert.equal(result.text, 'import os  # nosec B101 - pinned request, see clients.ts\nx = 1\n');
+  assert.ok(result.logs.some((line) => line.includes('suppresses a correctness or safety rule (nosec)')));
 });
 
 test('the check reports a prose directive with its bare form', () => {
@@ -169,8 +185,28 @@ test('the check reports a prose directive with its bare form', () => {
     fs.writeFileSync(path.join(dir, 'a.ts'), '// @vitest-environment node: drives the server SDK\nconst a = 1;\n');
     const logs = [];
     assert.equal(run(['a.ts'], dir, (line) => logs.push(line)), 1);
-    assert.ok(logs.some((line) => line.startsWith('a.ts:1: directive carries prose, keep only `// @vitest-environment node`')));
+    assert.ok(logs.some((line) => line.includes('directive carries prose, keep only `// @vitest-environment node`')));
   } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('findings are reported as GitHub annotations under GITHUB_ACTIONS and as file:line otherwise', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'comments-'));
+  const previous = process.env.GITHUB_ACTIONS;
+  try {
+    fs.writeFileSync(path.join(dir, 'a.ts'), '// @vitest-environment node: drives the server SDK\nconst a = 1;\n');
+    process.env.GITHUB_ACTIONS = 'true';
+    const ciLogs = [];
+    assert.equal(run(['a.ts'], dir, (line) => ciLogs.push(line)), 1);
+    assert.ok(ciLogs.some((line) => line.startsWith('::error file=a.ts,line=1::directive carries prose')));
+    delete process.env.GITHUB_ACTIONS;
+    const plainLogs = [];
+    assert.equal(run(['a.ts'], dir, (line) => plainLogs.push(line)), 1);
+    assert.ok(plainLogs.some((line) => line.startsWith('a.ts:1: directive carries prose')));
+  } finally {
+    if (previous === undefined) delete process.env.GITHUB_ACTIONS;
+    else process.env.GITHUB_ACTIONS = previous;
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });

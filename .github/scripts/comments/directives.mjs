@@ -51,8 +51,8 @@ const PREFIX_DIRECTIVES = [
   /^@refresh reset(?![\w-])/,
   /^prettier-ignore(?![\w-])/,
   /^[@#]__PURE__(?![\w-])/,
-  /^(?:istanbul|c8|v8) ignore(?:\s+(?:next|if|else|file|start|stop))?(?![\w-])/,
-  /^Stryker (?:disable|restore)(?:\s+next-line)?\s+[\w,]+/,
+  /^(?:istanbul|c8|v8) ignore(?:\s+next(?:\s+\d+)?|\s+(?:if|else|file|start|stop))?(?![\w-])/,
+  /^Stryker (?:disable|restore)(?:\s+next-line)?\s+[\w]+(?:\s*,\s*[\w]+)*/,
   /^(?:codeql|lgtm)\[[^\]\s]+\]/,
 ];
 
@@ -179,7 +179,7 @@ const PY_DIRECTIVES = [
   { re: /^#\s*pragma:\s*no (?:cover|branch)(?![\w-])/ },
   { re: /^#\s*fmt:\s*(?:off|on|skip)(?![\w-])/ },
   { re: /^#\s*isort:\s*(?:skip_file|skip|off|on)(?![\w-])/ },
-  { re: /^#\s*nosec(?![\w-])/, problem: 'correctness', detail: 'nosec' },
+  { re: /^#\s*nosec(?:\s+[A-Z]+\d+(?:\s*,\s*[A-Z]+\d+)*)?(?![\w-])/, problem: 'correctness', detail: 'nosec' },
   { re: /^#\s*(?:codeql|lgtm)\[[^\]\s]+\]/ },
 ];
 

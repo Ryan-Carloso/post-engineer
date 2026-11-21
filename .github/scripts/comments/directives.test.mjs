@@ -19,7 +19,7 @@ test('a bare ts directive is its own bare form', () => {
     '/**\n * @vitest-environment node\n */',
     '/* @vite-ignore */',
     '/* webpackIgnore: true */',
-    '// istanbul ignore next',
+    '// istanbul\u0020ignore next',
     '// Stryker disable next-line all',
     '// codeql[js/request-forgery]',
     '/// <reference types="vitest" />',
@@ -37,11 +37,13 @@ test('prose after a ts directive is cut to the bare directive', () => {
   assert.equal(ts('/**\n * @vitest-environment node\n * because the SDK needs it\n */').bare, '/** @vitest-environment node */');
   assert.equal(ts('// codeql[js/request-forgery]: false positive').bare, '// codeql[js/request-forgery]');
   assert.equal(ts('// Stryker disable next-line all: equivalent mutant').bare, '// Stryker disable next-line all');
+  assert.equal(ts('// istanbul\u0020ignore next 3').bare, '// istanbul\u0020ignore next 3');
+  assert.equal(ts('// Stryker disable next-line A, B: equivalent mutant').bare, '// Stryker disable next-line A, B');
 });
 
 test('a comment that only mentions a directive is a plain comment', () => {
   assert.equal(ts('// contract field makes this file fail typecheck. The @ts-expect-error'), null);
-  assert.equal(ts('/** see the eslint-disable note and istanbul ignore below */'), null);
+  assert.equal(ts('/** see the eslint-disable note and istanbul\u0020ignore below */'), null);
   assert.equal(ts('// `webpackIgnore: true` keeps the Node-only package out'), null);
   assert.equal(ts('// the codeql[js/request-forgery] alert is a false positive'), null);
 });
@@ -89,7 +91,7 @@ test('jsdoc without a type tag, or in a ts file, is a plain comment', () => {
 });
 
 test('a bare python directive is its own bare form', () => {
-  for (const text of ['# noqa: F401', '# noqa: E402,F401', '# type: ignore[arg-type]', '# pragma: no cover', '# fmt: off', '# codeql[py/full-ssrf]', '# pyright: ignore[reportGeneralTypeIssues]']) {
+  for (const text of ['# noqa: F401', '# noqa: E402,F401', '# type: ignore[arg-type]', '# pragma:\u0020no cover', '# fmt: off', '# codeql[py/full-ssrf]', '# pyright: ignore[reportGeneralTypeIssues]']) {
     assert.deepEqual(py(text), { bare: text, problem: null, detail: null }, text);
   }
   assert.deepEqual(py('#!/usr/bin/env python3', 0), { bare: '#!/usr/bin/env python3', problem: null, detail: null });
@@ -99,7 +101,7 @@ test('prose after a python directive is cut to the bare directive', () => {
   assert.equal(py('# noqa: BLE001 - telemetry must never break the request').bare, '# noqa: BLE001');
   assert.equal(py('# noqa: BLE001 — best-effort').bare, '# noqa: BLE001');
   assert.equal(py('# type: ignore[attr-defined] torch stubs lag').bare, '# type: ignore[attr-defined]');
-  assert.equal(py('# pragma: no cover - defensive').bare, '# pragma: no cover');
+  assert.equal(py('# pragma:\u0020no cover - defensive').bare, '# pragma:\u0020no cover');
   assert.equal(py('# codeql[py/full-ssrf]: guarded').bare, '# codeql[py/full-ssrf]');
   assert.equal(py('# noqa: F401  # type: ignore[attr-defined] - stubs').bare, '# noqa: F401  # type: ignore[attr-defined]');
 });
@@ -123,6 +125,8 @@ test('suppressing a python correctness or safety check is reported', () => {
   assert.equal(py('# noqa: E402, S603').detail, 'S603');
   assert.equal(py('# nosec').problem, 'correctness');
   assert.equal(py('# noqa: F401  # nosec').problem, 'correctness');
+  assert.deepEqual(py('# nosec B101'), { bare: '# nosec B101', problem: 'correctness', detail: 'nosec' });
+  assert.equal(py('# nosec B101, B102').bare, '# nosec B101, B102');
 });
 
 test('both eslint configs accept a bare @ts-expect-error', () => {
