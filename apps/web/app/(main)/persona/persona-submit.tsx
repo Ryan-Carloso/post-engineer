@@ -9,7 +9,7 @@ import { resolveScriptLanguage, usePersonaStore } from '@/lib/store';
 import { useI18n } from '@/lib/i18n/provider';
 import { scrollToErrorField } from '@/lib/scroll-to-error';
 import { notifyIfSessionExpired } from '@/lib/session-expiry';
-import { totalBoundAccounts, type PersonaDefaultAccounts } from '@/lib/persona-publishing-accounts';
+import { totalBoundAccounts, type PersonaDefaultAccounts, samePublishingAccounts } from '@/lib/persona-publishing-accounts';
 import { SpinnerIcon } from '@/lib/ui';
 
 export function resolveEditingPersonaId(pathname: string, editId: string | null): string | null {
@@ -48,6 +48,7 @@ export const PersonaSubmit = ({ editId }: { editId: string | null }) => {
   const { handleSubmit: validateForm } = useFormContext();
   const [isPending, setIsPending] = useState(false);
   const accountsLoaded = usePersonaStore((s) => s.publishingAccountsLoaded);
+  const loadedAccounts = usePersonaStore((s) => s.loadedPublishingAccounts);
 
   const editingPersonaId = resolveEditingPersonaId(pathname, editId);
   const isEditing = Boolean(editingPersonaId);
@@ -86,12 +87,15 @@ export const PersonaSubmit = ({ editId }: { editId: string | null }) => {
         const result = await updateMutation.mutateAsync({ personaId, formData });
         usePersonaStore.getState().setResult(result);
         if (result.success) {
-          try {
-            await savePublishingAccounts(personaId, state.publishingAccounts, t('persona.publishingAccountsSaveError'));
-          } catch {
-            usePersonaStore.getState().setResult({ success: false, error: t('persona.publishingAccountsSaveError') });
-            scrollToErrorField('accounts');
-            return;
+          if (loadedAccounts === null || !samePublishingAccounts(state.publishingAccounts, loadedAccounts)) {
+            try {
+              await savePublishingAccounts(personaId, state.publishingAccounts, t('persona.publishingAccountsSaveError'));
+              usePersonaStore.getState().setLoadedPublishingAccounts(state.publishingAccounts);
+            } catch {
+              usePersonaStore.getState().setResult({ success: false, error: t('persona.publishingAccountsSaveError') });
+              scrollToErrorField('accounts');
+              return;
+            }
           }
           await queryClient.invalidateQueries({ queryKey: ['persona-list'] });
           router.back();

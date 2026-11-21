@@ -4,6 +4,8 @@ import {
   getPersonaDefaultAccounts,
   getPersonaDefaultAccountsForPersonas,
   parsePublishingAccountsField,
+  prunePublishingAccounts,
+  samePublishingAccounts,
   setPersonaDefaultAccounts,
   totalBoundAccounts,
 } from '../persona-publishing-accounts';
@@ -326,6 +328,41 @@ describe('totalBoundAccounts', () => {
         bluesky: ['did:plc:a', 'did:plc:b'],
       }),
     ).toBe(3);
+  });
+});
+
+describe('samePublishingAccounts', () => {
+  it('ignores id order within a provider', () => {
+    const a = { ...emptyPersonaDefaultAccounts(), youtube: ['UC-1', 'UC-2'] };
+    const b = { ...emptyPersonaDefaultAccounts(), youtube: ['UC-2', 'UC-1'] };
+    expect(samePublishingAccounts(a, b)).toBe(true);
+  });
+
+  it('differs when any provider gains or loses an id', () => {
+    const base = { ...emptyPersonaDefaultAccounts(), youtube: ['UC-1'] };
+    expect(samePublishingAccounts(base, { ...emptyPersonaDefaultAccounts(), youtube: ['UC-1', 'UC-2'] })).toBe(false);
+    expect(samePublishingAccounts(base, { ...emptyPersonaDefaultAccounts(), youtube: [], instagram: ['ig-1'] })).toBe(false);
+  });
+});
+
+describe('prunePublishingAccounts', () => {
+  it('drops ids absent from the connected lists', () => {
+    const accounts = { ...emptyPersonaDefaultAccounts(), youtube: ['UC-1', 'UC-gone'], instagram: ['ig-1'] };
+    expect(prunePublishingAccounts(accounts, { youtube: ['UC-1'], instagram: ['ig-1'] })).toEqual({
+      ...emptyPersonaDefaultAccounts(),
+      youtube: ['UC-1'],
+      instagram: ['ig-1'],
+    });
+  });
+
+  it('keeps providers whose connected list is unknown', () => {
+    const accounts = { ...emptyPersonaDefaultAccounts(), youtube: ['UC-1'], rumble: ['chan-1'] };
+    expect(prunePublishingAccounts(accounts, { youtube: ['UC-1'] })).toEqual(accounts);
+  });
+
+  it('empties a provider whose connected list resolved to none', () => {
+    const accounts = { ...emptyPersonaDefaultAccounts(), youtube: ['UC-1'] };
+    expect(prunePublishingAccounts(accounts, { youtube: [] })).toEqual(emptyPersonaDefaultAccounts());
   });
 });
 

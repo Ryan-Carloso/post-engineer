@@ -24,7 +24,7 @@ import { useI18n } from '@/lib/i18n/provider';
 import { InlineFieldError, SectionDivider } from './persona-section-parts';
 import { SOCIAL_PROVIDERS, type SocialProvider } from '@/lib/providers/registry';
 import { PROVIDER_LABELS } from '@/lib/account-options';
-import { emptyPersonaDefaultAccounts, totalBoundAccounts } from '@/lib/persona-publishing-accounts';
+import { emptyPersonaDefaultAccounts, totalBoundAccounts, samePublishingAccounts, prunePublishingAccounts } from '@/lib/persona-publishing-accounts';
 import { usePersonaStore } from '@/lib/store';
 
 type PublishingProvider = SocialProvider;
@@ -100,6 +100,7 @@ export function PersonaPublishingAccountsSection({ personaId }: { personaId?: st
   const draftSelection = usePersonaStore((s) => s.publishingAccounts);
   const setDraftSelection = usePersonaStore((s) => s.setPublishingAccounts);
   const setPublishingAccountsLoaded = usePersonaStore((s) => s.setPublishingAccountsLoaded);
+  const setLoadedPublishingAccounts = usePersonaStore((s) => s.setLoadedPublishingAccounts);
   const submitResult = usePersonaStore((s) => s.result);
   const selection = draftSelection;
   const [loading, setLoading] = useState(!isDraft);
@@ -111,7 +112,10 @@ export function PersonaPublishingAccountsSection({ personaId }: { personaId?: st
     setLoadError(null);
     try {
       const binding = await fetchBinding(personaId, t('persona.publishingAccountsLoadError'));
-      if (UUID_SHAPE.test(personaId)) setDraftSelection(binding);
+      if (UUID_SHAPE.test(personaId)) {
+        setDraftSelection(binding);
+        setLoadedPublishingAccounts(binding);
+      }
       setPublishingAccountsLoaded(true);
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : t('persona.publishingAccountsLoadError'));
@@ -119,7 +123,7 @@ export function PersonaPublishingAccountsSection({ personaId }: { personaId?: st
     } finally {
       setLoading(false);
     }
-  }, [personaId, t, setDraftSelection, setPublishingAccountsLoaded]);
+  }, [personaId, t, setDraftSelection, setLoadedPublishingAccounts, setPublishingAccountsLoaded]);
 
   useEffect(() => {
     if (isDraft) {
@@ -129,6 +133,41 @@ export function PersonaPublishingAccountsSection({ personaId }: { personaId?: st
     setPublishingAccountsLoaded(false);
     void load();
   }, [load, isDraft, setPublishingAccountsLoaded]);
+
+  useEffect(() => {
+    if (isDraft || loading || loadError !== null) return;
+    const connected: Partial<Record<PublishingProvider, string[]>> = {};
+    if (youtube.data !== undefined) connected.youtube = youtube.data.accounts.map((account) => account.channelId);
+    if (instagram.data !== undefined) connected.instagram = instagram.data.accounts.map((account) => account.igUserId);
+    if (bluesky.data !== undefined) connected.bluesky = bluesky.data.accounts.map((account) => account.did);
+    if (linkedin.data !== undefined) connected.linkedin = linkedin.data.accounts.map((account) => account.providerAccountId);
+    if (threads.data !== undefined) connected.threads = threads.data.accounts.map((account) => account.providerAccountId);
+    if (facebook.data !== undefined) connected.facebook = facebook.data.accounts.map((account) => account.providerAccountId);
+    if (pinterest.data !== undefined) connected.pinterest = pinterest.data.accounts.map((account) => account.providerAccountId);
+    if (threespeak.data !== undefined) connected['3speak'] = threespeak.data.accounts.map((account) => account.providerAccountId);
+    if (rumble.data !== undefined) connected.rumble = rumble.data.accounts.map((account) => account.providerAccountId);
+    if (fanvue.data !== undefined) connected.fanvue = fanvue.data.accounts.map((account) => account.providerAccountId);
+    if (telegram.data !== undefined) connected.telegram = telegram.data.accounts.map((account) => account.providerAccountId);
+    const pruned = prunePublishingAccounts(draftSelection, connected);
+    if (!samePublishingAccounts(draftSelection, pruned)) setDraftSelection(pruned);
+  }, [
+    isDraft,
+    loading,
+    loadError,
+    draftSelection,
+    setDraftSelection,
+    youtube.data,
+    instagram.data,
+    bluesky.data,
+    linkedin.data,
+    threads.data,
+    facebook.data,
+    pinterest.data,
+    threespeak.data,
+    rumble.data,
+    fanvue.data,
+    telegram.data,
+  ]);
 
   const toggle = (provider: PublishingProvider, id: string) => {
     const current = draftSelection[provider];

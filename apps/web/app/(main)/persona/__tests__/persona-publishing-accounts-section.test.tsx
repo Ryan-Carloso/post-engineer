@@ -290,6 +290,20 @@ describe('PersonaPublishingAccountsSection', () => {
     expect(usePersonaStore.getState().publishingAccountsLoaded).toBe(true);
   });
 
+  it('drops a stored id whose account is no longer connected', async () => {
+    mockFetchOnce({
+      success: true,
+      defaults: { youtube: ['UC-1', 'UC-gone'], instagram: [], bluesky: ['did:plc:abc'], linkedin: [], threads: [] },
+    });
+    render(<PersonaPublishingAccountsSection personaId={PERSONA_ID} />);
+    await waitFor(() => {
+      expect(usePersonaStore.getState().publishingAccounts.youtube).toEqual(['UC-1']);
+    });
+    expect(usePersonaStore.getState().loadedPublishingAccounts).toEqual(
+      expect.objectContaining({ youtube: ['UC-1', 'UC-gone'] }),
+    );
+  });
+
   it('leaves the draft untouched and marks it loaded for a non-uuid personaId', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
