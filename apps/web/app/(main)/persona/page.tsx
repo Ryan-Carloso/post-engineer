@@ -180,7 +180,7 @@ const PersonaPageError = ({ onRetry, isRetrying }: PersonaPageErrorProps) => {
           type="button"
           disabled={isRetrying}
           onClick={() => void onRetry()}
-          className="mt-7 inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-on-ink transition-colors hover:bg-accent-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60"
+          className="mt-7 inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-destructive px-5 py-2.5 text-sm font-semibold text-on-ink transition-colors hover:bg-accent-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60"
         >
           {isRetrying && <SpinnerIcon />}
           {t('persona.tryAgain')}
