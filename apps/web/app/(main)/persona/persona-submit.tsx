@@ -91,8 +91,14 @@ export const PersonaSubmit = ({ editId }: { editId: string | null }) => {
             try {
               await savePublishingAccounts(personaId, state.publishingAccounts, t('persona.publishingAccountsSaveError'));
               usePersonaStore.getState().setLoadedPublishingAccounts(state.publishingAccounts);
-            } catch {
-              usePersonaStore.getState().setResult({ success: false, error: t('persona.publishingAccountsSaveError') });
+            } catch (error) {
+              usePersonaStore.getState().setResult({
+                success: false,
+                error:
+                  error instanceof Error && error.message !== ''
+                    ? error.message
+                    : t('persona.publishingAccountsSaveError'),
+              });
               scrollToErrorField('accounts');
               return;
             }
@@ -112,8 +118,11 @@ export const PersonaSubmit = ({ editId }: { editId: string | null }) => {
           scrollToErrorField('script');
         }
       }
-    } catch {
-      usePersonaStore.getState().setResult({ success: false, error: t('persona.errServer') });
+    } catch (error) {
+      usePersonaStore.getState().setResult({
+        success: false,
+        error: error instanceof Error && error.message !== '' ? error.message : t('persona.errServer'),
+      });
     } finally {
       setIsPending(false);
     }

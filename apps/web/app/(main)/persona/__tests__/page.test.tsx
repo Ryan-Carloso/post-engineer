@@ -990,9 +990,21 @@ describe('app/(main)/persona/page — validação do submit (guards do store)', 
     expect(screen.queryByText('persona.errAvatar')).toBeNull();
   });
 
-  it('rejeição do servidor mostra errServer no diálogo', async () => {
+  it('rejeição do servidor mostra a mensagem do erro no diálogo', async () => {
     const user = userEvent.setup();
     vi.mocked(createPersona).mockRejectedValue(new Error('boom'));
+    render(<PersonaPage />, { wrapper: createWrapper() });
+
+    await preencherFormularioValido(user);
+    await user.click(screen.getByText('persona.submit'));
+
+    expect(await screen.findByText('boom')).toBeTruthy();
+    expect(screen.getByRole('alertdialog')).toBeTruthy();
+  });
+
+  it('rejeição sem mensagem mostra errServer no diálogo', async () => {
+    const user = userEvent.setup();
+    vi.mocked(createPersona).mockRejectedValue(new Error(''));
     render(<PersonaPage />, { wrapper: createWrapper() });
 
     await preencherFormularioValido(user);
@@ -1947,7 +1959,7 @@ describe('app/(main)/persona/page — submit em edição', () => {
     });
   });
 
-  it('edição com falha no PUT das contas mostra o erro e não volta', async () => {
+  it('edição com falha no PUT das contas mostra o erro do servidor e não volta', async () => {
     const mutateAsync = vi.fn().mockResolvedValue({ success: true });
     vi.mocked(useUpdatePersonaMutation).mockReturnValue({ mutateAsync, isPending: false } as never);
     vi.stubGlobal(
@@ -1968,7 +1980,7 @@ describe('app/(main)/persona/page — submit em edição', () => {
     await user.click(screen.getByRole('button', { name: 'personas.save' }));
 
     await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
-    expect(await screen.findByText('persona.publishingAccountsSaveError')).toBeTruthy();
+    expect(await screen.findByText('db exploded')).toBeTruthy();
     expect(navigation.back).not.toHaveBeenCalled();
   });
 
