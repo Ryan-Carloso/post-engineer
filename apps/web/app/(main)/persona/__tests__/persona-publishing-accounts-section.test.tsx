@@ -270,8 +270,47 @@ describe('PersonaPublishingAccountsSection', () => {
         expect.objectContaining({ youtube: ['UC-1'], bluesky: ['did:plc:abc'], '3speak': ['alice'] }),
       );
     });
-    // No second save button: the page's single save persists this draft.
     expect(screen.queryByTestId('publishing-accounts-save')).not.toBeInTheDocument();
+  });
+
+  it('marks the draft unloaded while the stored binding loads', async () => {
+    mockFetchOnce(new Promise(() => {}));
+    render(<PersonaPublishingAccountsSection personaId={PERSONA_ID} />);
+    expect(screen.getByTestId('publishing-accounts-loading')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(usePersonaStore.getState().publishingAccountsLoaded).toBe(false);
+    });
+  });
+
+  it('marks the draft loaded once the stored binding lands', async () => {
+    usePersonaStore.getState().setPublishingAccountsLoaded(false);
+    mockFetchOnce(serverDefaults);
+    render(<PersonaPublishingAccountsSection personaId={PERSONA_ID} />);
+    await screen.findAllByTestId('account-card-select');
+    expect(usePersonaStore.getState().publishingAccountsLoaded).toBe(true);
+  });
+
+  it('leaves the draft untouched and marks it loaded for a non-uuid personaId', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    usePersonaStore.getState().setPublishingAccountsLoaded(false);
+    usePersonaStore
+      .getState()
+      .setPublishingAccounts({ ...usePersonaStore.getState().publishingAccounts, youtube: ['UC-2'] });
+    render(<PersonaPublishingAccountsSection personaId="p-1" />);
+    await waitFor(() => {
+      expect(usePersonaStore.getState().publishingAccountsLoaded).toBe(true);
+    });
+    expect(usePersonaStore.getState().publishingAccounts.youtube).toEqual(['UC-2']);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('marks the draft loaded after a failed defaults load', async () => {
+    usePersonaStore.getState().setPublishingAccountsLoaded(false);
+    mockFetchOnce({ success: false, error: 'boom' }, false, 500);
+    render(<PersonaPublishingAccountsSection personaId={PERSONA_ID} />);
+    expect(await screen.findByText('boom')).toBeInTheDocument();
+    expect(usePersonaStore.getState().publishingAccountsLoaded).toBe(true);
   });
 
   it('toggling a checkbox updates the persona store draft and never PUTs', async () => {
@@ -279,7 +318,6 @@ describe('PersonaPublishingAccountsSection', () => {
     render(<PersonaPublishingAccountsSection personaId={PERSONA_ID} />);
     await screen.findAllByTestId('account-card-select');
 
-    // The GET defaults land in the store draft.
     expect(usePersonaStore.getState().publishingAccounts.youtube).toEqual(['UC-1']);
     expect(usePersonaStore.getState().publishingAccounts['3speak']).toEqual(['alice']);
 
@@ -564,6 +602,15 @@ describe('PersonaPublishingAccountsSection — draft mode (issue #572)', () => {
     expect(screen.queryByTestId('publishing-accounts-save')).not.toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
     expect(screen.getAllByTestId('account-card-select')).toHaveLength(5);
+  });
+
+  it('marks the draft loaded in draft mode without fetching', () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    usePersonaStore.getState().setPublishingAccountsLoaded(false);
+    render(<PersonaPublishingAccountsSection />);
+    expect(usePersonaStore.getState().publishingAccountsLoaded).toBe(true);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('toggling a card writes the binding to the persona store', () => {
