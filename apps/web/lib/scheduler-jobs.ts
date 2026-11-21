@@ -1,7 +1,12 @@
 import 'server-only';
 
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
-import { collectPostMetrics, createPostMetricsStore } from '@/lib/metrics/post-metrics';
+import { collectPostMetrics, createPostMetricsStore, metricsTargets } from '@/lib/metrics/post-metrics';
+import {
+  collectPostMetricsDaily,
+  createPostMetricsDailyStore,
+  DAILY_RUN_TIME_BUDGET_MS,
+} from '@/lib/metrics/post-metrics-daily';
 import { fetchProviderCounters } from '@/lib/metrics/provider-counters';
 import { resolveYouTubeMetricsTarget } from '@/lib/metrics/youtube-account-resolution';
 import { fetchEnginePostMetricsSource } from '@/lib/engine-tasks';
@@ -27,8 +32,12 @@ import {
   tryAcquireSchedulerLease,
 } from '@/lib/scheduler-lease';
 
+const POST_METRICS_TICK_BUDGET_MS = 90_000;
+
 async function runPostMetricsTick(): Promise<void> {
-  const store = createPostMetricsStore(createSupabaseServiceClient());
+  const supabase = createSupabaseServiceClient();
+  const store = createPostMetricsStore(supabase);
+  const startedAt = Date.now();
   const report = await collectPostMetrics({
     ...store,
     fetchTaskSource: fetchEnginePostMetricsSource,
@@ -40,6 +49,20 @@ async function runPostMetricsTick(): Promise<void> {
   if (report.errors.length > 0) {
     logger.error('[scheduler/post-metrics] completed with errors', null, {
       errors: report.errors,
+    });
+  }
+  const dailyReport = await collectPostMetricsDaily({
+    ...createPostMetricsDailyStore(supabase),
+    fetchTaskSource: fetchEnginePostMetricsSource,
+    fetchCounters: fetchProviderCounters,
+    resolveTarget: resolveYouTubeMetricsTarget,
+    metricsTargets,
+    now: () => new Date(),
+    budgetMs: Math.max(0, Math.min(DAILY_RUN_TIME_BUDGET_MS, POST_METRICS_TICK_BUDGET_MS - (Date.now() - startedAt))),
+  });
+  if (dailyReport.errors.length > 0) {
+    logger.error('[scheduler/post-metrics] daily readings completed with errors', null, {
+      errors: dailyReport.errors,
     });
   }
   await flushPostHog();

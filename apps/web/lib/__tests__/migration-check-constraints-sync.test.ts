@@ -62,6 +62,7 @@ function parseEnumChecks(): Map<string, EnumCheck> {
 const EXPECTED: Record<string, readonly string[]> = {
   social_accounts_provider_check: SOCIAL_PROVIDERS,
   post_metrics_provider_check: SOCIAL_PROVIDERS,
+  post_metrics_daily_provider_check: SOCIAL_PROVIDERS,
   schedules_publish_mode_check: GENERATION_PUBLISH_MODES,
   video_generations_publish_mode_check: GENERATION_PUBLISH_MODES,
   personas_video_layout_check: VIDEO_LAYOUTS,

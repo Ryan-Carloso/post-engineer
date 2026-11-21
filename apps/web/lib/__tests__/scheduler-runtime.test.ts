@@ -23,6 +23,12 @@ vi.mock('../supabase/service', () => ({ createSupabaseServiceClient: vi.fn(() =>
 vi.mock('../metrics/post-metrics', () => ({
   collectPostMetrics: vi.fn().mockResolvedValue({ errors: [] }),
   createPostMetricsStore: vi.fn(() => ({ store: true })),
+  metricsTargets: vi.fn(),
+}));
+vi.mock('../metrics/post-metrics-daily', () => ({
+  collectPostMetricsDaily: vi.fn().mockResolvedValue({ checked: 0, recorded: 0, errors: [], truncated: false }),
+  createPostMetricsDailyStore: vi.fn(() => ({ dailyStore: true })),
+  DAILY_RUN_TIME_BUDGET_MS: 45_000,
 }));
 vi.mock('../metrics/provider-counters', () => ({ fetchProviderCounters: vi.fn() }));
 vi.mock('../metrics/youtube-account-resolution', () => ({ resolveYouTubeMetricsTarget: vi.fn() }));
@@ -69,6 +75,7 @@ import { refreshThreadsToken } from '../threads';
 import { notifyAccountBreak } from '../owner-alert-mail';
 import { isUnauthorizedError } from '../account-break';
 import { collectPostMetrics, createPostMetricsStore } from '../metrics/post-metrics';
+import { collectPostMetricsDaily } from '../metrics/post-metrics-daily';
 import { runBillingReconciliation, createReconcileStore } from '../billing/reconcile';
 import { logger } from '../logger';
 import {
@@ -96,6 +103,7 @@ beforeEach(() => {
   createSchedulerMock.mockClear();
   schedulerHandle.start.mockClear();
   vi.mocked(collectPostMetrics).mockClear();
+  vi.mocked(collectPostMetricsDaily).mockClear();
   vi.mocked(runBillingReconciliation).mockClear();
   vi.mocked(flushPostHog).mockClear();
   vi.mocked(logger.error).mockClear();
@@ -165,6 +173,47 @@ describe('startInternalScheduler', () => {
       expect.stringContaining('completed with errors'),
       null,
       { errors: ['boom'] },
+    );
+    expect(flushPostHog).toHaveBeenCalledTimes(1);
+  });
+
+  it('post-metrics tick runs the daily reading collector after the window collector within the shared budget', async () => {
+    const order: string[] = [];
+    vi.mocked(collectPostMetrics).mockImplementationOnce(async () => {
+      order.push('window');
+      return { checked: 0, recorded: 0, errors: [], truncated: false };
+    });
+    vi.mocked(collectPostMetricsDaily).mockImplementationOnce(async () => {
+      order.push('daily');
+      return { checked: 0, recorded: 0, errors: [], truncated: false };
+    });
+    process.env.SCHEDULER_ENABLED = 'true';
+    startInternalScheduler();
+    const deps = createdDeps[0] as { jobs: Array<{ name: string; run: () => Promise<void> }> };
+    await deps.jobs.find((j) => j.name === 'post-metrics')!.run();
+
+    expect(order).toEqual(['window', 'daily']);
+    const args = vi.mocked(collectPostMetricsDaily).mock.calls[0][0];
+    expect(args).toMatchObject({ dailyStore: true, fetchTaskSource: expect.anything() });
+    expect(args.budgetMs).toBeGreaterThan(0);
+    expect(args.budgetMs).toBeLessThanOrEqual(45_000);
+  });
+
+  it('post-metrics tick logs when the daily reading report carries errors', async () => {
+    vi.mocked(collectPostMetricsDaily).mockResolvedValueOnce({
+      checked: 1,
+      recorded: 0,
+      errors: ['daily boom'],
+      truncated: false,
+    });
+    process.env.SCHEDULER_ENABLED = 'true';
+    startInternalScheduler();
+    const deps = createdDeps[0] as { jobs: Array<{ name: string; run: () => Promise<void> }> };
+    await deps.jobs.find((j) => j.name === 'post-metrics')!.run();
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining('daily readings completed with errors'),
+      null,
+      { errors: ['daily boom'] },
     );
     expect(flushPostHog).toHaveBeenCalledTimes(1);
   });
