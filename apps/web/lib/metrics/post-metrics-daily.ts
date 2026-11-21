@@ -18,6 +18,7 @@ export interface DailyDuePost {
   id: string;
   userId: string;
   taskId: string;
+  collectedKeys: Set<string>;
 }
 
 export interface DailyReading {
@@ -38,6 +39,7 @@ export interface PostMetricsDailyDeps {
   fetchCounters: (userId: string, target: MetricsTarget, context: CounterContext) => Promise<MetricsCounters>;
   resolveTarget: (userId: string, target: MetricsTarget) => Promise<MetricsTarget | null>;
   saveReading: (reading: DailyReading) => Promise<void>;
+  markAttempted: (postId: string, snapshotDate: string) => Promise<void>;
   metricsTargets: (publishResults: unknown[]) => MetricsTargetsResult;
   now: () => Date;
   budgetMs?: number;
@@ -87,9 +89,10 @@ export async function collectPostMetricsDaily(deps: PostMetricsDailyDeps): Promi
     }
 
     const seen = new Set<string>();
+    let retryLater = false;
     for (const target of targets) {
       const key = `${target.provider}:${target.externalId}`;
-      if (seen.has(key)) continue;
+      if (seen.has(key) || post.collectedKeys.has(key)) continue;
       seen.add(key);
       try {
         const resolved = await deps.resolveTarget(post.userId, target);
@@ -118,7 +121,9 @@ export async function collectPostMetricsDaily(deps: PostMetricsDailyDeps): Promi
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         const { status, metaCode } = snapshotFailureDetails(error);
-        if (classifySnapshotFailure(error) === 'media_gone') {
+        const kind = classifySnapshotFailure(error);
+        if (kind === 'transient') retryLater = true;
+        if (kind === 'media_gone') {
           logger.warn('[post-metrics-daily] reading skipped', {
             postId: post.id,
             provider: target.provider,
@@ -139,13 +144,22 @@ export async function collectPostMetricsDaily(deps: PostMetricsDailyDeps): Promi
         report.errors.push(`${post.id}/${target.provider}: reading failed`);
       }
     }
+    if (!retryLater) {
+      try {
+        await deps.markAttempted(post.id, snapshotDate);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        logger.warn('[post-metrics-daily] mark attempted failed', { postId: post.id, error: message });
+        report.errors.push(`${post.id}: mark attempted failed`);
+      }
+    }
   }
   return report;
 }
 
 export function createPostMetricsDailyStore(
   supabase: SupabaseClient,
-): Pick<PostMetricsDailyDeps, 'listDuePosts' | 'saveReading'> {
+): Pick<PostMetricsDailyDeps, 'listDuePosts' | 'saveReading' | 'markAttempted'> {
   return {
     async listDuePosts(now, limit) {
       const { data, error } = await supabase.rpc('find_post_metrics_daily_due', {
@@ -158,7 +172,10 @@ export function createPostMetricsDailyStore(
         if (typeof row.post_id !== 'string' || typeof row.user_id !== 'string' || typeof row.task_id !== 'string') {
           continue;
         }
-        posts.push({ id: row.post_id, userId: row.user_id, taskId: row.task_id });
+        const keys = Array.isArray(row.collected_keys)
+          ? row.collected_keys.filter((key): key is string => typeof key === 'string')
+          : [];
+        posts.push({ id: row.post_id, userId: row.user_id, taskId: row.task_id, collectedKeys: new Set(keys) });
       }
       return posts;
     },
@@ -179,6 +196,15 @@ export function createPostMetricsDailyStore(
         { onConflict: 'post_id,provider,external_id,snapshot_date' },
       );
       if (error) throw new Error(`daily reading write failed: ${error.message}`);
+    },
+    async markAttempted(postId, snapshotDate) {
+      const { error } = await supabase
+        .from('post_metrics_daily_attempts')
+        .upsert(
+          { post_id: postId, snapshot_date: snapshotDate, attempted_at: new Date().toISOString() },
+          { onConflict: 'post_id,snapshot_date' },
+        );
+      if (error) throw new Error(`daily attempt write failed: ${error.message}`);
     },
   };
 }

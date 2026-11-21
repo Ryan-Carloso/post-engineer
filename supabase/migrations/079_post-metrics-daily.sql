@@ -13,10 +13,18 @@
 -- the service role only. The (post_id, provider, external_id, snapshot_date
 -- desc) index serves "latest reading minus the reading 20-28h earlier".
 --
+-- post_metrics_daily_attempts: one row per (post, UTC date) once every
+-- video of the post reached a terminal outcome that day (reading saved,
+-- video gone, account unresolved, unknown provider, dead token). A post
+-- whose videos were all skipped has no reading to show for the day, so
+-- without this marker it would stay due on every run and fill the cap.
+-- A transient failure (5xx, 429, timeout) leaves no marker and is retried.
+--
 -- find_post_metrics_daily_due: published posts from the last 28 days with
--- no reading yet for the UTC date of p_now. Posts never read come first,
--- then the post whose newest reading is oldest, then oldest publish, so a
--- backlog cannot starve fresh posts. Service role only (65 convention).
+-- no attempt marker for the UTC date of p_now, plus the provider:external
+-- keys already read today so a retry reads only the videos that are still
+-- missing. Posts never read come first, then the post whose newest reading
+-- is oldest, then oldest publish. Service role only (65 convention).
 -- Idempotent.
 -- ============================================================================
 
@@ -68,28 +76,66 @@ begin
   end if;
 end $$;
 
+create table if not exists public.post_metrics_daily_attempts (
+  post_id uuid not null,
+  snapshot_date date not null,
+  attempted_at timestamptz not null default now(),
+  primary key (post_id, snapshot_date)
+);
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.post_metrics_daily_attempts'::regclass
+      and conname = 'post_metrics_daily_attempts_post_id_fkey'
+  ) then
+    alter table public.post_metrics_daily_attempts
+      add constraint post_metrics_daily_attempts_post_id_fkey
+      foreign key (post_id) references public.scheduled_posts(id) on delete cascade;
+  end if;
+end $$;
+
+alter table public.post_metrics_daily_attempts enable row level security;
+
+drop function if exists public.find_post_metrics_daily_due(timestamptz, integer);
+
 create or replace function public.find_post_metrics_daily_due(p_now timestamptz, p_limit integer)
 returns table (
   post_id uuid,
   user_id uuid,
   task_id text,
-  published_at timestamptz
+  published_at timestamptz,
+  collected_keys text[]
 )
 language sql
 stable
 security definer
 set search_path = public
 as $$
-  select sp.id, sp.user_id, sp.task_id, sp.published_at
+  select
+    sp.id,
+    sp.user_id,
+    sp.task_id,
+    sp.published_at,
+    coalesce(
+      (
+        select array_agg(pmd.provider || ':' || pmd.external_id)
+        from public.post_metrics_daily pmd
+        where pmd.post_id = sp.id
+          and pmd.snapshot_date = (p_now at time zone 'UTC')::date
+      ),
+      '{}'
+    )
   from public.scheduled_posts sp
   where sp.status = 'published'
     and sp.task_id is not null
     and sp.published_at > p_now - interval '28 days'
     and sp.published_at <= p_now
     and not exists (
-      select 1 from public.post_metrics_daily pmd
-      where pmd.post_id = sp.id
-        and pmd.snapshot_date = (p_now at time zone 'UTC')::date
+      select 1 from public.post_metrics_daily_attempts pda
+      where pda.post_id = sp.id
+        and pda.snapshot_date = (p_now at time zone 'UTC')::date
     )
   order by
     (select max(pmd.collected_at) from public.post_metrics_daily pmd where pmd.post_id = sp.id) asc nulls first,

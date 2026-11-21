@@ -22,8 +22,8 @@ import { InstagramApiError } from '@/lib/errors';
 const COUNTERS = { views: 1200, likes: 80, comments: 9, saves: null };
 const NOW = new Date('2026-11-21T12:00:00.000Z');
 
-function post(id: string): DailyDuePost {
-  return { id, userId: 'user-1', taskId: `task-${id}` };
+function post(id: string, collected: string[] = []): DailyDuePost {
+  return { id, userId: 'user-1', taskId: `task-${id}`, collectedKeys: new Set(collected) };
 }
 
 const YT_ENTRY = {
@@ -41,6 +41,7 @@ function deps(overrides: Partial<PostMetricsDailyDeps> = {}): PostMetricsDailyDe
     fetchCounters: vi.fn(async () => COUNTERS),
     resolveTarget: vi.fn(async (_userId: string, target: MetricsTarget) => target),
     saveReading: vi.fn(async () => undefined),
+    markAttempted: vi.fn(async () => undefined),
     metricsTargets,
     now: () => NOW,
     ...overrides,
@@ -269,11 +270,164 @@ describe('collectPostMetricsDaily', () => {
   });
 });
 
+describe('attempt markers', () => {
+  const GONE = new InstagramApiError('Unsupported get request', 400, undefined, 100, 33);
+  const goneAll = (): Partial<PostMetricsDailyDeps> => ({
+    fetchCounters: vi.fn(async () => {
+      throw GONE;
+    }),
+  });
+
+  it('marks the post attempted after a successful reading', async () => {
+    const d = deps();
+    await collectPostMetricsDaily(d);
+    expect(d.markAttempted).toHaveBeenCalledWith('post-1', '2026-11-21');
+  });
+
+  it('marks a post whose videos are all gone as attempted without writing any reading', async () => {
+    const d = deps(goneAll());
+    const report = await collectPostMetricsDaily(d);
+    expect(d.saveReading).not.toHaveBeenCalled();
+    expect(d.markAttempted).toHaveBeenCalledWith('post-1', '2026-11-21');
+    expect(report.errors).toEqual([]);
+  });
+
+  it('marks a post attempted when no target resolves to an account', async () => {
+    const d = deps({ resolveTarget: vi.fn(async () => null) });
+    await collectPostMetricsDaily(d);
+    expect(d.saveReading).not.toHaveBeenCalled();
+    expect(d.markAttempted).toHaveBeenCalledTimes(1);
+  });
+
+  it('marks a post that only has unknown providers as attempted', async () => {
+    const d = deps({
+      fetchTaskSource: vi.fn(async () => ({
+        publishResults: [{ provider: 'myspace', status: 'published', accountId: 'x', postId: 'y' }],
+      })),
+    });
+    await collectPostMetricsDaily(d);
+    expect(d.fetchCounters).not.toHaveBeenCalled();
+    expect(d.markAttempted).toHaveBeenCalledWith('post-1', '2026-11-21');
+  });
+
+  it('marks a mixed post (one video gone, one read) as attempted and keeps the reading', async () => {
+    const d = deps({
+      fetchCounters: vi.fn(async (_userId: string, target: MetricsTarget) => {
+        if (target.provider === 'instagram') throw GONE;
+        return COUNTERS;
+      }),
+    });
+    await collectPostMetricsDaily(d);
+    expect(d.saveReading).toHaveBeenCalledTimes(1);
+    expect(d.saveReading).toHaveBeenCalledWith(expect.objectContaining({ provider: 'youtube' }));
+    expect(d.markAttempted).toHaveBeenCalledWith('post-1', '2026-11-21');
+  });
+
+  it('marks a dead token as attempted so it is not retried every hour', async () => {
+    const dead = new InstagramApiError('Invalid OAuth access token', 400, undefined, 190);
+    const d = deps({
+      fetchCounters: vi.fn(async () => {
+        throw dead;
+      }),
+    });
+    const report = await collectPostMetricsDaily(d);
+    expect(report.errors.length).toBe(2);
+    expect(d.markAttempted).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves a post unmarked after a transient failure so the next run retries it', async () => {
+    const d = deps({
+      fetchCounters: vi.fn(async (_userId: string, target: MetricsTarget) => {
+        if (target.provider === 'youtube') throw new Error('503 upstream');
+        return COUNTERS;
+      }),
+    });
+    await collectPostMetricsDaily(d);
+    expect(d.markAttempted).not.toHaveBeenCalled();
+  });
+
+  it('leaves a post unmarked when its publish results are unavailable', async () => {
+    const d = deps({
+      fetchTaskSource: vi.fn(async () => {
+        throw new Error('engine down');
+      }),
+    });
+    await collectPostMetricsDaily(d);
+    expect(d.markAttempted).not.toHaveBeenCalled();
+  });
+
+  it('skips videos already read today and reads only the missing one on a retry', async () => {
+    const d = deps({ listDuePosts: vi.fn(async () => [post('post-1', ['youtube:abc123'])]) });
+    const report = await collectPostMetricsDaily(d);
+    expect(report.recorded).toBe(1);
+    expect(d.saveReading).toHaveBeenCalledTimes(1);
+    expect(d.saveReading).toHaveBeenCalledWith(expect.objectContaining({ provider: 'instagram' }));
+    expect(d.markAttempted).toHaveBeenCalledTimes(1);
+  });
+
+  it('logs a failed attempt marker write with the exact call', async () => {
+    const d = deps({
+      markAttempted: vi.fn(async () => {
+        throw new Error('daily attempt write failed: down');
+      }),
+    });
+    const report = await collectPostMetricsDaily(d);
+    expect(logger.warn).toHaveBeenCalledWith('[post-metrics-daily] mark attempted failed', {
+      postId: 'post-1',
+      error: 'daily attempt write failed: down',
+    });
+    expect(report.errors).toEqual(['post-1: mark attempted failed']);
+  });
+
+  it('reads the healthy post on the next run after 50 attempted-but-gone posts filled the cap', async () => {
+    const attempted = new Set<string>();
+    const pool = [
+      ...Array.from({ length: MAX_DAILY_POSTS_PER_RUN }, (_, i) => `gone-${i}`),
+      'healthy',
+    ];
+    const readPosts: string[] = [];
+
+    const first = await collectPostMetricsDaily(
+      deps({
+        listDuePosts: vi.fn(async (_now: Date, limit: number) =>
+          pool.filter((id) => !attempted.has(id)).slice(0, limit).map((id) => post(id)),
+        ),
+        fetchTaskSource: vi.fn(async () => ({ publishResults: [IG_ENTRY] })),
+        fetchCounters: vi.fn(async () => {
+          throw GONE;
+        }),
+        markAttempted: vi.fn(async (postId: string) => {
+          attempted.add(postId);
+        }),
+      }),
+    );
+    expect(first.truncated).toBe(true);
+    expect(attempted.size).toBe(MAX_DAILY_POSTS_PER_RUN);
+
+    const second = await collectPostMetricsDaily(
+      deps({
+        listDuePosts: vi.fn(async (_now: Date, limit: number) =>
+          pool.filter((id) => !attempted.has(id)).slice(0, limit).map((id) => post(id)),
+        ),
+        fetchTaskSource: vi.fn(async () => ({ publishResults: [IG_ENTRY] })),
+        markAttempted: vi.fn(async (postId: string) => {
+          attempted.add(postId);
+        }),
+        saveReading: vi.fn(async (reading: DailyReading) => {
+          readPosts.push(reading.postId);
+        }),
+      }),
+    );
+    expect(second.truncated).toBe(false);
+    expect(readPosts).toEqual(['healthy']);
+  });
+});
+
 describe('createPostMetricsDailyStore', () => {
   it('lists due posts through the definer function and drops malformed rows', async () => {
     const rpc = vi.fn(async () => ({
       data: [
-        { post_id: 'p1', user_id: 'u1', task_id: 't1', published_at: '2026-11-20T10:00:00Z' },
+        { post_id: 'p1', user_id: 'u1', task_id: 't1', published_at: '2026-11-20T10:00:00Z', collected_keys: ['youtube:abc', 7] },
         { post_id: 'p2', user_id: 'u1', task_id: null, published_at: null },
         { post_id: 5, user_id: 'u1', task_id: 't3', published_at: null },
       ],
@@ -282,7 +436,7 @@ describe('createPostMetricsDailyStore', () => {
     const store = createPostMetricsDailyStore({ rpc } as unknown as SupabaseClient);
     const posts = await store.listDuePosts(NOW, 51);
     expect(rpc).toHaveBeenCalledWith('find_post_metrics_daily_due', { p_now: NOW.toISOString(), p_limit: 51 });
-    expect(posts).toEqual([{ id: 'p1', userId: 'u1', taskId: 't1' }]);
+    expect(posts).toEqual([{ id: 'p1', userId: 'u1', taskId: 't1', collectedKeys: new Set(['youtube:abc']) }]);
   });
 
   it('throws when the due lookup fails', async () => {
@@ -340,5 +494,23 @@ describe('createPostMetricsDailyStore', () => {
         saves: null,
       }),
     ).rejects.toThrow('daily reading write failed: nope');
+  });
+
+  it('upserts the attempt marker on its primary key', async () => {
+    const upsert = vi.fn(async () => ({ error: null }));
+    const from = vi.fn(() => ({ upsert }));
+    const store = createPostMetricsDailyStore({ from } as unknown as SupabaseClient);
+    await store.markAttempted('p1', '2026-11-21');
+    expect(from).toHaveBeenCalledWith('post_metrics_daily_attempts');
+    expect(upsert).toHaveBeenCalledWith(
+      { post_id: 'p1', snapshot_date: '2026-11-21', attempted_at: expect.any(String) },
+      { onConflict: 'post_id,snapshot_date' },
+    );
+  });
+
+  it('throws when the attempt marker write fails', async () => {
+    const from = vi.fn(() => ({ upsert: vi.fn(async () => ({ error: { message: 'nope' } })) }));
+    const store = createPostMetricsDailyStore({ from } as unknown as SupabaseClient);
+    await expect(store.markAttempted('p1', '2026-11-21')).rejects.toThrow('daily attempt write failed: nope');
   });
 });

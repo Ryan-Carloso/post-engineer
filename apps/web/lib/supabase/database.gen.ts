@@ -453,6 +453,24 @@ export interface Database {
         };
         Relationships: [];
       };
+      post_metrics_daily_attempts: {
+        Row: {
+        post_id: string;
+        snapshot_date: string;
+        attempted_at: string;
+        };
+        Insert: {
+        post_id: string;
+        snapshot_date: string;
+        attempted_at?: string;
+        };
+        Update: {
+        post_id?: string;
+        snapshot_date?: string;
+        attempted_at?: string;
+        };
+        Relationships: [];
+      };
       post_metrics_done: {
         Row: {
         post_id: string;

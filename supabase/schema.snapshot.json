@@ -2184,6 +2184,35 @@
                 "persona_default_accounts_persona_id_fkey": "FOREIGN KEY (persona_id) REFERENCES personas(id) ON DELETE CASCADE"
             }
         },
+        "post_metrics_daily_attempts": {
+            "rls": true,
+            "columns": [
+                {
+                    "name": "post_id",
+                    "type": "uuid",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "snapshot_date",
+                    "type": "date",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "attempted_at",
+                    "type": "timestamp with time zone",
+                    "default": "now()",
+                    "notNull": true
+                }
+            ],
+            "policies": {
+            },
+            "constraints": {
+                "post_metrics_daily_attempts_pkey": "PRIMARY KEY (post_id, snapshot_date)",
+                "post_metrics_daily_attempts_post_id_fkey": "FOREIGN KEY (post_id) REFERENCES scheduled_posts(id) ON DELETE CASCADE"
+            }
+        },
         "scheduled_post_progress_history": {
             "rls": true,
             "columns": [

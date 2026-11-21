@@ -86,4 +86,24 @@ describe('post_metrics_daily schema sync', () => {
     expect(migration).toContain("(p_now at time zone 'UTC')::date");
     expect(migration).toMatch(/order by[\s\S]*nulls first,\s+sp\.published_at asc,\s+sp\.id asc\s+limit p_limit/);
   });
+
+  it('keeps a service-only attempt marker keyed by post and date that the collector upserts on', () => {
+    const attempts = snapshot.tables.post_metrics_daily_attempts;
+    expect(attempts.rls).toBe(true);
+    expect(Object.keys(attempts.policies)).toEqual([]);
+    expect(attempts.constraints.post_metrics_daily_attempts_pkey).toBe('PRIMARY KEY (post_id, snapshot_date)');
+    expect(attempts.constraints.post_metrics_daily_attempts_post_id_fkey).toContain('ON DELETE CASCADE');
+    const columns = new Set(attempts.columns.map((column) => column.name));
+    for (const key of ['post_id', 'snapshot_date', 'attempted_at']) {
+      expect(columns.has(key), key).toBe(true);
+      expect(collectorSource).toContain(`${key}:`);
+    }
+    expect(collectorSource).toContain("onConflict: 'post_id,snapshot_date'");
+  });
+
+  it('excludes posts by attempt marker, not by reading, so skipped-only posts do not stay due', () => {
+    const finder = /create or replace function public\.find_post_metrics_daily_due[\s\S]*?\$\$;/.exec(migration)?.[0] ?? '';
+    expect(finder).toContain('from public.post_metrics_daily_attempts pda');
+    expect(finder).toMatch(/not exists \(\s+select 1 from public\.post_metrics_daily_attempts/);
+  });
 });
