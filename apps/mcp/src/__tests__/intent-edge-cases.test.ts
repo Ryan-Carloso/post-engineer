@@ -4,7 +4,6 @@ import { actionShape } from '../action-tool.js';
 import type { PostEngineerClient } from '../client.js';
 import { GenerateVideoSchema, handleGenerateVideo } from '../generate-video.js';
 import { createRefResolvers, resolveAccountRef, withOptionalPersona, withPersona } from '../refs.js';
-import { handleAddExperimentPair, AddExperimentPairSchema } from '../tools-experiments.js';
 import type { McpToolResponse } from '../tools-call.js';
 
 const MARIA = '11111111-1111-4111-8111-111111111111';
@@ -126,31 +125,5 @@ describe('generate_video reference failures', () => {
     const c = { generatePersonaVideo: generate, getHeaders: () => ({}) } as unknown as PostEngineerClient;
     await handleGenerateVideo(c, GenerateVideoSchema.parse({ videos: [{ ...baseVideo, persona: MARIA, providers: ['youtube', 'youtube'] }] }));
     expect(generate.mock.calls[0]?.[0].providers).toEqual(['youtube']);
-  });
-});
-
-describe('experiments add_pair reference failures', () => {
-  it('stops before the first video when the persona does not exist', async () => {
-    const generate = vi.fn();
-    const c = { listPersonas: vi.fn(async () => ({ personas: [] })), generatePersonaVideo: generate } as unknown as PostEngineerClient;
-    const args = AddExperimentPairSchema.parse({
-      experimentId: '33333333-3333-4333-8333-333333333333',
-      pair: 1,
-      title: 'T',
-      description: 'D',
-      persona: 'Ghost',
-      providers: ['youtube'],
-      mode: 'asap',
-      options: { videoType: 'full_lipsync' },
-      segments: [SEGMENTS[1], SEGMENTS[2]],
-      hooks: [
-        { variantId: 'hook-calm', text: HOOK },
-        { variantId: 'hook-bold', text: HOOK.replace('Most people', 'Almost everyone') },
-      ],
-    });
-    const response = await handleAddExperimentPair(c, args);
-    expect(response.isError).toBe(true);
-    expect(text(response)).toContain('No persona named "Ghost"');
-    expect(generate).not.toHaveBeenCalled();
   });
 });

@@ -1,7 +1,6 @@
 import { describe, expect, expectTypeOf, it } from 'vitest';
 import { readBody } from '@/lib/contracts-server';
-import { createExperiment } from '@/lib/contracts/experiments';
-import { getPrompt, listPrompts } from '@/lib/contracts/prompts';
+import { createUserPrompt, getPrompt, listPrompts } from '@/lib/contracts/prompts';
 import { getTokenBalance, listTokenTransactions } from '@/lib/contracts/billing';
 import { getPost } from '@/lib/contracts/posts';
 import { getRetentionCurve, listMetrics } from '@/lib/contracts/metrics';
@@ -14,8 +13,8 @@ import { addPersonaImage, createPersona, deletePersona, deletePersonaImage, getP
 import { applyBatchDiscount, completeVideoUpload, generateAndSchedule, mintVideoUpload, publishUploadedVideo, scoreDraft, validateScript } from '@/lib/contracts/videos';
 import type { BodyOf, ResponseOf } from '@/lib/contracts/endpoint';
 
-type CreateBody = BodyOf<typeof createExperiment>;
-type CreateResponse = ResponseOf<typeof createExperiment>;
+type CreateBody = BodyOf<typeof createUserPrompt>;
+type CreateResponse = ResponseOf<typeof createUserPrompt>;
 type ListPromptsResponse = ResponseOf<typeof listPrompts>;
 type GetPromptResponse = ResponseOf<typeof getPrompt>;
 type TokenBalanceResponse = ResponseOf<typeof getTokenBalance>;
@@ -73,30 +72,22 @@ type PublishByIdBody = BodyOf<typeof publishUploadedVideo>;
 
 describe('contracts typecheck', () => {
   it('pins BodyOf and ResponseOf field names', async () => {
-    const validBody: CreateBody = {
-      name: 'Hook test',
-      variable: 'hook',
-      targetPairs: 6,
-      variants: [
-        { variantId: 'hook-calm', name: 'Calm', description: 'calm' },
-        { variantId: 'hook-aggressive', name: 'Aggressive', description: 'direct' },
-      ],
-    };
-    expect(validBody.name).toBe('Hook test');
+    const validBody: CreateBody = { slug: 'hook-test', title: 'Hook test', prompt: 'Write a hook.' };
+    expect(validBody.title).toBe('Hook test');
 
     expectTypeOf<CreateBody>().not.toHaveProperty('nome');
 
-    const response = { success: true, experiment: { id: '1', name: 'Hook test', variable: 'hook', personaId: '11111111-2222-4333-8444-555555555555' as string | null, targetPairs: 6, variants: [] } } as CreateResponse;
-    expect(response.experiment.name).toBe('Hook test');
+    const response = { success: true, prompt: { slug: 'hook-test', title: 'Hook test', description: '', source: 'own', visibility: 'private', prompt: 'Write a hook.', versionId: '11111111-2222-4333-8444-555555555555', version: 1 } } as CreateResponse;
+    expect(response.prompt.versionId).toBe('11111111-2222-4333-8444-555555555555');
 
-    expectTypeOf(response.experiment).not.toHaveProperty('nome');
+    expectTypeOf(response.prompt).not.toHaveProperty('name');
 
-    const request = new Request('http://localhost/api/experiments', { method: 'POST', body: JSON.stringify(validBody) });
-    const result = await readBody(createExperiment, request);
+    const request = new Request('http://localhost/api/prompts', { method: 'POST', body: JSON.stringify(validBody) });
+    const result = await readBody(createUserPrompt, request);
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.body.name).toBe('Hook test');
-      expectTypeOf(result.body).exclude<undefined>().not.toHaveProperty('nome');
+      expect(result.body.title).toBe('Hook test');
+      expectTypeOf(result.body).exclude<undefined>().not.toHaveProperty('name');
     }
   });
 
@@ -105,7 +96,7 @@ describe('contracts typecheck', () => {
     expect(list.prompts[0]?.title).toBe('News');
     expectTypeOf(list.prompts[0]).exclude<undefined>().not.toHaveProperty('name');
 
-    const detail: GetPromptResponse = { success: true, prompt: { slug: 'daily-news', title: 'News', description: 'News', source: 'official', visibility: 'public', prompt: 'Write...' } };
+    const detail: GetPromptResponse = { success: true, prompt: { slug: 'daily-news', title: 'News', description: 'News', source: 'official', visibility: 'public', prompt: 'Write...', versionId: '11111111-2222-4333-8444-555555555555', version: 3 } };
     expect(detail.prompt.prompt).toBe('Write...');
     expectTypeOf(detail.prompt).exclude<undefined>().not.toHaveProperty('text');
   });

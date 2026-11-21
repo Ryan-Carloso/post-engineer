@@ -50,7 +50,7 @@ export interface GeneratePersonaVideoInput {
   personaId?: string;
   title: string;
   description: string;
-  experiment?: { experimentId: string; variantId: string; pair: number };
+  promptVersionId?: string;
   cta?: PersonaCtaInput | null;
   providers: SocialProvider[];
   youtubeAccountIds?: string[];

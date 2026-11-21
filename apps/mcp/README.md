@@ -203,7 +203,7 @@ The server offers **18 intent tools**, not one tool per API endpoint. A tool is 
 | `schedules` | `list`, `cancel`, `get_slot`, `update_slot_title`, `delete_slot` | Future slots. |
 | `posts` | `list`, `get` | Published and scheduled posts. |
 | `insights` | `post_metrics`, `retention_curve` | How posts performed. |
-| `experiments` | `create`, `list`, `add_pair`, `results` | Paired A/B hook experiments. |
+| `experiments` | `results` | Compares your prompts inside each publishing account: every video generated with a `promptVersionId` records its prompt version. |
 | `media` | `upload`, `check` | Images for video segments. |
 | `billing` | `balance`, `transactions` | Prepaid tokens. |
 | `prompts` | `list`, `get` | The recipe prompts. |
@@ -248,7 +248,7 @@ There is no alias for the old names. Saved prompts, recipes and agent configurat
 | `list_schedules`, `cancel_schedule`, `get_slot`, `update_slot_title`, `delete_slot` | `schedules` `list`, `cancel`, `get_slot`, `update_slot_title`, `delete_slot` |
 | `list_posts`, `get_post` | `posts` `list`, `get` |
 | `get_post_metrics`, `get_youtube_retention_curve` | `insights` `post_metrics`, `retention_curve` |
-| `create_experiment`, `list_experiments`, `add_experiment_pair`, `get_experiment_results` | `experiments` `create`, `list`, `add_pair`, `results` |
+| `get_experiment_results` | `experiments` `results` |
 | `upload_media`, `check_media` | `media` `upload`, `check` |
 | `get_token_balance`, `list_token_transactions` | `billing` `balance`, `transactions` |
 | `list_prompts`, `get_prompt` | `prompts` `list`, `get` |
@@ -292,4 +292,4 @@ objective). The MCP needs no change: it serves whatever the web hub lists.
 
 - Platform: https://post-engineer.com/
 - API keys: https://post-engineer.com/recipes
-- Recipes: [docs/recipes/daily-news.md](../../docs/recipes/daily-news.md) (daily news becomes a video), [docs/recipes/place-spotlight.md](../../docs/recipes/place-spotlight.md) (place spotlight becomes a video), [docs/recipes/subject-spotlight.md](../../docs/recipes/subject-spotlight.md) (subject spotlight becomes a video), [docs/recipes/last-30-days.md](../../docs/recipes/last-30-days.md) (last 30 days become a video), [docs/recipes/multi-rede.md](../../docs/recipes/multi-rede.md) (one week, one video per network), [docs/recipes/viral-shorts.md](../../docs/recipes/viral-shorts.md) (a viral video becomes your Short), [docs/recipes/ab-hook-test.md](../../docs/recipes/ab-hook-test.md) (test two hooks) and [docs/recipes/story-first-reels.md](../../docs/recipes/story-first-reels.md) (write scripts story-first)
+- Recipes: [docs/recipes/daily-news.md](../../docs/recipes/daily-news.md) (daily news becomes a video), [docs/recipes/place-spotlight.md](../../docs/recipes/place-spotlight.md) (place spotlight becomes a video), [docs/recipes/subject-spotlight.md](../../docs/recipes/subject-spotlight.md) (subject spotlight becomes a video), [docs/recipes/last-30-days.md](../../docs/recipes/last-30-days.md) (last 30 days become a video), [docs/recipes/multi-rede.md](../../docs/recipes/multi-rede.md) (one week, one video per network), [docs/recipes/viral-shorts.md](../../docs/recipes/viral-shorts.md) (a viral video becomes your Short), [docs/recipes/compare-prompts.md](../../docs/recipes/compare-prompts.md) (compare two prompts) and [docs/recipes/story-first-reels.md](../../docs/recipes/story-first-reels.md) (write scripts story-first)

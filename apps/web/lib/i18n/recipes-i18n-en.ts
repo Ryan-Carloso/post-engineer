@@ -179,24 +179,24 @@ export const recipesI18nEn = {
   fullSetupExampleInput: 'Starting with zero accounts and no persona.',
   fullSetupExampleOutput:
       'Accounts connected, persona created, script validated, one video published.',
-  abHookTestTitle: 'Test two hooks (A/B)',
-  abHookTestObjective:
-      'Compare two hook styles on the same videos. Faceless is the cheapest test. A variant is the winner only when the label is clear.',
-  abHookTestStep1: 'For creators comparing two hook styles on the same video.',
-  abHookTestStep2:
-      'Faceless is the cheapest test: 1 token per video, created with no persona.',
-  abHookTestStep3:
-      'Create the experiment with 6 pairs. 6 is the smallest target that can ever be clear. A moderate effect needs about 10-12.',
-  abHookTestStep4:
-      "Write both hooks per pair in each variant's style. Only the hook differs inside a pair.",
-  abHookTestStep5:
-      'Wait for publication and metrics, then read the result. Never call a variant the winner unless the label is clear.',
-  abHookTestDeliver1: 'One faceless experiment with two hook variants.',
-  abHookTestDeliver2: 'Pairs of videos at 1 token each, with the same voice on every pair.',
-  abHookTestDeliver3: 'A result that names a winner only when the label is clear.',
-  abHookTestExampleInput: 'A calm hook against a direct hook, faceless, on my niche.',
-  abHookTestExampleOutput:
-      'Experiment with 6 pairs. No winner named unless the label is clear.',
+  comparePromptsTitle: 'Compare two prompts (A/B)',
+  comparePromptsObjective:
+      'Alternate two prompts on the same account and see which one does better. A prompt is the winner only when the label is clear.',
+  comparePromptsStep1: 'For creators testing one change, like a hook style, written as two prompts.',
+  comparePromptsStep2:
+      'Every video records the prompt version it was written from, so the comparison needs no setup.',
+  comparePromptsStep3:
+      'Same account, voice and video type on every video: another account is another audience.',
+  comparePromptsStep4:
+      'Alternate the prompts on the calendar and swap their times every day, at least 5 videos per prompt.',
+  comparePromptsStep5:
+      'Wait for publication and metrics, then read the result. Never call a prompt the winner unless the label is clear.',
+  comparePromptsDeliver1: 'A calendar that alternates two prompts on one account.',
+  comparePromptsDeliver2: 'Videos that each record their prompt version.',
+  comparePromptsDeliver3: 'A comparison that names a winner only when the label is clear.',
+  comparePromptsExampleInput: 'My calm-hook prompt against my direct-hook prompt, faceless, on my YouTube.',
+  comparePromptsExampleOutput:
+      '10 videos alternated over 5 days. No winner named unless the label is clear.',
   storyFirstReelsTitle: 'Story-first Reels',
   storyFirstReelsObjective:
       'Write every script as a story first: one tight micro-arc, built to hold watch-through.',

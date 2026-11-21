@@ -10,7 +10,7 @@ import { generatePersonaVideoOutcome } from './tools-single-video.js';
 
 export const BatchVideoSchema = z
   .object(GeneratePersonaVideoShape)
-  .omit({ idempotencyKey: true, experiment: true, recipe: true })
+  .omit({ idempotencyKey: true, recipe: true })
   .strict();
 
 export const GeneratePersonaVideoBatchShape = {
@@ -27,7 +27,7 @@ export const GeneratePersonaVideoBatchShape = {
     .min(2, 'A batch needs at least 2 videos')
     .max(MAX_BATCH_VIDEOS, `A batch holds at most ${MAX_BATCH_VIDEOS} videos`)
     .describe(
-      `The videos, each with the same fields as generate_video (no idempotencyKey, experiment or recipe). Up to ${MAX_BATCH_VIDEOS}.`,
+      `The videos, each with the same fields as generate_video (no idempotencyKey or recipe). Up to ${MAX_BATCH_VIDEOS}.`,
     ),
 };
 

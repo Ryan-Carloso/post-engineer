@@ -277,7 +277,7 @@ describe('POST /api/prompts', () => {
     expect(GetPromptResponseSchema.safeParse(body).success).toBe(true);
     expect(body).toEqual({
       success: true,
-      prompt: { slug: 'my-prompt', title: 'Title', description: 'About', source: 'own', visibility: 'private', prompt: 'Body text' },
+      prompt: { slug: 'my-prompt', title: 'Title', description: 'About', source: 'own', visibility: 'private', prompt: 'Body text', versionId: db.versions[0]?.id, version: 1 },
     });
     expect(db.rows).toHaveLength(1);
     expect(db.rows[0].owner_id).toBe(ALICE);
@@ -375,7 +375,7 @@ describe('GET /api/prompts/[slug]', () => {
     expect(params).not.toHaveBeenCalled();
   });
 
-  it('returns the full official recipe for a known slug without querying the database', async () => {
+  it('returns the full official recipe for a known slug with its recorded version and no user_prompts query', async () => {
     const db = seedDb();
     authenticatedAs(ALICE);
     const response = await getPrompt(request('/api/prompts/daily-news'), slugContext('daily-news'));
@@ -389,11 +389,11 @@ describe('GET /api/prompts/[slug]', () => {
         description: recipesI18nEn.dailyNewsObjective,
         source: 'official',
         visibility: 'public',
-        prompt: DAILY_NEWS_PROMPT,
+        prompt: DAILY_NEWS_PROMPT, versionId: db.versions[0]?.id, version: 1,
       },
     });
     expect(GetPromptResponseSchema.safeParse(body).success).toBe(true);
-    expect(db.queries).toEqual([]);
+    expect(db.queries).toEqual(['rpc ensure_official_prompt_version daily-news']);
   });
 
   it('serves an official prompt and a public one to a caller with no credentials', async () => {

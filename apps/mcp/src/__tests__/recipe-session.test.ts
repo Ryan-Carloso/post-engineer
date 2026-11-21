@@ -57,7 +57,7 @@ function apiResponse(url: string): Response {
   if (path === '/api/prompts/place-spotlight') {
     return json(200, {
       success: true,
-      prompt: { slug: 'place-spotlight', title: 'Place', description: 'A place.', source: 'official', visibility: 'public', prompt: 'Place recipe text.' },
+      prompt: { slug: 'place-spotlight', title: 'Place', description: 'A place.', source: 'official', visibility: 'public', prompt: 'Place recipe text.', versionId: '44444444-4444-4444-8444-444444444444', version: 1 },
     });
   }
   if (path.startsWith('/api/prompts/')) {

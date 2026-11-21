@@ -13,6 +13,7 @@ import { UPLOAD_CONTENT_TYPES } from '@/lib/contracts/videos';
 import { SCHEDULED_MEDIA_KINDS } from '@/app/api/media/publish-existing/schema';
 import { PERSONA_CTA_TYPES } from '@/lib/contracts/personas';
 import { PROMPT_VISIBILITIES } from '@/lib/contracts/prompts';
+import { PROMPT_VERSION_SOURCES } from '@/lib/contracts/experiments';
 import { TOOL_CONFIG_SEARCH_TOOLS, TOOL_CONFIG_STOCK_SOURCES } from '@/lib/tool-config';
 
 interface SnapshotTable {
@@ -70,7 +71,6 @@ const EXPECTED: Record<string, readonly string[]> = {
   post_metrics_done_metrics_window_check: METRICS_WINDOWS,
   post_metrics_analytics_status_check: ANALYTICS_STATUSES,
   cloned_voices_status_check: ['pending', 'ready', 'failed'],
-  experiments_variable_check: ['hook'],
   publish_ledger_status_check: PUBLISH_LEDGER_STATUSES,
   video_uploads_status_check: VIDEO_UPLOAD_STATUSES,
   video_uploads_declared_content_type_check: UPLOAD_CONTENT_TYPES,
@@ -81,6 +81,7 @@ const EXPECTED: Record<string, readonly string[]> = {
   user_tool_configs_search_tool_check: TOOL_CONFIG_SEARCH_TOOLS,
   user_tool_configs_stock_sources_check: TOOL_CONFIG_STOCK_SOURCES,
   user_prompts_visibility_check: PROMPT_VISIBILITIES,
+  prompt_versions_source_check: PROMPT_VERSION_SOURCES,
 };
 
 describe('database enum checks match the code', () => {

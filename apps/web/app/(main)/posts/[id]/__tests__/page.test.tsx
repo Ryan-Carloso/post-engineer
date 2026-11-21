@@ -86,6 +86,7 @@ const SLOT_SCHEDULE = {
 
 function generationPayload(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
+    prompt: null,
     faceless: false,
     language: null,
     voiceId: null,

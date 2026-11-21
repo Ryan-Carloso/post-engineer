@@ -307,10 +307,6 @@
   "POST /api/videos/generate-and-schedule": [
     {
       "tool": "generate_video"
-    },
-    {
-      "tool": "experiments",
-      "action": "add_pair"
     }
   ],
   "POST /api/videos/batch-discount": [
@@ -360,19 +356,7 @@
       "action": "delete"
     }
   ],
-  "POST /api/experiments": [
-    {
-      "tool": "experiments",
-      "action": "create"
-    }
-  ],
   "GET /api/experiments": [
-    {
-      "tool": "experiments",
-      "action": "list"
-    }
-  ],
-  "GET /api/experiments/[id]": [
     {
       "tool": "experiments",
       "action": "results"

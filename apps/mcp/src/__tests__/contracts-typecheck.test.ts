@@ -1,6 +1,6 @@
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 import type { PostEngineerClient } from '../client.js';
-import { createExperiment } from '../client-experiments.js';
+import { getPromptComparison } from '../client-experiments.js';
 import { getPrompt, listPrompts } from '../client-prompts.js';
 import { getTokenBalance, listTokenTransactions } from '../client-billing.js';
 import { getPost, getPostMetrics, getYouTubeRetentionCurve } from '../client-posts.js';
@@ -12,7 +12,7 @@ import { getPersonaPublishingAccounts } from '../client-publishing-accounts.js';
 import { cancelVideoTask } from '../client-video-task.js';
 import { createClonedVoiceFromUrl, deleteClonedVoice, getClonedVoice, listClonedVoices } from '../cloned-voice-client.js';
 
-type CreateResult = Awaited<ReturnType<typeof createExperiment>>;
+type ComparisonResult = Awaited<ReturnType<typeof getPromptComparison>>;
 type ListPromptsResult = Awaited<ReturnType<typeof listPrompts>>;
 type GetPromptResult = Awaited<ReturnType<typeof getPrompt>>;
 type TokenBalanceResult = Awaited<ReturnType<typeof getTokenBalance>>;
@@ -59,13 +59,13 @@ type CompleteVideoUploadResult = Awaited<ReturnType<typeof completeVideoUpload>>
 type PublishUploadedResult = Awaited<ReturnType<typeof publishUploadedVideo>>;
 
 describe('contracts typecheck', () => {
-  it('rejects an unknown body field and an unknown response field at compile time', () => {
+  it('rejects an unknown query value and an unknown response field at compile time', () => {
     const client = { request: vi.fn(), getHeaders: () => ({}) } as unknown as PostEngineerClient;
     const run = (): void => {
-      expectTypeOf<Parameters<typeof createExperiment>[1]>().not.toHaveProperty('nome');
+      expectTypeOf<'30d'>().not.toExtend<Parameters<typeof getPromptComparison>[1]>();
     };
-    const read = (result: CreateResult): unknown => {
-      return expectTypeOf(result.experiment).exclude<undefined>().not.toHaveProperty('nome');
+    const read = (result: ComparisonResult): unknown => {
+      return expectTypeOf(result).not.toHaveProperty('experiments');
     };
     expect(typeof run).toBe('function');
     expect(typeof read).toBe('function');

@@ -57,7 +57,7 @@ export async function handleListPrompts(client: PostEngineerClient, args: unknow
 }
 
 export const GetPromptDescription =
-  'Return the full prompt for one slug from prompts (action: list): an official recipe, one of yours, or a public community prompt. Load only the recipe the agent will follow, and pass its slug as recipe on generate_video. Each recipe carries the complete validated workflow: script structure and word limits, media verification via media (action: check) for photo URLs, pricing rules for the overlay badge, and the generation and publish steps. Unknown slugs fail with the list of valid slugs — call prompts (action: list) first when unsure.';
+  'Return the full prompt for one slug from prompts (action: list): an official recipe, one of yours, or a public community prompt. Load only the recipe the agent will follow, and pass its slug as recipe and its versionId as promptVersionId on generate_video. Each recipe carries the complete validated workflow: script structure and word limits, media verification via media (action: check) for photo URLs, pricing rules for the overlay badge, and the generation and publish steps. Unknown slugs fail with the list of valid slugs — call prompts (action: list) first when unsure.';
 
 export const GetPromptShape = {
   slug: z.string().min(1, 'slug is required').describe('Prompt slug from prompts (action: list).'),
@@ -78,7 +78,7 @@ async function fetchPromptResponse(client: PostEngineerClient, args: unknown): P
   try {
     const prompt = await getPrompt(client, parsed.data.slug);
     return {
-      response: { content: [{ type: 'text', text: recipeRunText(prompt.slug, prompt.prompt, prompt.source) }] },
+      response: { content: [{ type: 'text', text: recipeRunText(prompt) }] },
       source: prompt.source,
     };
   } catch (error) {

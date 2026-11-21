@@ -204,19 +204,23 @@ describe('generate_video: batch', () => {
     expect(f.generatePersonaVideo).not.toHaveBeenCalled();
   });
 
-  it('rejects a batchKey on a single video and an experiment inside a batch', async () => {
+  it('rejects a batchKey on a single video', async () => {
     const f = fakes();
     const single = await handleGenerateVideo(f.client, parse({ videos: [video({ providers: ['youtube'] })], batchKey: 'b1' }));
     expect(single.isError).toBe(true);
     expect(text(single)).toContain('batchKey is for a batch of 2 or more videos');
-    const experiment = { experimentId: '33333333-3333-4333-8333-333333333333', variantId: 'hook-calm', pair: 1 };
-    const withExperiment = await handleGenerateVideo(
-      f.client,
-      parse({ videos: [video({ providers: ['youtube'], experiment }), video({ providers: ['youtube'] })], batchKey: 'b1' }),
-    );
-    expect(withExperiment.isError).toBe(true);
-    expect(text(withExperiment)).toContain('experiments (action: add_pair)');
     expect(f.generatePersonaVideo).not.toHaveBeenCalled();
+  });
+
+  it('forwards each video\'s own promptVersionId inside a batch', async () => {
+    const f = fakes({ generate: vi.fn(async (input: { personaId: string }) => scheduled(input.personaId === MARIA ? 'a' : 'b')) });
+    const first = '33333333-3333-4333-8333-333333333331';
+    const second = '33333333-3333-4333-8333-333333333332';
+    await handleGenerateVideo(
+      f.client,
+      parse({ videos: [video({ providers: ['youtube'], promptVersionId: first }), video({ providers: ['youtube'], promptVersionId: second })], batchKey: 'b1' }),
+    );
+    expect(f.generatePersonaVideo.mock.calls.map((call) => (call[0] as { promptVersionId?: string }).promptVersionId)).toEqual([first, second]);
   });
 
   it('creates every video with the deterministic batch key, applies the discount and echoes each video', async () => {

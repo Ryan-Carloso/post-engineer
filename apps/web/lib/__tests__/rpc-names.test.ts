@@ -47,8 +47,8 @@ function migratedFunctions(): Set<string> {
 describe('supabase rpc names', () => {
   it('finds the rpc calls and the migrated functions', () => {
     expect(rpcNames().size).toBeGreaterThan(5);
-    expect(migratedFunctions().has('create_experiment')).toBe(true);
-    expect(rpcNames().has('create_experiment')).toBe(true);
+    expect(migratedFunctions().has('ensure_official_prompt_version')).toBe(true);
+    expect(rpcNames().has('ensure_official_prompt_version')).toBe(true);
   });
 
   it('lists outside-the-chain functions only while 001_schema.sql still names them', () => {

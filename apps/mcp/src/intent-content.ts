@@ -10,19 +10,14 @@ import { IMAGE_PROVIDERS } from './contracts/providers.js';
 import { handlePublishExisting } from './tools-publish-existing.js';
 import { DESTRUCTIVE, MUTATING, READ_ONLY } from './tool-annotations.js';
 import { PublishVideoDirectShape, handlePublishVideoDirect } from './tools.js';
-import { AddExperimentPairShape, CreateExperimentShape, GetExperimentResultsShape, ListExperimentsShape, handleAddExperimentPair, handleCreateExperiment, handleGetExperimentResults, handleListExperiments } from './tools-experiments.js';
+import { PromptComparisonShape, handlePromptComparison } from './tools-experiments.js';
 import { UploadMediaRemoteShape } from './remote-shapes-images.js';
 import { CheckMediaShape, UploadMediaRemoteSchema, UploadMediaShape, handleCheckMedia, handleUploadMedia, handleUploadMediaFromUrl } from './tools-user-media.js';
 import { ValidateScriptSchema } from './single-video-shape.js';
 import { ScoreDraftShape, ValidateScriptShape, handleScoreDraft, handleValidateScript } from './tools-single-video.js';
 import { handleCompleteVideoUpload, handleCreateVideoUpload, handlePublishUploadedVideo } from './tools-publish-uploaded.js';
 
-const EXPERIMENTS_SPECS = {
-  create: optionalPersonaRefShape(CreateExperimentShape),
-  list: ListExperimentsShape,
-  add_pair: AddExperimentPairShape,
-  results: GetExperimentResultsShape,
-};
+const EXPERIMENTS_SPECS = { results: PromptComparisonShape };
 
 const MEDIA_SPECS = { upload: UploadMediaShape, check: CheckMediaShape };
 
@@ -40,17 +35,14 @@ export function registerContentTools(server: McpServer, client: PostEngineerClie
   server.tool(
     'experiments',
     actionDescription(
-      'Paired A/B experiments that test ONE script variable, the hook, with two variants (each a slug variantId such as hook-aggressive, never "A"/"B", with a name and the style you will follow when writing its hooks). create: define it. add_pair: both videos of one pair (same title, content and delivery, one hook per variant; each is a normal charged video, the second starts spacingHours after the first; the server rejects a pair that differs in anything but the hook, before charging; calling it again with the same arguments replays). list / results: results compare per network for a window (default 7d) with a sign-test pValue and a label: pending, indicative or clear. Never call a variant the winner unless the label is clear.',
+      'Experiments compare prompts. Every video generated with a promptVersionId (the versionId that prompts (action: get) returns) records that prompt version. results: per publishing account (never across accounts), each prompt version with its video count, median views, lift (each video\'s views divided by the median of the other videos of the same account; above 1 beats the account) and a sign-test label: insufficient (fewer than 5 videos), no_signal, indicative or clear. Videos made without a prompt form the "no prompt" group. Never call a prompt the winner unless the label is clear. To test two prompts fairly, alternate them on the same account and swap their posting times.',
       EXPERIMENTS_SPECS,
     ),
     actionShape(EXPERIMENTS_SPECS),
-    MUTATING,
+    READ_ONLY,
     byAction(
       {
-        create: (args) => withOptionalPersona(client, args, (resolved) => handleCreateExperiment(client, { ...resolved, targetPairs: resolved.targetPairs })),
-        list: async () => handleListExperiments(client),
-        add_pair: async (args) => handleAddExperimentPair(client, args),
-        results: async (args) => handleGetExperimentResults(client, args),
+        results: async (args) => handlePromptComparison(client, args),
       },
       EXPERIMENTS_SPECS,
       'experiments',

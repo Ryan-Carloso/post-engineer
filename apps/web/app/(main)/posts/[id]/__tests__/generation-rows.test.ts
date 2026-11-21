@@ -21,4 +21,14 @@ describe('buildGenerationRows', () => {
     );
     expect(rows.map((r) => r.value)).toEqual(['Ana', 'posts.generationFaceless', 'en-US', '3']);
   });
+
+  it('names the prompt version first when the video recorded one', () => {
+    const rows = buildGenerationRows(
+      { ...narrowGeneration(null), prompt: { slug: 'story-first', title: 'Story first', version: 3, source: 'official' } },
+      'Ana',
+      t,
+    );
+    expect(rows[0]).toEqual({ label: 'postPrompt.label', value: 'Story first · v3' });
+    expect(rows[1]).toEqual({ label: 'posts.generationPersonaLabel', value: 'Ana' });
+  });
 });

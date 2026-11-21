@@ -11,6 +11,8 @@ const SNAPSHOT_PATH = join(root, 'supabase', 'schema.snapshot.json');
 const DEFINER_TRIGGER_FUNCTIONS = new Set([
   'post_metrics_set_persona',
   'post_metrics_set_experiment',
+  'post_metrics_set_prompt_version',
+  'user_prompts_record_version',
   'enforce_persona_image_limit',
 ]);
 
@@ -82,6 +84,7 @@ describe('definer-function-grants', () => {
         'claim_publish_ledger',
         'create_experiment',
         'delete_slot_if_not_last',
+        'ensure_official_prompt_version',
         'find_post_metrics_due',
         'find_stuck_generations',
         'find_zombie_schedule_candidates',
