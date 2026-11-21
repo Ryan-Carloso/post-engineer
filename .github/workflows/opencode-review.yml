@@ -94,6 +94,13 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Checkout base for trusted scripts
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: .base
+          persist-credentials: false
+
       - name: Check for review API keys
         id: check
         env:
@@ -183,7 +190,7 @@ jobs:
           OPENROUTER_FREE_MODEL: ${{ env.OPENROUTER_FREE_MODEL }}
         run: |
           set -euo pipefail
-          python3 .github/scripts/select-review-models.py \
+          python3 .base/.github/scripts/select-review-models.py \
             --output review-model-chain.json | tee review-model-chain-summary.json
           echo "Selected chain:"
           python3 -c "import json; c=json.load(open('review-model-chain.json')); print('\n'.join('  - '+m for m in c['attempts']))"
@@ -202,7 +209,7 @@ jobs:
           # copied into that dir so CI loads it and nothing else.
           cfg="${RUNNER_TEMP}/opencode-review"
           mkdir -p "$cfg/agent"
-          cp .opencode/agent/reviewer.md "$cfg/agent/reviewer.md"
+          cp .base/.opencode/agent/reviewer.md "$cfg/agent/reviewer.md"
           export REVIEW_CONFIG="${cfg}/opencode.json"
           python3 <<'EOF'
           import json, os
@@ -349,11 +356,13 @@ jobs:
         if: steps.check.outputs.has_key == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
           python3 .github/scripts/review-context.py \
-            --repo "${{ github.repository }}" \
-            --pr "${{ github.event.pull_request.number }}" \
+            --repo "$REPO" \
+            --pr "$PR_NUMBER" \
             --files pr-files.txt \
             --extra mechanical-checks.md heuristics.md \
             > pr-context.md
@@ -557,7 +566,7 @@ jobs:
             exit 1
           fi
           set +e
-          python3 .github/scripts/verify-review-grounding.py \
+          python3 .base/.github/scripts/verify-review-grounding.py \
             pass2-raw.md pass2.md --context pr-context.md --files pr-files.txt
           ground_rc=$?
           set -e

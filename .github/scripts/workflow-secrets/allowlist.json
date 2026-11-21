@@ -1,0 +1,22 @@
+[
+  {
+    "workflow": ".github/workflows/ci.yml",
+    "job": "cypress",
+    "reason": "Reads only the dedicated low-privilege E2E test account and the public Supabase URL and anon key. The residual risk of a same-repo branch reading them is accepted in issue 457."
+  },
+  {
+    "workflow": ".github/workflows/ci.yml",
+    "job": "cypress-coverage",
+    "reason": "Same low-privilege E2E test account and public Supabase values as the cypress job; accepted in issue 457."
+  },
+  {
+    "workflow": ".github/workflows/opencode-review.yml",
+    "job": "review",
+    "reason": "Needs the provider keys on every pull request. Scripts and the reviewer agent are checked out from the base sha into .base, so no code from the PR tree runs beside the keys."
+  },
+  {
+    "workflow": ".github/workflows/api-naming.yml",
+    "job": "lint",
+    "reason": "The LLM key is optional and the checker, its config and the comment script run from a base sha checkout in .base; the PR tree is only the diff under review."
+  }
+]

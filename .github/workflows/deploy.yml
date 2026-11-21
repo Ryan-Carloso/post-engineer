@@ -53,6 +53,7 @@ jobs:
       (github.event.pull_request.merged == true &&
       github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
+    environment: production
     timeout-minutes: 10
     permissions:
       contents: read

@@ -147,6 +147,7 @@
 ## CI / review
 
 - Don't pass flags via `pnpm <script> -- <flags>` in workflows (pnpm forwards a literal `--`); use `pnpm exec <bin>`.
+- **Secrets and unreviewed refs — the `workflow-secrets` lint (`.github/scripts/workflow-secrets/check.mjs`).** A job that reads `secrets.*` under a `pull_request`/`workflow_dispatch` trigger needs an `environment:` (limited to `main`) or an entry with a reason in `allowlist.json`, and no `${{ inputs.* }}`/`${{ github.event.* }}` may sit inside a `run:` block (pass it through `env:`). Scripts and agent files that run beside provider keys come from a base-sha checkout (`.base`), never the PR tree.
 - API naming lint (`.github/workflows/api-naming.yml`) checks only new names in the contract surface; never rename shipped fields to satisfy it.
 - Local review is `opencode run --agent reviewer` (or the reviewer agent in the TUI) with glm-5.3. The default/build agent does not review.
 - The AI reviewer often cites stale or nonexistent lines and invents contracts: verify every finding (grep the cited code) before changing anything; decline false positives. A red review job with no findings is usually provider throttling — re-run.

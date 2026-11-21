@@ -40,6 +40,12 @@ jobs:
         with:
           fetch-depth: 0
 
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 pinned 2026-09-25
+        with:
+          ref: ${{ github.event.pull_request.base.sha || 'refs/heads/main' }}
+          path: .base
+          persist-credentials: false
+
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 pinned 2026-09-25
         with:
           node-version: '22'
@@ -54,18 +60,25 @@ jobs:
           # deterministic denylist layer still runs. Set in repo Settings >
           # Secrets and variables > Actions.
           API_NAMING_LLM_API_KEY: ${{ secrets.API_NAMING_LLM_API_KEY }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.sha }}
+          INPUT_BASE: ${{ inputs.base }}
+          INPUT_HEAD: ${{ inputs.head }}
         run: |
           set -euo pipefail
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            base="${{ github.event.pull_request.base.sha }}"
-            head="${{ github.sha }}"
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            base="$PR_BASE_SHA"
+            head="$HEAD_SHA"
           else
-            base="${{ inputs.base }}"
-            head="${{ inputs.head }}"
+            base="$INPUT_BASE"
+            head="$INPUT_HEAD"
           fi
           echo "head_sha=$head" >> "$GITHUB_OUTPUT"
           set +e
-          node .github/scripts/api-naming/run.mjs \
+          node .base/.github/scripts/api-naming/run.mjs \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --config .base/.github/api-naming.yml \
             --base "$base" --head "$head" \
             --findings-out /tmp/api-naming-findings.json
           code=$?
@@ -77,12 +90,15 @@ jobs:
         if: always() && github.event_name == 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ steps.lint.outputs.head_sha }}
         run: |
           set -euo pipefail
           findings=/tmp/api-naming-findings.json
-          pr="${{ github.event.pull_request.number }}"
-          repo="${{ github.repository }}"
-          head_sha="${{ steps.lint.outputs.head_sha }}"
+          pr="$PR_NUMBER"
+          repo="$REPO"
+          head_sha="$HEAD_SHA"
           if [[ ! -f "$findings" ]]; then
             echo "no findings file; skipping PR comment"
             exit 0
@@ -94,7 +110,7 @@ jobs:
             exit 0
           fi
           body_file="$(mktemp)"
-          node .github/scripts/api-naming/comment.mjs --findings "$findings" --head-sha "$head_sha" > "$body_file"
+          node .base/.github/scripts/api-naming/comment.mjs --findings "$findings" --head-sha "$head_sha" > "$body_file"
           if [[ -n "$existing_id" ]]; then
             gh api -X PATCH "repos/$repo/issues/comments/$existing_id" -F body=@"$body_file" > /dev/null
             echo "updated PR comment $existing_id"
@@ -105,8 +121,10 @@ jobs:
 
       - name: Fail on naming errors
         if: always()
+        env:
+          LINT_EXIT: ${{ steps.lint.outputs.lint_exit }}
         run: |
-          if [[ "${{ steps.lint.outputs.lint_exit }}" != "0" ]]; then
+          if [[ "$LINT_EXIT" != "0" ]]; then
             echo "::error::API naming lint found error-severity findings (see annotations and the PR comment)."
             exit 1
           fi
