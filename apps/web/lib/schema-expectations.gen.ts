@@ -1,9 +1,8 @@
 // GENERATED FILE — do not edit by hand.
-// Source: supabase/migrations/*.sql (columns added by `alter table ... add column`).
+// Source: supabase/migrations/*.sql (columns added by `alter table ... add column`, tables removed by `drop table`).
 // Regenerate: node apps/web/scripts/generate-schema-expectations.mjs
 
 export const REQUIRED_COLUMNS: Readonly<Record<string, readonly string[]>> = {
-  experiments: ['persona_id'],
   mcp_oauth_refresh_tokens: ['client_id', 'consumed_at', 'created_at', 'expires_at', 'resource', 'scope', 'user_id'],
   oauth_states: ['code_verifier'],
   personas: ['cta_instruction', 'cta_type', 'cta_url', 'hook_panel', 'recent_image_ids', 'video_layout'],

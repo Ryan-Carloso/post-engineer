@@ -19,4 +19,8 @@ describe('schema-expectations.gen.ts', () => {
     expect(REQUIRED_COLUMNS.personas).toContain('cta_type');
     expect(REQUIRED_COLUMNS.post_metrics).toContain('script_angle');
   });
+
+  it('does not list a table that migration 078 dropped', () => {
+    expect(REQUIRED_COLUMNS.experiments).toBeUndefined();
+  });
 });

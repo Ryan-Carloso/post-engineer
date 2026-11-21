@@ -46,6 +46,32 @@ describe('extractRequiredColumns', () => {
     expect(extractRequiredColumns(files)).toEqual({});
   });
 
+  it('removes a table that a later migration drops', async () => {
+    const { extractRequiredColumns } = await loadGenerator();
+    const files = [
+      'alter table public.experiments add column if not exists persona_id uuid;',
+      'drop table if exists public.experiments;',
+    ];
+    expect(extractRequiredColumns(files)).toEqual({});
+  });
+
+  it('drops only the dropped table and keeps the others', async () => {
+    const { extractRequiredColumns } = await loadGenerator();
+    const files = [
+      'alter table public.experiments add column if not exists persona_id uuid;',
+      'alter table public.personas add column if not exists cta_type text;',
+      'drop table if exists public.experiments;',
+    ];
+    expect(extractRequiredColumns(files)).toEqual({ personas: ['cta_type'] });
+  });
+
+  it('ignores a drop table written in a comment', async () => {
+    const { extractRequiredColumns } = await loadGenerator();
+    const sql = `-- drop table public.personas;
+      alter table public.personas add column if not exists cta_type text;`;
+    expect(extractRequiredColumns([sql])).toEqual({ personas: ['cta_type'] });
+  });
+
   it('ignores comments and tables that only enable row level security', async () => {
     const { extractRequiredColumns } = await loadGenerator();
     const sql = `-- alter table public.fake add column nope text;
