@@ -85,6 +85,7 @@ describe('definer-function-grants', () => {
         'create_experiment',
         'delete_slot_if_not_last',
         'ensure_official_prompt_version',
+        'find_post_metrics_daily_due',
         'find_post_metrics_due',
         'find_stuck_generations',
         'find_zombie_schedule_candidates',
