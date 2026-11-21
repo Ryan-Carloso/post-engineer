@@ -182,7 +182,11 @@ interface PersonaFormState {
   result: CreatePersonaResult | null;
   faceQuality: FaceQuality;
   publishingAccounts: PersonaDefaultAccounts;
+  publishingAccountsLoaded: boolean;
+  loadedPublishingAccounts: PersonaDefaultAccounts | null;
   setPublishingAccounts: (accounts: PersonaDefaultAccounts) => void;
+  setPublishingAccountsLoaded: (loaded: boolean) => void;
+  setLoadedPublishingAccounts: (accounts: PersonaDefaultAccounts) => void;
   setName: (value: string) => void;
   setPhoto: (file: File | null) => void;
   addPhotos: (files: File[]) => void;
@@ -223,6 +227,8 @@ const initialPersonaState = {
   result: null,
   faceQuality: 'ok' as FaceQuality,
   publishingAccounts: emptyPersonaDefaultAccounts(),
+  publishingAccountsLoaded: true,
+  loadedPublishingAccounts: null,
 };
 
 export const usePersonaStore = create<PersonaFormState>()(
@@ -258,6 +264,8 @@ export const usePersonaStore = create<PersonaFormState>()(
     setResult: (result) => set({ result }),
     setFaceQuality: (faceQuality) => set({ faceQuality }),
     setPublishingAccounts: (publishingAccounts) => set({ publishingAccounts }),
+    setPublishingAccountsLoaded: (publishingAccountsLoaded) => set({ publishingAccountsLoaded }),
+    setLoadedPublishingAccounts: (loadedPublishingAccounts) => set({ loadedPublishingAccounts }),
     resetForm: () => set({ ...initialPersonaState, publishingAccounts: emptyPersonaDefaultAccounts() }),
     buildPersonaFormData: (language?: string) => {
       const s = get();

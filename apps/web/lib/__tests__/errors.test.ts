@@ -13,6 +13,7 @@ import {
   getStatusCode,
   getErrorType,
   getErrorSuggestions,
+  surfaceAppErrorMessage,
 } from '@/lib/errors';
 
 describe('Error classes', () => {
@@ -157,5 +158,23 @@ describe('getErrorSuggestions', () => {
   it('plain Error → generic suggestion', () => {
     const s = getErrorSuggestions(new Error('generic'));
     expect(s.length).toBeGreaterThan(0);
+  });
+});
+
+describe('surfaceAppErrorMessage', () => {
+  it('returns the message of an app error', () => {
+    expect(surfaceAppErrorMessage(new Error('boom'), 'fallback')).toBe('boom');
+  });
+
+  it('returns the fallback for a transport TypeError', () => {
+    expect(surfaceAppErrorMessage(new TypeError('Failed to fetch'), 'fallback')).toBe('fallback');
+  });
+
+  it('returns the fallback for an empty message', () => {
+    expect(surfaceAppErrorMessage(new Error(''), 'fallback')).toBe('fallback');
+  });
+
+  it('returns the fallback for a non-Error throw', () => {
+    expect(surfaceAppErrorMessage('oops', 'fallback')).toBe('fallback');
   });
 });

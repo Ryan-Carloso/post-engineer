@@ -2,8 +2,7 @@
 
 import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useQueryClient } from '@tanstack/react-query';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { FormProvider, useForm, useFormContext } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import Autoplay from 'embla-carousel-autoplay';
@@ -14,8 +13,9 @@ import {
   CarouselNext,
   CarouselPrevious,
 } from '@/components/ui/carousel';
-import { useVoicesQuery, createPersona, useUpdatePersonaMutation, usePersonaListQuery } from '@/lib/api';
-import { resolveScriptLanguage, usePersonaStore } from '@/lib/store';
+import { useVoicesQuery, usePersonaListQuery } from '@/lib/api';
+import { emptyPersonaDefaultAccounts } from '@/lib/persona-publishing-accounts';
+import { usePersonaStore } from '@/lib/store';
 import { personaFormSchema, parsePersonaCtaType } from '@/lib/persona-schema';
 import { useI18n } from '@/lib/i18n/provider';
 import { PersonaTokensSection } from './persona-tokens';
@@ -29,8 +29,7 @@ import { PersonaFormSync } from './persona-form-sync';
 import { PersonaPhotoPicker } from './persona-photo-picker';
 import { isPersonaVoiceHydrated, PersonaVoiceSection } from './persona-voice-section';
 import { InlineFieldError, SectionDivider } from './persona-section-parts';
-import { scrollToErrorField } from '@/lib/scroll-to-error';
-import { totalBoundAccounts } from '@/lib/persona-publishing-accounts';
+import { PersonaSubmit, resolveEditingPersonaId } from './persona-submit';
 import { DEFAULT_PERSONA_FACE_IDS } from '@/lib/persona-faces';
 import {
   AlertIcon,
@@ -48,11 +47,6 @@ export default function PersonaPage() {
       <PersonaPageContent />
     </Suspense>
   );
-}
-
-function resolveEditingPersonaId(pathname: string, editId: string | null): string | null {
-  const editMatch = pathname.match(/^\/personas\/([^/]+)\/edit$/);
-  return editMatch?.[1] ?? editId;
 }
 
 const PersonaPageContent = () => {
@@ -101,6 +95,14 @@ const PersonaPageContent = () => {
     methods.setValue('scriptPrompt', persona.scriptPrompt ?? '');
     methods.setValue('niche', persona.niche ?? '');
   }, [editingPersona, methods]);
+
+  useEffect(() => {
+    if (editingPersonaId !== null) return;
+    const store = usePersonaStore.getState();
+    store.setPublishingAccounts(emptyPersonaDefaultAccounts());
+    store.setLoadedPublishingAccounts(emptyPersonaDefaultAccounts());
+    store.setPublishingAccountsLoaded(true);
+  }, [editingPersonaId]);
 
   const retryFailedQueries = async (): Promise<void> => {
     const failed = [voicesQuery, personasQuery].filter((query) => query.isError);
@@ -368,98 +370,6 @@ const PersonaNameField = () => {
       {result && !result.success && result.error === t('persona.errName') ? (
         <InlineFieldError message={result.error} />
       ) : null}
-    </div>
-  );
-};
-
-const PersonaSubmit = ({ editId }: { editId: string | null }) => {
-  const { t, locale } = useI18n();
-  const pathname = usePathname();
-  const router = useRouter();
-  const queryClient = useQueryClient();
-  const updateMutation = useUpdatePersonaMutation();
-  const { handleSubmit: validateForm } = useFormContext();
-  const [isPending, setIsPending] = useState(false);
-
-  const editingPersonaId = resolveEditingPersonaId(pathname, editId);
-  const isEditing = Boolean(editingPersonaId);
-
-  const handleSubmit = async () => {
-    const state = usePersonaStore.getState();
-    if (!state.name.trim()) {
-      state.setResult({ success: false, error: t('persona.errName') });
-      scrollToErrorField('name');
-      return;
-    }
-    if (!state.photo && !state.avatarUrl && !state.storedPhotoUrl) {
-      state.setResult({ success: false, error: t('persona.errAvatar') });
-      scrollToErrorField('avatar');
-      return;
-    }
-    if (!state.voiceId) {
-      state.setResult({ success: false, error: t('persona.errVoice') });
-      scrollToErrorField('voice');
-      return;
-    }
-    if (!isEditing && totalBoundAccounts(state.publishingAccounts) === 0) {
-      state.setResult({ success: false, error: t('publishing.mustSelectAccount') });
-      scrollToErrorField('accounts');
-      return;
-    }
-
-    const language = resolveScriptLanguage(locale);
-
-    state.setResult(null);
-    setIsPending(true);
-    try {
-      const personaId = editingPersonaId;
-      if (personaId) {
-        const formData = state.buildPersonaEditFormData();
-        const result = await updateMutation.mutateAsync({ personaId, formData });
-        usePersonaStore.getState().setResult(result);
-        if (result.success) {
-          await queryClient.invalidateQueries({ queryKey: ['persona-list'] });
-          router.back();
-        } else if (result.error === 'prompt_rejected') {
-          scrollToErrorField('script');
-        }
-      } else {
-        const result = await createPersona(state.buildPersonaFormData(language));
-        usePersonaStore.getState().setResult(result);
-        if (result.success) {
-          await queryClient.invalidateQueries({ queryKey: ['persona-list'] });
-          router.push('/personas');
-        } else if (result.error === 'prompt_rejected') {
-          scrollToErrorField('script');
-        }
-      }
-    } catch {
-      usePersonaStore.getState().setResult({ success: false, error: t('persona.errServer') });
-    } finally {
-      setIsPending(false);
-    }
-  };
-
-  return (
-    <div>
-      <button
-        type="button"
-        onClick={validateForm(() => void handleSubmit())}
-        disabled={isPending || updateMutation.isPending}
-        className="flex w-full items-center justify-center gap-2 rounded-lg bg-accent px-4 py-3 text-sm font-semibold text-on-ink transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
-      >
-        {isPending ? (
-          <>
-            <SpinnerIcon />
-            {t(isEditing ? 'personas.saving' : 'persona.submitting')}
-          </>
-        ) : (
-          t(isEditing ? 'personas.save' : 'persona.submit')
-        )}
-      </button>
-      <p className="mt-3 text-center text-sm leading-5 text-muted-text">
-        {t(isEditing ? 'personas.saveHint' : 'persona.submitHint')}
-      </p>
     </div>
   );
 };

@@ -42,6 +42,14 @@ vi.mock('@/lib/scroll-to-error', () => ({
   scrollToErrorField: vi.fn(),
 }));
 
+vi.mock('@/lib/session-expiry', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/session-expiry')>();
+  return {
+    ...actual,
+    notifyIfSessionExpired: vi.fn(),
+  };
+});
+
 vi.mock('@/lib/api', () => ({
   useVoicesQuery: vi.fn(),
   createPersona: vi.fn(),
@@ -108,7 +116,9 @@ import type { AccountData, InstagramAccountData } from '@/lib/types';
 import type { BlueskyAccountData, LinkedinAccountData } from '@/lib/providers/registry';
 import { I18nProvider, useI18n } from '@/lib/i18n/provider';
 import { usePersonaStore } from '@/lib/store';
+import { emptyPersonaDefaultAccounts } from '@/lib/persona-publishing-accounts';
 import { scrollToErrorField } from '@/lib/scroll-to-error';
+import { notifyIfSessionExpired } from '@/lib/session-expiry';
 
 let lastQueryClient: QueryClient | null = null;
 
@@ -206,6 +216,13 @@ function mockNoAccounts() {
   vi.mocked(useLinkedinAccountsQuery, { partial: true }).mockReturnValue({
     data: { authenticated: true, accounts: [] },
     isLoading: false,
+  });
+}
+
+function seedBoundAccount() {
+  usePersonaStore.getState().setPublishingAccounts({
+    ...emptyPersonaDefaultAccounts(),
+    youtube: ['yt-1'],
   });
 }
 
@@ -623,6 +640,7 @@ describe('app/(main)/persona/page — modo edição (mesma página do create)', 
       data: [EDIT_PERSONA],
       isLoading: false,
     } as never);
+    seedBoundAccount();
   }
 
   it('botão de submit mostra "Salvar alterações" em vez de "Criar persona"', () => {
@@ -651,6 +669,7 @@ describe('app/(main)/persona/page — modo edição (mesma página do create)', 
       data: [{ ...EDIT_PERSONA, videoLayout: 'react' }],
       isLoading: false,
     } as never);
+    seedBoundAccount();
     render(<PersonaPage />, { wrapper: createWrapper() });
 
     await waitFor(() =>
@@ -672,6 +691,7 @@ describe('app/(main)/persona/page — modo edição (mesma página do create)', 
       data: [{ ...EDIT_PERSONA, videoLayout: undefined }],
       isLoading: false,
     } as never);
+    seedBoundAccount();
     render(<PersonaPage />, { wrapper: createWrapper() });
 
     await waitFor(() =>
@@ -714,6 +734,7 @@ describe('app/(main)/persona/page — modo edição (mesma página do create)', 
       ],
       isLoading: false,
     } as never);
+    seedBoundAccount();
     const user = userEvent.setup();
     render(<PersonaPage />, { wrapper: createWrapper() });
 
@@ -904,6 +925,7 @@ function mockEditMode(persona: Record<string, unknown>) {
     data: [persona],
     isLoading: false,
   } as never);
+  seedBoundAccount();
 }
 
 afterEach(() => {
@@ -967,9 +989,45 @@ describe('app/(main)/persona/page — validação do submit (guards do store)', 
     expect(screen.queryByText('persona.errAvatar')).toBeNull();
   });
 
-  it('rejeição do servidor mostra errServer no diálogo', async () => {
+  it('rejeição do servidor mostra a mensagem do erro no diálogo', async () => {
     const user = userEvent.setup();
     vi.mocked(createPersona).mockRejectedValue(new Error('boom'));
+    render(<PersonaPage />, { wrapper: createWrapper() });
+
+    await preencherFormularioValido(user);
+    await user.click(screen.getByText('persona.submit'));
+
+    expect(await screen.findByText('boom')).toBeTruthy();
+    expect(screen.getByRole('alertdialog')).toBeTruthy();
+  });
+
+  it('rejeição sem mensagem mostra errServer no diálogo', async () => {
+    const user = userEvent.setup();
+    vi.mocked(createPersona).mockRejectedValue(new Error(''));
+    render(<PersonaPage />, { wrapper: createWrapper() });
+
+    await preencherFormularioValido(user);
+    await user.click(screen.getByText('persona.submit'));
+
+    expect(await screen.findByText('persona.errServer')).toBeTruthy();
+    expect(screen.getByRole('alertdialog')).toBeTruthy();
+  });
+
+  it('falha de rede na criação mostra errServer no diálogo', async () => {
+    const user = userEvent.setup();
+    vi.mocked(createPersona).mockRejectedValue(new TypeError('Failed to fetch'));
+    render(<PersonaPage />, { wrapper: createWrapper() });
+
+    await preencherFormularioValido(user);
+    await user.click(screen.getByText('persona.submit'));
+
+    expect(await screen.findByText('persona.errServer')).toBeTruthy();
+    expect(screen.getByRole('alertdialog')).toBeTruthy();
+  });
+
+  it('criação com resposta sem erro mostra errServer no diálogo', async () => {
+    const user = userEvent.setup();
+    vi.mocked(createPersona).mockResolvedValue({ success: false } as never);
     render(<PersonaPage />, { wrapper: createWrapper() });
 
     await preencherFormularioValido(user);
@@ -1899,6 +1957,320 @@ describe('app/(main)/persona/page — submit em edição', () => {
 
     await waitFor(() => expect(navigation.back).toHaveBeenCalledTimes(1));
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['persona-list'] });
+  });
+
+  it('edição salva as contas junto: PUT dos vínculos antes de voltar', async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({ success: true });
+    vi.mocked(useUpdatePersonaMutation).mockReturnValue({ mutateAsync, isPending: false } as never);
+    mockEditMode(EDIT_PERSONA_FULL);
+    const user = userEvent.setup();
+    render(<PersonaPage />, { wrapper: createWrapper() });
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'personas.save' })).toBeEnabled(),
+    );
+    await user.click(screen.getByRole('button', { name: 'personas.save' }));
+
+    await waitFor(() => expect(navigation.back).toHaveBeenCalledTimes(1));
+    const putCall = vi
+      .mocked(fetch)
+      .mock.calls.find(([url]) => url === '/api/persona/publishing-accounts?personaId=p-9');
+    expect(putCall).toBeDefined();
+    expect((putCall?.[1] as RequestInit | undefined)?.method).toBe('PUT');
+    expect(JSON.parse(String((putCall?.[1] as RequestInit | undefined)?.body))).toEqual({
+      accounts: expect.objectContaining({ youtube: ['yt-1'] }),
+    });
+  });
+
+  it('edição com falha no PUT das contas mostra o erro do servidor e não volta', async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({ success: true });
+    vi.mocked(useUpdatePersonaMutation).mockReturnValue({ mutateAsync, isPending: false } as never);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+        json: () => Promise.resolve({ success: false, error: 'db exploded' }),
+      }),
+    );
+    mockEditMode(EDIT_PERSONA_FULL);
+    const user = userEvent.setup();
+    render(<PersonaPage />, { wrapper: createWrapper() });
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'personas.save' })).toBeEnabled(),
+    );
+    await user.click(screen.getByRole('button', { name: 'personas.save' }));
+
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText('db exploded')).toBeTruthy();
+    expect(navigation.back).not.toHaveBeenCalled();
+  });
+
+  it('edição com PUT 401 das contas notifica a expiração de sessão e não volta', async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({ success: true });
+    vi.mocked(useUpdatePersonaMutation).mockReturnValue({ mutateAsync, isPending: false } as never);
+    const notify = vi.mocked(notifyIfSessionExpired);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: unknown, init?: RequestInit) => {
+        if (typeof url === 'string' && init?.method === 'PUT') {
+          return Promise.resolve({
+            ok: false,
+            status: 401,
+            json: () => Promise.resolve({ success: false }),
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              success: true,
+              defaults: { youtube: ['yt-1'], instagram: [], bluesky: [], linkedin: [] },
+            }),
+        });
+      }),
+    );
+    mockEditMode(EDIT_PERSONA_FULL);
+    const user = userEvent.setup();
+    render(<PersonaPage />, { wrapper: createWrapper() });
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'personas.save' })).toBeEnabled(),
+    );
+    await user.click(screen.getByRole('button', { name: 'personas.save' }));
+
+    await waitFor(() => expect(notify).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText('persona.publishingAccountsSaveError')).toBeTruthy();
+    expect(navigation.back).not.toHaveBeenCalled();
+  });
+
+  it('edição com falha de rede no PUT das contas mostra o erro genérico e não volta', async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({ success: true });
+    vi.mocked(useUpdatePersonaMutation).mockReturnValue({ mutateAsync, isPending: false } as never);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: unknown, init?: RequestInit) => {
+        if (typeof url === 'string' && init?.method === 'PUT') {
+          return Promise.reject(new TypeError('Failed to fetch'));
+        }
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              success: true,
+              defaults: { youtube: ['yt-1'], instagram: [], bluesky: [], linkedin: [] },
+            }),
+        });
+      }),
+    );
+    mockEditMode(EDIT_PERSONA_FULL);
+    const user = userEvent.setup();
+    render(<PersonaPage />, { wrapper: createWrapper() });
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'personas.save' })).toBeEnabled(),
+    );
+    await user.click(screen.getByRole('button', { name: 'personas.save' }));
+
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText('persona.publishingAccountsSaveError')).toBeTruthy();
+    expect(navigation.back).not.toHaveBeenCalled();
+  });
+
+  it('edição com resposta não-JSON no PUT das contas mostra o erro genérico e não volta', async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({ success: true });
+    vi.mocked(useUpdatePersonaMutation).mockReturnValue({ mutateAsync, isPending: false } as never);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: unknown, init?: RequestInit) => {
+        if (typeof url === 'string' && init?.method === 'PUT') {
+          return Promise.resolve({
+            ok: false,
+            status: 502,
+            json: () => Promise.reject(new SyntaxError("Unexpected token '<'")),
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              success: true,
+              defaults: { youtube: ['yt-1'], instagram: [], bluesky: [], linkedin: [] },
+            }),
+        });
+      }),
+    );
+    mockEditMode(EDIT_PERSONA_FULL);
+    const user = userEvent.setup();
+    render(<PersonaPage />, { wrapper: createWrapper() });
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'personas.save' })).toBeEnabled(),
+    );
+    await user.click(screen.getByRole('button', { name: 'personas.save' }));
+
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText('persona.publishingAccountsSaveError')).toBeTruthy();
+    expect(navigation.back).not.toHaveBeenCalled();
+  });
+
+  it('edição com falha no carregamento dos vínculos mantém o salvar desativado e não PUTa', async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({ success: true });
+    vi.mocked(useUpdatePersonaMutation).mockReturnValue({ mutateAsync, isPending: false } as never);
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      json: () => Promise.resolve({ success: false, error: 'boom' }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    mockEditMode({ ...EDIT_PERSONA_FULL, id: '11111111-2222-3333-4444-555555555555' });
+    render(<PersonaPage />, { wrapper: createWrapper() });
+
+    expect(await screen.findByText('boom')).toBeTruthy();
+    expect(usePersonaStore.getState().publishingAccountsLoaded).toBe(false);
+    expect(screen.getByRole('button', { name: 'personas.save' })).toBeDisabled();
+    expect(mutateAsync).not.toHaveBeenCalled();
+    expect(
+      fetchMock.mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === 'PUT'),
+    ).toHaveLength(0);
+  });
+
+  it('edição sem mudança nas contas não PUTa os vínculos', async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({ success: true });
+    vi.mocked(useUpdatePersonaMutation).mockReturnValue({ mutateAsync, isPending: false } as never);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            success: true,
+            defaults: { youtube: ['yt-1'], instagram: [], bluesky: [], linkedin: [], threads: [] },
+          }),
+      }),
+    );
+    mockEditMode({ ...EDIT_PERSONA_FULL, id: '11111111-2222-3333-4444-555555555555' });
+    const user = userEvent.setup();
+    render(<PersonaPage />, { wrapper: createWrapper() });
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'personas.save' })).toBeEnabled(),
+    );
+    await user.click(screen.getByRole('button', { name: 'personas.save' }));
+
+    await waitFor(() => expect(navigation.back).toHaveBeenCalledTimes(1));
+    expect(
+      vi.mocked(fetch).mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === 'PUT'),
+    ).toHaveLength(0);
+  });
+
+  it('edição com mudança nas contas PUTa os vínculos', async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({ success: true });
+    vi.mocked(useUpdatePersonaMutation).mockReturnValue({ mutateAsync, isPending: false } as never);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            success: true,
+            defaults: { youtube: ['yt-1'], instagram: [], bluesky: [], linkedin: [], threads: [] },
+          }),
+      }),
+    );
+    mockEditMode({ ...EDIT_PERSONA_FULL, id: '11111111-2222-3333-4444-555555555555' });
+    const user = userEvent.setup();
+    render(<PersonaPage />, { wrapper: createWrapper() });
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'personas.save' })).toBeEnabled(),
+    );
+    const checkboxes = screen.getAllByTestId('account-card-select') as HTMLInputElement[];
+    expect(checkboxes[1].checked).toBe(false);
+    await user.click(checkboxes[1]);
+    expect(checkboxes[1].checked).toBe(true);
+    await user.click(screen.getByRole('button', { name: 'personas.save' }));
+
+    await waitFor(() => expect(navigation.back).toHaveBeenCalledTimes(1));
+    const putCall = vi
+      .mocked(fetch)
+      .mock.calls.find(([, init]) => (init as RequestInit | undefined)?.method === 'PUT');
+    expect(putCall).toBeDefined();
+    expect(JSON.parse(String((putCall?.[1] as RequestInit | undefined)?.body))).toEqual({
+      accounts: expect.objectContaining({ youtube: ['yt-1'], instagram: ['ig-1'] }),
+    });
+  });
+
+  it('voltar para criação após editar limpa os vínculos do rascunho', async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({ success: true });
+    vi.mocked(useUpdatePersonaMutation).mockReturnValue({ mutateAsync, isPending: false } as never);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            success: true,
+            defaults: { youtube: ['yt-1'], instagram: [], bluesky: [], linkedin: [], threads: [] },
+          }),
+      }),
+    );
+    mockEditMode({ ...EDIT_PERSONA_FULL, id: '11111111-2222-3333-4444-555555555555' });
+    const { rerender } = render(<PersonaPage />, { wrapper: createWrapper() });
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'personas.save' })).toBeEnabled(),
+    );
+    expect(usePersonaStore.getState().publishingAccounts.youtube).toEqual(['yt-1']);
+
+    searchParams.value = new URLSearchParams();
+    rerender(<PersonaPage />);
+    await waitFor(() => {
+      expect(usePersonaStore.getState().publishingAccounts).toEqual(emptyPersonaDefaultAccounts());
+    });
+    expect(screen.getByRole('button', { name: 'persona.submit' })).toBeTruthy();
+  });
+
+  it('edição com falha no update não PUTa as contas', async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({ success: false, error: 'deu ruim' });
+    vi.mocked(useUpdatePersonaMutation).mockReturnValue({ mutateAsync, isPending: false } as never);
+    mockEditMode(EDIT_PERSONA_FULL);
+    const user = userEvent.setup();
+    render(<PersonaPage />, { wrapper: createWrapper() });
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'personas.save' })).toBeEnabled(),
+    );
+    await user.click(screen.getByRole('button', { name: 'personas.save' }));
+
+    expect(await screen.findByText('deu ruim')).toBeTruthy();
+    const fetchUrls = vi.mocked(fetch).mock.calls.map(([url]) => url);
+    expect(fetchUrls).not.toContain('/api/persona/publishing-accounts?personaId=p-9');
+  });
+
+  it('edição sem conta vinculada bloqueia e não atualiza', async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({ success: true });
+    vi.mocked(useUpdatePersonaMutation).mockReturnValue({ mutateAsync, isPending: false } as never);
+    mockEditMode(EDIT_PERSONA_FULL);
+    usePersonaStore.getState().setPublishingAccounts(emptyPersonaDefaultAccounts());
+    const user = userEvent.setup();
+    render(<PersonaPage />, { wrapper: createWrapper() });
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'personas.save' })).toBeEnabled(),
+    );
+    await user.click(screen.getByRole('button', { name: 'personas.save' }));
+
+    expect(mutateAsync).not.toHaveBeenCalled();
+    expect(screen.getByText('publishing.mustSelectAccount')).toBeInTheDocument();
+    expect(scrollToErrorField).toHaveBeenCalledWith('accounts');
   });
 
   it('edição com prompt_rejected mostra erro inline no roteiro', async () => {
