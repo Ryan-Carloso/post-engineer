@@ -142,12 +142,12 @@ describe('TelegramAccountsSection', () => {
     expect(notifyIfSessionExpired).toHaveBeenCalledWith(expect.objectContaining({ status: 401 }));
   });
 
-  it('shows the generic error when the request throws', async () => {
+  it('shows the thrown error message when the request throws', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('offline'); }));
     render(<TelegramAccountsSection />);
     openAndFill();
     fireEvent.click(screen.getByTestId('telegram-connect-button'));
-    expect(await screen.findByTestId('telegram-connect-error')).toHaveTextContent('accounts.telegramConnectError');
+    expect(await screen.findByTestId('telegram-connect-error')).toHaveTextContent('offline');
   });
 
   it('lists each chat with its kind badge and reconnects with the stored chat and kind', () => {
