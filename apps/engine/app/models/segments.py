@@ -1,5 +1,6 @@
 """Script segment models (moved out of app/models/schema.py so that file
-stays under the 500-line ratchet; schema.py re-exports them)."""
+stays under the 500-line ratchet; schema.py re-exports only ScriptSegment,
+import the other names from this module)."""
 
 from typing import Any, Literal, Optional
 

@@ -19,7 +19,7 @@ fields — the web handler adds it per account, like the Facebook Page id.
 the other documented value (``6`` = Rumble Only) locks the video into
 an exclusivity license that cannot be changed after upload.
 
-Kept out of ``upload_publisher`` (which re-exports these names) so that
+Kept out of ``upload_publisher`` (which imports the provider contract from here) so that
 module stays under the file-size cap; it owns only the Rumble types,
 validation and multipart fields.
 """

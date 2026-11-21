@@ -379,6 +379,8 @@ describe('contracts typecheck', () => {
     expectTypeOf(detail).exclude<undefined>().not.toHaveProperty('body');
     const body: CreateClonedVoiceBody = { consent: 'true', denoise: 'false', language: 'en' };
     expect(body.consent).toBe('true');
+    const wrongBody = { consent: true, denoise: 'false', language: 'en' };
+    expect(typeof wrongBody).toBe('object');
     expectTypeOf<true>().not.toExtend<CreateClonedVoiceBody['consent']>();
     const created: CreateClonedVoiceResponse = { success: true, voice: cloneRow };
     expect(created.voice.id).toBe('clone-1');
@@ -422,6 +424,8 @@ describe('contracts typecheck', () => {
     expectTypeOf(created).exclude<undefined>().not.toHaveProperty('image_ids');
     const body: CreatePersonaBody = { name: 'Ava', paragraphNumber: '3', imagePrimaryIndex: '0' };
     expect(body.paragraphNumber).toBe('3');
+    const wrongBody = { name: 'Ava', imagePrimaryIndex: 0 };
+    expect(typeof wrongBody).toBe('object');
     expectTypeOf<number>().not.toExtend<CreatePersonaBody['imagePrimaryIndex']>();
     const updated: UpdatePersonaResponse = { success: true };
     expect(updated.success).toBe(true);
@@ -441,6 +445,8 @@ describe('contracts typecheck', () => {
     expectTypeOf(preview).exclude<undefined>().not.toHaveProperty('truncated');
     const addBody: AddPersonaImageBody = { personaId: 'p1', isPrimary: 'true' };
     expect(addBody.isPrimary).toBe('true');
+    const wrongAddBody = { personaId: 'p1', isPrimary: true };
+    expect(typeof wrongAddBody).toBe('object');
     expectTypeOf<true>().not.toExtend<AddPersonaImageBody['isPrimary']>();
     const added: AddPersonaImageResponse = {
       success: true,
@@ -478,6 +484,14 @@ describe('contracts typecheck', () => {
     expect(generated.schedule.id).toBe('sch-1');
     expect(generated.slots[0]?.taskId).toBe('task-1');
     expect(generated.warnings?.[0]?.code).toBe('voice_fallback_applied');
+    const wrongWarnings = {
+      success: true,
+      schedule: { id: 'sch-1', mode: 'scheduled' },
+      slots: [{ slotId: 'slot-1', slotAt: '2026-10-05T20:00:00Z', title: 'Launch', taskId: 'task-1', status: 'scheduled' }],
+      replayed: false,
+      warnings: ['voice_fallback_applied'],
+    };
+    expect(typeof wrongWarnings).toBe('object');
     expectTypeOf<string>().not.toExtend<NonNullable<GenerateAndScheduleResponse['warnings']>[number]>();
     expectTypeOf(generated.slots[0]).exclude<undefined>().not.toHaveProperty('task_id');
     expectTypeOf(generated).exclude<undefined>().not.toHaveProperty('isReplay');

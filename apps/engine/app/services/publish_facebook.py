@@ -4,7 +4,7 @@ Wire contract (multipart/form-data, ``POST /api/upload-content``):
 ``provider=facebook``, ``video`` (file), ``caption``, repeated
 ``facebookAccountIds`` fields (Facebook Page ids).
 
-Kept out of ``upload_publisher`` (which re-exports these names) so that
+Kept out of ``upload_publisher`` (which imports the provider contract from here) so that
 module stays under the file-size cap; it owns only the Facebook types,
 validation and multipart fields.
 """

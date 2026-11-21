@@ -3,8 +3,7 @@
 These classes used to live in app/models/schema.py. They were moved here so
 schema.py stays under the 500-line file-size ratchet while the segments
 contract is added there. The envelope fields (status, message, body) match
-schema.BaseResponse exactly; schema.py re-exports these names so existing
-imports keep working.
+schema.BaseResponse exactly; import these names from this module.
 """
 
 from typing import Any, Optional

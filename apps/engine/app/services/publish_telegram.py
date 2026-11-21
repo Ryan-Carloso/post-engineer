@@ -12,7 +12,7 @@ resolves the bot token per chat. The Bot API caps a caption at 1024
 characters (``TELEGRAM_CAPTION_MAX_LENGTH`` in ``apps/web/lib/telegram.ts``,
 pinned by ``test_publish_telegram.py``).
 
-Kept out of ``upload_publisher`` (which re-exports these names) so that
+Kept out of ``upload_publisher`` (which imports the provider contract from here) so that
 module stays under the file-size cap; it owns only the Telegram types,
 validation and multipart fields.
 """
