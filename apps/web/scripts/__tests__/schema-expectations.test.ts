@@ -67,8 +67,8 @@ describe('extractRequiredColumns', () => {
 
   it('ignores a drop table written in a comment', async () => {
     const { extractRequiredColumns } = await loadGenerator();
-    const sql = `-- drop table public.personas;
-      alter table public.personas add column if not exists cta_type text;`;
+    const sql = `alter table public.personas add column if not exists cta_type text;
+      -- drop table public.personas;`;
     expect(extractRequiredColumns([sql])).toEqual({ personas: ['cta_type'] });
   });
 
