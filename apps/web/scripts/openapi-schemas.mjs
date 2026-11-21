@@ -1,4 +1,4 @@
-import { experimentLinkSchema, metricsOperationSchemas } from './openapi-metrics-schemas.mjs'; import { videoOperationSchemas } from './openapi-videos-schemas.mjs'; import { promptOperationSchemas } from './openapi-prompts-schemas.mjs'; import { OAUTH_CONNECT_PROVIDERS, SCHEDULE_ACCOUNT_COLUMNS, SOCIAL_PROVIDERS as providers } from '../../../shared/contracts/providers.ts';
+import { metricsOperationSchemas } from './openapi-metrics-schemas.mjs'; import { videoOperationSchemas } from './openapi-videos-schemas.mjs'; import { promptOperationSchemas } from './openapi-prompts-schemas.mjs'; import { OAUTH_CONNECT_PROVIDERS, SCHEDULE_ACCOUNT_COLUMNS, SOCIAL_PROVIDERS as providers } from '../../../shared/contracts/providers.ts';
 
 const object = (properties, required = []) => ({
   type: 'object',
@@ -106,7 +106,7 @@ const generateBody = object(
       language: str,
       niche: str,
     }, ['segments']),
-    experiment: experimentLinkSchema,
+    promptVersionId: { type: 'string', format: 'uuid', description: 'The versionId returned with the prompt (GET /api/prompts/[slug]) this script was written from. Experiments compare videos by prompt version; omit when the script was not written from a prompt.' },
     idempotencyKey: str,
     cta: {
       type: 'object',

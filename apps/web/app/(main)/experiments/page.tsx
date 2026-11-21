@@ -1,209 +1,190 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
+import { AlertTriangle, FlaskConical } from 'lucide-react';
+import { ProviderIcon } from '@/components/provider-icon';
+import { Badge } from '@/components/ui/badge';
+import { EmptyState } from '@/components/ui/empty-state';
+import { PageHeader } from '@/components/ui/page-header';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { accountOption } from '@/lib/account-options';
+import { useSocialAccountsQuery } from '@/lib/api';
+import type { PromptComparisonResponse } from '@/lib/contracts/experiments';
+import { METRICS_WINDOWS, type MetricsWindow } from '@/lib/contracts/metrics';
+import { COMPARISON_ROW_LIMIT } from '@/lib/experiments/comparison-limits';
+import { usePromptComparisonQuery } from '@/lib/experiments/comparison-query';
+import type { TranslationKey } from '@/lib/i18n';
 import { useI18n } from '@/lib/i18n/provider';
-import { AlertIcon, ChartIcon, SpinnerIcon } from '@/lib/ui';
+import { isSocialProvider } from '@/lib/providers/registry';
+import { SpinnerIcon } from '@/lib/ui';
 import { cn } from '@/lib/utils';
-import {
-  useExperimentDetailQuery,
-  useExperimentsQuery,
-  type ExperimentDetailResult,
-  type ExperimentsWindow,
-} from '@/lib/experiments/experiments-dashboard';
-import { ProviderCard } from './experiment-charts';
+
+type AccountView = PromptComparisonResponse['accounts'][number];
+type PromptView = AccountView['prompts'][number];
 
 const CARD_CLASS = 'rounded-2xl border border-hairline bg-card shadow-[0_8px_24px_rgba(20,32,51,0.04)]';
-const SELECT_CLASS =
-  "w-full appearance-none rounded-xl border border-line bg-card bg-[url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%23718096'%3E%3Cpath d='M5.5 7.5 10 12l4.5-4.5'/%3E%3C/svg%3E\")] bg-[length:16px] bg-[right_10px_center] bg-no-repeat py-2.5 pr-9 pl-3 text-sm font-medium text-ink transition-colors hover:border-line focus:border-ink focus:ring-2 focus:ring-ink/10 focus:outline-none";
-const WINDOWS: ExperimentsWindow[] = ['24h', '7d'];
+
+const WINDOW_LABEL_KEYS: Record<MetricsWindow, TranslationKey> = {
+  '24h': 'experiments.window24h',
+  '7d': 'experiments.window7d',
+  '28d': 'experiments.window28d',
+};
+
+const LABEL_KEYS: Record<PromptView['label'], TranslationKey> = {
+  insufficient: 'experiments.labelInsufficient',
+  no_signal: 'experiments.labelNoSignal',
+  indicative: 'experiments.labelIndicative',
+  clear: 'experiments.labelClear',
+};
+
+function labelTone(prompt: PromptView): string {
+  if (prompt.label === 'clear') return prompt.direction === 'below' ? 'bg-destructive-soft text-destructive' : 'bg-success-soft text-success';
+  if (prompt.label === 'indicative') return 'bg-warning-soft text-warning';
+  return 'bg-surface text-muted-text';
+}
 
 export default function ExperimentsPage(): React.ReactElement {
   const { t, locale } = useI18n();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [window, setWindow] = useState<ExperimentsWindow>('7d');
-
-  const listQuery = useExperimentsQuery();
-  const experiments = useMemo(
-    () => (listQuery.data !== undefined && listQuery.data.success ? listQuery.data.experiments : []),
-    [listQuery.data],
+  const [window, setWindow] = useState<MetricsWindow>('7d');
+  const query = usePromptComparisonQuery(window);
+  const accountsQuery = useSocialAccountsQuery();
+  const accountLabels = useMemo(
+    () => new Map((accountsQuery.data?.accounts ?? []).map(accountOption).map((account) => [account.id, account.label])),
+    [accountsQuery.data],
   );
-  useEffect(() => {
-    if (selectedId === null && experiments.length > 0) setSelectedId(experiments[0].id);
-  }, [selectedId, experiments]);
-
-  const detailQuery = useExperimentDetailQuery(selectedId, window);
-  const detail = detailQuery.data !== undefined && detailQuery.data.success ? detailQuery.data : null;
-  const failed = listQuery.isError
-    || (listQuery.data !== undefined && !listQuery.data.success)
-    || detailQuery.isError
-    || (detailQuery.data !== undefined && !detailQuery.data.success);
-
-  const formatNumber = (value: number): string => value.toLocaleString(locale === 'pt' ? 'pt-BR' : 'en-US');
-  const formatDateTime = (iso: string): string =>
-    new Date(iso).toLocaleString(locale === 'pt' ? 'pt-BR' : 'en-US', { dateStyle: 'medium', timeStyle: 'short' });
+  const result = query.data;
+  const failed = query.isError || (result !== undefined && !result.success);
+  const formatNumber = (value: number, digits = 0): string =>
+    value.toLocaleString(locale === 'pt' ? 'pt-BR' : 'en-US', { maximumFractionDigits: digits });
 
   return (
     <div className="mx-auto flex w-full max-w-375 flex-col gap-5 lg:gap-6">
-      <header className="flex items-center gap-4 py-1 lg:py-2">
-        <span className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-[#17191c] text-white shadow-[0_8px_18px_rgba(16,23,40,0.14)] [&>svg]:size-6">
-          <ChartIcon />
-        </span>
-        <div>
-          <h1 className="text-2xl font-bold tracking-[-0.035em] text-ink">{t('experiments.title')}</h1>
-          <p className="mt-0.5 text-sm text-muted-text lg:text-base">{t('experiments.subtitle')}</p>
-        </div>
-      </header>
+      <PageHeader title={t('experiments.title')} description={t('experiments.subtitle')} />
 
-      <section className={cn(CARD_CLASS, 'flex flex-col gap-4 p-4 lg:p-5')}>
-        <div className="flex flex-wrap items-end gap-3">
-          <label className="flex min-w-0 grow flex-col gap-1.5 text-xs font-semibold text-muted-text">
-            {t('experiments.selectLabel')}
-            <select
-              value={selectedId ?? ''}
-              onChange={(event) => setSelectedId(event.target.value === '' ? null : event.target.value)}
-              className={SELECT_CLASS}
-              disabled={listQuery.isLoading || experiments.length === 0}
-            >
-              <option value="">{t('experiments.selectPlaceholder')}</option>
-              {experiments.map((experiment) => (
-                <option key={experiment.id} value={experiment.id}>{experiment.name}</option>
-              ))}
-            </select>
-          </label>
-          <Segmented
-            options={WINDOWS.map((value) => ({ value, label: t(value === '24h' ? 'experiments.window24h' : 'experiments.window7d') }))}
-            value={window}
-            onChange={setWindow}
-          />
-        </div>
+      <section className={cn(CARD_CLASS, 'flex flex-col gap-3 p-4 lg:p-5')}>
+        <Tabs
+          value={window}
+          onValueChange={(value) => {
+            const match = METRICS_WINDOWS.find((candidate) => candidate === value);
+            if (match !== undefined) setWindow(match);
+          }}
+        >
+          <TabsList>
+            {METRICS_WINDOWS.map((value) => (
+              <TabsTrigger key={value} value={value}>{t(WINDOW_LABEL_KEYS[value])}</TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
+        <p className="text-xs text-muted-text">{t('experiments.howItWorks')}</p>
       </section>
 
-      {listQuery.isLoading || (selectedId !== null && detailQuery.isLoading) ? (
+      {query.isLoading ? (
         <div className="flex items-center justify-center py-20 text-muted-text"><SpinnerIcon /></div>
-      ) : failed ? (
-        <StatePanel tone="error" message={t('experiments.loadError')}
-          action={<button type="button" onClick={() => { void listQuery.refetch(); void detailQuery.refetch(); }}
-            disabled={listQuery.isFetching || detailQuery.isFetching}
-            className="rounded-xl border border-line bg-card px-4 py-2 text-sm font-semibold text-ink hover:bg-surface disabled:opacity-50">
-            {t('experiments.retry')}
-          </button>} />
-      ) : experiments.length === 0 ? (
-        <StatePanel tone="empty" message={t('experiments.empty')} />
-      ) : detail === null ? (
-        <StatePanel tone="empty" message={t('experiments.emptyDetail')} />
+      ) : failed || result === undefined || !result.success ? (
+        <EmptyState
+          icon={AlertTriangle}
+          title={t('experiments.title')}
+          description={t('experiments.loadError')}
+          action={(
+            <button
+              type="button"
+              onClick={() => { void query.refetch(); }}
+              disabled={query.isFetching}
+              className="rounded-xl border border-line bg-card px-4 py-2 text-sm font-semibold text-ink hover:bg-surface disabled:opacity-50"
+            >
+              {t('experiments.retry')}
+            </button>
+          )}
+        />
+      ) : result.accounts.length === 0 ? (
+        <EmptyState icon={FlaskConical} title={t('experiments.title')} description={t('experiments.empty')} />
       ) : (
-        <ExperimentDetail detail={detail} formatNumber={formatNumber} formatDateTime={formatDateTime} />
+        <>
+          {result.truncated && (
+            <p className="text-xs text-warning">{t('experiments.truncated', { count: formatNumber(COMPARISON_ROW_LIMIT) })}</p>
+          )}
+          {result.accounts.map((account) => (
+            <AccountCard
+              key={`${account.provider}:${account.accountId}`}
+              account={account}
+              accountLabel={accountLabels.get(account.accountId) ?? account.accountId}
+              formatNumber={formatNumber}
+            />
+          ))}
+        </>
       )}
     </div>
   );
 }
 
-function ExperimentDetail({ detail, formatNumber, formatDateTime }: {
-  detail: ExperimentDetailResult;
-  formatNumber: (value: number) => string;
-  formatDateTime: (iso: string) => string;
+function AccountCard({ account, accountLabel, formatNumber }: {
+  account: AccountView;
+  accountLabel: string;
+  formatNumber: (value: number, digits?: number) => string;
 }): React.ReactElement {
   const { t } = useI18n();
-  const [first, second] = detail.experiment.variants;
-  const variantName = (variantId: string): string =>
-    detail.experiment.variants.find((variant) => variant.variantId === variantId)?.name ?? variantId;
-  const badgeKey = detail.frozen
-    ? 'experiments.frozenBadge'
-    : detail.source === 'live'
-      ? 'experiments.liveBadge'
-      : detail.source === 'partial'
-        ? 'experiments.partialBadge'
-        : 'experiments.snapshotBadge';
   return (
-    <>
-      <section className={cn(CARD_CLASS, 'flex flex-col gap-2 p-4 lg:p-5')}>
-        <div className="flex flex-wrap items-center gap-2">
-          <span className={cn(
-            'rounded-full px-3 py-1 text-xs font-semibold',
-            detail.frozen ? 'bg-surface text-muted-text' : detail.source === 'snapshot' ? 'bg-surface text-muted-text' : detail.source === 'partial' ? 'bg-warning-soft text-warning' : 'bg-success-soft text-success',
-          )}>
-            {t(badgeKey)}
-          </span>
-          {detail.liveAt !== null && (
-            <p className="text-xs text-muted-text">{t('experiments.updatedAt', { date: formatDateTime(detail.liveAt) })}</p>
-          )}
-        </div>
-        <p className="text-sm text-ink">
-          {t('experiments.pairsPlanned', { published: detail.results.pairsPublished, target: detail.results.targetPairs })}
-        </p>
-        {detail.liveFailures.length > 0 && (
-          <p className="text-xs text-warning">{t('experiments.liveFailures', { count: detail.liveFailures.length })}</p>
+    <section className={cn(CARD_CLASS, 'flex flex-col gap-3 p-4 lg:p-5')} aria-label={accountLabel}>
+      <header className="flex items-center gap-3">
+        {isSocialProvider(account.provider) && (
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-sunken"><ProviderIcon provider={account.provider} /></span>
         )}
-      </section>
-
-      {detail.results.providers.length === 0 ? (
-        <StatePanel tone="empty" message={t('experiments.emptyDetail')} />
-      ) : (
-        detail.results.providers.map((provider) => (
-          <ProviderCard
-            key={provider.provider}
-            provider={provider}
-            firstName={first.name}
-            secondName={second.name}
-            firstId={first.variantId}
-            secondId={second.variantId}
-            variantName={variantName}
-            pairsCreated={detail.results.pairsCreated}
-            formatNumber={formatNumber}
-          />
-        ))
-      )}
-    </>
+        <div className="min-w-0">
+          <h2 className="truncate text-sm font-semibold text-ink">{accountLabel}</h2>
+          <p className="text-xs text-muted-text">
+            {t('experiments.accountSummary', {
+              videos: account.videos,
+              views: account.baselineViews === null ? '—' : formatNumber(account.baselineViews),
+            })}
+          </p>
+        </div>
+      </header>
+      <ul className="flex flex-col divide-y divide-hairline">
+        {account.prompts.map((prompt) => (
+          <PromptRow key={prompt.versionId ?? 'none'} prompt={prompt} formatNumber={formatNumber} />
+        ))}
+      </ul>
+    </section>
   );
 }
 
-interface SegmentedProps<T extends string> {
-  options: Array<{ value: T; label: string }>;
-  value: T;
-  onChange: (value: T) => void;
-}
-
-function Segmented<T extends string>({ options, value, onChange }: SegmentedProps<T>): React.ReactElement {
+function PromptRow({ prompt, formatNumber }: {
+  prompt: PromptView;
+  formatNumber: (value: number, digits?: number) => string;
+}): React.ReactElement {
+  const { t } = useI18n();
+  const name = prompt.versionId === null ? t('experiments.noPrompt') : (prompt.title ?? prompt.slug ?? prompt.versionId);
   return (
-    <div className="inline-flex max-w-full overflow-x-auto rounded-xl bg-sunken p-1">
-      {options.map((option) => (
-        <button
-          key={option.value}
-          type="button"
-          onClick={() => onChange(option.value)}
-          aria-pressed={value === option.value}
-          className={cn(
-            'shrink-0 rounded-lg px-4 py-2 text-sm font-semibold whitespace-nowrap transition-colors',
-            value === option.value ? 'bg-card text-ink shadow-sm' : 'text-muted-text hover:text-ink',
-          )}
+    <li className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-3">
+      <div className="min-w-0 grow basis-60">
+        <p className="truncate text-sm font-semibold text-ink">{name}</p>
+        <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted-text">
+          {prompt.slug !== null && <span className="truncate">{prompt.slug}</span>}
+          {prompt.version !== null && <span>{t('experiments.version', { version: prompt.version })}</span>}
+          {prompt.source === 'official' && <Badge variant="outline">{t('experiments.official')}</Badge>}
+          <span>{t('experiments.videos', { count: prompt.videos })}</span>
+        </p>
+      </div>
+      <div className="flex items-center gap-4">
+        <dl className="flex items-center gap-4 text-right">
+          <div>
+            <dt className="text-[11px] text-muted-text">{t('experiments.medianViews')}</dt>
+            <dd className="text-sm font-semibold text-ink tabular-nums">{prompt.medianViews === null ? '—' : formatNumber(prompt.medianViews)}</dd>
+          </div>
+          <div>
+            <dt className="text-[11px] text-muted-text">{t('experiments.lift')}</dt>
+            <dd className="text-sm font-semibold text-ink tabular-nums">
+              {prompt.lift === null ? '—' : t('experiments.liftValue', { value: formatNumber(prompt.lift, 2) })}
+            </dd>
+          </div>
+        </dl>
+        <span
+          className={cn('rounded-full px-3 py-1 text-xs font-semibold whitespace-nowrap', labelTone(prompt))}
+          title={prompt.direction === null ? undefined : t(prompt.direction === 'above' ? 'experiments.above' : 'experiments.below')}
         >
-          {option.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-interface StatePanelProps {
-  tone: 'error' | 'empty';
-  message: string;
-  action?: React.ReactNode;
-}
-
-function StatePanel({ tone, message, action }: StatePanelProps): React.ReactElement {
-  return (
-    <div
-      role={tone === 'error' ? 'alert' : undefined}
-      className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-line bg-surface px-6 py-14 text-center"
-    >
-      <span className={cn(
-        'flex size-11 items-center justify-center rounded-full [&>svg]:size-5',
-        tone === 'error' ? 'bg-destructive-soft text-destructive' : 'bg-card text-muted-text shadow-sm',
-      )}>
-        {tone === 'error' ? <AlertIcon /> : <ChartIcon />}
-      </span>
-      <p className="max-w-md text-sm text-ink-soft">{message}</p>
-      {action}
-    </div>
+          {t(LABEL_KEYS[prompt.label])}
+        </span>
+      </div>
+    </li>
   );
 }

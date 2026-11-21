@@ -78,7 +78,7 @@ type GenerateVideoItem = z.infer<typeof GenerateVideoItemSchema>;
 type LegacyVideo = z.infer<typeof GeneratePersonaVideoSchema>;
 
 export const GenerateVideoDescription =
-  `Generate and schedule persona videos from complete scripts: one video, or a batch of 2-${MAX_BATCH_VIDEOS} (every ${BATCH_FREE_EVERY} videos with the persona face, the cheapest is free; faceless videos pay full price and are never free; all videos are created within ${BATCH_WINDOW_MINUTES} minutes). Charges prepaid tokens. mode 'scheduled' slots a video 3h-30d ahead (startAt and times); 'asap' publishes it when generation finishes. Give persona and accounts by name or id: they are resolved here, and an unknown or ambiguous name creates nothing. Omit accounts to publish to the persona's bound accounts. The result echoes what was resolved. Then follow the videos with video_tasks (action: status). For a video about a topic (news, a place, a product, GitHub PRs) call prompts (action: list) first and follow the matching recipe with prompts (action: get); validate every script with check_script (action: validate) before spending tokens. To compare two hooks, use experiments, not two separate videos.`;
+  `Generate and schedule persona videos from complete scripts: one video, or a batch of 2-${MAX_BATCH_VIDEOS} (every ${BATCH_FREE_EVERY} videos with the persona face, the cheapest is free; faceless videos pay full price and are never free; all videos are created within ${BATCH_WINDOW_MINUTES} minutes). Charges prepaid tokens. mode 'scheduled' slots a video 3h-30d ahead (startAt and times); 'asap' publishes it when generation finishes. Give persona and accounts by name or id: they are resolved here, and an unknown or ambiguous name creates nothing. Omit accounts to publish to the persona's bound accounts. The result echoes what was resolved. Then follow the videos with video_tasks (action: status). For a video about a topic (news, a place, a product, GitHub PRs) call prompts (action: list) first and follow the matching recipe with prompts (action: get); validate every script with check_script (action: validate) before spending tokens. When the script was written from a prompt, pass that prompt's versionId as promptVersionId on each video: experiments (action: results) compares prompts by it.`;
 
 function failure(message: string): McpToolResponse {
   return { content: [{ type: 'text', text: message }], isError: true };
@@ -180,7 +180,6 @@ export async function handleGenerateVideo(client: PostEngineerClient, args: Gene
   if (videos.length > 1) {
     if (batchKey === undefined) return failure(`batchKey is required with ${videos.length} videos: name the batch (e.g. "launch-week-1") so a retry replays instead of charging again.`);
     if (idempotencyKey !== undefined) return failure('idempotencyKey is for one video. Use batchKey for a batch.');
-    if (videos.some((video) => video.experiment !== undefined)) return failure('experiment is for one video at a time. Create both videos of a pair with experiments (action: add_pair).');
   } else if (batchKey !== undefined) {
     return failure('batchKey is for a batch of 2 or more videos. Use idempotencyKey to make one video safe to retry.');
   }
@@ -200,7 +199,7 @@ export async function handleGenerateVideo(client: PostEngineerClient, args: Gene
   const response = await handleGeneratePersonaVideoBatch(client, {
     batchKey: batchKey as string,
     videos: prepared.map(({ video }) => {
-      const { idempotencyKey: _idempotency, experiment: _experiment, recipe: _recipe, ...batchVideo } = video;
+      const { idempotencyKey: _idempotency, recipe: _recipe, ...batchVideo } = video;
       return batchVideo;
     }),
   });

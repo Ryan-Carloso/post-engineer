@@ -175,15 +175,14 @@ describe('generate tool shape vs the videos contract', () => {
     }
   });
 
-  it('rejects an unknown experiment pair and variant on both sides', () => {
-    const badPairTool = { ...TOOL_GENERATE, experiment: { experimentId: '11111111-2222-4333-8444-555555555555', variantId: 'hook-a', pair: 21 } };
-    const badPairContract = { ...CONTRACT_GENERATE, experiment: { experimentId: '11111111-2222-4333-8444-555555555555', variantId: 'hook-a', pair: 21 } };
-    expect(accepts(GeneratePersonaVideoSchema, badPairTool)).toBe(false);
-    expect(accepts(GenerateAndScheduleBodySchema, badPairContract)).toBe(false);
-    const badVariantTool = { ...TOOL_GENERATE, experiment: { experimentId: '11111111-2222-4333-8444-555555555555', variantId: 'Hook A', pair: 1 } };
-    const badVariantContract = { ...CONTRACT_GENERATE, experiment: { experimentId: '11111111-2222-4333-8444-555555555555', variantId: 'Hook A', pair: 1 } };
-    expect(accepts(GeneratePersonaVideoSchema, badVariantTool)).toBe(false);
-    expect(accepts(GenerateAndScheduleBodySchema, badVariantContract)).toBe(false);
+  it('accepts a uuid promptVersionId and rejects any other value on both sides', () => {
+    const versionId = '11111111-2222-4333-8444-555555555555';
+    expect(accepts(GeneratePersonaVideoSchema, { ...TOOL_GENERATE, promptVersionId: versionId })).toBe(true);
+    expect(accepts(GenerateAndScheduleBodySchema, { ...CONTRACT_GENERATE, promptVersionId: versionId })).toBe(true);
+    for (const bad of ['story-first', '', 7]) {
+      expect(accepts(GeneratePersonaVideoSchema, { ...TOOL_GENERATE, promptVersionId: bad })).toBe(false);
+      expect(accepts(GenerateAndScheduleBodySchema, { ...CONTRACT_GENERATE, promptVersionId: bad })).toBe(false);
+    }
   });
 
   it('lets the mode/schedule coupling live outside the shape', () => {

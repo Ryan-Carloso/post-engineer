@@ -11,6 +11,7 @@ import { requireSupabaseSession } from '@/lib/request-auth';
 import { UserPromptStoreError, type UserPromptRow } from '@/lib/user-prompts';
 import { ListPromptsQuerySchema, PromptVisibilitySchema, type PromptSource, type PromptVisibility } from '@/lib/contracts/prompts';
 import type { PromptListFilter } from '@/lib/prompt-search';
+import type { PromptVersionRef } from '@/lib/prompt-versions';
 
 export interface PromptCaller {
   userId: string | null;
@@ -131,8 +132,10 @@ export function promptSummaryBody(row: UserPromptRow, source: PromptSource): Pro
   };
 }
 
-export function promptDetailBody(row: UserPromptRow, source: PromptSource): PromptSummaryBody & { prompt: string } {
-  return { ...promptSummaryBody(row, source), prompt: row.body };
+export type PromptDetailBody = PromptSummaryBody & { prompt: string; versionId: string; version: number };
+
+export function promptDetailBody(row: UserPromptRow, source: PromptSource, version: PromptVersionRef): PromptDetailBody {
+  return { ...promptSummaryBody(row, source), prompt: row.body, versionId: version.versionId, version: version.version };
 }
 
 export function readListFilter(request: Request, route: string): { ok: true; filter: PromptListFilter } | { ok: false; response: NextResponse } {

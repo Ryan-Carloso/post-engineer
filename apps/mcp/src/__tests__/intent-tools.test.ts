@@ -177,26 +177,12 @@ describe('accounts', () => {
 });
 
 describe('experiments and check_script with a persona by name', () => {
-  it('creates an experiment for a persona given by name', async () => {
-    const { call, seen } = setup({ 'GET /api/persona/list': PERSONAS, 'POST /api/experiments': { success: true, experiment: { id: '22222222-2222-4222-8222-222222222222', name: 'Calm vs bold', variable: 'hook', personaId: MARIA, targetPairs: 6, variants: [{ variantId: 'hook-calm', name: 'Calm', description: 'calm' }, { variantId: 'hook-bold', name: 'Bold', description: 'bold' }] } } });
-    const result = await call('experiments', {
-      action: 'create',
-      name: 'Calm vs bold',
-      persona: 'Maria',
-      variants: [{ variantId: 'hook-calm', name: 'Calm', description: 'calm' }, { variantId: 'hook-bold', name: 'Bold', description: 'bold' }],
-    });
+  it('reads the prompt comparison for the requested window', async () => {
+    const comparison = { success: true, window: '28d', truncated: false, accounts: [] };
+    const { call, seen } = setup({ 'GET /api/experiments': comparison });
+    const result = await call('experiments', { action: 'results', window: '28d' });
     expect(result.isError).toBe(false);
-    expect(seen.find((request) => request.method === 'POST')?.body).toMatchObject({ personaId: MARIA, name: 'Calm vs bold' });
-  });
-
-  it('creates an experiment with no persona when none is given', async () => {
-    const { call, seen } = setup({ 'POST /api/experiments': { success: true, experiment: { id: '22222222-2222-4222-8222-222222222222', name: 'Faceless', variable: 'hook', personaId: null, targetPairs: 6, variants: [{ variantId: 'hook-a', name: 'A', description: 'a' }, { variantId: 'hook-b', name: 'B', description: 'b' }] } } });
-    await call('experiments', {
-      action: 'create',
-      name: 'Faceless',
-      variants: [{ variantId: 'hook-a', name: 'A', description: 'a' }, { variantId: 'hook-b', name: 'B', description: 'b' }],
-    });
-    expect(seen.find((request) => request.method === 'POST')?.body).toMatchObject({ personaId: null });
+    expect(seen.find((request) => request.path.startsWith('/api/experiments'))?.path).toBe('/api/experiments?window=28d');
   });
 
   it('scores a draft against the measured posts of a persona given by name', async () => {

@@ -26,7 +26,7 @@ import { ANALYTICS_STATUSES } from '../metrics-query';
 import { InstagramApiError } from '@/lib/errors';
 
 const COUNTERS = { views: 1200, likes: 80, comments: 9, saves: null };
-const NO_EXPERIMENT = { experimentId: null, variantId: null, experimentPair: null };
+const NO_PROMPT = { promptVersionId: null };
 
 function duePost(overrides: Partial<DuePost> = {}): DuePost {
   return {
@@ -53,7 +53,7 @@ function deps(overrides: Partial<PostMetricsDeps> = {}): PostMetricsDeps {
     fetchTaskSource: vi.fn(async () => ({ publishResults: [YT_ENTRY, IG_ENTRY], scriptAngle: 'myth' })),
     fetchCounters: vi.fn(async () => COUNTERS),
     resolveTarget: vi.fn(async (_userId: string, target: MetricsTarget) => target),
-    saveMetrics: vi.fn(async () => NO_EXPERIMENT),
+    saveMetrics: vi.fn(async () => NO_PROMPT),
     markDone: vi.fn(async () => undefined),
     track: vi.fn(),
     now: () => new Date('2026-10-21T12:00:00.000Z'),
@@ -178,19 +178,17 @@ describe('collectPostMetrics', () => {
       ...COUNTERS,
       engaged_views: null,
       analytics_status: null,
-      experiment_id: null,
-      variant_id: null,
-      experiment_pair: null,
+      prompt_version_id: null,
     });
   });
 
-  it('tags the event with the experiment link the snapshot carries (issue #476)', async () => {
+  it('tags the event with the prompt version the snapshot carries', async () => {
     const d = deps({
-      saveMetrics: vi.fn(async () => ({ experimentId: 'exp-1', variantId: 'hook-aggressive', experimentPair: 2 })),
+      saveMetrics: vi.fn(async () => ({ promptVersionId: 'version-7' })),
     });
     await collectPostMetrics(d);
     expect(d.track).toHaveBeenCalledWith('post_metrics_collected', expect.objectContaining({
-      experiment_id: 'exp-1', variant_id: 'hook-aggressive', experiment_pair: 2,
+      prompt_version_id: 'version-7',
     }));
   });
 
@@ -887,8 +885,8 @@ describe('createPostMetricsStore', () => {
     expect(logger.warn).toHaveBeenCalledWith('[post-metrics] unknown provider in re-opened publish outcomes', { postId: 'post-2', provider: 'tiktok' });
   });
 
-  it('upserts one row per post/video/window, returns its experiment link and throws on a write error', async () => {
-    const single = vi.fn(async () => ({ data: { experiment_id: 'exp-1', variant_id: 'hook-calm', experiment_pair: 1 }, error: null }));
+  it('upserts one row per post/video/window, returns its prompt version and throws on a write error', async () => {
+    const single = vi.fn(async () => ({ data: { prompt_version_id: 'version-3' }, error: null }));
     const select = vi.fn(() => ({ single }));
     const upsert = vi.fn(() => ({ select }));
     const from = vi.fn(() => ({ upsert }));
@@ -929,8 +927,8 @@ describe('createPostMetricsStore', () => {
       },
       { onConflict: 'post_id,provider,external_id,metrics_window' },
     );
-    expect(select).toHaveBeenCalledWith('experiment_id, variant_id, experiment_pair');
-    expect(tag).toEqual({ experimentId: 'exp-1', variantId: 'hook-calm', experimentPair: 1 });
+    expect(select).toHaveBeenCalledWith('prompt_version_id');
+    expect(tag).toEqual({ promptVersionId: 'version-3' });
 
     single.mockResolvedValueOnce({ data: null, error: { message: 'denied' } } as never);
     await expect(
@@ -1012,7 +1010,7 @@ describe('migration 039 (post metrics retention + 28d window)', () => {
   const sql = readFileSync(join(findRepoRoot(import.meta.url), 'supabase', 'migrations', '039_post-metrics-retention.sql'), 'utf8');
 
   it('adds every retention column saveMetrics writes', async () => {
-    const single = vi.fn(async () => ({ data: { experiment_id: null, variant_id: null, experiment_pair: null }, error: null }));
+    const single = vi.fn(async () => ({ data: { prompt_version_id: null }, error: null }));
     const upsert = vi.fn((_row: unknown, _options: unknown) => ({ select: () => ({ single }) }));
     const store = createPostMetricsStore({ from: vi.fn(() => ({ upsert })) } as unknown as SupabaseClient);
     await store.saveMetrics({

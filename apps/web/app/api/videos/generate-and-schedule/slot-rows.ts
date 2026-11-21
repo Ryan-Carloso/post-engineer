@@ -1,7 +1,6 @@
 import type { DistributedSlot } from '@/lib/schedule/slot-distribution';
 import type { ScriptSegment } from '@/lib/generation/script-segments';
 import type { VideoType } from '@/lib/tokens';
-import type { ExperimentLink } from './experiment-link';
 
 export interface SlotRowInput {
   slots: DistributedSlot[];
@@ -13,7 +12,7 @@ export interface SlotRowInput {
   musicMood?: string;
   chargedTokens: number;
   segments: ScriptSegment[] | undefined;
-  experiment?: ExperimentLink;
+  promptVersionId?: string;
 }
 
 export function buildSlotRows(input: SlotRowInput) {
@@ -30,8 +29,6 @@ export function buildSlotRows(input: SlotRowInput) {
     music_mood: input.musicMood ?? null,
     charged_tokens: input.chargedTokens,
     segments: input.segments ?? null,
-    experiment_id: input.experiment?.experimentId ?? null,
-    variant_id: input.experiment?.variantId ?? null,
-    experiment_pair: input.experiment?.pair ?? null,
+    prompt_version_id: input.promptVersionId ?? null,
   }));
 }

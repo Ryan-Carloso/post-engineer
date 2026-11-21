@@ -23,6 +23,8 @@ const CATALOG = [
   { slug: 'full-setup', title: 'Full setup becomes videos', description: 'Connect accounts and publish.', ...SHAPE },
 ];
 
+const VERSION_ID = '44444444-4444-4444-8444-444444444444';
+
 const PROMPT_TEXT: Record<string, string> = {
   'daily-news': 'Daily news recipe: call validate_script, then generate_persona_video.',
   'full-setup': 'Full setup recipe: list_personas, get_token_balance, then generate_persona_video.',
@@ -42,7 +44,7 @@ function apiResponse(url: string): Response {
   if (entry === undefined) {
     return json(404, { success: false, error: 'Unknown prompt slug.', code: 'PROMPT_NOT_FOUND' });
   }
-  return json(200, { success: true, prompt: { ...entry, prompt: PROMPT_TEXT[slug] } });
+  return json(200, { success: true, prompt: { ...entry, prompt: PROMPT_TEXT[slug], versionId: VERSION_ID, version: 1 } });
 }
 
 let fetchMock: ReturnType<typeof vi.fn<(...args: FetchArgs) => Promise<Response>>>;
@@ -148,9 +150,9 @@ describe('handleGetPrompt', () => {
   it('returns the prompt text from the API plus the declare-the-recipe footer', async () => {
     const result = await handleGetPrompt(client(), { slug: 'daily-news' });
     expect(result.isError).toBeFalsy();
-    expect(textOf(result)).toBe(recipeRunText('daily-news', PROMPT_TEXT['daily-news'] ?? '', 'official'));
+    expect(textOf(result)).toBe(recipeRunText({ slug: 'daily-news', prompt: PROMPT_TEXT['daily-news'] ?? '', source: 'official', versionId: VERSION_ID }));
     expect(textOf(result).startsWith(PROMPT_TEXT['daily-news'] ?? '-')).toBe(true);
-    expect(textOf(result)).toContain('pass recipe: "daily-news"');
+    expect(textOf(result)).toContain(`pass recipe: "daily-news" and promptVersionId: "${VERSION_ID}"`);
     expect(requestedPaths()).toEqual(['/api/prompts/daily-news']);
   });
 
@@ -225,7 +227,7 @@ describe('prompt tools over MCP', () => {
       const listed = await mcp.callTool({ name: 'prompts', arguments: { action: 'list' } });
       expect(JSON.parse(textOf(listed))).toEqual(CATALOG);
       const fetched = await mcp.callTool({ name: 'prompts', arguments: { action: 'get', slug: 'full-setup' } });
-      expect(textOf(fetched)).toBe(recipeRunText('full-setup', PROMPT_TEXT['full-setup'] ?? '', 'official'));
+      expect(textOf(fetched)).toBe(recipeRunText({ slug: 'full-setup', prompt: PROMPT_TEXT['full-setup'] ?? '', source: 'official', versionId: VERSION_ID }));
       expect(toolHeaders()).toEqual(['prompts', 'prompts']);
       expect(actionHeaders()).toEqual(['list', 'get']);
     });
@@ -258,7 +260,7 @@ describe('prompt tools over MCP', () => {
       expect(generate?.description).toContain('call prompts (action: list) first');
       expect(generate?.description).toContain('prompts (action: get)');
       expect(generate?.description).toContain('(news, a place, a product, GitHub PRs)');
-      expect(generate?.description).toContain('To compare two hooks, use experiments, not two separate videos.');
+      expect(generate?.description).toContain("pass that prompt's versionId as promptVersionId on each video");
     });
   });
 
@@ -296,7 +298,7 @@ describe('slash commands over MCP', () => {
     await withMcpClient(async (mcp) => {
       const result = await mcp.getPrompt({ name: 'daily-news' });
       expect(result.messages).toEqual([
-        { role: 'user', content: { type: 'text', text: recipeRunText('daily-news', PROMPT_TEXT['daily-news'] ?? '', 'official') } },
+        { role: 'user', content: { type: 'text', text: recipeRunText({ slug: 'daily-news', prompt: PROMPT_TEXT['daily-news'] ?? '', source: 'official', versionId: VERSION_ID }) } },
       ]);
       expect(toolHeaders()).toEqual(['slash_get_prompt']);
     });
@@ -334,21 +336,26 @@ describe('prompts from users', () => {
         source,
         visibility: source === 'own' ? 'private' : 'public',
         prompt: 'Follow these steps.',
+        versionId: VERSION_ID,
+        version: 2,
       },
     });
   }
 
-  it('puts the unverified-content notice in front of a community prompt and declares no recipe', async () => {
+  it('puts the unverified-content notice in front of a community prompt and asks only for its version', async () => {
     fetchMock.mockResolvedValueOnce(userPrompt('community'));
     const result = await handleGetPrompt(client(), { slug: 'their-prompt' });
-    expect(textOf(result)).toBe(`${COMMUNITY_PROMPT_NOTICE}\n\nFollow these steps.`);
-    expect(textOf(result)).not.toContain('pass recipe');
+    expect(textOf(result).startsWith(`${COMMUNITY_PROMPT_NOTICE}\n\nFollow these steps.\n\n`)).toBe(true);
+    expect(textOf(result)).toContain(`pass promptVersionId: "${VERSION_ID}"`);
+    expect(textOf(result)).not.toContain('recipe:');
   });
 
-  it('returns the caller own prompt as written, without a notice and without a recipe footer', async () => {
+  it('returns the caller own prompt as written, followed only by its version footer', async () => {
     fetchMock.mockResolvedValueOnce(userPrompt('own'));
     const result = await handleGetPrompt(client(), { slug: 'their-prompt' });
-    expect(textOf(result)).toBe('Follow these steps.');
+    expect(textOf(result)).toBe(
+      `Follow these steps.\n\nWhen you call generate_video with a script written from this prompt, pass promptVersionId: "${VERSION_ID}" on each video, so experiments (action: results) can compare this prompt.`,
+    );
   });
 
   it('labels a community prompt in the slash prompt list so it is not mistaken for an official one', async () => {

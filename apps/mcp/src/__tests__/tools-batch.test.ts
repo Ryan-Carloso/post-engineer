@@ -75,8 +75,10 @@ describe('generate_persona_video_batch schema', () => {
     expect(() => batchArgs(2, { batchKey: 'x'.repeat(101) })).toThrow();
   });
 
-  it('rejects per-video idempotencyKey, experiment and recipe (the batch owns them)', () => {
-    for (const extra of [{ idempotencyKey: 'k' }, { experiment: { experimentId: 'e', variantId: 'v', pair: 1 } }, { recipe: 'r' }]) {
+  it('rejects per-video idempotencyKey and recipe (the batch owns them) and keeps a per-video promptVersionId', () => {
+    const accepted = GeneratePersonaVideoBatchSchema.parse({ batchKey: 'k', videos: [video('a'), { ...video('b'), promptVersionId: '11111111-2222-4333-8444-555555555555' }] });
+    expect(accepted.videos[1]?.promptVersionId).toBe('11111111-2222-4333-8444-555555555555');
+    for (const extra of [{ idempotencyKey: 'k' }, { recipe: 'r' }]) {
       expect(() =>
         GeneratePersonaVideoBatchSchema.parse({ batchKey: 'k', videos: [video('a'), { ...video('b'), ...extra }] }),
       ).toThrow();

@@ -39,7 +39,7 @@ export async function getSlashPrompt(client: PostEngineerClient, slug: string): 
     const prompt = await trackedGet({ client, slug });
     return {
       description: prompt.description,
-      messages: [{ role: 'user', content: { type: 'text', text: recipeRunText(prompt.slug, prompt.prompt, prompt.source) } }],
+      messages: [{ role: 'user', content: { type: 'text', text: recipeRunText(prompt) } }],
     };
   } catch (error) {
     if (error instanceof UnknownPromptSlugError) {

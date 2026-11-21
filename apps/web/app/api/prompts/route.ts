@@ -8,6 +8,7 @@ import { isOfficialPromptSlug, listHubPrompts } from '@/lib/recipes/hub-prompts'
 import { RATE_LIMITS } from '@/lib/rate-limit';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { createUserPrompt, listOwnPromptSlugs, listOwnUserPrompts, listPublicUserPrompts } from '@/lib/user-prompts';
+import { currentUserPromptVersion } from '@/lib/prompt-versions';
 import {
   promptDetailBody,
   promptSummaryBody,
@@ -72,7 +73,8 @@ async function postHandler(request: Request): Promise<NextResponse> {
     });
   }
   try {
-    const outcome = await createUserPrompt(createSupabaseServiceClient(), owner.userId, {
+    const db = createSupabaseServiceClient();
+    const outcome = await createUserPrompt(db, owner.userId, {
       slug,
       title,
       description: description ?? '',
@@ -80,7 +82,8 @@ async function postHandler(request: Request): Promise<NextResponse> {
       visibility: visibility ?? 'private',
     });
     if (outcome.kind !== 'saved') return slugTaken(POST_ROUTE);
-    return NextResponse.json({ success: true, prompt: promptDetailBody(outcome.row, 'own') }, { status: 201 });
+    const version = await currentUserPromptVersion(db, outcome.row.id);
+    return NextResponse.json({ success: true, prompt: promptDetailBody(outcome.row, 'own', version) }, { status: 201 });
   } catch (error) {
     return storeFailure(POST_ROUTE, error);
   }

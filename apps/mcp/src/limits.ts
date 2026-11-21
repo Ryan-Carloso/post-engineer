@@ -37,18 +37,6 @@ export {
 } from './contracts/metrics.js';
 export { SOCIAL_PROVIDERS as METRICS_PROVIDERS } from './contracts/providers.js';
 
-export {
-  EXPERIMENT_NAME_MAX_LENGTH,
-  EXPERIMENT_TARGET_PAIRS_MAX,
-  EXPERIMENT_TARGET_PAIRS_MIN,
-  EXPERIMENT_VARIABLES,
-  EXPERIMENT_VARIANT_COUNT,
-  EXPERIMENT_VARIANT_DESCRIPTION_MAX_LENGTH,
-  EXPERIMENT_VARIANT_ID_PATTERN,
-  EXPERIMENT_VARIANT_NAME_MAX_LENGTH,
-} from './contracts/experiments.js';
-export type { ExperimentVariable } from './contracts/experiments.js';
-
 export { BATCH_KEY_MAX_LENGTH, BATCH_KEY_PATTERN, MAX_BATCH_VIDEOS } from './contracts/videos.js';
 export const BATCH_FREE_EVERY = 6;
 export const BATCH_WINDOW_MINUTES = 10;

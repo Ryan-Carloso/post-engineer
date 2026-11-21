@@ -41,7 +41,6 @@ export const RATE_LIMITS = {
   publishingAccounts: { name: 'publishing-accounts', limit: 60, windowMs: 60_000 },
   toolConfig: { name: 'tool-config', limit: 60, windowMs: 60_000 },
   metrics: { name: 'metrics', limit: 60, windowMs: 60_000 },
-  experimentCreate: { name: 'experiment-create', limit: 10, windowMs: 60_000 },
   experimentRead: { name: 'experiment-read', limit: 60, windowMs: 60_000 },
   retentionCurve: { name: 'retention-curve', limit: 30, windowMs: 60_000 },
   draftScore: { name: 'draft-score', limit: 60, windowMs: 60_000 },

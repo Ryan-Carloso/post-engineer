@@ -38,9 +38,7 @@ describe('buildSlotRows', () => {
         { kind: 'content', text: 'Walk the Ribeira in the morning light.' },
         { kind: 'content', text: 'Follow for more.' },
       ],
-      experiment_id: null,
-      variant_id: null,
-      experiment_pair: null,
+      prompt_version_id: null,
     });
   });
 
@@ -115,7 +113,7 @@ describe('buildSlotRows', () => {
     expect(rows[0]?.description).toBe('Agent description.');
   });
 
-  it('writes the experiment link columns when the video joins an experiment', () => {
+  it('writes the prompt version the script was written from', () => {
     const rows = buildSlotRows({
       slots: [{ slotAtISO: '2026-09-08T09:00:00.000Z', dayIndex: 0, timeIndex: 0 }],
       title: 'Porto walks',
@@ -125,13 +123,9 @@ describe('buildSlotRows', () => {
       videoType: 'hook_lipsync',
       chargedTokens: 2,
       segments: undefined,
-      experiment: { experimentId: '7b0e6c1e-0000-4000-8000-000000000001', variantId: 'hook-aggressive', pair: 2 },
+      promptVersionId: '7b0e6c1e-0000-4000-8000-000000000001',
     });
-    expect(rows[0]).toMatchObject({
-      experiment_id: '7b0e6c1e-0000-4000-8000-000000000001',
-      variant_id: 'hook-aggressive',
-      experiment_pair: 2,
-    });
+    expect(rows[0]).toMatchObject({ prompt_version_id: '7b0e6c1e-0000-4000-8000-000000000001' });
   });
 
   it('writes the charged amount on every row, including a free (0) slot', () => {

@@ -6,7 +6,15 @@ export interface ProgressHistoryEntry {
   recordedAt: string;
 }
 
+export interface PostPromptFacts {
+  slug: string;
+  title: string;
+  version: number;
+  source: 'official' | 'user';
+}
+
 export interface GenerationFacts {
+  prompt: PostPromptFacts | null;
   faceless: boolean;
   language: string | null;
   voiceId: string | null;
@@ -49,8 +57,18 @@ export function narrowProgressHistory(value: unknown): ProgressHistoryEntry[] {
   return entries;
 }
 
+export function narrowPostPrompt(value: unknown): PostPromptFacts | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const record = value as Record<string, unknown>;
+  const { slug, title, version, source } = record;
+  if (typeof slug !== 'string' || typeof title !== 'string' || typeof version !== 'number') return null;
+  if (source !== 'official' && source !== 'user') return null;
+  return { slug, title, version, source };
+}
+
 export function narrowGeneration(value: unknown): GenerationFacts {
   const fallback: GenerationFacts = {
+    prompt: null,
     faceless: false,
     language: null,
     voiceId: null,
@@ -66,6 +84,7 @@ export function narrowGeneration(value: unknown): GenerationFacts {
     typeof record[key] === 'string' ? (record[key] as string) : null;
   const paragraphNumber = record.paragraphNumber;
   return {
+    prompt: narrowPostPrompt(record.prompt),
     faceless: record.faceless === true,
     language: text('language'),
     voiceId: text('voiceId'),

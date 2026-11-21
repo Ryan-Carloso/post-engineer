@@ -15,11 +15,11 @@ vi.mock('../analytics.js', () => ({
   },
 }));
 
-const READ_ONLY_TOOLS = ['video_tasks', 'posts', 'insights', 'billing', 'prompts', 'check_script'];
+const READ_ONLY_TOOLS = ['video_tasks', 'posts', 'insights', 'billing', 'prompts', 'check_script', 'experiments'];
 
 const DESTRUCTIVE_TOOLS = ['cancel_video', 'personas', 'persona_media', 'voices', 'accounts', 'schedules', 'publish_video', 'tool_config', 'prompt_library'];
 
-const MUTATING_TOOLS = ['generate_video', 'experiments', 'media'];
+const MUTATING_TOOLS = ['generate_video', 'media'];
 
 describe('tool annotations over HTTP tools/list', () => {
   it('carries readOnly/destructive/openWorld hints for every tool', async () => {

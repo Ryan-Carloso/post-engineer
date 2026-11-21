@@ -6718,30 +6718,10 @@
                       "segments"
                     ]
                   },
-                  "experiment": {
-                    "type": "object",
-                    "additionalProperties": false,
-                    "required": [
-                      "experimentId",
-                      "variantId",
-                      "pair"
-                    ],
-                    "description": "Join a paired A/B experiment: this video is one variant of one pair. Checked before the charge.",
-                    "properties": {
-                      "experimentId": {
-                        "type": "string",
-                        "format": "uuid"
-                      },
-                      "variantId": {
-                        "type": "string",
-                        "pattern": "^[a-z0-9][a-z0-9-]{0,47}$"
-                      },
-                      "pair": {
-                        "type": "integer",
-                        "minimum": 1,
-                        "maximum": 20
-                      }
-                    }
+                  "promptVersionId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "description": "The versionId returned with the prompt (GET /api/prompts/[slug]) this script was written from. Experiments compare videos by prompt version; omit when the script was not written from a prompt."
                   },
                   "idempotencyKey": {
                     "type": "string"
@@ -7526,6 +7506,16 @@
                         },
                         "prompt": {
                           "type": "string"
+                        },
+                        "versionId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "description": "The current version of this prompt text. Pass it as promptVersionId when generating a video from this prompt."
+                        },
+                        "version": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "description": "Version number: a new one each time the prompt text changes."
                         }
                       },
                       "required": [
@@ -7534,7 +7524,9 @@
                         "description",
                         "source",
                         "visibility",
-                        "prompt"
+                        "prompt",
+                        "versionId",
+                        "version"
                       ]
                     }
                   },
@@ -7709,6 +7701,16 @@
                         },
                         "prompt": {
                           "type": "string"
+                        },
+                        "versionId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "description": "The current version of this prompt text. Pass it as promptVersionId when generating a video from this prompt."
+                        },
+                        "version": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "description": "Version number: a new one each time the prompt text changes."
                         }
                       },
                       "required": [
@@ -7717,7 +7719,9 @@
                         "description",
                         "source",
                         "visibility",
-                        "prompt"
+                        "prompt",
+                        "versionId",
+                        "version"
                       ]
                     }
                   },
@@ -7836,6 +7840,16 @@
                         },
                         "prompt": {
                           "type": "string"
+                        },
+                        "versionId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "description": "The current version of this prompt text. Pass it as promptVersionId when generating a video from this prompt."
+                        },
+                        "version": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "description": "Version number: a new one each time the prompt text changes."
                         }
                       },
                       "required": [
@@ -7844,7 +7858,9 @@
                         "description",
                         "source",
                         "visibility",
-                        "prompt"
+                        "prompt",
+                        "versionId",
+                        "version"
                       ]
                     }
                   },
@@ -8059,241 +8075,6 @@
       }
     },
     "/api/experiments": {
-      "post": {
-        "operationId": "post_experiments_create",
-        "summary": "experiments create",
-        "tags": [
-          "experiments"
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Success.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": {
-                      "type": "boolean",
-                      "enum": [
-                        true
-                      ]
-                    },
-                    "experiment": {
-                      "type": "object",
-                      "additionalProperties": true
-                    }
-                  },
-                  "required": [
-                    "success"
-                  ]
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid input.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Missing or invalid API key.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Resource not found.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Rate limited.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        },
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "name": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 120
-                  },
-                  "variable": {
-                    "type": "string",
-                    "enum": [
-                      "hook"
-                    ]
-                  },
-                  "personaId": {
-                    "type": "string",
-                    "format": "uuid",
-                    "nullable": true,
-                    "description": "Omit or null for a faceless experiment."
-                  },
-                  "targetPairs": {
-                    "type": "integer",
-                    "minimum": 3,
-                    "maximum": 20
-                  },
-                  "variants": {
-                    "type": "array",
-                    "items": {
-                      "type": "object",
-                      "properties": {
-                        "variantId": {
-                          "type": "string",
-                          "pattern": "^[a-z0-9][a-z0-9-]{0,47}$"
-                        },
-                        "name": {
-                          "type": "string",
-                          "minLength": 1,
-                          "maxLength": 80
-                        },
-                        "description": {
-                          "type": "string",
-                          "minLength": 1,
-                          "maxLength": 500
-                        }
-                      },
-                      "required": [
-                        "variantId",
-                        "name",
-                        "description"
-                      ]
-                    },
-                    "minItems": 2,
-                    "maxItems": 2
-                  }
-                },
-                "required": [
-                  "name",
-                  "variable",
-                  "targetPairs",
-                  "variants"
-                ]
-              }
-            }
-          }
-        }
-      },
-      "get": {
-        "operationId": "get_experiments_list",
-        "summary": "experiments list",
-        "tags": [
-          "experiments"
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Success.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": {
-                      "type": "boolean",
-                      "enum": [
-                        true
-                      ]
-                    },
-                    "experiments": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "additionalProperties": true
-                      }
-                    },
-                    "truncated": {
-                      "type": "boolean"
-                    }
-                  },
-                  "required": [
-                    "success"
-                  ]
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid input.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Missing or invalid API key.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Resource not found.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Rate limited.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/experiments/{id}": {
       "get": {
         "operationId": "get_experiments_results",
         "summary": "experiments results",
@@ -8319,23 +8100,118 @@
                         true
                       ]
                     },
-                    "experiment": {
-                      "type": "object",
-                      "additionalProperties": true
-                    },
                     "window": {
                       "type": "string"
                     },
-                    "videos": {
+                    "accounts": {
                       "type": "array",
                       "items": {
                         "type": "object",
-                        "additionalProperties": true
-                      }
-                    },
-                    "results": {
-                      "type": "object",
-                      "additionalProperties": true
+                        "properties": {
+                          "provider": {
+                            "type": "string"
+                          },
+                          "accountId": {
+                            "type": "string"
+                          },
+                          "videos": {
+                            "type": "integer"
+                          },
+                          "baselineViews": {
+                            "type": "number",
+                            "nullable": true
+                          },
+                          "prompts": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "versionId": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "nullable": true,
+                                  "description": "null groups the videos made without a prompt."
+                                },
+                                "slug": {
+                                  "type": "string",
+                                  "nullable": true
+                                },
+                                "title": {
+                                  "type": "string",
+                                  "nullable": true
+                                },
+                                "version": {
+                                  "type": "integer",
+                                  "nullable": true
+                                },
+                                "source": {
+                                  "type": "string",
+                                  "enum": [
+                                    "official",
+                                    "user"
+                                  ],
+                                  "nullable": true
+                                },
+                                "videos": {
+                                  "type": "integer"
+                                },
+                                "medianViews": {
+                                  "type": "number",
+                                  "nullable": true
+                                },
+                                "lift": {
+                                  "type": "number",
+                                  "nullable": true,
+                                  "description": "Median of each video views divided by the median views of the other videos of the same account."
+                                },
+                                "pValue": {
+                                  "type": "number",
+                                  "nullable": true,
+                                  "description": "Two-sided sign test of the lifts against 1."
+                                },
+                                "label": {
+                                  "type": "string",
+                                  "enum": [
+                                    "insufficient",
+                                    "no_signal",
+                                    "indicative",
+                                    "clear"
+                                  ]
+                                },
+                                "direction": {
+                                  "type": "string",
+                                  "enum": [
+                                    "above",
+                                    "below"
+                                  ],
+                                  "nullable": true
+                                }
+                              },
+                              "required": [
+                                "versionId",
+                                "slug",
+                                "title",
+                                "version",
+                                "source",
+                                "videos",
+                                "medianViews",
+                                "lift",
+                                "pValue",
+                                "label",
+                                "direction"
+                              ]
+                            }
+                          }
+                        },
+                        "required": [
+                          "provider",
+                          "accountId",
+                          "videos",
+                          "baselineViews",
+                          "prompts"
+                        ]
+                      },
+                      "description": "One entry per publishing account: prompts are compared only inside one account."
                     },
                     "truncated": {
                       "type": "boolean"
@@ -8390,14 +8266,6 @@
           }
         },
         "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
           {
             "name": "window",
             "in": "query",

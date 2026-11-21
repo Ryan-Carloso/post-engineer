@@ -12,6 +12,8 @@ import { buildScheduleDetail, type ScheduleDetailRow } from './post-detail-sched
 import { resolveScriptAngle } from './post-detail-script-angle';
 import { noticesFromOutcomes, type PublishProviderFailure, type PublishUserNotice } from './publish-user-notice';
 import { buildGenerationFacts } from './generation-facts';
+import { readPostPromptFacts } from './prompt-versions';
+import type { PostPromptFacts } from './slot-detail';
 import { isPersonaAllowed, isScopedApiKey, type PersonaScopeContext } from './api-keys';
 import { logger } from './logger';
 import { postUrlFor } from './post-url';
@@ -69,6 +71,7 @@ export interface SlotPostDetail {
   };
   persona: { id: string; name: string } | null;
   generation: {
+    prompt: PostPromptFacts | null;
     faceless: boolean;
     language: string | null;
     voiceId: string | null;
@@ -141,7 +144,7 @@ export async function getSlotPost(
 ): Promise<SlotPostDetail | null> {
   const { data: slot, error: slotError } = await supabase
     .from('scheduled_posts')
-    .select('id, schedule_id, slot_at, status, title, error, published_at, task_id, faceless, publish_outcomes, segments')
+    .select('id, schedule_id, slot_at, status, title, error, published_at, task_id, faceless, publish_outcomes, segments, prompt_version_id')
     .eq('id', slotId)
     .eq('user_id', userId)
     .single();
@@ -161,6 +164,7 @@ export async function getSlotPost(
     faceless: boolean | null;
     publish_outcomes: unknown;
     segments: unknown;
+    prompt_version_id: string | null;
   };
 
   const { data: schedule, error: scheduleError } = await supabase
@@ -290,7 +294,7 @@ export async function getSlotPost(
     },
     schedule: buildScheduleDetail(scheduleRow),
     persona: personaRow,
-    generation: buildGenerationFacts(row, scheduleRow),
+    generation: { prompt: await readPostPromptFacts(supabase, row.prompt_version_id ?? null), ...buildGenerationFacts(row, scheduleRow) },
   };
 }
 

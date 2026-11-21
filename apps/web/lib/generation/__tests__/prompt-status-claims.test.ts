@@ -139,7 +139,7 @@ describe('prompt status claims', () => {
       ['place-spotlight.md', 'https://post-engineer.com/recipes/place-spotlight'],
       ['subject-spotlight.md', 'https://post-engineer.com/recipes/subject-spotlight'],
       ['github-prs.md', 'https://post-engineer.com/recipes/github-prs'],
-      ['ab-hook-test.md', 'https://post-engineer.com/recipes/ab-hook-test'],
+      ['compare-prompts.md', 'https://post-engineer.com/recipes/compare-prompts'],
       ['story-first-reels.md', 'https://post-engineer.com/recipes/story-first-reels'],
     ];
     for (const [file, href] of docs) {
@@ -199,8 +199,8 @@ describe('prompt tool names match registered MCP tools', () => {
     const base = promptBase.SHARED_PROMPT_BASE.join('\n');
     expect(base).toContain('waitSeconds');
     expect(base).toContain('nextPollInSeconds');
-    expect(promptBase.AB_HOOK_TEST_PROMPT).toContain('waitSeconds');
-    expect(promptBase.AB_HOOK_TEST_PROMPT).not.toContain('while a video generates');
+    expect(promptBase.COMPARE_PROMPTS_PROMPT).toContain('waitSeconds');
+    expect(promptBase.COMPARE_PROMPTS_PROMPT).not.toContain('while a video generates');
     for (const { text } of servedPromptTexts()) {
       expect(text).not.toContain('until it finishes');
     }

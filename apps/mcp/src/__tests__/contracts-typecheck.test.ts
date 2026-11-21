@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { PostEngineerClient } from '../client.js';
-import { createExperiment } from '../client-experiments.js';
+import { getPromptComparison } from '../client-experiments.js';
 import { getPrompt, listPrompts } from '../client-prompts.js';
 import { getTokenBalance, listTokenTransactions } from '../client-billing.js';
 import { getPost, getPostMetrics, getYouTubeRetentionCurve } from '../client-posts.js';
@@ -12,7 +12,7 @@ import { getPersonaPublishingAccounts } from '../client-publishing-accounts.js';
 import { cancelVideoTask } from '../client-video-task.js';
 import { createClonedVoiceFromUrl, deleteClonedVoice, getClonedVoice, listClonedVoices } from '../cloned-voice-client.js';
 
-type CreateResult = Awaited<ReturnType<typeof createExperiment>>;
+type ComparisonResult = Awaited<ReturnType<typeof getPromptComparison>>;
 type ListPromptsResult = Awaited<ReturnType<typeof listPrompts>>;
 type GetPromptResult = Awaited<ReturnType<typeof getPrompt>>;
 type TokenBalanceResult = Awaited<ReturnType<typeof getTokenBalance>>;
@@ -59,15 +59,15 @@ type CompleteVideoUploadResult = Awaited<ReturnType<typeof completeVideoUpload>>
 type PublishUploadedResult = Awaited<ReturnType<typeof publishUploadedVideo>>;
 
 describe('contracts typecheck', () => {
-  it('rejects an unknown body field and an unknown response field at compile time', () => {
+  it('rejects an unknown query value and an unknown response field at compile time', () => {
     const client = { request: vi.fn(), getHeaders: () => ({}) } as unknown as PostEngineerClient;
     const run = (): void => {
-      // @ts-expect-error -- the create body field is `name`, not `nome`
-      void createExperiment(client, { nome: 'x', variable: 'hook', targetPairs: 6, variants: [] });
+      // @ts-expect-error -- the comparison window is 24h, 7d or 28d, not 30d
+      void getPromptComparison(client, '30d');
     };
-    const read = (result: CreateResult): unknown => {
-      // @ts-expect-error -- the response experiment field is `name`, not `nome`
-      return result.experiment.nome;
+    const read = (result: ComparisonResult): unknown => {
+      // @ts-expect-error -- the comparison field is `accounts`, not `experiments`
+      return result.experiments;
     };
     expect(typeof run).toBe('function');
     expect(typeof read).toBe('function');
