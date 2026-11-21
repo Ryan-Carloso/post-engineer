@@ -13,6 +13,30 @@ export function totalBoundAccounts(accounts: PersonaDefaultAccounts): number {
   return total;
 }
 
+export function samePublishingAccounts(a: PersonaDefaultAccounts, b: PersonaDefaultAccounts): boolean {
+  for (const provider of SOCIAL_PROVIDERS) {
+    const left = a[provider];
+    const right = b[provider];
+    if (left.length !== right.length) return false;
+    const rightSet = new Set(right);
+    if (left.some((id) => !rightSet.has(id))) return false;
+  }
+  return true;
+}
+
+export function prunePublishingAccounts(
+  accounts: PersonaDefaultAccounts,
+  connected: Partial<Record<SocialProvider, string[]>>,
+): PersonaDefaultAccounts {
+  const pruned = emptyPersonaDefaultAccounts();
+  for (const provider of SOCIAL_PROVIDERS) {
+    const allowed = connected[provider];
+    pruned[provider] =
+      allowed === undefined ? [...accounts[provider]] : accounts[provider].filter((id) => allowed.includes(id));
+  }
+  return pruned;
+}
+
 const AT_LEAST_ONE_BOUND_ACCOUNT_ERROR =
   'A persona must have at least one bound account.';
 
