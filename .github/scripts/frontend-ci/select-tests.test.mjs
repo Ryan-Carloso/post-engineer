@@ -46,6 +46,10 @@ describe('shouldRunAll', () => {
     assert.equal(shouldRunAll(['docs/other-guide.md']), false);
   });
 
+  it('does not run everything for a recipe doc, since no web test reads docs/recipes any more', () => {
+    assert.equal(shouldRunAll(['docs/recipes/full-setup.md']), false);
+  });
+
   it('does not force a full run for a cypress spec or a single source file', () => {
     assert.equal(shouldRunAll(['apps/web/cypress/e2e/login.cy.ts']), false);
     assert.equal(shouldRunAll(['apps/web/lib/timezone.ts']), false);

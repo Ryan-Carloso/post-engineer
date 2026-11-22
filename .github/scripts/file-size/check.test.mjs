@@ -154,6 +154,14 @@ describe('file-size ratchet (multiple violations)', () => {
   });
 });
 
+describe('file-size ratchet (no prompt-data exemption)', () => {
+  it('fails for a new file above the cap under the former shared/prompt-base/ exemption', () => {
+    const { stdout, exitCode } = runCheck([A('shared/prompt-base/prompt-base.ts', 501)]);
+    assert.equal(exitCode, 1);
+    assert.match(stdout, /::error file=shared\/prompt-base\/prompt-base\.ts::/);
+  });
+});
+
 describe('file-size ratchet (vendored CalendarCN)', () => {
   it('passes for a vendored file above the cap', () => {
     const { exitCode, stdout } = runCheck([A('apps/web/components/calendar-provider.tsx', 3141)]);
