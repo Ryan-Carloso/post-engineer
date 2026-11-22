@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   MAX_IMAGES_MODE_MEDIAS,
   MAX_MEDIAS,
+  MAX_PHOTO_SECONDS,
   MAX_REQUESTED_PHOTO_SECONDS,
   MIN_REQUESTED_PHOTO_SECONDS,
   MIN_WORDS_PER_IMAGE,
@@ -27,7 +28,7 @@ function clips(count: number, prefix: string): Array<{ url: string }> {
 function withMedia(): Array<Record<string, unknown>> {
   return [
     { kind: 'hook', text: hook, media: photos(4, 'h') },
-    { kind: 'content', text: content, media: photos(6, 'b') },
+    { kind: 'content', text: content, media: photos(8, 'b') },
     { kind: 'content', text: cta, media: photos(2, 'c') },
   ];
 }
@@ -48,15 +49,16 @@ function manyMedia(count: number): Array<Record<string, unknown>> {
 }
 
 describe('validateSegments with the images material', () => {
-  it('names the rhythm: one image per 8 words, at most 30', () => {
+  it('names the rhythm: one image per 2s of speech, at most 30', () => {
     expect(WORDS_PER_IMAGE).toBe(8);
     expect(MIN_WORDS_PER_IMAGE).toBe(3);
+    expect(MAX_PHOTO_SECONDS).toBe(2);
     expect(MAX_IMAGES_MODE_MEDIAS).toBe(30);
   });
 
   it('accepts enough photos on every segment', () => {
     const result = validateSegments(withMedia());
-    expect(result.ok && result.value.mediaCount).toBe(12);
+    expect(result.ok && result.value.mediaCount).toBe(14);
   });
 
   it('rejects a 32-word segment that has only one photo and says how many are missing', () => {
@@ -67,9 +69,45 @@ describe('validateSegments with the images material', () => {
     if (!result.ok) {
       expect(result.error.field).toBe('segments.1.media');
       expect(result.error.rule).toBe(
-        'segment has 32 words (~12s) and needs at least 4 images (one per ~3s); it has 1.',
+        'segment has 32 words (~12s) and needs at least 6 images (one per 2s); it has 1.',
       );
-      expect(result.error.fix).toBe("Add 3 more images to this segment's media array.");
+      expect(result.error.fix).toBe("Add 5 more images to this segment's media array.");
+    }
+  });
+
+  it('rejects a script that passes the word count but cannot cover the audio at the 2s pace', () => {
+    const segments = [
+      { kind: 'hook', text: `${Array(25).fill('hook').join(' ')}.`, media: photos(4, 'h') },
+      { kind: 'content', text: Array(60).fill('body').join(' '), media: photos(8, 'b') },
+      { kind: 'content', text: Array(49).fill('final').join(' '), media: photos(8, 'f') },
+    ];
+    const result = validateSegments(segments);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.field).toBe('segments.1.media');
+      expect(result.error.rule).toBe(
+        'segment has 60 words (~23s) and needs at least 12 images (one per 2s); it has 8.',
+      );
+      expect(result.error.fix).toBe("Add 4 more images to this segment's media array.");
+    }
+  });
+
+  it('hook photos do not count toward the minimum in hook-only videos', () => {
+    const segments = [
+      { kind: 'hook', text: `${Array(25).fill('hook').join(' ')}.`, media: photos(1, 'h') },
+      { kind: 'content', text: Array(32).fill('body').join(' '), media: photos(6, 'b') },
+      { kind: 'content', text: Array(8).fill('cta').join(' '), media: photos(2, 'c') },
+    ];
+    const passed = validateSegments(segments);
+    expect(passed.ok && passed.value.mediaCount).toBe(9);
+    const faceless = validateSegments(segments, 'faceless');
+    expect(faceless.ok).toBe(false);
+    if (!faceless.ok) {
+      expect(faceless.error.field).toBe('segments.0.media');
+      expect(faceless.error.rule).toBe(
+        'segment has 25 words (~9s) and needs at least 5 images (one per 2s); it has 1.',
+      );
+      expect(faceless.error.fix).toBe("Add 4 more images to this segment's media array.");
     }
   });
 
@@ -96,11 +134,11 @@ describe('validateSegments with the images material', () => {
     expect(result.ok).toBe(true);
   });
 
-  it('accepts four photos on that 32-word segment and rejects eleven', () => {
+  it('accepts six photos on that 32-word segment and rejects eleven', () => {
     const enough = withMedia();
-    enough[1] = { kind: 'content', text: Array(32).fill('word').join(' '), media: photos(4, 'ok') };
+    enough[1] = { kind: 'content', text: Array(32).fill('word').join(' '), media: photos(6, 'ok') };
     const passed = validateSegments(enough);
-    expect(passed.ok && passed.value.mediaCount).toBe(10);
+    expect(passed.ok && passed.value.mediaCount).toBe(12);
     const tooMany = withMedia();
     tooMany[1] = { kind: 'content', text: Array(32).fill('word').join(' '), media: photos(11, 'many') };
     const failed = validateSegments(tooMany);
@@ -117,7 +155,7 @@ describe('validateSegments with the images material', () => {
     const result = validateSegments(
       [
         { kind: 'hook', text: `${Array(40).fill('hook').join(' ')}.`, media: photos(13, 'h') },
-        { kind: 'content', text: `${Array(140).fill('body').join(' ')}.`, media: photos(18, 'b') },
+        { kind: 'content', text: `${Array(140).fill('body').join(' ')}.`, media: photos(27, 'b') },
         { kind: 'content', text: `${Array(20).fill('save').join(' ')}.`, media: photos(6, 'c') },
       ],
     );
@@ -131,9 +169,9 @@ describe('validateSegments with the images material', () => {
       ...Array.from({ length: 6 }, (_, i) => ({
         kind: 'content',
         text: Array(25).fill(`body${i}`).join(' '),
-        media: photos(4, `b${i}-`),
+        media: photos(5, `b${i}-`),
       })),
-      { kind: 'content', text: Array(20).fill('cta').join(' '), media: photos(3, 'c') },
+      { kind: 'content', text: Array(20).fill('cta').join(' '), media: photos(4, 'c') },
     ];
     const result = validateSegments(segments);
     expect(result.ok).toBe(false);
@@ -213,14 +251,14 @@ describe('validateSegments with the images material', () => {
       { kind: 'content', text: content, media: clips(2, 'b') },
       { kind: 'content', text: 'Save this video now please.', media: photos(1, 'c') },
     ];
-    const result = validateSegments(segments);
+    const result = validateSegments(segments, 'faceless');
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.field).toBe('segments.0.media');
       expect(result.error.rule).toBe(
-        'segment has 40 words (~15s) and needs at least 5 images (one per ~3s); it has 1.',
+        'segment has 40 words (~15s) and needs at least 8 images (one per 2s); it has 1.',
       );
-      expect(result.error.fix).toBe("Add 1 more image to this segment's media array.");
+      expect(result.error.fix).toBe("Add 2 more images to this segment's media array.");
     }
   });
 

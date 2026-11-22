@@ -26,7 +26,7 @@ def _photos(count, prefix):
 
 
 def _params():
-    counts = (4, 5, 1)
+    counts = (5, 7, 2)
     segments = []
     for index, segment in enumerate(SEGMENTS):
         copied = dict(segment)

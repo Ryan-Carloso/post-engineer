@@ -7,6 +7,7 @@ export const MAX_SEGMENTS = 12;
 export const MAX_MEDIAS = 6;
 export const WORDS_PER_IMAGE = 8;
 export const MIN_WORDS_PER_IMAGE = 3;
+export const MAX_PHOTO_SECONDS = 2;
 export const MAX_IMAGES_MODE_MEDIAS = 30;
 export const MIN_TOTAL_WORDS = 60;
 export const MAX_TOTAL_WORDS = 200;
@@ -79,18 +80,19 @@ function spokenSeconds(words: number): number {
 function imageDensityError(
   words: number,
   count: number,
-  minCount?: number,
+  effectiveCount?: number,
+  coversAudio = true,
 ): { rule: string; fix: string } | null {
-  const low = Math.ceil(words / WORDS_PER_IMAGE);
+  const low = coversAudio ? Math.ceil(spokenSeconds(words) / MAX_PHOTO_SECONDS) : 0;
   const high = Math.max(1, Math.floor(words / MIN_WORDS_PER_IMAGE));
   const seconds = spokenSeconds(words);
-  const effective = minCount ?? count;
+  const effective = effectiveCount ?? count;
   if (effective < low) {
     const missing = low - effective;
     const images = low === 1 ? 'image' : 'images';
     const more = missing === 1 ? 'image' : 'images';
     return {
-      rule: `segment has ${words} words (~${seconds}s) and needs at least ${low} ${images} (one per ~3s); it has ${count}.`,
+      rule: `segment has ${words} words (~${seconds}s) and needs at least ${low} ${images} (one per 2s); it has ${count}.`,
       fix: `Add ${missing} more ${more} to this segment's media array.`,
     };
   }
@@ -351,7 +353,12 @@ export function validateSegments(input: unknown, videoType: VideoType = 'hook_li
       if (repeat !== null) return repeat;
     }
     if (imagesMode) {
-      const density = imageDensityError(countWords(segments[i].text), media.length, clipDensityMinCount(media));
+      const density = imageDensityError(
+        countWords(segments[i].text),
+        media.length,
+        clipDensityMinCount(media),
+        segments[i].kind !== 'hook' || videoType !== 'hook_lipsync',
+      );
       if (density !== null) return fail(`segments.${i}.media`, density.rule, density.fix);
       if (!hasSpokenWords(segments[i].text)) {
         return fail(

@@ -108,7 +108,7 @@ class BatchScheduleTests(unittest.TestCase):
                 {
                     "kind": "hook",
                     "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is still waiting nearby for you today.",
-                    "media": [{"url": "https://example.com/h0.jpg"}, {"url": "https://example.com/h1.jpg"}, {"url": "https://example.com/h2.jpg"}, {"url": "https://example.com/h3.jpg"}],
+                    "media": [{"url": "https://example.com/h0.jpg"}, {"url": "https://example.com/h1.jpg"}, {"url": "https://example.com/h2.jpg"}, {"url": "https://example.com/h3.jpg"}, {"url": "https://example.com/h4.jpg"}],
                 },
                 {
                     "kind": "content",
@@ -119,7 +119,7 @@ class BatchScheduleTests(unittest.TestCase):
                         {"url": "https://example.com/b2.jpg"},
                         {"url": "https://example.com/b3.jpg"},
                         {"url": "https://example.com/b4.jpg"},
-                        {"url": "https://example.com/b5.jpg"},
+                        {"url": "https://example.com/b5.jpg"}, {"url": "https://example.com/b6.jpg"}, {"url": "https://example.com/b7.jpg"},
                     ],
                 },
                 {
@@ -366,7 +366,7 @@ class BatchScheduleTests(unittest.TestCase):
             {
                 "kind": "hook",
                 "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is still waiting nearby for you today.",
-                "media": [{"url": "https://example.com/h0.jpg"}, {"url": "https://example.com/h1.jpg"}, {"url": "https://example.com/h2.jpg"}, {"url": "https://example.com/h3.jpg"}],
+                "media": [{"url": "https://example.com/h0.jpg"}, {"url": "https://example.com/h1.jpg"}, {"url": "https://example.com/h2.jpg"}, {"url": "https://example.com/h3.jpg"}, {"url": "https://example.com/h4.jpg"}],
             },
             {
                 "kind": "content",
@@ -377,7 +377,7 @@ class BatchScheduleTests(unittest.TestCase):
                     {"url": "https://example.com/b2.jpg"},
                     {"url": "https://example.com/b3.jpg"},
                     {"url": "https://example.com/b4.jpg"},
-                    {"url": "https://example.com/b5.jpg"},
+                    {"url": "https://example.com/b5.jpg"}, {"url": "https://example.com/b6.jpg"}, {"url": "https://example.com/b7.jpg"},
                 ],
             },
             {
@@ -1851,7 +1851,7 @@ class NotifyIntegrationTests(unittest.TestCase):
                 {
                     "kind": "hook",
                     "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is still waiting nearby for you today.",
-                    "media": [{"url": "https://example.com/h0.jpg"}, {"url": "https://example.com/h1.jpg"}, {"url": "https://example.com/h2.jpg"}, {"url": "https://example.com/h3.jpg"}],
+                    "media": [{"url": "https://example.com/h0.jpg"}, {"url": "https://example.com/h1.jpg"}, {"url": "https://example.com/h2.jpg"}, {"url": "https://example.com/h3.jpg"}, {"url": "https://example.com/h4.jpg"}],
                 },
                 {
                     "kind": "content",
@@ -1862,7 +1862,7 @@ class NotifyIntegrationTests(unittest.TestCase):
                         {"url": "https://example.com/b2.jpg"},
                         {"url": "https://example.com/b3.jpg"},
                         {"url": "https://example.com/b4.jpg"},
-                        {"url": "https://example.com/b5.jpg"},
+                        {"url": "https://example.com/b5.jpg"}, {"url": "https://example.com/b6.jpg"}, {"url": "https://example.com/b7.jpg"},
                     ],
                 },
                 {
@@ -1912,7 +1912,7 @@ class NotifyIntegrationTests(unittest.TestCase):
                 {
                     "kind": "hook",
                     "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is still waiting nearby for you today.",
-                    "media": [{"url": "https://example.com/h0.jpg"}, {"url": "https://example.com/h1.jpg"}, {"url": "https://example.com/h2.jpg"}, {"url": "https://example.com/h3.jpg"}],
+                    "media": [{"url": "https://example.com/h0.jpg"}, {"url": "https://example.com/h1.jpg"}, {"url": "https://example.com/h2.jpg"}, {"url": "https://example.com/h3.jpg"}, {"url": "https://example.com/h4.jpg"}],
                 },
                 {
                     "kind": "content",
@@ -1923,7 +1923,7 @@ class NotifyIntegrationTests(unittest.TestCase):
                         {"url": "https://example.com/b2.jpg"},
                         {"url": "https://example.com/b3.jpg"},
                         {"url": "https://example.com/b4.jpg"},
-                        {"url": "https://example.com/b5.jpg"},
+                        {"url": "https://example.com/b5.jpg"}, {"url": "https://example.com/b6.jpg"}, {"url": "https://example.com/b7.jpg"},
                     ],
                 },
                 {
@@ -1971,7 +1971,7 @@ class NotifyIntegrationTests(unittest.TestCase):
                 {
                     "kind": "hook",
                     "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is still waiting nearby for you today.",
-                    "media": [{"url": "https://example.com/h0.jpg"}, {"url": "https://example.com/h1.jpg"}, {"url": "https://example.com/h2.jpg"}, {"url": "https://example.com/h3.jpg"}],
+                    "media": [{"url": "https://example.com/h0.jpg"}, {"url": "https://example.com/h1.jpg"}, {"url": "https://example.com/h2.jpg"}, {"url": "https://example.com/h3.jpg"}, {"url": "https://example.com/h4.jpg"}],
                 },
                 {
                     "kind": "content",
@@ -1982,7 +1982,7 @@ class NotifyIntegrationTests(unittest.TestCase):
                         {"url": "https://example.com/b2.jpg"},
                         {"url": "https://example.com/b3.jpg"},
                         {"url": "https://example.com/b4.jpg"},
-                        {"url": "https://example.com/b5.jpg"},
+                        {"url": "https://example.com/b5.jpg"}, {"url": "https://example.com/b6.jpg"}, {"url": "https://example.com/b7.jpg"},
                     ],
                 },
                 {
@@ -2106,7 +2106,7 @@ class NotifyIntegrationTests(unittest.TestCase):
                 {
                     "kind": "hook",
                     "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is still waiting nearby for you today.",
-                    "media": [{"url": "https://example.com/h0.jpg"}, {"url": "https://example.com/h1.jpg"}, {"url": "https://example.com/h2.jpg"}, {"url": "https://example.com/h3.jpg"}],
+                    "media": [{"url": "https://example.com/h0.jpg"}, {"url": "https://example.com/h1.jpg"}, {"url": "https://example.com/h2.jpg"}, {"url": "https://example.com/h3.jpg"}, {"url": "https://example.com/h4.jpg"}],
                 },
                 {
                     "kind": "content",
@@ -2117,7 +2117,7 @@ class NotifyIntegrationTests(unittest.TestCase):
                         {"url": "https://example.com/b2.jpg"},
                         {"url": "https://example.com/b3.jpg"},
                         {"url": "https://example.com/b4.jpg"},
-                        {"url": "https://example.com/b5.jpg"},
+                        {"url": "https://example.com/b5.jpg"}, {"url": "https://example.com/b6.jpg"}, {"url": "https://example.com/b7.jpg"},
                     ],
                 },
                 {
@@ -2719,7 +2719,7 @@ class CoverageGapTests(unittest.TestCase):
                 {
                     "kind": "hook",
                     "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is still waiting nearby for you today.",
-                    "media": [{"url": "https://example.com/h0.jpg"}, {"url": "https://example.com/h1.jpg"}, {"url": "https://example.com/h2.jpg"}, {"url": "https://example.com/h3.jpg"}],
+                    "media": [{"url": "https://example.com/h0.jpg"}, {"url": "https://example.com/h1.jpg"}, {"url": "https://example.com/h2.jpg"}, {"url": "https://example.com/h3.jpg"}, {"url": "https://example.com/h4.jpg"}],
                 },
                 {
                     "kind": "content",
@@ -2730,7 +2730,7 @@ class CoverageGapTests(unittest.TestCase):
                         {"url": "https://example.com/b2.jpg"},
                         {"url": "https://example.com/b3.jpg"},
                         {"url": "https://example.com/b4.jpg"},
-                        {"url": "https://example.com/b5.jpg"},
+                        {"url": "https://example.com/b5.jpg"}, {"url": "https://example.com/b6.jpg"}, {"url": "https://example.com/b7.jpg"},
                     ],
                 },
                 {
@@ -2869,7 +2869,7 @@ class BatchDispatchTests(unittest.TestCase):
                 {
                     "kind": "hook",
                     "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is still waiting nearby for you today.",
-                    "media": [{"url": "https://example.com/h0.jpg"}, {"url": "https://example.com/h1.jpg"}, {"url": "https://example.com/h2.jpg"}, {"url": "https://example.com/h3.jpg"}],
+                    "media": [{"url": "https://example.com/h0.jpg"}, {"url": "https://example.com/h1.jpg"}, {"url": "https://example.com/h2.jpg"}, {"url": "https://example.com/h3.jpg"}, {"url": "https://example.com/h4.jpg"}],
                 },
                 {
                     "kind": "content",
@@ -2880,7 +2880,7 @@ class BatchDispatchTests(unittest.TestCase):
                         {"url": "https://example.com/b2.jpg"},
                         {"url": "https://example.com/b3.jpg"},
                         {"url": "https://example.com/b4.jpg"},
-                        {"url": "https://example.com/b5.jpg"},
+                        {"url": "https://example.com/b5.jpg"}, {"url": "https://example.com/b6.jpg"}, {"url": "https://example.com/b7.jpg"},
                     ],
                 },
                 {

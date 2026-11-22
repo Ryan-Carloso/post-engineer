@@ -20,17 +20,17 @@ SEGMENTS = [
     {
         "kind": "hook",
         "text": "Porto is the city that wins you over slowly, one riverside morning and one golden sunset at a time, in the soft golden evening light.",
-        "media": [{"url": f"https://e.com/0-{i}.jpg"} for i in range(4)],
+        "media": [{"url": f"https://e.com/0-{i}.jpg"} for i in range(5)],
     },
     {
         "kind": "content",
         "text": "Walk the Ribeira in the morning light, cross the Dom Luis bridge, taste francesinha where the locals eat, and finish with port wine as the river turns gold at sunset before heading home through the old town streets.",
-        "media": [{"url": f"https://e.com/1-{i}.jpg"} for i in range(5)],
+        "media": [{"url": f"https://e.com/1-{i}.jpg"} for i in range(7)],
     },
     {
         "kind": "content",
         "text": "Follow for more Porto walks every week.",
-        "media": [{"url": "https://e.com/2-0.jpg"}],
+        "media": [{"url": "https://e.com/2-0.jpg"}, {"url": "https://e.com/2-1.jpg"}],
     },
 ]
 

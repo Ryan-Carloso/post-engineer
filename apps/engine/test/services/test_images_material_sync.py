@@ -26,7 +26,7 @@ def _export_line(name: str) -> str:
 def test_image_density_constants_match_the_shared_validator():
     from app.services import image_density
 
-    for name in ("WORDS_PER_IMAGE", "MIN_WORDS_PER_IMAGE", "MAX_IMAGES_MODE_MEDIAS"):
+    for name in ("WORDS_PER_IMAGE", "MIN_WORDS_PER_IMAGE", "MAX_IMAGES_MODE_MEDIAS", "MAX_PHOTO_SECONDS"):
         assert _export_line(name) == f"export const {name} = {getattr(image_density, name)};"
     assert script_segments.MAX_IMAGES_MODE_MEDIAS == image_density.MAX_IMAGES_MODE_MEDIAS
     assert _export_line("MAX_SEGMENTS") == f"export const MAX_SEGMENTS = {script_segments.MAX_SEGMENTS};"

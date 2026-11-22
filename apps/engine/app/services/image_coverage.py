@@ -56,13 +56,13 @@ from dataclasses import replace
 from typing import Optional, Sequence
 
 from app.services import segment_panels, segment_video
+from app.services.image_density import MAX_PHOTO_SECONDS
 from app.services.segment_panels import Panel
 from app.services.segment_photo_duration import photo_cap
 
 IMAGES_DO_NOT_COVER_AUDIO = "images_do_not_cover_audio"
 MOTION_IN = "in"
 MOTION_OUT = "out"
-MAX_PHOTO_SECONDS = 2.0
 _COVERAGE_EPSILON_SECONDS = 0.01
 _SKIP_MARKER = " media skipped: "
 

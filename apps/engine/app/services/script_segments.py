@@ -377,7 +377,12 @@ def validate_segments(segments: Any, video_type: str = "hook_lipsync") -> dict[s
             )
         if images_mode and counted > 0:
             min_count = segment_video.clip_density_min_count(segment["media"], counted)
-            problem = density_error(_word_count(texts[index]), counted, min_count=min_count)
+            problem = density_error(
+                _word_count(texts[index]),
+                counted,
+                min_count=min_count,
+                covers_audio=not (segment["kind"] == "hook" and video_type == "hook_lipsync"),
+            )
             if problem is not None:
                 rule, fix = problem
                 raise SegmentValidationError(f"segments.{index}.media", rule, fix)

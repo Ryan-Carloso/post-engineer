@@ -20,14 +20,14 @@ def _photos(count: int, name: str) -> list[dict[str, str]]:
     return [{"url": f"https://example.com/{name}{i}.jpg"} for i in range(count)]
 
 
-def test_thirty_two_words_need_four_photos_and_refuse_one():
+def test_thirty_two_words_need_six_photos_and_refuse_one():
     rule, fix = density_error(32, 1)
-    assert rule == "segment has 32 words (~12s) and needs at least 4 images (one per ~3s); it has 1."
-    assert fix == "Add 3 more images to this segment's media array."
+    assert rule == "segment has 32 words (~12s) and needs at least 6 images (one per 2s); it has 1."
+    assert fix == "Add 5 more images to this segment's media array."
 
 
-def test_thirty_two_words_accept_four_photos_and_refuse_eleven():
-    assert density_error(32, 4) is None
+def test_thirty_two_words_accept_six_photos_and_refuse_eleven():
+    assert density_error(32, 6) is None
     assert density_error(32, 10) is None
     rule, fix = density_error(32, 11)
     assert rule == "segment has 32 words (~12s) and allows at most 10 images (each image needs ~1s); it has 11."
@@ -55,17 +55,17 @@ def test_validate_segments_reports_the_same_density_counts():
     segments = [
         {"kind": "hook", "text": _words(25, "hook"), "media": _photos(4, "h")},
         {"kind": "content", "text": _words(32, "body"), "media": _photos(1, "b")},
-        {"kind": "content", "text": _words(8, "cta"), "media": _photos(1, "c")},
+        {"kind": "content", "text": _words(8, "cta"), "media": _photos(2, "c")},
     ]
     with pytest.raises(SegmentValidationError) as exc_info:
         validate_segments(segments)
     assert exc_info.value.field == "segments.1.media"
     assert exc_info.value.rule == (
-        "segment has 32 words (~12s) and needs at least 4 images (one per ~3s); it has 1."
+        "segment has 32 words (~12s) and needs at least 6 images (one per 2s); it has 1."
     )
-    assert exc_info.value.fix == "Add 3 more images to this segment's media array."
-    segments[1]["media"] = _photos(4, "b")
-    assert validate_segments(segments)["media_count"] == 9
+    assert exc_info.value.fix == "Add 5 more images to this segment's media array."
+    segments[1]["media"] = _photos(6, "b")
+    assert validate_segments(segments)["media_count"] == 12
     segments[1]["media"] = _photos(11, "b")
     with pytest.raises(SegmentValidationError) as exc_info:
         validate_segments(segments)
@@ -75,7 +75,7 @@ def test_validate_segments_reports_the_same_density_counts():
 def test_validate_segments_rejects_more_than_thirty_photos_and_seven_on_full_lipsync():
     segments = [
         {"kind": "hook", "text": _words(40, "hook"), "media": _photos(13, "h")},
-        {"kind": "content", "text": _words(140, "body"), "media": _photos(18, "b")},
+        {"kind": "content", "text": _words(140, "body"), "media": _photos(27, "b")},
         {"kind": "content", "text": _words(20, "cta"), "media": _photos(6, "c")},
     ]
     with pytest.raises(SegmentValidationError) as exc_info:
@@ -107,3 +107,49 @@ def test_constants_are_the_shared_rhythm():
     assert image_density.WORDS_PER_IMAGE == 8
     assert image_density.MIN_WORDS_PER_IMAGE == 3
     assert image_density.MAX_IMAGES_MODE_MEDIAS == 30
+    assert image_density.MAX_PHOTO_SECONDS == 2
+
+
+def test_min_images_uses_the_render_pace_of_two_seconds_per_photo():
+    assert image_density.min_images(32) == 6
+    assert image_density.min_images(24) == 5
+    assert image_density.min_images(8) == 2
+    assert image_density.min_images(3) == 1
+
+
+def test_density_error_ignores_the_minimum_for_photos_that_never_cover_audio():
+    assert density_error(25, 1, covers_audio=False) is None
+    rule, fix = density_error(25, 1)
+    assert rule == "segment has 25 words (~9s) and needs at least 5 images (one per 2s); it has 1."
+    assert fix == "Add 4 more images to this segment's media array."
+
+
+def test_a_script_that_passes_the_word_count_but_cannot_cover_the_audio_fails_validation():
+    segments = [
+        {"kind": "hook", "text": _words(25, "hook"), "media": _photos(4, "h")},
+        {"kind": "content", "text": _words(60, "body"), "media": _photos(8, "b")},
+        {"kind": "content", "text": _words(49, "final"), "media": _photos(8, "f")},
+    ]
+    with pytest.raises(SegmentValidationError) as exc_info:
+        validate_segments(segments)
+    assert exc_info.value.field == "segments.1.media"
+    assert exc_info.value.rule == (
+        "segment has 60 words (~23s) and needs at least 12 images (one per 2s); it has 8."
+    )
+    assert exc_info.value.fix == "Add 4 more images to this segment's media array."
+
+
+def test_hook_photos_do_not_count_toward_the_minimum_in_hook_only_videos():
+    segments = [
+        {"kind": "hook", "text": _words(25, "hook"), "media": _photos(1, "h")},
+        {"kind": "content", "text": _words(32, "body"), "media": _photos(6, "b")},
+        {"kind": "content", "text": _words(8, "cta"), "media": _photos(2, "c")},
+    ]
+    assert validate_segments(segments)["media_count"] == 9
+    with pytest.raises(SegmentValidationError) as exc_info:
+        validate_segments(segments, video_type="faceless")
+    assert exc_info.value.field == "segments.0.media"
+    assert exc_info.value.rule == (
+        "segment has 25 words (~9s) and needs at least 5 images (one per 2s); it has 1."
+    )
+    assert exc_info.value.fix == "Add 4 more images to this segment's media array."
