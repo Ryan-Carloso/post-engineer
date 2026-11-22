@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ReactElement } from 'react';
 import { SharedMetricsView, SharedRateLimited } from '@/components/ui/shared-metrics-view';
 import { I18nProvider } from '@/lib/i18n/provider';
@@ -108,6 +108,19 @@ describe('SharedMetricsView', () => {
     const first = (await screen.findAllByTestId('shared-post-row'))[0];
     expect(within(first).getByText('YouTube', { selector: '.sr-only' })).toBeInTheDocument();
     expect(within(first).getByText('Instagram', { selector: '.sr-only' })).toBeInTheDocument();
+  });
+});
+
+describe('SharedMetricsView week range', () => {
+  afterEach(() => {
+    window.localStorage.clear();
+    vi.unstubAllEnvs();
+  });
+
+  it('shows the UTC week Monday to Sunday even for a viewer west of UTC', async () => {
+    vi.stubEnv('TZ', 'America/Sao_Paulo');
+    renderView(<SharedMetricsView view={viewWith()} />, 'en');
+    expect(await screen.findByText('Nov 16, 2026 to Nov 22, 2026')).toBeInTheDocument();
   });
 });
 

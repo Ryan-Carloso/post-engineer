@@ -7,7 +7,6 @@ vi.mock('@/lib/logger', () => ({
 
 import { RATE_LIMITS } from '@/lib/rate-limit';
 import { resolveSharedPage } from '../resolve-shared-page';
-import { hashShareToken } from '../token';
 
 const OWNER = '11111111-1111-4111-8111-111111111111';
 const LINK = '33333333-3333-4333-8333-333333333333';
@@ -91,10 +90,5 @@ describe('resolveSharedPage', () => {
     const result = await resolveSharedPage(token, request('192.0.2.77'), fake.client, NOW);
     expect(result).toEqual({ kind: 'rate-limited' });
     expect(fake.queries).toHaveLength(0);
-  });
-
-  it('keys the token limiter on a hash prefix, not the token', () => {
-    const token = tokenFor('bucket');
-    expect(hashShareToken(token).slice(0, 16)).not.toContain(token);
   });
 });

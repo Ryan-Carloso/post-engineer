@@ -146,7 +146,6 @@ describe('ShareLinksSection', () => {
   });
 
   it('shows a localized generic message when the network fails', async () => {
-    installFetch({});
     vi.stubGlobal('fetch', vi.fn(async (_url: string, init?: RequestInit) => {
       if ((init?.method ?? 'GET') === 'GET') return new Response(JSON.stringify({ success: true, links: [] }));
       throw new TypeError('Failed to fetch');
@@ -227,7 +226,6 @@ describe('ShareLinksSection', () => {
   });
 
   it('disables the create button and the persona select while a link is being created', async () => {
-    installFetch({ list: [] });
     vi.stubGlobal('fetch', vi.fn((_url: string, init?: RequestInit) =>
       (init?.method ?? 'GET') === 'GET'
         ? Promise.resolve(new Response(JSON.stringify({ success: true, links: [] })))

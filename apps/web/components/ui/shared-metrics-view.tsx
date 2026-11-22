@@ -80,7 +80,8 @@ export function SharedMetricsView({ view }: { view: ShareView }): ReactNode {
   const { t, locale } = useI18n();
   const intlLocale = locale === 'pt' ? 'pt-BR' : 'en-US';
   const formatNumber = (value: number): string => value.toLocaleString(intlLocale);
-  const formatDate = (iso: string): string => new Date(iso).toLocaleDateString(intlLocale, { dateStyle: 'medium' });
+  const formatDate = (iso: string): string =>
+    new Date(iso).toLocaleDateString(intlLocale, { dateStyle: 'medium', timeZone: 'UTC' });
   const formatDateTime = (iso: string): string =>
     new Date(iso).toLocaleString(intlLocale, { dateStyle: 'medium', timeStyle: 'short' });
   const lastWeekday = new Date(Date.parse(view.weekEnd) - DAY_MS).toISOString();

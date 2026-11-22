@@ -51,6 +51,9 @@ async function loadMetrics(
   supabase: SupabaseClient,
   scope: ShareScope,
 ): Promise<Pick<ShareView, 'summary' | 'byProvider' | 'asOf' | 'metricsTruncated'>> {
+  if (scope.personaIds !== null && scope.personaIds.length === 0) {
+    return { summary: { measurements: 0, views: 0, engagement: 0 }, byProvider: [], asOf: null, metricsTruncated: false };
+  }
   let query = supabase
     .from('post_metrics')
     .select('provider, views, likes, comments, saves, collected_at')

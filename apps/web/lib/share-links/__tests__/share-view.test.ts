@@ -104,10 +104,12 @@ describe('loadShareView', () => {
     expect(fake.rpcCalls[0].args.p_persona_ids).toEqual([PERSONA_A]);
   });
 
-  it('passes an empty persona scope through instead of widening it', async () => {
-    const fake = supabaseWith([], []);
-    await loadShareView(fake.client, { userId: USER, personaIds: [] }, NOW);
-    expect(fake.queries[0].calls).toContainEqual(['in', 'persona_id', []]);
+  it('reads no metrics at all for an empty persona scope and passes the empty scope to the posts function', async () => {
+    const fake = supabaseWith([metricRow()], []);
+    const view = await loadShareView(fake.client, { userId: USER, personaIds: [] }, NOW);
+    expect(fake.queries).toHaveLength(0);
+    expect(view.summary).toEqual({ measurements: 0, views: 0, engagement: 0 });
+    expect(view.byProvider).toEqual([]);
     expect(fake.rpcCalls[0].args.p_persona_ids).toEqual([]);
   });
 
