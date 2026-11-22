@@ -30,7 +30,7 @@ export const ScriptSegmentShape = {
     .array(z.object({ mediaId: z.string().min(1).optional(), url: z.string().min(1).optional(), duration: z.number().min(MIN_REQUESTED_PHOTO_SECONDS).max(MAX_REQUESTED_PHOTO_SECONDS).optional(), overlay: SegmentOverlayShape.optional() }).strict())
     .max(MAX_IMAGES_MODE_MEDIAS)
     .optional()
-    .describe('Photos for this segment. Each item is mediaId (from media (action: upload)) or url (a public image URL). One image per ~3s of speech (~8 words); a 60s video needs ~20 images, split across segments (max 30). Full lip sync: max 6 images total. Optional duration (0.5-6s): on-screen seconds for a full-frame photo; omit for the 2s default. Optional overlay: an info card (title, subtitle, badge), e.g. a place name, address and price; a spoken caption sits above it, never on the photo.'),
+    .describe('Photos for this segment. Each item is mediaId (from media (action: upload)) or url (a public image URL). One image per ~2s of speech (~5-6 words); a 60s video needs ~30 images, split across segments (max 30). Full lip sync: max 6 images total. Optional duration (0.5-6s): on-screen seconds for a full-frame photo; omit for the 2s default. Optional overlay: an info card (title, subtitle, badge), e.g. a place name, address and price; a spoken caption sits above it, never on the photo.'),
 };
 
 export const GeneratePersonaVideoShape = {

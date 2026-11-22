@@ -77,20 +77,43 @@ function spokenSeconds(words: number): number {
   return Math.floor((words * 3 + Math.floor(WORDS_PER_IMAGE / 2)) / WORDS_PER_IMAGE);
 }
 
+function photoCap(requested: unknown, fallback: number): number {
+  if (typeof requested !== 'number' || !Number.isFinite(requested)) return fallback;
+  return Math.min(Math.max(requested, MIN_REQUESTED_PHOTO_SECONDS), MAX_REQUESTED_PHOTO_SECONDS);
+}
+
+function coveredSlots(media: readonly unknown[]): number {
+  let slots = clipDensityMinCount(media);
+  for (const item of media) {
+    if (typeof item === 'object' && item !== null && !Array.isArray(item) && !isVideoRef(item)) {
+      const duration = (item as Record<string, unknown>)['duration'];
+      slots += photoCap(duration, MAX_PHOTO_SECONDS) / MAX_PHOTO_SECONDS - 1;
+    }
+  }
+  return slots;
+}
+
 function imageDensityError(
   words: number,
   count: number,
   effectiveCount?: number,
   coversAudio = true,
 ): { rule: string; fix: string } | null {
-  const low = coversAudio ? Math.ceil(spokenSeconds(words) / MAX_PHOTO_SECONDS) : 0;
+  const low = coversAudio ? Math.ceil((words * 3) / (WORDS_PER_IMAGE * MAX_PHOTO_SECONDS)) : 0;
   const high = Math.max(1, Math.floor(words / MIN_WORDS_PER_IMAGE));
   const seconds = spokenSeconds(words);
   const effective = effectiveCount ?? count;
   if (effective < low) {
-    const missing = low - effective;
+    const missing = Math.ceil(low - effective);
     const images = low === 1 ? 'image' : 'images';
     const more = missing === 1 ? 'image' : 'images';
+    if (count >= low) {
+      const covered = Number((effective * MAX_PHOTO_SECONDS).toPrecision(6));
+      return {
+        rule: `segment has ${words} words (~${seconds}s) but its photos cover only ~${covered}s at their requested durations; it needs ~${seconds}s of photos (one photo per 2s).`,
+        fix: `Add ${missing} more ${more} to this segment's media array.`,
+      };
+    }
     return {
       rule: `segment has ${words} words (~${seconds}s) and needs at least ${low} ${images} (one per 2s); it has ${count}.`,
       fix: `Add ${missing} more ${more} to this segment's media array.`,
@@ -353,10 +376,20 @@ export function validateSegments(input: unknown, videoType: VideoType = 'hook_li
       if (repeat !== null) return repeat;
     }
     if (imagesMode) {
+      if (segments[i].kind === 'hook' && videoType === 'hook_lipsync') {
+        const hasHookClip = media.some((item) => isVideoRef(item));
+        if (hasHookClip) {
+          return fail(
+            `segments.${i}.media`,
+            "A clip cannot play over the speaker's face in the hook of a hook-only video.",
+            'Use photos in the hook segment, or move the clip to a content segment.',
+          );
+        }
+      }
       const density = imageDensityError(
         countWords(segments[i].text),
         media.length,
-        clipDensityMinCount(media),
+        coveredSlots(media),
         segments[i].kind !== 'hook' || videoType !== 'hook_lipsync',
       );
       if (density !== null) return fail(`segments.${i}.media`, density.rule, density.fix);

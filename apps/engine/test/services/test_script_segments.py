@@ -571,7 +571,6 @@ def test_supplied_segments_script_calls_no_llm():
     assert task_service.generate_script("test-task", params) == joined
 
 
-
 def _photos(count, prefix):
     return [{"url": f"https://example.com/{prefix}{i}.jpg"} for i in range(count)]
 
@@ -757,10 +756,9 @@ def test_segments_to_script_forwards_full_lipsync_to_validation():
     )
 
 
-
 def _clip_segments():
     return [
-        {"kind": "hook", "text": _hook(), "media": [{"url": "https://example.com/h.mp4"}]},
+        {"kind": "hook", "text": _hook(), "media": [{"url": "https://example.com/h.jpg"}]},
         {"kind": "content", "text": _content(),
          "media": [{"url": "https://example.com/b1.mp4"}, {"url": "https://example.com/b2.mp4"}]},
         {"kind": "content", "text": "Save this video now please.",
@@ -768,12 +766,12 @@ def _clip_segments():
     ]
 
 
-def test_one_clip_per_take_passes_the_density_minimum():
+def test_one_clip_per_content_take_passes_the_density_minimum():
     result = script_segments.validate_segments(_clip_segments())
     assert result["media_count"] == 4
 
 
-def test_one_clip_in_a_long_take_still_fails_the_density_minimum():
+def test_one_photo_in_a_long_take_still_fails_the_density_minimum():
     segments = _clip_segments()
     segments[0]["text"] = " ".join(["word"] * 40) + "."
     with pytest.raises(SegmentValidationError) as exc_info:
@@ -782,7 +780,7 @@ def test_one_clip_in_a_long_take_still_fails_the_density_minimum():
     assert exc_info.value.rule == (
         "segment has 40 words (~15s) and needs at least 8 images (one per 2s); it has 1."
     )
-    assert exc_info.value.fix == "Add 2 more images to this segment's media array."
+    assert exc_info.value.fix == "Add 7 more images to this segment's media array."
 
 
 def test_the_density_maximum_counts_clips_one_for_one():
@@ -803,10 +801,12 @@ def test_the_density_maximum_counts_clips_one_for_one():
 
 def test_a_repeated_clip_reference_is_rejected_before_charging():
     segments = _clip_segments()
-    segments[1]["media"] = [{"url": "https://example.com/h.mp4"}]
+    segments[1]["media"] = [
+        {"url": "https://example.com/h.mp4"}, {"url": "https://example.com/h.mp4"},
+    ]
     with pytest.raises(SegmentValidationError) as exc_info:
         script_segments.validate_segments(segments)
-    assert exc_info.value.field == "segments.1.media.0"
+    assert exc_info.value.field == "segments.1.media.1"
     assert exc_info.value.rule == "the same video clip must not repeat"
     assert exc_info.value.fix == "Use a different video clip for each media item."
 

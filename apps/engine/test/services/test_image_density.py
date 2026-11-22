@@ -153,3 +153,111 @@ def test_hook_photos_do_not_count_toward_the_minimum_in_hook_only_videos():
         "segment has 25 words (~9s) and needs at least 5 images (one per 2s); it has 1."
     )
     assert exc_info.value.fix == "Add 4 more images to this segment's media array."
+
+
+def test_min_images_counts_the_unrounded_spoken_seconds():
+    assert image_density.min_images(6) == 2
+    assert image_density.min_images(11) == 3
+    assert image_density.min_images(38) == 8
+    assert image_density.min_images(200) == 38
+
+
+def test_covered_slots_counts_a_photo_by_its_requested_duration():
+    assert image_density.covered_slots(_photos(6, "b")) == 6
+    assert image_density.covered_slots(
+        [{**photo, "duration": 1} for photo in _photos(6, "b")]
+    ) == 3
+    assert image_density.covered_slots(
+        [{**photo, "duration": 6} for photo in _photos(3, "b")]
+    ) == 9
+    assert image_density.covered_slots([{"url": "https://example.com/a.mp4"}]) == 6
+    assert image_density.covered_slots(
+        [
+            {"url": "https://example.com/a.mp4"},
+            {"url": "https://example.com/b.jpg", "duration": 1},
+        ]
+    ) == 6.5
+
+
+def test_density_error_reports_the_covered_seconds_when_the_count_suffices_but_the_durations_do_not():
+    rule, fix = density_error(30, 6, min_count=3.0)
+    assert rule == (
+        "segment has 30 words (~11s) but its photos cover only ~6s at their "
+        "requested durations; it needs ~11s of photos (one photo per 2s)."
+    )
+    assert fix == "Add 3 more images to this segment's media array."
+    assert density_error(30, 6, min_count=6.0) is None
+    rule, fix = density_error(30, 3, min_count=3.0)
+    assert rule == "segment has 30 words (~11s) and needs at least 6 images (one per 2s); it has 3."
+    assert fix == "Add 3 more images to this segment's media array."
+
+
+def test_validate_segments_counts_a_photo_by_its_requested_duration():
+    segments = [
+        {"kind": "hook", "text": _words(25, "hook"), "media": _photos(5, "h")},
+        {
+            "kind": "content",
+            "text": _words(38, "body"),
+            "media": [{**photo, "duration": 1} for photo in _photos(6, "b")],
+        },
+        {"kind": "content", "text": _words(8, "cta"), "media": _photos(2, "c")},
+    ]
+    with pytest.raises(SegmentValidationError) as exc_info:
+        validate_segments(segments, video_type="faceless")
+    assert exc_info.value.field == "segments.1.media"
+    assert exc_info.value.rule == (
+        "segment has 38 words (~14s) and needs at least 8 images (one per 2s); it has 6."
+    )
+    assert exc_info.value.fix == "Add 5 more images to this segment's media array."
+    segments[1]["media"] = [{**photo, "duration": 2} for photo in _photos(8, "b")]
+    assert validate_segments(segments, video_type="faceless")["media_count"] == 15
+    segments[1]["media"] = [{**photo, "duration": 6} for photo in _photos(3, "b")]
+    assert validate_segments(segments, video_type="faceless")["media_count"] == 10
+
+
+def test_a_clip_in_the_hook_of_a_hook_only_video_fails_validation():
+    segments = [
+        {"kind": "hook", "text": _words(25, "hook"), "media": [{"url": "https://example.com/h.mp4"}]},
+        {"kind": "content", "text": _words(42, "body"), "media": _photos(8, "b")},
+        {"kind": "content", "text": _words(9, "cta"), "media": _photos(2, "c")},
+    ]
+    with pytest.raises(SegmentValidationError) as exc_info:
+        validate_segments(segments)
+    assert exc_info.value.field == "segments.0.media"
+    assert exc_info.value.rule == (
+        "A clip cannot play over the speaker's face in the hook of a hook-only video."
+    )
+    assert exc_info.value.fix == (
+        "Use photos in the hook segment, or move the clip to a content segment."
+    )
+    segments[0]["media"] = [{"url": "https://example.com/h.mp4"}, *_photos(3, "h")]
+    with pytest.raises(SegmentValidationError) as exc_info:
+        validate_segments(segments)
+    assert exc_info.value.field == "segments.0.media"
+    assert "clip cannot play" in exc_info.value.rule
+    assert validate_segments(segments, video_type="faceless")["media_count"] == 14
+    full_lipsync = [
+        {"kind": "hook", "text": _words(25, "hook"), "media": [{"url": "https://example.com/h.mp4"}]},
+        {"kind": "content", "text": _words(42, "body")},
+        {"kind": "content", "text": _words(9, "cta")},
+    ]
+    assert validate_segments(full_lipsync, video_type="full_lipsync")["media_count"] == 1
+
+
+def test_one_clip_in_a_long_take_still_fails_the_density_minimum_in_faceless_videos():
+    segments = [
+        {"kind": "hook", "text": _words(40, "hook"), "media": [{"url": "https://example.com/h.mp4"}]},
+        {
+            "kind": "content",
+            "text": _words(42, "body"),
+            "media": [{"url": "https://example.com/b1.mp4"}, {"url": "https://example.com/b2.mp4"}],
+        },
+        {"kind": "content", "text": _words(5, "cta"), "media": _photos(1, "c")},
+    ]
+    with pytest.raises(SegmentValidationError) as exc_info:
+        validate_segments(segments, video_type="faceless")
+    assert exc_info.value.field == "segments.0.media"
+    assert exc_info.value.rule == (
+        "segment has 40 words (~15s) and needs at least 8 images (one per 2s); it has 1."
+    )
+    assert exc_info.value.fix == "Add 2 more images to this segment's media array."

@@ -25,7 +25,7 @@ SEGMENTS = [
     {
         "kind": "content",
         "text": "Walk the Ribeira in the morning light, cross the Dom Luis bridge, taste francesinha where the locals eat, and finish with port wine as the river turns gold at sunset before heading home through the old town streets.",
-        "media": [{"url": f"https://e.com/1-{i}.jpg"} for i in range(7)],
+        "media": [{"url": f"https://e.com/1-{i}.jpg"} for i in range(8)],
     },
     {
         "kind": "content",

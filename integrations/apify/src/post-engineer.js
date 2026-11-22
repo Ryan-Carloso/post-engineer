@@ -5,6 +5,7 @@ export const MAX_SEGMENTS = 12;
 export const MAX_IMAGES = 30;
 export const WORDS_PER_IMAGE = 8;
 export const MIN_WORDS_PER_IMAGE = 3;
+export const MAX_PHOTO_SECONDS = 2;
 export const API_KEY_PREFIX = 'pe_live_';
 export const REQUEST_TIMEOUT_MS = 60_000;
 export const POLL_INTERVAL_MS = 15_000;
@@ -155,7 +156,7 @@ function countWords(text) {
 }
 
 function minImagesFor(words) {
-  return words <= 0 ? 0 : Math.ceil(words / WORDS_PER_IMAGE);
+  return words <= 0 ? 0 : Math.ceil((words * 3) / (WORDS_PER_IMAGE * MAX_PHOTO_SECONDS));
 }
 
 function maxImagesFor(words) {
@@ -170,11 +171,11 @@ export function assignImages(urls, texts) {
   if (urls.length < low || urls.length > high) {
     if (low > MAX_IMAGES) {
       throw new ActorInputError(
-        `images need at least ${low} URLs for this script (about one image per 3 seconds), but at most ${MAX_IMAGES} are allowed: merge body paragraphs so the per-segment minimums fit under ${MAX_IMAGES}.`,
+        `images need at least ${low} URLs for this script (about one image per 2 seconds), but at most ${MAX_IMAGES} are allowed: merge body paragraphs so the per-segment minimums fit under ${MAX_IMAGES}.`,
       );
     }
     throw new ActorInputError(
-      `images need between ${low} and ${high} URLs for this script (about one image per 3 seconds, each image at least about 1 second); got ${urls.length}.`,
+      `images need between ${low} and ${high} URLs for this script (about one image per 2 seconds, each image at least about 1 second); got ${urls.length}.`,
     );
   }
   const counts = [...lows];
@@ -203,7 +204,7 @@ function parseImages(raw, videoType, hook, body, cta) {
     return undefined;
   }
   if (!Array.isArray(value) || value.length === 0) {
-    throw new ActorInputError('images are required: about one public image URL per 3 seconds of speech.');
+    throw new ActorInputError('images are required: about one public image URL per 2 seconds of speech.');
   }
   for (const [index, url] of value.entries()) {
     let parsed;

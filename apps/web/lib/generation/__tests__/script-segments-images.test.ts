@@ -233,9 +233,9 @@ describe('validateSegments with the images material', () => {
     expect(joinSegments(segments, 'full_lipsync')).toBe(`${hook}\n\n${content}\n\n${cta}`);
   });
 
-  it('one clip per take passes the density minimum', () => {
+  it('one clip per content take passes the density minimum', () => {
     const result = validateSegments([
-      { kind: 'hook', text: hook, media: clips(1, 'h') },
+      { kind: 'hook', text: hook, media: photos(1, 'h') },
       { kind: 'content', text: content, media: clips(2, 'b') },
       { kind: 'content', text: 'Save this video now please.', media: photos(1, 'c') },
     ]);
@@ -260,9 +260,81 @@ describe('validateSegments with the images material', () => {
     }
   });
 
-  it('the density maximum counts clips one for one', () => {
+  it('counts the unrounded spoken seconds: six words need two photos', () => {
+    const sixWord = [
+      { kind: 'hook', text: hook, media: photos(4, 'h') },
+      { kind: 'content', text: content, media: photos(8, 'b') },
+      { kind: 'content', text: 'Save this video before you go.', media: photos(1, 'c') },
+    ];
+    const sixWordResult = validateSegments(sixWord);
+    expect(sixWordResult.ok).toBe(false);
+    if (!sixWordResult.ok) {
+      expect(sixWordResult.error.field).toBe('segments.2.media');
+      expect(sixWordResult.error.rule).toBe(
+        'segment has 6 words (~2s) and needs at least 2 images (one per 2s); it has 1.',
+      );
+      expect(sixWordResult.error.fix).toBe("Add 1 more image to this segment's media array.");
+    }
+    const elevenWord = [
+      { kind: 'hook', text: hook, media: photos(4, 'h') },
+      { kind: 'content', text: content, media: photos(8, 'b') },
+      {
+        kind: 'content',
+        text: 'Save this video before your next trip to Porto today please.',
+        media: photos(2, 'c'),
+      },
+    ];
+    const elevenWordResult = validateSegments(elevenWord);
+    expect(elevenWordResult.ok).toBe(false);
+    if (!elevenWordResult.ok) {
+      expect(elevenWordResult.error.field).toBe('segments.2.media');
+      expect(elevenWordResult.error.rule).toBe(
+        'segment has 11 words (~4s) and needs at least 3 images (one per 2s); it has 2.',
+      );
+      expect(elevenWordResult.error.fix).toBe("Add 1 more image to this segment's media array.");
+    }
+  });
+
+  it('rejects a clip in the hook of a hook-only video', () => {
     const segments = [
       { kind: 'hook', text: hook, media: clips(1, 'h') },
+      { kind: 'content', text: content, media: photos(8, 'b') },
+      { kind: 'content', text: cta, media: photos(2, 'c') },
+    ];
+    const result = validateSegments(segments);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.field).toBe('segments.0.media');
+      expect(result.error.rule).toBe(
+        "A clip cannot play over the speaker's face in the hook of a hook-only video.",
+      );
+      expect(result.error.fix).toBe(
+        'Use photos in the hook segment, or move the clip to a content segment.',
+      );
+    }
+    const withPhotos = segments.map((segment, index) =>
+      index === 0 ? { ...segment, media: [...clips(1, 'h'), ...photos(3, 'h')] } : segment,
+    );
+    const withPhotosResult = validateSegments(withPhotos);
+    expect(withPhotosResult.ok).toBe(false);
+    if (!withPhotosResult.ok) {
+      expect(withPhotosResult.error.field).toBe('segments.0.media');
+      expect(withPhotosResult.error.rule).toContain('clip cannot play');
+    }
+    expect(validateSegments(withPhotos, 'faceless').ok).toBe(true);
+    const fullLipsync = [
+      { kind: 'hook', text: hook, media: clips(1, 'h') },
+      { kind: 'content', text: content },
+      { kind: 'content', text: cta },
+    ];
+    const fullLipsyncResult = validateSegments(fullLipsync, 'full_lipsync');
+    expect(fullLipsyncResult.ok).toBe(true);
+    if (fullLipsyncResult.ok) expect(fullLipsyncResult.value.mediaCount).toBe(1);
+  });
+
+  it('the density maximum counts clips one for one', () => {
+    const segments = [
+      { kind: 'hook', text: hook, media: photos(1, 'h') },
       { kind: 'content', text: content, media: clips(2, 'b') },
       {
         kind: 'content',
@@ -295,6 +367,64 @@ describe('validateSegments with a requested photo duration', () => {
     media[2] = { ...media[2], duration: 6 };
     media[3] = { ...media[3], duration: null };
     expect(validateSegments(segments).ok).toBe(true);
+  });
+
+  it('counts a photo by its requested duration', () => {
+    const segments = [
+      { kind: 'hook', text: `${Array(25).fill('word').join(' ')}.`, media: photos(5, 'h') },
+      {
+        kind: 'content',
+        text: `${Array(38).fill('body').join(' ')}.`,
+        media: photos(6, 'b').map((photo) => ({ ...photo, duration: 1 })),
+      },
+      { kind: 'content', text: `${Array(8).fill('cta').join(' ')}.`, media: photos(2, 'c') },
+    ];
+    const result = validateSegments(segments, 'faceless');
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.field).toBe('segments.1.media');
+      expect(result.error.rule).toBe(
+        'segment has 38 words (~14s) and needs at least 8 images (one per 2s); it has 6.',
+      );
+      expect(result.error.fix).toBe("Add 5 more images to this segment's media array.");
+    }
+    const twoSecond = segments.map((segment, index) =>
+      index === 1
+        ? { ...segment, media: photos(8, 'b').map((photo) => ({ ...photo, duration: 2 })) }
+        : segment,
+    );
+    const twoSecondResult = validateSegments(twoSecond, 'faceless');
+    expect(twoSecondResult.ok).toBe(true);
+    if (twoSecondResult.ok) expect(twoSecondResult.value.mediaCount).toBe(15);
+    const sixSecond = segments.map((segment, index) =>
+      index === 1
+        ? { ...segment, media: photos(3, 'b').map((photo) => ({ ...photo, duration: 6 })) }
+        : segment,
+    );
+    const sixSecondResult = validateSegments(sixSecond, 'faceless');
+    expect(sixSecondResult.ok).toBe(true);
+    if (sixSecondResult.ok) expect(sixSecondResult.value.mediaCount).toBe(10);
+  });
+
+  it('names the covered seconds when the count suffices but the durations do not', () => {
+    const segments = [
+      { kind: 'hook', text: `${Array(25).fill('word').join(' ')}.`, media: photos(5, 'h') },
+      {
+        kind: 'content',
+        text: `${Array(30).fill('body').join(' ')}.`,
+        media: photos(6, 'b').map((photo) => ({ ...photo, duration: 1 })),
+      },
+      { kind: 'content', text: `${Array(8).fill('cta').join(' ')}.`, media: photos(2, 'c') },
+    ];
+    const result = validateSegments(segments, 'faceless');
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.field).toBe('segments.1.media');
+      expect(result.error.rule).toBe(
+        'segment has 30 words (~11s) but its photos cover only ~6s at their requested durations; it needs ~11s of photos (one photo per 2s).',
+      );
+      expect(result.error.fix).toBe("Add 3 more images to this segment's media array.");
+    }
   });
 
   it.each([0, -1, 0.49, 6.01, 60, '3', true, Number.NaN, Number.POSITIVE_INFINITY])(

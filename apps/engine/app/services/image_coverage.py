@@ -22,7 +22,7 @@ task fails with IMAGES_DO_NOT_COVER_AUDIO (the charger refunds a failed
 task), naming how many photos were sent, how many survived, the counts
 per reason, and every skipped photo by segment and image index — so the
 caller fixes the photo instead of guessing. The pre-charge density
-minimum (one photo per ~3s per segment) catches grossly under-covered
+minimum (one photo per 2s per segment) catches grossly under-covered
 requests before charging; the layout below is the exact guarantee at
 render, because the density estimate counts words while the render counts
 spoken seconds. On a full lip-sync video the face is on screen the whole
