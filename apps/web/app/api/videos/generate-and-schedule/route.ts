@@ -41,6 +41,7 @@ import {
   hasNonEmptyString,
   type JobPersona,
 } from '@/lib/generation/video-job-payload';
+import { buildGenerateJobRequest } from './job-request';
 import { recordGenerationStart, recordGenerationUpdate, startEngineVideoTask } from '@/lib/generation/video-generation';
 import { checkCustomAudioUrl } from '@/lib/generation/custom-audio';
 import { deleteInsertedSlots } from './rollback-slots';
@@ -519,17 +520,10 @@ async function postHandler(request: Request): Promise<NextResponse> {
         niche: prep.niche,
         face_quality: prep.faceQuality,
       };
-      const payload = buildJobPayload(jobPersona, {
-        video_title: title, video_description: description,
-        video_type: validatedOptions.videoType,
-        video_script: segmentsScript,
-        webhook_url: validatedOptions.webhookUrl,
-        cta_type: effectiveCta?.type ?? null,
-        generation_id: slotGenerationId,
-        slot_id: slot.id,
-        music_mood: validatedOptions.musicMood,
-        segments: options?.segments,
-      });
+      const payload = buildJobPayload(jobPersona, buildGenerateJobRequest({
+        title, description, validatedOptions, segmentsScript,
+        ctaType: effectiveCta?.type ?? null, generationId: slotGenerationId, slotId: slot.id, segments: options?.segments,
+      }));
       if (!hasNonEmptyString(payload.video_title)) {
         throw new SlotDispatchError('empty_title', 'Video title is empty.');
       }

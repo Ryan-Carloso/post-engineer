@@ -1297,6 +1297,17 @@
           "video_type": {
             "$ref": "#/components/schemas/VideoType"
           },
+          "video_variation_seed": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Video Variation Seed"
+          },
           "voice_name": {
             "anyOf": [
               {
@@ -1431,7 +1442,8 @@
           "FadeIn",
           "FadeOut",
           "SlideIn",
-          "SlideOut"
+          "SlideOut",
+          "Crossfade"
         ],
         "title": "VideoTransitionMode",
         "type": "string"

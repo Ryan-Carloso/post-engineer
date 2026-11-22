@@ -646,7 +646,7 @@ def generate_final_videos(
             video_for_render, intro_cost_usd, intro_job_id, intro_job_cost = intro
             intro_report = report_from_job_cost(intro_cost_usd, intro_job_id, intro_job_cost)
 
-    video_for_render = segment_panels.overlay_onto(task_id, video_for_render, _update_task)
+    video_for_render = segment_panels.overlay_onto(task_id, video_for_render, _update_task, transition_mode=params.video_transition_mode)
 
     _update_task(task_id, progress=75, music_mood=music_mood)
 

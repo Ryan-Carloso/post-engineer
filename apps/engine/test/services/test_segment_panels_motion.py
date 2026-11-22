@@ -74,6 +74,69 @@ def test_a_moving_panel_is_a_single_image_zoomed_into_a_finite_clip_that_passes_
     assert "[v0][2:v]overlay=10:900:enable='between(t,2.000,4.000)':shortest=1[v1]" in graph
 
 
+def test_crossfade_fades_the_second_photo_in_over_the_first():
+    panels = [
+        Panel(0, "/t/a.png", 0, 0, 0.0, 2.0, motion="in"),
+        Panel(1, "/t/b.png", 0, 0, 2.0, 4.0, motion="out"),
+    ]
+    command = segment_panels.overlay_command(
+        "/t/in.mp4", panels, "/t/out.mp4", "libx264", "veryfast", "ffmpeg",
+        frame_size=(1080, 1920), transition_mode="Crossfade",
+    )
+    graph = command[command.index("-filter_complex") + 1]
+    assert "[0:v][m0]overlay=0:0:enable='between(t,0.000,2.000)':eof_action=pass[v0]" in graph
+    assert "[m1]format=yuva420p,fade=t=in:st=1.500:d=0.500:alpha=1[f1]" in graph
+    assert "[v0][f1]overlay=0:0:enable='between(t,1.500,4.000)':eof_action=pass[v1]" in graph
+
+
+def test_without_crossfade_the_second_photo_starts_hard_at_its_start():
+    panels = [
+        Panel(0, "/t/a.png", 0, 0, 0.0, 2.0, motion="in"),
+        Panel(1, "/t/b.png", 0, 0, 2.0, 4.0, motion="out"),
+    ]
+    command = segment_panels.overlay_command(
+        "/t/in.mp4", panels, "/t/out.mp4", "libx264", "veryfast", "ffmpeg", frame_size=(1080, 1920)
+    )
+    graph = command[command.index("-filter_complex") + 1]
+    assert "fade=" not in graph
+    assert "enable='between(t,2.000,4.000)'" in graph
+
+
+def _solid_photo(tmp_path, name, color):
+    path = str(tmp_path / name)
+    Image.new("RGB", (1080, 1920), color).save(path, "JPEG", quality=95)
+    return path
+
+
+def test_real_crossfade_blends_the_photos_at_the_boundary(task_dir):
+    base = _video(task_dir, seconds=5)
+    first = _solid_photo(task_dir, "first.jpg", RED)
+    second = _solid_photo(task_dir, "second.jpg", GREEN)
+    segment_panels.write_manifest("t", [
+        Panel(0, first, 0, 0, 0.0, 2.0, motion="in"),
+        Panel(1, second, 0, 0, 2.0, 4.0, motion="out"),
+    ], [])
+    out = segment_panels.overlay_onto("t", base, lambda *a, **k: None, transition_mode="Crossfade")
+    assert out != base
+    assert _near(_frame(out, 0.5, task_dir).getpixel((540, 960)), RED), "before the fade the first photo is solid"
+    assert _near(_frame(out, 1.75, task_dir).getpixel((540, 960)), (120, 115, 30)), "mid-fade the photos blend half and half"
+    assert _near(_frame(out, 3.5, task_dir).getpixel((540, 960)), GREEN), "after the fade the second photo is solid"
+    assert _duration(out) == pytest.approx(_duration(base), abs=0.1), "the fade never cuts the video short"
+
+
+def test_real_overlay_without_crossfade_has_no_blend_at_the_boundary(task_dir):
+    base = _video(task_dir, seconds=5)
+    first = _solid_photo(task_dir, "first.jpg", RED)
+    second = _solid_photo(task_dir, "second.jpg", GREEN)
+    segment_panels.write_manifest("t", [
+        Panel(0, first, 0, 0, 0.0, 2.0, motion="in"),
+        Panel(1, second, 0, 0, 2.0, 4.0, motion="out"),
+    ], [])
+    out = segment_panels.overlay_onto("t", base, lambda *a, **k: None)
+    assert _near(_frame(out, 1.9, task_dir).getpixel((540, 960)), RED), "without crossfade the cut is hard"
+    assert _near(_frame(out, 2.1, task_dir).getpixel((540, 960)), GREEN)
+
+
 def test_without_a_frame_size_a_panel_with_motion_stays_a_still_overlay():
     panels = [Panel(0, "/t/a.png", 0, 0, 0.0, 2.0, motion="in")]
     command = segment_panels.overlay_command("/t/in.mp4", panels, "/t/out.mp4", "libx264", "veryfast", "ffmpeg")

@@ -42,3 +42,27 @@ def test_zoom_out_filter_starts_zoomed_and_returns_to_the_full_photo():
     chain = panel_motion.zoom_filter("2:v", _panel(0.0, 2.0, "out"), 1080, 1920, "m1")
     assert "zoompan=z='1.0600-0.0600*on/60'" in chain
     assert chain.startswith("[2:v]") and chain.endswith("[m1]")
+
+
+def test_zoom_filter_with_lead_starts_earlier_and_covers_more_frames():
+    chain = panel_motion.zoom_filter("1:v", _panel(2.0, 4.0, "in"), 1080, 1920, "m0", lead_seconds=0.5)
+    assert chain == (
+        "[1:v]scale=2160:3840,"
+        "zoompan=z='1+0.0750*on/75':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
+        ":d=75:s=1080x1920:fps=30,"
+        "setpts=PTS-STARTPTS+1.500/TB[m0]"
+    )
+
+
+def test_zoom_filter_without_lead_is_unchanged():
+    chain = panel_motion.zoom_filter("1:v", _panel(2.0, 4.0, "in"), 1080, 1920, "m0")
+    assert "setpts=PTS-STARTPTS+2.000/TB[m0]" in chain
+
+
+def test_crossfade_seconds_is_half_a_second():
+    assert panel_motion.CROSSFADE_SECONDS == 0.5
+
+
+def test_crossfade_in_filter_fades_the_alpha_channel_in():
+    chain = panel_motion.crossfade_in_filter("m1", 1.5, 0.5, "f1")
+    assert chain == "[m1]format=yuva420p,fade=t=in:st=1.500:d=0.500:alpha=1[f1]"

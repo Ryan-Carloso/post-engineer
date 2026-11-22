@@ -476,6 +476,7 @@ def prepare_segment_panels(task_id: str, params: Any, subtitle_path: str, audio_
     panels = image_coverage.ensure_coverage(
         panels, face=face, hook_end=hook_end, audio_duration=audio_duration,
         sent=sent, skipped=warnings,
+        variation_seed=getattr(params, "video_variation_seed", None),
     )
     segment_panels.write_manifest(task_id, panels, warnings)
     return warnings
