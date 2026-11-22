@@ -843,6 +843,39 @@ export interface Database {
         };
         Relationships: [];
       };
+      share_links: {
+        Row: {
+        id: string;
+        user_id: string;
+        token_hash: string;
+        persona_ids: string[] | null;
+        created_at: string;
+        expires_at: string | null;
+        revoked_at: string | null;
+        last_viewed_at: string | null;
+        };
+        Insert: {
+        id?: string;
+        user_id: string;
+        token_hash: string;
+        persona_ids?: string[] | null;
+        created_at?: string;
+        expires_at?: string | null;
+        revoked_at?: string | null;
+        last_viewed_at?: string | null;
+        };
+        Update: {
+        id?: string;
+        user_id?: string;
+        token_hash?: string;
+        persona_ids?: string[] | null;
+        created_at?: string;
+        expires_at?: string | null;
+        revoked_at?: string | null;
+        last_viewed_at?: string | null;
+        };
+        Relationships: [];
+      };
       social_accounts: {
         Row: {
         id: string;
