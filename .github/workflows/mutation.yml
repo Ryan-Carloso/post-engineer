@@ -557,32 +557,35 @@ jobs:
           SHARD_GLOBS: ${{ steps.functions.outputs.globs }}
         run: |
           set -f
+          # Stop before the 240 minute job cap. A cancel skips the save
+          # step; a failed step still reaches it. Same budget for the
+          # function-scoped run, the full-file scope, and the fallback.
+          run_mutmut() {
+            set +e
+            timeout 225m uv run mutmut run "$@"
+            code=$?
+            set -e
+            if [ "$code" -eq 124 ]; then
+              echo "::error::mutmut exceeded 225 minutes; partial mutants/ will be cached for the retry"
+              exit 1
+            fi
+            return "$code"
+          }
           if [ -z "$SHARD_GLOBS" ]; then
             # Full-file scope: dispatch runs, or the mapper's fallback
             # (new file / module-level change / decorated function).
-            uv run mutmut run
-            exit 0
+            run_mutmut
+            exit $?
           fi
           echo "Function-scoped mutant selection: $SHARD_GLOBS"
-          # Under the job cap so the job is not cancelled. A cancel skips
-          # the save step. A failed step still reaches it.
-          set +e
-          timeout 225m uv run mutmut run $SHARD_GLOBS
-          code=$?
-          set -e
-          if [ "$code" -eq 0 ]; then
-            exit 0
+          if ! run_mutmut $SHARD_GLOBS; then
+            # Only ever WIDENS the scope (never weakens a verdict): a
+            # function-scoped run can fail when a changed function
+            # happens to generate zero mutants (mutmut asserts on an
+            # empty selection); the whole file covers that case.
+            echo "::warning::function-scoped run failed — falling back to the whole-file scope"
+            run_mutmut
           fi
-          if [ "$code" -eq 124 ]; then
-            echo "::error::function-scoped mutmut exceeded 225 minutes; partial mutants/ will be cached for the retry"
-            exit 1
-          fi
-          # Only ever WIDENS the scope (never weakens a verdict): a
-          # function-scoped run can fail when a changed function
-          # happens to generate zero mutants (mutmut asserts on an
-          # empty selection); the whole file covers that case.
-          echo "::warning::function-scoped run failed (exit $code) — falling back to the whole-file scope"
-          uv run mutmut run
 
       - name: Save mutmut incremental state
         if: always() && !cancelled()

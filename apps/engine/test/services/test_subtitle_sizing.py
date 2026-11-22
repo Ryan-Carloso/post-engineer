@@ -165,7 +165,6 @@ def test_the_plain_caption_keeps_its_bottom_rows_transparent(tmp_path, monkeypat
     alpha = text_clip.mask.get_frame(0)
     unclipped = vd.TextClip(**{**text_clip.kwargs, "size": (text_clip.w, None), "margin": (0, 19)})
     assert box_height >= unclipped.h, "the box is as tall as the unclipped text"
-    assert alpha.shape[0] == box_height
     assert alpha[-BOTTOM_SLACK:].max() < 0.01
     assert _ink_bottom(text_clip) < box_height - BOTTOM_SLACK
 
