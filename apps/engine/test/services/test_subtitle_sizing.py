@@ -1,11 +1,20 @@
 """Subtitle font size: `font_size` is pixels at a 1080px short side."""
 
+import os
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
+import numpy as np
+import pytest
+from PIL import Image, ImageDraw, ImageFont
+
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from app.services import subtitle_sizing
+from app.models.schema import VideoParams  # noqa: E402
+from app.services import subtitle_sizing, subtitle_text  # noqa: E402
+from app.services import video as vd  # noqa: E402
 
 
 def test_portrait_1080_is_unchanged():
@@ -34,18 +43,6 @@ def test_the_minimum_matches_the_schema_lower_bound():
     bound = VideoParams.model_fields["font_size"].metadata[0].ge
     assert subtitle_sizing.MIN_FONT_SIZE == bound
 
-
-import os
-import shutil
-import subprocess
-
-import numpy as np
-import pytest
-from PIL import Image, ImageDraw, ImageFont
-
-from app.models.schema import VideoParams
-from app.services import subtitle_text
-from app.services import video as vd
 
 FONT_CANDIDATES = (
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
