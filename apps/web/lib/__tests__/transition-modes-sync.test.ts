@@ -15,7 +15,7 @@ describe('video transition modes match the engine', () => {
     expect([...VIDEO_TRANSITION_MODES]).toEqual(engineModes);
   });
 
-  it('has no mode the engine does not know', () => {
+  it('parses a non-empty, duplicate-free engine mode list', () => {
     expect(engineModes.length).toBeGreaterThan(0);
     expect(new Set(engineModes).size).toBe(engineModes.length);
   });

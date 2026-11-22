@@ -42,7 +42,8 @@ gap: short requests still fail naming the missing photos, and a request
 that leaves a later photo no time at all fails naming that photo.
 
 Full-frame photos also get a slow zoom (Ken Burns, panel_motion), alternating
-in and out, so a still photo never looks frozen.
+in and out by default or picking a direction from the variation seed, so a
+still photo never looks frozen.
 
 A video clip (segment_video) covers its take instead: it loops to fill
 its slice, at most MAX_CLIP_LOOPS plays, and never zooms — it already
