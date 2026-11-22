@@ -10,6 +10,22 @@ export function metricsOperationSchemas({ success, object, anyObject, str }) {
       ],
       response: success({ rows: { type: 'array', items: anyObject }, truncated: { type: 'boolean' } }),
     },
+    'GET /api/metrics/last-24h': {
+      query: ['persona', 'account', 'provider'].map((name) => ({ name, required: false })),
+      response: success({
+        rows: { type: 'array', items: anyObject },
+        totals: object({
+          views: { type: 'number' },
+          engagement: { type: 'number' },
+          videos: { type: 'number' },
+          measurements: { type: 'number' },
+        }),
+        skipped: object({ noBaseline: { type: 'number' }, stale: { type: 'number' } }),
+        counterResets: { type: 'number' },
+        truncated: { type: 'boolean' },
+        asOf: { type: 'string', nullable: true },
+      }),
+    },
     'GET /api/metrics/retention-curve': {
       extraResponses: {
         403: 'YOUTUBE_ANALYTICS_SCOPE_MISSING or YOUTUBE_RECONNECT_REQUIRED: reconnect YouTube.',

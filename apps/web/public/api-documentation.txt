@@ -126,6 +126,7 @@ PATCH  /api/schedule/slots/{slotId}                           update slot title
 DELETE /api/schedule/slots/{slotId}                           delete slot
 GET    /api/posts/{id}                                        get post
 GET    /api/metrics                                           get post metrics
+GET    /api/metrics/last-24h                                  get views and engagement gained in the last 24 hours
 GET    /api/metrics/retention-curve                           get YouTube retention curve
 GET    /api/experiments                                       compare prompts per account
 GET    /api/billing/tokens                                    get token balance

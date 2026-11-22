@@ -14,6 +14,7 @@ table['GET /api/billing/tokens'] = 'token_balance_fetched';
 table['GET /api/billing/transactions'] = 'billing_transactions_fetched';
 table['GET /api/experiments'] = 'experiment_results_fetched';
 table['GET /api/metrics'] = 'post_metrics_fetched';
+table['GET /api/metrics/last-24h'] = 'last_24h_metrics_fetched';
 table['GET /api/metrics/retention-curve'] = 'retention_curve_fetched';
 table['GET /api/coverage'] = 'coverage_collected';
 table['GET /api/google-oauth/callback'] = 'google_oauth_completed';

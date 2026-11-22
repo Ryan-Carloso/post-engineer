@@ -113,6 +113,12 @@
       "action": "post_metrics"
     }
   ],
+  "GET /api/metrics/last-24h": [
+    {
+      "tool": "insights",
+      "action": "last_day"
+    }
+  ],
   "GET /api/metrics/retention-curve": [
     {
       "tool": "insights",

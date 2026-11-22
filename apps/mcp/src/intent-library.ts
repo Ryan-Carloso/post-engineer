@@ -20,10 +20,12 @@ import {
   handleGetTokenBalance,
 } from './tools.js';
 import {
+  GetLast24hMetricsShape,
   GetPostMetricsShape,
   GetPostShape,
   GetYouTubeRetentionCurveShape,
   handleGetPost,
+  handleGetLast24hMetrics,
   handleGetPostMetrics,
   handleGetYouTubeRetentionCurve,
   handleListPosts,
@@ -39,7 +41,11 @@ const SCHEDULES_SPECS = {
 
 const POSTS_SPECS = { list: ListPostsShape, get: GetPostShape };
 
-const INSIGHTS_SPECS = { post_metrics: GetPostMetricsShape, retention_curve: GetYouTubeRetentionCurveShape };
+const INSIGHTS_SPECS = {
+  post_metrics: GetPostMetricsShape,
+  last_day: GetLast24hMetricsShape,
+  retention_curve: GetYouTubeRetentionCurveShape,
+};
 
 const BILLING_SPECS = { balance: {}, transactions: ListTokenTransactionsShape };
 
@@ -82,12 +88,13 @@ export function registerLibraryTools(server: McpServer, client: PostEngineerClie
 
   server.tool(
     'insights',
-    actionDescription('How your posts performed. post_metrics: per-network metrics of published posts (views, likes, comments, average view duration, published date), filterable by persona, network, account and window. retention_curve: the YouTube audience retention curve of one post.', INSIGHTS_SPECS),
+    actionDescription('How your posts performed. post_metrics: per-network metrics of published posts (views, likes, comments, average view duration, published date), filterable by persona, network, account and window. last_day: the views and engagement each video gained in the last 24 hours (the difference between two daily readings, not a lifetime total), with totals, filterable by persona, network and account; a video published less than 24 hours ago counts everything since publishing, a video with no reading from about a day earlier is counted in skipped.noBaseline instead of listed, and a counter that went backwards counts as 0 (counterResets). retention_curve: the YouTube audience retention curve of one post.', INSIGHTS_SPECS),
     actionShape(INSIGHTS_SPECS),
     READ_ONLY,
     byAction(
       {
         post_metrics: async (args) => handleGetPostMetrics(client, args),
+        last_day: async (args) => handleGetLast24hMetrics(client, args),
         retention_curve: async (args) => handleGetYouTubeRetentionCurve(client, args),
       },
       INSIGHTS_SPECS,

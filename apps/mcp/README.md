@@ -202,7 +202,7 @@ The server offers **18 intent tools**, not one tool per API endpoint. A tool is 
 | `prompt_library` | `create`, `update`, `delete` | The account's own prompts, private by default; only the owner can change one. `visibility` `public` makes a prompt readable by anyone (no review while the product is in beta), `private` keeps it to the account. Read and follow prompts with `prompts`: `list` (optional `query` words and `source` official, own or community) and `get` return the official prompts, the account's own (private ones included) and other users' public ones, which come back with an unverified-content notice. |
 | `schedules` | `list`, `cancel`, `get_slot`, `update_slot_title`, `delete_slot` | Future slots. |
 | `posts` | `list`, `get` | Published and scheduled posts. |
-| `insights` | `post_metrics`, `retention_curve` | How posts performed. |
+| `insights` | `post_metrics`, `last_day`, `retention_curve` | How posts performed. |
 | `experiments` | `results` | Compares your prompts inside each publishing account: every video generated with a `promptVersionId` records its prompt version. |
 | `media` | `upload`, `check` | Images for video segments. |
 | `billing` | `balance`, `transactions` | Prepaid tokens. |
