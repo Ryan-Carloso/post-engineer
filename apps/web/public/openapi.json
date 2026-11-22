@@ -7465,7 +7465,7 @@
                   },
                   "fullLipsync": {
                     "type": "boolean",
-                    "description": "Optional. Media is optional when true (full lip sync); otherwise every segment needs a media list, about one image per ~3s, at most 30."
+                    "description": "Optional. Media is optional when true (full lip sync); otherwise every segment needs a media list, about one image per ~2s, at most 30."
                   }
                 },
                 "required": [

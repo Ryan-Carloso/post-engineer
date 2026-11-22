@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { CLIP_DENSITY_ITEMS, clipDensityMinCount, isVideoRef } from '../segment-media.js';
 
 describe('segment-media clip helpers', () => {
-  it('credits one clip as four photo slots', () => {
-    expect(CLIP_DENSITY_ITEMS).toBe(4);
+  it('credits one clip as six photo slots', () => {
+    expect(CLIP_DENSITY_ITEMS).toBe(6);
   });
 
   it('isVideoRef reads the mediaId suffix first', () => {
@@ -34,9 +34,9 @@ describe('segment-media clip helpers', () => {
     expect(clipDensityMinCount([])).toBe(0);
   });
 
-  it('clipDensityMinCount credits each clip as four items', () => {
-    expect(clipDensityMinCount([{ url: 'https://e.com/a.mp4' }])).toBe(4);
-    expect(clipDensityMinCount([{ url: 'https://e.com/a.mp4' }, { url: 'https://e.com/b.mp4' }])).toBe(8);
-    expect(clipDensityMinCount([{ url: 'https://e.com/a.mp4' }, { url: 'https://e.com/b.jpg' }])).toBe(5);
+  it('clipDensityMinCount credits each clip as six items', () => {
+    expect(clipDensityMinCount([{ url: 'https://e.com/a.mp4' }])).toBe(6);
+    expect(clipDensityMinCount([{ url: 'https://e.com/a.mp4' }, { url: 'https://e.com/b.mp4' }])).toBe(12);
+    expect(clipDensityMinCount([{ url: 'https://e.com/a.mp4' }, { url: 'https://e.com/b.jpg' }])).toBe(7);
   });
 });

@@ -21,15 +21,15 @@ SEGMENTS = [
     {
         "kind": "hook",
         "text": "Porto is the city that wins you over slowly, one riverside morning and one golden sunset at a time, in the soft golden evening light.",
-        "media": [{"url": f"https://e.com/h{i}.jpg"} for i in range(4)],
+        "media": [{"url": f"https://e.com/h{i}.jpg"} for i in range(5)],
     },
     {
         "kind": "content",
         "text": "Walk the Ribeira in the morning light, cross the Dom Luis bridge, taste francesinha where the locals eat, and finish with port wine as the river turns gold at sunset before heading home through the old town streets.",
         "media": [{"mediaId": "abc123def456abc123def456abc12345.jpg"}]
-        + [{"url": f"https://e.com/b{i}.jpg"} for i in range(4)],
+        + [{"url": f"https://e.com/b{i}.jpg"} for i in range(7)],
     },
-    {"kind": "content", "text": "Follow for more Porto walks every week.", "media": [{"url": "https://e.com/c0.jpg"}]},
+    {"kind": "content", "text": "Follow for more Porto walks every week.", "media": [{"url": "https://e.com/c0.jpg"}, {"url": "https://e.com/c1.jpg"}]},
 ]
 
 
@@ -153,9 +153,9 @@ class BatchDispatchSegmentsTests(unittest.TestCase):
 
     def test_legacy_single_object_media_dispatches_as_a_list(self):
         legacy = [
-            dict(SEGMENTS[0]),
+            dict(SEGMENTS[0], media=[{"url": "https://e.com/h0.jpg"}]),
             dict(SEGMENTS[1], media={"mediaId": "abc123def456abc123def456abc12345.jpg"}),
-            dict(SEGMENTS[2]),
+            dict(SEGMENTS[2], media=[{"url": "https://e.com/c0.jpg"}]),
         ]
         request = self._dispatched_request(
             _slot(video_type="full_lipsync", segments=legacy)

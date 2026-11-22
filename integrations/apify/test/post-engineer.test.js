@@ -468,7 +468,7 @@ describe('images material', () => {
         cta: Array(20).fill('cta').join(' '),
         images: urls(31),
       },
-      /merge body paragraphs/,
+      /shorten the script/,
     ],
     ['an http image', imagesInput(['http://e.com/0.jpg', ...urls(3).slice(1)]), /images\[0\] must be an https URL/],
     ['a non-URL image', imagesInput(['https://e.com/0.jpg', 'not a url', ...urls(2)]), /images\[1\] must be an absolute https URL/],

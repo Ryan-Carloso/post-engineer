@@ -22,7 +22,7 @@ task fails with IMAGES_DO_NOT_COVER_AUDIO (the charger refunds a failed
 task), naming how many photos were sent, how many survived, the counts
 per reason, and every skipped photo by segment and image index — so the
 caller fixes the photo instead of guessing. The pre-charge density
-minimum (one photo per ~3s per segment) catches grossly under-covered
+minimum (one photo per 2s per segment) catches grossly under-covered
 requests before charging; the layout below is the exact guarantee at
 render, because the density estimate counts words while the render counts
 spoken seconds. On a full lip-sync video the face is on screen the whole
@@ -56,13 +56,13 @@ from dataclasses import replace
 from typing import Optional, Sequence
 
 from app.services import segment_panels, segment_video
+from app.services.image_density import MAX_PHOTO_SECONDS
 from app.services.segment_panels import Panel
 from app.services.segment_photo_duration import photo_cap
 
 IMAGES_DO_NOT_COVER_AUDIO = "images_do_not_cover_audio"
 MOTION_IN = "in"
 MOTION_OUT = "out"
-MAX_PHOTO_SECONDS = 2.0
 _COVERAGE_EPSILON_SECONDS = 0.01
 _SKIP_MARKER = " media skipped: "
 
