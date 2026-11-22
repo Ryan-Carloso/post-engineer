@@ -152,9 +152,9 @@ export function computeLast24h(input: {
       continue;
     }
 
-    const baseline = pickBaseline(history, latest);
     const published = Date.parse(post.publishedAt);
     const publishedInsideWindow = !Number.isNaN(published) && published > latestAt - LAST_24H_WINDOW_MS;
+    const baseline = publishedInsideWindow ? null : pickBaseline(history, latest);
     if (baseline === null && !publishedInsideWindow) {
       skipped.noBaseline += 1;
       continue;

@@ -98,6 +98,14 @@ describe('computeLast24h deltas', () => {
     expect(result.skipped.noBaseline).toBe(0);
   });
 
+  it('counts the whole lifetime of a video published 22 hours ago even when an earlier reading sits in the baseline band', () => {
+    const result = compute({
+      posts: [post({ publishedAt: ago(22) })],
+      readings: [reading({ collectedAt: ago(1), views: 900 }), reading({ collectedAt: ago(21), views: 100 })],
+    });
+    expect(result.rows[0]).toMatchObject({ views: 900, baseline: 'lifetime', baselineCollectedAt: null });
+  });
+
   it('does not list a 3-day-old video that has no reading from about 24 hours earlier, and counts it as skipped', () => {
     const result = compute({ readings: [reading({ views: 5000 })] });
     expect(result.rows).toEqual([]);
