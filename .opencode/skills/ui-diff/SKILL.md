@@ -24,10 +24,12 @@ to `.ui-diff/` at the repo root, which is added to `.git/info/exclude` automatic
 
 ## Privacy rules (always)
 
-- Screenshots never go to public or third-party hosts (no imgur, gists, Slack, CDNs, pastebins).
+- Screenshots never go to third-party hosts (no imgur, gists, Slack, CDNs, pastebins).
   The only upload target is the repository's own `ui-diff-assets` branch.
-- `publish` refuses public repositories unless the user explicitly passes `--allow-public-repo`.
-  If it says the repo is public or its visibility is unknown, stop and ask the user.
+- On post-engineer the owner pre-authorized public uploads (2026-11-22): `publish.allowPublicRepo`
+  is `true` in `apps/web/ui-diff.config.json`, so no per-PR OK is asked. Every capture masks
+  `[data-ui-diff-mask]` (account cards, the signed-in user's profile links, persona photos); mark any new identity element with it.
+- `publish` still refuses when repository visibility is unknown; never pass `--assume-private` on your own.
 - Never create Vercel share links, bypass URLs or URLs with tokens. Protected previews are
   reached with headers/cookies whose values come from environment variables (see `references/privacy.md`).
 - Never print secret values or paste them into comments or summaries.
@@ -141,9 +143,9 @@ node "$SKILL/bin/ui-diff.mjs" publish --pr <n> --dry-run   # lists uploads, writ
 node "$SKILL/bin/ui-diff.mjs" publish --pr <n>
 ```
 
-- Read the dry run's `publishable` and `problems`: if it says the repository is public, its
-  visibility is unknown or there is no GitHub remote, the real publish will stop there. Tell the
-  user; do not add `--allow-public-repo` or `--assume-private` on your own.
+- Read the dry run's `publishable` and `problems`: if its visibility is unknown or there is no
+  GitHub remote, the real publish will stop there. Tell the user; do not add `--assume-private`
+  on your own. A public repo publishes only through `publish.allowPublicRepo` in the config.
 - Images go to the orphan branch `ui-diff-assets` of the same repository (single commit, other PRs'
   files kept) and are linked as `https://github.com/<owner>/<repo>/raw/ui-diff-assets/…`, which
   renders only for people who can read the repo.

@@ -48,7 +48,7 @@ Same screen, same locale, same viewport in both shots. Add mobile screenshots wh
 
 Required on every PR, including non-UI ones. This is the explanation diagram, not a UI screenshot: left = the problem before this change, right = the solution after it.
 
-<!-- Excalidraw-style diagram: white background, sketchy stroke, in English, with colors. Upload it as a GitHub attachment, not as a file in the repo. -->
+<!-- Excalidraw-style diagram: white background, sketchy stroke, in English, with colors. Upload it as a GitHub attachment (`gh pr edit <n> --attach <png>`, gh ≥ 2.99), never as a file in the repo or on `ui-diff-assets`. -->
 
 ![Before / after](<!-- paste the GitHub attachment URL here -->)
 
