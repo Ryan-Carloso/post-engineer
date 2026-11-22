@@ -39,7 +39,7 @@ def zoom_filter(
     output_label: str,
     lead_seconds: float = 0.0,
 ) -> str:
-    """Filter chain turning one still into its zooming clip, timed to the panel's start."""
+    """Filter chain turning one still into its zooming clip, timed to the panel's start minus the crossfade lead."""
     frames = frame_count(panel, lead_seconds)
     peak = zoom_for(panel.end - panel.start + lead_seconds) - 1
     if panel.motion == "out":

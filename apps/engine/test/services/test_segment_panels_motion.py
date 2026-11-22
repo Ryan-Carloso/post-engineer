@@ -89,6 +89,50 @@ def test_crossfade_fades_the_second_photo_in_over_the_first():
     assert "[v0][f1]overlay=0:0:enable='between(t,1.500,4.000)':eof_action=pass[v1]" in graph
 
 
+def test_crossfade_lead_is_bounded_by_the_previous_photo():
+    panels = [
+        Panel(0, "/t/a.png", 0, 0, 0.0, 0.3, motion="in"),
+        Panel(1, "/t/b.png", 0, 0, 0.3, 4.3, motion="out"),
+    ]
+    command = segment_panels.overlay_command(
+        "/t/in.mp4", panels, "/t/out.mp4", "libx264", "veryfast", "ffmpeg",
+        frame_size=(1080, 1920), transition_mode="Crossfade",
+    )
+    graph = command[command.index("-filter_complex") + 1]
+    assert "[m1]format=yuva420p,fade=t=in:st=0.000:d=0.300:alpha=1[f1]" in graph
+    assert "[v0][f1]overlay=0:0:enable='between(t,0.000,4.300)':eof_action=pass[v1]" in graph
+
+
+def test_photo_after_a_clip_starts_hard_despite_crossfade():
+    panels = [
+        Panel(0, "/t/a.png", 0, 0, 0.0, 2.0, motion="in"),
+        Panel(1, "/t/c.mp4", 0, 0, 2.0, 4.0, clip_seconds=2.0, frame_width=1080, frame_height=1920),
+        Panel(2, "/t/b.png", 0, 0, 4.0, 6.0, motion="out"),
+    ]
+    command = segment_panels.overlay_command(
+        "/t/in.mp4", panels, "/t/out.mp4", "libx264", "veryfast", "ffmpeg",
+        frame_size=(1080, 1920), transition_mode="Crossfade",
+    )
+    graph = command[command.index("-filter_complex") + 1]
+    assert "fade=t=in" not in graph
+    assert "[v1][m2]overlay=0:0:enable='between(t,4.000,6.000)':eof_action=pass[v2]" in graph
+
+
+def test_photo_after_a_framed_panel_starts_hard_despite_crossfade():
+    panels = [
+        Panel(0, "/t/a.png", 0, 0, 0.0, 2.0, motion="in"),
+        Panel(1, "/t/b.png", 10, 900, 2.0, 4.0, caption_bottom=880),
+        Panel(2, "/t/c.png", 0, 0, 4.0, 6.0, motion="out"),
+    ]
+    command = segment_panels.overlay_command(
+        "/t/in.mp4", panels, "/t/out.mp4", "libx264", "veryfast", "ffmpeg",
+        frame_size=(1080, 1920), transition_mode="Crossfade",
+    )
+    graph = command[command.index("-filter_complex") + 1]
+    assert "fade=t=in" not in graph
+    assert "[v1][m2]overlay=0:0:enable='between(t,4.000,6.000)':eof_action=pass[v2]" in graph
+
+
 def test_without_crossfade_the_second_photo_starts_hard_at_its_start():
     panels = [
         Panel(0, "/t/a.png", 0, 0, 0.0, 2.0, motion="in"),

@@ -292,9 +292,11 @@ def overlay_command(
         if panel.clip_seconds is not None:
             steps.append(_clip_filter(layer, panel, f"c{position}"))
             layer, ending = f"c{position}", "eof_action=pass"
+            seen_full = False
         elif frame_size is not None and _moves(panel, frame_size):
             if crossfade and seen_full:
-                lead = min(panel_motion.CROSSFADE_SECONDS, max(0.0, panel.end - panel.start))
+                previous = panels[position - 1]
+                lead = min(panel_motion.CROSSFADE_SECONDS, max(0.0, previous.end - previous.start))
             steps.append(
                 panel_motion.zoom_filter(
                     layer, panel, frame_size[0], frame_size[1], f"m{position}", lead_seconds=lead
@@ -307,6 +309,8 @@ def overlay_command(
                 )
                 layer = f"f{position}"
             seen_full = True
+        else:
+            seen_full = False
         steps.append(
             f"[{source}][{layer}]overlay={panel.x}:{panel.y}"
             f":enable='between(t,{panel.start - lead:.3f},{panel.end:.3f})':{ending}[{target}]"
