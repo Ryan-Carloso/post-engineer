@@ -34,8 +34,8 @@ function photos(count: number, prefix: string): Array<{ url: string }> {
 }
 
 const segments = [
-  { kind: 'hook' as const, text: hook, media: photos(4, 'hook') },
-  { kind: 'content' as const, text: content, media: photos(6, 'content') },
+  { kind: 'hook' as const, text: hook, media: photos(5, 'hook') },
+  { kind: 'content' as const, text: content, media: photos(8, 'content') },
   { kind: 'content' as const, text: ctaTake, media: photos(2, 'ctaTake') },
 ];
 
@@ -90,8 +90,8 @@ describe('generate_persona_video tool', () => {
   it('forwards the per-video CTA override and the marked take to the client, including an explicit null (issue #639)', async () => {
     const client = mockClient();
     const marked = [
-      { kind: 'hook' as const, text: hook, media: photos(4, 'hook') },
-      { kind: 'content' as const, text: content, media: photos(6, 'content') },
+      { kind: 'hook' as const, text: hook, media: photos(5, 'hook') },
+      { kind: 'content' as const, text: content, media: photos(8, 'content') },
       { kind: 'content' as const, text: ctaTake, cta: true, media: photos(2, 'ctaTake') },
     ];
     await handleGeneratePersonaVideo(client, {
