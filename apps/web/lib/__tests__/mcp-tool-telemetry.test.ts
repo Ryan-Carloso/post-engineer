@@ -78,11 +78,11 @@ describe('mcp_tool_called', () => {
     expect(captureAs.mock.calls[0]?.[2]).toMatchObject({ path: '/api/prompts/[redacted]' });
   });
 
-  it('keeps a static slug segment readable', () => {
+  it('replaces a prompt slug path segment with :param so a private slug cannot reach PostHog', () => {
     record(
       mcpRequest({ 'x-mcp-tool': 'prompts' }, 'https://post-engineer.test/api/prompts/daily-news')
     );
-    expect(captureAs.mock.calls[0]?.[2]).toMatchObject({ path: '/api/prompts/daily-news' });
+    expect(captureAs.mock.calls[0]?.[2]).toMatchObject({ path: '/api/prompts/:param' });
   });
 
   it('records nothing without the tool header', () => {

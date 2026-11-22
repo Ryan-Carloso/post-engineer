@@ -74,7 +74,12 @@ function telemetryPath(url: string): string {
     }
     return decoded === '' || (STATIC_SEGMENT.test(decoded) && !CALL_ID.test(decoded)) ? decoded : ':param';
   });
-  return redactCredentialFragments(segments.join('/'));
+  const path = redactCredentialFragments(segments.join('/'));
+  const parts = path.split('/');
+  if (parts.length === 4 && parts[1] === 'api' && parts[2] === 'prompts' && STATIC_SEGMENT.test(parts[3] ?? '')) {
+    parts[3] = ':param';
+  }
+  return parts.join('/');
 }
 
 function headerMatching(request: Request, name: string, pattern: RegExp): string | undefined {
