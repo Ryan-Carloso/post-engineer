@@ -22,7 +22,7 @@ export async function fetchMediaCheck(
   userId: string,
   videoAspect: VideoAspectOption,
   logTag: string,
-): Promise<MediaCheckRecord | NextResponse> {
+): Promise<(MediaCheckRecord & { code: string }) | NextResponse> {
   const baseUrl = process.env.MONEYPRINT_API_URL;
   if (!baseUrl || !process.env.MONEYPRINT_API_SECRET) {
     logger.error(`[${logTag}] engine URL or secret is not defined`);
@@ -66,6 +66,6 @@ export async function fetchMediaCheck(
     logger.error(`[${logTag}] engine check returned no code`);
     return coded(502, ERROR_CODES.INTERNAL_ERROR, 'Video service is unavailable.');
   }
-  return record;
+  return { ...record, code: record.code };
 }
 

@@ -18,25 +18,24 @@ export const LIPSYNC_PHOTOS_REQUIRED_MESSAGE =
 export const LIPSYNC_PHOTOS_ONLY_FULL_MESSAGE =
   "options.lipsyncPhotos applies only to videoType 'full_lipsync': the other modes have no full talking-head video.";
 
-function photoIssue(photo: LipsyncPhotoRef, index: number): ValidationIssue | null {
+function normalizedRef(photo: LipsyncPhotoRef, index: number): LipsyncPhotoRef | ValidationIssue {
   const field = `${FIELD}.${index}`;
-  const hasMediaId = photo.mediaId !== undefined && photo.mediaId.trim().length > 0;
-  const hasUrl = photo.url !== undefined && photo.url.trim().length > 0;
-  if (hasMediaId === hasUrl) {
+  const mediaId = (photo.mediaId ?? '').trim();
+  const url = (photo.url ?? '').trim();
+  if ((mediaId.length > 0) === (url.length > 0)) {
     return invalid(`${field} must carry exactly one of mediaId or url.`, field);
   }
-  if (hasUrl && !isHttpUrl(photo.url ?? '')) {
+  if (url.length > 0 && !isHttpUrl(url)) {
     return invalid(`${field}.url must be a valid http(s) URL.`, field);
   }
   if (isVideoRef(photo)) {
     return invalid(`${field} is a video clip: full lip sync needs a still photo of the persona's face.`, field);
   }
-  return null;
+  return mediaId.length > 0 ? { mediaId } : { url };
 }
 
-function refKey(photo: LipsyncPhotoRef): string {
-  const mediaId = photo.mediaId?.trim() ?? '';
-  return mediaId.length > 0 ? `mediaId:${mediaId}` : `url:${photo.url?.trim() ?? ''}`;
+function refKey(ref: LipsyncPhotoRef): string {
+  return ref.mediaId !== undefined ? `mediaId:${ref.mediaId}` : `url:${ref.url}`;
 }
 
 export function validateLipsyncPhotos(
@@ -63,14 +62,16 @@ export function validateLipsyncPhotos(
     };
   }
   const issues: ValidationIssue[] = [];
+  const refs: LipsyncPhotoRef[] = [];
   const seen = new Map<string, number>();
   photos.forEach((photo, index) => {
-    const issue = photoIssue(photo, index);
-    if (issue !== null) {
-      issues.push(issue);
+    const ref = normalizedRef(photo, index);
+    if ('code' in ref) {
+      issues.push(ref);
       return;
     }
-    const key = refKey(photo);
+    refs.push(ref);
+    const key = refKey(ref);
     const earlier = seen.get(key);
     if (earlier !== undefined) {
       issues.push(
@@ -84,12 +85,5 @@ export function validateLipsyncPhotos(
     seen.set(key, index);
   });
   if (issues.length > 0) return { ok: false, issues };
-  return {
-    ok: true,
-    value: photos.map((photo) =>
-      photo.mediaId !== undefined && photo.mediaId.trim().length > 0
-        ? { mediaId: photo.mediaId.trim() }
-        : { url: (photo.url ?? '').trim() },
-    ),
-  };
+  return { ok: true, value: refs };
 }

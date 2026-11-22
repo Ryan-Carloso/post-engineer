@@ -28,7 +28,7 @@ export async function checkLipsyncPhotoFaces(
     );
     if (record instanceof NextResponse) return record;
     const field = `options.lipsyncPhotos.${index}`;
-    const reason = typeof record.code === 'string' ? UNUSABLE_REASONS[record.code] : undefined;
+    const reason: string | undefined = UNUSABLE_REASONS[record.code];
     if (reason !== undefined) {
       return validationFailed(
         ERROR_CODES.VALIDATION_FAILED,
