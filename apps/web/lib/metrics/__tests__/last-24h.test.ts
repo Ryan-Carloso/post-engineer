@@ -246,13 +246,27 @@ describe('computeLast24h filters and scope', () => {
   });
 
   it('does not count out-of-scope videos in skipped or resets', () => {
-    const input = twoPersonaInput();
-    const result = compute({
-      posts: input.posts,
-      readings: [...input.readings, reading({ postId: 'post-2', externalId: 'abc123', collectedAt: ago(40), views: 1 })],
-      personaIds: [PERSONA],
-    });
-    expect(result.skipped).toEqual({ noBaseline: 0, stale: 0 });
+    const outOfScope = [
+      post({ id: 'out-nobase', personaId: OTHER_PERSONA }),
+      post({ id: 'out-stale', personaId: OTHER_PERSONA }),
+      post({ id: 'out-reset', personaId: OTHER_PERSONA }),
+    ];
+    const staleAt = new Date(NOW.getTime() - LAST_24H_LATEST_MAX_AGE_MS - HOUR).toISOString();
+    const readings = [
+      reading({ postId: 'out-nobase', collectedAt: ago(1) }),
+      reading({ postId: 'out-stale', collectedAt: staleAt }),
+      reading({ postId: 'out-reset', collectedAt: ago(1), views: 1 }),
+      reading({ postId: 'out-reset', collectedAt: ago(25), views: 9 }),
+    ];
+    const scoped = compute({ posts: outOfScope, readings, personaIds: [PERSONA] });
+    expect(scoped.rows).toEqual([]);
+    expect(scoped.skipped).toEqual({ noBaseline: 0, stale: 0 });
+    expect(scoped.counterResets).toBe(0);
+    expect(logger.warn).not.toHaveBeenCalled();
+
+    const unscoped = compute({ posts: outOfScope, readings });
+    expect(unscoped.skipped).toEqual({ noBaseline: 1, stale: 1 });
+    expect(unscoped.counterResets).toBe(1);
   });
 
   it('shows every post to an unscoped caller', () => {
