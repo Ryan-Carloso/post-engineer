@@ -4,6 +4,11 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 
+Object.defineProperty(Element.prototype, 'scrollIntoView', { configurable: true, value: vi.fn() });
+window.HTMLElement.prototype.hasPointerCapture = () => false;
+window.HTMLElement.prototype.setPointerCapture = () => {};
+window.HTMLElement.prototype.releasePointerCapture = () => {};
+
 vi.mock('@/lib/api', () => ({
   useSchedulesQuery: vi.fn(),
   usePersonaListQuery: vi.fn(),
@@ -163,7 +168,8 @@ describe('posts calendar load failure copy', () => {
 });
 
 describe('PostsPage', () => {
-  it("opens on the calendar with today's posts below it: title, persona, status and network glyphs", () => {
+  it("opens on the calendar with today's posts below it: title, persona, status and network glyphs", async () => {
+    const user = userEvent.setup();
     render(<PostsPage />);
 
     expect(dayPanelCardText('Upcoming topic')).toBeInTheDocument();
@@ -174,6 +180,7 @@ describe('PostsPage', () => {
     expect(row.querySelectorAll('[role="img"]')).toHaveLength(2);
     expect(row.querySelector('[aria-label="youtube"]')).not.toBeNull();
     expect(row.querySelector('[aria-label="instagram"]')).not.toBeNull();
+    await user.click(screen.getByLabelText('posts.filterAccount'));
     expect(screen.getAllByText('Europa Na Estrada').length).toBe(1);
     expect(screen.queryByText('Past topic')).not.toBeInTheDocument();
   });
@@ -267,7 +274,8 @@ describe('PostsPage', () => {
     render(<PostsPage />);
 
     const selects = screen.getAllByRole('combobox');
-    await user.selectOptions(selects[0], 'linkedin');
+    await user.click(selects[0]);
+    await user.click(screen.getByRole('option', { name: 'LinkedIn' }));
 
     expect(screen.getByText('posts.filterMonthEmptyTitle')).toBeInTheDocument();
     expect(screen.getByText('posts.calendarMonthHeading')).toBeInTheDocument();
@@ -290,7 +298,8 @@ describe('PostsPage', () => {
     expect(dayPanelCardText('Upcoming topic')).toBeInTheDocument();
 
     const selects = screen.getAllByRole('combobox');
-    await user.selectOptions(selects[0], 'instagram');
+    await user.click(selects[0]);
+    await user.click(screen.getByRole('option', { name: 'Instagram' }));
 
     expect(screen.queryByText('Upcoming topic')).not.toBeInTheDocument();
     expect(screen.getByText('posts.filterMonthEmptyTitle')).toBeInTheDocument();
@@ -305,12 +314,13 @@ describe('PostsPage', () => {
     expect(screen.queryByRole('button', { name: 'posts.clearFilters' })).not.toBeInTheDocument();
 
     const selects = screen.getAllByRole('combobox');
-    await user.selectOptions(selects[0], 'youtube');
+    await user.click(selects[0]);
+    await user.click(screen.getByRole('option', { name: 'YouTube' }));
     expect(selects[0].className.split(/\s+/)).toContain('border-primary');
     expect(selects[1].className.split(/\s+/)).not.toContain('border-primary');
     expect(screen.getAllByRole('button', { name: 'posts.clearFilters' })).toHaveLength(1);
     await user.click(screen.getByRole('button', { name: 'posts.clearFilters' }));
-    expect(selects[0]).toHaveValue('all');
+    expect(selects[0]).toHaveTextContent('posts.allProviders');
     expect(dayPanelCardText('Upcoming topic')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'posts.clearFilters' })).not.toBeInTheDocument();
   });
@@ -320,7 +330,8 @@ describe('PostsPage', () => {
     render(<PostsPage />);
 
     const selects = screen.getAllByRole('combobox');
-    await user.selectOptions(selects[1], 'ig1');
+    await user.click(selects[1]);
+    await user.click(screen.getByRole('option', { name: '@vivalave' }));
 
     expect(dayPanelCardText('Upcoming topic')).toBeInTheDocument();
   });
@@ -333,7 +344,8 @@ describe('PostsPage', () => {
     render(<PostsPage />);
 
     const selects = screen.getAllByRole('combobox');
-    await user.selectOptions(selects[1], 'ig1');
+    await user.click(selects[1]);
+    await user.click(screen.getByRole('option', { name: '@vivalave' }));
 
     await waitFor(() => {
       expect(screen.queryByText('Upcoming topic')).not.toBeInTheDocument();
@@ -543,23 +555,28 @@ describe('PostsPage', () => {
     const user = userEvent.setup();
     render(<PostsPage />);
 
-    await user.selectOptions(screen.getByLabelText('posts.filterAccount'), 'ch1');
-    expect(screen.getByLabelText('posts.filterAccount')).toHaveValue('ch1');
+    await user.click(screen.getByLabelText('posts.filterAccount'));
+    await user.click(screen.getByRole('option', { name: 'Europa Na Estrada' }));
+    expect(screen.getByLabelText('posts.filterAccount')).toHaveTextContent('Europa Na Estrada');
 
-    await user.selectOptions(screen.getByLabelText('posts.filterProvider'), 'instagram');
-    expect(screen.getByLabelText('posts.filterAccount')).toHaveValue('all');
+    await user.click(screen.getByLabelText('posts.filterProvider'));
+    await user.click(screen.getByRole('option', { name: 'Instagram' }));
+    expect(screen.getByLabelText('posts.filterAccount')).toHaveTextContent('posts.allAccounts');
 
-    await user.selectOptions(screen.getByLabelText('posts.filterProvider'), 'all');
-    expect(screen.getByLabelText('posts.filterAccount')).toHaveValue('all');
+    await user.click(screen.getByLabelText('posts.filterProvider'));
+    await user.click(screen.getByRole('option', { name: 'posts.allProviders' }));
+    expect(screen.getByLabelText('posts.filterAccount')).toHaveTextContent('posts.allAccounts');
   });
 
   it('keeps the account filter when switching to a network the account belongs to', async () => {
     const user = userEvent.setup();
     render(<PostsPage />);
 
-    await user.selectOptions(screen.getByLabelText('posts.filterAccount'), 'ch1');
-    await user.selectOptions(screen.getByLabelText('posts.filterProvider'), 'youtube');
-    expect(screen.getByLabelText('posts.filterAccount')).toHaveValue('ch1');
+    await user.click(screen.getByLabelText('posts.filterAccount'));
+    await user.click(screen.getByRole('option', { name: 'Europa Na Estrada' }));
+    await user.click(screen.getByLabelText('posts.filterProvider'));
+    await user.click(screen.getByRole('option', { name: 'YouTube' }));
+    expect(screen.getByLabelText('posts.filterAccount')).toHaveTextContent('Europa Na Estrada');
   });
 });
 
@@ -685,11 +702,12 @@ describe('PostsPage fallbacks', () => {
     expect(row.querySelectorAll('[role="img"]')).toHaveLength(3);
   });
 
-  it('labels every provider filter option with its own network name', () => {
+  it('labels every provider filter option with its own network name', async () => {
+    const user = userEvent.setup();
     render(<PostsPage />);
 
-    const providerSelect = screen.getByLabelText('posts.filterProvider');
-    const options = within(providerSelect)
+    await user.click(screen.getByLabelText('posts.filterProvider'));
+    const options = screen
       .getAllByRole('option')
       .map((option) => option.textContent);
     expect(options).toEqual(['posts.allProviders', 'YouTube', 'Instagram', 'Bluesky', 'LinkedIn', 'Threads', 'Facebook', 'Pinterest', '3Speak', 'Rumble', 'Fanvue', 'Telegram']);
@@ -779,7 +797,8 @@ describe('PostsPage calendar view', () => {
     const user = userEvent.setup();
     render(<PostsPage />);
 
-    await user.selectOptions(screen.getAllByRole('combobox')[0], 'linkedin');
+    await user.click(screen.getAllByRole('combobox')[0]);
+    await user.click(screen.getByRole('option', { name: 'LinkedIn' }));
 
     expect(document.querySelectorAll('[data-event-id]')).toHaveLength(0);
   });
@@ -990,9 +1009,9 @@ describe('PostsPage calendar view', () => {
     render(<PostsPage />);
     for (const select of [screen.getByLabelText('posts.filterProvider'), screen.getByLabelText('posts.filterAccount')]) {
       expect(select).toBeDisabled();
-      expect(select.className.split(/\s+/)).toContain('appearance-none');
       expect(select.className.split(/\s+/)).toContain('saturate-50');
-      expect(select.className).not.toMatch(/bg-\[image:/);
+      expect(select.className.split(/\s+/)).toContain('[&>svg]:hidden');
+      expect(select.querySelector('svg.lucide-chevron-down')).not.toBeNull();
     }
   });
 

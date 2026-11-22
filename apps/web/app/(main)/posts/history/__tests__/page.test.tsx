@@ -4,6 +4,11 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 
+window.HTMLElement.prototype.scrollIntoView = vi.fn();
+window.HTMLElement.prototype.hasPointerCapture = () => false;
+window.HTMLElement.prototype.setPointerCapture = () => {};
+window.HTMLElement.prototype.releasePointerCapture = () => {};
+
 vi.mock('@/lib/api', () => ({
   useScheduleStatusQuery: vi.fn(),
   useSchedulesQuery: vi.fn(),
@@ -283,7 +288,8 @@ describe('PostHistoryPage', () => {
     const user = userEvent.setup();
     render(<PostHistoryPage />);
 
-    await user.selectOptions(screen.getByLabelText('posts.filterProvider'), 'linkedin');
+    await user.click(screen.getByLabelText('posts.filterProvider'));
+    await user.click(screen.getByRole('option', { name: 'LinkedIn' }));
     expect(screen.getByText('posts.noResultsForFilter')).toBeInTheDocument();
     expect(screen.getByText('posts.listCapped')).toBeInTheDocument();
   });
