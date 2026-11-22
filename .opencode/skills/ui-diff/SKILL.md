@@ -1,12 +1,14 @@
 ---
 name: ui-diff
-description: Before/after screenshots, highlighted pixel diffs and a short UX summary for pull requests that change UI, posted as one sticky PR comment whose images stay private in the same repository. Use when someone wants reviewers to see a frontend change ("add before/after screenshots to the PR", "what does this PR look like", "visual diff", "UI review", "did this CSS change break anything"), or wants to compare design variants (?hero=1..4), record hover/transition clips, audit design-token usage, check accessibility regressions on changed screens, or capture auth-protected preview deployments.
+description: Before/after screenshots, highlighted pixel diffs and a short UX summary for pull requests that change UI, with the images in the PR body (UI changes section) and one sticky PR comment whose images stay private in the same repository. Use when someone wants reviewers to see a frontend change ("add before/after screenshots to the PR", "what does this PR look like", "visual diff", "UI review", "did this CSS change break anything"), or wants to compare design variants (?hero=1..4), record hover/transition clips, audit design-token usage, check accessibility regressions on changed screens, or capture auth-protected preview deployments.
 ---
 
 # ui-diff
 
 Renders the affected routes of a web app at the PR's **base** and **head**, diffs the
-screenshots, and posts one PR comment with `before | after | diff` images and a UX summary.
+screenshots, and puts the `before | after | diff` images in the PR body (`UI changes`
+section), plus one sticky PR comment with the same images and a UX summary. The body is
+the deliverable; the comment never replaces it.
 The mechanics are scripted; your job is the judgment: which routes matter, what the changes
 mean for users, and whether it is OK to post.
 
@@ -153,9 +155,21 @@ node "$SKILL/bin/ui-diff.mjs" publish --pr <n>
 - No PR yet: use `render` (or `publish --dry-run`) to produce the comment and offer to post once
   the PR exists.
 
+> Post Engineer local patch (upstream `3075b4c8` has no PR-body step): the body is required.
+
+**PR body (required):** the sticky comment never replaces the PR body.
+
+- After a successful publish, add the published image URLs to the PR body's `UI changes`
+  section (`gh pr edit <n> --body-file ...`): one block per changed route — route, viewport,
+  pixel % and area count, then the `before | after | diff` composite image. Verify the body
+  shows the section and the URLs.
+- When publish is not possible (public repo without `--allow-public-repo`, exit code 3, no
+  remote), do not leave the PR without body screenshots: attach the composite images in chat
+  so the owner can drag them into the body.
+
 ## 6. Wrap up
 
-Report the comment link, the counts, the "worth a look" items and anything not captured. If you
+Report the PR body link and the comment link, the counts, the "worth a look" items and anything not captured. If you
 worked out routes, masks or dynamic ids yourself, offer to save them in `ui-diff.config.json`.
 After a PR closes, `node "$SKILL/bin/ui-diff.mjs" prune --closed` removes its images.
 
