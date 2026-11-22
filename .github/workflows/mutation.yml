@@ -367,13 +367,14 @@ jobs:
     needs: [mutation-engine-changes]
     if: needs.mutation-engine-changes.outputs.files_json != '[]'
     runs-on: ubuntu-latest
-    # 180 min: video.py alone generates 2032 mutants across 39 functions
-    # (~354 min of sequential test time; the two biggest functions,
-    # generate_video and combine_videos, hold 60% of it). The 120-min cap
-    # cancelled a run at 86% processed (run 40051091970: 1739/2032 verdicts
-    # saved). A completed run also lets mutmut's incremental cache save,
-    # making later synchronize runs much faster. (Ryan approved, 2026-10-24.)
-    timeout-minutes: 180
+    # 240 min: video.py alone generates ~1800 mutants. A source edit inside
+    # generate_video invalidates that function (~428 mutants) and they take
+    # about 200 minutes on a 4-core runner. The 180 min cap cancelled run
+    # 44977390118 at 383/428, and a cancelled job skips actions/cache's
+    # save, so the next run would start over. The step below stops mutmut
+    # at 225 min so a slow shard fails with the partial mutants/ tree still
+    # cached. (180 approved by Ryan, 2026-10-24; raised after that cancel.)
+    timeout-minutes: 240
     permissions:
       contents: read
     strategy:
@@ -560,14 +561,25 @@ jobs:
             exit 0
           fi
           echo "Function-scoped mutant selection: $SHARD_GLOBS"
-          if ! uv run mutmut run $SHARD_GLOBS; then
-            # Only ever WIDENS the scope (never weakens a verdict): a
-            # function-scoped run can fail when a changed function
-            # happens to generate zero mutants (mutmut asserts on an
-            # empty selection); the whole file covers that case.
-            echo "::warning::function-scoped run failed — falling back to the whole-file scope"
-            uv run mutmut run
+          # Under the job cap so the job is not cancelled. Cancellation
+          # skips the cache save and throws away every verdict.
+          set +e
+          timeout 225m uv run mutmut run $SHARD_GLOBS
+          code=$?
+          set -e
+          if [ "$code" -eq 0 ]; then
+            exit 0
           fi
+          if [ "$code" -eq 124 ]; then
+            echo "::error::function-scoped mutmut exceeded 225 minutes; partial mutants/ will be cached for the retry"
+            exit 1
+          fi
+          # Only ever WIDENS the scope (never weakens a verdict): a
+          # function-scoped run can fail when a changed function
+          # happens to generate zero mutants (mutmut asserts on an
+          # empty selection); the whole file covers that case.
+          echo "::warning::function-scoped run failed (exit $code) — falling back to the whole-file scope"
+          uv run mutmut run
 
       - name: Report skipped shard
         if: matrix.file != '' && steps.mutable.outputs.has_functions == 'false'
