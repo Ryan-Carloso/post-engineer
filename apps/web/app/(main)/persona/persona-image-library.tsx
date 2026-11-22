@@ -62,13 +62,6 @@ const ERROR_CLASS_PATTERNS: Array<{
     key: 'persona.libraryErrorFaceless',
   },
   {
-    test: (error) =>
-      /^The image content does not match its declared file type\.( \(image \d+(: [^)]+)?\))?$/.test(
-        error,
-      ),
-    key: 'persona.libraryErrorContentMismatch',
-  },
-  {
     test: (error) => /^(tag|description) must be at most \d+ characters\.$/.test(error),
     key: 'persona.libraryErrorTooLong',
   },
