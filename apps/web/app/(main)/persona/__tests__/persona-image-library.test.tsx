@@ -508,16 +508,6 @@ describe('PersonaImageLibrarySection', () => {
       mapPersonaImageError('Faceless persona must not include library images.', t, 'persona.libraryUploadError'),
     ).toBe('t:persona.libraryErrorFaceless');
     expect(
-      mapPersonaImageError('The image content does not match its declared file type.', t, 'persona.libraryUploadError'),
-    ).toBe('t:persona.libraryErrorContentMismatch');
-    expect(
-      mapPersonaImageError(
-        'The image content does not match its declared file type. (image 2: foo.jpg)',
-        t,
-        'persona.libraryUploadError',
-      ),
-    ).toBe('t:persona.libraryErrorContentMismatch');
-    expect(
       mapPersonaImageError('tag must be at most 100 characters.', t, 'persona.libraryUpdateError'),
     ).toBe('t:persona.libraryErrorTooLong');
     expect(mapPersonaImageError('Image not found.', t, 'persona.libraryDeleteError')).toBe(

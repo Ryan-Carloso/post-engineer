@@ -8,9 +8,7 @@ import { requestPinned } from '@/lib/ssrf/pinned-request';
 import { resolvePublicHost } from '@/lib/ssrf/resolve-public-host';
 import { isPublicAssetPath, toSameOriginAssetPath } from '@/lib/image-source';
 import { logger } from '@/lib/logger';
-import { detectMagicMimeType } from '@/lib/media/magic-bytes';
 import {
-  ALLOWED_IMAGE_MIME_TYPES,
   IMAGE_BUCKET,
   MAX_IMAGE_BYTES,
   personaAssetPath,
@@ -146,11 +144,7 @@ export async function downloadPublicImage(
   } catch {
     return { error: REMOTE_FACE_ERROR };
   }
-  const detected = detectMagicMimeType(buffer);
-  if (!detected || !ALLOWED_IMAGE_MIME_TYPES.has(detected)) {
-    return { error: REMOTE_FACE_ERROR };
-  }
-  const checked = validateImageBuffer(buffer, detected);
+  const checked = validateImageBuffer(buffer);
   if ('error' in checked) {
     return { error: REMOTE_FACE_ERROR };
   }
