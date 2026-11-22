@@ -414,8 +414,11 @@ jobs:
       # per file: each shard only ever mutates its own file, so caches
       # must not mix. run_id is in the key because cache entries are
       # immutable (re-saving under an existing key is a silent no-op).
+      # restore, not the combined action: that action's post step is
+      # post-if success(), so a failed shard would drop the partial tree.
+      # The save step below runs unless the job was cancelled.
       - name: Restore mutmut incremental state
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: apps/engine/mutants/
           key: mutmut-${{ steps.slug.outputs.slug }}-pr-${{ github.event.pull_request.number || 'manual' }}-${{ github.run_id }}
@@ -561,8 +564,8 @@ jobs:
             exit 0
           fi
           echo "Function-scoped mutant selection: $SHARD_GLOBS"
-          # Under the job cap so the job is not cancelled. Cancellation
-          # skips the cache save and throws away every verdict.
+          # Under the job cap so the job is not cancelled. A cancel skips
+          # the save step. A failed step still reaches it.
           set +e
           timeout 225m uv run mutmut run $SHARD_GLOBS
           code=$?
@@ -580,6 +583,14 @@ jobs:
           # empty selection); the whole file covers that case.
           echo "::warning::function-scoped run failed (exit $code) — falling back to the whole-file scope"
           uv run mutmut run
+
+      - name: Save mutmut incremental state
+        if: always() && !cancelled()
+        continue-on-error: true
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: apps/engine/mutants/
+          key: mutmut-${{ steps.slug.outputs.slug }}-pr-${{ github.event.pull_request.number || 'manual' }}-${{ github.run_id }}
 
       - name: Report skipped shard
         if: matrix.file != '' && steps.mutable.outputs.has_functions == 'false'

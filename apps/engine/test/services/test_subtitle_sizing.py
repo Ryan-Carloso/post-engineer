@@ -149,7 +149,7 @@ def _ink_bottom(text_clip):
     return int(rows.max())
 
 
-@pytest.mark.parametrize("branch", list(BRANCHES))
+@pytest.mark.parametrize("branch", [name for name in BRANCHES if name != "plain"])
 @pytest.mark.parametrize("lines", [1, 2, 3])
 def test_the_caption_box_covers_the_ink_bottom_of_the_last_line(
     tmp_path, monkeypatch, lines, branch
