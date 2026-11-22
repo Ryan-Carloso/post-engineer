@@ -18,7 +18,7 @@ type Operation = 'select' | 'insert' | 'update' | 'delete';
 export interface FakePromptVersion {
   id: string;
   prompt_id: string | null;
-  source: 'official' | 'user';
+  source: 'user';
   slug: string;
   version: number;
   body: string;
@@ -255,24 +255,11 @@ export function createFakeUserPromptsDb(seed: Partial<UserPromptRow>[] = []): Fa
     }
   }
 
-  function ensureOfficialVersion(args: { p_slug: string; p_body: string }): Outcome {
-    queries.push(`rpc ensure_official_prompt_version ${args.p_slug}`);
-    const official = versions.filter((entry) => entry.source === 'official' && entry.slug === args.p_slug);
-    const same = official.find((entry) => entry.body === args.p_body);
-    const row = same ?? { id: randomUUID(), prompt_id: null, source: 'official' as const, slug: args.p_slug, version: official.length + 1, body: args.p_body };
-    if (same === undefined) versions.push(row);
-    return { data: [{ version_id: row.id, version: row.version }], error: null };
-  }
-
   const client = {
     from(table: string): Query | VersionQuery {
       if (table === 'prompt_versions') return new VersionQuery();
       if (table !== 'user_prompts') throw new Error(`unexpected table ${table}`);
       return new Query();
-    },
-    rpc(name: string, args: { p_slug: string; p_body: string }): Promise<Outcome> {
-      if (name !== 'ensure_official_prompt_version') throw new Error(`unexpected rpc ${name}`);
-      return Promise.resolve(ensureOfficialVersion(args));
     },
   };
 

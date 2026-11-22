@@ -1,3 +1,13 @@
+const VERSION_ID = '44444444-4444-4444-8444-444444444444';
+
+const DAILY_NEWS = {
+  slug: 'daily-news',
+  title: 'Daily news becomes a video',
+  description: 'Turn one news story of the day into one persona video.',
+  source: 'community',
+  visibility: 'public',
+};
+
 function visitEnglish(path: string) {
   cy.visit(path, {
     onBeforeLoad(win) {
@@ -6,32 +16,30 @@ function visitEnglish(path: string) {
   });
 }
 
+function stubPrompts() {
+  cy.intercept('GET', '/api/prompts', { statusCode: 200, body: { success: true, prompts: [DAILY_NEWS] } }).as('listPrompts');
+  cy.intercept('GET', '/api/prompts/daily-news', {
+    statusCode: 200,
+    body: { success: true, prompt: { ...DAILY_NEWS, prompt: 'Pick one story of the day.', versionId: VERSION_ID, version: 2 } },
+  }).as('getPrompt');
+}
+
 describe('Prompts hub', () => {
-  it('lists every prompt with links to their detail pages', () => {
+  it('lists the public prompts from the API with links to their detail pages', () => {
+    stubPrompts();
     visitEnglish('/recipes');
     cy.contains('h1', 'Get your prompts').should('be.visible');
-    cy.contains('Daily news becomes a video').should('be.visible');
-    cy.contains('Place spotlight becomes a video').should('be.visible');
-    cy.contains('Subject spotlight becomes a video').should('be.visible');
-    cy.contains('GitHub PRs become videos').should('be.visible');
-    cy.contains('Last 30 days become a video').should('be.visible');
-    cy.contains('One week, one video per network').should('be.visible');
-    cy.contains('A viral video becomes your Short').should('be.visible');
-    cy.contains('Compare two prompts (A/B)').should('be.visible');
-    cy.contains('Story-first Reels').should('be.visible');
-    cy.get('a[href="/recipes/daily-news"]').should('be.visible');
-    cy.get('a[href="/recipes/place-spotlight"]').should('be.visible');
-    cy.get('a[href="/recipes/subject-spotlight"]').should('be.visible');
-    cy.get('a[href="/recipes/github-prs"]').should('be.visible');
-    cy.get('a[href="/recipes/last-30-days"]').should('be.visible');
-    cy.get('a[href="/recipes/multi-rede"]').should('be.visible');
-    cy.get('a[href="/recipes/viral-shorts"]').should('be.visible');
-    cy.get('a[href="/recipes/full-setup"]').should('be.visible');
-    cy.get('a[href="/recipes/compare-prompts"]').should('be.visible');
-    cy.get('a[href="/recipes/story-first-reels"]').should('be.visible');
+    cy.wait('@listPrompts');
+    cy.get('[data-testid="public-prompts-section"]')
+      .scrollIntoView()
+      .within(() => {
+        cy.contains('Daily news becomes a video').should('be.visible');
+        cy.get('a[href="/recipes/daily-news"]').should('be.visible');
+      });
   });
 
   it('shows a signed-out visitor the sign-in step and the setup prompt', () => {
+    stubPrompts();
     visitEnglish('/recipes');
     cy.get('[data-testid="recipes-sign-in-cta"]')
       .should('be.visible')
@@ -42,18 +50,22 @@ describe('Prompts hub', () => {
       .should('contain', '<MY_API_KEY>');
   });
 
-  it('copies a recipe prompt straight from its card', () => {
+  it('copies a public prompt straight from its card', () => {
+    stubPrompts();
     cy.visit('/recipes', {
       onBeforeLoad(win) {
         win.localStorage.setItem('social-hub-locale', 'en');
         cy.stub(win.navigator.clipboard, 'writeText').resolves();
       },
     });
-    cy.get('[data-testid="copy-prompt-daily-news"]')
+    cy.wait('@listPrompts');
+    cy.get('[data-testid="user-prompt-daily-news"]')
       .scrollIntoView()
-      .should('contain', 'Copy prompt')
-      .click()
-      .should('contain', 'Copied!');
+      .within(() => {
+        cy.contains('button', 'Copy').click();
+        cy.wait('@getPrompt');
+        cy.contains('button', 'Copied!').should('be.visible');
+      });
   });
 
   it('redirects the old /api-keys page to the hub', () => {
@@ -61,56 +73,20 @@ describe('Prompts hub', () => {
     cy.location('pathname').should('eq', '/recipes');
   });
 
-  it('shows the daily-news detail: steps, copy button, GitHub last', () => {
+  it('shows a prompt detail page with its text and copy button', () => {
+    stubPrompts();
     visitEnglish('/recipes/daily-news');
+    cy.wait('@getPrompt');
     cy.contains('h1', 'Daily news becomes a video').should('be.visible');
-    cy.contains('h2', 'What this prompt does').should('be.visible');
+    cy.contains('Version 2').should('be.visible');
+    cy.get('[data-testid="full-prompt"]').should('contain', 'Pick one story of the day.');
     cy.contains('button', 'Copy this prompt').should('be.visible');
-    cy.get('a[href*="docs/recipes/daily-news.md"]').should('be.visible');
-  });
-
-  it('shows the place-spotlight detail: steps, copy button, GitHub last', () => {
-    visitEnglish('/recipes/place-spotlight');
-    cy.contains('h1', 'Place spotlight becomes a video').should('be.visible');
-    cy.contains('h2', 'What this prompt does').should('be.visible');
-    cy.contains('button', 'Copy this prompt').should('be.visible');
-    cy.get('a[href*="docs/recipes/place-spotlight.md"]').should('be.visible');
-  });
-
-  it('shows the subject-spotlight detail: steps, copy button, GitHub last', () => {
-    visitEnglish('/recipes/subject-spotlight');
-    cy.contains('h1', 'Subject spotlight becomes a video').should('be.visible');
-    cy.contains('h2', 'What this prompt does').should('be.visible');
-    cy.contains('button', 'Copy this prompt').should('be.visible');
-    cy.get('a[href*="docs/recipes/subject-spotlight.md"]').should('be.visible');
-  });
-
-  it('shows the GitHub PRs detail: steps and copy button', () => {
-    visitEnglish('/recipes/github-prs');
-    cy.contains('h1', 'GitHub PRs become videos').should('be.visible');
-    cy.contains('h2', 'What this prompt does').should('be.visible');
-    cy.contains('button', 'Copy this prompt').should('be.visible');
-    cy.get('a[href*="docs/recipes/github-prs.md"]').should('be.visible');
-  });
-
-  it('shows the compare-prompts detail: steps and copy button', () => {
-    visitEnglish('/recipes/compare-prompts');
-    cy.contains('h1', 'Compare two prompts (A/B)').should('be.visible');
-    cy.contains('h2', 'What this prompt does').should('be.visible');
-    cy.contains('button', 'Copy this prompt').should('be.visible');
-    cy.get('a[href*="docs/recipes/compare-prompts.md"]').should('be.visible');
-  });
-
-  it('shows the story-first reels detail: steps and copy button', () => {
-    visitEnglish('/recipes/story-first-reels');
-    cy.contains('h1', 'Story-first Reels').should('be.visible');
-    cy.contains('h2', 'What this prompt does').should('be.visible');
-    cy.contains('button', 'Copy this prompt').should('be.visible');
-    cy.get('a[href*="docs/recipes/story-first-reels.md"]').should('be.visible');
   });
 
   it('shows a not-found line with a back link for an unknown slug', () => {
+    cy.intercept('GET', '/api/prompts/no-such-prompt', { statusCode: 404, body: { success: false, code: 'PROMPT_NOT_FOUND' } }).as('missing');
     visitEnglish('/recipes/no-such-prompt');
+    cy.wait('@missing');
     cy.contains('This prompt does not exist yet.').should('be.visible');
     cy.get('a[href="/recipes"]').should('be.visible');
   });

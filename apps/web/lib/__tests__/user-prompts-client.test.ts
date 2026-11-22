@@ -88,7 +88,6 @@ describe('prompt client', () => {
 describe('promptFailureKey', () => {
   it.each([
     [{ status: 409, code: 'PROMPT_SLUG_TAKEN' }, 'userPrompts.errorSlugTaken'],
-    [{ status: 409, code: 'PROMPT_SLUG_RESERVED' }, 'userPrompts.errorSlugReserved'],
     [{ status: 400, code: 'VALIDATION_FAILED' }, 'userPrompts.errorValidation'],
     [{ status: 429, code: null }, 'userPrompts.errorRateLimited'],
     [{ status: 403, code: 'PERSONA_SCOPE_DENIED' }, 'userPrompts.errorForbidden'],

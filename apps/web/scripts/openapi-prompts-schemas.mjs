@@ -6,10 +6,10 @@ export function promptOperationSchemas({ success, object, str }) {
     description: str,
     source: {
       type: 'string',
-      enum: ['official', 'own', 'community'],
-      description: 'official: shipped with post-engineer. own: written by the caller. community: a public prompt written by another user, not verified by post-engineer.',
+      enum: ['own', 'community'],
+      description: 'own: written by the caller. community: a public prompt written by another user, not verified by post-engineer.',
     },
-    visibility: { ...visibility, description: 'Official and community prompts are public; an own prompt is private until its owner makes it public.' },
+    visibility: { ...visibility, description: 'Community prompts are public; an own prompt is private until its owner makes it public.' },
   };
   const summary = object(summaryFields, Object.keys(summaryFields));
   const detailFields = {
@@ -50,7 +50,7 @@ export function promptOperationSchemas({ success, object, str }) {
   const description = { type: 'string', maxLength: 500 };
   const text = { type: 'string', minLength: 1, maxLength: 20000 };
   const owned = { 403: 'A persona-scoped API key cannot manage prompts.', 404: 'Unknown prompt, or not yours.' };
-  const taken = 'The slug is reserved by an official prompt (PROMPT_SLUG_RESERVED), already yours, or used by another public prompt (PROMPT_SLUG_TAKEN).';
+  const taken = 'The slug is already yours, or used by another public prompt (PROMPT_SLUG_TAKEN).';
   return {
     'GET /api/prompts': {
       query: [{ name: 'q', required: false }, { name: 'source', required: false }],

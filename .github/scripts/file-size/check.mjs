@@ -6,7 +6,6 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { isVendoredCalendarCN } from './vendored-calendarcn.mjs';
 import { isVendoredUiDiff } from './vendored-uidiff.mjs';
-import { isPromptDataFile } from './prompt-data.mjs';
 
 export const LINE_CAP = 500;
 
@@ -31,7 +30,6 @@ export function isSourceFile(p) {
 export function isExempt(p) {
   if (isVendoredCalendarCN(p)) return true;
   if (isVendoredUiDiff(p)) return true;
-  if (isPromptDataFile(p)) return true;
   const segments = p.split('/');
   const base = segments[segments.length - 1];
   if (base.includes('.test.') || base.includes('_test.')) return true;

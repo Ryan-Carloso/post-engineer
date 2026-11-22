@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useI18n } from '@/lib/i18n/provider';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -37,7 +38,15 @@ export default function UserPromptRow({
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
-          <h3 className="truncate text-base font-bold tracking-tight text-ink">{prompt.title}</h3>
+          <h3 className="truncate text-base font-bold tracking-tight text-ink">
+            <Link
+              href={`/recipes/${encodeURIComponent(prompt.slug)}`}
+              data-testid={`user-prompt-link-${prompt.slug}`}
+              className="hover:text-brand hover:underline"
+            >
+              {prompt.title}
+            </Link>
+          </h3>
           <p className="font-mono text-xs text-muted-text">{prompt.slug}</p>
         </div>
         {prompt.source === 'community' ? (

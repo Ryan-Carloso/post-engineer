@@ -15,7 +15,6 @@ const RUN_ALL_PREFIXES = [
   'supabase/',
   'apps/engine/',
   'apps/mcp/',
-  'docs/recipes/',
 ];
 
 const RUN_ALL_FILES = new Set([

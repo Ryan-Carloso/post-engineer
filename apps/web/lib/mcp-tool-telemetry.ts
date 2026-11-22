@@ -1,6 +1,6 @@
 import { getPostHogServer } from './posthog-server';
 import { redactCredentialFragments } from './scrub';
-import { PROMPTS } from '@/app/recipes/prompts';
+import { USER_PROMPT_SLUG_PATTERN } from '@/lib/contracts/prompts';
 
 const TOOL_NAME = /^[a-z][a-z0-9_]{0,63}$/;
 const CALL_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -26,7 +26,7 @@ export const RECIPE_NUDGE_SURFACES: ReadonlySet<string> = new Set([
   'generate_video',
 ]);
 const TRANSPORTS: ReadonlySet<string> = new Set(['stdio', 'http']);
-const HUB_SLUGS: ReadonlySet<string> = new Set(PROMPTS.map((entry) => entry.slug));
+const RECIPE_FOLLOWED = 'prompt';
 const SCRIPT_REJECTIONS = /^\d{1,3}$/;
 const CALL_REQUEST = /^[1-9]\d{0,5}$/;
 
@@ -38,7 +38,8 @@ function headerInSet(request: Request, name: string, allowed: ReadonlySet<string
 function recipeHeader(request: Request, name: string, allowNone: boolean): string | undefined {
   const value = request.headers.get(name);
   if (value === null) return undefined;
-  if (HUB_SLUGS.has(value) || (allowNone && value === 'none')) return value;
+  if (value === 'none') return allowNone ? value : 'unknown';
+  if (USER_PROMPT_SLUG_PATTERN.test(value)) return RECIPE_FOLLOWED;
   return 'unknown';
 }
 

@@ -77,35 +77,30 @@ select pg_temp.expect_value(
     where slug = 'versioned' and owner_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' and prompt_id is null$$,
   '2', 'deleting a prompt keeps its versions, unlinked');
 
-create temporary table official_ids (label text, id uuid, version integer) on commit drop;
-insert into official_ids select 'a', * from public.ensure_official_prompt_version('story-first', 'Story first', 'Body one');
-insert into official_ids select 'b', * from public.ensure_official_prompt_version('story-first', 'Story first', 'Body one');
-insert into official_ids select 'c', * from public.ensure_official_prompt_version('story-first', 'Story first', 'Body two');
 select pg_temp.expect_value(
-  $$select (select id from official_ids where label = 'a') = (select id from official_ids where label = 'b')$$,
-  'true', 'the same official body maps to the same version');
-select pg_temp.expect_value(
-  $$select string_agg(label || ':' || version::text, ',' order by label) from official_ids$$,
-  'a:1,b:1,c:2', 'a changed official body records the next version');
+  $$select (to_regprocedure('public.ensure_official_prompt_version(text, text, text)') is null)::text$$,
+  'true', 'prompts live only in user_prompts: nothing records an official version');
+
+create temporary table kept_version on commit drop as
+select pv.id from public.prompt_versions pv
+where pv.slug = 'versioned' and pv.owner_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+order by pv.version desc limit 1;
 
 insert into public.schedules (id, user_id, providers, youtube_account_ids, instagram_account_ids, times, linkedin_account_ids, bluesky_account_ids)
 values ('dddddddd-dddd-dddd-dddd-dddddddddd03', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', array['youtube'], array[]::text[], array[]::text[], array[]::text[], array[]::text[], array[]::text[]);
 insert into public.scheduled_posts (id, schedule_id, user_id, slot_at, charged_tokens, prompt_version_id)
 select 'dddddddd-dddd-dddd-dddd-dddddddddd02', 'dddddddd-dddd-dddd-dddd-dddddddddd03', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', now(), 1, id
-from official_ids where label = 'c';
+from kept_version;
 insert into public.post_metrics (post_id, user_id, provider, account_id, external_id, metrics_window)
 values ('dddddddd-dddd-dddd-dddd-dddddddddd02', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'youtube', 'acc', 'ext', '7d');
 select pg_temp.expect_value(
-  $$select (pm.prompt_version_id = (select id from official_ids where label = 'c'))::text
+  $$select (pm.prompt_version_id = (select id from kept_version))::text
     from public.post_metrics pm where pm.post_id = 'dddddddd-dddd-dddd-dddd-dddddddddd02'$$,
   'true', 'a metrics snapshot copies the prompt version of its post');
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', true);
 select pg_temp.expect_state($$select * from public.prompt_versions$$, '42501', 'authenticated cannot read prompt_versions');
-select pg_temp.expect_state(
-  $$select public.ensure_official_prompt_version('x', 'X', 'X')$$,
-  '42501', 'authenticated cannot record an official version');
 
 reset role;
 set local role anon;

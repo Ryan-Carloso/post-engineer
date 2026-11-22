@@ -7755,11 +7755,10 @@
                           "source": {
                             "type": "string",
                             "enum": [
-                              "official",
                               "own",
                               "community"
                             ],
-                            "description": "official: shipped with post-engineer. own: written by the caller. community: a public prompt written by another user, not verified by post-engineer."
+                            "description": "own: written by the caller. community: a public prompt written by another user, not verified by post-engineer."
                           },
                           "visibility": {
                             "type": "string",
@@ -7767,7 +7766,7 @@
                               "private",
                               "public"
                             ],
-                            "description": "Official and community prompts are public; an own prompt is private until its owner makes it public."
+                            "description": "Community prompts are public; an own prompt is private until its owner makes it public."
                           }
                         },
                         "required": [
@@ -7887,11 +7886,10 @@
                         "source": {
                           "type": "string",
                           "enum": [
-                            "official",
                             "own",
                             "community"
                           ],
-                          "description": "official: shipped with post-engineer. own: written by the caller. community: a public prompt written by another user, not verified by post-engineer."
+                          "description": "own: written by the caller. community: a public prompt written by another user, not verified by post-engineer."
                         },
                         "visibility": {
                           "type": "string",
@@ -7899,7 +7897,7 @@
                             "private",
                             "public"
                           ],
-                          "description": "Official and community prompts are public; an own prompt is private until its owner makes it public."
+                          "description": "Community prompts are public; an own prompt is private until its owner makes it public."
                         },
                         "prompt": {
                           "type": "string"
@@ -7975,7 +7973,7 @@
             }
           },
           "409": {
-            "description": "The slug is reserved by an official prompt (PROMPT_SLUG_RESERVED), already yours, or used by another public prompt (PROMPT_SLUG_TAKEN).",
+            "description": "The slug is already yours, or used by another public prompt (PROMPT_SLUG_TAKEN).",
             "content": {
               "application/json": {
                 "schema": {
@@ -8082,11 +8080,10 @@
                         "source": {
                           "type": "string",
                           "enum": [
-                            "official",
                             "own",
                             "community"
                           ],
-                          "description": "official: shipped with post-engineer. own: written by the caller. community: a public prompt written by another user, not verified by post-engineer."
+                          "description": "own: written by the caller. community: a public prompt written by another user, not verified by post-engineer."
                         },
                         "visibility": {
                           "type": "string",
@@ -8094,7 +8091,7 @@
                             "private",
                             "public"
                           ],
-                          "description": "Official and community prompts are public; an own prompt is private until its owner makes it public."
+                          "description": "Community prompts are public; an own prompt is private until its owner makes it public."
                         },
                         "prompt": {
                           "type": "string"
@@ -8221,11 +8218,10 @@
                         "source": {
                           "type": "string",
                           "enum": [
-                            "official",
                             "own",
                             "community"
                           ],
-                          "description": "official: shipped with post-engineer. own: written by the caller. community: a public prompt written by another user, not verified by post-engineer."
+                          "description": "own: written by the caller. community: a public prompt written by another user, not verified by post-engineer."
                         },
                         "visibility": {
                           "type": "string",
@@ -8233,7 +8229,7 @@
                             "private",
                             "public"
                           ],
-                          "description": "Official and community prompts are public; an own prompt is private until its owner makes it public."
+                          "description": "Community prompts are public; an own prompt is private until its owner makes it public."
                         },
                         "prompt": {
                           "type": "string"
@@ -8309,7 +8305,7 @@
             }
           },
           "409": {
-            "description": "The slug is reserved by an official prompt (PROMPT_SLUG_RESERVED), already yours, or used by another public prompt (PROMPT_SLUG_TAKEN).",
+            "description": "The slug is already yours, or used by another public prompt (PROMPT_SLUG_TAKEN).",
             "content": {
               "application/json": {
                 "schema": {

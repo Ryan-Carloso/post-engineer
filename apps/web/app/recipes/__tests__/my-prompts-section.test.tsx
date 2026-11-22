@@ -27,7 +27,7 @@ interface StoredPrompt {
   title: string;
   description: string;
   prompt: string;
-  source: 'official' | 'own' | 'community';
+  source: 'own' | 'community';
   visibility: 'private' | 'public';
   versionId: string;
   version: number;
@@ -251,16 +251,13 @@ describe('MyPromptsSection', () => {
     expect(await within(row).findByRole('button', { name: 'Copied!' })).toBeInTheDocument();
   });
 
-  it('filters the own and community prompts by what the user types and says when nothing matches', async () => {
-    stored = [own('alpha', 'private'), own('beta', 'public'), own('gamma-shared', 'public', { source: 'community' })];
+  it('filters the own prompts by what the user types and says when nothing matches', async () => {
+    stored = [own('alpha', 'private'), own('beta', 'public')];
     renderSection();
     const box = await screen.findByTestId('user-prompts-search');
     fireEvent.change(box, { target: { value: 'ALPHA' } });
     expect(screen.getByTestId('user-prompt-alpha')).toBeInTheDocument();
     expect(screen.queryByTestId('user-prompt-beta')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('user-prompt-gamma-shared')).not.toBeInTheDocument();
-    fireEvent.change(box, { target: { value: 'gamma' } });
-    expect(screen.getByTestId('user-prompt-gamma-shared')).toBeInTheDocument();
     expect(screen.queryByText('No prompt matches your search.')).not.toBeInTheDocument();
     fireEvent.change(box, { target: { value: 'zzz-nothing' } });
     expect(screen.getByText('No prompt matches your search.')).toBeInTheDocument();
@@ -268,23 +265,12 @@ describe('MyPromptsSection', () => {
     expect(screen.getByTestId('user-prompt-beta')).toBeInTheDocument();
   });
 
-  it('hides the search box while the user has no own or community prompts, even though the list carries the official ones', async () => {
-    stored = [own('daily-news', 'public', { source: 'official' })];
+  it('leaves community prompts to the public prompts section and hides the search box without own prompts', async () => {
+    stored = [own('theirs', 'public', { source: 'community' })];
     renderSection();
-    await screen.findByText('You have no prompts yet.');
+    expect(await screen.findByText('You have no prompts yet.')).toBeInTheDocument();
+    expect(screen.queryByTestId('user-prompt-theirs')).not.toBeInTheDocument();
     expect(screen.queryByTestId('user-prompts-search')).not.toBeInTheDocument();
-  });
-
-  it('shows community prompts under their own heading with a copy button only', async () => {
-    stored = [own('mine', 'private'), own('theirs', 'public', { source: 'community' })];
-    renderSection();
-    const community = await screen.findByTestId('user-prompt-theirs');
-    expect(screen.getByRole('heading', { name: 'Public prompts from the community' })).toBeInTheDocument();
-    expect(within(community).getByText('Community')).toBeInTheDocument();
-    expect(within(community).getByRole('button', { name: 'Copy' })).toBeInTheDocument();
-    for (const name of ['Edit', 'Delete', 'Make public', 'Make private']) {
-      expect(within(community).queryByRole('button', { name })).not.toBeInTheDocument();
-    }
   });
 
   it('shows an error with a retry when the list cannot be loaded', async () => {

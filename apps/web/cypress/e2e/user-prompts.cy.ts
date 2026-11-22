@@ -1,11 +1,3 @@
-const OFFICIAL = {
-  slug: 'daily-news',
-  title: 'Daily news becomes a video',
-  description: 'Turn one news story of the day into one persona video.',
-  source: 'official',
-  visibility: 'public',
-};
-
 function ownPrompt(slug: string, visibility: string) {
   return { slug, title: `Title ${slug}`, description: `About ${slug}`, source: 'own', visibility };
 }
@@ -33,7 +25,7 @@ describe('Your prompts on the hub', () => {
   });
 
   it('lists own prompts with their visibility and community prompts apart, then creates one', () => {
-    let prompts: unknown[] = [OFFICIAL, ownPrompt('mine', 'private'), COMMUNITY];
+    let prompts: unknown[] = [ownPrompt('mine', 'private'), COMMUNITY];
     cy.intercept('GET', '/api/prompts', (request) => {
       request.reply({ statusCode: 200, body: { success: true, prompts } });
     }).as('listPrompts');
@@ -48,8 +40,8 @@ describe('Your prompts on the hub', () => {
     visitEnglish('/recipes');
     cy.wait('@listPrompts');
     cy.get('[data-testid="user-prompt-visibility-mine"]').scrollIntoView().should('contain', 'Private');
-    cy.contains('h3', 'Public prompts from the community').should('be.visible');
-    cy.get('[data-testid="user-prompt-shared-by-someone"]').should('contain', 'Community');
+    cy.get('[data-testid="public-prompts-section"] [data-testid="user-prompt-shared-by-someone"]').should('contain', 'Community');
+    cy.get('[data-testid="my-prompts-section"] [data-testid="user-prompt-shared-by-someone"]').should('not.exist');
 
     cy.get('[data-testid="new-user-prompt-btn"]').click();
     cy.get('[data-testid="user-prompt-form"]').within(() => {
@@ -70,12 +62,12 @@ describe('Your prompts on the hub', () => {
   });
 
   it('makes a private prompt public straight from its row', () => {
-    let prompts: unknown[] = [OFFICIAL, ownPrompt('mine', 'private')];
+    let prompts: unknown[] = [ownPrompt('mine', 'private')];
     cy.intercept('GET', '/api/prompts', (request) => {
       request.reply({ statusCode: 200, body: { success: true, prompts } });
     }).as('listPrompts');
     cy.intercept('PATCH', '/api/prompts/mine', (request) => {
-      prompts = [OFFICIAL, ownPrompt('mine', 'public')];
+      prompts = [ownPrompt('mine', 'public')];
       request.reply({ statusCode: 200, body: { success: true, prompt: { ...ownPrompt('mine', 'public'), prompt: 'Text', versionId: '44444444-4444-4444-8444-444444444444', version: 1 } } });
     }).as('makePublic');
 

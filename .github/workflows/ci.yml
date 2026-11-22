@@ -710,7 +710,7 @@ jobs:
         run: |
           set -euo pipefail
           # Versions recorded on create and body change only, immutable rows,
-          # kept after the prompt is deleted, official versions by body hash,
+          # kept after the prompt is deleted, no official-version function,
           # the post_metrics snapshot and the service-role-only grants of
           # 077_prompt-versions.sql.
           psql "postgresql://postgres:postgres@localhost:5432/postgres?sslmode=disable" -v ON_ERROR_STOP=1 -f scripts/db/check-prompt-versions.sql

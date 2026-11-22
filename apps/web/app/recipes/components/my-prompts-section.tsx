@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useI18n } from '@/lib/i18n/provider';
-import { useCopyText } from '@/lib/use-copy-text';
+import { useCopyPrompt } from '@/lib/use-copy-prompt';
 import { Button } from '@/components/ui/button';
 import { INPUT_CLASS, SpinnerIcon } from '@/lib/ui';
 import { filterPromptSummaries } from '@/lib/prompt-search';
@@ -28,27 +28,24 @@ export default function MyPromptsSection(): React.ReactElement {
   const createMutation = useCreatePromptMutation();
   const updateMutation = useUpdatePromptMutation();
   const deleteMutation = useDeletePromptMutation();
-  const { copied, copy } = useCopyText();
+  const copier = useCopyPrompt();
 
   const [form, setForm] = useState<FormState | null>(null);
   const [failure, setFailure] = useState<PromptCallFailure | null>(null);
-  const [copiedSlug, setCopiedSlug] = useState<string | null>(null);
   const [loadingSlug, setLoadingSlug] = useState<string | null>(null);
   const [search, setSearch] = useState('');
 
   const listing = query.data !== undefined && query.data.success ? query.data.body.prompts : null;
-  const displayable = (listing ?? []).filter((prompt) => prompt.source !== 'official');
-  const visible = filterPromptSummaries(displayable, { q: search });
-  const own = visible.filter((prompt) => prompt.source === 'own');
-  const community = visible.filter((prompt) => prompt.source === 'community');
+  const displayable = (listing ?? []).filter((prompt) => prompt.source === 'own');
+  const own = filterPromptSummaries(displayable, { q: search });
   const searching = search.trim() !== '';
-  const emptyMessage =
-    own.length > 0 ? null : !searching ? t('userPrompts.empty') : community.length === 0 ? t('userPrompts.noResults') : null;
+  const emptyMessage = own.length > 0 ? null : searching ? t('userPrompts.noResults') : t('userPrompts.empty');
   const busy =
     createMutation.isPending ||
     updateMutation.isPending ||
     deleteMutation.isPending ||
-    loadingSlug !== null;
+    loadingSlug !== null ||
+    copier.loadingSlug !== null;
 
   const closeForm = (): void => {
     setForm(null);
@@ -80,19 +77,6 @@ export default function MyPromptsSection(): React.ReactElement {
         visibility: detail.visibility,
       },
     });
-  };
-
-  const copyPrompt = async (prompt: PromptSummary): Promise<void> => {
-    setFailure(null);
-    setLoadingSlug(prompt.slug);
-    const result = await fetchPrompt(prompt.slug);
-    setLoadingSlug(null);
-    if (!result.success) {
-      setFailure(result);
-      return;
-    }
-    copy(result.body.prompt.prompt);
-    setCopiedSlug(prompt.slug);
   };
 
   const submit = async (draft: PromptDraft): Promise<void> => {
@@ -133,7 +117,8 @@ export default function MyPromptsSection(): React.ReactElement {
   };
 
   const formPending = createMutation.isPending || updateMutation.isPending;
-  const errorMessage = failure === null ? null : t(promptFailureKey(failure));
+  const shownFailure = failure ?? copier.failure;
+  const errorMessage = shownFailure === null ? null : t(promptFailureKey(shownFailure));
 
   return (
     <div className="flex flex-col gap-4" data-testid="my-prompts-section">
@@ -196,7 +181,7 @@ export default function MyPromptsSection(): React.ReactElement {
           </Button>
         </div>
       ) : own.length === 0 ? (
-        emptyMessage === null ? null : <p className="text-sm text-muted-text">{emptyMessage}</p>
+        <p className="text-sm text-muted-text">{emptyMessage}</p>
       ) : (
         <ul className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           {own.map((prompt) => (
@@ -204,36 +189,14 @@ export default function MyPromptsSection(): React.ReactElement {
               key={prompt.slug}
               prompt={prompt}
               busy={busy}
-              copied={copied && copiedSlug === prompt.slug}
-              onCopy={() => void copyPrompt(prompt)}
+              copied={copier.copiedSlug === prompt.slug}
+              onCopy={() => void copier.copyPrompt(prompt.slug)}
               onEdit={() => void openEdit(prompt)}
               onToggleVisibility={() => void toggleVisibility(prompt)}
               onDelete={() => void remove(prompt)}
             />
           ))}
         </ul>
-      )}
-
-      {community.length === 0 ? null : (
-        <section aria-labelledby="community-prompts-title" className="flex flex-col gap-3 pt-2">
-          <div>
-            <h3 id="community-prompts-title" className="text-base font-bold tracking-tight text-ink">
-              {t('userPrompts.communityTitle')}
-            </h3>
-            <p className="text-sm text-muted-text">{t('userPrompts.communityHint')}</p>
-          </div>
-          <ul className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            {community.map((prompt) => (
-              <UserPromptRow
-                key={prompt.slug}
-                prompt={prompt}
-                busy={busy}
-                copied={copied && copiedSlug === prompt.slug}
-                onCopy={() => void copyPrompt(prompt)}
-              />
-            ))}
-          </ul>
-        </section>
       )}
     </div>
   );

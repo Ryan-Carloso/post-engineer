@@ -8,7 +8,7 @@ export type PromptVisibility = (typeof PROMPT_VISIBILITIES)[number];
 
 export const PromptVisibilitySchema = z.enum(PROMPT_VISIBILITIES);
 
-export const PROMPT_SOURCES = ['official', 'own', 'community'] as const;
+export const PROMPT_SOURCES = ['own', 'community'] as const;
 
 export const PromptSourceSchema = z.enum(PROMPT_SOURCES);
 
