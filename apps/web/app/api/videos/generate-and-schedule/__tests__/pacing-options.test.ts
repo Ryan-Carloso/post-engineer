@@ -42,7 +42,7 @@ function bodyWithOptions(options: Record<string, unknown>) {
         {
           kind: 'content',
           text: 'Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight.',
-          media: photos(6, 'content'),
+          media: photos(8, 'content'),
         },
         {
           kind: 'content',
