@@ -1323,8 +1323,6 @@ describe('PostsPage week view', () => {
     const user = userEvent.setup();
     await user.click(columns[0]);
     expect(screen.getByText('posts.calendarDayNone')).toBeInTheDocument();
-    // The scroll is scheduled with requestAnimationFrame. Stryker's dry
-    // run reaches this assertion before that frame, so wait for it.
     await waitFor(() => {
       expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });
     });
