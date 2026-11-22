@@ -1517,10 +1517,6 @@ def generate_video(
                 size=size,
             )
         else:
-            size = (
-                int(max_width),
-                clip_h,
-            )
             _clip = TextClip(
                 text=wrapped_txt,
                 font=font_path,
@@ -1530,8 +1526,9 @@ def generate_video(
                 stroke_color=params.stroke_color,
                 stroke_width=params.stroke_width,
                 interline=interline,
-                size=size,
+                size=(int(max_width), None),
                 text_align="center",
+                margin=(0, text_clip_margin_y),
             )
         duration = subtitle_item[0][1] - subtitle_item[0][0]
         _clip = _clip.with_start(subtitle_item[0][0])
