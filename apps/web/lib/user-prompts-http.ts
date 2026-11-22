@@ -12,6 +12,7 @@ import { UserPromptStoreError, type UserPromptRow } from '@/lib/user-prompts';
 import { ListPromptsQuerySchema, PromptVisibilitySchema, type PromptSource, type PromptVisibility } from '@/lib/contracts/prompts';
 import type { PromptListFilter } from '@/lib/prompt-search';
 import type { PromptVersionRef } from '@/lib/prompt-versions';
+import { SHARED_PROMPT_BASE } from '@/lib/generation/prompt-base';
 
 export interface PromptCaller {
   userId: string | null;
@@ -132,10 +133,20 @@ export function promptSummaryBody(row: UserPromptRow, source: PromptSource): Pro
   };
 }
 
-export type PromptDetailBody = PromptSummaryBody & { prompt: string; versionId: string; version: number };
+export type PromptDetailBody = PromptSummaryBody & { prompt: string; body: string; versionId: string; version: number };
+
+export function withSharedPromptBase(body: string): string {
+  return [...SHARED_PROMPT_BASE, '', body].join('\n');
+}
 
 export function promptDetailBody(row: UserPromptRow, source: PromptSource, version: PromptVersionRef): PromptDetailBody {
-  return { ...promptSummaryBody(row, source), prompt: row.body, versionId: version.versionId, version: version.version };
+  return {
+    ...promptSummaryBody(row, source),
+    prompt: withSharedPromptBase(row.body),
+    body: row.body,
+    versionId: version.versionId,
+    version: version.version,
+  };
 }
 
 export function readListFilter(request: Request, route: string): { ok: true; filter: PromptListFilter } | { ok: false; response: NextResponse } {

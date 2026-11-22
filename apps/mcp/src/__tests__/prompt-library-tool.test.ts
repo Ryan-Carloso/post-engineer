@@ -18,7 +18,8 @@ const OWN = {
   description: 'About',
   source: 'own',
   visibility: 'private',
-  prompt: 'Write it in three beats.',
+  prompt: 'Shared base rules.\n\nWrite it in three beats.',
+  body: 'Write it in three beats.',
   versionId: '44444444-4444-4444-8444-444444444444',
   version: 1,
 };
