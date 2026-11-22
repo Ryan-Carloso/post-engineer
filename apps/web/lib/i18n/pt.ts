@@ -218,7 +218,6 @@ export const ptDictionary = {
     libraryDeleteError: 'Não foi possível remover a imagem.',
     libraryErrorFull: 'A biblioteca de imagens está cheia. Remova uma para adicionar outra.',
     libraryErrorFaceless: 'Personas sem rosto não podem ter biblioteca de imagens.',
-    libraryErrorContentMismatch: 'O conteúdo da imagem não corresponde ao tipo do arquivo.',
     libraryErrorTooLong: 'A etiqueta ou descrição é muito longa.',
     libraryErrorNotFound: 'Não encontrado. Pode ter sido removido.',
     libraryLimitReached: 'A biblioteca está cheia ({max} imagens). Remova uma para adicionar outra.',

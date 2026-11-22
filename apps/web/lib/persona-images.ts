@@ -80,23 +80,13 @@ export function validateImageFile(
   return { file, extension };
 }
 
-export function validateImageBuffer(
-  buffer: Buffer,
-  declaredType: string,
-): { mime: string } | { error: string } {
+export function validateImageBuffer(buffer: Buffer): { mime: string } | { error: string } {
   const detected = detectMagicMimeType(buffer);
   if (!detected) {
     return { error: 'Could not verify the image content: the file is not a recognized image.' };
   }
   if (!ALLOWED_IMAGE_MIME_TYPES.has(detected)) {
     return { error: 'Only JPG/JPEG, PNG, or WebP images are accepted.' };
-  }
-  if (!declaredType) {
-    return { error: 'No image content type was declared for this file.' };
-  }
-  const declared = declaredType === 'image/jpg' ? 'image/jpeg' : declaredType;
-  if (detected !== declared) {
-    return { error: 'The image content does not match its declared file type.' };
   }
   return { mime: detected };
 }
@@ -110,7 +100,7 @@ export async function readValidatedImage(
   } catch {
     return { error: 'Could not read the image file.' };
   }
-  const result = validateImageBuffer(buffer, file.type);
+  const result = validateImageBuffer(buffer);
   if ('error' in result) return result;
   return { bytes: new Uint8Array(buffer), mime: result.mime };
 }

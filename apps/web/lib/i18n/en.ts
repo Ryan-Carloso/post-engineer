@@ -219,7 +219,6 @@ export const enDictionary: Dictionary = {
     libraryDeleteError: 'Could not remove the image.',
     libraryErrorFull: 'The image library is full. Remove one to add another.',
     libraryErrorFaceless: 'Faceless personas cannot have library images.',
-    libraryErrorContentMismatch: 'The image content does not match its file type.',
     libraryErrorTooLong: 'The tag or description is too long.',
     libraryErrorNotFound: 'Not found. It may have been removed.',
     libraryLimitReached: 'The library is full ({max} images). Remove one to add another.',
