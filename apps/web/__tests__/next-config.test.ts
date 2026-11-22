@@ -49,6 +49,19 @@ describe('next.config headers', () => {
   });
 });
 
+describe('next.config share page headers', () => {
+  it('keeps the public share page out of search engines, referrer-free and privately cached', async () => {
+    const { headers: loadHeaders } = nextConfig;
+    if (loadHeaders === undefined) throw new Error('next.config has no headers()');
+    const group = (await loadHeaders()).find((entry) => entry.source === '/s/:token*');
+    expect(group?.headers).toEqual([
+      { key: 'X-Robots-Tag', value: 'noindex, nofollow' },
+      { key: 'Referrer-Policy', value: 'no-referrer' },
+      { key: 'Cache-Control', value: 'private, max-age=60' },
+    ]);
+  });
+});
+
 describe('next.config redirects', () => {
   it('permanently redirects the old /api-keys page to the prompts hub', async () => {
     const { redirects: loadRedirects } = nextConfig;

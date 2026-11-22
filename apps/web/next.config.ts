@@ -118,6 +118,14 @@ const nextConfig: NextConfig = {
         ],
       },
       {
+        source: '/s/:token*',
+        headers: [
+          { key: 'X-Robots-Tag', value: 'noindex, nofollow' },
+          { key: 'Referrer-Policy', value: 'no-referrer' },
+          { key: 'Cache-Control', value: 'private, max-age=60' },
+        ],
+      },
+      {
         source: '/api/:path*',
         headers: [
           { key: 'Access-Control-Allow-Origin', value: 'https://post-engineer.com' },

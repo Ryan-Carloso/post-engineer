@@ -32,6 +32,11 @@ describe('loginRedirectTarget', () => {
     expect(loginRedirectTarget()).toBe('/login?next=%2Fdashboard%3Ftab%3Dschedule');
   });
 
+  it.each(['/settings', '/sharing', '/s2/abc'])('still redirects the protected path %s that only starts with /s', (pathname) => {
+    stubWindowLocation(pathname, '', undefined);
+    expect(loginRedirectTarget()).toBe(`/login?next=${encodeURIComponent(pathname)}`);
+  });
+
   it('returns null on the server (no window)', () => {
     vi.stubGlobal('window', undefined);
     expect(currentRelativePath()).toBeNull();
@@ -46,6 +51,7 @@ describe('loginRedirectTarget', () => {
     ['the terms page', '/terms', ''],
     ['a public recipe page', '/recipes', ''],
     ['/oauth/ pages', '/oauth/authorize', '?state=x'],
+    ['a public share page', `/s/${'a'.repeat(43)}`, ''],
   ])('returns null on %s', (_name, pathname, search) => {
     stubWindowLocation(pathname, search, undefined);
     expect(loginRedirectTarget()).toBeNull();
@@ -65,7 +71,7 @@ describe('PUBLIC_PATH_PREFIXES — middleware parity', () => {
     .filter(Boolean);
 
   it('extracts the middleware list (guard for this very pin)', () => {
-    expect(middlewarePublicPaths).toEqual(['/landing', '/login', '/privacy', '/terms', '/recipes']);
+    expect(middlewarePublicPaths).toEqual(['/landing', '/login', '/privacy', '/terms', '/recipes', '/s']);
   });
 
   it.each(middlewarePublicPaths)('never redirects from the middleware-public %s', (prefix) => {
@@ -76,6 +82,7 @@ describe('PUBLIC_PATH_PREFIXES — middleware parity', () => {
   it.each([
     ['/auth/', '/auth/callback'],
     ['/oauth/', '/oauth/authorize'],
+    ['/s/', `/s/${'a'.repeat(43)}`],
   ])('never redirects from the matcher exemption %s', (prefix, pathname) => {
     stubWindowLocation(pathname, '?state=1', undefined);
     expect(loginRedirectTarget()).toBeNull();

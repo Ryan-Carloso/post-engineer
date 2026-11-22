@@ -8,6 +8,7 @@ import type { TranslationKey } from '@/lib/i18n';
 import { AlertIcon, ChartIcon, SpinnerIcon } from '@/lib/ui';
 import { cn } from '@/lib/utils';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { CARD_CLASS, StatTile } from '@/components/ui/stat-tile';
 import { MetricsRow } from './metrics-row';
 import { MetricsCharts, MetricsViewToggle, readMetricsView, rowElementId, writeMetricsView, type MetricsView } from './metrics-charts';
 import { MetricsCoverageCard } from './metrics-coverage-card';
@@ -35,7 +36,6 @@ const WINDOW_LABEL_KEYS: Record<MetricsQuery['window'], TranslationKey> = {
   '28d': 'metrics.window28d',
 };
 
-const CARD_CLASS = 'rounded-2xl border border-hairline bg-card shadow-[0_8px_24px_rgba(20,32,51,0.04)]';
 const EMPTY_QUERY: MetricsQuery = { window: '24h', personaId: null, accountId: null, provider: null, angle: null };
 
 export default function MetricsPage(): React.ReactElement {
@@ -247,16 +247,6 @@ export default function MetricsPage(): React.ReactElement {
           formatDateTime={formatDateTime}
         />
       )}
-    </div>
-  );
-}
-
-function StatTile({ label, value, hint }: { label: string; value: string; hint?: string }): React.ReactElement {
-  return (
-    <div className={cn(CARD_CLASS, 'p-4')}>
-      <p className="text-xs font-semibold text-muted-text">{label}</p>
-      <p className="mt-1 truncate text-2xl font-bold tracking-[-0.03em] text-ink">{value}</p>
-      {hint !== undefined && <p className="text-xs text-muted-text tabular-nums">{hint}</p>}
     </div>
   );
 }
