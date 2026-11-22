@@ -1323,7 +1323,11 @@ describe('PostsPage week view', () => {
     const user = userEvent.setup();
     await user.click(columns[0]);
     expect(screen.getByText('posts.calendarDayNone')).toBeInTheDocument();
-    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });
+    // The scroll is scheduled with requestAnimationFrame. Stryker's dry
+    // run reaches this assertion before that frame, so wait for it.
+    await waitFor(() => {
+      expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });
+    });
   });
 
   it('scrolls the day panel into view after a column pick at 700px, where only the mobile query matches', async () => {
@@ -1341,7 +1345,9 @@ describe('PostsPage week view', () => {
     const user = userEvent.setup();
     await user.click(columns[6]);
     expect(dayPanelCardText('Upcoming topic')).toBeInTheDocument();
-    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });
+    await waitFor(() => {
+      expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });
+    });
   });
 });
 
