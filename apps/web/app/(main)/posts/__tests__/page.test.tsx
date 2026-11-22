@@ -1011,6 +1011,7 @@ describe('PostsPage calendar view', () => {
       expect(select).toBeDisabled();
       expect(select.className.split(/\s+/)).toContain('saturate-50');
       expect(select.className.split(/\s+/)).toContain('[&>svg]:hidden');
+      expect(select.querySelector('svg.lucide-chevron-down')).not.toBeNull();
     }
   });
 
