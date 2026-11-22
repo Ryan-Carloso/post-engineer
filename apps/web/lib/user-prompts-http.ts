@@ -120,6 +120,7 @@ export interface PromptSummaryBody {
   description: string;
   source: PromptSource;
   visibility: PromptVisibility;
+  verified: boolean;
 }
 
 export function promptSummaryBody(row: UserPromptRow, source: PromptSource): PromptSummaryBody {
@@ -129,6 +130,7 @@ export function promptSummaryBody(row: UserPromptRow, source: PromptSource): Pro
     description: row.description,
     source,
     visibility: PromptVisibilitySchema.parse(row.visibility),
+    verified: row.verified,
   };
 }
 

@@ -87,11 +87,27 @@ describe('GET /api/prompts', () => {
     const body = (await response.json()) as { prompts: Array<Record<string, unknown>> };
     expect(ListPromptsResponseSchema.safeParse(body).success).toBe(true);
     expect(body.prompts).toEqual([
-      { slug: 'mine', title: 'Mine', description: '', source: 'own', visibility: 'private' },
-      { slug: 'bobs-shared', title: 'Bobs shared', description: 'About', source: 'community', visibility: 'public' },
+      { slug: 'mine', title: 'Mine', description: '', source: 'own', visibility: 'private', verified: false },
+      { slug: 'bobs-shared', title: 'Bobs shared', description: 'About', source: 'community', visibility: 'public', verified: false },
     ]);
     expect(JSON.stringify(body)).not.toContain('bobs-private');
     expect(JSON.stringify(body)).not.toContain('Community text');
+  });
+
+  it('marks a prompt Post Engineer verified, to signed-in and anonymous callers alike', async () => {
+    seedDb([{ ...publicRow('00000000-0000-4000-8000-0000000000e1', 'daily-news', 'Daily news'), verified: true }, publicRow(BOB, 'bobs-shared')]);
+    for (const signedIn of [true, false]) {
+      if (signedIn) authenticatedAs(ALICE);
+      else signedOut();
+      const response = await listPrompts(request('/api/prompts', { credentials: signedIn }));
+      const body = (await response.json()) as { prompts: Array<{ slug: string; verified: boolean }> };
+      expect(body.prompts.map((entry) => [entry.slug, entry.verified])).toEqual([
+        ['daily-news', true],
+        ['bobs-shared', false],
+      ]);
+      const detail = await getPrompt(request('/api/prompts/daily-news', { credentials: signedIn }), slugContext('daily-news'));
+      expect(await detail.json()).toMatchObject({ prompt: { slug: 'daily-news', source: 'community', verified: true } });
+    }
   });
 
   it('shows the caller own public prompt once, as own', async () => {
@@ -193,7 +209,7 @@ describe('GET /api/prompts', () => {
     scopedKeyOf(ALICE);
     const body = (await (await listPrompts(request('/api/prompts'))).json()) as { prompts: Array<{ slug: string; source: string }> };
     expect(body.prompts.filter((entry) => entry.slug === 'mine-shared')).toEqual([
-      { slug: 'mine-shared', title: 'Mine shared', description: '', source: 'community', visibility: 'public' },
+      { slug: 'mine-shared', title: 'Mine shared', description: '', source: 'community', visibility: 'public', verified: false },
     ]);
   });
 
@@ -248,7 +264,7 @@ describe('POST /api/prompts', () => {
     expect(GetPromptResponseSchema.safeParse(body).success).toBe(true);
     expect(body).toEqual({
       success: true,
-      prompt: { slug: 'my-prompt', title: 'Title', description: 'About', source: 'own', visibility: 'private', prompt: 'Body text', versionId: db.versions[0]?.id, version: 1 },
+      prompt: { slug: 'my-prompt', title: 'Title', description: 'About', source: 'own', visibility: 'private', verified: false, prompt: 'Body text', versionId: db.versions[0]?.id, version: 1 },
     });
     expect(db.rows).toHaveLength(1);
     expect(db.rows[0].owner_id).toBe(ALICE);
@@ -279,6 +295,7 @@ describe('POST /api/prompts', () => {
     ['an over-long prompt', { ...valid, prompt: 'x'.repeat(USER_PROMPT_LIMITS.prompt + 1) }, 'prompt'],
     ['an unknown visibility', { ...valid, visibility: 'approved' }, 'visibility'],
     ['an unknown field', { ...valid, owner_id: BOB }, undefined],
+    ['a caller trying to verify its own prompt', { ...valid, verified: true }, undefined],
   ])('returns 400 for %s without writing anything', async (_label, body, field) => {
     const db = seedDb();
     authenticatedAs(ALICE);
@@ -458,7 +475,7 @@ describe('PATCH /api/prompts/[slug]', () => {
   it('returns 400 for an empty patch and for a field the caller may not set', async () => {
     const db = seedDb([{ owner_id: ALICE, slug: 'mine', title: 'Old', body: 'old body' }]);
     authenticatedAs(ALICE);
-    for (const body of [{}, { slug: 'renamed' }, { owner_id: BOB }, { visibility: 'approved' }]) {
+    for (const body of [{}, { slug: 'renamed' }, { owner_id: BOB }, { visibility: 'approved' }, { verified: true }]) {
       expect((await patchPrompt(request('/api/prompts/mine', { method: 'PATCH', body }), slugContext('mine'))).status).toBe(400);
     }
     expect(db.queries).toEqual([]);

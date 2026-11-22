@@ -29,6 +29,7 @@ interface StoredPrompt {
   prompt: string;
   source: 'own' | 'community';
   visibility: 'private' | 'public';
+  verified: boolean;
   versionId: string;
   version: number;
 }
@@ -39,7 +40,7 @@ let nextFailure: { status: number; body: unknown } | null;
 let failDetail: boolean;
 
 function own(slug: string, visibility: StoredPrompt['visibility'], extra: Partial<StoredPrompt> = {}): StoredPrompt {
-  return { slug, title: `Title ${slug}`, description: `About ${slug}`, prompt: `Text of ${slug}`, source: 'own', visibility, versionId: '44444444-4444-4444-8444-444444444444', version: 1, ...extra };
+  return { slug, title: `Title ${slug}`, description: `About ${slug}`, prompt: `Text of ${slug}`, source: 'own', visibility, verified: false, versionId: '44444444-4444-4444-8444-444444444444', version: 1, ...extra };
 }
 
 function summary(entry: StoredPrompt): Record<string, unknown> {

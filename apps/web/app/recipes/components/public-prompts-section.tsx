@@ -15,6 +15,7 @@ export default function PublicPromptsSection(): React.ReactElement {
 
   const listing = query.data !== undefined && query.data.success ? query.data.body.prompts : null;
   const publicPrompts = (listing ?? []).filter((prompt) => prompt.visibility === 'public');
+  const hasUnverifiedCommunity = publicPrompts.some((prompt) => prompt.source === 'community' && !prompt.verified);
 
   if (query.isPending) {
     return (
@@ -50,7 +51,7 @@ export default function PublicPromptsSection(): React.ReactElement {
         <p className="text-sm text-muted-text">{t('recipes.noPublicPrompts')}</p>
       ) : (
         <>
-          <p className="text-sm text-muted-text">{t('userPrompts.communityHint')}</p>
+          {hasUnverifiedCommunity ? <p className="text-sm text-muted-text">{t('userPrompts.communityHint')}</p> : null}
           <ul className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             {publicPrompts.map((prompt) => (
               <UserPromptRow

@@ -48,6 +48,7 @@ export function createFakeUserPromptsDb(seed: Partial<UserPromptRow>[] = []): Fa
       description: '',
       body: '',
       visibility: 'private',
+      verified: false,
       created_at: now(),
       updated_at: now(),
       ...values,

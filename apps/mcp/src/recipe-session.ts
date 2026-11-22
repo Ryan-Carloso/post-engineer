@@ -46,11 +46,12 @@ export interface RunnablePrompt {
   prompt: string;
   source: PromptSource;
   visibility: PromptVisibility;
+  verified: boolean;
   versionId: string;
 }
 
-export function recipeRunText({ slug, prompt, source, visibility, versionId }: RunnablePrompt): string {
-  const body = source === 'community' ? `${COMMUNITY_PROMPT_NOTICE}\n\n${prompt}` : prompt;
+export function recipeRunText({ slug, prompt, source, visibility, verified, versionId }: RunnablePrompt): string {
+  const body = source === 'community' && !verified ? `${COMMUNITY_PROMPT_NOTICE}\n\n${prompt}` : prompt;
   const recipe = visibility === 'public' ? `recipe: "${slug}" and ` : '';
   return `${body}\n\nWhen you call generate_video with a script written from this prompt, pass ${recipe}promptVersionId: "${versionId}" on each video, so experiments (action: results) can compare this prompt.`;
 }

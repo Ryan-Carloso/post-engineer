@@ -30,7 +30,7 @@ const VERSION_ID = '44444444-4444-4444-8444-444444444444';
 let requested: string[];
 let reply: { status: number; body: unknown };
 
-function detail(source: 'own' | 'community', visibility: 'private' | 'public'): Record<string, unknown> {
+function detail(source: 'own' | 'community', visibility: 'private' | 'public', verified = false): Record<string, unknown> {
   return {
     slug: 'luna-spicy-sfw-a-tease',
     title: 'Luna Summer: test A',
@@ -38,6 +38,7 @@ function detail(source: 'own' | 'community', visibility: 'private' | 'public'): 
     prompt: 'Write a curiosity tease hook.',
     source,
     visibility,
+    verified,
     versionId: VERSION_ID,
     version: 3,
   };
@@ -90,6 +91,14 @@ describe('prompt detail page for user prompts', () => {
     expect(screen.queryByText('Public')).not.toBeInTheDocument();
   });
 
+  it('marks a verified prompt and shows no unverified warning', async () => {
+    reply = { status: 200, body: { success: true, prompt: detail('community', 'public', true) } };
+    renderPage('luna-spicy-sfw-a-tease');
+    expect(await screen.findByText('Verified')).toBeInTheDocument();
+    expect(screen.queryByText('Community')).not.toBeInTheDocument();
+    expect(screen.queryByText(/not verified by post-engineer/)).not.toBeInTheDocument();
+  });
+
   it('shows not found for an unknown user prompt', async () => {
     reply = { status: 404, body: { success: false, code: 'PROMPT_NOT_FOUND' } };
     renderPage('missing-prompt');
@@ -124,7 +133,7 @@ describe('user prompt card', () => {
     render(
       <ul>
         <UserPromptRow
-          prompt={{ slug: 'luna-spicy-sfw-b-pov', title: 'Luna test B', description: '', source: 'own', visibility: 'private' }}
+          prompt={{ slug: 'luna-spicy-sfw-b-pov', title: 'Luna test B', description: '', source: 'own', visibility: 'private', verified: false }}
           busy={false}
           copied={false}
           onCopy={vi.fn()}

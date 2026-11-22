@@ -1,5 +1,5 @@
 function ownPrompt(slug: string, visibility: string) {
-  return { slug, title: `Title ${slug}`, description: `About ${slug}`, source: 'own', visibility };
+  return { slug, title: `Title ${slug}`, description: `About ${slug}`, source: 'own', visibility, verified: false };
 }
 
 const COMMUNITY = {
@@ -8,6 +8,7 @@ const COMMUNITY = {
   description: 'A community prompt.',
   source: 'community',
   visibility: 'public',
+  verified: false,
 };
 
 function visitEnglish(path: string) {

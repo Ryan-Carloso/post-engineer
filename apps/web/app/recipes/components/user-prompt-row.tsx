@@ -50,8 +50,14 @@ export default function UserPromptRow({
           <p className="font-mono text-xs text-muted-text">{prompt.slug}</p>
         </div>
         {prompt.source === 'community' ? (
-          <span className="rounded-full bg-brand/10 px-3 py-1 text-xs font-bold tracking-wider text-brand uppercase">
-            {t('userPrompts.communityBadge')}
+          <span
+            data-testid={`user-prompt-source-${prompt.slug}`}
+            className={cn(
+              'rounded-full px-3 py-1 text-xs font-bold tracking-wider uppercase',
+              prompt.verified ? 'bg-success-soft text-success ring-1 ring-success/30' : 'bg-brand/10 text-brand',
+            )}
+          >
+            {t(prompt.verified ? 'userPrompts.verifiedBadge' : 'userPrompts.communityBadge')}
           </span>
         ) : (
           <span

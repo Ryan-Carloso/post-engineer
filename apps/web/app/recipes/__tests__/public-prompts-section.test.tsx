@@ -27,6 +27,7 @@ interface Listed {
   slug: string;
   source: 'own' | 'community';
   visibility: 'private' | 'public';
+  verified?: boolean;
 }
 
 let listed: Listed[];
@@ -35,7 +36,7 @@ let detailStatus: number;
 let requested: string[];
 
 function summary(entry: Listed): Record<string, unknown> {
-  return { slug: entry.slug, title: `Title ${entry.slug}`, description: `About ${entry.slug}`, source: entry.source, visibility: entry.visibility };
+  return { slug: entry.slug, title: `Title ${entry.slug}`, description: `About ${entry.slug}`, source: entry.source, visibility: entry.visibility, verified: entry.verified ?? false };
 }
 
 function renderSection(): void {
@@ -92,6 +93,28 @@ describe('PublicPromptsSection', () => {
     expect(screen.getByTestId('user-prompt-mine-shared')).toBeInTheDocument();
     expect(screen.queryByTestId('user-prompt-mine-private')).not.toBeInTheDocument();
     expect(screen.getByTestId('user-prompt-link-daily-news')).toHaveAttribute('href', '/recipes/daily-news');
+    expect(screen.getByText(/not verified by post-engineer/)).toBeInTheDocument();
+  });
+
+  it('marks a verified prompt and drops the unverified warning when every public prompt is verified', async () => {
+    listed = [
+      { slug: 'daily-news', source: 'community', visibility: 'public', verified: true },
+      { slug: 'place-spotlight', source: 'community', visibility: 'public', verified: true },
+    ];
+    renderSection();
+    expect(await screen.findByTestId('user-prompt-source-daily-news')).toHaveTextContent('Verified');
+    expect(screen.queryByText('Community')).not.toBeInTheDocument();
+    expect(screen.queryByText(/not verified by post-engineer/)).not.toBeInTheDocument();
+  });
+
+  it('keeps the unverified warning when one public prompt is not verified', async () => {
+    listed = [
+      { slug: 'daily-news', source: 'community', visibility: 'public', verified: true },
+      { slug: 'theirs', source: 'community', visibility: 'public' },
+    ];
+    renderSection();
+    expect(await screen.findByTestId('user-prompt-source-theirs')).toHaveTextContent('Community');
+    expect(screen.getByTestId('user-prompt-source-daily-news')).toHaveTextContent('Verified');
     expect(screen.getByText(/not verified by post-engineer/)).toBeInTheDocument();
   });
 

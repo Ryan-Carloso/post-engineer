@@ -55,8 +55,13 @@ export default function UserPromptDetail({ slug }: { slug: string }): React.Reac
       {backLink}
       <div className="mt-10 flex flex-wrap items-center gap-2">
         {prompt.source === 'community' ? (
-          <span className="rounded-full bg-brand/10 px-3 py-1 text-xs font-bold tracking-wider text-brand uppercase">
-            {t('userPrompts.communityBadge')}
+          <span
+            className={cn(
+              'rounded-full px-3 py-1 text-xs font-bold tracking-wider uppercase',
+              prompt.verified ? 'bg-success-soft text-success ring-1 ring-success/30' : 'bg-brand/10 text-brand',
+            )}
+          >
+            {t(prompt.verified ? 'userPrompts.verifiedBadge' : 'userPrompts.communityBadge')}
           </span>
         ) : (
           <span
@@ -77,7 +82,7 @@ export default function UserPromptDetail({ slug }: { slug: string }): React.Reac
       {prompt.description.length > 0 ? (
         <p className="mt-3 max-w-2xl text-base leading-relaxed text-ink-soft">{prompt.description}</p>
       ) : null}
-      {prompt.source === 'community' ? (
+      {prompt.source === 'community' && !prompt.verified ? (
         <p className="mt-4 max-w-2xl text-sm text-muted-text">{t('userPrompts.communityHint')}</p>
       ) : null}
       <CopyPromptBlock prompt={prompt.prompt} />

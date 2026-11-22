@@ -25,7 +25,7 @@ export async function listSlashPrompts(client: PostEngineerClient): Promise<List
     return {
       prompts: prompts.map((prompt) => ({
         name: prompt.slug,
-        title: prompt.source === 'community' ? `${prompt.title} (community)` : prompt.title,
+        title: prompt.source === 'community' && !prompt.verified ? `${prompt.title} (community)` : prompt.title,
         description: prompt.description,
       })),
     };

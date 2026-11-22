@@ -34,6 +34,7 @@ export const PromptSummarySchema = z.object({
   description: z.string(),
   source: PromptSourceSchema,
   visibility: PromptVisibilitySchema,
+  verified: z.boolean(),
 });
 
 export const PromptDetailSchema = PromptSummarySchema.extend({

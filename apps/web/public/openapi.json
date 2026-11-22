@@ -7767,6 +7767,10 @@
                               "public"
                             ],
                             "description": "Community prompts are public; an own prompt is private until its owner makes it public."
+                          },
+                          "verified": {
+                            "type": "boolean",
+                            "description": "true when Post Engineer checked the prompt. Only Post Engineer sets it."
                           }
                         },
                         "required": [
@@ -7774,7 +7778,8 @@
                           "title",
                           "description",
                           "source",
-                          "visibility"
+                          "visibility",
+                          "verified"
                         ]
                       }
                     }
@@ -7899,6 +7904,10 @@
                           ],
                           "description": "Community prompts are public; an own prompt is private until its owner makes it public."
                         },
+                        "verified": {
+                          "type": "boolean",
+                          "description": "true when Post Engineer checked the prompt. Only Post Engineer sets it."
+                        },
                         "prompt": {
                           "type": "string"
                         },
@@ -7919,6 +7928,7 @@
                         "description",
                         "source",
                         "visibility",
+                        "verified",
                         "prompt",
                         "versionId",
                         "version"
@@ -8093,6 +8103,10 @@
                           ],
                           "description": "Community prompts are public; an own prompt is private until its owner makes it public."
                         },
+                        "verified": {
+                          "type": "boolean",
+                          "description": "true when Post Engineer checked the prompt. Only Post Engineer sets it."
+                        },
                         "prompt": {
                           "type": "string"
                         },
@@ -8113,6 +8127,7 @@
                         "description",
                         "source",
                         "visibility",
+                        "verified",
                         "prompt",
                         "versionId",
                         "version"
@@ -8231,6 +8246,10 @@
                           ],
                           "description": "Community prompts are public; an own prompt is private until its owner makes it public."
                         },
+                        "verified": {
+                          "type": "boolean",
+                          "description": "true when Post Engineer checked the prompt. Only Post Engineer sets it."
+                        },
                         "prompt": {
                           "type": "string"
                         },
@@ -8251,6 +8270,7 @@
                         "description",
                         "source",
                         "visibility",
+                        "verified",
                         "prompt",
                         "versionId",
                         "version"

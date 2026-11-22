@@ -6,6 +6,7 @@ const DAILY_NEWS = {
   description: 'Turn one news story of the day into one persona video.',
   source: 'community',
   visibility: 'public',
+  verified: true,
 };
 
 function visitEnglish(path: string) {
@@ -34,6 +35,7 @@ describe('Prompts hub', () => {
       .scrollIntoView()
       .within(() => {
         cy.contains('Daily news becomes a video').should('be.visible');
+        cy.contains('Verified').should('be.visible');
         cy.get('a[href="/recipes/daily-news"]').should('be.visible');
       });
   });
