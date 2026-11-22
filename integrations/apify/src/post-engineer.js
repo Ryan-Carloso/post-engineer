@@ -171,7 +171,7 @@ export function assignImages(urls, texts) {
   if (urls.length < low || urls.length > high) {
     if (low > MAX_IMAGES) {
       throw new ActorInputError(
-        `images need at least ${low} URLs for this script (about one image per 2 seconds), but at most ${MAX_IMAGES} are allowed: merge body paragraphs so the per-segment minimums fit under ${MAX_IMAGES}.`,
+        `images need at least ${low} URLs for this script (about one image per 2 seconds), but at most ${MAX_IMAGES} are allowed: shorten the script so the per-segment minimums fit under ${MAX_IMAGES}.`,
       );
     }
     throw new ActorInputError(

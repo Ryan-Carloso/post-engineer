@@ -261,3 +261,19 @@ def test_one_clip_in_a_long_take_still_fails_the_density_minimum_in_faceless_vid
         "segment has 40 words (~15s) and needs at least 8 images (one per 2s); it has 1."
     )
     assert exc_info.value.fix == "Add 2 more images to this segment's media array."
+
+
+def test_density_error_names_the_flicker_cap_when_adding_photos_would_exceed_it():
+    rule, fix = density_error(40, 8, min_count=2.0)
+    assert rule == (
+        "segment has 40 words (~15s); its photos cover only ~4s at their "
+        "requested durations, and adding 6 more images would exceed the "
+        "13-image flicker cap."
+    )
+    assert fix == "Increase the durations of the short photos, or replace them with longer ones."
+    rule, fix = density_error(40, 8, min_count=6.0)
+    assert rule == (
+        "segment has 40 words (~15s) but its photos cover only ~12s at their "
+        "requested durations; it needs ~15s of photos (one photo per 2s)."
+    )
+    assert fix == "Add 2 more images to this segment's media array."

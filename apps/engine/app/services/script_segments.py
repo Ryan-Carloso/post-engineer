@@ -253,10 +253,12 @@ def validate_segments(segments: Any, video_type: str = "hook_lipsync") -> dict[s
     without guessing.
 
     Every segment must carry media (the photos are the whole picture,
-    nothing tops them up). Each segment needs about one image per 2
-    seconds of speech, and the video cap is 30 images. A full lip-sync
-    video is the exception: it shows the talking head, so segment photos
-    are optional panels capped at 6 per video.
+    nothing tops them up). Each content segment needs about one image per 2
+    seconds of speech, and the video cap is 30 images. In a hook_lipsync
+    video the hook is exempt from the minimum and may not carry a clip; a
+    faceless hook still needs the minimum. A full lip-sync video is the
+    exception: it shows the talking head, so segment photos are optional
+    panels capped at 6 per video.
     """
     if not isinstance(segments, list) or not segments:
         raise SegmentValidationError(
@@ -403,8 +405,9 @@ def validate_segments(segments: Any, video_type: str = "hook_lipsync") -> dict[s
         fix = f"Remove medias until there are at most {media_cap}."
         if images_mode:
             fix = (
-                f"Remove medias until there are at most {media_cap}, or merge "
-                f"segments so the per-segment minimums fit under {media_cap}."
+                f"Remove medias until there are at most {media_cap}, or shorten "
+                f"the script so the per-segment minimums fit under {media_cap}, "
+                "or use a clip in place of photos (one clip covers about 12s)."
             )
         raise SegmentValidationError(
             "segments",

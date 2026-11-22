@@ -689,7 +689,7 @@ def test_the_six_media_cap_still_holds_for_full_lipsync():
     assert exc_info.value.fix == "Remove medias until there are at most 6."
 
 
-def test_images_cap_fix_names_merging_when_minimums_exceed_the_cap():
+def test_images_cap_fix_names_shortening_when_minimums_exceed_the_cap():
     segments = [
         {"kind": "hook", "text": " ".join(["hook"] * 25) + ".", "media": _photos(4, "h")},
         *[
@@ -702,7 +702,7 @@ def test_images_cap_fix_names_merging_when_minimums_exceed_the_cap():
         script_segments.validate_segments(segments)
     assert exc_info.value.field == "segments"
     assert exc_info.value.rule == "At most 30 medias are allowed."
-    assert "merge segments" in exc_info.value.fix
+    assert "shorten the script" in exc_info.value.fix
 
 
 def test_legacy_media_list_wraps_a_single_object_media():

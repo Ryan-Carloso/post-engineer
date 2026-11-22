@@ -163,7 +163,7 @@ describe('validateSegments with the images material', () => {
     if (!result.ok) expect(result.error.rule).toBe('at most 30 medias are allowed per video');
   });
 
-  it('names the merge escape when the per-segment minimums exceed the 30-photo cap', () => {
+  it('names the shorten-the-script escape when the per-segment minimums exceed the 30-photo cap', () => {
     const segments = [
       { kind: 'hook', text: `${Array(25).fill('hook').join(' ')}.`, media: photos(4, 'h') },
       ...Array.from({ length: 6 }, (_, i) => ({
@@ -177,7 +177,7 @@ describe('validateSegments with the images material', () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.rule).toBe('at most 30 medias are allowed per video');
-      expect(result.error.fix).toContain('merge segments');
+      expect(result.error.fix).toContain('shorten the script');
     }
   });
 
@@ -426,6 +426,29 @@ describe('validateSegments with a requested photo duration', () => {
         'segment has 30 words (~11s) but its photos cover only ~6s at their requested durations; it needs ~11s of photos (one photo per 2s).',
       );
       expect(result.error.fix).toBe("Add 3 more images to this segment's media array.");
+    }
+  });
+
+  it('names the flicker cap when adding photos would exceed it', () => {
+    const segments = [
+      { kind: 'hook', text: `${Array(25).fill('word').join(' ')}.`, media: photos(5, 'h') },
+      {
+        kind: 'content',
+        text: `${Array(40).fill('body').join(' ')}.`,
+        media: photos(8, 'b').map((photo) => ({ ...photo, duration: 0.5 })),
+      },
+      { kind: 'content', text: `${Array(8).fill('cta').join(' ')}.`, media: photos(2, 'c') },
+    ];
+    const result = validateSegments(segments, 'faceless');
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.field).toBe('segments.1.media');
+      expect(result.error.rule).toBe(
+        'segment has 40 words (~15s); its photos cover only ~4s at their requested durations, and adding 6 more images would exceed the 13-image flicker cap.',
+      );
+      expect(result.error.fix).toBe(
+        'Increase the durations of the short photos, or replace them with longer ones.',
+      );
     }
   });
 

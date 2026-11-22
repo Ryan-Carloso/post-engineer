@@ -90,6 +90,14 @@ def density_error(
         more = "image" if missing == 1 else "images"
         if count >= low:
             covered = effective * MAX_PHOTO_SECONDS
+            room = high - count
+            if room < missing:
+                return (
+                    f"segment has {words} words (~{seconds}s); its photos cover only "
+                    f"~{covered:g}s at their requested durations, and adding {missing} "
+                    f"more {more} would exceed the {high}-image flicker cap.",
+                    "Increase the durations of the short photos, or replace them with longer ones.",
+                )
             return (
                 f"segment has {words} words (~{seconds}s) but its photos cover only "
                 f"~{covered:g}s at their requested durations; it needs ~{seconds}s "

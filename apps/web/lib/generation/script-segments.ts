@@ -109,6 +109,13 @@ function imageDensityError(
     const more = missing === 1 ? 'image' : 'images';
     if (count >= low) {
       const covered = Number((effective * MAX_PHOTO_SECONDS).toPrecision(6));
+      const room = high - count;
+      if (room < missing) {
+        return {
+          rule: `segment has ${words} words (~${seconds}s); its photos cover only ~${covered}s at their requested durations, and adding ${missing} more ${more} would exceed the ${high}-image flicker cap.`,
+          fix: 'Increase the durations of the short photos, or replace them with longer ones.',
+        };
+      }
       return {
         rule: `segment has ${words} words (~${seconds}s) but its photos cover only ~${covered}s at their requested durations; it needs ~${seconds}s of photos (one photo per 2s).`,
         fix: `Add ${missing} more ${more} to this segment's media array.`,
@@ -408,7 +415,7 @@ export function validateSegments(input: unknown, videoType: VideoType = 'hook_li
       'segments',
       `at most ${mediaCap} medias are allowed per video`,
       imagesMode
-        ? `Remove medias until at most ${mediaCap} remain, or merge segments so the per-segment minimums fit under ${mediaCap}.`
+        ? `Remove medias until at most ${mediaCap} remain, or shorten the script so the per-segment minimums fit under ${mediaCap}, or use a clip in place of photos (one clip covers about 12s).`
         : `Remove medias until at most ${mediaCap} remain.`,
     );
   }
