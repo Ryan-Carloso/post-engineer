@@ -3,7 +3,7 @@
 A still photo looks frozen, so each one zooms slowly in
 or out over the seconds it is on screen. The zoom rate matches the still
 material clips (image_material: 3% per second) and is capped, so the zoom
-stays small over a photo's at most two seconds on screen. The photo is scaled up first:
+stays small over the photo's seconds on screen (up to six, plus the crossfade lead). The photo is scaled up first:
 zoompan rounds the crop window to whole pixels, and on a frame-sized source
 that rounding shows as a visible jitter.
 """

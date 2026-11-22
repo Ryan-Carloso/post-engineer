@@ -11,7 +11,7 @@ if (engineBlock === undefined) throw new Error('VideoTransitionMode not found in
 const engineModes = [...engineBlock.matchAll(/^\s*\w+ = "([^"]+)"/gm)].map((match) => match[1]);
 
 describe('video transition modes match the engine', () => {
-  it('lists the same modes in the same order as the engine enum', () => {
+  it('lists the same string-valued modes in the same order as the engine enum', () => {
     expect([...VIDEO_TRANSITION_MODES]).toEqual(engineModes);
   });
 
