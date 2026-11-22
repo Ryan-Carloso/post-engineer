@@ -17,8 +17,13 @@ function readConfig(): z.output<typeof UiDiffConfigSchema> {
   return UiDiffConfigSchema.parse(raw);
 }
 
+function readPersonaPage(): string {
+  const path = join(findRepoRoot(import.meta.url), 'apps/web/app/(main)/persona/page.tsx');
+  return readFileSync(path, 'utf8');
+}
+
 describe('ui-diff config', () => {
-  it('publishes to the public repo only with account identities masked on every capture', () => {
+  it('publishes to the public repo only with account and persona identities masked on every capture', () => {
     const config = readConfig();
     expect(config.publish.allowPublicRepo).toBe(true);
     expect(config.capture.mask).toEqual(
@@ -27,7 +32,14 @@ describe('ui-diff config', () => {
         '[data-testid="account-card"]',
         '[data-testid="profile-user-link"]',
         '[data-testid="mobile-profile-link"]',
+        '[data-error-field="avatar"]',
       ]),
     );
+  });
+
+  it('masks the persona photo area with a selector the base worktree already renders', () => {
+    const mask = readConfig().capture.mask;
+    expect(mask).toContain('[data-error-field="avatar"]');
+    expect(readPersonaPage()).toContain('data-error-field="avatar"');
   });
 });
