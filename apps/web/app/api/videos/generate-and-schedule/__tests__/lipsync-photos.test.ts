@@ -78,6 +78,9 @@ describe('validateLipsyncPhotos', () => {
     [{ url: 'ftp://e.com/a.jpg' }, 'options.lipsyncPhotos.0.url must be a valid http(s) URL.'],
     [{ mediaId: 'aabbccddeeff00112233445566778899.mp4' }, "options.lipsyncPhotos.0 is a video clip: full lip sync needs a still photo of the persona's face."],
     [{ url: 'https://e.com/clip.MP4?x=1' }, "options.lipsyncPhotos.0 is a video clip: full lip sync needs a still photo of the persona's face."],
+    [{ mediaId: ' aabbccddeeff00112233445566778899.mp4 ' }, "options.lipsyncPhotos.0 is a video clip: full lip sync needs a still photo of the persona's face."],
+    [{ url: ' https://e.com/clip.mp4 ' }, "options.lipsyncPhotos.0 is a video clip: full lip sync needs a still photo of the persona's face."],
+    [{ mediaId: '  ', url: 'https://e.com/clip.mp4' }, "options.lipsyncPhotos.0 is a video clip: full lip sync needs a still photo of the persona's face."],
   ])('rejects the malformed photo %j', (photo, message) => {
     const checked = validateLipsyncPhotos([photo, { url: 'https://e.com/b.jpg' }], 'full_lipsync');
     expect(checked).toEqual({

@@ -28,10 +28,11 @@ function normalizedRef(photo: LipsyncPhotoRef, index: number): LipsyncPhotoRef |
   if (url.length > 0 && !isHttpUrl(url)) {
     return invalid(`${field}.url must be a valid http(s) URL.`, field);
   }
-  if (isVideoRef(photo)) {
+  const ref: LipsyncPhotoRef = mediaId.length > 0 ? { mediaId } : { url };
+  if (isVideoRef(ref)) {
     return invalid(`${field} is a video clip: full lip sync needs a still photo of the persona's face.`, field);
   }
-  return mediaId.length > 0 ? { mediaId } : { url };
+  return ref;
 }
 
 function refKey(ref: LipsyncPhotoRef): string {
