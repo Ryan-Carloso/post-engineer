@@ -21,11 +21,11 @@ function rejectScopedKey(route: string, auth: Parameters<typeof isScopedApiKey>[
   return apiErrorResponse(403, SCOPED_KEY_ERROR, { route });
 }
 
-async function readBody(request: Request): Promise<{ ok: true; value: unknown } | { ok: false }> {
+async function readBody(request: Request): Promise<{ ok: true; json: unknown } | { ok: false }> {
   const text = await request.text();
-  if (text.trim().length === 0) return { ok: true, value: {} };
+  if (text.trim().length === 0) return { ok: true, json: {} };
   try {
-    return { ok: true, value: JSON.parse(text) as unknown };
+    return { ok: true, json: JSON.parse(text) as unknown };
   } catch {
     return { ok: false };
   }
@@ -70,7 +70,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
 
   const body = await readBody(request);
   if (!body.ok) return apiErrorResponse(400, 'Body must be valid JSON.', { route: 'POST /api/share-links' });
-  const parsed = CreateShareLinkBodySchema.safeParse(body.value);
+  const parsed = CreateShareLinkBodySchema.safeParse(body.json);
   if (!parsed.success) {
     return apiErrorResponse(400, 'Invalid share link request.', {
       route: 'POST /api/share-links',
