@@ -217,8 +217,10 @@ Actions that read a file from the disk (`publish_video` `from_file`, and a local
 `persona` and `accounts` accept a display name or an id. An id wins; otherwise the name must match **exactly** (case-insensitive, trimmed; never a prefix). No match is an error that says how to list the candidates. Several matches is **not** an error and not a guess: the result lists the candidates and says nothing was done, so you call again with the id. In `generate_video` every reference of every video is resolved before the first video is created, and `accounts` omitted means the persona's bound publishing accounts.
 
 ```json
-{ "videos": [ { "persona": "Maria", "accounts": ["Maria Cooks"], "title": "...", "description": "...", "segments": [ ... ], "mode": "asap", "options": { "videoType": "full_lipsync" } } ] }
+{ "videos": [ { "persona": "Maria", "accounts": ["Maria Cooks"], "title": "...", "description": "...", "segments": [ ... ], "mode": "asap", "options": { "videoType": "full_lipsync", "lipsyncPhotos": [ { "mediaId": "..." }, { "url": "https://..." } ] } } ] }
 ```
+
+`full_lipsync` requires `options.lipsyncPhotos`: 2-5 different face photos of the persona (same person, other outfits, places or angles). The narration is cut into windows of at most 12s and each window shows the next photo, so send one photo per 12s of narration (2 for 24s, 4 for 48s, 5 for 60s).
 
 `mode: "scheduled"` (the default) slots a video 3h-30d ahead (`startAt` and `times`); `mode: "asap"` publishes it when generation finishes.
 

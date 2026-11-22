@@ -158,7 +158,7 @@ class BatchDispatchSegmentsTests(unittest.TestCase):
             dict(SEGMENTS[2], media=[{"url": "https://e.com/c0.jpg"}]),
         ]
         request = self._dispatched_request(
-            _slot(video_type="full_lipsync", segments=legacy)
+            _slot(video_type="full_lipsync", segments=legacy, lipsync_photos=[{"url": "https://example.com/face-0.jpg"}, {"url": "https://example.com/face-1.jpg"}])
         )
         self.assertIsNotNone(request.segments)
         self.assertEqual(

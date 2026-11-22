@@ -4,17 +4,13 @@ import { ERROR_CODES } from '@/lib/error-codes';
 import { isHttpUrl } from '@/lib/generation/custom-audio';
 import { firstSegmentMedia } from '@/lib/hook-photo';
 import type { SegmentMediaRef } from '@/lib/hook-photo';
-import { engineAuthHeaders } from '@/lib/request-auth';
-import { logger } from '@/lib/logger';
 import type { VideoType } from '@/lib/tokens';
-import { coded, validationFailed } from './prepare-persona';
+import { validationFailed } from './prepare-persona';
 import { checkFullLipsyncNarration } from './full-lipsync-preflight';
+import { fetchMediaCheck, type VideoAspectOption } from './media-check';
+import { checkLipsyncPhotoFaces } from './lipsync-photo-faces';
 import type { PersonaPrep } from './persona-prep';
 import type { ValidatedOptions } from './options-validation';
-
-export const MEDIA_CHECK_TIMEOUT_MS = 30_000;
-
-export type VideoAspectOption = '9:16' | '16:9' | '1:1';
 
 export interface SegmentMediaAspectInput {
   userId: string;
@@ -22,65 +18,6 @@ export interface SegmentMediaAspectInput {
   videoAspect: VideoAspectOption;
   hasFace: boolean;
   videoType: VideoType;
-}
-
-interface MediaCheckRecord {
-  code?: unknown;
-  width?: unknown;
-  height?: unknown;
-  has_face?: unknown;
-}
-
-async function fetchMediaCheck(
-  ref: SegmentMediaRef,
-  userId: string,
-  videoAspect: VideoAspectOption,
-  logTag: string,
-): Promise<MediaCheckRecord | NextResponse> {
-  const baseUrl = process.env.MONEYPRINT_API_URL;
-  if (!baseUrl || !process.env.MONEYPRINT_API_SECRET) {
-    logger.error(`[${logTag}] engine URL or secret is not defined`);
-    return coded(502, ERROR_CODES.INTERNAL_ERROR, 'Video service is unavailable.');
-  }
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), MEDIA_CHECK_TIMEOUT_MS);
-  let upstream: Response;
-  try {
-    upstream = await fetch(`${baseUrl.replace(/\/+$/, '')}/api/v1/media/check`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...engineAuthHeaders(userId),
-      },
-      body: JSON.stringify(
-        ref.mediaId !== undefined
-          ? { media_id: ref.mediaId, video_aspect: videoAspect }
-          : { url: ref.url, video_aspect: videoAspect },
-      ),
-      signal: controller.signal,
-    });
-  } catch (error) {
-    clearTimeout(timeout);
-    logger.error(`[${logTag}] engine unreachable`, error);
-    return coded(502, ERROR_CODES.INTERNAL_ERROR, 'Video service is unavailable.');
-  }
-  clearTimeout(timeout);
-  if (!upstream.ok) {
-    logger.error(`[${logTag}] engine check failed`, undefined, {
-      status: upstream.status,
-    });
-    return coded(502, ERROR_CODES.INTERNAL_ERROR, 'Video service is unavailable.');
-  }
-  const parsed: unknown = await upstream.json().catch(() => null);
-  const body = (parsed as { body?: unknown } | null)?.body;
-  const record = (
-    typeof body === 'object' && body !== null ? body : {}
-  ) as MediaCheckRecord;
-  if (typeof record.code !== 'string') {
-    logger.error(`[${logTag}] engine check returned no code`);
-    return coded(502, ERROR_CODES.INTERNAL_ERROR, 'Video service is unavailable.');
-  }
-  return record;
 }
 
 function ratioLabel(width: number, height: number): string {
@@ -206,7 +143,7 @@ async function checkFallbackPhotoUrl(
 export async function checkFirstPhotoFace(
   input: FirstPhotoFaceInput,
 ): Promise<null | NextResponse> {
-  if (input.videoType === 'faceless') return null;
+  if (input.videoType === 'faceless' || input.videoType === 'full_lipsync') return null;
   const first = firstSegmentMedia(input.segments);
   if (first !== null) {
     const record = await fetchMediaCheck(
@@ -316,6 +253,9 @@ export async function checkPreChargePreflights(
     videoType: input.options.videoType,
   });
   if (aspect instanceof NextResponse) return aspect;
+  if (input.options.videoType === 'full_lipsync') {
+    return checkLipsyncPhotoFaces(input.userId, input.options.lipsyncPhotos ?? [], videoAspect);
+  }
   return checkFirstPhotoFace({
     userId: input.userId,
     segments: input.segments,
