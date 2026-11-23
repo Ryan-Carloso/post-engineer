@@ -14,8 +14,11 @@ Secret values are not in this file. Only secret and variable names.
 ## Recommendation
 
 Run each image-only video as one Modal CPU function. Bundle TTS,
-Whisper, and ffmpeg in that container. Set `max_containers` to at
-least 40. Do not put a GPU on it. Leave LongCat as the only GPU app.
+Whisper, and ffmpeg in that container. `max_containers` defaults to
+30 and can be raised; `min_containers` is 0, with no warm pool, so
+idle time scales to zero and costs nothing. One container per video
+in flight, never a standing fleet. Do not put a GPU on it. Leave
+LongCat as the only GPU app.
 
 This is the cheapest serious option and the one with the least new
 machinery. A planning-case video (below) is about **$0.004** on Modal
@@ -49,9 +52,10 @@ Modal's Starter plan, from the pricing page, allows **100 concurrent
 containers** and **10 concurrent GPUs**. Those are different counters.
 Thirty CPU containers plus one LongCat GPU container fit on Starter.
 The Team plan ($250/month, 5,000 containers) is not required for this
-target. A CPU function scales to zero on its own. Set
-`max_containers=40` (headroom over 30) and a short `scaledown_window`
-so idle containers do not sit for the default 60 seconds.
+target. A CPU function scales to zero when `min_containers` is 0.
+30 is the default ceiling (`MPT_CPU_WORKER_MAX_CONTAINERS`), not a
+number of containers to keep warm. Set a short `scaledown_window`
+so an idle container does not sit for Modal's default 60 seconds.
 
 LongCat's `max_containers=1` stays until the owner changes it. This
 plan does not.
@@ -118,7 +122,10 @@ container, except clone reference audio, which today sits on the
 No code in this PR. The next implementation PR has to do the
 following, and nothing fancier.
 
-1. A worker entrypoint that loads one task id, runs `task.start`, and
+1. A worker entrypoint that receives the task id and the validated
+   `VideoParams` (the queued row does not store them today; the
+   dispatcher persists `job_params` on the task and passes the same
+   payload into the spawn). It runs `task.start(task_id, params)` and
    exits. It must not start the fill scheduler, the heartbeat autopsy,
    or `reconcile_orphaned_tasks`. Those stay on the always-on engine
    or move only when they are taught to ignore a live remote worker.
@@ -141,15 +148,20 @@ following, and nothing fancier.
    not need that volume. The first burst target is house voices.
 7. Secrets the worker needs, by name: `SUPABASE_URL`,
    `SUPABASE_SERVICE_ROLE_KEY`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`,
-   `R2_SECRET_ACCESS_KEY`, and `HF_TOKEN` only if a weight file is
-   still gated at build time. It does not need `LONGCAT_*` for an
-   image-only job. It does not need `MODAL_TOKEN_ID` or
-   `MODAL_TOKEN_SECRET` inside the worker; those stay with the
-   operator who deploys.
+   `R2_SECRET_ACCESS_KEY`, `CHATTERBOX_HTTP_SECRET`, and `HF_TOKEN`
+   only if a weight file is still gated at build time. The container
+   must set `MPT_STATE_BACKEND=supabase` or `task.start` writes into
+   `MemoryState` and the archive path loses `user_id`. It does not
+   need `LONGCAT_*` for an image-only job. It does not need
+   `MODAL_TOKEN_ID` or `MODAL_TOKEN_SECRET` inside the worker; the
+   dispatcher process does, because that is what calls `spawn`.
 8. The always-on engine's boot reconcile must skip tasks that have a
-   live remote worker, or the next VPS deploy refunds every video
-   that is mid-render. This is the hazard that blocks turning the
-   flag on in production.
+   live remote worker. Generation-stage orphans are not all refunded:
+   a batch slot is put back to pending and a direct task with
+   persisted params is redispatched, so a live Modal render would
+   start a second time. Only a dead call (no longer running) may
+   fall through to that triage. This is the hazard that blocks
+   turning the flag on in production.
 
 Web, MCP, Caddy, Postgres, and LongCat's HTTP contract stay. The
 engine process remains the dispatcher and the fill scheduler until a
@@ -257,11 +269,14 @@ Each phase is reversible by the dispatcher flag except the last.
    down the phase durations. If render is 90 seconds or 8 minutes, the
    dollar table scales linearly and the recommendation does not.
 2. Build a worker image: engine plus the TTS stack plus Whisper
-   `small`, Phonon, and Kokoro. Entrypoint: one task id, then exit.
-   No ASGI startup. Publish it with a Modal function, `cpu=1.0`,
-   `memory=4096`, `max_containers=40`, `timeout` at least 1800,
-   `scaledown_window` at or under 30. Prove it with one task id
-   against a scratch Supabase row, uploading to R2.
+   `small`, Phonon, and Kokoro. Entrypoint: task id plus params, then
+   exit. No ASGI startup. `MPT_STATE_BACKEND=supabase`. Publish it
+   with a Modal function, `cpu=1.0`, `memory=6144`,
+   `min_containers=0`, `max_containers=30` (raise via
+   `MPT_CPU_WORKER_MAX_CONTAINERS`), `timeout` at least 1800,
+   `scaledown_window` as short as Modal allows. Prove it with one
+   task id and its params against a scratch Supabase row, uploading
+   to R2.
 3. Add the dispatcher flag on the VPS engine. Off: today's thread.
    On: spawn the CPU function and return. Web and MCP stay callers of
    the engine. Run two overlapping house-voice videos. Confirm the
