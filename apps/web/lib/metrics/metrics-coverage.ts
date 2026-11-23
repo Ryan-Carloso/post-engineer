@@ -13,6 +13,7 @@ import {
   type MetricsQuery,
 } from './metrics-query';
 import { metricsTargets } from './post-metrics';
+import { postInPersonaScope } from './post-scope';
 
 export interface CoveragePostInput {
   id: string;
@@ -70,13 +71,7 @@ export function computeCoverage(input: {
     } else if (query.personaId !== null && post.personaId !== query.personaId) {
       continue;
     }
-    if (scope !== null) {
-      if (post.personaId === null) {
-        if (post.faceless !== true) continue;
-      } else if (!scope.includes(post.personaId)) {
-        continue;
-      }
-    }
+    if (!postInPersonaScope(post.personaId, post.faceless, scope)) continue;
     const angleKnown = postsWithRows.has(post.id);
     const angle = angleKnown ? (postAngles.get(post.id) ?? null) : null;
     if (query.angle !== null) {

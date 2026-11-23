@@ -1,7 +1,9 @@
 import type { PostEngineerClient } from './client.js';
 import { parseContractResponse } from './contract-response.js';
 import {
+  getLast24hMetrics as getLast24hMetricsContract,
   getRetentionCurve as getRetentionCurveContract,
+  last24hSearchParams,
   listMetrics as listMetricsContract,
   metricsSearchParams,
 } from './contracts/metrics.js';
@@ -45,6 +47,30 @@ export async function getPostMetrics(
     'get post metrics',
   );
   return parseContractResponse(listMetricsContract, raw);
+}
+
+export interface Last24hMetricsQuery {
+  persona?: string;
+  account?: string;
+  provider?: SocialProvider;
+}
+
+export async function getLast24hMetrics(
+  client: PostEngineerClient,
+  query: Last24hMetricsQuery,
+): Promise<ResponseOf<typeof getLast24hMetricsContract>> {
+  const params = last24hSearchParams({
+    personaId: query.persona ?? null,
+    accountId: query.account ?? null,
+    provider: query.provider ?? null,
+  });
+  const suffix = params.size === 0 ? '' : `?${params.toString()}`;
+  const raw = await client.request(
+    `/api/metrics/last-24h${suffix}`,
+    { method: 'GET', headers: client.getHeaders() },
+    'get last 24 hours metrics',
+  );
+  return parseContractResponse(getLast24hMetricsContract, raw);
 }
 
 export async function getYouTubeRetentionCurve(
