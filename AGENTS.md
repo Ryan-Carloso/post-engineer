@@ -28,7 +28,7 @@
 
 ## Chat replies
 
-- **Every summary the agent posts in chat ships with a spoken version.** Render the summary as MP3 with the local CPU TTS and attach it next to the text in the same reply. Use the `mpt-tts-cpu` container read-only (Kokoro `pf_dora`, pt-BR): write a script that calls `local_tts.backends._use_system_espeak()` then `kokoro.KPipeline(lang_code="p", repo_id=backends.KOKORO_REPO, device="cpu")`, `docker cp` it in, run it, copy the mp3 out, delete the temp files inside the container. Never restart or reconfigure that container.
+- **Every summary the agent posts in chat ships with a spoken version.** Render the summary as MP3 with the local CPU TTS and attach it next to the text in the same reply. Never run that work inside the live `mpt-tts-cpu` container — the deploy recreates it and kills in-flight jobs. Run a one-off container from the same image instead: `docker run --rm -v tts_models:/models -v tts_voices:/voices -v <script>:/tmp/tts.py:ro -v /tmp/opencode:/out mpt-tts-cpu:latest python /tmp/tts.py`, where the script calls `local_tts.backends._use_system_espeak()` then `kokoro.KPipeline(lang_code="p", repo_id=backends.KOKORO_REPO, device="cpu")` with voice `pf_dora` (pt-BR).
 - The rule is a reply format, not a code path: no route, tool, or fixture changes it.
 
 ## Language
