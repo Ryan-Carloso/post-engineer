@@ -47,13 +47,12 @@ class TestSlotTrackingKwargs:
         assert tracking_kwargs(_body(slot_id="")) == {"video_clip_duration": 2}
 
     def test_records_explicit_pacing_values(self):
-        assert tracking_kwargs(
-            _body(
-                video_clip_duration=4,
-                video_transition_mode="Crossfade",
-                video_variation_seed=7,
-            )
-        ) == {
+        body = _body(
+            video_clip_duration=4,
+            video_transition_mode="Crossfade",
+            video_variation_seed=7,
+        )
+        assert tracking_kwargs(body) == {
             "video_clip_duration": 4,
             "video_transition_mode": "Crossfade",
             "video_variation_seed": 7,
