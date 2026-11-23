@@ -377,6 +377,12 @@ def render_full_lipsync(
 LIPSYNC_CAPTION_POSITION: float = 70.0
 
 
+def captions_on_face(params: VideoParams) -> bool:
+    return params.video_type == "full_lipsync" or (
+        persona_lipsync_active(params) and params.video_layout != VideoLayout.react
+    )
+
+
 def caption_params(params: VideoParams) -> VideoParams:
     """Params for the final encode, with the caption moved off the face.
 
@@ -390,10 +396,7 @@ def caption_params(params: VideoParams) -> VideoParams:
     """
     if params.subtitle_position != "center":
         return params
-    on_face = params.video_type == "full_lipsync" or (
-        persona_lipsync_active(params) and params.video_layout != VideoLayout.react
-    )
-    if not on_face:
+    if not captions_on_face(params):
         return params
     return params.model_copy(
         update={
