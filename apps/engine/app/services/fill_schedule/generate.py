@@ -289,12 +289,15 @@ class BatchGenerator:
     ) -> None:
         """Start one due slot on a free running slot of the shared manager.
 
-        Reserve the running slot first. The task row is written only after
-        that reservation, outside the manager lock. ``SlotDeferred`` means
-        no running slot was free: the caller leaves the slot pending and
-        this method has written no task row. A write that raises releases
-        the reservation before the exception propagates. Batch dispatch
-        does not queue; direct ``add_task`` still does.
+        A faceless slot first tries the Modal CPU worker, which writes the
+        task row with the remote marker before spawning; a spawn failure
+        clears the marker and falls through to the local path, which writes
+        the row again. Otherwise reserve the running slot first: the task
+        row is written only after that reservation, outside the manager
+        lock. ``SlotDeferred`` means no running slot was free: the caller
+        leaves the slot pending and this method has written no task row. A
+        write that raises releases the reservation before the exception
+        propagates. Batch dispatch does not queue; direct ``add_task`` still does.
 
         The caller claims the slot (pending → generating) only after
         this returns. The next tick must not dispatch a started slot again.

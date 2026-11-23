@@ -107,6 +107,11 @@ module = [
     "toml.*",
     "onnxruntime.*",
     "tokenizers.*",
+    "ptts.*",
+    "espeakng_loader.*",
+    "kokoro.*",
+    "chatterbox.*",
+    "soundfile.*",
 ]
 ignore_missing_imports = true
 
