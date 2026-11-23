@@ -1,4 +1,4 @@
-const VERSION_ID = '44444444-4444-4444-8444-444444444444';
+import { promptDetail } from '../support/prompt-mocks';
 
 const DAILY_NEWS = {
   slug: 'daily-news',
@@ -21,7 +21,7 @@ function stubPrompts() {
   cy.intercept('GET', '/api/prompts', { statusCode: 200, body: { success: true, prompts: [DAILY_NEWS] } }).as('listPrompts');
   cy.intercept('GET', '/api/prompts/daily-news', {
     statusCode: 200,
-    body: { success: true, prompt: { ...DAILY_NEWS, prompt: 'Pick one story of the day.', versionId: VERSION_ID, version: 2 } },
+    body: { success: true, prompt: { ...promptDetail(DAILY_NEWS, 'Pick one story of the day.'), version: 2 } },
   }).as('getPrompt');
 }
 

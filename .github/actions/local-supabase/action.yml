@@ -1,0 +1,63 @@
+name: Local Supabase for E2E
+description: >-
+  Start a throwaway Supabase stack in the runner (db, auth, rest, storage,
+  kong only), apply supabase/migrations, seed the E2E user, and export the
+  local URL and keys as NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY
+  and SUPABASE_SERVICE_ROLE_KEY for the rest of the job. CI E2E never talks to
+  the production Supabase project: every request it made there was billed as
+  production log ingestion.
+
+runs:
+  using: composite
+  steps:
+    - uses: supabase/setup-cli@45a513f8c64c0bc8e0e3dfe572b5c95be85f6359 # v3.0.1 pinned 2026-10-03
+      with:
+        version: '2.119.0'
+
+    # Only the services the web app calls: Postgres, GoTrue (password
+    # grant + getUser), PostgREST, Storage (migration 014 writes
+    # storage.buckets, whose schema the storage service creates) and Kong in
+    # front of them. Studio, realtime, edge functions, logs, mail and the
+    # pooler stay off (also disabled in apps/web/cypress/supabase/config.toml).
+    - name: Start local Supabase
+      shell: bash
+      run: |
+        set -euo pipefail
+        supabase start --workdir "$GITHUB_WORKSPACE/apps/web/cypress" \
+          -x realtime,imgproxy,mailpit,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
+
+    - name: Apply the migration chain
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      run: |
+        set -euo pipefail
+        supabase db push --yes --db-url "postgresql://postgres:postgres@127.0.0.1:54322/postgres?sslmode=disable"
+
+    - name: Export the local Supabase URL and keys
+      shell: bash
+      run: |
+        set -euo pipefail
+        status_env="$(supabase status -o env --workdir "$GITHUB_WORKSPACE/apps/web/cypress")"
+        read_status() {
+          local value
+          value="$(sed -n "s/^$1=\"\(.*\)\"$/\1/p" <<<"$status_env")"
+          if [ -z "$value" ]; then
+            echo "::error::supabase status did not report $1"
+            exit 1
+          fi
+          printf '%s' "$value"
+        }
+        api_url="$(read_status API_URL)"
+        anon_key="$(read_status ANON_KEY)"
+        service_role_key="$(read_status SERVICE_ROLE_KEY)"
+        {
+          echo "NEXT_PUBLIC_SUPABASE_URL=$api_url"
+          echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$anon_key"
+          echo "SUPABASE_SERVICE_ROLE_KEY=$service_role_key"
+        } >> "$GITHUB_ENV"
+
+    - name: Seed the E2E user
+      shell: bash
+      run: |
+        set -euo pipefail
+        "$GITHUB_WORKSPACE/apps/web/cypress/supabase/seed-e2e.sh"
