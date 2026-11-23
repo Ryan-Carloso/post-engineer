@@ -1,7 +1,7 @@
 import 'server-only';
 
 import type { NextResponse } from 'next/server';
-import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
+import { applyRateLimit, type RateLimitProfile } from '@/lib/rate-limit';
 
 export interface TaskPollCaller {
   userId: string;
@@ -21,8 +21,9 @@ export async function applyTaskPollLimit(
   request: Request,
   auth: TaskPollCaller,
   taskId: string,
+  profile: RateLimitProfile,
 ): Promise<NextResponse | null> {
   const caller = machinePollerId(auth);
   if (caller === null) return null;
-  return applyRateLimit(request, RATE_LIMITS.taskStatusPoll, `${caller}:${taskId}`);
+  return applyRateLimit(request, profile, `${caller}:${taskId}`);
 }

@@ -10,7 +10,10 @@ export function videoTaskOperationSchemas({ engineEnvelope }) {
     },
     'DELETE /api/persona/video-task/[taskId]': {
       response: engineEnvelope,
-      extraResponses: { 502: 'Engine unavailable; retry with backoff.' },
+      extraResponses: {
+        429: 'At most 10 cancels per minute per user; a faster call answers errorType RATE_LIMITED and a Retry-After header with the seconds left.',
+        502: 'Engine unavailable; retry with backoff.',
+      },
     },
   };
 }

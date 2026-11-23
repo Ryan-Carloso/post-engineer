@@ -16,7 +16,6 @@ export const EXEMPTION_KINDS = {
   'session-teardown': 'signs the caller out; throttling it would trap a session',
   'test-only': 'serves test instrumentation and touches no service',
   'oauth-discovery': 'static OAuth metadata or public keys',
-  'limited-elsewhere': 'rate limited by another open pull request; remove the entry when it merges',
 };
 export const MIN_REASON_LENGTH = 20;
 

@@ -5,6 +5,7 @@ import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { apiErrorResponse } from '@/lib/api-error';
 import { SAFE_TASK_ID } from '@/lib/video-urls';
 import { logger } from '@/lib/logger';
+import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { resolveTaskScope, type TaskScope } from '@/lib/video-task-scope';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
@@ -14,6 +15,8 @@ async function deleteHandler(
 ): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
+  const limited = await applyRateLimit(request, RATE_LIMITS.videoTaskCancel, auth.userId);
+  if (limited) return limited;
 
   const { taskId } = await context.params;
 
