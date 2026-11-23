@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
+import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 
 const MOCK_AVATAR_URL =
   'data:image/svg+xml;utf8,' +
@@ -25,6 +26,8 @@ async function postHandler(request: Request): Promise<NextResponse> {
       { status: 401 },
     );
   }
+  const limited = await applyRateLimit(request, RATE_LIMITS.personaAvatar, user.id);
+  if (limited) return limited;
 
   const body: unknown = await request.json().catch(() => null);
   const prompt =

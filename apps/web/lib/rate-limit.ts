@@ -53,7 +53,56 @@ export const RATE_LIMITS = {
   mcpRemotePreAuth: { name: 'mcp-remote-pre-auth', limit: 300, windowMs: 60_000 },
   promptsRead: { name: 'prompts-read', limit: 120, windowMs: 60_000 },
   promptsWrite: { name: 'prompts-write', limit: 30, windowMs: 60_000 },
+  accountDisconnect: { name: 'account-disconnect', limit: 10, windowMs: 60_000 },
+  apiKeyList: { name: 'api-key-list', limit: 60, windowMs: 60_000 },
+  healthProbe: { name: 'health-probe', limit: 30, windowMs: 60_000 },
+  engineHealthProbe: { name: 'engine-health-probe', limit: 30, windowMs: 60_000 },
+  versionProbe: { name: 'version-probe', limit: 60, windowMs: 60_000 },
+  personaAvatar: { name: 'persona-avatar', limit: 10, windowMs: 60_000 },
+  personaFaces: { name: 'persona-faces', limit: 60, windowMs: 60_000 },
+  personaImageEdit: { name: 'persona-image-edit', limit: 30, windowMs: 60_000 },
+  clonedVoiceList: { name: 'cloned-voice-list', limit: 60, windowMs: 60_000 },
+  clonedVoiceDelete: { name: 'cloned-voice-delete', limit: 10, windowMs: 60_000 },
+  scheduleDelete: { name: 'schedule-delete', limit: 10, windowMs: 60_000 },
+  slotWrite: { name: 'slot-write', limit: 30, windowMs: 60_000 },
+  shareLinkList: { name: 'share-link-list', limit: 60, windowMs: 60_000 },
+  validateScript: { name: 'validate-script', limit: 60, windowMs: 60_000 },
+  oauthAuthorize: { name: 'oauth-authorize', limit: 30, windowMs: 60_000 },
+  oauthApprove: { name: 'oauth-approve', limit: 20, windowMs: 60_000 },
 } as const satisfies Record<string, RateLimitProfile>;
+
+export interface CallerRateLimitProfiles {
+  browser: RateLimitProfile;
+  machine: RateLimitProfile;
+}
+
+function callerProfiles(name: string, browserLimit: number, machineLimit: number): CallerRateLimitProfiles {
+  return {
+    browser: { name: `${name}-browser`, limit: browserLimit, windowMs: 60_000 },
+    machine: { name: `${name}-machine`, limit: machineLimit, windowMs: 60_000 },
+  };
+}
+
+export const CALLER_RATE_LIMITS = {
+  accountList: callerProfiles('account-list', 120, 20),
+  personaList: callerProfiles('persona-list', 120, 20),
+  personaVoices: callerProfiles('persona-voices', 120, 20),
+  billingTokens: callerProfiles('billing-tokens', 120, 20),
+  billingTransactions: callerProfiles('billing-transactions', 120, 20),
+  videoGenerationList: callerProfiles('video-generation-list', 120, 20),
+  videoGenerationRead: callerProfiles('video-generation-read', 120, 20),
+  scheduleList: callerProfiles('schedule-list', 120, 20),
+  scheduleStatus: callerProfiles('schedule-status', 240, 20),
+  personaImagesRead: callerProfiles('persona-images-read', 120, 20),
+  clonedVoiceRead: callerProfiles('cloned-voice-read', 120, 20),
+} as const satisfies Record<string, CallerRateLimitProfiles>;
+
+export function profileForCaller(
+  auth: { isApiKey?: boolean; isOAuth?: boolean },
+  profiles: CallerRateLimitProfiles
+): RateLimitProfile {
+  return auth.isApiKey === true || auth.isOAuth === true ? profiles.machine : profiles.browser;
+}
 
 interface WindowCounter {
   count: number;

@@ -122,6 +122,8 @@ async function deleteHandler(
 ): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
+  const limited = await applyRateLimit(request, RATE_LIMITS.slotWrite, auth.userId);
+  if (limited) return limited;
   const supabase =
     auth.isApiKey === true || auth.isOAuth === true
       ? createSupabaseServiceClient()
@@ -185,6 +187,8 @@ async function patchHandler(
 ): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
+  const limited = await applyRateLimit(request, RATE_LIMITS.slotWrite, auth.userId);
+  if (limited) return limited;
   const supabase =
     auth.isApiKey === true || auth.isOAuth === true
       ? createSupabaseServiceClient()

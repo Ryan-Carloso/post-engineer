@@ -10,6 +10,7 @@ import {
   validateSegments,
 } from '@/lib/generation/script-segments';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
+import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 
 const ROUTE = 'POST /api/videos/validate-script';
 
@@ -19,6 +20,8 @@ export const MEASURED_DURATION_PENDING_REASON =
 async function postHandler(request: Request): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
+  const limited = await applyRateLimit(request, RATE_LIMITS.validateScript, auth.userId);
+  if (limited) return limited;
 
   let body: unknown;
   try {

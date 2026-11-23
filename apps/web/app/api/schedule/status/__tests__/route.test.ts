@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { NextResponse } from 'next/server';
 
+vi.mock('@/lib/rate-limit', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/rate-limit')>()),
+  applyRateLimit: vi.fn(async () => null),
+}));
 vi.mock('@/lib/request-auth', () => ({
   requireSupabaseSession: vi.fn(),
   engineAuthHeaders: (userId: string) => ({ 'x-user-id': userId }),

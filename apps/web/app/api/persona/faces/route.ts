@@ -3,6 +3,7 @@ import { requireSupabaseSession } from '@/lib/request-auth';
 import { listDefaultPersonaFaces } from '@/lib/persona-faces';
 import { logger } from '@/lib/logger';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
+import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 
 function appBaseUrl(): string {
   const url = process.env.NEXT_PUBLIC_APP_URL;
@@ -12,9 +13,11 @@ function appBaseUrl(): string {
   return url.replace(/\/+$/, '');
 }
 
-async function getHandler(request?: Request): Promise<NextResponse> {
+async function getHandler(request: Request): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
+  const limited = await applyRateLimit(request, RATE_LIMITS.personaFaces, auth.userId);
+  if (limited) return limited;
 
   let baseUrl: string;
   try {
