@@ -44,7 +44,7 @@ from app.services import (
     face_detect, image_coverage, media_overlay, persona_hook, image_fetch, segment_panels, subtitle, video,
     photo_content, segment_video,
 )
-from app.services.image_density import split_interval
+from app.services.image_density import media_weights, split_weighted
 from app.services.lipsync_active import persona_lipsync_active
 from app.services.segment_intervals import segment_intervals_from_subtitle
 from app.services.segment_panels import Panel
@@ -397,7 +397,7 @@ def prepare_segment_media(
                 for image_index in range(len(items))
             )
             continue
-        for image_index, (media, (slice_start, slice_end)) in enumerate(zip(items, split_interval(start, end, len(items)))):
+        for image_index, (media, (slice_start, slice_end)) in enumerate(zip(items, split_weighted(start, end, media_weights(items)))):
             if not isinstance(media, dict):
                 continue
             over_hook = face == segment_panels.FACE_HOOK and slice_start < hook_end

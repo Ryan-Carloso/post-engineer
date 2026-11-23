@@ -1,4 +1,5 @@
 import type { Dictionary } from './pt';
+import { generationErrorsI18nEn } from './generation-errors-i18n-en';
 import { personaVoiceCloneEn } from './voice-clone-i18n-en';
 import { mcpToolDescEn } from './mcp-tools-i18n-en';
 import { accountI18nEn } from './account-i18n-en';
@@ -54,13 +55,7 @@ export const enDictionary: Dictionary = {
     generationsTitle: 'Video generations',
     generationsEmpty: 'No video generations yet.',
     refundedBadge: 'Token refunded',
-    errorCustomAudio: 'The custom audio file was invalid. Try a different audio file (MP3/OGG/WAV, up to 1 minute).',
-    errorEngineUnavailable: 'The video service was unavailable. Please try again.',
-    errorEngineRejected: 'The video service rejected the job. Please try again.',
-    errorNoTaskId: 'The video service did not return a task. Please try again.',
-    errorInvalidTaskResponse: 'The video service returned an unexpected response. Please try again.',
-    errorEngineRestart: 'The engine restarted while generating your video. Please try again.',
-    errorUnknown: 'The video could not be generated. Please try again.',
+    ...generationErrorsI18nEn,
     detailsTitle: 'Post details',
     postIdLabel: 'Post ID',
     copyPostId: 'Copy post ID',

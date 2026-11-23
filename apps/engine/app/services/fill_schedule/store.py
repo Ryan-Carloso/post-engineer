@@ -9,6 +9,7 @@ from typing import Any
 import requests
 from loguru import logger
 
+from app.services.analytics import scrub_secret_values
 from app.services.fill_schedule.constants import (
     GENERATION_HORIZON_HOURS,
     SIGNED_URL_EXPIRES_SECONDS,
@@ -251,6 +252,9 @@ class ScheduleStore:
         (token_transactions.engine_task_id, migration 018); None when the
         task never reached the engine (dispatch failure still records the
         allocated id, so callers should always pass one when they have it).
+        A landed refund also marks the slot's video_generations row
+        (generation_id = refund_key) refunded, so the generation status
+        the agent reads says so (mark_generation_refunded).
         """
         result = self._request(
             "POST",
@@ -265,7 +269,32 @@ class ScheduleStore:
             },
             headers=self._headers,
         )
-        return isinstance(result, dict) and result.get("refunded") is True
+        refunded = isinstance(result, dict) and result.get("refunded") is True
+        if refunded:
+            self.mark_generation_refunded(refund_key)
+        return refunded
+
+    def mark_generation_refunded(self, generation_id: str) -> None:
+        """Set tokens_refunded on the video_generations row of a refunded slot.
+
+        Best effort: the refund already landed, so a failed write is
+        logged loudly and never raised — raising would make the caller
+        report a refund that did happen as failed. A key with no row
+        (a publish refund) patches nothing.
+        """
+        try:
+            self._request(
+                "PATCH",
+                "video_generations",
+                json={"tokens_refunded": True},
+                params={"generation_id": f"eq.{generation_id}"},
+                headers=self._headers,
+            )
+        except Exception as exc:
+            logger.error(
+                f"fill_schedule: refund landed but video_generations was not marked "
+                f"for {generation_id}: {scrub_secret_values(str(exc))}"
+            )
 
     def claim_ready_slot(self, slot_id: str, now_utc: datetime) -> bool:
         """Atomic ready→publishing claim (C2: avoids duplicate posts).

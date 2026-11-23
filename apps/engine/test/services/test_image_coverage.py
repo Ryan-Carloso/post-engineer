@@ -3,18 +3,19 @@
 The render rule is all-must-survive: any photo skipped at render fails
 the task with images_do_not_cover_audio naming the skip reasons, so the
 agent fixes the photo instead of guessing. Surviving full-frame photos
-are laid out back to back from the coverage start, at most 2s each: a
-photo may start early into the pause before its segment, but it never
-runs past 2s. When the photos run out before the end of the audio the
-task fails with images_do_not_cover_audio naming how many more 2s photos
-the window needs, instead of stretching one photo over the gap. Full lip
+are laid out back to back from the coverage start: each holds until the
+next photo's slice starts, at most 1.5x its pace (the requested duration
+or 2s), so the gap between the estimated and the real voice never fails
+the render. When the photos held at that cap still run out before the
+end of the audio the task fails with images_do_not_cover_audio naming
+how many more photos the window needs. Full lip
 sync stays lenient: the face is on screen the whole time, so a skipped
 photo is a warning there, never a failure.
 """
 
 import pytest
 
-from app.services import image_coverage, segment_panels
+from app.services import image_coverage, image_density, segment_panels
 from app.services.image_coverage import ImagesDoNotCoverAudio
 from app.services.segment_panels import Panel
 
@@ -51,23 +52,23 @@ def test_full_lipsync_has_nothing_to_cover():
     assert image_coverage.coverage_start(segment_panels.FACE_FULL, 7.5) is None
 
 
-def test_photos_beyond_two_seconds_fail_naming_how_many_more_are_needed():
+def test_photos_beyond_their_fitted_cap_fail_naming_how_many_more_are_needed():
     panels = [_full(0, 0.2, 3.9), _full(1, 4.1, 8.0), _full(2, 8.3, 11.5)]
     with pytest.raises(ImagesDoNotCoverAudio) as exc_info:
         image_coverage.extend_over_gaps(panels, 0.0, 12.0)
     assert str(exc_info.value) == (
-        "images_do_not_cover_audio: 3 photos cover 6.0s of 12.0s at 2s each; "
-        "need 3 more photos"
+        "images_do_not_cover_audio: 3 photos cover 9.0s of 12.0s at most 1.5x their pace each; "
+        "need 2 more photos"
     )
 
 
-def test_a_dropped_photo_is_not_covered_by_its_neighbour():
+def test_a_dropped_photo_is_covered_by_its_neighbour_only_up_to_the_fitted_cap():
     panels = [_full(0, 0.0, 4.0), _full(2, 8.0, 12.0)]
     with pytest.raises(ImagesDoNotCoverAudio) as exc_info:
         image_coverage.extend_over_gaps(panels, 0.0, 12.0)
     assert str(exc_info.value) == (
-        "images_do_not_cover_audio: 2 photos cover 4.0s of 12.0s at 2s each; "
-        "need 4 more photos"
+        "images_do_not_cover_audio: 2 photos cover 6.0s of 12.0s at most 1.5x their pace each; "
+        "need 3 more photos"
     )
 
 
@@ -75,7 +76,7 @@ def test_a_dropped_first_photo_fails_instead_of_stretching_the_next_one():
     with pytest.raises(ImagesDoNotCoverAudio) as exc_info:
         image_coverage.extend_over_gaps([_full(1, 4.0, 12.0)], 0.0, 12.0)
     assert str(exc_info.value) == (
-        "images_do_not_cover_audio: 1 photo covers 2.0s of 12.0s at 2s each; "
+        "images_do_not_cover_audio: 1 photo covers 3.0s of 12.0s at most 1.5x their pace each; "
         "need 5 more photos"
     )
 
@@ -84,7 +85,7 @@ def test_a_dropped_last_photo_fails_instead_of_stretching_the_previous_one():
     with pytest.raises(ImagesDoNotCoverAudio) as exc_info:
         image_coverage.extend_over_gaps([_full(0, 0.0, 6.0)], 0.0, 12.0)
     assert str(exc_info.value) == (
-        "images_do_not_cover_audio: 1 photo covers 2.0s of 12.0s at 2s each; "
+        "images_do_not_cover_audio: 1 photo covers 3.0s of 12.0s at most 1.5x their pace each; "
         "need 5 more photos"
     )
 
@@ -116,8 +117,8 @@ def test_overlapping_long_panels_fail_when_they_cannot_cover_the_audio():
     with pytest.raises(ImagesDoNotCoverAudio) as exc_info:
         image_coverage.extend_over_gaps([_full(0, 0.0, 5.0), _full(1, 4.5, 9.0)], 0.0, 9.0)
     assert str(exc_info.value) == (
-        "images_do_not_cover_audio: 2 photos cover 4.0s of 9.0s at 2s each; "
-        "need 3 more photos"
+        "images_do_not_cover_audio: 2 photos cover 6.0s of 9.0s at most 1.5x their pace each; "
+        "need 2 more photos"
     )
 
 
@@ -142,7 +143,7 @@ def test_the_bare_code_is_unchanged_when_no_detail_is_given():
     assert str(ImagesDoNotCoverAudio()) == "images_do_not_cover_audio"
 
 
-def test_photos_cover_small_pauses_without_exceeding_two_seconds():
+def test_a_photo_holds_through_a_small_pause_until_the_next_photo_starts():
     panels = [_full(0, 0.2, 1.9), _full(1, 2.1, 4.0)]
     covered = image_coverage.ensure_coverage(
         panels,
@@ -152,7 +153,7 @@ def test_photos_cover_small_pauses_without_exceeding_two_seconds():
         sent=2,
         skipped=[],
     )
-    assert [(p.start, p.end) for p in covered] == [(0.0, 2.0), (2.0, 4.0)]
+    assert [(p.start, p.end) for p in covered] == [(0.0, 2.1), (2.1, 4.0)]
 
 
 def test_one_skipped_photo_fails_naming_the_counts_and_the_photo():
@@ -293,31 +294,31 @@ def test_no_full_frame_photo_stays_on_screen_longer_than_two_seconds():
 
 
 def test_running_out_of_photos_fails_naming_the_missing_count():
-    panels = [_full(0, 0.0, 3.0), _full(1, 3.0, 6.0)]
+    panels = [_full(0, 0.0, 4.0), _full(1, 4.0, 8.0)]
     with pytest.raises(ImagesDoNotCoverAudio) as exc_info:
         image_coverage.ensure_coverage(
             panels,
             face=segment_panels.FACE_NONE,
             hook_end=0.0,
-            audio_duration=6.0,
+            audio_duration=8.0,
             sent=2,
             skipped=[],
         )
     assert str(exc_info.value) == (
-        "images_do_not_cover_audio: 2 photos cover 4.0s of 6.0s at 2s each; "
+        "images_do_not_cover_audio: 2 photos cover 6.0s of 8.0s at most 1.5x their pace each; "
         "need 1 more photo"
     )
 
 
-def test_the_reported_short_fails_with_twelve_photos_for_thirty_five_seconds():
+def test_the_reported_short_with_twelve_photos_for_thirty_five_seconds_still_fails():
     starts = [0, 3, 5, 7, 11, 13, 19, 21, 24, 27, 29, 32]
     ends = [3, 5, 7, 11, 13, 19, 21, 24, 27, 29, 32, 35]
     panels = [_full(index, start, end) for index, (start, end) in enumerate(zip(starts, ends))]
     with pytest.raises(ImagesDoNotCoverAudio) as exc_info:
         image_coverage.extend_over_gaps(panels, 0.0, 35.0)
     assert str(exc_info.value) == (
-        "images_do_not_cover_audio: 12 photos cover 24.0s of 35.0s at 2s each; "
-        "need 6 more photos"
+        "images_do_not_cover_audio: 12 photos cover 34.0s of 35.0s at most 1.5x their pace each; "
+        "need 1 more photo"
     )
 
 
@@ -370,11 +371,11 @@ def test_a_skipped_clip_fails_the_task_like_a_skipped_photo():
     message = str(exc_info.value)
     assert "2 sent, 1 survived, 1 skipped (not a video clip x1)" in message
     assert "segment 1 image 0 media skipped: not a video clip" in message
-def test_a_requested_long_photo_holds_the_turning_point():
+def test_a_requested_long_photo_holds_its_weighted_slice():
     panels = [
-        _full(0, 0.0, 2.0, requested_duration=3.0),
-        _full(1, 2.0, 4.0),
-        _full(2, 4.0, 6.0),
+        _full(0, 0.0, 3.0, requested_duration=3.0),
+        _full(1, 3.0, 5.0),
+        _full(2, 5.0, 7.0),
     ]
     covered = image_coverage.extend_over_gaps(panels, 0.0, 7.0)
     assert [(p.start, p.end) for p in covered] == [(0.0, 3.0), (3.0, 5.0), (5.0, 7.0)]
@@ -396,66 +397,49 @@ def test_a_requested_flash_photo_is_short():
     ]
 
 
-def test_a_requested_photo_runs_past_the_next_photo_original_start():
-    panels = [
-        _full(0, 0.0, 2.0, requested_duration=3.0),
-        _full(1, 2.0, 4.0),
-        _full(2, 4.0, 6.0),
-    ]
-    covered = image_coverage.extend_over_gaps(panels, 0.0, 6.0)
-    assert [(p.start, p.end) for p in covered] == [(0.0, 3.0), (3.0, 5.0), (5.0, 6.0)]
+def _segment_panels(segments, durations):
+    panels = []
+    for index, ((start, end), requested) in enumerate(zip(segments, durations), start=1):
+        media = [{"mediaId": f"{index:032x}.jpg", "duration": seconds} for seconds in requested]
+        for (slice_start, slice_end), seconds in zip(
+            image_density.split_weighted(start, end, image_density.media_weights(media)), requested
+        ):
+            panels.append(_full(index, slice_start, slice_end, requested_duration=seconds))
+    return panels
 
 
-def test_a_default_photo_after_a_long_request_never_runs_backwards():
-    panels = [
-        _full(0, 0.0, 2.0, requested_duration=4.0),
-        _full(1, 2.0, 3.0),
-        _full(2, 3.0, 5.0),
-    ]
-    covered = image_coverage.extend_over_gaps(panels, 0.0, 8.0)
-    assert [(p.start, p.end) for p in covered] == [(0.0, 4.0), (4.0, 6.0), (6.0, 8.0)]
+def test_requested_seconds_longer_than_the_real_voice_never_squeeze_a_photo_out():
+    hook_end = 5.0
+    segments = [(5.2, 15.4), (15.6, 25.0), (25.3, 31.0)]
+    panels = _segment_panels(segments, [[5, 5, 5], [5, 5, 5], [4, 4]])
+    covered = image_coverage.extend_over_gaps(panels, hook_end, 31.0)
+    assert len(covered) == 8
+    assert covered[0].start == hook_end
+    assert covered[-1].end == 31.0
     assert all(p.end > p.start for p in covered)
-
-
-def test_a_requested_photo_longer_than_the_remaining_audio_is_clipped():
-    panels = [_full(0, 0.0, 2.0), _full(1, 2.0, 4.0, requested_duration=6.0)]
-    covered = image_coverage.extend_over_gaps(panels, 0.0, 5.0)
-    assert [(p.start, p.end) for p in covered] == [(0.0, 2.0), (2.0, 5.0)]
-
-
-def test_short_requested_photos_fail_coverage_naming_the_missing_count():
-    panels = [
-        _full(0, 0.0, 0.5, requested_duration=0.5),
-        _full(1, 0.5, 1.0, requested_duration=0.5),
-        _full(2, 1.0, 3.0),
+    assert all(a.end == b.start for a, b in zip(covered, covered[1:]))
+    assert [round(p.end - p.start, 2) for p in covered] == [
+        3.6, 3.4, 3.6, 3.13, 3.13, 3.43, 2.85, 2.85,
     ]
-    with pytest.raises(ImagesDoNotCoverAudio) as exc_info:
-        image_coverage.extend_over_gaps(panels, 0.0, 6.0)
-    assert str(exc_info.value) == (
-        "images_do_not_cover_audio: 3 photos cover 3.0s of 6.0s at requested durations; "
-        "need 2 more photos"
-    )
 
 
-def test_requested_durations_do_not_change_the_message_without_requests():
-    panels = [_full(0, 0.0, 3.0), _full(1, 3.0, 6.0)]
+def test_a_real_voice_longer_than_the_estimate_stretches_photos_up_to_their_cap():
+    panels = [_full(0, 0.0, 2.8), _full(1, 2.8, 5.6), _full(2, 5.6, 8.4)]
+    covered = image_coverage.extend_over_gaps(panels, 0.0, 8.4)
+    assert [(p.start, p.end) for p in covered] == [(0.0, 2.8), (2.8, 5.6), (5.6, 8.4)]
+
+
+def test_a_requested_photo_stretches_at_most_one_and_a_half_times_its_request():
     with pytest.raises(ImagesDoNotCoverAudio) as exc_info:
-        image_coverage.extend_over_gaps(panels, 0.0, 6.0)
+        image_coverage.extend_over_gaps([_full(0, 0.0, 5.0, requested_duration=3.0)], 0.0, 5.0)
     assert str(exc_info.value) == (
-        "images_do_not_cover_audio: 2 photos cover 4.0s of 6.0s at 2s each; "
+        "images_do_not_cover_audio: 1 photo covers 4.5s of 5.0s at most 1.5x their pace each; "
         "need 1 more photo"
     )
 
 
-def test_a_request_that_squeezes_a_later_photo_out_fails_naming_it():
-    panels = [
-        _full(0, 0.0, 1.0, requested_duration=4.0),
-        _full(1, 1.0, 2.0),
-        _full(2, 2.0, 3.0),
-    ]
-    with pytest.raises(ImagesDoNotCoverAudio) as exc_info:
-        image_coverage.extend_over_gaps(panels, 0.0, 6.0)
-    assert str(exc_info.value) == (
-        "images_do_not_cover_audio: requested durations leave no time "
-        "for photo 3 of 3 (segment 2)"
-    )
+def test_the_fitted_cap_is_the_request_or_the_two_second_pace_times_the_stretch():
+    assert image_coverage.fitted_photo_cap(None) == 3.0
+    assert image_coverage.fitted_photo_cap(4.0) == 6.0
+    assert image_coverage.fitted_photo_cap(6.0) == 9.0
+    assert image_coverage.fitted_photo_cap(99) == 3.0

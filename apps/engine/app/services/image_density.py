@@ -117,12 +117,42 @@ def density_error(
     return None
 
 
-def split_interval(start: float, end: float, count: int) -> list[tuple[float, float]]:
-    """Split [start, end] into count equal slices. The last slice ends at end."""
-    if count <= 0 or end <= start:
+def media_weights(media: Any) -> list[float]:
+    """How much of its segment's spoken time each media item gets, relative to the others.
+
+    A photo weighs its requested duration, or the 2s pace when it has
+    none; a clip or a malformed item weighs the 2s pace. The weights are
+    relative: the segment's real spoken time is shared in proportion, so
+    a request holds one photo longer than its neighbours instead of
+    fixing absolute seconds the real voice may not have. The
+    segment_video import is local for the same cycle as covered_slots.
+    """
+    from app.services import segment_video
+
+    if not isinstance(media, list):
         return []
-    step = (end - start) / count
     return [
-        (start + index * step, end if index == count - 1 else start + (index + 1) * step)
-        for index in range(count)
+        photo_cap(item.get("duration"), MAX_PHOTO_SECONDS)
+        if isinstance(item, dict) and not segment_video.is_video_ref(item)
+        else float(MAX_PHOTO_SECONDS)
+        for item in media
     ]
+
+
+def split_weighted(start: float, end: float, weights: list[float]) -> list[tuple[float, float]]:
+    """Split [start, end] into back-to-back slices proportional to weights.
+
+    The last slice ends exactly at end. Equal weights give equal slices.
+    No slices when there is no time or no positive total weight.
+    """
+    total = sum(weights)
+    if not weights or end <= start or total <= 0:
+        return []
+    span = end - start
+    slices: list[tuple[float, float]] = []
+    cursor = start
+    for position, weight in enumerate(weights):
+        stop = end if position == len(weights) - 1 else cursor + span * weight / total
+        slices.append((cursor, stop))
+        cursor = stop
+    return slices

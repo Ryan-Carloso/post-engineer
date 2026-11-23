@@ -304,7 +304,7 @@ def test_two_photos_split_the_segment_and_a_dropped_one_fails_the_task(tmp_path)
     with pytest.raises(image_coverage.ImagesDoNotCoverAudio) as exc_info:
         image_coverage.extend_over_gaps(prepared, 0.0, 4.0)
     assert str(exc_info.value) == (
-        "images_do_not_cover_audio: 1 photo covers 2.0s of 4.0s at 2s each; "
+        "images_do_not_cover_audio: 1 photo covers 3.0s of 4.0s at most 1.5x their pace each; "
         "need 1 more photo"
     )
 
