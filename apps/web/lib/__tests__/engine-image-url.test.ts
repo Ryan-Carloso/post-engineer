@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import { ensureEngineImageUrl, isEngineUsablePersonaImageUrl } from '../engine-image-url';
 
 const ORIGINAL_BLOB = new Uint8Array([137, 80, 78, 71]);
@@ -17,6 +17,44 @@ function fakeStorage() {
 }
 
 describe('ensureEngineImageUrl', () => {
+  beforeEach(() => {
+    vi.stubEnv('NEXT_PUBLIC_APP_URL', 'http://localhost:3434');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('reads a site asset from the public app URL, never from the server bind address', async () => {
+    vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://post-engineer.com');
+    const { storage } = fakeStorage();
+    const fetchImpl = vi.fn().mockResolvedValue(new Response(ORIGINAL_BLOB, { status: 200 }));
+
+    await ensureEngineImageUrl('/caracter-samples/file-1.png', {
+      supabase: { storage } as never,
+      userId: 'u-1',
+      fetchImpl: fetchImpl as never,
+    });
+
+    const [source] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    expect(source).toBe('https://post-engineer.com/caracter-samples/file-1.png');
+  });
+
+  it('fails explicitly when the public app URL is not configured', async () => {
+    vi.stubEnv('NEXT_PUBLIC_APP_URL', undefined);
+    const { storage } = fakeStorage();
+    const fetchImpl = vi.fn();
+
+    await expect(
+      ensureEngineImageUrl('/caracter-samples/file-1.png', {
+        supabase: { storage } as never,
+        userId: 'u-1',
+        fetchImpl: fetchImpl as never,
+      }),
+    ).rejects.toThrow('NEXT_PUBLIC_APP_URL is not defined');
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
   it('passes an absolute https url straight through, without re-hosting', async () => {
     const { storage, upload } = fakeStorage();
     const url = 'https://project.supabase.co/storage/v1/object/sign/personas/a.png?token=T';
@@ -24,7 +62,6 @@ describe('ensureEngineImageUrl', () => {
     const result = await ensureEngineImageUrl(url, {
       supabase: { storage } as never,
       userId: 'u-1',
-      origin: 'http://localhost:3434',
       fetchImpl: vi.fn(),
     });
 
@@ -39,7 +76,6 @@ describe('ensureEngineImageUrl', () => {
     const result = await ensureEngineImageUrl(url, {
       supabase: { storage } as never,
       userId: 'u-1',
-      origin: 'http://localhost:3434',
       fetchImpl: vi.fn(),
     });
 
@@ -56,7 +92,6 @@ describe('ensureEngineImageUrl', () => {
     const result = await ensureEngineImageUrl('/caracter-samples/file-1.png', {
       supabase: { storage } as never,
       userId: 'u-1',
-      origin: 'http://localhost:3434',
       fetchImpl: fetchImpl as never,
     });
 
@@ -83,8 +118,7 @@ describe('ensureEngineImageUrl', () => {
       ensureEngineImageUrl('/caracter-samples/missing.png', {
         supabase: { storage } as never,
         userId: 'u-1',
-        origin: 'http://localhost:3434',
-        fetchImpl: fetchImpl as never,
+          fetchImpl: fetchImpl as never,
       }),
     ).rejects.toThrow(/missing\.png/);
   });
@@ -98,8 +132,7 @@ describe('ensureEngineImageUrl', () => {
       ensureEngineImageUrl('/caracter-samples/file-1.png', {
         supabase: { storage } as never,
         userId: 'u-1',
-        origin: 'http://localhost:3434',
-        fetchImpl: fetchImpl as never,
+          fetchImpl: fetchImpl as never,
       }),
     ).rejects.toThrow(/bucket full/);
   });
@@ -152,7 +185,6 @@ describe('ensureEngineImageUrl', () => {
     const result = await ensureEngineImageUrl(undefined, {
       supabase: { storage } as never,
       userId: 'u-1',
-      origin: 'http://localhost:3434',
       fetchImpl: vi.fn(),
     });
 
