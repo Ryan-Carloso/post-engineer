@@ -537,6 +537,25 @@ describe('mobile header profile area', () => {
     expect(within(sheet).getByText('nav.billing').closest('a')).toHaveAttribute('href', '/billing');
   });
 
+  it('More sheet links lay out in two columns with truncating labels', async () => {
+    render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
+    fireEvent.click(screen.getByRole('button', { name: 'nav.more' }));
+    const sheet = await screen.findByRole('dialog', { name: 'nav.moreTitle' });
+    const list = sheet.querySelector('ul');
+    expect(list?.className).toContain('grid-cols-2');
+    expect(list?.className).not.toContain('grid-cols-3');
+    for (const labelKey of ['nav.history', 'nav.metrics', 'nav.experiments', 'nav.billing']) {
+      const label = within(sheet).getByText(labelKey);
+      expect(label.className).toContain('truncate');
+      expect(label.className).toContain('min-w-0');
+      const link = label.closest('a') as HTMLElement;
+      expect(link.className).toContain('min-w-0');
+      const icon = link.querySelector('span');
+      expect(icon?.className).toContain('shrink-0');
+      expect(link.closest('li')?.className).toContain('min-w-0');
+    }
+  });
+
   it('sidebar user block links to /account', () => {
     mockSessionUser({
       id: 'user-1',
