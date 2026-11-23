@@ -171,6 +171,7 @@ also_copy = [
     "Dockerfile.cpu-worker",
     "local_tts/requirements-house.txt",
     "scripts/cpu_worker_burst.py",
+    "scripts/migrate_clone_voices.py",
     "local_tts/__init__.py",
     "local_tts/routing.py",
     "local_tts/backends.py",

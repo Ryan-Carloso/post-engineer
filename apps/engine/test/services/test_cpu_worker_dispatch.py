@@ -28,15 +28,13 @@ def _faceless(**overrides: object) -> dict[str, object]:
     return payload
 
 
-def test_flag_off_keeps_the_local_path(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv(dispatch.CPU_WORKER_FLAG, raising=False)
-    assert dispatch.should_dispatch(_faceless(), "video") is False
+def test_faceless_dispatches_without_a_feature_flag() -> None:
+    assert dispatch.should_dispatch(_faceless(), "video") is True
 
 
-def test_faceless_house_voice_dispatches_when_the_flag_is_on(
+def test_faceless_house_voice_dispatches(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv(dispatch.CPU_WORKER_FLAG, "true")
     assert dispatch.should_dispatch(_faceless(), "video") is True
     assert dispatch.should_dispatch(
         _faceless(persona={"voice_id": "chatterbox:kokoro_af_heart"}, voice_name=""),
@@ -44,14 +42,13 @@ def test_faceless_house_voice_dispatches_when_the_flag_is_on(
     ) is True
 
 
-def test_clone_and_lipsync_stay_on_the_vps(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(dispatch.CPU_WORKER_FLAG, "true")
+def test_clone_dispatches_and_lipsync_stays_on_the_vps() -> None:
     assert dispatch.should_dispatch(
         _faceless(voice_name=f"{dispatch.CLONE_PREFIX}mine"), "video"
-    ) is False
+    ) is True
     assert dispatch.should_dispatch(
         _faceless(persona={"voice_id": f"{dispatch.CLONE_PREFIX}mine"}), "video"
-    ) is False
+    ) is True
     assert dispatch.should_dispatch(_faceless(video_type="hook_lipsync"), "video") is False
     assert dispatch.should_dispatch(_faceless(video_type="full_lipsync"), "video") is False
     assert dispatch.should_dispatch(_faceless(), "audio") is False
@@ -82,10 +79,7 @@ def test_max_containers_defaults_to_30_and_rejects_a_lower_ceiling(
         dispatch.configured_max_containers()
 
 
-def test_spawn_records_the_call_id_and_a_failure_clears_the_marker(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv(dispatch.CPU_WORKER_FLAG, "true")
+def test_spawn_records_the_call_id_and_a_failure_clears_the_marker() -> None:
     state = MemoryState()
     state.update_task("task-1", state=3, progress=0)
 
@@ -118,10 +112,7 @@ def test_spawn_records_the_call_id_and_a_failure_clears_the_marker(
     assert cleared["remote_call_id"] == ""
 
 
-def test_thirty_faceless_jobs_spawn_without_a_local_queue(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv(dispatch.CPU_WORKER_FLAG, "true")
+def test_thirty_faceless_jobs_spawn_without_a_local_queue() -> None:
     state = MemoryState()
     seen: list[str] = []
 
@@ -160,7 +151,6 @@ def test_direct_create_uses_modal_when_the_flag_is_on(
         calls.append(task_id)
         return "fc-direct"
 
-    monkeypatch.setenv(dispatch.CPU_WORKER_FLAG, "true")
     monkeypatch.setattr(dispatch, "_modal_spawn", spawn)
     monkeypatch.setattr(video_controller.base, "get_task_id", lambda _request: "req-1")
     monkeypatch.setattr(video_controller.base, "get_auth_context", lambda _request: auth)
@@ -183,7 +173,7 @@ def test_direct_create_uses_modal_when_the_flag_is_on(
         sm.state.delete_task(task_id)
 
 
-def test_clone_create_stays_on_the_local_queue(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_clone_create_goes_to_modal(monkeypatch: pytest.MonkeyPatch) -> None:
     from app.controllers.v1 import video as video_controller
 
     body = TaskVideoRequest(
@@ -194,7 +184,12 @@ def test_clone_create_stays_on_the_local_queue(monkeypatch: pytest.MonkeyPatch) 
         video_script="script",
     )
     auth = type("Auth", (), {"user_id": "user-1"})()
-    monkeypatch.setenv(dispatch.CPU_WORKER_FLAG, "true")
+    calls: list[str] = []
+    monkeypatch.setattr(
+        dispatch,
+        "_modal_spawn",
+        lambda task_id, params, stop_at: calls.append(task_id) or "fc-clone",
+    )
     monkeypatch.setattr(video_controller.base, "get_task_id", lambda _request: "req-1")
     monkeypatch.setattr(video_controller.base, "get_auth_context", lambda _request: auth)
     added: list[object] = []
@@ -206,7 +201,8 @@ def test_clone_create_stays_on_the_local_queue(monkeypatch: pytest.MonkeyPatch) 
     response = video_controller.create_task(object(), body, stop_at="video")
     task_id = response["body"]["task_id"]
     try:
-        assert len(added) == 1
+        assert added == []
+        assert calls == [task_id]
     finally:
         sm.state.delete_task(task_id)
 
@@ -240,10 +236,7 @@ def test_finished_modal_call_falls_through_triage(monkeypatch: pytest.MonkeyPatc
     assert triage_orphan(state, "task-done", data, None) is False
 
 
-def test_resume_spawns_only_rows_that_never_got_a_call_id(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv(dispatch.CPU_WORKER_FLAG, "true")
+def test_resume_spawns_only_rows_that_never_got_a_call_id() -> None:
     rows = [
         {
             "task_id": "missing",
@@ -286,9 +279,11 @@ def test_resume_spawns_only_rows_that_never_got_a_call_id(
     assert started == 1
 
 
-def test_resume_is_a_no_op_when_the_flag_is_off(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv(dispatch.CPU_WORKER_FLAG, raising=False)
-    assert dispatch.resume_unspawned_cpu_jobs(MemoryState(), spawn=lambda *args: "x") == 0
+def test_app_name_defaults_and_can_be_overridden(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv(dispatch.APP_NAME_ENV, raising=False)
+    assert dispatch.worker_app_name() == "moneyprint-cpu-worker"
+    monkeypatch.setenv(dispatch.APP_NAME_ENV, "moneyprint-cpu-worker-dev")
+    assert dispatch.worker_app_name() == "moneyprint-cpu-worker-dev"
 
 
 def test_worker_env_requires_supabase_and_the_tts_secret(
@@ -315,14 +310,17 @@ def test_worker_entrypoint_scales_to_zero_and_skips_boot() -> None:
     assert "scaledown_window=1" in modal_source
     assert "buffer_containers" not in modal_source
     assert "max_containers=1" not in modal_source
-    assert "memory=6144" in modal_source
+    assert "memory=10240" in modal_source
+    assert "cpu-worker-voices" in modal_source
+    assert "def register_clone" in modal_source
+    assert "def delete_clone" in modal_source
     assert 'Secret.from_name("cpu-worker")' in modal_source
     assert "reconcile_orphaned_tasks" not in modal_source
     assert "reconcile_orphaned_tasks" not in run_source
     assert "asgi" not in run_source
     assert "ffmpeg" in dockerfile
     assert "WhisperModel" in dockerfile
-    assert "chatterbox-tts" not in dockerfile
+    assert "chatterbox-tts" in dockerfile
     assert "MPT_STATE_BACKEND=supabase" in dockerfile
     house = (ENGINE / "local_tts/requirements-house.txt").read_text()
     assert "kokoro" in house
@@ -332,3 +330,27 @@ def test_worker_entrypoint_scales_to_zero_and_skips_boot() -> None:
     assert dispatch.DEFAULT_APP_NAME == "moneyprint-cpu-worker"
     assert dispatch.FUNCTION_NAME == "render_video"
     assert "def render_video" in modal_source
+
+
+def test_migrate_lists_clone_wavs_without_uploading(tmp_path: Path) -> None:
+    from chatterbox_registry_volume import register_voice_on_volume
+    from scripts.migrate_clone_voices import clone_files
+
+    wav = b"RIFF" + b"\x00\x00\x00\x00" + b"WAVE" + b"rest"
+    register_voice_on_volume(
+        tmp_path,
+        tmp_path / "voices.toml",
+        "u0123456789ab_0123456789ab",
+        "pt",
+        wav,
+    )
+    rows = clone_files(tmp_path)
+    expected = tmp_path / "u0123456789ab_0123456789ab" / "reference.wav"
+    assert rows == [("u0123456789ab_0123456789ab", "pt", expected)]
+
+
+def test_publish_clone_requires_modal_tokens(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("MODAL_TOKEN_ID", raising=False)
+    monkeypatch.delenv("MODAL_TOKEN_SECRET", raising=False)
+    with pytest.raises(RuntimeError, match="MODAL_TOKEN_ID"):
+        dispatch.publish_clone_reference("u0123456789ab_0123456789ab", "en", b"wav")

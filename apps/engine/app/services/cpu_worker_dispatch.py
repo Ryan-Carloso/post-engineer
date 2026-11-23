@@ -1,8 +1,13 @@
 """Dispatch one image-only video onto a Modal CPU container.
 
-Off unless ``MPT_CPU_WORKER`` is exactly ``true``. Clone voices stay on
-the VPS: their reference WAVs live on the ``tts_voices`` volume, not in
-shared storage. Lip-sync jobs stay on the VPS because they call LongCat.
+Every faceless video, house voice or ``chatterbox_nano:`` clone, is
+spawned on ``moneyprint-cpu-worker``. Lip-sync stays on the VPS because
+it calls LongCat. A spawn failure falls back to the local thread.
+
+Clone reference WAVs live on the Modal volume ``cpu-worker-voices``.
+The worker mounts that volume. New clones are written there when they
+are registered, and ``scripts/migrate_clone_voices.py`` copies the WAVs
+that already sit on the VPS ``tts_voices`` volume.
 
 A spawned job is marked ``remote_worker=modal_cpu`` with ``job_params``
 and ``remote_call_id`` on the task row before the VPS can restart. Boot
@@ -19,11 +24,13 @@ from loguru import logger
 
 from app.models import const
 
-CPU_WORKER_FLAG = "MPT_CPU_WORKER"
 APP_NAME_ENV = "MPT_CPU_WORKER_APP_NAME"
 MAX_CONTAINERS_ENV = "MPT_CPU_WORKER_MAX_CONTAINERS"
 DEFAULT_APP_NAME = "moneyprint-cpu-worker"
 FUNCTION_NAME = "render_video"
+REGISTER_CLONE_FUNCTION = "register_clone"
+DELETE_CLONE_FUNCTION = "delete_clone"
+VOICES_VOLUME_NAME = "cpu-worker-voices"
 REMOTE_WORKER_VALUE = "modal_cpu"
 CLONE_PREFIX = "chatterbox_nano:"
 DEFAULT_MAX_CONTAINERS = 30
@@ -32,8 +39,10 @@ Spawn = Callable[[str, dict[str, Any], str], str]
 CallStatus = Callable[[str], str]
 
 
-def cpu_worker_enabled() -> bool:
-    return os.environ.get(CPU_WORKER_FLAG) == "true"
+def worker_app_name() -> str:
+    """Deployed app. ``MPT_CPU_WORKER_APP_NAME`` overrides the fixed default."""
+    name = os.environ.get(APP_NAME_ENV, "").strip()
+    return name or DEFAULT_APP_NAME
 
 
 def configured_max_containers() -> int:
@@ -91,16 +100,10 @@ def is_clone_voice(params: Any) -> bool:
 
 
 def should_dispatch(params: Any, stop_at: str) -> bool:
-    """True for a faceless house-voice render when the flag is on."""
-    if not cpu_worker_enabled():
-        return False
+    """True for every faceless render, including clone voices."""
     if stop_at != "video":
         return False
-    if _video_type(params) != "faceless":
-        return False
-    if is_clone_voice(params):
-        return False
-    return True
+    return _video_type(params) == "faceless"
 
 
 def job_params_of(body: Any) -> dict[str, Any]:
@@ -121,19 +124,38 @@ def _clear_remote(state: Any, task_id: str) -> None:
     )
 
 
-def _worker_app_name() -> str:
-    name = os.environ.get(APP_NAME_ENV, "")
-    if not name.strip():
-        raise RuntimeError(f"{APP_NAME_ENV} is not set")
-    return name.strip()
+def _require_modal_tokens() -> None:
+    if not os.environ.get("MODAL_TOKEN_ID") or not os.environ.get("MODAL_TOKEN_SECRET"):
+        raise RuntimeError(
+            "MODAL_TOKEN_ID and MODAL_TOKEN_SECRET are required to call the CPU worker"
+        )
 
 
 def _modal_spawn(task_id: str, params: dict[str, Any], stop_at: str) -> str:
+    _require_modal_tokens()
     import modal
 
-    function = modal.Function.from_name(_worker_app_name(), FUNCTION_NAME)
+    function = modal.Function.from_name(worker_app_name(), FUNCTION_NAME)
     call = function.spawn(task_id, params, stop_at)
     return str(getattr(call, "object_id", "") or "")
+
+
+def publish_clone_reference(voice_key: str, language_id: str, wav_bytes: bytes) -> None:
+    """Write one clone WAV onto the shared Modal volume."""
+    _require_modal_tokens()
+    import modal
+
+    modal.Function.from_name(worker_app_name(), REGISTER_CLONE_FUNCTION).remote(
+        voice_key, language_id, wav_bytes
+    )
+
+
+def delete_clone_reference(voice_key: str) -> None:
+    """Remove one clone WAV from the shared Modal volume."""
+    _require_modal_tokens()
+    import modal
+
+    modal.Function.from_name(worker_app_name(), DELETE_CLONE_FUNCTION).remote(voice_key)
 
 
 def _spawn(
@@ -281,7 +303,10 @@ def try_remote_batch(
             f"modal cpu spawn failed for {task_id}: {type(exc).__name__}"
         )
         _clear_remote(state, task_id)
-        return False, accepted
+        delete = getattr(state, "delete_task", None)
+        if delete is not None:
+            delete(task_id)
+        return False, False
     state.update_task(task_id, remote_call_id=call_id)
     return True, accepted
 
@@ -347,11 +372,9 @@ def _remote_rows(state: Any) -> list[dict[str, Any]]:
 def resume_unspawned_cpu_jobs(state: Any, spawn: Spawn | None = None) -> int:
     """Spawn rows that were marked for Modal and never received a call id.
 
-    No-op when the flag is off. Rows that already have a call id are left
-    for reconcile, which skips them while the call is running.
+    Rows that already have a call id are left for reconcile, which skips
+    them while the call is running.
     """
-    if not cpu_worker_enabled():
-        return 0
     started = 0
     for row in _remote_rows(state):
         data = row.get("data")

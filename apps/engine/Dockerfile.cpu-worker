@@ -1,5 +1,6 @@
-# One image-only video per container. House TTS (Kokoro, Phonon), Whisper, ffmpeg.
-# No Chatterbox Nano and no CUDA. Weights are downloaded at image build.
+# One image-only video per container. Kokoro, Phonon, Whisper, ffmpeg.
+# Chatterbox Nano is installed and loaded only when a job uses a clone.
+# No CUDA. Weights are downloaded at image build.
 FROM python:3.11-slim-bookworm
 
 COPY --from=ghcr.io/astral-sh/uv:0.8.24 /uv /uvx /bin/
@@ -24,7 +25,7 @@ ENV TZ=UTC \
     MPT_STATE_BACKEND=supabase \
     MPT_CPU_WORKER_ROLE=worker \
     MPT_STORAGE_DIR=/app/storage \
-    TTS_VOICES_DIR=/tmp/tts-voices \
+    TTS_VOICES_DIR=/voices \
     HF_HOME=/app/models/hf \
     HF_HUB_DISABLE_TELEMETRY=1 \
     ESPEAK_NG_LIBRARY=/usr/local/lib/libespeak-ng.so.1 \
@@ -39,7 +40,9 @@ COPY local_tts/requirements-house.txt /tmp/requirements-house.txt
 RUN uv sync --frozen --no-dev --no-install-project \
     && uv pip install --python .venv/bin/python torch torchaudio \
         --index-url https://download.pytorch.org/whl/cpu \
-    && uv pip install --python .venv/bin/python -r /tmp/requirements-house.txt
+    && uv pip install --python .venv/bin/python -r /tmp/requirements-house.txt \
+    && uv pip install --python .venv/bin/python \
+        "chatterbox-tts @ git+https://github.com/resemble-ai/chatterbox.git@5de7a54aa4e5e2baadb0182dde554908b48b85c2"
 
 COPY app ./app
 COPY local_tts ./local_tts
@@ -48,10 +51,10 @@ COPY resource/fonts ./resource/fonts
 COPY resource/songs ./resource/songs
 COPY config.example.toml ./config.toml
 
-RUN mkdir -p /tmp/tts-voices /app/storage /app/models/hf /app/logs \
+RUN mkdir -p /voices /tmp/tts-voices /app/storage /app/models/hf /app/logs \
     && .venv/bin/python -c "from faster_whisper import WhisperModel; WhisperModel('small', device='cpu', compute_type='int8')" \
     && TTS_VOICES_DIR=/tmp/tts-voices .venv/bin/python -c "from local_tts.backends import _phonon, _kokoro; _phonon(); _kokoro('a'); _kokoro('b')"
 
 RUN useradd --create-home --uid 10001 engine \
-    && chown -R engine:engine /app /tmp/tts-voices
+    && chown -R engine:engine /app /voices /tmp/tts-voices
 USER engine

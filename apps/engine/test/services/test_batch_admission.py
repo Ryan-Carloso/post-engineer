@@ -400,7 +400,7 @@ class BatchDispatchCapTests(unittest.TestCase):
         generator.task_state = _State()
         admitted = self._run(generator)
         self.assertEqual(admitted, 0)
-        self.assertEqual(seen, [1])
+        self.assertEqual(seen, [0])
         self.assertEqual(manager.current_tasks, 0)
         self.assertEqual(manager.queue_size(), 0)
         release = threading.Event()

@@ -9,7 +9,6 @@ script will not do that unless both ``--spawn`` and
 ``MPT_CPU_WORKER_BURST=1`` are set, and it still only calls Modal spawn
 for synthetic payloads (no tokens, no publish):
 
-    MPT_CPU_WORKER=true MPT_CPU_WORKER_APP_NAME=moneyprint-cpu-worker \\
     MPT_CPU_WORKER_BURST=1 python scripts/cpu_worker_burst.py --spawn
 """
 
@@ -52,32 +51,22 @@ def clone_payload() -> dict[str, object]:
 
 
 def check(count: int) -> None:
-    previous = os.environ.get("MPT_CPU_WORKER")
-    os.environ["MPT_CPU_WORKER"] = "true"
-    try:
-        for index in range(count):
-            if not should_dispatch(house_payload(index), "video"):
-                raise SystemExit(f"house payload {index} was not eligible")
-        if should_dispatch(clone_payload(), "video"):
-            raise SystemExit("clone payload must stay on the VPS")
-        if should_dispatch({**house_payload(0), "video_type": "hook_lipsync"}, "video"):
-            raise SystemExit("lip-sync payload must stay on the VPS")
-    finally:
-        if previous is None:
-            os.environ.pop("MPT_CPU_WORKER", None)
-        else:
-            os.environ["MPT_CPU_WORKER"] = previous
+    for index in range(count):
+        if not should_dispatch(house_payload(index), "video"):
+            raise SystemExit(f"house payload {index} was not eligible")
+    if not should_dispatch(clone_payload(), "video"):
+        raise SystemExit("clone payload must be eligible")
+    if should_dispatch({**house_payload(0), "video_type": "hook_lipsync"}, "video"):
+        raise SystemExit("lip-sync payload must stay on the VPS")
     print(
-        f"ok: {count} faceless house-voice jobs are eligible; "
-        f"ceiling default is {DEFAULT_MAX_CONTAINERS}; clones and lip-sync stay local"
+        f"ok: {count} faceless jobs are eligible, including clones; "
+        f"ceiling default is {DEFAULT_MAX_CONTAINERS}; lip-sync stays local"
     )
 
 
 def spawn_many(count: int) -> None:
     if os.environ.get("MPT_CPU_WORKER_BURST") != "1":
         raise SystemExit("refusing to spawn without MPT_CPU_WORKER_BURST=1")
-    if os.environ.get("MPT_CPU_WORKER") != "true":
-        raise SystemExit("refusing to spawn without MPT_CPU_WORKER=true")
     from app.services.cpu_worker_dispatch import _modal_spawn
 
     for index in range(count):

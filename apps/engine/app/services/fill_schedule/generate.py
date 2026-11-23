@@ -78,11 +78,9 @@ class BatchGenerator:
         refunded. Batch dispatch never fills the task-manager queue.
         """
         from app.controllers.v1.video import task_manager
-        from app.services.cpu_worker_dispatch import cpu_worker_enabled, configured_max_containers
+        from app.services.cpu_worker_dispatch import configured_max_containers
 
-        budget = free_running_slots(task_manager)
-        if cpu_worker_enabled():
-            budget = max(budget, configured_max_containers())
+        budget = max(free_running_slots(task_manager), configured_max_containers())
         enqueued = 0
         enqueued_titles: list[str] = []
 
