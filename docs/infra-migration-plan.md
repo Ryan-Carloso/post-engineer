@@ -144,11 +144,12 @@ following, and nothing fancier.
    `small` is the subtitle model.
 5. Fonts and the BGM catalog baked into the same image. They are
    already files the engine image expects.
-6. Clone WAVs live on the Modal volume `cpu-worker-voices`, mounted
-   at `/voices`. Registration writes new clones there.
-   `scripts/migrate_clone_voices.py` copies the WAVs that already
-   sit on the VPS `tts_voices` volume. The local volume is still
-   written so a spawn failure can render.
+6. The original clone WAV is already in Supabase Storage, bucket
+   `personas`, at `cloned_voices.storage_path`. The worker downloads
+   it by `engine_voice_key` and caches it for that container. The VPS
+   `tts_voices` volume is only the local TTS copy.
+   `scripts/migrate_clone_voices.py` uploads a VPS file only when that
+   storage object is missing.
 7. Secrets the worker needs, by name: `SUPABASE_URL`,
    `SUPABASE_SERVICE_ROLE_KEY`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`,
    `R2_SECRET_ACCESS_KEY`, `CHATTERBOX_HTTP_SECRET`, and `HF_TOKEN`
@@ -260,7 +261,7 @@ follows.
 Chatterbox Nano is the exception in size and speed, not in topology.
 The worker loads it only when the voice is a clone. The same
 function requests 10 GiB so that load fits, and the reference WAV
-is read from `cpu-worker-voices`. House voices do not import it.
+is downloaded from Supabase Storage. House voices do not import it.
 
 ## Phased move
 
@@ -285,8 +286,9 @@ Spawn failure is the rollback: the job runs on the local thread.
 4. Point the fill scheduler at the same spawn path (it is the same
    dispatcher). Watch Supabase connection count and R2. The database
    is the first real limit, not the CPU quota.
-5. Run `scripts/migrate_clone_voices.py` once so clones recorded
-   before the volume existed are visible to the worker.
+5. Run `scripts/migrate_clone_voices.py` once. It reports which
+   VPS WAVs are already in Supabase Storage and uploads only a file
+   whose storage object is missing.
 
 The VPS containers stay
 installed the whole time. LongCat's deploy does not change.
@@ -304,7 +306,7 @@ the TTS lock would still serialize speech.
 | Caddy | systemd on the VPS | None |
 | Postgres | Hosted Supabase | None, except 30 writers during a burst |
 | Engine process | VPS container `mpt-engine-cpu` | Becomes the dispatcher for faceless jobs. Lip-sync still renders here |
-| TTS container | VPS `mpt-tts-cpu` | Fallback when a spawn fails. New clones are also written to `cpu-worker-voices` |
+| TTS container | VPS `mpt-tts-cpu` | Fallback when a spawn fails. The canonical clone WAV is already in Supabase Storage |
 | LongCat | Modal app `moneyprint-longcat`, GPU, `max_containers=1` | None |
 | Qwen image API | Modal GPU plus a Vercel front. Not called by this product. Non-commercial license | None |
 
