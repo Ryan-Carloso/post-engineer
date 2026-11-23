@@ -110,8 +110,9 @@ def spawn(
     Returns ``(call_id, function_name)``, or None when the spawn failed
     (logged at error; the caller runs the task locally).
     """
-    function_name = worker_function_for(params, _effective_voice(params))
+    function_name = "unresolved"
     try:
+        function_name = worker_function_for(params, _effective_voice(params))
         modal = modal_module if modal_module is not None else _modal()
         function = modal.Function.from_name(app_name(), function_name)
         call = function.spawn(task_id, worker_payload(params), stop_at)

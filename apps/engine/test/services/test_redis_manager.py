@@ -7,7 +7,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from app.controllers.manager import redis_manager
 from app.models.schema import VideoParams
-from app.services import task as tm
+from app.services import remote_dispatch, task as tm
 
 
 class FakeRedis:
@@ -71,7 +71,7 @@ def test_dequeue_restores_func_and_params():
     manager.enqueue({"func": tm.start, "args": (), "kwargs": {"params": params}})
 
     restored = manager.dequeue()
-    assert restored["func"] is tm.start
+    assert restored["func"] is remote_dispatch.start
     assert isinstance(restored["kwargs"]["params"], VideoParams)
     assert restored["kwargs"]["params"].video_title == "test"
     assert manager.queue_size() == 0
