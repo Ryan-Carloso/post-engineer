@@ -7,7 +7,7 @@ import { GetPromptResponseSchema } from '@/lib/contracts/prompts';
 import { findRepoRoot } from '../../../test/repo-root';
 import { promptDetail } from '../prompt-mocks';
 
-const summary = { slug: 'mine', title: 'Mine', description: 'About', source: 'own', visibility: 'private' };
+const summary = { slug: 'mine', title: 'Mine', description: 'About', source: 'own', visibility: 'private', verified: false };
 
 describe('Cypress prompt detail mocks', () => {
   it('build a response the web client accepts under the shared prompt contract', () => {

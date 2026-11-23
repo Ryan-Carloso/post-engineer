@@ -4,13 +4,11 @@ import { useState } from 'react';
 import { useI18n } from '@/lib/i18n/provider';
 import ApiKeysSection from '@/components/ui/api-keys-section';
 import McpDocsSection from '@/components/ui/mcp-docs-section';
-import { PROMPTS } from './prompts';
 import { useSignedIn } from './viewer-context';
 import PromptsHero from './components/prompts-hero';
 import HubStep from './components/hub-step';
 import SignInCta from './components/sign-in-cta';
-import PromptCard from './components/prompt-card';
-import AddPromptLink from './components/add-prompt-link';
+import PublicPromptsSection from './components/public-prompts-section';
 import MyPromptsSection from './components/my-prompts-section';
 
 export default function RecipesPage() {
@@ -45,14 +43,7 @@ export default function RecipesPage() {
         <McpDocsSection apiKey={createdKey} />
       </HubStep>
       <HubStep number={3} title={t('recipes.stepRecipesTitle')} hint={t('recipes.stepRecipesHint')}>
-        <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3">
-          {PROMPTS.map((prompt) => (
-            <li key={prompt.slug}>
-              <PromptCard prompt={prompt} />
-            </li>
-          ))}
-        </ul>
-        <AddPromptLink />
+        <PublicPromptsSection />
       </HubStep>
       {signedIn ? (
         <HubStep number={4} title={t('userPrompts.stepTitle')} hint={t('userPrompts.stepHint')}>

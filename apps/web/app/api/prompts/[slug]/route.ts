@@ -3,7 +3,6 @@ import { apiErrorResponse } from '@/lib/api-error';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 import { UpdateUserPromptBodySchema, USER_PROMPT_SLUG_PATTERN } from '@/lib/contracts/prompts';
 import { ERROR_CODES } from '@/lib/error-codes';
-import { findHubPrompt } from '@/lib/recipes/hub-prompts';
 import { RATE_LIMITS } from '@/lib/rate-limit';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import {
@@ -12,7 +11,7 @@ import {
   findPublicUserPrompt,
   updateOwnUserPrompt,
 } from '@/lib/user-prompts';
-import { currentUserPromptVersion, ensureOfficialPromptVersion } from '@/lib/prompt-versions';
+import { currentUserPromptVersion } from '@/lib/prompt-versions';
 import {
   promptDetailBody,
   promptNotFound,
@@ -44,15 +43,10 @@ async function getHandler(request: Request, context: RouteContext): Promise<Next
   const slug = await readSlug(context, GET_ROUTE);
   if (slug instanceof NextResponse) return slug;
 
-  const official = findHubPrompt(slug);
-  if (official === null && !USER_PROMPT_SLUG_PATTERN.test(slug)) return promptNotFound(GET_ROUTE);
+  if (!USER_PROMPT_SLUG_PATTERN.test(slug)) return promptNotFound(GET_ROUTE);
 
   try {
     const db = createSupabaseServiceClient();
-    if (official !== null) {
-      const version = await ensureOfficialPromptVersion(db, official);
-      return NextResponse.json({ success: true, prompt: { ...official, body: null, source: 'official', visibility: 'public', ...version } });
-    }
     const own = caller.userId === null || caller.scopedKey ? null : await findOwnUserPrompt(db, caller.userId, slug);
     if (own !== null) {
       return NextResponse.json({ success: true, prompt: promptDetailBody(own, 'own', await currentUserPromptVersion(db, own.id)) });

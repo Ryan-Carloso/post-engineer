@@ -13,23 +13,6 @@ export interface PromptVersionRef {
   version: number;
 }
 
-export interface OfficialPromptText {
-  slug: string;
-  title: string;
-  prompt: string;
-}
-
-function isVersionRow(value: unknown): value is { version_id: string; version: number } {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'version_id' in value &&
-    typeof value.version_id === 'string' &&
-    'version' in value &&
-    typeof value.version === 'number'
-  );
-}
-
 export async function currentUserPromptVersion(db: Db, promptId: string): Promise<PromptVersionRef> {
   const { data, error } = await db
     .from('prompt_versions')
@@ -41,20 +24,6 @@ export async function currentUserPromptVersion(db: Db, promptId: string): Promis
   if (error !== null) throw new UserPromptStoreError('current version', error);
   if (data === null) throw new UserPromptStoreError('current version', new Error(`prompt ${promptId} has no version`));
   return { versionId: data.id, version: data.version };
-}
-
-export async function ensureOfficialPromptVersion(db: Db, prompt: OfficialPromptText): Promise<PromptVersionRef> {
-  const { data, error } = await db.rpc('ensure_official_prompt_version', {
-    p_slug: prompt.slug,
-    p_title: prompt.title,
-    p_body: prompt.prompt,
-  });
-  if (error !== null) throw new UserPromptStoreError('official version', error);
-  const row: unknown = Array.isArray(data) ? data[0] : data;
-  if (!isVersionRow(row)) {
-    throw new UserPromptStoreError('official version', new Error(`unexpected version row for ${prompt.slug}`));
-  }
-  return { versionId: row.version_id, version: row.version };
 }
 
 export async function readPostPromptFacts(db: SupabaseClient, versionId: string | null): Promise<PostPromptFacts | null> {

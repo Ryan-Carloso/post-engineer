@@ -18,7 +18,7 @@ const PROMPT_LIBRARY_SPECS = {
 };
 
 export const PromptLibraryDescription = actionDescription(
-  'Write your own prompts (read any prompt with prompts); private by default, only the owner can change one. Set visibility public so anyone can read it, private to keep it to this account. prompts (list, get) returns official prompts, these, and other users\' public ones, which are unverified community content.',
+  'Write your own prompts (read any prompt with prompts); private by default, only the owner can change one. Set visibility public so anyone can read it, private to keep it to this account. prompts (list, get) returns your own prompts and other users\' public ones; unverified community prompts carry a notice, verified ones do not.',
   PROMPT_LIBRARY_SPECS,
 );
 

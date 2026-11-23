@@ -86,22 +86,4 @@ describe('prompt versions over the prompt routes', () => {
     const shared = await promptOf(await getPrompt(request('/api/prompts/shared'), slugContext('shared')));
     expect(shared).toEqual(expect.objectContaining({ versionId: db.versions[0]?.id, version: 1 }));
   });
-
-  it('records an official prompt once per text: two reads share one version', async () => {
-    const db = seedDb();
-    authenticatedAs(ALICE);
-    const first = await promptOf(await getPrompt(request('/api/prompts/daily-news'), slugContext('daily-news')));
-    const second = await promptOf(await getPrompt(request('/api/prompts/daily-news'), slugContext('daily-news')));
-    expect(second.versionId).toBe(first.versionId);
-    expect(db.versions.filter((entry) => entry.source === 'official')).toHaveLength(1);
-  });
-
-  it('answers 500 and logs when the official version cannot be recorded', async () => {
-    const db = seedDb();
-    holder.db = { ...db.client, rpc: async () => ({ data: null, error: { code: '42501', message: 'denied' } }) };
-    authenticatedAs(ALICE);
-    const response = await getPrompt(request('/api/prompts/daily-news'), slugContext('daily-news'));
-    expect(response.status).toBe(500);
-    expect(loggerError).toHaveBeenCalledWith('[user-prompts] store failed', expect.objectContaining({ name: 'UserPromptStoreError' }), { route: 'GET /api/prompts/[slug]' });
-  });
 });

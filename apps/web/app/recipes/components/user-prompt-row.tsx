@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useI18n } from '@/lib/i18n/provider';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -37,12 +38,26 @@ export default function UserPromptRow({
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
-          <h3 className="truncate text-base font-bold tracking-tight text-ink">{prompt.title}</h3>
+          <h3 className="truncate text-base font-bold tracking-tight text-ink">
+            <Link
+              href={`/recipes/${encodeURIComponent(prompt.slug)}`}
+              data-testid={`user-prompt-link-${prompt.slug}`}
+              className="hover:text-brand hover:underline"
+            >
+              {prompt.title}
+            </Link>
+          </h3>
           <p className="font-mono text-xs text-muted-text">{prompt.slug}</p>
         </div>
         {prompt.source === 'community' ? (
-          <span className="rounded-full bg-brand/10 px-3 py-1 text-xs font-bold tracking-wider text-brand uppercase">
-            {t('userPrompts.communityBadge')}
+          <span
+            data-testid={`user-prompt-source-${prompt.slug}`}
+            className={cn(
+              'rounded-full px-3 py-1 text-xs font-bold tracking-wider uppercase',
+              prompt.verified ? 'bg-success-soft text-success ring-1 ring-success/30' : 'bg-brand/10 text-brand',
+            )}
+          >
+            {t(prompt.verified ? 'userPrompts.verifiedBadge' : 'userPrompts.communityBadge')}
           </span>
         ) : (
           <span

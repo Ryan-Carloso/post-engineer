@@ -9,7 +9,7 @@ vi.mock('@/lib/logger', async (importOriginal) => {
   return { ...actual, logger: { ...actual.logger, warn: loggerWarn } };
 });
 
-import { currentUserPromptVersion, ensureOfficialPromptVersion, readPostPromptFacts } from '@/lib/prompt-versions';
+import { currentUserPromptVersion, readPostPromptFacts } from '@/lib/prompt-versions';
 import { UserPromptStoreError } from '@/lib/user-prompts';
 
 const VERSION = '7b0e6c1e-0000-4000-8000-000000000001';
@@ -38,11 +38,6 @@ function tableDb(outcome: Outcome): { client: SupabaseClient; calls: Array<[stri
   return { client: client as unknown as SupabaseClient, calls };
 }
 
-function rpcDb(outcome: Outcome): { client: SupabaseClient; rpc: ReturnType<typeof vi.fn> } {
-  const rpc = vi.fn(async () => outcome);
-  return { client: { rpc } as unknown as SupabaseClient, rpc };
-}
-
 beforeEach(() => {
   loggerWarn.mockReset();
 });
@@ -63,27 +58,6 @@ describe('currentUserPromptVersion', () => {
   it('throws a store error on a read failure and when the prompt has no version', async () => {
     await expect(currentUserPromptVersion(tableDb({ data: null, error: { message: 'down' } }).client, 'p')).rejects.toBeInstanceOf(UserPromptStoreError);
     await expect(currentUserPromptVersion(tableDb({ data: null, error: null }).client, 'p')).rejects.toBeInstanceOf(UserPromptStoreError);
-  });
-});
-
-describe('ensureOfficialPromptVersion', () => {
-  const official = { slug: 'daily-news', title: 'Daily news', prompt: 'Body' };
-
-  it('records the official text through the RPC and reads its single row', async () => {
-    const db = rpcDb({ data: [{ version_id: VERSION, version: 2 }], error: null });
-    expect(await ensureOfficialPromptVersion(db.client, official)).toEqual({ versionId: VERSION, version: 2 });
-    expect(db.rpc).toHaveBeenCalledWith('ensure_official_prompt_version', { p_slug: 'daily-news', p_title: 'Daily news', p_body: 'Body' });
-  });
-
-  it('accepts the row as a bare object too', async () => {
-    const db = rpcDb({ data: { version_id: VERSION, version: 1 }, error: null });
-    expect(await ensureOfficialPromptVersion(db.client, official)).toEqual({ versionId: VERSION, version: 1 });
-  });
-
-  it('throws a store error on an RPC error and on a malformed row', async () => {
-    await expect(ensureOfficialPromptVersion(rpcDb({ data: null, error: { message: 'denied' } }).client, official)).rejects.toBeInstanceOf(UserPromptStoreError);
-    await expect(ensureOfficialPromptVersion(rpcDb({ data: [{ version_id: VERSION }], error: null }).client, official)).rejects.toBeInstanceOf(UserPromptStoreError);
-    await expect(ensureOfficialPromptVersion(rpcDb({ data: [], error: null }).client, official)).rejects.toBeInstanceOf(UserPromptStoreError);
   });
 });
 

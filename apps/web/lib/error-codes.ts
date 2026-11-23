@@ -33,7 +33,6 @@ export const ERROR_CODES = {
   MCP_VERSION_MISMATCH: 'MCP_VERSION_MISMATCH',
   PROMPT_NOT_FOUND: 'PROMPT_NOT_FOUND',
   PROMPT_SLUG_TAKEN: 'PROMPT_SLUG_TAKEN',
-  PROMPT_SLUG_RESERVED: 'PROMPT_SLUG_RESERVED',
 } as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];
@@ -78,7 +77,6 @@ const DEFAULT_MESSAGES: Record<ErrorCode, string> = {
   MCP_VERSION_MISMATCH: 'This post-engineer-mcp version does not match the server. Restart the MCP with the version the server requires.',
   PROMPT_NOT_FOUND: 'Unknown prompt slug.',
   PROMPT_SLUG_TAKEN: 'You already have a prompt with this slug, or another public prompt uses it.',
-  PROMPT_SLUG_RESERVED: 'This slug belongs to an official prompt. Pick another slug.',
 };
 
 export function errorMessage(code: ErrorCode): string {
