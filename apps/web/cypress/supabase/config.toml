@@ -63,5 +63,5 @@ token_refresh = 1000
 token_verifications = 1000
 
 [auth.email]
-enable_signup = false
+enable_signup = true
 enable_confirmations = false
