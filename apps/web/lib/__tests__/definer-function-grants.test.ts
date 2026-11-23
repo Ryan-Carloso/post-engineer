@@ -10,7 +10,6 @@ const SNAPSHOT_PATH = join(root, 'supabase', 'schema.snapshot.json');
 
 const DEFINER_TRIGGER_FUNCTIONS = new Set([
   'post_metrics_set_persona',
-  'post_metrics_set_experiment',
   'post_metrics_set_prompt_version',
   'user_prompts_record_version',
   'enforce_persona_image_limit',
@@ -28,6 +27,12 @@ interface ParsedFunction {
   name: string;
   isDefiner: boolean;
   isTrigger: boolean;
+  index: number;
+}
+
+interface DroppedFunction {
+  name: string;
+  index: number;
 }
 
 function migrationSources(): { file: string; sql: string }[] {
@@ -38,7 +43,7 @@ function migrationSources(): { file: string; sql: string }[] {
     .map((file) => ({ file, sql: readFileSync(join(MIGRATIONS_DIR, file), 'utf8') }));
 }
 
-function parseFunctions(sql: string): ParsedFunction[] {
+function parseFunctions(sql: string, offset = 0): ParsedFunction[] {
   const found: ParsedFunction[] = [];
   const re = /create\s+(or\s+replace\s+)?function\s+public\.([a-z_][a-z0-9_]*)\s*\(/gi;
   const starts: { index: number; name: string }[] = [];
@@ -54,9 +59,60 @@ function parseFunctions(sql: string): ParsedFunction[] {
       name: start.name,
       isDefiner: /security\s+definer/i.test(block),
       isTrigger: /returns\s+trigger/i.test(block),
+      index: offset + start.index,
     });
   }
   return found;
+}
+
+function parseDrops(sql: string, offset = 0): DroppedFunction[] {
+  const found: DroppedFunction[] = [];
+  const re = /drop\s+function\s+(if\s+exists\s+)?public\.([a-z_][a-z0-9_]*)\s*\(/gi;
+  for (const match of sql.matchAll(re)) {
+    found.push({ name: (match[2] ?? '').toLowerCase(), index: offset + (match.index ?? 0) });
+  }
+  return found;
+}
+
+interface FinalSchema {
+  definers: Set<string>;
+  triggers: Set<string>;
+  finalCreateIndex: Map<string, number>;
+  recreated: Set<string>;
+}
+
+function finalSchema(): FinalSchema {
+  const events: { kind: 'create' | 'drop'; name: string; index: number; fn?: ParsedFunction }[] = [];
+  let offset = 0;
+  for (const { sql } of migrationSources()) {
+    for (const fn of parseFunctions(sql, offset)) events.push({ kind: 'create', name: fn.name, index: fn.index, fn });
+    for (const drop of parseDrops(sql, offset)) events.push({ kind: 'drop', name: drop.name, index: drop.index });
+    offset += sql.length + 1;
+  }
+  events.sort((a, b) => a.index - b.index);
+  const live = new Map<string, ParsedFunction>();
+  const dropped = new Set<string>();
+  const recreated = new Set<string>();
+  for (const event of events) {
+    if (event.kind === 'drop') {
+      live.delete(event.name);
+      dropped.add(event.name);
+      continue;
+    }
+    if (event.fn === undefined) continue;
+    if (dropped.has(event.name)) recreated.add(event.name);
+    live.set(event.name, event.fn);
+  }
+  const definers = new Set<string>();
+  const triggers = new Set<string>();
+  const finalCreateIndex = new Map<string, number>();
+  for (const [name, fn] of live) {
+    finalCreateIndex.set(name, fn.index);
+    if (!fn.isDefiner) continue;
+    if (fn.isTrigger) triggers.add(name);
+    else definers.add(name);
+  }
+  return { definers, triggers, finalCreateIndex, recreated };
 }
 
 function chainText(): string {
@@ -69,22 +125,13 @@ function hasRevoke(chain: string, fn: string, role: 'anon' | 'authenticated'): b
 
 describe('definer-function-grants', () => {
   it('finds SECURITY DEFINER functions and classifies triggers without RPC exposure', () => {
-    const definers = new Set<string>();
-    const triggers = new Set<string>();
-    for (const { sql } of migrationSources()) {
-      for (const fn of parseFunctions(sql)) {
-        if (!fn.isDefiner) continue;
-        if (fn.isTrigger) triggers.add(fn.name);
-        else definers.add(fn.name);
-      }
-    }
+    const { definers, triggers } = finalSchema();
     expect([...definers].sort()).toEqual(
       [
         'claim_owner_alert',
         'claim_publish_ledger',
-        'create_experiment',
+        'create_share_link',
         'delete_slot_if_not_last',
-        'ensure_official_prompt_version',
         'find_post_metrics_daily_due',
         'find_post_metrics_due',
         'find_stuck_generations',
@@ -99,30 +146,28 @@ describe('definer-function-grants', () => {
         'rotate_mcp_refresh_token',
         'set_primary_persona_image',
         'settle_batch_clawback',
+        'share_week_posts',
         'touch_publish_ledger',
       ].sort(),
     );
     expect([...triggers].sort()).toEqual([...DEFINER_TRIGGER_FUNCTIONS].sort());
-    expect([...definers].length).toBeGreaterThan(5);
+    expect(definers.size).toBeGreaterThan(5);
   });
 
   it('revokes every non-trigger definer function from anon and authenticated', () => {
     const chain = chainText();
-    const definers = new Set<string>();
-    for (const { sql } of migrationSources()) {
-      for (const fn of parseFunctions(sql)) {
-        if (fn.isDefiner && !fn.isTrigger) definers.add(fn.name);
-      }
-    }
+    const { definers, finalCreateIndex, recreated } = finalSchema();
     const restricted = new Set([...definers, ...SCHEDULER_LEASE_FUNCTIONS]);
     for (const name of AUTHENTICATED_DEFINER_RPCS) restricted.delete(name);
     for (const name of restricted) {
-      expect(hasRevoke(chain, name, 'anon'), `${name} must revoke EXECUTE from anon`).toBe(true);
-      expect(hasRevoke(chain, name, 'authenticated'), `${name} must revoke EXECUTE from authenticated`).toBe(true);
+      const scope = recreated.has(name) ? chain.slice(finalCreateIndex.get(name) ?? 0) : chain;
+      expect(hasRevoke(scope, name, 'anon'), `${name} must revoke EXECUTE from anon`).toBe(true);
+      expect(hasRevoke(scope, name, 'authenticated'), `${name} must revoke EXECUTE from authenticated`).toBe(true);
     }
     for (const name of restricted) {
+      const scope = recreated.has(name) ? chain.slice(finalCreateIndex.get(name) ?? 0) : chain;
       expect(
-        new RegExp(`grant\\s+execute\\s+on\\s+function\\s+public\\.${name}\\b[^;]*to\\s+service_role\\b`, 'i').test(chain),
+        new RegExp(`grant\\s+execute\\s+on\\s+function\\s+public\\.${name}\\b[^;]*to\\s+service_role\\b`, 'i').test(scope),
         `${name} must grant EXECUTE to service_role`,
       ).toBe(true);
     }

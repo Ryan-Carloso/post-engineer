@@ -1,6 +1,7 @@
 'use client';
 
 import { AccountPanel } from '@/components/ui/account-panel';
+import ShareLinksSection from '@/components/ui/share-links-section';
 import { useI18n } from '@/lib/i18n/provider';
 
 export default function AccountPage() {
@@ -13,6 +14,9 @@ export default function AccountPage() {
         <p className="mt-1 text-[15px] text-muted-text">{t('account.subtitle')}</p>
       </div>
       <AccountPanel showVersionBadge />
+      <div className="mt-6">
+        <ShareLinksSection />
+      </div>
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { isEnglishLanguage, ONLY_ENGLISH_VIDEOS_MESSAGE } from '@/lib/language-gate';
 import { isPublicHttpsWebhookUrl } from '@/lib/ssrf/webhook-url';
+import { VIDEO_TRANSITION_MODES, type VideoTransitionMode } from '@/lib/contracts/videos';
 import { isHttpUrl } from '@/lib/generation/custom-audio';
 import { isMusicMood, MUSIC_MOOD_NONE, unknownMusicMoodMessage } from '@/lib/generation/music-moods';
 import {
@@ -10,6 +11,7 @@ import {
 } from '@/lib/tokens';
 import { MAX_TITLE_CHARS } from './prepare-persona';
 import { invalid, type Checked, type ValidationIssue } from './validation-issues';
+import { validateLipsyncPhotos, type LipsyncPhotoRef } from './lipsync-photos';
 
 const MAX_LANGUAGE_CHARS = 32;
 
@@ -18,6 +20,7 @@ export interface OptionsInput {
   musicMood?: string;
   audioUrl?: string;
   imageId?: string;
+  lipsyncPhotos?: LipsyncPhotoRef[];
   webhookUrl?: string;
   voiceId?: string;
   videoAspect?: '9:16' | '16:9' | '1:1';
@@ -26,6 +29,9 @@ export interface OptionsInput {
   paragraphNumber?: number;
   language?: string;
   niche?: string;
+  videoClipDuration?: number;
+  videoTransitionMode?: string;
+  videoVariationSeed?: number;
 }
 
 export interface ValidatedOptions {
@@ -33,6 +39,7 @@ export interface ValidatedOptions {
   musicMood?: string;
   audioUrl?: string;
   imageId?: string;
+  lipsyncPhotos?: LipsyncPhotoRef[];
   webhookUrl?: string;
   voiceId?: string;
   videoAspect?: '9:16' | '16:9' | '1:1';
@@ -41,6 +48,15 @@ export interface ValidatedOptions {
   paragraphNumber?: number;
   language?: string;
   niche?: string;
+  videoClipDuration?: number;
+  videoTransitionMode?: VideoTransitionMode;
+  videoVariationSeed?: number;
+}
+
+const TRANSITION_MODES: readonly string[] = VIDEO_TRANSITION_MODES;
+
+function isVideoTransitionMode(value: string): value is VideoTransitionMode {
+  return TRANSITION_MODES.includes(value);
 }
 
 export const HOOK_PANEL_ONLY_HOOK_LIPSYNC_MESSAGE =
@@ -52,6 +68,7 @@ export function validateOptions(options: OptionsInput): Checked<ValidatedOptions
     musicMood,
     audioUrl,
     imageId,
+    lipsyncPhotos,
     webhookUrl,
     voiceId,
     videoAspect,
@@ -60,6 +77,9 @@ export function validateOptions(options: OptionsInput): Checked<ValidatedOptions
     paragraphNumber,
     language,
     niche,
+    videoClipDuration,
+    videoTransitionMode,
+    videoVariationSeed,
   } = options;
   const issues: ValidationIssue[] = [];
   const mode = videoType !== undefined && isVideoType(videoType) ? videoType : undefined;
@@ -100,7 +120,28 @@ export function validateOptions(options: OptionsInput): Checked<ValidatedOptions
   if (hookPanel !== undefined && mode !== undefined && mode !== 'hook_lipsync') {
     issues.push(invalid(HOOK_PANEL_ONLY_HOOK_LIPSYNC_MESSAGE, 'options.hookPanel'));
   }
-  if (issues.length > 0) return { ok: false, issues };
+  if (
+    videoClipDuration !== undefined &&
+    (!Number.isInteger(videoClipDuration) || videoClipDuration < 1 || videoClipDuration > 60)
+  ) {
+    issues.push(invalid('options.videoClipDuration must be an integer between 1 and 60.', 'options.videoClipDuration'));
+  }
+  let transitionMode: VideoTransitionMode | undefined;
+  if (videoTransitionMode !== undefined) {
+    if (!isVideoTransitionMode(videoTransitionMode)) {
+      issues.push(
+        invalid(`options.videoTransitionMode must be one of ${VIDEO_TRANSITION_MODES.join(', ')}.`, 'options.videoTransitionMode'),
+      );
+    } else {
+      transitionMode = videoTransitionMode;
+    }
+  }
+  if (videoVariationSeed !== undefined && !Number.isInteger(videoVariationSeed)) {
+    issues.push(invalid('options.videoVariationSeed must be an integer.', 'options.videoVariationSeed'));
+  }
+  const photos = validateLipsyncPhotos(lipsyncPhotos, mode);
+  if (!photos.ok) issues.push(...photos.issues);
+  if (issues.length > 0 || !photos.ok) return { ok: false, issues };
   if (mode === undefined) {
     return { ok: false, issues: [invalid(VIDEO_TYPE_REQUIRED_MESSAGE, 'options.videoType')] };
   }
@@ -111,6 +152,7 @@ export function validateOptions(options: OptionsInput): Checked<ValidatedOptions
       musicMood,
       audioUrl,
       imageId: imageId?.trim(),
+      lipsyncPhotos: photos.value,
       webhookUrl,
       voiceId: voiceId?.trim(),
       videoAspect,
@@ -119,6 +161,9 @@ export function validateOptions(options: OptionsInput): Checked<ValidatedOptions
       paragraphNumber,
       language,
       niche,
+      videoClipDuration,
+      videoTransitionMode: transitionMode,
+      videoVariationSeed,
     },
   };
 }

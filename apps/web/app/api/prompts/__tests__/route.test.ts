@@ -22,9 +22,6 @@ vi.mock('@/lib/api-error-reporting', async (importOriginal) => ({
 import { GET as listPrompts, POST as createPrompt } from '../route';
 import { GET as getPrompt, PATCH as patchPrompt, DELETE as deletePrompt } from '../[slug]/route';
 import { GetPromptResponseSchema, ListPromptsResponseSchema, USER_PROMPT_LIMITS } from '@/lib/contracts/prompts';
-import { PROMPTS } from '@/app/recipes/prompts';
-import { recipesI18nEn } from '@/lib/i18n/recipes-i18n-en';
-import { DAILY_NEWS_PROMPT } from '@/lib/generation/prompt-base';
 import { createFakeUserPromptsDb, type FakeUserPromptsDb } from '@/lib/__tests__/support/fake-user-prompts-db';
 
 const ALICE = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -79,30 +76,6 @@ beforeEach(() => {
 });
 
 describe('GET /api/prompts', () => {
-  it('lists the official prompts first, in order, without prompt text', async () => {
-    authenticatedAs(ALICE);
-    const response = await listPrompts(request('/api/prompts'));
-    expect(response.status).toBe(200);
-    const body: unknown = await response.json();
-    expect(ListPromptsResponseSchema.safeParse(body).success).toBe(true);
-    expect(body).toEqual({
-      success: true,
-      prompts: PROMPTS.map((entry) => ({
-        slug: entry.slug,
-        title: expect.any(String),
-        description: expect.any(String),
-        source: 'official',
-        visibility: 'public',
-      })),
-    });
-    expect(JSON.stringify(body)).not.toContain(DAILY_NEWS_PROMPT.slice(0, 200));
-    expect(body).toMatchObject({
-      prompts: expect.arrayContaining([
-        expect.objectContaining({ slug: 'daily-news', title: recipesI18nEn.dailyNewsTitle, description: recipesI18nEn.dailyNewsObjective }),
-      ]),
-    });
-  });
-
   it('adds the caller own prompts, private ones included, and other users public prompts as community', async () => {
     seedDb([
       { owner_id: ALICE, slug: 'mine', title: 'Mine', body: 'a' },
@@ -110,13 +83,31 @@ describe('GET /api/prompts', () => {
       publicRow(BOB, 'bobs-shared', 'Bobs shared'),
     ]);
     authenticatedAs(ALICE);
-    const body = (await (await listPrompts(request('/api/prompts'))).json()) as { prompts: Array<Record<string, unknown>> };
-    expect(body.prompts.slice(PROMPTS.length)).toEqual([
-      { slug: 'mine', title: 'Mine', description: '', source: 'own', visibility: 'private' },
-      { slug: 'bobs-shared', title: 'Bobs shared', description: 'About', source: 'community', visibility: 'public' },
+    const response = await listPrompts(request('/api/prompts'));
+    const body = (await response.json()) as { prompts: Array<Record<string, unknown>> };
+    expect(ListPromptsResponseSchema.safeParse(body).success).toBe(true);
+    expect(body.prompts).toEqual([
+      { slug: 'mine', title: 'Mine', description: '', source: 'own', visibility: 'private', verified: false },
+      { slug: 'bobs-shared', title: 'Bobs shared', description: 'About', source: 'community', visibility: 'public', verified: false },
     ]);
     expect(JSON.stringify(body)).not.toContain('bobs-private');
     expect(JSON.stringify(body)).not.toContain('Community text');
+  });
+
+  it('marks a prompt Post Engineer verified, to signed-in and anonymous callers alike', async () => {
+    seedDb([{ ...publicRow('00000000-0000-4000-8000-0000000000e1', 'daily-news', 'Daily news'), verified: true }, publicRow(BOB, 'bobs-shared')]);
+    for (const signedIn of [true, false]) {
+      if (signedIn) authenticatedAs(ALICE);
+      else signedOut();
+      const response = await listPrompts(request('/api/prompts', { credentials: signedIn }));
+      const body = (await response.json()) as { prompts: Array<{ slug: string; verified: boolean }> };
+      expect(body.prompts.map((entry) => [entry.slug, entry.verified])).toEqual([
+        ['daily-news', true],
+        ['bobs-shared', false],
+      ]);
+      const detail = await getPrompt(request('/api/prompts/daily-news', { credentials: signedIn }), slugContext('daily-news'));
+      expect(await detail.json()).toMatchObject({ prompt: { slug: 'daily-news', source: 'community', verified: true } });
+    }
   });
 
   it('shows the caller own public prompt once, as own', async () => {
@@ -128,16 +119,14 @@ describe('GET /api/prompts', () => {
     ]);
   });
 
-  it('hides a public prompt whose slug an official or own prompt already uses', async () => {
+  it('hides a public prompt whose slug an own prompt already uses', async () => {
     seedDb([
-      publicRow(BOB, 'daily-news', 'Fake official'),
       { owner_id: ALICE, slug: 'clash', title: 'Own clash', body: 'a' },
       publicRow(BOB, 'clash', 'Community clash'),
     ]);
     authenticatedAs(ALICE);
     const body = (await (await listPrompts(request('/api/prompts'))).json()) as { prompts: Array<{ slug: string; source: string }> };
-    expect(body.prompts.filter((entry) => entry.slug === 'daily-news')).toHaveLength(1);
-    expect(body.prompts.find((entry) => entry.slug === 'clash')?.source).toBe('own');
+    expect(body.prompts.filter((entry) => entry.slug === 'clash')).toEqual([expect.objectContaining({ source: 'own' })]);
   });
 
   it('does not show a persona-scoped key the account private prompts', async () => {
@@ -189,8 +178,6 @@ describe('GET /api/prompts', () => {
   it('reads only the lists the requested source needs', async () => {
     const db = seedDb([{ owner_id: ALICE, slug: 'mine', title: 'Mine', body: 'a' }, publicRow(BOB, 'theirs')]);
     authenticatedAs(ALICE);
-    await listPrompts(request('/api/prompts?source=official'));
-    expect(db.queries).toEqual([]);
     await listPrompts(request('/api/prompts?source=own'));
     expect(db.queries.some((query) => query.includes('eq visibility=public'))).toBe(false);
     db.queries.length = 0;
@@ -210,7 +197,7 @@ describe('GET /api/prompts', () => {
   it('rejects an unknown source, an unknown parameter and an over-long query with 400 before reading the database', async () => {
     const db = seedDb();
     authenticatedAs(ALICE);
-    for (const path of ['/api/prompts?source=mine', '/api/prompts?sort=asc', `/api/prompts?q=${'x'.repeat(101)}`]) {
+    for (const path of ['/api/prompts?source=mine', '/api/prompts?source=official', '/api/prompts?sort=asc', `/api/prompts?q=${'x'.repeat(101)}`]) {
       const response = await listPrompts(request(path));
       expect(response.status).toBe(400);
     }
@@ -222,11 +209,11 @@ describe('GET /api/prompts', () => {
     scopedKeyOf(ALICE);
     const body = (await (await listPrompts(request('/api/prompts'))).json()) as { prompts: Array<{ slug: string; source: string }> };
     expect(body.prompts.filter((entry) => entry.slug === 'mine-shared')).toEqual([
-      { slug: 'mine-shared', title: 'Mine shared', description: '', source: 'community', visibility: 'public' },
+      { slug: 'mine-shared', title: 'Mine shared', description: '', source: 'community', visibility: 'public', verified: false },
     ]);
   });
 
-  it('serves the official and public prompts to a caller with no credentials, limited by IP, and never a private one', async () => {
+  it('serves the public prompts to a caller with no credentials, limited by IP, and never a private one', async () => {
     seedDb([
       { owner_id: ALICE, slug: 'mine', title: 'Mine', body: 'secret text' },
       publicRow(BOB, 'bobs-shared'),
@@ -236,7 +223,7 @@ describe('GET /api/prompts', () => {
     expect(response.status).toBe(200);
     const body = (await response.json()) as { prompts: Array<{ slug: string; source: string }> };
     expect(body.prompts.map((entry) => entry.slug)).toContain('bobs-shared');
-    expect(body.prompts.map((entry) => entry.slug)).toContain('daily-news');
+    expect(body.prompts.map((entry) => entry.slug)).toEqual(['bobs-shared']);
     expect(JSON.stringify(body)).not.toContain('mine');
     expect(applyRateLimit).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ name: 'prompts-read' }));
   });
@@ -277,7 +264,7 @@ describe('POST /api/prompts', () => {
     expect(GetPromptResponseSchema.safeParse(body).success).toBe(true);
     expect(body).toEqual({
       success: true,
-      prompt: { slug: 'my-prompt', title: 'Title', description: 'About', source: 'own', visibility: 'private', prompt: 'Body text', versionId: db.versions[0]?.id, version: 1 },
+      prompt: { slug: 'my-prompt', title: 'Title', description: 'About', source: 'own', visibility: 'private', verified: false, prompt: 'Body text', body: 'Body text', versionId: db.versions[0]?.id, version: 1 },
     });
     expect(db.rows).toHaveLength(1);
     expect(db.rows[0].owner_id).toBe(ALICE);
@@ -308,6 +295,7 @@ describe('POST /api/prompts', () => {
     ['an over-long prompt', { ...valid, prompt: 'x'.repeat(USER_PROMPT_LIMITS.prompt + 1) }, 'prompt'],
     ['an unknown visibility', { ...valid, visibility: 'approved' }, 'visibility'],
     ['an unknown field', { ...valid, owner_id: BOB }, undefined],
+    ['a caller trying to verify its own prompt', { ...valid, verified: true }, undefined],
   ])('returns 400 for %s without writing anything', async (_label, body, field) => {
     const db = seedDb();
     authenticatedAs(ALICE);
@@ -322,15 +310,6 @@ describe('POST /api/prompts', () => {
     const db = seedDb();
     authenticatedAs(ALICE);
     expect((await createPrompt(request('/api/prompts', { method: 'POST', rawBody: '{nope' }))).status).toBe(400);
-    expect(db.queries).toEqual([]);
-  });
-
-  it('returns 409 PROMPT_SLUG_RESERVED for an official slug and never queries the database', async () => {
-    const db = seedDb();
-    authenticatedAs(ALICE);
-    const response = await createPrompt(request('/api/prompts', { method: 'POST', body: { ...valid, slug: 'daily-news' } }));
-    expect(response.status).toBe(409);
-    expect(await response.json()).toMatchObject({ code: 'PROMPT_SLUG_RESERVED' });
     expect(db.queries).toEqual([]);
   });
 
@@ -375,34 +354,34 @@ describe('GET /api/prompts/[slug]', () => {
     expect(params).not.toHaveBeenCalled();
   });
 
-  it('returns the full official recipe for a known slug with its recorded version and no user_prompts query', async () => {
+  it('answers 404 for a slug that only lived in git before prompts moved to the database', async () => {
     const db = seedDb();
     authenticatedAs(ALICE);
     const response = await getPrompt(request('/api/prompts/daily-news'), slugContext('daily-news'));
-    expect(response.status).toBe(200);
-    const body: unknown = await response.json();
-    expect(body).toEqual({
-      success: true,
-      prompt: {
-        slug: 'daily-news',
-        title: recipesI18nEn.dailyNewsTitle,
-        description: recipesI18nEn.dailyNewsObjective,
-        source: 'official',
-        visibility: 'public',
-        prompt: DAILY_NEWS_PROMPT, versionId: db.versions[0]?.id, version: 1,
-      },
-    });
-    expect(GetPromptResponseSchema.safeParse(body).success).toBe(true);
-    expect(db.queries).toEqual(['rpc ensure_official_prompt_version daily-news']);
+    expect(response.status).toBe(404);
+    expect(db.queries.length).toBeGreaterThan(0);
   });
 
-  it('serves an official prompt and a public one to a caller with no credentials', async () => {
+  it.each([
+    ['own private', 'mine', { owner_id: ALICE, slug: 'mine', title: 'Mine', body: 'My own steps', visibility: 'private' as const }],
+    ['own public', 'mine-pub', { owner_id: ALICE, slug: 'mine-pub', title: 'Mine pub', body: 'My own steps', visibility: 'public' as const }],
+    ['community', 'theirs', { owner_id: BOB, slug: 'theirs', title: 'Theirs', body: 'My own steps', visibility: 'public' as const }],
+  ])('serves a %s prompt as exactly its stored text, in both prompt and body', async (_label, slug, row) => {
+    seedDb([row]);
+    authenticatedAs(ALICE);
+    const response = await getPrompt(request(`/api/prompts/${slug}`), slugContext(slug));
+    expect(response.status).toBe(200);
+    const body = GetPromptResponseSchema.parse(await response.json());
+    expect(body.prompt.prompt).toBe('My own steps');
+    expect(body.prompt.body).toBe('My own steps');
+  });
+
+  it('serves a public prompt to a caller with no credentials', async () => {
     seedDb([publicRow(BOB, 'bobs-shared')]);
     signedOut();
-    expect((await getPrompt(request('/api/prompts/daily-news', { credentials: false }), slugContext('daily-news'))).status).toBe(200);
     const response = await getPrompt(request('/api/prompts/bobs-shared', { credentials: false }), slugContext('bobs-shared'));
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({ prompt: { slug: 'bobs-shared', source: 'community', visibility: 'public', prompt: 'Community text' } });
+    expect(await response.json()).toMatchObject({ prompt: { slug: 'bobs-shared', source: 'community', visibility: 'public', prompt: 'Community text', body: 'Community text' } });
   });
 
   it('returns 404 to a caller with no credentials for a private prompt', async () => {
@@ -414,6 +393,7 @@ describe('GET /api/prompts/[slug]', () => {
   });
 
   it('decodes a percent-encoded slug before matching', async () => {
+    seedDb([publicRow(BOB, 'daily-news')]);
     authenticatedAs(ALICE);
     const response = await getPrompt(request('/api/prompts/daily%2Dnews'), slugContext('daily%2Dnews'));
     expect(response.status).toBe(200);
@@ -429,7 +409,7 @@ describe('GET /api/prompts/[slug]', () => {
     seedDb([{ owner_id: ALICE, slug: 'mine', title: 'Mine', body: 'secret text' }]);
     authenticatedAs(ALICE);
     const response = await getPrompt(request('/api/prompts/mine'), slugContext('mine'));
-    expect(await response.json()).toMatchObject({ prompt: { slug: 'mine', source: 'own', visibility: 'private', prompt: 'secret text' } });
+    expect(await response.json()).toMatchObject({ prompt: { slug: 'mine', source: 'own', visibility: 'private', prompt: 'secret text', body: 'secret text' } });
   });
 
   it('returns 404 for another owner private prompt, same as an unknown slug', async () => {
@@ -446,7 +426,7 @@ describe('GET /api/prompts/[slug]', () => {
     seedDb([publicRow(BOB, 'bobs-shared')]);
     authenticatedAs(ALICE);
     const response = await getPrompt(request('/api/prompts/bobs-shared'), slugContext('bobs-shared'));
-    expect(await response.json()).toMatchObject({ prompt: { slug: 'bobs-shared', source: 'community', visibility: 'public', prompt: 'Community text' } });
+    expect(await response.json()).toMatchObject({ prompt: { slug: 'bobs-shared', source: 'community', visibility: 'public', prompt: 'Community text', body: 'Community text' } });
   });
 
   it('returns 404 for a slug that cannot be a prompt without querying the database', async () => {
@@ -476,7 +456,7 @@ describe('PATCH /api/prompts/[slug]', () => {
     authenticatedAs(ALICE);
     const response = await patchPrompt(request('/api/prompts/mine', { method: 'PATCH', body: { title: 'New', prompt: 'new body' } }), slugContext('mine'));
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({ prompt: { title: 'New', description: 'Keep', prompt: 'new body', visibility: 'private' } });
+    expect(await response.json()).toMatchObject({ prompt: { title: 'New', description: 'Keep', prompt: 'new body', body: 'new body', visibility: 'private' } });
     expect(db.rows[0]).toMatchObject({ title: 'New', description: 'Keep', body: 'new body' });
   });
 
@@ -509,7 +489,7 @@ describe('PATCH /api/prompts/[slug]', () => {
   it('returns 400 for an empty patch and for a field the caller may not set', async () => {
     const db = seedDb([{ owner_id: ALICE, slug: 'mine', title: 'Old', body: 'old body' }]);
     authenticatedAs(ALICE);
-    for (const body of [{}, { slug: 'renamed' }, { owner_id: BOB }, { visibility: 'approved' }]) {
+    for (const body of [{}, { slug: 'renamed' }, { owner_id: BOB }, { visibility: 'approved' }, { verified: true }]) {
       expect((await patchPrompt(request('/api/prompts/mine', { method: 'PATCH', body }), slugContext('mine'))).status).toBe(400);
     }
     expect(db.queries).toEqual([]);

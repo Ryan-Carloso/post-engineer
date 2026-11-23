@@ -55,6 +55,36 @@ describe('generate_persona_video options (Phase 5-4)', () => {
   });
 });
 
+describe('pacing options (per-photo duration, crossfade, per-video variation)', () => {
+  it('accepts videoClipDuration, videoTransitionMode and videoVariationSeed', () => {
+    const parsed = parseOptions({ videoClipDuration: 4, videoTransitionMode: 'Crossfade', videoVariationSeed: 7 });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.options?.videoClipDuration).toBe(4);
+      expect(parsed.data.options?.videoTransitionMode).toBe('Crossfade');
+      expect(parsed.data.options?.videoVariationSeed).toBe(7);
+    }
+  });
+
+  it('rejects a videoClipDuration outside 1-60', () => {
+    for (const videoClipDuration of [0, 61]) {
+      expect(parseOptions({ videoClipDuration }).success).toBe(false);
+    }
+  });
+
+  it('rejects an unknown videoTransitionMode', () => {
+    const parsed = parseOptions({ videoTransitionMode: 'Dissolve' });
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) {
+      expect(JSON.stringify(parsed.error.issues)).toContain('videoTransitionMode');
+    }
+  });
+
+  it('rejects a non-integer videoVariationSeed', () => {
+    expect(parseOptions({ videoVariationSeed: 1.5 }).success).toBe(false);
+  });
+});
+
 const VIDEO = {
   title: 'Porto trip',
   description: 'Agent description.',

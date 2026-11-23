@@ -52,6 +52,21 @@ describe('AccountCard', () => {
     expect(screen.getByText('canal@example.com')).toBeTruthy();
   });
 
+  it('marks the name, email and initials for the ui-diff mask', () => {
+    render(<AccountCard {...baseProps} email="canal@example.com" />);
+    expect(screen.getByText('Meu Canal').hasAttribute('data-ui-diff-mask')).toBe(true);
+    expect(screen.getByText('canal@example.com').hasAttribute('data-ui-diff-mask')).toBe(true);
+    expect(screen.getByRole('img', { name: 'Meu Canal' }).hasAttribute('data-ui-diff-mask')).toBe(true);
+  });
+
+  it('marks the thumbnail and the compact card for the ui-diff mask', () => {
+    const { unmount } = render(<AccountCard {...baseProps} thumbnail="https://example.com/a.png" />);
+    expect(document.querySelector('img')?.hasAttribute('data-ui-diff-mask')).toBe(true);
+    unmount();
+    render(<AccountCard {...baseProps} compact />);
+    expect(screen.getByTestId('account-card').hasAttribute('data-ui-diff-mask')).toBe(true);
+  });
+
   it('uses initials when there is no thumbnail (YouTube)', () => {
     render(<AccountCard {...baseProps} />);
     expect(screen.getByRole('img', { name: 'Meu Canal' }).textContent).toBe('ME');

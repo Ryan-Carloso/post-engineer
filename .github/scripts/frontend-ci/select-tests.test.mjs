@@ -42,9 +42,12 @@ describe('shouldRunAll', () => {
     assert.equal(shouldRunAll(['shared/ssrf/public-ip-cases.json']), true);
   });
 
-  it('runs everything for a recipe doc pinned by a web test', () => {
-    assert.equal(shouldRunAll(['docs/recipes/full-setup.md']), true);
+  it('does not run everything for a doc', () => {
     assert.equal(shouldRunAll(['docs/other-guide.md']), false);
+  });
+
+  it('does not run everything for a recipe doc, since no web test reads docs/recipes any more', () => {
+    assert.equal(shouldRunAll(['docs/recipes/full-setup.md']), false);
   });
 
   it('does not force a full run for a cypress spec or a single source file', () => {
@@ -87,7 +90,7 @@ describe('selectTestFiles', () => {
   it('falls back to the full suite when a source edit selects nothing', () => {
     const selected = selectTestFiles({
       event: 'pull_request',
-      changedPaths: ['shared/prompt-base/prompt-base.ts'],
+      changedPaths: ['shared/contracts/prompts.ts'],
       forceAll: false,
       allFiles,
       listedChanged: [],

@@ -12,7 +12,7 @@ import {
   updatePrompt,
 } from '@/lib/user-prompts-client';
 
-const DETAIL = { slug: 'my-prompt', title: 'T', description: 'D', source: 'own', visibility: 'private', prompt: 'P', versionId: '44444444-4444-4444-8444-444444444444', version: 1 };
+const DETAIL = { slug: 'my-prompt', title: 'T', description: 'D', source: 'own', visibility: 'private', verified: false, prompt: 'P', body: 'P', versionId: '44444444-4444-4444-8444-444444444444', version: 1 };
 
 function stubFetch(response: Response | Error): ReturnType<typeof vi.fn<typeof fetch>> {
   const mock = vi.fn<typeof fetch>(async () => {
@@ -88,7 +88,6 @@ describe('prompt client', () => {
 describe('promptFailureKey', () => {
   it.each([
     [{ status: 409, code: 'PROMPT_SLUG_TAKEN' }, 'userPrompts.errorSlugTaken'],
-    [{ status: 409, code: 'PROMPT_SLUG_RESERVED' }, 'userPrompts.errorSlugReserved'],
     [{ status: 400, code: 'VALIDATION_FAILED' }, 'userPrompts.errorValidation'],
     [{ status: 429, code: null }, 'userPrompts.errorRateLimited'],
     [{ status: 403, code: 'PERSONA_SCOPE_DENIED' }, 'userPrompts.errorForbidden'],

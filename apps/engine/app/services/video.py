@@ -970,7 +970,7 @@ def _needs_moviepy_effects(video_transition_mode) -> bool:
     before writing; the plain fast path can re-encode straight with ffmpeg.
     """
     value = getattr(video_transition_mode, "value", video_transition_mode)
-    return value not in (None, VideoTransitionMode.none.value)
+    return value not in (None, VideoTransitionMode.none.value, VideoTransitionMode.crossfade.value)
 
 
 def _reencode_clip_with_ffmpeg(

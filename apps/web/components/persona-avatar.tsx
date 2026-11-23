@@ -72,6 +72,7 @@ export default function PersonaAvatar({
 
   return (
     <span
+      data-ui-diff-mask=""
       aria-busy={imageLoading || undefined}
       className={cn(
         'relative flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-sunken text-ink-soft ring-2 ring-hairline',

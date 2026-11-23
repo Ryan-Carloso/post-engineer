@@ -27,8 +27,9 @@ interface StoredPrompt {
   title: string;
   description: string;
   prompt: string;
-  source: 'official' | 'own' | 'community';
+  source: 'own' | 'community';
   visibility: 'private' | 'public';
+  verified: boolean;
   versionId: string;
   version: number;
 }
@@ -39,12 +40,16 @@ let nextFailure: { status: number; body: unknown } | null;
 let failDetail: boolean;
 
 function own(slug: string, visibility: StoredPrompt['visibility'], extra: Partial<StoredPrompt> = {}): StoredPrompt {
-  return { slug, title: `Title ${slug}`, description: `About ${slug}`, prompt: `Text of ${slug}`, source: 'own', visibility, versionId: '44444444-4444-4444-8444-444444444444', version: 1, ...extra };
+  return { slug, title: `Title ${slug}`, description: `About ${slug}`, prompt: `Text of ${slug}`, source: 'own', visibility, verified: false, versionId: '44444444-4444-4444-8444-444444444444', version: 1, ...extra };
 }
 
 function summary(entry: StoredPrompt): Record<string, unknown> {
   const { prompt: _text, versionId: _versionId, version: _version, ...rest } = entry;
   return rest;
+}
+
+function detail(entry: StoredPrompt): Record<string, unknown> {
+  return { ...entry, body: entry.prompt };
 }
 
 async function handle(url: string, init: RequestInit | undefined): Promise<Response> {
@@ -62,20 +67,20 @@ async function handle(url: string, init: RequestInit | undefined): Promise<Respo
     const draft = body as { slug: string; title: string; description: string; prompt: string; visibility: StoredPrompt['visibility'] };
     const created = own(draft.slug, draft.visibility, { title: draft.title, description: draft.description, prompt: draft.prompt });
     stored.push(created);
-    return Response.json({ success: true, prompt: created }, { status: 201 });
+    return Response.json({ success: true, prompt: detail(created) }, { status: 201 });
   }
   const match = /^\/api\/prompts\/([^/]+)$/.exec(url);
   const entry = match === null ? undefined : stored.find((candidate) => candidate.slug === decodeURIComponent(match[1]));
   if (match === null || entry === undefined) return Response.json({ success: false, code: 'PROMPT_NOT_FOUND' }, { status: 404 });
   if (method === 'PATCH') {
     Object.assign(entry, body);
-    return Response.json({ success: true, prompt: entry });
+    return Response.json({ success: true, prompt: detail(entry) });
   }
   if (method === 'DELETE') {
     stored = stored.filter((candidate) => candidate !== entry);
     return Response.json({ success: true });
   }
-  return Response.json({ success: true, prompt: entry });
+  return Response.json({ success: true, prompt: detail(entry) });
 }
 
 function renderSection(): void {
@@ -187,7 +192,7 @@ describe('MyPromptsSection', () => {
     expect(screen.getByTestId('user-prompt-form')).toBeInTheDocument();
   });
 
-  it('edits a prompt: loads its text, locks the slug and sends only title, description and text', async () => {
+  it('edits a prompt: loads its stored text, locks the slug and sends only title, description and text', async () => {
     stored = [own('mine', 'private')];
     renderSection();
     const row = await screen.findByTestId('user-prompt-mine');
@@ -251,16 +256,13 @@ describe('MyPromptsSection', () => {
     expect(await within(row).findByRole('button', { name: 'Copied!' })).toBeInTheDocument();
   });
 
-  it('filters the own and community prompts by what the user types and says when nothing matches', async () => {
-    stored = [own('alpha', 'private'), own('beta', 'public'), own('gamma-shared', 'public', { source: 'community' })];
+  it('filters the own prompts by what the user types and says when nothing matches', async () => {
+    stored = [own('alpha', 'private'), own('beta', 'public')];
     renderSection();
     const box = await screen.findByTestId('user-prompts-search');
     fireEvent.change(box, { target: { value: 'ALPHA' } });
     expect(screen.getByTestId('user-prompt-alpha')).toBeInTheDocument();
     expect(screen.queryByTestId('user-prompt-beta')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('user-prompt-gamma-shared')).not.toBeInTheDocument();
-    fireEvent.change(box, { target: { value: 'gamma' } });
-    expect(screen.getByTestId('user-prompt-gamma-shared')).toBeInTheDocument();
     expect(screen.queryByText('No prompt matches your search.')).not.toBeInTheDocument();
     fireEvent.change(box, { target: { value: 'zzz-nothing' } });
     expect(screen.getByText('No prompt matches your search.')).toBeInTheDocument();
@@ -268,23 +270,12 @@ describe('MyPromptsSection', () => {
     expect(screen.getByTestId('user-prompt-beta')).toBeInTheDocument();
   });
 
-  it('hides the search box while the user has no own or community prompts, even though the list carries the official ones', async () => {
-    stored = [own('daily-news', 'public', { source: 'official' })];
+  it('leaves community prompts to the public prompts section and hides the search box without own prompts', async () => {
+    stored = [own('theirs', 'public', { source: 'community' })];
     renderSection();
-    await screen.findByText('You have no prompts yet.');
+    expect(await screen.findByText('You have no prompts yet.')).toBeInTheDocument();
+    expect(screen.queryByTestId('user-prompt-theirs')).not.toBeInTheDocument();
     expect(screen.queryByTestId('user-prompts-search')).not.toBeInTheDocument();
-  });
-
-  it('shows community prompts under their own heading with a copy button only', async () => {
-    stored = [own('mine', 'private'), own('theirs', 'public', { source: 'community' })];
-    renderSection();
-    const community = await screen.findByTestId('user-prompt-theirs');
-    expect(screen.getByRole('heading', { name: 'Public prompts from the community' })).toBeInTheDocument();
-    expect(within(community).getByText('Community')).toBeInTheDocument();
-    expect(within(community).getByRole('button', { name: 'Copy' })).toBeInTheDocument();
-    for (const name of ['Edit', 'Delete', 'Make public', 'Make private']) {
-      expect(within(community).queryByRole('button', { name })).not.toBeInTheDocument();
-    }
   });
 
   it('shows an error with a retry when the list cannot be loaded', async () => {
@@ -306,7 +297,7 @@ describe('MyPromptsSection', () => {
     fireEvent.click(within(row).getByRole('button', { name: 'Make public' }));
     await waitFor(() => expect(within(row).getByRole('button', { name: 'Edit' })).toBeDisabled());
     expect(within(row).getByRole('button', { name: 'Delete' })).toBeDisabled();
-    release(Response.json({ success: true, prompt: own('mine', 'public') }));
+    release(Response.json({ success: true, prompt: detail(own('mine', 'public')) }));
   });
 
   it('shows a localized error and keeps the form closed when the prompt text cannot be loaded for editing', async () => {

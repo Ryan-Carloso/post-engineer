@@ -8,7 +8,7 @@ from app.config import config
 from app.utils.ssrf import UnsafeUrlError, assert_public_url
 from app.models import publish as publish_models
 from app.models.cta import CtaType
-from app.models.segments import ScriptSegment
+from app.models.segments import MAX_LIPSYNC_PHOTOS, MIN_LIPSYNC_PHOTOS, LipsyncPhoto, ScriptSegment
 
 warnings.filterwarnings(
     "ignore",
@@ -29,6 +29,7 @@ class VideoTransitionMode(str, Enum):
     fade_out = "FadeOut"
     slide_in = "SlideIn"
     slide_out = "SlideOut"
+    crossfade = "Crossfade"
 
 
 class LipSyncQuality(str, Enum):
@@ -174,11 +175,15 @@ class VideoParams(BaseModel):
     hook_panel: bool = True
     video_transition_mode: Optional[VideoTransitionMode] = None
     video_clip_duration: Optional[int] = Field(default=2, ge=1, le=60)
+    video_variation_seed: Optional[int] = config.app.get("video_variation_seed")
 
     custom_audio_file: Optional[str] = None
     video_language: Optional[str] = ""
 
     persona: Optional[PersonaParams] = None
+    lipsync_photos: Optional[list[LipsyncPhoto]] = Field(
+        default=None, min_length=MIN_LIPSYNC_PHOTOS, max_length=MAX_LIPSYNC_PHOTOS
+    )
     video_quality: LipSyncQuality = LipSyncQuality.ok
     platform_ids: list[str] = Field(default_factory=list)
     voice_name: Optional[str] = Field(default="", max_length=200)
@@ -276,6 +281,23 @@ class TaskVideoRequest(VideoParams, BaseModel):
     def _validate_video_type_persona(self) -> "TaskVideoRequest":
         if self.video_type in (VideoType.full_lipsync, VideoType.hook_lipsync) and self.persona is None:
             raise ValueError(f"{self.video_type.value} requires a persona with a photo")
+        return self
+
+    @model_validator(mode="after")
+    def _validate_lipsync_photos(self) -> "TaskVideoRequest":
+        photos = self.lipsync_photos
+        if self.video_type != VideoType.full_lipsync:
+            if photos is not None:
+                raise ValueError("lipsync_photos is only accepted for full_lipsync")
+            return self
+        if photos is None:
+            raise ValueError(
+                f"full_lipsync requires lipsync_photos: {MIN_LIPSYNC_PHOTOS}-{MAX_LIPSYNC_PHOTOS} "
+                "different face photos of the persona, one per 12s window"
+            )
+        refs = [(photo.mediaId, photo.url) for photo in photos]
+        if len(set(refs)) != len(refs):
+            raise ValueError("lipsync_photos must all be different photos")
         return self
 
     @model_validator(mode="after")

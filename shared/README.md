@@ -6,7 +6,7 @@ published MCP package ships only `dist`, and an unpublished workspace
 dependency would be missing from a standalone `npm install` of
 `post-engineer-mcp`. Consumers reach a shared file through a symlink
 when a direct import is blocked by their `rootDir` or by tooling that
-copies only the app root (see prompt-base below).
+copies only the app root.
 
 ## script-segments
 
@@ -77,35 +77,6 @@ guarded by the parity-exclusion gate. Each app has a
 `music-mood-field-shared.test.ts` drift suite, and each runs the same
 payload contract table in `music-mood-field.test.ts` against its own
 copy. Never edit a generated copy by hand.
-
-## prompt-base
-
-`prompt-base/prompt-base.ts` holds the text of every prompt in the prompts
-hub: `SHARED_PROMPT_BASE` (rules for all prompts) plus each composed prompt
-(`[...SHARED_PROMPT_BASE, '', ...specificLines].join('\n')`). A new prompt
-gets every shared rule by spreading the base. Web, MCP, and docs never repeat
-this text: docs link to the hub.
-
-There is exactly one prompt-base file in git: this one. The web reads it
-through a symlink, not a copy:
-
-- `apps/web/lib/generation/prompt-base.ts` ->
-  `../../../../shared/prompt-base/prompt-base.ts`
-
-A direct import is not an option: the web `rootDir` makes `tsc` reject
-it with TS6059, and Stryker's sandbox copies only the app root, so a
-direct import breaks mutation testing (verified: Stryker fails with
-"No tests were executed" on a directly imported shared file). The
-symlink is dereferenced by `tsc`, webpack, vitest, and Stryker.
-
-The MCP has no copy: `prompts (action: list)`, `prompts (action: get)` and the slash commands
-fetch the recipes from the web API (`GET /api/prompts`,
-`GET /api/prompts/[slug]`), so a recipe edit reaches every MCP install
-without a package release.
-
-To change the base, edit only this file. The web
-`prompt-base-shared.test.ts` suite fails loudly if a copy ever
-reappears.
 
 ## contracts
 

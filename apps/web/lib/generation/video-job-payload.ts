@@ -22,11 +22,15 @@ const REQUEST_FORWARD_FIELDS: ReadonlyArray<EngineVideoRequestField> = [
   'video_script',
   'video_quality',
   'paragraph_number',
+  'video_clip_duration',
+  'video_transition_mode',
+  'video_variation_seed',
   'webhook_url',
   'generation_id',
   'slot_id',
   'music_mood',
   'segments',
+  'lipsync_photos',
   'cta_type',
 ];
 const REQUEST_FORWARD_FIELD_SET: ReadonlySet<string> = new Set(REQUEST_FORWARD_FIELDS);

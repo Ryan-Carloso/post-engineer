@@ -1101,6 +1101,11 @@ class TestFfmpegReencode(unittest.TestCase):
         """fade_in transition mode requires MoviePy effects."""
         self.assertTrue(vd._needs_moviepy_effects(vd.VideoTransitionMode.fade_in))
 
+    def test_needs_moviepy_effects_crossfade(self):
+        """Crossfade is applied at the panel overlay stage, not per clip."""
+        self.assertFalse(vd._needs_moviepy_effects(vd.VideoTransitionMode.crossfade))
+        self.assertFalse(vd._needs_moviepy_effects("Crossfade"))
+
     def test_reencode_clip_with_ffmpeg_zero_duration_raises(self):
         """Zero-duration subclip must raise instead of producing corrupt output."""
         with tempfile.TemporaryDirectory() as temp_dir:

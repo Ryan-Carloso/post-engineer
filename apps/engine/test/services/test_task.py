@@ -386,6 +386,49 @@ class TestGenerateFinalVideosCaptionWiring(unittest.TestCase):
         self.assertEqual(params.subtitle_position, "center")
 
 
+class TestGenerateFinalVideosTransitionWiring(unittest.TestCase):
+    """The transition mode must actually reach the panel overlay.
+
+    A unit test on overlay_command alone passes even if the call site in
+    generate_final_videos drops the mode, so pin the wiring here.
+    """
+
+    def _run(self, video_transition_mode):
+        params = VideoParams(
+            video_title="x",
+            video_description="Test description.",
+            video_type="faceless",
+            video_transition_mode=video_transition_mode,
+        )
+        with (
+            patch.object(tm.sm.state, "get_task", return_value={"user_id": "u1"}),
+            patch.object(tm.sm.state, "update_task"),
+            patch.object(tm.history_repository, "recent", return_value=[]),
+            patch.object(tm.video, "combine_videos"),
+            patch.object(tm.segment_panels, "overlay_onto", return_value="combined-1.mp4") as overlay,
+            patch.object(tm.segment_panels, "caption_bands", return_value=[]),
+            patch.object(tm.video, "generate_video"),
+        ):
+            tm.generate_final_videos(
+                task_id="transition-wiring",
+                params=params,
+                downloaded_videos=["c1.mp4"],
+                audio_file="a.mp3",
+                subtitle_path="s.srt",
+                video_script="script",
+                music_mood="calm",
+            )
+        return overlay
+
+    def test_crossfade_mode_reaches_the_panel_overlay(self):
+        overlay = self._run("Crossfade")
+        self.assertEqual(overlay.call_args.kwargs["transition_mode"], "Crossfade")
+
+    def test_no_mode_reaches_the_panel_overlay_as_none(self):
+        overlay = self._run(None)
+        self.assertIsNone(overlay.call_args.kwargs["transition_mode"])
+
+
 class _FakeStreamResponse:
     """Fake requests.get(stream=True) response for download_persona_voice."""
 

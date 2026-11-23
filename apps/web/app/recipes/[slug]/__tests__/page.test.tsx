@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 
 vi.mock('next/navigation', () => ({
-  useParams: () => ({ slug: 'no-such-prompt' }),
+  useParams: () => ({ slug: 'No_Such_Prompt' }),
 }));
 
 vi.mock('@/lib/i18n/provider', () => {
@@ -23,7 +23,7 @@ vi.mock('@/lib/i18n/provider', () => {
 import PromptDetailPage from '../page';
 
 describe('prompt detail route', () => {
-  it('shows a not-found line with a link back to the prompts list', () => {
+  it('shows a not-found line with a link back to the prompts list for a slug no prompt can have', () => {
     render(<PromptDetailPage />);
     expect(
       screen.getByText('That prompt does not exist.'),

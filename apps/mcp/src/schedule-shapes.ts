@@ -2,10 +2,12 @@ import { isIP } from 'node:net';
 import { z } from 'zod';
 import { isEnglishLanguage, ONLY_ENGLISH_VIDEOS_MESSAGE } from './language.js';
 import { isPublicIp } from './public-ip.js';
+import { VIDEO_TRANSITION_MODES } from './contracts/videos.js';
 import { VIDEO_LAYOUTS } from './limits.js';
 import { VIDEO_TYPES, VIDEO_TYPE_ERROR_SUFFIX, unknownVideoTypeMessage } from './video-type.js';
 import { personaVoiceField } from './voice-filters.js';
 import { musicMoodField } from './music-mood-field.js';
+import { LIPSYNC_WINDOW_SECONDS, MAX_LIPSYNC_PHOTOS, MIN_LIPSYNC_PHOTOS } from './contracts/videos.js';
 
 export const ListSchedulesShape = {};
 
@@ -118,8 +120,25 @@ export const GeneratePersonaVideoOptionsShape = {
           ? `options.videoType is required; ${VIDEO_TYPE_ERROR_SUFFIX}`
           : unknownVideoTypeMessage(issue.input),
     })
-    .describe('The one video mode: full_lipsync = the whole video is the persona talking (requires a persona with a photo; 8 tokens at face quality ok, 15 at very_good); hook_lipsync = lip sync on the hook only, agent images after (requires a persona with a photo; 2 tokens ok, 3 very_good); faceless = agent images only, no face (persona optional — with one, its voice and niche still apply; 1 token). Required: the mode decides the render path and the price.'),
+    .describe('The one video mode: full_lipsync = the whole video is the persona talking (requires a persona with a photo and options.lipsyncPhotos; 8 tokens at face quality ok, 15 at very_good); hook_lipsync = lip sync on the hook only, agent images after (requires a persona with a photo; 2 tokens ok, 3 very_good); faceless = agent images only, no face (persona optional — with one, its voice and niche still apply; 1 token). Required: the mode decides the render path and the price.'),
   musicMood: musicMoodField,
+  lipsyncPhotos: z
+    .array(
+      z
+        .object({ mediaId: z.string().min(1).optional(), url: z.string().min(1).optional() })
+        .strict()
+        .refine((photo) => (photo.mediaId === undefined) !== (photo.url === undefined), {
+          message: 'Each lipsync photo needs exactly one of mediaId or url.',
+        }),
+    )
+    .min(MIN_LIPSYNC_PHOTOS, `Send at least ${MIN_LIPSYNC_PHOTOS} different face photos`)
+    .max(MAX_LIPSYNC_PHOTOS, `Send at most ${MAX_LIPSYNC_PHOTOS} face photos`)
+    .optional()
+    .describe(
+      `full_lipsync only, and required there: ${MIN_LIPSYNC_PHOTOS}-${MAX_LIPSYNC_PHOTOS} different face photos of the persona, all the same person (other outfits, places or angles), so the video does not stay on one photo. ` +
+        `The narration is cut into windows of at most ${LIPSYNC_WINDOW_SECONDS}s and window i shows photo i (photo i % count when there are fewer photos than windows): send one photo per ${LIPSYNC_WINDOW_SECONDS}s of narration, e.g. 2 for a 24s video, 4 for 48s, ${MAX_LIPSYNC_PHOTOS} for 60s. ` +
+        'Each item is mediaId (from media (action: upload), a temporary asset, 1 hour) or url (a public image URL). Every photo must show a detectable face and no photo may repeat. Rejected for hook_lipsync and faceless.',
+    ),
   audioUrl: httpsUrlField('audioUrl').optional().describe('Public URL of custom audio for the videos (overrides the persona voice).'),
   imageId: z.string().min(1, 'imageId must be a non-empty string').optional().describe('Library image ID to use for every video (overrides the deterministic per-video selection; see persona_media (action: list_images)).'),
   voiceId: personaVoiceField().optional().describe('Voice ID override: id or label from voices (action: list). Never type a provider prefix.'),
@@ -142,4 +161,22 @@ export const GeneratePersonaVideoOptionsShape = {
     .optional()
     .describe('Spoken language code — English only for now, e.g. en-US. Overrides the persona when one is given.'),
   niche: z.string().min(1).max(300).optional().describe('Content niche. Overrides the persona when one is given.'),
+  videoClipDuration: z
+    .number()
+    .int()
+    .min(1)
+    .max(60)
+    .optional()
+    .describe('Maximum seconds per clip (1-60). Omitted keeps the 2s default.'),
+  videoTransitionMode: z
+    .enum(VIDEO_TRANSITION_MODES)
+    .optional()
+    .describe('Transition between clips: Shuffle varies it per clip, Crossfade blends segment photos over 0.5s. Omitted keeps hard cuts.'),
+  videoVariationSeed: z
+    .number()
+    .int()
+    .optional()
+    .describe(
+      'Seed for per-video variation of the segment photos zoom direction; the same seed repeats the same pattern. Omitted keeps the fixed in/out alternation.',
+    ),
 };

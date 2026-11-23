@@ -21,12 +21,19 @@ export function unknownVideoTypeMessage(value: unknown): string {
 
 export const VIDEO_TYPE_REQUIRED_MESSAGE = `videoType is required; ${VIDEO_TYPE_ERROR_SUFFIX}`;
 
+export const VIDEO_TRANSITION_MODES = ['Shuffle', 'FadeIn', 'FadeOut', 'SlideIn', 'SlideOut', 'Crossfade'] as const;
+export type VideoTransitionMode = (typeof VIDEO_TRANSITION_MODES)[number];
+
 export const MAX_SEGMENTS = 12;
 export const MAX_IMAGES_MODE_MEDIAS = 30;
 export const HOOK_MIN_SECONDS = 8;
 export const HOOK_MAX_SECONDS = 12;
 export const MIN_REQUESTED_PHOTO_SECONDS = 0.5;
 export const MAX_REQUESTED_PHOTO_SECONDS = 6;
+
+export const MIN_LIPSYNC_PHOTOS = 2;
+export const MAX_LIPSYNC_PHOTOS = 5;
+export const LIPSYNC_WINDOW_SECONDS = 12;
 
 export const MAX_REPORTED_ISSUES = 20;
 
@@ -79,6 +86,15 @@ export const segmentsRequestSchema = z.array(
     .strict(),
 ).max(MAX_SEGMENTS);
 
+export const lipsyncPhotosRequestSchema = z.array(
+  z
+    .object({
+      mediaId: z.string().optional(),
+      url: z.string().optional(),
+    })
+    .strict(),
+);
+
 const PublishingScheduleSchema = z.object({
   startAt: z.string(),
   times: z.array(z.string()),
@@ -103,6 +119,7 @@ const OptionsSchema = z
     audioUrl: z.string().optional(),
     imageId: z.string().optional(),
     segments: segmentsRequestSchema.optional(),
+    lipsyncPhotos: lipsyncPhotosRequestSchema.optional(),
     webhookUrl: z.string().optional(),
     voiceId: z.string().optional(),
     videoAspect: z.enum(['9:16', '16:9', '1:1']).optional(),
@@ -111,6 +128,9 @@ const OptionsSchema = z
     paragraphNumber: z.number().int().min(1).max(10).optional(),
     language: z.string().optional(),
     niche: z.string().optional(),
+    videoClipDuration: z.number().int().min(1).max(60).optional().describe('Maximum seconds per clip (1-60). Omitted keeps the 2s default.'),
+    videoTransitionMode: z.enum(VIDEO_TRANSITION_MODES).optional().describe('Transition between clips: Shuffle varies it per clip, Crossfade blends segment photos over 0.5s. Omitted keeps hard cuts.'),
+    videoVariationSeed: z.number().int().optional().describe('Seed for per-video variation of the segment photos zoom direction; the same seed repeats the same pattern. Omitted keeps the fixed in/out alternation.'),
   })
   .optional();
 

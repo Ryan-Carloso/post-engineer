@@ -1,4 +1,4 @@
-export const CLIP_DENSITY_ITEMS = 4;
+export const CLIP_DENSITY_ITEMS = 6;
 
 export function isVideoRef(media: unknown): boolean {
   if (typeof media !== 'object' || media === null || Array.isArray(media)) return false;

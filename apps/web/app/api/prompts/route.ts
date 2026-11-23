@@ -1,10 +1,7 @@
 import { NextResponse } from 'next/server';
-import { apiErrorResponse } from '@/lib/api-error';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 import { CreateUserPromptBodySchema } from '@/lib/contracts/prompts';
-import { ERROR_CODES, errorMessage } from '@/lib/error-codes';
 import { filterPromptSummaries, searchTerms } from '@/lib/prompt-search';
-import { isOfficialPromptSlug, listHubPrompts } from '@/lib/recipes/hub-prompts';
 import { RATE_LIMITS } from '@/lib/rate-limit';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { createUserPrompt, listOwnPromptSlugs, listOwnUserPrompts, listPublicUserPrompts } from '@/lib/user-prompts';
@@ -37,18 +34,17 @@ async function getHandler(request: Request): Promise<NextResponse> {
     const own =
       !wantsOwn || caller.userId === null || caller.scopedKey ? [] : await listOwnUserPrompts(db, caller.userId, terms);
     const publicPrompts = wantsCommunity ? await listPublicUserPrompts(db, terms) : [];
-    const official = listHubPrompts().map((entry) => ({ ...entry, source: 'official' as const, visibility: 'public' as const }));
     const slugOwner = wantsCommunity && !caller.scopedKey ? caller.userId : null;
     const ownSlugs =
       slugOwner === null ? [] : wantsOwn && terms.length === 0 ? own.map((row) => row.slug) : await listOwnPromptSlugs(db, slugOwner);
-    const taken = new Set([...official.map((entry) => entry.slug), ...ownSlugs]);
+    const taken = new Set(ownSlugs);
     const community = publicPrompts
       .filter((row) => (caller.scopedKey || row.owner_id !== caller.userId) && !taken.has(row.slug))
       .map((row) => promptSummaryBody(row, 'community'));
     return NextResponse.json({
       success: true,
       prompts: filterPromptSummaries(
-        [...official, ...own.map((row) => promptSummaryBody(row, 'own')), ...community],
+        [...own.map((row) => promptSummaryBody(row, 'own')), ...community],
         filter.filter,
       ),
     });
@@ -65,13 +61,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
   const parsed = await readJsonBody(request, CreateUserPromptBodySchema, POST_ROUTE);
   if (!parsed.ok) return parsed.response;
   const { slug, title, description, prompt, visibility } = parsed.body;
-  if (isOfficialPromptSlug(slug)) {
-    return apiErrorResponse(409, errorMessage(ERROR_CODES.PROMPT_SLUG_RESERVED), {
-      route: POST_ROUTE,
-      code: ERROR_CODES.PROMPT_SLUG_RESERVED,
-      field: 'slug',
-    });
-  }
   try {
     const db = createSupabaseServiceClient();
     const outcome = await createUserPrompt(db, owner.userId, {

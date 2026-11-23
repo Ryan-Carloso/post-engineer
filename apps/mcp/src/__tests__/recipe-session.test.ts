@@ -33,8 +33,8 @@ function photos(count: number, prefix: string): Array<{ url: string }> {
 }
 
 const validSegments = [
-  { kind: 'hook' as const, text: hook, media: photos(4, 'hook') },
-  { kind: 'content' as const, text: content, media: photos(6, 'content') },
+  { kind: 'hook' as const, text: hook, media: photos(5, 'hook') },
+  { kind: 'content' as const, text: content, media: photos(8, 'content') },
   { kind: 'content' as const, text: ctaTake, media: photos(2, 'ctaTake') },
 ];
 const rejectedSegments = [
@@ -52,12 +52,12 @@ function json(status: number, payload: unknown): Response {
 function apiResponse(url: string): Response {
   const path = new URL(url).pathname;
   if (path === '/api/prompts') {
-    return json(200, { success: true, prompts: [{ slug: 'place-spotlight', title: 'Place', description: 'A place.', source: 'official', visibility: 'public' }] });
+    return json(200, { success: true, prompts: [{ slug: 'place-spotlight', title: 'Place', description: 'A place.', source: 'own', visibility: 'public', verified: false }] });
   }
   if (path === '/api/prompts/place-spotlight') {
     return json(200, {
       success: true,
-      prompt: { slug: 'place-spotlight', title: 'Place', description: 'A place.', source: 'official', visibility: 'public', prompt: 'Place recipe text.', versionId: '44444444-4444-4444-8444-444444444444', version: 1 },
+      prompt: { slug: 'place-spotlight', title: 'Place', description: 'A place.', source: 'own', visibility: 'public', verified: false, prompt: 'Place recipe text.', body: 'Place recipe text.', versionId: '44444444-4444-4444-8444-444444444444', version: 1 },
     });
   }
   if (path.startsWith('/api/prompts/')) {

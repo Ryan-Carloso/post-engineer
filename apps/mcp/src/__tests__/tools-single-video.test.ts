@@ -34,8 +34,8 @@ function photos(count: number, prefix: string): Array<{ url: string }> {
 }
 
 const segments = [
-  { kind: 'hook' as const, text: hook, media: photos(4, 'hook') },
-  { kind: 'content' as const, text: content, media: photos(6, 'content') },
+  { kind: 'hook' as const, text: hook, media: photos(5, 'hook') },
+  { kind: 'content' as const, text: content, media: photos(8, 'content') },
   { kind: 'content' as const, text: ctaTake, media: photos(2, 'ctaTake') },
 ];
 
@@ -87,11 +87,38 @@ describe('generate_persona_video tool', () => {
     expect(textOf(response)).toContain('Porto trip');
   });
 
+  it('forwards the pacing options to the client verbatim', async () => {
+    const client = mockClient();
+    const response = await handleGeneratePersonaVideo(client, {
+      personaId: 'persona-1',
+      segments,
+      title: 'Porto trip',
+      description: 'Agent description.',
+      language: 'en-US',
+      providers: ['youtube'],
+      youtubeAccountIds: ['acct-1'],
+      mode: 'scheduled',
+      startAt: '2026-10-30T18:00:00',
+      times: ['18:00'],
+      timezone: 'Europe/Lisbon',
+      options: { videoType: 'faceless', videoClipDuration: 4, videoTransitionMode: 'Crossfade', videoVariationSeed: 7 },
+    });
+    expect(response.isError).toBeUndefined();
+    const generate = vi.mocked(client.generatePersonaVideo);
+    expect(generate).toHaveBeenCalledTimes(1);
+    const input = generate.mock.calls[0][0];
+    expect(input.options).toMatchObject({
+      videoClipDuration: 4,
+      videoTransitionMode: 'Crossfade',
+      videoVariationSeed: 7,
+    });
+  });
+
   it('forwards the per-video CTA override and the marked take to the client, including an explicit null (issue #639)', async () => {
     const client = mockClient();
     const marked = [
-      { kind: 'hook' as const, text: hook, media: photos(4, 'hook') },
-      { kind: 'content' as const, text: content, media: photos(6, 'content') },
+      { kind: 'hook' as const, text: hook, media: photos(5, 'hook') },
+      { kind: 'content' as const, text: content, media: photos(8, 'content') },
       { kind: 'content' as const, text: ctaTake, cta: true, media: photos(2, 'ctaTake') },
     ];
     await handleGeneratePersonaVideo(client, {

@@ -74,7 +74,7 @@
     "images": {
       "title": "Images",
       "type": "array",
-      "description": "Required unless fullLipsync: public https image URLs, in order, about one image per 3 seconds of speech, at most 30. They are split across the hook, each body paragraph (split the body with blank lines) and the CTA. Each image fills the screen with a slow zoom for its share of that part; no stock is added. Replace the prefilled placeholders with your own image URLs. Use images you have the rights to.",
+      "description": "Required unless fullLipsync: public https image URLs, in order, about one image per 2 seconds of speech, at most 30. They are split across the hook, each body paragraph (split the body with blank lines) and the CTA. Each image fills the screen with a slow zoom for its share of that part; no stock is added. Replace the prefilled placeholders with your own image URLs. Use images you have the rights to.",
       "editor": "stringList",
       "prefill": [
         "https://example.com/image-1.jpg",
@@ -89,7 +89,11 @@
         "https://example.com/image-10.jpg",
         "https://example.com/image-11.jpg",
         "https://example.com/image-12.jpg",
-        "https://example.com/image-13.jpg"
+        "https://example.com/image-13.jpg",
+        "https://example.com/image-14.jpg",
+        "https://example.com/image-15.jpg",
+        "https://example.com/image-16.jpg",
+        "https://example.com/image-17.jpg"
       ]
     },
     "fullLipsync": {

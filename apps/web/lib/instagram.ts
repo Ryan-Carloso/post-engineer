@@ -114,16 +114,11 @@ export class InstagramService {
           message,
           responseData,
         });
-        logger.error(`Instagram API error (${context})`, asError, {
-          status: axiosError.response?.status,
-          data: responseData,
-        });
       }
       throw new InstagramApiError(message, axiosError.response?.status ?? 500, asError, readMetaErrorCode(responseData), readMetaErrorSubcode(responseData));
     }
     if (log) {
       logger.error('[instagram] NON-AXIOS ERROR', asError, { context, message: asError.message });
-      logger.error(`Instagram API error (${context})`, asError);
     }
     throw new InstagramApiError(asError.message, 500, asError);
   }
@@ -379,7 +374,7 @@ export class InstagramService {
         apiError: axiosData?.response?.data,
         message: error instanceof Error ? error.message : String(error),
       });
-      this.handleApiError(error, 'publishMedia');
+      this.handleApiError(error, 'publishMedia', { log: false });
     }
   }
 
@@ -396,13 +391,12 @@ export class InstagramService {
         const status = (response.data as { status_code?: string }).status_code;
         if (status === 'FINISHED') return;
         if (status === 'ERROR') {
-          logger.error('[instagram] waitForContainer IG error', new Error('Instagram media processing failed'), { creationId, attempt, status, data: response.data });
-          throw new InstagramApiError('Instagram media processing failed', 400);
+          throw new InstagramApiError(`Instagram media processing failed (creation ${creationId}, attempt ${attempt})`, 400);
         }
       } catch (error) {
         if (error instanceof InstagramApiError) throw error;
         logger.error('[instagram] waitForContainer polling failed', error, { creationId, attempt });
-        this.handleApiError(error, 'waitForContainer');
+        this.handleApiError(error, 'waitForContainer', { log: false });
       }
       await new Promise((resolve) => setTimeout(resolve, 2000));
     }

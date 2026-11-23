@@ -1,6 +1,7 @@
 import type { DistributedSlot } from '@/lib/schedule/slot-distribution';
 import type { ScriptSegment } from '@/lib/generation/script-segments';
 import type { VideoType } from '@/lib/tokens';
+import type { LipsyncPhotoRef } from './lipsync-photos';
 
 export interface SlotRowInput {
   slots: DistributedSlot[];
@@ -12,6 +13,7 @@ export interface SlotRowInput {
   musicMood?: string;
   chargedTokens: number;
   segments: ScriptSegment[] | undefined;
+  lipsyncPhotos?: LipsyncPhotoRef[];
   promptVersionId?: string;
 }
 
@@ -29,6 +31,7 @@ export function buildSlotRows(input: SlotRowInput) {
     music_mood: input.musicMood ?? null,
     charged_tokens: input.chargedTokens,
     segments: input.segments ?? null,
+    lipsync_photos: input.lipsyncPhotos ?? null,
     prompt_version_id: input.promptVersionId ?? null,
   }));
 }

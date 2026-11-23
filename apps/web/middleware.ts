@@ -92,7 +92,7 @@ export async function middleware(request: NextRequest) {
     error,
   } = await supabase.auth.getUser()
 
-  const publicPaths = ['/landing', '/login', '/privacy', '/terms', '/recipes'];
+  const publicPaths = ['/landing', '/login', '/privacy', '/terms', '/recipes', '/s'];
 
   const isPublicPath = publicPaths.some(
     (publicPath) => pathname === publicPath || pathname.startsWith(`${publicPath}/`),
@@ -117,6 +117,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:png|jpe?g|gif|webp|svg|ico|txt|mp3|woff2?|ttf)$|sitemap\\.xml$|openapi\\.json$|mcp$|api/|auth/|.well-known/|oauth/|login|landing|privacy|terms|recipes).*)',
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:png|jpe?g|gif|webp|svg|ico|txt|mp3|woff2?|ttf)$|sitemap\\.xml$|openapi\\.json$|mcp$|api/|auth/|.well-known/|oauth/|login|landing|privacy|terms|recipes|s/).*)',
   ],
 }

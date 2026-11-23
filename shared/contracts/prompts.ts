@@ -8,7 +8,7 @@ export type PromptVisibility = (typeof PROMPT_VISIBILITIES)[number];
 
 export const PromptVisibilitySchema = z.enum(PROMPT_VISIBILITIES);
 
-export const PROMPT_SOURCES = ['official', 'own', 'community'] as const;
+export const PROMPT_SOURCES = ['own', 'community'] as const;
 
 export const PromptSourceSchema = z.enum(PROMPT_SOURCES);
 
@@ -34,10 +34,12 @@ export const PromptSummarySchema = z.object({
   description: z.string(),
   source: PromptSourceSchema,
   visibility: PromptVisibilitySchema,
+  verified: z.boolean(),
 });
 
 export const PromptDetailSchema = PromptSummarySchema.extend({
   prompt: z.string(),
+  body: z.string(),
   versionId: z.string().uuid(),
   version: z.number().int().min(1),
 });

@@ -631,6 +631,7 @@ export interface Database {
         media_content_type: string | null;
         media_claimed_at: string | null;
         prompt_version_id: string | null;
+        lipsync_photos: Json | null;
         };
         Insert: {
         id?: string;
@@ -662,6 +663,7 @@ export interface Database {
         media_content_type?: string | null;
         media_claimed_at?: string | null;
         prompt_version_id?: string | null;
+        lipsync_photos?: Json | null;
         };
         Update: {
         id?: string;
@@ -693,6 +695,7 @@ export interface Database {
         media_content_type?: string | null;
         media_claimed_at?: string | null;
         prompt_version_id?: string | null;
+        lipsync_photos?: Json | null;
         };
         Relationships: [];
       };
@@ -840,6 +843,39 @@ export interface Database {
         post_cta_url?: string | null;
         post_cta_instruction?: string | null;
         post_hook_panel?: boolean | null;
+        };
+        Relationships: [];
+      };
+      share_links: {
+        Row: {
+        id: string;
+        user_id: string;
+        token_hash: string;
+        persona_ids: string[] | null;
+        created_at: string;
+        expires_at: string | null;
+        revoked_at: string | null;
+        last_viewed_at: string | null;
+        };
+        Insert: {
+        id?: string;
+        user_id: string;
+        token_hash: string;
+        persona_ids?: string[] | null;
+        created_at?: string;
+        expires_at?: string | null;
+        revoked_at?: string | null;
+        last_viewed_at?: string | null;
+        };
+        Update: {
+        id?: string;
+        user_id?: string;
+        token_hash?: string;
+        persona_ids?: string[] | null;
+        created_at?: string;
+        expires_at?: string | null;
+        revoked_at?: string | null;
+        last_viewed_at?: string | null;
         };
         Relationships: [];
       };
@@ -1046,6 +1082,7 @@ export interface Database {
         visibility: 'private' | 'public';
         created_at: string;
         updated_at: string;
+        verified: boolean;
         };
         Insert: {
         id?: string;
@@ -1057,6 +1094,7 @@ export interface Database {
         visibility?: 'private' | 'public';
         created_at?: string;
         updated_at?: string;
+        verified?: boolean;
         };
         Update: {
         id?: string;
@@ -1068,6 +1106,7 @@ export interface Database {
         visibility?: 'private' | 'public';
         created_at?: string;
         updated_at?: string;
+        verified?: boolean;
         };
         Relationships: [];
       };

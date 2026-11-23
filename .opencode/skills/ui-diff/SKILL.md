@@ -24,10 +24,14 @@ to `.ui-diff/` at the repo root, which is added to `.git/info/exclude` automatic
 
 ## Privacy rules (always)
 
-- Screenshots never go to public or third-party hosts (no imgur, gists, Slack, CDNs, pastebins).
+- Screenshots never go to third-party hosts (no imgur, gists, Slack, CDNs, pastebins).
   The only upload target is the repository's own `ui-diff-assets` branch.
-- `publish` refuses public repositories unless the user explicitly passes `--allow-public-repo`.
-  If it says the repo is public or its visibility is unknown, stop and ask the user.
+- On post-engineer the owner pre-authorized public uploads (2026-11-22): `publish.allowPublicRepo`
+  is `true` in `apps/web/ui-diff.config.json`, so no per-PR OK is asked. Every capture masks
+  account cards, the signed-in user's profile links and the persona photo area
+  (`[data-ui-diff-mask]` on the head, plus base-compatible selectors in the config so a "before"
+  capture of `main` is masked too); mark any new identity element with `[data-ui-diff-mask]`.
+- `publish` still refuses when repository visibility is unknown; never pass `--assume-private` on your own.
 - Never create Vercel share links, bypass URLs or URLs with tokens. Protected previews are
   reached with headers/cookies whose values come from environment variables (see `references/privacy.md`).
 - Never print secret values or paste them into comments or summaries.
@@ -141,9 +145,10 @@ node "$SKILL/bin/ui-diff.mjs" publish --pr <n> --dry-run   # lists uploads, writ
 node "$SKILL/bin/ui-diff.mjs" publish --pr <n>
 ```
 
-- Read the dry run's `publishable` and `problems`: if it says the repository is public, its
-  visibility is unknown or there is no GitHub remote, the real publish will stop there. Tell the
-  user; do not add `--allow-public-repo` or `--assume-private` on your own.
+- Read the dry run's `publishable` and `problems`: if its visibility is unknown or there is no
+  GitHub remote, the real publish will stop there. Tell the user; do not add `--assume-private`
+  on your own. A public repo publishes through `publish.allowPublicRepo` in the config; the
+  `--allow-public-repo` flag stays an explicit per-run override.
 - Images go to the orphan branch `ui-diff-assets` of the same repository (single commit, other PRs'
   files kept) and are linked as `https://github.com/<owner>/<repo>/raw/ui-diff-assets/…`, which
   renders only for people who can read the repo.
@@ -163,9 +168,9 @@ node "$SKILL/bin/ui-diff.mjs" publish --pr <n>
   section (`gh pr edit <n> --body-file ...`): one block per changed route — route, viewport,
   pixel % and area count, then the `before | after | diff` composite image. Verify the body
   shows the section and the URLs.
-- When publish is not possible (public repo without `--allow-public-repo`, exit code 3, no
-  remote), do not leave the PR without body screenshots: attach the composite images in chat
-  so the owner can drag them into the body.
+- When publish is not possible (the config has no `publish.allowPublicRepo` and no
+  `--allow-public-repo` override, exit code 3, no remote), do not leave the PR without body
+  screenshots: attach the composite images in chat so the owner can drag them into the body.
 
 ## 6. Wrap up
 
