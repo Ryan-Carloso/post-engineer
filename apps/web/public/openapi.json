@@ -2846,6 +2846,154 @@
         ]
       }
     },
+    "/api/metrics/last-24h": {
+      "get": {
+        "operationId": "get_insights_last_day",
+        "summary": "insights last day",
+        "tags": [
+          "metrics"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    },
+                    "totals": {
+                      "type": "object",
+                      "properties": {
+                        "views": {
+                          "type": "number"
+                        },
+                        "engagement": {
+                          "type": "number"
+                        },
+                        "videos": {
+                          "type": "number"
+                        },
+                        "measurements": {
+                          "type": "number"
+                        }
+                      }
+                    },
+                    "skipped": {
+                      "type": "object",
+                      "properties": {
+                        "noBaseline": {
+                          "type": "number"
+                        },
+                        "stale": {
+                          "type": "number"
+                        }
+                      }
+                    },
+                    "counterResets": {
+                      "type": "number"
+                    },
+                    "truncated": {
+                      "type": "boolean"
+                    },
+                    "asOf": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "success"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "persona",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "account",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "provider",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
     "/api/metrics/retention-curve": {
       "get": {
         "operationId": "get_insights_retention_curve",
