@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from typing import Any
 
 import pytest
@@ -36,6 +37,19 @@ def test_client_and_transport_errors_stay_running(monkeypatch: pytest.MonkeyPatc
     assert _status(monkeypatch, AuthError("token")) == "running"
     assert _status(monkeypatch, InternalFailure("retry")) == "running"
     assert _status(monkeypatch, StreamTerminatedError()) == "running"
+
+
+def test_missing_modal_package_stays_running(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setitem(sys.modules, "modal", None)
+    assert dispatch.modal_call_status("fc-status") == "running"
+
+
+def test_exception_without_a_module_name_means_finished() -> None:
+    class _NoModuleError(Exception):
+        pass
+
+    _NoModuleError.__module__ = None
+    assert dispatch._exception_means_call_finished(_NoModuleError()) is True
 
 
 def test_a_finished_call_is_finished(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -425,3 +425,40 @@ class StartupWarmClientTests(unittest.TestCase):
         ):
             asgi.startup_event()
         mock_state.reconcile_orphaned_tasks.assert_called_once_with()
+
+    def test_startup_event_resumes_unspawned_cpu_dispatches(self):
+        from unittest.mock import MagicMock
+
+        mock_state = MagicMock()
+        mock_state.reconcile_orphaned_tasks.return_value = 0
+        with (
+            patch("app.asgi.warm_client"),
+            patch("app.asgi.start_fill_schedule_scheduler"),
+            patch("app.services.engine_heartbeat.start_heartbeat_after_autopsy"),
+            patch.object(asgi.sm, "state", mock_state),
+            patch(
+                "app.services.cpu_worker_dispatch.resume_unspawned_cpu_jobs",
+                return_value=2,
+            ) as resume,
+        ):
+            asgi.startup_event()
+        resume.assert_called_once_with(mock_state)
+        mock_state.reconcile_orphaned_tasks.assert_called_once_with()
+
+    def test_startup_event_survives_a_failed_cpu_resume(self):
+        from unittest.mock import MagicMock
+
+        mock_state = MagicMock()
+        mock_state.reconcile_orphaned_tasks.return_value = 0
+        with (
+            patch("app.asgi.warm_client"),
+            patch("app.asgi.start_fill_schedule_scheduler"),
+            patch("app.services.engine_heartbeat.start_heartbeat_after_autopsy"),
+            patch.object(asgi.sm, "state", mock_state),
+            patch(
+                "app.services.cpu_worker_dispatch.resume_unspawned_cpu_jobs",
+                side_effect=RuntimeError("modal down"),
+            ),
+        ):
+            asgi.startup_event()
+        mock_state.reconcile_orphaned_tasks.assert_called_once_with()
