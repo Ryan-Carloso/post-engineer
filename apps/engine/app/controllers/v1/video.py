@@ -342,7 +342,7 @@ def create_task(
         validate_music_mood(getattr(body, "music_mood", None))
         sm.state.update_task(
             task_id, user_id=auth.user_id, flow="direct", pipeline=stop_at,
-            state=const.TASK_STATE_PROCESSING,
+            state=const.TASK_STATE_QUEUED,
             progress=0,
             **_persona_tracking_kwargs(body),
             **_tracking_kwargs(body),
