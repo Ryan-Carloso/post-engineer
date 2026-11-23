@@ -203,7 +203,7 @@ The server offers **18 intent tools**, not one tool per API endpoint. A tool is 
 | `schedules` | `list`, `cancel`, `get_slot`, `update_slot_title`, `delete_slot` | Future slots. |
 | `posts` | `list`, `get` | Published and scheduled posts. |
 | `insights` | `post_metrics`, `last_day`, `retention_curve`, `share_link_create`, `share_link_list`, `share_link_revoke` | How posts performed, and a public read-only link to the metrics summary and this week's posts. |
-| `experiments` | `results` | Compares your prompts inside each publishing account: every video generated with a `promptVersionId` records its prompt version. |
+| `experiments` | `results` | Compares your prompts inside each publishing account: every video generated with a `promptVersionId` records its prompt version. Compare any number of prompts by rotating them round-robin on one account (at least 5 videos each); the clear/indicative thresholds are corrected for the number of prompts compared. |
 | `media` | `upload`, `check` | Images for video segments. |
 | `billing` | `balance`, `transactions` | Prepaid tokens. |
 | `prompts` | `list`, `get` | The recipe prompts. |

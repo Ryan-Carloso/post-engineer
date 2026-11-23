@@ -4,6 +4,7 @@ import {
   INDICATIVE_P_VALUE,
   MIN_COMPARED_VIDEOS,
   comparePrompts,
+  comparisonLabel,
   median,
   signTestPValue,
   type ComparedVideo,
@@ -12,6 +13,9 @@ import {
 
 const A = '11111111-1111-4111-8111-111111111111';
 const B = '22222222-2222-4222-8222-222222222222';
+const C = '33333333-3333-4333-8333-333333333333';
+const D = '44444444-4444-4444-8444-444444444444';
+const E = '55555555-5555-4555-8555-555555555555';
 
 const VERSIONS: PromptVersionFacts[] = [
   { versionId: A, slug: 'calm-hook', title: 'Calm hook', version: 2, source: 'user' },
@@ -77,20 +81,20 @@ describe('comparePrompts', () => {
     expect(prompt?.label).toBe('insufficient');
   });
 
-  it('labels a unanimous lead over six videos clear, five indicative, and a split no_signal', () => {
-    const control = videos(null, [10, 10, 10, 10, 10, 10]);
+  it('labels a unanimous lead over six videos clear, five indicative, and a split no_signal when it is the only tested group', () => {
+    const control = [...videos(B, [10, 10, 10, 10]), ...videos(null, [10, 10, 10, 10])];
     const six = comparePrompts([...videos(A, [100, 100, 100, 100, 100, 100]), ...control], VERSIONS)[0]?.prompts[0];
     const five = comparePrompts([...videos(A, [100, 100, 100, 100, 100]), ...control], VERSIONS)[0]?.prompts[0];
     const split = comparePrompts([...videos(A, [1, 1, 1, 100, 100, 100]), ...control], VERSIONS)[0]?.prompts[0];
-    expect(six?.pValue).toBeLessThan(CLEAR_P_VALUE);
+    expect(six?.pValue).toBe(0.03125);
     expect(six?.label).toBe('clear');
-    expect(five?.pValue).toBeLessThan(INDICATIVE_P_VALUE);
+    expect(five?.pValue).toBe(0.0625);
     expect(five?.label).toBe('indicative');
     expect(split?.label).toBe('no_signal');
   });
 
   it('marks a clear trailing prompt as below the account', () => {
-    const [account] = comparePrompts([...videos(A, [1, 1, 1, 1, 1, 1]), ...videos(null, [100, 100, 100, 100, 100, 100])], VERSIONS);
+    const [account] = comparePrompts([...videos(A, [1, 1, 1, 1, 1, 1, 1]), ...videos(null, [100, 100, 100, 100, 100, 100, 100])], VERSIONS);
     const prompt = account?.prompts.find((entry) => entry.versionId === A);
     expect(prompt?.label).toBe('clear');
     expect(prompt?.direction).toBe('below');
@@ -115,8 +119,70 @@ describe('comparePrompts', () => {
     expect(account?.prompts[0]).toMatchObject({ slug: null, title: null, version: null, source: null });
   });
 
+  it('downgrades a lead that is clear for one prompt once five prompts are compared on the account', () => {
+    const lead = videos(A, [100, 100, 100, 100, 100, 100, 100]);
+    const alone = comparePrompts([...lead, ...videos(B, [10, 10, 10, 10]), ...videos(C, [10, 10, 10, 10])], VERSIONS)[0];
+    const five = comparePrompts(
+      [...lead, ...videos(B, [10, 10, 10, 10, 10]), ...videos(C, [10, 10, 10, 10, 10]), ...videos(D, [10, 10, 10, 10, 10]), ...videos(E, [10, 10, 10, 10, 10])],
+      VERSIONS,
+    )[0];
+    const aloneLead = alone?.prompts.find((entry) => entry.versionId === A);
+    const fiveLead = five?.prompts.find((entry) => entry.versionId === A);
+    expect(aloneLead?.pValue).toBe(0.015625);
+    expect(aloneLead?.label).toBe('clear');
+    expect(fiveLead?.pValue).toBe(0.015625);
+    expect(fiveLead?.pValue).toBeLessThan(CLEAR_P_VALUE);
+    expect(fiveLead?.pValue).toBeGreaterThan(CLEAR_P_VALUE / 5);
+    expect(fiveLead?.label).toBe('indicative');
+    expect(five?.prompts.filter((entry) => entry.versionId !== A).every((entry) => entry.label === 'no_signal')).toBe(true);
+  });
+
+  it('counts the no-prompt group as a comparison once it has enough videos to be labeled', () => {
+    const lead = videos(A, [100, 100, 100, 100, 100, 100]);
+    const tested = comparePrompts([...lead, ...videos(null, [10, 10, 10, 10, 10, 10])], VERSIONS)[0];
+    const untested = comparePrompts([...lead, ...videos(B, [10, 10, 10, 10]), ...videos(null, [10, 10, 10, 10])], VERSIONS)[0];
+    expect(tested?.prompts.map((entry) => [entry.versionId, entry.pValue, entry.label])).toEqual([
+      [A, 0.03125, 'indicative'],
+      [null, 0.03125, 'indicative'],
+    ]);
+    expect(untested?.prompts.find((entry) => entry.versionId === null)?.label).toBe('insufficient');
+    expect(untested?.prompts.find((entry) => entry.versionId === A)?.label).toBe('clear');
+  });
+
+  it('leaves a prompt with fewer than the minimum videos out of the comparison count', () => {
+    const lead = videos(A, [100, 100, 100, 100, 100, 100]);
+    const withSmallGroup = comparePrompts([...lead, ...videos(B, [10, 10, 10, 10]), ...videos(C, [10, 10, 10, 10])], VERSIONS)[0];
+    const withTestedGroup = comparePrompts([...lead, ...videos(B, [10, 10, 10, 10, 10]), ...videos(C, [10, 10, 10])], VERSIONS)[0];
+    expect(withSmallGroup?.prompts.find((entry) => entry.versionId === A)?.label).toBe('clear');
+    expect(withTestedGroup?.prompts.find((entry) => entry.versionId === B)?.label).not.toBe('insufficient');
+    expect(withTestedGroup?.prompts.find((entry) => entry.versionId === A)?.label).toBe('indicative');
+  });
+
   it('gives no direction when the median lift is exactly 1', () => {
     const [account] = comparePrompts([...videos(A, [10]), ...videos(B, [10])], VERSIONS);
     expect(account?.prompts.every((entry) => entry.lift === 1 && entry.direction === null)).toBe(true);
+  });
+});
+
+describe('comparisonLabel', () => {
+  it('divides both thresholds by the number of tested groups and compares strictly', () => {
+    expect(comparisonLabel(MIN_COMPARED_VIDEOS, CLEAR_P_VALUE / 2 - 0.0001, 2)).toBe('clear');
+    expect(comparisonLabel(MIN_COMPARED_VIDEOS, CLEAR_P_VALUE / 2, 2)).toBe('indicative');
+    expect(comparisonLabel(MIN_COMPARED_VIDEOS, INDICATIVE_P_VALUE / 2 - 0.0001, 2)).toBe('indicative');
+    expect(comparisonLabel(MIN_COMPARED_VIDEOS, INDICATIVE_P_VALUE / 2, 2)).toBe('no_signal');
+    expect(comparisonLabel(MIN_COMPARED_VIDEOS, CLEAR_P_VALUE / 5, 5)).toBe('indicative');
+    expect(comparisonLabel(MIN_COMPARED_VIDEOS, INDICATIVE_P_VALUE / 5, 5)).toBe('no_signal');
+  });
+
+  it('keeps the raw thresholds for one tested group and treats zero tested groups as one', () => {
+    for (const tested of [0, 1]) {
+      expect(comparisonLabel(MIN_COMPARED_VIDEOS, CLEAR_P_VALUE - 0.0001, tested)).toBe('clear');
+      expect(comparisonLabel(MIN_COMPARED_VIDEOS, CLEAR_P_VALUE, tested)).toBe('indicative');
+      expect(comparisonLabel(MIN_COMPARED_VIDEOS, INDICATIVE_P_VALUE, tested)).toBe('no_signal');
+    }
+  });
+
+  it('labels fewer than the minimum compared videos insufficient before looking at the p-value', () => {
+    expect(comparisonLabel(MIN_COMPARED_VIDEOS - 1, 0, 1)).toBe('insufficient');
   });
 });
