@@ -14,8 +14,14 @@ describe('Cypress prompt detail mocks', () => {
     expect(GetPromptResponseSchema.safeParse({ success: true, prompt: promptDetail(summary, 'Text') }).success).toBe(true);
   });
 
-  it.each(['user-prompts.cy.ts', 'prompts-hub.cy.ts'])('are the only way %s builds a prompt detail', (specName) => {
-    const spec = readFileSync(join(findRepoRoot(import.meta.url), 'apps/web/cypress/e2e', specName), 'utf8');
+  it('are the only way the user prompts spec builds a prompt detail', () => {
+    const spec = readFileSync(join(findRepoRoot(import.meta.url), 'apps/web/cypress/e2e/user-prompts.cy.ts'), 'utf8');
+    expect(spec).toContain('promptDetail(');
+    expect(spec).not.toContain('versionId');
+  });
+
+  it('are the only way the prompts hub spec builds a prompt detail', () => {
+    const spec = readFileSync(join(findRepoRoot(import.meta.url), 'apps/web/cypress/e2e/prompts-hub.cy.ts'), 'utf8');
     expect(spec).toContain('promptDetail(');
     expect(spec).not.toContain('versionId');
   });
