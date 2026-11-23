@@ -37,9 +37,10 @@ for LongCat only. It is a new GCP project, an image registry, and a
 quota check before the first burst of 30.
 
 Do not keep a separate autoscaled TTS service. The current TTS
-process holds one lock for every voice. Thirty videos need thirty
-copies of Kokoro or Phonon, inside the job container. Load Chatterbox
-Nano only when the job is a clone, and give that job more RAM.
+process holds one lock for every voice. Each container loads Kokoro
+or Phonon for a house voice, and Chatterbox Nano only for a
+``chatterbox_nano:`` clone. The container requests 10 GiB so a clone
+fits. Clone WAVs live on the Modal volume ``cpu-worker-voices``.
 
 ## The concurrency limit is ours, not Modal's plan
 
@@ -130,9 +131,9 @@ following, and nothing fancier.
    or `reconcile_orphaned_tasks`. Those stay on the always-on engine
    or move only when they are taught to ignore a live remote worker.
 2. A dispatcher in front of the in-memory queue. The web and the MCP
-   keep calling the engine. The engine writes the queued row, then
-   starts one remote container instead of a thread. A flag sends the
-   job locally again. That flag is the rollback.
+   keep calling the engine. Every faceless job, house voice or clone,
+   is spawned. There is no feature flag. The only fallback to the
+   local thread is a failed spawn. Lip-sync is not dispatched.
 3. TTS in-process inside the worker, not an HTTP call to a single
    locked server. House voices load Phonon or Kokoro. A clone loads
    Chatterbox Nano. The lock can stay; it only protects that one
@@ -143,9 +144,11 @@ following, and nothing fancier.
    `small` is the subtitle model.
 5. Fonts and the BGM catalog baked into the same image. They are
    already files the engine image expects.
-6. Clone WAVs copied off the `tts_voices` volume onto R2 (or another
-   object store) before a clone job can burst. House-voice videos do
-   not need that volume. The first burst target is house voices.
+6. Clone WAVs live on the Modal volume `cpu-worker-voices`, mounted
+   at `/voices`. Registration writes new clones there.
+   `scripts/migrate_clone_voices.py` copies the WAVs that already
+   sit on the VPS `tts_voices` volume. The local volume is still
+   written so a spawn failure can render.
 7. Secrets the worker needs, by name: `SUPABASE_URL`,
    `SUPABASE_SERVICE_ROLE_KEY`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`,
    `R2_SECRET_ACCESS_KEY`, `CHATTERBOX_HTTP_SECRET`, and `HF_TOKEN`
@@ -255,15 +258,13 @@ network hop, to save a load that is smaller than the ffmpeg that
 follows.
 
 Chatterbox Nano is the exception in size and speed, not in topology.
-The worker loads it when the voice is a clone and asks for 8 GiB.
-House-voice containers never load it. Clone audio files have to be
-readable without the VPS volume (see the change list). Until that
-copy exists, clone jobs keep running on the VPS TTS, and the 30-wide
-burst is house voices only.
+The worker loads it only when the voice is a clone. The same
+function requests 10 GiB so that load fits, and the reference WAV
+is read from `cpu-worker-voices`. House voices do not import it.
 
 ## Phased move
 
-Each phase is reversible by the dispatcher flag except the last.
+Spawn failure is the rollback: the job runs on the local thread.
 
 1. Time one faceless house-voice video on the current VPS and write
    down the phase durations. If render is 90 seconds or 8 minutes, the
@@ -271,25 +272,23 @@ Each phase is reversible by the dispatcher flag except the last.
 2. Build a worker image: engine plus the TTS stack plus Whisper
    `small`, Phonon, and Kokoro. Entrypoint: task id plus params, then
    exit. No ASGI startup. `MPT_STATE_BACKEND=supabase`. Publish it
-   with a Modal function, `cpu=1.0`, `memory=6144`,
+   with a Modal function, `cpu=1.0`, `memory=10240`,
    `min_containers=0`, `max_containers=30` (raise via
    `MPT_CPU_WORKER_MAX_CONTAINERS`), `timeout` at least 1800,
    `scaledown_window` as short as Modal allows. Prove it with one
    task id and its params against a scratch Supabase row, uploading
    to R2.
-3. Add the dispatcher flag on the VPS engine. Off: today's thread.
-   On: spawn the CPU function and return. Web and MCP stay callers of
-   the engine. Run two overlapping house-voice videos. Confirm the
-   boot reconcile does not fail the remote one. Fix that before the
-   flag can be on across a deploy.
-4. Point the fill scheduler at the same spawn path. Raise the burst
-   to 30. Watch Supabase connection count (30 workers writing status)
-   and R2. The database is the first real limit, not the CPU quota.
-5. Move clone WAVs to object storage, then allow Nano jobs onto the
-   same function with the larger memory request. Until then the VPS
-   TTS container still serves clones, one at a time.
+3. Deploy `modal_cpu_worker.py`. Web and MCP stay callers of the
+   engine. Every faceless job spawns. Run two overlapping videos,
+   one house voice and one clone. Confirm boot reconcile does not
+   requeue or refund a live call.
+4. Point the fill scheduler at the same spawn path (it is the same
+   dispatcher). Watch Supabase connection count and R2. The database
+   is the first real limit, not the CPU quota.
+5. Run `scripts/migrate_clone_voices.py` once so clones recorded
+   before the volume existed are visible to the worker.
 
-Rollback at steps 3 and 4 is the flag. The VPS containers stay
+The VPS containers stay
 installed the whole time. LongCat's deploy does not change.
 
 Web, MCP, Caddy, and Postgres do not move. A bigger VPS does not
@@ -304,8 +303,8 @@ the TTS lock would still serialize speech.
 | Remote MCP | VPS container `post-engineer-mcp` | None |
 | Caddy | systemd on the VPS | None |
 | Postgres | Hosted Supabase | None, except 30 writers during a burst |
-| Engine process | VPS container `mpt-engine-cpu` | Becomes the dispatcher. Stops rendering when the flag is on |
-| TTS container | VPS `mpt-tts-cpu` | House-voice traffic leaves. Clones stay until their WAVs are off the volume |
+| Engine process | VPS container `mpt-engine-cpu` | Becomes the dispatcher for faceless jobs. Lip-sync still renders here |
+| TTS container | VPS `mpt-tts-cpu` | Fallback when a spawn fails. New clones are also written to `cpu-worker-voices` |
 | LongCat | Modal app `moneyprint-longcat`, GPU, `max_containers=1` | None |
 | Qwen image API | Modal GPU plus a Vercel front. Not called by this product. Non-commercial license | None |
 
