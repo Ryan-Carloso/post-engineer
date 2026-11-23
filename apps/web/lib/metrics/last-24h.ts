@@ -40,6 +40,10 @@ export interface Last24hPostInput {
   faceless: boolean;
 }
 
+export function accountOverrideKey(postId: string, provider: SocialProvider, externalId: string): string {
+  return `${postId}:${provider}:${externalId}`;
+}
+
 export type Last24hComputed = Omit<Last24hResponse, 'success'>;
 
 const COUNTERS = ['views', 'likes', 'comments', 'saves'] as const;
@@ -104,6 +108,7 @@ export function computeLast24h(input: {
   query: Last24hQuery;
   now: Date;
   personaIds?: ReadonlyArray<string> | null;
+  resolvedAccountIds?: ReadonlyMap<string, string>;
 }): Last24hComputed {
   const { readings, query, now } = input;
   const scope = input.personaIds ?? null;
@@ -144,7 +149,9 @@ export function computeLast24h(input: {
       });
       continue;
     }
-    if (query.accountId !== null && target.accountId !== query.accountId) continue;
+    const accountId = input.resolvedAccountIds?.get(accountOverrideKey(latest.postId, latest.provider, latest.externalId))
+      ?? target.accountId;
+    if (query.accountId !== null && accountId !== query.accountId) continue;
 
     const latestAt = readingTime(latest);
     if (now.getTime() - latestAt > LAST_24H_LATEST_MAX_AGE_MS) {
@@ -174,7 +181,7 @@ export function computeLast24h(input: {
       postId: latest.postId,
       personaId: post.personaId,
       provider: latest.provider,
-      accountId: target.accountId,
+      accountId,
       externalId: latest.externalId,
       publishedAt: post.publishedAt,
       ...delta.values,

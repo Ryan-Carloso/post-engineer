@@ -5,6 +5,13 @@ vi.mock('@/lib/logger', () => ({
   logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn() },
 }));
 
+vi.mock('../youtube-account-resolution', () => ({ resolveYouTubeMetricsTarget: vi.fn() }));
+
+vi.mock('@/lib/social-accounts', () => ({
+  isPlaceholderProviderAccountId: (id: string): boolean => ['', 'unknown'].includes(id.trim().toLowerCase()),
+}));
+
+import { resolveYouTubeMetricsTarget } from '../youtube-account-resolution';
 import { LAST_24H_LOOKBACK_MS } from '../last-24h';
 import { LAST_24H_READINGS_LIMIT, fetchLast24h } from '../last-24h-fetch';
 import type { Last24hQuery } from '../metrics-query';
@@ -206,5 +213,42 @@ describe('fetchLast24h', () => {
     const { client } = mockSupabase({ post_metrics_daily: { data: null, error: null } });
     const result = await fetchLast24h(client, 'user-1', QUERY, NOW);
     expect(result.rows).toEqual([]);
+  });
+
+  describe('placeholder YouTube accounts', () => {
+    const PLACEHOLDER_OUTCOME = { ...YT_OUTCOME, accountId: 'unknown' };
+    const withPlaceholderPost = (): SupabaseClient => mockSupabase({
+      post_metrics_daily: { data: [dailyRow(), dailyRow({ collected_at: new Date(NOW.getTime() - 25 * HOUR).toISOString(), views: 700, likes: 4 })], error: null },
+      scheduled_posts: { data: [postRow({ publish_outcomes: [PLACEHOLDER_OUTCOME] })], error: null },
+      schedules: { data: [{ id: 'sch-1', persona_id: PERSONA }], error: null },
+    }).client;
+
+    it('returns the resolved channel id and honours an account filter on it', async () => {
+      vi.mocked(resolveYouTubeMetricsTarget).mockResolvedValue({ provider: 'youtube', externalId: 'abc123', accountId: 'UCreal' });
+      const filtered = await fetchLast24h(withPlaceholderPost(), 'user-1', { ...QUERY, accountId: 'UCreal' }, NOW);
+      expect(filtered.rows).toHaveLength(1);
+      expect(filtered.rows[0]?.accountId).toBe('UCreal');
+      expect(resolveYouTubeMetricsTarget).toHaveBeenCalledWith('user-1', expect.objectContaining({ externalId: 'abc123', accountId: 'unknown' }));
+      const other = await fetchLast24h(withPlaceholderPost(), 'user-1', { ...QUERY, accountId: 'UCother' }, NOW);
+      expect(other.rows).toEqual([]);
+    });
+
+    it('keeps the stored account id and logs when the channel cannot be resolved', async () => {
+      vi.mocked(resolveYouTubeMetricsTarget).mockRejectedValue(new Error('probe failed'));
+      const result = await fetchLast24h(withPlaceholderPost(), 'user-1', QUERY, NOW);
+      expect(result.rows[0]?.accountId).toBe('unknown');
+      expect(logger.warn).toHaveBeenCalledWith('[metrics-last-24h] youtube placeholder account not resolved', {
+        postId: 'post-1', externalId: 'abc123', error: 'probe failed',
+      });
+    });
+
+    it('never resolves a target that already carries a real account id', async () => {
+      const { client } = mockSupabase({
+        post_metrics_daily: { data: [dailyRow()], error: null },
+        scheduled_posts: { data: [postRow()], error: null },
+      });
+      await fetchLast24h(client, 'user-1', QUERY, NOW);
+      expect(resolveYouTubeMetricsTarget).not.toHaveBeenCalled();
+    });
   });
 });

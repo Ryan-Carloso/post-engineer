@@ -2,9 +2,13 @@ import 'server-only';
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
+import { isPlaceholderProviderAccountId } from '@/lib/social-accounts';
 import type { Last24hQuery } from './metrics-query';
+import { metricsTargets } from './post-metrics';
+import { resolveYouTubeMetricsTarget } from './youtube-account-resolution';
 import {
   LAST_24H_LOOKBACK_MS,
+  accountOverrideKey,
   computeLast24h,
   readingFromRecord,
   type DailyReadingInput,
@@ -74,6 +78,39 @@ async function loadPosts(
   return posts;
 }
 
+async function resolvePlaceholderAccounts(
+  userId: string,
+  readings: DailyReadingInput[],
+  posts: Last24hPostInput[],
+): Promise<Map<string, string>> {
+  const postsById = new Map(posts.map((post) => [post.id, post]));
+  const resolved = new Map<string, string>();
+  const attempted = new Set<string>();
+  for (const reading of readings) {
+    if (reading.provider !== 'youtube') continue;
+    const key = accountOverrideKey(reading.postId, reading.provider, reading.externalId);
+    if (attempted.has(key)) continue;
+    const post = postsById.get(reading.postId);
+    if (post === undefined) continue;
+    const target = metricsTargets(post.outcomes).targets.find(
+      (candidate) => candidate.provider === reading.provider && candidate.externalId === reading.externalId,
+    );
+    if (target === undefined || !isPlaceholderProviderAccountId(target.accountId)) continue;
+    attempted.add(key);
+    try {
+      const account = await resolveYouTubeMetricsTarget(userId, target);
+      if (account !== null) resolved.set(key, account.accountId);
+    } catch (error) {
+      logger.warn('[metrics-last-24h] youtube placeholder account not resolved', {
+        postId: reading.postId,
+        externalId: reading.externalId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+  return resolved;
+}
+
 export async function fetchLast24h(
   supabase: SupabaseClient,
   userId: string,
@@ -111,7 +148,9 @@ export async function fetchLast24h(
 
   const postIds = [...new Set(readings.map((reading) => reading.postId))];
   const posts = postIds.length === 0 ? [] : await loadPosts(supabase, userId, postIds);
+  const resolvedAccountIds = await resolvePlaceholderAccounts(userId, readings, posts);
   const computed = computeLast24h({
+    resolvedAccountIds,
     readings,
     posts,
     query,
