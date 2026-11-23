@@ -13,7 +13,7 @@ import type { PromptComparisonResponse } from '@/lib/contracts/experiments';
 import { METRICS_WINDOWS, type MetricsWindow } from '@/lib/contracts/metrics';
 import { COMPARISON_ROW_LIMIT } from '@/lib/experiments/comparison-limits';
 import { usePromptComparisonQuery } from '@/lib/experiments/comparison-query';
-import { MIN_COMPARED_VIDEOS } from '@/lib/experiments/prompt-comparison';
+import { MIN_COMPARED_VIDEOS, RECOMMENDED_VIDEOS_PER_PROMPT } from '@/lib/experiments/prompt-comparison';
 import type { TranslationKey } from '@/lib/i18n';
 import { useI18n } from '@/lib/i18n/provider';
 import { isSocialProvider } from '@/lib/providers/registry';
@@ -76,7 +76,7 @@ export default function ExperimentsPage(): React.ReactElement {
             ))}
           </TabsList>
         </Tabs>
-        <p className="text-xs text-muted-text">{t('experiments.howItWorks', { min: MIN_COMPARED_VIDEOS })}</p>
+        <p className="text-xs text-muted-text">{t('experiments.howItWorks', { min: MIN_COMPARED_VIDEOS, recommended: RECOMMENDED_VIDEOS_PER_PROMPT })}</p>
       </section>
 
       {query.isLoading ? (

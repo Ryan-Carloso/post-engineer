@@ -3,6 +3,7 @@ import {
   CLEAR_P_VALUE,
   INDICATIVE_P_VALUE,
   MIN_COMPARED_VIDEOS,
+  RECOMMENDED_VIDEOS_PER_PROMPT,
   comparePrompts,
   comparisonLabel,
   median,
@@ -184,5 +185,20 @@ describe('comparisonLabel', () => {
 
   it('labels fewer than the minimum compared videos insufficient before looking at the p-value', () => {
     expect(comparisonLabel(MIN_COMPARED_VIDEOS - 1, 0, 1)).toBe('insufficient');
+  });
+});
+
+describe('RECOMMENDED_VIDEOS_PER_PROMPT', () => {
+  const FIVE_PROMPTS = 5;
+
+  it('lets a unanimous lead read clear when five prompts are compared', () => {
+    const pValue = signTestPValue(RECOMMENDED_VIDEOS_PER_PROMPT, 0);
+    expect(comparisonLabel(RECOMMENDED_VIDEOS_PER_PROMPT, pValue, FIVE_PROMPTS)).toBe('clear');
+  });
+
+  it('is needed because the minimum count can never read clear, even unanimous and alone', () => {
+    const pValue = signTestPValue(MIN_COMPARED_VIDEOS, 0);
+    expect(comparisonLabel(MIN_COMPARED_VIDEOS, pValue, 1)).not.toBe('clear');
+    expect(RECOMMENDED_VIDEOS_PER_PROMPT).toBeGreaterThan(MIN_COMPARED_VIDEOS);
   });
 });

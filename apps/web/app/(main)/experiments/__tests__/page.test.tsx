@@ -101,7 +101,7 @@ describe('ExperimentsPage', () => {
     expect(within(card).getByText('experiments.official')).toBeInTheDocument();
     expect(within(card).getByText('experiments.noPrompt')).toBeInTheDocument();
     expect(within(card).getByText('experiments.labelInsufficient')).not.toHaveAttribute('title');
-    expect(screen.getByText('experiments.howItWorks [5]')).toBeInTheDocument();
+    expect(screen.getByText('experiments.howItWorks [5, 10]')).toBeInTheDocument();
   });
 
   it('colours a clear trailing prompt as destructive and falls back to the account id without a name', () => {

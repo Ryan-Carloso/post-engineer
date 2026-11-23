@@ -1,6 +1,7 @@
 import type { PromptVersionSource } from '@/lib/contracts/experiments';
 
 export const MIN_COMPARED_VIDEOS = 5;
+export const RECOMMENDED_VIDEOS_PER_PROMPT = 10;
 export const CLEAR_P_VALUE = 0.05;
 export const INDICATIVE_P_VALUE = 0.2;
 
