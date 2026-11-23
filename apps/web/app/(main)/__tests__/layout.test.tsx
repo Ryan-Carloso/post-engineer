@@ -556,6 +556,23 @@ describe('mobile header profile area', () => {
     }
   });
 
+  it('More sheet marks the current link with the active style and aria-current', async () => {
+    vi.mocked(usePathname).mockReturnValue('/metrics');
+    render(<MainLayout>child</MainLayout>, { wrapper: createWrapper() });
+    fireEvent.click(screen.getByRole('button', { name: 'nav.more' }));
+    const sheet = await screen.findByRole('dialog', { name: 'nav.moreTitle' });
+    const activeLink = within(sheet).getByText('nav.metrics').closest('a') as HTMLElement;
+    expect(activeLink).toHaveAttribute('aria-current', 'page');
+    expect(activeLink.className).toContain('bg-brand-soft');
+    expect(activeLink.className).not.toContain('bg-surface');
+    for (const labelKey of ['nav.history', 'nav.experiments', 'nav.billing']) {
+      const link = within(sheet).getByText(labelKey).closest('a') as HTMLElement;
+      expect(link).not.toHaveAttribute('aria-current');
+      expect(link.className).toContain('bg-surface');
+      expect(link.className).not.toContain('bg-brand-soft');
+    }
+  });
+
   it('sidebar user block links to /account', () => {
     mockSessionUser({
       id: 'user-1',
