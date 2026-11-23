@@ -11,7 +11,8 @@ Until then an image published to YouTube becomes an 8-second 9:16 Short: the
 whole image centred over a blurred, zoomed copy of itself, a slow zoom, and a
 catalogued background track that fades out. REVALIDATE IN 2027: once
 ``posts.insert`` is open to every project, publish images to YouTube as image
-posts and delete this module. Plan: docs/youtube-image-posts.md. Context and decision: PR #YOUTUBE_IMAGE_SHORT_PR.
+posts and delete this module. Plan: docs/youtube-image-posts.md.
+Context and decision: https://github.com/Ryan-Carloso/post-engineer/pull/760
 """
 
 from __future__ import annotations

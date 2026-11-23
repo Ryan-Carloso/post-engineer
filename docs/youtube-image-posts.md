@@ -49,4 +49,4 @@ When `posts.insert` is open to every project:
    and `IMAGE_AS_SHORT_PROVIDERS` / `IMAGE_AS_SHORT_NOTE` in
    `shared/contracts/providers.ts`.
 
-Context and decision: PR #YOUTUBE_IMAGE_SHORT_PR.
+Context and decision: https://github.com/Ryan-Carloso/post-engineer/pull/760
