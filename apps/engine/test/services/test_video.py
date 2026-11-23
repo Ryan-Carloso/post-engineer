@@ -950,6 +950,9 @@ class TestVideoService(unittest.TestCase):
             def getbbox(self, text):
                 return (0, 0, len(text) * self._char_width, self._height)
 
+            def getmetrics(self):
+                return (self._height - 4, 4)
+
         try:
             with patch.object(
                 vd.ImageFont, "truetype", return_value=_FakeFont()

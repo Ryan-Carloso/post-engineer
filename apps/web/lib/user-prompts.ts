@@ -91,6 +91,7 @@ function withSearchTerms<Query extends { or: (filters: string) => Query }>(query
 export async function listOwnUserPrompts(db: Db, ownerId: string, terms: string[] = []): Promise<UserPromptRow[]> {
   const { data, error } = await withSearchTerms(db.from('user_prompts').select(COLUMNS).eq('owner_id', ownerId), terms)
     .order('created_at', { ascending: false })
+    .order('slug', { ascending: true })
     .limit(USER_PROMPT_LIST_LIMIT);
   if (error !== null) return fail('list own', error);
   return data;
@@ -105,6 +106,7 @@ export async function listOwnPromptSlugs(db: Db, ownerId: string): Promise<strin
 export async function listPublicUserPrompts(db: Db, terms: string[] = []): Promise<UserPromptRow[]> {
   const { data, error } = await withSearchTerms(db.from('user_prompts').select(COLUMNS).eq('visibility', 'public'), terms)
     .order('created_at', { ascending: false })
+    .order('slug', { ascending: true })
     .limit(USER_PROMPT_LIST_LIMIT);
   if (error !== null) return fail('list public', error);
   return data;
