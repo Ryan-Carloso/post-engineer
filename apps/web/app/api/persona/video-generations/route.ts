@@ -10,12 +10,15 @@ import {
   parseGenerationsLimit,
   type VideoGenerationRow,
 } from '@/lib/contracts/video-tasks';
+import { applyRateLimit, CALLER_RATE_LIMITS, profileForCaller } from '@/lib/rate-limit';
 
 export { parseGenerationsLimit } from '@/lib/contracts/video-tasks';
 
 async function getHandler(request: Request): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
+  const limited = await applyRateLimit(request, profileForCaller(auth, CALLER_RATE_LIMITS.videoGenerationList), auth.userId);
+  if (limited) return limited;
   const supabase =
     auth.isApiKey === true || auth.isOAuth === true
       ? createSupabaseServiceClient()

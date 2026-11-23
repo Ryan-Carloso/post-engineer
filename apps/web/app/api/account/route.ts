@@ -10,12 +10,13 @@ import { isUnauthorizedError } from '@/lib/upload/account-unauthorized';
 import { logger } from '@/lib/logger';
 import { parseDisconnectAccountQuery } from '@/lib/contracts/accounts';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
+import { applyRateLimit, CALLER_RATE_LIMITS, profileForCaller, RATE_LIMITS } from '@/lib/rate-limit';
 
 function isCredentialFailure(error: unknown): boolean {
   return error instanceof TokenDecryptError || isUnauthorizedError(error);
 }
 
-async function getHandler(request?: Request) {
+async function getHandler(request: Request) {
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) {
     return NextResponse.json(
@@ -23,6 +24,8 @@ async function getHandler(request?: Request) {
       { status: 401 }
     );
   }
+  const limited = await applyRateLimit(request, profileForCaller(auth, CALLER_RATE_LIMITS.accountList), auth.userId);
+  if (limited) return limited;
   const userId = auth.userId;
   const supabase = auth.isApiKey === true || auth.isOAuth === true
     ? createSupabaseServiceClient()
@@ -74,6 +77,8 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
       { status: 401 }
     );
   }
+  const limited = await applyRateLimit(request, RATE_LIMITS.accountDisconnect, auth.userId);
+  if (limited) return limited;
 
   const params = new URL(request.url).searchParams;
   const parsed = parseDisconnectAccountQuery(params);

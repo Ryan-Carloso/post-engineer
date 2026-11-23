@@ -6,6 +6,7 @@ import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-r
 import { engineAuthHeaders, requireSupabaseSession } from '@/lib/request-auth';
 
 import { narrowClonedVoiceRow } from '@/lib/cloned-voices-types';
+import { applyRateLimit, CALLER_RATE_LIMITS, profileForCaller, RATE_LIMITS } from '@/lib/rate-limit';
 
 type RouteContext = { params: Promise<{ cloneId: string }> };
 
@@ -14,6 +15,8 @@ async function getHandler(request: Request, context: RouteContext): Promise<Next
   if (authError || !auth) {
     return authError;
   }
+  const limited = await applyRateLimit(request, profileForCaller(auth, CALLER_RATE_LIMITS.clonedVoiceRead), auth.userId);
+  if (limited) return limited;
   const { cloneId } = await context.params;
   if (!cloneId.trim()) {
     return NextResponse.json({ success: false, error: 'Clone id is required.' }, { status: 400 });
@@ -59,6 +62,8 @@ async function deleteHandler(request: Request, context: RouteContext): Promise<N
   if (authError || !auth) {
     return authError;
   }
+  const limited = await applyRateLimit(request, RATE_LIMITS.clonedVoiceDelete, auth.userId);
+  if (limited) return limited;
   const { cloneId } = await context.params;
   if (!cloneId.trim()) {
     return NextResponse.json({ success: false, error: 'Clone id is required.' }, { status: 400 });

@@ -29,6 +29,8 @@ function parsePersonaScope(value: unknown): { ok: true; personaIds: string[] | n
 async function getHandler(request: Request): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
+  const limited = await applyRateLimit(request, RATE_LIMITS.apiKeyList, auth.userId);
+  if (limited) return limited;
 
   if (auth.isApiKey === true || auth.isOAuth === true) {
     return NextResponse.json(

@@ -22,6 +22,8 @@ async function getHandler(request: Request): Promise<NextResponse> {
   if (authError || !auth) {
     return authError;
   }
+  const limited = await applyRateLimit(request, RATE_LIMITS.clonedVoiceList, auth.userId);
+  if (limited) return limited;
 
   let baseUrl: string;
   try {

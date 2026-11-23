@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { parseAuthorizeRequest, buildErrorRedirect } from '@/lib/oauth/authorize';
@@ -8,6 +9,8 @@ import { mintConsentRequest } from '@/lib/oauth/tokens';
 import { getIssuer } from '@/lib/oauth/config';
 
 export async function GET(request: Request): Promise<NextResponse> {
+  const limited = await applyRateLimit(request, RATE_LIMITS.oauthAuthorize);
+  if (limited) return limited;
   const url = new URL(request.url);
   const service = createSupabaseServiceClient();
   const validation = await parseAuthorizeRequest(url, service);
