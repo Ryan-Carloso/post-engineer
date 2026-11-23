@@ -24,6 +24,9 @@ export const VIDEO_TYPE_REQUIRED_MESSAGE = `videoType is required; ${VIDEO_TYPE_
 export const VIDEO_TRANSITION_MODES = ['Shuffle', 'FadeIn', 'FadeOut', 'SlideIn', 'SlideOut', 'Crossfade'] as const;
 export type VideoTransitionMode = (typeof VIDEO_TRANSITION_MODES)[number];
 
+export const SUBTITLE_POSITIONS = ['top', 'center', 'bottom', 'custom'] as const;
+export type SubtitlePosition = (typeof SUBTITLE_POSITIONS)[number];
+
 export const MAX_SEGMENTS = 12;
 export const MAX_IMAGES_MODE_MEDIAS = 30;
 export const HOOK_MIN_SECONDS = 8;
@@ -131,6 +134,8 @@ const OptionsSchema = z
     videoClipDuration: z.number().int().min(1).max(60).optional().describe('Maximum seconds per clip (1-60). Omitted keeps the 2s default.'),
     videoTransitionMode: z.enum(VIDEO_TRANSITION_MODES).optional().describe('Transition between clips: Shuffle varies it per clip, Crossfade blends segment photos over 0.5s. Omitted keeps hard cuts.'),
     videoVariationSeed: z.number().int().optional().describe('Seed for per-video variation of the segment photos zoom direction; the same seed repeats the same pattern. Omitted keeps the fixed in/out alternation.'),
+    subtitlePosition: z.enum(SUBTITLE_POSITIONS).optional().describe('Caption placement: top near the top of the frame, center in the middle, bottom near the bottom, custom at subtitleCustomPosition percent from the top. Omitted keeps the engine default.'),
+    subtitleCustomPosition: z.number().int().min(0).max(100).optional().describe('Caption height as percent from the top (0-100). Only with subtitlePosition "custom"; rejected otherwise.'),
   })
   .optional();
 

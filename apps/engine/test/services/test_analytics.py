@@ -523,3 +523,39 @@ def test_track_ai_request_failure_error_never_empty():
             props = instance.capture.call_args_list[0].kwargs["properties"]
             assert props["error"]
             assert props["success"] is False
+
+
+def test_subtitle_event_props_carries_default_position_from_params():
+    from types import SimpleNamespace
+
+    assert analytics.subtitle_event_props(SimpleNamespace(subtitle_position="center", custom_position=50.0)) == {
+        "subtitle_position": "center",
+    }
+
+
+def test_subtitle_event_props_carries_custom_height_only_with_custom():
+    from types import SimpleNamespace
+
+    assert analytics.subtitle_event_props(SimpleNamespace(subtitle_position="custom", custom_position=20)) == {
+        "subtitle_position": "custom",
+        "subtitle_custom_position": 20,
+    }
+    assert analytics.subtitle_event_props(SimpleNamespace(subtitle_position="top", custom_position=20)) == {
+        "subtitle_position": "top",
+    }
+
+
+def test_subtitle_event_props_reads_task_row_keys():
+    assert analytics.subtitle_event_props({"subtitle_position": "custom", "subtitle_custom_position": 20}) == {
+        "subtitle_position": "custom",
+        "subtitle_custom_position": 20,
+    }
+    assert analytics.subtitle_event_props({"subtitle_position": "bottom"}) == {"subtitle_position": "bottom"}
+
+
+def test_subtitle_event_props_omits_blank_or_missing_position():
+    from types import SimpleNamespace
+
+    assert analytics.subtitle_event_props(SimpleNamespace(subtitle_position="", custom_position=20)) == {}
+    assert analytics.subtitle_event_props(SimpleNamespace()) == {}
+    assert analytics.subtitle_event_props({}) == {}
