@@ -107,8 +107,8 @@ describe('GET /api/prompts', () => {
       const response = await listPrompts(request('/api/prompts', { credentials: signedIn }));
       const body = (await response.json()) as { prompts: Array<{ slug: string; verified: boolean }> };
       expect(body.prompts.map((entry) => [entry.slug, entry.verified])).toEqual([
-        ['bobs-shared', false],
         ['daily-news', true],
+        ['bobs-shared', false],
       ]);
       const detail = await getPrompt(request('/api/prompts/daily-news', { credentials: signedIn }), slugContext('daily-news'));
       expect(await detail.json()).toMatchObject({ prompt: { slug: 'daily-news', source: 'community', verified: true } });
