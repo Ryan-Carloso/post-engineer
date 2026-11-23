@@ -30,6 +30,7 @@ from app.services import full_lipsync, lipsync_photos
 from app.services.music_mood import resolve_music_mood
 from app.services.task_cleanup import _first_http_url, abort_if_cancelled, cleanup_task_intermediates
 from app.services.task_outcome import crash_or_stop, fail_or_stop, finish_or_stop
+from app.services.tracking_props import tracking_context_from_task
 from app.services.pipeline_stage import PhaseTracker
 from app.services.intro_cost import IntroCostReport, completion_cost_kwargs, cost_event_props, report_from_job_cost
 from app.services.longcat_cost import ModalJobCost
@@ -206,10 +207,7 @@ def _task_tracking_context(task_id: str) -> dict[str, object]:
         "flow": task.get("flow") or "unknown",
         "pipeline": task.get("pipeline") or "unknown",
     }
-    for key in ("persona_id", "slot_id", "schedule_id", "generation_id"):
-        value = task.get(key)
-        if isinstance(value, str) and value:
-            context[key] = value
+    context.update(tracking_context_from_task(task))
     return context
 
 
