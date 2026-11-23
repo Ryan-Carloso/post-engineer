@@ -2,6 +2,7 @@ import { VIDEO_LAYOUTS } from './limits.js';
 import type { FaceQuality, VideoAspect } from './contracts/personas.js';
 import type { PersonaCtaType } from './contracts/personas.js';
 import type { VideoType } from './video-type.js';
+import type { VideoTransitionMode } from './contracts/videos.js';
 import type { SocialProvider } from './contracts/providers.js';
 
 export type { VideoType } from './video-type.js';
@@ -82,6 +83,9 @@ export interface GeneratePersonaVideoInput {
     paragraphNumber?: number;
     language?: string;
     niche?: string;
+    videoClipDuration?: number;
+    videoTransitionMode?: VideoTransitionMode;
+    videoVariationSeed?: number;
     segments?: Array<{
       kind: 'hook' | 'content';
       text: string;
