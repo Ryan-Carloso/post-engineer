@@ -370,13 +370,6 @@ describe('GET /api/prompts/[slug]', () => {
     expect(await response.json()).toMatchObject({ prompt: { slug: 'bobs-shared', source: 'community', visibility: 'public', prompt: 'Community text' } });
   });
 
-    seedDb([publicRow(BOB, 'bobs-shared')]);
-    signedOut();
-    const response = await getPrompt(request('/api/prompts/bobs-shared', { credentials: false }), slugContext('bobs-shared'));
-    expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({ prompt: { slug: 'bobs-shared', source: 'community', visibility: 'public', prompt: served('Community text'), body: 'Community text' } });
-  });
-
   it('returns 404 to a caller with no credentials for a private prompt', async () => {
     seedDb([{ owner_id: ALICE, slug: 'mine', title: 'Mine', body: 'secret text' }]);
     signedOut();
@@ -402,7 +395,7 @@ describe('GET /api/prompts/[slug]', () => {
     seedDb([{ owner_id: ALICE, slug: 'mine', title: 'Mine', body: 'secret text' }]);
     authenticatedAs(ALICE);
     const response = await getPrompt(request('/api/prompts/mine'), slugContext('mine'));
-    expect(await response.json()).toMatchObject({ prompt: { slug: 'mine', source: 'own', visibility: 'private', prompt: served('secret text'), body: 'secret text' } });
+    expect(await response.json()).toMatchObject({ prompt: { slug: 'mine', source: 'own', visibility: 'private', prompt: 'secret text' } });
   });
 
   it('returns 404 for another owner private prompt, same as an unknown slug', async () => {
@@ -419,7 +412,7 @@ describe('GET /api/prompts/[slug]', () => {
     seedDb([publicRow(BOB, 'bobs-shared')]);
     authenticatedAs(ALICE);
     const response = await getPrompt(request('/api/prompts/bobs-shared'), slugContext('bobs-shared'));
-    expect(await response.json()).toMatchObject({ prompt: { slug: 'bobs-shared', source: 'community', visibility: 'public', prompt: served('Community text'), body: 'Community text' } });
+    expect(await response.json()).toMatchObject({ prompt: { slug: 'bobs-shared', source: 'community', visibility: 'public', prompt: 'Community text' } });
   });
 
   it('returns 404 for a slug that cannot be a prompt without querying the database', async () => {
@@ -449,7 +442,7 @@ describe('PATCH /api/prompts/[slug]', () => {
     authenticatedAs(ALICE);
     const response = await patchPrompt(request('/api/prompts/mine', { method: 'PATCH', body: { title: 'New', prompt: 'new body' } }), slugContext('mine'));
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({ prompt: { title: 'New', description: 'Keep', prompt: served('new body'), body: 'new body', visibility: 'private' } });
+    expect(await response.json()).toMatchObject({ prompt: { title: 'New', description: 'Keep', prompt: 'new body', visibility: 'private' } });
     expect(db.rows[0]).toMatchObject({ title: 'New', description: 'Keep', body: 'new body' });
   });
 

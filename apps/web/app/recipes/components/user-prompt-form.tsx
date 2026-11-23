@@ -98,7 +98,6 @@ export default function UserPromptForm({
           rows={10}
           className={`${INPUT_CLASS} font-mono`}
         />
-        <span className="mt-1 block text-xs text-muted-text">{t('userPrompts.promptHint')}</span>
       </label>
       <fieldset className="flex flex-col gap-2" disabled={pending}>
         <legend className={SECTION_LABEL_CLASS}>{t('userPrompts.visibilityLabel')}</legend>

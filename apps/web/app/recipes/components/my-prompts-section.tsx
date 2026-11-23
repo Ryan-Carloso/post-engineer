@@ -67,18 +67,13 @@ export default function MyPromptsSection(): React.ReactElement {
       return;
     }
     const detail = result.body.prompt;
-    if (detail.body === null) {
-      setFailure({ success: false, status: 200, code: null });
-      return;
-    }
-    const body = detail.body;
     setForm({
       mode: 'edit',
       draft: {
         slug: detail.slug,
         title: detail.title,
         description: detail.description,
-        prompt: body,
+        prompt: detail.prompt,
         visibility: detail.visibility,
       },
     });
