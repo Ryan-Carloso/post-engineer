@@ -36,7 +36,7 @@ describe('Your prompts on the hub', () => {
       prompts = [...prompts, ownPrompt('fresh-one', 'private')];
       request.reply({
         statusCode: 201,
-        body: { success: true, prompt: promptDetail(ownPrompt('fresh-one', 'private'), request.body.prompt) },
+        body: { success: true, prompt: { ...ownPrompt('fresh-one', 'private'), prompt: request.body.prompt, versionId: '44444444-4444-4444-8444-444444444444', version: 1 } },
       });
     }).as('createPrompt');
 

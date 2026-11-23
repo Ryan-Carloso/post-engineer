@@ -26,7 +26,7 @@ export const RECIPE_NUDGE_SURFACES: ReadonlySet<string> = new Set([
   'generate_video',
 ]);
 const TRANSPORTS: ReadonlySet<string> = new Set(['stdio', 'http']);
-const RECIPE_FOLLOWED = 'prompt';
+const FOLLOWED_PROMPT_LABEL = 'prompt';
 const SCRIPT_REJECTIONS = /^\d{1,3}$/;
 const CALL_REQUEST = /^[1-9]\d{0,5}$/;
 
@@ -39,7 +39,7 @@ function recipeHeader(request: Request, name: string, allowNone: boolean): strin
   const value = request.headers.get(name);
   if (value === null) return undefined;
   if (value === 'none') return allowNone ? value : 'unknown';
-  if (USER_PROMPT_SLUG_PATTERN.test(value)) return RECIPE_FOLLOWED;
+  if (USER_PROMPT_SLUG_PATTERN.test(value)) return FOLLOWED_PROMPT_LABEL;
   return 'unknown';
 }
 
