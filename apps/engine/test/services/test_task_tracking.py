@@ -260,6 +260,25 @@ class CompleteTaskTests(unittest.TestCase):
         _, props = track.call_args[0]
         self.assertEqual(props["music_mood"], "calm")
 
+    def test_complete_task_carries_row_pacing_on_generated_event(self):
+        """Pacing stored on the task row rides the direct video_generated
+        event, so PostHog can break the funnel down by pacing."""
+        sm.state.update_task(
+            self.task_id,
+            video_clip_duration=4,
+            video_transition_mode="Crossfade",
+            video_variation_seed=7,
+        )
+        with (
+            patch.object(tm, "track_event") as track,
+            patch.object(tm.task_webhook, "notify_terminal_task"),
+        ):
+            tm._complete_task(self.task_id, _params())
+        _, props = track.call_args[0]
+        self.assertEqual(props["video_clip_duration"], 4)
+        self.assertEqual(props["video_transition_mode"], "Crossfade")
+        self.assertEqual(props["video_variation_seed"], 7)
+
     def test_complete_task_clears_milestone_cache(self):
         tm._progress_milestones[self.task_id] = 50
         with (
@@ -438,7 +457,11 @@ class CreateTaskControllerTests(unittest.TestCase):
             resp = video_controller.create_task(MagicMock(), body, stop_at="video")
             task_id = resp["body"]["task_id"]
             requested.assert_called_once_with(
-                task_id, user_id="user-1", flow="direct", pipeline="video",
+                task_id,
+                user_id="user-1",
+                flow="direct",
+                pipeline="video",
+                video_clip_duration=2,
                 subtitle_position=body.subtitle_position,
             )
             add_task.assert_called_once()
@@ -448,6 +471,7 @@ class CreateTaskControllerTests(unittest.TestCase):
             task = sm.state.get_task(task_id)
             self.assertEqual(task["flow"], "direct")
             self.assertEqual(task["pipeline"], "video")
+            self.assertEqual(task["video_clip_duration"], 2)
         finally:
             sm.state.delete_task(task_id)
 
@@ -576,6 +600,7 @@ class BatchRequestedTests(unittest.TestCase):
             pipeline="video",
             slot_id="slot-batch-req-1",
             persona_id="persona-1",
+            video_clip_duration=2,
             subtitle_position=task_kwargs["params"].subtitle_position,
         )
         self.assertEqual(task_kwargs["stop_at"], "video")

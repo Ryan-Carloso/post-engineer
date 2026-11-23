@@ -167,18 +167,16 @@ export const GeneratePersonaVideoOptionsShape = {
     .min(1)
     .max(60)
     .optional()
-    .describe('Maximum seconds per clip (1-60). Omitted keeps the 2s default.'),
+    .describe('Pacing weight, not exact seconds: maximum seconds per photo (1-60). Omitted keeps the 2s default. The engine fits photo holds to the real spoken audio, stretching each photo at most 1.5x its pace, so a larger value means slower holds and fewer photos, not a longer video. A/B test it: change one knob at a time between videos of the same niche and compare their results.'),
   videoTransitionMode: z
     .enum(VIDEO_TRANSITION_MODES)
     .optional()
-    .describe('Transition between clips: Shuffle varies it per clip, Crossfade blends segment photos over 0.5s. Omitted keeps hard cuts.'),
+    .describe('Transition between clips: Shuffle varies it per clip, Crossfade blends segment photos over 0.5s, FadeIn/FadeOut fade each clip in/out, SlideIn/SlideOut slide it in/out. Omitted keeps hard cuts. A/B test it like videoClipDuration: one knob at a time, same niche, and compare results.'),
   videoVariationSeed: z
     .number()
     .int()
     .optional()
-    .describe(
-      'Seed for per-video variation of the segment photos zoom direction; the same seed repeats the same pattern. Omitted keeps the fixed in/out alternation.',
-    ),
+    .describe('Seed for per-video variation of the segment photos zoom direction; the same seed repeats the same pattern. Omitted keeps the fixed in/out alternation. Change it for a different look of the same script without changing pacing.'),
   subtitlePosition: z
     .enum(SUBTITLE_POSITIONS)
     .optional()
