@@ -3,6 +3,10 @@ import { GET } from '../route';
 import { logger } from '@/lib/logger';
 import { isPostHogServerConfigured } from '@/lib/posthog-server';
 
+vi.mock('@/lib/rate-limit', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/rate-limit')>()),
+  applyRateLimit: vi.fn(async () => null),
+}));
 vi.mock('@/lib/logger', () => ({
   logger: {
     error: vi.fn(() => 'test-error-id'),

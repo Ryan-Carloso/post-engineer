@@ -8,6 +8,7 @@ import { generationPersonaOrFilter } from '@/lib/video-task-scope';
 import { logger } from '@/lib/logger';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 import type { VideoGenerationRow } from '@/lib/contracts/video-tasks';
+import { applyRateLimit, CALLER_RATE_LIMITS, profileForCaller } from '@/lib/rate-limit';
 
 interface DbGenerationRow {
   id: string;
@@ -28,6 +29,8 @@ async function getHandler(
 ): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
+  const limited = await applyRateLimit(request, profileForCaller(auth, CALLER_RATE_LIMITS.videoGenerationRead), auth.userId);
+  if (limited) return limited;
   const supabase =
     auth.isApiKey === true || auth.isOAuth === true
       ? createSupabaseServiceClient()

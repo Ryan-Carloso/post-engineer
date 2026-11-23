@@ -2,10 +2,13 @@ import { NextResponse } from 'next/server';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { logger } from '@/lib/logger';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
+import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 
-async function getHandler(): Promise<NextResponse> {
+async function getHandler(request: Request): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession();
   if (authError || !auth) return authError;
+  const limited = await applyRateLimit(request, RATE_LIMITS.engineHealthProbe, auth.userId);
+  if (limited) return limited;
 
   const baseUrl = process.env.MONEYPRINT_API_URL;
   if (!baseUrl) {

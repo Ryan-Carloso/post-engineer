@@ -21,6 +21,7 @@ import {
 } from '@/lib/contracts/schedule';
 import { mergeBySlotAt, presentPublishRows, USER_NOTICE_OUTCOME_FILTER } from '@/lib/publish-user-notice';
 import { postUrlFor } from '@/lib/post-url';
+import { applyRateLimit, CALLER_RATE_LIMITS, profileForCaller } from '@/lib/rate-limit';
 
 const RESULT_SELECT =
   'id, slot_at, status, title, error, published_at, schedule_id, task_id, publish_outcomes';
@@ -82,13 +83,15 @@ async function withSlotPresentation<T extends { status?: unknown; task_id?: unkn
   });
 }
 
-async function getHandler(request?: Request): Promise<NextResponse> {
-  const range = request ? parseStatusRange(new URL(request.url).searchParams) : { kind: 'none' as const };
+async function getHandler(request: Request): Promise<NextResponse> {
+  const range = parseStatusRange(new URL(request.url).searchParams);
   if (range.kind === 'error') {
     return NextResponse.json({ success: false, error: range.message }, { status: 400 });
   }
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
+  const limited = await applyRateLimit(request, profileForCaller(auth, CALLER_RATE_LIMITS.scheduleStatus), auth.userId);
+  if (limited) return limited;
   const supabase =
     auth.isApiKey === true || auth.isOAuth === true
       ? createSupabaseServiceClient()

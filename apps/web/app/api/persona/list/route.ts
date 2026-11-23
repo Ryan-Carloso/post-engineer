@@ -14,6 +14,7 @@ import {
   getPersonaDefaultAccountsForPersonas,
   type PersonaDefaultAccounts,
 } from '@/lib/persona-publishing-accounts';
+import { applyRateLimit, CALLER_RATE_LIMITS, profileForCaller } from '@/lib/rate-limit';
 
 const SIGNED_URL_EXPIRES_SECONDS = 60 * 60;
 
@@ -25,6 +26,8 @@ async function getHandler(request: Request): Promise<NextResponse> {
       { status: 401 },
     );
   }
+  const limited = await applyRateLimit(request, profileForCaller(auth, CALLER_RATE_LIMITS.personaList), auth.userId);
+  if (limited) return limited;
 
   const supabase = createSupabaseServiceClient();
   let query = supabase
