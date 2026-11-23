@@ -120,7 +120,7 @@ describe('wait_for_video_tasks', () => {
     expect(result.allTerminal).toBe(true);
     expect(result.results[0]?.outcome).toBe('completed');
     expect(sleep).toHaveBeenCalledTimes(1);
-    expect(sleep).toHaveBeenCalledWith(10_000);
+    expect(sleep).toHaveBeenCalledWith(60_000);
   });
 
   it('surfaces the engine error when the task fails', async () => {

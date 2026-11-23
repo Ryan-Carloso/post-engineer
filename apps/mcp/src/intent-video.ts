@@ -16,7 +16,7 @@ const VIDEO_TASKS_SPECS = {
 };
 
 export const VideoTasksDescription = actionDescription(
-  'For the final outcome, call status with waitSeconds above 0 (one server-side wait). A snapshot (waitSeconds 0) is only progress: wait at least nextPollInSeconds. On timeout, call again with unfinished taskIds. list_generations / get_generation: generation history.',
+  'For the final outcome, call status with waitSeconds above 0 (one server-side wait). A snapshot (waitSeconds 0) is only progress: wait at least nextPollInSeconds; each task can be polled at most once a minute. On timeout, call again with unfinished taskIds. list_generations / get_generation: generation history.',
   VIDEO_TASKS_SPECS,
 );
 

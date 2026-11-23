@@ -1,4 +1,4 @@
-import { ApiError, readApiFailure } from './errors.js';
+import { apiErrorFromResponse } from './errors.js';
 import { redactSecretFromError } from './secret-redaction.js';
 import {
   MAX_LIBRARY_IMAGE_BYTES, MAX_LIBRARY_IMAGE_MB,
@@ -165,14 +165,7 @@ export class PostEngineerClient {
       signal: init.signal ?? AbortSignal.timeout(timeoutMs),
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      const failure = readApiFailure(errorText);
-      throw new ApiError(
-        `Failed to ${action}: ${response.status} ${failure.detail}`,
-        failure.code, failure.field, response.status, failure.delivered, failure.postUrl,
-      );
-    }
+    if (!response.ok) throw await apiErrorFromResponse(response, action);
 
     if (response.status === 204) return { ok: true };
     const successText = await response.text();

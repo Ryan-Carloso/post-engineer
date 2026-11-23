@@ -39,7 +39,7 @@ export const WaitForVideoTasksShape = {
     .min(0, 'waitSeconds must be at least 0')
     .max(600, 'waitSeconds must be at most 600')
     .default(0)
-    .describe('Above 0 is the final outcome: block until tasks finish (max 600). 0 is a snapshot: wait at least nextPollInSeconds. On timeout, retry unfinished taskIds.'),
+    .describe('Above 0 is the final outcome: block until tasks finish (max 600). 0 is a snapshot: wait at least nextPollInSeconds (a task is polled at most once a minute). On timeout, retry unfinished taskIds.'),
 };
 
 export const WaitForVideoTasksSchema = z.object(WaitForVideoTasksShape);
@@ -61,7 +61,7 @@ export interface WaitForVideoTasksDeps {
   pollIntervalMs?: number;
 }
 
-const POLL_INTERVAL_MS = 10_000;
+export const POLL_INTERVAL_MS = 60_000;
 
 const ENGINE_TASK_GONE_MESSAGE = 'The video task no longer exists on the generation engine.';
 
@@ -90,7 +90,13 @@ function toWaitResult(
 type PollOutcome =
   | { taskId: string; result: TaskWaitResult }
   | { taskId: string; callError: ApiError }
+  | { taskId: string; retryAfterSeconds: number }
   | null;
+
+function withRetryAfter(result: TaskWaitResult, retryAfterSeconds: number | undefined): TaskWaitResult {
+  if (retryAfterSeconds === undefined) return result;
+  return { ...result, nextPollInSeconds: Math.max(result.nextPollInSeconds ?? 0, retryAfterSeconds) };
+}
 
 export async function handleWaitForVideoTasks(
   client: PostEngineerClient,
@@ -123,6 +129,9 @@ export async function handleWaitForVideoTasks(
         try {
           return { taskId, result: toWaitResult(taskId, narrowTaskProgress(await client.getVideoStatus(taskId))) };
         } catch (error) {
+          if (error instanceof ApiError && error.status === 429) {
+            return { taskId, retryAfterSeconds: error.retryAfterSeconds ?? 0 };
+          }
           if (error instanceof ApiError && error.status === 410) {
             if (error.delivered) {
               return {
@@ -176,10 +185,13 @@ export async function handleWaitForVideoTasks(
       }),
     );
     let callError: ApiError | null = null;
+    const rateLimited = new Map<string, number>();
     for (const entry of settled) {
       if (entry.status !== 'fulfilled' || entry.value === null) continue;
       const value = entry.value;
-      if ('callError' in value) {
+      if ('retryAfterSeconds' in value) {
+        rateLimited.set(value.taskId, value.retryAfterSeconds);
+      } else if ('callError' in value) {
         if (callError === null) callError = value.callError;
       } else {
         last.set(value.taskId, value.result);
@@ -196,16 +208,19 @@ export async function handleWaitForVideoTasks(
     }
     const results = taskIds.map(
       (taskId): TaskWaitResult =>
-        last.get(taskId) ??
-        attachPollHint({
-          task_id: taskId,
-          state: null,
-          outcome: 'running',
-          progress: null,
-          stage: null,
-          error: null,
-          postUrl: null,
-        }),
+        withRetryAfter(
+          last.get(taskId) ??
+            attachPollHint({
+              task_id: taskId,
+              state: null,
+              outcome: 'running',
+              progress: null,
+              stage: null,
+              error: null,
+              postUrl: null,
+            }),
+          rateLimited.get(taskId),
+        ),
     );
     const allTerminal = results.every((entry) => entry.outcome !== 'running');
     if (allTerminal) {
@@ -220,6 +235,7 @@ export async function handleWaitForVideoTasks(
         'waiting for video tasks',
       );
     }
-    await sleep(Math.min(pollIntervalMs, deadline - now()));
+    const retryAfterMs = Math.max(0, ...rateLimited.values()) * 1000;
+    await sleep(Math.min(Math.max(pollIntervalMs, retryAfterMs), deadline - now()));
   }
 }

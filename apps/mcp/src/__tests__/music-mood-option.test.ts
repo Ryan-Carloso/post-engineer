@@ -132,7 +132,7 @@ describe('generate_persona_video options.musicMood', () => {
       error: "unknown music mood: 'funky'; available moods: calm, energetic, inspiring, upbeat",
       field: 'options.musicMood',
     });
-    global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 400, text: async () => webBody });
+    global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 400, headers: new Headers(), text: async () => webBody });
     const client = new PostEngineerClient({ apiKey: 'test-token-123' });
     const response = await handleGeneratePersonaVideo(client, {
       ...baseArgs,
@@ -152,7 +152,7 @@ describe('generate_persona_video options.musicMood', () => {
       error: "unknown video_type 'sideways'; use full_lipsync (8/15), hook_lipsync (2/3) or faceless (1)",
       field: 'options.videoType',
     });
-    global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 400, text: async () => webBody });
+    global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 400, headers: new Headers(), text: async () => webBody });
     const client = new PostEngineerClient({ apiKey: 'test-token-123' });
     const response = await handleGeneratePersonaVideo(client, {
       ...baseArgs,
