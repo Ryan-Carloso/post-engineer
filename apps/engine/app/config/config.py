@@ -168,6 +168,7 @@ chatterbox = _cfg.get("chatterbox", {})
 cloned_voices = _cfg.get("cloned_voices", {})
 openrouter = _cfg.get("openrouter", {})
 longcat = _cfg.get("longcat", {})
+modal_worker = _cfg.get("modal_worker", {})
 bgm = _cfg.get("bgm", {})
 ui = _cfg.get(
     "ui",

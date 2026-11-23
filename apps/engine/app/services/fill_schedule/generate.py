@@ -11,7 +11,7 @@ from loguru import logger
 from app.models.schema import LipSyncQuality, TaskVideoRequest
 from app.models import const as model_const
 from app.services import notify as notify_module
-from app.services import task as tm
+from app.services import remote_dispatch, task as tm
 from app.services.analytics import nonempty_error_reason, scrub_secret_values, track_event
 from app.services.fill_schedule.batch_admission import (
     SlotDeferred,
@@ -325,7 +325,7 @@ class BatchGenerator:
 
         submit_batch_start(
             task_manager,
-            tm.start,
+            remote_dispatch.pipeline_entry(),
             task_id=task_id,
             params=request,
             on_accepted=on_accepted,

@@ -1,7 +1,9 @@
 # Infrastructure plan: one container per video
 
-Date: 2026-11-23, revised the same day. Recommendation only. This
-document does not change application code, migrations, or the deploy.
+Date: 2026-11-23, revised the same day. The PR that carries this
+document also implements it (see "What this PR implements"). It does
+not change the deploy: the worker is off until the production config
+names it.
 
 The first draft of this file recommended leaving the CPU stack on one
 VPS. That is the wrong shape for the goal that replaced it: every
@@ -12,9 +14,6 @@ on Modal GPU, and its `max_containers=1` does not change.
 
 Secret values are not in this file. Only secret and variable names.
 
-Names in this plan that do not exist in the repository yet are marked
-**(new)**. They are proposals for the implementation PR.
-
 ## Recommendation
 
 Every video, of every type, renders in one Modal CPU container. That
@@ -22,7 +21,7 @@ container runs TTS, Whisper, and ffmpeg. For a lip-sync video it also
 calls LongCat for the face and waits for it. The VPS engine stops
 rendering. It accepts tasks and spawns containers.
 
-| Video type | Modal CPU function **(new)** | CPU | RAM | `max_containers` |
+| Video type | Modal CPU function | CPU | RAM | `max_containers` |
 | --- | --- | --- | --- | --- |
 | `faceless`, house voice | `render_faceless` | 1 physical core (2 vCPU) | 4 GiB | 30 |
 | `faceless`, `chatterbox_nano:` clone | `render_faceless_clone` | 1 physical core | 10 GiB | 30 |
@@ -146,63 +145,85 @@ does not need a new status protocol. The LongCat cost that
 R2 upload is already the archive step (`upload_final_video_r2`).
 Temp files live under the task directory and die with the container.
 
-## What has to change so one container is one video
+## What this PR implements
 
-No code in this PR. The implementation PR does the following.
-
-1. **A worker entrypoint (new)** that receives the task id and the
-   validated `VideoParams`, runs `task.start(task_id, params)`, and
-   exits. The queued row does not store the params today, so the
-   dispatcher persists them on the task row and passes the same
-   payload into the spawn. The worker does not start the fill
-   scheduler, the heartbeat autopsy, or `reconcile_orphaned_tasks`.
-2. **A dispatcher (new)** in front of the in-memory queue. The web and
-   the MCP keep calling the engine. Every task, of every video type,
-   is spawned on the function in the table above. There is no feature
-   flag. The only fallback to the local thread is a failed spawn.
-3. **A migration (new)** that adds `modal_call_id text` to
-   `engine_task_state`. The dispatcher writes it after a spawn
-   succeeds. Update `supabase/README.md` and regenerate
-   `supabase/schema.snapshot.json` in the same PR.
+1. **Worker entrypoint**: `app/services/remote_worker.py`. It receives
+   the task id, the validated request as JSON, and `stop_at`, writes
+   `config.toml` from the `ENGINE_CONFIG_TOML` secret, starts the TTS
+   server on loopback, and runs `task.start`. It does not start the
+   fill scheduler, the heartbeat autopsy, or `reconcile_orphaned_tasks`
+   (those run only in the ASGI startup hook).
+2. **Dispatcher**: `app/services/remote_dispatch.py`. Direct create,
+   the fill-schedule batch, and the boot redispatch all hand
+   `remote_dispatch.pipeline_entry()` to the task manager. With
+   `[modal_worker] app_name` set, every video task is spawned on the
+   function in the table above, and the manager thread waits for the
+   call, so the running-slot count stays honest. With it empty, the
+   entry is `task.start` itself and nothing changes. That config
+   value is the only switch. A failed spawn renders on the VPS,
+   capped by `[modal_worker] local_max_concurrent_tasks` (default 1).
+   Audio-only and subtitle-only tasks always run on the VPS.
+3. **The call id is stored on the task row**: `modal_call_id` and
+   `modal_function` go into `engine_task_state.data`, the same JSON
+   column that already holds `stage`, `slot_id`, and `persona_id`.
+   No migration.
 4. **The boot reconcile skips live calls.** A generation-stage orphan
    is not always refunded: a batch slot goes back to pending, and a
    direct task with persisted params is redispatched. Without this
-   step a live Modal render starts a second time, and a lip-sync
-   render pays for the GPU twice. For a row with `modal_call_id`, the
-   reconcile asks Modal for that call (`modal.FunctionCall.from_id`)
-   and leaves the row alone while the call is running. Only a call
-   that has ended without writing a terminal state falls through to
-   the triage. This must ship in the same PR as the dispatcher.
-5. **TTS in-process inside the worker**, not an HTTP call to the
-   locked server. House voices load Phonon or Kokoro. A clone loads
-   Chatterbox Nano. The lock can stay; it protects only that one
-   container.
-6. **Weights, fonts, and the BGM catalog baked into the image.** Do
-   not download weights from Hugging Face on the hot path. Chatterbox
-   Nano is a gated repo (`HF_TOKEN` at build time). Whisper `small` is
-   the subtitle model. Face detection uses OpenCV's bundled cascade,
-   which ships with the package.
-7. **Clone audio from Supabase Storage.** The original clone WAV is
-   already in the `personas` bucket at `cloned_voices.storage_path`.
-   The worker downloads it by `engine_voice_key` and caches it for
-   that container. The VPS `tts_voices` volume stays the local TTS
-   copy. A one-time check **(new script)** lists VPS WAVs with no
-   storage object and uploads them, before the first clone is
-   spawned.
-8. **Secrets, by name.** Every worker: `SUPABASE_URL`,
-   `SUPABASE_SERVICE_ROLE_KEY`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`,
-   `R2_SECRET_ACCESS_KEY`, and `MPT_STATE_BACKEND=supabase` (without
-   it `task.start` writes into `MemoryState` and the archive path
-   loses `user_id`). `render_lipsync` only: `LONGCAT_SUBMIT_URL`,
-   `LONGCAT_STATUS_URL`, `LONGCAT_DOWNLOAD_URL`, and
-   `LONGCAT_HTTP_SECRET`. No worker needs `CHATTERBOX_HTTP_SECRET`,
-   because TTS is in-process, or `MODAL_TOKEN_ID` and
-   `MODAL_TOKEN_SECRET`. The dispatcher on the VPS needs those two,
-   because it calls `spawn` and `FunctionCall.from_id`.
-9. **Timeouts.** The faceless functions: at least 1800 s.
-   `render_lipsync`: 14400 s, the same as `GenerateAvatar`, because a
-   full lip-sync video waits on several LongCat windows in a row, and
-   the client allows 1800 s per window (`[longcat] timeout_seconds`).
+   step a live Modal render would start a second time, and a lip-sync
+   render would pay for the GPU twice. `orphan_requeue.triage_orphan`
+   asks Modal for the row's call first. While it runs, the row is
+   left alone and a waiter thread is adopted for it. If Modal cannot
+   answer, the call counts as live. Only an ended call falls through
+   to the triage.
+5. **A worker that dies is settled.** When a call ends (container
+   killed, timeout, out of memory) and the task row is still not
+   terminal, the waiting thread fails the task through
+   `task_outcome.fail_or_stop`, the same path as a pipeline failure.
+6. **Cancel reaches the container.** A cancelled task cancels its
+   Modal call (`terminate_containers=True`) and deletes the row again,
+   in case the worker wrote one more progress update.
+7. **TTS inside the worker container.** The worker starts
+   `local_tts.server` on `127.0.0.1:4123` with a bearer secret made
+   for that container. The server runs in its own virtualenv
+   (`/opt/tts`), because torch and the TTS models do not share the
+   engine's dependency set. The engine client reaches it through the
+   existing `MPT_CHATTERBOX_BASE_URL` / `MPT_CHATTERBOX_API_KEY`
+   overrides. The TTS lock now serializes only that container.
+8. **Weights, fonts, and the BGM catalog are baked into the image**
+   (`modal_cpu_worker.py`). Kokoro, Phonon, Chatterbox Nano, and
+   Whisper `small` are downloaded at image build time with the
+   `huggingface` secret, before the app code is copied, so a code
+   change does not download them again.
+9. **Clone audio from Supabase Storage.** The worker looks up the
+   ready `cloned_voices` row by `engine_voice_key`, downloads the WAV
+   from the `personas` bucket, and registers it on the container's
+   voices directory. A clone with no ready row fails that video
+   loudly.
+10. **Secrets, by name.** `post-engineer-cpu-worker`: `SUPABASE_URL`,
+    `SUPABASE_SERVICE_ROLE_KEY`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`,
+    `R2_SECRET_ACCESS_KEY`. `post-engineer-engine-config`:
+    `ENGINE_CONFIG_TOML`. `post-engineer-longcat-client`, for
+    `render_lipsync` only: `LONGCAT_SUBMIT_URL`, `LONGCAT_STATUS_URL`,
+    `LONGCAT_DOWNLOAD_URL`, `LONGCAT_HTTP_SECRET`. The image sets
+    `MPT_STATE_BACKEND=supabase`. The VPS engine needs
+    `MODAL_TOKEN_ID` and `MODAL_TOKEN_SECRET`, because it calls
+    `spawn` and `FunctionCall.from_id`.
+11. **Timeouts.** The faceless functions: 1800 s. `render_lipsync`:
+    14400 s, the same as `GenerateAvatar`, because a full lip-sync
+    video waits on several LongCat windows in a row, and the client
+    allows 1800 s per window (`[longcat] timeout_seconds`).
+
+To turn it on in production (manual, not done by this PR):
+
+1. Create the three Modal secrets (commands in the
+   `modal_cpu_worker.py` docstring) and run
+   `uv run modal deploy modal_cpu_worker.py`.
+2. In the production `config.toml`, set `[modal_worker] app_name =
+   "post-engineer-cpu-worker"` and raise `[app] max_concurrent_tasks`
+   to the number of videos that may render at once (for example 32).
+3. Refresh `post-engineer-engine-config` whenever `config.toml`
+   changes, or the workers render with stale settings.
 
 Web, MCP, Caddy, Postgres, and LongCat's HTTP contract stay. The
 engine process remains the dispatcher, the fill scheduler, and the
@@ -298,31 +319,26 @@ Chatterbox Nano is the exception in size and speed, not in topology.
 Only `render_faceless_clone` and `render_lipsync` load it, and only
 when the voice is a clone. Both request 10 GiB so it fits.
 
-## Phased move
+## Rollout checks after merge
 
-A failed spawn is the rollback: the task runs on the local thread.
+A failed spawn is the rollback: the task renders on the VPS. Setting
+`app_name` back to `""` turns dispatch off completely.
 
 1. Time one video of each type (faceless house voice, faceless clone,
-   hook lip-sync, full lip-sync) on the current VPS and write down the
-   phase durations. The dollar tables scale linearly with them.
-2. Build the worker image: engine, the TTS stack, Whisper `small`,
-   Phonon, Kokoro, Chatterbox Nano, fonts, BGM. Entrypoint: task id
-   plus params, then exit. No ASGI startup. Publish it as a Modal app
-   **(new, for example `modal_cpu_worker.py`)** with the three
-   functions from the recommendation. Prove each function with one
-   task id and its params against a scratch Supabase row, uploading
-   to R2.
-3. Ship the dispatcher, the `modal_call_id` migration, and the
-   reconcile change in one PR. Every task spawns. Run three
-   overlapping videos: one house voice, one clone, one hook lip-sync.
-   Restart the engine during the run and confirm the boot reconcile
-   does not requeue, redispatch, or refund a live call.
+   hook lip-sync, full lip-sync) and write down the phase durations.
+   The dollar tables scale linearly with them.
+2. Deploy `modal_cpu_worker.py` and run one task of each function
+   against a test account before setting `app_name` in production.
+3. Run three overlapping videos: one house voice, one clone, one hook
+   lip-sync. Restart the engine during the run and confirm the boot
+   reconcile adopts the live calls instead of requeueing, redispatching,
+   or refunding them.
 4. Run one full lip-sync video end to end. Confirm the worker survives
    several LongCat windows and records the same LongCat cost that the
    VPS records today.
-5. Point the fill scheduler at the same spawn path (it is the same
-   dispatcher). Watch the Supabase connection count and R2. The
-   database is the first real limit, not the CPU quota.
+5. Fill a batch of 30 faceless slots. Watch the Supabase connection
+   count and R2. The database is the first real limit, not the CPU
+   quota.
 
 The VPS containers stay installed the whole time. LongCat's deploy
 does not change.
@@ -337,7 +353,7 @@ not fit in 16 GB, and the TTS lock would still serialize speech.
 | Next.js, OAuth, Stripe, web cron | VPS container `post-engineer-web` | None |
 | Remote MCP | VPS container `post-engineer-mcp` | None |
 | Caddy | systemd on the VPS | None |
-| Postgres | Hosted Supabase | One new column; 30+ writers during a burst |
+| Postgres | Hosted Supabase | No schema change; 30+ writers during a burst |
 | Engine process | VPS container `mpt-engine-cpu` | Becomes the dispatcher for every video type. Renders only when a spawn fails |
 | TTS container | VPS `mpt-tts-cpu` | Fallback when a spawn fails |
 | LongCat | Modal app `moneyprint-longcat`, GPU, `max_containers=1` | None. Called from `render_lipsync` instead of the VPS |

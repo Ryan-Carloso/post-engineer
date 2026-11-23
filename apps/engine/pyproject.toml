@@ -150,6 +150,7 @@ only_mutate = []
 #   engine mutation shard fails with FileNotFoundError / ImportError on
 #   the first modal test, since the mutants/ working copy holds only
 #   app/ + test/.
+# - modal_cpu_worker.py: test_modal_cpu_worker_app.py reads it.
 # - chatterbox_registry_volume.py / modal_chatterbox_registry_routes.py:
 #   the registry volume and routes tests import both top-level modules.
 # - local_tts/__init__.py / routing.py / backends.py: the local TTS routing
@@ -165,6 +166,7 @@ also_copy = [
     "modal_longcat_gpu.py",
     "modal_longcat_resident.py",
     "modal_longcat_cost.py",
+    "modal_cpu_worker.py",
     "chatterbox_registry_volume.py",
     "modal_chatterbox_registry_routes.py",
     "local_tts/__init__.py",

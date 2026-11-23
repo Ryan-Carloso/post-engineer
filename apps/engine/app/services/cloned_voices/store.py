@@ -180,6 +180,21 @@ class ClonedVoiceStore:
         response.raise_for_status()
         return list(response.json() or [])
 
+    def get_ready_by_engine_voice_key(self, engine_voice_key: str) -> dict[str, Any] | None:
+        response = self._rest(
+            "GET",
+            "cloned_voices",
+            params={
+                "engine_voice_key": f"eq.{engine_voice_key}",
+                "status": f"eq.{STATUS_READY}",
+                "select": "storage_path,language",
+                "limit": "1",
+            },
+        )
+        response.raise_for_status()
+        rows = response.json() or []
+        return rows[0] if rows else None
+
     def list_pending(self) -> list[dict[str, Any]]:
         response = self._rest(
             "GET",

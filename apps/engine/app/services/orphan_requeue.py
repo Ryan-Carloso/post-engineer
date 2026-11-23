@@ -132,9 +132,14 @@ def triage_orphan(
 
     Returns True when the orphan was claimed and the caller must NOT
     fail+refund it: the slot was requeued for the tick or a direct
-    generation was marked for restart. Returns False when the caller
+    generation was marked for restart, or its Modal worker is still
+    running and was adopted. Returns False when the caller
     falls through to the historical fail+refund.
     """
+    from app.services.remote_dispatch import adopt_live_call
+
+    if adopt_live_call(task_id, data):
+        return True
     if triage_requeue(state, slot_store, task_id, data):
         return True
     from app.services.direct_redispatch import triage_redispatch_direct

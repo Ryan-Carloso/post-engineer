@@ -123,6 +123,10 @@ redis_port = 6379
 redis_password = ""
 
 # 文生视频时的最大并发任务数
+# With [modal_worker] app_name set, a running slot is a Modal container the
+# engine waits on, not a local render: raise this to the number of videos
+# that may render at once (e.g. 32). Local renders after a failed spawn are
+# capped separately by [modal_worker] local_max_concurrent_tasks.
 max_concurrent_tasks = 1
 
 # 并发任务已满后的最大排队任务数，超过后接口返回 429，避免匿名请求无限堆积
@@ -321,6 +325,18 @@ timeout_seconds = 1800
 # Fallback only: both production callers pass an explicit duration (the persona
 # hook window), so this is never used on a real task.
 intro_duration_seconds = 5
+
+[modal_worker]
+# One Modal CPU container per video (modal_cpu_worker.py,
+# app/services/remote_dispatch.py). Empty = every video renders on this
+# engine, as before. Set it to the deployed app name
+# ("post-engineer-cpu-worker") and every video task is spawned there; a
+# failed spawn renders here instead.
+app_name = ""
+# Renders that run here because a spawn failed, at most this many at once.
+local_max_concurrent_tasks = 1
+# How often the engine checks a spawned call for its end, in seconds.
+poll_seconds = 30
 
 [bgm]
 # Automatic BGM selection uses only tracks explicitly listed in this catalog.

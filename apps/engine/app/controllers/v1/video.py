@@ -29,7 +29,7 @@ from app.models.schema import (
     TaskResponse,
     TaskVideoRequest,
 )
-from app.services import state as sm, task as tm
+from app.services import remote_dispatch, state as sm, task as tm
 from app.services import video_storage
 from app.services.task_cleanup import remove_task_directory
 from app.services.language_gate import ensure_english_video_language
@@ -348,7 +348,7 @@ def create_task(
             **_tracking_kwargs(body),
         )
         task_manager.add_task(
-            tm.start,
+            remote_dispatch.pipeline_entry(),
             task_id=task_id,
             params=body,
             stop_at=stop_at,
