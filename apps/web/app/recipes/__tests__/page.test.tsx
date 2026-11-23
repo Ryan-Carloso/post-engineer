@@ -16,38 +16,13 @@ vi.mock('@/lib/i18n/provider', () => {
     'recipes.stepKeyHint': 'It connects your agent to your account.',
     'recipes.stepSetupTitle': 'Send the setup prompt to your agent',
     'recipes.stepSetupHint': 'Paste it into your agent.',
-    'recipes.stepRecipesTitle': 'Pick a recipe',
+    'recipes.stepRecipesTitle': 'Public prompts',
     'recipes.stepRecipesHint': 'Copy a prompt and paste it into your agent.',
     'recipes.signInCta': 'Sign in or create an account',
     'recipes.signInHint': 'Sign in to create your API key.',
-    'recipes.copyPrompt': 'Copy prompt',
-    'recipes.copiedPrompt': 'Copied!',
     'apiKeys.copy': 'Copy',
-    'recipes.dailyNewsTitle': 'Daily news becomes a video',
-    'recipes.dailyNewsObjective': 'Turn one news story of the day into one persona video.',
-    'recipes.placeSpotlightTitle': 'Place spotlight becomes a video',
-    'recipes.placeSpotlightObjective': 'Turn one real place into one persona video.',
-    'recipes.subjectSpotlightTitle': 'Subject spotlight becomes a video',
-    'recipes.subjectSpotlightObjective': 'Turn one concrete subject into one persona video.',
-    'recipes.githubPrsTitle': 'GitHub PRs become videos',
-    'recipes.githubPrsObjective': 'Turn your GitHub pull requests into persona videos.',
-    'recipes.last30DaysTitle': 'Last 30 days become a video',
-    'recipes.last30DaysObjective':
-      'Turn what happened in your niche in the last 30 days into one persona video.',
-    'recipes.multiRedeTitle': 'One week, one video per network',
-    'recipes.multiRedeObjective': 'Publish one video per network this week.',
-    'recipes.viralShortsTitle': 'A viral video becomes your Short',
-    'recipes.viralShortsObjective': 'Learn from the most-viewed video in your niche.',
-    'recipes.fullSetupTitle': 'Full setup becomes videos',
-    'recipes.comparePromptsTitle': 'Compare two prompts (A/B)',
-    'recipes.storyFirstReelsTitle': 'Story-first Reels',
-    'recipes.kindRecipe': 'Recipe',
-    'recipes.kindPrompt': 'Prompt',
-    'recipes.openPrompt': 'Open prompt',
     'userPrompts.stepTitle': 'Your prompts',
     'userPrompts.stepHint': 'Write your own prompts.',
-    'recipes.addYourPrompt': 'Add your prompt',
-    'recipes.addYourPromptHint': 'Got a prompt that works? Send it in.',
   };
   return {
     useI18n: () => ({
@@ -63,6 +38,10 @@ vi.mock('../components/my-prompts-section', () => ({
   default: () => <div data-testid="my-prompts-section" />,
 }));
 
+vi.mock('../components/public-prompts-section', () => ({
+  default: () => <div data-testid="public-prompts-section" />,
+}));
+
 vi.mock('@/components/ui/api-keys-section', () => ({
   default: ({ onKeyCreated }: { onKeyCreated?: (key: string) => void }) => (
     <button type="button" data-testid="api-keys-section" onClick={() => onKeyCreated?.(CREATED_KEY)}>
@@ -73,7 +52,6 @@ vi.mock('@/components/ui/api-keys-section', () => ({
 
 import RecipesPage from '../page';
 import { ViewerProvider } from '../viewer-context';
-import { PROMPTS } from '../prompts';
 import { buildInstallPrompt } from '@/lib/mcp-install-prompt';
 
 const CREATED_KEY = 'pe_live_abcdef1234567890abcdef1234567890';
@@ -140,7 +118,7 @@ describe('/recipes prompts hub', () => {
     ).toBeInTheDocument();
     expect(within(steps[1]).getByText('Paste it into your agent.')).toBeInTheDocument();
     expect(within(steps[1]).getByText('2')).toBeInTheDocument();
-    expect(within(steps[2]).getByRole('heading', { name: 'Pick a recipe' })).toBeInTheDocument();
+    expect(within(steps[2]).getByRole('heading', { name: 'Public prompts' })).toBeInTheDocument();
     expect(within(steps[2]).getByText('Copy a prompt and paste it into your agent.')).toBeInTheDocument();
     expect(within(steps[2]).getByText('3')).toBeInTheDocument();
   });
@@ -185,65 +163,13 @@ describe('/recipes prompts hub', () => {
     expect(screen.getByTestId('mcp-install-prompt')).toHaveTextContent(CREATED_KEY);
   });
 
-  it('links each card title to its own detail page, not straight to GitHub', () => {
-    renderHub(true);
-    for (const [name, href] of [
-      [/Daily news becomes a video/, '/recipes/daily-news'],
-      [/Place spotlight becomes a video/, '/recipes/place-spotlight'],
-      [/Subject spotlight becomes a video/, '/recipes/subject-spotlight'],
-      [/GitHub PRs become videos/, '/recipes/github-prs'],
-      [/Last 30 days become a video/, '/recipes/last-30-days'],
-      [/One week, one video per network/, '/recipes/multi-rede'],
-      [/A viral video becomes your Short/, '/recipes/viral-shorts'],
-      [/Full setup becomes videos/, '/recipes/full-setup'],
-      [/Compare two prompts \(A\/B\)/, '/recipes/compare-prompts'],
-      [/Story-first Reels/, '/recipes/story-first-reels'],
-    ] as const) {
-      expect(screen.getByRole('link', { name })).toHaveAttribute('href', href);
+  it('lists the public prompts from the database in step 3, signed in or not', () => {
+    for (const signedIn of [true, false]) {
+      const { unmount } = renderHub(signedIn);
+      const steps = screen.getAllByRole('region');
+      expect(within(steps[2]).getByTestId('public-prompts-section')).toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: 'Add your prompt' })).not.toBeInTheDocument();
+      unmount();
     }
-    expect(screen.getAllByRole('link', { name: /Open prompt/ })).toHaveLength(PROMPTS.length);
-    expect(
-      screen.queryByText(/Turn this GitHub pull request into one persona video/),
-    ).not.toBeInTheDocument();
-  });
-
-  it('copies the exact full prompt from each card', async () => {
-    renderHub(true);
-    for (const prompt of PROMPTS) {
-      fireEvent.click(screen.getByTestId(`copy-prompt-${prompt.slug}`));
-      expect(window.navigator.clipboard.writeText).toHaveBeenLastCalledWith(prompt.prompt);
-    }
-    expect(window.navigator.clipboard.writeText).toHaveBeenCalledTimes(PROMPTS.length);
-    expect(await screen.findAllByRole('button', { name: 'Copied!' })).toHaveLength(PROMPTS.length);
-  });
-
-  it('labels entries by kind, not by sequence number', () => {
-    renderHub(true);
-    expect(screen.getAllByText('Recipe')).toHaveLength(7);
-    expect(screen.getAllByText('Prompt')).toHaveLength(3);
-    expect(screen.queryByText('01')).not.toBeInTheDocument();
-  });
-
-  it('has no search box or kind filter', () => {
-    renderHub(true);
-    expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'All' })).not.toBeInTheDocument();
-  });
-
-  it('offers a secondary "Add your prompt" link to the prompt_request template after the grid', () => {
-    const { container } = renderHub(true);
-    const link = screen.getByRole('link', { name: 'Add your prompt' });
-    expect(link).toHaveAttribute(
-      'href',
-      'https://github.com/Ryan-Carloso/post-engineer/issues/new?template=prompt_request.md',
-    );
-    expect(link).toHaveAttribute('target', '_blank');
-    expect(link).toHaveAttribute('rel', 'noopener noreferrer');
-    const grid = container.querySelector('ul');
-    if (!grid) throw new Error('prompt grid not rendered');
-    expect(grid.contains(link)).toBe(false);
-    expect(
-      grid.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
   });
 });

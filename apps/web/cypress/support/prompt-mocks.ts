@@ -6,11 +6,12 @@ export interface PromptSummaryMock {
   description: string;
   source: string;
   visibility: string;
+  verified: boolean;
 }
 
 export const promptDetail = (summary: PromptSummaryMock, body: string) => ({
   ...summary,
-  prompt: `Shared base rules\n\n${body}`,
+  prompt: body,
   body,
   versionId: PROMPT_VERSION_ID,
   version: 1,

@@ -199,7 +199,7 @@ The server offers **18 intent tools**, not one tool per API endpoint. A tool is 
 | `voices` | `list`, `preview`, `list_clones`, `create_clone`, `get_clone`, `preview_clone`, `delete_clone` | House voices and voice clones. |
 | `accounts` | `list`, `connect`, `disconnect`, `get_persona_publishing`, `set_persona_publishing`, `list_boards` | Social accounts and the accounts each persona publishes to. |
 | `tool_config` | `get`, `save` | The saved research/stock tool configuration: which search tool (Tavily/Exa/own) and stock sources (Pexels/Pixabay/Coverr) the account has keys for. `save` replaces the whole set; keys are stored encrypted and are never returned in full — `get` shows presence and last 4 characters only. |
-| `prompt_library` | `create`, `update`, `delete` | The account's own prompts, private by default; only the owner can change one. `visibility` `public` makes a prompt readable by anyone (no review while the product is in beta), `private` keeps it to the account. Read and follow prompts with `prompts`: `list` (optional `query` words and `source` official, own or community) and `get` return the official prompts, the account's own (private ones included) and other users' public ones, which come back with an unverified-content notice. |
+| `prompt_library` | `create`, `update`, `delete` | The account's own prompts, private by default; only the owner can change one. `visibility` `public` makes a prompt readable by anyone (no review while the product is in beta), `private` keeps it to the account. Read and follow prompts with `prompts`: `list` (optional `query` words and `source` own or community) and `get` return the account's own prompts (private ones included) and other users' public ones; unverified community prompts carry a notice, verified ones do not. |
 | `schedules` | `list`, `cancel`, `get_slot`, `update_slot_title`, `delete_slot` | Future slots. |
 | `posts` | `list`, `get` | Published and scheduled posts. |
 | `insights` | `post_metrics`, `retention_curve`, `share_link_create`, `share_link_list`, `share_link_revoke` | How posts performed, and a public read-only link to the metrics summary and this week's posts. |
@@ -259,39 +259,31 @@ There is no alias for the old names. Saved prompts, recipes and agent configurat
 
 ## Prompts (slash commands)
 
-The server serves the prompts hub from the Post Engineer web platform over
+The server serves the prompts stored on the Post Engineer web platform over
 the MCP [prompts capability](https://modelcontextprotocol.io/docs/concepts/prompts),
-so MCP clients (Cursor, Claude) list them as slash commands. Each prompt is
-zero-arg: the agent asks you for the persona, accounts, and timing when you
-run it. The list and the text are fetched from the web API on demand
-(`GET /api/prompts`, `GET /api/prompts/{slug}`), so a recipe edit on the
-web reaches every install without a package update.
-
-- `/daily-news`: Daily news becomes a video — turn one top GNews story of the day into one persona video, validated before any token is spent.
-- `/place-spotlight`: Place spotlight becomes a video — turn one real place into one persona video with the place's own photos checked and attached as segment media, validated before any token is spent.
-- `/subject-spotlight`: Subject spotlight becomes a video — turn one concrete subject (a car, a product, a gadget) into one persona video with its own photos and its real price on screen, validated before any token is spent.
-- `/github-prs`: GitHub PRs become videos — turn a GitHub pull request into one persona video.
-- `/last-30-days`: Last 30 days become a video — turn what happened in your niche in the last 30 days into one persona video, validated before any token is spent.
-- `/multi-rede`: One week, one video per network — publish one video per network this week: LinkedIn, YouTube, Instagram, Bluesky, each scored for its own network.
-- `/viral-shorts`: A viral video becomes your Short — learn from the most-viewed video in your niche and write a fresh Shorts script in your own voice, hook, content, CTA.
-- `/full-setup`: Full setup becomes videos — connect accounts, create a persona, validate the script, and publish your first video without skipping a step.
+so MCP clients (Cursor, Claude) list them as slash commands: the account's own
+prompts and every public prompt. Each prompt is zero-arg: the agent asks you for
+the persona, accounts, and timing when you run it. The list and the text are
+fetched from the web API on demand (`GET /api/prompts`, `GET /api/prompts/{slug}`),
+so a prompt edit reaches every install without a package update. Prompts live
+only in the database (`user_prompts`); there is no prompt text in git.
 
 An agent that arrives without a human typing a slash command can still self-serve
-the same hub through MCP **tools**: `prompts (action: list)` lists the recipes
-(slug/title/description) and `prompts (action: get)` returns one recipe's full text by
+the same prompts through MCP **tools**: `prompts (action: list)` lists them
+(slug/title/description) and `prompts (action: get)` returns one prompt's full text by
 `slug`. The server's initialize instructions point agents there for
-topic-shaped requests. Until the agent lists or fetches a recipe, the results
+topic-shaped requests. Until the agent lists or fetches a prompt, the results
 of `personas (action: create)`, `personas (action: list)`, `accounts (action: list)`, and
 `billing (action: balance)` end with a short next-step block pointing at
 `prompts (action: list)`, and a script rejected by `check_script (action: validate)` or
 `generate_video` gets a hint that recipes produce scripts that pass.
 
-To add a prompt, add its text to `shared/prompt-base/prompt-base.ts` and its
-entry to the web hub (`apps/web/app/recipes/prompts.ts` + its i18n title and
-objective). The MCP needs no change: it serves whatever the web hub lists.
+To add a prompt, create it on https://post-engineer.com/recipes or with
+`prompt_library (action: create)`, and make it public to share it. The MCP
+needs no change.
 
 ## Links
 
 - Platform: https://post-engineer.com/
 - API keys: https://post-engineer.com/recipes
-- Recipes: [docs/recipes/daily-news.md](../../docs/recipes/daily-news.md) (daily news becomes a video), [docs/recipes/place-spotlight.md](../../docs/recipes/place-spotlight.md) (place spotlight becomes a video), [docs/recipes/subject-spotlight.md](../../docs/recipes/subject-spotlight.md) (subject spotlight becomes a video), [docs/recipes/last-30-days.md](../../docs/recipes/last-30-days.md) (last 30 days become a video), [docs/recipes/multi-rede.md](../../docs/recipes/multi-rede.md) (one week, one video per network), [docs/recipes/viral-shorts.md](../../docs/recipes/viral-shorts.md) (a viral video becomes your Short), [docs/recipes/compare-prompts.md](../../docs/recipes/compare-prompts.md) (compare two prompts) and [docs/recipes/story-first-reels.md](../../docs/recipes/story-first-reels.md) (write scripts story-first)
+- Prompts: https://post-engineer.com/recipes

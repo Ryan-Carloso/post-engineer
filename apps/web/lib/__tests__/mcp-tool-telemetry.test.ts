@@ -5,7 +5,6 @@ const getPostHogServer = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/posthog-server', () => ({ getPostHogServer }));
 
 import { noteMcpToolCaller, recordMcpToolCall } from '../mcp-tool-telemetry';
-import { PROMPTS } from '@/app/recipes/prompts';
 
 const CALL_ID = '0b9f6a52-2f43-4c8e-9a51-6f0d1c2e3a4b';
 
@@ -79,11 +78,11 @@ describe('mcp_tool_called', () => {
     expect(captureAs.mock.calls[0]?.[2]).toMatchObject({ path: '/api/prompts/[redacted]' });
   });
 
-  it('keeps a static slug segment readable', () => {
+  it('replaces a prompt slug path segment with :param so a private slug cannot reach PostHog', () => {
     record(
       mcpRequest({ 'x-mcp-tool': 'prompts' }, 'https://post-engineer.test/api/prompts/daily-news')
     );
-    expect(captureAs.mock.calls[0]?.[2]).toMatchObject({ path: '/api/prompts/daily-news' });
+    expect(captureAs.mock.calls[0]?.[2]).toMatchObject({ path: '/api/prompts/:param' });
   });
 
   it('records nothing without the tool header', () => {
@@ -209,44 +208,51 @@ describe('mcp_tool_called', () => {
 
   describe('recipe-adoption headers', () => {
     const SESSION_ID = '7c1e2d3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f';
-    const hubSlug = PROMPTS[0]?.slug ?? '';
+    const promptSlug = 'daily-news';
 
     function recordedProperties(headers: Record<string, string>): Record<string, unknown> {
       record(mcpRequest({ 'x-mcp-tool': 'generate_video', ...headers }));
       return captureAs.mock.calls[0]?.[2] as Record<string, unknown>;
     }
 
-    it('records the session, attribution and recipe headers as typed properties', () => {
-      expect(hubSlug.length).toBeGreaterThan(0);
+    it('records the session, attribution and recipe headers as typed properties, never the prompt slug', () => {
       const properties = recordedProperties({
         'x-mcp-session-id': SESSION_ID,
         'x-mcp-transport': 'stdio',
         'x-mcp-nudged-by': 'personas_list',
         'x-mcp-recipes-known': 'true',
-        'x-mcp-recipe-fetched': hubSlug,
+        'x-mcp-recipe-fetched': promptSlug,
         'x-mcp-script-rejections': '2',
-        'x-mcp-recipe': hubSlug,
+        'x-mcp-recipe': promptSlug,
       });
       expect(properties).toMatchObject({
         session_id: SESSION_ID,
         transport: 'stdio',
         nudged_by: 'personas_list',
         recipes_known: true,
-        recipe_fetched: hubSlug,
+        recipe_fetched: 'prompt',
         script_rejections: 2,
-        recipe: hubSlug,
+        recipe: 'prompt',
       });
+      expect(JSON.stringify(properties)).not.toContain(promptSlug);
     });
 
-    it('records a recipe that is not a hub slug as unknown, never the caller text', () => {
+    it('records a slug-shaped recipe as a followed prompt, never the caller text', () => {
       const properties = recordedProperties({
         'x-mcp-recipe': 'pe-live-secret-slug',
         'x-mcp-recipe-fetched': 'another-made-up-slug',
       });
-      expect(properties.recipe).toBe('unknown');
-      expect(properties.recipe_fetched).toBe('unknown');
+      expect(properties.recipe).toBe('prompt');
+      expect(properties.recipe_fetched).toBe('prompt');
       expect(JSON.stringify(properties)).not.toContain('secret-slug');
       expect(JSON.stringify(properties)).not.toContain('made-up-slug');
+    });
+
+    it('records a recipe that is not a slug as unknown, never the caller text', () => {
+      const properties = recordedProperties({ 'x-mcp-recipe': 'Not A Slug!', 'x-mcp-recipe-fetched': 'UPPER' });
+      expect(properties.recipe).toBe('unknown');
+      expect(properties.recipe_fetched).toBe('unknown');
+      expect(JSON.stringify(properties)).not.toContain('Not A Slug');
     });
 
     it('accepts none for the fetched recipe but not for the declared one', () => {
@@ -274,7 +280,7 @@ describe('mcp_tool_called', () => {
     });
 
     it('lets no recipe header override the tool, path or auth method', () => {
-      const properties = recordedProperties({ 'x-mcp-recipe': hubSlug });
+      const properties = recordedProperties({ 'x-mcp-recipe': promptSlug });
       expect(properties).toMatchObject({ tool: 'generate_video', auth_method: 'api_key', path: '/api/persona/list' });
     });
   });

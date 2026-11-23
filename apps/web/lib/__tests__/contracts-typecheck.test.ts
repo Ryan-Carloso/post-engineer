@@ -92,11 +92,11 @@ describe('contracts typecheck', () => {
   });
 
   it('pins the prompts response field names', () => {
-    const list: ListPromptsResponse = { success: true, prompts: [{ slug: 'daily-news', title: 'News', description: 'News', source: 'official', visibility: 'public' }] };
+    const list: ListPromptsResponse = { success: true, prompts: [{ slug: 'daily-news', title: 'News', description: 'News', source: 'community', visibility: 'public', verified: true }] };
     expect(list.prompts[0]?.title).toBe('News');
     expectTypeOf(list.prompts[0]).exclude<undefined>().not.toHaveProperty('name');
 
-    const detail: GetPromptResponse = { success: true, prompt: { slug: 'daily-news', title: 'News', description: 'News', source: 'official', visibility: 'public', prompt: 'Write...', body: null, versionId: '11111111-2222-4333-8444-555555555555', version: 3 } };
+    const detail: GetPromptResponse = { success: true, prompt: { slug: 'daily-news', title: 'News', description: 'News', source: 'community', visibility: 'public', verified: true, prompt: 'Write...', body: 'Write...', versionId: '11111111-2222-4333-8444-555555555555', version: 3 } };
     expect(detail.prompt.prompt).toBe('Write...');
     expectTypeOf(detail.prompt).exclude<undefined>().not.toHaveProperty('text');
   });

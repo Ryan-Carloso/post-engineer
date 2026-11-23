@@ -9,8 +9,7 @@ name: file-size
 #
 # Scope: *.py / *.ts / *.tsx. Exempt: test files (*.test.*, *_test.*,
 # **/tests/**, **/test/**), supabase/migrations/**, lockfiles, *.md,
-# generated *.gen.<ext>, vendored CalendarCN files, and prompt-data files
-# (shared/prompt-base/** — prompt wording is data, not logic).
+# generated *.gen.<ext> and vendored CalendarCN files.
 #
 # The real cost of large files is slow mutation testing, not the line
 # count itself; this lint is the cheap static proxy of that incentive.
