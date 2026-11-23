@@ -27,7 +27,7 @@ from moviepy.video.tools.subtitles import SubtitlesClip
 from PIL import Image, ImageDraw, ImageFont
 
 from app.config import config
-from app.services import caption_layout, subtitle_sizing, video_loop
+from app.services import caption_layout, caption_line_cap, subtitle_sizing, video_loop
 from app.services.letterbox import MAX_LETTERBOX_BARS
 from app.models.schema import (
     VideoAspect,
@@ -1428,8 +1428,9 @@ def generate_video(
             getattr(params, "rounded_subtitle_background", False) and bg_color
         )
         has_subtitle_background = bool(bg_color)
-        pad_x = int(params.font_size * 0.6) if has_subtitle_background else 0
-        text_max_width = max(1, int(max_width) - 2 * pad_x)
+        pad_x, text_max_width = caption_line_cap.text_box(
+            params.font_size, has_subtitle_background, max_width
+        )
         wrapped_txt, txt_height = wrap_text(
             phrase,
             max_width=text_max_width,
@@ -1517,10 +1518,6 @@ def generate_video(
                 size=size,
             )
         else:
-            size = (
-                int(max_width),
-                clip_h,
-            )
             _clip = TextClip(
                 text=wrapped_txt,
                 font=font_path,
@@ -1530,8 +1527,9 @@ def generate_video(
                 stroke_color=params.stroke_color,
                 stroke_width=params.stroke_width,
                 interline=interline,
-                size=size,
+                size=(int(max_width), None),
                 text_align="center",
+                margin=(0, text_clip_margin_y),
             )
         duration = subtitle_item[0][1] - subtitle_item[0][0]
         _clip = _clip.with_start(subtitle_item[0][0])
@@ -1568,10 +1566,12 @@ def generate_video(
         sub = SubtitlesClip(
             subtitles=subtitle_path, encoding="utf-8", make_textclip=make_textclip
         )
-        text_clips = []
-        for item in sub.subtitles:
-            clip = create_text_clip(subtitle_item=item)
-            text_clips.append(clip)
+        text_clips = [
+            create_text_clip(subtitle_item=item)
+            for item in caption_line_cap.cap_items(
+                sub.subtitles, params, font_path, video_width, bool(resolve_subtitle_background_color())
+            )
+        ]
         video_clip = CompositeVideoClip([video_clip, *text_clips])
 
     bgm_file = get_bgm_file(music_mood, recent_files=recent_bgm_files or ())
