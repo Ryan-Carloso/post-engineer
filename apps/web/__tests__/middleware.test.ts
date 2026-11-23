@@ -1,13 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { NextRequest } from 'next/server';
 
-const { getUser } = vi.hoisted(() => ({
+const { getClaims, getUser } = vi.hoisted(() => ({
+  getClaims: vi.fn(),
   getUser: vi.fn(),
 }));
 
 vi.mock('@supabase/ssr', () => ({
   createServerClient: () => ({
-    auth: { getUser },
+    auth: { getClaims, getUser },
   }),
 }));
 
@@ -30,8 +31,21 @@ function authError(name: string, status: number, message: string = name): {
   return { name, status, message, __isAuthError: true };
 }
 
+function validClaims(sub: string): {
+  claims: { sub: string; role: string; exp: number };
+  header: { alg: string; kid: string };
+  signature: Uint8Array;
+} {
+  return {
+    claims: { sub, role: 'authenticated', exp: Math.floor(Date.now() / 1000) + 3600 },
+    header: { alg: 'ES256', kid: 'kid-1' },
+    signature: new Uint8Array(),
+  };
+}
+
 describe('middleware auth redirect', () => {
   beforeEach(() => {
+    getClaims.mockReset();
     getUser.mockReset();
     vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://example.supabase.co');
     vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', 'test-anon-key');
@@ -44,8 +58,8 @@ describe('middleware auth redirect', () => {
   });
 
   it('redirects to /landing when the session is missing', async () => {
-    getUser.mockResolvedValue({
-      data: { user: null },
+    getClaims.mockResolvedValue({
+      data: null,
       error: authError('AuthSessionMissingError', 400, 'Auth session missing!'),
     });
 
@@ -57,7 +71,7 @@ describe('middleware auth redirect', () => {
   });
 
   it('does not redirect unauthenticated requests for the public /recipes page', async () => {
-    getUser.mockResolvedValue({ data: { user: null }, error: null });
+    getClaims.mockResolvedValue({ data: null, error: null });
 
     const response = await middleware(requestFor('/recipes'));
 
@@ -65,7 +79,7 @@ describe('middleware auth redirect', () => {
   });
 
   it('does not redirect unauthenticated requests for a public /recipes detail page', async () => {
-    getUser.mockResolvedValue({ data: { user: null }, error: null });
+    getClaims.mockResolvedValue({ data: null, error: null });
 
     const response = await middleware(requestFor('/recipes/daily-news'));
 
@@ -73,7 +87,7 @@ describe('middleware auth redirect', () => {
   });
 
   it('does not redirect unauthenticated requests for a public /s/<token> share page', async () => {
-    getUser.mockResolvedValue({ data: { user: null }, error: null });
+    getClaims.mockResolvedValue({ data: null, error: null });
 
     const response = await middleware(requestFor(`/s/${'a'.repeat(43)}`));
 
@@ -85,8 +99,8 @@ describe('middleware auth redirect', () => {
     expect(source).toContain('recipes|s/)');
   });
 
-  it('redirects to /landing when getUser returns no user and no error', async () => {
-    getUser.mockResolvedValue({ data: { user: null }, error: null });
+  it('redirects to /landing when getClaims finds no session and no error', async () => {
+    getClaims.mockResolvedValue({ data: null, error: null });
 
     const response = await middleware(requestFor('/posts/slot-e2e-new'));
 
@@ -95,8 +109,8 @@ describe('middleware auth redirect', () => {
   });
 
   it('redirects to /landing when the access token is rejected', async () => {
-    getUser.mockResolvedValue({
-      data: { user: null },
+    getClaims.mockResolvedValue({
+      data: null,
       error: authError('AuthApiError', 401, 'invalid jwt'),
     });
 
@@ -106,10 +120,10 @@ describe('middleware auth redirect', () => {
     expect(response.headers.get('location')).toBe('http://localhost:3434/landing');
   });
 
-  it('does not redirect when getUser fails with a retryable fetch error', async () => {
+  it('does not redirect when getClaims fails with a retryable fetch error', async () => {
     const secret = 'api_key=super-secret-value';
-    getUser.mockResolvedValue({
-      data: { user: null },
+    getClaims.mockResolvedValue({
+      data: null,
       error: authError('AuthRetryableFetchError', 0, secret),
     });
 
@@ -127,10 +141,10 @@ describe('middleware auth redirect', () => {
   });
 
   it.each([429, 500, 503, 520])(
-    'does not redirect when getUser fails with HTTP %s',
+    'does not redirect when getClaims fails with HTTP %s',
     async (status) => {
-      getUser.mockResolvedValue({
-        data: { user: null },
+      getClaims.mockResolvedValue({
+        data: null,
         error: authError('AuthApiError', status, `HTTP ${status}`),
       });
 
@@ -147,8 +161,8 @@ describe('middleware auth redirect', () => {
   );
 
   it('continues when the user is present', async () => {
-    getUser.mockResolvedValue({
-      data: { user: { id: 'user-1' } },
+    getClaims.mockResolvedValue({
+      data: validClaims('user-1'),
       error: null,
     });
 
@@ -158,9 +172,52 @@ describe('middleware auth redirect', () => {
     expect(response.headers.get('location')).toBeNull();
   });
 
+  it('verifies the session from the JWT claims and never fetches the user record', async () => {
+    getClaims.mockResolvedValue({ data: validClaims('user-1'), error: null });
+
+    await middleware(requestFor('/posts/slot-e2e-new'));
+
+    expect(getClaims).toHaveBeenCalledTimes(1);
+    expect(getUser).not.toHaveBeenCalled();
+  });
+
+  it('redirects to /landing when the verified claims carry no subject', async () => {
+    getClaims.mockResolvedValue({
+      data: { ...validClaims(''), claims: { role: 'anon', exp: 0 } },
+      error: null,
+    });
+
+    const response = await middleware(requestFor('/posts/slot-e2e-new'));
+
+    expect(response.status).toBe(307);
+    expect(response.headers.get('location')).toBe('http://localhost:3434/landing');
+  });
+
+  it('redirects to /landing when the JWT signature is invalid', async () => {
+    getClaims.mockResolvedValue({
+      data: null,
+      error: authError('AuthInvalidJwtError', 400, 'Invalid JWT signature'),
+    });
+
+    const response = await middleware(requestFor('/posts/slot-e2e-new'));
+
+    expect(response.status).toBe(307);
+    expect(response.headers.get('location')).toBe('http://localhost:3434/landing');
+    expect(warnCalls()).toHaveLength(0);
+  });
+
+  it('sends an authenticated visitor from /landing to /', async () => {
+    getClaims.mockResolvedValue({ data: validClaims('user-1'), error: null });
+
+    const response = await middleware(requestFor('/landing'));
+
+    expect(response.status).toBe(307);
+    expect(response.headers.get('location')).toBe('http://localhost:3434/');
+  });
+
   it('sends an authenticated visitor from /login to /', async () => {
-    getUser.mockResolvedValue({
-      data: { user: { id: 'user-1' } },
+    getClaims.mockResolvedValue({
+      data: validClaims('user-1'),
       error: null,
     });
 
@@ -171,8 +228,8 @@ describe('middleware auth redirect', () => {
   });
 
   it('does not redirect unauthenticated requests for public static assets (logo.png)', async () => {
-    getUser.mockResolvedValue({
-      data: { user: null },
+    getClaims.mockResolvedValue({
+      data: null,
       error: authError('AuthSessionMissingError', 400, 'Auth session missing!'),
     });
 
@@ -183,8 +240,8 @@ describe('middleware auth redirect', () => {
   });
 
   it('does not redirect unauthenticated requests for the public /openapi.json spec', async () => {
-    getUser.mockResolvedValue({
-      data: { user: null },
+    getClaims.mockResolvedValue({
+      data: null,
       error: authError('AuthSessionMissingError', 400, 'Auth session missing!'),
     });
 
@@ -192,12 +249,12 @@ describe('middleware auth redirect', () => {
 
     expect(response.status).not.toBe(307);
     expect(response.headers.get('location')).toBeNull();
-    expect(getUser).not.toHaveBeenCalled();
+    expect(getClaims).not.toHaveBeenCalled();
   });
 
   it('still redirects unauthenticated requests for any other .json path', async () => {
-    getUser.mockResolvedValue({
-      data: { user: null },
+    getClaims.mockResolvedValue({
+      data: null,
       error: authError('AuthSessionMissingError', 400, 'Auth session missing!'),
     });
 
@@ -212,8 +269,8 @@ describe('middleware auth redirect', () => {
   });
 
   it('does not redirect unauthenticated requests for /sitemap.xml', async () => {
-    getUser.mockResolvedValue({
-      data: { user: null },
+    getClaims.mockResolvedValue({
+      data: null,
       error: authError('AuthSessionMissingError', 400, 'Auth session missing!'),
     });
 
@@ -221,12 +278,12 @@ describe('middleware auth redirect', () => {
 
     expect(response.status).not.toBe(307);
     expect(response.headers.get('location')).toBeNull();
-    expect(getUser).not.toHaveBeenCalled();
+    expect(getClaims).not.toHaveBeenCalled();
   });
 
   it('still redirects unauthenticated requests for any other .xml path', async () => {
-    getUser.mockResolvedValue({
-      data: { user: null },
+    getClaims.mockResolvedValue({
+      data: null,
       error: authError('AuthSessionMissingError', 400, 'Auth session missing!'),
     });
 
@@ -241,8 +298,8 @@ describe('middleware auth redirect', () => {
   });
 
   it('does not redirect unauthenticated requests for /mcp', async () => {
-    getUser.mockResolvedValue({
-      data: { user: null },
+    getClaims.mockResolvedValue({
+      data: null,
       error: authError('AuthSessionMissingError', 400, 'Auth session missing!'),
     });
 
@@ -250,7 +307,7 @@ describe('middleware auth redirect', () => {
 
     expect(response.status).not.toBe(307);
     expect(response.headers.get('location')).toBeNull();
-    expect(getUser).not.toHaveBeenCalled();
+    expect(getClaims).not.toHaveBeenCalled();
   });
 
   it('excludes /mcp from the matcher so the middleware never runs on it', () => {

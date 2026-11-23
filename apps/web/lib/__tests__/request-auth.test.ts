@@ -88,8 +88,8 @@ describe('requireSupabaseSession', () => {
   it('authenticates via cookie session when no API key header is present', async () => {
     const mockServerClient = {
       auth: {
-        getUser: vi.fn().mockResolvedValue({
-          data: { user: { id: 'user-cookie-456' } },
+        getClaims: vi.fn().mockResolvedValue({
+          data: { claims: { sub: 'user-cookie-456' } },
           error: null,
         }),
         getSession: vi.fn().mockResolvedValue({
@@ -109,7 +109,7 @@ describe('requireSupabaseSession', () => {
   it('never records MCP tool telemetry for a cookie session, even with the MCP headers', async () => {
     const mockServerClient = {
       auth: {
-        getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'user-cookie-456' } }, error: null }),
+        getClaims: vi.fn().mockResolvedValue({ data: { claims: { sub: 'user-cookie-456' } }, error: null }),
         getSession: vi.fn().mockResolvedValue({
           data: { session: { access_token: 'cookie-session-token' } },
           error: null,
@@ -129,8 +129,8 @@ describe('requireSupabaseSession', () => {
   it('carries the display name from user_metadata on cookie sessions', async () => {
     const mockServerClient = {
       auth: {
-        getUser: vi.fn().mockResolvedValue({
-          data: { user: { id: 'user-cookie-456', user_metadata: { full_name: 'Test User' } } },
+        getClaims: vi.fn().mockResolvedValue({
+          data: { claims: { sub: 'user-cookie-456', user_metadata: { full_name: 'Test User' } } },
           error: null,
         }),
         getSession: vi.fn().mockResolvedValue({
@@ -148,10 +148,10 @@ describe('requireSupabaseSession', () => {
   it('falls back through name keys in user_metadata (full_name, name, display_name, user_name)', async () => {
     const mockServerClient = {
       auth: {
-        getUser: vi.fn().mockResolvedValue({
+        getClaims: vi.fn().mockResolvedValue({
           data: {
-            user: {
-              id: 'user-cookie-456',
+            claims: {
+              sub: 'user-cookie-456',
               user_metadata: { name: 'Plain Name', user_name: 'nick' },
             },
           },
@@ -172,8 +172,8 @@ describe('requireSupabaseSession', () => {
   it('leaves displayName undefined when user_metadata carries no name', async () => {
     const mockServerClient = {
       auth: {
-        getUser: vi.fn().mockResolvedValue({
-          data: { user: { id: 'user-cookie-456', user_metadata: { avatar_url: 'x' } } },
+        getClaims: vi.fn().mockResolvedValue({
+          data: { claims: { sub: 'user-cookie-456', user_metadata: { avatar_url: 'x' } } },
           error: null,
         }),
         getSession: vi.fn().mockResolvedValue({
@@ -233,10 +233,72 @@ describe('requireSupabaseSession with OAuth access tokens', () => {
     expect(noteMcpToolCaller).toHaveBeenCalledWith(request, 'user-oauth-789', 'oauth');
   });
 
+  it('verifies the cookie session from the JWT claims and never fetches the user record', async () => {
+    const getUser = vi.fn();
+    const getClaims = vi.fn().mockResolvedValue({ data: { claims: { sub: 'user-cookie-456' } }, error: null });
+    const mockServerClient = {
+      auth: {
+        getClaims,
+        getUser,
+        getSession: vi.fn().mockResolvedValue({
+          data: { session: { access_token: 'cookie-session-token' } },
+          error: null,
+        }),
+      },
+    };
+    vi.mocked(createSupabaseServerClient).mockResolvedValue(mockServerClient as unknown as SupabaseClient);
+
+    const result = await requireSupabaseSession();
+    expect(result.auth?.userId).toBe('user-cookie-456');
+    expect(getClaims).toHaveBeenCalledTimes(1);
+    expect(getUser).not.toHaveBeenCalled();
+  });
+
+  it('rejects the cookie session with 401 when the JWT claims fail verification', async () => {
+    const getSession = vi.fn().mockResolvedValue({
+      data: { session: { access_token: 'cookie-session-token' } },
+      error: null,
+    });
+    const mockServerClient = {
+      auth: {
+        getClaims: vi.fn().mockResolvedValue({
+          data: null,
+          error: { name: 'AuthInvalidJwtError', status: 400, message: 'Invalid JWT signature' },
+        }),
+        getSession,
+      },
+    };
+    vi.mocked(createSupabaseServerClient).mockResolvedValue(mockServerClient as unknown as SupabaseClient);
+
+    const result = await requireSupabaseSession();
+    expect(result.auth).toBeNull();
+    expect(result.error?.status).toBe(401);
+    expect(getSession).not.toHaveBeenCalled();
+  });
+
+  it('rejects the cookie session with 401 when the verified claims carry no subject', async () => {
+    const getSession = vi.fn().mockResolvedValue({
+      data: { session: { access_token: 'cookie-session-token' } },
+      error: null,
+    });
+    const mockServerClient = {
+      auth: {
+        getClaims: vi.fn().mockResolvedValue({ data: { claims: { sub: '', role: 'anon' } }, error: null }),
+        getSession,
+      },
+    };
+    vi.mocked(createSupabaseServerClient).mockResolvedValue(mockServerClient as unknown as SupabaseClient);
+
+    const result = await requireSupabaseSession();
+    expect(result.auth).toBeNull();
+    expect(result.error?.status).toBe(401);
+    expect(getSession).not.toHaveBeenCalled();
+  });
+
   it('falls through to session auth when the OAuth token is invalid', async () => {
     const mockServerClient = {
       auth: {
-        getUser: vi.fn().mockResolvedValue({ data: { user: null }, error: null }),
+        getClaims: vi.fn().mockResolvedValue({ data: null, error: null }),
         getSession: vi.fn().mockResolvedValue({ data: { session: null }, error: null }),
       },
     };
@@ -306,7 +368,7 @@ describe('requireSupabaseSession MCP version gate', () => {
     vi.stubEnv('REQUIRED_MCP_VERSION', undefined);
     const mockServerClient = {
       auth: {
-        getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'user-cookie-456' } }, error: null }),
+        getClaims: vi.fn().mockResolvedValue({ data: { claims: { sub: 'user-cookie-456' } }, error: null }),
         getSession: vi.fn().mockResolvedValue({
           data: { session: { access_token: 'cookie-session-token' } },
           error: null,

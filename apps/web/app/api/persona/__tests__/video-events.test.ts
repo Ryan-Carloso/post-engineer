@@ -13,10 +13,10 @@ const API_SECRET = 'test-api-secret';
 function mockSession(opts?: { noSession?: boolean; noToken?: boolean }): void {
   const client = {
     auth: {
-      getUser: vi.fn(async () =>
+      getClaims: vi.fn(async () =>
         opts?.noSession
-          ? { data: { user: null }, error: null }
-          : { data: { user: { id: 'user-1' } }, error: null },
+          ? { data: null, error: null }
+          : { data: { claims: { sub: 'user-1' } }, error: null },
       ),
       getSession: vi.fn(async () =>
         opts?.noToken

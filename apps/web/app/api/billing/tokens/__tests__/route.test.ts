@@ -43,7 +43,7 @@ function queryClient(singleData: unknown): {
 function mockServerProfile(singleData: unknown): void {
   vi.mocked(createSupabaseServerClient).mockResolvedValue({
     auth: {
-      getUser: () => Promise.resolve({ data: { user: { id: USER_ID } }, error: null }),
+      getClaims: () => Promise.resolve({ data: { claims: { sub: USER_ID } }, error: null }),
       getSession: () => Promise.resolve({ data: { session: { access_token: 'sb-token' } }, error: null }),
     },
     from: () => ({
@@ -98,7 +98,7 @@ describe('GET /api/billing/tokens', () => {
   it('returns 401 without a session', async () => {
     vi.mocked(createSupabaseServerClient).mockResolvedValue({
       auth: {
-        getUser: () => Promise.resolve({ data: { user: null }, error: null }),
+        getClaims: () => Promise.resolve({ data: null, error: null }),
         getSession: () => Promise.resolve({ data: { session: null }, error: null }),
       },
     } as never);

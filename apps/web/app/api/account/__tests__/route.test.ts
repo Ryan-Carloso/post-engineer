@@ -37,7 +37,7 @@ import { logger } from '@/lib/logger';
 function mockSession(userId = 'u1') {
   vi.mocked(createSupabaseServerClient).mockResolvedValue({
     auth: {
-      getUser: vi.fn().mockResolvedValue({ data: { user: { id: userId } }, error: null }),
+      getClaims: vi.fn().mockResolvedValue({ data: { claims: { sub: userId } }, error: null }),
       getSession: vi.fn().mockResolvedValue({ data: { session: { access_token: 'sb-token' } }, error: null }),
     },
   } as never);
@@ -53,7 +53,7 @@ describe('GET /api/account', () => {
 
   it('returns 401 when no session', async () => {
     vi.mocked(createSupabaseServerClient).mockResolvedValue({
-      auth: { getUser: vi.fn().mockResolvedValue({ data: { user: null }, error: { message: 'no' } }) },
+      auth: { getClaims: vi.fn().mockResolvedValue({ data: null, error: { message: 'no' } }) },
     } as never);
 
     const res = await GET();
@@ -65,7 +65,7 @@ describe('GET /api/account', () => {
   it('maps youtube accounts with statistics', async () => {
     vi.mocked(createSupabaseServerClient).mockResolvedValue({
       auth: {
-        getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'u1' } }, error: null }),
+        getClaims: vi.fn().mockResolvedValue({ data: { claims: { sub: 'u1' } }, error: null }),
         getSession: vi.fn().mockResolvedValue({ data: { session: { access_token: 'sb-token' } }, error: null }),
       },
     } as never);
@@ -107,7 +107,7 @@ describe('GET /api/account', () => {
   it('maps instagram accounts with defaults for missing metadata', async () => {
     vi.mocked(createSupabaseServerClient).mockResolvedValue({
       auth: {
-        getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'u1' } }, error: null }),
+        getClaims: vi.fn().mockResolvedValue({ data: { claims: { sub: 'u1' } }, error: null }),
         getSession: vi.fn().mockResolvedValue({ data: { session: { access_token: 'sb-token' } }, error: null }),
       },
     } as never);
@@ -356,7 +356,7 @@ describe('GET /api/account', () => {
   it('maps bluesky accounts with did and handle (nao vira instagram)', async () => {
     vi.mocked(createSupabaseServerClient).mockResolvedValue({
       auth: {
-        getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'u1' } }, error: null }),
+        getClaims: vi.fn().mockResolvedValue({ data: { claims: { sub: 'u1' } }, error: null }),
         getSession: vi.fn().mockResolvedValue({ data: { session: { access_token: 'sb-token' } }, error: null }),
       },
     } as never);
@@ -386,7 +386,7 @@ describe('GET /api/account', () => {
   it('maps linkedin accounts with providerAccountId and metadata', async () => {
     vi.mocked(createSupabaseServerClient).mockResolvedValue({
       auth: {
-        getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'u1' } }, error: null }),
+        getClaims: vi.fn().mockResolvedValue({ data: { claims: { sub: 'u1' } }, error: null }),
         getSession: vi.fn().mockResolvedValue({ data: { session: { access_token: 'sb-token' } }, error: null }),
       },
     } as never);
@@ -421,7 +421,7 @@ describe('GET /api/account', () => {
   it('descarta registro com provider desconhecido e mantém o resto da lista', async () => {
     vi.mocked(createSupabaseServerClient).mockResolvedValue({
       auth: {
-        getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'u1' } }, error: null }),
+        getClaims: vi.fn().mockResolvedValue({ data: { claims: { sub: 'u1' } }, error: null }),
         getSession: vi.fn().mockResolvedValue({ data: { session: { access_token: 'sb-token' } }, error: null }),
       },
     } as never);
@@ -511,7 +511,7 @@ describe('GET /api/account', () => {
   it('returns 500 when listSocialAccounts throws', async () => {
     vi.mocked(createSupabaseServerClient).mockResolvedValue({
       auth: {
-        getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'u1' } }, error: null }),
+        getClaims: vi.fn().mockResolvedValue({ data: { claims: { sub: 'u1' } }, error: null }),
         getSession: vi.fn().mockResolvedValue({ data: { session: { access_token: 'sb-token' } }, error: null }),
       },
     } as never);
@@ -542,7 +542,7 @@ describe('DELETE /api/account', () => {
 
   it('returns 401 when no session', async () => {
     vi.mocked(createSupabaseServerClient).mockResolvedValue({
-      auth: { getUser: vi.fn().mockResolvedValue({ data: { user: null }, error: { message: 'no' } }) },
+      auth: { getClaims: vi.fn().mockResolvedValue({ data: null, error: { message: 'no' } }) },
     } as never);
 
     const res = await DELETE(deleteRequest('provider=youtube&providerAccountId=ch1'));

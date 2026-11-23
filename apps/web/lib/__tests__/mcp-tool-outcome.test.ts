@@ -101,7 +101,7 @@ describe('mcp_tool_called through auth and withApiErrorReporting', () => {
   it('records nothing for a cookie session, even with MCP headers', async () => {
     vi.mocked(createSupabaseServerClient).mockResolvedValue({
       auth: {
-        getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'user-cookie' } }, error: null }),
+        getClaims: vi.fn().mockResolvedValue({ data: { claims: { sub: 'user-cookie' } }, error: null }),
         getSession: vi.fn().mockResolvedValue({
           data: { session: { access_token: 'cookie-token' } },
           error: null,
