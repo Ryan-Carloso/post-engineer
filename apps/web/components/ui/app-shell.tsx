@@ -187,19 +187,19 @@ const MobileNavigation = () => {
         </SheetTrigger>
         <SheetContent side="bottom" aria-describedby={undefined} className="rounded-t-3xl bg-card pb-[calc(env(safe-area-inset-bottom)+1.5rem)]">
           <SheetTitle className="text-base text-primary">{t('nav.moreTitle')}</SheetTitle>
-          <ul className="mt-4 grid grid-cols-3 gap-2">
+          <ul className="mt-4 grid grid-cols-2 gap-2">
             {moreLinks.map((link) => {
               const Icon = link.icon;
               const isActive = onRoute(link.href, pathname);
               return (
-                <li key={link.href}>
+                <li key={link.href} className="min-w-0">
                   <Link
                     href={link.href}
                     aria-current={isActive ? 'page' : undefined}
-                    className={`flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium ${isActive ? 'bg-brand-soft text-ink' : 'bg-surface text-muted-text'}`}
+                    className={`flex min-w-0 items-center gap-2 rounded-2xl p-3 text-sm font-medium ${isActive ? 'bg-brand-soft text-ink' : 'bg-surface text-muted-text'}`}
                   >
-                    <span className="[&>svg]:size-5"><Icon /></span>
-                    {t(link.labelKey)}
+                    <span className="shrink-0 [&>svg]:size-5"><Icon /></span>
+                    <span className="min-w-0 truncate">{t(link.labelKey)}</span>
                   </Link>
                 </li>
               );
