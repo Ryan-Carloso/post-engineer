@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import io
-import json
-import shutil
+import re
 import subprocess
 from pathlib import Path
 
@@ -156,20 +155,12 @@ def test_render_returns_the_output_file_bytes(tmp_path):
     assert render_image_short(_image_bytes((50, 50)), str(tmp_path), pick_track=lambda: None, run=fake_run) == b"mp4-bytes"
 
 
-@pytest.mark.skipif(shutil.which("ffprobe") is None, reason="ffprobe is not installed")
 def test_real_render_is_an_eight_second_vertical_short_with_audio(tmp_path):
     video = render_image_short(_image_bytes((1600, 900)), str(tmp_path), pick_track=lambda: None)
     output = tmp_path / "probe.mp4"
     output.write_bytes(video)
-    probe = subprocess.run(
-        ["ffprobe", "-v", "error", "-show_entries", "stream=codec_type,width,height,duration", "-of", "json", str(output)],
-        capture_output=True,
-        check=True,
-    )
-    streams = json.loads(probe.stdout)["streams"]
-    video_stream = next(stream for stream in streams if stream["codec_type"] == "video")
-    audio_stream = next(stream for stream in streams if stream["codec_type"] == "audio")
-    assert (video_stream["width"], video_stream["height"]) == (1080, 1920)
-    assert float(video_stream["duration"]) == pytest.approx(8.0, abs=0.1)
-    assert float(audio_stream["duration"]) == pytest.approx(8.0, abs=0.1)
-    assert utils.get_ffmpeg_binary()
+    probe = subprocess.run([utils.get_ffmpeg_binary(), "-hide_banner", "-i", str(output)], capture_output=True)
+    info = probe.stderr.decode("utf-8", errors="replace")
+    assert "Duration: 00:00:08.00" in info
+    assert re.search(r"Video: h264.*1080x1920", info) is not None
+    assert re.search(r"Audio: aac", info) is not None
