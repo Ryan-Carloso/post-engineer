@@ -17,26 +17,28 @@ function engineSeconds(relativePath: string, name: string): string {
 }
 
 describe('shared prompt base: the lip-sync face', () => {
-  it('says the first photo of the video is the face that talks in both face modes', () => {
-    expect(baseText).toContain(
-      'Lip-sync face: in full_lipsync and hook_lipsync, the first photo of the video is the face that talks.',
-    );
+  it('says the first photo of the video is the face that talks in hook_lipsync only', () => {
+    expect(baseText).toContain('Lip-sync face: in hook_lipsync, the first photo of the video is the face that talks.');
+    expect(baseText).not.toContain('in full_lipsync and hook_lipsync, the first photo of the video is the face');
     expect(baseText).toContain('the first photo of the first segment that carries media; a video clip never counts');
     expect(baseText).toContain("clear, front-facing photo of the persona's own face");
   });
 
-  it('says a faceless or unloadable first photo fails the video and when the persona photo talks', () => {
+  it('says a faceless or unloadable first photo fails the video', () => {
     expect(baseText).toContain('A first photo with no detectable face, or one that fails to load, fails the video.');
-    expect(baseText).toContain(
-      'Only when no segment carries a photo (possible in full_lipsync only) does the persona photo talk instead.',
-    );
+  });
+
+  it('says full_lipsync talks through options.lipsyncPhotos, never the segment photos', () => {
+    expect(baseText).toContain('In full_lipsync the segment photos never talk: the faces are options.lipsyncPhotos');
+    expect(baseText).toContain('full_lipsync requires options.lipsyncPhotos');
+    expect(baseText).not.toContain('does the persona photo talk instead');
   });
 
   it('states the hook lip-sync ceiling the engine enforces', () => {
     const intro = engineSeconds('apps/engine/app/services/task.py', 'PERSONA_LIPSYNC_MAX_SECONDS');
     const hook = engineSeconds('apps/engine/app/services/persona_hook.py', 'PERSONA_HOOK_MAX_SECONDS');
     expect(hook).toBe(intro);
-    expect(baseText).toContain(`In hook_lipsync the face talks through the hook only (at most ${intro} seconds)`);
+    expect(baseText).toContain(`The face talks through the hook only (at most ${intro} seconds)`);
   });
 
   it('names the hookPanel option the generate_video options really accept', () => {

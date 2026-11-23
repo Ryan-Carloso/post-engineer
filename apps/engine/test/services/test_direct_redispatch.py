@@ -138,6 +138,7 @@ class TriageRedispatchDirectTests(unittest.TestCase):
             "video_title": "myth busting",
             "video_description": "Agent description.",
             "video_type": "full_lipsync",
+            "lipsync_photos": [{"url": "https://example.com/face-0.jpg"}, {"url": "https://example.com/face-1.jpg"}],
             "generation_id": "g1",
             "persona": {
                 "name": "Ana",

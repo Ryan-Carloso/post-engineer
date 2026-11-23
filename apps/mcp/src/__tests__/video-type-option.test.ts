@@ -14,6 +14,7 @@ vi.mock('../analytics.js', () => ({
 
 import { VIDEO_TYPE_ERROR_SUFFIX, VIDEO_TYPE_REQUIRED_MESSAGE, isVideoType, unknownVideoTypeMessage } from '../video-type.js';
 import { GeneratePersonaVideoSchema, ValidateScriptSchema } from '../single-video-shape.js';
+import { GeneratePersonaVideoOptionsShape } from '../schedule-shapes.js';
 import { handleGeneratePersonaVideo, handleValidateScript } from '../tools-single-video.js';
 import type { PostEngineerClient } from '../client.js';
 import type { McpToolResponse } from '../tools.js';
@@ -233,5 +234,35 @@ describe('validate_script videoType (no charge)', () => {
     const faceless = await handleValidateScript(client, { segments: bare, videoType: 'faceless' });
     expect(faceless.isError).toBe(true);
     expect(textOf(faceless)).toContain('segments.0.media');
+  });
+});
+
+describe('generate_persona_video options.lipsyncPhotos', () => {
+  const faces = [{ url: 'https://example.com/face-1.jpg' }, { mediaId: 'aabbccddeeff00112233445566778899.jpg' }];
+  const fullArgs = { ...baseArgs, segments: bareSegments, options: { videoType: 'full_lipsync' as const, lipsyncPhotos: faces } };
+
+  it('forwards the face photos to the web route unchanged', async () => {
+    const client = mockClient();
+    const parsed = GeneratePersonaVideoSchema.parse(fullArgs);
+    await handleGeneratePersonaVideo(client, parsed);
+    const body = vi.mocked(client.generatePersonaVideo).mock.calls[0]?.[0] as { options?: { lipsyncPhotos?: unknown } };
+    expect(body.options?.lipsyncPhotos).toEqual(faces);
+  });
+
+  it.each([1, 6])('rejects %i photos in the schema', (count) => {
+    const lipsyncPhotos = Array.from({ length: count }, (_, i) => ({ url: `https://example.com/f-${i}.jpg` }));
+    expect(GeneratePersonaVideoSchema.safeParse({ ...fullArgs, options: { ...fullArgs.options, lipsyncPhotos } }).success).toBe(false);
+  });
+
+  it.each([[{}], [{ mediaId: 'a.jpg', url: 'https://example.com/a.jpg' }]])('rejects a photo without exactly one ref: %j', (photo) => {
+    const result = GeneratePersonaVideoSchema.safeParse({ ...fullArgs, options: { ...fullArgs.options, lipsyncPhotos: [photo, faces[0]] } });
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.error.issues[0]?.message).toBe('Each lipsync photo needs exactly one of mediaId or url.');
+  });
+
+  it('explains the 12s windows in the advertised description', () => {
+    const description = GeneratePersonaVideoOptionsShape.lipsyncPhotos.description ?? '';
+    expect(description).toContain('windows of at most 12s');
+    expect(description).toContain('2-5 different face photos of the persona');
   });
 });

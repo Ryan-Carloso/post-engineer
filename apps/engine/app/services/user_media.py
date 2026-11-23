@@ -135,17 +135,28 @@ def resolve_first_segment_photo(
     if found is None:
         return "", -1, -1, "no_segment_media"
     segment_index, image_index, media = found
+    photo, reason = resolve_photo_ref(media, "hook-first", task_dir, session=session)
+    return photo, segment_index, image_index, reason
+
+
+def resolve_photo_ref(
+    media: dict, token: str, task_dir: str, session=None
+) -> tuple[str, Optional[str]]:
+    """One still photo from a {mediaId} or {url} ref: (path, None), or ("", reason).
+
+    A url download lands in the task directory and is the caller's to
+    remove; a mediaId resolves to its temp asset in place. A video clip
+    is never a photo.
+    """
+    if segment_video.is_video_ref(media):
+        return "", "a video clip is not a photo"
     media_id = media.get("mediaId")
     url = media.get("url")
     if isinstance(media_id, str) and media_id:
-        photo, reason = _resolve_media_id(media_id)
-    elif isinstance(url, str) and url:
-        photo, reason = _resolve_url(url, "hook-first", task_dir, session=session)
-    else:
-        return "", segment_index, image_index, "unusable media"
-    if reason is not None:
-        return "", segment_index, image_index, reason
-    return photo, segment_index, image_index, None
+        return _resolve_media_id(media_id)
+    if isinstance(url, str) and url:
+        return _resolve_url(url, token, task_dir, session=session)
+    return "", "unusable media"
 
 
 def _download_failure_code(exc: Exception) -> str:

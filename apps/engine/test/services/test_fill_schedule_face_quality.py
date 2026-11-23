@@ -123,7 +123,7 @@ class BatchDispatchFaceQualityTests(unittest.TestCase):
         self.assertEqual(request.video_quality, LipSyncQuality.ok)
 
     def test_very_good_full_lipsync_dispatches_very_good(self):
-        slot = _slot(video_type="full_lipsync")
+        slot = _slot(video_type="full_lipsync", lipsync_photos=[{"url": "https://example.com/face-0.jpg"}, {"url": "https://example.com/face-1.jpg"}])
         for segment in slot["segments"]:
             segment.pop("media", None)
         slot["schedules"]["personas"]["face_quality"] = "very_good"

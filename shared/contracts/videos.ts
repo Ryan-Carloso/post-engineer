@@ -28,6 +28,10 @@ export const HOOK_MAX_SECONDS = 12;
 export const MIN_REQUESTED_PHOTO_SECONDS = 0.5;
 export const MAX_REQUESTED_PHOTO_SECONDS = 6;
 
+export const MIN_LIPSYNC_PHOTOS = 2;
+export const MAX_LIPSYNC_PHOTOS = 5;
+export const LIPSYNC_WINDOW_SECONDS = 12;
+
 export const MAX_REPORTED_ISSUES = 20;
 
 export const MAX_BATCH_VIDEOS = 12;
@@ -79,6 +83,15 @@ export const segmentsRequestSchema = z.array(
     .strict(),
 ).max(MAX_SEGMENTS);
 
+export const lipsyncPhotosRequestSchema = z.array(
+  z
+    .object({
+      mediaId: z.string().optional(),
+      url: z.string().optional(),
+    })
+    .strict(),
+);
+
 const PublishingScheduleSchema = z.object({
   startAt: z.string(),
   times: z.array(z.string()),
@@ -103,6 +116,7 @@ const OptionsSchema = z
     audioUrl: z.string().optional(),
     imageId: z.string().optional(),
     segments: segmentsRequestSchema.optional(),
+    lipsyncPhotos: lipsyncPhotosRequestSchema.optional(),
     webhookUrl: z.string().optional(),
     voiceId: z.string().optional(),
     videoAspect: z.enum(['9:16', '16:9', '1:1']).optional(),

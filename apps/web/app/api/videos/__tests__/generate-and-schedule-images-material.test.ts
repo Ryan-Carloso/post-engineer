@@ -66,7 +66,10 @@ function semantics(segments: unknown, videoType: 'full_lipsync' | 'hook_lipsync'
     description: 'Agent description.',
     segments,
     providers: ['youtube'],
-    options: { videoType },
+    options:
+      videoType === 'full_lipsync'
+        ? { videoType, lipsyncPhotos: [{ url: 'https://img.test/face-0.jpg' }, { url: 'https://img.test/face-1.jpg' }] }
+        : { videoType },
     personaId: 'persona-1',
   });
 }
