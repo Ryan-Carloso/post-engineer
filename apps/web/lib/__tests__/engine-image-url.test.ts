@@ -153,7 +153,6 @@ describe('ensureEngineImageUrl', () => {
       ensureEngineImageUrl(value, {
         supabase: { storage } as never,
         userId: 'u-1',
-        origin: 'https://post-engineer.com',
         fetchImpl: fetchImpl as never,
       }),
     ).rejects.toThrow(/not usable by the engine/);
@@ -172,7 +171,6 @@ describe('ensureEngineImageUrl', () => {
       ensureEngineImageUrl('/caracter-samples/file-1.png', {
         supabase: { storage } as never,
         userId: 'u-1',
-        origin: 'https://post-engineer.com',
         fetchImpl: fetchImpl as never,
       }),
     ).rejects.toThrow(/redirect/);
