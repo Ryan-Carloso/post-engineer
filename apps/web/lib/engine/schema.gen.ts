@@ -1030,6 +1030,8 @@ export interface components {
             video_title: string;
             video_transition_mode?: components["schemas"]["VideoTransitionMode"] | null;
             video_type: components["schemas"]["VideoType"];
+            /** Video Variation Seed */
+            video_variation_seed?: number | null;
             /**
              * Voice Name
              * @default
@@ -1081,7 +1083,7 @@ export interface components {
          * VideoTransitionMode
          * @enum {string}
          */
-        VideoTransitionMode: "None" | "Shuffle" | "FadeIn" | "FadeOut" | "SlideIn" | "SlideOut";
+        VideoTransitionMode: "None" | "Shuffle" | "FadeIn" | "FadeOut" | "SlideIn" | "SlideOut" | "Crossfade";
         /**
          * VideoType
          * @description The one video mode (issue #542 follow-up): it replaces the

@@ -28,7 +28,7 @@ class FullLipsyncPhotosWiringTests(unittest.TestCase):
             patch.object(tm.video, "combine_videos"),
             patch.object(tm.voice, "get_audio_duration", return_value=30.0),
             patch.object(tm.subtitle, "file_to_subtitles", return_value=[]),
-            patch.object(tm.segment_panels, "overlay_onto", side_effect=lambda _t, path, _u: path),
+            patch.object(tm.segment_panels, "overlay_onto", side_effect=lambda _t, path, _u, **_kw: path),
             patch.object(tm.lipsync_photos, "resolve_lipsync_photos", return_value=photos) as resolve,
             patch.object(tm.full_lipsync, "resolve_persona_image") as hook_image,
             patch.object(

@@ -29,6 +29,7 @@ class VideoTransitionMode(str, Enum):
     fade_out = "FadeOut"
     slide_in = "SlideIn"
     slide_out = "SlideOut"
+    crossfade = "Crossfade"
 
 
 class LipSyncQuality(str, Enum):
@@ -174,6 +175,7 @@ class VideoParams(BaseModel):
     hook_panel: bool = True
     video_transition_mode: Optional[VideoTransitionMode] = None
     video_clip_duration: Optional[int] = Field(default=2, ge=1, le=60)
+    video_variation_seed: Optional[int] = config.app.get("video_variation_seed")
 
     custom_audio_file: Optional[str] = None
     video_language: Optional[str] = ""

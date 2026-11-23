@@ -340,6 +340,21 @@ def test_prepare_segment_panels_forwards_the_hook_panel_choice(tmp_path, value, 
     assert prepare.call_args.kwargs["hook_panel"] is expected
 
 
+@pytest.mark.parametrize("value", [None, 7])
+def test_prepare_segment_panels_forwards_the_variation_seed(tmp_path, value):
+    params = SimpleNamespace(
+        segments=_two_media_segments(), video_aspect="9:16", video_script="",
+        hook_panel=True, video_variation_seed=value,
+    )
+    with patch.object(user_media, "prepare_segment_media", return_value=([], [])), patch.object(
+        user_media, "_face_mode", return_value=segment_panels.FACE_FULL
+    ), patch.object(user_media.image_coverage, "ensure_coverage", return_value=[]) as coverage, patch.object(
+        user_media.segment_panels, "write_manifest"
+    ), patch.object(user_media.utils, "task_dir", return_value=str(tmp_path)):
+        user_media.prepare_segment_panels("task-1", params, _subtitle(tmp_path), 6.0)
+    assert coverage.call_args.kwargs["variation_seed"] is value
+
+
 def _timed_subtitle(tmp_path, words, name="timed.srt"):
     path = str(tmp_path / name)
     with open(path, "w", encoding="utf-8") as handle:

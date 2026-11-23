@@ -69,7 +69,7 @@ def test_start_draws_the_panels_at_the_materials_stage_and_overlays_them_when_as
     overlay = final.index("segment_panels.overlay_onto(")
     assert final.index("full_lipsync.render_full_lipsync(") < overlay < final.index("video.generate_video(")
     assert final.index("prepare_persona_lipsync_video(") < overlay
-    assert "_update_task)" in final[overlay : overlay + 140], "the render failure is recorded on the task"
+    assert "_update_task," in final[overlay : overlay + 140], "the render failure is recorded on the task"
 
 
 def test_final_encode_keeps_the_captions_above_each_panel():

@@ -13,6 +13,7 @@ from app.models.schema import (
     VideoAspect,
     VideoLayout,
     VideoParams,
+    VideoTransitionMode,
 )
 
 
@@ -66,6 +67,22 @@ class TestSchemaBounds(unittest.TestCase):
         self.assertEqual(self._params(video_clip_duration=1).video_clip_duration, 1)
         self.assertEqual(self._params(video_clip_duration=60).video_clip_duration, 60)
         self.assertEqual(self._params().video_clip_duration, 2)
+
+    def test_video_transition_mode_accepts_crossfade(self):
+        self.assertEqual(
+            self._params(video_transition_mode="Crossfade").video_transition_mode,
+            VideoTransitionMode.crossfade,
+        )
+        self.assertIsNone(self._params().video_transition_mode)
+
+    def test_video_variation_seed_defaults_to_none_and_accepts_ints(self):
+        self.assertIsNone(self._params().video_variation_seed)
+        self.assertEqual(self._params(video_variation_seed=7).video_variation_seed, 7)
+
+    def test_video_variation_seed_rejects_non_ints(self):
+        for bad in ("abc", 1.5):
+            with self.assertRaises(ValidationError, msg=f"variation_seed={bad}"):
+                self._params(video_variation_seed=bad)
 
     def test_font_size_bounds(self):
         for bad in (0, 7, 301, 10000):

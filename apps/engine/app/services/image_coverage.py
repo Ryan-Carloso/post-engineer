@@ -42,7 +42,8 @@ gap: short requests still fail naming the missing photos, and a request
 that leaves a later photo no time at all fails naming that photo.
 
 Full-frame photos also get a slow zoom (Ken Burns, panel_motion), alternating
-in and out, so a still photo never looks frozen.
+in and out by default or picking a direction from the variation seed, so a
+still photo never looks frozen.
 
 A video clip (segment_video) covers its take instead: it loops to fill
 its slice, at most MAX_CLIP_LOOPS plays, and never zooms — it already
@@ -51,6 +52,7 @@ task fails naming the gap, exactly like a missing photo.
 """
 
 import math
+import random
 from collections import Counter
 from dataclasses import replace
 from typing import Optional, Sequence
@@ -111,6 +113,13 @@ def failure_detail(
     return "; ".join(parts)
 
 
+def _photo_motion(position: int, rng: Optional[random.Random]) -> str:
+    """Zoom direction for one full-frame photo: the fixed alternation, or the seed's pick."""
+    if rng is None:
+        return MOTION_IN if position % 2 == 0 else MOTION_OUT
+    return rng.choice((MOTION_IN, MOTION_OUT))
+
+
 def ensure_coverage(
     panels: Sequence[Panel],
     *,
@@ -119,6 +128,7 @@ def ensure_coverage(
     audio_duration: float,
     sent: int,
     skipped: Sequence[str],
+    variation_seed: Optional[int] = None,
 ) -> list[Panel]:
     """Lay surviving panels over the coverage window, or fail naming why.
 
@@ -139,7 +149,7 @@ def ensure_coverage(
                 sent=sent, survived=len(panels), skipped=skipped, no_full_frame=not has_full
             )
         )
-    return extend_over_gaps(panels, window_start, audio_duration)
+    return extend_over_gaps(panels, window_start, audio_duration, variation_seed=variation_seed)
 
 
 def coverage_start(face: str, hook_end: float) -> Optional[float]:
@@ -152,7 +162,10 @@ def coverage_start(face: str, hook_end: float) -> Optional[float]:
 
 
 def extend_over_gaps(
-    panels: Sequence[Panel], window_start: Optional[float], audio_duration: float
+    panels: Sequence[Panel],
+    window_start: Optional[float],
+    audio_duration: float,
+    variation_seed: Optional[int] = None,
 ) -> list[Panel]:
     """Panels whose full-frame photos cover [window_start, audio_duration].
 
@@ -181,6 +194,7 @@ def extend_over_gaps(
     covered: list[Panel] = []
     cursor = window_start
     photo_position = 0
+    rng = random.Random(variation_seed) if variation_seed is not None else None
     for position, panel in enumerate(full):
         start = cursor
         if panel.clip_seconds is not None:
@@ -207,7 +221,7 @@ def extend_over_gaps(
                     "requested durations leave no time for "
                     f"photo {position + 1} of {len(full)} (segment {panel.index})"
                 )
-            motion = MOTION_IN if photo_position % 2 == 0 else MOTION_OUT
+            motion = _photo_motion(photo_position, rng)
             photo_position += 1
         covered.append(replace(panel, start=start, end=end, motion=motion))
         cursor = end
