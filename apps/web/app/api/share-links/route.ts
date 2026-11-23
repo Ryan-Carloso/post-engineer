@@ -34,6 +34,8 @@ async function readBody(request: Request): Promise<{ ok: true; json: unknown } |
 async function getHandler(request: Request): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
+  const limited = await applyRateLimit(request, RATE_LIMITS.shareLinkList, auth.userId);
+  if (limited) return limited;
   const scoped = rejectScopedKey('GET /api/share-links', auth);
   if (scoped !== null) return scoped;
 

@@ -3,12 +3,15 @@ import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { logger } from '@/lib/logger';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
+import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 
 const START_TIME = Date.now();
 
-async function getHandler() {
+async function getHandler(request: Request) {
   const { auth, error: authError } = await requireSupabaseSession();
   if (authError || !auth) return authError;
+  const limited = await applyRateLimit(request, RATE_LIMITS.healthProbe, auth.userId);
+  if (limited) return limited;
 
   try {
     const supabase = createSupabaseServiceClient();

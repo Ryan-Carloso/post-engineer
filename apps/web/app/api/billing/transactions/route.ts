@@ -7,6 +7,7 @@ import type { TokenTransaction } from '@/lib/token-transactions';
 import { logger } from '@/lib/logger';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 import { parseTransactionsLimit, parseTransactionsOffset } from '@/lib/contracts/billing';
+import { applyRateLimit, CALLER_RATE_LIMITS, profileForCaller } from '@/lib/rate-limit';
 
 export { parseTransactionsLimit, parseTransactionsOffset } from '@/lib/contracts/billing';
 
@@ -30,7 +31,7 @@ function toTransaction(row: {
   };
 }
 
-async function getHandler(request?: Request): Promise<NextResponse> {
+async function getHandler(request: Request): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) {
     return NextResponse.json(
@@ -38,6 +39,8 @@ async function getHandler(request?: Request): Promise<NextResponse> {
       { status: 401 },
     );
   }
+  const limited = await applyRateLimit(request, profileForCaller(auth, CALLER_RATE_LIMITS.billingTransactions), auth.userId);
+  if (limited) return limited;
   const userId = auth.userId;
   const supabase = auth.isApiKey === true || auth.isOAuth === true
     ? createSupabaseServiceClient()

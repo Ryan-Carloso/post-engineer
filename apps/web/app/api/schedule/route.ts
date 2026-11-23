@@ -27,6 +27,7 @@ import {
   type ScheduleCancelSlot,
 } from './cancel-slots';
 import { cancelRemovedEngineTasks } from './cancel-engine-tasks';
+import { applyRateLimit, CALLER_RATE_LIMITS, profileForCaller, RATE_LIMITS } from '@/lib/rate-limit';
 
 
 function errorResponse(
@@ -64,9 +65,11 @@ async function assertScheduleScope(
   return null;
 }
 
-async function getHandler(request?: Request): Promise<NextResponse> {
+async function getHandler(request: Request): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
+  const limited = await applyRateLimit(request, profileForCaller(auth, CALLER_RATE_LIMITS.scheduleList), auth.userId);
+  if (limited) return limited;
   const user = { id: auth.userId };
   const supabase = auth.isApiKey === true || auth.isOAuth === true
     ? createSupabaseServiceClient()
@@ -111,6 +114,8 @@ type CancelRefundReason =
 async function deleteHandler(request: Request): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
+  const limited = await applyRateLimit(request, RATE_LIMITS.scheduleDelete, auth.userId);
+  if (limited) return limited;
   const user = { id: auth.userId };
   const supabase = auth.isApiKey === true || auth.isOAuth === true
     ? createSupabaseServiceClient()

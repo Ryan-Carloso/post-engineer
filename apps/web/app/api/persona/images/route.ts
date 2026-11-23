@@ -15,7 +15,7 @@ import {
   setPrimaryLibraryImage,
 } from '@/lib/persona-images';
 import { type PersonaLibraryImage } from '@/lib/persona-image-select';
-import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
+import { applyRateLimit, CALLER_RATE_LIMITS, profileForCaller, RATE_LIMITS } from '@/lib/rate-limit';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
@@ -42,6 +42,7 @@ function errorResponse(
 interface Authed {
   userId: string;
   isApiKey: boolean;
+  isOAuth: boolean;
   personaIds: string[] | null;
 }
 
@@ -60,6 +61,7 @@ async function getAuth(request: Request): Promise<
     auth: {
       userId: auth.userId,
       isApiKey: auth.isApiKey === true,
+      isOAuth: auth.isOAuth === true,
       personaIds: (auth.personaIds ?? null) as string[] | null,
     },
     supabase,
@@ -198,6 +200,8 @@ async function getHandler(request: Request): Promise<NextResponse> {
   const authed = await getAuth(request);
   if ('response' in authed) return authed.response;
   const { auth, supabase } = authed;
+  const limited = await applyRateLimit(request, profileForCaller(auth, CALLER_RATE_LIMITS.personaImagesRead), auth.userId);
+  if (limited) return limited;
 
   const parsedPersonaId = parseListPersonaImagesQuery(request.url);
   if (!parsedPersonaId.ok) return personaValidationError(parsedPersonaId.error, 'GET /api/persona/images', { field: 'personaId' });
@@ -329,6 +333,8 @@ async function patchHandler(request: Request): Promise<NextResponse> {
   const authed = await getAuth(request);
   if ('response' in authed) return authed.response;
   const { auth, supabase } = authed;
+  const limited = await applyRateLimit(request, RATE_LIMITS.personaImageEdit, auth.userId);
+  if (limited) return limited;
 
   const body: unknown = await request.json().catch(() => null);
   const id =
@@ -414,6 +420,8 @@ async function deleteHandler(request: Request): Promise<NextResponse> {
   const authed = await getAuth(request);
   if ('response' in authed) return authed.response;
   const { auth, supabase } = authed;
+  const limited = await applyRateLimit(request, RATE_LIMITS.personaImageEdit, auth.userId);
+  if (limited) return limited;
 
   const parsedId = parseDeletePersonaImageQuery(request.url);
   if (!parsedId.ok) return personaValidationError(parsedId.error, 'DELETE /api/persona/images', { field: 'id' });

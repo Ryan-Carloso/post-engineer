@@ -4,6 +4,7 @@ import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { logger } from '@/lib/logger';
 import { apiErrorResponse } from '@/lib/api-error';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
+import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 
 async function deleteHandler(
   request: Request,
@@ -11,6 +12,8 @@ async function deleteHandler(
 ): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) return authError;
+  const limited = await applyRateLimit(request, RATE_LIMITS.apiKeyManage, auth.userId);
+  if (limited) return limited;
 
   if (auth.isApiKey === true || auth.isOAuth === true) {
     return NextResponse.json(

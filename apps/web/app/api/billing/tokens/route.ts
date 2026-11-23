@@ -5,8 +5,9 @@ import { createSupabaseServiceClient } from '@/lib/supabase/service';
 import { toFiniteNumber } from '@/lib/tokens';
 import { logger } from '@/lib/logger';
 import { withApiErrorReporting, resolveReportingUserId, attachApiErrorProperties } from '@/lib/api-error-reporting';
+import { applyRateLimit, CALLER_RATE_LIMITS, profileForCaller } from '@/lib/rate-limit';
 
-async function getHandler(request?: Request): Promise<NextResponse> {
+async function getHandler(request: Request): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);
   if (authError || !auth) {
     return NextResponse.json(
@@ -14,6 +15,8 @@ async function getHandler(request?: Request): Promise<NextResponse> {
       { status: 401 },
     );
   }
+  const limited = await applyRateLimit(request, profileForCaller(auth, CALLER_RATE_LIMITS.billingTokens), auth.userId);
+  if (limited) return limited;
   const userId = auth.userId;
   const supabase = auth.isApiKey === true || auth.isOAuth === true
     ? createSupabaseServiceClient()

@@ -277,28 +277,22 @@ jobs:
   # intercepts alone cannot authenticate), network-level mocks only for
   # what cannot run in CI (social OAuth, engine task polling).
   #
-  # Required repository secrets (Settings > Secrets > Actions):
-  #   NEXT_PUBLIC_SUPABASE_URL      — Supabase project URL (public value)
-  #   NEXT_PUBLIC_SUPABASE_ANON_KEY — Supabase anon key (public value)
-  #   CYPRESS_E2E_TEST_EMAIL        — login of the dedicated E2E test user
-  #   CYPRESS_E2E_TEST_PASSWORD     — password of the dedicated E2E test user
-  # The Supabase pair is named after the app variables it feeds (the gate
-  # below checks those names, so a CYPRESS_-prefixed secret would report as
-  # an empty NEXT_PUBLIC_* var). The credentials keep the CYPRESS_ prefix and
-  # are re-exported below as E2E_TEST_* because that is what
-  # cypress.config.ts reads via loadEnvConfig — the CI runner has no .env.
-  # The E2E user must exist in the Supabase project; specs must mock every
-  # mutating API call (cy.intercept) so CI never writes production data.
+  # Supabase is a throwaway local stack started in the runner
+  # (.github/actions/local-supabase): the migration chain is applied and the
+  # E2E user below is seeded by apps/web/cypress/supabase/seed-e2e.sh. The
+  # job never talks to the production project and needs no secrets: every
+  # page hit runs supabase.auth.getUser() in middleware.ts, and running the
+  # suite against production made CI half of that project's billed log
+  # ingestion. The E2E credentials are fixed values that only exist in that
+  # local stack.
   cypress:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
       contents: read
     env:
-      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
-      E2E_TEST_EMAIL: ${{ secrets.CYPRESS_E2E_TEST_EMAIL }}
-      E2E_TEST_PASSWORD: ${{ secrets.CYPRESS_E2E_TEST_PASSWORD }}
+      E2E_TEST_EMAIL: e2e@post-engineer.test
+      E2E_TEST_PASSWORD: local-e2e-password
       NEXT_PUBLIC_APP_URL: http://localhost:3434
       NEXT_PUBLIC_POSTHOG_HOST: https://example.posthog.com
       NEXT_PUBLIC_POSTHOG_KEY: dummy-posthog-key
@@ -318,24 +312,7 @@ jobs:
           echo "BUILD=${{ github.run_number }}" >> "$GITHUB_ENV"
           echo "COMMIT=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
 
-      - name: Check E2E secrets are configured
-        shell: bash
-        run: |
-          set -euo pipefail
-          missing=0
-          for var in NEXT_PUBLIC_SUPABASE_URL NEXT_PUBLIC_SUPABASE_ANON_KEY; do
-            if [ -z "${!var:-}" ]; then
-              echo "::error::Repository secret $var is not set (Settings > Secrets > Actions). The Cypress job needs it."
-              missing=1
-            fi
-          done
-          for var in E2E_TEST_EMAIL E2E_TEST_PASSWORD; do
-            if [ -z "${!var:-}" ]; then
-              echo "::error::$var is not set — is the repository secret CYPRESS_${var#E2E_TEST_} configured (Settings > Secrets > Actions)? The Cypress job needs it."
-              missing=1
-            fi
-          done
-          exit $missing
+      - uses: ./.github/actions/local-supabase
 
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
@@ -425,10 +402,8 @@ jobs:
     permissions:
       contents: read
     env:
-      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
-      E2E_TEST_EMAIL: ${{ secrets.CYPRESS_E2E_TEST_EMAIL }}
-      E2E_TEST_PASSWORD: ${{ secrets.CYPRESS_E2E_TEST_PASSWORD }}
+      E2E_TEST_EMAIL: e2e@post-engineer.test
+      E2E_TEST_PASSWORD: local-e2e-password
       NEXT_PUBLIC_APP_URL: http://localhost:3434
       NEXT_PUBLIC_POSTHOG_HOST: https://example.posthog.com
       NEXT_PUBLIC_POSTHOG_KEY: dummy-posthog-key
@@ -449,24 +424,7 @@ jobs:
           echo "BUILD=${{ github.run_number }}" >> "$GITHUB_ENV"
           echo "COMMIT=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
 
-      - name: Check E2E secrets are configured
-        shell: bash
-        run: |
-          set -euo pipefail
-          missing=0
-          for var in NEXT_PUBLIC_SUPABASE_URL NEXT_PUBLIC_SUPABASE_ANON_KEY; do
-            if [ -z "${!var:-}" ]; then
-              echo "::error::Repository secret $var is not set (Settings > Secrets > Actions). The Cypress job needs it."
-              missing=1
-            fi
-          done
-          for var in E2E_TEST_EMAIL E2E_TEST_PASSWORD; do
-            if [ -z "${!var:-}" ]; then
-              echo "::error::$var is not set — is the repository secret CYPRESS_${var#E2E_TEST_} configured (Settings > Secrets > Actions)? The Cypress job needs it."
-              missing=1
-            fi
-          done
-          exit $missing
+      - uses: ./.github/actions/local-supabase
 
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:

@@ -67,6 +67,9 @@ apps/engine/config.toml
 
 # Supabase CLI cache — contains local project refs / pooler URLs
 apps/web/supabase/.temp/
+supabase/.temp/
+apps/web/cypress/supabase/.temp/
+apps/web/cypress/supabase/.branches/
 
 # Keep examples
 !*.example

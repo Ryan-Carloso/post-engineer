@@ -35,6 +35,25 @@ pnpm build         # production build
 
 From the repo root these run via Nx: `pnpm test`, `pnpm lint`, `pnpm typecheck`.
 
+### E2E against a local Supabase
+
+CI runs the Cypress suite against a throwaway local Supabase stack, never the
+production project (`.github/actions/local-supabase`). Reproduce it locally
+(Docker required):
+
+```bash
+supabase start --workdir apps/web/cypress \
+  -x realtime,imgproxy,mailpit,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
+supabase db push --yes --db-url "postgresql://postgres:postgres@127.0.0.1:54322/postgres?sslmode=disable"
+supabase status -o env --workdir apps/web/cypress   # API_URL, ANON_KEY, SERVICE_ROLE_KEY
+```
+
+Point `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` and
+`SUPABASE_SERVICE_ROLE_KEY` at those values, pick any `E2E_TEST_EMAIL` /
+`E2E_TEST_PASSWORD`, run `apps/web/cypress/supabase/seed-e2e.sh` (it refuses a
+non-local URL), then build, `next start -p 3434` and `pnpm test:e2e`.
+`supabase stop --no-backup --workdir apps/web/cypress` throws the stack away.
+
 ## Conventions
 
 - No `any` types; env vars fail explicitly when missing (no fallbacks).

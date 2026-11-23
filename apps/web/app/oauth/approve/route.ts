@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { getOAuthKeys } from '@/lib/oauth/keys';
 import { verifyConsentRequest, mintAuthorizationCode } from '@/lib/oauth/tokens';
@@ -16,6 +17,8 @@ function redirectToClient(
 }
 
 export async function POST(request: Request): Promise<NextResponse> {
+  const limited = await applyRateLimit(request, RATE_LIMITS.oauthApprove);
+  if (limited) return limited;
   let form: FormData;
   try {
     form = await request.formData();
