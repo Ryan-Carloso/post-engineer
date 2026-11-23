@@ -118,7 +118,7 @@ describe('ensureEngineImageUrl', () => {
       ensureEngineImageUrl('/caracter-samples/missing.png', {
         supabase: { storage } as never,
         userId: 'u-1',
-          fetchImpl: fetchImpl as never,
+        fetchImpl: fetchImpl as never,
       }),
     ).rejects.toThrow(/missing\.png/);
   });
@@ -132,7 +132,7 @@ describe('ensureEngineImageUrl', () => {
       ensureEngineImageUrl('/caracter-samples/file-1.png', {
         supabase: { storage } as never,
         userId: 'u-1',
-          fetchImpl: fetchImpl as never,
+        fetchImpl: fetchImpl as never,
       }),
     ).rejects.toThrow(/bucket full/);
   });
