@@ -427,6 +427,7 @@ def test_worker_caches_a_clone_downloaded_from_supabase(tmp_path: Path) -> None:
 
     store = _Store()
     params = {"voice_name": f"chatterbox_nano:{key}"}
+    assert not (tmp_path / "voices.toml").is_file()
     assert materialize_clone(params, tmp_path, store) is True
     assert materialize_clone(params, tmp_path, store) is False
     assert store.downloads == 1

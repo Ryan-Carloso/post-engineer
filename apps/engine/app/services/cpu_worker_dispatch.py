@@ -289,11 +289,45 @@ def try_remote_batch(
     return True, accepted
 
 
-def modal_call_status(call_id: str) -> str:
-    """``running`` while the call has not finished. Unknown errors stay running.
+_TERMINAL_CALL_ERRORS = frozenset(
+    {
+        "RemoteError",
+        "FunctionTimeoutError",
+        "OutputExpiredError",
+        "NotFoundError",
+    }
+)
 
-    A finished call, including one whose container raised, is ``finished``
-    so boot triage can recover a task the worker never closed.
+
+def _exception_means_call_finished(exc: BaseException) -> bool:
+    """True when Modal is reporting that this call has ended.
+
+    A poll timeout and every Modal client error stay open. ``grpclib``
+    stream failures stay open too: the client retries, then re-raises
+    that type, and the container may still be rendering. A result is
+    different. Modal re-raises the container's own exception as that
+    same type, so a normal ``RuntimeError`` or ``OSError`` means the
+    call finished and boot triage may recover the task.
+    """
+    name = type(exc).__name__
+    module = type(exc).__module__
+    if not isinstance(module, str):
+        return True
+    if name in {"TimeoutError", "ExecutionTimeoutError"}:
+        return False
+    if module == "modal" or module.startswith("modal."):
+        return name in _TERMINAL_CALL_ERRORS
+    if module == "grpclib" or module.startswith("grpclib."):
+        return False
+    return True
+
+
+def modal_call_status(call_id: str) -> str:
+    """``running`` until this call is known to have ended.
+
+    Client and transport failures stay ``running``, so a blip cannot
+    refund a live render. A returned result, a container exception, a
+    function timeout, or an expired or missing call is ``finished``.
     """
     try:
         import modal
@@ -301,19 +335,10 @@ def modal_call_status(call_id: str) -> str:
         return "running"
     try:
         modal.FunctionCall.from_id(call_id).get(timeout=0)
-    except TimeoutError:
-        return "running"
     except Exception as exc:
-        name = type(exc).__name__
-        module = type(exc).__module__
-        if name in {"TimeoutError", "ExecutionTimeoutError"}:
-            return "running"
-        if isinstance(module, str) and module.startswith("modal") and name not in {
-            "RemoteError",
-            "FunctionTimeoutError",
-        }:
-            return "running"
-        return "finished"
+        if _exception_means_call_finished(exc):
+            return "finished"
+        return "running"
     return "finished"
 
 
