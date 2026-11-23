@@ -61,7 +61,7 @@ def test_an_invalid_image_is_a_400_with_its_code(client, monkeypatch):
     monkeypatch.setattr(image_short, "render_image_short", invalid)
     response = _post(client, b"nope")
     assert response.status_code == 400
-    assert response.json() == {"status": 400, "body": {"code": "invalid_image"}, "message": "image could not be decoded"}
+    assert response.json() == {"status": 400, "body": {"code": "invalid_image"}, "message": "image must be a readable JPEG or PNG"}
 
 
 def test_an_oversized_upload_is_a_413_before_rendering(client, monkeypatch):
@@ -78,6 +78,16 @@ def test_a_render_failure_is_a_500_without_the_ffmpeg_detail(client, monkeypatch
         raise image_short.ImageShortError("render_failed", "image Short render failed (exit 1): /srv/tmp/x.png boom")
 
     monkeypatch.setattr(image_short, "render_image_short", failed)
+    response = _post(client, b"jpeg-bytes")
+    assert response.status_code == 500
+    assert response.json() == {"status": 500, "body": {"code": "render_failed"}, "message": "image Short render failed"}
+
+
+def test_an_unknown_error_code_is_a_generic_500(client, monkeypatch):
+    def odd(image_bytes, work_dir):
+        raise image_short.ImageShortError("something_new", "/srv/secret/path detail")
+
+    monkeypatch.setattr(image_short, "render_image_short", odd)
     response = _post(client, b"jpeg-bytes")
     assert response.status_code == 500
     assert response.json() == {"status": 500, "body": {"code": "render_failed"}, "message": "image Short render failed"}

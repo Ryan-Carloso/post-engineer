@@ -17,18 +17,19 @@ from app.utils import utils
 
 router = new_router()
 
-_STATUS_BY_CODE: dict[str, int] = {
-    image_short.ERROR_INVALID_IMAGE: 400,
-    image_short.ERROR_IMAGE_TOO_LARGE: 413,
-    image_short.ERROR_RENDER_FAILED: 500,
+_PUBLIC_ERRORS: dict[str, tuple[int, str]] = {
+    image_short.ERROR_INVALID_IMAGE: (400, "image must be a readable JPEG or PNG"),
+    image_short.ERROR_IMAGE_TOO_LARGE: (413, "image exceeds 8 MB"),
+    image_short.ERROR_RENDER_FAILED: (500, "image Short render failed"),
 }
 
 
-def _error_response(code: str, message: str) -> JSONResponse:
-    status = _STATUS_BY_CODE.get(code, 500)
+def _error_response(code: str) -> JSONResponse:
+    known = code if code in _PUBLIC_ERRORS else image_short.ERROR_RENDER_FAILED
+    status, message = _PUBLIC_ERRORS[known]
     return JSONResponse(
         status_code=status,
-        content=utils.get_response(status=status, body={"code": code}, message=message),
+        content=utils.get_response(status=status, body={"code": known}, message=message),
     )
 
 
@@ -39,12 +40,11 @@ def _error_response(code: str, message: str) -> JSONResponse:
 def render_image_short(request: Request, file: UploadFile = File(...)):
     base.get_auth_context(request)
     if file.size is not None and file.size > image_short.MAX_IMAGE_SHORT_BYTES:
-        return _error_response(image_short.ERROR_IMAGE_TOO_LARGE, "image exceeds 8 MB")
+        return _error_response(image_short.ERROR_IMAGE_TOO_LARGE)
     image_bytes = file.file.read(image_short.MAX_IMAGE_SHORT_BYTES + 1)
     try:
         with tempfile.TemporaryDirectory() as work_dir:
             video = image_short.render_image_short(image_bytes, work_dir)
     except image_short.ImageShortError as exc:
-        public = "image Short render failed" if exc.code == image_short.ERROR_RENDER_FAILED else str(exc)
-        return _error_response(exc.code, public)
+        return _error_response(exc.code)
     return Response(content=video, media_type="video/mp4")
