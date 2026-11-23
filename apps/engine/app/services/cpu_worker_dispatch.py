@@ -162,8 +162,10 @@ def try_remote_dispatch(
     """Spawn when the job is eligible.
 
     Returns ``(spawned, on_accepted_already_ran)``. A spawn failure clears
-    the remote marker and returns ``(False, ...)`` so the caller can run
-    the local thread. ``on_accepted`` errors propagate.
+    the remote marker and returns ``(False, False)`` so the caller can run
+    the local thread with the original callback. ``on_accepted`` runs only
+    after the call id is recorded, so a rejected job never reports
+    requested. ``on_accepted`` errors propagate.
     """
     if not should_dispatch(body, stop_at):
         return False, False
@@ -174,14 +176,6 @@ def try_remote_dispatch(
         remote_call_id="",
         job_params=params,
     )
-    accepted = False
-    if on_accepted is not None:
-        try:
-            on_accepted()
-            accepted = True
-        except Exception:
-            _clear_remote(state, task_id)
-            raise
     try:
         call_id = _spawn(task_id, params, stop_at, spawn)
     except Exception as exc:
@@ -189,8 +183,12 @@ def try_remote_dispatch(
             f"modal cpu spawn failed for {task_id}: {type(exc).__name__}"
         )
         _clear_remote(state, task_id)
-        return False, accepted
+        return False, False
     state.update_task(task_id, remote_call_id=call_id)
+    accepted = False
+    if on_accepted is not None:
+        on_accepted()
+        accepted = True
     return True, accepted
 
 
@@ -251,7 +249,12 @@ def try_remote_batch(
     on_accepted: Callable[[], None] | None = None,
     spawn: Spawn | None = None,
 ) -> tuple[bool, bool]:
-    """Spawn a batch slot without taking a local running slot."""
+    """Spawn a batch slot without taking a local running slot.
+
+    ``on_accepted`` runs only after the call id is recorded, so a spawn
+    failure or a deferred slot never reports requested; the caller then
+    runs the original callback on the local path instead.
+    """
     if not should_dispatch(request, "video"):
         return False, False
     params = job_params_of(request)
@@ -267,14 +270,6 @@ def try_remote_batch(
         job_params=params,
         **tracking_ids,
     )
-    accepted = False
-    if on_accepted is not None:
-        try:
-            on_accepted()
-            accepted = True
-        except Exception:
-            _clear_remote(state, task_id)
-            raise
     try:
         call_id = _spawn(task_id, params, "video", spawn)
     except Exception as exc:
@@ -287,6 +282,10 @@ def try_remote_batch(
             delete(task_id)
         return False, False
     state.update_task(task_id, remote_call_id=call_id)
+    accepted = False
+    if on_accepted is not None:
+        on_accepted()
+        accepted = True
     return True, accepted
 
 

@@ -112,6 +112,80 @@ def test_spawn_records_the_call_id_and_a_failure_clears_the_marker() -> None:
     assert cleared["remote_call_id"] == ""
 
 
+def test_on_accepted_runs_only_after_a_successful_spawn() -> None:
+    state = MemoryState()
+    state.update_task("task-1", state=3, progress=0)
+    ran: list[str] = []
+
+    def boom(task_id: str, params: dict[str, object], stop_at: str) -> str:
+        raise RuntimeError("modal down")
+
+    spawned, accepted = dispatch.try_remote_dispatch(
+        state,
+        "task-1",
+        _faceless(),
+        "video",
+        on_accepted=lambda: ran.append("x"),
+        spawn=boom,
+    )
+    assert spawned is False
+    assert accepted is False
+    assert ran == []
+
+    def spawn(task_id: str, params: dict[str, object], stop_at: str) -> str:
+        return "fc-1"
+
+    spawned, accepted = dispatch.try_remote_dispatch(
+        state,
+        "task-1",
+        _faceless(),
+        "video",
+        on_accepted=lambda: ran.append("x"),
+        spawn=spawn,
+    )
+    assert spawned is True
+    assert accepted is True
+    assert ran == ["x"]
+
+
+def test_batch_on_accepted_runs_only_after_a_successful_spawn() -> None:
+    state = MemoryState()
+    state.update_task("task-1", state=3, progress=0)
+    ran: list[str] = []
+
+    def boom(task_id: str, params: dict[str, object], stop_at: str) -> str:
+        raise RuntimeError("modal down")
+
+    spawned, accepted = dispatch.try_remote_batch(
+        state,
+        "task-1",
+        _faceless(),
+        "user-1",
+        {},
+        on_accepted=lambda: ran.append("x"),
+        spawn=boom,
+    )
+    assert spawned is False
+    assert accepted is False
+    assert ran == []
+
+    def spawn(task_id: str, params: dict[str, object], stop_at: str) -> str:
+        return "fc-1"
+
+    spawned, accepted = dispatch.try_remote_batch(
+        state,
+        "task-1",
+        _faceless(),
+        "user-1",
+        {},
+        on_accepted=lambda: ran.append("x"),
+        spawn=spawn,
+    )
+    assert spawned is True
+    assert accepted is True
+    assert ran == ["x"]
+
+
 def test_thirty_faceless_jobs_spawn_without_a_local_queue() -> None:
     state = MemoryState()
     seen: list[str] = []
