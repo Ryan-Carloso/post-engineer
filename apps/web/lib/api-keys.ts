@@ -1,8 +1,10 @@
 import { createHash, randomBytes } from 'crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { logger } from '@/lib/logger';
 
 const KEY_PREFIX = 'pe_live_';
 const MIN_KEY_LENGTH = 32;
+export const API_KEY_LAST_USED_TOUCH_INTERVAL_MS = 60 * 60 * 1000;
 
 export function generateRawApiKey(): string {
   const bytes = randomBytes(24).toString('hex');
@@ -43,7 +45,7 @@ export async function resolveApiKey(
 
   const { data, error } = await supabase
     .from('user_api_keys')
-    .select('id, user_id, persona_ids, revoked_at')
+    .select('id, user_id, persona_ids, revoked_at, last_used_at')
     .eq('key_hash', keyHash)
     .is('revoked_at', null)
     .single();
@@ -52,10 +54,7 @@ export async function resolveApiKey(
     return null;
   }
 
-  await supabase
-    .from('user_api_keys')
-    .update({ last_used_at: new Date().toISOString() })
-    .eq('id', data.id);
+  await touchApiKeyLastUsed(supabase, data.id as string, data.last_used_at);
 
   const personaIds = Array.isArray(data.persona_ids)
     ? (data.persona_ids as unknown[]).filter(
@@ -68,6 +67,35 @@ export async function resolveApiKey(
     keyId: data.id as string,
     personaIds,
   };
+}
+
+function isLastUsedStale(lastUsedAt: unknown, cutoffMs: number): boolean {
+  if (typeof lastUsedAt !== 'string') return true;
+  const lastUsedMs = Date.parse(lastUsedAt);
+  return Number.isNaN(lastUsedMs) || lastUsedMs < cutoffMs;
+}
+
+async function touchApiKeyLastUsed(
+  supabase: SupabaseClient,
+  keyId: string,
+  lastUsedAt: unknown,
+): Promise<void> {
+  const nowMs = Date.now();
+  const cutoffMs = nowMs - API_KEY_LAST_USED_TOUCH_INTERVAL_MS;
+  if (!isLastUsedStale(lastUsedAt, cutoffMs)) return;
+  const cutoff = new Date(cutoffMs).toISOString();
+  const { error } = await supabase
+    .from('user_api_keys')
+    .update({ last_used_at: new Date(nowMs).toISOString() })
+    .eq('id', keyId)
+    .or(`last_used_at.is.null,last_used_at.lt.${cutoff}`);
+  if (error) {
+    logger.warn('[api-keys] last_used_at touch failed', {
+      keyId,
+      code: error.code,
+      message: error.message,
+    });
+  }
 }
 
 export interface PersonaScopeContext {
