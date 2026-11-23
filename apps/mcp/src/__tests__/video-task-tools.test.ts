@@ -431,6 +431,23 @@ describe('wait_for_video_tasks', () => {
     expect(result.results.map((entry) => entry.outcome)).toEqual(['running', 'running']);
   });
 
+  it('keeps polling a queued task until it completes', async () => {
+    const clock = fakeClock();
+    const sleep = vi.fn(clock.sleep);
+    vi.mocked(mockClient.getVideoStatus)
+      .mockResolvedValueOnce(statusBody('task-1', 3, 0, null))
+      .mockResolvedValueOnce(statusBody('task-1', 1, 100, null));
+    const args = WaitForVideoTasksSchema.parse({ taskIds: ['task-1'], waitSeconds: 120 });
+
+    const response = await handleWaitForVideoTasks(mockClient, args, { now: clock.now, sleep });
+
+    const result = parsed(response);
+    expect(mockClient.getVideoStatus).toHaveBeenCalledTimes(2);
+    expect(result.allTerminal).toBe(true);
+    expect(result.results[0]?.outcome).toBe('completed');
+    expect(result.results[0]?.state).toBe(1);
+  });
+
   it('reports queued tasks distinctly from running ones and keeps polling them', async () => {
     const clock = fakeClock();
     const sleep = vi.fn(clock.sleep);
