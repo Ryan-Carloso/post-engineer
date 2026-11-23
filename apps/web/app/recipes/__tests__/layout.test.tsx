@@ -86,6 +86,24 @@ describe('/recipes layout', () => {
     consoleError.mockRestore();
   });
 
+  it('treats verified claims with an empty subject as signed out', async () => {
+    getClaims.mockResolvedValue({ data: claimsFor(''), error: null });
+    render(await RecipesLayout({ children: <Probe /> }));
+    expect(screen.getByText('signed-out')).toBeInTheDocument();
+    expect(screen.queryByTestId('app-shell')).not.toBeInTheDocument();
+  });
+
+  it('treats claims returned alongside an error as signed out', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    getClaims.mockResolvedValue({
+      data: claimsFor('u1'),
+      error: { name: 'AuthApiError', message: 'boom' },
+    });
+    render(await RecipesLayout({ children: <Probe /> }));
+    expect(screen.getByText('signed-out')).toBeInTheDocument();
+    consoleError.mockRestore();
+  });
+
   it('logs a real auth error and falls back to the public frame', async () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     getClaims.mockResolvedValue({
