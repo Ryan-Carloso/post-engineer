@@ -485,6 +485,7 @@ def test_a_compressed_segment_never_shifts_the_next_segment_photos():
 def test_photos_are_laid_back_to_back_without_a_gap_or_an_overlap():
     panels = _segment_panels([(1.0, 7.0), (7.4, 9.0), (9.8, 16.0)], [[1, 4], [6], [2, 2, 3]])
     covered = image_coverage.extend_over_gaps(panels, 0.5, 16.0)
+    assert len(covered) == 6
     assert covered[0].start == 0.5
     assert covered[-1].end == 16.0
     assert all(a.end == b.start for a, b in zip(covered, covered[1:]))
