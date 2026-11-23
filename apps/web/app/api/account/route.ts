@@ -8,7 +8,7 @@ import { syncAccountProfile, credentialFailureHeld } from '@/lib/account-profile
 import { TokenDecryptError } from '@/lib/token-crypto';
 import { isUnauthorizedError } from '@/lib/upload/account-unauthorized';
 import { logger } from '@/lib/logger';
-import { parseDisconnectAccountQuery } from '@/lib/contracts/accounts';
+import { parseDisconnectAccountQuery, parseListAccountsQuery } from '@/lib/contracts/accounts';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 import { applyRateLimit, CALLER_RATE_LIMITS, profileForCaller, RATE_LIMITS } from '@/lib/rate-limit';
 
@@ -26,6 +26,17 @@ async function getHandler(request: Request) {
   }
   const limited = await applyRateLimit(request, profileForCaller(auth, CALLER_RATE_LIMITS.accountList), auth.userId);
   if (limited) return limited;
+  const parsed = parseListAccountsQuery(new URL(request.url).searchParams);
+  if (!parsed.ok) {
+    return NextResponse.json(
+      { authenticated: true, accounts: [], message: parsed.error, error: parsed.code },
+      { status: 400 }
+    );
+  }
+  if (parsed.refresh) {
+    const refreshLimited = await applyRateLimit(request, RATE_LIMITS.accountProfileRefresh, auth.userId);
+    if (refreshLimited) return refreshLimited;
+  }
   const userId = auth.userId;
   const supabase = auth.isApiKey === true || auth.isOAuth === true
     ? createSupabaseServiceClient()
@@ -36,7 +47,7 @@ async function getHandler(request: Request) {
     const failedRecordIds = new Set<string>();
     const effectiveRecords = await Promise.all(records.map(async (record) => {
       try {
-        return await syncAccountProfile(supabase, userId, record);
+        return await syncAccountProfile(supabase, userId, record, { force: parsed.refresh });
       } catch (error) {
         logger.error('[ACCOUNT] Profile sync failed, keeping the stored profile', error, { recordId: record.id, provider: record.provider });
         if (isCredentialFailure(error)) failedRecordIds.add(record.id);

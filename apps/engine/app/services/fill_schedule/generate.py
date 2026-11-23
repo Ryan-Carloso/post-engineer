@@ -29,6 +29,7 @@ from app.services.language_gate import ENGLISH_ONLY_VIDEO_MESSAGE, is_english_la
 from app.services.owner_alert import notify_generation_failed, notify_owner_async
 from app.services.persona_image import is_engine_usable_persona_image_url
 from app.services.script_segments import legacy_media_list
+from app.services.tracking_props import pacing_tracking_props
 from app.services.fill_schedule.support import (
     build_persona_params,
     notify_safe,
@@ -181,6 +182,7 @@ class BatchGenerator:
                         pipeline="video",
                         slot_id=slot["id"],
                         persona_id=identity.get("id"),
+                        **pacing_tracking_props(request),
                     )
 
                 self._dispatch_generation(

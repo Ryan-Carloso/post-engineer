@@ -19,4 +19,10 @@ describe('Cypress prompt detail mocks', () => {
     expect(spec).toContain('promptDetail(');
     expect(spec).not.toContain('versionId');
   });
+
+  it('are the only way the prompts hub spec builds a prompt detail', () => {
+    const spec = readFileSync(join(findRepoRoot(import.meta.url), 'apps/web/cypress/e2e/prompts-hub.cy.ts'), 'utf8');
+    expect(spec).toContain('promptDetail(');
+    expect(spec).not.toContain('versionId');
+  });
 });
