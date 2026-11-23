@@ -29,11 +29,12 @@ from app.models.schema import (
     TaskResponse,
     TaskVideoRequest,
 )
-from app.services import remote_dispatch, state as sm, task as tm
+from app.services import analytics, remote_dispatch, state as sm, task as tm
 from app.services import video_storage
 from app.services.task_cleanup import remove_task_directory
 from app.services.language_gate import ensure_english_video_language
 from app.services.music_mood import validate_music_mood
+from app.services.tracking_props import persona_tracking_kwargs, tracking_kwargs
 from app.services.upload_filenames import sanitize_upload_filename as _sanitize_upload_filename
 from app.utils import file_security, upload_limits, utils
 
@@ -260,31 +261,6 @@ def create_audio(
     return create_task(request, body, stop_at="audio")
 
 
-def _persona_tracking_kwargs(
-    body: Union[TaskVideoRequest, SubtitleRequest, AudioRequest],
-) -> dict[str, str]:
-    """persona_id for the task row (read back by the PostHog tracking
-    context). Omitted when the request carries no persona, so the row —
-    and the events — stay free of blank props."""
-    persona = getattr(body, "persona", None)
-    persona_id = getattr(persona, "id", None)
-    if isinstance(persona_id, str) and persona_id:
-        return {"persona_id": persona_id}
-    return {}
-
-
-def _tracking_kwargs(
-    body: Union[TaskVideoRequest, SubtitleRequest, AudioRequest],
-) -> dict[str, str]:
-    """generation_id/slot_id for the task row. Only TaskVideoRequest carries
-    them; omitted when absent so the row stays free of blank props."""
-    return {
-        field: value
-        for field in ("generation_id", "slot_id")
-        if isinstance((value := getattr(body, field, None)), str) and value
-    }
-
-
 def _generation_id_for_task(task_id: str) -> str | None:
     """Best-effort: resolve the web generation_id for an engine task id.
 
@@ -344,8 +320,8 @@ def create_task(
             task_id, user_id=auth.user_id, flow="direct", pipeline=stop_at,
             state=const.TASK_STATE_QUEUED,
             progress=0,
-            **_persona_tracking_kwargs(body),
-            **_tracking_kwargs(body),
+            **persona_tracking_kwargs(body),
+            **tracking_kwargs(body),
         )
         task_manager.add_task(
             remote_dispatch.pipeline_entry(),
@@ -354,7 +330,7 @@ def create_task(
             stop_at=stop_at,
             on_accepted=lambda: tm.track_generation_requested(
                 task_id, user_id=auth.user_id, flow="direct", pipeline=stop_at,
-                **_tracking_kwargs(body),
+                **tracking_kwargs(body), **analytics.subtitle_event_props(body),
             ),
         )
         logger.success(f"Task created: task_id={task_id}")

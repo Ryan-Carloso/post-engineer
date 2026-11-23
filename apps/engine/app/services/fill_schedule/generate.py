@@ -12,7 +12,7 @@ from app.models.schema import LipSyncQuality, TaskVideoRequest
 from app.models import const as model_const
 from app.services import notify as notify_module
 from app.services import remote_dispatch, task as tm
-from app.services.analytics import nonempty_error_reason, scrub_secret_values, track_event
+from app.services.analytics import nonempty_error_reason, scrub_secret_values, subtitle_event_props, track_event
 from app.services.fill_schedule.batch_admission import (
     SlotDeferred,
     free_running_slots,
@@ -29,6 +29,7 @@ from app.services.language_gate import ENGLISH_ONLY_VIDEO_MESSAGE, is_english_la
 from app.services.owner_alert import notify_generation_failed, notify_owner_async
 from app.services.persona_image import is_engine_usable_persona_image_url
 from app.services.script_segments import legacy_media_list
+from app.services.tracking_props import pacing_tracking_props
 from app.services.fill_schedule.support import (
     build_persona_params,
     notify_safe,
@@ -180,6 +181,8 @@ class BatchGenerator:
                         pipeline="video",
                         slot_id=slot["id"],
                         persona_id=identity.get("id"),
+                        **subtitle_event_props(request),
+                        **pacing_tracking_props(request),
                     )
 
                 self._dispatch_generation(
@@ -319,6 +322,7 @@ class BatchGenerator:
                 state=model_const.TASK_STATE_PROCESSING,
                 progress=0,
                 **tracking_ids,
+                **subtitle_event_props(request),
             )
 
         from app.controllers.v1.video import task_manager

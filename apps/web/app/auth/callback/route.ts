@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { isCodeRelayTarget } from '@/lib/auth-code-relay'
 import { safeNextPath } from '@/lib/safe-next-path'
+import { sameOriginRedirect } from '@/lib/same-origin-redirect'
 
 function getSupabaseEnv() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -26,9 +27,7 @@ export async function GET(request: NextRequest) {
   const oauthError = requestUrl.searchParams.get('error')
   if (oauthError) {
     const cancelled = oauthError === 'access_denied'
-    return NextResponse.redirect(
-      new URL(cancelled ? '/login?error=cancelled' : '/login?error=auth', request.url),
-    )
+    return sameOriginRedirect(cancelled ? '/login?error=cancelled' : '/login?error=auth')
   }
 
   if (code) {
@@ -39,7 +38,7 @@ export async function GET(request: NextRequest) {
     }
 
     const next = safeNextPath(rawNext)
-    const response = NextResponse.redirect(new URL(next, request.url))
+    const response = sameOriginRedirect(next)
 
     const supabase = createServerClient(url, key, {
       cookies: {
@@ -80,5 +79,5 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  return NextResponse.redirect(new URL('/login?error=auth', request.url))
+  return sameOriginRedirect('/login?error=auth')
 }

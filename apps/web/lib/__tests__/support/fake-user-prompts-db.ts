@@ -37,9 +37,11 @@ export function createFakeUserPromptsDb(seed: Partial<UserPromptRow>[] = []): Fa
   const versions: FakePromptVersion[] = [];
   const queries: string[] = [];
   let pendingFailure: string | null = null;
-  const now = (): string => new Date().toISOString();
+  let clock = Date.now();
+  const now = (): string => new Date(++clock).toISOString();
 
   function insertRow(values: Partial<UserPromptRow>): UserPromptRow {
+    const stamp = now();
     const base: UserPromptRow = {
       id: randomUUID(),
       owner_id: '',
@@ -49,8 +51,8 @@ export function createFakeUserPromptsDb(seed: Partial<UserPromptRow>[] = []): Fa
       body: '',
       visibility: 'private',
       verified: false,
-      created_at: now(),
-      updated_at: now(),
+      created_at: stamp,
+      updated_at: stamp,
       ...values,
     };
     return base;
@@ -85,7 +87,7 @@ export function createFakeUserPromptsDb(seed: Partial<UserPromptRow>[] = []): Fa
     private operation: Operation = 'select';
     private values: Partial<UserPromptRow> = {};
     private filters: Array<(row: UserPromptRow) => boolean> = [];
-    private sorting: { column: keyof UserPromptRow; ascending: boolean } | null = null;
+    private sorting: Array<{ column: keyof UserPromptRow; ascending: boolean }> = [];
     private max: number | null = null;
     private returning = false;
     private shape: 'many' | 'single' | 'maybe' = 'many';
@@ -141,7 +143,7 @@ export function createFakeUserPromptsDb(seed: Partial<UserPromptRow>[] = []): Fa
     }
 
     order(column: keyof UserPromptRow, options: { ascending: boolean }): this {
-      this.sorting = { column, ascending: options.ascending };
+      this.sorting.push({ column, ascending: options.ascending });
       return this;
     }
 
@@ -193,15 +195,13 @@ export function createFakeUserPromptsDb(seed: Partial<UserPromptRow>[] = []): Fa
         for (const row of matches) rows.splice(rows.indexOf(row), 1);
       }
       if (this.operation !== 'select' && !this.returning) return { data: null, error: null };
-      const sorting = this.sorting;
-      const ordered =
-        sorting === null
-          ? affected
-          : [...affected].sort((left, right) => {
-            const a = String(left[sorting.column]);
-            const b = String(right[sorting.column]);
-            return sorting.ascending ? a.localeCompare(b) : b.localeCompare(a);
-          });
+      const ordered = [...affected].sort((left, right) => {
+        for (const { column, ascending } of this.sorting) {
+          const compared = String(left[column]).localeCompare(String(right[column]));
+          if (compared !== 0) return ascending ? compared : -compared;
+        }
+        return 0;
+      });
       const limited = this.max === null ? ordered : ordered.slice(0, this.max);
       if (this.shape === 'many') return { data: limited, error: null };
       if (limited.length === 0) {

@@ -12,7 +12,7 @@ from app.services.fill_schedule.constants import (
     SLOT_FAILED,
     SLOT_READY,
 )
-from app.services.analytics import scrub_secret_values, track_event
+from app.services.analytics import scrub_secret_values, subtitle_event_props, track_event
 from app.services.owner_alert import notify_generation_failed, notify_owner_async
 from app.services.intro_cost import cost_event_props
 from app.services.fill_schedule.store import ScheduleStore
@@ -68,6 +68,7 @@ class BatchReconciler:
                 properties["batch_id"] = batch_id
             properties.update(cost_event_props(task))
             properties["music_mood"] = task.get("music_mood") or "unknown"
+            properties.update(subtitle_event_props(task))
             track_event("video_generated", properties)
             return 1
         elif task.get("state") == const.TASK_STATE_FAILED:

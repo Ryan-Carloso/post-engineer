@@ -89,4 +89,8 @@ export const accountsI18nEn = {
   subscriber: '{count} subscriber',
   view: '{count} view',
   video: '{count} video',
+  refreshProfiles: 'Refresh profiles',
+  refreshingProfiles: 'Refreshing…',
+  refreshProfilesDone: 'Photos and names updated.',
+  refreshProfilesError: 'Could not refresh the profiles. Try again in a moment.',
 } as const;

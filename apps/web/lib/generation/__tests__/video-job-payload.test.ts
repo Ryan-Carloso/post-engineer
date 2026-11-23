@@ -123,6 +123,16 @@ describe('buildJobPayload — request allowlist', () => {
     expect(payload.video_variation_seed).toBe(7);
   });
 
+  it('forwards the subtitle position and custom height so a requested placement reaches the engine', () => {
+    const payload = buildJobPayload(persona(), {
+      video_title: 'myth busting',
+      subtitle_position: 'custom',
+      custom_position: 20,
+    });
+    expect(payload.subtitle_position).toBe('custom');
+    expect(payload.custom_position).toBe(20);
+  });
+
   it('forwards video_title and video_description so publish uses the agent copy', () => {
     const payload = buildJobPayload(persona(), {
       video_title: 'Porto in 30 seconds',

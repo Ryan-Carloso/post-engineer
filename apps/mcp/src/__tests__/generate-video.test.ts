@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { z } from 'zod';
 import type { PostEngineerClient } from '../client.js';
-import { GenerateVideoSchema, handleGenerateVideo } from '../generate-video.js';
+import { GenerateVideoSchema, GenerateVideoDescription, handleGenerateVideo } from '../generate-video.js';
 import type { McpToolResponse } from '../tools-call.js';
 
 const MARIA = '11111111-1111-4111-8111-111111111111';
@@ -63,6 +63,14 @@ function fakes(options: { personas?: unknown; accounts?: unknown; bound?: unknow
 }
 
 const text = (response: McpToolResponse): string => response.content.map((part) => (part.type === 'text' ? part.text : '')).join('\n');
+
+describe('generate_video description', () => {
+  it('mentions the caption position and the one-knob A/B rule', () => {
+    expect(GenerateVideoDescription).toContain('options.subtitlePosition');
+    expect(GenerateVideoDescription).toContain('top keeps the caption clear of the face');
+    expect(GenerateVideoDescription).toContain('change one knob at a time');
+  });
+});
 
 describe('generate_video: one video', () => {
   it('creates the video in one call from a persona name, publishing to the bound accounts, and echoes what it resolved', async () => {

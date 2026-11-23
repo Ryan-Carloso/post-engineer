@@ -6,8 +6,8 @@ task orphaned by an engine restart fell through to the historical
 fail+refund even though the auto-requeue machinery (PR #203) existed.
 """
 
-from app.controllers.v1.video import _tracking_kwargs
 from app.models.schema import TaskVideoRequest
+from app.services.tracking_props import tracking_kwargs
 
 
 def _body(**kwargs):
@@ -28,16 +28,32 @@ class TestSlotIdSchema:
 
 class TestSlotTrackingKwargs:
     def test_returns_slot_id_when_present(self):
-        assert _tracking_kwargs(_body(slot_id="slot-123")) == {"slot_id": "slot-123"}
-
-    def test_returns_both_ids_when_present(self):
-        assert _tracking_kwargs(_body(slot_id="slot-123", generation_id="gen-456")) == {
+        assert tracking_kwargs(_body(slot_id="slot-123")) == {
             "slot_id": "slot-123",
-            "generation_id": "gen-456",
+            "video_clip_duration": 2,
         }
 
-    def test_omits_when_absent(self):
-        assert _tracking_kwargs(_body()) == {}
+    def test_returns_both_ids_when_present(self):
+        assert tracking_kwargs(_body(slot_id="slot-123", generation_id="gen-456")) == {
+            "slot_id": "slot-123",
+            "generation_id": "gen-456",
+            "video_clip_duration": 2,
+        }
 
-    def test_omits_when_empty(self):
-        assert _tracking_kwargs(_body(slot_id="")) == {}
+    def test_omits_ids_when_absent(self):
+        assert tracking_kwargs(_body()) == {"video_clip_duration": 2}
+
+    def test_omits_empty_ids(self):
+        assert tracking_kwargs(_body(slot_id="")) == {"video_clip_duration": 2}
+
+    def test_records_explicit_pacing_values(self):
+        body = _body(
+            video_clip_duration=4,
+            video_transition_mode="Crossfade",
+            video_variation_seed=7,
+        )
+        assert tracking_kwargs(body) == {
+            "video_clip_duration": 4,
+            "video_transition_mode": "Crossfade",
+            "video_variation_seed": 7,
+        }

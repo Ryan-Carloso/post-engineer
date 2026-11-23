@@ -26,7 +26,7 @@ const ACTIONS: Record<string, string[]> = {
   prompt_library: ['create', 'update', 'delete'],
   schedules: ['list', 'cancel', 'get_slot', 'update_slot_title', 'delete_slot'],
   posts: ['list', 'get'],
-  insights: ['post_metrics', 'retention_curve', 'share_link_create', 'share_link_list', 'share_link_revoke'],
+  insights: ['post_metrics', 'last_day', 'retention_curve', 'share_link_create', 'share_link_list', 'share_link_revoke'],
   experiments: ['results'],
   media: ['upload', 'check'],
   billing: ['balance', 'transactions'],
@@ -130,6 +130,12 @@ describe('action tools advertise one flat schema', () => {
     expect(tools.get('personas')?.description).toContain('create (');
     expect(tools.get('personas')?.description).toContain('delete (persona)');
     expect(tools.get('accounts')?.description).toContain('disconnect (account)');
+  });
+
+  it('points the agent at pacing A/B testing on generate_video and prompts', async () => {
+    const tools = await listTools('stdio');
+    expect(tools.get('generate_video')?.description).toContain('one knob at a time');
+    expect(tools.get('prompts')?.description).toContain('one pacing knob at a time');
   });
 
   it('keeps the whole tools/list payload at least 35% below the 102,160 bytes of the 56 endpoint-mirror tools', async () => {
