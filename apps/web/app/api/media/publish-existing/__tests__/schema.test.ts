@@ -171,9 +171,7 @@ describe('checkPublishExistingSemantics', () => {
       media: { kind: 'image', imageData: JPEG_BASE64, contentType: 'image/jpeg' },
       title: 'Sunset photo',
       description: 'Edited photo, straight to the feed.',
-      publishing: { mode: 'asap', providers: ['youtube'], accounts: { youtube: ['UC1'] } },
-      tags: ['sunset'],
-      privacyStatus: 'public',
+      publishing: { mode: 'asap', providers: ['rumble'], accounts: { rumble: ['rb-1'] } },
     });
     expect(parsed.ok).toBe(true);
     if (parsed.ok) {
@@ -182,10 +180,23 @@ describe('checkPublishExistingSemantics', () => {
       if (!checked.ok) {
         expect(checked.issues[0]?.field).toBe('publishing.providers');
         expect(checked.issues[0]?.message).toBe(
-          'Images can be published to instagram, bluesky, linkedin, threads, facebook, pinterest, telegram only; youtube takes video.',
+          'Images can be published to youtube, instagram, bluesky, linkedin, threads, facebook, pinterest, telegram only; rumble takes video.',
         );
       }
     }
+  });
+
+  it('accepts an image for YouTube, which publishes it as a Short', () => {
+    const parsed = parsePublishExistingBody({
+      media: { kind: 'image', imageData: JPEG_BASE64, contentType: 'image/jpeg' },
+      title: 'Sunset photo',
+      description: 'Edited photo, straight to the feed.',
+      publishing: { mode: 'asap', providers: ['youtube'], accounts: { youtube: ['UC1'] } },
+      tags: ['sunset'],
+      privacyStatus: 'public',
+    });
+    expect(parsed.ok).toBe(true);
+    if (parsed.ok) expect(checkPublishExistingSemantics(parsed.value).ok).toBe(true);
   });
 
   it('accepts an image for every image network at once', () => {
