@@ -281,9 +281,11 @@ jobs:
   # (.github/actions/local-supabase): the migration chain is applied and the
   # E2E user below is seeded by apps/web/cypress/supabase/seed-e2e.sh. The
   # job never talks to the production project and needs no secrets: every
-  # page hit runs supabase.auth.getUser() in middleware.ts, and running the
-  # suite against production made CI half of that project's billed log
-  # ingestion. The E2E credentials are fixed values that only exist in that
+  # page hit verifies the session in middleware.ts with
+  # supabase.auth.getClaims() (which falls back to a getUser() request while
+  # the project still uses the legacy HS256 secret), and running the suite
+  # against production made CI half of that project's billed log ingestion.
+  # The E2E credentials are fixed values that only exist in that
   # local stack.
   cypress:
     runs-on: ubuntu-latest

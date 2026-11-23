@@ -14,10 +14,10 @@ const USER_ID = 'user-1';
 function mockSession(opts?: { noSession?: boolean; noToken?: boolean }): void {
   const client = {
     auth: {
-      getUser: vi.fn(async () =>
+      getClaims: vi.fn(async () =>
         opts?.noSession
-          ? { data: { user: null }, error: null }
-          : { data: { user: { id: USER_ID } }, error: null },
+          ? { data: null, error: null }
+          : { data: { claims: { sub: USER_ID } }, error: null },
       ),
       getSession: vi.fn(async () =>
         opts?.noToken

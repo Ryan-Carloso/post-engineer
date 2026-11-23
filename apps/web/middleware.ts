@@ -18,6 +18,11 @@ function authErrorLogFields(error: unknown): { name: string; status: number | nu
   return { name, status }
 }
 
+function hasSubjectClaim(claims: unknown): boolean {
+  if (typeof claims !== 'object' || claims === null) return false
+  return 'sub' in claims && typeof claims.sub === 'string' && claims.sub.length > 0
+}
+
 export const PUBLIC_STATIC_ASSET_PATH = /\.(?:png|jpe?g|gif|webp|svg|ico|txt|mp3|woff2?|ttf)$/i;
 const PUBLIC_SITEMAP_PATH = '/sitemap.xml';
 const PUBLIC_OPENAPI_SPEC_PATH = '/openapi.json';
@@ -87,10 +92,8 @@ export async function middleware(request: NextRequest) {
     },
   })
 
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser()
+  const { data, error } = await supabase.auth.getClaims()
+  const signedIn = hasSubjectClaim(data?.claims)
 
   const publicPaths = ['/landing', '/login', '/privacy', '/terms', '/recipes', '/s'];
 
@@ -98,7 +101,7 @@ export async function middleware(request: NextRequest) {
     (publicPath) => pathname === publicPath || pathname.startsWith(`${publicPath}/`),
   );
 
-  if (!user && !isPublicPath) {
+  if (!signedIn && !isPublicPath) {
     if (!isTransientAuthError(error)) {
       return NextResponse.redirect(new URL('/landing', request.url))
     }
@@ -108,7 +111,7 @@ export async function middleware(request: NextRequest) {
     })
   }
 
-  if (user && (pathname === '/login' || pathname === '/landing')) {
+  if (signedIn && (pathname === '/login' || pathname === '/landing')) {
     return NextResponse.redirect(new URL('/', request.url))
   }
 

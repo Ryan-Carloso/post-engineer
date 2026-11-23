@@ -12,7 +12,6 @@ const SERVER_ONLY_MODULES: readonly string[] = [
   'lib/owner-alert-mail.ts',
   'lib/supabase/server.ts',
   'lib/supabase/service.ts',
-  'lib/supabase/middleware.ts',
   'lib/rate-limit.ts',
   'lib/upload/handlers.ts',
 ];
