@@ -12,7 +12,7 @@ import {
   updatePrompt,
 } from '@/lib/user-prompts-client';
 
-const DETAIL = { slug: 'my-prompt', title: 'T', description: 'D', source: 'own', visibility: 'private', prompt: 'P', versionId: '44444444-4444-4444-8444-444444444444', version: 1 };
+const DETAIL = { slug: 'my-prompt', title: 'T', description: 'D', source: 'own', visibility: 'private', prompt: 'Base\n\nP', body: 'P', versionId: '44444444-4444-4444-8444-444444444444', version: 1 };
 
 function stubFetch(response: Response | Error): ReturnType<typeof vi.fn<typeof fetch>> {
   const mock = vi.fn<typeof fetch>(async () => {

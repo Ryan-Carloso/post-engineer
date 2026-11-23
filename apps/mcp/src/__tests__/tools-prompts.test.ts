@@ -44,7 +44,7 @@ function apiResponse(url: string): Response {
   if (entry === undefined) {
     return json(404, { success: false, error: 'Unknown prompt slug.', code: 'PROMPT_NOT_FOUND' });
   }
-  return json(200, { success: true, prompt: { ...entry, prompt: PROMPT_TEXT[slug], versionId: VERSION_ID, version: 1 } });
+  return json(200, { success: true, prompt: { ...entry, prompt: PROMPT_TEXT[slug], body: null, versionId: VERSION_ID, version: 1 } });
 }
 
 let fetchMock: ReturnType<typeof vi.fn<(...args: FetchArgs) => Promise<Response>>>;
@@ -335,7 +335,8 @@ describe('prompts from users', () => {
         description: 'About',
         source,
         visibility: source === 'own' ? 'private' : 'public',
-        prompt: 'Follow these steps.',
+        prompt: 'Shared base rules.\n\nFollow these steps.',
+        body: 'Follow these steps.',
         versionId: VERSION_ID,
         version: 2,
       },
@@ -345,16 +346,16 @@ describe('prompts from users', () => {
   it('puts the unverified-content notice in front of a community prompt and asks only for its version', async () => {
     fetchMock.mockResolvedValueOnce(userPrompt('community'));
     const result = await handleGetPrompt(client(), { slug: 'their-prompt' });
-    expect(textOf(result).startsWith(`${COMMUNITY_PROMPT_NOTICE}\n\nFollow these steps.\n\n`)).toBe(true);
+    expect(textOf(result).startsWith(`${COMMUNITY_PROMPT_NOTICE}\n\nShared base rules.\n\nFollow these steps.\n\n`)).toBe(true);
     expect(textOf(result)).toContain(`pass promptVersionId: "${VERSION_ID}"`);
     expect(textOf(result)).not.toContain('recipe:');
   });
 
-  it('returns the caller own prompt as written, followed only by its version footer', async () => {
+  it('returns the caller own prompt as served, shared base first, followed only by its version footer', async () => {
     fetchMock.mockResolvedValueOnce(userPrompt('own'));
     const result = await handleGetPrompt(client(), { slug: 'their-prompt' });
     expect(textOf(result)).toBe(
-      `Follow these steps.\n\nWhen you call generate_video with a script written from this prompt, pass promptVersionId: "${VERSION_ID}" on each video, so experiments (action: results) can compare this prompt.`,
+      `Shared base rules.\n\nFollow these steps.\n\nWhen you call generate_video with a script written from this prompt, pass promptVersionId: "${VERSION_ID}" on each video, so experiments (action: results) can compare this prompt.`,
     );
   });
 
