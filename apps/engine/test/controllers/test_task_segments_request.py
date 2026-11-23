@@ -24,8 +24,8 @@ def _photos(prefix, count):
 
 def valid_segments():
     return [
-        {"kind": "hook", "text": HOOK, "media": _photos("h", 4)},
-        {"kind": "content", "text": BODY, "media": _photos("b", 6)},
+        {"kind": "hook", "text": HOOK, "media": _photos("h", 5)},
+        {"kind": "content", "text": BODY, "media": _photos("b", 8)},
         {"kind": "content", "text": CTA, "media": _photos("c", 2)},
     ]
 
@@ -123,8 +123,8 @@ def test_empty_segments_list_is_rejected():
 def test_segments_joining_beyond_video_script_cap_is_rejected():
     long_body = "x" * 20001 + " " + " ".join(["word"] * 29) + "."
     segments = [
-        {"kind": "hook", "text": HOOK, "media": _photos("h", 4)},
-        {"kind": "content", "text": long_body, "media": _photos("b", 4)},
+        {"kind": "hook", "text": HOOK, "media": _photos("h", 5)},
+        {"kind": "content", "text": long_body, "media": _photos("b", 6)},
         {"kind": "content", "text": CTA, "media": _photos("c", 2)},
     ]
     with pytest.raises(ValidationError, match="video_script"):

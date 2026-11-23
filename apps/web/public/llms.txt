@@ -52,7 +52,7 @@ accounts are given by name or id.
   (`list`, `preview`, `list_clones`, `create_clone`, `get_clone`, `preview_clone`, `delete_clone`).
 - Accounts and schedule: `accounts` (`list`, `connect`, `disconnect`, `get_persona_publishing`,
   `set_persona_publishing`, `list_boards`), `schedules` (`list`, `cancel`, `get_slot`, `update_slot_title`,
-  `delete_slot`), `posts` (`list`, `get`), `insights` (`post_metrics`, `last_day`, `retention_curve`), `billing`
+  `delete_slot`), `posts` (`list`, `get`), `insights` (`post_metrics`, `last_day`, `retention_curve`, `share_link_create`, `share_link_list`, `share_link_revoke`), `billing`
   (`balance`, `transactions`), `experiments` (`results`: compare your prompts inside each account).
 - Scripts, media and publishing: `check_script` (`validate`, `score`: mechanical, no tokens spent),
   `media` (`upload`, `check`), `publish_video` (`from_file`, `create_upload`, `complete_upload`,

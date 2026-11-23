@@ -31,8 +31,8 @@ function photos(count: number, prefix: string): Array<{ url: string }> {
 }
 
 const segments = [
-  { kind: 'hook', text: hook, media: photos(4, 'hook') },
-  { kind: 'content', text: bodyText, media: photos(6, 'content') },
+  { kind: 'hook', text: hook, media: photos(5, 'hook') },
+  { kind: 'content', text: bodyText, media: photos(8, 'content') },
   { kind: 'content', text: ctaTake, media: photos(2, 'ctaTake') },
 ];
 

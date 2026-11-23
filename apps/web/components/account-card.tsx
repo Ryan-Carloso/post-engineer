@@ -89,6 +89,7 @@ export default function AccountCard({
     return (
       <label
         data-testid="account-card"
+        data-ui-diff-mask=""
         title={handle || name}
         onClick={onSelect}
         className={cn(
@@ -107,6 +108,7 @@ export default function AccountCard({
     <div className="flex items-center gap-3">
       {thumbnail && !thumbnailFailed ? (
         <Image
+          data-ui-diff-mask=""
           src={thumbnail}
           alt={handle || name}
           width={48}
@@ -116,6 +118,7 @@ export default function AccountCard({
         />
       ) : (
         <span
+          data-ui-diff-mask=""
           role="img"
           aria-label={handle || name}
           className="flex size-12 shrink-0 items-center justify-center rounded-full bg-sunken text-base font-bold text-muted-text"
@@ -127,6 +130,7 @@ export default function AccountCard({
         <div className="flex items-center gap-2">
           <span role="img" className={cn('size-2 shrink-0 rounded-full', error ? 'bg-destructive' : 'bg-emerald-500')} aria-label={error ? t('accounts.tokenInvalid') : t('accounts.connectedAccount')} />
           <h3
+            data-ui-diff-mask=""
             ref={labelRef}
             title={shownLabel}
             style={{ minWidth: ACCOUNT_LABEL_MIN_WIDTH_PX }}
@@ -136,9 +140,9 @@ export default function AccountCard({
           </h3>
         </div>
         {error ? (
-          <p ref={secondaryRef} className="mt-1 truncate text-xs text-destructive">{t('accounts.tokenInvalid')}</p>
+          <p ref={secondaryRef} data-ui-diff-mask="" className="mt-1 truncate text-xs text-destructive">{t('accounts.tokenInvalid')}</p>
         ) : secondaryLabel ? (
-          <p ref={secondaryRef} className="mt-1 truncate text-xs text-muted-text">{secondaryLabel}</p>
+          <p ref={secondaryRef} data-ui-diff-mask="" className="mt-1 truncate text-xs text-muted-text">{secondaryLabel}</p>
         ) : null}
       </div>
 

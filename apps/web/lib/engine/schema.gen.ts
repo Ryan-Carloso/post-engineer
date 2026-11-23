@@ -620,6 +620,19 @@ export interface components {
             detail?: components["schemas"]["ValidationError"][];
         };
         /**
+         * LipsyncPhoto
+         * @description One face photo of the persona for full lip sync: a mediaId (media (action: upload)) or a public image url.
+         *
+         *     Full lip sync renders the narration as windows of at most 12s; window i
+         *     shows lipsync_photos[i % len(lipsync_photos)].
+         */
+        LipsyncPhoto: {
+            /** Mediaid */
+            mediaId?: string | null;
+            /** Url */
+            url?: string | null;
+        };
+        /**
          * LipSyncQuality
          * @enum {string}
          */
@@ -935,6 +948,8 @@ export interface components {
              * @default true
              */
             hook_panel?: boolean;
+            /** Lipsync Photos */
+            lipsync_photos?: components["schemas"]["LipsyncPhoto"][] | null;
             /** Music Mood */
             music_mood?: string | null;
             /**

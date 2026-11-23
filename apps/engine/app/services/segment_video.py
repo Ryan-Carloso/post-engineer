@@ -45,7 +45,7 @@ MAX_CLIP_BYTES = 50 * 1024 * 1024
 MAX_CLIP_DURATION_SECONDS = 30.0
 MIN_CLIP_DURATION_SECONDS = 1.0
 MAX_CLIP_LOOPS = 3
-CLIP_DENSITY_ITEMS = 4
+CLIP_DENSITY_ITEMS = 6
 VIDEO_CODEC = "h264"
 VIDEO_SUFFIX = ".mp4"
 DOWNLOAD_TIMEOUT_SECONDS = 10
@@ -98,7 +98,7 @@ def is_video_url(url: Optional[str]) -> bool:
 def clip_density_min_count(media: Any, counted: int) -> int:
     """The density minimum a segment's media counts as.
 
-    A clip covers ~12s of speech, not one 3s photo slot, so each clip
+    A clip covers ~12s of speech, not one 2s photo slot, so each clip
     stands in for CLIP_DENSITY_ITEMS photos in the minimum. The maximum
     still counts items one for one.
     """

@@ -30,13 +30,15 @@ function photos(count: number, prefix: string) {
   return Array.from({ length: count }, (_, index) => ({ url: `https://e.com/${prefix}${index}.jpg` }));
 }
 const withMedia = [
-  { kind: 'hook', text: hook, media: photos(4, 'h') },
-  { kind: 'content', text: contentText, media: [{ mediaId: `${'a'.repeat(32)}.jpg` }, ...photos(5, 'b')] },
+  { kind: 'hook', text: hook, media: photos(5, 'h') },
+  { kind: 'content', text: contentText, media: [{ mediaId: `${'a'.repeat(32)}.jpg` }, ...photos(7, 'b')] },
   { kind: 'content', text: ctaTake, media: photos(2, 'c') },
 ];
-const bodyWithoutMedia = withMedia.map((segment, index) =>
-  index === 1 ? { kind: segment.kind, text: segment.text } : segment,
-);
+const bodyWithoutMedia = withMedia.map((segment, index) => {
+  if (index === 1) return { kind: segment.kind, text: segment.text };
+  if (index === 2) return { ...segment, media: segment.media.slice(0, 1) };
+  return segment;
+});
 
 function post(options: Record<string, unknown>): Promise<Response> {
   return POST(
@@ -64,7 +66,10 @@ function semantics(segments: unknown, videoType: 'full_lipsync' | 'hook_lipsync'
     description: 'Agent description.',
     segments,
     providers: ['youtube'],
-    options: { videoType },
+    options:
+      videoType === 'full_lipsync'
+        ? { videoType, lipsyncPhotos: [{ url: 'https://img.test/face-0.jpg' }, { url: 'https://img.test/face-1.jpg' }] }
+        : { videoType },
     personaId: 'persona-1',
   });
 }

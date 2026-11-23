@@ -392,12 +392,12 @@ const DEFAULT_SEGMENTS = [
   {
     kind: 'hook',
     text: 'Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is still waiting nearby for you today.',
-    media: [0, 1, 2, 3].map((photo) => ({ url: `https://e.com/h${photo}.jpg` })),
+    media: [0, 1, 2, 3, 4].map((photo) => ({ url: `https://e.com/h${photo}.jpg` })),
   },
   {
     kind: 'content',
     text: 'Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight.',
-    media: [0, 1, 2, 3, 4, 5].map((photo) => ({ url: `https://e.com/b${photo}.jpg` })),
+    media: [0, 1, 2, 3, 4, 5, 6, 7].map((photo) => ({ url: `https://e.com/b${photo}.jpg` })),
   },
   {
     kind: 'content',
@@ -807,15 +807,17 @@ describe('POST /api/videos/generate-and-schedule', () => {
         ),
       );
       try {
-        const res = await post(baseBody({ options: { videoType: 'full_lipsync', segments: NO_MEDIA_SEGMENTS } }));
+        const res = await post(baseBody({ options: { videoType: 'full_lipsync', segments: NO_MEDIA_SEGMENTS, lipsyncPhotos: [{ url: 'https://img.test/face-0.jpg' }, { url: 'https://img.test/face-1.jpg' }] } }));
         expect(res.status).toBe(200);
         const payload = vi.mocked(startEngineVideoTask).mock.calls[0][1] as Record<string, unknown>;
         expect(payload.video_type).toBe('full_lipsync');
+        expect(payload.lipsync_photos).toEqual([{ url: 'https://img.test/face-0.jpg' }, { url: 'https://img.test/face-1.jpg' }]);
         const spends = rpcCalls.filter((c) => c.name === 'spend_tokens');
         expect(spends).toHaveLength(1);
         expect(spends[0].args.p_amount).toBe(8);
         const slotRows = inserts['scheduled_posts'] as Array<Record<string, unknown>>;
         expect(slotRows.map((r) => r.charged_tokens)).toEqual([8]);
+        expect(slotRows[0]?.lipsync_photos).toEqual([{ url: 'https://img.test/face-0.jpg' }, { url: 'https://img.test/face-1.jpg' }]);
       } finally {
         vi.unstubAllGlobals();
         vi.unstubAllEnvs();
@@ -862,11 +864,11 @@ describe('POST /api/videos/generate-and-schedule', () => {
       'Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight.';
     const segmentsCtaTake = 'Save this video before your next trip to Porto.';
     const validSegments = [
-      { kind: 'hook', text: segmentsHook, media: [0, 1, 2, 3].map((photo) => ({ url: `https://e.com/h${photo}.jpg` })) },
+      { kind: 'hook', text: segmentsHook, media: [0, 1, 2, 3, 4].map((photo) => ({ url: `https://e.com/h${photo}.jpg` })) },
       {
         kind: 'content',
         text: segmentsContent,
-        media: [0, 1, 2, 3, 4, 5].map((photo) => ({ url: `https://e.com/b${photo}.jpg` })),
+        media: [0, 1, 2, 3, 4, 5, 6, 7].map((photo) => ({ url: `https://e.com/b${photo}.jpg` })),
       },
       { kind: 'content', text: segmentsCtaTake, cta: true, media: [0, 1].map((photo) => ({ url: `https://e.com/c${photo}.jpg` })) },
     ];
@@ -2615,7 +2617,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
     });
 
-    it('rejects a faceless stored persona photo with 400 before any charge', async () => {
+    it('rejects a full lip-sync photo without a face with 400 before any charge', async () => {
       setup({ ...DEFAULT_CFG, persona: { ...PERSONA, avatar_url: null, photo_path: 'personas/user-1/photo.jpg' } });
       vi.mocked(resolveVideoImage).mockResolvedValue({ ok: true, image: null });
       vi.stubGlobal(
@@ -2632,12 +2634,13 @@ describe('POST /api/videos/generate-and-schedule', () => {
             }),
         ),
       );
-      const res = await post(baseBody({ options: { videoType: 'full_lipsync', segments: NO_MEDIA_SEGMENTS } }));
+      const res = await post(baseBody({ options: { videoType: 'full_lipsync', segments: NO_MEDIA_SEGMENTS, lipsyncPhotos: [{ url: 'https://img.test/face-0.jpg' }, { url: 'https://img.test/face-1.jpg' }] } }));
       const json = await res.json();
       expect(res.status).toBe(400);
       expect(json.success).toBe(false);
       expect(json.code).toBe('VALIDATION_FAILED');
-      expect(json.error).toContain('The persona photo has no detectable face');
+      expect(json.field).toBe('options.lipsyncPhotos.0');
+      expect(json.error).toContain('options.lipsyncPhotos.0 has no detectable face');
       expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
     });
 
@@ -3252,11 +3255,11 @@ describe('segments-only contract (Phase 4)', () => {
     'Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight.';
   const ctaTake = 'Save this video before your next trip to Porto.';
   const segments = [
-    { kind: 'hook', text: hook, media: [0, 1, 2, 3].map((photo) => ({ url: `https://e.com/h${photo}.jpg` })) },
+    { kind: 'hook', text: hook, media: [0, 1, 2, 3, 4].map((photo) => ({ url: `https://e.com/h${photo}.jpg` })) },
     {
       kind: 'content',
       text: contentText,
-      media: [0, 1, 2, 3, 4, 5].map((photo) => ({ url: `https://e.com/b${photo}.jpg` })),
+      media: [0, 1, 2, 3, 4, 5, 6, 7].map((photo) => ({ url: `https://e.com/b${photo}.jpg` })),
     },
     { kind: 'content', text: ctaTake, cta: true, media: [0, 1].map((photo) => ({ url: `https://e.com/c${photo}.jpg` })) },
   ];
@@ -3358,7 +3361,7 @@ describe('full lip-sync preflight — pre-charge rejection', () => {
 
   it('rejects a 61s full-mode narration with 400 and charges nothing', async () => {
     stubPreflight(61);
-    const res = await post(baseBody({ options: { videoType: 'full_lipsync', segments: NO_MEDIA_SEGMENTS } }));
+    const res = await post(baseBody({ options: { videoType: 'full_lipsync', segments: NO_MEDIA_SEGMENTS, lipsyncPhotos: [{ url: 'https://img.test/face-0.jpg' }, { url: 'https://img.test/face-1.jpg' }] } }));
     const json = await res.json();
     expect(res.status).toBe(400);
     expect(String(json.field)).toContain('options.videoType');
@@ -3370,7 +3373,7 @@ describe('full lip-sync preflight — pre-charge rejection', () => {
 
   it('charges and dispatches a full-mode narration at exactly 60s', async () => {
     stubPreflight(60);
-    const res = await post(baseBody({ options: { videoType: 'full_lipsync', segments: NO_MEDIA_SEGMENTS } }));
+    const res = await post(baseBody({ options: { videoType: 'full_lipsync', segments: NO_MEDIA_SEGMENTS, lipsyncPhotos: [{ url: 'https://img.test/face-0.jpg' }, { url: 'https://img.test/face-1.jpg' }] } }));
     const json = await res.json();
     expect(res.status).toBe(200);
     expect(json.success).toBe(true);
@@ -3394,7 +3397,7 @@ describe('full lip-sync preflight — pre-charge rejection', () => {
     );
     const res = await post(baseBody());
     expect(res.status).toBe(200);
-    expect(calls).toHaveLength(13);
+    expect(calls).toHaveLength(16);
     expect(calls.every((url) => url.includes('/api/v1/media/check'))).toBe(true);
     expect(calls.some((url) => url.includes('preflight-duration'))).toBe(false);
     expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(1);

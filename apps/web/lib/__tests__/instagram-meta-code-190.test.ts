@@ -73,7 +73,7 @@ describe('InstagramService Meta code 190', () => {
     expect((error as InstagramApiError).message).toContain('Error validating access token');
   });
 
-  it('logs the publish failure with the original error as the cause, not undefined', async () => {
+  it('logs the publish failure once, with the original error as the cause', async () => {
     const axiosError = meta190AxiosError();
     mockPost.mockRejectedValueOnce(axiosError);
 
@@ -82,11 +82,24 @@ describe('InstagramService Meta code 190', () => {
       .publishMedia('user', 'tok', 'cap', 'https://example.com/img.jpg', false)
       .catch(() => undefined);
 
+    expect(logger.error).toHaveBeenCalledTimes(1);
     expect(logger.error).toHaveBeenCalledWith(
       '[instagram] publishMedia failed',
       axiosError,
       expect.objectContaining({ status: 400 }),
     );
+  });
+
+  it('logs a Meta 190 profile failure once, with the original error as the cause', async () => {
+    const axiosError = meta190AxiosError();
+    mockGet.mockRejectedValueOnce(axiosError);
+
+    const service = new InstagramService();
+    const error = await service.getProfile('tok').catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(InstagramApiError);
+    expect((error as InstagramApiError).providerCode).toBe(190);
+    expect(logger.error).toHaveBeenCalledTimes(1);
     expect(logger.error).toHaveBeenCalledWith(
       '[instagram] API ERROR',
       axiosError,
@@ -94,7 +107,7 @@ describe('InstagramService Meta code 190', () => {
     );
   });
 
-  it('logs a non-axios failure with the original error as the cause', async () => {
+  it('logs a non-axios publish failure once, with the original error as the cause', async () => {
     const plainError = new Error('socket hang up');
     mockPost.mockRejectedValueOnce(plainError);
 
@@ -104,11 +117,7 @@ describe('InstagramService Meta code 190', () => {
       .catch((caught: unknown) => caught);
 
     expect(error).toBeInstanceOf(InstagramApiError);
-    expect(logger.error).toHaveBeenCalledWith(
-      '[instagram] NON-AXIOS ERROR',
-      plainError,
-      expect.objectContaining({ context: 'publishMedia' }),
-    );
+    expect(logger.error).toHaveBeenCalledTimes(1);
     expect(logger.error).toHaveBeenCalledWith(
       '[instagram] publishMedia failed',
       plainError,
@@ -116,23 +125,38 @@ describe('InstagramService Meta code 190', () => {
     );
   });
 
-  it('logs a container ERROR status with a real error as the cause, not undefined', async () => {
+  it('logs a non-axios profile failure once, with the original error as the cause', async () => {
+    const plainError = new Error('socket hang up');
+    mockGet.mockRejectedValueOnce(plainError);
+
+    const service = new InstagramService();
+    const error = await service.getProfile('tok').catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(InstagramApiError);
+    expect(logger.error).toHaveBeenCalledTimes(1);
+    expect(logger.error).toHaveBeenCalledWith(
+      '[instagram] NON-AXIOS ERROR',
+      plainError,
+      expect.objectContaining({ context: 'getProfile' }),
+    );
+  });
+
+  it('reports a container ERROR status once, naming the creation in the thrown error', async () => {
     mockPost.mockResolvedValueOnce({ data: { id: 'err-container' } });
     mockGet.mockResolvedValueOnce({ data: { status_code: 'ERROR' } });
 
     const service = new InstagramService();
-    await expect(
-      service.publishMedia('user', 'tok', 'cap', 'https://example.com/vid.mp4', true),
-    ).rejects.toThrow(InstagramApiError);
+    const error = await service
+      .publishMedia('user', 'tok', 'cap', 'https://example.com/vid.mp4', true)
+      .catch((caught: unknown) => caught);
 
-    const igErrorCall = vi
-      .mocked(logger.error)
-      .mock.calls.find(([message]) => message === '[instagram] waitForContainer IG error');
-    expect(igErrorCall).toBeDefined();
-    expect(igErrorCall?.[1]).toBeInstanceOf(Error);
-    expect((igErrorCall?.[1] as Error).message).toBe('Instagram media processing failed');
-    expect(igErrorCall?.[2]).toEqual(
-      expect.objectContaining({ creationId: 'err-container', status: 'ERROR' }),
+    expect(error).toBeInstanceOf(InstagramApiError);
+    expect((error as InstagramApiError).message).toContain('err-container');
+    expect(logger.error).toHaveBeenCalledTimes(1);
+    expect(logger.error).toHaveBeenCalledWith(
+      '[instagram] publishMedia failed',
+      expect.any(InstagramApiError),
+      expect.objectContaining({ igUserId: 'user' }),
     );
   });
 

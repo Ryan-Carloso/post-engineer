@@ -571,7 +571,6 @@ def test_supplied_segments_script_calls_no_llm():
     assert task_service.generate_script("test-task", params) == joined
 
 
-
 def _photos(count, prefix):
     return [{"url": f"https://example.com/{prefix}{i}.jpg"} for i in range(count)]
 
@@ -579,7 +578,7 @@ def _photos(count, prefix):
 def _images_segments(media=True):
     segments = [
         {"kind": "hook", "text": _hook(), "media": _photos(4, "h")},
-        {"kind": "content", "text": _content(), "media": _photos(6, "b")},
+        {"kind": "content", "text": _content(), "media": _photos(8, "b")},
         {
             "kind": "content",
             "text": _cta_take(),
@@ -593,7 +592,7 @@ def _images_segments(media=True):
 
 def test_images_material_accepts_media_on_every_segment():
     result = script_segments.validate_segments(_images_segments())
-    assert result["media_count"] == 12
+    assert result["media_count"] == 14
 
 
 def test_images_material_rejects_a_segment_without_media_on_that_segment():
@@ -654,9 +653,9 @@ def test_images_density_names_how_many_photos_a_segment_is_missing():
         script_segments.validate_segments(segments)
     assert exc_info.value.field == "segments.1.media"
     assert exc_info.value.rule == (
-        "segment has 32 words (~12s) and needs at least 4 images (one per ~3s); it has 1."
+        "segment has 32 words (~12s) and needs at least 6 images (one per 2s); it has 1."
     )
-    assert exc_info.value.fix == "Add 3 more images to this segment's media array."
+    assert exc_info.value.fix == "Add 5 more images to this segment's media array."
 
 
 def test_a_punctuation_only_segment_with_a_photo_is_rejected_before_charging():
@@ -690,20 +689,20 @@ def test_the_six_media_cap_still_holds_for_full_lipsync():
     assert exc_info.value.fix == "Remove medias until there are at most 6."
 
 
-def test_images_cap_fix_names_merging_when_minimums_exceed_the_cap():
+def test_images_cap_fix_names_shortening_when_minimums_exceed_the_cap():
     segments = [
         {"kind": "hook", "text": " ".join(["hook"] * 25) + ".", "media": _photos(4, "h")},
         *[
-            {"kind": "content", "text": " ".join([f"body{i}"] * 25), "media": _photos(4, f"b{i}")}
+            {"kind": "content", "text": " ".join([f"body{i}"] * 25), "media": _photos(5, f"b{i}")}
             for i in range(6)
         ],
-        {"kind": "content", "text": " ".join(["cta"] * 20), "media": _photos(3, "c")},
+        {"kind": "content", "text": " ".join(["cta"] * 20), "media": _photos(4, "c")},
     ]
     with pytest.raises(SegmentValidationError) as exc_info:
         script_segments.validate_segments(segments)
     assert exc_info.value.field == "segments"
     assert exc_info.value.rule == "At most 30 medias are allowed."
-    assert "merge segments" in exc_info.value.fix
+    assert "shorten the script" in exc_info.value.fix
 
 
 def test_legacy_media_list_wraps_a_single_object_media():
@@ -757,10 +756,9 @@ def test_segments_to_script_forwards_full_lipsync_to_validation():
     )
 
 
-
 def _clip_segments():
     return [
-        {"kind": "hook", "text": _hook(), "media": [{"url": "https://example.com/h.mp4"}]},
+        {"kind": "hook", "text": _hook(), "media": [{"url": "https://example.com/h.jpg"}]},
         {"kind": "content", "text": _content(),
          "media": [{"url": "https://example.com/b1.mp4"}, {"url": "https://example.com/b2.mp4"}]},
         {"kind": "content", "text": "Save this video now please.",
@@ -768,21 +766,21 @@ def _clip_segments():
     ]
 
 
-def test_one_clip_per_take_passes_the_density_minimum():
+def test_one_clip_per_content_take_passes_the_density_minimum():
     result = script_segments.validate_segments(_clip_segments())
     assert result["media_count"] == 4
 
 
-def test_one_clip_in_a_long_take_still_fails_the_density_minimum():
+def test_one_photo_in_a_long_take_still_fails_the_density_minimum():
     segments = _clip_segments()
     segments[0]["text"] = " ".join(["word"] * 40) + "."
     with pytest.raises(SegmentValidationError) as exc_info:
-        script_segments.validate_segments(segments)
+        script_segments.validate_segments(segments, video_type="faceless")
     assert exc_info.value.field == "segments.0.media"
     assert exc_info.value.rule == (
-        "segment has 40 words (~15s) and needs at least 5 images (one per ~3s); it has 1."
+        "segment has 40 words (~15s) and needs at least 8 images (one per 2s); it has 1."
     )
-    assert exc_info.value.fix == "Add 1 more image to this segment's media array."
+    assert exc_info.value.fix == "Add 7 more images to this segment's media array."
 
 
 def test_the_density_maximum_counts_clips_one_for_one():
@@ -803,10 +801,12 @@ def test_the_density_maximum_counts_clips_one_for_one():
 
 def test_a_repeated_clip_reference_is_rejected_before_charging():
     segments = _clip_segments()
-    segments[1]["media"] = [{"url": "https://example.com/h.mp4"}]
+    segments[1]["media"] = [
+        {"url": "https://example.com/h.mp4"}, {"url": "https://example.com/h.mp4"},
+    ]
     with pytest.raises(SegmentValidationError) as exc_info:
         script_segments.validate_segments(segments)
-    assert exc_info.value.field == "segments.1.media.0"
+    assert exc_info.value.field == "segments.1.media.1"
     assert exc_info.value.rule == "the same video clip must not repeat"
     assert exc_info.value.fix == "Use a different video clip for each media item."
 

@@ -399,6 +399,75 @@
                 "schedules_post_cta_instruction_length_check": "CHECK (((post_cta_instruction IS NULL) OR (char_length(post_cta_instruction) <= 500)))"
             }
         },
+        "share_links": {
+            "rls": true,
+            "columns": [
+                {
+                    "name": "id",
+                    "type": "uuid",
+                    "default": "gen_random_uuid()",
+                    "notNull": true
+                },
+                {
+                    "name": "user_id",
+                    "type": "uuid",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "token_hash",
+                    "type": "text",
+                    "default": null,
+                    "notNull": true
+                },
+                {
+                    "name": "persona_ids",
+                    "type": "uuid[]",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "created_at",
+                    "type": "timestamp with time zone",
+                    "default": "now()",
+                    "notNull": true
+                },
+                {
+                    "name": "expires_at",
+                    "type": "timestamp with time zone",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "revoked_at",
+                    "type": "timestamp with time zone",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "last_viewed_at",
+                    "type": "timestamp with time zone",
+                    "default": null,
+                    "notNull": false
+                }
+            ],
+            "policies": {
+                "share_links_select_own": {
+                    "cmd": "r",
+                    "qual": "(auth.uid() = user_id)",
+                    "withCheck": null
+                },
+                "share_links_update_own": {
+                    "cmd": "w",
+                    "qual": "(auth.uid() = user_id)",
+                    "withCheck": "(auth.uid() = user_id)"
+                }
+            },
+            "constraints": {
+                "share_links_pkey": "PRIMARY KEY (id)",
+                "share_links_token_hash_key": "UNIQUE (token_hash)"
+            }
+        },
         "oauth_states": {
             "rls": true,
             "columns": [
@@ -1357,6 +1426,12 @@
                 {
                     "name": "prompt_version_id",
                     "type": "uuid",
+                    "default": null,
+                    "notNull": false
+                },
+                {
+                    "name": "lipsync_photos",
+                    "type": "jsonb",
                     "default": null,
                     "notNull": false
                 }

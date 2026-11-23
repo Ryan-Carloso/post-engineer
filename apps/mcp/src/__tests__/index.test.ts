@@ -26,7 +26,7 @@ const ACTIONS: Record<string, string[]> = {
   prompt_library: ['create', 'update', 'delete'],
   schedules: ['list', 'cancel', 'get_slot', 'update_slot_title', 'delete_slot'],
   posts: ['list', 'get'],
-  insights: ['post_metrics', 'last_day', 'retention_curve'],
+  insights: ['post_metrics', 'last_day', 'retention_curve', 'share_link_create', 'share_link_list', 'share_link_revoke'],
   experiments: ['results'],
   media: ['upload', 'check'],
   billing: ['balance', 'transactions'],

@@ -45,7 +45,7 @@ def test_limits_are_explicit_and_sane():
     assert MIN_CLIP_DURATION_SECONDS == 1.0
     assert MAX_CLIP_DURATION_SECONDS == 30.0
     assert MAX_CLIP_LOOPS == 3
-    assert CLIP_DENSITY_ITEMS == 4, "one clip stands in for ~12s of speech"
+    assert CLIP_DENSITY_ITEMS == 6, "one clip stands in for ~12s of speech"
     assert segment_video.VIDEO_CODEC == "h264"
 
 
@@ -55,15 +55,15 @@ def test_clip_density_min_count_counts_photos_one_for_one():
     assert clip_density_min_count([], 0) == 0
 
 
-def test_clip_density_min_count_credits_each_clip_as_four_items():
-    assert clip_density_min_count([{"url": "https://e.com/a.mp4"}], 1) == 4
+def test_clip_density_min_count_credits_each_clip_as_six_items():
+    assert clip_density_min_count([{"url": "https://e.com/a.mp4"}], 1) == 6
     assert (
         clip_density_min_count([{"url": "https://e.com/a.mp4"}, {"url": "https://e.com/b.mp4"}], 2)
-        == 8
+        == 12
     )
     assert (
         clip_density_min_count([{"url": "https://e.com/a.mp4"}, {"url": "https://e.com/b.jpg"}], 2)
-        == 5
+        == 7
     )
 
 

@@ -125,6 +125,24 @@
       "action": "retention_curve"
     }
   ],
+  "POST /api/share-links": [
+    {
+      "tool": "insights",
+      "action": "share_link_create"
+    }
+  ],
+  "GET /api/share-links": [
+    {
+      "tool": "insights",
+      "action": "share_link_list"
+    }
+  ],
+  "DELETE /api/share-links/[id]": [
+    {
+      "tool": "insights",
+      "action": "share_link_revoke"
+    }
+  ],
   "GET /api/pinterest/boards": [
     {
       "tool": "accounts",

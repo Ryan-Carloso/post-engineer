@@ -69,7 +69,7 @@ def _request_segments(with_media):
         {"kind": "content", "text": cta},
     ]
     if with_media:
-        counts = (4, 6, 2)
+        counts = (5, 8, 2)
         segments = [
             {
                 **segment,

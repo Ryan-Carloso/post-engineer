@@ -45,7 +45,7 @@ const MCP_TOOL_CARDS: McpToolCard[] = [
   { id: 'prompt_library', actions: ['create', 'update', 'delete'], descKey: 'apiKeys.toolDescPromptLibrary', Icon: ComposeIcon },
   { id: 'schedules', actions: ['list', 'cancel', 'get_slot', 'update_slot_title', 'delete_slot'], descKey: 'apiKeys.toolDescSchedules', Icon: CalendarIcon },
   { id: 'posts', actions: ['list', 'get'], descKey: 'apiKeys.toolDescPosts', Icon: ExternalLinkIcon },
-  { id: 'insights', actions: ['post_metrics', 'last_day', 'retention_curve'], descKey: 'apiKeys.toolDescInsights', Icon: HistoryIcon },
+  { id: 'insights', actions: ['post_metrics', 'last_day', 'retention_curve', 'share_link_create', 'share_link_list', 'share_link_revoke'], descKey: 'apiKeys.toolDescInsights', Icon: HistoryIcon },
   { id: 'experiments', actions: ['results'], descKey: 'apiKeys.toolDescExperiments', Icon: ComposeIcon },
   { id: 'media', actions: ['upload', 'check'], descKey: 'apiKeys.toolDescMedia', Icon: UploadIcon },
   { id: 'billing', actions: ['balance', 'transactions'], descKey: 'apiKeys.toolDescBilling', Icon: CoinsIcon },

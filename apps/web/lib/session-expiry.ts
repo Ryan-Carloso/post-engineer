@@ -1,6 +1,7 @@
 import { HttpStatusError } from './errors';
 
-const PUBLIC_PATH_PREFIXES = ['/login', '/auth/', '/landing', '/privacy', '/terms', '/recipes', '/oauth/'];
+const PUBLIC_PATH_PREFIXES = ['/login', '/auth/', '/landing', '/privacy', '/terms', '/recipes', '/oauth/', '/s/'];
+const PUBLIC_EXACT_PATHS = ['/s'];
 
 export function isSessionExpiredError(error: unknown): boolean {
   return error instanceof HttpStatusError && error.status === 401;
@@ -14,6 +15,7 @@ export function currentRelativePath(): string | null {
 export function loginRedirectTarget(): string | null {
   const path = currentRelativePath();
   if (path === null) return null;
+  if (PUBLIC_EXACT_PATHS.includes(path)) return null;
   if (PUBLIC_PATH_PREFIXES.some((prefix) => path.startsWith(prefix))) return null;
   return `/login?next=${encodeURIComponent(path)}`;
 }

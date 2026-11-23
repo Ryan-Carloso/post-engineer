@@ -26,7 +26,7 @@ from app.services import (
 from app.services import state as sm
 from app.services import image_coverage, task_webhook, user_media
 from app.services.lipsync_active import lip_sync_cap_seconds, persona_lipsync_active
-from app.services import full_lipsync
+from app.services import full_lipsync, lipsync_photos
 from app.services.music_mood import resolve_music_mood
 from app.services.task_cleanup import _first_http_url, abort_if_cancelled, cleanup_task_intermediates
 from app.services.task_outcome import crash_or_stop, fail_or_stop, finish_or_stop
@@ -613,11 +613,11 @@ def generate_final_videos(
                 "full_lipsync requires a persona with a photo"
             )
         logger.info("generating full lip-sync video (no background footage)")
-        full_image = full_lipsync.resolve_persona_image(task_id, params, _PERSONA_IMAGE_MAX_BYTES)
+        full_images = lipsync_photos.resolve_lipsync_photos(task_id, params)
         full_path, full_cost, full_job_ids = full_lipsync.render_full_lipsync(
             task_id=task_id,
             params=params,
-            image_path=full_image,
+            image_paths=full_images,
             audio_file=audio_file,
             audio_seconds=voice.get_audio_duration(audio_file),
             subtitles=subtitle.file_to_subtitles(subtitle_path),

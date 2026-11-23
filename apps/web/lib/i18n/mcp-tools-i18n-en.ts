@@ -10,7 +10,7 @@ export const mcpToolDescEn = {
   toolDescPromptLibrary: 'Your own prompts: write, make public or private, delete',
   toolDescSchedules: 'Your scheduled posts: list, cancel, edit',
   toolDescPosts: 'Your upcoming and published posts',
-  toolDescInsights: 'Post metrics and YouTube retention curves',
+  toolDescInsights: 'Post metrics, YouTube retention curves and public read-only share links',
   toolDescExperiments: 'Compare your prompts in each account',
   toolDescMedia: 'Upload and check segment images',
   toolDescBilling: 'Token balance and ledger',

@@ -23,6 +23,10 @@ vi.mock('@/lib/api', () => ({
   useSessionQuery: vi.fn(),
 }));
 
+vi.mock('@/components/ui/share-links-section', () => ({
+  default: () => <section data-testid="share-links-section" />,
+}));
+
 vi.mock('@/lib/supabase/client', () => ({
   createSupabaseClient: () => ({
     auth: { signOut: vi.fn().mockResolvedValue({ error: null }) },
@@ -88,6 +92,13 @@ describe('app/(main)/account — AccountPage', () => {
     expect(screen.getByTestId('account-page')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'account.title' })).toBeInTheDocument();
     expect(screen.getByText('account.subtitle')).toBeInTheDocument();
+  });
+
+  it('renders the share links card below the account panel', () => {
+    render(<AccountPage />, { wrapper: createWrapper() });
+    const panel = screen.getByText('Page User');
+    const card = screen.getByTestId('share-links-section');
+    expect(panel.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('renders the shared account panel: user, tokens, version, locale, sign out', () => {

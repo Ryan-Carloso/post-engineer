@@ -21,6 +21,7 @@ from app.services import fill_schedule as fs
 from app.services.fill_schedule.support import slot_video_type
 
 UTC = timezone.utc
+LIPSYNC_PHOTOS = [{"url": "https://example.com/face-0.jpg"}, {"url": "https://example.com/face-1.jpg"}]
 
 
 def _slot(**extra):
@@ -31,8 +32,8 @@ def _slot(**extra):
         "description": "Agent description.",
         "video_type": "hook_lipsync",
         "segments": [
-            {"kind": "hook", "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is still waiting nearby for you today.", "media": [{"url": "https://example.com/h0.jpg"}, {"url": "https://example.com/h1.jpg"}, {"url": "https://example.com/h2.jpg"}, {"url": "https://example.com/h3.jpg"}]},
-            {"kind": "content", "text": "Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight.", "media": [{"url": "https://example.com/b0.jpg"}, {"url": "https://example.com/b1.jpg"}, {"url": "https://example.com/b2.jpg"}, {"url": "https://example.com/b3.jpg"}, {"url": "https://example.com/b4.jpg"}, {"url": "https://example.com/b5.jpg"}]},
+            {"kind": "hook", "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is still waiting nearby for you today.", "media": [{"url": "https://example.com/h0.jpg"}, {"url": "https://example.com/h1.jpg"}, {"url": "https://example.com/h2.jpg"}, {"url": "https://example.com/h3.jpg"}, {"url": "https://example.com/h4.jpg"}]},
+            {"kind": "content", "text": "Locals skip the famous house and walk two minutes to a smaller kitchen where the sauce recipe has not changed since nineteen fifty three and the cook still greets every table by name before the first plate arrives at your table tonight.", "media": [{"url": "https://example.com/b0.jpg"}, {"url": "https://example.com/b1.jpg"}, {"url": "https://example.com/b2.jpg"}, {"url": "https://example.com/b3.jpg"}, {"url": "https://example.com/b4.jpg"}, {"url": "https://example.com/b5.jpg"}, {"url": "https://example.com/b6.jpg"}, {"url": "https://example.com/b7.jpg"}]},
             {"kind": "content", "text": "Save this video before your next trip to Porto.", "media": [{"url": "https://example.com/c0.jpg"}, {"url": "https://example.com/c1.jpg"}]},
         ],
         "schedules": {
@@ -116,11 +117,29 @@ class BatchDispatchVideoTypeTests(unittest.TestCase):
         return dispatch.call_args[0][1]
 
     def test_full_lipsync_slot_dispatches_full_lipsync(self):
-        slot = _slot(video_type="full_lipsync")
+        slot = _slot(video_type="full_lipsync", lipsync_photos=LIPSYNC_PHOTOS)
         for segment in slot["segments"]:
             segment.pop("media", None)
         request = self._dispatched_request(slot)
         self.assertEqual(request.video_type, "full_lipsync")
+        self.assertEqual(
+            [photo.model_dump(exclude_none=True) for photo in request.lipsync_photos],
+            LIPSYNC_PHOTOS,
+        )
+
+    def test_full_lipsync_slot_without_lipsync_photos_fails_with_a_refund(self):
+        slot = _slot(video_type="full_lipsync", charged_tokens=8)
+        for segment in slot["segments"]:
+            segment.pop("media", None)
+        store = self._failed_slot(slot)
+        self.assertIn("full_lipsync requires lipsync_photos", store.updates[0][1]["error"])
+        self.assertEqual(len(store.refund_batch_calls), 1)
+        self.assertEqual(store.refund_batch_calls[0][3], 8)
+
+    def test_hook_lipsync_slot_with_lipsync_photos_fails_with_a_refund(self):
+        store = self._failed_slot(_slot(charged_tokens=2, lipsync_photos=LIPSYNC_PHOTOS))
+        self.assertIn("lipsync_photos is only accepted for full_lipsync", store.updates[0][1]["error"])
+        self.assertEqual(store.refund_batch_calls[0][3], 2)
 
     def test_hook_lipsync_slot_dispatches_hook_lipsync(self):
         request = self._dispatched_request(_slot())
@@ -178,7 +197,9 @@ class BatchDispatchVideoTypeTests(unittest.TestCase):
         return slot
 
     def test_full_lipsync_slot_without_a_persona_photo_fails_with_a_refund(self):
-        slot = self._photo_less(_slot(video_type="full_lipsync", charged_tokens=8))
+        slot = self._photo_less(
+            _slot(video_type="full_lipsync", charged_tokens=8, lipsync_photos=LIPSYNC_PHOTOS)
+        )
         for segment in slot["segments"]:
             segment.pop("media", None)
         store = self._failed_slot(slot)

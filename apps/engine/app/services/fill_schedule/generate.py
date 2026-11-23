@@ -138,6 +138,7 @@ class BatchGenerator:
                         else LipSyncQuality.ok
                     ),
                     persona=build_persona_params(identity, self.store, video_type),
+                    lipsync_photos=slot.get("lipsync_photos"),
                     video_aspect=identity.get("video_aspect") or "9:16",
                     video_layout=identity.get("video_layout") or "standard",
                     hook_panel=identity.get("hook_panel") is not False,

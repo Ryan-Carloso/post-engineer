@@ -128,6 +128,9 @@ GET    /api/posts/{id}                                        get post
 GET    /api/metrics                                           get post metrics
 GET    /api/metrics/last-24h                                  get views and engagement gained in the last 24 hours
 GET    /api/metrics/retention-curve                           get YouTube retention curve
+POST   /api/share-links                                       create public read-only share link
+GET    /api/share-links                                       list share links
+DELETE /api/share-links/{id}                                  revoke share link
 GET    /api/experiments                                       compare prompts per account
 GET    /api/billing/tokens                                    get token balance
 GET    /api/billing/transactions                              list token transactions
