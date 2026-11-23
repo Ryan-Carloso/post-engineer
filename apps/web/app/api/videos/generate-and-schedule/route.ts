@@ -493,7 +493,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
           const hosted = await ensureEngineImageUrl(prep.avatarUrl, {
             supabase,
             userId,
-            origin: new URL(request.url).origin,
           }).catch((error: unknown) => {
             throw new SlotDispatchError(
               'photo_resolve_failed',

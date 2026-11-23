@@ -54,6 +54,7 @@ export const RATE_LIMITS = {
   promptsRead: { name: 'prompts-read', limit: 120, windowMs: 60_000 },
   promptsWrite: { name: 'prompts-write', limit: 30, windowMs: 60_000 },
   accountDisconnect: { name: 'account-disconnect', limit: 10, windowMs: 60_000 },
+  accountProfileRefresh: { name: 'account-profile-refresh', limit: 5, windowMs: 60_000 },
   apiKeyList: { name: 'api-key-list', limit: 60, windowMs: 60_000 },
   healthProbe: { name: 'health-probe', limit: 30, windowMs: 60_000 },
   engineHealthProbe: { name: 'engine-health-probe', limit: 30, windowMs: 60_000 },

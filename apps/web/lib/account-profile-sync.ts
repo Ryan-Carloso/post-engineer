@@ -33,6 +33,7 @@ function reportOwnerAccountBreak(record: SocialAccountRecord, error: unknown): v
 
 export interface AccountProfileSyncOptions {
   now?: () => Date;
+  force?: boolean;
 }
 
 function failureCooldownActive(record: SocialAccountRecord, now: Date): boolean {
@@ -138,7 +139,8 @@ export async function syncAccountProfile(
   if (credentialFailureHeld(record, now)) {
     return record;
   }
-  if (!source.applies(record) || !profileNeedsSync(record, source.pictureKey, now)) {
+  const due = options.force === true || profileNeedsSync(record, source.pictureKey, now);
+  if (!source.applies(record) || !due) {
     await probeStoredCredential(supabase, userId, record, now);
     return record;
   }

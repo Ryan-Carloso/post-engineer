@@ -3,6 +3,7 @@ import { engineAuthHeaders, requireSupabaseSession } from '@/lib/request-auth';
 import { apiErrorResponse } from '@/lib/api-error';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { logger } from '@/lib/logger';
+import { sameOriginRedirect } from '@/lib/same-origin-redirect';
 import { SAFE_TASK_ID } from '@/lib/video-urls';
 import { enforceScopedTaskRead } from '@/lib/video-task-scope';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
@@ -77,7 +78,7 @@ async function getHandler(request: Request, context: DownloadContext): Promise<N
       const target = `/api/persona/video-download/${encodeURIComponent(taskId)}/${resolution.segments
         .map(encodeURIComponent)
         .join('/')}${source === 'stream' ? '?source=stream' : ''}`;
-      return NextResponse.redirect(new URL(target, request.url), 302);
+      return sameOriginRedirect(target, 302);
     }
     const reason = resolution.kind === 'path' ? 'unknown' : resolution.kind;
     const status = reason === 'gone' || reason === 'failed' ? 410 : 404;

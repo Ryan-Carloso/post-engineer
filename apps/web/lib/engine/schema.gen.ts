@@ -152,6 +152,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/media/image-short": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Render one JPEG/PNG into an 8-second 9:16 MP4 Short (video/mp4) */
+        post: operations["render_image_short_api_v1_media_image_short_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/musics": {
         parameters: {
             query?: never;
@@ -565,6 +582,11 @@ export interface components {
         };
         /** Body_denoise_preview_api_v1_cloned_voices_denoise_preview_post */
         Body_denoise_preview_api_v1_cloned_voices_denoise_preview_post: {
+            /** File */
+            file: string;
+        };
+        /** Body_render_image_short_api_v1_media_image_short_post */
+        Body_render_image_short_api_v1_media_image_short_post: {
             /** File */
             file: string;
         };
@@ -1401,6 +1423,39 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["MediaCheckRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    render_image_short_api_v1_media_image_short_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_render_image_short_api_v1_media_image_short_post"];
             };
         };
         responses: {

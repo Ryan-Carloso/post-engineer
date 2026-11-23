@@ -86,6 +86,11 @@ vi.mock('@/lib/instagram', () => {
   };
 });
 
+vi.mock('@/lib/engine/image-short', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/engine/image-short')>()),
+  renderImageShort: vi.fn(async () => new File([new Uint8Array([7, 7, 7])], 'image-short.mp4', { type: 'video/mp4' })),
+}));
+
 vi.mock('@/lib/youtube', () => ({
   createGoogleOAuth2Client: vi.fn().mockResolvedValue({
     setCredentials: vi.fn(),
@@ -514,6 +519,73 @@ describe('handleYoutubeUpload', () => {
       account_id: 'UC-real-channel',
       user_id: OWNER_USER_ID,
       status: 401,
+    });
+  });
+
+  describe('image published as a Short', () => {
+    it('renders a JPEG into a Short and uploads the rendered video', async () => {
+      const { uploadYouTubeVideo } = await import('@/lib/youtube');
+      const { renderImageShort } = await import('@/lib/engine/image-short');
+      vi.mocked(uploadYouTubeVideo).mockClear();
+      vi.mocked(renderImageShort).mockClear();
+      const image = new File([new Uint8Array(10)], 'image.jpg', { type: 'image/jpeg' });
+
+      const response = await handleYoutubeUpload(makeVideoFormData({ ...validFields, accountIds: 'ch-1' }, image), OWNER_USER_ID, logId, startTime);
+
+      expect(response.success && response.results[0].success).toBe(true);
+      expect(renderImageShort).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(renderImageShort).mock.calls[0][0].name).toBe('image.jpg');
+      expect(vi.mocked(renderImageShort).mock.calls[0][1]).toBe(OWNER_USER_ID);
+      const uploaded = vi.mocked(uploadYouTubeVideo).mock.calls[0][1];
+      expect(Buffer.isBuffer(uploaded) ? [...uploaded] : uploaded).toEqual([7, 7, 7]);
+    });
+
+    it('renders a PNG once for every account', async () => {
+      const { uploadYouTubeVideo } = await import('@/lib/youtube');
+      const { renderImageShort } = await import('@/lib/engine/image-short');
+      vi.mocked(uploadYouTubeVideo).mockClear();
+      vi.mocked(renderImageShort).mockClear();
+      const image = new File([new Uint8Array(10)], 'image.png', { type: 'image/png' });
+      const fd = makeVideoFormData({ ...validFields }, image);
+      fd.append('accountIds', 'ch-1');
+      fd.append('accountIds', 'ch-2');
+
+      await handleYoutubeUpload(fd, OWNER_USER_ID, logId, startTime);
+
+      expect(renderImageShort).toHaveBeenCalledTimes(1);
+      expect(uploadYouTubeVideo).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not render a video', async () => {
+      const { renderImageShort } = await import('@/lib/engine/image-short');
+      vi.mocked(renderImageShort).mockClear();
+      const file = new File([new Uint8Array(100)], 'video.mp4', { type: 'video/mp4' });
+
+      await handleYoutubeUpload(makeVideoFormData({ ...validFields, accountIds: 'ch-1' }, file), OWNER_USER_ID, logId, startTime);
+
+      expect(renderImageShort).not.toHaveBeenCalled();
+    });
+
+    it('rejects a file that is neither a video nor a JPEG/PNG without rendering', async () => {
+      const { renderImageShort } = await import('@/lib/engine/image-short');
+      vi.mocked(renderImageShort).mockClear();
+      const file = new File([new Uint8Array(10)], 'image.gif', { type: 'image/gif' });
+
+      await expect(
+        handleYoutubeUpload(makeVideoFormData({ ...validFields, accountIds: 'ch-1' }, file), OWNER_USER_ID, logId, startTime),
+      ).rejects.toThrow('Invalid file. Must be a video, or a JPEG/PNG image to publish as a Short');
+      expect(renderImageShort).not.toHaveBeenCalled();
+    });
+
+    it('validates the metadata before rendering the image', async () => {
+      const { renderImageShort } = await import('@/lib/engine/image-short');
+      vi.mocked(renderImageShort).mockClear();
+      const image = new File([new Uint8Array(10)], 'image.jpg', { type: 'image/jpeg' });
+
+      await expect(
+        handleYoutubeUpload(makeVideoFormData({ ...validFields, tags: ' ', accountIds: 'ch-1' }, image), OWNER_USER_ID, logId, startTime),
+      ).rejects.toThrow(ValidationError);
+      expect(renderImageShort).not.toHaveBeenCalled();
     });
   });
 
