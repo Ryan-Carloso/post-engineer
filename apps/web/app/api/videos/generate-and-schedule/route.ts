@@ -438,7 +438,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
         videoType: validatedOptions.videoType,
         musicMood: validatedOptions.musicMood,
         chargedTokens: perVideoCost,
-        segments: options?.segments,
+        segments: options?.segments, lipsyncPhotos: validatedOptions.lipsyncPhotos,
         promptVersionId,
       }),
     )
@@ -528,7 +528,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
         generation_id: slotGenerationId,
         slot_id: slot.id,
         music_mood: validatedOptions.musicMood,
-        segments: options?.segments,
+        segments: options?.segments, lipsync_photos: validatedOptions.lipsyncPhotos,
       });
       if (!hasNonEmptyString(payload.video_title)) {
         throw new SlotDispatchError('empty_title', 'Video title is empty.');

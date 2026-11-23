@@ -1434,6 +1434,12 @@
                     "type": "uuid",
                     "default": null,
                     "notNull": false
+                },
+                {
+                    "name": "lipsync_photos",
+                    "type": "jsonb",
+                    "default": null,
+                    "notNull": false
                 }
             ],
             "policies": {

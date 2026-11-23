@@ -27,6 +27,7 @@ const REQUEST_FORWARD_FIELDS: ReadonlyArray<EngineVideoRequestField> = [
   'slot_id',
   'music_mood',
   'segments',
+  'lipsync_photos',
   'cta_type',
 ];
 const REQUEST_FORWARD_FIELD_SET: ReadonlySet<string> = new Set(REQUEST_FORWARD_FIELDS);

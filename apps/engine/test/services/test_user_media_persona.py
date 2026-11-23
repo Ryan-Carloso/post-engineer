@@ -48,7 +48,10 @@ def test_persona_panel_sits_at_the_bottom_in_every_layout():
             segments = SEGMENTS
             if full:
                 segments = [{k: v for k, v in s.items() if k != "media"} for s in SEGMENTS]
-            params = _request(persona=_persona(), video_layout=layout, full_lipsync=full, segments=segments)
+            photos = {"lipsync_photos": [{"url": "https://example.com/face-0.jpg"}, {"url": "https://example.com/face-1.jpg"}]} if full else {}
+            params = _request(
+                persona=_persona(), video_layout=layout, full_lipsync=full, segments=segments, **photos
+            )
             assert user_media._face_mode(params) != segment_panels.FACE_NONE
             assert segment_panels.panel_rect(1080, 1920)[1] == 1160
 
