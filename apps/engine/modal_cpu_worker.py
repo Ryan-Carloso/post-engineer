@@ -1,0 +1,53 @@
+"""Modal app: one image-only video per CPU container.
+
+Deploy (does not run a render):
+
+    MPT_CPU_WORKER_MAX_CONTAINERS=30 uv run modal deploy modal_cpu_worker.py
+
+``min_containers`` is 0 and there is no warm pool. Modal scales from zero
+to ``max_containers`` (default 30, raise with ``MPT_CPU_WORKER_MAX_CONTAINERS``)
+and drops idle containers after ``scaledown_window`` seconds.
+
+The secret ``cpu-worker`` must define ``SUPABASE_URL``,
+``SUPABASE_SERVICE_ROLE_KEY``, ``R2_ACCOUNT_ID``, ``R2_ACCESS_KEY_ID``,
+``R2_SECRET_ACCESS_KEY``, and ``CHATTERBOX_HTTP_SECRET``. The dispatcher
+on the VPS needs ``MODAL_TOKEN_ID``, ``MODAL_TOKEN_SECRET``,
+``MPT_CPU_WORKER=true``, and ``MPT_CPU_WORKER_APP_NAME`` set to this app.
+"""
+
+from __future__ import annotations
+
+import modal
+
+from app.services.cpu_worker_dispatch import (
+    DEFAULT_APP_NAME,
+    configured_max_containers,
+)
+
+app = modal.App(DEFAULT_APP_NAME)
+
+_MAX_CONTAINERS = configured_max_containers()
+
+CPU_WORKER_IMAGE = modal.Image.from_dockerfile(
+    "Dockerfile.cpu-worker",
+    context_dir=".",
+)
+
+CPU_WORKER_SECRET = modal.Secret.from_name("cpu-worker")
+
+
+@app.function(
+    image=CPU_WORKER_IMAGE,
+    cpu=1.0,
+    memory=6144,
+    timeout=1800,
+    min_containers=0,
+    max_containers=_MAX_CONTAINERS,
+    scaledown_window=1,
+    secrets=[CPU_WORKER_SECRET],
+)
+def render_video(task_id: str, params: dict, stop_at: str = "video") -> None:
+    """Render one video and exit. One input at a time; the container is not kept warm."""
+    from app.services.cpu_worker_run import run_one
+
+    run_one(task_id, params, stop_at)

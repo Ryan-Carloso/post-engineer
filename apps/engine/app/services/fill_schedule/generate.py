@@ -78,8 +78,11 @@ class BatchGenerator:
         refunded. Batch dispatch never fills the task-manager queue.
         """
         from app.controllers.v1.video import task_manager
+        from app.services.cpu_worker_dispatch import cpu_worker_enabled, configured_max_containers
 
         budget = free_running_slots(task_manager)
+        if cpu_worker_enabled():
+            budget = max(budget, configured_max_containers())
         enqueued = 0
         enqueued_titles: list[str] = []
 
@@ -309,6 +312,21 @@ class BatchGenerator:
             tracking_ids["schedule_id"] = schedule_id
         if persona_id:
             tracking_ids["persona_id"] = persona_id
+
+        from app.services.cpu_worker_dispatch import try_remote_batch
+
+        spawned, accepted = try_remote_batch(
+            self.task_state,
+            task_id,
+            request,
+            user_id,
+            tracking_ids,
+            on_accepted,
+        )
+        if spawned:
+            return
+        if accepted:
+            on_accepted = None
 
         def _write_task_row() -> None:
             self.task_state.update_task(

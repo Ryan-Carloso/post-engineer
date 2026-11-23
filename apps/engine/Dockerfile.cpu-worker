@@ -1,0 +1,57 @@
+# One image-only video per container. House TTS (Kokoro, Phonon), Whisper, ffmpeg.
+# No Chatterbox Nano and no CUDA. Weights are downloaded at image build.
+FROM python:3.11-slim-bookworm
+
+COPY --from=ghcr.io/astral-sh/uv:0.8.24 /uv /uvx /bin/
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ffmpeg \
+        espeak-ng \
+        libgomp1 \
+        ca-certificates \
+        git \
+        tzdata \
+    && rm -rf /var/lib/apt/lists/* \
+    && ln -s "$(find / -name 'libespeak-ng.so.1' -not -path '/proc/*' | head -n 1)" /usr/local/lib/libespeak-ng.so.1 \
+    && ln -s "$(find /usr -type d -name 'espeak-ng-data' | head -n 1)" /usr/local/share/espeak-ng-data
+
+ENV TZ=UTC \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    MPT_STATE_BACKEND=supabase \
+    MPT_CPU_WORKER_ROLE=worker \
+    MPT_STORAGE_DIR=/app/storage \
+    TTS_VOICES_DIR=/tmp/tts-voices \
+    HF_HOME=/app/models/hf \
+    HF_HUB_DISABLE_TELEMETRY=1 \
+    ESPEAK_NG_LIBRARY=/usr/local/lib/libespeak-ng.so.1 \
+    ESPEAK_NG_DATA=/usr/local/share/espeak-ng-data \
+    MPT_CHATTERBOX_BASE_URL=http://127.0.0.1:4123/v1 \
+    MPT_CLONED_VOICES_REGISTRY_BASE_URL=http://127.0.0.1:4123
+
+WORKDIR /app
+
+COPY pyproject.toml uv.lock local_tts/requirements-house.txt ./
+COPY local_tts/requirements-house.txt /tmp/requirements-house.txt
+RUN uv sync --frozen --no-dev --no-install-project \
+    && uv pip install --python .venv/bin/python torch torchaudio \
+        --index-url https://download.pytorch.org/whl/cpu \
+    && uv pip install --python .venv/bin/python -r /tmp/requirements-house.txt
+
+COPY app ./app
+COPY local_tts ./local_tts
+COPY chatterbox_registry_volume.py modal_chatterbox_auth.py modal_chatterbox_registry_routes.py ./
+COPY resource/fonts ./resource/fonts
+COPY resource/songs ./resource/songs
+COPY config.example.toml ./config.toml
+
+RUN mkdir -p /tmp/tts-voices /app/storage /app/models/hf /app/logs \
+    && .venv/bin/python -c "from faster_whisper import WhisperModel; WhisperModel('small', device='cpu', compute_type='int8')" \
+    && TTS_VOICES_DIR=/tmp/tts-voices .venv/bin/python -c "from local_tts.backends import _phonon, _kokoro; _phonon(); _kokoro('a'); _kokoro('b')"
+
+RUN useradd --create-home --uid 10001 engine \
+    && chown -R engine:engine /app /tmp/tts-voices
+USER engine

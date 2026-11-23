@@ -348,6 +348,14 @@ def startup_event():
     )
     warm_client()
     try:
+        from app.services.cpu_worker_dispatch import resume_unspawned_cpu_jobs
+
+        resumed = resume_unspawned_cpu_jobs(sm.state)
+        if resumed:
+            logger.info(f"resumed {resumed} modal cpu dispatch(es) at boot")
+    except Exception as exc:
+        logger.warning(f"modal cpu resume failed: {exc}")
+    try:
         reconcile = getattr(sm.state, "reconcile_orphaned_tasks", None)
         if callable(reconcile):
             failed = reconcile()

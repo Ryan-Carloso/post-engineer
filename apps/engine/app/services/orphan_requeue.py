@@ -135,6 +135,13 @@ def triage_orphan(
     generation was marked for restart. Returns False when the caller
     falls through to the historical fail+refund.
     """
+    from app.services.cpu_worker_dispatch import remote_worker_in_flight
+
+    if remote_worker_in_flight(data):
+        logger.info(
+            f"orphan {task_id} is rendering on a modal cpu worker; not triaging"
+        )
+        return True
     if triage_requeue(state, slot_store, task_id, data):
         return True
     from app.services.direct_redispatch import triage_redispatch_direct

@@ -29,7 +29,7 @@ from app.models.schema import (
     TaskResponse,
     TaskVideoRequest,
 )
-from app.services import state as sm, task as tm
+from app.services import state as sm
 from app.services import video_storage
 from app.services.task_cleanup import remove_task_directory
 from app.services.language_gate import ensure_english_video_language
@@ -340,22 +340,16 @@ def create_task(
             "user_id": auth.user_id,
         }
         validate_music_mood(getattr(body, "music_mood", None))
-        sm.state.update_task(
-            task_id, user_id=auth.user_id, flow="direct", pipeline=stop_at,
-            state=const.TASK_STATE_QUEUED,
-            progress=0,
-            **_persona_tracking_kwargs(body),
-            **_tracking_kwargs(body),
-        )
-        task_manager.add_task(
-            tm.start,
-            task_id=task_id,
-            params=body,
-            stop_at=stop_at,
-            on_accepted=lambda: tm.track_generation_requested(
-                task_id, user_id=auth.user_id, flow="direct", pipeline=stop_at,
-                **_tracking_kwargs(body),
-            ),
+        from app.services.cpu_worker_dispatch import accept_direct_task
+
+        accept_direct_task(
+            task_manager,
+            task_id,
+            body,
+            stop_at,
+            auth.user_id,
+            _persona_tracking_kwargs(body),
+            _tracking_kwargs(body),
         )
         logger.success(f"Task created: task_id={task_id}")
         return utils.get_response(200, task)
