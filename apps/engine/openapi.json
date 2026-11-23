@@ -354,6 +354,40 @@
         "title": "LipSyncQuality",
         "type": "string"
       },
+      "LipsyncPhoto": {
+        "additionalProperties": false,
+        "description": "One face photo of the persona for full lip sync: a mediaId (media (action: upload)) or a public image url.\n\nFull lip sync renders the narration as windows of at most 12s; window i\nshows lipsync_photos[i % len(lipsync_photos)].",
+        "properties": {
+          "mediaId": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mediaid"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "title": "LipsyncPhoto",
+        "type": "object"
+      },
       "MediaCheckRequest": {
         "properties": {
           "media_id": {
@@ -1053,6 +1087,22 @@
             "default": true,
             "title": "Hook Panel",
             "type": "boolean"
+          },
+          "lipsync_photos": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/LipsyncPhoto"
+                },
+                "maxItems": 5,
+                "minItems": 2,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lipsync Photos"
           },
           "music_mood": {
             "anyOf": [

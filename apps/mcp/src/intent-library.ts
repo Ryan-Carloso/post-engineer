@@ -4,6 +4,14 @@ import type { PostEngineerClient } from './client.js';
 import { withRecipeNudge, type RecipeSession } from './recipe-session.js';
 import { DESTRUCTIVE, READ_ONLY } from './tool-annotations.js';
 import {
+  CreateShareLinkShape,
+  ListShareLinksShape,
+  RevokeShareLinkShape,
+  handleCreateShareLink,
+  handleListShareLinks,
+  handleRevokeShareLink,
+} from './tools-share-links.js';
+import {
   CancelScheduleShape,
   DeleteSlotShape,
   GetSlotShape,
@@ -39,7 +47,13 @@ const SCHEDULES_SPECS = {
 
 const POSTS_SPECS = { list: ListPostsShape, get: GetPostShape };
 
-const INSIGHTS_SPECS = { post_metrics: GetPostMetricsShape, retention_curve: GetYouTubeRetentionCurveShape };
+const INSIGHTS_SPECS = {
+  post_metrics: GetPostMetricsShape,
+  retention_curve: GetYouTubeRetentionCurveShape,
+  share_link_create: CreateShareLinkShape,
+  share_link_list: ListShareLinksShape,
+  share_link_revoke: RevokeShareLinkShape,
+};
 
 const BILLING_SPECS = { balance: {}, transactions: ListTokenTransactionsShape };
 
@@ -82,13 +96,16 @@ export function registerLibraryTools(server: McpServer, client: PostEngineerClie
 
   server.tool(
     'insights',
-    actionDescription('How your posts performed. post_metrics: per-network metrics of published posts (views, likes, comments, average view duration, published date), filterable by persona, network, account and window. retention_curve: the YouTube audience retention curve of one post.', INSIGHTS_SPECS),
+    actionDescription('How your posts performed. post_metrics: per-network metrics of published posts (views, likes, comments, average view duration, published date), filterable by persona, network, account and window. retention_curve: the YouTube audience retention curve of one post. share_link_create: a public read-only link (no login) to the metrics summary of the first 7 days and this week\'s posts, optionally limited to one persona and an expiry; the url is returned once and only its hash is stored. share_link_list: your links with their scope, expiry, revocation and last view, never the url. share_link_revoke: stops a link at once.', INSIGHTS_SPECS),
     actionShape(INSIGHTS_SPECS),
-    READ_ONLY,
+    DESTRUCTIVE,
     byAction(
       {
         post_metrics: async (args) => handleGetPostMetrics(client, args),
         retention_curve: async (args) => handleGetYouTubeRetentionCurve(client, args),
+        share_link_create: (args) => handleCreateShareLink(client, args),
+        share_link_list: async () => handleListShareLinks(client),
+        share_link_revoke: async (args) => handleRevokeShareLink(client, args),
       },
       INSIGHTS_SPECS,
       'insights',

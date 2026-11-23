@@ -3,7 +3,9 @@
 Today a persona video only lip-syncs the hook intro;
 the rest is background video. Full mode renders the entire
 narration as talking-head windows and concatenates them, so the output
-contains no background footage at all.
+contains no background footage at all. Each window shows one of the job's
+lipsync_photos (window i shows photo i % len(photos), see lipsync_photos),
+so the face changes along the video instead of one photo for its whole length.
 
 Window arithmetic follows the intro path exactly, not a new model contract:
 a LongCat render is capped at the observed-safe 12s window (task.py
@@ -220,10 +222,10 @@ def resolve_persona_image(
     params: VideoParams,
     max_bytes: int,
 ) -> str:
-    """Download the persona image to the task dir, as the intro path does.
+    """Download the hook lip-sync image to the task dir.
 
-    Extracted verbatim from task.py's intro path so both callers share one
-    SSRF-safe download: data-URI images are decoded, remote images go
+    One SSRF-safe download for the hook intro and its preflight (full lip
+    sync uses lipsync_photos instead): data-URI images are decoded, remote images go
     through the public-address check with a 20 MB cap and image/* content
     type. Failures raise LongCatError and fail the task.
 
@@ -308,7 +310,7 @@ def resolve_persona_image(
 def render_full_lipsync(
     task_id: str,
     params: VideoParams,
-    image_path: str,
+    image_paths: Sequence[str],
     audio_file: str,
     audio_seconds: float,
     subtitles: Sequence[tuple[int, str, str]],
@@ -323,9 +325,12 @@ def render_full_lipsync(
     failure propagates: the caller must fail the task, never ship background
     footage instead. No background material is read here; the output is the persona
     only, silent, for the downstream final encode to mux with narration.
+    Window i is rendered from image_paths[i % len(image_paths)].
     """
     if params.persona is None:
         raise FullLipSyncError("full lip-sync requires a persona")
+    if not image_paths:
+        raise FullLipSyncError("full lip-sync requires at least one face photo")
     windows = plan_windows(audio_seconds, cue_starts_from_subtitles(subtitles))
     task_dir = utils.task_dir(task_id)
     clip_paths: list[str] = []
@@ -342,7 +347,7 @@ def render_full_lipsync(
         )
         clip_path = path.join(task_dir, f"full-lipsync-clip-{index}.mp4")
         _out, cost_usd, job_id = generate_intro(
-            image_path=image_path,
+            image_path=image_paths[index % len(image_paths)],
             audio_path=window_audio,
             quality=params.video_quality,
             output_path=clip_path,

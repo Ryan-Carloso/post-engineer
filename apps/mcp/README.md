@@ -202,7 +202,7 @@ The server offers **18 intent tools**, not one tool per API endpoint. A tool is 
 | `prompt_library` | `create`, `update`, `delete` | The account's own prompts, private by default; only the owner can change one. `visibility` `public` makes a prompt readable by anyone (no review while the product is in beta), `private` keeps it to the account. Read and follow prompts with `prompts`: `list` (optional `query` words and `source` official, own or community) and `get` return the official prompts, the account's own (private ones included) and other users' public ones, which come back with an unverified-content notice. |
 | `schedules` | `list`, `cancel`, `get_slot`, `update_slot_title`, `delete_slot` | Future slots. |
 | `posts` | `list`, `get` | Published and scheduled posts. |
-| `insights` | `post_metrics`, `retention_curve` | How posts performed. |
+| `insights` | `post_metrics`, `retention_curve`, `share_link_create`, `share_link_list`, `share_link_revoke` | How posts performed, and a public read-only link to the metrics summary and this week's posts. |
 | `experiments` | `results` | Compares your prompts inside each publishing account: every video generated with a `promptVersionId` records its prompt version. |
 | `media` | `upload`, `check` | Images for video segments. |
 | `billing` | `balance`, `transactions` | Prepaid tokens. |
@@ -217,8 +217,10 @@ Actions that read a file from the disk (`publish_video` `from_file`, and a local
 `persona` and `accounts` accept a display name or an id. An id wins; otherwise the name must match **exactly** (case-insensitive, trimmed; never a prefix). No match is an error that says how to list the candidates. Several matches is **not** an error and not a guess: the result lists the candidates and says nothing was done, so you call again with the id. In `generate_video` every reference of every video is resolved before the first video is created, and `accounts` omitted means the persona's bound publishing accounts.
 
 ```json
-{ "videos": [ { "persona": "Maria", "accounts": ["Maria Cooks"], "title": "...", "description": "...", "segments": [ ... ], "mode": "asap", "options": { "videoType": "full_lipsync" } } ] }
+{ "videos": [ { "persona": "Maria", "accounts": ["Maria Cooks"], "title": "...", "description": "...", "segments": [ ... ], "mode": "asap", "options": { "videoType": "full_lipsync", "lipsyncPhotos": [ { "mediaId": "..." }, { "url": "https://..." } ] } } ] }
 ```
+
+`full_lipsync` requires `options.lipsyncPhotos`: 2-5 different face photos of the persona (same person, other outfits, places or angles). The narration is cut into windows of at most 12s and each window shows the next photo, so send one photo per 12s of narration (2 for 24s, 4 for 48s, 5 for 60s).
 
 `mode: "scheduled"` (the default) slots a video 3h-30d ahead (`startAt` and `times`); `mode: "asap"` publishes it when generation finishes.
 

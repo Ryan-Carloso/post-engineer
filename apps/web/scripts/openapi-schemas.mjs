@@ -1,4 +1,4 @@
-import { metricsOperationSchemas } from './openapi-metrics-schemas.mjs'; import { videoOperationSchemas } from './openapi-videos-schemas.mjs'; import { promptOperationSchemas } from './openapi-prompts-schemas.mjs'; import { OAUTH_CONNECT_PROVIDERS, SCHEDULE_ACCOUNT_COLUMNS, SOCIAL_PROVIDERS as providers } from '../../../shared/contracts/providers.ts';
+import { metricsOperationSchemas } from './openapi-metrics-schemas.mjs'; import { videoOperationSchemas } from './openapi-videos-schemas.mjs'; import { promptOperationSchemas } from './openapi-prompts-schemas.mjs'; import { shareLinkOperationSchemas } from './openapi-share-links-schemas.mjs'; import { OAUTH_CONNECT_PROVIDERS, SCHEDULE_ACCOUNT_COLUMNS, SOCIAL_PROVIDERS as providers } from '../../../shared/contracts/providers.ts';
 
 const object = (properties, required = []) => ({
   type: 'object',
@@ -55,7 +55,7 @@ const segmentsBody = object(
     },
     fullLipsync: {
       type: 'boolean',
-      description: 'Optional. Media is optional when true (full lip sync); otherwise every segment needs a media list, about one image per ~3s, at most 30.',
+      description: 'Optional. Media is optional when true (full lip sync); otherwise every segment needs a media list, about one image per ~2s, at most 30.',
     },
   },
   ['segments'],
@@ -508,7 +508,7 @@ export const operationSchemas = {
     request: object({ url: { type: 'string', format: 'uri', description: 'http(s) URL.' } }, ['url']),
     response: success({ code: str }),
   },
-  ...metricsOperationSchemas({ success, object, anyObject, str }), ...videoOperationSchemas({ success, object, str }), ...promptOperationSchemas({ success, object, str }),
+  ...metricsOperationSchemas({ success, object, anyObject, str }), ...videoOperationSchemas({ success, object, str }), ...promptOperationSchemas({ success, object, str }), ...shareLinkOperationSchemas({ success, object, str }),
   'GET /api/posts/[id]': {
     response: success({
       kind: { type: 'string', enum: ['generation', 'slot'] },

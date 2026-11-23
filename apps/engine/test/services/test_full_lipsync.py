@@ -154,7 +154,7 @@ class RenderTests(unittest.TestCase):
         output, cost, jobs = full_lipsync.render_full_lipsync(
             task_id="t1",
             params=_params(),
-            image_path="/tmp/photo.png",
+            image_paths=["/tmp/photo-0.png", "/tmp/photo-1.png"],
             audio_file="/tmp/audio.mp3",
             audio_seconds=30.0,
             subtitles=[],
@@ -169,13 +169,75 @@ class RenderTests(unittest.TestCase):
         self.assertEqual(jobs, ["job-1", "job-2", "job-3"])
         self.assertEqual(len(ran), 1)
 
+    def test_each_window_cycles_through_the_photos(self):
+        images: list[str] = []
+
+        def fake(image_path, audio_path, quality, output_path, duration_seconds):
+            images.append(image_path)
+            return output_path, 0.5, f"job-{len(images)}"
+
+        full_lipsync.render_full_lipsync(
+            task_id="t1",
+            params=_params(),
+            image_paths=["/tmp/a.png", "/tmp/b.png"],
+            audio_file="/tmp/audio.mp3",
+            audio_seconds=50.0,
+            subtitles=[],
+            output_path="/tmp/full.mp4",
+            generate_intro=fake,
+            trim_audio=lambda *args, **kwargs: None,
+            run_ffmpeg=lambda argv: MagicMock(returncode=0, stderr=""),
+        )
+        self.assertEqual(
+            images, ["/tmp/a.png", "/tmp/b.png", "/tmp/a.png", "/tmp/b.png", "/tmp/a.png"]
+        )
+
+    def test_one_photo_per_window_never_repeats(self):
+        images: list[str] = []
+
+        def fake(image_path, audio_path, quality, output_path, duration_seconds):
+            images.append(image_path)
+            return output_path, 0.5, "job"
+
+        photos = [f"/tmp/p{i}.png" for i in range(5)]
+        full_lipsync.render_full_lipsync(
+            task_id="t1",
+            params=_params(),
+            image_paths=photos,
+            audio_file="/tmp/audio.mp3",
+            audio_seconds=60.0,
+            subtitles=[],
+            output_path="/tmp/full.mp4",
+            generate_intro=fake,
+            trim_audio=lambda *args, **kwargs: None,
+            run_ffmpeg=lambda argv: MagicMock(returncode=0, stderr=""),
+        )
+        self.assertEqual(images, photos)
+
+    def test_no_photo_fails_before_any_window(self):
+        calls: list[float] = []
+        with self.assertRaises(FullLipSyncError):
+            full_lipsync.render_full_lipsync(
+                task_id="t1",
+                params=_params(),
+                image_paths=[],
+                audio_file="/tmp/audio.mp3",
+                audio_seconds=10.0,
+                subtitles=[],
+                output_path="/tmp/full.mp4",
+                generate_intro=self._fake_generate(calls),
+                trim_audio=lambda *args, **kwargs: None,
+                run_ffmpeg=lambda argv: MagicMock(returncode=0, stderr=""),
+            )
+        self.assertEqual(calls, [])
+
     def test_over_60s_render_fails_before_any_window(self):
         calls: list[float] = []
         with self.assertRaises(FullLipSyncError):
             full_lipsync.render_full_lipsync(
                 task_id="t1",
                 params=_params(),
-                image_path="/tmp/photo.png",
+                image_paths=["/tmp/photo-0.png", "/tmp/photo-1.png"],
                 audio_file="/tmp/audio.mp3",
                 audio_seconds=61.0,
                 subtitles=[],
@@ -202,7 +264,7 @@ class RenderTests(unittest.TestCase):
                     full_lipsync.render_full_lipsync(
                         task_id="t1",
                         params=_params(),
-                        image_path="/tmp/photo.png",
+                        image_paths=["/tmp/photo-0.png", "/tmp/photo-1.png"],
                         audio_file="/tmp/audio.mp3",
                         audio_seconds=10.0,
                         subtitles=[],
@@ -228,7 +290,7 @@ class RenderTests(unittest.TestCase):
             full_lipsync.render_full_lipsync(
                 task_id="t1",
                 params=_params(),
-                image_path="/tmp/photo.png",
+                image_paths=["/tmp/photo-0.png", "/tmp/photo-1.png"],
                 audio_file="/tmp/audio.mp3",
                 audio_seconds=10.0,
                 subtitles=[],
@@ -245,7 +307,7 @@ class RenderTests(unittest.TestCase):
             full_lipsync.render_full_lipsync(
                 task_id="t1",
                 params=params,
-                image_path="/tmp/photo.png",
+                image_paths=["/tmp/photo-0.png", "/tmp/photo-1.png"],
                 audio_file="/tmp/audio.mp3",
                 audio_seconds=10.0,
                 subtitles=[],

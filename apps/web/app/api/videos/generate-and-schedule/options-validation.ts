@@ -11,6 +11,7 @@ import {
 } from '@/lib/tokens';
 import { MAX_TITLE_CHARS } from './prepare-persona';
 import { invalid, type Checked, type ValidationIssue } from './validation-issues';
+import { validateLipsyncPhotos, type LipsyncPhotoRef } from './lipsync-photos';
 
 const MAX_LANGUAGE_CHARS = 32;
 
@@ -19,6 +20,7 @@ export interface OptionsInput {
   musicMood?: string;
   audioUrl?: string;
   imageId?: string;
+  lipsyncPhotos?: LipsyncPhotoRef[];
   webhookUrl?: string;
   voiceId?: string;
   videoAspect?: '9:16' | '16:9' | '1:1';
@@ -37,6 +39,7 @@ export interface ValidatedOptions {
   musicMood?: string;
   audioUrl?: string;
   imageId?: string;
+  lipsyncPhotos?: LipsyncPhotoRef[];
   webhookUrl?: string;
   voiceId?: string;
   videoAspect?: '9:16' | '16:9' | '1:1';
@@ -65,6 +68,7 @@ export function validateOptions(options: OptionsInput): Checked<ValidatedOptions
     musicMood,
     audioUrl,
     imageId,
+    lipsyncPhotos,
     webhookUrl,
     voiceId,
     videoAspect,
@@ -135,7 +139,9 @@ export function validateOptions(options: OptionsInput): Checked<ValidatedOptions
   if (videoVariationSeed !== undefined && !Number.isInteger(videoVariationSeed)) {
     issues.push(invalid('options.videoVariationSeed must be an integer.', 'options.videoVariationSeed'));
   }
-  if (issues.length > 0) return { ok: false, issues };
+  const photos = validateLipsyncPhotos(lipsyncPhotos, mode);
+  if (!photos.ok) issues.push(...photos.issues);
+  if (issues.length > 0 || !photos.ok) return { ok: false, issues };
   if (mode === undefined) {
     return { ok: false, issues: [invalid(VIDEO_TYPE_REQUIRED_MESSAGE, 'options.videoType')] };
   }
@@ -146,6 +152,7 @@ export function validateOptions(options: OptionsInput): Checked<ValidatedOptions
       musicMood,
       audioUrl,
       imageId: imageId?.trim(),
+      lipsyncPhotos: photos.value,
       webhookUrl,
       voiceId: voiceId?.trim(),
       videoAspect,

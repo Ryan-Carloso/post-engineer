@@ -715,6 +715,14 @@ jobs:
           # 077_prompt-versions.sql.
           psql "postgresql://postgres:postgres@localhost:5432/postgres?sslmode=disable" -v ON_ERROR_STOP=1 -f scripts/db/check-prompt-versions.sql
 
+      - name: Check share_links behaviour
+        run: |
+          set -euo pipefail
+          # The active-link cap, the persona scope of the week's posts, the
+          # column grants and the service-role-only functions of
+          # 080_share-links.sql.
+          psql "postgresql://postgres:postgres@localhost:5432/postgres?sslmode=disable" -v ON_ERROR_STOP=1 -f scripts/db/check-share-links.sql
+
       - name: Check the schema snapshot is up to date
         run: |
           set -euo pipefail

@@ -146,6 +146,21 @@ describe('buildJobPayload — request allowlist', () => {
     expect(payload.segments).toEqual(segments);
   });
 
+  it('forwards lipsync_photos so a full lip-sync window renders its own face photo', () => {
+    const photos = [{ url: 'https://e.com/face-0.jpg' }, { mediaId: 'aabbccddeeff00112233445566778899.png' }];
+    const payload = buildJobPayload(persona(), {
+      video_title: 'Porto trip',
+      video_type: 'full_lipsync',
+      lipsync_photos: photos,
+    });
+    expect(payload.lipsync_photos).toEqual(photos);
+  });
+
+  it('omits lipsync_photos when the request has none', () => {
+    const payload = buildJobPayload(persona(), { video_title: 'Porto trip', video_type: 'hook_lipsync', lipsync_photos: undefined });
+    expect(payload.lipsync_photos).toBeUndefined();
+  });
+
   it('warns once with the dropped key names, capped at ten', () => {
     buildJobPayload(persona(), { a: 1, b: 2, c: 3 });
     expect(warn).toHaveBeenCalledTimes(1);

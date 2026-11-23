@@ -24,6 +24,7 @@ export function buildGenerateJobRequest(input: GenerateJobRequestInput): Record<
     slot_id: slotId,
     music_mood: validatedOptions.musicMood,
     segments,
+    lipsync_photos: validatedOptions.lipsyncPhotos,
     video_clip_duration: validatedOptions.videoClipDuration,
     video_transition_mode: validatedOptions.videoTransitionMode,
     video_variation_seed: validatedOptions.videoVariationSeed,

@@ -471,7 +471,7 @@ class BatchRequestedTests(unittest.TestCase):
                 {
                     "kind": "hook",
                     "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is still waiting nearby for you today.",
-                    "media": [{"url": "https://example.com/h0.jpg"}, {"url": "https://example.com/h1.jpg"}, {"url": "https://example.com/h2.jpg"}, {"url": "https://example.com/h3.jpg"}],
+                    "media": [{"url": "https://example.com/h0.jpg"}, {"url": "https://example.com/h1.jpg"}, {"url": "https://example.com/h2.jpg"}, {"url": "https://example.com/h3.jpg"}, {"url": "https://example.com/h4.jpg"}],
                 },
                 {
                     "kind": "content",
@@ -482,7 +482,7 @@ class BatchRequestedTests(unittest.TestCase):
                         {"url": "https://example.com/b2.jpg"},
                         {"url": "https://example.com/b3.jpg"},
                         {"url": "https://example.com/b4.jpg"},
-                        {"url": "https://example.com/b5.jpg"},
+                        {"url": "https://example.com/b5.jpg"}, {"url": "https://example.com/b6.jpg"}, {"url": "https://example.com/b7.jpg"},
                     ],
                 },
                 {
@@ -569,7 +569,7 @@ class BatchFailedTests(unittest.TestCase):
                 {
                     "kind": "hook",
                     "text": "Stop wasting your trip stuck in a ninety minute line for the original dish when a better table is still waiting nearby for you today.",
-                    "media": [{"url": "https://example.com/h0.jpg"}, {"url": "https://example.com/h1.jpg"}, {"url": "https://example.com/h2.jpg"}, {"url": "https://example.com/h3.jpg"}],
+                    "media": [{"url": "https://example.com/h0.jpg"}, {"url": "https://example.com/h1.jpg"}, {"url": "https://example.com/h2.jpg"}, {"url": "https://example.com/h3.jpg"}, {"url": "https://example.com/h4.jpg"}],
                 },
                 {
                     "kind": "content",
@@ -580,7 +580,7 @@ class BatchFailedTests(unittest.TestCase):
                         {"url": "https://example.com/b2.jpg"},
                         {"url": "https://example.com/b3.jpg"},
                         {"url": "https://example.com/b4.jpg"},
-                        {"url": "https://example.com/b5.jpg"},
+                        {"url": "https://example.com/b5.jpg"}, {"url": "https://example.com/b6.jpg"}, {"url": "https://example.com/b7.jpg"},
                     ],
                 },
                 {

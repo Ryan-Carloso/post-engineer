@@ -13,8 +13,8 @@ from app.services import segment_panels, user_media
 from app.services import task as tm
 
 SEGMENTS = [
-    {"kind": "hook", "text": "Welcome to Porto where the river meets the sea and every bridge tells a story of trade and wine for sure, come walk with me today.", "media": [{"url": f"https://e.com/h{i}.jpg"} for i in range(4)]},
-    {"kind": "content", "text": "Walk the Ribeira in the morning light, cross the Dom Luis bridge, taste francesinha where the locals eat, and finish with port wine as the river turns gold before heading home through the old town streets.", "media": [{"url": f"https://e.com/b{i}.jpg"} for i in range(5)]},
+    {"kind": "hook", "text": "Welcome to Porto where the river meets the sea and every bridge tells a story of trade and wine for sure, come walk with me today.", "media": [{"url": f"https://e.com/h{i}.jpg"} for i in range(5)]},
+    {"kind": "content", "text": "Walk the Ribeira in the morning light, cross the Dom Luis bridge, taste francesinha where the locals eat, and finish with port wine as the river turns gold before heading home through the old town streets.", "media": [{"url": f"https://e.com/b{i}.jpg"} for i in range(7)]},
     {"kind": "content", "text": "Follow for more Porto walks.", "media": [{"url": "https://e.com/c0.jpg"}]},
 ]
 
@@ -48,7 +48,10 @@ def test_persona_panel_sits_at_the_bottom_in_every_layout():
             segments = SEGMENTS
             if full:
                 segments = [{k: v for k, v in s.items() if k != "media"} for s in SEGMENTS]
-            params = _request(persona=_persona(), video_layout=layout, full_lipsync=full, segments=segments)
+            photos = {"lipsync_photos": [{"url": "https://example.com/face-0.jpg"}, {"url": "https://example.com/face-1.jpg"}]} if full else {}
+            params = _request(
+                persona=_persona(), video_layout=layout, full_lipsync=full, segments=segments, **photos
+            )
             assert user_media._face_mode(params) != segment_panels.FACE_NONE
             assert segment_panels.panel_rect(1080, 1920)[1] == 1160
 

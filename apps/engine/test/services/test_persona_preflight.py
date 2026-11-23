@@ -14,7 +14,7 @@ from unittest.mock import MagicMock, patch
 
 from app.models.schema import PersonaParams, TaskVideoRequest, VideoParams
 from test.controllers.test_task_segments_request import valid_segments
-from app.services import face_detect, full_lipsync, longcat, persona_preflight
+from app.services import face_detect, full_lipsync, lipsync_photos, longcat, persona_preflight
 from app.services import task as task_service
 
 _MAX_BYTES = 20 * 1024 * 1024
@@ -40,6 +40,26 @@ class PreflightPersonaImageTests(unittest.TestCase):
             params = _params()
             persona_preflight.preflight_persona_image("task-1", params, _MAX_BYTES)
         resolve.assert_called_once_with("task-1", params, _MAX_BYTES)
+
+    def test_full_lipsync_preflights_every_lipsync_photo_not_the_hook_image(self):
+        params = _params(video_type="full_lipsync")
+        with (
+            patch.object(full_lipsync, "resolve_persona_image") as hook_image,
+            patch.object(
+                lipsync_photos, "resolve_lipsync_photos", return_value=["/t/0.png", "/t/1.png"]
+            ) as photos,
+        ):
+            persona_preflight.preflight_persona_image("task-full", params, _MAX_BYTES)
+        photos.assert_called_once_with("task-full", params)
+        hook_image.assert_not_called()
+
+    def test_hook_lipsync_never_reads_lipsync_photos(self):
+        with (
+            patch.object(full_lipsync, "resolve_persona_image", return_value="/t/img.png"),
+            patch.object(lipsync_photos, "resolve_lipsync_photos") as photos,
+        ):
+            persona_preflight.preflight_persona_image("task-hook", _params(), _MAX_BYTES)
+        photos.assert_not_called()
 
     def test_skips_when_faceless(self):
         with patch.object(full_lipsync, "resolve_persona_image") as resolve:

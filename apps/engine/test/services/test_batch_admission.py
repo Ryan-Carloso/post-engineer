@@ -47,7 +47,7 @@ _SEGMENTS = [
             {"url": "https://example.com/h0.jpg"},
             {"url": "https://example.com/h1.jpg"},
             {"url": "https://example.com/h2.jpg"},
-            {"url": "https://example.com/h3.jpg"},
+            {"url": "https://example.com/h3.jpg"}, {"url": "https://example.com/h4.jpg"}, {"url": "https://example.com/h5.jpg"},
         ],
     },
     {
@@ -64,7 +64,7 @@ _SEGMENTS = [
             {"url": "https://example.com/b2.jpg"},
             {"url": "https://example.com/b3.jpg"},
             {"url": "https://example.com/b4.jpg"},
-            {"url": "https://example.com/b5.jpg"},
+            {"url": "https://example.com/b5.jpg"}, {"url": "https://example.com/b6.jpg"}, {"url": "https://example.com/b7.jpg"},
         ],
     },
     {

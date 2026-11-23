@@ -6,8 +6,8 @@ import {
   checkFirstPhotoFace,
   checkPreChargePreflights,
   checkSegmentMediaAspect,
-  MEDIA_CHECK_TIMEOUT_MS,
 } from '../aspect-preflight';
+import { MEDIA_CHECK_TIMEOUT_MS } from '../media-check';
 import { checkFullLipsyncNarration } from '../full-lipsync-preflight';
 import { logger } from '@/lib/logger';
 import type { PersonaPrep } from '../persona-prep';
@@ -78,6 +78,11 @@ const PREP: PersonaPrep = {
   paragraphNumber: null,
   photoRequired: false,
 };
+
+const LIPSYNC_PHOTOS = [
+  { url: 'https://e.com/face-0.jpg' },
+  { mediaId: 'ffeeddccbbaa99887766554433221100.jpg' },
+];
 
 const OPTIONS: ValidatedOptions = {
   videoType: 'hook_lipsync',
@@ -697,16 +702,19 @@ describe('checkPreChargePreflights', () => {
     expect(calls).toHaveLength(0);
   });
 
-  it('checks nothing after a fitting narration: full lip-sync fills the frame', async () => {
-    const calls = stubFetch([engineBody('ok', 1080, 1920)]);
+  it('checks every lipsync photo after a fitting narration, never the segment photos', async () => {
+    const calls = stubFetch([engineBody('ok', 1080, 1920, true)]);
     vi.mocked(checkFullLipsyncNarration).mockResolvedValue(45);
     const result = await checkPreChargePreflights({
       ...COMBINED,
-      options: { ...OPTIONS, videoType: 'full_lipsync' },
+      options: { ...OPTIONS, videoType: 'full_lipsync', lipsyncPhotos: LIPSYNC_PHOTOS },
     });
     expect(result).toBeNull();
     expect(checkFullLipsyncNarration).toHaveBeenCalledTimes(1);
-    expect(calls).toHaveLength(1);
+    expect(calls.map((call) => JSON.parse(String(call.init.body)))).toEqual([
+      { url: 'https://e.com/face-0.jpg', video_aspect: '9:16' },
+      { media_id: 'ffeeddccbbaa99887766554433221100.jpg', video_aspect: '9:16' },
+    ]);
   });
 
   it('skips the narration check when full lip-sync is off', async () => {
@@ -861,25 +869,62 @@ describe('checkPreChargePreflights', () => {
     expect(calls).toHaveLength(1);
   });
 
-  it('checks the persona avatar for full lip-sync text-only segments', async () => {
-    const calls = stubFetch([engineBody('ok', 1080, 1920, false)]);
+  it('rejects a full lip-sync photo without a face, naming its index', async () => {
+    const calls = stubFetch([engineBody('ok', 1080, 1920, true), engineBody('ok', 1080, 1920, false)]);
     vi.mocked(checkFullLipsyncNarration).mockResolvedValue(45);
     const result = await checkPreChargePreflights({
       ...COMBINED,
-      options: { ...OPTIONS, videoType: 'full_lipsync' },
+      options: { ...OPTIONS, videoType: 'full_lipsync', lipsyncPhotos: LIPSYNC_PHOTOS },
       prep: { ...PREP, avatarUrl: 'https://e.com/avatar.jpg' },
-      segments: [
-        { kind: 'hook', text: 'Welcome to Porto.' },
-        { kind: 'content', text: 'Where the river meets the sea.' },
-      ],
     });
-    expect(result).not.toBeNull();
     expect(result?.status).toBe(400);
     const payload = (await result?.json()) as { error?: string; field?: string };
-    expect(payload.error).toContain('The persona photo has no detectable face');
-    expect(payload.field).toBe('personaId');
-    expect(checkFullLipsyncNarration).toHaveBeenCalledTimes(1);
-    expect(calls).toHaveLength(1);
+    expect(payload.error).toBe(
+      "options.lipsyncPhotos.1 has no detectable face: full lip sync needs a photo of the persona's face for every window.",
+    );
+    expect(payload.field).toBe('options.lipsyncPhotos.1');
+    expect(calls).toHaveLength(2);
+    expect(calls.some((call) => String(call.init.body).includes('avatar.jpg'))).toBe(false);
+  });
+
+  it.each([
+    ['not_image', 'is not a readable image'],
+    ['too_small', 'is too small'],
+    ['too_large', 'is too large'],
+    ['blocked_403', 'could not be loaded (blocked_403)'],
+    ['timeout', 'could not be loaded (timeout)'],
+    ['media_expired', 'could not be loaded (media_expired)'],
+  ])('rejects a full lip-sync photo the engine reports as %s', async (code, reason) => {
+    stubFetch([engineBody(code)]);
+    vi.mocked(checkFullLipsyncNarration).mockResolvedValue(45);
+    const result = await checkPreChargePreflights({
+      ...COMBINED,
+      options: { ...OPTIONS, videoType: 'full_lipsync', lipsyncPhotos: LIPSYNC_PHOTOS },
+    });
+    expect(result?.status).toBe(400);
+    const payload = (await result?.json()) as { error?: string; field?: string };
+    expect(payload.error).toBe(`options.lipsyncPhotos.0 ${reason}: send a usable photo of the persona's face.`);
+    expect(payload.field).toBe('options.lipsyncPhotos.0');
+  });
+
+  it('accepts a wrong-ratio full lip-sync photo with a face: the face is never cropped to the frame', async () => {
+    stubFetch([engineBody('wrong_aspect', 1920, 1080, true)]);
+    vi.mocked(checkFullLipsyncNarration).mockResolvedValue(45);
+    const result = await checkPreChargePreflights({
+      ...COMBINED,
+      options: { ...OPTIONS, videoType: 'full_lipsync', lipsyncPhotos: LIPSYNC_PHOTOS },
+    });
+    expect(result).toBeNull();
+  });
+
+  it('returns the engine failure of a full lip-sync photo check', async () => {
+    stubFetch([new Response('down', { status: 503 })]);
+    vi.mocked(checkFullLipsyncNarration).mockResolvedValue(45);
+    const result = await checkPreChargePreflights({
+      ...COMBINED,
+      options: { ...OPTIONS, videoType: 'full_lipsync', lipsyncPhotos: LIPSYNC_PHOTOS },
+    });
+    expect(result?.status).toBe(502);
   });
 
   it('passes text-only segments with no avatar through to the engine backstop', async () => {

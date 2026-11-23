@@ -83,6 +83,7 @@ describe('definer-function-grants', () => {
         'claim_owner_alert',
         'claim_publish_ledger',
         'create_experiment',
+        'create_share_link',
         'delete_slot_if_not_last',
         'ensure_official_prompt_version',
         'find_post_metrics_daily_due',
@@ -99,6 +100,7 @@ describe('definer-function-grants', () => {
         'rotate_mcp_refresh_token',
         'set_primary_persona_image',
         'settle_batch_clawback',
+        'share_week_posts',
         'touch_publish_ledger',
       ].sort(),
     );

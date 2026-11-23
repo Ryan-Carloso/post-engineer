@@ -439,7 +439,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
         videoType: validatedOptions.videoType,
         musicMood: validatedOptions.musicMood,
         chargedTokens: perVideoCost,
-        segments: options?.segments,
+        segments: options?.segments, lipsyncPhotos: validatedOptions.lipsyncPhotos,
         promptVersionId,
       }),
     )

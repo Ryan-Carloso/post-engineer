@@ -38,8 +38,25 @@ describe('buildSlotRows', () => {
         { kind: 'content', text: 'Walk the Ribeira in the morning light.' },
         { kind: 'content', text: 'Follow for more.' },
       ],
+      lipsync_photos: null,
       prompt_version_id: null,
     });
+  });
+
+  it('stores the full lip-sync face photos for the batch pipeline', () => {
+    const photos = [{ url: 'https://e.com/face-0.jpg' }, { mediaId: 'aabbccddeeff00112233445566778899.jpg' }];
+    const rows = buildSlotRows({
+      slots: [{ slotAtISO: '2026-09-08T09:00:00.000Z', dayIndex: 0, timeIndex: 0 }],
+      title: 'Porto walks',
+      description: 'Agent description.',
+      scheduleId: 'sched-1',
+      userId: 'user-1',
+      videoType: 'full_lipsync',
+      chargedTokens: 8,
+      segments: undefined,
+      lipsyncPhotos: photos,
+    });
+    expect(rows[0]?.lipsync_photos).toEqual(photos);
   });
 
   it('derives the stored faceless/full_lipsync flags from the video mode', () => {

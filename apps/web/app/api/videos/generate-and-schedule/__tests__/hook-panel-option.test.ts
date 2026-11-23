@@ -15,7 +15,8 @@ describe('validateOptions options.hookPanel', () => {
   });
 
   it.each(['full_lipsync', 'faceless'])('rejects hookPanel on %s with a 400 issue naming the field', (videoType) => {
-    expect(validateOptions({ videoType, hookPanel: false })).toEqual({
+    const photos = videoType === 'full_lipsync' ? { lipsyncPhotos: [{ url: 'https://e.com/a.jpg' }, { url: 'https://e.com/b.jpg' }] } : {};
+    expect(validateOptions({ videoType, hookPanel: false, ...photos })).toEqual({
       ok: false,
       issues: [expect.objectContaining({ message: HOOK_PANEL_ONLY_HOOK_LIPSYNC_MESSAGE, field: 'options.hookPanel' })],
     });

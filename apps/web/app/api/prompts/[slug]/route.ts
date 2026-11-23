@@ -51,7 +51,7 @@ async function getHandler(request: Request, context: RouteContext): Promise<Next
     const db = createSupabaseServiceClient();
     if (official !== null) {
       const version = await ensureOfficialPromptVersion(db, official);
-      return NextResponse.json({ success: true, prompt: { ...official, source: 'official', visibility: 'public', ...version } });
+      return NextResponse.json({ success: true, prompt: { ...official, body: null, source: 'official', visibility: 'public', ...version } });
     }
     const own = caller.userId === null || caller.scopedKey ? null : await findOwnUserPrompt(db, caller.userId, slug);
     if (own !== null) {

@@ -72,6 +72,19 @@ describe('middleware auth redirect', () => {
     expect(response.headers.get('location')).toBeNull();
   });
 
+  it('does not redirect unauthenticated requests for a public /s/<token> share page', async () => {
+    getUser.mockResolvedValue({ data: { user: null }, error: null });
+
+    const response = await middleware(requestFor(`/s/${'a'.repeat(43)}`));
+
+    expect(response.headers.get('location')).toBeNull();
+  });
+
+  it('keeps the matcher from running auth on the public /s/ share pages', () => {
+    const source = config.matcher[0];
+    expect(source).toContain('recipes|s/)');
+  });
+
   it('redirects to /landing when getUser returns no user and no error', async () => {
     getUser.mockResolvedValue({ data: { user: null }, error: null });
 

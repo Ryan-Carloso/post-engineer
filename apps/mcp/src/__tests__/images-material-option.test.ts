@@ -24,8 +24,8 @@ function photos(count: number, prefix: string) {
   return Array.from({ length: count }, (_, index) => ({ url: `https://e.com/${prefix}${index}.jpg` }));
 }
 const withMedia = [
-  { kind: 'hook' as const, text: hook, media: photos(4, 'h') },
-  { kind: 'content' as const, text: content, media: [{ mediaId: `${'a'.repeat(32)}.jpg` }, ...photos(5, 'b')] },
+  { kind: 'hook' as const, text: hook, media: photos(5, 'h') },
+  { kind: 'content' as const, text: content, media: [{ mediaId: `${'a'.repeat(32)}.jpg` }, ...photos(7, 'b')] },
   { kind: 'content' as const, text: ctaTake, media: photos(2, 'c') },
 ];
 const sparseMedia = [
@@ -33,9 +33,11 @@ const sparseMedia = [
   { kind: 'content' as const, text: content, media: [{ mediaId: `${'a'.repeat(32)}.jpg` }] },
   { kind: 'content' as const, text: ctaTake, media: photos(1, 'c') },
 ];
-const bodyWithoutMedia = withMedia.map((segment, index) =>
-  index === 1 ? { kind: segment.kind, text: segment.text } : segment,
-);
+const bodyWithoutMedia = withMedia.map((segment, index) => {
+  if (index === 1) return { kind: segment.kind, text: segment.text };
+  if (index === 2) return { ...segment, media: segment.media.slice(0, 1) };
+  return segment;
+});
 const baseArgs = {
   personaId: 'persona-123',
   title: 'Porto trip',
