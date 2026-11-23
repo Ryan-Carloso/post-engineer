@@ -7755,11 +7755,10 @@
                           "source": {
                             "type": "string",
                             "enum": [
-                              "official",
                               "own",
                               "community"
                             ],
-                            "description": "official: shipped with post-engineer. own: written by the caller. community: a public prompt written by another user, not verified by post-engineer."
+                            "description": "own: written by the caller. community: a public prompt written by another user, not verified by post-engineer."
                           },
                           "visibility": {
                             "type": "string",
@@ -7767,7 +7766,11 @@
                               "private",
                               "public"
                             ],
-                            "description": "Official and community prompts are public; an own prompt is private until its owner makes it public."
+                            "description": "Community prompts are public; an own prompt is private until its owner makes it public."
+                          },
+                          "verified": {
+                            "type": "boolean",
+                            "description": "true when Post Engineer checked the prompt. Only Post Engineer sets it."
                           }
                         },
                         "required": [
@@ -7775,7 +7778,8 @@
                           "title",
                           "description",
                           "source",
-                          "visibility"
+                          "visibility",
+                          "verified"
                         ]
                       }
                     }
@@ -7887,11 +7891,10 @@
                         "source": {
                           "type": "string",
                           "enum": [
-                            "official",
                             "own",
                             "community"
                           ],
-                          "description": "official: shipped with post-engineer. own: written by the caller. community: a public prompt written by another user, not verified by post-engineer."
+                          "description": "own: written by the caller. community: a public prompt written by another user, not verified by post-engineer."
                         },
                         "visibility": {
                           "type": "string",
@@ -7899,10 +7902,18 @@
                             "private",
                             "public"
                           ],
-                          "description": "Official and community prompts are public; an own prompt is private until its owner makes it public."
+                          "description": "Community prompts are public; an own prompt is private until its owner makes it public."
+                        },
+                        "verified": {
+                          "type": "boolean",
+                          "description": "true when Post Engineer checked the prompt. Only Post Engineer sets it."
                         },
                         "prompt": {
                           "type": "string"
+                        },
+                        "body": {
+                          "type": "string",
+                          "description": "The stored prompt text as written, the text the edit form loads."
                         },
                         "versionId": {
                           "type": "string",
@@ -7921,7 +7932,9 @@
                         "description",
                         "source",
                         "visibility",
+                        "verified",
                         "prompt",
+                        "body",
                         "versionId",
                         "version"
                       ]
@@ -7975,7 +7988,7 @@
             }
           },
           "409": {
-            "description": "The slug is reserved by an official prompt (PROMPT_SLUG_RESERVED), already yours, or used by another public prompt (PROMPT_SLUG_TAKEN).",
+            "description": "The slug is already yours, or used by another public prompt (PROMPT_SLUG_TAKEN).",
             "content": {
               "application/json": {
                 "schema": {
@@ -8082,11 +8095,10 @@
                         "source": {
                           "type": "string",
                           "enum": [
-                            "official",
                             "own",
                             "community"
                           ],
-                          "description": "official: shipped with post-engineer. own: written by the caller. community: a public prompt written by another user, not verified by post-engineer."
+                          "description": "own: written by the caller. community: a public prompt written by another user, not verified by post-engineer."
                         },
                         "visibility": {
                           "type": "string",
@@ -8094,10 +8106,18 @@
                             "private",
                             "public"
                           ],
-                          "description": "Official and community prompts are public; an own prompt is private until its owner makes it public."
+                          "description": "Community prompts are public; an own prompt is private until its owner makes it public."
+                        },
+                        "verified": {
+                          "type": "boolean",
+                          "description": "true when Post Engineer checked the prompt. Only Post Engineer sets it."
                         },
                         "prompt": {
                           "type": "string"
+                        },
+                        "body": {
+                          "type": "string",
+                          "description": "The stored prompt text as written, the text the edit form loads."
                         },
                         "versionId": {
                           "type": "string",
@@ -8116,7 +8136,9 @@
                         "description",
                         "source",
                         "visibility",
+                        "verified",
                         "prompt",
+                        "body",
                         "versionId",
                         "version"
                       ]
@@ -8221,11 +8243,10 @@
                         "source": {
                           "type": "string",
                           "enum": [
-                            "official",
                             "own",
                             "community"
                           ],
-                          "description": "official: shipped with post-engineer. own: written by the caller. community: a public prompt written by another user, not verified by post-engineer."
+                          "description": "own: written by the caller. community: a public prompt written by another user, not verified by post-engineer."
                         },
                         "visibility": {
                           "type": "string",
@@ -8233,10 +8254,18 @@
                             "private",
                             "public"
                           ],
-                          "description": "Official and community prompts are public; an own prompt is private until its owner makes it public."
+                          "description": "Community prompts are public; an own prompt is private until its owner makes it public."
+                        },
+                        "verified": {
+                          "type": "boolean",
+                          "description": "true when Post Engineer checked the prompt. Only Post Engineer sets it."
                         },
                         "prompt": {
                           "type": "string"
+                        },
+                        "body": {
+                          "type": "string",
+                          "description": "The stored prompt text as written, the text the edit form loads."
                         },
                         "versionId": {
                           "type": "string",
@@ -8255,7 +8284,9 @@
                         "description",
                         "source",
                         "visibility",
+                        "verified",
                         "prompt",
+                        "body",
                         "versionId",
                         "version"
                       ]
@@ -8309,7 +8340,7 @@
             }
           },
           "409": {
-            "description": "The slug is reserved by an official prompt (PROMPT_SLUG_RESERVED), already yours, or used by another public prompt (PROMPT_SLUG_TAKEN).",
+            "description": "The slug is already yours, or used by another public prompt (PROMPT_SLUG_TAKEN).",
             "content": {
               "application/json": {
                 "schema": {

@@ -101,6 +101,29 @@ def test_full_frame_photos_alternate_zooming_in_and_out():
     assert [p.motion for p in covered] == ["in", "out", "in"]
 
 
+def test_no_seed_keeps_the_alternation_from_in():
+    panels = [_full(0, 0.0, 2.0), _full(1, 2.0, 4.0), _full(2, 4.0, 6.0)]
+    covered = image_coverage.extend_over_gaps(panels, 0.0, 6.0, variation_seed=None)
+    assert [p.motion for p in covered] == ["in", "out", "in"]
+
+
+def test_the_same_seed_repeats_the_same_motion_pattern():
+    panels = [_full(0, 0.0, 2.0), _full(1, 2.0, 4.0), _full(2, 4.0, 6.0), _full(3, 6.0, 8.0)]
+    first = [p.motion for p in image_coverage.extend_over_gaps(panels, 0.0, 8.0, variation_seed=7)]
+    second = [p.motion for p in image_coverage.extend_over_gaps(panels, 0.0, 8.0, variation_seed=7)]
+    assert first == second
+    assert set(first) <= {"in", "out"}
+
+
+def test_seeds_vary_the_motion_pattern_across_videos():
+    panels = [_full(0, 0.0, 2.0), _full(1, 2.0, 4.0), _full(2, 4.0, 6.0)]
+    patterns = {
+        tuple(p.motion for p in image_coverage.extend_over_gaps(panels, 0.0, 6.0, variation_seed=seed))
+        for seed in range(20)
+    }
+    assert len(patterns) > 1
+
+
 def test_framed_hook_panels_keep_their_times_and_never_move():
     hook = _framed(0, 0.5, 6.5)
     covered = image_coverage.extend_over_gaps([hook, _full(1, 8.0, 9.0)], 7.0, 9.0)

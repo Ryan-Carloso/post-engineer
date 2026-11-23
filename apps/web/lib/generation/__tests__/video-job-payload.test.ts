@@ -111,6 +111,18 @@ describe('buildJobPayload — request allowlist', () => {
     expect(payload.music_mood).toBe('calm');
   });
 
+  it('forwards the pacing knobs so a requested hold, transition and seed reach the engine', () => {
+    const payload = buildJobPayload(persona(), {
+      video_title: 'myth busting',
+      video_clip_duration: 4,
+      video_transition_mode: 'Crossfade',
+      video_variation_seed: 7,
+    });
+    expect(payload.video_clip_duration).toBe(4);
+    expect(payload.video_transition_mode).toBe('Crossfade');
+    expect(payload.video_variation_seed).toBe(7);
+  });
+
   it('forwards video_title and video_description so publish uses the agent copy', () => {
     const payload = buildJobPayload(persona(), {
       video_title: 'Porto in 30 seconds',

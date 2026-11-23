@@ -80,8 +80,6 @@ export function promptFailureKey(failure: PromptCallFailure): TranslationKey {
   switch (failure.code) {
     case 'PROMPT_SLUG_TAKEN':
       return 'userPrompts.errorSlugTaken';
-    case 'PROMPT_SLUG_RESERVED':
-      return 'userPrompts.errorSlugReserved';
     case 'VALIDATION_FAILED':
       return 'userPrompts.errorValidation';
     default:

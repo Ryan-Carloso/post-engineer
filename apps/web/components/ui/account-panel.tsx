@@ -263,6 +263,7 @@ export function MobileProfileLink() {
     <Link
       href="/account"
       data-testid="mobile-profile-link"
+      data-ui-diff-mask=""
       aria-label={t('nav.profile')}
       className="ml-auto flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-sunken text-muted-text ring-2 ring-card"
     >
@@ -315,6 +316,7 @@ export function AccountPanel({
           <Link
             href="/account"
             data-testid="profile-user-link"
+            data-ui-diff-mask=""
             aria-label={t('nav.profile')}
             className={`flex items-center gap-3 border-t border-hairline px-1 ${
               compact ? 'pt-3' : 'pt-4 lg:pt-5'

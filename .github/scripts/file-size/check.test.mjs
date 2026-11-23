@@ -154,45 +154,11 @@ describe('file-size ratchet (multiple violations)', () => {
   });
 });
 
-describe('file-size ratchet (prompt-data files)', () => {
-  it('passes for a new prompt file above the cap', () => {
-    const { exitCode, stdout } = runCheck([A('shared/prompt-base/prompt-base.ts', 600)]);
-    assert.equal(exitCode, 0, stdout);
-  });
-
-  it('passes when a prompt file grows past the cap', () => {
-    const { exitCode, stdout } = runCheck([
-      M('shared/prompt-base/prompt-base.ts', 499, 520),
-    ]);
-    assert.equal(exitCode, 0, stdout);
-  });
-
-  it('passes for a prompt file nested under shared/prompt-base/', () => {
-    const { exitCode, stdout } = runCheck([A('shared/prompt-base/story-first-reels.ts', 700)]);
-    assert.equal(exitCode, 0, stdout);
-  });
-
-  it('still fails for our own file above the cap next to a prompt one', () => {
-    const { stdout, exitCode } = runCheck([
-      M('shared/prompt-base/prompt-base.ts', 499, 520),
-      A('apps/web/lib/some-module.ts', 501),
-    ]);
+describe('file-size ratchet (no prompt-data exemption)', () => {
+  it('fails for a new file above the cap under the former shared/prompt-base/ exemption', () => {
+    const { stdout, exitCode } = runCheck([A('shared/prompt-base/prompt-base.ts', 501)]);
     assert.equal(exitCode, 1);
-    const errors = stdout.split('\n').filter((l) => l.startsWith('::error'));
-    assert.equal(errors.length, 1);
-    assert.ok(errors[0].includes('apps/web/lib/some-module.ts'));
-  });
-
-  it('still fails for a file merely named prompt-base elsewhere', () => {
-    const { stdout, exitCode } = runCheck([A('apps/web/lib/prompt-base.ts', 501)]);
-    assert.equal(exitCode, 1);
-    assert.match(stdout, /::error file=apps\/web\/lib\/prompt-base\.ts::/);
-  });
-
-  it('still fails for the top-level shared/prompt-base.ts file', () => {
-    const { stdout, exitCode } = runCheck([A('shared/prompt-base.ts', 501)]);
-    assert.equal(exitCode, 1);
-    assert.match(stdout, /::error file=shared\/prompt-base\.ts::/);
+    assert.match(stdout, /::error file=shared\/prompt-base\/prompt-base\.ts::/);
   });
 });
 

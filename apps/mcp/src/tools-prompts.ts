@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { PostEngineerClient } from './client.js';
 import { UnknownPromptSlugError, getPrompt, listPrompts } from './client-prompts.js';
 import { getErrorMessage } from './errors.js';
-import { PROMPT_SEARCH_MAX_LENGTH, PROMPT_SOURCES, type PromptSource } from './contracts/prompts.js';
+import { PROMPT_SEARCH_MAX_LENGTH, PROMPT_SOURCES } from './contracts/prompts.js';
 import type { McpToolResponse } from './tools-call.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { actionDescription, actionShape, byAction } from './action-tool.js';
@@ -19,36 +19,36 @@ export const SERVER_INSTRUCTIONS = [
 ].join(' ');
 
 export const ListPromptsDescription =
-  'List the available prompts (slug, title, description, source): official recipes, your own, and other users\' public ones. Call this BEFORE writing or generating a video script when the user\'s request describes a topic rather than a ready script — news of the day, a real place with its own photos, a concrete subject like a car or a product, GitHub pull requests, or first-time account setup. Then call prompts (action: get) with the matching slug to load the full validated workflow for that recipe.';
+  'List the available prompts (slug, title, description, source): your own and other users\' public ones. Call this BEFORE writing or generating a video script when the user\'s request describes a topic rather than a ready script — news of the day, a real place with its own photos, a concrete subject like a car or a product, GitHub pull requests, or first-time account setup. Then call prompts (action: get) with the matching slug to load the full validated workflow for that recipe.';
 
 export const ListPromptsShape = {
   query: z.string().max(PROMPT_SEARCH_MAX_LENGTH).optional().describe('Words to find in slug, title or description.'),
-  source: z.enum(PROMPT_SOURCES).optional().describe('Only official, own or community prompts.'),
+  source: z.enum(PROMPT_SOURCES).optional().describe('Only own or community prompts.'),
 };
 
 const ListPromptsSchema = z.object(ListPromptsShape);
 
 interface ListedPrompts {
   response: McpToolResponse;
-  includesOfficial: boolean;
+  listedAny: boolean;
 }
 
 async function fetchPromptList(client: PostEngineerClient, args: unknown): Promise<ListedPrompts> {
   const parsed = ListPromptsSchema.safeParse(args);
   if (!parsed.success) {
     return {
-      response: errorResponse('listing prompts', 'query must be at most 100 characters and source one of official, own, community.'),
-      includesOfficial: false,
+      response: errorResponse('listing prompts', 'query must be at most 100 characters and source one of own, community.'),
+      listedAny: false,
     };
   }
   try {
     const prompts = await listPrompts(client, parsed.data);
     return {
       response: { content: [{ type: 'text', text: JSON.stringify(prompts, null, 2) }] },
-      includesOfficial: prompts.some((prompt) => prompt.source === 'official'),
+      listedAny: prompts.length > 0,
     };
   } catch (error) {
-    return { response: errorResponse('listing prompts', getErrorMessage(error)), includesOfficial: false };
+    return { response: errorResponse('listing prompts', getErrorMessage(error)), listedAny: false };
   }
 }
 
@@ -57,7 +57,7 @@ export async function handleListPrompts(client: PostEngineerClient, args: unknow
 }
 
 export const GetPromptDescription =
-  'Return the full prompt for one slug from prompts (action: list): an official recipe, one of yours, or a public community prompt. Load only the recipe the agent will follow, and pass its slug as recipe and its versionId as promptVersionId on generate_video. Each recipe carries the complete validated workflow: script structure and word limits, media verification via media (action: check) for photo URLs, pricing rules for the overlay badge, and the generation and publish steps. Unknown slugs fail with the list of valid slugs — call prompts (action: list) first when unsure.';
+  'Return the full prompt for one slug from prompts (action: list): one of yours or a public community prompt. Load only the recipe the agent will follow, and pass its slug as recipe and its versionId as promptVersionId on generate_video. Each recipe carries the complete validated workflow: script structure and word limits, media verification via media (action: check) for photo URLs, pricing rules for the overlay badge, and the generation and publish steps. Unknown slugs fail with the list of valid slugs — call prompts (action: list) first when unsure.';
 
 export const GetPromptShape = {
   slug: z.string().min(1, 'slug is required').describe('Prompt slug from prompts (action: list).'),
@@ -67,23 +67,23 @@ const GetPromptSchema = z.object(GetPromptShape);
 
 interface FetchedPrompt {
   response: McpToolResponse;
-  source: PromptSource | null;
+  publicPrompt: boolean;
 }
 
 async function fetchPromptResponse(client: PostEngineerClient, args: unknown): Promise<FetchedPrompt> {
   const parsed = GetPromptSchema.safeParse(args);
   if (!parsed.success) {
-    return { response: errorResponse('getting prompt', 'slug is required. Call prompts (action: list) for the valid slugs.'), source: null };
+    return { response: errorResponse('getting prompt', 'slug is required. Call prompts (action: list) for the valid slugs.'), publicPrompt: false };
   }
   try {
     const prompt = await getPrompt(client, parsed.data.slug);
     return {
       response: { content: [{ type: 'text', text: recipeRunText(prompt) }] },
-      source: prompt.source,
+      publicPrompt: prompt.visibility === 'public',
     };
   } catch (error) {
     const message = error instanceof UnknownPromptSlugError ? error.message : getErrorMessage(error);
-    return { response: errorResponse('getting prompt', message), source: null };
+    return { response: errorResponse('getting prompt', message), publicPrompt: false };
   }
 }
 
@@ -108,12 +108,12 @@ export function registerPromptTools(server: McpServer, client: PostEngineerClien
       {
         list: async (args) => {
           const listed = await session.run(undefined, () => fetchPromptList(client, args));
-          if (listed.response.isError !== true && listed.includesOfficial) session.recordRecipesListed();
+          if (listed.response.isError !== true && listed.listedAny) session.recordRecipesListed();
           return listed.response;
         },
         get: async (args) => {
           const fetched = await session.run(args.slug, () => fetchPromptResponse(client, args));
-          if (fetched.response.isError !== true && fetched.source === 'official' && isRecipeSlug(args.slug)) {
+          if (fetched.publicPrompt && isRecipeSlug(args.slug)) {
             session.recordRecipeFetched(args.slug);
           }
           return fetched.response;

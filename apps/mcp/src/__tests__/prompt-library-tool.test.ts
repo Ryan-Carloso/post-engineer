@@ -18,7 +18,9 @@ const OWN = {
   description: 'About',
   source: 'own',
   visibility: 'private',
+  verified: false,
   prompt: 'Write it in three beats.',
+  body: 'Write it in three beats.',
   versionId: '44444444-4444-4444-8444-444444444444',
   version: 1,
 };

@@ -258,6 +258,7 @@ def overlay_command(
     preset: str,
     ffmpeg: str,
     frame_size: Optional[tuple[int, int]] = None,
+    transition_mode: object = None,
 ) -> list[str]:
     """ffmpeg argv overlaying each panel for its seconds, in segment order.
 
@@ -279,21 +280,40 @@ def overlay_command(
             command += ["-i", panel.path]
         else:
             command += ["-loop", "1", "-i", panel.path]
+    crossfade = transition_mode == "Crossfade"
     steps: list[str] = []
     source = "0:v"
+    seen_full = False
     for position, panel in enumerate(panels):
         target = f"v{position}"
         layer = f"{position + 1}:v"
         ending = "shortest=1"
+        lead = 0.0
         if panel.clip_seconds is not None:
             steps.append(_clip_filter(layer, panel, f"c{position}"))
             layer, ending = f"c{position}", "eof_action=pass"
+            seen_full = False
         elif frame_size is not None and _moves(panel, frame_size):
-            steps.append(panel_motion.zoom_filter(layer, panel, frame_size[0], frame_size[1], f"m{position}"))
+            if crossfade and seen_full:
+                previous = panels[position - 1]
+                lead = min(panel_motion.CROSSFADE_SECONDS, max(0.0, previous.end - previous.start))
+            steps.append(
+                panel_motion.zoom_filter(
+                    layer, panel, frame_size[0], frame_size[1], f"m{position}", lead_seconds=lead
+                )
+            )
             layer, ending = f"m{position}", "eof_action=pass"
+            if lead > 0:
+                steps.append(
+                    panel_motion.crossfade_in_filter(layer, panel.start - lead, lead, f"f{position}")
+                )
+                layer = f"f{position}"
+            seen_full = True
+        else:
+            seen_full = False
         steps.append(
             f"[{source}][{layer}]overlay={panel.x}:{panel.y}"
-            f":enable='between(t,{panel.start:.3f},{panel.end:.3f})':{ending}[{target}]"
+            f":enable='between(t,{panel.start - lead:.3f},{panel.end:.3f})':{ending}[{target}]"
         )
         source = target
     return command + [
@@ -321,7 +341,9 @@ def _frame_size(panels: Sequence[Panel]) -> Optional[tuple[int, int]]:
         return opened.size
 
 
-def overlay_onto(task_id: str, video_path: str, record: Callable[..., None]) -> str:
+def overlay_onto(
+    task_id: str, video_path: str, record: Callable[..., None], transition_mode: object = None
+) -> str:
     """The video with its segment panels.
 
     Without a manifest or without panels the video passes through untouched.
@@ -344,6 +366,7 @@ def overlay_onto(task_id: str, video_path: str, record: Callable[..., None]) -> 
             video._get_configured_video_preset(),
             utils.get_ffmpeg_binary(),
             frame_size=_frame_size(panels),
+            transition_mode=transition_mode,
         )
         video._run_ffmpeg_bounded(command, timeout=OVERLAY_TIMEOUT_SECONDS, failure_message="segment panel overlay failed")
     except (RuntimeError, subprocess.TimeoutExpired, OSError) as exc:

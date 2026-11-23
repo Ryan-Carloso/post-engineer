@@ -2,6 +2,7 @@ import { isIP } from 'node:net';
 import { z } from 'zod';
 import { isEnglishLanguage, ONLY_ENGLISH_VIDEOS_MESSAGE } from './language.js';
 import { isPublicIp } from './public-ip.js';
+import { VIDEO_TRANSITION_MODES } from './contracts/videos.js';
 import { VIDEO_LAYOUTS } from './limits.js';
 import { VIDEO_TYPES, VIDEO_TYPE_ERROR_SUFFIX, unknownVideoTypeMessage } from './video-type.js';
 import { personaVoiceField } from './voice-filters.js';
@@ -160,4 +161,22 @@ export const GeneratePersonaVideoOptionsShape = {
     .optional()
     .describe('Spoken language code — English only for now, e.g. en-US. Overrides the persona when one is given.'),
   niche: z.string().min(1).max(300).optional().describe('Content niche. Overrides the persona when one is given.'),
+  videoClipDuration: z
+    .number()
+    .int()
+    .min(1)
+    .max(60)
+    .optional()
+    .describe('Maximum seconds per clip (1-60). Omitted keeps the 2s default.'),
+  videoTransitionMode: z
+    .enum(VIDEO_TRANSITION_MODES)
+    .optional()
+    .describe('Transition between clips: Shuffle varies it per clip, Crossfade blends segment photos over 0.5s. Omitted keeps hard cuts.'),
+  videoVariationSeed: z
+    .number()
+    .int()
+    .optional()
+    .describe(
+      'Seed for per-video variation of the segment photos zoom direction; the same seed repeats the same pattern. Omitted keeps the fixed in/out alternation.',
+    ),
 };

@@ -740,6 +740,12 @@
                     "type": "timestamp with time zone",
                     "default": "now()",
                     "notNull": true
+                },
+                {
+                    "name": "verified",
+                    "type": "boolean",
+                    "default": "false",
+                    "notNull": true
                 }
             ],
             "policies": {

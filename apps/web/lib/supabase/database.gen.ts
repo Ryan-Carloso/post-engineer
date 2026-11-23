@@ -1082,6 +1082,7 @@ export interface Database {
         visibility: 'private' | 'public';
         created_at: string;
         updated_at: string;
+        verified: boolean;
         };
         Insert: {
         id?: string;
@@ -1093,6 +1094,7 @@ export interface Database {
         visibility?: 'private' | 'public';
         created_at?: string;
         updated_at?: string;
+        verified?: boolean;
         };
         Update: {
         id?: string;
@@ -1104,6 +1106,7 @@ export interface Database {
         visibility?: 'private' | 'public';
         created_at?: string;
         updated_at?: string;
+        verified?: boolean;
         };
         Relationships: [];
       };
