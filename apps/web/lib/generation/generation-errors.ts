@@ -7,6 +7,7 @@ export const GENERATION_ERROR_CODES = [
   'no_task_id',
   'invalid_task_response',
   'engine_restart',
+  'images_do_not_cover_audio',
   'unknown',
 ] as const;
 
@@ -19,6 +20,7 @@ export const GENERATION_ERROR_KEY: Record<string, TranslationKey> = {
   no_task_id: 'posts.errorNoTaskId',
   invalid_task_response: 'posts.errorInvalidTaskResponse',
   engine_restart: 'posts.errorEngineRestart',
+  images_do_not_cover_audio: 'posts.errorImagesDoNotCoverAudio',
   unknown: 'posts.errorUnknown',
 };
 
@@ -31,6 +33,7 @@ export function categorizeGenerationError(
     return text as GenerationErrorCode;
   }
   if (text.includes('engine restart')) return 'engine_restart';
+  if (text.startsWith('images_do_not_cover_audio')) return 'images_do_not_cover_audio';
   if (text.includes('custom audio')) return 'custom_audio_invalid';
   if (text.includes('unavailable')) return 'engine_unavailable';
   if (text.includes('rejected the job')) return 'engine_rejected';

@@ -72,6 +72,16 @@ describe('categorizeGenerationError', () => {
     );
   });
 
+  it('maps the engine photo-coverage failure with its detail to its own code', () => {
+    expect(
+      categorizeGenerationError(
+        'images_do_not_cover_audio: 8 photos cover 20.0s of 26.0s at most 1.5x their pace each; need 3 more photos',
+      ),
+    ).toBe('images_do_not_cover_audio');
+    expect(categorizeGenerationError('images_do_not_cover_audio')).toBe('images_do_not_cover_audio');
+    expect(isRetryableGenerationError('images_do_not_cover_audio: need 1 more photo')).toBe(false);
+  });
+
   it('falls back to unknown for empty or unrecognized text', () => {
     expect(categorizeGenerationError(null)).toBe('unknown');
     expect(categorizeGenerationError(undefined)).toBe('unknown');
@@ -136,6 +146,15 @@ describe('engine error-code contract', () => {
         `missing pt key ${key}`,
       ).toBeTruthy();
     }
+  });
+
+  it('pins the photo-coverage code to the engine constant', () => {
+    const coverage = readFileSync(
+      join(findRepoRoot(import.meta.url), 'apps', 'engine', 'app', 'services', 'image_coverage.py'),
+      'utf8',
+    );
+    expect(coverage).toContain('IMAGES_DO_NOT_COVER_AUDIO = "images_do_not_cover_audio"');
+    expect(GENERATION_ERROR_CODES).toContain('images_do_not_cover_audio');
   });
 
   it('treats engine_restart as retryable (transient infra blip)', () => {
