@@ -43,7 +43,7 @@ export function AccountsHeader(): React.ReactElement {
         <p
           role="status"
           aria-live="polite"
-          className={cn('min-h-4 text-xs', status === 'error' ? 'text-destructive' : 'text-muted-text')}
+          className={cn('text-xs empty:hidden', status === 'error' ? 'text-destructive' : 'text-muted-text')}
         >
           {status === 'done' && t('accounts.refreshProfilesDone')}
           {status === 'error' && t('accounts.refreshProfilesError')}
