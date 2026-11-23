@@ -32,6 +32,11 @@ beforeEach(() => {
 });
 
 describe('PersonaAvatar', () => {
+  it('marks the persona photo for the ui-diff mask', () => {
+    render(<PersonaAvatar photoUrl="https://x.test/p.png" name="Viva Leve" />);
+    expect(screen.getByRole('img', { name: 'Viva Leve' }).parentElement).toHaveAttribute('data-ui-diff-mask');
+  });
+
   it('shows a skeleton until the photo loads, then reveals it', () => {
     render(<PersonaAvatar photoUrl="https://x.test/p.png" name="Viva Leve" />);
 
