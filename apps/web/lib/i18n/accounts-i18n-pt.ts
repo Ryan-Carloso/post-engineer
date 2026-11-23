@@ -88,4 +88,8 @@ export const accountsI18nPt = {
   subscriber: '{count} inscrito',
   view: '{count} visualização',
   video: '{count} vídeo',
+  refreshProfiles: 'Atualizar perfis',
+  refreshingProfiles: 'Atualizando…',
+  refreshProfilesDone: 'Fotos e nomes atualizados.',
+  refreshProfilesError: 'Não foi possível atualizar os perfis. Tente novamente em instantes.',
 } as const;
