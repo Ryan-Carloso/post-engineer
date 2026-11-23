@@ -443,3 +443,27 @@ def test_the_fitted_cap_is_the_request_or_the_two_second_pace_times_the_stretch(
     assert image_coverage.fitted_photo_cap(4.0) == 6.0
     assert image_coverage.fitted_photo_cap(6.0) == 9.0
     assert image_coverage.fitted_photo_cap(99) == 3.0
+
+
+def test_a_requested_last_photo_runs_to_the_end_of_the_audio_within_its_cap():
+    panels = [_full(0, 0.0, 2.0), _full(1, 2.0, 5.0, requested_duration=6.0)]
+    covered = image_coverage.extend_over_gaps(panels, 0.0, 5.0)
+    assert [(p.start, p.end) for p in covered] == [(0.0, 2.0), (2.0, 5.0)]
+
+
+def test_a_compressed_segment_never_shifts_the_next_segment_photos():
+    panels = _segment_panels([(0.0, 6.0), (6.5, 10.5)], [[5, 5, 5], [2, 2]])
+    covered = image_coverage.extend_over_gaps(panels, 0.0, 10.5)
+    assert [(p.index, round(p.start, 2), round(p.end, 2)) for p in covered] == [
+        (1, 0.0, 2.0), (1, 2.0, 4.0), (1, 4.0, 6.5), (2, 6.5, 8.5), (2, 8.5, 10.5),
+    ]
+
+
+def test_photos_are_laid_back_to_back_without_a_gap_or_an_overlap():
+    panels = _segment_panels([(1.0, 7.0), (7.4, 9.0), (9.8, 16.0)], [[1, 4], [6], [2, 2, 3]])
+    covered = image_coverage.extend_over_gaps(panels, 0.5, 16.0)
+    assert covered[0].start == 0.5
+    assert covered[-1].end == 16.0
+    assert all(a.end == b.start for a, b in zip(covered, covered[1:]))
+    assert all(b.end > b.start for b in covered)
+    assert [p.motion for p in covered] == ["in", "out", "in", "out", "in", "out"]
