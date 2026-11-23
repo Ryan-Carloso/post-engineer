@@ -558,11 +558,17 @@ jobs:
         run: |
           set -f
           # Stop before the 240 minute job cap. A cancel skips the save
-          # step; a failed step still reaches it. Same budget for the
-          # function-scoped run, the full-file scope, and the fallback.
+          # step; a failed step still reaches it. One shared deadline covers
+          # the function-scoped run, the full-file scope, and the fallback.
+          deadline=$((SECONDS + 225 * 60))
           run_mutmut() {
+            remaining=$((deadline - SECONDS))
+            if [ "$remaining" -le 0 ]; then
+              echo "::error::mutmut budget of 225 minutes is spent; partial mutants/ will be cached for the retry"
+              exit 1
+            fi
             set +e
-            timeout 225m uv run mutmut run "$@"
+            timeout "${remaining}s" uv run mutmut run "$@"
             code=$?
             set -e
             if [ "$code" -eq 124 ]; then
