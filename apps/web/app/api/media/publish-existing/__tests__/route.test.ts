@@ -415,12 +415,12 @@ describe('POST /api/media/publish-existing', () => {
   });
 
   it('refuses an image upload for a video-only network before claiming it (400 IMAGE_PROVIDER_UNSUPPORTED)', async () => {
-    const client = fakeSupabase({ socialRows: [{ provider: 'youtube', provider_account_id: 'UC1' }] });
+    const client = fakeSupabase({ socialRows: [{ provider: 'rumble', provider_account_id: 'rb-1' }] });
     vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
     const imageRow = uploadRow({ declared_content_type: 'image/jpeg', detected_content_type: 'image/jpeg' });
     mockUploadStore({ uploadRow: imageRow });
     vi.mocked(assertUploadFitsProviders).mockImplementationOnce(() => {
-      throw new VideoUploadError('This upload is an image: youtube publishes video only.', 400, 'IMAGE_PROVIDER_UNSUPPORTED');
+      throw new VideoUploadError('This upload is an image: rumble publishes video only.', 400, 'IMAGE_PROVIDER_UNSUPPORTED');
     });
 
     const response = await POST(
@@ -428,14 +428,12 @@ describe('POST /api/media/publish-existing', () => {
         media: { kind: 'upload', uploadId: UPLOAD_ID },
         title: 'Photo',
         description: 'A photo.',
-        publishing: { mode: 'asap', providers: ['youtube'], accounts: { youtube: ['UC1'] } },
-        tags: ['photo'],
-        privacyStatus: 'public',
+        publishing: { mode: 'asap', providers: ['rumble'], accounts: { rumble: ['rb-1'] } },
       }),
     );
     expect(response.status).toBe(400);
     expect((await response.json()).code).toBe('IMAGE_PROVIDER_UNSUPPORTED');
-    expect(vi.mocked(assertUploadFitsProviders)).toHaveBeenCalledWith(imageRow, ['youtube']);
+    expect(vi.mocked(assertUploadFitsProviders)).toHaveBeenCalledWith(imageRow, ['rumble']);
     expect(vi.mocked(claimUploadForPublish)).not.toHaveBeenCalled();
     expect(vi.mocked(dispatchPublish)).not.toHaveBeenCalled();
   });

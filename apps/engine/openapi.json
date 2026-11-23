@@ -255,6 +255,20 @@
         "title": "Body_denoise_preview_api_v1_cloned_voices_denoise_preview_post",
         "type": "object"
       },
+      "Body_render_image_short_api_v1_media_image_short_post": {
+        "properties": {
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_render_image_short_api_v1_media_image_short_post",
+        "type": "object"
+      },
       "Body_upload_bgm_file_api_v1_musics_post": {
         "properties": {
           "file": {
@@ -1925,6 +1939,45 @@
           }
         },
         "summary": "Mechanically check one image or video URL or media id (MCP media check)",
+        "tags": [
+          "V1"
+        ]
+      }
+    },
+    "/api/v1/media/image-short": {
+      "post": {
+        "operationId": "render_image_short_api_v1_media_image_short_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_render_image_short_api_v1_media_image_short_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Render one JPEG/PNG into an 8-second 9:16 MP4 Short (video/mp4)",
         "tags": [
           "V1"
         ]
