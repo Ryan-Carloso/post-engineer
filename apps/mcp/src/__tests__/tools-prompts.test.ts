@@ -44,7 +44,7 @@ function apiResponse(url: string): Response {
   if (entry === undefined) {
     return json(404, { success: false, error: 'Unknown prompt slug.', code: 'PROMPT_NOT_FOUND' });
   }
-  return json(200, { success: true, prompt: { ...entry, prompt: PROMPT_TEXT[slug], versionId: VERSION_ID, version: 1 } });
+  return json(200, { success: true, prompt: { ...entry, prompt: PROMPT_TEXT[slug], body: PROMPT_TEXT[slug], versionId: VERSION_ID, version: 1 } });
 }
 
 let fetchMock: ReturnType<typeof vi.fn<(...args: FetchArgs) => Promise<Response>>>;
@@ -336,6 +336,7 @@ describe('prompts from users', () => {
         visibility: source === 'own' ? 'private' : 'public',
         verified,
         prompt: 'Follow these steps.',
+        body: 'Follow these steps.',
         versionId: VERSION_ID,
         version: 2,
       },
@@ -357,7 +358,7 @@ describe('prompts from users', () => {
     expect(textOf(result)).toContain(`pass recipe: "their-prompt" and promptVersionId: "${VERSION_ID}"`);
   });
 
-  it('returns the caller own prompt as written, followed only by its version footer', async () => {
+  it('returns the caller own prompt as stored, followed only by its version footer', async () => {
     fetchMock.mockResolvedValueOnce(userPrompt('own'));
     const result = await handleGetPrompt(client(), { slug: 'their-prompt' });
     expect(textOf(result)).toBe(

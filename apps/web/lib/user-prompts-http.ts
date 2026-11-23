@@ -134,10 +134,16 @@ export function promptSummaryBody(row: UserPromptRow, source: PromptSource): Pro
   };
 }
 
-export type PromptDetailBody = PromptSummaryBody & { prompt: string; versionId: string; version: number };
+export type PromptDetailBody = PromptSummaryBody & { prompt: string; body: string; versionId: string; version: number };
 
 export function promptDetailBody(row: UserPromptRow, source: PromptSource, version: PromptVersionRef): PromptDetailBody {
-  return { ...promptSummaryBody(row, source), prompt: row.body, versionId: version.versionId, version: version.version };
+  return {
+    ...promptSummaryBody(row, source),
+    prompt: row.body,
+    body: row.body,
+    versionId: version.versionId,
+    version: version.version,
+  };
 }
 
 export function readListFilter(request: Request, route: string): { ok: true; filter: PromptListFilter } | { ok: false; response: NextResponse } {

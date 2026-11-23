@@ -73,7 +73,7 @@ export default function MyPromptsSection(): React.ReactElement {
         slug: detail.slug,
         title: detail.title,
         description: detail.description,
-        prompt: detail.prompt,
+        prompt: detail.body,
         visibility: detail.visibility,
       },
     });

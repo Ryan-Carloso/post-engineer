@@ -66,7 +66,7 @@ beforeEach(() => {
       const slug = decodeURIComponent(url.replace('/api/prompts/', ''));
       const entry = listed.find((candidate) => candidate.slug === slug);
       if (entry === undefined) return Response.json({ success: false, code: 'PROMPT_NOT_FOUND' }, { status: 404 });
-      return Response.json({ success: true, prompt: { ...summary(entry), prompt: `Text of ${slug}`, versionId: VERSION_ID, version: 1 } });
+      return Response.json({ success: true, prompt: { ...summary(entry), prompt: `Text of ${slug}`, body: `Text of ${slug}`, versionId: VERSION_ID, version: 1 } });
     }),
   );
   Object.defineProperty(window.navigator, 'clipboard', {

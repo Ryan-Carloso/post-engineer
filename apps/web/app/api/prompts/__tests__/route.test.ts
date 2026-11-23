@@ -264,7 +264,7 @@ describe('POST /api/prompts', () => {
     expect(GetPromptResponseSchema.safeParse(body).success).toBe(true);
     expect(body).toEqual({
       success: true,
-      prompt: { slug: 'my-prompt', title: 'Title', description: 'About', source: 'own', visibility: 'private', verified: false, prompt: 'Body text', versionId: db.versions[0]?.id, version: 1 },
+      prompt: { slug: 'my-prompt', title: 'Title', description: 'About', source: 'own', visibility: 'private', verified: false, prompt: 'Body text', body: 'Body text', versionId: db.versions[0]?.id, version: 1 },
     });
     expect(db.rows).toHaveLength(1);
     expect(db.rows[0].owner_id).toBe(ALICE);
@@ -362,12 +362,26 @@ describe('GET /api/prompts/[slug]', () => {
     expect(db.queries.length).toBeGreaterThan(0);
   });
 
+  it.each([
+    ['own private', 'mine', { owner_id: ALICE, slug: 'mine', title: 'Mine', body: 'My own steps', visibility: 'private' as const }],
+    ['own public', 'mine-pub', { owner_id: ALICE, slug: 'mine-pub', title: 'Mine pub', body: 'My own steps', visibility: 'public' as const }],
+    ['community', 'theirs', { owner_id: BOB, slug: 'theirs', title: 'Theirs', body: 'My own steps', visibility: 'public' as const }],
+  ])('serves a %s prompt as exactly its stored text, in both prompt and body', async (_label, slug, row) => {
+    seedDb([row]);
+    authenticatedAs(ALICE);
+    const response = await getPrompt(request(`/api/prompts/${slug}`), slugContext(slug));
+    expect(response.status).toBe(200);
+    const body = GetPromptResponseSchema.parse(await response.json());
+    expect(body.prompt.prompt).toBe('My own steps');
+    expect(body.prompt.body).toBe('My own steps');
+  });
+
   it('serves a public prompt to a caller with no credentials', async () => {
     seedDb([publicRow(BOB, 'bobs-shared')]);
     signedOut();
     const response = await getPrompt(request('/api/prompts/bobs-shared', { credentials: false }), slugContext('bobs-shared'));
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({ prompt: { slug: 'bobs-shared', source: 'community', visibility: 'public', prompt: 'Community text' } });
+    expect(await response.json()).toMatchObject({ prompt: { slug: 'bobs-shared', source: 'community', visibility: 'public', prompt: 'Community text', body: 'Community text' } });
   });
 
   it('returns 404 to a caller with no credentials for a private prompt', async () => {
@@ -395,7 +409,7 @@ describe('GET /api/prompts/[slug]', () => {
     seedDb([{ owner_id: ALICE, slug: 'mine', title: 'Mine', body: 'secret text' }]);
     authenticatedAs(ALICE);
     const response = await getPrompt(request('/api/prompts/mine'), slugContext('mine'));
-    expect(await response.json()).toMatchObject({ prompt: { slug: 'mine', source: 'own', visibility: 'private', prompt: 'secret text' } });
+    expect(await response.json()).toMatchObject({ prompt: { slug: 'mine', source: 'own', visibility: 'private', prompt: 'secret text', body: 'secret text' } });
   });
 
   it('returns 404 for another owner private prompt, same as an unknown slug', async () => {
@@ -412,7 +426,7 @@ describe('GET /api/prompts/[slug]', () => {
     seedDb([publicRow(BOB, 'bobs-shared')]);
     authenticatedAs(ALICE);
     const response = await getPrompt(request('/api/prompts/bobs-shared'), slugContext('bobs-shared'));
-    expect(await response.json()).toMatchObject({ prompt: { slug: 'bobs-shared', source: 'community', visibility: 'public', prompt: 'Community text' } });
+    expect(await response.json()).toMatchObject({ prompt: { slug: 'bobs-shared', source: 'community', visibility: 'public', prompt: 'Community text', body: 'Community text' } });
   });
 
   it('returns 404 for a slug that cannot be a prompt without querying the database', async () => {
@@ -442,7 +456,7 @@ describe('PATCH /api/prompts/[slug]', () => {
     authenticatedAs(ALICE);
     const response = await patchPrompt(request('/api/prompts/mine', { method: 'PATCH', body: { title: 'New', prompt: 'new body' } }), slugContext('mine'));
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({ prompt: { title: 'New', description: 'Keep', prompt: 'new body', visibility: 'private' } });
+    expect(await response.json()).toMatchObject({ prompt: { title: 'New', description: 'Keep', prompt: 'new body', body: 'new body', visibility: 'private' } });
     expect(db.rows[0]).toMatchObject({ title: 'New', description: 'Keep', body: 'new body' });
   });
 

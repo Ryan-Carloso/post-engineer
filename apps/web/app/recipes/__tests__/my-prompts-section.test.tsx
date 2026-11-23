@@ -48,6 +48,10 @@ function summary(entry: StoredPrompt): Record<string, unknown> {
   return rest;
 }
 
+function detail(entry: StoredPrompt): Record<string, unknown> {
+  return { ...entry, body: entry.prompt };
+}
+
 async function handle(url: string, init: RequestInit | undefined): Promise<Response> {
   const method = init?.method ?? 'GET';
   const body: unknown = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined;
@@ -63,20 +67,20 @@ async function handle(url: string, init: RequestInit | undefined): Promise<Respo
     const draft = body as { slug: string; title: string; description: string; prompt: string; visibility: StoredPrompt['visibility'] };
     const created = own(draft.slug, draft.visibility, { title: draft.title, description: draft.description, prompt: draft.prompt });
     stored.push(created);
-    return Response.json({ success: true, prompt: created }, { status: 201 });
+    return Response.json({ success: true, prompt: detail(created) }, { status: 201 });
   }
   const match = /^\/api\/prompts\/([^/]+)$/.exec(url);
   const entry = match === null ? undefined : stored.find((candidate) => candidate.slug === decodeURIComponent(match[1]));
   if (match === null || entry === undefined) return Response.json({ success: false, code: 'PROMPT_NOT_FOUND' }, { status: 404 });
   if (method === 'PATCH') {
     Object.assign(entry, body);
-    return Response.json({ success: true, prompt: entry });
+    return Response.json({ success: true, prompt: detail(entry) });
   }
   if (method === 'DELETE') {
     stored = stored.filter((candidate) => candidate !== entry);
     return Response.json({ success: true });
   }
-  return Response.json({ success: true, prompt: entry });
+  return Response.json({ success: true, prompt: detail(entry) });
 }
 
 function renderSection(): void {
@@ -188,7 +192,7 @@ describe('MyPromptsSection', () => {
     expect(screen.getByTestId('user-prompt-form')).toBeInTheDocument();
   });
 
-  it('edits a prompt: loads its text, locks the slug and sends only title, description and text', async () => {
+  it('edits a prompt: loads its stored text, locks the slug and sends only title, description and text', async () => {
     stored = [own('mine', 'private')];
     renderSection();
     const row = await screen.findByTestId('user-prompt-mine');
@@ -293,7 +297,7 @@ describe('MyPromptsSection', () => {
     fireEvent.click(within(row).getByRole('button', { name: 'Make public' }));
     await waitFor(() => expect(within(row).getByRole('button', { name: 'Edit' })).toBeDisabled());
     expect(within(row).getByRole('button', { name: 'Delete' })).toBeDisabled();
-    release(Response.json({ success: true, prompt: own('mine', 'public') }));
+    release(Response.json({ success: true, prompt: detail(own('mine', 'public')) }));
   });
 
   it('shows a localized error and keeps the form closed when the prompt text cannot be loaded for editing', async () => {

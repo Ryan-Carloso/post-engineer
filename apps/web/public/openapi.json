@@ -7911,6 +7911,10 @@
                         "prompt": {
                           "type": "string"
                         },
+                        "body": {
+                          "type": "string",
+                          "description": "The stored prompt text as written, the text the edit form loads."
+                        },
                         "versionId": {
                           "type": "string",
                           "format": "uuid",
@@ -7930,6 +7934,7 @@
                         "visibility",
                         "verified",
                         "prompt",
+                        "body",
                         "versionId",
                         "version"
                       ]
@@ -8110,6 +8115,10 @@
                         "prompt": {
                           "type": "string"
                         },
+                        "body": {
+                          "type": "string",
+                          "description": "The stored prompt text as written, the text the edit form loads."
+                        },
                         "versionId": {
                           "type": "string",
                           "format": "uuid",
@@ -8129,6 +8138,7 @@
                         "visibility",
                         "verified",
                         "prompt",
+                        "body",
                         "versionId",
                         "version"
                       ]
@@ -8253,6 +8263,10 @@
                         "prompt": {
                           "type": "string"
                         },
+                        "body": {
+                          "type": "string",
+                          "description": "The stored prompt text as written, the text the edit form loads."
+                        },
                         "versionId": {
                           "type": "string",
                           "format": "uuid",
@@ -8272,6 +8286,7 @@
                         "visibility",
                         "verified",
                         "prompt",
+                        "body",
                         "versionId",
                         "version"
                       ]

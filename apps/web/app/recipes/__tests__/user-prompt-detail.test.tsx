@@ -36,6 +36,7 @@ function detail(source: 'own' | 'community', visibility: 'private' | 'public', v
     title: 'Luna Summer: test A',
     description: 'A/B test A for Luna Summer.',
     prompt: 'Write a curiosity tease hook.',
+    body: 'Write a curiosity tease hook.',
     source,
     visibility,
     verified,

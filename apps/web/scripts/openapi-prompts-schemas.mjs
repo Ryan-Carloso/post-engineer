@@ -16,6 +16,7 @@ export function promptOperationSchemas({ success, object, str }) {
   const detailFields = {
     ...summaryFields,
     prompt: str,
+    body: { type: 'string', description: 'The stored prompt text as written, the text the edit form loads.' },
     versionId: { type: 'string', format: 'uuid', description: 'The current version of this prompt text. Pass it as promptVersionId when generating a video from this prompt.' },
     version: { type: 'integer', minimum: 1, description: 'Version number: a new one each time the prompt text changes.' },
   };
