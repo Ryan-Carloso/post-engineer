@@ -28,5 +28,7 @@ export function buildGenerateJobRequest(input: GenerateJobRequestInput): Record<
     video_clip_duration: validatedOptions.videoClipDuration,
     video_transition_mode: validatedOptions.videoTransitionMode,
     video_variation_seed: validatedOptions.videoVariationSeed,
+    subtitle_position: validatedOptions.subtitlePosition,
+    custom_position: validatedOptions.subtitleCustomPosition,
   };
 }

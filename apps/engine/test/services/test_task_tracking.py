@@ -25,6 +25,7 @@ def _params():
         video_description="Test description.",
         video_type="voiceover",
         video_script="script",
+        subtitle_position="center",
     )
 
 
@@ -209,11 +210,12 @@ class CompleteTaskTests(unittest.TestCase):
         sm.state.delete_task(self.task_id)
 
     def test_complete_task_tracks_video_generated(self):
+        params = _params()
         with (
             patch.object(tm, "track_event") as track,
             patch.object(tm.task_webhook, "notify_terminal_task"),
         ):
-            tm._complete_task(self.task_id, _params())
+            tm._complete_task(self.task_id, params)
         track.assert_called_once_with(
             "video_generated",
             {
@@ -222,8 +224,30 @@ class CompleteTaskTests(unittest.TestCase):
                 "flow": "direct",
                 "pipeline": "video",
                 "music_mood": "unknown",
+                "subtitle_position": params.subtitle_position,
             },
         )
+
+    def test_complete_task_attaches_custom_subtitle_height_to_generated_event(self):
+        """A custom placement carries its height on the direct
+        video_generated event, so PostHog can break the funnel down by
+        placement and height."""
+        params = VideoParams(
+            video_title="test subject",
+            video_description="Test description.",
+            video_type="voiceover",
+            video_script="script",
+            subtitle_position="custom",
+            custom_position=20,
+        )
+        with (
+            patch.object(tm, "track_event") as track,
+            patch.object(tm.task_webhook, "notify_terminal_task"),
+        ):
+            tm._complete_task(self.task_id, params)
+        _, props = track.call_args[0]
+        self.assertEqual(props["subtitle_position"], "custom")
+        self.assertEqual(props["subtitle_custom_position"], 20)
 
     def test_complete_task_attaches_music_mood_to_generated_event(self):
         """The resolved BGM mood rides the direct video_generated event,
@@ -291,11 +315,12 @@ class CompleteTaskTests(unittest.TestCase):
     def test_complete_task_attaches_cost_usd_to_generated_event(self):
         """The Modal GPU cost rides the direct video_generated event as a
         PostHog-only property — the API layer strips it from responses."""
+        params = _params()
         with (
             patch.object(tm, "track_event") as track,
             patch.object(tm.task_webhook, "notify_terminal_task"),
         ):
-            tm._complete_task(self.task_id, _params(), cost_usd=0.1)
+            tm._complete_task(self.task_id, params, cost_usd=0.1)
         track.assert_called_once_with(
             "video_generated",
             {
@@ -305,6 +330,7 @@ class CompleteTaskTests(unittest.TestCase):
                 "pipeline": "video",
                 "cost_usd": 0.1,
                 "music_mood": "unknown",
+                "subtitle_position": params.subtitle_position,
             },
         )
 
@@ -436,6 +462,7 @@ class CreateTaskControllerTests(unittest.TestCase):
                 flow="direct",
                 pipeline="video",
                 video_clip_duration=2,
+                subtitle_position=body.subtitle_position,
             )
             add_task.assert_called_once()
             _, kwargs = add_task.call_args
@@ -574,6 +601,7 @@ class BatchRequestedTests(unittest.TestCase):
             slot_id="slot-batch-req-1",
             persona_id="persona-1",
             video_clip_duration=2,
+            subtitle_position=task_kwargs["params"].subtitle_position,
         )
         self.assertEqual(task_kwargs["stop_at"], "video")
         saved = generator.task_state.update_task.call_args.kwargs

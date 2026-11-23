@@ -698,6 +698,7 @@ class BatchScheduleTests(unittest.TestCase):
             slot_id="slot-1",
             schedule_id="sched-1",
             persona_id="persona-1",
+            subtitle_position=request.subtitle_position,
         )
         manager.try_reserve_running.assert_called_once_with()
         manager.add_task.assert_not_called()
@@ -730,6 +731,7 @@ class BatchScheduleTests(unittest.TestCase):
             pipeline="video",
             state=model_const.TASK_STATE_PROCESSING,
             progress=0,
+            subtitle_position=request.subtitle_position,
         )
 
     def test_dispatch_generation_omits_only_the_blank_identity_ids(self):
@@ -762,6 +764,7 @@ class BatchScheduleTests(unittest.TestCase):
             progress=0,
             schedule_id="sched-3",
             persona_id="persona-3",
+            subtitle_position=request.subtitle_position,
         )
 
     def test_dispatch_generation_omits_blank_schedule_id_only(self):
@@ -794,6 +797,7 @@ class BatchScheduleTests(unittest.TestCase):
             progress=0,
             slot_id="slot-4",
             persona_id="persona-4",
+            subtitle_position=request.subtitle_position,
         )
 
     def test_dispatch_generation_omits_all_explicitly_blank_identity_ids(self):
@@ -824,6 +828,7 @@ class BatchScheduleTests(unittest.TestCase):
             pipeline="video",
             state=model_const.TASK_STATE_PROCESSING,
             progress=0,
+            subtitle_position=request.subtitle_position,
         )
 
 

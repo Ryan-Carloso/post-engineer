@@ -88,6 +88,58 @@ describe('pacing options (per-photo duration, crossfade, per-video variation)', 
   });
 });
 
+describe('subtitle position options', () => {
+  it('accepts top, center, bottom and custom', () => {
+    for (const subtitlePosition of ['top', 'center', 'bottom', 'custom']) {
+      const parsed = parseOptions({ subtitlePosition, subtitleCustomPosition: subtitlePosition === 'custom' ? 20 : undefined });
+      expect(parsed.success).toBe(true);
+      if (parsed.success) {
+        expect(parsed.data.options?.subtitlePosition).toBe(subtitlePosition);
+      }
+    }
+  });
+
+  it('accepts a custom height of 0-100 with custom', () => {
+    for (const subtitleCustomPosition of [0, 20, 100]) {
+      const parsed = parseOptions({ subtitlePosition: 'custom', subtitleCustomPosition });
+      expect(parsed.success).toBe(true);
+      if (parsed.success) {
+        expect(parsed.data.options?.subtitleCustomPosition).toBe(subtitleCustomPosition);
+      }
+    }
+  });
+
+  it('rejects a custom height outside 0-100', () => {
+    for (const subtitleCustomPosition of [-1, 101, 12.5]) {
+      expect(parseOptions({ subtitlePosition: 'custom', subtitleCustomPosition }).success).toBe(false);
+    }
+  });
+
+  it('rejects an unknown subtitle position', () => {
+    const parsed = parseOptions({ subtitlePosition: 'side' });
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) {
+      expect(JSON.stringify(parsed.error.issues)).toContain('subtitlePosition');
+    }
+  });
+
+  it('rejects a custom height without a custom subtitle position', () => {
+    for (const subtitlePosition of [undefined, 'top', 'center', 'bottom']) {
+      const parsed = parseOptions({ subtitlePosition, subtitleCustomPosition: 20 });
+      expect(parsed.success).toBe(false);
+      if (!parsed.success) {
+        expect(JSON.stringify(parsed.error.issues)).toContain('subtitleCustomPosition');
+      }
+    }
+  });
+
+  it('teaches the agent the top placement and the one-knob A/B rule', () => {
+    const shape = GeneratePersonaVideoOptionsShape.subtitlePosition;
+    expect(shape.description).toContain('top keeps the caption near the top of the frame, clear of the face');
+    expect(shape.description).toContain('change one knob at a time');
+  });
+});
+
 const VIDEO = {
   title: 'Porto trip',
   description: 'Agent description.',

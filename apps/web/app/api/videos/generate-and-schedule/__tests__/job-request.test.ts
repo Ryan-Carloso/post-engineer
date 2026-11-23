@@ -48,6 +48,43 @@ describe('buildGenerateJobRequest', () => {
     expect(request.video_variation_seed).toBe(7);
   });
 
+  it('carries the subtitle position when given', () => {
+    const request = buildGenerateJobRequest({
+      title: 'Porto trip',
+      description: 'Agent description.',
+      validatedOptions: {
+        videoType: 'hook_lipsync',
+        subtitlePosition: 'top',
+      },
+      segmentsScript: 'Stop scrolling.',
+      ctaType: null,
+      generationId: 'gen-1',
+      slotId: 'slot-1',
+      segments: [{ kind: 'hook' as const, text: 'Stop scrolling.' }],
+    });
+    expect(request.subtitle_position).toBe('top');
+    expect(request.custom_position).toBeUndefined();
+  });
+
+  it('carries a custom subtitle position with its height when given', () => {
+    const request = buildGenerateJobRequest({
+      title: 'Porto trip',
+      description: 'Agent description.',
+      validatedOptions: {
+        videoType: 'hook_lipsync',
+        subtitlePosition: 'custom',
+        subtitleCustomPosition: 20,
+      },
+      segmentsScript: 'Stop scrolling.',
+      ctaType: null,
+      generationId: 'gen-1',
+      slotId: 'slot-1',
+      segments: [{ kind: 'hook' as const, text: 'Stop scrolling.' }],
+    });
+    expect(request.subtitle_position).toBe('custom');
+    expect(request.custom_position).toBe(20);
+  });
+
   it('leaves the pacing knobs undefined when omitted, like the inline literal did', () => {
     const request = buildGenerateJobRequest({
       title: 'Porto trip',
@@ -62,5 +99,7 @@ describe('buildGenerateJobRequest', () => {
     expect(request.video_clip_duration).toBeUndefined();
     expect(request.video_transition_mode).toBeUndefined();
     expect(request.video_variation_seed).toBeUndefined();
+    expect(request.subtitle_position).toBeUndefined();
+    expect(request.custom_position).toBeUndefined();
   });
 });

@@ -2,7 +2,7 @@ import { isIP } from 'node:net';
 import { z } from 'zod';
 import { isEnglishLanguage, ONLY_ENGLISH_VIDEOS_MESSAGE } from './language.js';
 import { isPublicIp } from './public-ip.js';
-import { VIDEO_TRANSITION_MODES } from './contracts/videos.js';
+import { VIDEO_TRANSITION_MODES, SUBTITLE_POSITIONS } from './contracts/videos.js';
 import { VIDEO_LAYOUTS } from './limits.js';
 import { VIDEO_TYPES, VIDEO_TYPE_ERROR_SUFFIX, unknownVideoTypeMessage } from './video-type.js';
 import { personaVoiceField } from './voice-filters.js';
@@ -177,4 +177,24 @@ export const GeneratePersonaVideoOptionsShape = {
     .int()
     .optional()
     .describe('Seed for per-video variation of the segment photos zoom direction; the same seed repeats the same pattern. Omitted keeps the fixed in/out alternation. Change it for a different look of the same script without changing pacing.'),
+  subtitlePosition: z
+    .enum(SUBTITLE_POSITIONS)
+    .optional()
+    .describe(
+      'Caption placement: top keeps the caption near the top of the frame, clear of the face and the lower photo area; center is the default; bottom sits near the bottom; custom places it at subtitleCustomPosition percent from the top. A/B rule: change one knob at a time, in the same niche, and compare before changing another.',
+    ),
+  subtitleCustomPosition: z
+    .number()
+    .int()
+    .min(0)
+    .max(100)
+    .optional()
+    .describe('Caption height as percent from the top (0-100). Only with subtitlePosition "custom"; rejected otherwise.'),
 };
+
+export const GeneratePersonaVideoOptionsSchema = z
+  .object(GeneratePersonaVideoOptionsShape)
+  .refine((value) => value.subtitleCustomPosition === undefined || value.subtitlePosition === 'custom', {
+    message: "subtitleCustomPosition only allowed with subtitlePosition 'custom'",
+    path: ['subtitleCustomPosition'],
+  });

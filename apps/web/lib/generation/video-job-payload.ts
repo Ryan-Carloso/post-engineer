@@ -25,6 +25,8 @@ const REQUEST_FORWARD_FIELDS: ReadonlyArray<EngineVideoRequestField> = [
   'video_clip_duration',
   'video_transition_mode',
   'video_variation_seed',
+  'subtitle_position',
+  'custom_position',
   'webhook_url',
   'generation_id',
   'slot_id',

@@ -29,7 +29,7 @@ from app.models.schema import (
     TaskResponse,
     TaskVideoRequest,
 )
-from app.services import state as sm, task as tm
+from app.services import analytics, state as sm, task as tm
 from app.services import video_storage
 from app.services.task_cleanup import remove_task_directory
 from app.services.language_gate import ensure_english_video_language
@@ -330,7 +330,7 @@ def create_task(
             stop_at=stop_at,
             on_accepted=lambda: tm.track_generation_requested(
                 task_id, user_id=auth.user_id, flow="direct", pipeline=stop_at,
-                **tracking_kwargs(body),
+                **tracking_kwargs(body), **analytics.subtitle_event_props(body),
             ),
         )
         logger.success(f"Task created: task_id={task_id}")
