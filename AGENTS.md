@@ -112,6 +112,7 @@
 - Storage backends share `STORAGE_BUCKET = "videos"` as the literal bucket name.
 - A trim/limit helper that exists to preserve a trailing element (the CTA) must preserve it on EVERY path, fallbacks included: when no body fits next to it, the element ships alone — a plain-cut fallback that ends before it silently drops exactly what the helper protects. Pin the fallback paths, not just the length cap.
 - A persona field the engine consumes (e.g. `niche` for the script angle) must be forwarded on EVERY dispatch path — web direct payload (`buildJobPayload`), engine batch (`build_persona_params`), MCP — a field populated on only one path is silently dead on the others. Pin each path with a dispatch test, not a hand-built params object.
+- Render queue: the engine renders one video at a time (`max_concurrent_tasks`). A direct task queued behind other renders reports state 3 (queued) at progress 0 until `start()` writes progress 5 — never write PROCESSING before the worker starts, or a queued task is indistinguishable from a running one and waits look like hangs. Batch slots wait **pending** in Supabase (never in the engine queue) until a running slot frees; MCP surfaces state 3 as outcome `queued`. Under a busy engine a task behind several renders can wait ~1h before its pipeline starts. Stop-then-start deploys wipe the in-memory queue — batch slots go back to pending and re-dispatch on the next 60s tick, so a deploy costs minutes, not lost work.
 
 ## MCP
 
