@@ -44,7 +44,7 @@ function apiResponse(url: string): Response {
   if (entry === undefined) {
     return json(404, { success: false, error: 'Unknown prompt slug.', code: 'PROMPT_NOT_FOUND' });
   }
-  return json(200, { success: true, prompt: { ...entry, prompt: PROMPT_TEXT[slug], versionId: VERSION_ID, version: 1 } });
+  return json(200, { success: true, prompt: { ...entry, prompt: PROMPT_TEXT[slug], body: null, versionId: VERSION_ID, version: 1 } });
 }
 
 let fetchMock: ReturnType<typeof vi.fn<(...args: FetchArgs) => Promise<Response>>>;
@@ -357,11 +357,11 @@ describe('prompts from users', () => {
     expect(textOf(result)).toContain(`pass recipe: "their-prompt" and promptVersionId: "${VERSION_ID}"`);
   });
 
-  it('returns the caller own prompt as written, followed only by its version footer', async () => {
+  it('returns the caller own prompt as served, shared base first, followed only by its version footer', async () => {
     fetchMock.mockResolvedValueOnce(userPrompt('own'));
     const result = await handleGetPrompt(client(), { slug: 'their-prompt' });
     expect(textOf(result)).toBe(
-      `Follow these steps.\n\nWhen you call generate_video with a script written from this prompt, pass promptVersionId: "${VERSION_ID}" on each video, so experiments (action: results) can compare this prompt.`,
+      `Shared base rules.\n\nFollow these steps.\n\nWhen you call generate_video with a script written from this prompt, pass promptVersionId: "${VERSION_ID}" on each video, so experiments (action: results) can compare this prompt.`,
     );
   });
 

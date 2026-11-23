@@ -38,6 +38,7 @@ let stored: StoredPrompt[];
 let requests: Array<{ method: string; path: string; body: unknown }>;
 let nextFailure: { status: number; body: unknown } | null;
 let failDetail: boolean;
+let detailWithoutBody: boolean;
 
 function own(slug: string, visibility: StoredPrompt['visibility'], extra: Partial<StoredPrompt> = {}): StoredPrompt {
   return { slug, title: `Title ${slug}`, description: `About ${slug}`, prompt: `Text of ${slug}`, source: 'own', visibility, verified: false, versionId: '44444444-4444-4444-8444-444444444444', version: 1, ...extra };
@@ -46,6 +47,12 @@ function own(slug: string, visibility: StoredPrompt['visibility'], extra: Partia
 function summary(entry: StoredPrompt): Record<string, unknown> {
   const { prompt: _text, versionId: _versionId, version: _version, ...rest } = entry;
   return rest;
+}
+
+const SERVED_BASE = 'Shared base rules';
+
+function detail(entry: StoredPrompt): Record<string, unknown> {
+  return { ...entry, prompt: `${SERVED_BASE}\n\n${entry.prompt}`, body: detailWithoutBody ? null : entry.prompt };
 }
 
 async function handle(url: string, init: RequestInit | undefined): Promise<Response> {
@@ -63,20 +70,20 @@ async function handle(url: string, init: RequestInit | undefined): Promise<Respo
     const draft = body as { slug: string; title: string; description: string; prompt: string; visibility: StoredPrompt['visibility'] };
     const created = own(draft.slug, draft.visibility, { title: draft.title, description: draft.description, prompt: draft.prompt });
     stored.push(created);
-    return Response.json({ success: true, prompt: created }, { status: 201 });
+    return Response.json({ success: true, prompt: detail(created) }, { status: 201 });
   }
   const match = /^\/api\/prompts\/([^/]+)$/.exec(url);
   const entry = match === null ? undefined : stored.find((candidate) => candidate.slug === decodeURIComponent(match[1]));
   if (match === null || entry === undefined) return Response.json({ success: false, code: 'PROMPT_NOT_FOUND' }, { status: 404 });
   if (method === 'PATCH') {
     Object.assign(entry, body);
-    return Response.json({ success: true, prompt: entry });
+    return Response.json({ success: true, prompt: detail(entry) });
   }
   if (method === 'DELETE') {
     stored = stored.filter((candidate) => candidate !== entry);
     return Response.json({ success: true });
   }
-  return Response.json({ success: true, prompt: entry });
+  return Response.json({ success: true, prompt: detail(entry) });
 }
 
 function renderSection(): void {
@@ -93,6 +100,7 @@ beforeEach(() => {
   requests = [];
   nextFailure = null;
   failDetail = false;
+  detailWithoutBody = false;
   vi.stubGlobal('fetch', vi.fn<typeof fetch>(async (input, init) => handle(String(input), init)));
   Object.defineProperty(window.navigator, 'clipboard', {
     value: { writeText: vi.fn().mockResolvedValue(undefined) },
@@ -188,7 +196,7 @@ describe('MyPromptsSection', () => {
     expect(screen.getByTestId('user-prompt-form')).toBeInTheDocument();
   });
 
-  it('edits a prompt: loads its text, locks the slug and sends only title, description and text', async () => {
+  it('edits a prompt: loads its own text without the shared base, locks the slug and sends only title, description and text', async () => {
     stored = [own('mine', 'private')];
     renderSection();
     const row = await screen.findByTestId('user-prompt-mine');
@@ -242,13 +250,13 @@ describe('MyPromptsSection', () => {
     expect(requests.filter((request) => request.method === 'DELETE')).toHaveLength(1);
   });
 
-  it('copies the full prompt text, fetched on demand, since the list carries no text', async () => {
+  it('copies the served prompt, shared base first, fetched on demand, since the list carries no text', async () => {
     stored = [own('mine', 'private')];
     renderSection();
     const row = await screen.findByTestId('user-prompt-mine');
     expect(JSON.stringify(requests)).not.toContain('Text of mine');
     fireEvent.click(within(row).getByRole('button', { name: 'Copy' }));
-    await waitFor(() => expect(window.navigator.clipboard.writeText).toHaveBeenCalledWith('Text of mine'));
+    await waitFor(() => expect(window.navigator.clipboard.writeText).toHaveBeenCalledWith(`${SERVED_BASE}\n\nText of mine`));
     expect(await within(row).findByRole('button', { name: 'Copied!' })).toBeInTheDocument();
   });
 
@@ -293,7 +301,7 @@ describe('MyPromptsSection', () => {
     fireEvent.click(within(row).getByRole('button', { name: 'Make public' }));
     await waitFor(() => expect(within(row).getByRole('button', { name: 'Edit' })).toBeDisabled());
     expect(within(row).getByRole('button', { name: 'Delete' })).toBeDisabled();
-    release(Response.json({ success: true, prompt: own('mine', 'public') }));
+    release(Response.json({ success: true, prompt: detail(own('mine', 'public')) }));
   });
 
   it('shows a localized error and keeps the form closed when the prompt text cannot be loaded for editing', async () => {
@@ -301,6 +309,16 @@ describe('MyPromptsSection', () => {
     renderSection();
     const row = await screen.findByTestId('user-prompt-mine');
     failDetail = true;
+    fireEvent.click(within(row).getByRole('button', { name: 'Edit' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Something went wrong. Try again.');
+    expect(screen.queryByTestId('user-prompt-form')).not.toBeInTheDocument();
+  });
+
+  it('shows the localized error and opens no form when the loaded prompt carries no editable text', async () => {
+    stored = [own('mine', 'private')];
+    renderSection();
+    const row = await screen.findByTestId('user-prompt-mine');
+    detailWithoutBody = true;
     fireEvent.click(within(row).getByRole('button', { name: 'Edit' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Something went wrong. Try again.');
     expect(screen.queryByTestId('user-prompt-form')).not.toBeInTheDocument();

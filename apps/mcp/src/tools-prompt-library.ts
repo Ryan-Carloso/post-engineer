@@ -14,7 +14,7 @@ const TitleField = z.string().min(1).max(USER_PROMPT_LIMITS.title).describe('A s
 
 const DescriptionField = z.string().max(USER_PROMPT_LIMITS.description).describe('What the prompt is for.');
 
-const PromptField = z.string().min(1).max(USER_PROMPT_LIMITS.prompt).describe('The prompt text.');
+const PromptField = z.string().min(1).max(USER_PROMPT_LIMITS.prompt).describe('Only your own steps: prompts (action: get) serves every user prompt after the shared Post Engineer rules, so never repeat them here.');
 
 const VisibilityField = z
   .enum(PROMPT_VISIBILITIES)

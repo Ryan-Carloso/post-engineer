@@ -57,7 +57,7 @@ vi.mock('@/lib/i18n/provider', async () => {
 const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);
 
-import { AccountPanel } from '../account-panel';
+import { AccountPanel, MobileProfileLink } from '../account-panel';
 import { useSessionQuery } from '@/lib/api';
 
 function createWrapper() {
@@ -119,6 +119,14 @@ describe('AccountPanel', () => {
     const link = screen.getByTestId('profile-user-link');
     expect(link).toHaveAttribute('href', '/account');
     expect(link).toHaveTextContent('Test User');
+  });
+
+  it('marks the signed-in user name and avatar for the ui-diff mask in the sidebar and the mobile header', () => {
+    const { unmount } = render(<AccountPanel />, { wrapper: createWrapper() });
+    expect(screen.getByTestId('profile-user-link')).toHaveAttribute('data-ui-diff-mask');
+    unmount();
+    render(<MobileProfileLink />, { wrapper: createWrapper() });
+    expect(screen.getByTestId('mobile-profile-link')).toHaveAttribute('data-ui-diff-mask');
   });
 
   it('renders the token balance fetched from the API', async () => {
