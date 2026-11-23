@@ -551,6 +551,16 @@ def test_subtitle_event_props_reads_task_row_keys():
         "subtitle_custom_position": 20,
     }
     assert analytics.subtitle_event_props({"subtitle_position": "bottom"}) == {"subtitle_position": "bottom"}
+    assert analytics.subtitle_event_props({"subtitle_position": "custom", "custom_position": 20}) == {
+        "subtitle_position": "custom",
+        "subtitle_custom_position": 20,
+    }
+    assert analytics.subtitle_event_props(
+        {"subtitle_position": "custom", "subtitle_custom_position": 30, "custom_position": 20}
+    ) == {
+        "subtitle_position": "custom",
+        "subtitle_custom_position": 30,
+    }
 
 
 def test_subtitle_event_props_omits_blank_or_missing_position():

@@ -25,6 +25,7 @@ def _params():
         video_description="Test description.",
         video_type="faceless",
         video_script="script",
+        subtitle_position="center",
     )
 
 
@@ -227,17 +228,26 @@ class CompleteTaskTests(unittest.TestCase):
             },
         )
 
-    def test_complete_task_attaches_subtitle_position_to_generated_event(self):
-        """The caption placement rides the direct video_generated event,
-        so PostHog can break the funnel down by placement."""
-        params = _params()
+    def test_complete_task_attaches_custom_subtitle_height_to_generated_event(self):
+        """A custom placement carries its height on the direct
+        video_generated event, so PostHog can break the funnel down by
+        placement and height."""
+        params = VideoParams(
+            video_title="test subject",
+            video_description="Test description.",
+            video_type="faceless",
+            video_script="script",
+            subtitle_position="custom",
+            custom_position=20,
+        )
         with (
             patch.object(tm, "track_event") as track,
             patch.object(tm.task_webhook, "notify_terminal_task"),
         ):
             tm._complete_task(self.task_id, params)
         _, props = track.call_args[0]
-        self.assertEqual(props["subtitle_position"], params.subtitle_position)
+        self.assertEqual(props["subtitle_position"], "custom")
+        self.assertEqual(props["subtitle_custom_position"], 20)
 
     def test_complete_task_attaches_music_mood_to_generated_event(self):
         """The resolved BGM mood rides the direct video_generated event,

@@ -276,11 +276,14 @@ def subtitle_event_props(source: object) -> dict[str, object]:
     Only a real placement travels; the custom height only travels with a
     custom placement, so the event never carries a meaningless number.
     Params objects carry custom_position; task rows carry the emitted
-    subtitle_custom_position key.
+    subtitle_custom_position key, falling back to the raw custom_position
+    key when a row was built from raw params.
     """
     if isinstance(source, dict):
         position = source.get("subtitle_position")
         custom = source.get("subtitle_custom_position")
+        if custom is None:
+            custom = source.get("custom_position")
     else:
         position = getattr(source, "subtitle_position", None)
         custom = getattr(source, "custom_position", None)

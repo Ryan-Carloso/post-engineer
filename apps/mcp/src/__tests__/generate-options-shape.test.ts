@@ -120,6 +120,16 @@ describe('subtitle position options', () => {
     }
   });
 
+  it('rejects a custom height without a custom subtitle position', () => {
+    for (const subtitlePosition of [undefined, 'top', 'center', 'bottom']) {
+      const parsed = parseOptions({ subtitlePosition, subtitleCustomPosition: 20 });
+      expect(parsed.success).toBe(false);
+      if (!parsed.success) {
+        expect(JSON.stringify(parsed.error.issues)).toContain('subtitleCustomPosition');
+      }
+    }
+  });
+
   it('teaches the agent the top placement and the one-knob A/B rule', () => {
     const shape = GeneratePersonaVideoOptionsShape.subtitlePosition;
     expect(shape.description).toContain('top keeps the caption near the top of the frame, clear of the face');

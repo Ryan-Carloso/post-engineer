@@ -193,3 +193,10 @@ export const GeneratePersonaVideoOptionsShape = {
     .optional()
     .describe('Caption height as percent from the top (0-100). Only with subtitlePosition "custom"; rejected otherwise.'),
 };
+
+export const GeneratePersonaVideoOptionsSchema = z
+  .object(GeneratePersonaVideoOptionsShape)
+  .refine((value) => value.subtitleCustomPosition === undefined || value.subtitlePosition === 'custom', {
+    message: "subtitleCustomPosition only allowed with subtitlePosition 'custom'",
+    path: ['subtitleCustomPosition'],
+  });
