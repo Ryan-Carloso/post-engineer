@@ -59,6 +59,7 @@ from typing import Optional, Sequence
 
 from app.services import segment_panels, segment_video
 from app.services.image_density import MAX_PHOTO_SECONDS
+from app.services.photo_content import REASON_DUPLICATE_PHOTO
 from app.services.segment_panels import Panel
 from app.services.segment_photo_duration import photo_cap
 
@@ -86,8 +87,8 @@ class ImagesDoNotCoverAudio(Exception):
         super().__init__(message)
 
 
-def _skip_summary(sent: int, survived: int, skipped: Sequence[str]) -> tuple[str, list[str]]:
-    """("N sent, M survived, K skipped (reason xN, ...)", [fatal skip lines])."""
+def _skip_summary(sent: int, survived: int, skipped: Sequence[str]) -> tuple[str, list[str], Counter[str]]:
+    """("N sent, M survived, K skipped (reason xN, ...)", [fatal skip lines], {reason: count})."""
     fatal = [line for line in skipped if _SKIP_MARKER in line]
     reasons = Counter(line.split(_SKIP_MARKER, 1)[1] for line in fatal)
     summary = f"{sent} sent, {survived} survived, {len(fatal)} skipped"
@@ -95,7 +96,7 @@ def _skip_summary(sent: int, survived: int, skipped: Sequence[str]) -> tuple[str
         summary += " (" + ", ".join(
             f"{reason} x{count}" for reason, count in reasons.most_common()
         ) + ")"
-    return summary, fatal
+    return summary, fatal, reasons
 
 
 def failure_detail(
@@ -105,11 +106,13 @@ def failure_detail(
     skipped: Sequence[str],
     no_full_frame: bool,
 ) -> str:
-    """The detail for an ImagesDoNotCoverAudio: counts and every skip."""
-    summary, fatal = _skip_summary(sent, survived, skipped)
+    """The detail for an ImagesDoNotCoverAudio: counts, every skip, and the fix for duplicates."""
+    summary, fatal, reasons = _skip_summary(sent, survived, skipped)
     parts = ["no full-frame image survived"] if no_full_frame else []
     parts.append(summary)
     parts.extend(fatal)
+    if REASON_DUPLICATE_PHOTO in reasons:
+        parts.append("fix: use a different photo for each media item")
     return "; ".join(parts)
 
 
@@ -141,7 +144,7 @@ def ensure_coverage(
     surviving photos run out before the end of the audio at their caps.
     """
     window_start = coverage_start(face, hook_end)
-    _summary, fatal = _skip_summary(sent, len(panels), skipped)
+    _summary, fatal, _reasons = _skip_summary(sent, len(panels), skipped)
     has_full = any(panel.caption_bottom is None for panel in panels)
     if face != segment_panels.FACE_FULL and (fatal or not has_full):
         raise ImagesDoNotCoverAudio(
