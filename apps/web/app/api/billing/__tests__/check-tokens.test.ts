@@ -104,16 +104,16 @@ describe('POST /api/billing/check-tokens', () => {
     );
   });
 
-  it('forwards videoType faceless when the request is faceless', async () => {
+  it('forwards videoType voiceover when the request is voiceover', async () => {
     vi.mocked(checkAndDeductTokens).mockResolvedValue({ ok: true, cost: 1 });
 
-    await POST(makePostRequest({ userId: 'u1', videoType: 'faceless', faceQuality: 'ok' }));
+    await POST(makePostRequest({ userId: 'u1', videoType: 'voiceover', faceQuality: 'ok' }));
 
     expect(checkAndDeductTokens).toHaveBeenCalledWith(
       expect.anything(),
       'u1',
       expect.any(String),
-      'faceless',
+      'voiceover',
       'ok',
     );
   });

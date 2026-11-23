@@ -61,10 +61,10 @@ class PreflightPersonaImageTests(unittest.TestCase):
             persona_preflight.preflight_persona_image("task-hook", _params(), _MAX_BYTES)
         photos.assert_not_called()
 
-    def test_skips_when_faceless(self):
+    def test_skips_when_voiceover(self):
         with patch.object(full_lipsync, "resolve_persona_image") as resolve:
             persona_preflight.preflight_persona_image(
-                "task-2", _params(video_type="faceless"), _MAX_BYTES
+                "task-2", _params(video_type="voiceover"), _MAX_BYTES
             )
         resolve.assert_not_called()
 
@@ -313,7 +313,7 @@ class ResolvePersonaImageFirstPhotoTests(unittest.TestCase):
             self.assertIn("segment 0 image 1", str(ctx.exception))
             self.assertIn("media expired or missing", str(ctx.exception))
 
-    def test_faceless_first_photo_fails_the_task(self):
+    def test_voiceover_first_photo_fails_the_task(self):
         with tempfile.TemporaryDirectory() as task_dir:
             resolved = os.path.join(task_dir, "resolved.jpg")
             with open(resolved, "wb") as handle:

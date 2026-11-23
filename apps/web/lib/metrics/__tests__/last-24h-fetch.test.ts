@@ -65,7 +65,7 @@ function dailyRow(overrides: Record<string, unknown> = {}): Record<string, unkno
 function postRow(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     id: 'post-1', schedule_id: 'sch-1', published_at: new Date(NOW.getTime() - 72 * HOUR).toISOString(),
-    publish_outcomes: [YT_OUTCOME], faceless: false,
+    publish_outcomes: [YT_OUTCOME], voiceover: false,
     ...overrides,
   };
 }
@@ -171,7 +171,7 @@ describe('fetchLast24h', () => {
     expect(shown.rows).toHaveLength(1);
   });
 
-  it('treats a post whose schedule is gone as persona-less and not faceless, hiding it from a scoped key', async () => {
+  it('treats a post whose schedule is gone as persona-less and not voiceover, hiding it from a scoped key', async () => {
     const { client } = mockSupabase({
       post_metrics_daily: { data: [dailyRow(), dailyRow({ collected_at: new Date(NOW.getTime() - 25 * HOUR).toISOString(), views: 1 })], error: null },
       scheduled_posts: { data: [postRow({ schedule_id: null })], error: null },

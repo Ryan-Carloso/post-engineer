@@ -15,7 +15,7 @@ describe('schema-expectations.gen.ts', () => {
   });
 
   it('lists the columns whose absence caused the 2026-10 production errors', () => {
-    expect(REQUIRED_COLUMNS.scheduled_posts).toContain('faceless_material');
+    expect(REQUIRED_COLUMNS.scheduled_posts).toContain('voiceover_material');
     expect(REQUIRED_COLUMNS.personas).toContain('cta_type');
     expect(REQUIRED_COLUMNS.post_metrics).toContain('script_angle');
   });

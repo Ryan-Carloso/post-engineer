@@ -361,7 +361,7 @@ export const SlotDetail = ({
         </div>
       )}
 
-      <HookPhotoSection hookPhoto={slot.hookPhoto} faceless={generation.faceless} />
+      <HookPhotoSection hookPhoto={slot.hookPhoto} voiceover={generation.voiceover} />
 
       <div className="mt-6">
         <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">{t('posts.captionLabel')}</p>

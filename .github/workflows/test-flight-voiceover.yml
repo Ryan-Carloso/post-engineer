@@ -1,9 +1,9 @@
-name: test-flight-faceless
+name: test-flight-voiceover
 
-# CI-only end-to-end smoke of the FACELESS pipeline (production).
+# CI-only end-to-end smoke of the VOICEOVER pipeline (production).
 #
-# Same shape as test-flight, but generates faceless videos: the persona is
-# still passed (voice + account routing), yet options.faceless=true skips
+# Same shape as test-flight, but generates voiceover videos: the persona is
+# still passed (voice + account routing), yet options.voiceover=true skips
 # the GPU lipsync render entirely — the engine renders stock footage with
 # the persona's voice. This validates generation + publishing end-to-end
 # when Modal/GPU is unavailable (e.g. out of credits), without spending GPU.
@@ -77,7 +77,7 @@ name: test-flight-faceless
 #                                    https://openrouter.ai/api/v1 and the
 #                                    TEST_FLIGHT_LLM_MODELS chain above.
 #
-# Manual flight: Actions > test-flight-faceless > Run workflow — fill topic,
+# Manual flight: Actions > test-flight-voiceover > Run workflow — fill topic,
 # persona_id and the account ids to post to. scheduled_action=leave keeps
 # the scheduled-leg slot to fire for real; cancel (default) verifies the
 # slot then removes it.
@@ -117,7 +117,7 @@ on:
     - cron: '0 9 * * *' # daily prod-health monitor, 09:00 UTC (one hour after the persona flight)
 
 concurrency:
-  group: test-flight-faceless
+  group: test-flight-voiceover
   cancel-in-progress: false # a running flight is never killed; the next one queues
 
 permissions:
@@ -154,7 +154,7 @@ jobs:
           TEST_FLIGHT_TAVILY_API_KEY: ${{ secrets.TEST_FLIGHT_TAVILY_API_KEY }}
           TEST_FLIGHT_EXA_API_KEY: ${{ secrets.TEST_FLIGHT_EXA_API_KEY }}
 
-      - name: Run faceless test flight
+      - name: Run voiceover test flight
         run: node .github/scripts/test-flight/flight.mjs
         env:
           TEST_FLIGHT_API_BASE_URL: ${{ vars.TEST_FLIGHT_API_BASE_URL }}
@@ -165,7 +165,7 @@ jobs:
           TEST_FLIGHT_INSTAGRAM_ACCOUNT_ID: ${{ inputs.instagram_account_id || vars.TEST_FLIGHT_INSTAGRAM_ACCOUNT_ID || secrets.TEST_FLIGHT_INSTAGRAM_ACCOUNT_ID }}
           TEST_FLIGHT_YOUTUBE_ACCOUNT_ID: ${{ inputs.youtube_account_id || vars.TEST_FLIGHT_YOUTUBE_ACCOUNT_ID || secrets.TEST_FLIGHT_YOUTUBE_ACCOUNT_ID }}
           TEST_FLIGHT_SCHEDULED_ACTION: ${{ inputs.scheduled_action }}
-          TEST_FLIGHT_FACELESS: 'true'
+          TEST_FLIGHT_VOICEOVER: 'true'
           TEST_FLIGHT_RUN_ID: ${{ github.run_id }}
 
       - name: Notify Discord on failure
@@ -177,16 +177,16 @@ jobs:
           # The secrets context is not allowed in `if:` expressions, so the
           # empty check lives here instead of in the step condition.
           if [ -z "${DISCORD_WEBHOOK_URL}" ]; then
-            echo 'test-flight-faceless: no Discord webhook configured, skipping notification'
+            echo 'test-flight-voiceover: no Discord webhook configured, skipping notification'
             exit 0
           fi
           curl -fsS -X POST -H 'content-type: application/json' \
-            --data "{\"content\":\"🚨 test-flight-faceless FAILED — ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}" \
+            --data "{\"content\":\"🚨 test-flight-voiceover FAILED — ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}" \
             "${DISCORD_WEBHOOK_URL}"
 
       - name: Report failure to PostHog
         if: failure()
         env:
           TEST_FLIGHT_POSTHOG_KEY: ${{ secrets.TEST_FLIGHT_POSTHOG_KEY }}
-          TEST_FLIGHT_FACELESS: 'true'
+          TEST_FLIGHT_VOICEOVER: 'true'
         run: node .github/scripts/test-flight/report-posthog.mjs

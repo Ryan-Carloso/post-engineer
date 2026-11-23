@@ -65,24 +65,24 @@ class VideoAspect(str, Enum):
 
 class VideoType(str, Enum):
     """The one video mode (issue #542 follow-up): it replaces the
-    faceless / full_lipsync / lipsync_enabled boolean combination.
+    voiceover / full_lipsync / lipsync_enabled boolean combination.
 
     full_lipsync: the whole narration renders as talking head; a persona
         with a photo is required. 8 tokens at face quality ok, 15 at
         very_good.
     hook_lipsync: lip sync only on the hook, then the agent's images; a
         persona with a photo is required. 2 tokens ok, 3 very_good.
-    faceless: only the agent's images; a persona is optional, and when one
+    voiceover: only the agent's images; a persona is optional, and when one
         is present only its voice and niche are used, never its face.
         1 token.
     """
 
     full_lipsync = "full_lipsync"
     hook_lipsync = "hook_lipsync"
-    faceless = "faceless"
+    voiceover = "voiceover"
 
 
-VIDEO_TYPE_ERROR_SUFFIX = "use full_lipsync (8/15), hook_lipsync (2/3) or faceless (1)"
+VIDEO_TYPE_ERROR_SUFFIX = "use full_lipsync (8/15), hook_lipsync (2/3) or voiceover (1)"
 
 
 def unknown_video_type_message(value: object) -> str:
@@ -95,7 +95,7 @@ class PersonaParams(BaseModel):
     """Inline persona in the job (stateless): refs resolved by the caller.
 
     At most one visual identity (photo_url OR avatar_url — a person in
-    faceless mode may have zero) and exactly one voice (voice_id OR
+    voiceover mode may have zero) and exactly one voice (voice_id OR
     voice_audio_url).
     """
 

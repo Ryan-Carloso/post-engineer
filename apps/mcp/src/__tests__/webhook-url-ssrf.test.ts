@@ -43,7 +43,7 @@ const VIDEO = {
 function parseOptions(options: Record<string, unknown>) {
   return GeneratePersonaVideoSchema.safeParse({
     ...VIDEO,
-    options: { videoType: 'faceless', ...options },
+    options: { videoType: 'voiceover', ...options },
   });
 }
 

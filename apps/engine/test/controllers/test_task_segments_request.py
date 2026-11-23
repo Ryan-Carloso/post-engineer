@@ -34,7 +34,7 @@ def test_valid_segments_join_into_video_script():
     request = TaskVideoRequest(
         video_title="Porto",
         video_description="Test description.",
-        video_type="faceless",
+        video_type="voiceover",
         segments=valid_segments(),
     )
     assert request.video_script == f"{HOOK}\n\n{BODY}\n\n{CTA}"
@@ -47,7 +47,7 @@ def test_segments_without_hook_first_is_rejected():
         TaskVideoRequest(
             video_title="Porto",
             video_description="Test description.",
-            video_type="faceless",
+            video_type="voiceover",
             segments=segments,
         )
 
@@ -59,7 +59,7 @@ def test_segments_with_short_body_is_rejected():
         TaskVideoRequest(
             video_title="Porto",
             video_description="Test description.",
-            video_type="faceless",
+            video_type="voiceover",
             segments=segments,
         )
 
@@ -69,7 +69,7 @@ def test_supplied_script_mismatching_segments_is_rejected():
         TaskVideoRequest(
             video_title="Porto",
             video_description="Test description.",
-            video_type="faceless",
+            video_type="voiceover",
             video_script="A completely different script.",
             segments=valid_segments(),
         )
@@ -79,7 +79,7 @@ def test_request_without_segments_is_unchanged():
     request = TaskVideoRequest(
         video_title="Porto",
         video_description="Test description.",
-        video_type="faceless",
+        video_type="voiceover",
         video_script="script",
     )
     assert request.video_script == "script"
@@ -93,7 +93,7 @@ def test_segments_with_unknown_segment_key_is_rejected():
         TaskVideoRequest(
             video_title="Porto",
             video_description="Test description.",
-            video_type="faceless",
+            video_type="voiceover",
             segments=segments,
         )
 
@@ -105,7 +105,7 @@ def test_segments_with_unknown_media_key_is_rejected():
         TaskVideoRequest(
             video_title="Porto",
             video_description="Test description.",
-            video_type="faceless",
+            video_type="voiceover",
             segments=segments,
         )
 
@@ -115,7 +115,7 @@ def test_empty_segments_list_is_rejected():
         TaskVideoRequest(
             video_title="Porto",
             video_description="Test description.",
-            video_type="faceless",
+            video_type="voiceover",
             segments=[],
         )
 
@@ -131,7 +131,7 @@ def test_segments_joining_beyond_video_script_cap_is_rejected():
         TaskVideoRequest(
             video_title="Porto",
             video_description="Test description.",
-            video_type="faceless",
+            video_type="voiceover",
             segments=segments,
         )
 
@@ -143,7 +143,7 @@ def test_media_shape_only_in_phase_one():
         TaskVideoRequest(
             video_title="Porto",
             video_description="Test description.",
-            video_type="faceless",
+            video_type="voiceover",
             segments=segments,
         )
 
@@ -154,7 +154,7 @@ def test_cta_take_marked_content_passes_with_cta_type():
     request = TaskVideoRequest(
         video_title="Porto",
         video_description="Test description.",
-        video_type="faceless",
+        video_type="voiceover",
         cta_type="follow",
         segments=segments,
     )
@@ -167,7 +167,7 @@ def test_cta_type_without_marked_take_is_rejected():
         TaskVideoRequest(
             video_title="Porto",
             video_description="Test description.",
-            video_type="faceless",
+            video_type="voiceover",
             cta_type="follow",
             segments=valid_segments(),
         )
@@ -180,7 +180,7 @@ def test_comment_cta_without_question_is_rejected():
         TaskVideoRequest(
             video_title="Porto",
             video_description="Test description.",
-            video_type="faceless",
+            video_type="voiceover",
             cta_type="comment",
             segments=segments,
         )
@@ -197,7 +197,7 @@ def test_comment_cta_with_question_passes():
     request = TaskVideoRequest(
         video_title="Porto",
         video_description="Test description.",
-        video_type="faceless",
+        video_type="voiceover",
         cta_type="comment",
         segments=segments,
     )
@@ -211,7 +211,7 @@ def test_hook_marked_as_cta_is_rejected():
         TaskVideoRequest(
             video_title="Porto",
             video_description="Test description.",
-            video_type="faceless",
+            video_type="voiceover",
             cta_type="follow",
             segments=segments,
         )
@@ -224,6 +224,6 @@ def test_stray_cta_marker_without_cta_type_is_rejected():
         TaskVideoRequest(
             video_title="Porto",
             video_description="Test description.",
-            video_type="faceless",
+            video_type="voiceover",
             segments=segments,
         )

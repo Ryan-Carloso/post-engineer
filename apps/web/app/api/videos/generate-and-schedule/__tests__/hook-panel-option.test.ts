@@ -14,7 +14,7 @@ describe('validateOptions options.hookPanel', () => {
     expect(checked.ok && checked.value.hookPanel).toBeUndefined();
   });
 
-  it.each(['full_lipsync', 'faceless'])('rejects hookPanel on %s with a 400 issue naming the field', (videoType) => {
+  it.each(['full_lipsync', 'voiceover'])('rejects hookPanel on %s with a 400 issue naming the field', (videoType) => {
     const photos = videoType === 'full_lipsync' ? { lipsyncPhotos: [{ url: 'https://e.com/a.jpg' }, { url: 'https://e.com/b.jpg' }] } : {};
     expect(validateOptions({ videoType, hookPanel: false, ...photos })).toEqual({
       ok: false,

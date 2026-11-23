@@ -36,7 +36,7 @@ function fakeClient(existing: Existing): SupabaseClient {
   } as unknown as SupabaseClient;
 }
 
-const EXPECTED = { scheduled_posts: ['faceless_material', 'full_lipsync'], personas: ['cta_type'] };
+const EXPECTED = { scheduled_posts: ['voiceover_material', 'full_lipsync'], personas: ['cta_type'] };
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -44,18 +44,18 @@ beforeEach(() => {
 
 describe('checkSchemaDrift', () => {
   it('reports nothing when every expected column exists', async () => {
-    const client = fakeClient({ scheduled_posts: ['faceless_material', 'full_lipsync'], personas: ['cta_type'] });
+    const client = fakeClient({ scheduled_posts: ['voiceover_material', 'full_lipsync'], personas: ['cta_type'] });
     expect(await checkSchemaDrift(client, EXPECTED)).toEqual({ missing: {}, unverified: [] });
   });
 
   it('names exactly the missing column, not the whole table', async () => {
     const client = fakeClient({ scheduled_posts: ['full_lipsync'], personas: ['cta_type'] });
     const report = await checkSchemaDrift(client, EXPECTED);
-    expect(report.missing).toEqual({ scheduled_posts: ['faceless_material'] });
+    expect(report.missing).toEqual({ scheduled_posts: ['voiceover_material'] });
   });
 
   it('reports every column of a table that does not exist', async () => {
-    const client = fakeClient({ scheduled_posts: ['faceless_material', 'full_lipsync'], personas: 'missing-table' });
+    const client = fakeClient({ scheduled_posts: ['voiceover_material', 'full_lipsync'], personas: 'missing-table' });
     expect((await checkSchemaDrift(client, EXPECTED)).missing).toEqual({ personas: ['cta_type'] });
   });
 
@@ -81,7 +81,7 @@ describe('checkSchemaDrift per-column probes', () => {
     } as unknown as SupabaseClient;
   }
 
-  const ONE_TABLE = { scheduled_posts: ['faceless_material', 'full_lipsync'] };
+  const ONE_TABLE = { scheduled_posts: ['voiceover_material', 'full_lipsync'] };
 
   it('leaves the table unverified when a per-column probe fails for a reason that is not drift', async () => {
     const report = await checkSchemaDrift(scriptedClient(['08006', null]), ONE_TABLE);
@@ -95,7 +95,7 @@ describe('checkSchemaDrift per-column probes', () => {
 
   it('still names the confirmed missing column when another probe fails', async () => {
     const report = await checkSchemaDrift(scriptedClient(['42703', '08006']), ONE_TABLE);
-    expect(report.missing).toEqual({ scheduled_posts: ['faceless_material'] });
+    expect(report.missing).toEqual({ scheduled_posts: ['voiceover_material'] });
     expect(report.unverified).toEqual([]);
   });
 });
@@ -113,7 +113,7 @@ describe('reportSchemaDrift', () => {
     expect(loggerMock.error).toHaveBeenCalledTimes(1);
     const [message, cause] = loggerMock.error.mock.calls[0] as [string, Error];
     expect(message).toContain('apply the pending supabase migrations');
-    expect(cause.message).toContain('scheduled_posts.faceless_material');
+    expect(cause.message).toContain('scheduled_posts.voiceover_material');
     expect(trackMock).toHaveBeenCalledWith(
       'schema_drift_detected',
       expect.objectContaining({ tables: expect.arrayContaining(['scheduled_posts']) }),

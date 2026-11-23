@@ -86,7 +86,7 @@ def test_images_request_with_media_on_every_segment_joins_into_the_script():
     request = TaskVideoRequest(
         video_title="Porto",
         video_description="Test description.",
-        video_type="faceless",
+        video_type="voiceover",
         segments=_request_segments(True),
     )
     assert request.video_script.startswith("Stop wasting your trip")
@@ -103,7 +103,7 @@ def test_images_request_with_a_segment_missing_media_is_rejected():
         TaskVideoRequest(
             video_title="Porto",
             video_description="Test description.",
-            video_type="faceless",
+            video_type="voiceover",
             segments=_request_segments(False),
         )
 
@@ -115,7 +115,7 @@ def test_request_without_segments_is_accepted_for_script_only_calls():
         TaskVideoRequest(
             video_title="Porto",
             video_description="Test description.",
-            video_type="faceless",
+            video_type="voiceover",
             video_script="Some script.",
         ).segments
         is None

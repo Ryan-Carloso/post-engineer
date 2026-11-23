@@ -72,19 +72,19 @@ describe('resolveTaskScope', () => {
   it('uses the generation persona and does not look at the slot', async () => {
     const { supabase, queried } = client({
       video_generations: { data: { persona_id: PERSONA_A }, error: null },
-      scheduled_posts: { data: { schedule_id: SCHEDULE_ID, faceless: true }, error: null },
+      scheduled_posts: { data: { schedule_id: SCHEDULE_ID, voiceover: true }, error: null },
     });
 
     await expect(resolveTaskScope(supabase, USER_ID, TASK_ID)).resolves.toEqual({
       found: true,
       personaId: PERSONA_A,
-      faceless: false,
+      voiceover: false,
       scheduleMissing: false,
     });
     expect(queried).toEqual(['video_generations']);
   });
 
-  it('treats a null generation persona as a faceless post', async () => {
+  it('treats a null generation persona as a voiceover post', async () => {
     const { supabase } = client({
       video_generations: { data: { persona_id: null }, error: null },
     });
@@ -92,12 +92,12 @@ describe('resolveTaskScope', () => {
     await expect(resolveTaskScope(supabase, USER_ID, TASK_ID)).resolves.toEqual({
       found: true,
       personaId: null,
-      faceless: true,
+      voiceover: true,
       scheduleMissing: false,
     });
   });
 
-  it('treats a non-object generation row as a faceless post', async () => {
+  it('treats a non-object generation row as a voiceover post', async () => {
     const { supabase } = client({
       video_generations: { data: ['not-a-row'], error: null },
     });
@@ -105,7 +105,7 @@ describe('resolveTaskScope', () => {
     await expect(resolveTaskScope(supabase, USER_ID, TASK_ID)).resolves.toEqual({
       found: true,
       personaId: null,
-      faceless: true,
+      voiceover: true,
       scheduleMissing: false,
     });
   });
@@ -123,7 +123,7 @@ describe('resolveTaskScope', () => {
     await expect(resolveTaskScope(supabase, USER_ID, TASK_ID)).resolves.toEqual({
       found: false,
       personaId: null,
-      faceless: false,
+      voiceover: false,
       scheduleMissing: false,
     });
     expect(queried).toEqual(['video_generations', 'scheduled_posts']);
@@ -136,68 +136,68 @@ describe('resolveTaskScope', () => {
     await expect(resolveTaskScope(supabase, USER_ID, TASK_ID)).rejects.toBe(dbError);
   });
 
-  it('keeps a slot with no schedule id and reads faceless only from literal true', async () => {
-    const faceless = client({
-      scheduled_posts: { data: { schedule_id: null, faceless: true }, error: null },
+  it('keeps a slot with no schedule id and reads voiceover only from literal true', async () => {
+    const voiceover = client({
+      scheduled_posts: { data: { schedule_id: null, voiceover: true }, error: null },
     });
-    await expect(resolveTaskScope(faceless.supabase, USER_ID, TASK_ID)).resolves.toEqual({
+    await expect(resolveTaskScope(voiceover.supabase, USER_ID, TASK_ID)).resolves.toEqual({
       found: true,
       personaId: null,
-      faceless: true,
+      voiceover: true,
       scheduleMissing: false,
     });
 
     const faced = client({
-      scheduled_posts: { data: { schedule_id: null, faceless: false }, error: null },
+      scheduled_posts: { data: { schedule_id: null, voiceover: false }, error: null },
     });
     await expect(resolveTaskScope(faced.supabase, USER_ID, TASK_ID)).resolves.toMatchObject({
       found: true,
       personaId: null,
-      faceless: false,
+      voiceover: false,
       scheduleMissing: false,
     });
 
     const word = client({
-      scheduled_posts: { data: { schedule_id: null, faceless: 'true' }, error: null },
+      scheduled_posts: { data: { schedule_id: null, voiceover: 'true' }, error: null },
     });
     await expect(resolveTaskScope(word.supabase, USER_ID, TASK_ID)).resolves.toMatchObject({
-      faceless: false,
+      voiceover: false,
     });
   });
 
   it('reads the persona from the schedule row', async () => {
     const { supabase, queried } = client({
-      scheduled_posts: { data: { schedule_id: SCHEDULE_ID, faceless: false }, error: null },
+      scheduled_posts: { data: { schedule_id: SCHEDULE_ID, voiceover: false }, error: null },
       schedules: { data: { persona_id: PERSONA_B }, error: null },
     });
 
     await expect(resolveTaskScope(supabase, USER_ID, TASK_ID)).resolves.toEqual({
       found: true,
       personaId: PERSONA_B,
-      faceless: false,
+      voiceover: false,
       scheduleMissing: false,
     });
     expect(queried).toEqual(['video_generations', 'scheduled_posts', 'schedules']);
   });
 
-  it('marks a deleted schedule without turning the post faceless', async () => {
+  it('marks a deleted schedule without turning the post voiceover', async () => {
     const faced = client({
-      scheduled_posts: { data: { schedule_id: SCHEDULE_ID, faceless: false }, error: null },
+      scheduled_posts: { data: { schedule_id: SCHEDULE_ID, voiceover: false }, error: null },
       schedules: { data: null, error: null },
     });
     await expect(resolveTaskScope(faced.supabase, USER_ID, TASK_ID)).resolves.toEqual({
       found: true,
       personaId: null,
-      faceless: false,
+      voiceover: false,
       scheduleMissing: true,
     });
 
-    const faceless = client({
-      scheduled_posts: { data: { schedule_id: SCHEDULE_ID, faceless: true }, error: null },
+    const voiceover = client({
+      scheduled_posts: { data: { schedule_id: SCHEDULE_ID, voiceover: true }, error: null },
       schedules: { data: null, error: null },
     });
-    await expect(resolveTaskScope(faceless.supabase, USER_ID, TASK_ID)).resolves.toMatchObject({
-      faceless: true,
+    await expect(resolveTaskScope(voiceover.supabase, USER_ID, TASK_ID)).resolves.toMatchObject({
+      voiceover: true,
       scheduleMissing: true,
     });
   });
@@ -205,7 +205,7 @@ describe('resolveTaskScope', () => {
   it('throws the schedule lookup error', async () => {
     const dbError = { code: 'XX000', message: 'schedule down' };
     const { supabase } = client({
-      scheduled_posts: { data: { schedule_id: SCHEDULE_ID, faceless: true }, error: null },
+      scheduled_posts: { data: { schedule_id: SCHEDULE_ID, voiceover: true }, error: null },
       schedules: { data: null, error: dbError },
     });
 
@@ -217,27 +217,27 @@ describe('isTaskVisibleToScopedKey', () => {
   const ids = [PERSONA_A];
 
   it('hides a task that was not found', () => {
-    const scope: TaskScope = { found: false, personaId: null, faceless: true, scheduleMissing: false };
+    const scope: TaskScope = { found: false, personaId: null, voiceover: true, scheduleMissing: false };
     expect(isTaskVisibleToScopedKey(scope, ids)).toBe(false);
   });
 
-  it('shows a deleted schedule only when the slot is faceless', () => {
-    const faceless: TaskScope = { found: true, personaId: null, faceless: true, scheduleMissing: true };
-    const faced: TaskScope = { found: true, personaId: null, faceless: false, scheduleMissing: true };
-    expect(isTaskVisibleToScopedKey(faceless, ids)).toBe(true);
+  it('shows a deleted schedule only when the slot is voiceover', () => {
+    const voiceover: TaskScope = { found: true, personaId: null, voiceover: true, scheduleMissing: true };
+    const faced: TaskScope = { found: true, personaId: null, voiceover: false, scheduleMissing: true };
+    expect(isTaskVisibleToScopedKey(voiceover, ids)).toBe(true);
     expect(isTaskVisibleToScopedKey(faced, ids)).toBe(false);
   });
 
-  it('shows a null persona only when the post is faceless', () => {
-    const faceless: TaskScope = { found: true, personaId: null, faceless: true, scheduleMissing: false };
-    const faced: TaskScope = { found: true, personaId: null, faceless: false, scheduleMissing: false };
-    expect(isTaskVisibleToScopedKey(faceless, ids)).toBe(true);
+  it('shows a null persona only when the post is voiceover', () => {
+    const voiceover: TaskScope = { found: true, personaId: null, voiceover: true, scheduleMissing: false };
+    const faced: TaskScope = { found: true, personaId: null, voiceover: false, scheduleMissing: false };
+    expect(isTaskVisibleToScopedKey(voiceover, ids)).toBe(true);
     expect(isTaskVisibleToScopedKey(faced, ids)).toBe(false);
   });
 
   it('shows a persona only when the key lists it', () => {
-    const allowed: TaskScope = { found: true, personaId: PERSONA_A, faceless: false, scheduleMissing: false };
-    const other: TaskScope = { found: true, personaId: PERSONA_B, faceless: false, scheduleMissing: false };
+    const allowed: TaskScope = { found: true, personaId: PERSONA_A, voiceover: false, scheduleMissing: false };
+    const other: TaskScope = { found: true, personaId: PERSONA_B, voiceover: false, scheduleMissing: false };
     expect(isTaskVisibleToScopedKey(allowed, ids)).toBe(true);
     expect(isTaskVisibleToScopedKey(other, ids)).toBe(false);
   });

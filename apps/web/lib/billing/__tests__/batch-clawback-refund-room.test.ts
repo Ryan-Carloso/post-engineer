@@ -252,7 +252,7 @@ describe('the 044 cap after a clawback of the free video', () => {
     const remaining: BatchSlot[] = ['A', 'B', 'C', 'D'].map((id) => ({
       id,
       scheduleId: id,
-      faceless: false,
+      voiceover: false,
       status: 'generating',
       chargedTokens: PRICE,
       discountTokens: 0,
@@ -262,7 +262,7 @@ describe('the 044 cap after a clawback of the free video', () => {
     remaining.push({
       id: 'F',
       scheduleId: 'F',
-      faceless: false,
+      voiceover: false,
       status: 'failed',
       chargedTokens: 0,
       discountTokens: PRICE,

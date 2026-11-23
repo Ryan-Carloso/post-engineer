@@ -85,7 +85,7 @@ def _slot(index: int, status: str = SLOT_PENDING) -> dict:
         "slot_at": f"2026-09-08T09:00:{index:02d}+00:00",
         "title": f"Batch title {index}",
         "description": "Agent description.",
-        "video_type": "faceless",
+        "video_type": "voiceover",
         "charged_tokens": 2,
         "status": status,
         "segments": _SEGMENTS,

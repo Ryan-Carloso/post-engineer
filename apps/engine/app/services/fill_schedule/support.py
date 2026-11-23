@@ -70,7 +70,7 @@ def post_identity(schedule: dict[str, Any]) -> dict[str, Any]:
 
     One field breaks the fallback rule: ``post_cta_type``. A NULL snapshot
     there means "no CTA on this post" (migration 073), not "no snapshot" —
-    so it must not fall back to the persona's CTA, or a faceless or
+    so it must not fall back to the persona's CTA, or a voiceover or
     ``cta: null`` post would inherit one.
 
     Raises ``RuntimeError`` when NEITHER source can supply the definition: the
@@ -144,7 +144,7 @@ def slot_video_type(slot: dict[str, Any]) -> str:
 
     ``scheduled_posts.video_type`` (migration 056) is the one mode the web
     writes at creation; migration 056 backfilled every stored row from the
-    old faceless / full_lipsync booleans. A row without a valid value fails
+    old voiceover / full_lipsync booleans. A row without a valid value fails
     loudly with the same short message the engine validator uses — a slot
     must never silently render a mode nobody asked for.
     """
@@ -175,7 +175,7 @@ def build_persona_params(
 ) -> dict[str, Any]:
     """TaskVideoRequest persona params: avatar/voice resolution.
 
-    A faceless post contributes ONLY the voice — no avatar, no photo — so the
+    A voiceover post contributes ONLY the voice — no avatar, no photo — so the
     engine renders the agent's images (its ``persona_lipsync_active`` also returns
     false without a visual identity). This keeps the batch pipeline in step
     with the web's direct dispatch of the same slot.
@@ -183,7 +183,7 @@ def build_persona_params(
     params: dict[str, Any] = {"name": persona.get("name") or "Persona"}
     if persona.get("niche"):
         params["niche"] = persona["niche"]
-    if video_type != "faceless":
+    if video_type != "voiceover":
         if persona.get("avatar_url"):
             params["avatar_url"] = persona["avatar_url"]
         elif persona.get("photo_path"):

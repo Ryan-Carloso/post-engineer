@@ -72,7 +72,7 @@ export interface SlotPostDetail {
   persona: { id: string; name: string } | null;
   generation: {
     prompt: PostPromptFacts | null;
-    faceless: boolean;
+    voiceover: boolean;
     language: string | null;
     voiceId: string | null;
     videoAspect: string | null;
@@ -144,7 +144,7 @@ export async function getSlotPost(
 ): Promise<SlotPostDetail | null> {
   const { data: slot, error: slotError } = await supabase
     .from('scheduled_posts')
-    .select('id, schedule_id, slot_at, status, title, error, published_at, task_id, faceless, publish_outcomes, segments, prompt_version_id')
+    .select('id, schedule_id, slot_at, status, title, error, published_at, task_id, voiceover, publish_outcomes, segments, prompt_version_id')
     .eq('id', slotId)
     .eq('user_id', userId)
     .single();
@@ -161,7 +161,7 @@ export async function getSlotPost(
     error: string | null;
     published_at: string | null;
     task_id: string | null;
-    faceless: boolean | null;
+    voiceover: boolean | null;
     publish_outcomes: unknown;
     segments: unknown;
     prompt_version_id: string | null;

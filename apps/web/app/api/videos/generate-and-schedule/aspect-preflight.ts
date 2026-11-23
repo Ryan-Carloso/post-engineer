@@ -143,7 +143,7 @@ async function checkFallbackPhotoUrl(
 export async function checkFirstPhotoFace(
   input: FirstPhotoFaceInput,
 ): Promise<null | NextResponse> {
-  if (input.videoType === 'faceless' || input.videoType === 'full_lipsync') return null;
+  if (input.videoType === 'voiceover' || input.videoType === 'full_lipsync') return null;
   const first = firstSegmentMedia(input.segments);
   if (first !== null) {
     const record = await fetchMediaCheck(
@@ -249,7 +249,7 @@ export async function checkPreChargePreflights(
     userId: input.userId,
     segments: input.segments,
     videoAspect,
-    hasFace: input.options.videoType !== 'faceless' && input.prep.photoPath !== null,
+    hasFace: input.options.videoType !== 'voiceover' && input.prep.photoPath !== null,
     videoType: input.options.videoType,
   });
   if (aspect instanceof NextResponse) return aspect;

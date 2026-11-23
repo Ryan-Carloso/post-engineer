@@ -87,7 +87,7 @@ const SLOT_SCHEDULE = {
 function generationPayload(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     prompt: null,
-    faceless: false,
+    voiceover: false,
     language: null,
     voiceId: null,
     videoAspect: null,
@@ -626,14 +626,14 @@ describe('PostDetailPage', () => {
     expect(mockT).toHaveBeenCalledWith('posts.hookPhotoPersonaNote');
   });
 
-  it('renders no hook photo section for a faceless video', () => {
+  it('renders no hook photo section for a voiceover video', () => {
     mockQueries({
       slot: slotPayload(
         {},
         {
           persona: null,
           schedule: { ...SLOT_SCHEDULE, personaId: null },
-          generation: generationPayload({ faceless: true }),
+          generation: generationPayload({ voiceover: true }),
         },
       ),
     });
@@ -664,27 +664,27 @@ describe('PostDetailPage', () => {
     expect(within(section).getByText('9:16')).toBeInTheDocument();
   });
 
-  it('labels a faceless post as faceless and a persona post by name', () => {
+  it('labels a voiceover post as voiceover and a persona post by name', () => {
     mockQueries({
       slot: slotPayload({}, {
         persona: null,
         schedule: { ...SLOT_SCHEDULE, personaId: null },
-        generation: generationPayload({ faceless: true }),
+        generation: generationPayload({ voiceover: true }),
       }),
     });
     const { unmount } = render(<DetailPage />);
-    const facelessSection = screen.getByRole('region', { name: 'posts.generationFactsLabel' });
-    expect(within(facelessSection).getByText('posts.generationFaceLabel')).toBeInTheDocument();
-    expect(within(facelessSection).getByText('posts.generationFaceless')).toBeInTheDocument();
-    expect(within(facelessSection).queryByText('posts.generationWithFace')).not.toBeInTheDocument();
-    expect(within(facelessSection).getByText('posts.noPersona')).toBeInTheDocument();
+    const voiceoverSection = screen.getByRole('region', { name: 'posts.generationFactsLabel' });
+    expect(within(voiceoverSection).getByText('posts.generationFaceLabel')).toBeInTheDocument();
+    expect(within(voiceoverSection).getByText('posts.generationVoiceover')).toBeInTheDocument();
+    expect(within(voiceoverSection).queryByText('posts.generationWithFace')).not.toBeInTheDocument();
+    expect(within(voiceoverSection).getByText('posts.noPersona')).toBeInTheDocument();
     unmount();
 
     mockQueries({ slot: slotPayload() });
     render(<DetailPage />);
     const faceSection = screen.getByRole('region', { name: 'posts.generationFactsLabel' });
     expect(within(faceSection).getByText('posts.generationWithFace')).toBeInTheDocument();
-    expect(within(faceSection).queryByText('posts.generationFaceless')).not.toBeInTheDocument();
+    expect(within(faceSection).queryByText('posts.generationVoiceover')).not.toBeInTheDocument();
     expect(within(faceSection).getByText('Viva Leve')).toBeInTheDocument();
   });
 

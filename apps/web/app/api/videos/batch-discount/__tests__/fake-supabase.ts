@@ -181,7 +181,7 @@ export function slotRow(id: string, overrides: Row = {}): Row {
     id,
     schedule_id: `00000000-0000-4000-8000-${id.padStart(12, '0')}`,
     user_id: 'user-1',
-    faceless: false,
+    voiceover: false,
     status: 'generating',
     charged_tokens: 2,
     discount_tokens: 0,

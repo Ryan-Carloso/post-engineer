@@ -34,7 +34,7 @@ function post(overrides: Partial<Last24hPostInput> = {}): Last24hPostInput {
     personaId: PERSONA,
     publishedAt: ago(72),
     outcomes: [YT_OUTCOME],
-    faceless: false,
+    voiceover: false,
     ...overrides,
   };
 }
@@ -225,8 +225,8 @@ describe('computeLast24h filters and scope', () => {
     posts: [
       post({ id: 'post-1', personaId: PERSONA }),
       post({ id: 'post-2', personaId: OTHER_PERSONA }),
-      post({ id: 'post-3', personaId: null, faceless: true }),
-      post({ id: 'post-4', personaId: null, faceless: false }),
+      post({ id: 'post-3', personaId: null, voiceover: true }),
+      post({ id: 'post-4', personaId: null, voiceover: false }),
     ],
     readings: ['post-1', 'post-2', 'post-3', 'post-4'].flatMap((id) => [
       reading({ postId: id, collectedAt: ago(1), views: 10 }),
@@ -234,13 +234,13 @@ describe('computeLast24h filters and scope', () => {
     ]),
   });
 
-  it('shows a persona-scoped key only its personas plus faceless posts, hiding orphaned persona-less posts', () => {
+  it('shows a persona-scoped key only its personas plus voiceover posts, hiding orphaned persona-less posts', () => {
     const result = compute({ ...twoPersonaInput(), personaIds: [PERSONA] });
     expect(result.rows.map((row) => row.postId).sort()).toEqual(['post-1', 'post-3']);
     expect(result.totals.measurements).toBe(2);
   });
 
-  it('shows a scoped key with no personas only faceless posts', () => {
+  it('shows a scoped key with no personas only voiceover posts', () => {
     const result = compute({ ...twoPersonaInput(), personaIds: [] });
     expect(result.rows.map((row) => row.postId)).toEqual(['post-3']);
   });

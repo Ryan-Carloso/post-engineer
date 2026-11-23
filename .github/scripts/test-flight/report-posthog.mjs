@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url';
 
 export const DEFAULT_POSTHOG_HOST = 'https://eu.i.posthog.com';
 
-export function buildEvent({ workflow, runId, faceless, runUrl }) {
+export function buildEvent({ workflow, runId, voiceover, runUrl }) {
   return {
     api_key: undefined,
     event: 'test_flight_failed',
@@ -12,7 +12,7 @@ export function buildEvent({ workflow, runId, faceless, runUrl }) {
     properties: {
       workflow: workflow || 'test-flight',
       run_id: runId || '',
-      faceless: faceless === 'true',
+      voiceover: voiceover === 'true',
       run_url: runUrl || '',
       $lib: 'test-flight-ci',
     },
@@ -30,7 +30,7 @@ export async function reportFailure(env = process.env, fetchFn = fetch) {
   const event = buildEvent({
     workflow: env.GITHUB_WORKFLOW,
     runId: env.GITHUB_RUN_ID,
-    faceless: env.TEST_FLIGHT_FACELESS,
+    voiceover: env.TEST_FLIGHT_VOICEOVER,
     runUrl:
       env.GITHUB_SERVER_URL && env.GITHUB_REPOSITORY && env.GITHUB_RUN_ID
         ? `${env.GITHUB_SERVER_URL}/${env.GITHUB_REPOSITORY}/actions/runs/${env.GITHUB_RUN_ID}`

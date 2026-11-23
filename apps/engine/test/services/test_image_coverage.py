@@ -36,7 +36,7 @@ def _framed(index, start, end):
     return Panel(index=index, path=f"/t/{index}.png", x=10, y=900, start=start, end=end, caption_bottom=880)
 
 
-def test_coverage_starts_at_zero_on_a_faceless_video():
+def test_coverage_starts_at_zero_on_a_voiceover_video():
     assert image_coverage.coverage_start(segment_panels.FACE_NONE, 7.5) == 0.0
 
 

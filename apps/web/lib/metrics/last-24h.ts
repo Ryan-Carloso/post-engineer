@@ -37,7 +37,7 @@ export interface Last24hPostInput {
   personaId: string | null;
   publishedAt: string;
   outcomes: unknown[];
-  faceless: boolean;
+  voiceover: boolean;
 }
 
 export function accountOverrideKey(postId: string, provider: SocialProvider, externalId: string): string {
@@ -135,7 +135,7 @@ export function computeLast24h(input: {
       logger.warn('[metrics-last-24h] reading skipped: post not found', { postId: latest.postId });
       continue;
     }
-    if (!postInPersonaScope(post.personaId, post.faceless, scope)) continue;
+    if (!postInPersonaScope(post.personaId, post.voiceover, scope)) continue;
     if (!postMatchesQuery(post, query)) continue;
     if (query.provider !== null && latest.provider !== query.provider) continue;
     const target = metricsTargets(post.outcomes).targets.find(

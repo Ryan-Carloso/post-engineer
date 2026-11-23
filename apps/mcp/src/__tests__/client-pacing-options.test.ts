@@ -30,7 +30,7 @@ describe('generatePersonaVideo pacing options', () => {
       times: ['20:00'],
       timezone: 'Europe/Lisbon',
       options: {
-        videoType: 'faceless',
+        videoType: 'voiceover',
         videoClipDuration: 4,
         videoTransitionMode: 'Crossfade',
         videoVariationSeed: 7,

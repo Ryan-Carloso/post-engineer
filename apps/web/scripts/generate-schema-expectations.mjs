@@ -8,7 +8,7 @@ export const OUTPUT_PATH = join(root, 'apps/web/lib/schema-expectations.gen.ts')
 
 const HEADER = [
   '// GENERATED FILE — do not edit by hand.',
-  '// Source: supabase/migrations/*.sql (columns added by `alter table ... add column`, tables removed by `drop table`).',
+  '// Source: supabase/migrations/*.sql (columns added by `alter table ... add column` and renamed by `rename column`, tables removed by `drop table`).',
   '// Regenerate: node apps/web/scripts/generate-schema-expectations.mjs',
   '',
   '',
@@ -17,6 +17,7 @@ const HEADER = [
 const ALTER_TABLE = /alter\s+table\s+(?:if\s+exists\s+)?(?:only\s+)?(?:public\.)?"?([a-z_][a-z0-9_]*)"?\s+([^;]*);/gi;
 const ADD_COLUMN = /add\s+column\s+(?:if\s+not\s+exists\s+)?"?([a-z_][a-z0-9_]*)"?/gi;
 const DROP_COLUMN = /drop\s+column\s+(?:if\s+exists\s+)?"?([a-z_][a-z0-9_]*)"?/gi;
+const RENAME_COLUMN = /rename\s+column\s+"?([a-z_][a-z0-9_]*)"?\s+to\s+"?([a-z_][a-z0-9_]*)"?/gi;
 const DROP_TABLE = /drop\s+table\s+(?:if\s+exists\s+)?([^;]*);/gi;
 const TABLE_NAME = /(?:public\.)?"?([a-z_][a-z0-9_]*)"?/g;
 
@@ -41,6 +42,9 @@ export function extractRequiredColumns(sqlFiles) {
       const columns = tables.get(table) ?? new Set();
       for (const added of body.matchAll(ADD_COLUMN)) columns.add(added[1].toLowerCase());
       for (const dropped of body.matchAll(DROP_COLUMN)) columns.delete(dropped[1].toLowerCase());
+      for (const [, from, to] of body.matchAll(RENAME_COLUMN)) {
+        if (columns.delete(from.toLowerCase())) columns.add(to.toLowerCase());
+      }
       if (columns.size > 0) tables.set(table.toLowerCase(), columns);
       else tables.delete(table.toLowerCase());
     }

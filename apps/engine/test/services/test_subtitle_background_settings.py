@@ -64,7 +64,7 @@ class TestSubtitleBackgroundSettings(unittest.TestCase):
         base_params = {
             "video_title": "subtitle background smoke",
             "video_description": "Test description.",
-            "video_type": "faceless",
+            "video_type": "voiceover",
         }
 
         disabled_params = VideoParams(

@@ -8,11 +8,11 @@ import { SOCIAL_PROVIDERS } from './providers.js';
 import { ScheduleWarningSchema } from './schedule-warnings.js';
 import { MAX_IMAGE_UPLOAD_BYTES, MAX_VIDEO_UPLOAD_BYTES, UPLOAD_CONTENT_TYPES, UPLOAD_CONTENT_TYPE_MESSAGE, isImageUploadContentType } from './upload-types.js';
 
-export const VIDEO_TYPES = ['full_lipsync', 'hook_lipsync', 'faceless'] as const;
+export const VIDEO_TYPES = ['full_lipsync', 'hook_lipsync', 'voiceover'] as const;
 export type VideoType = (typeof VIDEO_TYPES)[number];
 
 export const VIDEO_TYPE_ERROR_SUFFIX =
-  'use full_lipsync (8/15), hook_lipsync (2/3) or faceless (1)';
+  'use full_lipsync (8/15), hook_lipsync (2/3) or voiceover (1)';
 
 export function unknownVideoTypeMessage(value: unknown): string {
   const shown = value === null || value === undefined ? '' : String(value).slice(0, 32);
@@ -115,7 +115,7 @@ const OptionsSchema = z
     videoType: z.enum(VIDEO_TYPES, {
       error: (issue) => (issue.input === undefined ? `options.videoType is required; ${VIDEO_TYPE_ERROR_SUFFIX}` : unknownVideoTypeMessage(issue.input)),
     }),
-    musicMood: z.string().min(1).max(64).optional().describe('Background-music mood for the video: a mood from the engine BGM catalog, or "none" for explicit no music. Omitted lets the engine pick the first catalogued mood; an unknown mood is rejected with a 400 naming the valid moods. Works with faceless videos too.'),
+    musicMood: z.string().min(1).max(64).optional().describe('Background-music mood for the video: a mood from the engine BGM catalog, or "none" for explicit no music. Omitted lets the engine pick the first catalogued mood; an unknown mood is rejected with a 400 naming the valid moods. Works with voiceover videos too.'),
     audioUrl: z.string().optional(),
     imageId: z.string().optional(),
     segments: segmentsRequestSchema.optional(),

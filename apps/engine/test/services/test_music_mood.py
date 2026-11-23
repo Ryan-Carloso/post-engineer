@@ -24,7 +24,7 @@ def _params(music_mood=None):
     return VideoParams(
         video_title="Lisbon trams",
         video_description="Test description.",
-        video_type="faceless",
+        video_type="voiceover",
         music_mood=music_mood,
     )
 

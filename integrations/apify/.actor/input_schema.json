@@ -56,7 +56,7 @@
     "personaId": {
       "title": "Persona ID",
       "type": "string",
-      "description": "AI persona that presents the video (lip-sync on the hook). Leave empty for a faceless video.",
+      "description": "AI persona that presents the video (lip-sync on the hook). Leave empty for a voiceover video.",
       "editor": "textfield"
     },
     "voiceId": {
@@ -66,10 +66,10 @@
       "editor": "textfield",
       "prefill": "chatterbox:kokoro_af_heart"
     },
-    "faceless": {
-      "title": "Faceless video",
+    "voiceover": {
+      "title": "Voiceover video",
       "type": "boolean",
-      "description": "No face on screen: only your own images. Defaults to true when no persona is set."
+      "description": "Voiceover video: narration over your own images, no lip-synced persona on camera (the images may show people). Defaults to true when no persona is set."
     },
     "images": {
       "title": "Images",
@@ -99,7 +99,7 @@
     "fullLipsync": {
       "title": "Full lip-sync",
       "type": "boolean",
-      "description": "The persona talks for the whole video instead of only the hook (most expensive). Needs a persona; not with faceless."
+      "description": "The persona talks for the whole video instead of only the hook (most expensive). Needs a persona; not with voiceover."
     },
     "accounts": {
       "title": "Account IDs per provider",

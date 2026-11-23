@@ -37,7 +37,7 @@ class CreateTaskLanguageGateTests(unittest.TestCase):
                 body = TaskVideoRequest(
                     video_title="subject",
                     video_description="Test description.",
-                    video_type="faceless",
+                    video_type="voiceover",
                     video_script="script",
                     video_language=language,
                 )
@@ -70,7 +70,7 @@ class CreateTaskLanguageGateTests(unittest.TestCase):
                 body = TaskVideoRequest(
                     video_title="subject",
                     video_description="Test description.",
-                    video_type="faceless",
+                    video_type="voiceover",
                     video_script="script",
                     video_language=language,
                 )

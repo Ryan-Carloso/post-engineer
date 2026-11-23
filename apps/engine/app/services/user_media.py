@@ -11,7 +11,7 @@ tokens differently), the intervals fall back to timing proportional to
 word counts, and the fallback is reported to the caller instead of
 silently placing a photo at the wrong time.
 
-A panel is an overlay, so it works the same on every video: faceless over
+A panel is an overlay, so it works the same on every video: voiceover over
 the neutral background, and on a persona video over the persona's
 face (hook-only or full lip-sync). Where the face shows the panel sits at
 the bottom edge, so the captions above it never cover the photo.

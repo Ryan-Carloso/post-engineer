@@ -20,7 +20,7 @@ export interface CoveragePostInput {
   personaId: string | null;
   publishedAt: string;
   outcomes: unknown[];
-  faceless: boolean;
+  voiceover: boolean;
 }
 
 export interface CoverageRowInput {
@@ -71,7 +71,7 @@ export function computeCoverage(input: {
     } else if (query.personaId !== null && post.personaId !== query.personaId) {
       continue;
     }
-    if (!postInPersonaScope(post.personaId, post.faceless, scope)) continue;
+    if (!postInPersonaScope(post.personaId, post.voiceover, scope)) continue;
     const angleKnown = postsWithRows.has(post.id);
     const angle = angleKnown ? (postAngles.get(post.id) ?? null) : null;
     if (query.angle !== null) {
@@ -147,7 +147,7 @@ export async function fetchCoverage(
   const cutoff = new Date(now.getTime() - METRICS_WINDOW_LOOKBACK_HOURS * 60 * 60 * 1000);
   const { data: postData, error: postError } = await supabase
     .from('scheduled_posts')
-    .select('id, schedule_id, user_id, status, published_at, publish_outcomes, faceless')
+    .select('id, schedule_id, user_id, status, published_at, publish_outcomes, voiceover')
     .eq('user_id', userId)
     .eq('status', 'published')
     .gte('published_at', cutoff.toISOString())
@@ -190,7 +190,7 @@ export async function fetchCoverage(
       personaId: typeof record.schedule_id === 'string' ? (personaBySchedule.get(record.schedule_id) ?? null) : null,
       publishedAt: record.published_at,
       outcomes: Array.isArray(record.publish_outcomes) ? record.publish_outcomes : [],
-      faceless: record.faceless === true,
+      voiceover: record.voiceover === true,
     });
     postIds.push(record.id);
   }

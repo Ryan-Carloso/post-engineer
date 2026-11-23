@@ -130,7 +130,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
     newlyFreeIds.has(slot.id) ? { ...slot, chargedTokens: 0, discountTokens: slot.chargedTokens } : slot,
   );
   const free = final.filter((slot) => slot.discountTokens > 0);
-  const faceVideos = final.filter((slot) => !slot.faceless).length;
+  const faceVideos = final.filter((slot) => !slot.voiceover).length;
   const discountTokens = free.reduce((sum, slot) => sum + slot.discountTokens, 0);
   if (newlyFree.length > 0) {
     trackApiEvent('batch_discount_applied', {

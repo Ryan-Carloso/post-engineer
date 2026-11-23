@@ -131,11 +131,11 @@ class BatchDispatchFaceQualityTests(unittest.TestCase):
         self.assertEqual(request.video_type, "full_lipsync")
         self.assertEqual(request.video_quality, LipSyncQuality.very_good)
 
-    def test_faceless_keeps_the_engine_default(self):
-        slot = _slot(video_type="faceless")
+    def test_voiceover_keeps_the_engine_default(self):
+        slot = _slot(video_type="voiceover")
         slot["schedules"]["personas"]["face_quality"] = "very_good"
         request = self._dispatched_request(slot)
-        self.assertEqual(request.video_type, "faceless")
+        self.assertEqual(request.video_type, "voiceover")
         self.assertEqual(request.video_quality, LipSyncQuality.ok)
 
     def test_unknown_quality_dispatches_ok(self):

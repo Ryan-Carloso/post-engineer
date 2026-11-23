@@ -1,4 +1,4 @@
-export const VIDEO_TYPES = ['full_lipsync', 'hook_lipsync', 'faceless'] as const;
+export const VIDEO_TYPES = ['full_lipsync', 'hook_lipsync', 'voiceover'] as const;
 
 export type VideoType = (typeof VIDEO_TYPES)[number];
 
@@ -6,7 +6,7 @@ export function isVideoType(value: unknown): value is VideoType {
   return typeof value === 'string' && (VIDEO_TYPES as readonly string[]).includes(value);
 }
 
-export const VIDEO_TYPE_ERROR_SUFFIX = 'use full_lipsync (8/15), hook_lipsync (2/3) or faceless (1)';
+export const VIDEO_TYPE_ERROR_SUFFIX = 'use full_lipsync (8/15), hook_lipsync (2/3) or voiceover (1)';
 
 export const VIDEO_TYPE_REQUIRED_MESSAGE = `videoType is required; ${VIDEO_TYPE_ERROR_SUFFIX}`;
 

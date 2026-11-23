@@ -26,7 +26,7 @@ def _params(enabled=True):
     return VideoParams(
         video_title="s",
         video_description="Test description.",
-        video_type="faceless",
+        video_type="voiceover",
         video_script="Hello world.",
         subtitle_enabled=enabled,
     )

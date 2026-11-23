@@ -869,7 +869,7 @@ describe('app/(main)/persona/page — sample language', () => {
     });
   });
 
-  it('never renders the legacy faceless creation mode or the face-mix slider', async () => {
+  it('never renders the legacy voiceover creation mode or the face-mix slider', async () => {
     render(<PersonaPage />, { wrapper: createWrapper() });
 
     await waitFor(() => {

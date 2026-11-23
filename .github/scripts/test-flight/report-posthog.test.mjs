@@ -2,11 +2,11 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { buildEvent, reportFailure } from './report-posthog.mjs';
 
-test('buildEvent carries workflow, run, and faceless flag, never a key', () => {
-  const event = buildEvent({ workflow: 'Test flight (faceless)', runId: '123', faceless: 'true', runUrl: 'https://example.test/runs/123' });
+test('buildEvent carries workflow, run, and voiceover flag, never a key', () => {
+  const event = buildEvent({ workflow: 'Test flight (voiceover)', runId: '123', voiceover: 'true', runUrl: 'https://example.test/runs/123' });
   assert.equal(event.event, 'test_flight_failed');
   assert.equal(event.distinct_id, 'test-flight');
-  assert.equal(event.properties.faceless, true);
+  assert.equal(event.properties.voiceover, true);
   assert.equal(event.properties.run_url, 'https://example.test/runs/123');
   assert.equal(event.api_key, undefined);
 });
@@ -23,11 +23,11 @@ test('reportFailure sends the event with the key in the body, never in logs', as
   const result = await reportFailure(
     {
       TEST_FLIGHT_POSTHOG_KEY: 'phc-test-key',
-      GITHUB_WORKFLOW: 'Test flight (faceless)',
+      GITHUB_WORKFLOW: 'Test flight (voiceover)',
       GITHUB_RUN_ID: '123',
       GITHUB_SERVER_URL: 'https://github.com',
       GITHUB_REPOSITORY: 'Ryan-Carloso/post-engineer',
-      TEST_FLIGHT_FACELESS: 'true',
+      TEST_FLIGHT_VOICEOVER: 'true',
     },
     async (url, options) => { body = JSON.parse(options.body); return { ok: true }; },
   );

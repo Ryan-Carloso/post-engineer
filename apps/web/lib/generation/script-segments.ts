@@ -240,7 +240,7 @@ export function hasSpokenWords(text: string): boolean {
   return /[\p{L}\p{N}]/u.test(text);
 }
 
-export type VideoType = 'full_lipsync' | 'hook_lipsync' | 'faceless';
+export type VideoType = 'full_lipsync' | 'hook_lipsync' | 'voiceover';
 
 export function validateSegments(input: unknown, videoType: VideoType = 'hook_lipsync'): SegmentsResult {
   if (!Array.isArray(input) || input.length === 0) {

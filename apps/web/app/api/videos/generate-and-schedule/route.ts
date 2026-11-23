@@ -472,7 +472,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
     try {
       let photoUrl: string | undefined;
       let pickedImageId: string | null = null;
-      if (validatedOptions.videoType !== 'faceless' && personaId !== null) {
+      if (validatedOptions.videoType !== 'voiceover' && personaId !== null) {
         const selection = await resolveVideoImage(supabase, personaId, userId, recentIds, {
           title,
           niche: prep.niche,

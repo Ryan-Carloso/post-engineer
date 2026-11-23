@@ -62,14 +62,14 @@ export function resolveConfig(env) {
   if (parsedUrl.protocol !== 'https:' && !isLoopback) {
     throw new FlightError(`test-flight: TEST_FLIGHT_API_BASE_URL must be https (got '${apiBaseUrl}')`);
   }
-  const faceless = optionalEnv(env, 'TEST_FLIGHT_FACELESS') === 'true';
+  const voiceover = optionalEnv(env, 'TEST_FLIGHT_VOICEOVER') === 'true';
   return {
     apiKey,
     personaId,
     accounts,
     scheduledAction,
     apiBaseUrl,
-    videoType: faceless ? 'faceless' : 'hook_lipsync',
+    videoType: voiceover ? 'voiceover' : 'hook_lipsync',
     runId: optionalEnv(env, 'TEST_FLIGHT_RUN_ID') || `manual-${Date.now()}`,
     pollTimeoutMs: parsePositiveInt(optionalEnv(env, 'TEST_FLIGHT_POLL_TIMEOUT_MIN'), 'TEST_FLIGHT_POLL_TIMEOUT_MIN', DEFAULT_POLL_TIMEOUT_MS / 60000) * 60000,
     pollIntervalMs: parsePositiveInt(optionalEnv(env, 'TEST_FLIGHT_POLL_INTERVAL_SEC'), 'TEST_FLIGHT_POLL_INTERVAL_SEC', DEFAULT_POLL_INTERVAL_MS / 1000) * 1000,
@@ -360,7 +360,7 @@ export async function runFlight(env = process.env, options = {}) {
   const providers = Object.keys(accounts);
   const summary = [`script source: ${script.source}${script.topic ? ` (topic: ${script.topic})` : ''}`];
 
-  console.log(`test-flight: leg 1/2 (ASAP) title="${script.title}" source=${script.source} providers=${providers.join(',')}${cfg.videoType === 'faceless' ? ' faceless' : ''}`);
+  console.log(`test-flight: leg 1/2 (ASAP) title="${script.title}" source=${script.source} providers=${providers.join(',')}${cfg.videoType === 'voiceover' ? ' voiceover' : ''}`);
   const asapBody = await apiJson(client, '/api/videos/generate-and-schedule', {
     method: 'POST',
     body: buildAsapPayload({

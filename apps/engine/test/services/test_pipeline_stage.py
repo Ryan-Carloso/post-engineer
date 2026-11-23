@@ -85,7 +85,7 @@ class StartPhaseAttributionTests(unittest.TestCase):
         params = VideoParams(
             video_title="Lisbon trams",
             video_description="Test description.",
-            video_type="faceless",
+            video_type="voiceover",
             voice_name="chatterbox:kokoro_af_heart",
         )
         stages = self._track_failed_stages(
@@ -100,7 +100,7 @@ class StartPhaseAttributionTests(unittest.TestCase):
         params = VideoParams(
             video_title="Lisbon trams",
             video_description="Test description.",
-            video_type="faceless",
+            video_type="voiceover",
             voice_name="chatterbox:kokoro_af_heart",
         )
         stages = self._track_failed_stages(

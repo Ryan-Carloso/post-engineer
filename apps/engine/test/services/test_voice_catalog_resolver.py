@@ -45,7 +45,7 @@ def _params(voice_name: str) -> VideoParams:
     return VideoParams(
         video_title="t",
         video_description="d",
-        video_type="faceless",
+        video_type="voiceover",
         video_script="Hook. Body.",
         voice_name=voice_name,
     )

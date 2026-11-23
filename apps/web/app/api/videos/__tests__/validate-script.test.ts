@@ -136,9 +136,9 @@ describe('POST /api/videos/validate-script', () => {
       expect(response.status).toBe(200);
     });
 
-    it('keeps media required for faceless', async () => {
+    it('keeps media required for voiceover', async () => {
       const bare = segments.map((segment) => ({ kind: segment.kind, text: segment.text }));
-      const response = await POST(authRequest({ segments: bare, videoType: 'faceless' }));
+      const response = await POST(authRequest({ segments: bare, videoType: 'voiceover' }));
       expect(response.status).toBe(400);
       const payload = (await response.json()) as { field?: string };
       expect(payload.field).toBe('segments.0.media');

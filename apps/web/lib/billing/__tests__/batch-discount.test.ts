@@ -22,7 +22,7 @@ function slot(id: string, chargedTokens: number, extra: Partial<BatchSlot> = {})
   return {
     id,
     scheduleId: `sched-${id}`,
-    faceless: false,
+    voiceover: false,
     status: 'generating',
     chargedTokens,
     discountTokens: 0,
@@ -62,8 +62,8 @@ describe('batchFreeCount', () => {
     expect(batchFreeCount(faces(12))).toBe(2);
   });
 
-  it('does not count faceless videos toward the threshold', () => {
-    const batch = [...faces(5), slot('fl', 1, { faceless: true })];
+  it('does not count voiceover videos toward the threshold', () => {
+    const batch = [...faces(5), slot('fl', 1, { voiceover: true })];
     expect(batchFreeCount(batch)).toBe(0);
   });
 
@@ -88,11 +88,11 @@ describe('planBatchDiscount', () => {
     expect(planBatchDiscount(batch).map((s) => s.id)).toEqual(['cheap1', 'cheap2']);
   });
 
-  it('never makes a faceless video free, even when it is the cheapest', () => {
-    const batch = [...faces(6, 3), slot('fl', 1, { faceless: true })];
+  it('never makes a voiceover video free, even when it is the cheapest', () => {
+    const batch = [...faces(6, 3), slot('fl', 1, { voiceover: true })];
     const plan = planBatchDiscount(batch);
     expect(plan).toHaveLength(1);
-    expect(plan[0]?.faceless).toBe(false);
+    expect(plan[0]?.voiceover).toBe(false);
   });
 
   it('never picks a failed video (its charge may already be refunded)', () => {
@@ -158,10 +158,10 @@ describe('planBatchClawback', () => {
     expect(planBatchClawback(remaining).map((s) => s.id)).toEqual(['live-free']);
   });
 
-  it('ignores faceless videos when counting what remains', () => {
+  it('ignores voiceover videos when counting what remains', () => {
     const remaining = [
       ...faces(4),
-      slot('fl', 1, { faceless: true }),
+      slot('fl', 1, { voiceover: true }),
       slot('free', 0, { discountTokens: 2 }),
     ];
     expect(planBatchClawback(remaining).map((s) => s.id)).toEqual(['free']);
@@ -186,7 +186,7 @@ describe('narrowBatchSlot', () => {
   const row = {
     id: 'slot-1',
     schedule_id: 'sched-1',
-    faceless: false,
+    voiceover: false,
     status: 'ready',
     charged_tokens: 2,
     discount_tokens: 0,
@@ -199,7 +199,7 @@ describe('narrowBatchSlot', () => {
     expect(narrowBatchSlot(row)).toEqual({
       id: 'slot-1',
       scheduleId: 'sched-1',
-      faceless: false,
+      voiceover: false,
       status: 'ready',
       chargedTokens: 2,
       discountTokens: 0,
@@ -208,9 +208,9 @@ describe('narrowBatchSlot', () => {
     });
   });
 
-  it('treats only literal true as faceless', () => {
-    expect(narrowBatchSlot({ ...row, faceless: 'true' })?.faceless).toBe(false);
-    expect(narrowBatchSlot({ ...row, faceless: true })?.faceless).toBe(true);
+  it('treats only literal true as voiceover', () => {
+    expect(narrowBatchSlot({ ...row, voiceover: 'true' })?.voiceover).toBe(false);
+    expect(narrowBatchSlot({ ...row, voiceover: true })?.voiceover).toBe(true);
   });
 
   it('rejects rows with unreadable money columns', () => {

@@ -58,13 +58,13 @@ describe('buildJobPayload — request allowlist', () => {
       video_subject: 'Porto trip',
       lipsync: false,
       full_lipsync: true,
-      faceless_material: 'images',
+      voiceover_material: 'images',
       lipsync_enabled: false,
     });
     expect(payload).not.toHaveProperty('video_subject');
     expect(payload).not.toHaveProperty('lipsync');
     expect(payload).not.toHaveProperty('full_lipsync');
-    expect(payload).not.toHaveProperty('faceless_material');
+    expect(payload).not.toHaveProperty('voiceover_material');
     expect(payload).not.toHaveProperty('lipsync_enabled');
     expect(warn).toHaveBeenCalledTimes(1);
     expect(warn.mock.calls[0][0]).toContain('dropping 5 unknown request field(s)');
@@ -97,7 +97,7 @@ describe('buildJobPayload — request allowlist', () => {
   });
 
   it('forwards video_type for every mode', () => {
-    for (const videoType of ['full_lipsync', 'hook_lipsync', 'faceless'] as const) {
+    for (const videoType of ['full_lipsync', 'hook_lipsync', 'voiceover'] as const) {
       const payload = buildJobPayload(persona(), { video_title: 'Porto trip', video_type: videoType });
       expect(payload.video_type).toBe(videoType);
     }
@@ -287,14 +287,14 @@ describe('buildJobPayload — face quality and video_type', () => {
     expect(payload.video_quality).toBe('ultra');
   });
 
-  it('does not invent video_quality from the persona for faceless videos', () => {
-    const payload = buildJobPayload(persona({ face_quality: 'very_good' }), { video_type: 'faceless' });
+  it('does not invent video_quality from the persona for voiceover videos', () => {
+    const payload = buildJobPayload(persona({ face_quality: 'very_good' }), { video_type: 'voiceover' });
     expect(payload).not.toHaveProperty('video_quality');
   });
 
-  it('leaves an explicit request video_quality alone on faceless videos', () => {
+  it('leaves an explicit request video_quality alone on voiceover videos', () => {
     const payload = buildJobPayload(persona({ face_quality: 'very_good' }), {
-      video_type: 'faceless',
+      video_type: 'voiceover',
       video_quality: 'ok',
     });
     expect(payload.video_quality).toBe('ok');
@@ -326,7 +326,7 @@ describe('buildJobPayload — niche and script prompt', () => {
 describe('buildJobPayload — final null pass', () => {
   it('drops null engine-facing fields instead of forwarding them', () => {
     const payload = buildJobPayload(persona({ niche: 'finance' }), {
-      video_type: 'faceless',
+      video_type: 'voiceover',
       video_quality: null,
       webhook_url: 'https://hooks.test/done',
     });
@@ -346,8 +346,8 @@ describe('buildJobPayload — final null pass', () => {
     expect(payload.video_quality).toBe('very-good');
   });
 
-  it('deletes an empty-string video_quality on faceless videos instead of defaulting it', () => {
-    const payload = buildJobPayload(persona(), { video_type: 'faceless', video_quality: '   ' });
+  it('deletes an empty-string video_quality on voiceover videos instead of defaulting it', () => {
+    const payload = buildJobPayload(persona(), { video_type: 'voiceover', video_quality: '   ' });
     expect(payload).not.toHaveProperty('video_quality');
   });
 });

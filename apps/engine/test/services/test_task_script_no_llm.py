@@ -48,7 +48,7 @@ def test_empty_script_fails_without_search_or_llm():
     params = VideoParams(
         video_title="coffee",
         video_description="Test description.",
-        video_type="faceless",
+        video_type="voiceover",
         video_script="",
     )
     with patch.object(tm, "_fail_task") as fail_task:
@@ -66,7 +66,7 @@ def test_supplied_script_passes_without_llm():
     params = VideoParams(
         video_title="coffee",
         video_description="Test description.",
-        video_type="faceless",
+        video_type="voiceover",
         video_script=script,
     )
     assert tm.generate_script("supplied-task", params) == script

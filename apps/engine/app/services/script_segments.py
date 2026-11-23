@@ -256,7 +256,7 @@ def validate_segments(segments: Any, video_type: str = "hook_lipsync") -> dict[s
     nothing tops them up). Each content segment needs about one image per 2
     seconds of speech, and the video cap is 30 images. In a hook_lipsync
     video the hook is exempt from the minimum and may not carry a clip; a
-    faceless hook still needs the minimum. A full lip-sync video is the
+    voiceover hook still needs the minimum. A full lip-sync video is the
     exception: it shows the talking head, so segment photos are optional
     panels capped at 6 per video.
     """

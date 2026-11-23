@@ -1322,7 +1322,7 @@
                     "notNull": true
                 },
                 {
-                    "name": "faceless",
+                    "name": "voiceover",
                     "type": "boolean",
                     "default": "false",
                     "notNull": true
@@ -1340,7 +1340,7 @@
                     "notNull": false
                 },
                 {
-                    "name": "faceless_material",
+                    "name": "voiceover_material",
                     "type": "text",
                     "default": "'images'::text",
                     "notNull": true
@@ -1453,11 +1453,11 @@
                 "scheduled_posts_pkey": "PRIMARY KEY (id)",
                 "scheduled_posts_media_ref_check": "CHECK (((media_kind IS NULL) OR (media_ref IS NOT NULL)))",
                 "scheduled_posts_media_kind_check": "CHECK (((media_kind IS NULL) OR (media_kind = ANY (ARRAY['upload'::text, 'image'::text]))))",
-                "scheduled_posts_video_type_check": "CHECK ((video_type = ANY (ARRAY['full_lipsync'::text, 'hook_lipsync'::text, 'faceless'::text])))",
+                "scheduled_posts_video_type_check": "CHECK ((video_type = ANY (ARRAY['full_lipsync'::text, 'hook_lipsync'::text, 'voiceover'::text])))",
                 "scheduled_posts_charged_tokens_check": "CHECK ((charged_tokens >= 0))",
                 "scheduled_posts_discount_tokens_check": "CHECK ((discount_tokens >= 0))",
                 "scheduled_posts_prompt_version_id_fkey": "FOREIGN KEY (prompt_version_id) REFERENCES prompt_versions(id) ON DELETE SET NULL",
-                "scheduled_posts_faceless_material_check": "CHECK ((faceless_material = 'images'::text))"
+                "scheduled_posts_voiceover_material_check": "CHECK ((voiceover_material = 'images'::text))"
             }
         },
         "social_accounts": {

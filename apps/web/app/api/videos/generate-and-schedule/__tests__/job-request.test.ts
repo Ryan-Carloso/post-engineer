@@ -6,7 +6,7 @@ describe('buildGenerateJobRequest', () => {
     const request = buildGenerateJobRequest({
       title: 'Porto trip',
       description: 'Agent description.',
-      validatedOptions: { videoType: 'faceless', musicMood: 'calm', webhookUrl: 'https://example.com/hook' },
+      validatedOptions: { videoType: 'voiceover', musicMood: 'calm', webhookUrl: 'https://example.com/hook' },
       segmentsScript: 'Stop scrolling.',
       ctaType: 'save',
       generationId: 'gen-1',
@@ -16,7 +16,7 @@ describe('buildGenerateJobRequest', () => {
     expect(request).toMatchObject({
       video_title: 'Porto trip',
       video_description: 'Agent description.',
-      video_type: 'faceless',
+      video_type: 'voiceover',
       video_script: 'Stop scrolling.',
       music_mood: 'calm',
       webhook_url: 'https://example.com/hook',
@@ -52,7 +52,7 @@ describe('buildGenerateJobRequest', () => {
     const request = buildGenerateJobRequest({
       title: 'Porto trip',
       description: 'Agent description.',
-      validatedOptions: { videoType: 'faceless' },
+      validatedOptions: { videoType: 'voiceover' },
       segmentsScript: 'Stop scrolling.',
       ctaType: null,
       generationId: 'gen-1',

@@ -7139,7 +7139,7 @@
                 "properties": {
                   "personaId": {
                     "type": "string",
-                    "description": "Optional: a faceless post needs no persona."
+                    "description": "Optional: a voiceover post needs no persona."
                   },
                   "title": {
                     "type": "string",
@@ -7207,12 +7207,12 @@
                   "options": {
                     "type": "object",
                     "properties": {
-                      "faceless": {
+                      "voiceover": {
                         "type": "boolean"
                       },
                       "fullLipsync": {
                         "type": "boolean",
-                        "description": "Persona talks for the whole video, not only the hook. Not with faceless."
+                        "description": "Persona talks for the whole video, not only the hook. Not with voiceover."
                       },
                       "audioUrl": {
                         "type": "string"

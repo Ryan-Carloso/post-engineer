@@ -23,7 +23,7 @@ def _params():
     return VideoParams(
         video_title="test subject",
         video_description="Test description.",
-        video_type="faceless",
+        video_type="voiceover",
         video_script="script",
     )
 
@@ -290,7 +290,7 @@ class CompleteTaskTests(unittest.TestCase):
         )
 
     def test_complete_task_omits_cost_usd_when_absent(self):
-        """Faceless videos (no Modal intro) carry no cost property at all:
+        """Voiceover videos (no Modal intro) carry no cost property at all:
         unknown cost is absence, never zero."""
         with (
             patch.object(tm, "track_event") as track,
@@ -392,7 +392,7 @@ class CreateTaskControllerTests(unittest.TestCase):
         body = TaskVideoRequest(
             video_title="subject",
             video_description="Test description.",
-            video_type="faceless",
+            video_type="voiceover",
             video_script="script",
         )
         auth = SimpleNamespace(user_id="user-1")
@@ -435,7 +435,7 @@ class CreateTaskControllerTests(unittest.TestCase):
         body = TaskVideoRequest(
             video_title="subject",
             video_description="Test description.",
-            video_type="faceless",
+            video_type="voiceover",
             video_script="script",
         )
         auth = SimpleNamespace(user_id="user-1")

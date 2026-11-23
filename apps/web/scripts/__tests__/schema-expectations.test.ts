@@ -46,6 +46,24 @@ describe('extractRequiredColumns', () => {
     expect(extractRequiredColumns(files)).toEqual({});
   });
 
+  it('moves a column that a later migration renames', async () => {
+    const { extractRequiredColumns } = await loadGenerator();
+    const files = [
+      'alter table public.scheduled_posts add column if not exists faceless boolean;',
+      'do $$ begin alter table public.scheduled_posts rename column faceless to voiceover; end $$;',
+    ];
+    expect(extractRequiredColumns(files)).toEqual({ scheduled_posts: ['voiceover'] });
+  });
+
+  it('ignores a rename of a column no migration added', async () => {
+    const { extractRequiredColumns } = await loadGenerator();
+    const files = [
+      'alter table public.scheduled_posts add column if not exists title text;',
+      'alter table public.scheduled_posts rename column legacy to modern;',
+    ];
+    expect(extractRequiredColumns(files)).toEqual({ scheduled_posts: ['title'] });
+  });
+
   it('removes a table that a later migration drops', async () => {
     const { extractRequiredColumns } = await loadGenerator();
     const files = [

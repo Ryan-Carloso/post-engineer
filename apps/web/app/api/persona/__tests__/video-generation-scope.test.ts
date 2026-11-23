@@ -50,7 +50,7 @@ function row(partial: GenerationFixture): GenerationFixture & Record<string, unk
 
 const ALLOWED = row({ persona_id: PERSONA_A, video_subject: 'allowed-subject', generation_id: 'gen-a' });
 const OTHER = row({ persona_id: PERSONA_B, video_subject: 'secret-other-persona', generation_id: 'gen-b' });
-const FACELESS = row({ persona_id: null, video_subject: 'faceless-subject', generation_id: 'gen-f' });
+const VOICEOVER = row({ persona_id: null, video_subject: 'voiceover-subject', generation_id: 'gen-f' });
 
 function personaVisible(personaId: string | null, filter: string | null, nullOnly: boolean): boolean {
   if (filter === null && !nullOnly) return true;
@@ -135,7 +135,7 @@ describe('GET /api/persona/video-generations persona scope', () => {
 
   it('hides another persona and keeps the allowed persona plus a persona-less generation', async () => {
     authAs([PERSONA_A]);
-    const client = mockList([ALLOWED, OTHER, FACELESS]);
+    const client = mockList([ALLOWED, OTHER, VOICEOVER]);
     vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
 
     const response = await listGenerations(new Request('https://x/api/persona/video-generations'));
@@ -144,7 +144,7 @@ describe('GET /api/persona/video-generations persona scope', () => {
 
     expect(response.status).toBe(200);
     expect(subjects).not.toContain('secret-other-persona');
-    expect(subjects).toEqual(['allowed-subject', 'faceless-subject']);
+    expect(subjects).toEqual(['allowed-subject', 'voiceover-subject']);
     const filter = client.chain.or.mock.calls[0]?.[0] as string;
     expect(filter).toContain(PERSONA_A);
     expect(filter).toContain('persona_id.is.null');
@@ -153,7 +153,7 @@ describe('GET /api/persona/video-generations persona scope', () => {
 
   it('returns every generation for an unscoped API key and does not add a persona filter', async () => {
     authAs(null);
-    const client = mockList([ALLOWED, OTHER, FACELESS]);
+    const client = mockList([ALLOWED, OTHER, VOICEOVER]);
     vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
 
     const response = await listGenerations(new Request('https://x/api/persona/video-generations'));
@@ -163,7 +163,7 @@ describe('GET /api/persona/video-generations persona scope', () => {
     expect(body.generations.map((generation) => generation.videoSubject)).toEqual([
       'allowed-subject',
       'secret-other-persona',
-      'faceless-subject',
+      'voiceover-subject',
     ]);
     expect(client.chain.or).not.toHaveBeenCalled();
     expect(client.chain.is).not.toHaveBeenCalled();
@@ -171,27 +171,27 @@ describe('GET /api/persona/video-generations persona scope', () => {
 
   it('shows only persona-less generations when the key scope is empty', async () => {
     authAs([]);
-    const client = mockList([ALLOWED, OTHER, FACELESS]);
+    const client = mockList([ALLOWED, OTHER, VOICEOVER]);
     vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
 
     const response = await listGenerations(new Request('https://x/api/persona/video-generations'));
     const body = (await response.json()) as { generations: Array<{ videoSubject: string | null }> };
 
-    expect(body.generations.map((generation) => generation.videoSubject)).toEqual(['faceless-subject']);
+    expect(body.generations.map((generation) => generation.videoSubject)).toEqual(['voiceover-subject']);
     expect(client.chain.is).toHaveBeenCalledWith('persona_id', null);
     expect(client.chain.or).not.toHaveBeenCalled();
   });
 
   it('drops a malformed persona id before building the filter', async () => {
     authAs(['not-a-uuid', INJECTED]);
-    const client = mockList([ALLOWED, OTHER, FACELESS]);
+    const client = mockList([ALLOWED, OTHER, VOICEOVER]);
     vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
 
     const response = await listGenerations(new Request('https://x/api/persona/video-generations'));
     const body = (await response.json()) as { generations: Array<{ videoSubject: string | null }> };
     const filter = client.chain.or.mock.calls.map((call) => String(call[0])).join(' ');
 
-    expect(body.generations.map((generation) => generation.videoSubject)).toEqual(['faceless-subject']);
+    expect(body.generations.map((generation) => generation.videoSubject)).toEqual(['voiceover-subject']);
     expect(filter).not.toContain('not-a-uuid');
     expect(filter).not.toContain('hack');
     expect(filter).not.toContain(PERSONA_B);
@@ -199,7 +199,7 @@ describe('GET /api/persona/video-generations persona scope', () => {
 
   it('does not add a persona filter for an OAuth caller', async () => {
     authAs([PERSONA_A], false, { isOAuth: true });
-    const client = mockList([ALLOWED, OTHER, FACELESS]);
+    const client = mockList([ALLOWED, OTHER, VOICEOVER]);
     vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
 
     const response = await listGenerations(new Request('https://x/api/persona/video-generations'));
@@ -209,7 +209,7 @@ describe('GET /api/persona/video-generations persona scope', () => {
     expect(body.generations.map((generation) => generation.videoSubject)).toEqual([
       'allowed-subject',
       'secret-other-persona',
-      'faceless-subject',
+      'voiceover-subject',
     ]);
     expect(client.chain.or).not.toHaveBeenCalled();
     expect(client.chain.is).not.toHaveBeenCalled();
@@ -264,11 +264,11 @@ describe('GET /api/persona/video-generations/[generationId] persona scope', () =
 
   it('returns a persona-less generation to a scoped key', async () => {
     authAs([PERSONA_A]);
-    const response = await read(FACELESS);
+    const response = await read(VOICEOVER);
     const body = (await response.json()) as { generation: { videoSubject: string } };
 
     expect(response.status).toBe(200);
-    expect(body.generation.videoSubject).toBe('faceless-subject');
+    expect(body.generation.videoSubject).toBe('voiceover-subject');
   });
 
   it('returns another persona generation to an unscoped API key', async () => {
@@ -282,7 +282,7 @@ describe('GET /api/persona/video-generations/[generationId] persona scope', () =
 
   it('filters with persona_id is null when every scoped id is not a UUID', async () => {
     authAs(['not-a-uuid', INJECTED]);
-    const client = mockDetail(FACELESS);
+    const client = mockDetail(VOICEOVER);
     vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
 
     const response = await getGeneration(new Request('https://x/api/persona/video-generations/gen-f'), {
@@ -291,7 +291,7 @@ describe('GET /api/persona/video-generations/[generationId] persona scope', () =
     const body = (await response.json()) as { generation: { videoSubject: string } };
 
     expect(response.status).toBe(200);
-    expect(body.generation.videoSubject).toBe('faceless-subject');
+    expect(body.generation.videoSubject).toBe('voiceover-subject');
     expect(client.chain.is).toHaveBeenCalledWith('persona_id', null);
     expect(client.chain.or).not.toHaveBeenCalled();
   });

@@ -76,7 +76,7 @@ class ContinueOnProviderFailureTests(unittest.TestCase):
         state = MagicMock()
         state.get_task.return_value = {
             "state": 1, "videos": [self.video_path],
-            "video_storage_path": "user-1/faceless/t-1/final-1.mp4",
+            "video_storage_path": "user-1/voiceover/t-1/final-1.mp4",
         }
         return state
 

@@ -32,7 +32,7 @@ function slotDetailPayload() {
     },
     persona: { id: 'persona-e2e-1', name: 'E2E Persona' },
     generation: {
-      faceless: false,
+      voiceover: false,
       language: 'pt-BR',
       voiceId: 'ana_neural',
       videoAspect: '9:16',

@@ -254,10 +254,10 @@ describe('contracts shared source', () => {
   it('pins the videos type literals to lib/tokens.ts', () => {
     const root = findRepoRoot(import.meta.url);
     const tokens = readFileSync(join(root, 'apps', 'web', 'lib', 'tokens.ts'), 'utf8');
-    expect(VIDEO_TYPES).toEqual(['full_lipsync', 'hook_lipsync', 'faceless']);
-    expect(tokens).toContain("export const VIDEO_TYPES = ['full_lipsync', 'hook_lipsync', 'faceless'] as const;");
-    expect(VIDEO_TYPE_ERROR_SUFFIX).toBe('use full_lipsync (8/15), hook_lipsync (2/3) or faceless (1)');
-    expect(tokens).toContain("export const VIDEO_TYPE_ERROR_SUFFIX =\n  'use full_lipsync (8/15), hook_lipsync (2/3) or faceless (1)';");
+    expect(VIDEO_TYPES).toEqual(['full_lipsync', 'hook_lipsync', 'voiceover']);
+    expect(tokens).toContain("export const VIDEO_TYPES = ['full_lipsync', 'hook_lipsync', 'voiceover'] as const;");
+    expect(VIDEO_TYPE_ERROR_SUFFIX).toBe('use full_lipsync (8/15), hook_lipsync (2/3) or voiceover (1)');
+    expect(tokens).toContain("export const VIDEO_TYPE_ERROR_SUFFIX =\n  'use full_lipsync (8/15), hook_lipsync (2/3) or voiceover (1)';");
   });
 
   it('pins the videos segment caps to the shared script-segments source', () => {

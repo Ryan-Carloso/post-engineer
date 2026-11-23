@@ -39,8 +39,8 @@ describe('buildIdentitySnapshot', () => {
   });
 
   it('snapshots nulls when there is no voice, no audio URL and no CTA', () => {
-    const faceless = { ...PREP, voiceIdValue: null, niche: null, language: null, videoAspect: null, videoLayout: null, hookPanel: true, paragraphNumber: null, faceQuality: null } as unknown as PersonaPrep;
-    expect(buildIdentitySnapshot(faceless, undefined, null)).toEqual({
+    const voiceover = { ...PREP, voiceIdValue: null, niche: null, language: null, videoAspect: null, videoLayout: null, hookPanel: true, paragraphNumber: null, faceQuality: null } as unknown as PersonaPrep;
+    expect(buildIdentitySnapshot(voiceover, undefined, null)).toEqual({
       post_voice_id: null,
       post_voice_audio_url: null,
       post_cta_type: null,
