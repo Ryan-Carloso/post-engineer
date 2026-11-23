@@ -691,7 +691,7 @@ class BatchScheduleTests(unittest.TestCase):
         calls = scheduler.task_state.update_task.call_args_list
         self.assertEqual([c.kwargs.get("remote_worker") for c in calls], ["modal_cpu", "", None])
         self.assertEqual(calls[-1].args, ("task-1",))
-        self.assertEqual(calls[-1].kwargs, {"user_id": "user-1", "flow": "batch", "pipeline": "video", "state": model_const.TASK_STATE_PROCESSING, "progress": 0, "slot_id": "slot-1", "schedule_id": "sched-1", "persona_id": "persona-1"})
+        self.assertEqual(calls[-1].kwargs, {"user_id": "user-1", "flow": "batch", "pipeline": "video", "state": model_const.TASK_STATE_PROCESSING, "progress": 0, "slot_id": "slot-1", "schedule_id": "sched-1", "persona_id": "persona-1", "subtitle_position": request.subtitle_position})
         self.assertEqual({k: v for k, v in calls[0].kwargs.items() if k in {"slot_id", "schedule_id", "persona_id"}}, {"slot_id": "slot-1", "schedule_id": "sched-1", "persona_id": "persona-1"})
         manager.try_reserve_running.assert_called_once_with()
         manager.add_task.assert_not_called()
@@ -720,7 +720,7 @@ class BatchScheduleTests(unittest.TestCase):
         calls = scheduler.task_state.update_task.call_args_list
         self.assertEqual([c.kwargs.get("remote_worker") for c in calls], ["modal_cpu", "", None])
         self.assertEqual(calls[-1].args, ("task-2",))
-        self.assertEqual(calls[-1].kwargs, {"user_id": "user-1", "flow": "batch", "pipeline": "video", "state": model_const.TASK_STATE_PROCESSING, "progress": 0})
+        self.assertEqual(calls[-1].kwargs, {"user_id": "user-1", "flow": "batch", "pipeline": "video", "state": model_const.TASK_STATE_PROCESSING, "progress": 0, "subtitle_position": request.subtitle_position})
         self.assertEqual({k: v for k, v in calls[0].kwargs.items() if k in {"slot_id", "schedule_id", "persona_id"}}, {})
 
     def test_dispatch_generation_omits_only_the_blank_identity_ids(self):
@@ -747,7 +747,7 @@ class BatchScheduleTests(unittest.TestCase):
         calls = scheduler.task_state.update_task.call_args_list
         self.assertEqual([c.kwargs.get("remote_worker") for c in calls], ["modal_cpu", "", None])
         self.assertEqual(calls[-1].args, ("task-3",))
-        self.assertEqual(calls[-1].kwargs, {"user_id": "user-1", "flow": "batch", "pipeline": "video", "state": model_const.TASK_STATE_PROCESSING, "progress": 0, "schedule_id": "sched-3", "persona_id": "persona-3"})
+        self.assertEqual(calls[-1].kwargs, {"user_id": "user-1", "flow": "batch", "pipeline": "video", "state": model_const.TASK_STATE_PROCESSING, "progress": 0, "schedule_id": "sched-3", "persona_id": "persona-3", "subtitle_position": request.subtitle_position})
         self.assertEqual({k: v for k, v in calls[0].kwargs.items() if k in {"slot_id", "schedule_id", "persona_id"}}, {"schedule_id": "sched-3", "persona_id": "persona-3"})
 
     def test_dispatch_generation_omits_blank_schedule_id_only(self):
@@ -774,7 +774,7 @@ class BatchScheduleTests(unittest.TestCase):
         calls = scheduler.task_state.update_task.call_args_list
         self.assertEqual([c.kwargs.get("remote_worker") for c in calls], ["modal_cpu", "", None])
         self.assertEqual(calls[-1].args, ("task-4",))
-        self.assertEqual(calls[-1].kwargs, {"user_id": "user-1", "flow": "batch", "pipeline": "video", "state": model_const.TASK_STATE_PROCESSING, "progress": 0, "slot_id": "slot-4", "persona_id": "persona-4"})
+        self.assertEqual(calls[-1].kwargs, {"user_id": "user-1", "flow": "batch", "pipeline": "video", "state": model_const.TASK_STATE_PROCESSING, "progress": 0, "slot_id": "slot-4", "persona_id": "persona-4", "subtitle_position": request.subtitle_position})
         self.assertEqual({k: v for k, v in calls[0].kwargs.items() if k in {"slot_id", "schedule_id", "persona_id"}}, {"slot_id": "slot-4", "persona_id": "persona-4"})
 
     def test_dispatch_generation_omits_all_explicitly_blank_identity_ids(self):
@@ -801,7 +801,7 @@ class BatchScheduleTests(unittest.TestCase):
         calls = scheduler.task_state.update_task.call_args_list
         self.assertEqual([c.kwargs.get("remote_worker") for c in calls], ["modal_cpu", "", None])
         self.assertEqual(calls[-1].args, ("task-5",))
-        self.assertEqual(calls[-1].kwargs, {"user_id": "user-1", "flow": "batch", "pipeline": "video", "state": model_const.TASK_STATE_PROCESSING, "progress": 0})
+        self.assertEqual(calls[-1].kwargs, {"user_id": "user-1", "flow": "batch", "pipeline": "video", "state": model_const.TASK_STATE_PROCESSING, "progress": 0, "subtitle_position": request.subtitle_position})
         self.assertEqual({k: v for k, v in calls[0].kwargs.items() if k in {"slot_id", "schedule_id", "persona_id"}}, {})
 
 

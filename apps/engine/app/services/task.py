@@ -41,7 +41,7 @@ from app.services.persona_hook import (
     _limit_generated_script,
 )
 from app.services.bgm_history import history_repository
-from app.services.analytics import nonempty_error_reason, track_event
+from app.services.analytics import nonempty_error_reason, subtitle_event_props, track_event
 from app.services.notify import safe_reason, send_discord, task_failed_msg
 from app.services.owner_alert import alert_failed_task
 from app.utils import file_security, ssrf, utils
@@ -290,8 +290,8 @@ def _complete_task(
     _progress_milestones.pop(task_id, None)
     context = _task_tracking_context(task_id)
     if context.get("flow") == "direct":
-        context.update(cost_event_props(kwargs))
-        context["music_mood"] = kwargs.get("music_mood") or "unknown"
+        context.update(cost_event_props(kwargs), music_mood=kwargs.get("music_mood") or "unknown")
+        context.update(subtitle_event_props(params))
         track_event("video_generated", context)
     task_webhook.notify_terminal_task(
         task_id,

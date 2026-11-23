@@ -12,7 +12,7 @@ from app.models.schema import LipSyncQuality, TaskVideoRequest
 from app.models import const as model_const
 from app.services import notify as notify_module
 from app.services import task as tm
-from app.services.analytics import nonempty_error_reason, scrub_secret_values, track_event
+from app.services.analytics import nonempty_error_reason, scrub_secret_values, subtitle_event_props, track_event
 from app.services.fill_schedule.batch_admission import (
     SlotDeferred,
     free_running_slots,
@@ -182,6 +182,7 @@ class BatchGenerator:
                         pipeline="video",
                         slot_id=slot["id"],
                         persona_id=identity.get("id"),
+                        **subtitle_event_props(request),
                         **pacing_tracking_props(request),
                     )
 
@@ -340,6 +341,7 @@ class BatchGenerator:
                 state=model_const.TASK_STATE_PROCESSING,
                 progress=0,
                 **tracking_ids,
+                **subtitle_event_props(request),
             )
 
         from app.controllers.v1.video import task_manager

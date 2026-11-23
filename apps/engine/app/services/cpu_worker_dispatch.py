@@ -201,6 +201,7 @@ def accept_direct_task(
     persona_tracking: dict[str, Any],
     tracking: dict[str, Any],
     spawn: Spawn | None = None,
+    event_tracking: dict[str, Any] | None = None,
 ) -> None:
     """Queue a direct task locally, or spawn a CPU container."""
     from app.services import state as sm
@@ -224,6 +225,7 @@ def accept_direct_task(
             flow="direct",
             pipeline=stop_at,
             **tracking,
+            **(event_tracking or {}),
         )
 
     spawned, accepted = try_remote_dispatch(
