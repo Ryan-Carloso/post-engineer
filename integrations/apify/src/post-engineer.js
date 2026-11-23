@@ -8,7 +8,7 @@ export const MIN_WORDS_PER_IMAGE = 3;
 export const MAX_PHOTO_SECONDS = 2;
 export const API_KEY_PREFIX = 'pe_live_';
 export const REQUEST_TIMEOUT_MS = 60_000;
-export const POLL_INTERVAL_MS = 15_000;
+export const POLL_INTERVAL_MS = 60_000;
 export const DEFAULT_TIMEOUT_MINUTES = 30;
 export const MAX_TIMEOUT_MINUTES = 60;
 

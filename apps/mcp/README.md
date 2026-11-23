@@ -82,7 +82,7 @@ from `apps/mcp/`.
 Each request to the post-engineer API includes the calling tool's name and
 the server version, recorded against your account for product analytics.
 A tool call can make several requests (a `video_tasks (action: status)` wait
-checks status every 10 seconds), so each request also carries the call id
+checks status every 60 seconds), so each request also carries the call id
 (`X-MCP-Call-Id`) and its ordinal in the call (`X-MCP-Call-Request`, from 1).
 The web API records one `mcp_tool_called` per call, from the first request,
 and records a later request only when it fails, as `mcp_tool_request_failed`

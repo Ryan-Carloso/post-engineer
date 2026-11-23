@@ -343,6 +343,10 @@ describe('runActor', () => {
     await assert.rejects(auth.promise, (error) => error instanceof PostEngineerApiError && error.status === 401);
   });
 
+  it('polls the video status at most once a minute', () => {
+    assert.equal(POLL_INTERVAL_MS, 60_000);
+  });
+
   it('returns timeout when the task never finishes before the deadline', async () => {
     const { promise, calls } = runWith(
       {
