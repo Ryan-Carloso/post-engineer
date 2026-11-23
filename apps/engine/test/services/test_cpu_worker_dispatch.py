@@ -311,9 +311,9 @@ def test_worker_entrypoint_scales_to_zero_and_skips_boot() -> None:
     assert "buffer_containers" not in modal_source
     assert "max_containers=1" not in modal_source
     assert "memory=10240" in modal_source
-    assert "cpu-worker-voices" in modal_source
-    assert "def register_clone" in modal_source
-    assert "def delete_clone" in modal_source
+    assert "min_containers=0" in modal_source
+    assert "def register_clone" not in modal_source
+    assert "cpu-worker-voices" not in modal_source
     assert 'Secret.from_name("cpu-worker")' in modal_source
     assert "reconcile_orphaned_tasks" not in modal_source
     assert "reconcile_orphaned_tasks" not in run_source
@@ -332,25 +332,36 @@ def test_worker_entrypoint_scales_to_zero_and_skips_boot() -> None:
     assert "def render_video" in modal_source
 
 
-def test_migrate_lists_clone_wavs_without_uploading(tmp_path: Path) -> None:
-    from chatterbox_registry_volume import register_voice_on_volume
-    from scripts.migrate_clone_voices import clone_files
+def test_worker_caches_a_clone_downloaded_from_supabase(tmp_path: Path) -> None:
+    from app.services.cloned_voices.materialize import materialize_clone
 
     wav = b"RIFF" + b"\x00\x00\x00\x00" + b"WAVE" + b"rest"
-    register_voice_on_volume(
-        tmp_path,
-        tmp_path / "voices.toml",
-        "u0123456789ab_0123456789ab",
-        "pt",
-        wav,
-    )
-    rows = clone_files(tmp_path)
-    expected = tmp_path / "u0123456789ab_0123456789ab" / "reference.wav"
-    assert rows == [("u0123456789ab_0123456789ab", "pt", expected)]
+    key = "u0123456789ab_0123456789ab"
+
+    class _Store:
+        def __init__(self) -> None:
+            self.downloads = 0
+
+        def get_ready_by_engine_voice_key(self, engine_voice_key: str) -> dict[str, str]:
+            assert engine_voice_key == key
+            return {"storage_path": "user/cloned-voices/clone/reference.wav", "language": "pt"}
+
+        def download_reference_wav(self, storage_path: str) -> bytes:
+            self.downloads += 1
+            assert storage_path.startswith("user/cloned-voices/")
+            return wav
+
+    store = _Store()
+    params = {"voice_name": f"chatterbox_nano:{key}"}
+    assert materialize_clone(params, tmp_path, store) is True
+    assert materialize_clone(params, tmp_path, store) is False
+    assert store.downloads == 1
+    assert (tmp_path / key / "reference.wav").read_bytes() == wav
+    assert materialize_clone({"voice_name": "chatterbox:kokoro_af_heart"}, tmp_path, store) is False
 
 
 def test_publish_clone_requires_modal_tokens(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("MODAL_TOKEN_ID", raising=False)
     monkeypatch.delenv("MODAL_TOKEN_SECRET", raising=False)
     with pytest.raises(RuntimeError, match="MODAL_TOKEN_ID"):
-        dispatch.publish_clone_reference("u0123456789ab_0123456789ab", "en", b"wav")
+        dispatch._require_modal_tokens()

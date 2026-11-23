@@ -26,16 +26,6 @@ class ClonedVoiceServiceTests(unittest.TestCase):
         self.store = MagicMock()
         self.registry = MagicMock()
         self.service = ClonedVoiceService(store=self.store, registry=self.registry)
-        self._shared = patch(
-            "app.services.cpu_worker_dispatch.publish_clone_reference"
-        )
-        self._shared_delete = patch(
-            "app.services.cpu_worker_dispatch.delete_clone_reference"
-        )
-        self.publish_clone = self._shared.start()
-        self.delete_shared = self._shared_delete.start()
-        self.addCleanup(self._shared.stop)
-        self.addCleanup(self._shared_delete.stop)
 
     @patch("app.services.cloned_voices.service.normalize_reference_audio")
     @patch("app.services.cloned_voices.service._track_clone")

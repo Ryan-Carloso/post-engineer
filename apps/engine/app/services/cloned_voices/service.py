@@ -88,9 +88,6 @@ def register_clone_in_background(
             return
         try:
             reg.register_voice(voice_key, language, wav_bytes)
-            from app.services.cpu_worker_dispatch import publish_clone_reference
-
-            publish_clone_reference(voice_key, language, wav_bytes)
         except RegistryNotConfiguredError:
             db.mark_failed(user_id, clone_id, ERROR_REGISTRY_NOT_CONFIGURED)
             _track_clone("voice_clone_failed", user_id, clone_id, ERROR_REGISTRY_NOT_CONFIGURED)
@@ -255,9 +252,6 @@ class ClonedVoiceService:
         if isinstance(voice_key, str) and voice_key:
             try:
                 reg.delete_voice(voice_key)
-                from app.services.cpu_worker_dispatch import delete_clone_reference
-
-                delete_clone_reference(voice_key)
             except RegistryNotConfiguredError:
                 logger.warning(
                     "cloned voice delete skipped registry (not configured), "

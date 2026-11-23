@@ -4,10 +4,10 @@ Every faceless video, house voice or ``chatterbox_nano:`` clone, is
 spawned on ``moneyprint-cpu-worker``. Lip-sync stays on the VPS because
 it calls LongCat. A spawn failure falls back to the local thread.
 
-Clone reference WAVs live on the Modal volume ``cpu-worker-voices``.
-The worker mounts that volume. New clones are written there when they
-are registered, and ``scripts/migrate_clone_voices.py`` copies the WAVs
-that already sit on the VPS ``tts_voices`` volume.
+Clone reference audio already lives in Supabase Storage (the ``personas``
+bucket, path on ``cloned_voices.storage_path``). The worker downloads
+that object once per container. The VPS ``tts_voices`` volume is only
+the local TTS server's copy.
 
 A spawned job is marked ``remote_worker=modal_cpu`` with ``job_params``
 and ``remote_call_id`` on the task row before the VPS can restart. Boot
@@ -28,9 +28,6 @@ APP_NAME_ENV = "MPT_CPU_WORKER_APP_NAME"
 MAX_CONTAINERS_ENV = "MPT_CPU_WORKER_MAX_CONTAINERS"
 DEFAULT_APP_NAME = "moneyprint-cpu-worker"
 FUNCTION_NAME = "render_video"
-REGISTER_CLONE_FUNCTION = "register_clone"
-DELETE_CLONE_FUNCTION = "delete_clone"
-VOICES_VOLUME_NAME = "cpu-worker-voices"
 REMOTE_WORKER_VALUE = "modal_cpu"
 CLONE_PREFIX = "chatterbox_nano:"
 DEFAULT_MAX_CONTAINERS = 30
@@ -138,24 +135,6 @@ def _modal_spawn(task_id: str, params: dict[str, Any], stop_at: str) -> str:
     function = modal.Function.from_name(worker_app_name(), FUNCTION_NAME)
     call = function.spawn(task_id, params, stop_at)
     return str(getattr(call, "object_id", "") or "")
-
-
-def publish_clone_reference(voice_key: str, language_id: str, wav_bytes: bytes) -> None:
-    """Write one clone WAV onto the shared Modal volume."""
-    _require_modal_tokens()
-    import modal
-
-    modal.Function.from_name(worker_app_name(), REGISTER_CLONE_FUNCTION).remote(
-        voice_key, language_id, wav_bytes
-    )
-
-
-def delete_clone_reference(voice_key: str) -> None:
-    """Remove one clone WAV from the shared Modal volume."""
-    _require_modal_tokens()
-    import modal
-
-    modal.Function.from_name(worker_app_name(), DELETE_CLONE_FUNCTION).remote(voice_key)
 
 
 def _spawn(
