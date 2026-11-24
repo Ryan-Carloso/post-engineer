@@ -102,12 +102,12 @@ function mockSlotsClient(options: {
     table === 'prompt_versions'
       ? promptVersionsChain
       : table === 'scheduled_posts'
-      ? postsChain
-      : table === 'schedules'
-        ? schedulesChain
-        : table === 'scheduled_post_progress_history'
-          ? historyChain
-          : personasChain,
+        ? postsChain
+        : table === 'schedules'
+          ? schedulesChain
+          : table === 'scheduled_post_progress_history'
+            ? historyChain
+            : personasChain,
   );
   const rpc = vi.fn(async () => ({
     data: options.rpcResult ?? 'deleted',
