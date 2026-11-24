@@ -199,17 +199,18 @@ describe('persistVoiceSwap DB-failure logging', () => {
   };
 
   function failingUpdateClient(error: unknown): SupabaseClient {
+    const result = { data: null, error };
     const chain: Record<string, unknown> = {
       update: () => chain,
       eq: () => chain,
-      then: (resolve: (v: unknown) => void) =>
-        Promise.resolve({ data: null, error }).then(resolve),
+      then: (resolve: (v: unknown) => void) => resolve(result),
     };
     return { from: vi.fn(() => chain) } as unknown as SupabaseClient;
   }
 
   function throwingUpdateClient(thrown: unknown): SupabaseClient {
     let eqCount = 0;
+    const result = { data: null, error: null };
     const chain: Record<string, unknown> = {
       update: () => chain,
       eq: () => {
@@ -217,8 +218,7 @@ describe('persistVoiceSwap DB-failure logging', () => {
         if (eqCount === 2) throw thrown;
         return chain;
       },
-      then: (resolve: (v: unknown) => void) =>
-        Promise.resolve({ data: null, error: null }).then(resolve),
+      then: (resolve: (v: unknown) => void) => resolve(result),
     };
     return { from: vi.fn(() => chain) } as unknown as SupabaseClient;
   }
