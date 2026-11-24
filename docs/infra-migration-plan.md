@@ -216,8 +216,10 @@ Temp files live under the task directory and die with the container.
 
 To turn it on in production (manual, not done by this PR):
 
-1. Create the three Modal secrets (commands in the
-   `modal_cpu_worker.py` docstring) and run
+1. Create the four Modal secrets (commands in the
+   `modal_cpu_worker.py` docstring), including
+   `uv run modal secret create huggingface HF_TOKEN=...`
+   (may already exist from the LongCat setup), and run
    `uv run modal deploy modal_cpu_worker.py`.
 2. In the production `config.toml`, set `[modal_worker] app_name =
    "post-engineer-cpu-worker"` and raise `[app] max_concurrent_tasks`

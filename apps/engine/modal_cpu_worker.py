@@ -24,6 +24,9 @@ One-time setup (per Modal account):
     uv run modal secret create post-engineer-longcat-client \\
         LONGCAT_SUBMIT_URL=... LONGCAT_STATUS_URL=... \\
         LONGCAT_DOWNLOAD_URL=... LONGCAT_HTTP_SECRET=...
+    uv run modal secret create huggingface HF_TOKEN=...
+        (may already exist from the LongCat setup; the image build
+        downloads the TTS and Whisper weights with it)
 
 On every change to the engine's config.toml, refresh the config secret so
 the workers render with the same settings as the engine:

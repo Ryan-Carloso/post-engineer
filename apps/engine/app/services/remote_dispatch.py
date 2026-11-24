@@ -40,11 +40,16 @@ FUNCTION_FIELD = "modal_function"
 VIDEO_TITLE_FIELD = "video_title"
 WEBHOOK_FIELD = "webhook_url"
 WORKER_STOPPED_ERROR = "render worker stopped before the video finished"
+AMBIGUOUS_SPAWN_ERROR = "modal did not confirm the render; not rendering it twice"
 TERMINAL_STATES = (const.TASK_STATE_FAILED, const.TASK_STATE_COMPLETE)
 
 _DEFAULT_POLL_SECONDS = 30.0
 _DEFAULT_LOCAL_MAX = 1
 _DEFAULT_MAX_WAIT_SECONDS = 14400 + 3600
+
+
+class AmbiguousSpawnError(RuntimeError):
+    pass
 
 _local_slots_lock = threading.Lock()
 _local_slots: threading.BoundedSemaphore | None = None
@@ -127,16 +132,35 @@ def spawn(
     """Spawn the task on its worker function.
 
     Returns ``(call_id, function_name)``, or None when the spawn failed
-    (logged at error; the caller runs the task locally).
+    before anything was submitted (logged at error; the caller runs the
+    task locally). Raises AmbiguousSpawnError when ``function.spawn``
+    itself fails with a transport error: the call may already exist on
+    Modal, so the caller must not render locally.
     """
     function_name = "unresolved"
     try:
         function_name = worker_function_for(params, _effective_voice(params))
         modal = modal_module if modal_module is not None else _modal()
         function = modal.Function.from_name(app_name(), function_name)
+    except Exception as exc:
+        logger.error(
+            f"modal worker spawn failed for task {task_id} on {function_name}; "
+            f"running it locally: {type(exc).__name__}: {exc}"
+        )
+        return None
+    try:
         call = function.spawn(task_id, worker_payload(params), stop_at)
         call_id = str(call.object_id)
     except Exception as exc:
+        if modal_unreachable(modal, exc):
+            logger.error(
+                f"modal worker spawn for task {task_id} on {function_name} "
+                f"failed after submission: {type(exc).__name__}: {exc}"
+            )
+            raise AmbiguousSpawnError(
+                f"modal worker spawn for task {task_id} on {function_name} "
+                f"failed after submission: {type(exc).__name__}: {exc}"
+            ) from exc
         logger.error(
             f"modal worker spawn failed for task {task_id} on {function_name}; "
             f"running it locally: {type(exc).__name__}: {exc}"
@@ -163,17 +187,27 @@ def _fail_unfinished(task_id: str, params: Any, reason: str) -> None:
     fail_or_stop(task_id, WORKER_STOPPED_ERROR, params, stage=str(stage or "worker"))
 
 
-def _cancel_remote(task_id: str, call: Any) -> None:
+def _delete_cancelled_row(task_id: str) -> None:
     from app.services import state as sm
 
-    try:
-        call.cancel(terminate_containers=True)
-    except Exception as exc:
-        logger.error(f"task {task_id}: cancelling the modal call failed: {exc}")
     try:
         sm.state.delete_task(task_id)
     except Exception as exc:
         logger.error(f"task {task_id}: deleting the cancelled row failed: {exc}")
+
+
+def _request_cancel(task_id: str, call: Any) -> bool:
+    try:
+        call.cancel(terminate_containers=True)
+    except Exception as exc:
+        logger.error(f"task {task_id}: cancelling the modal call failed: {exc}")
+        return False
+    return True
+
+
+def _cancel_remote(task_id: str, call: Any) -> None:
+    if _request_cancel(task_id, call):
+        _delete_cancelled_row(task_id)
 
 
 def wait_for_call(
@@ -225,10 +259,13 @@ def wait_for_call(
             )
             return
     unreachable_since = None
+    cancel_requested = False
     while True:
         if is_cancelled(task_id):
-            _cancel_remote(task_id, call)
-            return
+            cancel_requested = True
+            if _request_cancel(task_id, call):
+                _delete_cancelled_row(task_id)
+                return
         try:
             call.get(timeout=poll_seconds())
             break
@@ -250,6 +287,9 @@ def wait_for_call(
                 continue
             reason = f"the modal call ended with {type(exc).__name__}: {exc}"
             break
+    if cancel_requested:
+        _delete_cancelled_row(task_id)
+        return
     _fail_unfinished(task_id, params, reason)
 
 
@@ -286,8 +326,15 @@ def start(task_id: str, params: Any, stop_at: str = "video") -> Any:
     if not app_name():
         return _pipeline_start()(task_id, params, stop_at)
     if stop_at != "video":
-        return run_local(task_id, params, stop_at)
-    spawned = spawn(task_id, params, stop_at)
+        return _pipeline_start()(task_id, params, stop_at)
+    try:
+        spawned = spawn(task_id, params, stop_at)
+    except AmbiguousSpawnError as exc:
+        logger.error(f"task {task_id}: {exc}")
+        from app.services.task_outcome import fail_or_stop
+
+        fail_or_stop(task_id, AMBIGUOUS_SPAWN_ERROR, params, stage="dispatch")
+        return None
     if spawned is None:
         return run_local(task_id, params, stop_at)
     call_id, function_name = spawned
@@ -300,7 +347,13 @@ def start(task_id: str, params: Any, stop_at: str = "video") -> Any:
     video_title = getattr(params, "video_title", None)
     if isinstance(video_title, str) and video_title:
         fields[VIDEO_TITLE_FIELD] = video_title
-    sm.state.update_task(task_id, **fields)
+    try:
+        sm.persist_state_update(sm.state, task_id, **fields)
+    except Exception as exc:
+        logger.error(
+            f"task {task_id}: persisting modal call {call_id} failed "
+            f"({type(exc).__name__}: {exc}); boot adoption cannot find this call"
+        )
     wait_for_call(task_id, call_id, params)
     return None
 
@@ -360,6 +413,7 @@ def adopt_live_call(
 
 
 __all__ = [
+    "AMBIGUOUS_SPAWN_ERROR",
     "CALL_ID_FIELD",
     "FACELESS_CLONE_FUNCTION",
     "FACELESS_FUNCTION",
@@ -368,6 +422,7 @@ __all__ = [
     "VIDEO_TITLE_FIELD",
     "WEBHOOK_FIELD",
     "WORKER_FUNCTIONS",
+    "AmbiguousSpawnError",
     "adopt_live_call",
     "call_is_live",
     "max_wait_seconds",

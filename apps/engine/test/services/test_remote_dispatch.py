@@ -108,13 +108,35 @@ class StartTests(unittest.TestCase):
                 patch.object(remote_dispatch, "spawn", return_value=("fc-1", "render_faceless")), \
                 patch.object(remote_dispatch, "wait_for_call") as wait, \
                 patch("app.services.state.state", state), \
+                patch("app.services.state.persist_state_update") as persist, \
                 patch("app.services.task.start", local):
             remote_dispatch.start("t-1", "params", "video")
-        state.update_task.assert_called_once_with(
-            "t-1", modal_call_id="fc-1", modal_function="render_faceless"
+        persist.assert_called_once_with(
+            state, "t-1", modal_call_id="fc-1", modal_function="render_faceless"
         )
         wait.assert_called_once_with("t-1", "fc-1", "params")
         local.assert_not_called()
+
+    def test_a_raising_persist_still_waits_for_the_live_call(self):
+        state = MagicMock()
+        local = MagicMock()
+        with patch.dict(config.modal_worker, {"app_name": "worker-app"}), \
+                patch.object(remote_dispatch, "spawn", return_value=("fc-1", "render_faceless")), \
+                patch.object(remote_dispatch, "wait_for_call") as wait, \
+                patch("app.services.state.state", state), \
+                patch("app.services.state.persist_state_update", side_effect=RuntimeError("down")) as persist, \
+                patch.object(remote_dispatch.logger, "error") as log, \
+                patch("app.services.task.start", local):
+            result = remote_dispatch.start("t-1", "params", "video")
+        self.assertIsNone(result)
+        persist.assert_called_once_with(
+            state, "t-1", modal_call_id="fc-1", modal_function="render_faceless"
+        )
+        wait.assert_called_once_with("t-1", "fc-1", "params")
+        local.assert_not_called()
+        self.assertIn("boot adoption cannot find this call", log.call_args.args[0])
+        self.assertIn("t-1", log.call_args.args[0])
+        self.assertIn("fc-1", log.call_args.args[0])
 
     def test_spawned_task_persists_the_failure_webhook(self):
         state = MagicMock()
@@ -122,9 +144,11 @@ class StartTests(unittest.TestCase):
         with patch.dict(config.modal_worker, {"app_name": "worker-app"}), \
                 patch.object(remote_dispatch, "spawn", return_value=("fc-1", "render_faceless")), \
                 patch.object(remote_dispatch, "wait_for_call") as wait, \
-                patch("app.services.state.state", state):
+                patch("app.services.state.state", state), \
+                patch("app.services.state.persist_state_update") as persist:
             remote_dispatch.start("t-1", params, "video")
-        state.update_task.assert_called_once_with(
+        persist.assert_called_once_with(
+            state,
             "t-1",
             modal_call_id="fc-1",
             modal_function="render_faceless",
@@ -145,9 +169,10 @@ class StartTests(unittest.TestCase):
                 with patch.dict(config.modal_worker, {"app_name": "worker-app"}), \
                         patch.object(remote_dispatch, "spawn", return_value=("fc-1", "render_faceless")), \
                         patch.object(remote_dispatch, "wait_for_call"), \
-                        patch("app.services.state.state", state):
+                        patch("app.services.state.state", state), \
+                        patch("app.services.state.persist_state_update") as persist:
                     remote_dispatch.start("t-1", params, "video")
-                self.assertNotIn("webhook_url", state.update_task.call_args.kwargs)
+                self.assertNotIn("webhook_url", persist.call_args.kwargs)
 
     def test_spawned_task_persists_the_video_title(self):
         state = MagicMock()
@@ -155,9 +180,11 @@ class StartTests(unittest.TestCase):
         with patch.dict(config.modal_worker, {"app_name": "worker-app"}), \
                 patch.object(remote_dispatch, "spawn", return_value=("fc-1", "render_faceless")), \
                 patch.object(remote_dispatch, "wait_for_call") as wait, \
-                patch("app.services.state.state", state):
+                patch("app.services.state.state", state), \
+                patch("app.services.state.persist_state_update") as persist:
             remote_dispatch.start("t-1", params, "video")
-        state.update_task.assert_called_once_with(
+        persist.assert_called_once_with(
+            state,
             "t-1",
             modal_call_id="fc-1",
             modal_function="render_faceless",
@@ -178,9 +205,10 @@ class StartTests(unittest.TestCase):
                 with patch.dict(config.modal_worker, {"app_name": "worker-app"}), \
                         patch.object(remote_dispatch, "spawn", return_value=("fc-1", "render_faceless")), \
                         patch.object(remote_dispatch, "wait_for_call"), \
-                        patch("app.services.state.state", state):
+                        patch("app.services.state.state", state), \
+                        patch("app.services.state.persist_state_update") as persist:
                     remote_dispatch.start("t-1", params, "video")
-                self.assertNotIn("video_title", state.update_task.call_args.kwargs)
+                self.assertNotIn("video_title", persist.call_args.kwargs)
 
     def test_failed_spawn_runs_the_pipeline_here(self):
         local = MagicMock(return_value="done")
@@ -197,9 +225,11 @@ class StartTests(unittest.TestCase):
         local = MagicMock()
         with patch.dict(config.modal_worker, {"app_name": "worker-app"}), \
                 patch.object(remote_dispatch, "spawn") as spawn, \
+                patch.object(remote_dispatch, "_local_semaphore") as semaphore, \
                 patch("app.services.task.start", local):
             remote_dispatch.start("t-1", "params", "audio")
         spawn.assert_not_called()
+        semaphore.assert_not_called()
         local.assert_called_once_with("t-1", "params", "audio")
 
     def test_off_runs_task_start_without_the_local_cap(self):
@@ -218,6 +248,76 @@ class StartTests(unittest.TestCase):
         fake.Function.from_name.side_effect = modal.exception.NotFoundError("no app")
         with patch.dict(config.modal_worker, {"app_name": "worker-app"}), \
                 patch.object(remote_dispatch, "_effective_voice", return_value=""), \
+                patch.object(remote_dispatch.logger, "error") as log:
+            spawned = remote_dispatch.spawn("t-1", SimpleNamespace(video_type="faceless"), "video", modal_module=fake)
+        self.assertIsNone(spawned)
+        self.assertIn("running it locally", log.call_args.args[0])
+
+    def test_a_from_name_failure_runs_the_pipeline_here(self):
+        fake = _fake_modal()
+        fake.Function.from_name.side_effect = modal.exception.NotFoundError("no app")
+        local = MagicMock(return_value="done")
+        with patch.dict(config.modal_worker, {"app_name": "worker-app"}), \
+                patch.object(remote_dispatch, "_effective_voice", return_value=""), \
+                patch.object(remote_dispatch, "_modal", return_value=fake), \
+                patch.object(remote_dispatch, "wait_for_call") as wait, \
+                patch("app.services.task.start", local):
+            result = remote_dispatch.start("t-1", SimpleNamespace(video_type="faceless"), "video")
+        self.assertEqual(result, "done")
+        local.assert_called_once()
+        wait.assert_not_called()
+
+    def test_a_spawn_transport_error_fails_the_task_instead_of_rendering_twice(self):
+        fake = _fake_modal()
+        fake.Function.from_name.return_value.spawn.side_effect = modal.exception.ConnectionError("down")
+        local = MagicMock()
+        with patch.dict(config.modal_worker, {"app_name": "worker-app"}), \
+                patch.object(remote_dispatch, "_effective_voice", return_value=""), \
+                patch.object(remote_dispatch, "worker_payload", return_value={}), \
+                patch.object(remote_dispatch, "_modal", return_value=fake), \
+                patch.object(remote_dispatch, "wait_for_call") as wait, \
+                patch("app.services.task_outcome.fail_or_stop") as fail, \
+                patch.object(remote_dispatch.logger, "error"), \
+                patch("app.services.task.start", local):
+            result = remote_dispatch.start("t-1", "params", "video")
+        self.assertIsNone(result)
+        fail.assert_called_once_with("t-1", remote_dispatch.AMBIGUOUS_SPAWN_ERROR, "params", stage="dispatch")
+        local.assert_not_called()
+        wait.assert_not_called()
+
+    def test_a_spawn_non_transport_error_runs_the_pipeline_here(self):
+        fake = _fake_modal()
+        fake.Function.from_name.return_value.spawn.side_effect = modal.exception.InvalidError("bad payload")
+        local = MagicMock(return_value="done")
+        with patch.dict(config.modal_worker, {"app_name": "worker-app"}), \
+                patch.object(remote_dispatch, "_effective_voice", return_value=""), \
+                patch.object(remote_dispatch, "worker_payload", return_value={}), \
+                patch.object(remote_dispatch, "_modal", return_value=fake), \
+                patch.object(remote_dispatch, "wait_for_call") as wait, \
+                patch("app.services.task_outcome.fail_or_stop") as fail, \
+                patch("app.services.task.start", local):
+            result = remote_dispatch.start("t-1", "params", "video")
+        self.assertEqual(result, "done")
+        local.assert_called_once_with("t-1", "params", "video")
+        fail.assert_not_called()
+        wait.assert_not_called()
+
+    def test_spawn_raises_on_a_transport_error_from_function_spawn(self):
+        fake = _fake_modal()
+        fake.Function.from_name.return_value.spawn.side_effect = modal.exception.ConnectionError("down")
+        with patch.dict(config.modal_worker, {"app_name": "worker-app"}), \
+                patch.object(remote_dispatch, "_effective_voice", return_value=""), \
+                patch.object(remote_dispatch, "worker_payload", return_value={}), \
+                patch.object(remote_dispatch.logger, "error"):
+            with self.assertRaises(remote_dispatch.AmbiguousSpawnError):
+                remote_dispatch.spawn("t-1", SimpleNamespace(video_type="faceless"), "video", modal_module=fake)
+
+    def test_spawn_returns_none_on_a_non_transport_error_from_function_spawn(self):
+        fake = _fake_modal()
+        fake.Function.from_name.return_value.spawn.side_effect = modal.exception.InvalidError("bad payload")
+        with patch.dict(config.modal_worker, {"app_name": "worker-app"}), \
+                patch.object(remote_dispatch, "_effective_voice", return_value=""), \
+                patch.object(remote_dispatch, "worker_payload", return_value={}), \
                 patch.object(remote_dispatch.logger, "error") as log:
             spawned = remote_dispatch.spawn("t-1", SimpleNamespace(video_type="faceless"), "video", modal_module=fake)
         self.assertIsNone(spawned)
@@ -295,6 +395,36 @@ class WaitForCallTests(unittest.TestCase):
         call.cancel.assert_called_once_with(terminate_containers=True)
         self.state.delete_task.assert_called_once_with("t-1")
         call.get.assert_not_called()
+        fail.assert_not_called()
+
+    def test_a_failed_cancel_is_retried_until_it_succeeds(self):
+        call = MagicMock()
+        call.cancel.side_effect = [RuntimeError("down"), RuntimeError("down"), None]
+        call.get.side_effect = [TimeoutError(), TimeoutError()]
+        with patch("app.services.task_cancellation.is_cancelled", return_value=True):
+            fail = self._wait(call, {"state": const.TASK_STATE_PROCESSING})
+        self.assertEqual(call.cancel.call_count, 3)
+        self.state.delete_task.assert_called_once_with("t-1")
+        fail.assert_not_called()
+
+    def test_a_failed_cancel_deletes_the_row_when_the_call_ends(self):
+        call = MagicMock()
+        call.cancel.side_effect = RuntimeError("down")
+        call.get.side_effect = modal.exception.InputCancellation("c")
+        with patch("app.services.task_cancellation.is_cancelled", return_value=True):
+            fail = self._wait(call, {"state": const.TASK_STATE_PROCESSING})
+        self.assertEqual(call.cancel.call_count, 1)
+        self.state.delete_task.assert_called_once_with("t-1")
+        fail.assert_not_called()
+
+    def test_a_failed_cancel_deletes_the_row_when_the_call_ends_with_a_non_transport_error(self):
+        call = MagicMock()
+        call.cancel.side_effect = RuntimeError("down")
+        call.get.side_effect = modal.exception.FunctionTimeoutError("timeout")
+        with patch("app.services.task_cancellation.is_cancelled", return_value=True):
+            fail = self._wait(call, {"state": const.TASK_STATE_PROCESSING})
+        self.assertEqual(call.cancel.call_count, 1)
+        self.state.delete_task.assert_called_once_with("t-1")
         fail.assert_not_called()
 
     def _wait_with_clock(self, call: MagicMock, row: dict, clock: dict) -> MagicMock:
