@@ -84,3 +84,68 @@ def test_delete_video_succeeds_when_rmtree_raises_and_logs_error(monkeypatch, tm
     assert any(task_id in line for line in errors)
     assert not any(str(tmp_path) in line for line in errors)
     sm.state.delete_task(task_id)
+
+
+def test_delete_video_cancels_a_live_modal_call_first(monkeypatch, tmp_path):
+    from app.services import cpu_worker_dispatch as dispatch
+
+    task_id = "delete-modal-1"
+    monkeypatch.setenv("MPT_STORAGE_DIR", str(tmp_path))
+    sm.state.update_task(
+        task_id,
+        user_id="u-1",
+        state=const.TASK_STATE_PROCESSING,
+        progress=40,
+        remote_worker=dispatch.REMOTE_WORKER_VALUE,
+        remote_call_id="fc-1",
+    )
+    current = Path(utils.task_dir()) / task_id
+    current.mkdir()
+    (current / "audio.mp3").write_text("audio", encoding="utf-8")
+    cancelled: list[str] = []
+    monkeypatch.setattr(
+        dispatch,
+        "_cancel_modal_call",
+        lambda call_id: cancelled.append(call_id),
+    )
+    seen: dict[str, object] = {}
+
+    real_rmtree = shutil.rmtree
+
+    def _rmtree(path, *args, **kwargs):
+        seen["cancelled_before_rmtree"] = list(cancelled)
+        real_rmtree(path, *args, **kwargs)
+
+    monkeypatch.setattr(shutil, "rmtree", _rmtree)
+
+    response = video_controller.delete_video(_request(), task_id)
+
+    assert cancelled == ["fc-1"]
+    assert seen["cancelled_before_rmtree"] == ["fc-1"]
+    assert sm.state.get_task(task_id) is None
+    assert response["status"] == 200
+    sm.state.delete_task(task_id)
+
+
+def test_delete_video_does_not_cancel_a_local_task(monkeypatch, tmp_path):
+    from app.services import cpu_worker_dispatch as dispatch
+
+    task_id = "delete-local-1"
+    monkeypatch.setenv("MPT_STORAGE_DIR", str(tmp_path))
+    sm.state.update_task(
+        task_id, user_id="u-1", state=const.TASK_STATE_PROCESSING, progress=40
+    )
+    current = Path(utils.task_dir()) / task_id
+    current.mkdir()
+    cancelled: list[str] = []
+    monkeypatch.setattr(
+        dispatch,
+        "_cancel_modal_call",
+        lambda call_id: cancelled.append(call_id),
+    )
+
+    response = video_controller.delete_video(_request(), task_id)
+
+    assert cancelled == []
+    assert response["status"] == 200
+    sm.state.delete_task(task_id)

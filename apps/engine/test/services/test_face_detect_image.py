@@ -160,5 +160,5 @@ def test_returns_none_when_detection_raises(fake_cv2):
     assert face_detect.image_contains_face(str(RESOURCE)) is None
 
 
-def test_real_cv2_reports_no_face_in_a_faceless_resource_image():
+def test_real_cv2_reports_no_face_in_a_voiceover_resource_image():
     assert face_detect.image_contains_face(str(RESOURCE)) is False

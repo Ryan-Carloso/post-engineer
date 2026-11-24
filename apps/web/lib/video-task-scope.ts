@@ -9,14 +9,14 @@ import { createSupabaseServiceClient } from '@/lib/supabase/service';
 export interface TaskScope {
   found: boolean;
   personaId: string | null;
-  faceless: boolean;
+  voiceover: boolean;
   scheduleMissing: boolean;
 }
 
 const NOT_FOUND: TaskScope = {
   found: false,
   personaId: null,
-  faceless: false,
+  voiceover: false,
   scheduleMissing: false,
 };
 
@@ -56,14 +56,14 @@ export async function resolveTaskScope(
     return {
       found: true,
       personaId,
-      faceless: personaId === null,
+      voiceover: personaId === null,
       scheduleMissing: false,
     };
   }
 
   const { data: slot, error: slotError } = await supabase
     .from('scheduled_posts')
-    .select('schedule_id, faceless')
+    .select('schedule_id, voiceover')
     .eq('user_id', userId)
     .eq('task_id', taskId)
     .limit(1)
@@ -71,10 +71,10 @@ export async function resolveTaskScope(
   if (slotError) throw slotError;
   if (slot === null) return NOT_FOUND;
 
-  const faceless = field(slot, 'faceless') === true;
+  const voiceover = field(slot, 'voiceover') === true;
   const scheduleId = stringOrNull(field(slot, 'schedule_id'));
   if (scheduleId === null) {
-    return { found: true, personaId: null, faceless, scheduleMissing: false };
+    return { found: true, personaId: null, voiceover, scheduleMissing: false };
   }
 
   const { data: schedule, error: scheduleError } = await supabase
@@ -85,20 +85,20 @@ export async function resolveTaskScope(
     .maybeSingle();
   if (scheduleError) throw scheduleError;
   if (schedule === null) {
-    return { found: true, personaId: null, faceless, scheduleMissing: true };
+    return { found: true, personaId: null, voiceover, scheduleMissing: true };
   }
   return {
     found: true,
     personaId: stringOrNull(field(schedule, 'persona_id')),
-    faceless,
+    voiceover,
     scheduleMissing: false,
   };
 }
 
 export function isTaskVisibleToScopedKey(scope: TaskScope, personaIds: readonly string[]): boolean {
   if (!scope.found) return false;
-  if (scope.scheduleMissing) return scope.faceless === true;
-  if (scope.personaId === null) return scope.faceless === true;
+  if (scope.scheduleMissing) return scope.voiceover === true;
+  if (scope.personaId === null) return scope.voiceover === true;
   return personaIds.includes(scope.personaId);
 }
 

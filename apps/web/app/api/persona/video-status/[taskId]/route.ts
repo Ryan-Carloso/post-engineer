@@ -11,6 +11,8 @@ import {
 import { apiErrorResponse } from '@/lib/api-error';
 import { rewriteVideoUrls, SAFE_TASK_ID } from '@/lib/video-urls';
 import { enforceScopedTaskRead } from '@/lib/video-task-scope';
+import { applyTaskPollLimit, taskPollCaller } from '@/lib/task-poll-limit';
+import { RATE_LIMITS } from '@/lib/rate-limit';
 import { extractTaskError, isFailedVideoStatus, isCompletedVideoStatus } from '@/lib/engine-task-state';
 import { hasPublishedSlotForTask, readDurableTaskState } from '@/lib/generation/gone-settle';
 import { lookupSlotIdForTask } from '@/lib/slot-by-task';
@@ -35,6 +37,9 @@ async function getHandler(
   if (!SAFE_TASK_ID.test(taskId)) {
     return apiErrorResponse(400, 'Invalid taskId.', { route: 'GET /api/persona/video-status' });
   }
+
+  const pollLimited = await applyTaskPollLimit(request, taskPollCaller(auth), taskId, RATE_LIMITS.taskStatusPoll);
+  if (pollLimited) return pollLimited;
 
   const scopeError = await enforceScopedTaskRead(
     auth,

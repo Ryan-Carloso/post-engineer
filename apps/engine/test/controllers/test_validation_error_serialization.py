@@ -27,7 +27,7 @@ def test_repeated_photo_returns_400_with_field_rule_and_fix(auth_headers):
         {
             "video_title": "Porto",
             "video_description": "Test description.",
-            "video_type": "faceless",
+            "video_type": "voiceover",
             "segments": segments,
         },
         auth_headers,

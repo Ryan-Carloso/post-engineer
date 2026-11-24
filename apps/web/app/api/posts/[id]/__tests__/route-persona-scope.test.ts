@@ -82,7 +82,7 @@ const SLOT_ROW = {
   error: null,
   published_at: null,
   task_id: 'task-2',
-  faceless: false,
+  voiceover: false,
 };
 
 function scheduleRow(personaId: string | null): Record<string, unknown> {

@@ -36,7 +36,7 @@ export async function signedUrl(
 
 export interface PersonaPrep {
   personaName: string;
-  faceless: boolean;
+  voiceover: boolean;
   faceQuality: FaceQuality;
   voiceAudioUrl?: string;
   voiceIdValue?: string;
@@ -114,7 +114,7 @@ export function resolvePostWithoutPersona(opts: {
 }): PersonaPrep {
   return {
     personaName: 'Post',
-    faceless: true,
+    voiceover: true,
     faceQuality: 'ok',
     voiceAudioUrl: opts.audioUrl,
     voiceIdValue: opts.voiceId,

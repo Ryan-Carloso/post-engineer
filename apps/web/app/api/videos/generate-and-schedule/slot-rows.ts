@@ -26,7 +26,7 @@ export function buildSlotRows(input: SlotRowInput) {
     title: input.title,
     description: input.description,
     video_type: input.videoType,
-    faceless: input.videoType === 'faceless',
+    voiceover: input.videoType === 'voiceover',
     full_lipsync: input.videoType === 'full_lipsync',
     music_mood: input.musicMood ?? null,
     charged_tokens: input.chargedTokens,

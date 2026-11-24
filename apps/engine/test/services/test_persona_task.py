@@ -27,7 +27,7 @@ def _params(**persona_fields) -> VideoParams:
         return VideoParams(
             video_title="viagem",
             video_description="Test description.",
-            video_type="faceless",
+            video_type="voiceover",
             video_aspect="9:16",
         )
     fields = {
@@ -70,19 +70,19 @@ class TestPersonaInSchema:
                 avatar_url="https://x.test/a.png",
             )
 
-    def test_faceless_persona_accepts_zero_visuals(self):
-        """Faceless mode: a persona with neither photo nor avatar (voice only) is valid."""
+    def test_voiceover_persona_accepts_zero_visuals(self):
+        """Voiceover mode: a persona with neither photo nor avatar (voice only) is valid."""
         persona = PersonaParams(name="Canal Ninja", voice_id="calm")
 
         assert persona.photo_url is None
         assert persona.avatar_url is None
 
-    def test_faceless_persona_still_requires_a_voice(self):
-        """Mesmo sem visual, a persona faceless precisa de uma voz."""
+    def test_voiceover_persona_still_requires_a_voice(self):
+        """Mesmo sem visual, a persona voiceover precisa de uma voz."""
         with pytest.raises(ValidationError, match="exactly one of voice_id"):
             PersonaParams(name="Canal Ninja")
 
-    def test_faceless_persona_still_rejects_both_voices(self):
+    def test_voiceover_persona_still_rejects_both_voices(self):
         with pytest.raises(ValidationError, match="exactly one of voice_id"):
             PersonaParams(
                 name="Canal Ninja",
@@ -164,19 +164,19 @@ class TestPersonaHookBoundary:
 
 
 class TestPersonaLipsyncGate:
-    """Faceless keeps the persona voice but skips the
+    """Voiceover keeps the persona voice but skips the
     LongCat intro entirely (no GPU work)."""
 
     def test_persona_with_default_lipsync_is_active(self):
         assert task_service.persona_lipsync_active(_params(voice_id="calm")) is True
 
-    def test_persona_with_faceless_is_inactive(self):
+    def test_persona_with_voiceover_is_inactive(self):
         params = _params(voice_id="calm")
-        params.video_type = "faceless"
+        params.video_type = "voiceover"
         assert task_service.persona_lipsync_active(params) is False
 
-    def test_faceless_persona_without_visual_is_inactive(self):
-        """Faceless mode: without photo/avatar there is
+    def test_voiceover_persona_without_visual_is_inactive(self):
+        """Voiceover mode: without photo/avatar there is
         no intro lip-sync and no face exclusion (exclude_faces=False)."""
         params = _params(name="Canal Ninja", voice_id="calm", photo_url=None)
         assert task_service.persona_lipsync_active(params) is False
@@ -187,18 +187,18 @@ class TestPersonaLipsyncGate:
 
     def test_no_persona_is_never_active(self):
         params = VideoParams(
-            video_title="viagem", video_description="Test description.", video_type="faceless"
+            video_title="viagem", video_description="Test description.", video_type="voiceover"
         )
         assert task_service.persona_lipsync_active(params) is False
 
 
 class TestPersonaHookGate:
-    """In faceless mode the script skips the persona hook contract:
+    """In voiceover mode the script skips the persona hook contract:
     no paragraph constraints, no hook validation, and no LLM calls."""
 
-    def test_faceless_skips_hook_validation(self):
+    def test_voiceover_skips_hook_validation(self):
         params = _params(name="Ana", voice_id="calm")
-        params.video_type = "faceless"
+        params.video_type = "voiceover"
         params.video_script = "A single paragraph without hook rules."
         assert not hasattr(task_service, "llm")
         result = generate_script("normal-video", params)
@@ -295,7 +295,7 @@ class TestPersonaPacingConstants:
 
     def test_video_params_has_no_pacing_fields(self):
         params = VideoParams(
-            video_title="viagem", video_description="Test description.", video_type="faceless"
+            video_title="viagem", video_description="Test description.", video_type="voiceover"
         )
         assert not hasattr(params, "persona_hook_min_seconds")
         assert not hasattr(params, "persona_hook_max_seconds")

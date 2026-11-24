@@ -40,10 +40,10 @@ export interface CheckedRequest {
 
 function personaLessIssues(options: ValidatedOptions): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
-  if (options.videoType !== 'faceless') {
+  if (options.videoType !== 'voiceover') {
     issues.push({
       code: 'VALIDATION_FAILED',
-      message: 'A post without a persona must be faceless: set options.videoType to \'faceless\'.',
+      message: 'A post without a persona must be voiceover: set options.videoType to \'voiceover\'.',
       field: 'options.videoType',
     });
   }

@@ -67,7 +67,7 @@ class TestPortugalCampervanE2E(unittest.TestCase):
         params = VideoParams(
             video_title=SUBJECT,
             video_description="Test description.",
-            video_type="faceless",
+            video_type="voiceover",
             video_script=SCRIPT,
             video_language=LANGUAGE,
             video_aspect=ASPECT,

@@ -505,8 +505,8 @@ describe('PersonaImageLibrarySection', () => {
       't:persona.libraryErrorFull',
     );
     expect(
-      mapPersonaImageError('Faceless persona must not include library images.', t, 'persona.libraryUploadError'),
-    ).toBe('t:persona.libraryErrorFaceless');
+      mapPersonaImageError('Voiceover persona must not include library images.', t, 'persona.libraryUploadError'),
+    ).toBe('t:persona.libraryErrorVoiceover');
     expect(
       mapPersonaImageError('tag must be at most 100 characters.', t, 'persona.libraryUpdateError'),
     ).toBe('t:persona.libraryErrorTooLong');

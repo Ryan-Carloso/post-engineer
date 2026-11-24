@@ -108,7 +108,7 @@ describe('usePersonaStore', () => {
     expect(formData.has('photo')).toBe(false);
   });
 
-  it('holds no faceless mode and no face mix', () => {
+  it('holds no voiceover mode and no face mix', () => {
     const state = usePersonaStore.getState() as unknown as Record<string, unknown>;
     for (const key of [
       'personaMode',

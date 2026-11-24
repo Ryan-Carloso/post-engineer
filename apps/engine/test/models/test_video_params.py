@@ -23,7 +23,7 @@ def _params(**overrides):
     fields = {
         "video_title": "Slot subject",
         "video_description": "Agent description.",
-        "video_type": "faceless",
+        "video_type": "voiceover",
     }
     fields.update(overrides)
     return VideoParams(**fields)
@@ -32,11 +32,11 @@ def _params(**overrides):
 class VideoTitleDescriptionTests(unittest.TestCase):
     def test_missing_title_fails_validation(self):
         with self.assertRaises(ValidationError):
-            VideoParams(video_description="Agent description.", video_type="faceless")
+            VideoParams(video_description="Agent description.", video_type="voiceover")
 
     def test_missing_description_fails_validation(self):
         with self.assertRaises(ValidationError):
-            VideoParams(video_title="Slot subject", video_type="faceless")
+            VideoParams(video_title="Slot subject", video_type="voiceover")
 
     def test_empty_title_fails_validation(self):
         with self.assertRaises(ValidationError):

@@ -977,11 +977,11 @@ describe('GET /api/schedule/slots/[slotId] generation facts', () => {
 
   it('returns the generation facts used to create the post', async () => {
     const generation = await getGeneration(
-      { ...SLOT_DETAIL_ROW, faceless: true },
+      { ...SLOT_DETAIL_ROW, voiceover: true },
       SNAPSHOT_SCHEDULE_ROW,
     );
     expect(generation).toEqual({
-      prompt: null, faceless: true,
+      prompt: null, voiceover: true,
       language: 'pt-BR',
       voiceId: 'ana_neural',
       videoAspect: '9:16',
@@ -992,17 +992,17 @@ describe('GET /api/schedule/slots/[slotId] generation facts', () => {
     });
   });
 
-  it('reports faceless as true only for the literal true', async () => {
-    for (const faceless of [true, false, null, 'true', 1]) {
-      const generation = await getGeneration({ ...SLOT_DETAIL_ROW, faceless }, SCHEDULE_ROW);
-      expect(generation.faceless).toBe(faceless === true);
+  it('reports voiceover as true only for the literal true', async () => {
+    for (const voiceover of [true, false, null, 'true', 1]) {
+      const generation = await getGeneration({ ...SLOT_DETAIL_ROW, voiceover }, SCHEDULE_ROW);
+      expect(generation.voiceover).toBe(voiceover === true);
     }
   });
 
   it('omits nothing when the snapshot columns are null', async () => {
     const generation = await getGeneration(SLOT_DETAIL_ROW, SCHEDULE_ROW);
     expect(generation).toEqual({
-      prompt: null, faceless: false,
+      prompt: null, voiceover: false,
       language: null,
       voiceId: null,
       videoAspect: null,
@@ -1030,7 +1030,7 @@ describe('GET /api/schedule/slots/[slotId] generation facts', () => {
     };
     expect(body.success).toBe(true);
     expect(body.persona).toBeNull();
-    expect(body.generation.faceless).toBe(false);
+    expect(body.generation.voiceover).toBe(false);
   });
 });
 
@@ -1261,7 +1261,7 @@ describe('slot id normalization', () => {
       client.calls
         .filter((c) => c.table === 'scheduled_posts' && c.op === 'select')
         .map((c) => c.args),
-    ).toEqual([['id, schedule_id, slot_at, status, title, error, published_at, task_id, faceless, publish_outcomes, segments, prompt_version_id']]);
+    ).toEqual([['id, schedule_id, slot_at, status, title, error, published_at, task_id, voiceover, publish_outcomes, segments, prompt_version_id']]);
     expect(
       client.calls
         .filter((c) => c.table === 'scheduled_posts' && c.op === 'eq')

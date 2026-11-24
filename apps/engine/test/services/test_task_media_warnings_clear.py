@@ -77,7 +77,7 @@ class MediaWarningsClearTests(unittest.TestCase):
         params = TaskVideoRequest(
             video_title="Porto walks",
             video_description="Test description.",
-            video_type="faceless",
+            video_type="voiceover",
             segments=SEGMENTS,
             voice_name="chatterbox:kokoro_af_heart",
         )
@@ -89,7 +89,7 @@ class MediaWarningsClearTests(unittest.TestCase):
         params = TaskVideoRequest(
             video_title="Porto walks",
             video_description="Test description.",
-            video_type="faceless",
+            video_type="voiceover",
             segments=SEGMENTS,
             voice_name="chatterbox:kokoro_af_heart",
         )
@@ -102,7 +102,7 @@ class MediaWarningsClearTests(unittest.TestCase):
         params = VideoParams(
             video_title="Porto walks",
             video_description="Test description.",
-            video_type="faceless",
+            video_type="voiceover",
             voice_name="chatterbox:kokoro_af_heart",
         )
         writes = self._run_to_materials(params, [])

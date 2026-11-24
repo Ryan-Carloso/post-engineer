@@ -24,7 +24,7 @@ class TestGenerateAudioForwardsLanguage(unittest.TestCase):
         params = VideoParams(
             video_title="Port wine cellars",
             video_description="Test description.",
-            video_type="faceless",
+            video_type="voiceover",
             video_language="en",
             voice_name="chatterbox:en_us_male_01",
         )

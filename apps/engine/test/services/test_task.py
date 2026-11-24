@@ -33,7 +33,7 @@ class TestTaskService(unittest.TestCase):
     def test_generate_final_videos_does_not_rerecord_old_bgm(self):
         task_id = "bgm-history-no-selection"
         params = VideoParams(
-            video_title="test", video_description="Test description.", video_type="faceless"
+            video_title="test", video_description="Test description.", video_type="voiceover"
         )
         with (
             patch.object(tm.sm.state, "get_task", return_value={"user_id": "alice"}),
@@ -58,7 +58,7 @@ class TestTaskService(unittest.TestCase):
         params = VideoParams(
             video_title="custom audio",
             video_description="Test description.",
-            video_type="faceless",
+            video_type="voiceover",
             video_script="",
             custom_audio_file="custom-audio.mp3",
             voice_name="test-voice",
@@ -88,7 +88,7 @@ class TestTaskService(unittest.TestCase):
             params = VideoParams(
                 video_title="custom audio",
                 video_description="Test description.",
-                video_type="faceless",
+                video_type="voiceover",
                 video_script="",
                 custom_audio_file=server_audio.name,
                 voice_name="test-voice",
@@ -126,7 +126,7 @@ class TestTaskService(unittest.TestCase):
         params = VideoParams(
             video_title="custom audio",
             video_description="Test description.",
-            video_type="faceless",
+            video_type="voiceover",
             video_script="",
             custom_audio_file="missing.mp3",
             voice_name="test-voice",
@@ -171,7 +171,7 @@ class TestTaskService(unittest.TestCase):
         params = VideoParams(
             video_title="custom audio",
             video_description="Test description.",
-            video_type="faceless",
+            video_type="voiceover",
             video_script="Hello world.",
             subtitle_enabled=True,
         )
@@ -214,7 +214,7 @@ class TestTaskService(unittest.TestCase):
         params = VideoParams(
             video_title="custom audio",
             video_description="Test description.",
-            video_type="faceless",
+            video_type="voiceover",
             video_script="Hello world.",
             subtitle_enabled=True,
         )
@@ -249,11 +249,11 @@ class TestGetVideoMaterials(unittest.TestCase):
         params = VideoParams(
             video_title="x",
             video_description="Test description.",
-            video_type="faceless",
+            video_type="voiceover",
         )
 
         with patch.object(
-            tm.faceless_material, "images_canvas", return_value=["canvas.mp4"]
+            tm.voiceover_material, "images_canvas", return_value=["canvas.mp4"]
         ) as canvas:
             result = tm.get_video_materials(
                 task_id="images-canvas",
@@ -268,10 +268,10 @@ class TestGetVideoMaterials(unittest.TestCase):
         params = VideoParams(
             video_title="x",
             video_description="Test description.",
-            video_type="faceless",
+            video_type="voiceover",
         )
 
-        with patch.object(tm.faceless_material, "images_canvas", return_value=[]):
+        with patch.object(tm.voiceover_material, "images_canvas", return_value=[]):
             result = tm.get_video_materials(
                 task_id="images-canvas-fail",
                 params=params,
@@ -291,7 +291,7 @@ class TestGenerateFinalVideosSingleOutput(unittest.TestCase):
         params = VideoParams(
             video_title="x",
             video_description="Test description.",
-            video_type=params_kwargs.pop("video_type", "faceless"),
+            video_type=params_kwargs.pop("video_type", "voiceover"),
             **params_kwargs,
         )
         with (
@@ -397,7 +397,7 @@ class TestGenerateFinalVideosTransitionWiring(unittest.TestCase):
         params = VideoParams(
             video_title="x",
             video_description="Test description.",
-            video_type="faceless",
+            video_type="voiceover",
             video_transition_mode=video_transition_mode,
         )
         with (
@@ -599,7 +599,7 @@ class TestDownloadPersonaVoice(unittest.TestCase):
         params = VideoParams(
             video_title="voz rejeitada",
             video_description="Test description.",
-            video_type="faceless",
+            video_type="voiceover",
             video_script="",
         )
         persona = {"voice_audio_url": "http://127.0.0.1/voz.mp3"}
@@ -641,7 +641,7 @@ class TestGenerateAudioMissingVoice(unittest.TestCase):
         params = VideoParams(
             video_title="no voice",
             video_description="Test description.",
-            video_type="faceless",
+            video_type="voiceover",
             video_script="",
         )
 
@@ -694,7 +694,7 @@ class TestGenerateAudioTtsFailureReason(unittest.TestCase):
         params = VideoParams(
             video_title="reason propagation",
             video_description="Test description.",
-            video_type="faceless",
+            video_type="voiceover",
             video_script="",
             voice_name="elevenlabs:bad-id",
         )
@@ -766,7 +766,7 @@ class TestFailTaskDiscordDedupe(unittest.TestCase):
 
     def test_fail_task_alert_includes_subject(self):
         params = VideoParams(
-            video_title="Lisbon trams", video_description="Test description.", video_type="faceless"
+            video_title="Lisbon trams", video_description="Test description.", video_type="voiceover"
         )
         with (
             patch.object(tm.sm.state, "update_task"),
@@ -825,7 +825,7 @@ class TestCompleteTaskCostReason(unittest.TestCase):
 
     def _complete(self, task_id, **kwargs):
         params = VideoParams(
-            video_title="t", video_description="Test description.", video_type="faceless"
+            video_title="t", video_description="Test description.", video_type="voiceover"
         )
         with (
             patch.object(tm.sm.state, "update_task"),
@@ -864,7 +864,7 @@ class TestCompleteTaskCostReason(unittest.TestCase):
 
     def test_reason_is_persisted_on_the_task_row(self):
         params = VideoParams(
-            video_title="t", video_description="Test description.", video_type="faceless"
+            video_title="t", video_description="Test description.", video_type="voiceover"
         )
         with (
             patch.object(tm.sm.state, "update_task") as update_task,
@@ -1007,7 +1007,7 @@ class TestStartR2Requirement(unittest.TestCase):
 
     def test_video_run_fails_fast_without_r2(self):
         params = VideoParams(
-            video_title="s", video_description="Test description.", video_type="faceless"
+            video_title="s", video_description="Test description.", video_type="voiceover"
         )
         with (
             self._no_r2_env(),
@@ -1024,7 +1024,7 @@ class TestStartR2Requirement(unittest.TestCase):
 
     def test_partial_run_skips_r2_check(self):
         params = VideoParams(
-            video_title="s", video_description="Test description.", video_type="faceless"
+            video_title="s", video_description="Test description.", video_type="voiceover"
         )
         with (
             self._no_r2_env(),
@@ -1088,7 +1088,7 @@ class TestArchiveFinalVideos(unittest.TestCase):
         task_id = "archive-task-1"
         tm.sm.state.update_task(task_id, user_id="user-9", persona_id="persona-3")
         params = VideoParams(
-            video_title="s", video_description="Test description.", video_type="faceless"
+            video_title="s", video_description="Test description.", video_type="voiceover"
         )
         try:
             with patch(
@@ -1110,7 +1110,7 @@ class TestArchiveFinalVideos(unittest.TestCase):
         task_id = "archive-task-2"
         tm.sm.state.update_task(task_id, user_id="user-9")
         params = VideoParams(
-            video_title="s", video_description="Test description.", video_type="faceless"
+            video_title="s", video_description="Test description.", video_type="voiceover"
         )
         try:
             with patch(
@@ -1129,7 +1129,7 @@ class TestArchiveFinalVideos(unittest.TestCase):
                 "archive-task-3",
                 [],
                 VideoParams(
-                    video_title="s", video_description="Test description.", video_type="faceless"
+                    video_title="s", video_description="Test description.", video_type="voiceover"
                 ),
             )
             upload.assert_not_called()

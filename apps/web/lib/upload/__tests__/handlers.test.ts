@@ -60,7 +60,7 @@ vi.mock('@/lib/supabase/service', () => ({
 
 vi.mock('@/lib/upload/publish-media', () => ({
   uploadPublishMedia: vi.fn(async () => 'https://acct.r2.cloudflarestorage.com/videos/publish-media/instagram/x.jpg?X-Amz-Signature=s'),
-  presignPublishMedia: vi.fn(async () => 'https://acct.r2.cloudflarestorage.com/videos/u1/faceless/task-7/final-1.mp4?X-Amz-Signature=a'),
+  presignPublishMedia: vi.fn(async () => 'https://acct.r2.cloudflarestorage.com/videos/u1/voiceover/task-7/final-1.mp4?X-Amz-Signature=a'),
   cleanupPublishMedia: vi.fn(async () => 0),
 }));
 
@@ -442,29 +442,29 @@ describe('handleInstagramUpload', () => {
     vi.mocked(cleanupPublishMedia).mockClear();
     vi.mocked(presignPublishMedia).mockClear();
 
-    const fd = makeFormData({ caption: 'Test', videoStoragePath: 'u1/faceless/task-7/final-1.mp4' });
+    const fd = makeFormData({ caption: 'Test', videoStoragePath: 'u1/voiceover/task-7/final-1.mp4' });
     const response = await handleInstagramUpload(fd, OWNER_USER_ID, logId, startTime);
 
     expect(response.success).toBe(true);
-    expect(presignPublishMedia).toHaveBeenCalledWith('u1/faceless/task-7/final-1.mp4');
+    expect(presignPublishMedia).toHaveBeenCalledWith('u1/voiceover/task-7/final-1.mp4');
     expect(uploadPublishMedia).not.toHaveBeenCalled();
     expect(cleanupPublishMedia).not.toHaveBeenCalled();
     expect(publishMedia.mock.calls[0][3]).toBe(
-      'https://acct.r2.cloudflarestorage.com/videos/u1/faceless/task-7/final-1.mp4?X-Amz-Signature=a',
+      'https://acct.r2.cloudflarestorage.com/videos/u1/voiceover/task-7/final-1.mp4?X-Amz-Signature=a',
     );
   });
 
   it('rejects an archive key that belongs to another user', async () => {
     const { presignPublishMedia } = await import('@/lib/upload/publish-media');
     vi.mocked(presignPublishMedia).mockClear();
-    const fd = makeFormData({ caption: 'Test', videoStoragePath: 'other/faceless/task-7/final-1.mp4' });
+    const fd = makeFormData({ caption: 'Test', videoStoragePath: 'other/voiceover/task-7/final-1.mp4' });
     await expect(handleInstagramUpload(fd, OWNER_USER_ID, logId, startTime)).rejects.toThrow(ValidationError);
     expect(presignPublishMedia).not.toHaveBeenCalled();
   });
 
   it('rejects a request that sends both a file and an archive key', async () => {
     const file = new File([new Uint8Array(50)], 'clip.mp4', { type: 'video/mp4' });
-    const fd = makeFormData({ caption: 'Test', videoStoragePath: 'u1/faceless/task-7/final-1.mp4' }, file);
+    const fd = makeFormData({ caption: 'Test', videoStoragePath: 'u1/voiceover/task-7/final-1.mp4' }, file);
     await expect(handleInstagramUpload(fd, OWNER_USER_ID, logId, startTime)).rejects.toThrow(ValidationError);
   });
 });

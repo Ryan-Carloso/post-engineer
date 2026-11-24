@@ -105,10 +105,10 @@ def worker_function_for(params: Any, voice_name: str) -> str:
     """Pick the worker function from the video type and the voice.
 
     Any lip-sync type goes to the lip-sync function (it calls LongCat and
-    has the memory for a clone). A faceless clone needs 10 GiB for
-    Chatterbox Nano; a faceless house voice fits in 4 GiB.
+    has the memory for a clone). A voiceover clone needs 10 GiB for
+    Chatterbox Nano; a voiceover house voice fits in 4 GiB.
     """
-    if getattr(params, "video_type", "faceless") != "faceless":
+    if getattr(params, "video_type", "voiceover") != "voiceover":
         return LIPSYNC_FUNCTION
     if voice_name.startswith(CHATTERBOX_NANO_VOICE_PREFIX):
         return FACELESS_CLONE_FUNCTION

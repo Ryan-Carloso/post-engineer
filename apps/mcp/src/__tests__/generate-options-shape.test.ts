@@ -18,12 +18,12 @@ describe('generate_persona_video options (Phase 5-4)', () => {
       providers: ['youtube'],
       mode: 'asap',
       segments: [{ kind: 'hook', text: 'Stop scrolling, this Porto kitchen changes everything.' }],
-      options: { scriptPrompt: 'Be funny', videoType: 'faceless' },
+      options: { scriptPrompt: 'Be funny', videoType: 'voiceover' },
     });
     expect(parsed.success).toBe(true);
     if (parsed.success) {
       expect(parsed.data.options).not.toHaveProperty('scriptPrompt');
-      expect(parsed.data.options?.videoType).toBe('faceless');
+      expect(parsed.data.options?.videoType).toBe('voiceover');
     }
   });
 
@@ -49,7 +49,7 @@ describe('generate_persona_video options (Phase 5-4)', () => {
       providers: ['youtube'],
       mode: 'asap',
       segments: [{ kind: 'hook', text: 'Stop scrolling, this Porto kitchen changes everything.' }],
-      options: { videoType: 'faceless', videoAspect: '1:1' },
+      options: { videoType: 'voiceover', videoAspect: '1:1' },
     });
     expect(parsed.success).toBe(true);
     if (parsed.success) {
@@ -151,7 +151,7 @@ const VIDEO = {
 function parseOptions(options: Record<string, unknown>) {
   return GeneratePersonaVideoSchema.safeParse({
     ...VIDEO,
-    options: { videoType: 'faceless', ...options },
+    options: { videoType: 'voiceover', ...options },
   });
 }
 

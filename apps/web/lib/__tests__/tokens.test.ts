@@ -4,7 +4,7 @@ import {
   computeVideoTokens,
   netLedgerSpent,
   useTokenStore,
-  FACELESS_PRICE,
+  VOICEOVER_PRICE,
   FACE_QUALITY_PRICES,
   FULL_LIPSYNC_PRICES,
   DEFAULT_TOKEN_BALANCE,
@@ -14,8 +14,8 @@ import {
 } from '@/lib/tokens';
 
 describe('constant prices', () => {
-  it('faceless custa 1 token', () => {
-    expect(FACELESS_PRICE).toBe(1);
+  it('voiceover custa 1 token', () => {
+    expect(VOICEOVER_PRICE).toBe(1);
   });
 
   it('face ok custa 2 tokens e very_good custa 3', () => {
@@ -34,9 +34,9 @@ describe('constant prices', () => {
 });
 
 describe('computeVideoTokens', () => {
-  it('faceless custa 1 token, em qualquer qualidade (não há rosto a resolver)', () => {
-    expect(computeVideoTokens('faceless', 'ok')).toBe(1);
-    expect(computeVideoTokens('faceless', 'very_good')).toBe(1);
+  it('voiceover custa 1 token, em qualquer qualidade (não há rosto a resolver)', () => {
+    expect(computeVideoTokens('voiceover', 'ok')).toBe(1);
+    expect(computeVideoTokens('voiceover', 'very_good')).toBe(1);
   });
 
   it('hook lip-sync custa 2 tokens ok e 3 tokens very_good', () => {
@@ -50,7 +50,7 @@ describe('computeVideoTokens', () => {
   });
 
   it('o preço nunca é zero nem fracionário', () => {
-    for (const videoType of ['faceless', 'hook_lipsync', 'full_lipsync'] as const) {
+    for (const videoType of ['voiceover', 'hook_lipsync', 'full_lipsync'] as const) {
       for (const quality of ['ok', 'very_good'] as const) {
         const cost = computeVideoTokens(videoType, quality);
         expect(Number.isInteger(cost)).toBe(true);
@@ -63,7 +63,7 @@ describe('computeVideoTokens', () => {
 describe('video_type error messages', () => {
   it('unknownVideoTypeMessage names the bad value and lists every type with its cost', () => {
     expect(unknownVideoTypeMessage('bogus')).toBe(
-      "unknown video_type 'bogus'; use full_lipsync (8/15), hook_lipsync (2/3) or faceless (1)",
+      "unknown video_type 'bogus'; use full_lipsync (8/15), hook_lipsync (2/3) or voiceover (1)",
     );
   });
 
@@ -90,7 +90,7 @@ describe('video_type error messages', () => {
     expect(VIDEO_TYPE_ERROR_SUFFIX).toContain(
       `hook_lipsync (${FACE_QUALITY_PRICES.ok}/${FACE_QUALITY_PRICES.very_good})`,
     );
-    expect(VIDEO_TYPE_ERROR_SUFFIX).toContain(`faceless (${FACELESS_PRICE})`);
+    expect(VIDEO_TYPE_ERROR_SUFFIX).toContain(`voiceover (${VOICEOVER_PRICE})`);
   });
 });
 

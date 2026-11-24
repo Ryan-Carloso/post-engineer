@@ -30,7 +30,7 @@ export async function resolvePreChargeFallbackPhotos(
       return validationFailed(ERROR_CODES.VALIDATION_FAILED, imageCheck.error, 'options.imageId', imageCheck.status);
     }
     libraryImagePath = imageCheck.image?.image_path ?? null;
-  } else if (input.videoType !== 'faceless' && input.personaId !== null) {
+  } else if (input.videoType !== 'voiceover' && input.personaId !== null) {
     const selection = await resolveVideoImage(supabase, input.personaId, input.userId, [], {
       title: input.title,
       niche: input.prep.niche,

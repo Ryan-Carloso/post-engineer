@@ -100,14 +100,14 @@ describe('validateSegments with the images material', () => {
     ];
     const passed = validateSegments(segments);
     expect(passed.ok && passed.value.mediaCount).toBe(9);
-    const faceless = validateSegments(segments, 'faceless');
-    expect(faceless.ok).toBe(false);
-    if (!faceless.ok) {
-      expect(faceless.error.field).toBe('segments.0.media');
-      expect(faceless.error.rule).toBe(
+    const voiceover = validateSegments(segments, 'voiceover');
+    expect(voiceover.ok).toBe(false);
+    if (!voiceover.ok) {
+      expect(voiceover.error.field).toBe('segments.0.media');
+      expect(voiceover.error.rule).toBe(
         'segment has 25 words (~9s) and needs at least 5 images (one per 2s); it has 1.',
       );
-      expect(faceless.error.fix).toBe("Add 4 more images to this segment's media array.");
+      expect(voiceover.error.fix).toBe("Add 4 more images to this segment's media array.");
     }
   });
 
@@ -210,7 +210,7 @@ describe('validateSegments with the images material', () => {
     delete segments[1].media;
     expect(validateSegments(segments, 'full_lipsync').ok).toBe(true);
     expect(validateSegments(segments, 'hook_lipsync').ok).toBe(false);
-    expect(validateSegments(segments, 'faceless').ok).toBe(false);
+    expect(validateSegments(segments, 'voiceover').ok).toBe(false);
     expect(validateSegments(segments).ok).toBe(false);
   });
 
@@ -249,7 +249,7 @@ describe('validateSegments with the images material', () => {
       { kind: 'content', text: content, media: clips(2, 'b') },
       { kind: 'content', text: 'Save this video now please.', media: photos(1, 'c') },
     ];
-    const result = validateSegments(segments, 'faceless');
+    const result = validateSegments(segments, 'voiceover');
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.field).toBe('segments.0.media');
@@ -321,7 +321,7 @@ describe('validateSegments with the images material', () => {
       expect(withPhotosResult.error.field).toBe('segments.0.media');
       expect(withPhotosResult.error.rule).toContain('clip cannot play');
     }
-    expect(validateSegments(withPhotos, 'faceless').ok).toBe(true);
+    expect(validateSegments(withPhotos, 'voiceover').ok).toBe(true);
     const fullLipsync = [
       { kind: 'hook', text: hook, media: clips(1, 'h') },
       { kind: 'content', text: content },
@@ -379,7 +379,7 @@ describe('validateSegments with a requested photo duration', () => {
       },
       { kind: 'content', text: `${Array(8).fill('cta').join(' ')}.`, media: photos(2, 'c') },
     ];
-    const result = validateSegments(segments, 'faceless');
+    const result = validateSegments(segments, 'voiceover');
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.field).toBe('segments.1.media');
@@ -393,7 +393,7 @@ describe('validateSegments with a requested photo duration', () => {
         ? { ...segment, media: photos(8, 'b').map((photo) => ({ ...photo, duration: 2 })) }
         : segment,
     );
-    const twoSecondResult = validateSegments(twoSecond, 'faceless');
+    const twoSecondResult = validateSegments(twoSecond, 'voiceover');
     expect(twoSecondResult.ok).toBe(true);
     if (twoSecondResult.ok) expect(twoSecondResult.value.mediaCount).toBe(15);
     const sixSecond = segments.map((segment, index) =>
@@ -401,7 +401,7 @@ describe('validateSegments with a requested photo duration', () => {
         ? { ...segment, media: photos(3, 'b').map((photo) => ({ ...photo, duration: 6 })) }
         : segment,
     );
-    const sixSecondResult = validateSegments(sixSecond, 'faceless');
+    const sixSecondResult = validateSegments(sixSecond, 'voiceover');
     expect(sixSecondResult.ok).toBe(true);
     if (sixSecondResult.ok) expect(sixSecondResult.value.mediaCount).toBe(10);
   });
@@ -416,7 +416,7 @@ describe('validateSegments with a requested photo duration', () => {
       },
       { kind: 'content', text: `${Array(8).fill('cta').join(' ')}.`, media: photos(2, 'c') },
     ];
-    const result = validateSegments(segments, 'faceless');
+    const result = validateSegments(segments, 'voiceover');
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.field).toBe('segments.1.media');
@@ -437,7 +437,7 @@ describe('validateSegments with a requested photo duration', () => {
       },
       { kind: 'content', text: `${Array(8).fill('cta').join(' ')}.`, media: photos(2, 'c') },
     ];
-    const result = validateSegments(segments, 'faceless');
+    const result = validateSegments(segments, 'voiceover');
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.field).toBe('segments.1.media');

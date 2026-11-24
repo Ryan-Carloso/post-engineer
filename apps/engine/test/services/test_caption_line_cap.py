@@ -34,11 +34,11 @@ def _lipsync_params(**overrides):
     )
 
 
-def _faceless_params():
+def _voiceover_params():
     return VideoParams(
         video_title="x",
         video_description="Test description.",
-        video_type="faceless",
+        video_type="voiceover",
         video_aspect="9:16",
         font_size=FONT_SIZE,
     )
@@ -50,7 +50,7 @@ def _line_count(text):
 
 def test_max_lines_applies_only_to_the_moved_lipsync_caption():
     assert caption_line_cap.max_lines(_lipsync_params()) == 2
-    assert caption_line_cap.max_lines(_faceless_params()) is None
+    assert caption_line_cap.max_lines(_voiceover_params()) is None
     assert caption_line_cap.max_lines(_lipsync_params(subtitle_position="bottom")) is None
 
 
@@ -86,7 +86,7 @@ def test_the_background_padding_narrows_the_cap_width():
 
 def test_other_paths_keep_their_cues_untouched():
     items = [((0.0, 2.0), PHRASES[3])]
-    assert caption_line_cap.cap_items(items, _faceless_params(), _font(), 1080, False) == items
+    assert caption_line_cap.cap_items(items, _voiceover_params(), _font(), 1080, False) == items
 
 
 def test_a_word_wider_than_the_frame_is_kept_as_its_own_part():
@@ -125,6 +125,6 @@ def test_the_lipsync_render_never_builds_a_three_line_caption(tmp_path, monkeypa
     assert len(texts) == (2 if lines == 3 else 1)
 
 
-def test_the_faceless_render_still_wraps_three_lines(tmp_path, monkeypatch):
-    texts = _render_texts(tmp_path, monkeypatch, _faceless_params(), PHRASES[3])
+def test_the_voiceover_render_still_wraps_three_lines(tmp_path, monkeypatch):
+    texts = _render_texts(tmp_path, monkeypatch, _voiceover_params(), PHRASES[3])
     assert [_line_count(text) for text in texts] == [3]

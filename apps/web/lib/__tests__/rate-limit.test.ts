@@ -100,6 +100,28 @@ describe('rate-limit', () => {
       expect(after).toBeNull();
     });
 
+    it('answers with the profile message when the profile carries one', async () => {
+      const profile = { name: 'test-message', limit: 1, windowMs: 60_000, message: 'Poll at most once per minute.' };
+      await applyRateLimit(makeRequest(), profile, 'ip-m');
+      const res = await applyRateLimit(makeRequest(), profile, 'ip-m');
+      const body = (await res?.json()) as { error: string; errorType: string };
+      expect(body.error).toBe('Poll at most once per minute.');
+      expect(body.errorType).toBe('RATE_LIMITED');
+    });
+
+    it('answers with the generic message when the profile carries none', async () => {
+      const profile = { name: 'test-generic', limit: 1, windowMs: 60_000 };
+      await applyRateLimit(makeRequest(), profile, 'ip-n');
+      const res = await applyRateLimit(makeRequest(), profile, 'ip-n');
+      const body = (await res?.json()) as { error: string };
+      expect(body.error).toBe('Too many requests. Please wait before trying again.');
+    });
+
+    it('limits video task status polls to one per minute', () => {
+      expect(RATE_LIMITS.taskStatusPoll).toMatchObject({ name: 'task-status-poll', limit: 1, windowMs: 60_000 });
+      expect(RATE_LIMITS.taskStatusPoll.message).toContain('at most once per minute');
+    });
+
     it('tracks identifiers independently', async () => {
       const profile = { name: 'test-id', limit: 1, windowMs: 60_000 };
       await applyRateLimit(makeRequest(), profile, 'ip-d');

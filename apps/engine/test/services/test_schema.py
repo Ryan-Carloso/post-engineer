@@ -37,7 +37,7 @@ class TestVideoLayout(unittest.TestCase):
             VideoParams(
                 video_title="test",
                 video_description="Test description.",
-                video_type="faceless",
+                video_type="voiceover",
             ).video_layout,
             VideoLayout.standard,
         )
@@ -50,7 +50,7 @@ class TestSchemaBounds(unittest.TestCase):
     def _params(self, **kwargs):
         kwargs.setdefault("video_title", "test")
         kwargs.setdefault("video_description", "Test description.")
-        kwargs.setdefault("video_type", "faceless")
+        kwargs.setdefault("video_type", "voiceover")
         return VideoParams(**kwargs)
 
     def test_video_script_rejects_20001_chars(self):

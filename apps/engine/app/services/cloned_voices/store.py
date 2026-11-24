@@ -180,21 +180,6 @@ class ClonedVoiceStore:
         response.raise_for_status()
         return list(response.json() or [])
 
-    def get_ready_by_engine_voice_key(self, engine_voice_key: str) -> dict[str, Any] | None:
-        response = self._rest(
-            "GET",
-            "cloned_voices",
-            params={
-                "engine_voice_key": f"eq.{engine_voice_key}",
-                "status": f"eq.{STATUS_READY}",
-                "select": "storage_path,language",
-                "limit": "1",
-            },
-        )
-        response.raise_for_status()
-        rows = response.json() or []
-        return rows[0] if rows else None
-
     def list_pending(self) -> list[dict[str, Any]]:
         response = self._rest(
             "GET",
@@ -207,6 +192,43 @@ class ClonedVoiceStore:
         )
         response.raise_for_status()
         return list(response.json() or [])
+
+    def get_by_engine_voice_key(self, engine_voice_key: str) -> dict[str, Any] | None:
+        """Any clone row for this TTS key, including ones that are not ready."""
+        response = self._rest(
+            "GET",
+            "cloned_voices",
+            params={
+                "engine_voice_key": f"eq.{engine_voice_key}",
+                "select": "storage_path,language,engine_voice_key,status",
+                "limit": "1",
+            },
+        )
+        response.raise_for_status()
+        rows = response.json()
+        if not rows:
+            return None
+        row = rows[0]
+        return row if isinstance(row, dict) else None
+
+    def get_ready_by_engine_voice_key(self, engine_voice_key: str) -> dict[str, Any] | None:
+        """The storage path for one ready clone, looked up by the TTS voice key."""
+        response = self._rest(
+            "GET",
+            "cloned_voices",
+            params={
+                "engine_voice_key": f"eq.{engine_voice_key}",
+                "status": f"eq.{STATUS_READY}",
+                "select": "storage_path,language,engine_voice_key",
+                "limit": "1",
+            },
+        )
+        response.raise_for_status()
+        rows = response.json()
+        if not rows:
+            return None
+        row = rows[0]
+        return row if isinstance(row, dict) else None
 
     def download_reference_wav(self, storage_path: str) -> bytes:
         response = self._requests.get(

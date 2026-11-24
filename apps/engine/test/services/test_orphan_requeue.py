@@ -207,6 +207,18 @@ class TriageLiveModalCallTests(unittest.TestCase):
         self.assertTrue(claimed)
         store.update_slot.assert_called_once_with("slot-1", status="pending")
 
+    def test_a_live_cpu_worker_call_is_claimed_before_any_requeue(self):
+        state = MagicMock()
+        store = MagicMock()
+        store.get_slot.return_value = {"id": "slot-1", "status": "pending"}
+        data = _task_data(remote_worker="modal_cpu", remote_call_id="cpu-1")
+        with patch("app.services.cpu_worker_dispatch.modal_call_status", return_value="running"), \
+                patch.object(orphan_requeue, "track_event"):
+            claimed = orphan_requeue.triage_orphan(state, "t-1", data, store)
+        self.assertTrue(claimed)
+        store.update_slot.assert_called_once_with("slot-1", status="generating", task_id="t-1")
+        state.update_task.assert_not_called()
+
 
 class TriageRequeueStageGateTests(unittest.TestCase):
     def _slot_store(self, slot):

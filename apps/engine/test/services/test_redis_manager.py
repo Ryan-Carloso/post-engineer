@@ -44,7 +44,7 @@ def test_create_queue_names_the_task_queue():
 def test_enqueue_serializes_func_name_and_params():
     manager, fake = make_manager()
     params = VideoParams(
-        video_title="test", video_description="Test description.", video_type="faceless"
+        video_title="test", video_description="Test description.", video_type="voiceover"
     )
     manager.enqueue({"func": tm.start, "args": ("task-1",), "kwargs": {"params": params}})
 
@@ -66,7 +66,7 @@ def test_enqueue_without_video_params_keeps_kwargs():
 def test_dequeue_restores_func_and_params():
     manager, _ = make_manager()
     params = VideoParams(
-        video_title="test", video_description="Test description.", video_type="faceless"
+        video_title="test", video_description="Test description.", video_type="voiceover"
     )
     manager.enqueue({"func": tm.start, "args": (), "kwargs": {"params": params}})
 

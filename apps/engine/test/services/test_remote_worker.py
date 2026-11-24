@@ -135,8 +135,8 @@ class CloneVoiceTests(unittest.TestCase):
 class RunTests(unittest.TestCase):
     def _run(self, voice: str) -> tuple[MagicMock, MagicMock, MagicMock]:
         order = MagicMock()
-        payload = {"video_type": "faceless"}
-        params = SimpleNamespace(video_type="faceless")
+        payload = {"video_type": "voiceover"}
+        params = SimpleNamespace(video_type="voiceover")
         with patch.object(remote_worker, "prepare", order.prepare), \
                 patch.object(remote_worker, "stage_clone_voice", order.stage), \
                 patch.object(remote_worker, "ensure_tts_server", order.tts), \

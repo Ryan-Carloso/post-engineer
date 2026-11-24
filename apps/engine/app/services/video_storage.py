@@ -13,7 +13,7 @@ post-audio-mux render) is archived. Intermediates (combined-1.mp4),
 caches, materials, and pre-audio renders are never uploaded.
 
 Layout inside the bucket (private):
-    {user_id}/{persona_id | faceless}/{task_id}/final-1.mp4
+    {user_id}/{persona_id | voiceover}/{task_id}/final-1.mp4
 """
 
 import os
@@ -23,7 +23,7 @@ from loguru import logger
 
 STORAGE_BUCKET = "videos"
 FINAL_VIDEO_FILENAME = "final-1.mp4"
-FACELESS_FOLDER = "faceless"
+VOICEOVER_FOLDER = "voiceover"
 _SIGNED_URL_TTL_SECONDS = 3600
 
 def _r2_account_id() -> str:
@@ -171,10 +171,10 @@ def storage_object_path(user_id: str, persona_folder: str, task_id: str) -> str:
 def persona_folder(task: dict, params) -> str:
     """Storage folder for the task's persona.
 
-    Returns the persona_id for persona videos, ``faceless`` for faceless
-    ones. A faceless video is an inline persona with no visual identity
+    Returns the persona_id for persona videos, ``voiceover`` for voiceover
+    ones. A voiceover video is an inline persona with no visual identity
     (voice-only — the batch pipeline and the web's direct dispatch both
-    strip avatar/photo for faceless posts). With no inline persona at all
+    strip avatar/photo for voiceover posts). With no inline persona at all
     (raw API call), the task row's persona_id is trusted when present.
     """
     persona = getattr(params, "persona", None)
@@ -184,7 +184,7 @@ def persona_folder(task: dict, params) -> str:
     persona_id = str(task.get("persona_id") or getattr(persona, "id", "") or "").strip()
     if persona_id and (has_visuals or persona is None):
         return persona_id
-    return FACELESS_FOLDER
+    return VOICEOVER_FOLDER
 
 
 def upload_final_video(object_path: str, local_path: str) -> Optional[str]:

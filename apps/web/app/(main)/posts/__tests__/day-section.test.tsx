@@ -67,11 +67,11 @@ describe('DayListRow', () => {
   });
 
   it('shows the no-persona fallback when the schedule has no persona', () => {
-    const facelessJoins: PostJoins = {
+    const voiceoverJoins: PostJoins = {
       ...rowJoins,
       scheduleById: new Map([['s1', { id: 's1', personaId: null } as ScheduleConfig]]),
     };
-    render(<DayListRow slot={rowSlot} joins={facelessJoins} />);
+    render(<DayListRow slot={rowSlot} joins={voiceoverJoins} />);
 
     expect(screen.getByText('posts.noPersona')).toBeInTheDocument();
   });

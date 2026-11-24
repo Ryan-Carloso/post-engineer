@@ -12,7 +12,7 @@ from app.services.tracking_props import tracking_kwargs
 
 def _body(**kwargs):
     return TaskVideoRequest(
-        video_title="viagem", video_description="Test description.", video_type="faceless", **kwargs
+        video_title="viagem", video_description="Test description.", video_type="voiceover", **kwargs
     )
 
 

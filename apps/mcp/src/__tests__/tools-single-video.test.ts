@@ -101,7 +101,7 @@ describe('generate_persona_video tool', () => {
       startAt: '2026-10-30T18:00:00',
       times: ['18:00'],
       timezone: 'Europe/Lisbon',
-      options: { videoType: 'faceless', videoClipDuration: 4, videoTransitionMode: 'Crossfade', videoVariationSeed: 7 },
+      options: { videoType: 'voiceover', videoClipDuration: 4, videoTransitionMode: 'Crossfade', videoVariationSeed: 7 },
     });
     expect(response.isError).toBeUndefined();
     const generate = vi.mocked(client.generatePersonaVideo);

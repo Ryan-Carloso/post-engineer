@@ -770,7 +770,7 @@ describe('api', () => {
         persona: null,
         generation: {
           prompt: { slug: 'story-first', title: 'Story first', version: 3, source: 'official' },
-          faceless: true,
+          voiceover: true,
           language: 'pt-BR',
           voiceId: 'ana_neural',
           videoAspect: '9:16',
@@ -785,7 +785,7 @@ describe('api', () => {
     if (payload?.kind !== 'slot') throw new Error('expected slot');
     expect(payload.generation).toEqual({
       prompt: { slug: 'story-first', title: 'Story first', version: 3, source: 'official' },
-      faceless: true,
+      voiceover: true,
       language: 'pt-BR',
       voiceId: 'ana_neural',
       videoAspect: '9:16',
@@ -856,7 +856,7 @@ describe('api', () => {
         persona: null,
         generation: {
           prompt: { slug: 'story-first', title: 'Story first', version: '3', source: 'official' },
-          faceless: 'yes',
+          voiceover: 'yes',
           language: 42,
           voiceId: null,
           paragraphNumber: Number.NaN,
@@ -868,7 +868,7 @@ describe('api', () => {
     if (payload?.kind !== 'slot') throw new Error('expected slot');
     expect(payload.generation).toEqual({
       prompt: null,
-      faceless: false,
+      voiceover: false,
       language: null,
       voiceId: null,
       videoAspect: null,
@@ -894,7 +894,7 @@ describe('api', () => {
     if (payload?.kind !== 'slot') throw new Error('expected slot');
     expect(payload.generation).toEqual({
       prompt: null,
-      faceless: false,
+      voiceover: false,
       language: null,
       voiceId: null,
       videoAspect: null,

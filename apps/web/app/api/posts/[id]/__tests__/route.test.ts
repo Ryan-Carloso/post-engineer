@@ -140,7 +140,7 @@ describe('GET /api/posts/[id]', () => {
       persona: { id: 'persona-1', name: 'Viva Leve' },
       generation: {
         prompt: null,
-        faceless: false,
+        voiceover: false,
         language: null,
         voiceId: null,
         videoAspect: null,

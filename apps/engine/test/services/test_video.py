@@ -136,7 +136,7 @@ class TestSecurityControls(unittest.TestCase):
             task_id,
             state=const.TASK_STATE_COMPLETE,
             user_id="internal",
-            video_storage_path=f"internal/faceless/{task_id}/final-1.mp4",
+            video_storage_path=f"internal/voiceover/{task_id}/final-1.mp4",
         )
 
         try:
@@ -162,7 +162,7 @@ class TestSecurityControls(unittest.TestCase):
             task_id,
             state=const.TASK_STATE_COMPLETE,
             user_id="internal",
-            video_storage_path=f"internal/faceless/{task_id}/final-1.mp4",
+            video_storage_path=f"internal/voiceover/{task_id}/final-1.mp4",
         )
 
         try:
@@ -190,7 +190,7 @@ class TestSecurityControls(unittest.TestCase):
             task_id,
             state=const.TASK_STATE_COMPLETE,
             user_id="internal",
-            video_storage_path=f"internal/faceless/{task_id}/final-1.mp4",
+            video_storage_path=f"internal/voiceover/{task_id}/final-1.mp4",
         )
         try:
             with self.assertRaises(video_controller.HttpException):
@@ -283,7 +283,7 @@ class TestStorageFallback(unittest.TestCase):
             task_id,
             state=const.TASK_STATE_COMPLETE,
             user_id="internal",
-            video_storage_path="internal/faceless/storage-fallback-task/final-1.mp4",
+            video_storage_path="internal/voiceover/storage-fallback-task/final-1.mp4",
         )
         try:
             with patch(
@@ -306,7 +306,7 @@ class TestStorageFallback(unittest.TestCase):
             task_id,
             state=const.TASK_STATE_COMPLETE,
             user_id="internal",
-            video_storage_path="internal/faceless/storage-fallback-stream/final-1.mp4",
+            video_storage_path="internal/voiceover/storage-fallback-stream/final-1.mp4",
         )
         try:
             with patch(
@@ -343,7 +343,7 @@ class TestStorageFallback(unittest.TestCase):
             task_id,
             state=const.TASK_STATE_COMPLETE,
             user_id="internal",
-            video_storage_path=f"internal/faceless/{task_id}/final-1.mp4",
+            video_storage_path=f"internal/voiceover/{task_id}/final-1.mp4",
         )
         try:
             with patch.dict(os.environ, {}, clear=True):
@@ -363,7 +363,7 @@ class TestStorageFallback(unittest.TestCase):
             task_id,
             state=const.TASK_STATE_COMPLETE,
             user_id="someone-else",
-            video_storage_path="someone-else/faceless/other-user-task/final-1.mp4",
+            video_storage_path="someone-else/voiceover/other-user-task/final-1.mp4",
         )
         try:
             with patch(
@@ -395,7 +395,7 @@ class TestStorageFallback(unittest.TestCase):
             task_id,
             state=const.TASK_STATE_COMPLETE,
             user_id="internal",
-            video_storage_path="internal/faceless/local-file-present-task/final-1.mp4",
+            video_storage_path="internal/voiceover/local-file-present-task/final-1.mp4",
         )
         try:
             with patch(
@@ -410,7 +410,7 @@ class TestStorageFallback(unittest.TestCase):
                     )
             self.assertEqual(response.status_code, 302)
             signed.assert_called_once_with(
-                "internal/faceless/local-file-present-task/final-1.mp4"
+                "internal/voiceover/local-file-present-task/final-1.mp4"
             )
             opened.assert_not_called()
         finally:
@@ -428,7 +428,7 @@ class TestStorageFallback(unittest.TestCase):
             task_id,
             state=const.TASK_STATE_COMPLETE,
             user_id="internal",
-            video_storage_error=f"internal/faceless/{task_id}/final-1.mp4",
+            video_storage_error=f"internal/voiceover/{task_id}/final-1.mp4",
         )
         try:
             with patch(
@@ -1729,7 +1729,7 @@ class TestTerminalStateGate(unittest.TestCase):
             task_id,
             const.TASK_STATE_PROCESSING,
             with_file=False,
-            storage_path=f"internal/faceless/{task_id}/final-1.mp4",
+            storage_path=f"internal/voiceover/{task_id}/final-1.mp4",
         )
         try:
             with patch(
@@ -1753,7 +1753,7 @@ class TestTerminalStateGate(unittest.TestCase):
         task_dir = self._seed_task(
             task_id,
             const.TASK_STATE_COMPLETE,
-            storage_path=f"internal/faceless/{task_id}/final-1.mp4",
+            storage_path=f"internal/voiceover/{task_id}/final-1.mp4",
         )
         try:
             with patch(
@@ -1851,7 +1851,7 @@ class TestFinalVideoUri(unittest.TestCase):
             task_id,
             state=const.TASK_STATE_COMPLETE,
             user_id="internal",
-            video_storage_path=f"internal/faceless/{task_id}/final-1.mp4",
+            video_storage_path=f"internal/voiceover/{task_id}/final-1.mp4",
         )
         try:
             response = video_controller.get_task(_FakeRequest(), task_id=task_id)

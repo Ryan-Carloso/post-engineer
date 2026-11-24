@@ -74,7 +74,7 @@ describe('parseInput', () => {
     const input = parseInput(baseInput());
     assert.equal(input.apiUrl, DEFAULT_API_URL);
     assert.equal(input.mode, 'asap');
-    assert.equal(input.videoType, 'faceless');
+    assert.equal(input.videoType, 'voiceover');
     assert.equal(input.description, 'Stop scrolling.');
     assert.equal(input.waitForCompletion, true);
     assert.equal(input.timeoutMinutes, 30);
@@ -95,11 +95,11 @@ describe('parseInput', () => {
     ['scheduled mode without a schedule', { ...baseInput(), mode: 'scheduled' }, /schedule is required/],
     ['an http apiUrl that is not loopback', { ...baseInput(), apiUrl: 'http://example.com' }, /must use https/],
     ['an apiUrl with credentials', { ...baseInput(), apiUrl: 'https://u:p@example.com' }, /must not contain credentials/],
-    ['a string boolean', { ...baseInput(), faceless: 'true' }, /faceless must be true or false/],
-    ['no persona with faceless off', { ...baseInput(), faceless: false }, /without a persona must be faceless/],
+    ['a string boolean', { ...baseInput(), voiceover: 'true' }, /voiceover must be true or false/],
+    ['no persona with voiceover off', { ...baseInput(), voiceover: false }, /without a persona must be voiceover/],
     ['no persona and no voice', { ...baseInput(), voiceId: undefined }, /without a persona needs a voice/],
     ['full lip-sync without a persona', { ...baseInput(), fullLipsync: true }, /fullLipsync needs a persona/],
-    ['full lip-sync with faceless', { ...baseInput(), personaId: 'p1', faceless: true, fullLipsync: true }, /fullLipsync needs a persona/],
+    ['full lip-sync with voiceover', { ...baseInput(), personaId: 'p1', voiceover: true, fullLipsync: true }, /fullLipsync needs a persona/],
     ['images with full lip-sync', { ...baseInput(), personaId: 'p1', fullLipsync: true }, /not used with fullLipsync/],
     ['a timeout above the cap', { ...baseInput(), timeoutMinutes: 61 }, /timeoutMinutes must be an integer from 1 to 60/],
   ];
@@ -125,11 +125,11 @@ describe('parseInput', () => {
 
 describe('buildGenerateBody', () => {
   it('sends segments hook, content, content in order with the idempotency key', () => {
-    const body = buildGenerateBody(parseInput({ ...baseInput(), faceless: true }), 'apify-run-abc');
+    const body = buildGenerateBody(parseInput({ ...baseInput(), voiceover: true }), 'apify-run-abc');
     assert.deepEqual(body.options.segments.map((s) => s.kind), ['hook', 'content', 'content']);
-    assert.equal(body.options.videoType, 'faceless');
+    assert.equal(body.options.videoType, 'voiceover');
     assert.equal(body.options.voiceId, 'chatterbox:kokoro_af_heart');
-    assert.equal('faceless' in body.options, false);
+    assert.equal('voiceover' in body.options, false);
     assert.equal('fullLipsync' in body.options, false);
     assert.equal(body.description, 'Stop scrolling.');
     assert.equal(body.idempotencyKey, 'apify-run-abc');
@@ -139,19 +139,19 @@ describe('buildGenerateBody', () => {
 });
 
 describe('buildGenerateBody look options', () => {
-  it('sends faceless videoType when faceless is true even with a persona (voice-only, 1 token)', () => {
-    const body = buildGenerateBody(parseInput({ ...baseInput(), personaId: 'p1', faceless: true }));
+  it('sends voiceover videoType when voiceover is true even with a persona (voice-only, 1 token)', () => {
+    const body = buildGenerateBody(parseInput({ ...baseInput(), personaId: 'p1', voiceover: true }));
     assert.equal(body.personaId, 'p1');
-    assert.equal(body.options.videoType, 'faceless');
+    assert.equal(body.options.videoType, 'voiceover');
     assert.equal(body.options.voiceId, 'chatterbox:kokoro_af_heart');
-    assert.equal('faceless' in body.options, false);
+    assert.equal('voiceover' in body.options, false);
   });
 
-  it('sends a persona video with full lip-sync videoType and no faceless flag', () => {
+  it('sends a persona video with full lip-sync videoType and no voiceover flag', () => {
     const body = buildGenerateBody(parseInput({ ...baseInput(), voiceId: undefined, personaId: 'p1', fullLipsync: true, images: undefined }));
     assert.equal(body.personaId, 'p1');
     assert.equal(body.options.videoType, 'full_lipsync');
-    assert.equal('faceless' in body.options, false);
+    assert.equal('voiceover' in body.options, false);
     assert.equal('voiceId' in body.options, false);
   });
 
@@ -162,7 +162,7 @@ describe('buildGenerateBody look options', () => {
 
   it('sends no material: images is the only material', () => {
     const body = buildGenerateBody(parseInput(baseInput()));
-    assert.equal('facelessMaterial' in body.options, false);
+    assert.equal('voiceoverMaterial' in body.options, false);
   });
 });
 
@@ -343,6 +343,10 @@ describe('runActor', () => {
     await assert.rejects(auth.promise, (error) => error instanceof PostEngineerApiError && error.status === 401);
   });
 
+  it('polls the video status at most once a minute', () => {
+    assert.equal(POLL_INTERVAL_MS, 60_000);
+  });
+
   it('returns timeout when the task never finishes before the deadline', async () => {
     const { promise, calls } = runWith(
       {
@@ -403,8 +407,8 @@ describe('Actor definition files', () => {
     assert.ok(fallback.includes(`DEFAULT_VOICE_FEMALE = '${schema.properties.voiceId.prefill}'`));
   });
 
-  it('has no faceless material input: images is the only material', () => {
-    assert.equal('facelessMaterial' in schema.properties, false);
+  it('has no voiceover material input: images is the only material', () => {
+    assert.equal('voiceoverMaterial' in schema.properties, false);
   });
 
   it('documents every provider and mode the code accepts', () => {
@@ -494,20 +498,20 @@ describe('images material', () => {
     await assert.rejects(promise);
     assert.equal(calls.length, 1);
     const sent = JSON.parse(calls[0].init.body);
-    assert.equal(sent.videoType, 'faceless');
-    assert.equal('facelessMaterial' in sent, false);
+    assert.equal(sent.videoType, 'voiceover');
+    assert.equal('voiceoverMaterial' in sent, false);
     assert.equal(sent.segments.length, 4);
   });
 
-  it('sends videoType faceless to validate-script for an images video', async () => {
+  it('sends videoType voiceover to validate-script for an images video', async () => {
     const { promise, calls } = runWith(
       { 'POST /api/videos/validate-script': jsonResponse(400, { success: false, error: 'Script too short.' }) },
       baseInput(),
     );
     await assert.rejects(promise);
     const sent = JSON.parse(calls[0].init.body);
-    assert.equal(sent.videoType, 'faceless');
-    assert.equal('facelessMaterial' in sent, false);
+    assert.equal(sent.videoType, 'voiceover');
+    assert.equal('voiceoverMaterial' in sent, false);
   });
 
   it('documents the images input in the input schema', () => {

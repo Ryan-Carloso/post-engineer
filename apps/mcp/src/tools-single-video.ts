@@ -91,8 +91,8 @@ export async function generatePersonaVideoOutcome(
     if (!result.ok) {
       throw new Error(`${result.error.field}: ${result.error.rule} Fix: ${result.error.fix}`);
     }
-    if (args.personaId === undefined && videoType !== 'faceless') {
-      throw new Error('A post without a persona must be faceless: set options.videoType to \'faceless\'.');
+    if (args.personaId === undefined && videoType !== 'voiceover') {
+      throw new Error('A post without a persona must be voiceover: set options.videoType to \'voiceover\'.');
     }
     if (args.personaId === undefined && args.options?.voiceId === undefined && args.options?.audioUrl === undefined) {
       throw new Error('A post without a persona must have a voice: set options.voiceId (or options.audioUrl).');

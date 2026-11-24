@@ -95,7 +95,7 @@ class BatchDispatchSegmentsTests(unittest.TestCase):
         return dispatch.call_args[0][1]
 
     def test_segment_slot_dispatches_segments_and_joined_script(self):
-        request = self._dispatched_request(_slot(video_type="faceless", segments=SEGMENTS))
+        request = self._dispatched_request(_slot(video_type="voiceover", segments=SEGMENTS))
         self.assertIsNotNone(request.segments)
         self.assertEqual(
             [segment.kind for segment in request.segments],
@@ -122,7 +122,7 @@ class BatchDispatchSegmentsTests(unittest.TestCase):
             {**SEGMENTS[1], "kind": "body"},
             {**SEGMENTS[2], "kind": "cta"},
         ]
-        request = self._dispatched_request(_slot(video_type="faceless", segments=legacy))
+        request = self._dispatched_request(_slot(video_type="voiceover", segments=legacy))
         self.assertEqual(
             [segment.kind for segment in request.segments],
             ["hook", "content", "content"],
@@ -139,7 +139,7 @@ class BatchDispatchSegmentsTests(unittest.TestCase):
         )
 
     def test_slot_without_segments_fails_without_dispatch(self):
-        store = _Store(_slot(video_type="faceless"))
+        store = _Store(_slot(video_type="voiceover"))
         scheduler = fs.FillScheduleScheduler(
             store=store, task_state=MagicMock(), publish_video=MagicMock()
         )

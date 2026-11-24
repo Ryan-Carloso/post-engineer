@@ -72,23 +72,32 @@ class BatchGenerator:
         self.notify = notify
 
     def run(self, now: datetime) -> int:
-        """Dispatch generation for pending slots the manager can start now.
+        """Dispatch generation for pending batch slots.
 
-        Returns how many slots were started. A slot that cannot start on
-        this tick stays pending: it is not queued, not failed, and not
-        refunded. Batch dispatch never fills the task-manager queue.
+        Faceless slots try the Modal CPU worker first and do not need a
+        local running slot; other types only start when the manager has a
+        free running slot. A spawn failure with no free local slot leaves
+        the slot pending: it is not queued, not failed, and not refunded.
+        Batch dispatch never fills the task-manager queue.
         """
         from app.controllers.v1.video import task_manager
+        from app.services.cpu_worker_dispatch import configured_max_containers
 
-        budget = free_running_slots(task_manager)
+        local_budget = free_running_slots(task_manager)
+        budget = max(local_budget, configured_max_containers())
         enqueued = 0
         enqueued_titles: list[str] = []
 
         for slot in read_pending_slots(self.store, now, budget):
+            voiceover = slot.get("video_type") == "voiceover"
+            if not voiceover and local_budget <= 0:
+                continue
             label = self._generate_slot(slot)
             if label is not None:
                 enqueued += 1
                 enqueued_titles.append(label)
+                if not voiceover:
+                    local_budget -= 1
 
         if enqueued:
             notify_safe(self.notify, notify_module.generation_batch_msg(enqueued, enqueued_titles))
@@ -135,7 +144,7 @@ class BatchGenerator:
                     video_type=video_type,
                     video_quality=(
                         LipSyncQuality.very_good
-                        if video_type != "faceless" and identity.get("face_quality") == "very_good"
+                        if video_type != "voiceover" and identity.get("face_quality") == "very_good"
                         else LipSyncQuality.ok
                     ),
                     persona=build_persona_params(identity, self.store, video_type),
@@ -291,12 +300,18 @@ class BatchGenerator:
     ) -> None:
         """Start one due slot on a free running slot of the shared manager.
 
-        Reserve the running slot first. The task row is written only after
-        that reservation, outside the manager lock. ``SlotDeferred`` means
-        no running slot was free: the caller leaves the slot pending and
-        this method has written no task row. A write that raises releases
-        the reservation before the exception propagates. Batch dispatch
-        does not queue; direct ``add_task`` still does.
+        A voiceover slot first tries the Modal CPU worker, which writes the
+        task row with the remote marker before spawning; a spawn failure
+        clears the marker and falls through to the local path, which writes
+        the row again. Otherwise reserve the running slot first: the task
+        row is written only after that reservation, outside the manager
+        lock. ``SlotDeferred`` means no running slot was free: the caller
+        leaves the slot pending. After a voiceover spawn failure the marker
+        row written by ``try_remote_batch`` remains (PROCESSING, marker
+        cleared) and is claimed by boot triage; only the local-reservation
+        path is guaranteed row-free. A write that raises releases the
+        reservation before the exception propagates. Batch dispatch does not
+        queue; direct ``add_task`` still does.
 
         The caller claims the slot (pending → generating) only after
         this returns. The next tick must not dispatch a started slot again.
@@ -312,6 +327,21 @@ class BatchGenerator:
             tracking_ids["schedule_id"] = schedule_id
         if persona_id:
             tracking_ids["persona_id"] = persona_id
+
+        from app.services.cpu_worker_dispatch import try_remote_batch
+
+        spawned, accepted = try_remote_batch(
+            self.task_state,
+            task_id,
+            request,
+            user_id,
+            tracking_ids,
+            on_accepted,
+        )
+        if spawned:
+            return
+        if accepted:
+            on_accepted = None
 
         def _write_task_row() -> None:
             self.task_state.update_task(

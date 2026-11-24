@@ -73,7 +73,7 @@ export const SlotScheduleSchema = z.object({
 });
 
 export const SlotGenerationSchema = z.object({
-  faceless: z.boolean(),
+  voiceover: z.boolean(),
   language: z.string().nullable(),
   voiceId: z.string().nullable(),
   videoAspect: z.string().nullable(),

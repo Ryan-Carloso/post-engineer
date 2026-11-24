@@ -1,6 +1,7 @@
 import type { PromptVersionSource } from '@/lib/contracts/experiments';
 
 export const MIN_COMPARED_VIDEOS = 5;
+export const RECOMMENDED_VIDEOS_PER_PROMPT = 10;
 export const CLEAR_P_VALUE = 0.05;
 export const INDICATIVE_P_VALUE = 0.2;
 
@@ -74,14 +75,21 @@ function liftOf(videos: ComparedVideo[], index: number): number | null {
   return videos[index].views / baseline;
 }
 
-function labelFor(compared: number, pValue: number): ComparisonLabel {
+export function comparisonLabel(compared: number, pValue: number, testedGroups: number): ComparisonLabel {
   if (compared < MIN_COMPARED_VIDEOS) return 'insufficient';
-  if (pValue < CLEAR_P_VALUE) return 'clear';
-  if (pValue < INDICATIVE_P_VALUE) return 'indicative';
+  const comparisons = Math.max(testedGroups, 1);
+  if (pValue < CLEAR_P_VALUE / comparisons) return 'clear';
+  if (pValue < INDICATIVE_P_VALUE / comparisons) return 'indicative';
   return 'no_signal';
 }
 
-function promptResult(versionId: string | null, facts: PromptVersionFacts | undefined, views: number[], lifts: number[]): PromptResult {
+function promptResult(
+  versionId: string | null,
+  facts: PromptVersionFacts | undefined,
+  views: number[],
+  lifts: number[],
+  testedGroups: number,
+): PromptResult {
   const above = lifts.filter((lift) => lift > 1).length;
   const below = lifts.filter((lift) => lift < 1).length;
   const pValue = lifts.length === 0 ? null : signTestPValue(above, below);
@@ -96,7 +104,7 @@ function promptResult(versionId: string | null, facts: PromptVersionFacts | unde
     medianViews: median(views),
     lift,
     pValue,
-    label: pValue === null ? 'insufficient' : labelFor(lifts.length, pValue),
+    label: pValue === null ? 'insufficient' : comparisonLabel(lifts.length, pValue, testedGroups),
     direction: lift === null || lift === 1 ? null : lift > 1 ? 'above' : 'below',
   };
 }
@@ -110,8 +118,11 @@ function compareAccount(provider: string, accountId: string, videos: ComparedVid
     if (lift !== null) group.lifts.push(lift);
     groups.set(video.promptVersionId, group);
   });
+  const testedGroups = [...groups.values()].filter((group) => group.lifts.length >= MIN_COMPARED_VIDEOS).length;
   const prompts = [...groups.entries()]
-    .map(([versionId, group]) => promptResult(versionId, versionId === null ? undefined : versions.get(versionId), group.views, group.lifts))
+    .map(([versionId, group]) =>
+      promptResult(versionId, versionId === null ? undefined : versions.get(versionId), group.views, group.lifts, testedGroups),
+    )
     .sort((left, right) => {
       if ((left.versionId === null) !== (right.versionId === null)) return left.versionId === null ? 1 : -1;
       return right.videos - left.videos || String(left.versionId).localeCompare(String(right.versionId));

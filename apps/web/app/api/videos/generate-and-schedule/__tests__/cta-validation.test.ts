@@ -22,7 +22,7 @@ describe('resolveEffectiveCta', () => {
     expect(resolveEffectiveCta(null, FOLLOW)).toBeNull();
   });
 
-  it('an absent override inherits the persona CTA, including a faceless null', () => {
+  it('an absent override inherits the persona CTA, including a voiceover null', () => {
     expect(resolveEffectiveCta(undefined, FOLLOW)).toBe(FOLLOW);
     expect(resolveEffectiveCta(undefined, null)).toBeNull();
   });
@@ -39,7 +39,7 @@ describe('validateCtaTake', () => {
     ).toEqual({ ok: true });
   });
 
-  it('passes with no CTA and no marker (faceless, or a null override)', () => {
+  it('passes with no CTA and no marker (voiceover, or a null override)', () => {
     expect(validateCtaTake(null, [HOOK('Hook.'), CONTENT('Body.')])).toEqual({ ok: true });
     expect(validateCtaTake(null, undefined)).toEqual({ ok: true });
   });

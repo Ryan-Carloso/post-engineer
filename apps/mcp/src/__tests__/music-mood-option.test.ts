@@ -113,12 +113,12 @@ describe('generate_persona_video options.musicMood', () => {
     expect(generate.mock.calls[0][0].options?.musicMood).toBe('calm');
   });
 
-  it('forwards musicMood on a faceless call too — BGM has no face to render', async () => {
+  it('forwards musicMood on a voiceover call too — BGM has no face to render', async () => {
     const client = mockClient();
     const response = await handleGeneratePersonaVideo(client, {
       ...baseArgs,
       mode: 'scheduled',
-      options: { videoType: 'faceless', musicMood: 'upbeat' },
+      options: { videoType: 'voiceover', musicMood: 'upbeat' },
     });
     expect(response.isError).toBeUndefined();
     const generate = vi.mocked(client.generatePersonaVideo);
@@ -132,7 +132,7 @@ describe('generate_persona_video options.musicMood', () => {
       error: "unknown music mood: 'funky'; available moods: calm, energetic, inspiring, upbeat",
       field: 'options.musicMood',
     });
-    global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 400, text: async () => webBody });
+    global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 400, headers: new Headers(), text: async () => webBody });
     const client = new PostEngineerClient({ apiKey: 'test-token-123' });
     const response = await handleGeneratePersonaVideo(client, {
       ...baseArgs,
@@ -149,10 +149,10 @@ describe('generate_persona_video options.musicMood', () => {
     const webBody = JSON.stringify({
       success: false,
       code: 'validation_failed',
-      error: "unknown video_type 'sideways'; use full_lipsync (8/15), hook_lipsync (2/3) or faceless (1)",
+      error: "unknown video_type 'sideways'; use full_lipsync (8/15), hook_lipsync (2/3) or voiceover (1)",
       field: 'options.videoType',
     });
-    global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 400, text: async () => webBody });
+    global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 400, headers: new Headers(), text: async () => webBody });
     const client = new PostEngineerClient({ apiKey: 'test-token-123' });
     const response = await handleGeneratePersonaVideo(client, {
       ...baseArgs,
@@ -164,6 +164,6 @@ describe('generate_persona_video options.musicMood', () => {
     expect(text).toContain("unknown video_type 'sideways'");
     expect(text).toContain('full_lipsync (8/15)');
     expect(text).toContain('hook_lipsync (2/3)');
-    expect(text).toContain('faceless (1)');
+    expect(text).toContain('voiceover (1)');
   });
 });

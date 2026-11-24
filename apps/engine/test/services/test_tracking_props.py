@@ -21,7 +21,7 @@ def _params(**kwargs):
     return VideoParams(
         video_title="test subject",
         video_description="Test description.",
-        video_type="faceless",
+        video_type="voiceover",
         video_script="script",
         **kwargs,
     )
@@ -31,7 +31,7 @@ def _request(**kwargs):
     return TaskVideoRequest(
         video_title="test subject",
         video_description="Test description.",
-        video_type="faceless",
+        video_type="voiceover",
         video_script="script",
         **kwargs,
     )

@@ -529,11 +529,11 @@ class PublishVideoClientTest(unittest.TestCase):
             timeout_seconds=5,
             sleep=lambda seconds: None,
             publish_scope_key="slot:slot-1:video:final.mp4",
-            r2_object_path="user-1/faceless/task-7/final-1.mp4",
+            r2_object_path="user-1/voiceover/task-7/final-1.mp4",
         )
         self.assertTrue(result["success"])
         body = _MockHandler.requests[0]["body"]
-        self.assertIn(b"videoStoragePath=user-1%2Ffaceless%2Ftask-7%2Ffinal-1.mp4", body)
+        self.assertIn(b"videoStoragePath=user-1%2Fvoiceover%2Ftask-7%2Ffinal-1.mp4", body)
         self.assertNotIn(b"filename=", body)
         self.assertNotIn(b"mp4-bytes", body)
 
@@ -549,10 +549,10 @@ class PublishVideoClientTest(unittest.TestCase):
             content_type="video/mp4",
             timeout_seconds=5,
             sleep=lambda seconds: None,
-            r2_object_path="user-1/faceless/task-7/final-1.mp4",
+            r2_object_path="user-1/voiceover/task-7/final-1.mp4",
         )
         body = _MockHandler.requests[0]["body"]
-        self.assertIn(b"videoStoragePath=user-1%2Ffaceless%2Ftask-7%2Ffinal-1.mp4", body)
+        self.assertIn(b"videoStoragePath=user-1%2Fvoiceover%2Ftask-7%2Ffinal-1.mp4", body)
         self.assertNotIn(b"filename=", body)
 
     def test_publish_video_youtube_ignores_archive_and_requires_bytes(self) -> None:
@@ -568,7 +568,7 @@ class PublishVideoClientTest(unittest.TestCase):
                 content_type="video/mp4",
                 timeout_seconds=5,
                 sleep=lambda seconds: None,
-                r2_object_path="user-1/faceless/task-7/final-1.mp4",
+                r2_object_path="user-1/voiceover/task-7/final-1.mp4",
             )
         self.assertIn("bytes", str(caught.exception))
         self.assertEqual(_MockHandler.requests, [])
@@ -585,7 +585,7 @@ class PublishVideoClientTest(unittest.TestCase):
             content_type="video/mp4",
             timeout_seconds=5,
             sleep=lambda seconds: None,
-            r2_object_path="user-1/faceless/task-7/final-1.mp4",
+            r2_object_path="user-1/voiceover/task-7/final-1.mp4",
         )
         body = _MockHandler.requests[0]["body"]
         self.assertIn(b'filename="final.mp4"', body)

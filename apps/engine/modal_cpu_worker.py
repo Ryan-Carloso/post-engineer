@@ -41,6 +41,12 @@ Deploy (the image build downloads the TTS and Whisper weights once):
 Then set ``[modal_worker] app_name`` in the engine's config.toml to
 ``WORKER_APP_NAME`` and raise ``[app] max_concurrent_tasks`` (see
 config.example.toml).
+
+The same file also defines the image-only worker: ``moneyprint-cpu-worker``
+with a single ``render_video`` function, spawned by
+``app/services/cpu_worker_dispatch.py`` for faceless videos. Its image
+comes from ``Dockerfile.cpu-worker`` and its secret is ``cpu-worker``.
+``modal deploy`` deploys both apps.
 """
 
 from __future__ import annotations
@@ -48,6 +54,11 @@ from __future__ import annotations
 from pathlib import Path
 
 import modal
+
+from app.services.cpu_worker_dispatch import (
+    configured_max_containers,
+    worker_app_name,
+)
 
 WORKER_APP_NAME = "post-engineer-cpu-worker"
 ENGINE_ROOT = "/app"
@@ -188,3 +199,33 @@ def render_faceless_clone(task_id: str, payload: dict, stop_at: str) -> None:
 def render_lipsync(task_id: str, payload: dict, stop_at: str) -> None:
     """Hook or full lip-sync video; LongCat renders the face."""
     _render(task_id, payload, stop_at)
+
+
+CPU_WORKER_IMAGE = modal.Image.from_dockerfile(
+    "Dockerfile.cpu-worker",
+    context_dir=".",
+)
+
+CPU_WORKER_SECRET = modal.Secret.from_name("cpu-worker")
+CPU_WORKER_SECRETS = [CPU_WORKER_SECRET]
+
+cpu_worker_app = modal.App(worker_app_name())
+
+_MAX_CONTAINERS = configured_max_containers()
+
+
+@cpu_worker_app.function(
+    image=CPU_WORKER_IMAGE,
+    cpu=1.0,
+    memory=10240,
+    timeout=1800,
+    min_containers=0,
+    max_containers=_MAX_CONTAINERS,
+    scaledown_window=1,
+    secrets=CPU_WORKER_SECRETS,
+)
+def render_video(task_id: str, params: dict, stop_at: str = "video") -> None:
+    """Render one video and exit. One input at a time; the container is not kept warm."""
+    from app.services.cpu_worker_run import run_one
+
+    run_one(task_id, params, stop_at)

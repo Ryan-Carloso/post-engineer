@@ -42,7 +42,7 @@ def _params_with_secret():
     return TaskVideoRequest(
         video_title="subject-with-s3cr3t-token",
         video_description="Test description.",
-        video_type="faceless",
+        video_type="voiceover",
         custom_audio_file="/tmp/signed-audio-url-with-secret",
     )
 
@@ -191,7 +191,7 @@ class TerminalWriteWiringTests(unittest.TestCase):
     def test_terminal_writes_use_persist_state_update(self):
         services_dir = Path(task_service.__file__).parent
         offenders = []
-        for module_file in ("task.py",):
+        for module_file in ("task.py", "cpu_worker_run.py"):
             tree = ast.parse((services_dir / module_file).read_text())
             for node in ast.walk(tree):
                 if not isinstance(node, ast.Call):
@@ -203,10 +203,16 @@ class TerminalWriteWiringTests(unittest.TestCase):
                     if kw.arg != "state":
                         continue
                     value = kw.value
-                    if isinstance(value, ast.Attribute) and value.attr in (
+                    is_terminal = isinstance(value, ast.Attribute) and value.attr in (
                         "TASK_STATE_FAILED",
                         "TASK_STATE_COMPLETE",
-                    ):
+                    )
+                    is_terminal = is_terminal or (
+                        isinstance(value, ast.Call)
+                        and isinstance(value.func, ast.Name)
+                        and value.func.id in ("const_failed", "const_complete")
+                    )
+                    if is_terminal:
                         offenders.append(f"{module_file}:{node.lineno}")
         self.assertEqual(offenders, [])
 
@@ -216,7 +222,7 @@ class StartCrashStageTests(unittest.TestCase):
         params = TaskVideoRequest(
             video_title="topic",
             video_description="Test description.",
-            video_type="faceless",
+            video_type="voiceover",
             voice_name="chatterbox:kokoro_af_heart",
         )
         task_id = "crash-task"
@@ -277,7 +283,7 @@ class StartCrashStageTests(unittest.TestCase):
         params = TaskVideoRequest(
             video_title="topic",
             video_description="Test description.",
-            video_type="faceless",
+            video_type="voiceover",
             voice_name="chatterbox:kokoro_af_heart",
         )
         task_id = "stage-task"

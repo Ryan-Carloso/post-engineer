@@ -70,7 +70,7 @@ class TestPersonaPreferences(unittest.TestCase):
             TaskVideoRequest(
                 video_title="test",
                 video_description="Test description.",
-                video_type="faceless",
+                video_type="voiceover",
                 video_aspect="4:3",
             )
 
@@ -79,14 +79,14 @@ class TestPersonaPreferences(unittest.TestCase):
             TaskVideoRequest(
                 video_title="test",
                 video_description="Test description.",
-                video_type="faceless",
+                video_type="voiceover",
                 paragraph_number=0,
             )
         with self.assertRaises(ValidationError):
             TaskVideoRequest(
                 video_title="test",
                 video_description="Test description.",
-                video_type="faceless",
+                video_type="voiceover",
                 paragraph_number=11,
             )
 

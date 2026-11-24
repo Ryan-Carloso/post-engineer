@@ -18,7 +18,7 @@ export function buildGenerationRows(
     { label: t('posts.generationPersonaLabel'), value: personaName },
     {
       label: t('posts.generationFaceLabel'),
-      value: generation.faceless ? t('posts.generationFaceless') : t('posts.generationWithFace'),
+      value: generation.voiceover ? t('posts.generationVoiceover') : t('posts.generationWithFace'),
     },
   ];
   if (generation.language !== null) {

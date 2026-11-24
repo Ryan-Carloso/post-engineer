@@ -51,7 +51,7 @@ def test_a_repeated_ref_is_rejected():
         _request(lipsync_photos=[{"url": "https://img.test/a.png"}, {"url": "https://img.test/a.png"}])
 
 
-@pytest.mark.parametrize("video_type", ["hook_lipsync", "faceless"])
+@pytest.mark.parametrize("video_type", ["hook_lipsync", "voiceover"])
 def test_other_modes_reject_the_field(video_type):
     with pytest.raises(ValidationError, match="only accepted for full_lipsync"):
         _request(video_type=video_type, lipsync_photos=_photos(2))

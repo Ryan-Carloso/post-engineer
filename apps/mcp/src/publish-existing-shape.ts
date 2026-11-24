@@ -46,7 +46,7 @@ export const PublishExistingShape = {
   personaId: z
     .string()
     .optional()
-    .describe('The persona id. Omit for a faceless post.'),
+    .describe('The persona id. Omit for a voiceover post.'),
   mode: z
     .enum(['asap', 'scheduled'])
     .describe("Required. 'asap' publishes now; 'scheduled' publishes once at publishAt."),

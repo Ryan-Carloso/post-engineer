@@ -173,7 +173,7 @@ def test_captions_use_the_frame_scaled_font_size_and_leave_the_callers_params_al
     params = VideoParams(
         video_title="x",
         video_description="Test description.",
-        video_type="faceless",
+        video_type="voiceover",
         video_aspect="9:16",
         font_size=50,
     )

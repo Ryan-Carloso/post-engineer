@@ -36,7 +36,7 @@ def _params():
     return TaskVideoRequest(
         video_title="Porto walks",
         video_description="Test description.",
-        video_type="faceless",
+        video_type="voiceover",
         segments=segments,
         voice_name="chatterbox:kokoro_af_heart",
     )
@@ -69,7 +69,7 @@ class ImagesMaterialStartTests(unittest.TestCase):
                 )
             )
             mocks["canvas"] = stack.enter_context(
-                patch.object(tm.faceless_material, "images_canvas", return_value=list(canvas))
+                patch.object(tm.voiceover_material, "images_canvas", return_value=list(canvas))
             )
             mocks["panels"] = stack.enter_context(
                 patch.object(

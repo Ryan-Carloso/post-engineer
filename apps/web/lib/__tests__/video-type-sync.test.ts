@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { findRepoRoot } from '@/test/repo-root';
 import {
-  FACELESS_PRICE,
+  VOICEOVER_PRICE,
   FACE_QUALITY_PRICES,
   FULL_LIPSYNC_PRICES,
   VIDEO_TYPE_ERROR_SUFFIX,
@@ -25,7 +25,7 @@ describe('video_type error suffix matches the engine and the price table', () =>
   it('lists the costs from the price table, not a hand-typed copy', () => {
     expect(VIDEO_TYPE_ERROR_SUFFIX).toBe(
       `use full_lipsync (${FULL_LIPSYNC_PRICES.ok}/${FULL_LIPSYNC_PRICES.very_good}), ` +
-        `hook_lipsync (${FACE_QUALITY_PRICES.ok}/${FACE_QUALITY_PRICES.very_good}) or faceless (${FACELESS_PRICE})`,
+        `hook_lipsync (${FACE_QUALITY_PRICES.ok}/${FACE_QUALITY_PRICES.very_good}) or voiceover (${VOICEOVER_PRICE})`,
     );
   });
 

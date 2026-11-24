@@ -8,7 +8,7 @@ export const MIN_WORDS_PER_IMAGE = 3;
 export const MAX_PHOTO_SECONDS = 2;
 export const API_KEY_PREFIX = 'pe_live_';
 export const REQUEST_TIMEOUT_MS = 60_000;
-export const POLL_INTERVAL_MS = 15_000;
+export const POLL_INTERVAL_MS = 60_000;
 export const DEFAULT_TIMEOUT_MINUTES = 30;
 export const MAX_TIMEOUT_MINUTES = 60;
 
@@ -130,19 +130,19 @@ function parseTimeoutMinutes(raw) {
 }
 
 function parseLook(raw, personaId) {
-  const faceless = optionalBoolean(raw, 'faceless', personaId === undefined);
+  const voiceover = optionalBoolean(raw, 'voiceover', personaId === undefined);
   const voiceId = optionalString(raw, 'voiceId');
   const fullLipsync = optionalBoolean(raw, 'fullLipsync', false);
-  if (personaId === undefined && !faceless) {
-    throw new ActorInputError('A video without a persona must be faceless: set faceless to true or give a personaId.');
+  if (personaId === undefined && !voiceover) {
+    throw new ActorInputError('A video without a persona must be voiceover: set voiceover to true or give a personaId.');
   }
   if (personaId === undefined && voiceId === undefined) {
     throw new ActorInputError('A video without a persona needs a voice: set voiceId (an id from GET /api/persona/voices).');
   }
-  if (fullLipsync && (faceless || personaId === undefined)) {
-    throw new ActorInputError('fullLipsync needs a persona with a face, so it cannot be used with faceless videos.');
+  if (fullLipsync && (voiceover || personaId === undefined)) {
+    throw new ActorInputError('fullLipsync needs a persona with a face, so it cannot be used with voiceover videos.');
   }
-  const videoType = faceless ? 'faceless' : fullLipsync ? 'full_lipsync' : 'hook_lipsync';
+  const videoType = voiceover ? 'voiceover' : fullLipsync ? 'full_lipsync' : 'hook_lipsync';
   return { videoType, voiceId };
 }
 

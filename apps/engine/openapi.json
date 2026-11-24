@@ -443,7 +443,7 @@
         "type": "object"
       },
       "PersonaParams": {
-        "description": "Inline persona in the job (stateless): refs resolved by the caller.\n\nAt most one visual identity (photo_url OR avatar_url — a person in\nfaceless mode may have zero) and exactly one voice (voice_id OR\nvoice_audio_url).",
+        "description": "Inline persona in the job (stateless): refs resolved by the caller.\n\nAt most one visual identity (photo_url OR avatar_url — a person in\nvoiceover mode may have zero) and exactly one voice (voice_id OR\nvoice_audio_url).",
         "example": {
           "name": "Ana",
           "photo_url": "https://supabase.test/signed/foto.png",
@@ -1513,11 +1513,11 @@
         "type": "string"
       },
       "VideoType": {
-        "description": "The one video mode (issue #542 follow-up): it replaces the\nfaceless / full_lipsync / lipsync_enabled boolean combination.\n\nfull_lipsync: the whole narration renders as talking head; a persona\n    with a photo is required. 8 tokens at face quality ok, 15 at\n    very_good.\nhook_lipsync: lip sync only on the hook, then the agent's images; a\n    persona with a photo is required. 2 tokens ok, 3 very_good.\nfaceless: only the agent's images; a persona is optional, and when one\n    is present only its voice and niche are used, never its face.\n    1 token.",
+        "description": "The one video mode (issue #542 follow-up): it replaces the\nvoiceover / full_lipsync / lipsync_enabled boolean combination.\n\nfull_lipsync: the whole narration renders as talking head; a persona\n    with a photo is required. 8 tokens at face quality ok, 15 at\n    very_good.\nhook_lipsync: lip sync only on the hook, then the agent's images; a\n    persona with a photo is required. 2 tokens ok, 3 very_good.\nvoiceover: only the agent's images; a persona is optional, and when one\n    is present only its voice and niche are used, never its face.\n    1 token.",
         "enum": [
           "full_lipsync",
           "hook_lipsync",
-          "faceless"
+          "voiceover"
         ],
         "title": "VideoType",
         "type": "string"

@@ -37,7 +37,7 @@ class CreateTaskQueuedStateTests(unittest.TestCase):
         body = TaskVideoRequest(
             video_title="subject",
             video_description="Test description.",
-            video_type="faceless",
+            video_type="voiceover",
             video_script="script",
         )
         response, _ = self._call_create_task(body)

@@ -152,7 +152,7 @@ const FULL_SLOT_DETAIL: ResponseOf<typeof getSlotContract> = {
   },
   persona: { id: 'persona-1', name: 'Ava' },
   generation: {
-    faceless: false,
+    voiceover: false,
     language: 'en-US',
     voiceId: null,
     videoAspect: '9:16',

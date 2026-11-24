@@ -279,7 +279,7 @@ def _is_full_frame(panel):
         return image.size == (1080, 1920) and (panel.x, panel.y) == (0, 0)
 
 
-def test_faceless_photos_are_all_full_frame(tmp_path):
+def test_voiceover_photos_are_all_full_frame(tmp_path):
     panels, skipped = _prepare(tmp_path, _two_media_segments(), face=segment_panels.FACE_NONE)
     assert skipped == []
     assert [_is_full_frame(panel) for panel in panels] == [True, True]
@@ -319,7 +319,7 @@ def test_hook_panel_off_changes_nothing_on_full_lipsync(tmp_path):
     assert [_is_full_frame(panel) for panel in panels] == [False, False]
 
 
-def test_hook_panel_off_changes_nothing_on_faceless(tmp_path):
+def test_hook_panel_off_changes_nothing_on_voiceover(tmp_path):
     panels, _ = _prepare(
         tmp_path, _two_media_segments(), face=segment_panels.FACE_NONE, hook_panel=False
     )
@@ -421,7 +421,7 @@ def test_face_mode_follows_the_video_type(persona, full, expected):
 
     if persona is None:
         params = VideoParams(
-            video_title="Porto", video_description="Test description.", video_type="faceless"
+            video_title="Porto", video_description="Test description.", video_type="voiceover"
         )
     else:
         voice_only = persona == "voice-only"

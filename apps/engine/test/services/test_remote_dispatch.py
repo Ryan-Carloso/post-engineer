@@ -29,25 +29,25 @@ def _fake_modal(call: MagicMock | None = None, function: MagicMock | None = None
     )
 
 
-def _faceless_request() -> TaskVideoRequest:
+def _voiceover_request() -> TaskVideoRequest:
     return TaskVideoRequest(
         video_title="Porto",
         video_description="Test description.",
-        video_type="faceless",
+        video_type="voiceover",
         segments=valid_segments(),
     )
 
 
 class WorkerFunctionTests(unittest.TestCase):
-    def test_faceless_house_voice_goes_to_render_faceless(self):
-        params = SimpleNamespace(video_type="faceless")
+    def test_voiceover_house_voice_goes_to_render_faceless(self):
+        params = SimpleNamespace(video_type="voiceover")
         self.assertEqual(
             remote_dispatch.worker_function_for(params, "en-US-AriaNeural-Female"),
             remote_dispatch.FACELESS_FUNCTION,
         )
 
-    def test_faceless_clone_goes_to_the_10_gib_function(self):
-        params = SimpleNamespace(video_type="faceless")
+    def test_voiceover_clone_goes_to_the_10_gib_function(self):
+        params = SimpleNamespace(video_type="voiceover")
         self.assertEqual(
             remote_dispatch.worker_function_for(params, "chatterbox_nano:uabc_def"),
             remote_dispatch.FACELESS_CLONE_FUNCTION,
@@ -66,7 +66,7 @@ class WorkerFunctionTests(unittest.TestCase):
         params = TaskVideoRequest(
             video_title="Porto",
             video_description="Test description.",
-            video_type="faceless",
+            video_type="voiceover",
             segments=valid_segments(),
             persona=PersonaParams(name="Ana", voice_id="chatterbox_nano:uabc_def"),
         )
@@ -80,7 +80,7 @@ class WorkerFunctionTests(unittest.TestCase):
 
 class WorkerPayloadTests(unittest.TestCase):
     def test_payload_validates_back_into_the_same_request(self):
-        request = _faceless_request()
+        request = _voiceover_request()
         payload = remote_dispatch.worker_payload(request)
         self.assertEqual(TaskVideoRequest.model_validate(payload), request)
 
@@ -249,7 +249,7 @@ class StartTests(unittest.TestCase):
         with patch.dict(config.modal_worker, {"app_name": "worker-app"}), \
                 patch.object(remote_dispatch, "_effective_voice", return_value=""), \
                 patch.object(remote_dispatch.logger, "error") as log:
-            spawned = remote_dispatch.spawn("t-1", SimpleNamespace(video_type="faceless"), "video", modal_module=fake)
+            spawned = remote_dispatch.spawn("t-1", SimpleNamespace(video_type="voiceover"), "video", modal_module=fake)
         self.assertIsNone(spawned)
         self.assertIn("running it locally", log.call_args.args[0])
 
@@ -262,7 +262,7 @@ class StartTests(unittest.TestCase):
                 patch.object(remote_dispatch, "_modal", return_value=fake), \
                 patch.object(remote_dispatch, "wait_for_call") as wait, \
                 patch("app.services.task.start", local):
-            result = remote_dispatch.start("t-1", SimpleNamespace(video_type="faceless"), "video")
+            result = remote_dispatch.start("t-1", SimpleNamespace(video_type="voiceover"), "video")
         self.assertEqual(result, "done")
         local.assert_called_once()
         wait.assert_not_called()
@@ -310,7 +310,7 @@ class StartTests(unittest.TestCase):
                 patch.object(remote_dispatch, "worker_payload", return_value={}), \
                 patch.object(remote_dispatch.logger, "error"):
             with self.assertRaises(remote_dispatch.AmbiguousSpawnError):
-                remote_dispatch.spawn("t-1", SimpleNamespace(video_type="faceless"), "video", modal_module=fake)
+                remote_dispatch.spawn("t-1", SimpleNamespace(video_type="voiceover"), "video", modal_module=fake)
 
     def test_spawn_returns_none_on_a_non_transport_error_from_function_spawn(self):
         fake = _fake_modal()
@@ -319,7 +319,7 @@ class StartTests(unittest.TestCase):
                 patch.object(remote_dispatch, "_effective_voice", return_value=""), \
                 patch.object(remote_dispatch, "worker_payload", return_value={}), \
                 patch.object(remote_dispatch.logger, "error") as log:
-            spawned = remote_dispatch.spawn("t-1", SimpleNamespace(video_type="faceless"), "video", modal_module=fake)
+            spawned = remote_dispatch.spawn("t-1", SimpleNamespace(video_type="voiceover"), "video", modal_module=fake)
         self.assertIsNone(spawned)
         self.assertIn("running it locally", log.call_args.args[0])
 

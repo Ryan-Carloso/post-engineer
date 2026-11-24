@@ -7,7 +7,8 @@ A slot that cannot start on this tick stays pending: it is not queued,
 not failed, and not refunded. The caller claims a slot only after the
 worker has been started, so the next tick does not dispatch it again.
 
-One tick admits only the free running slots. Batch dispatch never fills
+One tick admits the free running slots, plus voiceover slots bound for
+the Modal CPU worker. Batch dispatch never fills
 ``max_queued_tasks``. Those rows are retried on a later tick, when a
 completion has freed a running slot. Direct ``add_task`` still queues.
 """

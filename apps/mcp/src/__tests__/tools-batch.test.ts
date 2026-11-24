@@ -125,7 +125,7 @@ describe('generate_persona_video_batch', () => {
     expect(text(response)).toContain('2 more face video(s) in this batch would make one more video free.');
   });
 
-  it('does not promise another free video when faceless videos already fill the batch', async () => {
+  it('does not promise another free video when voiceover videos already fill the batch', async () => {
     const client = mockClient({
       request: vi.fn(async () => ({ ...DISCOUNT, videos: 12, faceVideos: 6, earnedFreeVideos: 1 })),
     });

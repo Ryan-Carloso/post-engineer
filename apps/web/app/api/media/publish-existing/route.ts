@@ -165,7 +165,7 @@ async function scheduleExistingMedia(ctx: PublishExistingContext): Promise<NextR
     description: input.description,
     scheduleId,
     userId,
-    videoType: 'faceless',
+    videoType: 'voiceover',
     chargedTokens: 0,
     segments: undefined,
   }).map((row) => ({

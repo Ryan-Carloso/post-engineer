@@ -33,7 +33,7 @@ def _request(**overrides):
             if full
             else "hook_lipsync"
             if overrides.get("persona") is not None
-            else "faceless"
+            else "voiceover"
         ),
         segments=SEGMENTS,
         video_script="\n\n".join(s["text"] for s in SEGMENTS),
@@ -56,7 +56,7 @@ def test_persona_panel_sits_at_the_bottom_in_every_layout():
             assert segment_panels.panel_rect(1080, 1920)[1] == 1160
 
 
-def test_faceless_video_shows_the_photo_full_frame():
+def test_voiceover_video_shows_the_photo_full_frame():
     assert user_media._face_mode(_request()) == segment_panels.FACE_NONE
 
 

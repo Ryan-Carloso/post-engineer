@@ -51,10 +51,10 @@ function dailyRows(postId: string, hoursAgoLatest = 1): Array<Record<string, unk
   ];
 }
 
-function postRecord(id: string, scheduleId: string | null, faceless = false): Record<string, unknown> {
+function postRecord(id: string, scheduleId: string | null, voiceover = false): Record<string, unknown> {
   return {
     id, schedule_id: scheduleId, published_at: new Date(Date.now() - 72 * HOUR).toISOString(),
-    publish_outcomes: [YT_OUTCOME], faceless,
+    publish_outcomes: [YT_OUTCOME], voiceover,
   };
 }
 
@@ -140,20 +140,20 @@ describe('GET /api/metrics/last-24h', () => {
     expect(none.rows).toEqual([]);
   });
 
-  it('limits a persona-scoped API key to its personas plus faceless posts', async () => {
+  it('limits a persona-scoped API key to its personas plus voiceover posts', async () => {
     vi.mocked(requireSupabaseSession).mockResolvedValue({
       auth: { userId: 'user-1', isApiKey: true, personaIds: [PERSONA] }, error: null,
     } as never);
     mockTables({
       post_metrics_daily: {
-        data: [...dailyRows('in-scope'), ...dailyRows('out-of-scope'), ...dailyRows('faceless'), ...dailyRows('orphan')],
+        data: [...dailyRows('in-scope'), ...dailyRows('out-of-scope'), ...dailyRows('voiceover'), ...dailyRows('orphan')],
         error: null,
       },
       scheduled_posts: {
         data: [
           postRecord('in-scope', 'sch-in'),
           postRecord('out-of-scope', 'sch-out'),
-          postRecord('faceless', null, true),
+          postRecord('voiceover', null, true),
           postRecord('orphan', null, false),
         ],
         error: null,
@@ -161,21 +161,21 @@ describe('GET /api/metrics/last-24h', () => {
       schedules: { data: [{ id: 'sch-in', persona_id: PERSONA }, { id: 'sch-out', persona_id: OTHER_PERSONA }], error: null },
     });
     const body = await (await get()).json();
-    expect(body.rows.map((row: { postId: string }) => row.postId).sort()).toEqual(['faceless', 'in-scope']);
+    expect(body.rows.map((row: { postId: string }) => row.postId).sort()).toEqual(['in-scope', 'voiceover']);
     expect(body.totals.measurements).toBe(2);
   });
 
-  it('shows a scoped key with no personas only faceless posts and ignores non-uuid scope ids', async () => {
+  it('shows a scoped key with no personas only voiceover posts and ignores non-uuid scope ids', async () => {
     vi.mocked(requireSupabaseSession).mockResolvedValue({
       auth: { userId: 'user-1', isApiKey: true, personaIds: ['not-a-uuid'] }, error: null,
     } as never);
     mockTables({
-      post_metrics_daily: { data: [...dailyRows('in-scope'), ...dailyRows('faceless')], error: null },
-      scheduled_posts: { data: [postRecord('in-scope', 'sch-in'), postRecord('faceless', null, true)], error: null },
+      post_metrics_daily: { data: [...dailyRows('in-scope'), ...dailyRows('voiceover')], error: null },
+      scheduled_posts: { data: [postRecord('in-scope', 'sch-in'), postRecord('voiceover', null, true)], error: null },
       schedules: { data: [{ id: 'sch-in', persona_id: 'not-a-uuid' }], error: null },
     });
     const body = await (await get()).json();
-    expect(body.rows.map((row: { postId: string }) => row.postId)).toEqual(['faceless']);
+    expect(body.rows.map((row: { postId: string }) => row.postId)).toEqual(['voiceover']);
   });
 
   it('answers 500 and logs when a query fails', async () => {

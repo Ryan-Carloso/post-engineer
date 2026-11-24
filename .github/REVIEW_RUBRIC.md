@@ -87,7 +87,7 @@ Verification: repro with a fake 401 / code 190 / `invalid_credentials`. Do not c
 
 Trigger: `apps/web/lib/billing/**`, `charged_tokens`, `refund_batch_tokens`, batch discount, or a migration that touches those functions.
 
-- Pass: the refund uses the stored `charged_tokens` for that slot. A slot charged 0 does not call the refund RPC. Faceless counts only when the flag is literal `true`. The batch discount is a credit after the charge (every 6th face video), and a cancel of a batch slot runs the clawback in the same transaction. `tokens_refunded=true` is written only after the refund lands. Whoever charged owns the refund.
+- Pass: the refund uses the stored `charged_tokens` for that slot. A slot charged 0 does not call the refund RPC. Voiceover counts only when the flag is literal `true`. The batch discount is a credit after the charge (every 6th face video), and a cancel of a batch slot runs the clawback in the same transaction. `tokens_refunded=true` is written only after the refund lands. Whoever charged owns the refund.
 - Fail: the refund recomputes a price, a failed slot is given away as the free one, or the discount is applied by charging less up front.
 
 Verification: property. Generate amounts and slot counts and assert the balance never goes negative and a second identical refund does not pay twice. Name the test file in the verdict.

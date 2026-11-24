@@ -33,7 +33,7 @@ def _params(subject="Lisbon trams", music_mood=None):
     return VideoParams(
         video_title=subject,
         video_description="Test description.",
-        video_type="faceless",
+        video_type="voiceover",
         voice_name="chatterbox:kokoro_af_heart",
         music_mood=music_mood,
     )

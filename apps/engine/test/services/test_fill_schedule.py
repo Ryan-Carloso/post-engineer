@@ -319,7 +319,7 @@ class BatchScheduleTests(unittest.TestCase):
     def test_persona_less_batch_dispatch_uses_the_snapshot_language(self):
         slot = self._batch_slot()
         del slot["schedules"]["personas"]
-        slot["video_type"] = "faceless"
+        slot["video_type"] = "voiceover"
         slot["schedules"].update(
             {
                 "post_voice_id": "energetic",
@@ -425,7 +425,7 @@ class BatchScheduleTests(unittest.TestCase):
     def test_generate_persona_less_slot_from_the_snapshot_generates(self):
         slot = self._batch_slot()
         del slot["schedules"]["personas"]
-        slot["video_type"] = "faceless"
+        slot["video_type"] = "voiceover"
         slot["schedules"].update(
             {
                 "post_voice_id": "energetic",
@@ -454,7 +454,7 @@ class BatchScheduleTests(unittest.TestCase):
     def test_generate_slot_forwards_the_snapshot_cta_type(self):
         slot = self._batch_slot()
         del slot["schedules"]["personas"]
-        slot["video_type"] = "faceless"
+        slot["video_type"] = "voiceover"
         slot["segments"][2]["cta"] = True
         slot["schedules"].update(
             {
@@ -476,7 +476,7 @@ class BatchScheduleTests(unittest.TestCase):
     def test_generate_slot_stored_before_cta_rule_renders_without_a_cta(self):
         slot = self._batch_slot()
         del slot["schedules"]["personas"]
-        slot["video_type"] = "faceless"
+        slot["video_type"] = "voiceover"
         slot["schedules"].update(
             {
                 "post_voice_id": "energetic",
@@ -673,12 +673,18 @@ class BatchScheduleTests(unittest.TestCase):
         store = _FakeStore()
         scheduler = self._scheduler(store)
         request = TaskVideoRequest(
-            video_type="faceless",
+            video_type="voiceover",
             video_title="Batch topic one",
             video_description="Batch description.",
         )
 
-        with patch("app.controllers.v1.video.task_manager") as manager:
+        with (
+            patch(
+                "app.services.cpu_worker_dispatch._modal_spawn",
+                side_effect=RuntimeError("offline"),
+            ),
+            patch("app.controllers.v1.video.task_manager") as manager,
+        ):
             scheduler.generator._dispatch_generation(
                 "task-1",
                 request,
@@ -688,18 +694,11 @@ class BatchScheduleTests(unittest.TestCase):
                 persona_id="persona-1",
             )
 
-        scheduler.task_state.update_task.assert_called_once_with(
-            "task-1",
-            user_id="user-1",
-            flow="batch",
-            pipeline="video",
-            state=model_const.TASK_STATE_PROCESSING,
-            progress=0,
-            slot_id="slot-1",
-            schedule_id="sched-1",
-            persona_id="persona-1",
-            subtitle_position=request.subtitle_position,
-        )
+        calls = scheduler.task_state.update_task.call_args_list
+        self.assertEqual([c.kwargs.get("remote_worker") for c in calls], ["modal_cpu", "", None])
+        self.assertEqual(calls[-1].args, ("task-1",))
+        self.assertEqual(calls[-1].kwargs, {"user_id": "user-1", "flow": "batch", "pipeline": "video", "state": model_const.TASK_STATE_PROCESSING, "progress": 0, "slot_id": "slot-1", "schedule_id": "sched-1", "persona_id": "persona-1", "subtitle_position": request.subtitle_position})
+        self.assertEqual({k: v for k, v in calls[0].kwargs.items() if k in {"slot_id", "schedule_id", "persona_id"}}, {"slot_id": "slot-1", "schedule_id": "sched-1", "persona_id": "persona-1"})
         manager.try_reserve_running.assert_called_once_with()
         manager.add_task.assert_not_called()
         reservation = manager.try_reserve_running.return_value
@@ -716,7 +715,7 @@ class BatchScheduleTests(unittest.TestCase):
         store = _FakeStore()
         scheduler = self._scheduler(store)
         request = TaskVideoRequest(
-            video_type="faceless",
+            video_type="voiceover",
             video_title="Batch topic one",
             video_description="Batch description.",
         )
@@ -724,15 +723,11 @@ class BatchScheduleTests(unittest.TestCase):
         with patch("app.controllers.v1.video.task_manager"):
             scheduler.generator._dispatch_generation("task-2", request, "user-1")
 
-        scheduler.task_state.update_task.assert_called_once_with(
-            "task-2",
-            user_id="user-1",
-            flow="batch",
-            pipeline="video",
-            state=model_const.TASK_STATE_PROCESSING,
-            progress=0,
-            subtitle_position=request.subtitle_position,
-        )
+        calls = scheduler.task_state.update_task.call_args_list
+        self.assertEqual([c.kwargs.get("remote_worker") for c in calls], ["modal_cpu", "", None])
+        self.assertEqual(calls[-1].args, ("task-2",))
+        self.assertEqual(calls[-1].kwargs, {"user_id": "user-1", "flow": "batch", "pipeline": "video", "state": model_const.TASK_STATE_PROCESSING, "progress": 0, "subtitle_position": request.subtitle_position})
+        self.assertEqual({k: v for k, v in calls[0].kwargs.items() if k in {"slot_id", "schedule_id", "persona_id"}}, {})
 
     def test_dispatch_generation_omits_only_the_blank_identity_ids(self):
         from app.models.schema import TaskVideoRequest
@@ -740,7 +735,7 @@ class BatchScheduleTests(unittest.TestCase):
         store = _FakeStore()
         scheduler = self._scheduler(store)
         request = TaskVideoRequest(
-            video_type="faceless",
+            video_type="voiceover",
             video_title="Batch topic one",
             video_description="Batch description.",
         )
@@ -755,17 +750,11 @@ class BatchScheduleTests(unittest.TestCase):
                 persona_id="persona-3",
             )
 
-        scheduler.task_state.update_task.assert_called_once_with(
-            "task-3",
-            user_id="user-1",
-            flow="batch",
-            pipeline="video",
-            state=model_const.TASK_STATE_PROCESSING,
-            progress=0,
-            schedule_id="sched-3",
-            persona_id="persona-3",
-            subtitle_position=request.subtitle_position,
-        )
+        calls = scheduler.task_state.update_task.call_args_list
+        self.assertEqual([c.kwargs.get("remote_worker") for c in calls], ["modal_cpu", "", None])
+        self.assertEqual(calls[-1].args, ("task-3",))
+        self.assertEqual(calls[-1].kwargs, {"user_id": "user-1", "flow": "batch", "pipeline": "video", "state": model_const.TASK_STATE_PROCESSING, "progress": 0, "schedule_id": "sched-3", "persona_id": "persona-3", "subtitle_position": request.subtitle_position})
+        self.assertEqual({k: v for k, v in calls[0].kwargs.items() if k in {"slot_id", "schedule_id", "persona_id"}}, {"schedule_id": "sched-3", "persona_id": "persona-3"})
 
     def test_dispatch_generation_omits_blank_schedule_id_only(self):
         from app.models.schema import TaskVideoRequest
@@ -773,7 +762,7 @@ class BatchScheduleTests(unittest.TestCase):
         store = _FakeStore()
         scheduler = self._scheduler(store)
         request = TaskVideoRequest(
-            video_type="faceless",
+            video_type="voiceover",
             video_title="Batch topic one",
             video_description="Batch description.",
         )
@@ -788,17 +777,11 @@ class BatchScheduleTests(unittest.TestCase):
                 persona_id="persona-4",
             )
 
-        scheduler.task_state.update_task.assert_called_once_with(
-            "task-4",
-            user_id="user-1",
-            flow="batch",
-            pipeline="video",
-            state=model_const.TASK_STATE_PROCESSING,
-            progress=0,
-            slot_id="slot-4",
-            persona_id="persona-4",
-            subtitle_position=request.subtitle_position,
-        )
+        calls = scheduler.task_state.update_task.call_args_list
+        self.assertEqual([c.kwargs.get("remote_worker") for c in calls], ["modal_cpu", "", None])
+        self.assertEqual(calls[-1].args, ("task-4",))
+        self.assertEqual(calls[-1].kwargs, {"user_id": "user-1", "flow": "batch", "pipeline": "video", "state": model_const.TASK_STATE_PROCESSING, "progress": 0, "slot_id": "slot-4", "persona_id": "persona-4", "subtitle_position": request.subtitle_position})
+        self.assertEqual({k: v for k, v in calls[0].kwargs.items() if k in {"slot_id", "schedule_id", "persona_id"}}, {"slot_id": "slot-4", "persona_id": "persona-4"})
 
     def test_dispatch_generation_omits_all_explicitly_blank_identity_ids(self):
         from app.models.schema import TaskVideoRequest
@@ -806,7 +789,7 @@ class BatchScheduleTests(unittest.TestCase):
         store = _FakeStore()
         scheduler = self._scheduler(store)
         request = TaskVideoRequest(
-            video_type="faceless",
+            video_type="voiceover",
             video_title="Batch topic one",
             video_description="Batch description.",
         )
@@ -821,15 +804,11 @@ class BatchScheduleTests(unittest.TestCase):
                 persona_id="",
             )
 
-        scheduler.task_state.update_task.assert_called_once_with(
-            "task-5",
-            user_id="user-1",
-            flow="batch",
-            pipeline="video",
-            state=model_const.TASK_STATE_PROCESSING,
-            progress=0,
-            subtitle_position=request.subtitle_position,
-        )
+        calls = scheduler.task_state.update_task.call_args_list
+        self.assertEqual([c.kwargs.get("remote_worker") for c in calls], ["modal_cpu", "", None])
+        self.assertEqual(calls[-1].args, ("task-5",))
+        self.assertEqual(calls[-1].kwargs, {"user_id": "user-1", "flow": "batch", "pipeline": "video", "state": model_const.TASK_STATE_PROCESSING, "progress": 0, "subtitle_position": request.subtitle_position})
+        self.assertEqual({k: v for k, v in calls[0].kwargs.items() if k in {"slot_id", "schedule_id", "persona_id"}}, {})
 
 
 class ReconcileTests(unittest.TestCase):
@@ -1116,7 +1095,7 @@ class ReconcileTests(unittest.TestCase):
             "id": "slot-b1",
             "user_id": "user-1",
             "task_id": "t-b1",
-            "faceless": True,
+            "voiceover": True,
             "schedule_id": "sched-b1",
             "charged_tokens": 1,
         }
@@ -1146,7 +1125,7 @@ class ReconcileTests(unittest.TestCase):
             "id": "slot-b1",
             "user_id": "user-1",
             "task_id": "t-b1",
-            "faceless": True,
+            "voiceover": True,
             "schedule_id": "sched-b1",
             "charged_tokens": 1,
         }
@@ -1178,7 +1157,7 @@ class ReconcileTests(unittest.TestCase):
             "id": "slot-b1",
             "user_id": "user-1",
             "task_id": "t-b1",
-            "faceless": True,
+            "voiceover": True,
             "schedule_id": "sched-b1",
             "charged_tokens": 1,
         }
@@ -1202,7 +1181,7 @@ class ReconcileTests(unittest.TestCase):
             "id": "slot-b1",
             "user_id": "user-1",
             "task_id": "t-b1",
-            "faceless": True,
+            "voiceover": True,
             "schedule_id": "sched-b1",
             "charged_tokens": 1,
         }
@@ -1271,7 +1250,7 @@ class PublishDueTests(unittest.TestCase):
         state.get_task.return_value = {
             "state": 1,
             "videos": [self.video_path],
-            "video_storage_path": "user-1/faceless/t-1/final-1.mp4",
+            "video_storage_path": "user-1/voiceover/t-1/final-1.mp4",
         }
         publish = MagicMock(return_value={"success": True, "results": [{"success": True}]})
         scheduler = fs.FillScheduleScheduler(
@@ -1309,7 +1288,7 @@ class PublishDueTests(unittest.TestCase):
         state.get_task.return_value = {
             "state": 1,
             "videos": [self.video_path],
-            "video_storage_path": "user-1/faceless/t-1/final-1.mp4",
+            "video_storage_path": "user-1/voiceover/t-1/final-1.mp4",
         }
         publish = MagicMock(return_value={"success": True, "results": [{"success": True}]})
         scheduler = fs.FillScheduleScheduler(
@@ -1401,7 +1380,7 @@ class PublishDueTests(unittest.TestCase):
         state.get_task.return_value = {
             "state": 1,
             "videos": [self.video_path],
-            "video_storage_path": "user-1/faceless/t-1/final-1.mp4",
+            "video_storage_path": "user-1/voiceover/t-1/final-1.mp4",
         }
         scheduler = fs.FillScheduleScheduler(
             store=store,
@@ -1415,7 +1394,7 @@ class PublishDueTests(unittest.TestCase):
             video_storage, "read_final_video_r2", return_value=b"fake-video-bytes"
         ) as read_mock:
             scheduler.publish_due(datetime(2026, 9, 7, 12, 0, tzinfo=UTC))
-        read_mock.assert_called_once_with("user-1/faceless/t-1/final-1.mp4")
+        read_mock.assert_called_once_with("user-1/voiceover/t-1/final-1.mp4")
 
     def test_instagram_provider_uses_caption_metadata(self):
         slot = self._slot()
@@ -1426,7 +1405,7 @@ class PublishDueTests(unittest.TestCase):
         state.get_task.return_value = {
             "state": 1,
             "videos": [self.video_path],
-            "video_storage_path": "user-1/faceless/t-1/final-1.mp4",
+            "video_storage_path": "user-1/voiceover/t-1/final-1.mp4",
         }
         scheduler = fs.FillScheduleScheduler(
             store=store,
@@ -1450,7 +1429,7 @@ class PublishDueTests(unittest.TestCase):
         state.get_task.return_value = {
             "state": 1,
             "videos": [self.video_path],
-            "video_storage_path": "user-1/faceless/t-1/final-1.mp4",
+            "video_storage_path": "user-1/voiceover/t-1/final-1.mp4",
         }
         scheduler = fs.FillScheduleScheduler(
             store=store,
@@ -1474,7 +1453,7 @@ class PublishDueTests(unittest.TestCase):
         state.get_task.return_value = {
             "state": 1,
             "videos": [self.video_path],
-            "video_storage_path": "user-1/faceless/t-1/final-1.mp4",
+            "video_storage_path": "user-1/voiceover/t-1/final-1.mp4",
         }
         publish = MagicMock(side_effect=PublishError("boom"))
         scheduler = fs.FillScheduleScheduler(
@@ -1499,7 +1478,7 @@ class PublishDueTests(unittest.TestCase):
         state.get_task.return_value = {
             "state": 1,
             "videos": [self.video_path],
-            "video_storage_path": "user-1/faceless/t-1/final-1.mp4",
+            "video_storage_path": "user-1/voiceover/t-1/final-1.mp4",
         }
         error = PublishError("E" * 150 + " api_key=TOPSECRET123 " + "F" * 150)
         publish = MagicMock(side_effect=error)
@@ -1558,7 +1537,7 @@ class PublishRetryLimitTests(unittest.TestCase):
             "title": "Tokyo coffee",
             "description": "Tokyo coffee description.",
             "task_id": "t-1",
-            "faceless": True,
+            "voiceover": True,
             "charged_tokens": 1,
             "publish_attempts": publish_attempts,
             "schedules": {
@@ -1570,7 +1549,7 @@ class PublishRetryLimitTests(unittest.TestCase):
             },
         }
 
-    def _run_publish(self, slot, video_storage_path="user-1/faceless/t-1/final-1.mp4"):
+    def _run_publish(self, slot, video_storage_path="user-1/voiceover/t-1/final-1.mp4"):
         from app.services.upload_publisher import PublishError
 
         store = _FakeStore()
@@ -1676,7 +1655,7 @@ class PublishRetryLimitTests(unittest.TestCase):
         state.get_task.return_value = {
             "state": 1,
             "videos": [self.video_path],
-            "video_storage_path": "user-1/faceless/t-1/final-1.mp4",
+            "video_storage_path": "user-1/voiceover/t-1/final-1.mp4",
         }
         publish = MagicMock(side_effect=PublishError("boom"))
         scheduler = fs.FillScheduleScheduler(
@@ -1712,7 +1691,7 @@ class PublishRetryLimitTests(unittest.TestCase):
         state.get_task.return_value = {
             "state": 1,
             "videos": [self.video_path],
-            "video_storage_path": "user-1/faceless/t-1/final-1.mp4",
+            "video_storage_path": "user-1/voiceover/t-1/final-1.mp4",
         }
         publish = MagicMock(side_effect=PublishError("boom"))
         scheduler = fs.FillScheduleScheduler(
@@ -1775,7 +1754,7 @@ class PublishRetryLimitTests(unittest.TestCase):
         state.get_task.return_value = {
             "state": 1,
             "videos": [self.video_path],
-            "video_storage_path": "user-1/faceless/t-1/final-1.mp4",
+            "video_storage_path": "user-1/voiceover/t-1/final-1.mp4",
         }
         publish = MagicMock(side_effect=PublishError("boom"))
         scheduler = fs.FillScheduleScheduler(
@@ -1803,7 +1782,7 @@ class PublishRetryLimitTests(unittest.TestCase):
         state.get_task.return_value = {
             "state": 1,
             "videos": [self.video_path],
-            "video_storage_path": "user-1/faceless/t-1/final-1.mp4",
+            "video_storage_path": "user-1/voiceover/t-1/final-1.mp4",
         }
         publish = MagicMock(side_effect=PublishError("boom"))
         scheduler = fs.FillScheduleScheduler(
@@ -1851,7 +1830,7 @@ class NotifyIntegrationTests(unittest.TestCase):
             "slot_at": "2026-09-07T12:00:00+00:00",
             "title": "Batch title one",
             "description": "Agent description.",
-            "video_type": "faceless",
+            "video_type": "voiceover",
             "segments": [
                 {
                     "kind": "hook",
@@ -1912,7 +1891,7 @@ class NotifyIntegrationTests(unittest.TestCase):
             "slot_at": "2026-09-07T12:00:00+00:00",
             "title": "Batch title",
             "description": "Agent description.",
-            "video_type": "faceless",
+            "video_type": "voiceover",
             "segments": [
                 {
                     "kind": "hook",
@@ -1971,7 +1950,7 @@ class NotifyIntegrationTests(unittest.TestCase):
             "slot_at": "2026-09-07T12:00:00+00:00",
             "title": "Batch title",
             "description": "Agent description.",
-            "video_type": "faceless",
+            "video_type": "voiceover",
             "segments": [
                 {
                     "kind": "hook",
@@ -2039,7 +2018,7 @@ class NotifyIntegrationTests(unittest.TestCase):
         state.get_task.return_value = {
             "state": 1,
             "videos": [video_path],
-            "video_storage_path": "user-1/faceless/t-1/final-1.mp4",
+            "video_storage_path": "user-1/voiceover/t-1/final-1.mp4",
         }
         notify = MagicMock()
         scheduler = self._scheduler(store, task_state=state, notify=notify)
@@ -2082,7 +2061,7 @@ class NotifyIntegrationTests(unittest.TestCase):
         state.get_task.return_value = {
             "state": 1,
             "videos": [video_path],
-            "video_storage_path": "user-1/faceless/t-1/final-1.mp4",
+            "video_storage_path": "user-1/voiceover/t-1/final-1.mp4",
         }
         notify = MagicMock()
         scheduler = self._scheduler(
@@ -2106,7 +2085,7 @@ class NotifyIntegrationTests(unittest.TestCase):
             "slot_at": "2026-09-07T12:00:00+00:00",
             "title": "Batch title",
             "description": "Agent description.",
-            "video_type": "faceless",
+            "video_type": "voiceover",
             "segments": [
                 {
                     "kind": "hook",
@@ -2242,10 +2221,10 @@ class CoverageGapTests(unittest.TestCase):
         self.assertNotIn("voice_id", params)
         store.signed_url.assert_not_called()
 
-    def test_persona_params_faceless_drops_visual_identity(self):
+    def test_persona_params_voiceover_drops_visual_identity(self):
         store = MagicMock()
         store.signed_url = MagicMock(
-            side_effect=AssertionError("must not sign a photo for a faceless post")
+            side_effect=AssertionError("must not sign a photo for a voiceover post")
         )
         params = fs.build_persona_params(
             {
@@ -2255,7 +2234,7 @@ class CoverageGapTests(unittest.TestCase):
                 "voice_id": "calm",
             },
             store=store,
-            video_type="faceless",
+            video_type="voiceover",
         )
         self.assertEqual(params["name"], "Ana")
         self.assertEqual(params["voice_id"], "calm")
@@ -2267,7 +2246,7 @@ class CoverageGapTests(unittest.TestCase):
         self.assertEqual(fs.slot_refund_amount({"id": "s", "charged_tokens": 1}), 1)
 
     def test_slot_refund_amount_ignores_the_video_type(self):
-        slot = {"id": "s", "video_type": "faceless", "charged_tokens": 7}
+        slot = {"id": "s", "video_type": "voiceover", "charged_tokens": 7}
         self.assertEqual(fs.slot_refund_amount(slot), 7)
 
     def test_slot_refund_amount_is_none_for_a_free_slot(self):
@@ -2430,7 +2409,7 @@ class CoverageGapTests(unittest.TestCase):
         state.get_task.return_value = {
             "state": 1,
             "videos": [self.video_path],
-            "video_storage_path": "user-1/faceless/t-1/final-1.mp4",
+            "video_storage_path": "user-1/voiceover/t-1/final-1.mp4",
         }
         publish = MagicMock(return_value={"success": True, "results": [{"success": True}]})
         manager = MagicMock()
@@ -2460,7 +2439,7 @@ class CoverageGapTests(unittest.TestCase):
         state.get_task.return_value = {
             "state": 1,
             "videos": [self.video_path],
-            "video_storage_path": "user-1/faceless/t-1/final-1.mp4",
+            "video_storage_path": "user-1/voiceover/t-1/final-1.mp4",
         }
         publish = MagicMock()
         scheduler = self._scheduler(store, task_state=state, publish_video=publish)
@@ -2482,7 +2461,7 @@ class CoverageGapTests(unittest.TestCase):
         state.get_task.return_value = {
             "state": 1,
             "videos": [self.video_path],
-            "video_storage_path": "user-1/faceless/t-1/final-1.mp4",
+            "video_storage_path": "user-1/voiceover/t-1/final-1.mp4",
         }
         notify = MagicMock()
         scheduler = self._scheduler(
@@ -2719,7 +2698,7 @@ class CoverageGapTests(unittest.TestCase):
             "slot_at": "2026-09-07T12:00:00+00:00",
             "title": "Batch title",
             "description": "Agent description.",
-            "video_type": "faceless",
+            "video_type": "voiceover",
             "segments": [
                 {
                     "kind": "hook",

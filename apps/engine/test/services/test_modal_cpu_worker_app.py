@@ -13,6 +13,7 @@ import unittest
 from pathlib import Path
 
 from app.services import remote_dispatch
+from app.services.cpu_worker_dispatch import FUNCTION_NAME
 
 ENGINE_DIR = Path(__file__).resolve().parents[2]
 SOURCE = (ENGINE_DIR / "modal_cpu_worker.py").read_text(encoding="utf-8")
@@ -53,8 +54,11 @@ def _decorated_functions() -> dict[str, dict[str, object]]:
 
 
 class WorkerFunctionContractTests(unittest.TestCase):
-    def test_the_app_defines_exactly_the_functions_the_dispatcher_spawns(self):
-        self.assertEqual(set(_decorated_functions()), set(remote_dispatch.WORKER_FUNCTIONS))
+    def test_the_app_defines_exactly_the_functions_the_dispatchers_spawn(self):
+        self.assertEqual(
+            set(_decorated_functions()),
+            set(remote_dispatch.WORKER_FUNCTIONS) | {FUNCTION_NAME},
+        )
 
     def test_the_app_name_matches_the_documented_config_value(self):
         self.assertEqual(_module_constants()["WORKER_APP_NAME"], "post-engineer-cpu-worker")
@@ -82,7 +86,12 @@ class WorkerFunctionContractTests(unittest.TestCase):
         functions = _decorated_functions()
         for name, kwargs in functions.items():
             with self.subTest(function=name):
-                expected = "LIPSYNC_SECRETS" if name == remote_dispatch.LIPSYNC_FUNCTION else "WORKER_SECRETS"
+                if name == remote_dispatch.LIPSYNC_FUNCTION:
+                    expected = "LIPSYNC_SECRETS"
+                elif name == FUNCTION_NAME:
+                    expected = "CPU_WORKER_SECRETS"
+                else:
+                    expected = "WORKER_SECRETS"
                 self.assertEqual(kwargs["secrets"], expected)
         self.assertIn('modal.Secret.from_name("post-engineer-longcat-client")', SOURCE)
 

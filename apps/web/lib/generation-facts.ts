@@ -1,5 +1,5 @@
 export function buildGenerationFacts(
-  row: { faceless: boolean | null },
+  row: { voiceover: boolean | null },
   scheduleRow: {
     post_language: string | null;
     post_voice_id: string | null;
@@ -10,7 +10,7 @@ export function buildGenerationFacts(
     post_face_quality: string | null;
   },
 ): {
-  faceless: boolean;
+  voiceover: boolean;
   language: string | null;
   voiceId: string | null;
   videoAspect: string | null;
@@ -19,7 +19,7 @@ export function buildGenerationFacts(
   paragraphNumber: number | null;
   faceQuality: string | null;
 } {
-  const faceless = row.faceless === true;
+  const voiceover = row.voiceover === true;
   const language = scheduleRow.post_language ?? null;
   const voiceId = scheduleRow.post_voice_id ?? null;
   const videoAspect = scheduleRow.post_video_aspect ?? null;
@@ -28,6 +28,6 @@ export function buildGenerationFacts(
   const paragraphNumber = scheduleRow.post_paragraph_number ?? null;
   const faceQuality = scheduleRow.post_face_quality ?? null;
   return {
-    faceless, language, voiceId, videoAspect, videoLayout, niche, paragraphNumber, faceQuality,
+    voiceover, language, voiceId, videoAspect, videoLayout, niche, paragraphNumber, faceQuality,
   };
 }

@@ -106,7 +106,7 @@ class AccountRetryTests(unittest.TestCase):
         state.get_task.return_value = {
             "state": 1,
             "videos": [self.video_path],
-            "video_storage_path": "user-1/faceless/t-1/final-1.mp4",
+            "video_storage_path": "user-1/voiceover/t-1/final-1.mp4",
         }
         scheduler = FillScheduleScheduler(
             store=store,
@@ -496,7 +496,7 @@ class AccountRetryTests(unittest.TestCase):
         read_mock.assert_not_called()
         kwargs = publish.call_args.kwargs
         self.assertIsNone(kwargs["video_bytes"])
-        self.assertEqual(kwargs["r2_object_path"], "user-1/faceless/t-1/final-1.mp4")
+        self.assertEqual(kwargs["r2_object_path"], "user-1/voiceover/t-1/final-1.mp4")
 
     def test_youtube_publish_still_reads_bytes_with_archive_path_present(self) -> None:
         store = _MemoryStore(self._slot(["youtube"]))
@@ -505,7 +505,7 @@ class AccountRetryTests(unittest.TestCase):
         with patch.object(video_storage, "read_final_video_r2", return_value=b"fake-video-bytes") as read_mock:
             published = scheduler.publish_due(NOW)
         self.assertEqual(published, 1)
-        read_mock.assert_called_once_with("user-1/faceless/t-1/final-1.mp4")
+        read_mock.assert_called_once_with("user-1/voiceover/t-1/final-1.mp4")
         kwargs = publish.call_args.kwargs
         self.assertEqual(kwargs["video_bytes"], b"fake-video-bytes")
         self.assertIsNone(kwargs["r2_object_path"])

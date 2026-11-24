@@ -53,7 +53,7 @@ class FillSchedulePublishPostHogTests(TestCase):
             "title": "Porto coffee",
             "description": "Porto coffee description.",
             "task_id": "t-1",
-            "faceless": True,
+            "voiceover": True,
             "publish_attempts": 0,
             "schedules": {
                 "id": "sched-1",
@@ -73,7 +73,7 @@ class FillSchedulePublishPostHogTests(TestCase):
         state.get_task.return_value = {
             "state": 1,
             "videos": [self.video_path],
-            "video_storage_path": "user-1/faceless/t-1/final-1.mp4",
+            "video_storage_path": "user-1/voiceover/t-1/final-1.mp4",
         }
         sched = scheduler_module.FillScheduleScheduler(
             store=store,

@@ -7,7 +7,7 @@ export const BATCH_WINDOW_MS = 10 * 60 * 1000;
 export interface BatchSlot {
   id: string;
   scheduleId: string;
-  faceless: boolean;
+  voiceover: boolean;
   status: string;
   chargedTokens: number;
   discountTokens: number;
@@ -16,7 +16,7 @@ export interface BatchSlot {
 }
 
 function faceSlots(slots: readonly BatchSlot[]): BatchSlot[] {
-  return slots.filter((slot) => !slot.faceless);
+  return slots.filter((slot) => !slot.voiceover);
 }
 
 export function batchFreeCount(slots: readonly BatchSlot[]): number {
@@ -75,7 +75,7 @@ function isNonNegativeInteger(value: unknown): value is number {
 }
 
 export const BATCH_SLOT_COLUMNS =
-  'id, schedule_id, faceless, status, charged_tokens, discount_tokens, created_at, task_id, batch_id';
+  'id, schedule_id, voiceover, status, charged_tokens, discount_tokens, created_at, task_id, batch_id';
 
 export function narrowBatchSlot(value: unknown): BatchSlot | null {
   if (typeof value !== 'object' || value === null) return null;
@@ -89,7 +89,7 @@ export function narrowBatchSlot(value: unknown): BatchSlot | null {
   return {
     id,
     scheduleId,
-    faceless: row.faceless === true,
+    voiceover: row.voiceover === true,
     status,
     chargedTokens: row.charged_tokens,
     discountTokens: row.discount_tokens,
