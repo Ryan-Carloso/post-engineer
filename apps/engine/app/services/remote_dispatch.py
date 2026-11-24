@@ -205,11 +205,6 @@ def _request_cancel(task_id: str, call: Any) -> bool:
     return True
 
 
-def _cancel_remote(task_id: str, call: Any) -> None:
-    if _request_cancel(task_id, call):
-        _delete_cancelled_row(task_id)
-
-
 def wait_for_call(
     task_id: str,
     call_id: str,
