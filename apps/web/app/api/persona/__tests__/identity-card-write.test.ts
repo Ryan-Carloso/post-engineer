@@ -53,7 +53,6 @@ function observedOutput(): string {
 
 const DB_ROW_SENTINEL = 'fake-row-sentinel-9c41';
 
-// Mirrors PostgrestError for a CHECK violation: `details` echoes the whole failing row.
 function dbFailure(): { message: string; details: string; hint: null; code: string } {
   return {
     message: 'new row for relation "personas" violates check constraint "personas_identity_card_object_check"',
