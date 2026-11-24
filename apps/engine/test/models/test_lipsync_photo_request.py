@@ -13,14 +13,15 @@ from pydantic import ValidationError
 from app.models.schema import PersonaParams, TaskVideoRequest
 from app.models.segments import MAX_LIPSYNC_PHOTOS, MIN_LIPSYNC_PHOTOS, LipsyncPhoto
 from app.services import full_lipsync
+from test.controllers.test_task_segments_request import valid_segments
 
 
-def _request(video_type="full_lipsync", **extra):
+def _request(video_type="full_lipsync", video_script="Hook. Body. Call to action.", **extra):
     return TaskVideoRequest(
         video_title="Porto",
         video_description="Test description.",
         video_type=video_type,
-        video_script="Hook. Body. Call to action.",
+        video_script=video_script,
         persona=PersonaParams(name="Ana", photo_url="https://img.test/p.png", voice_id="calm"),
         **extra,
     )
@@ -53,12 +54,16 @@ def test_a_repeated_ref_is_rejected():
 
 @pytest.mark.parametrize("video_type", ["hook_lipsync", "voiceover"])
 def test_other_modes_reject_the_field(video_type):
+    extra = {"lipsync_photos": _photos(2)}
+    if video_type == "hook_lipsync":
+        extra["segments"] = valid_segments()
+        extra["video_script"] = ""
     with pytest.raises(ValidationError, match="only accepted for full_lipsync"):
-        _request(video_type=video_type, lipsync_photos=_photos(2))
+        _request(video_type=video_type, **extra)
 
 
-def test_other_modes_without_the_field_pass():
-    assert _request(video_type="hook_lipsync").lipsync_photos is None
+def test_voiceover_without_the_field_passes():
+    assert _request(video_type="voiceover").lipsync_photos is None
 
 
 @pytest.mark.parametrize(
