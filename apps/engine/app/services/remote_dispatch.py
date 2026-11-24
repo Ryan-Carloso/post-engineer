@@ -37,6 +37,7 @@ WORKER_FUNCTIONS = (FACELESS_FUNCTION, FACELESS_CLONE_FUNCTION, LIPSYNC_FUNCTION
 
 CALL_ID_FIELD = "modal_call_id"
 FUNCTION_FIELD = "modal_function"
+VIDEO_TITLE_FIELD = "video_title"
 WEBHOOK_FIELD = "webhook_url"
 WORKER_STOPPED_ERROR = "render worker stopped before the video finished"
 TERMINAL_STATES = (const.TASK_STATE_FAILED, const.TASK_STATE_COMPLETE)
@@ -70,6 +71,7 @@ def max_wait_seconds() -> float:
 @dataclass(frozen=True)
 class _AdoptedParams:
     webhook_url: str | None = None
+    video_title: str = ""
 
 
 def _local_semaphore() -> threading.BoundedSemaphore:
@@ -191,10 +193,38 @@ def wait_for_call(
     unreachable_since: float | None = None
     try:
         modal = modal_module if modal_module is not None else _modal()
-        call = modal.FunctionCall.from_id(call_id)
     except Exception as exc:
-        logger.error(f"task {task_id}: looking up modal call {call_id} failed: {exc}")
+        _fail_unfinished(
+            task_id,
+            params,
+            f"the modal call lookup failed with {type(exc).__name__}: {exc}",
+        )
         return
+    while True:
+        try:
+            call = modal.FunctionCall.from_id(call_id)
+            break
+        except Exception as exc:
+            if modal_unreachable(modal, exc):
+                logger.warning(f"task {task_id}: looking up modal call {call_id} failed: {exc}")
+                if unreachable_since is None:
+                    unreachable_since = now()
+                sleep(poll_seconds())
+                if now() - unreachable_since >= limit:
+                    _fail_unfinished(
+                        task_id,
+                        params,
+                        f"modal call lookup did not answer within {int(limit)} seconds",
+                    )
+                    return
+                continue
+            _fail_unfinished(
+                task_id,
+                params,
+                f"the modal call lookup failed with {type(exc).__name__}: {exc}",
+            )
+            return
+    unreachable_since = None
     while True:
         if is_cancelled(task_id):
             _cancel_remote(task_id, call)
@@ -250,8 +280,9 @@ def pipeline_entry() -> Callable[..., Any]:
 
 
 def start(task_id: str, params: Any, stop_at: str = "video") -> Any:
-    """Has ``task.start``'s signature; returns None once the task is spawned
-    (the worker's result stays in Modal)."""
+    """Has ``task.start``'s signature; blocks in ``wait_for_call`` until the
+    spawned call ends so the manager's running slot stays occupied; returns
+    None for a spawned task (the worker's result stays in Modal)."""
     if not app_name():
         return _pipeline_start()(task_id, params, stop_at)
     if stop_at != "video":
@@ -266,6 +297,9 @@ def start(task_id: str, params: Any, stop_at: str = "video") -> Any:
     webhook_url = getattr(params, "webhook_url", None)
     if isinstance(webhook_url, str) and webhook_url:
         fields[WEBHOOK_FIELD] = webhook_url
+    video_title = getattr(params, "video_title", None)
+    if isinstance(video_title, str) and video_title:
+        fields[VIDEO_TITLE_FIELD] = video_title
     sm.state.update_task(task_id, **fields)
     wait_for_call(task_id, call_id, params)
     return None
@@ -314,11 +348,13 @@ def adopt_live_call(
         return False
     logger.info(f"orphan {task_id}: modal call {call_id} is still running; adopted")
     stored_webhook = data.get(WEBHOOK_FIELD)
-    adopted_params = (
-        _AdoptedParams(webhook_url=stored_webhook)
-        if isinstance(stored_webhook, str) and stored_webhook
-        else None
-    )
+    stored_title = data.get(VIDEO_TITLE_FIELD)
+    webhook_url = stored_webhook if isinstance(stored_webhook, str) and stored_webhook else None
+    video_title = stored_title if isinstance(stored_title, str) and stored_title else ""
+    if webhook_url is None and not video_title:
+        adopted_params: _AdoptedParams | None = None
+    else:
+        adopted_params = _AdoptedParams(webhook_url=webhook_url, video_title=video_title)
     (spawn_thread or threading.Thread)(target=wait_for_call, args=(task_id, call_id, adopted_params), daemon=True).start()
     return True
 
@@ -329,6 +365,7 @@ __all__ = [
     "FACELESS_FUNCTION",
     "FUNCTION_FIELD",
     "LIPSYNC_FUNCTION",
+    "VIDEO_TITLE_FIELD",
     "WEBHOOK_FIELD",
     "WORKER_FUNCTIONS",
     "adopt_live_call",

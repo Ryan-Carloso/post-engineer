@@ -2,8 +2,11 @@
 
 Historically ``SupabaseTaskState.reconcile_orphaned_tasks`` failed every
 non-terminal orphan and refunded its token. That is correct for genuinely
-dead work, but two cases can recover by themselves:
+dead work, but three cases can recover by themselves:
 
+- a row naming a Modal call that is still running is adopted and watched,
+  so the render is neither repeated nor refunded; an ended call falls
+  through to the cases below;
 - an orphan in a generation stage that belongs to a batch slot: the slot
   goes back to ``pending`` and the next fill-schedule tick re-dispatches it.
   Batch slots are prepaid at schedule creation, so no billing change;
