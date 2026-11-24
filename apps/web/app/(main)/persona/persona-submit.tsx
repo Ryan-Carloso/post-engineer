@@ -103,6 +103,9 @@ export const PersonaSubmit = ({ editId }: { editId: string | null }) => {
         const result = localizeIdentityCardResult(await updateMutation.mutateAsync({ personaId, formData }), t);
         usePersonaStore.getState().setResult(result);
         if (result.success) {
+          await queryClient.invalidateQueries({
+            queryKey: [PERSONA_IDENTITY_CARD_QUERY_KEY, personaId],
+          });
           if (loadedAccounts === null || !samePublishingAccounts(state.publishingAccounts, loadedAccounts)) {
             try {
               await savePublishingAccounts(personaId, state.publishingAccounts, t('persona.publishingAccountsSaveError'));
@@ -117,9 +120,6 @@ export const PersonaSubmit = ({ editId }: { editId: string | null }) => {
             }
           }
           await queryClient.invalidateQueries({ queryKey: ['persona-list'] });
-          await queryClient.invalidateQueries({
-            queryKey: [PERSONA_IDENTITY_CARD_QUERY_KEY, personaId],
-          });
           router.back();
         } else if (result.error === 'prompt_rejected') {
           scrollToErrorField('script');

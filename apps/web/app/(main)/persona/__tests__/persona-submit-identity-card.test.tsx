@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { FormProvider, useForm } from 'react-hook-form';
@@ -66,6 +66,10 @@ beforeEach(() => {
   });
 });
 
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 async function submit(): Promise<void> {
   render(<PersonaSubmit editId={null} />, { wrapper: Wrapper });
   fireEvent.click(screen.getByRole('button'));
@@ -122,6 +126,27 @@ describe('PersonaSubmit with an identity card', () => {
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: [PERSONA_IDENTITY_CARD_QUERY_KEY, personaId],
     });
+    invalidateSpy.mockRestore();
+  });
+
+  it('invalidates the identity card query even when the publishing accounts save fails', async () => {
+    const personaId = '11111111-1111-4111-8111-111111111111';
+    api.updateMutateAsync.mockResolvedValue({ success: true });
+    const store = usePersonaStore.getState();
+    store.setPublishingAccountsLoaded(true);
+    store.setLoadedPublishingAccounts(emptyPersonaDefaultAccounts());
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: false, status: 500, json: async () => ({ success: false }) }),
+    );
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+    render(<PersonaSubmit editId={personaId} />, { wrapper: Wrapper });
+    fireEvent.click(screen.getByRole('button'));
+    await waitFor(() => expect(usePersonaStore.getState().result?.success).toBe(false));
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: [PERSONA_IDENTITY_CARD_QUERY_KEY, personaId],
+    });
+    expect(invalidateSpy).not.toHaveBeenCalledWith({ queryKey: ['persona-list'] });
     invalidateSpy.mockRestore();
   });
 });
