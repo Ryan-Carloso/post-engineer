@@ -102,6 +102,15 @@ def title_end(first_segment_end: Optional[float], audio_duration: float) -> floa
     return max(0.0, min(limits))
 
 
+def card_top(title: Optional[TitleLayer], panel_start: float) -> Optional[int]:
+    """Where a full-frame info card starts so it clears the title, or None to keep its place.
+
+    The card PNG is static, so a photo that starts while the title shows
+    keeps the lower card for its whole time on screen.
+    """
+    return title.floor if title is not None and panel_start < title.end else None
+
+
 def _scale(width: int, height: int) -> float:
     return min(width, height) / 1080
 
