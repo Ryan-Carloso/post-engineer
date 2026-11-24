@@ -90,12 +90,14 @@ export const PROMPT_VERSION_LIST_LIMITS = { default: 20, max: 50 } as const;
 
 export const PROMPT_VERSION_PREVIEW_LENGTH = 280;
 
+export const PROMPT_VERSION_MAX = 999_999_999;
+
 export const PROMPT_VERSION_PATTERN = /^[1-9]\d{0,8}$/;
 
 export const ListPromptVersionsQuerySchema = z
   .object({
     limit: z.coerce.number().int().min(1).max(PROMPT_VERSION_LIST_LIMITS.max).optional(),
-    before: z.coerce.number().int().min(2).optional(),
+    before: z.coerce.number().int().min(2).max(PROMPT_VERSION_MAX).optional(),
   })
   .strict();
 

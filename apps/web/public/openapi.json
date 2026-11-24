@@ -8712,7 +8712,7 @@
                           "bodyLength": {
                             "type": "integer",
                             "minimum": 1,
-                            "description": "Length of the full text."
+                            "description": "Length of the full text in characters (code points)."
                           },
                           "current": {
                             "type": "boolean",
@@ -8825,7 +8825,7 @@
             }
           }
         ],
-        "description": "Owner-only. Lists the saved texts of your own prompt, newest first. limit is 1 to 50 (default 20). before is a version number of 2 or more: pass nextCursor to read the next page."
+        "description": "Owner-only. Lists the saved texts of your own prompt, newest first. limit is 1 to 50 (default 20). before is a version number from 2 to 999999999: pass nextCursor to read the next page."
       }
     },
     "/api/prompts/{slug}/versions/{version}": {

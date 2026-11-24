@@ -25,7 +25,7 @@ describe('userPrompts strings', () => {
   it('carries the version history and restore strings in both languages', () => {
     const keys = [
       'historyTitle', 'historyEmpty', 'historyCurrent', 'historyTitleThen', 'historyViewFull', 'historyHideFull', 'historyShowOlder',
-      'restoreButton', 'restoreDialogTitle', 'restoreDialogBody', 'restoreConfirm', 'restoreCancel', 'restoreUnchanged',
+      'restoreButton', 'restoreDialogTitle', 'restoreDialogBody', 'restoreConfirm', 'restoreCancel', 'restoreUnchanged', 'restoreDone',
       'errorVersionConflict', 'errorVersionNotFound',
     ] as const;
     for (const key of keys) {
@@ -34,5 +34,7 @@ describe('userPrompts strings', () => {
     }
     expect(userPromptsStrings.en.userPrompts.restoreDialogBody).toContain('{next}');
     expect(userPromptsStrings.pt.userPrompts.restoreDialogBody).toContain('{next}');
+    expect(userPromptsStrings.en.userPrompts.restoreDone).toContain('{version}');
+    expect(userPromptsStrings.pt.userPrompts.restoreDone).toContain('{version}');
   });
 });

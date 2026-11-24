@@ -194,6 +194,7 @@ describe('prompt_library', () => {
       ['a limit of 0', { limit: 0 }],
       ['a limit above the cap', { limit: 51 }],
       ['a before of 1', { before: 1 }],
+      ['a before above the version limit', { before: 1_000_000_000 }],
       ['a version of 0', { version: 0 }],
       ['a fractional version', { version: 1.5 }],
       ['version with a page cursor', { version: 2, before: 3 }],

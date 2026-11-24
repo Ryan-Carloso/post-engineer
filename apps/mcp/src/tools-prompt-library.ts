@@ -3,6 +3,7 @@ import type { PostEngineerClient } from './client.js';
 import { createUserPrompt, deleteUserPrompt, listPromptVersions, restorePromptVersion, updateUserPrompt } from './client-prompt-library.js';
 import {
   PROMPT_VERSION_LIST_LIMITS,
+  PROMPT_VERSION_MAX,
   PROMPT_VISIBILITIES,
   USER_PROMPT_LIMITS,
   USER_PROMPT_SLUG_PATTERN,
@@ -43,7 +44,7 @@ export const UpdatePromptShape = {
 
 export const DeletePromptShape = { slug: SlugField };
 
-const VersionField = z.number().int().min(1).max(999_999_999);
+const VersionField = z.number().int().min(1).max(PROMPT_VERSION_MAX);
 
 export const VersionsPromptShape = {
   slug: SlugField,
@@ -61,6 +62,7 @@ export const VersionsPromptShape = {
     .number()
     .int()
     .min(2)
+    .max(PROMPT_VERSION_MAX)
     .optional()
     .describe('List versions older than this one. Pass the nextCursor of the previous page.'),
 };

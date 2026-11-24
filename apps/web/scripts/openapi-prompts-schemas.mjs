@@ -65,7 +65,7 @@ export function promptOperationSchemas({ success, object, str }) {
       createdAt: { type: 'string', format: 'date-time' },
       preview: { ...str, description: 'The first 280 characters of the text.' },
       previewTruncated: { type: 'boolean', description: 'true when the text is longer than the preview.' },
-      bodyLength: { type: 'integer', minimum: 1, description: 'Length of the full text.' },
+      bodyLength: { type: 'integer', minimum: 1, description: 'Length of the full text in characters (code points).' },
       current: { type: 'boolean', description: 'true for the version the prompt text is now.' },
     },
     ['versionId', 'version', 'title', 'createdAt', 'preview', 'previewTruncated', 'bodyLength', 'current'],
@@ -102,7 +102,7 @@ export function promptOperationSchemas({ success, object, str }) {
     'GET /api/prompts/[slug]/versions': {
       query: [{ name: 'limit', required: false }, { name: 'before', required: false }],
       description:
-        'Owner-only. Lists the saved texts of your own prompt, newest first. limit is 1 to 50 (default 20). before is a version number of 2 or more: pass nextCursor to read the next page.',
+        'Owner-only. Lists the saved texts of your own prompt, newest first. limit is 1 to 50 (default 20). before is a version number from 2 to 999999999: pass nextCursor to read the next page.',
       response: success({
         currentVersion: { type: 'integer', minimum: 1 },
         versions: { type: 'array', items: versionSummary },

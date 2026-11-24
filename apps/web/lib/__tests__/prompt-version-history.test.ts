@@ -86,6 +86,15 @@ describe('listUserPromptVersions', () => {
     expect(JSON.stringify(page)).not.toContain(body);
   });
 
+  it('counts bodyLength in code points, like the preview cut and the 20,000 character limit', async () => {
+    const { db, promptId } = await seedHistory(['small', '😀'.repeat(300)]);
+    const page = await listUserPromptVersions(db.client, promptId, { limit: 20 });
+    const emoji = page.versions[0];
+    expect(emoji.bodyLength).toBe(300);
+    expect(Array.from(emoji.preview)).toHaveLength(PROMPT_VERSION_PREVIEW_LENGTH);
+    expect(emoji.previewTruncated).toBe(true);
+  });
+
   it('filters by prompt id only and reads one extra row to detect truncation', async () => {
     const { db, promptId } = await seedHistory(['a', 'b', 'c']);
     db.queries.length = 0;

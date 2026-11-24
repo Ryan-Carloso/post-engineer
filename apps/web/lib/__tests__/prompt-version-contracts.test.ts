@@ -43,6 +43,12 @@ describe('prompt version contracts', () => {
     expect(ListPromptVersionsQuerySchema.parse({})).toEqual({});
   });
 
+  it('accepts the largest before the version segment allows and rejects anything above it', () => {
+    expect(ListPromptVersionsQuerySchema.safeParse({ before: '999999999' }).success).toBe(true);
+    expect(ListPromptVersionsQuerySchema.safeParse({ before: '1000000000' }).success).toBe(false);
+    expect(ListPromptVersionsQuerySchema.safeParse({ before: '99999999999999999999' }).success).toBe(false);
+  });
+
   it.each([{ limit: '0' }, { limit: '51' }, { limit: '1.5' }, { before: '1' }, { before: 'x' }, { other: '1' }])(
     'rejects the query %j',
     (query) => {

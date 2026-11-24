@@ -212,15 +212,69 @@ describe('PromptVersionHistory restore', () => {
     expect(await screen.findByTestId('prompt-version-restore-2')).toBeInTheDocument();
   });
 
+  describe('a version whose preview is cut', () => {
+    const FULL_URL = '/api/prompts/my-prompt/versions/2';
+    const cutPage = (): Response =>
+      Response.json({ ...PAGE, versions: [entry(3, { current: true }), entry(2, { preview: 'text of ver', previewTruncated: true })] });
+    const fullVersion = (body: string): Response =>
+      Response.json({ success: true, version: { versionId: ID(2), version: 2, title: 'Current title', createdAt: NOW, body, current: false } });
+
+    it('reads the full text first and tells it is already current instead of promising a new version', async () => {
+      route('GET', '/api/prompts/my-prompt/versions', cutPage);
+      route('GET', FULL_URL, () => fullVersion('text of version two is long'));
+      renderHistory({ currentBody: 'text of version two is long' });
+      fireEvent.click(await screen.findByTestId('prompt-version-restore-2'));
+      const notice = await screen.findByTestId('prompt-version-notice');
+      expect(notice).toHaveTextContent('Already the current text.');
+      expect(notice).toHaveAttribute('data-tone', 'info');
+      expect(screen.queryByTestId('confirm-dialog')).not.toBeInTheDocument();
+      expect(seen.some((call) => call.url === FULL_URL)).toBe(true);
+      expect(seen.some((call) => call.method === 'POST')).toBe(false);
+    });
+
+    it('opens the confirmation when the full text differs from the current text', async () => {
+      route('GET', '/api/prompts/my-prompt/versions', cutPage);
+      route('GET', FULL_URL, () => fullVersion('text of version two is long'));
+      renderHistory({ currentBody: 'something else' });
+      fireEvent.click(await screen.findByTestId('prompt-version-restore-2'));
+      expect(await screen.findByTestId('confirm-dialog')).toBeInTheDocument();
+      expect(screen.queryByTestId('prompt-version-notice')).not.toBeInTheDocument();
+    });
+
+    it('shows a localized error and no dialog when the full text cannot be read', async () => {
+      route('GET', '/api/prompts/my-prompt/versions', cutPage);
+      route('GET', FULL_URL, () => Response.json({ success: false, error: 'db exploded' }, { status: 500 }));
+      renderHistory({ currentBody: 'something else' });
+      fireEvent.click(await screen.findByTestId('prompt-version-restore-2'));
+      const notice = await screen.findByTestId('prompt-version-notice');
+      expect(notice).toHaveTextContent('Something went wrong. Try again.');
+      expect(notice).toHaveAttribute('data-tone', 'error');
+      expect(screen.queryByTestId('confirm-dialog')).not.toBeInTheDocument();
+    });
+
+    it('disables the row controls while the full text is being read', async () => {
+      let release: (response: Response) => void = () => undefined;
+      route('GET', '/api/prompts/my-prompt/versions', cutPage);
+      route('GET', FULL_URL, () => new Promise<Response>((resolve) => { release = resolve; }));
+      renderHistory({ currentBody: 'something else' });
+      fireEvent.click(await screen.findByTestId('prompt-version-restore-2'));
+      await waitFor(() => expect(screen.getByTestId('prompt-version-restore-2')).toBeDisabled());
+      await act(async () => {
+        release(fullVersion('text of version two is long'));
+      });
+      expect(await screen.findByTestId('confirm-dialog')).toBeInTheDocument();
+    });
+  });
+
   it('opens a confirmation that names the next version, with focus on Cancel, and Escape closes it', async () => {
     renderHistory();
     fireEvent.click(await screen.findByTestId('prompt-version-restore-1'));
-    const dialog = await screen.findByTestId('restore-dialog');
+    const dialog = await screen.findByTestId('confirm-dialog');
     expect(within(dialog).getByText('Restore version 1?')).toBeInTheDocument();
     expect(within(dialog).getByText('Creates version 4 with this text. The title stays. Experiment results count it as a new prompt.')).toBeInTheDocument();
-    expect(screen.getByTestId('restore-cancel-button')).toHaveFocus();
+    expect(screen.getByTestId('confirm-dialog-cancel')).toHaveFocus();
     fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
-    await waitFor(() => expect(screen.queryByTestId('restore-dialog')).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByTestId('confirm-dialog')).not.toBeInTheDocument());
     expect(seen.some((call) => call.method === 'POST')).toBe(false);
   });
 
@@ -234,11 +288,30 @@ describe('PromptVersionHistory restore', () => {
     );
     renderHistory();
     fireEvent.click(await screen.findByTestId('prompt-version-restore-1'));
-    fireEvent.click(await screen.findByTestId('restore-confirm-button'));
-    await waitFor(() => expect(screen.queryByTestId('restore-dialog')).not.toBeInTheDocument());
+    fireEvent.click(await screen.findByTestId('confirm-dialog-confirm'));
+    await waitFor(() => expect(screen.queryByTestId('confirm-dialog')).not.toBeInTheDocument());
     const post = seen.find((call) => call.method === 'POST');
     expect(post).toEqual({ method: 'POST', url: '/api/prompts/my-prompt/versions/1/restore', body: { expectedCurrentVersion: 3 } });
-    expect(screen.queryByTestId('prompt-version-notice')).not.toBeInTheDocument();
+    const notice = await screen.findByTestId('prompt-version-notice');
+    expect(notice).toHaveTextContent('Restored as version 4.');
+    expect(notice).toHaveAttribute('data-tone', 'success');
+    expect(notice).toHaveAttribute('role', 'status');
+  });
+
+  it('clears the success notice when the next restore starts', async () => {
+    route('POST', '/api/prompts/my-prompt/versions/1/restore', () =>
+      Response.json({
+        success: true,
+        restored: true,
+        prompt: { slug: 'my-prompt', title: 'Current title', description: '', source: 'own', visibility: 'private', verified: false, prompt: 'x', body: 'x', versionId: ID(4), version: 4 },
+      }),
+    );
+    renderHistory();
+    fireEvent.click(await screen.findByTestId('prompt-version-restore-1'));
+    fireEvent.click(await screen.findByTestId('confirm-dialog-confirm'));
+    await screen.findByText('Restored as version 4.');
+    fireEvent.click(await screen.findByTestId('prompt-version-restore-2'));
+    expect(screen.queryByText('Restored as version 4.')).not.toBeInTheDocument();
   });
 
   it('refreshes the history after a restore that succeeded', async () => {
@@ -251,7 +324,7 @@ describe('PromptVersionHistory restore', () => {
     );
     renderHistory();
     fireEvent.click(await screen.findByTestId('prompt-version-restore-1'));
-    fireEvent.click(await screen.findByTestId('restore-confirm-button'));
+    fireEvent.click(await screen.findByTestId('confirm-dialog-confirm'));
     await waitFor(() => expect(seen.filter((call) => call.method === 'GET' && call.url.endsWith('/versions'))).toHaveLength(2));
   });
 
@@ -265,7 +338,7 @@ describe('PromptVersionHistory restore', () => {
     );
     renderHistory();
     fireEvent.click(await screen.findByTestId('prompt-version-restore-1'));
-    fireEvent.click(await screen.findByTestId('restore-confirm-button'));
+    fireEvent.click(await screen.findByTestId('confirm-dialog-confirm'));
     const notice = await screen.findByTestId('prompt-version-notice');
     expect(notice).toHaveTextContent('Already the current text.');
     expect(notice).toHaveAttribute('data-tone', 'info');
@@ -277,19 +350,19 @@ describe('PromptVersionHistory restore', () => {
     );
     renderHistory();
     fireEvent.click(await screen.findByTestId('prompt-version-restore-1'));
-    fireEvent.click(await screen.findByTestId('restore-confirm-button'));
+    fireEvent.click(await screen.findByTestId('confirm-dialog-confirm'));
     const notice = await screen.findByTestId('prompt-version-notice');
     expect(notice).toHaveTextContent('The prompt changed since you loaded it. The history was reloaded: check it and try again.');
     expect(notice).toHaveAttribute('data-tone', 'error');
     await waitFor(() => expect(seen.filter((call) => call.method === 'GET' && call.url.endsWith('/versions'))).toHaveLength(2));
-    expect(screen.queryByTestId('restore-dialog')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('confirm-dialog')).not.toBeInTheDocument();
   });
 
   it('shows a localized message, not the raw error, when the restore fails for another reason', async () => {
     route('POST', '/api/prompts/my-prompt/versions/1/restore', () => Response.json({ success: false, error: 'db exploded' }, { status: 500 }));
     renderHistory();
     fireEvent.click(await screen.findByTestId('prompt-version-restore-1'));
-    fireEvent.click(await screen.findByTestId('restore-confirm-button'));
+    fireEvent.click(await screen.findByTestId('confirm-dialog-confirm'));
     expect(await screen.findByTestId('prompt-version-notice')).toHaveTextContent('Something went wrong. Try again.');
     expect(screen.queryByText(/exploded/)).not.toBeInTheDocument();
   });
@@ -302,9 +375,9 @@ describe('PromptVersionHistory restore', () => {
     );
     renderHistory();
     fireEvent.click(await screen.findByTestId('prompt-version-restore-1'));
-    fireEvent.click(await screen.findByTestId('restore-confirm-button'));
-    await waitFor(() => expect(screen.getByTestId('restore-confirm-button')).toBeDisabled());
-    expect(screen.getByTestId('restore-cancel-button')).toBeDisabled();
+    fireEvent.click(await screen.findByTestId('confirm-dialog-confirm'));
+    await waitFor(() => expect(screen.getByTestId('confirm-dialog-confirm')).toBeDisabled());
+    expect(screen.getByTestId('confirm-dialog-cancel')).toBeDisabled();
     expect(screen.getByTestId('prompt-version-restore-2')).toBeDisabled();
     expect(screen.getByTestId('prompt-version-older')).toBeDisabled();
     expect(screen.getByTestId('prompt-version-toggle-2')).toBeDisabled();

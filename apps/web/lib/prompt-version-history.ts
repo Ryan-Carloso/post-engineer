@@ -68,7 +68,7 @@ export async function listUserPromptVersions(
     title: row.title,
     createdAt: row.created_at,
     ...previewOf(row.body),
-    bodyLength: row.body.length,
+    bodyLength: Array.from(row.body).length,
     current: row.version === currentVersion,
   }));
   return { currentVersion, versions, truncated, nextCursor: truncated ? versions[versions.length - 1].version : null };

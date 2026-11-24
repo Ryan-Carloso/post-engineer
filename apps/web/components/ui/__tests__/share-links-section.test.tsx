@@ -190,16 +190,16 @@ describe('ShareLinksSection', () => {
     const fetchMock = installFetch({ list: [link()], revoke: { status: 200, body: { success: true, alreadyRevoked: false } } });
     renderSection('en');
     fireEvent.click(await screen.findByTestId(`revoke-share-link-btn-${LINK_ID}`));
-    const dialog = await screen.findByTestId('disconnect-dialog');
+    const dialog = await screen.findByTestId('confirm-dialog');
     expect(dialog).toHaveTextContent('Revoke this link?');
     expect(dialog).toHaveTextContent('Anyone with the link loses access right away. This cannot be undone.');
     expect(fetchMock.mock.calls.some((call) => (call[1] as RequestInit | undefined)?.method === 'DELETE')).toBe(false);
-    fireEvent.click(screen.getByTestId('disconnect-confirm-button'));
+    fireEvent.click(screen.getByTestId('confirm-dialog-confirm'));
     await waitFor(() => {
       expect(fetchMock.mock.calls.filter((call) => (call[1] as RequestInit | undefined)?.method === 'DELETE')).toHaveLength(1);
     });
     expect(fetchMock.mock.calls.find((call) => (call[1] as RequestInit | undefined)?.method === 'DELETE')?.[0]).toBe(`/api/share-links/${LINK_ID}`);
-    await waitFor(() => expect(screen.queryByTestId('disconnect-dialog')).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByTestId('confirm-dialog')).not.toBeInTheDocument());
     await waitFor(() => {
       expect(fetchMock.mock.calls.filter((call) => (call[1] as RequestInit | undefined)?.method === undefined).length).toBeGreaterThan(1);
     });
@@ -209,8 +209,8 @@ describe('ShareLinksSection', () => {
     const fetchMock = installFetch({ list: [link()] });
     renderSection('en');
     fireEvent.click(await screen.findByTestId(`revoke-share-link-btn-${LINK_ID}`));
-    fireEvent.click(await screen.findByTestId('disconnect-cancel-button'));
-    await waitFor(() => expect(screen.queryByTestId('disconnect-dialog')).not.toBeInTheDocument());
+    fireEvent.click(await screen.findByTestId('confirm-dialog-cancel'));
+    await waitFor(() => expect(screen.queryByTestId('confirm-dialog')).not.toBeInTheDocument());
     expect(fetchMock.mock.calls.some((call) => (call[1] as RequestInit | undefined)?.method === 'DELETE')).toBe(false);
   });
 
@@ -218,7 +218,7 @@ describe('ShareLinksSection', () => {
     installFetch({ list: [link()], revoke: { status: 500, body: { success: false, error: 'internal boom' } } });
     renderSection('pt');
     fireEvent.click(await screen.findByTestId(`revoke-share-link-btn-${LINK_ID}`));
-    fireEvent.click(await screen.findByTestId('disconnect-confirm-button'));
+    fireEvent.click(await screen.findByTestId('confirm-dialog-confirm'));
     const alert = await screen.findByTestId('share-links-error');
     expect(alert).toHaveTextContent('Não foi possível revogar o link. Tente novamente.');
     expect(alert).not.toHaveTextContent('boom');
@@ -242,8 +242,8 @@ describe('ShareLinksSection', () => {
     installFetch({ list: [link()] });
     renderSection('en');
     fireEvent.click(await screen.findByTestId(`revoke-share-link-btn-${LINK_ID}`));
-    const dialog = await screen.findByTestId('disconnect-dialog');
+    const dialog = await screen.findByTestId('confirm-dialog');
     fireEvent.keyDown(dialog, { key: 'Escape' });
-    await waitFor(() => expect(screen.queryByTestId('disconnect-dialog')).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByTestId('confirm-dialog')).not.toBeInTheDocument());
   });
 });

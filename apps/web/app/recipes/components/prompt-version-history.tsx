@@ -2,20 +2,27 @@
 
 import { useState } from 'react';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
-import RestoreVersionDialog from '@/components/ui/restore-version-dialog';
+import ConfirmDialog from '@/components/ui/confirm-dialog';
 import { useI18n } from '@/lib/i18n/provider';
 import type { TranslationKey } from '@/lib/i18n';
 import { SpinnerIcon } from '@/lib/ui';
 import { cn } from '@/lib/utils';
-import { fetchPromptVersions, promptFailureKey } from '@/lib/user-prompts-client';
-import { USER_PROMPTS_KEY, useRestorePromptVersionMutation, userPromptVersionsKey } from '@/lib/use-user-prompts';
+import { fetchPromptVersion, fetchPromptVersions, promptFailureKey } from '@/lib/user-prompts-client';
+import { USER_PROMPTS_KEY, useRestorePromptVersionMutation, userPromptVersionKey, userPromptVersionsKey } from '@/lib/use-user-prompts';
 import type { PromptVersionSummary } from '@/lib/user-prompts-types';
 import PromptVersionRow from './prompt-version-row';
 
 interface Notice {
-  tone: 'info' | 'error';
+  tone: 'success' | 'info' | 'error';
   key: TranslationKey;
+  vars?: Record<string, number>;
 }
+
+const NOTICE_CLASS: Record<Notice['tone'], string> = {
+  success: 'bg-success-soft text-success',
+  info: 'bg-warning-soft text-warning',
+  error: 'bg-destructive-soft text-destructive',
+};
 
 export interface PromptVersionHistoryProps {
   slug: string;
@@ -36,6 +43,7 @@ export default function PromptVersionHistory({
   const [target, setTarget] = useState<PromptVersionSummary | null>(null);
   const [expanded, setExpanded] = useState<ReadonlySet<number>>(new Set());
   const [notice, setNotice] = useState<Notice | null>(null);
+  const [checking, setChecking] = useState(false);
 
   const history = useInfiniteQuery({
     queryKey: userPromptVersionsKey(slug),
@@ -48,7 +56,7 @@ export default function PromptVersionHistory({
   const pages = history.data?.pages ?? [];
   const entries = pages.flatMap((page) => (page.success ? page.body.versions : []));
   const failedPage = pages.find((page) => !page.success);
-  const busy = restore.isPending || history.isFetchingNextPage;
+  const busy = restore.isPending || history.isFetchingNextPage || checking;
 
   function toggle(version: number): void {
     setExpanded((previous) => {
@@ -59,6 +67,32 @@ export default function PromptVersionHistory({
     });
   }
 
+  function requestRestore(entry: PromptVersionSummary): void {
+    setNotice(null);
+    if (!entry.previewTruncated) {
+      setTarget(entry);
+      return;
+    }
+    setChecking(true);
+    queryClient
+      .fetchQuery({
+        queryKey: userPromptVersionKey(slug, entry.version),
+        queryFn: () => fetchPromptVersion(slug, entry.version),
+        staleTime: 60_000,
+      })
+      .then((result) => {
+        if (!result.success) {
+          setNotice({ tone: 'error', key: promptFailureKey(result) });
+        } else if (result.body.version.body === currentBody) {
+          setNotice({ tone: 'info', key: 'userPrompts.restoreUnchanged' });
+        } else {
+          setTarget(entry);
+        }
+      })
+      .catch(() => setNotice({ tone: 'error', key: 'userPrompts.errorGeneric' }))
+      .finally(() => setChecking(false));
+  }
+
   function confirmRestore(): void {
     if (target === null) return;
     restore
@@ -66,7 +100,11 @@ export default function PromptVersionHistory({
       .then((result) => {
         setTarget(null);
         if (result.success) {
-          setNotice(result.body.restored ? null : { tone: 'info', key: 'userPrompts.restoreUnchanged' });
+          setNotice(
+            result.body.restored
+              ? { tone: 'success', key: 'userPrompts.restoreDone', vars: { version: result.body.prompt.version } }
+              : { tone: 'info', key: 'userPrompts.restoreUnchanged' },
+          );
           return;
         }
         setNotice({ tone: 'error', key: promptFailureKey(result) });
@@ -108,10 +146,7 @@ export default function PromptVersionHistory({
               expanded={expanded.has(entry.version)}
               disabled={busy}
               onToggle={() => toggle(entry.version)}
-              onRestore={() => {
-                setNotice(null);
-                setTarget(entry);
-              }}
+              onRestore={() => requestRestore(entry)}
             />
           ))}
         </ul>
@@ -145,16 +180,13 @@ export default function PromptVersionHistory({
           role={notice.tone === 'error' ? 'alert' : 'status'}
           data-testid="prompt-version-notice"
           data-tone={notice.tone}
-          className={cn(
-            'mt-3 rounded-xl px-3 py-2 text-sm',
-            notice.tone === 'error' ? 'bg-destructive-soft text-destructive' : 'bg-warning-soft text-warning',
-          )}
+          className={cn('mt-3 rounded-xl px-3 py-2 text-sm', NOTICE_CLASS[notice.tone])}
         >
-          {t(notice.key)}
+          {t(notice.key, notice.vars)}
         </p>
       )}
       {body}
-      <RestoreVersionDialog
+      <ConfirmDialog
         open={target !== null}
         pending={restore.isPending}
         title={t('userPrompts.restoreDialogTitle', { version: target?.version ?? 0 })}

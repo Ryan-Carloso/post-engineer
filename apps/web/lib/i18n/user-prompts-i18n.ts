@@ -57,6 +57,7 @@ export const userPromptsStrings = {
       restoreConfirm: 'Restore this version',
       restoreCancel: 'Cancel',
       restoreUnchanged: 'Already the current text.',
+      restoreDone: 'Restored as version {version}.',
     },
   },
   pt: {
@@ -117,6 +118,7 @@ export const userPromptsStrings = {
       restoreConfirm: 'Restaurar esta versão',
       restoreCancel: 'Cancelar',
       restoreUnchanged: 'Já é o texto atual.',
+      restoreDone: 'Restaurada como versão {version}.',
     },
   },
 };
