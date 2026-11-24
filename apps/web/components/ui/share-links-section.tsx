@@ -14,7 +14,7 @@ import {
 import { SHARE_LINK_MAX_ACTIVE } from '@/lib/contracts/share-links';
 import { useCopyText } from '@/lib/use-copy-text';
 import { Button } from '@/components/ui/button';
-import DisconnectAccountDialog from '@/components/ui/disconnect-account-dialog';
+import ConfirmDialog from '@/components/ui/confirm-dialog';
 import { GlobeIcon, INPUT_CLASS, SpinnerIcon } from '@/lib/ui';
 import { cn } from '@/lib/utils';
 
@@ -242,11 +242,12 @@ export default function ShareLinksSection(): ReactNode {
         )}
       </div>
 
-      <DisconnectAccountDialog
+      <ConfirmDialog
+        tone="destructive"
         open={revokeTarget !== null}
         onClose={() => setRevokeTarget(null)}
         onConfirm={() => void handleRevoke()}
-        accountName={
+        detail={
           revokeTarget === null
             ? ''
             : `${scopeLabel(revokeTarget)} · ${t('shareLinks.created', { date: formatDate(revokeTarget.createdAt) })}`

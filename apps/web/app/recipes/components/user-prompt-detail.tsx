@@ -6,9 +6,9 @@ import { useI18n } from '@/lib/i18n/provider';
 import { SpinnerIcon } from '@/lib/ui';
 import { cn } from '@/lib/utils';
 import { fetchPrompt, promptFailureKey } from '@/lib/user-prompts-client';
+import { userPromptDetailKey } from '@/lib/use-user-prompts';
 import CopyPromptBlock from '../copy-prompt-block';
-
-export const userPromptDetailKey = (slug: string) => ['user-prompts', 'detail', slug] as const;
+import PromptVersionHistory from './prompt-version-history';
 
 export default function UserPromptDetail({ slug }: { slug: string }): React.ReactElement {
   const { t } = useI18n();
@@ -86,6 +86,14 @@ export default function UserPromptDetail({ slug }: { slug: string }): React.Reac
         <p className="mt-4 max-w-2xl text-sm text-muted-text">{t('userPrompts.communityHint')}</p>
       ) : null}
       <CopyPromptBlock prompt={prompt.prompt} />
+      {prompt.source === 'own' ? (
+        <PromptVersionHistory
+          slug={prompt.slug}
+          currentVersion={prompt.version}
+          currentTitle={prompt.title}
+          currentBody={prompt.body}
+        />
+      ) : null}
     </div>
   );
 }

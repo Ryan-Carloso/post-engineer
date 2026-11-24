@@ -1,6 +1,10 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getGenerationPost, getSlotPost, personaScopeOf } from '../post-detail';
+import { createSupabaseServiceClient } from '../supabase/service';
+import { logger } from '../logger';
+
+vi.mock('../supabase/service', () => ({ createSupabaseServiceClient: vi.fn() }));
 
 vi.mock('../schedule-slot-presentation', () => ({
   enrichSlot: vi.fn(async () => ({
@@ -68,6 +72,7 @@ const SLOT_ROW = {
   published_at: null,
   task_id: 'task-1',
   voiceover: false, voiceover_material: 'images',
+  prompt_version_id: null,
 };
 
 const SCHEDULE_ROW = {
@@ -608,5 +613,90 @@ describe('persona scope (persona-scoped API keys)', () => {
     });
     const detail = await getGenerationPost(supabase, 'gen-1:slot:slot-1', 'user-1', []);
     expect(detail?.generationId).toBe('gen-1:slot:slot-1');
+  });
+});
+
+describe('getSlotPost prompt facts', () => {
+  const VERSION_ID = '7b0e6c1e-0000-4000-8000-000000000001';
+  const SLOT_WITH_PROMPT = { ...SLOT_ROW, prompt_version_id: VERSION_ID };
+  const PERMISSION_DENIED = { code: '42501', message: 'permission denied for table prompt_versions' };
+  const PUBLIC_PROMPT_OF_ANOTHER_USER = {
+    slug: 'community-hook',
+    title: 'Community hook',
+    version: 2,
+    source: 'user',
+    owner_id: 'other-user',
+  };
+
+  function sessionTables(overrides: Record<string, { data: unknown; error: unknown }> = {}) {
+    return {
+      scheduled_posts: { data: SLOT_WITH_PROMPT, error: null },
+      schedules: { data: SCHEDULE_ROW, error: null },
+      personas: { data: { id: 'persona-1', name: 'Viva Leve' }, error: null },
+      scheduled_post_progress_history: { data: [], error: null },
+      prompt_versions: { data: null, error: PERMISSION_DENIED },
+      ...overrides,
+    };
+  }
+
+  function useServiceClient(outcome: { data: unknown; error: unknown }) {
+    const service = mockSupabase({ prompt_versions: outcome });
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(service.supabase);
+    return service;
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('reads the prompt version with the service client for a cookie-session caller, even when another user owns the public prompt', async () => {
+    const session = mockSupabase(sessionTables());
+    const service = useServiceClient({ data: PUBLIC_PROMPT_OF_ANOTHER_USER, error: null });
+    const detail = await getSlotPost(session.supabase, 'slot-1', 'user-1', null);
+    expect(detail?.generation.prompt).toEqual({ slug: 'community-hook', title: 'Community hook', version: 2, source: 'user' });
+    expect(session.from).not.toHaveBeenCalledWith('prompt_versions');
+    expect(service.from).toHaveBeenCalledWith('prompt_versions');
+    expect(service.chains['prompt_versions'].eq.mock.calls).toEqual([['id', VERSION_ID]]);
+    expect(logger.error).not.toHaveBeenCalled();
+  });
+
+  it('does not touch the service client when the slot is not the caller\'s', async () => {
+    const session = mockSupabase(sessionTables({ scheduled_posts: { data: null, error: PGRST116 } }));
+    await expect(getSlotPost(session.supabase, 'slot-1', 'user-1', null)).resolves.toBeNull();
+    expect(session.chains['scheduled_posts'].eq.mock.calls).toContainEqual(['user_id', 'user-1']);
+    expect(createSupabaseServiceClient).not.toHaveBeenCalled();
+  });
+
+  it('does not touch the service client when the schedule is outside the API-key persona scope', async () => {
+    const session = mockSupabase(sessionTables());
+    await expect(getSlotPost(session.supabase, 'slot-1', 'user-1', ['persona-2'])).resolves.toBeNull();
+    expect(createSupabaseServiceClient).not.toHaveBeenCalled();
+  });
+
+  it('does not create the service client for a slot with no prompt version', async () => {
+    const session = mockSupabase(sessionTables({ scheduled_posts: { data: { ...SLOT_ROW, prompt_version_id: null }, error: null } }));
+    const detail = await getSlotPost(session.supabase, 'slot-1', 'user-1', null);
+    expect(detail?.generation.prompt).toBeNull();
+    expect(createSupabaseServiceClient).not.toHaveBeenCalled();
+  });
+
+  it('does not touch the service client when the schedule is not the caller\'s', async () => {
+    const session = mockSupabase(sessionTables({ schedules: { data: null, error: null } }));
+    await expect(getSlotPost(session.supabase, 'slot-1', 'user-1', null)).resolves.toBeNull();
+    expect(session.chains['schedules'].eq.mock.calls).toContainEqual(['user_id', 'user-1']);
+    expect(createSupabaseServiceClient).not.toHaveBeenCalled();
+  });
+
+  it('logs at error level and hides the prompt when the service read fails', async () => {
+    const session = mockSupabase(sessionTables());
+    useServiceClient({ data: null, error: { code: 'XX000', message: 'down' } });
+    const detail = await getSlotPost(session.supabase, 'slot-1', 'user-1', null);
+    expect(detail?.generation.prompt).toBeNull();
+    expect(detail?.slot.id).toBe('slot-1');
+    expect(logger.error).toHaveBeenCalledWith(
+      '[prompt-versions] post prompt lookup failed',
+      { code: 'XX000', message: 'down' },
+      { versionId: VERSION_ID, code: 'XX000' },
+    );
   });
 });
