@@ -26,18 +26,20 @@ export async function currentUserPromptVersion(db: Db, promptId: string): Promis
   return { versionId: data.id, version: data.version };
 }
 
-export async function readPostPromptFacts(db: SupabaseClient, versionId: string | null): Promise<PostPromptFacts | null> {
-  if (versionId === null) return null;
+export async function readPostPromptFacts(db: SupabaseClient, versionId: string): Promise<PostPromptFacts | null> {
   const { data, error } = await db
     .from('prompt_versions')
     .select('slug, title, version, source')
     .eq('id', versionId)
     .maybeSingle();
   if (error !== null) {
-    logger.warn('[prompt-versions] post prompt lookup failed', { versionId, code: error.code, message: error.message });
+    logger.error('[prompt-versions] post prompt lookup failed', error, { versionId, code: error.code });
     return null;
   }
-  if (data === null) return null;
+  if (data === null) {
+    logger.error('[prompt-versions] post prompt version missing', new Error(`prompt version ${versionId} not found`), { versionId });
+    return null;
+  }
   const row = data as { slug: string; title: string; version: number; source: string };
   if (row.source !== 'official' && row.source !== 'user') return null;
   return { slug: row.slug, title: row.title, version: row.version, source: row.source };
