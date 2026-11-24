@@ -222,11 +222,24 @@ def exception_handler(request: Request, e: HttpException):
     )
 
 
+def _with_stable_code(error: dict) -> dict:
+    """The error entry plus a top-level `code` when its validator raised an error with a stable one.
+
+    A hook title refused for its length carries `HOOK_TITLE_TOO_LONG` in the
+    raised error (`ctx.error.code`); lifting it makes it as easy to branch on
+    as the web API's `errors[].code`.
+    """
+    code = getattr(error.get("ctx", {}).get("error"), "code", None)
+    return {**error, "code": code} if isinstance(code, str) else error
+
+
 def validation_exception_handler(request: Request, e: RequestValidationError):
     return JSONResponse(
         status_code=400,
         content=utils.get_response(
-            status=400, body=jsonable_encoder(e.errors()), message="field required"
+            status=400,
+            body=jsonable_encoder([_with_stable_code(error) for error in e.errors()]),
+            message="field required",
         ),
     )
 

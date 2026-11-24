@@ -35,6 +35,7 @@ def test_a_bad_title_is_a_400_carrying_the_stable_code(title, code, auth_headers
     assert response.status_code == 400
     errors = response.json()["body"]
     assert [error["loc"] for error in errors] == [["body", "hook_title"]]
+    assert errors[0]["code"] == code, "the stable code is a top-level key, like the web API's errors[].code"
     assert errors[0]["ctx"]["error"]["code"] == code
     assert code in errors[0]["msg"]
 
@@ -51,3 +52,9 @@ def test_the_stored_title_has_its_whitespace_collapsed():
 def test_the_title_is_optional():
     assert TaskVideoRequest(**BASE).hook_title is None
     assert TaskVideoRequest(**BASE, hook_title=None).hook_title is None
+
+
+def test_an_error_without_a_stable_code_gets_no_code_key(auth_headers):
+    response = _post({"video_description": "Test description."}, auth_headers)
+    assert response.status_code == 400
+    assert all("code" not in error for error in response.json()["body"])
