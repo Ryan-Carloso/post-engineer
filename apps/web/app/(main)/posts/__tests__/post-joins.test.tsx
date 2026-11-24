@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest';
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, renderHook, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 
@@ -18,27 +18,190 @@ vi.mock('@/lib/i18n/provider', () => {
   return { useI18n, I18nProvider };
 });
 
-import { PostFiltersBar, type PostFilters } from '../post-joins';
-import type { AccountOption } from '@/lib/account-options';
+import { POSTS_NO_PERSONA, PostFiltersBar, usePostFilters, type PostFilters, type PostJoins } from '../post-joins';
+import type { ScheduleConfig, ScheduledSlot } from '@/lib/api';
 
-const accountOptions: AccountOption[] = [
-  { id: 'yt-1', provider: 'youtube', label: 'My YouTube' },
-  { id: 'ig-1', provider: 'instagram', label: 'My Instagram' },
+const personas = [
+  { id: 'p1', name: 'Viva Leve' },
+  { id: 'p2', name: 'Other Persona' },
 ];
+
+function makeSchedule(overrides: Partial<ScheduleConfig> = {}): ScheduleConfig {
+  return {
+    id: 's1',
+    personaId: 'p1',
+    providers: ['youtube', 'instagram'],
+    youtubeAccountIds: ['ch1'],
+    instagramAccountIds: ['ig1'],
+    linkedinAccountIds: [],
+    blueskyAccountIds: [],
+    threadsAccountIds: [],
+    facebookAccountIds: [],
+    pinterestAccountIds: [],
+    pinterestBoardId: null,
+    threespeakAccountIds: [],
+    rumbleAccountIds: [],
+    fanvueAccountIds: [],
+    telegramAccountIds: [],
+    daysOfWeek: [1, 2, 3],
+    startHour: 9,
+    endHour: 17,
+    postsPerDay: 1,
+    timezone: 'UTC',
+    active: true,
+    publishMode: 'scheduled',
+    ...overrides,
+  };
+}
+
+function makeSlot(overrides: Partial<ScheduledSlot> = {}): ScheduledSlot {
+  return {
+    id: 'u1',
+    scheduleId: 's1',
+    slotAt: '2030-06-01T10:00:00.000Z',
+    status: 'awaiting',
+    title: 'Upcoming topic',
+    error: null,
+    publishedAt: null,
+    taskId: null,
+    progress: 0,
+    stage: null,
+    queuePosition: null,
+    queueTotal: null,
+    retryable: null,
+    ...overrides,
+  };
+}
+
+function makeJoins(overrides: { schedules?: ScheduleConfig[]; personas?: { id: string; name: string }[] } = {}): PostJoins {
+  const schedules = overrides.schedules ?? [
+    makeSchedule(),
+    makeSchedule({ id: 's2', personaId: 'p2', providers: ['youtube'] }),
+    makeSchedule({ id: 's3', personaId: null, providers: ['youtube'] }),
+  ];
+  const names = overrides.personas ?? personas;
+  return {
+    scheduleById: new Map(schedules.map((schedule) => [schedule.id, schedule])),
+    personaNameById: new Map(names.map((persona) => [persona.id, persona.name])),
+    personaPhotoById: new Map(
+      names.map((persona) => [
+        persona.id,
+        { avatarUrl: undefined, photoUrl: undefined, libraryUrl: undefined, name: persona.name },
+      ]),
+    ),
+    accountOptions: [],
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+  };
+}
 
 function makeFilters(overrides: Partial<PostFilters> = {}): PostFilters {
   return {
     provider: 'all',
-    account: 'all',
-    visibleAccounts: accountOptions,
+    persona: 'all',
+    personas,
     hasActiveFilter: false,
     setProvider: vi.fn(),
-    setAccount: vi.fn(),
+    setPersona: vi.fn(),
     clear: vi.fn(),
     passes: () => true,
     ...overrides,
   };
 }
+
+describe('usePostFilters passes', () => {
+  it('passes every slot when nothing is filtered', () => {
+    const { result } = renderHook(() => usePostFilters(makeJoins()));
+
+    expect(result.current.passes(makeSlot())).toBe(true);
+    expect(result.current.passes(makeSlot({ scheduleId: 's2' }))).toBe(true);
+    expect(result.current.passes(makeSlot({ scheduleId: 's3' }))).toBe(true);
+  });
+
+  it('keeps only the selected persona slots', () => {
+    const { result } = renderHook(() => usePostFilters(makeJoins()));
+    act(() => {
+      result.current.setPersona('p1');
+    });
+
+    expect(result.current.passes(makeSlot())).toBe(true);
+    expect(result.current.passes(makeSlot({ scheduleId: 's2' }))).toBe(false);
+    expect(result.current.passes(makeSlot({ scheduleId: 's3' }))).toBe(false);
+  });
+
+  it('keeps only faceless slots for the no-persona option', () => {
+    const { result } = renderHook(() => usePostFilters(makeJoins()));
+    act(() => {
+      result.current.setPersona(POSTS_NO_PERSONA);
+    });
+
+    expect(result.current.passes(makeSlot())).toBe(false);
+    expect(result.current.passes(makeSlot({ scheduleId: 's2' }))).toBe(false);
+    expect(result.current.passes(makeSlot({ scheduleId: 's3' }))).toBe(true);
+  });
+
+  it('combines the persona and provider predicates', () => {
+    const { result } = renderHook(() => usePostFilters(makeJoins()));
+    act(() => {
+      result.current.setPersona('p1');
+      result.current.setProvider('instagram');
+    });
+
+    expect(result.current.passes(makeSlot())).toBe(true);
+    act(() => {
+      result.current.setProvider('linkedin');
+    });
+    expect(result.current.passes(makeSlot())).toBe(false);
+  });
+
+  it('keeps the persona filter when the provider changes', () => {
+    const { result } = renderHook(() => usePostFilters(makeJoins()));
+    act(() => {
+      result.current.setPersona('p2');
+      result.current.setProvider('youtube');
+    });
+
+    expect(result.current.persona).toBe('p2');
+    expect(result.current.passes(makeSlot({ scheduleId: 's2' }))).toBe(true);
+    expect(result.current.passes(makeSlot())).toBe(false);
+  });
+
+  it('drops slots whose schedule no longer exists', () => {
+    const { result } = renderHook(() => usePostFilters(makeJoins()));
+
+    expect(result.current.passes(makeSlot({ scheduleId: 'deleted' }))).toBe(false);
+  });
+
+  it('matches a deleted persona id against nothing', () => {
+    const { result } = renderHook(() => usePostFilters(makeJoins()));
+    act(() => {
+      result.current.setPersona('p9');
+    });
+
+    expect(result.current.passes(makeSlot())).toBe(false);
+    expect(result.current.passes(makeSlot({ scheduleId: 's2' }))).toBe(false);
+    expect(result.current.passes(makeSlot({ scheduleId: 's3' }))).toBe(false);
+  });
+
+  it('clears both filters and reports no active filter', () => {
+    const { result } = renderHook(() => usePostFilters(makeJoins()));
+    act(() => {
+      result.current.setPersona('p1');
+      result.current.setProvider('youtube');
+    });
+    expect(result.current.hasActiveFilter).toBe(true);
+
+    act(() => {
+      result.current.clear();
+    });
+
+    expect(result.current.persona).toBe('all');
+    expect(result.current.provider).toBe('all');
+    expect(result.current.hasActiveFilter).toBe(false);
+    expect(result.current.passes(makeSlot())).toBe(true);
+  });
+});
 
 describe('PostFiltersBar', () => {
   it('renders two shadcn comboboxes and no native select', () => {
@@ -48,11 +211,11 @@ describe('PostFiltersBar', () => {
     expect(document.querySelector('select')).toBeNull();
   });
 
-  it('shows the all-providers and all-accounts labels when nothing is filtered', () => {
+  it('shows the all-providers and all-personas labels when nothing is filtered', () => {
     render(<PostFiltersBar filters={makeFilters()} />);
 
     expect(screen.getByRole('combobox', { name: 'posts.filterProvider' })).toHaveTextContent('posts.allProviders');
-    expect(screen.getByRole('combobox', { name: 'posts.filterAccount' })).toHaveTextContent('posts.allAccounts');
+    expect(screen.getByRole('combobox', { name: 'posts.filterPersona' })).toHaveTextContent('posts.allPersonas');
   });
 
   it('calls setProvider with the picked provider', async () => {
@@ -66,21 +229,39 @@ describe('PostFiltersBar', () => {
     expect(filters.setProvider).toHaveBeenCalledWith('youtube');
   });
 
-  it('calls setAccount with the picked account id', async () => {
+  it('calls setPersona with the picked persona id', async () => {
     const filters = makeFilters();
     render(<PostFiltersBar filters={filters} />);
     const user = userEvent.setup();
 
-    await user.click(screen.getByRole('combobox', { name: 'posts.filterAccount' }));
-    await user.click(screen.getByRole('option', { name: 'My YouTube' }));
+    await user.click(screen.getByRole('combobox', { name: 'posts.filterPersona' }));
+    await user.click(screen.getByRole('option', { name: 'Viva Leve' }));
 
-    expect(filters.setAccount).toHaveBeenCalledWith('yt-1');
+    expect(filters.setPersona).toHaveBeenCalledWith('p1');
+  });
+
+  it('lists the personas and the no-persona option', async () => {
+    render(<PostFiltersBar filters={makeFilters()} />);
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole('combobox', { name: 'posts.filterPersona' }));
+    const options = screen.getAllByRole('option').map((option) => option.textContent);
+
+    expect(options).toEqual(['posts.allPersonas', 'Viva Leve', 'Other Persona', 'posts.noPersona']);
   });
 
   it('highlights the provider trigger while a provider filter is active', () => {
     render(<PostFiltersBar filters={makeFilters({ provider: 'youtube', hasActiveFilter: true })} />);
 
     const trigger = screen.getByRole('combobox', { name: 'posts.filterProvider' });
+    expect(trigger.className).toContain('border-primary');
+    expect(trigger.className).toContain('bg-info-soft');
+  });
+
+  it('highlights the persona trigger while a persona filter is active', () => {
+    render(<PostFiltersBar filters={makeFilters({ persona: 'p1', hasActiveFilter: true })} />);
+
+    const trigger = screen.getByRole('combobox', { name: 'posts.filterPersona' });
     expect(trigger.className).toContain('border-primary');
     expect(trigger.className).toContain('bg-info-soft');
   });

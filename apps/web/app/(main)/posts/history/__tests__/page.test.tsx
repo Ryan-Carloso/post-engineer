@@ -74,10 +74,10 @@ const FAILED_SLOT = {
 
 const ok = (data: unknown, refetch = vi.fn()) => ({ data, isLoading: false, isFetching: false, isError: false, refetch }) as never;
 
-function mockQueries(overrides: { recent?: unknown[]; schedules?: unknown[]; generations?: unknown[] } = {}) {
+function mockQueries(overrides: { recent?: unknown[]; schedules?: unknown[]; generations?: unknown[]; personas?: unknown[] } = {}) {
   vi.mocked(useScheduleStatusQuery).mockReturnValue(ok({ upcoming: [], recent: overrides.recent ?? [PUBLISHED_SLOT, FAILED_SLOT] }));
   vi.mocked(useSchedulesQuery).mockReturnValue(ok(overrides.schedules ?? [SCHEDULE]));
-  vi.mocked(usePersonaListQuery).mockReturnValue(ok([{ id: 'p1', name: 'Viva Leve' }]));
+  vi.mocked(usePersonaListQuery).mockReturnValue(ok(overrides.personas ?? [{ id: 'p1', name: 'Viva Leve' }]));
   vi.mocked(useSocialAccountsQuery).mockReturnValue({
     data: { authenticated: true, accounts: [{ provider: 'youtube', channelId: 'ch1', channelName: 'Europa Na Estrada' }, { provider: 'instagram', igUserId: 'ig1', username: 'vivalave' }] },
     isLoading: false,
@@ -292,6 +292,29 @@ describe('PostHistoryPage', () => {
     await user.click(screen.getByRole('option', { name: 'LinkedIn' }));
     expect(screen.getByText('posts.noResultsForFilter')).toBeInTheDocument();
     expect(screen.getByText('posts.listCapped')).toBeInTheDocument();
+  });
+
+  it('filters history slots by persona', async () => {
+    const user = userEvent.setup();
+    render(<PostHistoryPage />);
+
+    await user.click(screen.getByLabelText('posts.filterPersona'));
+    await user.click(screen.getByRole('option', { name: 'Viva Leve' }));
+
+    expect(screen.getByText('Past topic')).toBeInTheDocument();
+    expect(screen.getByText('Failed topic')).toBeInTheDocument();
+  });
+
+  it('hides persona slots for the no-persona option', async () => {
+    const user = userEvent.setup();
+    render(<PostHistoryPage />);
+
+    await user.click(screen.getByLabelText('posts.filterPersona'));
+    await user.click(screen.getByRole('option', { name: 'posts.noPersona' }));
+
+    expect(screen.queryByText('Past topic')).not.toBeInTheDocument();
+    expect(screen.queryByText('Failed topic')).not.toBeInTheDocument();
+    expect(screen.getByText('posts.noResultsForFilter')).toBeInTheDocument();
   });
 
   it('shows the generations section with friendly errors and refund badges', () => {
