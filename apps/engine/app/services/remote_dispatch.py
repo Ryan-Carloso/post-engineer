@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import threading
 import time
+from dataclasses import dataclass
 from typing import Any, Callable
 
 from loguru import logger
@@ -36,11 +37,13 @@ WORKER_FUNCTIONS = (FACELESS_FUNCTION, FACELESS_CLONE_FUNCTION, LIPSYNC_FUNCTION
 
 CALL_ID_FIELD = "modal_call_id"
 FUNCTION_FIELD = "modal_function"
+WEBHOOK_FIELD = "webhook_url"
 WORKER_STOPPED_ERROR = "render worker stopped before the video finished"
 TERMINAL_STATES = (const.TASK_STATE_FAILED, const.TASK_STATE_COMPLETE)
 
 _DEFAULT_POLL_SECONDS = 30.0
 _DEFAULT_LOCAL_MAX = 1
+_DEFAULT_MAX_WAIT_SECONDS = 14400 + 3600
 
 _local_slots_lock = threading.Lock()
 _local_slots: threading.BoundedSemaphore | None = None
@@ -53,6 +56,20 @@ def app_name() -> str:
 
 def poll_seconds() -> float:
     return float(config.modal_worker.get("poll_seconds", _DEFAULT_POLL_SECONDS))
+
+
+def max_wait_seconds() -> float:
+    """Seconds a waiter tolerates Modal going unanswered.
+
+    The worker's longest timeout plus one hour of grace, so the dead waiter
+    never beats a render that is still going.
+    """
+    return float(config.modal_worker.get("max_wait_seconds", _DEFAULT_MAX_WAIT_SECONDS))
+
+
+@dataclass(frozen=True)
+class _AdoptedParams:
+    webhook_url: str | None = None
 
 
 def _local_semaphore() -> threading.BoundedSemaphore:
@@ -164,11 +181,14 @@ def wait_for_call(
     *,
     modal_module: Any | None = None,
     sleep: Callable[[float], None] = time.sleep,
+    now: Callable[[], float] = time.monotonic,
 ) -> None:
     """Block until the call ends, then settle a row the worker left open."""
     from app.services.task_cancellation import is_cancelled
 
     reason = "the modal call ended"
+    started = now()
+    limit = max_wait_seconds()
     try:
         modal = modal_module if modal_module is not None else _modal()
         call = modal.FunctionCall.from_id(call_id)
@@ -191,6 +211,9 @@ def wait_for_call(
             if modal_unreachable(modal, exc):
                 logger.warning(f"task {task_id}: polling modal call {call_id} failed: {exc}")
                 sleep(poll_seconds())
+                if now() - started >= limit:
+                    reason = f"modal did not answer within {int(limit)} seconds"
+                    break
                 continue
             reason = f"the modal call ended with {type(exc).__name__}: {exc}"
             break
@@ -224,7 +247,8 @@ def pipeline_entry() -> Callable[..., Any]:
 
 
 def start(task_id: str, params: Any, stop_at: str = "video") -> Any:
-    """Drop-in for ``task.start``: spawn on Modal, or run here."""
+    """Has ``task.start``'s signature; returns None once the task is spawned
+    (the worker's result stays in Modal)."""
     if not app_name():
         return _pipeline_start()(task_id, params, stop_at)
     if stop_at != "video":
@@ -235,7 +259,11 @@ def start(task_id: str, params: Any, stop_at: str = "video") -> Any:
     call_id, function_name = spawned
     from app.services import state as sm
 
-    sm.state.update_task(task_id, **{CALL_ID_FIELD: call_id, FUNCTION_FIELD: function_name})
+    fields: dict[str, object] = {CALL_ID_FIELD: call_id, FUNCTION_FIELD: function_name}
+    webhook_url = getattr(params, "webhook_url", None)
+    if isinstance(webhook_url, str) and webhook_url:
+        fields[WEBHOOK_FIELD] = webhook_url
+    sm.state.update_task(task_id, **fields)
     wait_for_call(task_id, call_id, params)
     return None
 
@@ -282,7 +310,13 @@ def adopt_live_call(
     if not (is_live or call_is_live)(call_id):
         return False
     logger.info(f"orphan {task_id}: modal call {call_id} is still running; adopted")
-    (spawn_thread or threading.Thread)(target=wait_for_call, args=(task_id, call_id, None), daemon=True).start()
+    stored_webhook = data.get(WEBHOOK_FIELD)
+    adopted_params = (
+        _AdoptedParams(webhook_url=stored_webhook)
+        if isinstance(stored_webhook, str) and stored_webhook
+        else None
+    )
+    (spawn_thread or threading.Thread)(target=wait_for_call, args=(task_id, call_id, adopted_params), daemon=True).start()
     return True
 
 
@@ -292,9 +326,11 @@ __all__ = [
     "FACELESS_FUNCTION",
     "FUNCTION_FIELD",
     "LIPSYNC_FUNCTION",
+    "WEBHOOK_FIELD",
     "WORKER_FUNCTIONS",
     "adopt_live_call",
     "call_is_live",
+    "max_wait_seconds",
     "modal_unreachable",
     "pipeline_entry",
     "spawn",

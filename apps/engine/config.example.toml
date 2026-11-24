@@ -337,6 +337,10 @@ app_name = ""
 local_max_concurrent_tasks = 1
 # How often the engine checks a spawned call for its end, in seconds.
 poll_seconds = 30
+# How long the waiting thread tolerates Modal going unanswered before it
+# fails the task row, in seconds. The longest worker timeout
+# (LIPSYNC_TIMEOUT_SECONDS) plus one hour of grace.
+max_wait_seconds = 18000
 
 [bgm]
 # Automatic BGM selection uses only tracks explicitly listed in this catalog.

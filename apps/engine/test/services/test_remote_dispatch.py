@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import ast
 import threading
+import tomllib
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -112,6 +115,39 @@ class StartTests(unittest.TestCase):
         )
         wait.assert_called_once_with("t-1", "fc-1", "params")
         local.assert_not_called()
+
+    def test_spawned_task_persists_the_failure_webhook(self):
+        state = MagicMock()
+        params = SimpleNamespace(webhook_url="https://example.com/hook")
+        with patch.dict(config.modal_worker, {"app_name": "worker-app"}), \
+                patch.object(remote_dispatch, "spawn", return_value=("fc-1", "render_faceless")), \
+                patch.object(remote_dispatch, "wait_for_call") as wait, \
+                patch("app.services.state.state", state):
+            remote_dispatch.start("t-1", params, "video")
+        state.update_task.assert_called_once_with(
+            "t-1",
+            modal_call_id="fc-1",
+            modal_function="render_faceless",
+            webhook_url="https://example.com/hook",
+        )
+        wait.assert_called_once_with("t-1", "fc-1", params)
+
+    def test_spawned_task_omits_the_webhook_when_absent_or_blank(self):
+        cases = (
+            SimpleNamespace(),
+            SimpleNamespace(webhook_url=None),
+            SimpleNamespace(webhook_url=""),
+            SimpleNamespace(webhook_url=123),
+        )
+        for params in cases:
+            with self.subTest(params=params):
+                state = MagicMock()
+                with patch.dict(config.modal_worker, {"app_name": "worker-app"}), \
+                        patch.object(remote_dispatch, "spawn", return_value=("fc-1", "render_faceless")), \
+                        patch.object(remote_dispatch, "wait_for_call"), \
+                        patch("app.services.state.state", state):
+                    remote_dispatch.start("t-1", params, "video")
+                self.assertNotIn("webhook_url", state.update_task.call_args.kwargs)
 
     def test_failed_spawn_runs_the_pipeline_here(self):
         local = MagicMock(return_value="done")
@@ -228,6 +264,67 @@ class WaitForCallTests(unittest.TestCase):
         call.get.assert_not_called()
         fail.assert_not_called()
 
+    def _wait_with_clock(self, call: MagicMock, row: dict, clock: dict) -> MagicMock:
+        state = MagicMock()
+        state.get_task.return_value = row
+        with patch("app.services.state.state", state), \
+                patch("app.services.task_outcome.fail_or_stop") as fail, \
+                patch.dict(config.modal_worker, {"poll_seconds": 1, "max_wait_seconds": 5}):
+            remote_dispatch.wait_for_call(
+                "t-1",
+                "fc-1",
+                "params",
+                modal_module=_fake_modal(call),
+                sleep=lambda s: clock.__setitem__("t", clock["t"] + s),
+                now=lambda: clock["t"],
+            )
+        return fail
+
+    def test_an_unreachable_modal_fails_the_open_row_once_the_deadline_passes(self):
+        call = MagicMock()
+        call.get.side_effect = [modal.exception.ConnectionError("down")] * 20
+        clock = {"t": 0.0}
+        fail = self._wait_with_clock(call, {"state": const.TASK_STATE_PROCESSING, "stage": "render"}, clock)
+        fail.assert_called_once_with("t-1", remote_dispatch.WORKER_STOPPED_ERROR, "params", stage="render")
+        self.assertEqual(call.get.call_count, 5)
+
+    def test_the_deadline_leaves_a_terminal_row_alone(self):
+        call = MagicMock()
+        call.get.side_effect = [modal.exception.ConnectionError("down")] * 20
+        clock = {"t": 0.0}
+        fail = self._wait_with_clock(call, {"state": const.TASK_STATE_COMPLETE}, clock)
+        fail.assert_not_called()
+        self.assertEqual(call.get.call_count, 5)
+
+
+ENGINE_DIR = Path(__file__).resolve().parents[2]
+
+
+def _lipsync_timeout() -> int:
+    tree = ast.parse((ENGINE_DIR / "modal_cpu_worker.py").read_text(encoding="utf-8"))
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+            if node.targets[0].id == "LIPSYNC_TIMEOUT_SECONDS":
+                return int(ast.literal_eval(node.value))
+    raise AssertionError("LIPSYNC_TIMEOUT_SECONDS missing from modal_cpu_worker.py")
+
+
+class MaxWaitDefaultTests(unittest.TestCase):
+    def test_the_default_is_the_lipsync_timeout_plus_one_hour(self):
+        expected = _lipsync_timeout() + 3600
+        with patch.dict(config.modal_worker, {}, clear=True):
+            self.assertEqual(remote_dispatch.max_wait_seconds(), float(expected))
+
+    def test_the_config_example_carries_the_same_max_wait(self):
+        expected = _lipsync_timeout() + 3600
+        with open(ENGINE_DIR / "config.example.toml", "rb") as handle:
+            example = tomllib.load(handle)
+        self.assertEqual(example["modal_worker"]["max_wait_seconds"], expected)
+
+    def test_a_configured_max_wait_overrides_the_default(self):
+        with patch.dict(config.modal_worker, {"max_wait_seconds": 42}):
+            self.assertEqual(remote_dispatch.max_wait_seconds(), 42.0)
+
 
 class CallIsLiveTests(unittest.TestCase):
     def _live(self, outcome: object) -> bool:
@@ -281,6 +378,51 @@ class AdoptLiveCallTests(unittest.TestCase):
             target=remote_dispatch.wait_for_call, args=("t-1", "fc-1", None), daemon=True
         )
         thread.return_value.start.assert_called_once_with()
+
+    def test_adoption_passes_the_stored_webhook_to_the_waiter(self):
+        thread = MagicMock()
+        claimed = remote_dispatch.adopt_live_call(
+            "t-1",
+            {"modal_call_id": "fc-1", "webhook_url": "https://example.com/hook"},
+            is_live=lambda _c: True,
+            spawn_thread=thread,
+        )
+        self.assertTrue(claimed)
+        adopted = thread.call_args.kwargs["args"][2]
+        self.assertEqual(adopted.webhook_url, "https://example.com/hook")
+
+    def test_adoption_with_a_blank_stored_webhook_passes_none(self):
+        thread = MagicMock()
+        claimed = remote_dispatch.adopt_live_call(
+            "t-1",
+            {"modal_call_id": "fc-1", "webhook_url": ""},
+            is_live=lambda _c: True,
+            spawn_thread=thread,
+        )
+        self.assertTrue(claimed)
+        self.assertIsNone(thread.call_args.kwargs["args"][2])
+
+    def test_the_adopted_waiter_failure_reaches_fail_with_the_stored_webhook(self):
+        thread = MagicMock()
+        remote_dispatch.adopt_live_call(
+            "t-1",
+            {"modal_call_id": "fc-1", "webhook_url": "https://example.com/hook"},
+            is_live=lambda _c: True,
+            spawn_thread=thread,
+        )
+        adopted = thread.call_args.kwargs["args"][2]
+        call = MagicMock()
+        call.get.return_value = None
+        state = MagicMock()
+        state.get_task.return_value = {"state": const.TASK_STATE_PROCESSING, "stage": "render"}
+        with patch("app.services.state.state", state), \
+                patch("app.services.task_outcome.fail_or_stop") as fail, \
+                patch.dict(config.modal_worker, {"poll_seconds": 0}):
+            remote_dispatch.wait_for_call(
+                "t-1", "fc-1", adopted, modal_module=_fake_modal(call), sleep=lambda _s: None
+            )
+        fail.assert_called_once()
+        self.assertEqual(fail.call_args.args[2].webhook_url, "https://example.com/hook")
 
 
 if __name__ == "__main__":
