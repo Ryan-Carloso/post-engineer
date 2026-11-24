@@ -182,6 +182,18 @@ describe('SceneSchema', () => {
     }
   });
 
+  it.each([
+    ['pose', 'skinny woman'],
+    ['pose', 'skinny jeans'],
+  ])('rejects "skinny" in %s (%s) as a body-shape word', (field, text) => {
+    const result = parseSceneValue({ ...FIXTURE_SCENE, [field]: text });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.startsWith(`scene.${field}:`)).toBe(true);
+      expect(result.error).not.toContain(text);
+    }
+  });
+
   it('accepts "body of water" as a setting', () => {
     expect(SceneSchema.safeParse({ ...FIXTURE_SCENE, setting: 'body of water' }).success).toBe(true);
   });

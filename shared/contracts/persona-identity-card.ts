@@ -38,6 +38,8 @@ const HARMLESS_SCENE_PHRASES: readonly RegExp[] = [
   /\btransparent glass\b/g,
 ];
 
+const SCENE_IDENTITY_WORDS: ReadonlySet<string> = new Set(['skinny']);
+
 function stripHarmless(value: string, scene: boolean): string {
   const lowered = value.toLowerCase();
   const stripped = HARMLESS_CLOTHING_WORDS.reduce((text, phrase) => text.replace(phrase, ' '), lowered);
@@ -47,6 +49,7 @@ function stripHarmless(value: string, scene: boolean): string {
 }
 
 function mentionsIdentity(value: string, scene = false): boolean {
+  if (scene && wordsOf(value).some((word) => SCENE_IDENTITY_WORDS.has(word))) return true;
   return wordsOf(stripHarmless(value, scene)).some(
     (word) =>
       IDENTITY_WORDS.has(word) ||
