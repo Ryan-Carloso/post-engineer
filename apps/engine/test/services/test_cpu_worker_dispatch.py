@@ -334,13 +334,21 @@ def test_finished_modal_call_falls_through_triage(monkeypatch: pytest.MonkeyPatc
     }
     assert dispatch.remote_worker_in_flight(data) is False
     state = MemoryState()
+    state._eq = lambda value: value  # type: ignore[method-assign]
 
     class _Response:
         def json(self) -> list[object]:
             return []
 
-    state._request = lambda *args, **kwargs: _Response()  # type: ignore[method-assign]
+    requested: list[str] = []
+
+    def _request(method: str, query: str, **kwargs: object) -> _Response:
+        requested.append(query)
+        return _Response()
+
+    state._request = _request  # type: ignore[method-assign]
     assert triage_orphan(state, "task-done", data, None) is False
+    assert requested, "the configured request mock must be exercised"
 
 
 def test_resume_spawns_only_rows_that_never_got_a_call_id() -> None:
@@ -429,11 +437,12 @@ def test_worker_entrypoint_scales_to_zero_and_skips_boot() -> None:
     assert "WhisperModel" in dockerfile
     assert "chatterbox-tts" in dockerfile
     assert "MPT_STATE_BACKEND=supabase" in dockerfile
+    assert 'PATH="/app/.venv/bin:$PATH"' in dockerfile
     house = (ENGINE / "local_tts/requirements-house.txt").read_text()
     assert "kokoro" in house
     assert "ptts" in house
     assert "chatterbox" not in house
-    assert "modal.App(DEFAULT_APP_NAME)" in modal_source
+    assert "modal.App(worker_app_name())" in modal_source
     assert dispatch.DEFAULT_APP_NAME == "moneyprint-cpu-worker"
     assert dispatch.FUNCTION_NAME == "render_video"
     assert "def render_video" in modal_source

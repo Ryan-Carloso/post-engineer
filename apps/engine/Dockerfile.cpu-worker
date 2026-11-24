@@ -22,6 +22,7 @@ ENV TZ=UTC \
     PYTHONDONTWRITEBYTECODE=1 \
     UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
+    PATH="/app/.venv/bin:$PATH" \
     MPT_STATE_BACKEND=supabase \
     MPT_CPU_WORKER_ROLE=worker \
     MPT_STORAGE_DIR=/app/storage \

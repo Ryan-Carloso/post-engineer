@@ -105,7 +105,6 @@ def const_complete() -> int:
 
 def run_one(task_id: str, params: dict[str, Any], stop_at: str = "video") -> None:
     """Render ``params`` for ``task_id`` and leave status on the Supabase row."""
-    prepare_worker_env()
     from pathlib import Path
 
     from app.services.cloned_voices.materialize import materialize_clone
@@ -114,6 +113,7 @@ def run_one(task_id: str, params: dict[str, Any], stop_at: str = "video") -> Non
     from app.services.task import start
 
     try:
+        prepare_worker_env()
         request = TaskVideoRequest.model_validate(params)
         materialize_clone(params, Path(os.environ["TTS_VOICES_DIR"]))
         start_local_tts()

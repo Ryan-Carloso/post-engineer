@@ -371,3 +371,23 @@ def test_run_one_marks_the_task_failed_when_validation_fails(
     assert len(failed) == 1
     assert failed[0][0] == "task-1"
     assert isinstance(failed[0][1], ValidationError)
+
+
+def test_run_one_marks_the_task_failed_when_worker_env_setup_fails(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _env(monkeypatch, tmp_path)
+
+    def _boom() -> None:
+        raise RuntimeError("secret missing")
+
+    monkeypatch.setattr(run, "prepare_worker_env", _boom)
+    failed: list[tuple[str, BaseException]] = []
+    monkeypatch.setattr(
+        run, "_fail_if_open", lambda task_id, exc: failed.append((task_id, exc))
+    )
+    with pytest.raises(RuntimeError, match="secret missing"):
+        run.run_one("task-1", _params())
+    assert len(failed) == 1
+    assert failed[0][0] == "task-1"
+    assert isinstance(failed[0][1], RuntimeError)

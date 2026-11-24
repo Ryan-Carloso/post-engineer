@@ -677,3 +677,14 @@ def test_dispatch_generation_docstring_admits_the_surviving_marker_row() -> None
     assert "has written no task row" not in doc
     assert "marker row" in doc
     assert "guaranteed row-free" in doc
+
+
+def test_batch_run_docstring_admits_remote_dispatch_without_a_local_slot() -> None:
+    from app.services.fill_schedule import batch_admission
+
+    doc = " ".join((BatchGenerator.run.__doc__ or "").split())
+    assert "manager can start now" not in doc
+    assert "Modal CPU worker" in doc
+    admission_doc = " ".join((batch_admission.__doc__ or "").split())
+    assert "One tick admits only the free running slots" not in admission_doc
+    assert "Modal CPU worker" in admission_doc

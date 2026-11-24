@@ -72,11 +72,13 @@ class BatchGenerator:
         self.notify = notify
 
     def run(self, now: datetime) -> int:
-        """Dispatch generation for pending slots the manager can start now.
+        """Dispatch generation for pending batch slots.
 
-        Returns how many slots were started. A slot that cannot start on
-        this tick stays pending: it is not queued, not failed, and not
-        refunded. Batch dispatch never fills the task-manager queue.
+        Faceless slots try the Modal CPU worker first and do not need a
+        local running slot; other types only start when the manager has a
+        free running slot. A spawn failure with no free local slot leaves
+        the slot pending: it is not queued, not failed, and not refunded.
+        Batch dispatch never fills the task-manager queue.
         """
         from app.controllers.v1.video import task_manager
         from app.services.cpu_worker_dispatch import configured_max_containers

@@ -29,11 +29,11 @@ from __future__ import annotations
 import modal
 
 from app.services.cpu_worker_dispatch import (
-    DEFAULT_APP_NAME,
     configured_max_containers,
+    worker_app_name,
 )
 
-app = modal.App(DEFAULT_APP_NAME)
+app = modal.App(worker_app_name())
 
 _MAX_CONTAINERS = configured_max_containers()
 
