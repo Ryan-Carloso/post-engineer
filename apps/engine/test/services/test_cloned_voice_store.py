@@ -141,6 +141,95 @@ class ClonedVoiceStoreTest(unittest.TestCase):
         self.assertEqual(call[1]["params"]["status"], "eq.pending")
         self.assertEqual(call[1]["params"]["order"], "created_at.asc")
 
+    def test_get_by_engine_voice_key_returns_the_row(self) -> None:
+        requests = MagicMock()
+        response = MagicMock()
+        response.raise_for_status = MagicMock()
+        response.json.return_value = [
+            {"storage_path": "u/c/reference.wav", "status": "pending"}
+        ]
+        requests.request.return_value = response
+        store = ClonedVoiceStore(
+            url="https://supabase.example",
+            service_key="service-key",
+            requests_module=requests,
+        )
+        row = store.get_by_engine_voice_key("uabc_def012")
+        self.assertEqual(row, {"storage_path": "u/c/reference.wav", "status": "pending"})
+        call = requests.request.call_args
+        self.assertEqual(call[1]["params"]["engine_voice_key"], "eq.uabc_def012")
+        self.assertEqual(call[1]["params"]["limit"], "1")
+
+    def test_get_by_engine_voice_key_returns_none_when_empty(self) -> None:
+        requests = MagicMock()
+        response = MagicMock()
+        response.raise_for_status = MagicMock()
+        response.json.return_value = []
+        requests.request.return_value = response
+        store = ClonedVoiceStore(
+            url="https://supabase.example",
+            service_key="service-key",
+            requests_module=requests,
+        )
+        self.assertIsNone(store.get_by_engine_voice_key("uabc_def012"))
+
+    def test_get_by_engine_voice_key_returns_none_for_a_non_dict_row(self) -> None:
+        requests = MagicMock()
+        response = MagicMock()
+        response.raise_for_status = MagicMock()
+        response.json.return_value = ["not-a-dict"]
+        requests.request.return_value = response
+        store = ClonedVoiceStore(
+            url="https://supabase.example",
+            service_key="service-key",
+            requests_module=requests,
+        )
+        self.assertIsNone(store.get_by_engine_voice_key("uabc_def012"))
+
+    def test_get_ready_by_engine_voice_key_returns_the_row(self) -> None:
+        requests = MagicMock()
+        response = MagicMock()
+        response.raise_for_status = MagicMock()
+        response.json.return_value = [
+            {"storage_path": "u/c/reference.wav", "status": "ready"}
+        ]
+        requests.request.return_value = response
+        store = ClonedVoiceStore(
+            url="https://supabase.example",
+            service_key="service-key",
+            requests_module=requests,
+        )
+        row = store.get_ready_by_engine_voice_key("uabc_def012")
+        self.assertEqual(row, {"storage_path": "u/c/reference.wav", "status": "ready"})
+        call = requests.request.call_args
+        self.assertEqual(call[1]["params"]["status"], "eq.ready")
+
+    def test_get_ready_by_engine_voice_key_returns_none_when_empty(self) -> None:
+        requests = MagicMock()
+        response = MagicMock()
+        response.raise_for_status = MagicMock()
+        response.json.return_value = []
+        requests.request.return_value = response
+        store = ClonedVoiceStore(
+            url="https://supabase.example",
+            service_key="service-key",
+            requests_module=requests,
+        )
+        self.assertIsNone(store.get_ready_by_engine_voice_key("uabc_def012"))
+
+    def test_get_ready_by_engine_voice_key_returns_none_for_a_non_dict_row(self) -> None:
+        requests = MagicMock()
+        response = MagicMock()
+        response.raise_for_status = MagicMock()
+        response.json.return_value = ["not-a-dict"]
+        requests.request.return_value = response
+        store = ClonedVoiceStore(
+            url="https://supabase.example",
+            service_key="service-key",
+            requests_module=requests,
+        )
+        self.assertIsNone(store.get_ready_by_engine_voice_key("uabc_def012"))
+
     def test_download_reference_wav_gets_storage_object(self) -> None:
         requests = MagicMock()
         response = MagicMock()

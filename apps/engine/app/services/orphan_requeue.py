@@ -135,6 +135,14 @@ def triage_orphan(
     generation was marked for restart. Returns False when the caller
     falls through to the historical fail+refund.
     """
+    from app.services.cpu_worker_dispatch import remote_worker_in_flight
+
+    if remote_worker_in_flight(data):
+        logger.info(
+            f"orphan {task_id} is rendering on a modal cpu worker; not triaging"
+        )
+        _claim_in_flight_slot(slot_store, task_id, data)
+        return True
     if triage_requeue(state, slot_store, task_id, data):
         return True
     from app.services.direct_redispatch import triage_redispatch_direct
@@ -142,3 +150,32 @@ def triage_orphan(
     if triage_redispatch_direct(state, task_id, data):
         return True
     return False
+
+
+def _claim_in_flight_slot(
+    slot_store: Any, task_id: str, data: dict[str, Any]
+) -> None:
+    """Mark a pending slot generating when its render is already live.
+
+    Boot triage sees the in-flight call but the slot is still pending:
+    without the claim the next fill-schedule tick re-dispatches the slot
+    and spawns the same deterministic task a second time.
+    """
+    if slot_store is None:
+        return
+    slot_id = data.get("slot_id")
+    if not isinstance(slot_id, str) or not slot_id:
+        return
+    try:
+        slot = slot_store.get_slot(slot_id)
+    except Exception as exc:
+        logger.warning(f"orphan {task_id}: slot lookup failed: {exc}")
+        return
+    if not isinstance(slot, dict):
+        return
+    if slot.get("status") != SLOT_PENDING:
+        return
+    try:
+        slot_store.update_slot(slot_id, status=SLOT_GENERATING, task_id=task_id)
+    except Exception as exc:
+        logger.warning(f"orphan {task_id}: slot claim failed: {exc}")

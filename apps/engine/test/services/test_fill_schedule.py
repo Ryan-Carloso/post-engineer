@@ -678,7 +678,13 @@ class BatchScheduleTests(unittest.TestCase):
             video_description="Batch description.",
         )
 
-        with patch("app.controllers.v1.video.task_manager") as manager:
+        with (
+            patch(
+                "app.services.cpu_worker_dispatch._modal_spawn",
+                side_effect=RuntimeError("offline"),
+            ),
+            patch("app.controllers.v1.video.task_manager") as manager,
+        ):
             scheduler.generator._dispatch_generation(
                 "task-1",
                 request,
@@ -688,18 +694,11 @@ class BatchScheduleTests(unittest.TestCase):
                 persona_id="persona-1",
             )
 
-        scheduler.task_state.update_task.assert_called_once_with(
-            "task-1",
-            user_id="user-1",
-            flow="batch",
-            pipeline="video",
-            state=model_const.TASK_STATE_PROCESSING,
-            progress=0,
-            slot_id="slot-1",
-            schedule_id="sched-1",
-            persona_id="persona-1",
-            subtitle_position=request.subtitle_position,
-        )
+        calls = scheduler.task_state.update_task.call_args_list
+        self.assertEqual([c.kwargs.get("remote_worker") for c in calls], ["modal_cpu", "", None])
+        self.assertEqual(calls[-1].args, ("task-1",))
+        self.assertEqual(calls[-1].kwargs, {"user_id": "user-1", "flow": "batch", "pipeline": "video", "state": model_const.TASK_STATE_PROCESSING, "progress": 0, "slot_id": "slot-1", "schedule_id": "sched-1", "persona_id": "persona-1", "subtitle_position": request.subtitle_position})
+        self.assertEqual({k: v for k, v in calls[0].kwargs.items() if k in {"slot_id", "schedule_id", "persona_id"}}, {"slot_id": "slot-1", "schedule_id": "sched-1", "persona_id": "persona-1"})
         manager.try_reserve_running.assert_called_once_with()
         manager.add_task.assert_not_called()
         reservation = manager.try_reserve_running.return_value
@@ -724,15 +723,11 @@ class BatchScheduleTests(unittest.TestCase):
         with patch("app.controllers.v1.video.task_manager"):
             scheduler.generator._dispatch_generation("task-2", request, "user-1")
 
-        scheduler.task_state.update_task.assert_called_once_with(
-            "task-2",
-            user_id="user-1",
-            flow="batch",
-            pipeline="video",
-            state=model_const.TASK_STATE_PROCESSING,
-            progress=0,
-            subtitle_position=request.subtitle_position,
-        )
+        calls = scheduler.task_state.update_task.call_args_list
+        self.assertEqual([c.kwargs.get("remote_worker") for c in calls], ["modal_cpu", "", None])
+        self.assertEqual(calls[-1].args, ("task-2",))
+        self.assertEqual(calls[-1].kwargs, {"user_id": "user-1", "flow": "batch", "pipeline": "video", "state": model_const.TASK_STATE_PROCESSING, "progress": 0, "subtitle_position": request.subtitle_position})
+        self.assertEqual({k: v for k, v in calls[0].kwargs.items() if k in {"slot_id", "schedule_id", "persona_id"}}, {})
 
     def test_dispatch_generation_omits_only_the_blank_identity_ids(self):
         from app.models.schema import TaskVideoRequest
@@ -755,17 +750,11 @@ class BatchScheduleTests(unittest.TestCase):
                 persona_id="persona-3",
             )
 
-        scheduler.task_state.update_task.assert_called_once_with(
-            "task-3",
-            user_id="user-1",
-            flow="batch",
-            pipeline="video",
-            state=model_const.TASK_STATE_PROCESSING,
-            progress=0,
-            schedule_id="sched-3",
-            persona_id="persona-3",
-            subtitle_position=request.subtitle_position,
-        )
+        calls = scheduler.task_state.update_task.call_args_list
+        self.assertEqual([c.kwargs.get("remote_worker") for c in calls], ["modal_cpu", "", None])
+        self.assertEqual(calls[-1].args, ("task-3",))
+        self.assertEqual(calls[-1].kwargs, {"user_id": "user-1", "flow": "batch", "pipeline": "video", "state": model_const.TASK_STATE_PROCESSING, "progress": 0, "schedule_id": "sched-3", "persona_id": "persona-3", "subtitle_position": request.subtitle_position})
+        self.assertEqual({k: v for k, v in calls[0].kwargs.items() if k in {"slot_id", "schedule_id", "persona_id"}}, {"schedule_id": "sched-3", "persona_id": "persona-3"})
 
     def test_dispatch_generation_omits_blank_schedule_id_only(self):
         from app.models.schema import TaskVideoRequest
@@ -788,17 +777,11 @@ class BatchScheduleTests(unittest.TestCase):
                 persona_id="persona-4",
             )
 
-        scheduler.task_state.update_task.assert_called_once_with(
-            "task-4",
-            user_id="user-1",
-            flow="batch",
-            pipeline="video",
-            state=model_const.TASK_STATE_PROCESSING,
-            progress=0,
-            slot_id="slot-4",
-            persona_id="persona-4",
-            subtitle_position=request.subtitle_position,
-        )
+        calls = scheduler.task_state.update_task.call_args_list
+        self.assertEqual([c.kwargs.get("remote_worker") for c in calls], ["modal_cpu", "", None])
+        self.assertEqual(calls[-1].args, ("task-4",))
+        self.assertEqual(calls[-1].kwargs, {"user_id": "user-1", "flow": "batch", "pipeline": "video", "state": model_const.TASK_STATE_PROCESSING, "progress": 0, "slot_id": "slot-4", "persona_id": "persona-4", "subtitle_position": request.subtitle_position})
+        self.assertEqual({k: v for k, v in calls[0].kwargs.items() if k in {"slot_id", "schedule_id", "persona_id"}}, {"slot_id": "slot-4", "persona_id": "persona-4"})
 
     def test_dispatch_generation_omits_all_explicitly_blank_identity_ids(self):
         from app.models.schema import TaskVideoRequest
@@ -821,15 +804,11 @@ class BatchScheduleTests(unittest.TestCase):
                 persona_id="",
             )
 
-        scheduler.task_state.update_task.assert_called_once_with(
-            "task-5",
-            user_id="user-1",
-            flow="batch",
-            pipeline="video",
-            state=model_const.TASK_STATE_PROCESSING,
-            progress=0,
-            subtitle_position=request.subtitle_position,
-        )
+        calls = scheduler.task_state.update_task.call_args_list
+        self.assertEqual([c.kwargs.get("remote_worker") for c in calls], ["modal_cpu", "", None])
+        self.assertEqual(calls[-1].args, ("task-5",))
+        self.assertEqual(calls[-1].kwargs, {"user_id": "user-1", "flow": "batch", "pipeline": "video", "state": model_const.TASK_STATE_PROCESSING, "progress": 0, "subtitle_position": request.subtitle_position})
+        self.assertEqual({k: v for k, v in calls[0].kwargs.items() if k in {"slot_id", "schedule_id", "persona_id"}}, {})
 
 
 class ReconcileTests(unittest.TestCase):
