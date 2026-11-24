@@ -30,7 +30,7 @@ from app.models.schema import (
     TaskResponse,
     TaskVideoRequest,
 )
-from app.services import analytics, remote_dispatch, state as sm
+from app.services import analytics, state as sm
 from app.services import video_storage
 from app.services.task_cleanup import remove_task_directory
 from app.services.language_gate import ensure_english_video_language
@@ -299,7 +299,6 @@ def create_task(
             auth.user_id,
             persona_tracking_kwargs(body),
             tracking_kwargs(body),
-            local_start=remote_dispatch.pipeline_entry(),
             event_tracking=analytics.subtitle_event_props(body),
         )
         logger.success(f"Task created: task_id={task_id}")

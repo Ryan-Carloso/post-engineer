@@ -113,6 +113,33 @@ def test_accept_direct_task_queues_a_non_voiceover_job_locally() -> None:
     assert kwargs["params"] is body
     assert kwargs["stop_at"] == "video"
     assert callable(kwargs["on_accepted"])
+    assert args[0] is dispatch._remote_pipeline_entry()
+
+
+def test_accept_direct_task_defaults_the_local_start_to_the_remote_pipeline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.services import remote_dispatch
+
+    monkeypatch.setattr(
+        remote_dispatch, "app_name", lambda: "post-engineer-cpu-worker"
+    )
+    body = {"video_type": "hook_lipsync"}
+    added: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
+
+    class _Manager:
+        def add_task(self, *args: Any, **kwargs: Any) -> None:
+            added.append((args, kwargs))
+
+    try:
+        dispatch.accept_direct_task(
+            _Manager(), "task-default-start", body, "video", "user-1", {}, {}
+        )
+    finally:
+        sm.state.delete_task("task-default-start")
+    assert len(added) == 1
+    args, _kwargs = added[0]
+    assert args[0] is remote_dispatch.start
 
 
 def test_accept_direct_task_uses_the_given_local_start() -> None:

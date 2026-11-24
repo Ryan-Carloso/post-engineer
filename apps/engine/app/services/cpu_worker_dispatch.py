@@ -242,6 +242,13 @@ def try_remote_dispatch(
     return True, accepted
 
 
+def _remote_pipeline_entry() -> Callable[..., Any]:
+    """Remote-first local fallback: a job the CPU worker does not take still renders in its own container."""
+    from app.services import remote_dispatch
+
+    return remote_dispatch.pipeline_entry()
+
+
 def accept_direct_task(
     task_manager: Any,
     task_id: str,
@@ -256,8 +263,8 @@ def accept_direct_task(
 ) -> None:
     """Queue a direct task locally, or spawn a CPU container.
 
-    ``local_start`` replaces the local fallback; the direct create passes
-    the remote pipeline entry so a job the CPU worker does not take still
+    ``local_start`` replaces the local fallback; without it the fallback is
+    the remote pipeline entry, so a job the CPU worker does not take still
     renders in its own container instead of on the VPS thread.
     """
     from app.services import state as sm
@@ -290,7 +297,7 @@ def accept_direct_task(
     if spawned:
         return
     task_manager.add_task(
-        local_start if local_start is not None else tm.start,
+        local_start if local_start is not None else _remote_pipeline_entry(),
         task_id=task_id,
         params=body,
         stop_at=stop_at,
