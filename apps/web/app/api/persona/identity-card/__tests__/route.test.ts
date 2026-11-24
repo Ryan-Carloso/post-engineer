@@ -261,6 +261,20 @@ describe('POST /api/persona/identity-card', () => {
     expect(client.from).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['a non-JSON body', 'not json', true, 'body'],
+    ['a non-object body', '[]', true, 'body'],
+    ['an unknown body field', { personaId: PERSONA_ID, scene: FIXTURE_SCENE, card: {} }, false, 'body'],
+    ['an over-size body', `{"personaId":"${PERSONA_ID}","scene":"${'x'.repeat(20_000)}"}`, true, 'body'],
+    ['a missing scene', { personaId: PERSONA_ID }, false, 'scene'],
+    ['a scene-level error', { personaId: PERSONA_ID, scene: { ...FIXTURE_SCENE, lighting: 'soft warm' } }, false, 'scene'],
+  ])('reports field %s for %s', async (_name, body, raw, field) => {
+    setup();
+    const res = await POST(postRequest(body, raw));
+    expect(res.status).toBe(400);
+    expect((await json(res)).field).toBe(field);
+  });
+
   it('answers 400 for an over-size scene without reading the persona', async () => {
     const { client } = setup();
     const padded = { personaId: PERSONA_ID, scene: { lighting: 'studio', framing: 'close_up', pad: 'x'.repeat(SCENE_MAX_BYTES) } };

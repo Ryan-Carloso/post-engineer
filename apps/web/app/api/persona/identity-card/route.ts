@@ -114,15 +114,15 @@ async function postHandler(request: Request): Promise<NextResponse> {
   if (authenticated instanceof NextResponse) return authenticated;
 
   const text = await readBoundedText(request, BODY_MAX_BYTES);
-  if (!text.ok) return validationError(POST_ROUTE, `body: at most ${BODY_MAX_BYTES} bytes`, 'scene');
+  if (!text.ok) return validationError(POST_ROUTE, `body: at most ${BODY_MAX_BYTES} bytes`, 'body');
   let body: unknown;
   try {
     body = JSON.parse(text.text);
   } catch {
-    return validationError(POST_ROUTE, 'Request body must be valid JSON.', 'scene');
+    return validationError(POST_ROUTE, 'Request body must be valid JSON.', 'body');
   }
   const fields = recordOf(body);
-  if (fields === null) return validationError(POST_ROUTE, 'Request body must be a JSON object.', 'scene');
+  if (fields === null) return validationError(POST_ROUTE, 'Request body must be a JSON object.', 'body');
   const personaId = fields.personaId;
   if (typeof personaId !== 'string' || personaId.length === 0) {
     return validationError(POST_ROUTE, 'personaId is required.', 'personaId');
@@ -132,7 +132,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
   }
   if (!isPersonaAllowed(authenticated.personaIds, personaId)) return denyScope(POST_ROUTE);
   if (Object.keys(fields).some((key) => key !== 'personaId' && key !== 'scene')) {
-    return validationError(POST_ROUTE, 'body: unknown field', 'scene');
+    return validationError(POST_ROUTE, 'body: unknown field', 'body');
   }
   if (fields.scene === undefined) return validationError(POST_ROUTE, 'scene: required', 'scene');
 
