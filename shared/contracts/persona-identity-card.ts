@@ -29,6 +29,10 @@ const IDENTITY_EXTRA_WORDS: ReadonlySet<string> = new Set([
 const HARMLESS_PHRASES: readonly RegExp[] = [
   /\b(?:body|bodies) of water\b/g,
   /\b(?:skinny|skintight|eyewear|eyeglasses|eyelet)\b/g,
+  /\bginger tea\b/g,
+  /\bbald eagle\b/g,
+  /\bsheer curtains\b/g,
+  /\btransparent glass\b/g,
 ];
 
 function withoutHarmlessPhrases(value: string): string {
@@ -54,7 +58,7 @@ function wordsOf(value: string): string[] {
 }
 
 function mentionsAny(value: string, words: ReadonlySet<string>): boolean {
-  return wordsOf(value).some((word) => words.has(word));
+  return wordsOf(withoutHarmlessPhrases(value)).some((word) => words.has(word));
 }
 
 function mentionsSeeThrough(value: string): boolean {

@@ -179,6 +179,29 @@ describe('SceneSchema', () => {
   });
 
   it.each([
+    ['setting', 'sheer curtains'],
+    ['setting', 'transparent glass wall'],
+    ['setting', 'sipping ginger tea'],
+    ['setting', 'bald eagle soaring'],
+  ])('accepts harmless scene text that shares words with the denylist in %s (%s)', (field, text) => {
+    expect(SceneSchema.safeParse({ ...FIXTURE_SCENE, [field]: text }).success).toBe(true);
+  });
+
+  it.each([
+    ['pose', 'sheer dress'],
+    ['pose', 'transparent top'],
+    ['pose', 'ginger hair'],
+    ['pose', 'bald man'],
+  ])('still rejects real identity and sexualised words in %s (%s)', (field, text) => {
+    const result = parseSceneValue({ ...FIXTURE_SCENE, [field]: text });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.startsWith(`scene.${field}:`)).toBe(true);
+      expect(result.error).not.toContain(text);
+    }
+  });
+
+  it.each([
     ['pose', 'topless on the bed'],
     ['pose', 'naked'],
     ['setting', 'nude beach'],
