@@ -58,9 +58,6 @@ const INPUT = {
   videoAspect: '9:16' as const,
   hasFace: false,
   videoType: 'hook_lipsync' as const,
-  avatarUrl: null as string | null,
-  libraryPhotoUrl: null as string | null,
-  photoPathUrl: null as string | null,
 };
 
 const PREP: PersonaPrep = {
@@ -351,73 +348,10 @@ describe('checkFirstPhotoFace', () => {
     expect(calls).toHaveLength(0);
   });
 
-  it('checks the persona avatar when no segment carries a photo', async () => {
-    const calls = stubFetch([engineBody('ok', 1080, 1920, true)]);
-    const result = await checkFirstPhotoFace({
-      ...INPUT,
-      segments: [],
-      avatarUrl: 'https://e.com/avatar.jpg',
-    });
-    expect(result).toBeNull();
-    expect(calls).toHaveLength(1);
-    expect(calls[0].url).toBe('https://engine.test/api/v1/media/check');
-    expect(JSON.parse(calls[0].init.body as string)).toEqual({
-      url: 'https://e.com/avatar.jpg',
-      video_aspect: '9:16',
-    });
-  });
 
-  it('rejects a voiceover persona avatar with a 400 naming the persona photo', async () => {
-    stubFetch([engineBody('ok', 1080, 1920, false)]);
-    const result = await checkFirstPhotoFace({
-      ...INPUT,
-      segments: [],
-      avatarUrl: 'https://e.com/avatar.jpg',
-    });
-    expect(result).toBeInstanceOf(NextResponse);
-    expect((result as NextResponse).status).toBe(400);
-    const payload = (await (result as NextResponse).json()) as {
-      error?: string;
-      code?: string;
-      field?: string;
-    };
-    expect(payload.error).toContain('The persona photo has no detectable face');
-    expect(payload.code).toBe('VALIDATION_FAILED');
-    expect(payload.field).toBe('personaId');
-  });
 
-  it('passes a data-URI avatar without an engine call: media/check cannot fetch it', async () => {
-    const calls = stubFetch([engineBody('ok', 1080, 1920, true)]);
-    const result = await checkFirstPhotoFace({
-      ...INPUT,
-      segments: [],
-      avatarUrl: 'data:image/png;base64,iVBORw0KGgo=',
-    });
-    expect(result).toBeNull();
-    expect(calls).toHaveLength(0);
-  });
 
-  it('passes a relative-asset avatar without an engine call: media/check needs an absolute URL', async () => {
-    const calls = stubFetch([engineBody('ok', 1080, 1920, true)]);
-    const result = await checkFirstPhotoFace({
-      ...INPUT,
-      segments: [],
-      avatarUrl: '/caracter-samples/file-1.png',
-    });
-    expect(result).toBeNull();
-    expect(calls).toHaveLength(0);
-  });
 
-  it('fails closed with a 502 when the avatar check cannot reach the engine', async () => {
-    stubFetch([new Error('fetch failed')]);
-    const result = await checkFirstPhotoFace({
-      ...INPUT,
-      segments: [],
-      avatarUrl: 'https://e.com/avatar.jpg',
-    });
-    expect(result).toBeInstanceOf(NextResponse);
-    expect((result as NextResponse).status).toBe(502);
-  });
 
   it('passes when the first photo has a face and sends the media id', async () => {
     const calls = stubFetch([engineBody('ok', 1080, 1920, true)]);
@@ -502,143 +436,12 @@ describe('checkFirstPhotoFace', () => {
     },
   );
 
-  it('rejects a mechanically rejected persona avatar with a 400 naming the real reason', async () => {
-    stubFetch([engineBody('not_image')]);
-    const result = await checkFirstPhotoFace({
-      ...INPUT,
-      segments: [],
-      avatarUrl: 'https://e.com/avatar.jpg',
-    });
-    expect(result).toBeInstanceOf(NextResponse);
-    expect((result as NextResponse).status).toBe(400);
-    const payload = (await (result as NextResponse).json()) as {
-      error?: string;
-      code?: string;
-      field?: string;
-    };
-    expect(payload.error).toContain('The persona photo is not a readable image');
-    expect(payload.code).toBe('VALIDATION_FAILED');
-    expect(payload.field).toBe('personaId');
-  });
 
-  it.each(['too_small', 'too_large'])(
-    'passes a %s persona avatar: the engine applies no size bounds to the fallback',
-    async (code) => {
-      stubFetch([engineBody(code)]);
-      const result = await checkFirstPhotoFace({
-        ...INPUT,
-        segments: [],
-        avatarUrl: 'https://e.com/avatar.jpg',
-      });
-      expect(result).toBeNull();
-    },
-  );
 
-  it.each(['too_small', 'too_large'])(
-    'passes a %s picked library photo: the engine applies no size bounds to the fallback',
-    async (code) => {
-      stubFetch([engineBody(code)]);
-      const result = await checkFirstPhotoFace({
-        ...INPUT,
-        segments: [],
-        avatarUrl: 'https://e.com/avatar.jpg',
-        libraryPhotoUrl: 'https://cdn.example/signed-library.jpg',
-      });
-      expect(result).toBeNull();
-    },
-  );
 
-  it('checks the stored persona photo when the avatar is null and a photo path was signed', async () => {
-    const calls = stubFetch([engineBody('ok', 1080, 1920, false)]);
-    const result = await checkFirstPhotoFace({
-      ...INPUT,
-      segments: [],
-      avatarUrl: null,
-      photoPathUrl: 'https://cdn.example/signed-photo.jpg',
-    });
-    expect(result).toBeInstanceOf(NextResponse);
-    expect((result as NextResponse).status).toBe(400);
-    const payload = (await (result as NextResponse).json()) as {
-      error?: string;
-      code?: string;
-      field?: string;
-    };
-    expect(payload.error).toContain('The persona photo has no detectable face');
-    expect(payload.code).toBe('VALIDATION_FAILED');
-    expect(payload.field).toBe('personaId');
-    expect(calls).toHaveLength(1);
-    expect(JSON.parse(calls[0].init.body as string)).toEqual({
-      url: 'https://cdn.example/signed-photo.jpg',
-      video_aspect: '9:16',
-    });
-  });
 
-  it('passes when the stored persona photo has a face', async () => {
-    stubFetch([engineBody('ok', 1080, 1920, true)]);
-    const result = await checkFirstPhotoFace({
-      ...INPUT,
-      segments: [],
-      avatarUrl: null,
-      photoPathUrl: 'https://cdn.example/signed-photo.jpg',
-    });
-    expect(result).toBeNull();
-  });
 
-  it('checks the avatar, not the stored photo, when an avatar URL is set', async () => {
-    const calls = stubFetch([engineBody('ok', 1080, 1920, true)]);
-    const result = await checkFirstPhotoFace({
-      ...INPUT,
-      segments: [],
-      avatarUrl: 'https://e.com/avatar.jpg',
-      photoPathUrl: 'https://cdn.example/signed-photo.jpg',
-    });
-    expect(result).toBeNull();
-    expect(calls).toHaveLength(1);
-    expect(JSON.parse(calls[0].init.body as string)).toEqual({
-      url: 'https://e.com/avatar.jpg',
-      video_aspect: '9:16',
-    });
-  });
-  it('checks the picked library photo, not the stored avatar, when one was picked', async () => {
-    const calls = stubFetch([engineBody('ok', 1080, 1920, false)]);
-    const result = await checkFirstPhotoFace({
-      ...INPUT,
-      segments: [],
-      avatarUrl: 'https://e.com/avatar.jpg',
-      libraryPhotoUrl: 'https://cdn.example/signed-library.jpg',
-    });
-    expect(result).toBeInstanceOf(NextResponse);
-    expect((result as NextResponse).status).toBe(400);
-    const payload = (await (result as NextResponse).json()) as {
-      error?: string;
-      code?: string;
-      field?: string;
-    };
-    expect(payload.error).toContain('The photo selected for this video has no detectable face');
-    expect(payload.code).toBe('VALIDATION_FAILED');
-    expect(payload.field).toBe('personaId');
-    expect(calls).toHaveLength(1);
-    expect(JSON.parse(calls[0].init.body as string)).toEqual({
-      url: 'https://cdn.example/signed-library.jpg',
-      video_aspect: '9:16',
-    });
-  });
 
-  it('passes when the picked library photo has a face even if the stored avatar does not', async () => {
-    const calls = stubFetch([engineBody('ok', 1080, 1920, true)]);
-    const result = await checkFirstPhotoFace({
-      ...INPUT,
-      segments: [],
-      avatarUrl: 'https://e.com/avatar.jpg',
-      libraryPhotoUrl: 'https://cdn.example/signed-library.jpg',
-    });
-    expect(result).toBeNull();
-    expect(calls).toHaveLength(1);
-    expect(JSON.parse(calls[0].init.body as string)).toEqual({
-      url: 'https://cdn.example/signed-library.jpg',
-      video_aspect: '9:16',
-    });
-  });
 
   it('fails closed with a 502 when the engine is unreachable', async () => {
     stubFetch([new Error('fetch failed')]);
@@ -674,8 +477,6 @@ describe('checkPreChargePreflights', () => {
     prep: PREP,
     options: OPTIONS,
     segments: SEGMENTS,
-    libraryPhotoUrl: null as string | null,
-    photoPathUrl: null as string | null,
   };
 
   beforeEach(() => {
