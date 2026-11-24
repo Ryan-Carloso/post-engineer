@@ -7,8 +7,11 @@ import type { ReactNode } from 'react';
 
 import { enDictionary } from '@/lib/i18n';
 import { usePersonaStore } from '@/lib/store';
+import { PERSONA_IDENTITY_CARD_QUERY_KEY } from '@/lib/persona-identity-card-api';
 import { emptyPersonaDefaultAccounts } from '@/lib/persona-publishing-accounts';
 import { PersonaSubmit } from '../persona-submit';
+
+let queryClient = new QueryClient();
 
 const api = vi.hoisted(() => ({
   createPersona: vi.fn(),
@@ -37,7 +40,7 @@ vi.mock('@/lib/i18n/provider', () => ({
 function Wrapper({ children }: { children: ReactNode }) {
   const methods = useForm();
   return (
-    <QueryClientProvider client={new QueryClient()}>
+    <QueryClientProvider client={queryClient}>
       <FormProvider {...methods}>{children}</FormProvider>
     </QueryClientProvider>
   );
@@ -54,6 +57,7 @@ function fillRequiredFields(): void {
 beforeEach(() => {
   vi.clearAllMocks();
   api.submittingDuringCall.length = 0;
+  queryClient = new QueryClient();
   usePersonaStore.getState().resetForm();
   fillRequiredFields();
   api.createPersona.mockImplementation(async () => {
@@ -102,5 +106,22 @@ describe('PersonaSubmit with an identity card', () => {
       success: false,
       error: enDictionary.identityCard.errField,
     });
+  });
+
+  it('invalidates the identity card query after a successful edit save', async () => {
+    const personaId = '11111111-1111-4111-8111-111111111111';
+    api.updateMutateAsync.mockResolvedValue({ success: true });
+    const store = usePersonaStore.getState();
+    store.setPublishingAccountsLoaded(true);
+    store.setLoadedPublishingAccounts(store.publishingAccounts);
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+    render(<PersonaSubmit editId={personaId} />, { wrapper: Wrapper });
+    fireEvent.click(screen.getByRole('button'));
+    await waitFor(() => expect(usePersonaStore.getState().result).toEqual({ success: true }));
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['persona-list'] });
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: [PERSONA_IDENTITY_CARD_QUERY_KEY, personaId],
+    });
+    invalidateSpy.mockRestore();
   });
 });

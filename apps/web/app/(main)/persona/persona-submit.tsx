@@ -11,6 +11,7 @@ import { scrollToErrorField } from '@/lib/scroll-to-error';
 import { notifyIfSessionExpired } from '@/lib/session-expiry';
 import { surfaceAppErrorMessage } from '@/lib/errors';
 import { localizeIdentityCardResult, validateIdentityCardDraft } from '@/lib/persona-identity-card-form';
+import { PERSONA_IDENTITY_CARD_QUERY_KEY } from '@/lib/persona-identity-card-api';
 import { totalBoundAccounts, type PersonaDefaultAccounts, samePublishingAccounts } from '@/lib/persona-publishing-accounts';
 import { SpinnerIcon } from '@/lib/ui';
 
@@ -116,6 +117,9 @@ export const PersonaSubmit = ({ editId }: { editId: string | null }) => {
             }
           }
           await queryClient.invalidateQueries({ queryKey: ['persona-list'] });
+          await queryClient.invalidateQueries({
+            queryKey: [PERSONA_IDENTITY_CARD_QUERY_KEY, personaId],
+          });
           router.back();
         } else if (result.error === 'prompt_rejected') {
           scrollToErrorField('script');
