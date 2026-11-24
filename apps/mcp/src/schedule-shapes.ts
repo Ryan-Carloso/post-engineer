@@ -7,6 +7,7 @@ import { VIDEO_LAYOUTS } from './limits.js';
 import { VIDEO_TYPES, VIDEO_TYPE_ERROR_SUFFIX, unknownVideoTypeMessage } from './video-type.js';
 import { personaVoiceField } from './voice-filters.js';
 import { musicMoodField } from './music-mood-field.js';
+import { hookTitleField } from './hook-title-field.js';
 import { LIPSYNC_WINDOW_SECONDS, MAX_LIPSYNC_PHOTOS, MIN_LIPSYNC_PHOTOS } from './contracts/videos.js';
 
 export const ListSchedulesShape = {};
@@ -161,6 +162,7 @@ export const GeneratePersonaVideoOptionsShape = {
     .optional()
     .describe('Spoken language code — English only for now, e.g. en-US. Overrides the persona when one is given.'),
   niche: z.string().min(1).max(300).optional().describe('Content niche. Overrides the persona when one is given.'),
+  hookTitle: hookTitleField.optional(),
   videoClipDuration: z
     .number()
     .int()

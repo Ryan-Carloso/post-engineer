@@ -13,6 +13,7 @@ import {
   MIN_REQUESTED_PHOTO_SECONDS,
 } from './script-segments.js';
 import { SOCIAL_PROVIDERS } from './contracts/providers.js';
+import { hookTitleField } from './hook-title-field.js';
 
 export const SegmentOverlayShape = z
   .object({
@@ -128,6 +129,7 @@ export const ValidateScriptShape = {
     })
     .optional()
     .describe('The video mode the script is for: full_lipsync = media is optional (at most 6 images in total); hook_lipsync or voiceover = images mode, which checks that every segment carries a media list. Omitted means hook_lipsync.'),
+  hookTitle: hookTitleField.optional(),
 };
 
 export const ValidateScriptSchema = z.object(ValidateScriptShape);

@@ -14,6 +14,7 @@ import {
 import { GeneratePersonaVideoSchema, ValidateScriptSchema } from './single-video-shape.js';
 import { resolvePersonaVoiceId } from './voice-filters.js';
 import { PUBLISH_NETWORKS } from './contracts/videos.js';
+import { checkHookTitle, hookTitleIssueMessage } from './hook-title.js';
 
 export { GeneratePersonaVideoShape, ValidateScriptShape } from './single-video-shape.js';
 
@@ -40,6 +41,11 @@ export async function handleValidateScript(
     return errorResponse(
       `Script validation failed: ${result.error.field}: ${result.error.rule} Fix: ${result.error.fix}`,
     );
+  }
+  // Re-checked here, not only in the zod field: a direct handler call skips the schema.
+  const hookTitleCode = args.hookTitle === undefined ? null : checkHookTitle(args.hookTitle);
+  if (hookTitleCode !== null) {
+    return errorResponse(`Script validation failed: hookTitle: ${hookTitleIssueMessage(hookTitleCode)}`);
   }
   let payload: ValidatedScriptPayload;
   try {
