@@ -743,11 +743,12 @@ describe('GET /api/schedule/slots/[slotId]', () => {
   });
 
   it('returns 404 without creating the service client when the slot is not the caller\'s', async () => {
-    installCookieSlotsSession({ slot: null, schedule: SCHEDULE_ROW });
+    const { session } = installCookieSlotsSession({ slot: null, schedule: SCHEDULE_ROW });
 
     const response = await getSlot();
 
     expect(response.status).toBe(404);
+    expect(session.calls).toContainEqual({ table: 'scheduled_posts', op: 'eq', args: ['user_id', USER_ID] });
     expect(createSupabaseServiceClient).not.toHaveBeenCalled();
   });
 
