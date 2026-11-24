@@ -1,12 +1,17 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook } from '@testing-library/react';
 import type { ReactNode } from 'react';
+import type { z } from 'zod';
+
+import type { GetPromptVersionResponseSchema } from '@/lib/contracts/prompts';
 
 vi.mock('@/lib/session-expiry', () => ({ notifyIfSessionExpired: vi.fn() }));
 
 import {
+  PromptVersionReadError,
   USER_PROMPTS_KEY,
+  promptVersionQueryOptions,
   userPromptDetailKey,
   userPromptVersionKey,
   userPromptVersionsKey,
@@ -69,5 +74,50 @@ describe('useRestorePromptVersionMutation', () => {
     });
     expect(outcome).toEqual({ success: false, status: 409, code: 'PROMPT_VERSION_CONFLICT' });
     expect(invalidate).not.toHaveBeenCalled();
+  });
+});
+
+describe('promptVersionQueryOptions', () => {
+  const VERSION_BODY = {
+    success: true,
+    version: {
+      versionId: '55555555-5555-4555-8555-555555555555',
+      version: 2,
+      title: 'T',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      body: 'older text',
+      current: false,
+    },
+  };
+
+  it('keys the query by slug and version with no retry and a 60s stale time', () => {
+    const options = promptVersionQueryOptions('my-prompt', 2);
+    expect(options.queryKey).toEqual(userPromptVersionKey('my-prompt', 2));
+    expect(options.retry).toBe(false);
+    expect(options.staleTime).toBe(60_000);
+  });
+
+  it('types the cached data of its key as the version response body', () => {
+    const options = promptVersionQueryOptions('my-prompt', 2);
+    const cached = new QueryClient().getQueryData(options.queryKey);
+    expectTypeOf(cached).toEqualTypeOf<z.output<typeof GetPromptVersionResponseSchema> | undefined>();
+  });
+
+  it('resolves the response body on a successful read', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json(VERSION_BODY)));
+    const body = await new QueryClient().fetchQuery(promptVersionQueryOptions('my-prompt', 2));
+    expect(body.version.body).toBe('older text');
+  });
+
+  it('throws a PromptVersionReadError carrying the failure when the read fails', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => Response.json({ success: false, code: 'PROMPT_VERSION_NOT_FOUND' }, { status: 404 })),
+    );
+    const error: unknown = await new QueryClient()
+      .fetchQuery(promptVersionQueryOptions('my-prompt', 2))
+      .catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(PromptVersionReadError);
+    expect(error instanceof PromptVersionReadError && error.failure.status).toBe(404);
   });
 });

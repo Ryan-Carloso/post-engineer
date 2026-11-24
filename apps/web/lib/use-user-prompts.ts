@@ -1,4 +1,11 @@
-import { useMutation, useQuery, useQueryClient, type UseMutationResult, type UseQueryResult } from '@tanstack/react-query';
+import {
+  queryOptions,
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type UseMutationResult,
+  type UseQueryResult,
+} from '@tanstack/react-query';
 import {
   createPrompt,
   deletePrompt,
@@ -29,16 +36,17 @@ export class PromptVersionReadError extends Error {
   }
 }
 
-export const promptVersionQueryOptions = (slug: string, version: number) => ({
-  queryKey: userPromptVersionKey(slug, version),
-  queryFn: async () => {
-    const result = await fetchPromptVersion(slug, version);
-    if (!result.success) throw new PromptVersionReadError(result);
-    return result.body;
-  },
-  retry: false,
-  staleTime: 60_000,
-});
+export const promptVersionQueryOptions = (slug: string, version: number) =>
+  queryOptions({
+    queryKey: userPromptVersionKey(slug, version),
+    queryFn: async () => {
+      const result = await fetchPromptVersion(slug, version);
+      if (!result.success) throw new PromptVersionReadError(result);
+      return result.body;
+    },
+    retry: false,
+    staleTime: 60_000,
+  });
 
 export function useUserPromptsQuery(): UseQueryResult<Listing, Error> {
   return useQuery<Listing, Error>({ queryKey: USER_PROMPTS_KEY, queryFn: fetchPrompts, staleTime: 30_000 });
