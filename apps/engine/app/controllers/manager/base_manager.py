@@ -140,7 +140,7 @@ class TaskManager:
     def check_queue(self):
         reserved: Dict | None = None
         with self.lock:
-            if (
+            while (
                 self.current_tasks < self.max_concurrent_tasks
                 and not self.is_queue_empty()
             ):
@@ -148,6 +148,7 @@ class TaskManager:
                 if isinstance(task_info, dict):
                     self.current_tasks += 1
                     reserved = task_info
+                    break
         if reserved is None:
             return
         self._spawn_reserved(

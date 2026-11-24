@@ -75,11 +75,11 @@ class PreflightPersonaImageTests(unittest.TestCase):
         resolve.assert_not_called()
 
     def test_propagates_a_failed_download(self):
-        failure = longcat.LongCatError("persona image download failed: HTTP 404")
+        failure = longcat.LongCatError("first photo of the video (segment 0 image 0) could not be loaded: download blocked")
         with patch.object(full_lipsync, "resolve_persona_image", side_effect=failure):
             with self.assertRaises(longcat.LongCatError) as ctx:
                 persona_preflight.preflight_persona_image("task-4", _params(), _MAX_BYTES)
-        self.assertIn("HTTP 404", str(ctx.exception))
+        self.assertIn("download blocked", str(ctx.exception))
 
 
 class ResolvePersonaImageReuseTests(unittest.TestCase):
@@ -118,12 +118,12 @@ class StartAbortsOnDeadImageTests(unittest.TestCase):
         return preflight, generate_script, fail_task
 
     def test_dead_image_fails_a_video_run_before_the_script_stage(self):
-        failure = longcat.LongCatError("persona image download failed: HTTP 404")
+        failure = longcat.LongCatError("first photo of the video (segment 0 image 0) could not be loaded: download blocked")
         _, generate_script, fail_task = self._run_start("video", preflight_side_effect=failure)
         generate_script.assert_not_called()
         fail_task.assert_called_once()
         self.assertEqual(fail_task.call_args.kwargs["stage"], "persona_image")
-        self.assertIn("HTTP 404", fail_task.call_args.args[1])
+        self.assertIn("download blocked", fail_task.call_args.args[1])
 
     def test_partial_runs_never_download_the_image(self):
         preflight, generate_script, _ = self._run_start("script")
@@ -139,7 +139,7 @@ class IntroOnlyJobsArePreflightedTests(unittest.TestCase):
     def test_a_dead_image_fails_an_intro_only_video_run_at_the_start(self):
         params = _params()
         self.assertEqual(params.video_type, "hook_lipsync")
-        failure = longcat.LongCatError("persona image download failed: HTTP 404")
+        failure = longcat.LongCatError("first photo of the video (segment 0 image 0) could not be loaded: download blocked")
         with (
             patch.object(persona_preflight, "preflight_persona_image", side_effect=failure),
             patch.object(task_service.video_storage, "require_r2_configuration"),
@@ -260,6 +260,36 @@ class ResolvePersonaImageFirstPhotoTests(unittest.TestCase):
                     full_lipsync.resolve_persona_image("task-hook", params, _MAX_BYTES)
             self.assertIn("no_first_photo", str(ctx.exception))
             download.assert_not_called()
+
+    def test_missing_segments_fail_with_no_first_photo(self):
+        from types import SimpleNamespace
+
+        for segments in (None, []):
+            with self.subTest(segments=segments):
+                with tempfile.TemporaryDirectory() as task_dir:
+                    params = SimpleNamespace(
+                        persona=PersonaParams(
+                            name="Ana",
+                            photo_url="https://img.test/p.png",
+                            voice_id="chatterbox:kokoro_af_heart",
+                        ),
+                        segments=segments,
+                    )
+                    with (
+                        patch.object(full_lipsync.utils, "task_dir", return_value=task_dir),
+                        patch.object(ssrf, "download_public_file") as download,
+                        patch.object(
+                            full_lipsync.user_media, "resolve_first_segment_photo"
+                        ) as resolve_first,
+                        patch.object(face_detect, "image_contains_face", return_value=True),
+                    ):
+                        with self.assertRaises(longcat.LongCatError) as ctx:
+                            full_lipsync.resolve_persona_image(
+                                "task-hook", params, _MAX_BYTES
+                            )
+                    self.assertIn("no_first_photo", str(ctx.exception))
+                    download.assert_not_called()
+                    resolve_first.assert_not_called()
 
     def test_empty_cached_file_is_replaced_by_the_first_segment_photo(self):
         with tempfile.TemporaryDirectory() as task_dir:

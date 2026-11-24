@@ -73,7 +73,7 @@ class TestPersonaImageDownloadSecurity(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.tmp, True)
 
     def _params(self, first_photo_url):
-        persona = PersonaParams(id="p1", name="Test", avatar_url=first_photo_url, voice_id="voice-1")
+        persona = PersonaParams(id="p1", name="Test", avatar_url="https://avatar.example.com/p.png", voice_id="voice-1")
         return TaskVideoRequest(
             video_title="test",
             video_description="Test description.",
@@ -118,17 +118,17 @@ class TestPersonaImageDownloadSecurity(unittest.TestCase):
         )
 
     def test_rejects_private_ip_image_url(self):
-        with self.assertRaises(tm.longcat.LongCatError):
+        with self.assertRaisesRegex(tm.longcat.LongCatError, "download blocked"):
             self._run("http://169.254.169.254/secret.png")
         self.assertEqual(os.listdir(self.tmp), [])
 
     def test_rejects_hostname_resolving_to_private_ip(self):
-        with self.assertRaises(tm.longcat.LongCatError):
+        with self.assertRaisesRegex(tm.longcat.LongCatError, "download blocked"):
             self._run("https://avatar.internal.test/pic.png", resolved_ips=("10.1.2.3",))
         self.assertEqual(os.listdir(self.tmp), [])
 
     def test_rejects_non_image_content_type(self):
-        with self.assertRaises(tm.longcat.LongCatError):
+        with self.assertRaisesRegex(tm.longcat.LongCatError, "not an image"):
             self._run(
                 "https://cdn.example.com/pic",
                 response=_FakeImageResponse(content_type="text/html"),
@@ -145,11 +145,8 @@ class TestPersonaImageDownloadSecurity(unittest.TestCase):
         self.assertTrue(files[0].startswith("persona"))
         self.assertGreater(os.path.getsize(os.path.join(self.tmp, files[0])), 0)
 
-    def test_other_relative_paths_are_not_resolved(self):
-        with (
-            patch.dict(os.environ, {"MPT_UPLOAD_API_BASE_URL": "https://web.example.com"}),
-            self.assertRaises(tm.longcat.LongCatError),
-        ):
+    def test_relative_first_photo_url_is_rejected_without_a_download(self):
+        with self.assertRaisesRegex(tm.longcat.LongCatError, "download blocked"):
             self._run("/api/admin/secret.png")
         self.started[2].assert_not_called()
 

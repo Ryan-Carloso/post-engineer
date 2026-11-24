@@ -110,41 +110,39 @@ export async function checkFirstPhotoFace(
 ): Promise<null | NextResponse> {
   if (input.videoType === 'voiceover' || input.videoType === 'full_lipsync') return null;
   const first = firstSegmentMedia(input.segments);
-  if (first !== null) {
-    const record = await fetchMediaCheck(
-      first,
-      input.userId,
-      input.videoAspect,
-      'first-photo-face',
+  if (first === null) return null;
+  const record = await fetchMediaCheck(
+    first,
+    input.userId,
+    input.videoAspect,
+    'first-photo-face',
+  );
+  if (record instanceof NextResponse) return record;
+  const rejection = mechanicalRejectionReason(record.code);
+  if (rejection !== undefined) {
+    return validationFailed(
+      ERROR_CODES.VALIDATION_FAILED,
+      `Segment ${first.segmentIndex} image ${first.imageIndex} is the first photo of this video, but it ${rejection}: send a usable photo showing the persona's face.`,
+      'options.segments',
     );
-    if (record instanceof NextResponse) return record;
-    const rejection = mechanicalRejectionReason(record.code);
-    if (rejection !== undefined) {
-      return validationFailed(
-        ERROR_CODES.VALIDATION_FAILED,
-        `Segment ${first.segmentIndex} image ${first.imageIndex} is the first photo of this video, but it ${rejection}: send a usable photo showing the persona's face.`,
-        'options.segments',
-      );
-    }
-    if (
-      record.code === 'blocked_403' ||
-      record.code === 'timeout' ||
-      record.code === 'media_expired'
-    ) {
-      return validationFailed(
-        ERROR_CODES.VALIDATION_FAILED,
-        `Segment ${first.segmentIndex} image ${first.imageIndex} is the first photo of this video, but it could not be loaded (${record.code}): send a usable photo showing the persona's face.`,
-        'options.segments',
-      );
-    }
-    if (record.has_face === false) {
-      return validationFailed(
-        ERROR_CODES.VALIDATION_FAILED,
-        `Segment ${first.segmentIndex} image ${first.imageIndex} is the first photo of this video, but no face was detected in it: send a photo showing the persona's face.`,
-        'options.segments',
-      );
-    }
-    return null;
+  }
+  if (
+    record.code === 'blocked_403' ||
+    record.code === 'timeout' ||
+    record.code === 'media_expired'
+  ) {
+    return validationFailed(
+      ERROR_CODES.VALIDATION_FAILED,
+      `Segment ${first.segmentIndex} image ${first.imageIndex} is the first photo of this video, but it could not be loaded (${record.code}): send a usable photo showing the persona's face.`,
+      'options.segments',
+    );
+  }
+  if (record.has_face === false) {
+    return validationFailed(
+      ERROR_CODES.VALIDATION_FAILED,
+      `Segment ${first.segmentIndex} image ${first.imageIndex} is the first photo of this video, but no face was detected in it: send a photo showing the persona's face.`,
+      'options.segments',
+    );
   }
   return null;
 }

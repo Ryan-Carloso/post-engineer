@@ -134,21 +134,63 @@ def test_dequeue_keeps_segments_on_a_task_video_request():
     assert manager.queue_size() == 0
 
 
+def _invalid_hook_lipsync_params():
+    return {
+        "video_title": "Porto",
+        "video_description": "Test description.",
+        "video_type": "hook_lipsync",
+        "persona": {"name": "Ana", "photo_url": "https://img.test/p.png", "voice_id": "calm"},
+    }
+
+
+def _production_shaped_invalid_task(task_id="task-1", webhook_url=None):
+    params = _invalid_hook_lipsync_params()
+    if webhook_url is not None:
+        params["webhook_url"] = webhook_url
+    return {
+        "func": "start",
+        "args": [],
+        "kwargs": {"task_id": task_id, "params": params, "stop_at": "video"},
+    }
+
+
 def test_dequeue_marks_hook_lipsync_without_segments_failed(monkeypatch):
+    manager, fake = make_manager()
+    calls = []
+    monkeypatch.setattr(tm, "_fail_task", lambda *a, **k: calls.append((a, k)))
+    fake.lists["task_queue"] = [json.dumps(_production_shaped_invalid_task())]
+
+    assert manager.dequeue() is None
+    assert manager.queue_size() == 0
+    assert len(calls) == 1
+    assert calls[0][0][0] == "task-1"
+    assert "hook_lipsync requires segments" in calls[0][0][1]
+    assert calls[0][1]["stage"] == "dispatch"
+
+
+def test_dequeue_invalid_task_passes_webhook_url_to_the_failure(monkeypatch):
+    manager, fake = make_manager()
+    calls = []
+    monkeypatch.setattr(tm, "_fail_task", lambda *a, **k: calls.append((a, k)))
+    fake.lists["task_queue"] = [
+        json.dumps(
+            _production_shaped_invalid_task(webhook_url="https://hooks.example.com/done")
+        )
+    ]
+
+    assert manager.dequeue() is None
+    assert len(calls) == 1
+    assert getattr(calls[0][0][2], "webhook_url", None) == "https://hooks.example.com/done"
+
+
+def test_dequeue_falls_back_to_positional_args_task_id(monkeypatch):
     manager, fake = make_manager()
     calls = []
     monkeypatch.setattr(tm, "_fail_task", lambda *a, **k: calls.append((a, k)))
     stored = {
         "func": "start",
         "args": ["task-1"],
-        "kwargs": {
-            "params": {
-                "video_title": "Porto",
-                "video_description": "Test description.",
-                "video_type": "hook_lipsync",
-                "persona": {"name": "Ana", "photo_url": "https://img.test/p.png", "voice_id": "calm"},
-            }
-        },
+        "kwargs": {"params": _invalid_hook_lipsync_params()},
     }
     fake.lists["task_queue"] = [json.dumps(stored)]
 
@@ -158,6 +200,39 @@ def test_dequeue_marks_hook_lipsync_without_segments_failed(monkeypatch):
     assert calls[0][0][0] == "task-1"
     assert "hook_lipsync requires segments" in calls[0][0][1]
     assert calls[0][1]["stage"] == "dispatch"
+
+
+def test_check_queue_drains_past_an_invalid_task(monkeypatch):
+    manager, fake = make_manager()
+    failed = []
+    monkeypatch.setattr(tm, "_fail_task", lambda *a, **k: failed.append((a, k)))
+    spawned = []
+    monkeypatch.setattr(manager, "execute_task", lambda *a, **k: spawned.append((a, k)))
+    valid = {
+        "func": "start",
+        "args": [],
+        "kwargs": {
+            "task_id": "task-2",
+            "params": {
+                "video_title": "Porto",
+                "video_description": "Test description.",
+                "video_type": "voiceover",
+            },
+            "stop_at": "video",
+        },
+    }
+    fake.lists["task_queue"] = [
+        json.dumps(_production_shaped_invalid_task()),
+        json.dumps(valid),
+    ]
+
+    manager.check_queue()
+
+    assert len(failed) == 1
+    assert failed[0][0][0] == "task-1"
+    assert len(spawned) == 1
+    assert spawned[0][1]["task_id"] == "task-2"
+    assert manager.queue_size() == 0
 
 
 def test_is_queue_empty_follows_size():

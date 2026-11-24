@@ -1,4 +1,4 @@
-"""Persona image URL resolution for the lipsync intro download."""
+"""Stored persona image URL shape check for the batch fill gate."""
 
 import ipaddress
 import re
@@ -12,16 +12,19 @@ def is_engine_usable_persona_image_url(value: str) -> bool:
 
     Mirrors the web's isEngineUsablePersonaImageUrl
     (apps/web/lib/engine-image-url.ts), which pre-flights the same shapes
-    before any token charge: the engine re-checks everything at download
-    time, so this exists only so a bad stored URL fails fast instead of
-    dying mid-pipeline ("persona image download rejected").
+    before any token charge: this exists only so a bad stored avatar_url
+    fails the batch fill gate at accept time instead of failing the video
+    after the job starts ("{video_type} requires a usable persona photo").
+
+    The photo itself is never downloaded as a video frame: the hook image
+    is the first photo of the video (issue #766).
 
     - a house-face path (/caracter-samples/file-N.png);
     - a data:image/ URI with the payload separator the engine splits on;
     - an http(s) URL with a hostname, where a literal IP host must be
       public (hostnames are left to the engine's resolve-and-check).
     Anything else (a relative non-asset path, a non-http scheme, a
-    host-less URL) is guaranteed to die at download time.
+    host-less URL) is guaranteed to fail the gate.
     """
     candidate = value.strip()
     if not candidate:

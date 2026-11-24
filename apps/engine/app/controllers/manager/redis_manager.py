@@ -1,4 +1,5 @@
 import json
+from types import SimpleNamespace
 from typing import Dict
 
 import redis
@@ -63,13 +64,26 @@ class RedisTaskManager(TaskManager):
     def _fail_invalid_task(self, task_info, exc):
         from app.services.task_outcome import fail_or_stop
 
+        kwargs = task_info.get("kwargs") or {}
         args = task_info.get("args") or []
-        task_id = args[0] if args else None
+        task_id = kwargs.get("task_id") or (args[0] if args else None)
         error = "; ".join(str(item["msg"]) for item in exc.errors())
         if task_id is None:
             logger.error(f"dropping invalid queued task with no task id: {error}")
             return
-        fail_or_stop(task_id, f"invalid task params: {error}", stage="dispatch")
+        raw_params = kwargs.get("params")
+        if isinstance(raw_params, dict):
+            webhook_url = raw_params.get("webhook_url")
+        else:
+            webhook_url = getattr(raw_params, "webhook_url", None)
+        failure_params = (
+            SimpleNamespace(webhook_url=webhook_url, video_title="")
+            if webhook_url
+            else None
+        )
+        fail_or_stop(
+            task_id, f"invalid task params: {error}", failure_params, stage="dispatch"
+        )
 
     def is_queue_empty(self):
         return self.redis_client.llen(self.queue) == 0
