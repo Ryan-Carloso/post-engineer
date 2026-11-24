@@ -20,6 +20,7 @@ const repoRoot = findRepoRoot(import.meta.url);
 const sharedSource = join(repoRoot, 'shared', 'script-segments', 'script-segments.ts');
 const sharedMedia = join(repoRoot, 'shared', 'script-segments', 'segment-media.ts');
 const sharedText = join(repoRoot, 'shared', 'script-segments', 'segment-text.ts');
+const sharedHookTitle = join(repoRoot, 'shared', 'script-segments', 'hook-title.ts');
 const syncScript = join(repoRoot, 'scripts', 'sync-script-segments.mjs');
 const musicSource = join(repoRoot, 'shared', 'music-mood-field', 'music-mood-field.ts');
 const musicScript = join(repoRoot, 'scripts', 'sync-music-mood-field.mjs');
@@ -29,6 +30,8 @@ const webMediaTarget = join('apps', 'web', 'lib', 'generation', 'segment-media.t
 const mcpMediaTarget = join('apps', 'mcp', 'src', 'segment-media.ts');
 const webTextTarget = join('apps', 'web', 'lib', 'generation', 'segment-text.ts');
 const mcpTextTarget = join('apps', 'mcp', 'src', 'segment-text.ts');
+const webHookTitleTarget = join('apps', 'web', 'lib', 'generation', 'hook-title.ts');
+const mcpHookTitleTarget = join('apps', 'mcp', 'src', 'hook-title.ts');
 const musicWebTarget = join('apps', 'web', 'lib', 'generation', 'music-mood-field.ts');
 const musicMcpTarget = join('apps', 'mcp', 'src', 'music-mood-field.ts');
 
@@ -52,6 +55,7 @@ function createPartialCheckout(options: { withMcp: boolean; base?: string }): st
   copyFileSync(sharedSource, join(root, 'shared', 'script-segments', 'script-segments.ts'));
   copyFileSync(sharedMedia, join(root, 'shared', 'script-segments', 'segment-media.ts'));
   copyFileSync(sharedText, join(root, 'shared', 'script-segments', 'segment-text.ts'));
+  copyFileSync(sharedHookTitle, join(root, 'shared', 'script-segments', 'hook-title.ts'));
   mkdirSync(join(root, 'shared', 'music-mood-field'), { recursive: true });
   copyFileSync(musicSource, join(root, 'shared', 'music-mood-field', 'music-mood-field.ts'));
 
@@ -59,12 +63,14 @@ function createPartialCheckout(options: { withMcp: boolean; base?: string }): st
   writeFileSync(join(root, webTarget), 'stale web copy\n');
   writeFileSync(join(root, webMediaTarget), 'stale web media copy\n');
   writeFileSync(join(root, webTextTarget), 'stale web text copy\n');
+  writeFileSync(join(root, webHookTitleTarget), 'stale web hook title copy\n');
 
   if (options.withMcp) {
     mkdirSync(join(root, 'apps', 'mcp', 'src'), { recursive: true });
     writeFileSync(join(root, mcpTarget), 'stale mcp copy\n');
     writeFileSync(join(root, mcpMediaTarget), 'stale mcp media copy\n');
     writeFileSync(join(root, mcpTextTarget), 'stale mcp text copy\n');
+    writeFileSync(join(root, mcpHookTitleTarget), 'stale mcp hook title copy\n');
   }
 
   return root;
@@ -102,6 +108,7 @@ describe('sync-script-segments in a partial checkout', () => {
     expect(output).toContain(`skipped ${join(root, mcpTarget)}`);
     expect(output).toContain(`skipped ${join(root, mcpMediaTarget)}`);
     expect(output).toContain(`skipped ${join(root, mcpTextTarget)}`);
+    expect(output).toContain(`skipped ${join(root, mcpHookTitleTarget)}`);
     expect(output).toContain(`skipped ${join(root, musicMcpTarget)}`);
   });
 
@@ -119,6 +126,9 @@ describe('sync-script-segments in a partial checkout', () => {
     const text = readFileSync(sharedText, 'utf8');
     expect(readFileSync(join(root, webTextTarget), 'utf8')).toBe(text);
     expect(readFileSync(join(root, mcpTextTarget), 'utf8')).toBe(text);
+    const hookTitle = readFileSync(sharedHookTitle, 'utf8');
+    expect(readFileSync(join(root, webHookTitleTarget), 'utf8')).toBe(hookTitle);
+    expect(readFileSync(join(root, mcpHookTitleTarget), 'utf8')).toBe(hookTitle);
     const music = readFileSync(musicSource, 'utf8');
     expect(readFileSync(join(root, musicWebTarget), 'utf8')).toBe(music);
     expect(readFileSync(join(root, musicMcpTarget), 'utf8')).toBe(music);

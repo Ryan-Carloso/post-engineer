@@ -5,7 +5,8 @@ import { fileURLToPath } from 'node:url';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const sharedDir = join(root, 'shared', 'script-segments');
-const files = ['script-segments.ts', 'segment-media.ts', 'segment-text.ts'].map((name) => ({
+const sharedFiles = ['script-segments.ts', 'segment-media.ts', 'segment-text.ts', 'hook-title.ts'];
+const files = sharedFiles.map((name) => ({
   source: join(sharedDir, name),
   targets: [
     join(root, 'apps', 'web', 'lib', 'generation', name),
