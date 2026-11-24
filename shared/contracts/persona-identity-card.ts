@@ -19,6 +19,23 @@ const IDENTITY_WORDS: ReadonlySet<string> = new Set([
   'tattoo', 'tattoos', 'tattooed', 'freckles', 'freckled', 'body', 'bodies', 'face', 'faces', 'taller', 'thinner',
 ]);
 
+const IDENTITY_STEMS: readonly string[] = ['hair', 'eye', 'skin', 'freckl', 'tattoo', 'beard'];
+
+const IDENTITY_EXTRA_WORDS: ReadonlySet<string> = new Set([
+  'blonde', 'brunette', 'redhead', 'ginger', 'bald', 'abs',
+  'cabelo', 'loiro', 'loira', 'ruivo', 'ruiva', 'careca', 'calvo',
+]);
+
+function mentionsIdentity(value: string): boolean {
+  const withoutWater = value.toLowerCase().replace(/\b(?:body|bodies) of water\b/g, ' ');
+  return wordsOf(withoutWater).some(
+    (word) =>
+      IDENTITY_WORDS.has(word) ||
+      IDENTITY_EXTRA_WORDS.has(word) ||
+      IDENTITY_STEMS.some((stem) => word.startsWith(stem)),
+  );
+}
+
 const SEXUALISED_WORDS: ReadonlySet<string> = new Set([
   'nude', 'naked', 'nudity', 'topless', 'bottomless', 'shirtless', 'lingerie', 'bikini', 'underwear', 'thong',
   'undressed', 'sexy', 'sexual', 'erotic', 'nsfw', 'revealing', 'transparent', 'sheer',
@@ -51,9 +68,13 @@ const freeText = z
   .max(IDENTITY_TEXT_MAX_LENGTH)
   .refine((value) => !hasControlCharacter(value), { message: 'must be a single line without control characters' });
 
-const sceneText = freeText.refine((value) => !mentionsAny(value, IDENTITY_WORDS), {
-  message: 'must describe the scene only, not the person (face, hair, skin, body)',
-});
+const sceneText = freeText
+  .refine((value) => !mentionsIdentity(value), {
+    message: 'must describe the scene only, not the person (face, hair, skin, body)',
+  })
+  .refine((value) => !mentionsAny(value, SEXUALISED_WORDS) && !mentionsSeeThrough(value), {
+    message: 'nude or sexualised content is not allowed',
+  });
 
 const OutfitSchema = z
   .strictObject({
@@ -76,7 +97,7 @@ const OutfitSchema = z
     for (const slot of filled) {
       const value = outfit[slot];
       if (value === undefined) continue;
-      if (mentionsAny(value, IDENTITY_WORDS)) {
+      if (mentionsIdentity(value)) {
         ctx.addIssue({ code: 'custom', path: [slot], message: 'must describe clothing only, not the person (face, hair, skin, body)' });
       } else if (mentionsAny(value, SEXUALISED_WORDS) || mentionsSeeThrough(value)) {
         ctx.addIssue({ code: 'custom', path: [slot], message: 'nude or sexualised clothing is not allowed' });

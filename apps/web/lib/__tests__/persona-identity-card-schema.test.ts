@@ -132,6 +132,39 @@ describe('SceneSchema', () => {
     }
   });
 
+  it.each([
+    ['pose', 'blonde woman smiling'],
+    ['pose', 'blue-eyed redhead'],
+    ['pose', 'long-haired, bald'],
+    ['pose', 'tank top that shows abs'],
+    ['setting', 'cabelo loiro'],
+  ])('rejects identity words that evade whole-word matching in %s (%s)', (field, text) => {
+    const result = parseSceneValue({ ...FIXTURE_SCENE, [field]: text });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.startsWith(`scene.${field}:`)).toBe(true);
+      expect(result.error).not.toContain(text);
+    }
+  });
+
+  it('accepts "body of water" as a setting', () => {
+    expect(SceneSchema.safeParse({ ...FIXTURE_SCENE, setting: 'body of water' }).success).toBe(true);
+  });
+
+  it.each([
+    ['pose', 'topless on the bed'],
+    ['pose', 'naked'],
+    ['setting', 'nude beach'],
+    ['pose', 'see-through dress'],
+  ])('rejects sexualised content in %s (%s) and names the field', (field, text) => {
+    const result = parseSceneValue({ ...FIXTURE_SCENE, [field]: text });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBe(`scene.${field}: nude or sexualised content is not allowed`);
+      expect(result.error).not.toContain(text);
+    }
+  });
+
   it('rejects identity words in scene outfit slots', () => {
     const result = parseSceneValue({ ...FIXTURE_SCENE, outfit: { top: 'tank top showing a muscular build' } });
     expect(result.ok).toBe(false);

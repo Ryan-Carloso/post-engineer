@@ -242,6 +242,8 @@ describe('POST /api/persona/identity-card', () => {
     ['a full card passed as the scene', { personaId: PERSONA_ID, scene: FIXTURE_CARD }, false, 'scene: unknown fields'],
     ['an invalid lighting', { personaId: PERSONA_ID, scene: { ...FIXTURE_SCENE, lighting: 'soft warm' } }, false, 'scene.lighting: not an allowed value'],
     ['identity words in the pose', { personaId: PERSONA_ID, scene: { ...FIXTURE_SCENE, pose: 'standing, red hair' } }, false, 'scene.pose: must describe the scene only, not the person (face, hair, skin, body)'],
+    ['sexualised content in the pose', { personaId: PERSONA_ID, scene: { ...FIXTURE_SCENE, pose: 'topless on the bed' } }, false, 'scene.pose: nude or sexualised content is not allowed'],
+    ['sexualised content in the setting', { personaId: PERSONA_ID, scene: { ...FIXTURE_SCENE, setting: 'nude beach' } }, false, 'scene.setting: nude or sexualised content is not allowed'],
   ])('answers 400 for %s', async (_name, body, raw, message) => {
     const { client } = setup();
     const res = await POST(postRequest(body, raw));
