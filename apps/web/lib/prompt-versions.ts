@@ -34,10 +34,13 @@ export async function readPostPromptFacts(db: SupabaseClient, versionId: string 
     .eq('id', versionId)
     .maybeSingle();
   if (error !== null) {
-    logger.warn('[prompt-versions] post prompt lookup failed', { versionId, code: error.code, message: error.message });
+    logger.error('[prompt-versions] post prompt lookup failed', error, { versionId, code: error.code });
     return null;
   }
-  if (data === null) return null;
+  if (data === null) {
+    logger.error('[prompt-versions] post prompt version missing', undefined, { versionId });
+    return null;
+  }
   const row = data as { slug: string; title: string; version: number; source: string };
   if (row.source !== 'official' && row.source !== 'user') return null;
   return { slug: row.slug, title: row.title, version: row.version, source: row.source };

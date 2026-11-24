@@ -4,9 +4,10 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 vi.mock('server-only', () => ({}));
 const loggerWarn = vi.hoisted(() => vi.fn());
+const loggerError = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/logger', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/logger')>();
-  return { ...actual, logger: { ...actual.logger, warn: loggerWarn } };
+  return { ...actual, logger: { ...actual.logger, warn: loggerWarn, error: loggerError } };
 });
 
 import { currentUserPromptVersion, readPostPromptFacts } from '@/lib/prompt-versions';
@@ -40,6 +41,7 @@ function tableDb(outcome: Outcome): { client: SupabaseClient; calls: Array<[stri
 
 beforeEach(() => {
   loggerWarn.mockReset();
+  loggerError.mockReset();
 });
 
 describe('currentUserPromptVersion', () => {
@@ -66,6 +68,8 @@ describe('readPostPromptFacts', () => {
     const db = tableDb({ data: null, error: null });
     expect(await readPostPromptFacts(db.client, null)).toBeNull();
     expect(db.calls).toEqual([]);
+    expect(loggerError).not.toHaveBeenCalled();
+    expect(loggerWarn).not.toHaveBeenCalled();
   });
 
   it('returns the slug, title, number and source of the version', async () => {
@@ -74,14 +78,21 @@ describe('readPostPromptFacts', () => {
     expect(db.calls).toContainEqual(['eq', 'id', VERSION]);
   });
 
-  it('returns null for a missing version and for an unknown source', async () => {
+  it('returns null and logs at error level when the version row is missing', async () => {
     expect(await readPostPromptFacts(tableDb({ data: null, error: null }).client, VERSION)).toBeNull();
-    expect(await readPostPromptFacts(tableDb({ data: { slug: 's', title: 'T', version: 1, source: 'legacy' }, error: null }).client, VERSION)).toBeNull();
+    expect(loggerError).toHaveBeenCalledWith('[prompt-versions] post prompt version missing', undefined, { versionId: VERSION });
   });
 
-  it('logs a failed read and leaves the detail page without the prompt', async () => {
-    const result = await readPostPromptFacts(tableDb({ data: null, error: { code: '500', message: 'down' } }).client, VERSION);
+  it('returns null for an unknown source', async () => {
+    expect(await readPostPromptFacts(tableDb({ data: { slug: 's', title: 'T', version: 1, source: 'legacy' }, error: null }).client, VERSION)).toBeNull();
+    expect(loggerError).not.toHaveBeenCalled();
+  });
+
+  it('logs a failed read at error level and leaves the detail page without the prompt', async () => {
+    const error = { code: '42501', message: 'permission denied for table prompt_versions' };
+    const result = await readPostPromptFacts(tableDb({ data: null, error }).client, VERSION);
     expect(result).toBeNull();
-    expect(loggerWarn).toHaveBeenCalledWith('[prompt-versions] post prompt lookup failed', { versionId: VERSION, code: '500', message: 'down' });
+    expect(loggerError).toHaveBeenCalledWith('[prompt-versions] post prompt lookup failed', error, { versionId: VERSION, code: '42501' });
+    expect(loggerWarn).not.toHaveBeenCalled();
   });
 });
