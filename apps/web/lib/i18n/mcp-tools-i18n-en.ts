@@ -7,7 +7,7 @@ export const mcpToolDescEn = {
   toolDescVoices: 'House voices, previews and voice clones',
   toolDescAccounts: 'Connect accounts and choose where a persona publishes',
   toolDescToolConfig: 'Saved search and stock tool setup — keys stored encrypted, never shown back',
-  toolDescPromptLibrary: 'Your own prompts: write, make public or private, delete',
+  toolDescPromptLibrary: 'Your own prompts: write, make public or private, delete, list old versions and restore one',
   toolDescSchedules: 'Your scheduled posts: list, cancel, edit',
   toolDescPosts: 'Your upcoming and published posts',
   toolDescInsights: 'Post metrics, YouTube retention curves and public read-only share links',

@@ -9,7 +9,13 @@ import { logger } from '@/lib/logger';
 import { applyRateLimit, type RateLimitProfile } from '@/lib/rate-limit';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { UserPromptStoreError, type UserPromptRow } from '@/lib/user-prompts';
-import { ListPromptsQuerySchema, PromptVisibilitySchema, type PromptSource, type PromptVisibility } from '@/lib/contracts/prompts';
+import {
+  ListPromptsQuerySchema,
+  PromptVisibilitySchema,
+  USER_PROMPT_SLUG_PATTERN,
+  type PromptSource,
+  type PromptVisibility,
+} from '@/lib/contracts/prompts';
 import type { PromptListFilter } from '@/lib/prompt-search';
 import type { PromptVersionRef } from '@/lib/prompt-versions';
 
@@ -84,6 +90,31 @@ export async function readJsonBody<Schema extends z.ZodType>(
       field,
     }),
   };
+}
+
+export async function readPromptSlug(params: Promise<{ slug: string }>, route: string): Promise<string | NextResponse> {
+  const { slug: rawSlug } = await params;
+  try {
+    return decodeURIComponent(rawSlug);
+  } catch {
+    return apiErrorResponse(400, 'Malformed prompt slug.', { route, code: ERROR_CODES.VALIDATION_FAILED });
+  }
+}
+
+export async function resolvePromptOwnerSlug(
+  request: Request,
+  params: Promise<{ slug: string }>,
+  route: string,
+  limit: RateLimitProfile,
+): Promise<{ userId: string; slug: string } | NextResponse> {
+  const caller = await resolvePromptCaller(request, route, limit, { allowAnonymous: false });
+  if (caller instanceof NextResponse) return caller;
+  const owner = requireOwner(caller, route);
+  if (owner instanceof NextResponse) return owner;
+  const slug = await readPromptSlug(params, route);
+  if (slug instanceof NextResponse) return slug;
+  if (!USER_PROMPT_SLUG_PATTERN.test(slug)) return promptNotFound(route);
+  return { userId: owner.userId, slug };
 }
 
 export function promptNotFound(route: string): NextResponse {

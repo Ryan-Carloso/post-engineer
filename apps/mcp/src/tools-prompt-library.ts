@@ -1,7 +1,12 @@
 import { z } from 'zod';
 import type { PostEngineerClient } from './client.js';
-import { createUserPrompt, deleteUserPrompt, updateUserPrompt } from './client-prompt-library.js';
-import { PROMPT_VISIBILITIES, USER_PROMPT_LIMITS, USER_PROMPT_SLUG_PATTERN } from './contracts/prompts.js';
+import { createUserPrompt, deleteUserPrompt, listPromptVersions, restorePromptVersion, updateUserPrompt } from './client-prompt-library.js';
+import {
+  PROMPT_VERSION_LIST_LIMITS,
+  PROMPT_VISIBILITIES,
+  USER_PROMPT_LIMITS,
+  USER_PROMPT_SLUG_PATTERN,
+} from './contracts/prompts.js';
 import { handleLibraryCall, type McpToolResponse } from './tools-call.js';
 
 const SlugField = z
@@ -38,6 +43,36 @@ export const UpdatePromptShape = {
 
 export const DeletePromptShape = { slug: SlugField };
 
+const VersionField = z.number().int().min(1).max(999_999_999);
+
+export const VersionsPromptShape = {
+  slug: SlugField,
+  version: VersionField.optional().describe(
+    'Read the full text of this version. Leave it out to list the versions, newest first, with a short preview each.',
+  ),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(PROMPT_VERSION_LIST_LIMITS.max)
+    .optional()
+    .describe(`How many versions to list (default ${PROMPT_VERSION_LIST_LIMITS.default}, max ${PROMPT_VERSION_LIST_LIMITS.max}).`),
+  before: z
+    .number()
+    .int()
+    .min(2)
+    .optional()
+    .describe('List versions older than this one. Pass the nextCursor of the previous page.'),
+};
+
+export const RestorePromptShape = {
+  slug: SlugField,
+  version: VersionField.describe('The version whose text becomes the current text.'),
+  expectedCurrentVersion: VersionField.describe(
+    'The currentVersion you saw in versions. The restore is refused when the prompt changed since.',
+  ),
+};
+
 function invalid(action: string, message: string): McpToolResponse {
   return { content: [{ type: 'text', text: `Error in prompt_library · ${action}: ${message}` }], isError: true };
 }
@@ -65,4 +100,26 @@ export async function handleDeletePrompt(
   args: z.infer<z.ZodObject<typeof DeletePromptShape>>,
 ): Promise<McpToolResponse> {
   return handleLibraryCall(() => deleteUserPrompt(client, args.slug), 'deleting prompt', 'Prompt deleted');
+}
+
+export async function handleListPromptVersions(
+  client: PostEngineerClient,
+  args: z.infer<z.ZodObject<typeof VersionsPromptShape>>,
+): Promise<McpToolResponse> {
+  const { slug, ...options } = args;
+  if (options.version !== undefined && (options.limit !== undefined || options.before !== undefined)) {
+    return invalid('versions', 'version reads one version; limit and before page the list. Send one or the other.');
+  }
+  return handleLibraryCall(() => listPromptVersions(client, slug, options), 'listing prompt versions');
+}
+
+export async function handleRestorePrompt(
+  client: PostEngineerClient,
+  args: z.infer<z.ZodObject<typeof RestorePromptShape>>,
+): Promise<McpToolResponse> {
+  return handleLibraryCall(
+    () => restorePromptVersion(client, args.slug, args.version, args.expectedCurrentVersion),
+    'restoring prompt version',
+    (result) => (result.restored ? `Prompt restored as version ${result.prompt.version}` : 'Already the current text; nothing changed'),
+  );
 }

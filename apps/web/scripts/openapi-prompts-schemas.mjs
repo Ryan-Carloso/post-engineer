@@ -52,6 +52,35 @@ export function promptOperationSchemas({ success, object, str }) {
   const description = { type: 'string', maxLength: 500 };
   const text = { type: 'string', minLength: 1, maxLength: 20000 };
   const owned = { 403: 'A persona-scoped API key cannot manage prompts.', 404: 'Unknown prompt, or not yours.' };
+  const historyOwned = {
+    403: 'A persona-scoped API key cannot manage prompts.',
+    404: 'Unknown prompt, not yours, or unknown version (PROMPT_NOT_FOUND, PROMPT_VERSION_NOT_FOUND). The history is owner-only: a public prompt of another user has none to read.',
+  };
+  const versionId = { type: 'string', format: 'uuid' };
+  const versionSummary = object(
+    {
+      versionId,
+      version: { type: 'integer', minimum: 1 },
+      title: { ...str, description: 'The title the prompt had when this version was saved.' },
+      createdAt: { type: 'string', format: 'date-time' },
+      preview: { ...str, description: 'The first 280 characters of the text.' },
+      previewTruncated: { type: 'boolean', description: 'true when the text is longer than the preview.' },
+      bodyLength: { type: 'integer', minimum: 1, description: 'Length of the full text.' },
+      current: { type: 'boolean', description: 'true for the version the prompt text is now.' },
+    },
+    ['versionId', 'version', 'title', 'createdAt', 'preview', 'previewTruncated', 'bodyLength', 'current'],
+  );
+  const versionDetail = object(
+    {
+      versionId,
+      version: { type: 'integer', minimum: 1 },
+      title: str,
+      createdAt: { type: 'string', format: 'date-time' },
+      body: { ...str, description: 'The full text of this version.' },
+      current: { type: 'boolean' },
+    },
+    ['versionId', 'version', 'title', 'createdAt', 'body', 'current'],
+  );
   const taken = 'The slug is already yours, or used by another public prompt (PROMPT_SLUG_TAKEN).';
   return {
     'GET /api/prompts': {
@@ -70,6 +99,33 @@ export function promptOperationSchemas({ success, object, str }) {
       extraResponses: { ...owned, 409: taken },
     },
     'DELETE /api/prompts/[slug]': { response: success({}), extraResponses: owned },
+    'GET /api/prompts/[slug]/versions': {
+      query: [{ name: 'limit', required: false }, { name: 'before', required: false }],
+      description:
+        'Owner-only. Lists the saved texts of your own prompt, newest first. limit is 1 to 50 (default 20). before is a version number of 2 or more: pass nextCursor to read the next page.',
+      response: success({
+        currentVersion: { type: 'integer', minimum: 1 },
+        versions: { type: 'array', items: versionSummary },
+        truncated: { type: 'boolean', description: 'true when older versions remain.' },
+        nextCursor: { type: 'integer', nullable: true, description: 'Pass it as before to read the next page; null on the last page.' },
+      }),
+      extraResponses: historyOwned,
+    },
+    'GET /api/prompts/[slug]/versions/[version]': {
+      description: 'Owner-only. Reads one saved text of your own prompt in full.',
+      response: success({ version: versionDetail }),
+      extraResponses: historyOwned,
+    },
+    'POST /api/prompts/[slug]/versions/[version]/restore': {
+      description:
+        'Owner-only. Makes an old version the current text by saving it as a new version; the title stays. Experiment results count the new version separately from the old one. restored is false, and nothing is written, when the text already is the current one.',
+      request: {
+        ...object({ expectedCurrentVersion: { type: 'integer', minimum: 1, description: 'The currentVersion you read from the list.' } }, ['expectedCurrentVersion']),
+        additionalProperties: false,
+      },
+      response: success({ restored: { type: 'boolean' }, prompt: detail }),
+      extraResponses: { ...historyOwned, 409: 'The prompt changed since expectedCurrentVersion (PROMPT_VERSION_CONFLICT). Read the list again.' },
+    },
     'GET /api/experiments': {
       query: [{ name: 'window', required: false, enum: ['24h', '7d', '28d'] }],
       response: success({
