@@ -69,7 +69,9 @@ describe('Select', () => {
     await openSelect();
     const item = screen.getByRole('option', { name: 'YouTube' });
     expect(item.className).toContain('pl-8');
-    expect(item.className).toContain('focus:bg-accent');
+    expect(item.className).toContain('focus:bg-sunken');
+    expect(item.className).toContain('focus:text-primary');
+    expect(item.className).not.toContain('focus:bg-accent');
     const user = userEvent.setup();
     await user.click(item);
     expect(screen.getByRole('combobox')).toHaveTextContent('YouTube');

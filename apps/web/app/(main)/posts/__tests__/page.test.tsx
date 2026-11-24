@@ -180,9 +180,9 @@ describe('PostsPage', () => {
     expect(row.querySelectorAll('[role="img"]')).toHaveLength(2);
     expect(row.querySelector('[aria-label="youtube"]')).not.toBeNull();
     expect(row.querySelector('[aria-label="instagram"]')).not.toBeNull();
-    await user.click(screen.getByLabelText('posts.filterAccount'));
-    expect(screen.getAllByText('Europa Na Estrada').length).toBe(1);
-    expect(screen.queryByText('Past topic')).not.toBeInTheDocument();
+    await user.click(screen.getByLabelText('posts.filterPersona'));
+    expect(screen.getByRole('option', { name: 'Viva Leve' })).toBeInTheDocument();
+    expect(dayPanelCardText('Upcoming topic')).toBeInTheDocument();
   });
 
   it('shows the account notice on a publishing card before the slot is finished', () => {
@@ -325,27 +325,27 @@ describe('PostsPage', () => {
     expect(screen.queryByRole('button', { name: 'posts.clearFilters' })).not.toBeInTheDocument();
   });
 
-  it('filters slots by account', async () => {
+  it('filters slots by persona', async () => {
     const user = userEvent.setup();
     render(<PostsPage />);
 
     const selects = screen.getAllByRole('combobox');
     await user.click(selects[1]);
-    await user.click(screen.getByRole('option', { name: '@vivalave' }));
+    await user.click(screen.getByRole('option', { name: 'Viva Leve' }));
 
     expect(dayPanelCardText('Upcoming topic')).toBeInTheDocument();
   });
 
-  it('hides slots when the schedule does not target the filtered account', async () => {
+  it('hides slots when the schedule belongs to another persona', async () => {
     const user = userEvent.setup();
     mockQueries({
-      schedules: [{ ...SCHEDULE, youtubeAccountIds: [], instagramAccountIds: [] }],
+      schedules: [{ ...SCHEDULE, personaId: 'p2' }],
     });
     render(<PostsPage />);
 
     const selects = screen.getAllByRole('combobox');
     await user.click(selects[1]);
-    await user.click(screen.getByRole('option', { name: '@vivalave' }));
+    await user.click(screen.getByRole('option', { name: 'Viva Leve' }));
 
     await waitFor(() => {
       expect(screen.queryByText('Upcoming topic')).not.toBeInTheDocument();
@@ -551,32 +551,32 @@ describe('PostsPage', () => {
     expect(personasRefetch).toHaveBeenCalledTimes(1);
   });
 
-  it('resets the account filter when switching to a network the account does not belong to', async () => {
+  it('keeps the persona filter when switching networks', async () => {
     const user = userEvent.setup();
     render(<PostsPage />);
 
-    await user.click(screen.getByLabelText('posts.filterAccount'));
-    await user.click(screen.getByRole('option', { name: 'Europa Na Estrada' }));
-    expect(screen.getByLabelText('posts.filterAccount')).toHaveTextContent('Europa Na Estrada');
+    await user.click(screen.getByLabelText('posts.filterPersona'));
+    await user.click(screen.getByRole('option', { name: 'Viva Leve' }));
+    expect(screen.getByLabelText('posts.filterPersona')).toHaveTextContent('Viva Leve');
 
     await user.click(screen.getByLabelText('posts.filterProvider'));
     await user.click(screen.getByRole('option', { name: 'Instagram' }));
-    expect(screen.getByLabelText('posts.filterAccount')).toHaveTextContent('posts.allAccounts');
+    expect(screen.getByLabelText('posts.filterPersona')).toHaveTextContent('Viva Leve');
 
     await user.click(screen.getByLabelText('posts.filterProvider'));
     await user.click(screen.getByRole('option', { name: 'posts.allProviders' }));
-    expect(screen.getByLabelText('posts.filterAccount')).toHaveTextContent('posts.allAccounts');
+    expect(screen.getByLabelText('posts.filterPersona')).toHaveTextContent('Viva Leve');
   });
 
-  it('keeps the account filter when switching to a network the account belongs to', async () => {
+  it('combines the persona and network filters', async () => {
     const user = userEvent.setup();
     render(<PostsPage />);
 
-    await user.click(screen.getByLabelText('posts.filterAccount'));
-    await user.click(screen.getByRole('option', { name: 'Europa Na Estrada' }));
+    await user.click(screen.getByLabelText('posts.filterPersona'));
+    await user.click(screen.getByRole('option', { name: 'Viva Leve' }));
     await user.click(screen.getByLabelText('posts.filterProvider'));
-    await user.click(screen.getByRole('option', { name: 'YouTube' }));
-    expect(screen.getByLabelText('posts.filterAccount')).toHaveTextContent('Europa Na Estrada');
+    await user.click(screen.getByRole('option', { name: 'LinkedIn' }));
+    expect(screen.queryByText('Upcoming topic')).not.toBeInTheDocument();
   });
 });
 
@@ -1007,7 +1007,7 @@ describe('PostsPage calendar view', () => {
       refetch: vi.fn(),
     } as never);
     render(<PostsPage />);
-    for (const select of [screen.getByLabelText('posts.filterProvider'), screen.getByLabelText('posts.filterAccount')]) {
+    for (const select of [screen.getByLabelText('posts.filterProvider'), screen.getByLabelText('posts.filterPersona')]) {
       expect(select).toBeDisabled();
       expect(select.className.split(/\s+/)).toContain('saturate-50');
       expect(select.className.split(/\s+/)).toContain('[&>svg]:hidden');
