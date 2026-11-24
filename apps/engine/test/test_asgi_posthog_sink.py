@@ -442,7 +442,7 @@ class StartupWarmClientTests(unittest.TestCase):
             ) as resume,
         ):
             asgi.startup_event()
-        resume.assert_called_once_with(mock_state)
+        resume.assert_called_once_with(mock_state, slot_store=None)
         mock_state.reconcile_orphaned_tasks.assert_called_once_with()
 
     def test_startup_event_survives_a_failed_cpu_resume(self):

@@ -23,6 +23,7 @@ from typing import Any, Callable
 from loguru import logger
 
 from app.models import const
+from app.services.fill_schedule.constants import SLOT_GENERATING, SLOT_PENDING
 from app.services.state_persistence import persist_state_update
 
 APP_NAME_ENV = "MPT_CPU_WORKER_APP_NAME"
@@ -127,11 +128,8 @@ def job_params_of(body: Any) -> dict[str, Any]:
 
 
 def _clear_remote(state: Any, task_id: str) -> None:
-    state.update_task(
-        task_id,
-        remote_worker="",
-        remote_call_id="",
-        job_params=None,
+    persist_state_update(
+        state, task_id, remote_worker="", remote_call_id="", job_params=None
     )
 
 
@@ -148,6 +146,11 @@ def _cancel_modal_call(call_id: str) -> None:
         logger.warning(
             f"modal cpu cancel failed for {call_id}: {type(exc).__name__}"
         )
+
+
+def cancel_remote_call(call_id: str) -> None:
+    """Cancel a spawned Modal call. Best effort: never raises."""
+    _cancel_modal_call(call_id)
 
 
 def _untrack_spawned_call(state: Any, task_id: str, call_id: str) -> None:
@@ -420,11 +423,15 @@ def _remote_rows(state: Any) -> list[dict[str, Any]]:
     return [row for row in rows if isinstance(row, dict)]
 
 
-def resume_unspawned_cpu_jobs(state: Any, spawn: Spawn | None = None) -> int:
+def resume_unspawned_cpu_jobs(
+    state: Any, spawn: Spawn | None = None, slot_store: Any = None
+) -> int:
     """Spawn rows that were marked for Modal and never received a call id.
 
     Rows that already have a call id are left for reconcile, which skips
-    them while the call is running.
+    them while the call is running. Rows whose batch slot is no longer
+    pending or generating are skipped: the slot was refunded or finished
+    without this row, so spawning it now would render a dead slot.
     """
     started = 0
     for row in _remote_rows(state):
@@ -442,6 +449,14 @@ def resume_unspawned_cpu_jobs(state: Any, spawn: Spawn | None = None) -> int:
         task_id = row.get("task_id")
         if not isinstance(task_id, str) or not task_id:
             continue
+        slot_id = data.get("slot_id")
+        if slot_store is not None and isinstance(slot_id, str) and slot_id:
+            slot = slot_store.get_slot(slot_id)
+            if isinstance(slot, dict) and slot.get("status") not in (
+                SLOT_PENDING,
+                SLOT_GENERATING,
+            ):
+                continue
         pipeline = data.get("pipeline")
         stop_at = pipeline if isinstance(pipeline, str) and pipeline else "video"
         try:

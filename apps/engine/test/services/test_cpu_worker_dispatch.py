@@ -645,3 +645,163 @@ def test_custom_audio_file_stays_on_the_vps() -> None:
         custom_audio_file="narration.mp3",
     )
     assert dispatch.should_dispatch(request, "video") is False
+
+
+def test_live_modal_worker_claims_its_pending_slot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.services.fill_schedule.constants import (
+        SLOT_GENERATING,
+        SLOT_PENDING,
+    )
+
+    monkeypatch.setattr(dispatch, "modal_call_status", lambda _call_id: "running")
+    data = {
+        "remote_worker": dispatch.REMOTE_WORKER_VALUE,
+        "remote_call_id": "fc-live",
+        "stage": "render",
+        "slot_id": "slot-1",
+    }
+
+    class _Store:
+        def __init__(self) -> None:
+            self.slots = {"slot-1": {"status": SLOT_PENDING}}
+            self.updates: list[tuple[str, dict[str, object]]] = []
+
+        def get_slot(self, slot_id: str) -> dict[str, object] | None:
+            return self.slots.get(slot_id)
+
+        def update_slot(self, slot_id: str, **fields: object) -> None:
+            self.updates.append((slot_id, fields))
+            self.slots[slot_id].update(fields)
+
+    store = _Store()
+    assert triage_orphan(MemoryState(), "task-live", data, store) is True
+    assert store.updates == [
+        ("slot-1", {"status": SLOT_GENERATING, "task_id": "task-live"})
+    ]
+    assert store.slots["slot-1"]["status"] == SLOT_GENERATING
+
+
+def test_live_modal_worker_leaves_a_generating_slot_alone(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.services.fill_schedule.constants import SLOT_GENERATING
+
+    monkeypatch.setattr(dispatch, "modal_call_status", lambda _call_id: "running")
+    data = {
+        "remote_worker": dispatch.REMOTE_WORKER_VALUE,
+        "remote_call_id": "fc-live",
+        "stage": "render",
+        "slot_id": "slot-1",
+    }
+
+    class _Store:
+        def __init__(self) -> None:
+            self.slots = {"slot-1": {"status": SLOT_GENERATING}}
+            self.updates: list[tuple[str, dict[str, object]]] = []
+
+        def get_slot(self, slot_id: str) -> dict[str, object] | None:
+            return self.slots.get(slot_id)
+
+        def update_slot(self, slot_id: str, **fields: object) -> None:
+            self.updates.append((slot_id, fields))
+
+    store = _Store()
+    assert triage_orphan(MemoryState(), "task-live", data, store) is True
+    assert store.updates == []
+
+
+class _ClearWriteFailsState(MemoryState):
+    """Refuses the write that clears the remote marker, accepts the rest."""
+
+    def update_task(self, task_id: str, **kwargs: object) -> None:
+        if kwargs.get("remote_worker") == "" and kwargs.get("job_params") is None:
+            raise RuntimeError("supabase down")
+        super().update_task(task_id, **kwargs)
+
+
+def test_spawn_failure_with_a_failing_clear_still_falls_back_locally(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _no_retry_sleep(monkeypatch)
+    state = _ClearWriteFailsState()
+    state.update_task("task-1", state=3, progress=0)
+
+    def boom(task_id: str, params: dict[str, object], stop_at: str) -> str:
+        raise RuntimeError("modal down")
+
+    spawned, accepted = dispatch.try_remote_dispatch(
+        state, "task-1", _faceless(), "video", spawn=boom
+    )
+    assert spawned is False
+    assert accepted is False
+    saved = state.get_task("task-1")
+    assert saved is not None
+    assert saved.get("remote_worker") == dispatch.REMOTE_WORKER_VALUE
+
+
+def test_resume_skips_a_row_whose_slot_failed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _no_retry_sleep(monkeypatch)
+    rows = [
+        {
+            "task_id": "failed-slot",
+            "data": {
+                "remote_worker": dispatch.REMOTE_WORKER_VALUE,
+                "remote_call_id": "",
+                "job_params": _faceless(),
+                "pipeline": "video",
+                "slot_id": "slot-failed",
+            },
+        },
+        {
+            "task_id": "pending-slot",
+            "data": {
+                "remote_worker": dispatch.REMOTE_WORKER_VALUE,
+                "remote_call_id": "",
+                "job_params": _faceless(),
+                "pipeline": "video",
+                "slot_id": "slot-pending",
+            },
+        },
+        {
+            "task_id": "direct-task",
+            "data": {
+                "remote_worker": dispatch.REMOTE_WORKER_VALUE,
+                "remote_call_id": "",
+                "job_params": _faceless(),
+                "pipeline": "video",
+            },
+        },
+    ]
+
+    class _Response:
+        def json(self) -> list[dict[str, object]]:
+            return rows
+
+    class _State(MemoryState):
+        def _request(self, method: str, query: str) -> _Response:
+            return _Response()
+
+    class _Store:
+        def get_slot(self, slot_id: str) -> dict[str, object] | None:
+            return {
+                "slot-failed": {"status": "failed"},
+                "slot-pending": {"status": "pending"},
+            }.get(slot_id)
+
+    spawned: list[str] = []
+
+    def _spawn(task_id: str, params: dict[str, object], stop_at: str) -> str:
+        spawned.append(task_id)
+        return f"fc-{task_id}"
+
+    started = dispatch.resume_unspawned_cpu_jobs(
+        _State(),
+        spawn=_spawn,
+        slot_store=_Store(),
+    )
+    assert started == 2
+    assert spawned == ["pending-slot", "direct-task"]

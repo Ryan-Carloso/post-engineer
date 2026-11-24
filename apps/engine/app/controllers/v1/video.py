@@ -17,6 +17,7 @@ from app.controllers.manager.base_manager import TaskQueueFullError
 from app.controllers.manager.memory_manager import InMemoryTaskManager
 from app.controllers.manager.redis_manager import RedisTaskManager
 from app.controllers.v1.base import new_router
+from app.controllers.v1.task_file_uri import task_file_to_uri
 from app.models.exception import HttpException
 from app.models import const
 from app.models.media_responses import BgmRetrieveResponse, BgmUploadResponse
@@ -206,34 +207,6 @@ def _validate_request_shape(
     return _task_id_from_resolved_path(tasks_dir, resolved)
 
 
-def _task_file_to_uri(file: str, endpoint: str, task_dir: str, request_id: str) -> str:
-    if not isinstance(file, str):
-        return file
-
-    if file.startswith(("http://", "https://")):
-        return file
-
-    try:
-        file_security.resolve_path_within_directory(task_dir, file)
-    except ValueError as exc:
-        logger.warning(
-            f"skip unsafe task output path, request_id: {request_id}, path: {file}, "
-            f"error: {str(exc)}"
-        )
-        return file
-
-    logical_path = file
-    if os.path.isabs(logical_path):
-        relative_path = os.path.relpath(logical_path, task_dir)
-    else:
-        relative_path = os.path.relpath(os.path.join(task_dir, logical_path), task_dir)
-    relative_path = relative_path.replace("\\", "/")
-    uri_path = f"api/v1/download/{relative_path}"
-    if endpoint:
-        return f"{endpoint.rstrip('/')}/{uri_path}"
-    return f"/{uri_path}"
-
-
 def _task_id_from_resolved_path(task_dir: str, resolved_path: str) -> str:
     relative_path = os.path.relpath(resolved_path, task_dir)
     parts = pathlib.Path(relative_path).parts
@@ -377,17 +350,17 @@ def get_task(
 
         if "videos" in task:
             response_task["videos"] = [
-                _task_file_to_uri(v, endpoint, task_dir, request_id)
+                task_file_to_uri(v, endpoint, task_dir, request_id)
                 for v in task["videos"]
             ]
         if "combined_videos" in task:
             response_task["combined_videos"] = [
-                _task_file_to_uri(v, endpoint, task_dir, request_id)
+                task_file_to_uri(v, endpoint, task_dir, request_id)
                 for v in task["combined_videos"]
             ]
         final_videos = task.get("videos") or []
         if final_videos:
-            response_task["final_video"] = _task_file_to_uri(
+            response_task["final_video"] = task_file_to_uri(
                 final_videos[0], endpoint, task_dir, request_id
             )
         response_task["has_archive"] = bool(task.get("video_storage_path"))
@@ -480,6 +453,15 @@ def delete_video(request: Request, task_id: str = Path(..., description="Task ID
     auth = base.get_auth_context(request)
     task = sm.state.get_task(task_id, user_id=auth.user_id)
     if task:
+        from app.services.cpu_worker_dispatch import (
+            REMOTE_WORKER_VALUE,
+            cancel_remote_call,
+        )
+
+        if task.get("remote_worker") == REMOTE_WORKER_VALUE:
+            call_id = task.get("remote_call_id")
+            if isinstance(call_id, str) and call_id:
+                cancel_remote_call(call_id)
         sm.state.delete_task(task_id)
         remove_task_directory(task_id)
         logger.success(f"video deleted: task_id={task_id}")
