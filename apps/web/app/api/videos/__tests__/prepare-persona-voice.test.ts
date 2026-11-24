@@ -1,3 +1,4 @@
+import { inspect } from 'node:util';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
@@ -28,6 +29,7 @@ import {
   preparePersona,
 } from '../generate-and-schedule/prepare-persona';
 import { VOICE_FALLBACK_REASONS } from '@/lib/voice-fallback';
+import { logger } from '@/lib/logger';
 
 const USER_ID = 'user-uuid-1';
 const PERSONA_ID = 'persona-1';
@@ -185,5 +187,86 @@ describe('preparePersona face-mode photo check', () => {
   it('passes a face mode when a library image is pinned (it replaces the persona photo)', async () => {
     const result = await preparePersona(photoLessClient(), USER_ID, PERSONA_ID, { videoType: 'hook_lipsync', imageId: 'img-1' });
     expect(result).not.toBeInstanceOf(Response);
+  });
+});
+
+describe('persistVoiceSwap DB-failure logging', () => {
+  const ROW_SENTINEL = 'persist-swap-row-sentinel-3b9e';
+  const INFO = {
+    fromVoice: 'energetic',
+    toVoice: 'chatterbox:kokoro_af_heart',
+    reason: VOICE_FALLBACK_REASONS.UNKNOWN_VOICE,
+  };
+
+  function failingUpdateClient(error: unknown): SupabaseClient {
+    const chain: Record<string, unknown> = {
+      update: () => chain,
+      eq: () => chain,
+      then: (resolve: (v: unknown) => void) =>
+        Promise.resolve({ data: null, error }).then(resolve),
+    };
+    return { from: vi.fn(() => chain) } as unknown as SupabaseClient;
+  }
+
+  function throwingUpdateClient(thrown: unknown): SupabaseClient {
+    let eqCount = 0;
+    const chain: Record<string, unknown> = {
+      update: () => chain,
+      eq: () => {
+        eqCount += 1;
+        if (eqCount === 2) throw thrown;
+        return chain;
+      },
+      then: (resolve: (v: unknown) => void) =>
+        Promise.resolve({ data: null, error: null }).then(resolve),
+    };
+    return { from: vi.fn(() => chain) } as unknown as SupabaseClient;
+  }
+
+  it('logs only the error code when the voice-swap update hits a constraint', async () => {
+    vi.mocked(logger.error).mockClear();
+    await persistVoiceSwap(
+      failingUpdateClient({
+        code: '23514',
+        message: 'new row violates check constraint "personas_identity_card_object_check"',
+        details: `Failing row contains (${PERSONA_ID}, ${USER_ID}, ${ROW_SENTINEL})`,
+      }),
+      USER_ID,
+      PERSONA_ID,
+      INFO,
+    );
+    expect(vi.mocked(logger.error)).toHaveBeenCalledWith(
+      '[generate-and-schedule] failed to persist the swapped persona voice',
+      { personaId: PERSONA_ID, userId: USER_ID, code: '23514' },
+    );
+    expect(inspect(vi.mocked(logger.error).mock.calls, { depth: 10 })).not.toContain(ROW_SENTINEL);
+  });
+
+  it('logs only the error code when the voice-swap update throws', async () => {
+    vi.mocked(logger.error).mockClear();
+    await persistVoiceSwap(
+      throwingUpdateClient({
+        code: '23514',
+        message: `update failed: Failing row contains (${ROW_SENTINEL})`,
+        details: `Failing row contains (${PERSONA_ID}, ${USER_ID}, ${ROW_SENTINEL})`,
+      }),
+      USER_ID,
+      PERSONA_ID,
+      INFO,
+    );
+    expect(vi.mocked(logger.error)).toHaveBeenCalledWith(
+      '[generate-and-schedule] persistVoiceSwap threw; swap persisted no-op',
+      { personaId: PERSONA_ID, userId: USER_ID, code: '23514' },
+    );
+    expect(inspect(vi.mocked(logger.error).mock.calls, { depth: 10 })).not.toContain(ROW_SENTINEL);
+  });
+
+  it('logs no code when the thrown value carries none', async () => {
+    vi.mocked(logger.error).mockClear();
+    await persistVoiceSwap(throwingUpdateClient(new Error('boom')), USER_ID, PERSONA_ID, INFO);
+    expect(vi.mocked(logger.error)).toHaveBeenCalledWith(
+      '[generate-and-schedule] persistVoiceSwap threw; swap persisted no-op',
+      { personaId: PERSONA_ID, userId: USER_ID },
+    );
   });
 });
