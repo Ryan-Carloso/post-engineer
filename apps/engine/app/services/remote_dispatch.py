@@ -59,7 +59,7 @@ def poll_seconds() -> float:
 
 
 def max_wait_seconds() -> float:
-    """Seconds a waiter tolerates Modal going unanswered.
+    """Seconds in a row a waiter tolerates Modal going unanswered.
 
     The worker's longest timeout plus one hour of grace, so the dead waiter
     never beats a render that is still going.
@@ -187,8 +187,8 @@ def wait_for_call(
     from app.services.task_cancellation import is_cancelled
 
     reason = "the modal call ended"
-    started = now()
     limit = max_wait_seconds()
+    unreachable_since: float | None = None
     try:
         modal = modal_module if modal_module is not None else _modal()
         call = modal.FunctionCall.from_id(call_id)
@@ -203,6 +203,7 @@ def wait_for_call(
             call.get(timeout=poll_seconds())
             break
         except TimeoutError:
+            unreachable_since = None
             continue
         except modal.exception.InputCancellation:
             reason = "the modal call was cancelled"
@@ -210,8 +211,10 @@ def wait_for_call(
         except Exception as exc:
             if modal_unreachable(modal, exc):
                 logger.warning(f"task {task_id}: polling modal call {call_id} failed: {exc}")
+                if unreachable_since is None:
+                    unreachable_since = now()
                 sleep(poll_seconds())
-                if now() - started >= limit:
+                if now() - unreachable_since >= limit:
                     reason = f"modal did not answer within {int(limit)} seconds"
                     break
                 continue

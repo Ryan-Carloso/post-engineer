@@ -296,6 +296,40 @@ class WaitForCallTests(unittest.TestCase):
         fail.assert_not_called()
         self.assertEqual(call.get.call_count, 5)
 
+    def test_the_deadline_counts_the_outage_not_the_whole_wait(self):
+        clock = {"t": 0.0}
+        outcomes: list[BaseException | None] = [TimeoutError()] * 10
+        outcomes += [modal.exception.ConnectionError("down")] * 3
+        outcomes += [None]
+
+        def poll(timeout: float) -> None:
+            outcome = outcomes.pop(0)
+            if isinstance(outcome, TimeoutError):
+                clock["t"] += 10
+            if outcome is not None:
+                raise outcome
+
+        call = MagicMock()
+        call.get.side_effect = poll
+        fail = self._wait_with_clock(call, {"state": const.TASK_STATE_COMPLETE}, clock)
+        self.assertEqual(call.get.call_count, 14)
+        self.assertGreater(clock["t"], 5)
+        fail.assert_not_called()
+
+    def test_a_running_answer_resets_the_outage_clock(self):
+        clock = {"t": 0.0}
+        outcomes: list[BaseException | None] = []
+        for _ in range(3):
+            outcomes += [modal.exception.ConnectionError("down")] * 4
+            outcomes += [TimeoutError()]
+        outcomes += [None]
+
+        call = MagicMock()
+        call.get.side_effect = outcomes
+        fail = self._wait_with_clock(call, {"state": const.TASK_STATE_PROCESSING, "stage": "render"}, clock)
+        self.assertEqual(call.get.call_count, 16)
+        fail.assert_called_once_with("t-1", remote_dispatch.WORKER_STOPPED_ERROR, "params", stage="render")
+
 
 ENGINE_DIR = Path(__file__).resolve().parents[2]
 
