@@ -57,8 +57,6 @@ def test_a_caption_taller_than_the_band_stops_at_the_top_margin():
     assert y == caption_layout.MIN_MARGIN
 
 
-# --- the hook title floor ---------------------------------------------------
-
 import pytest  # noqa: E402
 
 FLOOR = 425

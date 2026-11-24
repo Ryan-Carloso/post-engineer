@@ -5,9 +5,6 @@ import { describe, expect, it } from 'vitest';
 import { findRepoRoot } from '@/test/repo-root';
 import { HOOK_TITLE_MAX_CHARS, HOOK_TITLE_MAX_WORDS, HOOK_TITLE_SECONDS } from '../generation/hook-title';
 
-// The hook title limits live in shared/script-segments/hook-title.ts. Prose that
-// states them (contract descriptions, the MCP README) is typed by hand, so each
-// copy is pinned here: change a limit and this test names the stale sentence.
 const root = findRepoRoot(import.meta.url);
 
 function linesMentioning(file: string, needle: string): string[] {

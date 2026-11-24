@@ -34,7 +34,6 @@ const REQUEST_FORWARD_FIELDS: ReadonlyArray<EngineVideoRequestField> = [
   'segments',
   'lipsync_photos',
   'cta_type',
-  // The on-screen headline of the first seconds; validated before any charge.
   'hook_title',
 ];
 const REQUEST_FORWARD_FIELD_SET: ReadonlySet<string> = new Set(REQUEST_FORWARD_FIELDS);

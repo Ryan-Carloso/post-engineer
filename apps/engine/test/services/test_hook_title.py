@@ -1,13 +1,23 @@
 """Hook title text rules and their sync with the shared TypeScript limits."""
 
 import re
+import tempfile
 from pathlib import Path
 
 import pytest
 
 from app.services import hook_title
 
-SHARED = Path(__file__).resolve().parents[4] / "shared" / "script-segments" / "hook-title.ts"
+
+def _repo_root(start: Path | None = None) -> Path:
+    here = (start if start is not None else Path(__file__)).resolve()
+    for parent in (*([here] if here.is_dir() else []), *here.parents):
+        if (parent / "shared" / "script-segments" / "hook-title.ts").is_file():
+            return parent
+    raise AssertionError("repo root not found from the test file location")
+
+
+SHARED = _repo_root() / "shared" / "script-segments" / "hook-title.ts"
 
 
 def _shared_number(name: str) -> float:
@@ -33,6 +43,18 @@ def test_codes_match_the_shared_typescript_source():
     assert hook_title.CODE_TOO_MANY_WORDS == _shared_code("tooManyWords")
     assert hook_title.CODE_TOO_LONG == _shared_code("tooLong")
     assert hook_title.CODE_INVALID_CHARS == _shared_code("invalidChars")
+
+
+def test_repo_root_walks_up_past_mutants_tree():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "shared" / "script-segments").mkdir(parents=True)
+        (root / "shared" / "script-segments" / "hook-title.ts").write_text("// fake")
+        fake_test = (
+            root / "apps" / "engine" / "mutants" / "test" / "services" / "test_hook_title.py"
+        )
+        fake_test.parent.mkdir(parents=True)
+        assert _repo_root(fake_test) == root
 
 
 def test_a_title_at_exactly_the_limits_passes():
@@ -87,8 +109,6 @@ def test_spaces_never_count_against_the_limits():
     assert hook_title.check_text(f"  {'a ' * 7} ") == "a a a a a a a"
 
 
-# --- drawing -------------------------------------------------------------
-
 from PIL import Image, ImageFont  # noqa: E402
 
 PORTRAIT = (1080, 1920)
@@ -138,8 +158,6 @@ def test_the_band_bottom_including_both_strokes_never_passes_the_limit(tmp_path,
     largest = hook_title.TITLE_SIZES[0]
     line = hook_title.media_overlay.line_height(_font_for(largest), 1.0)
     band_bottom = top + line + 2 * stroke
-    # Three pixels short of the largest size's real band: only the stroke at the bottom
-    # (which the old check left out) pushes it over the limit.
     limit = band_bottom - 3
     monkeypatch.setattr(hook_title, "MAX_BOTTOM_FRACTION", limit / PORTRAIT[1])
     layer, reason, out = _build(tmp_path, text="Hi")

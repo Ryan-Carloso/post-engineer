@@ -42,7 +42,6 @@ export async function handleValidateScript(
       `Script validation failed: ${result.error.field}: ${result.error.rule} Fix: ${result.error.fix}`,
     );
   }
-  // Re-checked here, not only in the zod field: a direct handler call skips the schema.
   const hookTitleCode = args.hookTitle === undefined ? null : checkHookTitle(args.hookTitle);
   if (hookTitleCode !== null) {
     return errorResponse(`Script validation failed: hookTitle: ${hookTitleIssueMessage(hookTitleCode)}`);

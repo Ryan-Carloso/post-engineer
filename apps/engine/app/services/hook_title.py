@@ -47,8 +47,6 @@ REASON_NO_FONT = "hook title not added: font unavailable"
 REASON_NO_FIT = "hook title not added: text does not fit"
 REASON_RENDER_FAILED = "hook title not added: render failed"
 
-# JS `\s` also matches U+FEFF (a byte-order mark); Python `\s` does not. Match it
-# here so a direct caller and the web API normalize to the same stored title.
 _SPACES = re.compile(r"[\s\ufeff]+")
 
 
@@ -137,8 +135,6 @@ def build_title(
     stroke = max(1, round(STROKE_WIDTH * scale))
     inner = width - 2 * round(SIDE_MARGIN * scale) - 2 * stroke
     try:
-        # The band is its lines plus a stroke above and below, so its bottom edge is
-        # `top + 2 * stroke + lines * line_height`: that is what must clear the limit.
         chosen = _choose(text, font_for, scale, inner, top + 2 * stroke, round(height * MAX_BOTTOM_FRACTION))
         if chosen is None:
             return None, REASON_NO_FIT

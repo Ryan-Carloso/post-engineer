@@ -7,10 +7,6 @@ import {
   hookTitleIssueMessage,
 } from './hook-title.js';
 
-// One zod field for the optional on-screen headline, shared by generate_video
-// (options.hookTitle) and check_script (hookTitle). The limits and codes come
-// from shared/script-segments/hook-title.ts, so a bad title is refused here
-// with the same stable HOOK_TITLE_* code the web API and the engine return.
 export const hookTitleField = z
   .string()
   .superRefine((value, ctx) => {

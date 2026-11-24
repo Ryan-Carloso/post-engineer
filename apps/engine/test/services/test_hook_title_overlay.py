@@ -197,8 +197,6 @@ def test_a_failed_overlay_leaves_no_caption_floor_for_a_title_that_is_not_on_scr
     assert segment_panels.caption_bands("t") == []
 
 
-# --- the full-frame info card moves below the title ----------------------
-
 
 def test_full_card_rect_moves_down_to_the_given_top_and_keeps_its_height():
     default = segment_panels.full_card_rect(1080, 1920)
@@ -241,8 +239,6 @@ def test_card_top_applies_only_to_a_photo_that_starts_inside_the_window(panel_st
 def test_card_top_is_none_without_a_title():
     assert hook_title.card_top(None, 0.0) is None
 
-
-# --- the materials stage ---------------------------------------------------
 
 WORDS = [("Welcome", 0.0, 0.5), ("to", 0.5, 0.7), ("Porto", 0.7, 1.2), ("Visit", 5.0, 5.4), ("Porto", 5.4, 5.9)]
 SEGMENTS = [
