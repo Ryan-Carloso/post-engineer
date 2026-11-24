@@ -10,6 +10,7 @@ import { ERROR_CODES } from '@/lib/error-codes';
 import { logger } from '@/lib/logger';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 import { parsePersonaIdQuery } from '@/lib/contracts/personas';
+import { isUuid } from '@/lib/schedule-slot-id';
 import {
   IDENTITY_CARD_MISSING_CODE,
   IDENTITY_CARD_VERSION,
@@ -94,6 +95,9 @@ async function getHandler(request: Request): Promise<NextResponse> {
   const parsed = parsePersonaIdQuery(request.url);
   if (!parsed.ok) return validationError(GET_ROUTE, parsed.error, 'personaId');
   const personaId = parsed.query.personaId;
+  if (!isUuid(personaId)) {
+    return validationError(GET_ROUTE, 'personaId must be a UUID.', 'personaId');
+  }
   if (!isPersonaAllowed(authenticated.personaIds, personaId)) return denyScope(GET_ROUTE);
 
   const loaded = await loadStoredCard(authenticated.caller, personaId, GET_ROUTE);
@@ -122,6 +126,9 @@ async function postHandler(request: Request): Promise<NextResponse> {
   const personaId = fields.personaId;
   if (typeof personaId !== 'string' || personaId.length === 0) {
     return validationError(POST_ROUTE, 'personaId is required.', 'personaId');
+  }
+  if (!isUuid(personaId)) {
+    return validationError(POST_ROUTE, 'personaId must be a UUID.', 'personaId');
   }
   if (!isPersonaAllowed(authenticated.personaIds, personaId)) return denyScope(POST_ROUTE);
   if (Object.keys(fields).some((key) => key !== 'personaId' && key !== 'scene')) {

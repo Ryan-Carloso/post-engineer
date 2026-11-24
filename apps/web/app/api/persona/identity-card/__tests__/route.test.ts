@@ -148,6 +148,14 @@ describe('GET /api/persona/identity-card', () => {
     expect((await json(res)).error).toBe('personaId is required.');
   });
 
+  it('answers 400 for a non-UUID personaId without reading the database', async () => {
+    const { client } = setup();
+    const res = await GET(getRequest('not-a-uuid'));
+    expect(res.status).toBe(400);
+    expect((await json(res)).error).toBe('personaId must be a UUID.');
+    expect(client.from).not.toHaveBeenCalled();
+  });
+
   it('answers 403 for a key scoped to other personas', async () => {
     const { client } = setup({ auth: { isApiKey: true, personaIds: ['22222222-2222-4222-8222-222222222222'] } });
     const res = await GET(getRequest());
@@ -236,6 +244,7 @@ describe('POST /api/persona/identity-card', () => {
   it.each([
     ['a non-JSON body', 'not json', true, 'Request body must be valid JSON.'],
     ['a non-object body', '[]', true, 'Request body must be a JSON object.'],
+    ['a non-UUID personaId', { personaId: 'not-a-uuid', scene: FIXTURE_SCENE }, false, 'personaId must be a UUID.'],
     ['a missing personaId', { scene: FIXTURE_SCENE }, false, 'personaId is required.'],
     ['a missing scene', { personaId: PERSONA_ID }, false, 'scene: required'],
     ['an unknown body field', { personaId: PERSONA_ID, scene: FIXTURE_SCENE, card: {} }, false, 'body: unknown field'],
