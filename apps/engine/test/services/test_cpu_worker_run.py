@@ -248,6 +248,35 @@ def test_run_one_renders_through_the_shared_pipeline(
     assert started[0][2] == "video"
 
 
+def test_run_one_populates_the_chatterbox_api_key_before_rendering(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from app.config import config as app_config
+
+    _env(monkeypatch, tmp_path)
+    monkeypatch.delenv("MPT_CHATTERBOX_API_KEY", raising=False)
+    monkeypatch.delenv("MPT_CLONED_VOICES_REGISTRY_API_KEY", raising=False)
+    monkeypatch.setitem(app_config.chatterbox, "api_key", "")
+    monkeypatch.setitem(app_config.cloned_voices, "registry_api_key", "")
+    monkeypatch.setattr(run, "start_local_tts", lambda: None)
+    monkeypatch.setattr(
+        "app.services.cloned_voices.materialize.materialize_clone",
+        lambda params, voices_dir: None,
+    )
+    seen: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        "app.services.task.start",
+        lambda task_id, request, stop_at="video": seen.append(
+            (
+                app_config.chatterbox.get("api_key", ""),
+                app_config.cloned_voices.get("registry_api_key", ""),
+            )
+        ),
+    )
+    run.run_one("task-1", _params())
+    assert seen == [("secret", "secret")]
+
+
 def test_run_one_marks_the_task_failed_and_re_raises(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

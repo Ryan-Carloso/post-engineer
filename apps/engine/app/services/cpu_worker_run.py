@@ -36,6 +36,25 @@ def prepare_worker_env() -> None:
     if not isinstance(voices, str) or not voices:
         os.environ["TTS_VOICES_DIR"] = "/tmp/tts-voices"
     os.makedirs(os.environ["TTS_VOICES_DIR"], exist_ok=True)
+    _apply_tts_env_overrides()
+
+
+def _apply_tts_env_overrides() -> None:
+    """Re-apply the TTS env overrides to the imported config.
+
+    ``app.config`` applies them once at import; the worker sets the env
+    vars here, after that import may already have run, so the config
+    dict would keep an empty api_key and the TTS server would 401.
+    """
+    from app.config import config as app_config
+
+    app_config.apply_tts_env_overrides(
+        {
+            "chatterbox": app_config.chatterbox,
+            "cloned_voices": app_config.cloned_voices,
+        },
+        os.environ,
+    )
 
 
 def _wait_until_tts_healthy(timeout_s: float = 60) -> None:
@@ -105,15 +124,16 @@ def const_complete() -> int:
 
 def run_one(task_id: str, params: dict[str, Any], stop_at: str = "video") -> None:
     """Render ``params`` for ``task_id`` and leave status on the Supabase row."""
-    from pathlib import Path
-
-    from app.services.cloned_voices.materialize import materialize_clone
-
-    from app.models.schema import TaskVideoRequest
-    from app.services.task import start
-
     try:
         prepare_worker_env()
+
+        from pathlib import Path
+
+        from app.services.cloned_voices.materialize import materialize_clone
+
+        from app.models.schema import TaskVideoRequest
+        from app.services.task import start
+
         request = TaskVideoRequest.model_validate(params)
         materialize_clone(params, Path(os.environ["TTS_VOICES_DIR"]))
         start_local_tts()
