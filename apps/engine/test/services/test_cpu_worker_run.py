@@ -322,3 +322,52 @@ def test_run_one_marks_the_task_failed_when_tts_startup_fails(
     assert len(failed) == 1
     assert failed[0][0] == "task-1"
     assert isinstance(failed[0][1], RuntimeError)
+
+
+def test_fail_if_open_retries_a_failing_first_write(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    attempts: list[dict[str, Any]] = []
+
+    class _FlakyState:
+        def get_task(self, task_id: str) -> dict[str, Any]:
+            return {"state": const.TASK_STATE_PROCESSING}
+
+        def update_task(self, task_id: str, **kwargs: Any) -> None:
+            attempts.append(kwargs)
+            if len(attempts) == 1:
+                raise RuntimeError("supabase down")
+
+    monkeypatch.setattr("app.services.state.state", _FlakyState())
+    monkeypatch.setattr(
+        "app.services.state_persistence.time.sleep", lambda _: None
+    )
+    run._fail_if_open("task-1", RuntimeError("boom"))
+    assert len(attempts) == 2
+    assert attempts[-1] == {
+        "state": const.TASK_STATE_FAILED,
+        "error": "RuntimeError",
+    }
+
+
+def test_run_one_marks_the_task_failed_when_validation_fails(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from pydantic import ValidationError
+
+    _env(monkeypatch, tmp_path)
+    monkeypatch.setattr(run, "prepare_worker_env", lambda: None)
+    monkeypatch.setattr(run, "start_local_tts", lambda: None)
+    monkeypatch.setattr(
+        "app.services.cloned_voices.materialize.materialize_clone",
+        lambda params, voices_dir: None,
+    )
+    failed: list[tuple[str, BaseException]] = []
+    monkeypatch.setattr(
+        run, "_fail_if_open", lambda task_id, exc: failed.append((task_id, exc))
+    )
+    with pytest.raises(ValidationError):
+        run.run_one("task-1", {"video_type": "faceless"})
+    assert len(failed) == 1
+    assert failed[0][0] == "task-1"
+    assert isinstance(failed[0][1], ValidationError)

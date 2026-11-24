@@ -23,6 +23,7 @@ from typing import Any, Callable
 from loguru import logger
 
 from app.models import const
+from app.services.state_persistence import persist_state_update
 
 APP_NAME_ENV = "MPT_CPU_WORKER_APP_NAME"
 MAX_CONTAINERS_ENV = "MPT_CPU_WORKER_MAX_CONTAINERS"
@@ -124,6 +125,37 @@ def _clear_remote(state: Any, task_id: str) -> None:
     )
 
 
+def _cancel_modal_call(call_id: str) -> None:
+    """Cancel a spawned Modal call. Best effort: never raises."""
+    try:
+        import modal
+    except Exception as exc:
+        logger.warning(f"modal cpu cancel unavailable: {type(exc).__name__}")
+        return
+    try:
+        modal.FunctionCall.from_id(call_id).cancel()
+    except Exception as exc:
+        logger.warning(
+            f"modal cpu cancel failed for {call_id}: {type(exc).__name__}"
+        )
+
+
+def _untrack_spawned_call(state: Any, task_id: str, call_id: str) -> None:
+    """Drop a spawned call whose id could not be recorded.
+
+    The call exists but nothing tracks it, so cancel it and clear the
+    remote marker instead of leaving a live render the refund and
+    reconcile paths cannot see. The caller then falls back to local.
+    """
+    try:
+        _cancel_modal_call(call_id)
+    except Exception as exc:
+        logger.error(f"modal cpu cancel failed for {call_id}: {type(exc).__name__}")
+    persist_state_update(
+        state, task_id, remote_worker="", remote_call_id="", job_params=None
+    )
+
+
 def _require_modal_tokens() -> None:
     if not os.environ.get("MODAL_TOKEN_ID") or not os.environ.get("MODAL_TOKEN_SECRET"):
         raise RuntimeError(
@@ -187,7 +219,9 @@ def try_remote_dispatch(
         )
         _clear_remote(state, task_id)
         return False, False
-    state.update_task(task_id, remote_call_id=call_id)
+    if not persist_state_update(state, task_id, remote_call_id=call_id):
+        _untrack_spawned_call(state, task_id, call_id)
+        return False, False
     accepted = False
     if on_accepted is not None:
         on_accepted()
@@ -283,7 +317,9 @@ def try_remote_batch(
         )
         _clear_remote(state, task_id)
         return False, False
-    state.update_task(task_id, remote_call_id=call_id)
+    if not persist_state_update(state, task_id, remote_call_id=call_id):
+        _untrack_spawned_call(state, task_id, call_id)
+        return False, False
     accepted = False
     if on_accepted is not None:
         on_accepted()
@@ -405,6 +441,8 @@ def resume_unspawned_cpu_jobs(state: Any, spawn: Spawn | None = None) -> int:
                 f"modal cpu resume failed for {task_id}: {type(exc).__name__}"
             )
             continue
-        state.update_task(task_id, remote_call_id=new_id)
+        if not persist_state_update(state, task_id, remote_call_id=new_id):
+            _untrack_spawned_call(state, task_id, new_id)
+            continue
         started += 1
     return started

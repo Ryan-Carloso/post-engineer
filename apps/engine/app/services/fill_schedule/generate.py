@@ -304,9 +304,12 @@ class BatchGenerator:
         the row again. Otherwise reserve the running slot first: the task
         row is written only after that reservation, outside the manager
         lock. ``SlotDeferred`` means no running slot was free: the caller
-        leaves the slot pending and this method has written no task row. A
-        write that raises releases the reservation before the exception
-        propagates. Batch dispatch does not queue; direct ``add_task`` still does.
+        leaves the slot pending. After a faceless spawn failure the marker
+        row written by ``try_remote_batch`` remains (PROCESSING, marker
+        cleared) and is claimed by boot triage; only the local-reservation
+        path is guaranteed row-free. A write that raises releases the
+        reservation before the exception propagates. Batch dispatch does not
+        queue; direct ``add_task`` still does.
 
         The caller claims the slot (pending → generating) only after
         this returns. The next tick must not dispatch a started slot again.

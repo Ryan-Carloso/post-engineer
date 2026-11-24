@@ -86,7 +86,9 @@ def _fail_if_open(task_id: str, exc: BaseException) -> None:
         return
     if task.get("state") in (const_failed(), const_complete()):
         return
-    sm.state.update_task(task_id, state=const_failed(), error=type(exc).__name__)
+    sm.persist_state_update(
+        sm.state, task_id, state=const_failed(), error=type(exc).__name__
+    )
 
 
 def const_failed() -> int:
@@ -111,8 +113,8 @@ def run_one(task_id: str, params: dict[str, Any], stop_at: str = "video") -> Non
     from app.models.schema import TaskVideoRequest
     from app.services.task import start
 
-    request = TaskVideoRequest.model_validate(params)
     try:
+        request = TaskVideoRequest.model_validate(params)
         materialize_clone(params, Path(os.environ["TTS_VOICES_DIR"]))
         start_local_tts()
         start(task_id, request, stop_at=stop_at)

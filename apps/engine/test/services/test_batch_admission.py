@@ -670,3 +670,10 @@ class BatchAdmissionHelperTests(unittest.TestCase):
             )
         self.assertEqual(manager.current_tasks, 0)
         self.assertEqual(manager.queue_size(), 0)
+
+
+def test_dispatch_generation_docstring_admits_the_surviving_marker_row() -> None:
+    doc = " ".join((BatchGenerator._dispatch_generation.__doc__ or "").split())
+    assert "has written no task row" not in doc
+    assert "marker row" in doc
+    assert "guaranteed row-free" in doc

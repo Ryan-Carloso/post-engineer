@@ -473,3 +473,145 @@ def test_publish_clone_requires_modal_tokens(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.delenv("MODAL_TOKEN_SECRET", raising=False)
     with pytest.raises(RuntimeError, match="MODAL_TOKEN_ID"):
         dispatch._require_modal_tokens()
+
+
+class _CallIdWriteFailsState(MemoryState):
+    """Refuses the write that records a live call id, accepts the rest."""
+
+    refuse_call_ids: frozenset[str] | None = None
+
+    def update_task(self, task_id: str, **kwargs: object) -> None:
+        call_id = kwargs.get("remote_call_id")
+        if isinstance(call_id, str) and call_id:
+            if self.refuse_call_ids is None or call_id in self.refuse_call_ids:
+                raise RuntimeError("supabase down")
+        super().update_task(task_id, **kwargs)
+
+
+def _no_retry_sleep(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "app.services.state_persistence.time.sleep", lambda _: None
+    )
+
+
+def test_call_id_write_failure_cancels_the_call_and_falls_back_locally(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _no_retry_sleep(monkeypatch)
+    state = _CallIdWriteFailsState()
+    state.update_task("task-1", state=3, progress=0)
+    cancelled: list[str] = []
+    monkeypatch.setattr(
+        dispatch, "_cancel_modal_call", lambda call_id: cancelled.append(call_id)
+    )
+    spawned, accepted = dispatch.try_remote_dispatch(
+        state,
+        "task-1",
+        _faceless(),
+        "video",
+        spawn=lambda task_id, params, stop_at: "fc-1",
+    )
+    assert spawned is False
+    assert accepted is False
+    assert cancelled == ["fc-1"]
+    saved = state.get_task("task-1")
+    assert saved is not None
+    assert saved.get("remote_worker") == ""
+    assert saved.get("remote_call_id") == ""
+    assert saved.get("job_params") is None
+
+
+def test_batch_call_id_write_failure_cancels_the_call_and_falls_back_locally(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _no_retry_sleep(monkeypatch)
+    state = _CallIdWriteFailsState()
+    state.update_task("task-1", state=3, progress=0)
+    cancelled: list[str] = []
+    monkeypatch.setattr(
+        dispatch, "_cancel_modal_call", lambda call_id: cancelled.append(call_id)
+    )
+    spawned, accepted = dispatch.try_remote_batch(
+        state,
+        "task-1",
+        _faceless(),
+        "user-1",
+        {},
+        spawn=lambda task_id, params, stop_at: "fc-1",
+    )
+    assert spawned is False
+    assert accepted is False
+    assert cancelled == ["fc-1"]
+    saved = state.get_task("task-1")
+    assert saved is not None
+    assert saved.get("remote_worker") == ""
+    assert saved.get("remote_call_id") == ""
+    assert saved.get("job_params") is None
+
+
+def test_call_id_write_failure_with_a_failing_cancel_still_falls_back(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _no_retry_sleep(monkeypatch)
+    state = _CallIdWriteFailsState()
+    state.update_task("task-1", state=3, progress=0)
+
+    def _cancel_boom(call_id: str) -> None:
+        raise RuntimeError("modal down")
+
+    monkeypatch.setattr(dispatch, "_cancel_modal_call", _cancel_boom)
+    spawned, accepted = dispatch.try_remote_dispatch(
+        state,
+        "task-1",
+        _faceless(),
+        "video",
+        spawn=lambda task_id, params, stop_at: "fc-1",
+    )
+    assert spawned is False
+    assert accepted is False
+
+
+def test_resume_call_id_write_failure_cancels_and_continues(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _no_retry_sleep(monkeypatch)
+    rows = [
+        {
+            "task_id": "first",
+            "data": {
+                "remote_worker": dispatch.REMOTE_WORKER_VALUE,
+                "remote_call_id": "",
+                "job_params": _faceless(),
+                "pipeline": "video",
+            },
+        },
+        {
+            "task_id": "second",
+            "data": {
+                "remote_worker": dispatch.REMOTE_WORKER_VALUE,
+                "remote_call_id": "",
+                "job_params": _faceless(),
+                "pipeline": "video",
+            },
+        },
+    ]
+
+    class _Response:
+        def json(self) -> list[dict[str, object]]:
+            return rows
+
+    class _State(_CallIdWriteFailsState):
+        refuse_call_ids = frozenset({"fc-first"})
+
+        def _request(self, method: str, query: str) -> _Response:
+            return _Response()
+
+    cancelled: list[str] = []
+    monkeypatch.setattr(
+        dispatch, "_cancel_modal_call", lambda call_id: cancelled.append(call_id)
+    )
+    started = dispatch.resume_unspawned_cpu_jobs(
+        _State(), spawn=lambda task_id, params, stop_at: f"fc-{task_id}"
+    )
+    assert started == 1
+    assert cancelled == ["fc-first"]
