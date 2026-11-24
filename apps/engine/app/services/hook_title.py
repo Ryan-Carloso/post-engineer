@@ -137,7 +137,9 @@ def build_title(
     stroke = max(1, round(STROKE_WIDTH * scale))
     inner = width - 2 * round(SIDE_MARGIN * scale) - 2 * stroke
     try:
-        chosen = _choose(text, font_for, scale, inner, top + stroke, round(height * MAX_BOTTOM_FRACTION))
+        # The band is its lines plus a stroke above and below, so its bottom edge is
+        # `top + 2 * stroke + lines * line_height`: that is what must clear the limit.
+        chosen = _choose(text, font_for, scale, inner, top + 2 * stroke, round(height * MAX_BOTTOM_FRACTION))
         if chosen is None:
             return None, REASON_NO_FIT
         pixels, lines, line_height = chosen
@@ -176,7 +178,10 @@ def build_title(
 def _choose(
     text: str, font_for: media_overlay.FontFor, scale: float, inner: float, top: int, limit: int
 ) -> Optional[tuple[int, list[str], int]]:
-    """(pixel size, lines, line height) of the largest size that fits above `limit`."""
+    """(pixel size, lines, line height) of the largest size whose band ends at or above `limit`.
+
+    `top` is the band's top edge plus the stroke padding at both its top and bottom.
+    """
     for size in TITLE_SIZES:
         fitted = media_overlay.fit(text, font_for, (size,), scale, inner, MAX_LINES)
         if fitted is None:

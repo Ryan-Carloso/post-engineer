@@ -132,6 +132,35 @@ def test_title_stays_clear_of_the_face_zone(tmp_path):
     assert layer.y + band_height <= round(PORTRAIT[1] * hook_title.MAX_BOTTOM_FRACTION)
 
 
+def test_the_band_bottom_including_both_strokes_never_passes_the_limit(tmp_path, monkeypatch):
+    stroke = hook_title.STROKE_WIDTH
+    top = round(PORTRAIT[1] * hook_title.TOP_FRACTION)
+    largest = hook_title.TITLE_SIZES[0]
+    line = hook_title.media_overlay.line_height(_font_for(largest), 1.0)
+    band_bottom = top + line + 2 * stroke
+    # Three pixels short of the largest size's real band: only the stroke at the bottom
+    # (which the old check left out) pushes it over the limit.
+    limit = band_bottom - 3
+    monkeypatch.setattr(hook_title, "MAX_BOTTOM_FRACTION", limit / PORTRAIT[1])
+    layer, reason, out = _build(tmp_path, text="Hi")
+    assert reason is None and layer is not None
+    (_, band_height), _ = _bounds(out)
+    assert layer.y + band_height <= limit
+    assert band_height < line + 2 * stroke, "a smaller size was chosen instead"
+
+
+def test_a_band_that_ends_exactly_on_the_limit_still_fits(tmp_path, monkeypatch):
+    stroke = hook_title.STROKE_WIDTH
+    top = round(PORTRAIT[1] * hook_title.TOP_FRACTION)
+    line = hook_title.media_overlay.line_height(_font_for(hook_title.TITLE_SIZES[0]), 1.0)
+    limit = top + line + 2 * stroke
+    monkeypatch.setattr(hook_title, "MAX_BOTTOM_FRACTION", limit / PORTRAIT[1])
+    layer, reason, out = _build(tmp_path, text="Hi")
+    assert reason is None and layer is not None
+    (_, band_height), _ = _bounds(out)
+    assert layer.y + band_height == limit
+
+
 def test_text_is_centered_inside_the_side_margin(tmp_path):
     layer, _, out = _build(tmp_path)
     assert layer is not None
