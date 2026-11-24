@@ -170,6 +170,12 @@ describe('check_script validate hookTitle', () => {
     expect(textOf(response)).toContain('Script valid');
   });
 
+  it('forwards the title to the web route so a direct caller and the MCP are checked alike', async () => {
+    const client = validateClient();
+    await handleValidateScript(client, { segments, videoType: 'voiceover', hookTitle: AT_WORD_LIMIT });
+    expect(vi.mocked(client.validateScript)).toHaveBeenCalledWith(segments, 'voiceover', AT_WORD_LIMIT);
+  });
+
   it('is still valid without a title', async () => {
     const response = await handleValidateScript(validateClient(), { segments, videoType: 'voiceover' });
     expect(response.isError).toBeUndefined();
@@ -177,6 +183,22 @@ describe('check_script validate hookTitle', () => {
 });
 
 describe('client request body', () => {
+  it('sends hookTitle to the validate-script route, and nothing when there is none', async () => {
+    const client = new PostEngineerClient({ apiKey: 'test-token-123' });
+    const okBody = {
+      success: true, valid: true, segmentCount: 1, totalWords: 1, hookWords: 1, contentWords: 0, mediaCount: 0,
+      hookWindowSeconds: { min: 8, max: 12 }, measuredDurationSeconds: null, measured: 'pending', measuredReason: 'x',
+    };
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200, text: async () => JSON.stringify(okBody) });
+    await client.validateScript(segments, 'voiceover', 'I entered the sea clothed?');
+    await client.validateScript(segments, 'voiceover');
+    const bodies = vi.mocked(global.fetch).mock.calls.map(
+      (call) => JSON.parse(String(call[1]?.body)) as Record<string, unknown>,
+    );
+    expect(bodies[0].hookTitle).toBe('I entered the sea clothed?');
+    expect('hookTitle' in bodies[1]).toBe(false);
+  });
+
   it('forwards options.hookTitle to the web route', async () => {
     const client = new PostEngineerClient({ apiKey: 'test-token-123' });
     global.fetch = vi.fn().mockResolvedValue({

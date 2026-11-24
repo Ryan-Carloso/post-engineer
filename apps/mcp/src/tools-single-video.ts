@@ -49,7 +49,7 @@ export async function handleValidateScript(
   }
   let payload: ValidatedScriptPayload;
   try {
-    const result = await client.validateScript(args.segments, args.videoType ?? 'hook_lipsync');
+    const result = await client.validateScript(args.segments, args.videoType ?? 'hook_lipsync', args.hookTitle);
     payload = {
       segmentCount: result.segmentCount,
       totalWords: result.totalWords,

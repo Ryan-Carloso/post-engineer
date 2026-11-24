@@ -183,6 +183,7 @@ export const ValidateScriptBodySchema = z.object({
       error: (issue) => unknownVideoTypeMessage(issue.input),
     })
     .optional(),
+  hookTitle: z.string().optional().describe('Optional on-screen headline checked with the same rules generate-and-schedule enforces (at most 7 words and 60 characters, no newline or control character): a bad title is a 400 with a stable HOOK_TITLE_* code, as the video request would return.'),
 });
 
 export const ValidateScriptResponseSchema = z.object({
