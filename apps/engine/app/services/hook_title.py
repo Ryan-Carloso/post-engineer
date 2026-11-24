@@ -47,7 +47,9 @@ REASON_NO_FONT = "hook title not added: font unavailable"
 REASON_NO_FIT = "hook title not added: text does not fit"
 REASON_RENDER_FAILED = "hook title not added: render failed"
 
-_SPACES = re.compile(r"\s+")
+# JS `\s` also matches U+FEFF (a byte-order mark); Python `\s` does not. Match it
+# here so a direct caller and the web API normalize to the same stored title.
+_SPACES = re.compile(r"[\s\ufeff]+")
 
 
 class HookTitleError(ValueError):

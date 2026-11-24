@@ -72,6 +72,17 @@ def test_the_title_keeps_punctuation_and_case_and_collapses_spaces():
     assert hook_title.check_text("  A   B  ") == "A B"
 
 
+@pytest.mark.parametrize("value", ["\ufeffA\ufeff\ufeffB\ufeff", "A\u00a0B", "A \ufeff B"])
+def test_a_byte_order_mark_is_whitespace_like_in_the_web_normalizer(value):
+    assert hook_title.check_text(value) == "A B"
+
+
+def test_a_title_of_only_byte_order_marks_is_empty():
+    with pytest.raises(hook_title.HookTitleError) as caught:
+        hook_title.check_text("\ufeff \ufeff")
+    assert caught.value.code == hook_title.CODE_EMPTY
+
+
 def test_spaces_never_count_against_the_limits():
     assert hook_title.check_text(f"  {'a ' * 7} ") == "a a a a a a a"
 
