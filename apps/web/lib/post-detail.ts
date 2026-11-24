@@ -17,6 +17,7 @@ import type { PostPromptFacts } from './slot-detail';
 import { isPersonaAllowed, isScopedApiKey, type PersonaScopeContext } from './api-keys';
 import { logger } from './logger';
 import { postUrlFor } from './post-url';
+import { createSupabaseServiceClient } from './supabase/service';
 
 export function personaScopeOf(auth: PersonaScopeContext): readonly string[] | null {
   return isScopedApiKey(auth) ? (auth.personaIds ?? []) : null;
@@ -269,6 +270,10 @@ export async function getSlotPost(
   const userNoticesOut = publishNotices.userNotices;
   const providerFailuresOut = publishNotices.providerFailures;
 
+  const promptVersionId = row.prompt_version_id ?? null;
+  const prompt =
+    promptVersionId === null ? null : await readPostPromptFacts(createSupabaseServiceClient(), promptVersionId);
+
   return {
     slot: {
       id: slotIdOut,
@@ -294,7 +299,7 @@ export async function getSlotPost(
     },
     schedule: buildScheduleDetail(scheduleRow),
     persona: personaRow,
-    generation: { prompt: await readPostPromptFacts(supabase, row.prompt_version_id ?? null), ...buildGenerationFacts(row, scheduleRow) },
+    generation: { prompt, ...buildGenerationFacts(row, scheduleRow) },
   };
 }
 
