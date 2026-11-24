@@ -51,13 +51,27 @@ function observedOutput(): string {
   return inspect(calls, { depth: 10, maxStringLength: null });
 }
 
-function mockSupabase() {
+const DB_ROW_SENTINEL = 'fake-row-sentinel-9c41';
+
+// Mirrors PostgrestError for a CHECK violation: `details` echoes the whole failing row.
+function dbFailure(): { message: string; details: string; hint: null; code: string } {
+  return {
+    message: 'new row for relation "personas" violates check constraint "personas_identity_card_object_check"',
+    details: `Failing row contains (persona-uuid-1, Maria, {"identity": {"face": {"eyes": "${DB_ROW_SENTINEL}"}}}).`,
+    hint: null,
+    code: '23514',
+  };
+}
+
+function mockSupabase(options: { failWrite?: boolean } = {}) {
   const inserted: Array<Record<string, unknown>> = [];
   const updated: Array<Record<string, unknown>> = [];
   const personas = {
     insert: vi.fn((values: Record<string, unknown>) => {
       inserted.push(values);
-      return { select: vi.fn(() => ({ single: vi.fn(async () => ({ data: { id: 'persona-uuid-1' }, error: null })) })) };
+      return { select: vi.fn(() => ({ single: vi.fn(async () => (
+        options.failWrite === true ? { data: null, error: dbFailure() } : { data: { id: 'persona-uuid-1' }, error: null }
+      )) })) };
     }),
     select: vi.fn(() => ({
       eq: vi.fn(() => ({
@@ -72,7 +86,7 @@ function mockSupabase() {
     })),
     update: vi.fn((values: Record<string, unknown>) => {
       updated.push(values);
-      return { eq: vi.fn(() => ({ eq: vi.fn(async () => ({ error: null })) })) };
+      return { eq: vi.fn(() => ({ eq: vi.fn(async () => ({ error: options.failWrite === true ? dbFailure() : null })) })) };
     }),
   };
   const socialAccounts = {
@@ -219,5 +233,29 @@ describe('identity card privacy on the persona routes', () => {
     expect(spies.some((spy) => spy.mock.calls.length > 0)).toBe(true);
     expect(observedOutput()).not.toContain(CARD_SENTINEL);
     expect(await errorOf(unknownKey)).not.toContain(CARD_SENTINEL.slice(0, 20) + CARD_SENTINEL.slice(20));
+  });
+});
+
+describe('persona DB failures keep the failing row out of every sink', () => {
+  it('POST insert failure answers 500 and never emits the row details', async () => {
+    mockSupabase({ failWrite: true });
+    const res = await POST(createRequest(JSON.stringify(cardWithSentinel())));
+    expect(res.status).toBe(500);
+    expect(spies.some((spy) => spy.mock.calls.length > 0)).toBe(true);
+    expect(observedOutput()).toContain('23514');
+    expect(observedOutput()).not.toContain(DB_ROW_SENTINEL);
+    expect(observedOutput()).not.toContain('Failing row contains');
+    expect(JSON.stringify(await res.json())).not.toContain(DB_ROW_SENTINEL);
+  });
+
+  it('PATCH update failure answers 500 and never emits the row details', async () => {
+    mockSupabase({ failWrite: true });
+    const res = await PATCH(patchRequest({ identityCard: JSON.stringify(cardWithSentinel()) }));
+    expect(res.status).toBe(500);
+    expect(spies.some((spy) => spy.mock.calls.length > 0)).toBe(true);
+    expect(observedOutput()).toContain('23514');
+    expect(observedOutput()).not.toContain(DB_ROW_SENTINEL);
+    expect(observedOutput()).not.toContain('Failing row contains');
+    expect(JSON.stringify(await res.json())).not.toContain(DB_ROW_SENTINEL);
   });
 });

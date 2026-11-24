@@ -165,8 +165,9 @@ async function postHandler(request: Request): Promise<NextResponse> {
 
   if (insertError || !persona) {
     await rollbackStoragePath(supabase, photoPathToRollback);
+    // Log only the code: PostgrestError.details echoes the whole failing row, identity card included.
     return errorResponse(500, 'Failed to create persona.', 'POST /api/persona', {
-      cause: insertError,
+      cause: insertError ? { code: insertError.code } : undefined,
     });
   }
 
@@ -300,7 +301,8 @@ async function patchHandler(request: Request): Promise<NextResponse> {
     .eq('id', personaId)
     .eq('user_id', user.id);
   if (updateError) {
-    logger.error('[api/persona] update failed', updateError);
+    // Log only the code: PostgrestError.details echoes the whole failing row, identity card included.
+    logger.error('[api/persona] update failed', { personaId, code: updateError.code });
     if (replacementPhotoPath && replacementPhotoPath !== persona.photo_path) {
       await rollbackStoragePath(supabase, replacementPhotoPath);
     }
