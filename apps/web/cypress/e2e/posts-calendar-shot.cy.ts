@@ -2,6 +2,33 @@ describe('posts calendar shots', () => {
   beforeEach(() => {
     cy.loginE2EUser();
     cy.intercept('GET', '/api/persona/list', { authenticated: true, personas: [] }).as('personas');
+    cy.intercept('GET', '/api/schedule', {
+      success: true,
+      schedules: [
+        {
+          id: 'schedule-e2e-1',
+          persona_id: 'p1',
+          providers: ['youtube'],
+          youtube_account_ids: [],
+          instagram_account_ids: [],
+          linkedin_account_ids: [],
+          bluesky_account_ids: [],
+          days_of_week: [],
+          start_hour: null,
+          end_hour: null,
+          posts_per_day: 1,
+          timezone: 'Europe/Lisbon',
+          active: true,
+        },
+      ],
+    }).as('schedules');
+    cy.intercept('GET', '/api/schedule/status*', {
+      success: true,
+      upcoming: [],
+      recent: [],
+      slots: [],
+      hasAnyPost: true,
+    }).as('status');
   });
 
   it('opens the network and persona dropdowns over an opaque panel on desktop', () => {
@@ -14,6 +41,7 @@ describe('posts calendar shots', () => {
     cy.get('[data-calendar-card]', { timeout: 60000 }).should('be.visible');
     cy.get('[data-skeleton-calendar]').should('not.exist');
 
+    cy.get('[role="combobox"]').eq(0).should('not.be.disabled');
     cy.get('[role="combobox"]').eq(0).click();
     cy.get('[role="listbox"]', { timeout: 30000 }).should('be.visible');
     cy.get('[role="listbox"]').then(($content) => {
@@ -49,6 +77,7 @@ describe('posts calendar shots', () => {
     cy.get('[data-calendar-card]', { timeout: 60000 }).should('be.visible');
     cy.get('[data-skeleton-calendar]').should('not.exist');
 
+    cy.get('[role="combobox"]').eq(0).should('not.be.disabled');
     cy.get('[role="combobox"]').eq(0).click();
     cy.get('[role="listbox"]', { timeout: 30000 }).should('be.visible');
     cy.get('[role="listbox"]').then(($content) => {
