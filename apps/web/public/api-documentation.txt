@@ -139,6 +139,9 @@ GET    /api/prompts/{slug}                                    get recipe prompt
 POST   /api/prompts                                           create prompt
 PATCH  /api/prompts/{slug}                                    update prompt
 DELETE /api/prompts/{slug}                                    delete prompt
+GET    /api/prompts/{slug}/versions                           list old versions of your prompt
+GET    /api/prompts/{slug}/versions/{version}                 read one old version in full
+POST   /api/prompts/{slug}/versions/{version}/restore         restore an old version as a new one
 
 Not in this list: session-only routes (OAuth callbacks, API key management,
 billing checkout/webhook, logout, GET /api/health) and the public

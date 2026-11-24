@@ -380,6 +380,24 @@
       "action": "delete"
     }
   ],
+  "GET /api/prompts/[slug]/versions": [
+    {
+      "tool": "prompt_library",
+      "action": "versions"
+    }
+  ],
+  "GET /api/prompts/[slug]/versions/[version]": [
+    {
+      "tool": "prompt_library",
+      "action": "versions"
+    }
+  ],
+  "POST /api/prompts/[slug]/versions/[version]/restore": [
+    {
+      "tool": "prompt_library",
+      "action": "restore"
+    }
+  ],
   "GET /api/experiments": [
     {
       "tool": "experiments",

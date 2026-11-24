@@ -13,7 +13,7 @@
     "app/__tests__/sitemap.test.ts": 3.31201171875,
     "app/__tests__/theme-tokens.test.ts": 23.567626953125,
     "components/__tests__/account-card.test.tsx": 235.6181640625,
-    "components/__tests__/disconnect-account-dialog.test.tsx": 236.534423828125,
+    "components/ui/__tests__/confirm-dialog.test.tsx": 236.534423828125,
     "components/__tests__/key-connect-dialog.test.tsx": 125.776123046875,
     "components/__tests__/persona-avatar.test.tsx": 83.468505859375,
     "components/__tests__/provider-icon.test.tsx": 133.66357421875,

@@ -7,8 +7,11 @@ import {
   createPrompt,
   deletePrompt,
   fetchPrompt,
+  fetchPromptVersion,
+  fetchPromptVersions,
   fetchPrompts,
   promptFailureKey,
+  restorePromptVersion,
   updatePrompt,
 } from '@/lib/user-prompts-client';
 
@@ -91,9 +94,93 @@ describe('promptFailureKey', () => {
     [{ status: 400, code: 'VALIDATION_FAILED' }, 'userPrompts.errorValidation'],
     [{ status: 429, code: null }, 'userPrompts.errorRateLimited'],
     [{ status: 403, code: 'PERSONA_SCOPE_DENIED' }, 'userPrompts.errorForbidden'],
+    [{ status: 409, code: 'PROMPT_VERSION_CONFLICT' }, 'userPrompts.errorVersionConflict'],
+    [{ status: 404, code: 'PROMPT_VERSION_NOT_FOUND' }, 'userPrompts.errorVersionNotFound'],
     [{ status: 500, code: 'INTERNAL_ERROR' }, 'userPrompts.errorGeneric'],
     [{ status: 0, code: null }, 'userPrompts.errorGeneric'],
   ])('maps %o to %s', (failure, key) => {
     expect(promptFailureKey({ success: false, ...failure })).toBe(key);
+  });
+});
+
+const VERSION_ID = '55555555-5555-4555-8555-555555555555';
+
+const PAGE = {
+  success: true,
+  currentVersion: 2,
+  versions: [
+    { versionId: VERSION_ID, version: 2, title: 'T', createdAt: '2026-11-24T10:00:00Z', preview: 'P', previewTruncated: false, bodyLength: 1, current: true },
+  ],
+  truncated: false,
+  nextCursor: null,
+};
+
+const VERSION_DETAIL = { success: true, version: { versionId: VERSION_ID, version: 2, title: 'T', createdAt: '2026-11-24T10:00:00Z', body: 'P', current: true } };
+
+describe('prompt version client', () => {
+  it('lists the versions of an encoded slug, with the cursor as before', async () => {
+    const fetchMock = stubFetch(Response.json(PAGE));
+    expect(await fetchPromptVersions('my-prompt')).toEqual({ success: true, body: PAGE });
+    await fetchPromptVersions('my prompt/x', { before: 6 });
+    expect(fetchMock.mock.calls.map(([url, init]) => [String(url), init?.method ?? 'GET'])).toEqual([
+      ['/api/prompts/my-prompt/versions', 'GET'],
+      ['/api/prompts/my%20prompt%2Fx/versions?before=6', 'GET'],
+    ]);
+  });
+
+  it('reads one version', async () => {
+    const fetchMock = stubFetch(Response.json(VERSION_DETAIL));
+    expect(await fetchPromptVersion('my-prompt', 2)).toEqual({ success: true, body: VERSION_DETAIL });
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe('/api/prompts/my-prompt/versions/2');
+  });
+
+  it('posts the restore with expectedCurrentVersion', async () => {
+    const restored = { success: true, restored: true, prompt: { ...DETAIL, version: 3 } };
+    const fetchMock = stubFetch(Response.json(restored));
+    expect(await restorePromptVersion('my-prompt', 1, 2)).toEqual({ success: true, body: restored });
+    const [url, init] = fetchMock.mock.calls[0] ?? [];
+    expect([String(url), init?.method, init?.body]).toEqual([
+      '/api/prompts/my-prompt/versions/1/restore',
+      'POST',
+      JSON.stringify({ expectedCurrentVersion: 2 }),
+    ]);
+  });
+
+  it.each([
+    ['list', () => fetchPromptVersions('my-prompt')],
+    ['read', () => fetchPromptVersion('my-prompt', 1)],
+    ['restore', () => restorePromptVersion('my-prompt', 1, 2)],
+  ])('%s returns the status and code of an HTTP error instead of throwing', async (_label, run) => {
+    stubFetch(Response.json({ success: false, error: 'raw english text', code: 'PROMPT_VERSION_CONFLICT' }, { status: 409 }));
+    const result = await run();
+    expect(result).toEqual({ success: false, status: 409, code: 'PROMPT_VERSION_CONFLICT' });
+    expect(JSON.stringify(result)).not.toContain('raw english text');
+  });
+
+  it.each([
+    ['list', () => fetchPromptVersions('my-prompt')],
+    ['read', () => fetchPromptVersion('my-prompt', 1)],
+    ['restore', () => restorePromptVersion('my-prompt', 1, 2)],
+  ])('%s returns a failure for a proxy HTML body', async (_label, run) => {
+    stubFetch(new Response('<html>Bad gateway</html>', { status: 502 }));
+    expect(await run()).toEqual({ success: false, status: 502, code: null });
+  });
+
+  it.each([
+    ['list', () => fetchPromptVersions('my-prompt')],
+    ['read', () => fetchPromptVersion('my-prompt', 1)],
+    ['restore', () => restorePromptVersion('my-prompt', 1, 2)],
+  ])('%s returns a failure for a 200 that does not match the contract', async (_label, run) => {
+    stubFetch(Response.json({ success: true, versions: 'nope' }));
+    expect(await run()).toEqual({ success: false, status: 200, code: null });
+  });
+
+  it.each([
+    ['list', () => fetchPromptVersions('my-prompt')],
+    ['read', () => fetchPromptVersion('my-prompt', 1)],
+    ['restore', () => restorePromptVersion('my-prompt', 1, 2)],
+  ])('%s returns status 0 when the network is down', async (_label, run) => {
+    stubFetch(new TypeError('Failed to fetch'));
+    expect(await run()).toEqual({ success: false, status: 0, code: null });
   });
 });

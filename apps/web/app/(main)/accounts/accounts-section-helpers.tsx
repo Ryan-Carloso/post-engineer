@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import type { ReactNode } from 'react';
-import DisconnectAccountDialog from '@/components/ui/disconnect-account-dialog';
+import ConfirmDialog from '@/components/ui/confirm-dialog';
 import {
   useDisconnectAccountMutation,
   type DisconnectableProvider,
@@ -50,12 +50,13 @@ export function useDisconnectFlow(provider: DisconnectableProvider): {
   };
 
   const dialog = (
-    <DisconnectAccountDialog
+    <ConfirmDialog
+      tone="destructive"
       open={pending !== null}
       onClose={() => { if (!disconnect.isPending) setPending(null); }}
       onConfirm={confirm}
       pending={disconnect.isPending}
-      accountName={pending?.label ?? ''}
+      detail={pending?.label ?? ''}
       title={t('accounts.disconnectQuestion')}
       body={t('accounts.disconnectBody')}
       cancelLabel={t('accounts.disconnectCancel')}
