@@ -214,7 +214,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
     userId,
     title,
     script: segmentsScript,
-    videoType: validatedOptions.videoType,
     requestedImageId,
     prep,
   });

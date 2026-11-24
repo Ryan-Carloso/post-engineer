@@ -1,11 +1,8 @@
 """Persona image URL resolution for the lipsync intro download."""
 
 import ipaddress
-import os
 import re
 from urllib.parse import urlparse
-
-from app.services import longcat, upload_publisher
 
 _HOUSE_FACE_PATH = re.compile(r"/caracter-samples/file-\d+\.png")
 
@@ -19,8 +16,7 @@ def is_engine_usable_persona_image_url(value: str) -> bool:
     time, so this exists only so a bad stored URL fails fast instead of
     dying mid-pipeline ("persona image download rejected").
 
-    - a house-face path (/caracter-samples/file-N.png), which
-      resolve_persona_image_url turns into an absolute URL;
+    - a house-face path (/caracter-samples/file-N.png);
     - a data:image/ URI with the payload separator the engine splits on;
     - an http(s) URL with a hostname, where a literal IP host must be
       public (hostnames are left to the engine's resolve-and-check).
@@ -45,19 +41,3 @@ def is_engine_usable_persona_image_url(value: str) -> bool:
     except ValueError:
         return True
     return address.is_global
-
-
-def resolve_persona_image_url(image_url: str) -> str:
-    """Return an absolute URL for a house-face path; other values unchanged.
-
-    MPT_UPLOAD_API_BASE_URL is the web's public URL (the publish-back
-    target), which also serves the house-face PNGs.
-    """
-    if not _HOUSE_FACE_PATH.fullmatch(image_url):
-        return image_url
-    base_url = os.getenv(upload_publisher.BASE_URL_ENV)
-    if not base_url:
-        raise longcat.LongCatError(
-            f"{upload_publisher.BASE_URL_ENV} is required to load the house face {image_url}"
-        )
-    return f"{base_url.rstrip('/')}{image_url}"

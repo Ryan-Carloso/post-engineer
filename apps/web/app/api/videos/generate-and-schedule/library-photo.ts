@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { ERROR_CODES } from '@/lib/error-codes';
 import { resolveVideoImage } from '@/lib/persona-images';
-import type { VideoType } from '@/lib/tokens';
 import type { PersonaPrep } from './persona-prep';
 import { validationFailed } from './prepare-persona';
 
@@ -13,7 +12,6 @@ export async function validatePreChargeImageId(
     userId: string;
     title: string;
     script: string;
-    videoType: VideoType;
     requestedImageId: string | null;
     prep: PersonaPrep;
   },

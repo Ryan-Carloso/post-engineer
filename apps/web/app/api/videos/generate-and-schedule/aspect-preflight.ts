@@ -146,10 +146,6 @@ export async function checkFirstPhotoFace(
     }
     return null;
   }
-  // No first photo: nothing to face-check here. Segments validation
-  // rejects a hook_lipsync request without segments before this point,
-  // and the engine fails any job that reaches it without a usable first
-  // photo with no_first_photo instead of substituting the persona photo.
   return null;
 }
 

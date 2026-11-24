@@ -5,8 +5,6 @@ Covers:
   through the SSRF-safe helper (private IPs / resolving hosts rejected,
   valid public images accepted). The persona avatar is never downloaded:
   the hook image is the first photo of the video (issue #766).
-- resolve_persona_image_url: house-face paths resolve against
-  MPT_UPLOAD_API_BASE_URL, and fail clearly without it.
 - resolve_custom_audio_file: only files inside the task directory or the
   local_videos storage directory are accepted.
 """
@@ -25,7 +23,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import app.services.task as tm
 from app.models.schema import PersonaParams, TaskVideoRequest
-from app.services.persona_image import resolve_persona_image_url
 
 HOOK = (
     "Stop wasting your trip stuck in a ninety minute line for the original dish "
@@ -147,21 +144,6 @@ class TestPersonaImageDownloadSecurity(unittest.TestCase):
         self.assertEqual(len(files), 1)
         self.assertTrue(files[0].startswith("persona"))
         self.assertGreater(os.path.getsize(os.path.join(self.tmp, files[0])), 0)
-
-    def test_resolves_house_face_path_against_the_web_base_url(self):
-        with patch.dict(os.environ, {"MPT_UPLOAD_API_BASE_URL": "https://web.example.com/"}):
-            self.assertEqual(
-                resolve_persona_image_url("/caracter-samples/file-3.png"),
-                "https://web.example.com/caracter-samples/file-3.png",
-            )
-
-    def test_house_face_without_web_base_url_fails_with_a_clear_reason(self):
-        with (
-            patch.dict(os.environ, {"MPT_UPLOAD_API_BASE_URL": ""}),
-            self.assertRaises(tm.longcat.LongCatError) as ctx,
-        ):
-            resolve_persona_image_url("/caracter-samples/file-3.png")
-        self.assertIn("MPT_UPLOAD_API_BASE_URL", str(ctx.exception))
 
     def test_other_relative_paths_are_not_resolved(self):
         with (
