@@ -26,8 +26,7 @@ export async function currentUserPromptVersion(db: Db, promptId: string): Promis
   return { versionId: data.id, version: data.version };
 }
 
-export async function readPostPromptFacts(db: SupabaseClient, versionId: string | null): Promise<PostPromptFacts | null> {
-  if (versionId === null) return null;
+export async function readPostPromptFacts(db: SupabaseClient, versionId: string): Promise<PostPromptFacts | null> {
   const { data, error } = await db
     .from('prompt_versions')
     .select('slug, title, version, source')

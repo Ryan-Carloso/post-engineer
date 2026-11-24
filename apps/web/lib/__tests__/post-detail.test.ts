@@ -663,6 +663,7 @@ describe('getSlotPost prompt facts', () => {
   it('does not touch the service client when the slot is not the caller\'s', async () => {
     const session = mockSupabase(sessionTables({ scheduled_posts: { data: null, error: PGRST116 } }));
     await expect(getSlotPost(session.supabase, 'slot-1', 'user-1', null)).resolves.toBeNull();
+    expect(session.chains['scheduled_posts'].eq.mock.calls).toContainEqual(['user_id', 'user-1']);
     expect(createSupabaseServiceClient).not.toHaveBeenCalled();
   });
 

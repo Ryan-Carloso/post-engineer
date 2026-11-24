@@ -64,14 +64,6 @@ describe('currentUserPromptVersion', () => {
 });
 
 describe('readPostPromptFacts', () => {
-  it('returns null without a query for a post with no prompt version', async () => {
-    const db = tableDb({ data: null, error: null });
-    expect(await readPostPromptFacts(db.client, null)).toBeNull();
-    expect(db.calls).toEqual([]);
-    expect(loggerError).not.toHaveBeenCalled();
-    expect(loggerWarn).not.toHaveBeenCalled();
-  });
-
   it('returns the slug, title, number and source of the version', async () => {
     const db = tableDb({ data: { slug: 'calm-hook', title: 'Calm hook', version: 3, source: 'user' }, error: null });
     expect(await readPostPromptFacts(db.client, VERSION)).toEqual({ slug: 'calm-hook', title: 'Calm hook', version: 3, source: 'user' });

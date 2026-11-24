@@ -288,9 +288,10 @@ describe('GET /api/posts/[id] slot id normalization', () => {
     };
 
     it('404s without creating the service client when the slot is not the caller\'s', async () => {
-      installCookieSession({ slot: false }, { promptVersion: publicPrompt });
+      const { sessionClient } = installCookieSession({ slot: false }, { promptVersion: publicPrompt });
       const response = await get(SLOT_ID);
       expect(response.status).toBe(404);
+      expect(sessionClient.calls).toContainEqual({ table: 'scheduled_posts', op: 'eq', args: ['user_id', USER_ID] });
       expect(createSupabaseServiceClient).not.toHaveBeenCalled();
     });
 
