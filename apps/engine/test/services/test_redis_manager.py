@@ -6,8 +6,35 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from app.controllers.manager import redis_manager
-from app.models.schema import VideoParams
+from app.models.schema import PersonaParams, TaskVideoRequest, VideoParams
 from app.services import remote_dispatch, task as tm
+
+HOOK = (
+    "Stop wasting your trip stuck in a ninety minute line for the original dish "
+    "when a better table is still waiting nearby for you today."
+)
+BODY = (
+    "Locals skip the famous house and walk two minutes to a smaller kitchen where "
+    "the sauce recipe has not changed since nineteen fifty three and the cook still "
+    "greets every table by name before the first plate arrives at your table tonight."
+)
+CTA = "Save this video before your next trip to Porto."
+
+
+def _photos(prefix, count):
+    return [{"url": f"https://example.com/{prefix}{i}.jpg"} for i in range(count)]
+
+
+def _valid_segments():
+    return [
+        {"kind": "hook", "text": HOOK, "media": _photos("h", 5)},
+        {"kind": "content", "text": BODY, "media": _photos("b", 8)},
+        {"kind": "content", "text": CTA, "media": _photos("c", 2)},
+    ]
+
+
+def _persona():
+    return PersonaParams(name="Ana", photo_url="https://img.test/p.png", voice_id="calm")
 
 
 class FakeRedis:
@@ -82,6 +109,130 @@ def test_dequeue_on_empty_queue_returns_none():
 
     assert manager.dequeue() is None
     assert manager.is_queue_empty() is True
+
+
+def test_dequeue_keeps_segments_on_a_task_video_request():
+    manager, _ = make_manager()
+    params = TaskVideoRequest(
+        video_title="Porto",
+        video_description="Test description.",
+        video_type="hook_lipsync",
+        persona=_persona(),
+        segments=_valid_segments(),
+    )
+    manager.enqueue({"func": tm.start, "args": ("task-1",), "kwargs": {"params": params}})
+
+    restored = manager.dequeue()
+    assert restored is not None
+    assert isinstance(restored["kwargs"]["params"], TaskVideoRequest)
+    assert isinstance(restored["kwargs"]["params"], VideoParams)
+    segments = restored["kwargs"]["params"].segments
+    assert segments is not None
+    assert [segment.kind for segment in segments] == ["hook", "content", "content"]
+    assert segments[0].media is not None
+    assert segments[0].media[0].url == "https://example.com/h0.jpg"
+    assert manager.queue_size() == 0
+
+
+def _invalid_hook_lipsync_params():
+    return {
+        "video_title": "Porto",
+        "video_description": "Test description.",
+        "video_type": "hook_lipsync",
+        "persona": {"name": "Ana", "photo_url": "https://img.test/p.png", "voice_id": "calm"},
+    }
+
+
+def _production_shaped_invalid_task(task_id="task-1", webhook_url=None):
+    params = _invalid_hook_lipsync_params()
+    if webhook_url is not None:
+        params["webhook_url"] = webhook_url
+    return {
+        "func": "start",
+        "args": [],
+        "kwargs": {"task_id": task_id, "params": params, "stop_at": "video"},
+    }
+
+
+def test_dequeue_marks_hook_lipsync_without_segments_failed(monkeypatch):
+    manager, fake = make_manager()
+    calls = []
+    monkeypatch.setattr(tm, "_fail_task", lambda *a, **k: calls.append((a, k)))
+    fake.lists["task_queue"] = [json.dumps(_production_shaped_invalid_task())]
+
+    assert manager.dequeue() is None
+    assert manager.queue_size() == 0
+    assert len(calls) == 1
+    assert calls[0][0][0] == "task-1"
+    assert "hook_lipsync requires segments" in calls[0][0][1]
+    assert calls[0][1]["stage"] == "dispatch"
+
+
+def test_dequeue_invalid_task_passes_webhook_url_to_the_failure(monkeypatch):
+    manager, fake = make_manager()
+    calls = []
+    monkeypatch.setattr(tm, "_fail_task", lambda *a, **k: calls.append((a, k)))
+    fake.lists["task_queue"] = [
+        json.dumps(
+            _production_shaped_invalid_task(webhook_url="https://hooks.example.com/done")
+        )
+    ]
+
+    assert manager.dequeue() is None
+    assert len(calls) == 1
+    assert getattr(calls[0][0][2], "webhook_url", None) == "https://hooks.example.com/done"
+
+
+def test_dequeue_falls_back_to_positional_args_task_id(monkeypatch):
+    manager, fake = make_manager()
+    calls = []
+    monkeypatch.setattr(tm, "_fail_task", lambda *a, **k: calls.append((a, k)))
+    stored = {
+        "func": "start",
+        "args": ["task-1"],
+        "kwargs": {"params": _invalid_hook_lipsync_params()},
+    }
+    fake.lists["task_queue"] = [json.dumps(stored)]
+
+    assert manager.dequeue() is None
+    assert manager.queue_size() == 0
+    assert len(calls) == 1
+    assert calls[0][0][0] == "task-1"
+    assert "hook_lipsync requires segments" in calls[0][0][1]
+    assert calls[0][1]["stage"] == "dispatch"
+
+
+def test_check_queue_drains_past_an_invalid_task(monkeypatch):
+    manager, fake = make_manager()
+    failed = []
+    monkeypatch.setattr(tm, "_fail_task", lambda *a, **k: failed.append((a, k)))
+    spawned = []
+    monkeypatch.setattr(manager, "execute_task", lambda *a, **k: spawned.append((a, k)))
+    valid = {
+        "func": "start",
+        "args": [],
+        "kwargs": {
+            "task_id": "task-2",
+            "params": {
+                "video_title": "Porto",
+                "video_description": "Test description.",
+                "video_type": "voiceover",
+            },
+            "stop_at": "video",
+        },
+    }
+    fake.lists["task_queue"] = [
+        json.dumps(_production_shaped_invalid_task()),
+        json.dumps(valid),
+    ]
+
+    manager.check_queue()
+
+    assert len(failed) == 1
+    assert failed[0][0][0] == "task-1"
+    assert len(spawned) == 1
+    assert spawned[0][1]["task_id"] == "task-2"
+    assert manager.queue_size() == 0
 
 
 def test_is_queue_empty_follows_size():

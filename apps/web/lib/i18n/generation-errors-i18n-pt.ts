@@ -6,5 +6,6 @@ export const generationErrorsI18nPt = {
   errorInvalidTaskResponse: 'O serviço de vídeo retornou uma resposta inesperada. Tente novamente.',
   errorEngineRestart: 'O motor reiniciou durante a geração do vídeo. Tente novamente.',
   errorImagesDoNotCoverAudio: 'As fotos não cobriram a narração. Adicione mais fotos ao roteiro e tente novamente.',
+  errorNoFirstPhoto: 'Nenhuma primeira foto foi enviada com este vídeo. Envie uma primeira foto com o rosto visível e tente novamente.',
   errorUnknown: 'O vídeo não pôde ser gerado. Tente novamente.',
 };

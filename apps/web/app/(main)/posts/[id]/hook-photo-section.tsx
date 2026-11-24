@@ -46,7 +46,7 @@ export const HookPhotoSection = ({
       </p>
     );
   } else {
-    body = <p className="mt-2 text-sm text-muted-foreground">{t('posts.hookPhotoPersonaNote')}</p>;
+    body = <p className="mt-2 text-sm text-muted-foreground">{t('posts.hookPhotoNoneNote')}</p>;
   }
   return (
     <section aria-label={t('posts.hookPhotoLabel')} className="mt-6">

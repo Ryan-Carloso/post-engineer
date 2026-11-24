@@ -19,14 +19,16 @@ Contract pinned here:
 
 import base64
 from contextlib import ExitStack
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
-from app.models.schema import PersonaParams, VideoParams
+from app.models.schema import PersonaParams, TaskVideoRequest
 from app.services import persona_hook
 from app.services import task as task_service
 from app.services.persona_hook import _find_hook_end_seconds, lipsync_window_seconds
+from test.controllers.test_task_segments_request import valid_segments
 
 
 def _cue(index, start, end, text):
@@ -94,13 +96,15 @@ class TestLipsyncWindow:
         assert lipsync_window_seconds(hook_end, 12.0) == expected
 
 
-def _lipsync_params() -> VideoParams:
+def _lipsync_params() -> TaskVideoRequest:
     avatar = "data:image/png;base64," + base64.b64encode(b"img").decode()
-    return VideoParams(
+    return TaskVideoRequest(
         video_title="francesinha",
         video_description="Test description.",
         video_type="hook_lipsync",
         video_aspect="9:16",
+        video_script="",
+        segments=valid_segments(),
         persona=PersonaParams(name="Ryan", voice_id="calm", avatar_url=avatar),
     )
 
@@ -127,6 +131,8 @@ class TestHookOutsideWindowNeverRegeneratesOrFails:
 
 class TestLipsyncIntroIsCappedNotSkipped:
     def _prepare(self, tmp_path, cues=_WHISPER_CUES, hook_end=None, audio_seconds=30.0):
+        first_photo = Path(tmp_path) / "first.jpg"
+        first_photo.write_bytes(b"first-photo-bytes")
         with ExitStack() as stack:
             stack.enter_context(
                 patch.object(task_service.utils, "task_dir", return_value=str(tmp_path))
@@ -136,6 +142,13 @@ class TestLipsyncIntroIsCappedNotSkipped:
             )
             stack.enter_context(
                 patch.object(task_service.voice, "get_audio_duration", return_value=audio_seconds)
+            )
+            stack.enter_context(
+                patch.object(
+                    task_service.full_lipsync.user_media,
+                    "resolve_first_segment_photo",
+                    return_value=(str(first_photo), 0, 0, None),
+                )
             )
             if hook_end is not None:
                 stack.enter_context(

@@ -6,5 +6,6 @@ export const generationErrorsI18nEn = {
   errorInvalidTaskResponse: 'The video service returned an unexpected response. Please try again.',
   errorEngineRestart: 'The engine restarted while generating your video. Please try again.',
   errorImagesDoNotCoverAudio: 'The photos could not cover the narration. Add more photos to the script and try again.',
+  errorNoFirstPhoto: 'No first photo was sent with this video. Send a first photo with a detectable face and try again.',
   errorUnknown: 'The video could not be generated. Please try again.',
 };

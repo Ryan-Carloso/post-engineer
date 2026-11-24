@@ -887,6 +887,16 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
     });
 
+    it('rejects a request without segments before any charge', async () => {
+      const res = await post(baseBody({ options: { segments: undefined } }));
+      const json = await res.json();
+      expect(res.status).toBe(400);
+      expect(json.code).toBe('VALIDATION_FAILED');
+      expect(json.field).toBe('options.segments');
+      expect(json.error).toContain('options.segments is required');
+      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
+    });
+
     it('rejects an unknown segment key at parse time instead of stripping it', async () => {
       const withVoice = [
         { kind: 'hook', text: segmentsHook },
@@ -2555,9 +2565,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
     });
 
     it('marks the slot image_resolve_failed when dispatch-time resolution fails', async () => {
-      vi.mocked(resolveVideoImage)
-        .mockResolvedValueOnce({ ok: true, image: null })
-        .mockResolvedValue({ ok: false, error: 'library down', status: 500 });
+      vi.mocked(resolveVideoImage).mockResolvedValue({ ok: false, error: 'library down', status: 500 });
       const res = await post(baseBody());
       const json = await res.json();
       expect(res.status).toBe(502);
@@ -2568,12 +2576,10 @@ describe('POST /api/videos/generate-and-schedule', () => {
 
     it('marks the slot image_sign_failed when the selected image cannot be signed', async () => {
       setup({ ...DEFAULT_CFG, signUrlError: true });
-      vi.mocked(resolveVideoImage)
-        .mockResolvedValueOnce({ ok: true, image: null })
-        .mockResolvedValue({
-          ok: true,
-          image: { id: 'img-1', image_path: 'library/img-1.png' } as never,
-        });
+      vi.mocked(resolveVideoImage).mockResolvedValue({
+        ok: true,
+        image: { id: 'img-1', image_path: 'library/img-1.png' } as never,
+      });
       const res = await post(baseBody());
       const json = await res.json();
       expect(res.status).toBe(502);
@@ -2592,30 +2598,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
     });
 
-    it('500s before charging when the pre-charge library resolution fails', async () => {
-      vi.mocked(resolveVideoImage).mockResolvedValue({ ok: false, error: 'library down', status: 500 });
-      const res = await post(baseBody());
-      const json = await res.json();
-      expect(res.status).toBe(500);
-      expect(json.success).toBe(false);
-      expect(json.code).toBe('INTERNAL_ERROR');
-      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
-    });
 
-    it('500s before charging when the picked library photo cannot be signed', async () => {
-      setup({ ...DEFAULT_CFG, signUrlError: true });
-      vi.mocked(resolveVideoImage).mockResolvedValue({
-        ok: true,
-        image: { id: 'img-1', image_path: 'library/img-1.png' } as never,
-      });
-      const res = await post(baseBody());
-      const json = await res.json();
-      expect(res.status).toBe(500);
-      expect(json.success).toBe(false);
-      expect(json.code).toBe('INTERNAL_ERROR');
-      expect(json.error).toBe('The selected persona image could not be loaded. Please try again.');
-      expect(rpcCalls.filter((c) => c.name === 'spend_tokens')).toHaveLength(0);
-    });
 
     it('rejects a full lip-sync photo without a face with 400 before any charge', async () => {
       setup({ ...DEFAULT_CFG, persona: { ...PERSONA, avatar_url: null, photo_path: 'personas/user-1/photo.jpg' } });

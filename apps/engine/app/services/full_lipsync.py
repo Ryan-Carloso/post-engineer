@@ -24,7 +24,6 @@ error and ship the background video instead.
 
 from __future__ import annotations
 
-import base64
 import contextlib
 import logging
 import math
@@ -37,10 +36,9 @@ from typing import Callable, Sequence
 
 from app.config import config
 from app.models.schema import VideoLayout, VideoParams
-from app.services import face_detect, longcat, persona_image, user_media
-from app.services.analytics import scrub_error_text
+from app.services import face_detect, longcat, user_media
 from app.services.lipsync_active import persona_lipsync_active
-from app.utils import ssrf, utils
+from app.utils import utils
 
 logger = logging.getLogger(__name__)
 FULL_LIPSYNC_MAX_WINDOW_SECONDS: float = 12.0
@@ -208,15 +206,6 @@ def build_concat_command(
     ]
 
 
-def _download_failure_reason(exc: BaseException) -> str:
-    """The downloader's failure text with every URL replaced.
-
-    A requests error echoes the request URL (host, path, signed token), and
-    the reason is stored on the task and sent to Discord and PostHog.
-    """
-    return scrub_error_text(re.sub(r"https?://\S+", "<url>", str(exc)), max_chars=200)
-
-
 def resolve_persona_image(
     task_id: str,
     params: VideoParams,
@@ -224,18 +213,12 @@ def resolve_persona_image(
 ) -> str:
     """Download the hook lip-sync image to the task dir.
 
-    One SSRF-safe download for the hook intro and its preflight (full lip
-    sync uses lipsync_photos instead): data-URI images are decoded, remote images go
-    through the public-address check with a 20 MB cap and image/* content
-    type. Failures raise LongCatError and fail the task.
-
-    The hook image is the first photo of the video (issue #589): when the
-    job carries segments, their first photo opens the video, not the
-    persona avatar. Segment-less direct jobs and text-only segments
-    keep the persona photo. The resolved image must show a detectable
-    face (Haar cascade): a voiceover first photo fails here, before any
-    lip-sync spend, with a per-photo error naming the segment and image.
-    A missing detector never blocks.
+    The hook image is the first photo of the video (issue #589): it opens
+    the video, never the persona avatar. A job with no usable first photo
+    fails here with no_first_photo, before any lip-sync spend. The resolved
+    image must show a detectable face (Haar cascade): a voiceover first
+    photo fails here, before any lip-sync spend, with a per-photo error
+    naming the segment and image. A missing detector never blocks.
     """
     persona = params.persona
     if persona is None:
@@ -268,36 +251,10 @@ def resolve_persona_image(
                     f"image {image_index}) could not be loaded: {reason}"
                 )
         if not fetched:
-            image_url = persona.avatar_url or persona.photo_url
-            if not image_url:
-                raise longcat.LongCatError("lip sync requires a persona image")
-            source_label = "persona photo"
-            if image_url.startswith("data:image/"):
-                try:
-                    encoded = image_url.split(",", 1)[1]
-                    with open(image_path, "wb") as image_file:
-                        image_file.write(base64.b64decode(encoded))
-                except (IndexError, ValueError) as exc:
-                    raise longcat.LongCatError("invalid persona image data URI") from exc
-            else:
-                try:
-                    ssrf.download_public_file(
-                        persona_image.resolve_persona_image_url(image_url),
-                        image_path,
-                        what="persona image",
-                        max_bytes=max_bytes,
-                        allowed_content_types=("image/",),
-                        timeout=60,
-                        tls_verify=config.app.get("tls_verify", True),
-                    )
-                except ssrf.UnsafeUrlError as exc:
-                    raise longcat.LongCatError(
-                        f"persona image download rejected: {_download_failure_reason(exc)}"
-                    ) from exc
-                except OSError as exc:
-                    raise longcat.LongCatError(
-                        f"persona image download failed: {_download_failure_reason(exc)}"
-                    ) from exc
+            raise longcat.LongCatError(
+                "no_first_photo: no usable first photo in segments; "
+                "send a first photo with a detectable face"
+            )
     has_face = face_detect.image_contains_face(image_path)
     if has_face is False:
         raise longcat.LongCatError(

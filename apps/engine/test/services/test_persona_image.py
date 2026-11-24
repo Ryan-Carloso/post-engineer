@@ -1,10 +1,9 @@
-"""is_engine_usable_persona_image_url: the filler photo gate's shape check.
+"""is_engine_usable_persona_image_url: the batch fill gate's shape check.
 
 The web pre-flights the same shapes before any token charge
-(isEngineUsablePersonaImageUrl); the engine re-checks everything at
-download time, so this helper exists only so a bad stored avatar_url
-fails fast in the batch filler — inside the refund block — instead of
-dying mid-pipeline ("persona image download rejected").
+(isEngineUsablePersonaImageUrl); the engine re-checks the stored
+avatar_url here so a bad URL fails the batch at accept time instead of
+failing the video after the job starts.
 """
 
 import sys

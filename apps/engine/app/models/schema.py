@@ -284,6 +284,12 @@ class TaskVideoRequest(VideoParams, BaseModel):
         return self
 
     @model_validator(mode="after")
+    def _validate_hook_lipsync_segments(self) -> "TaskVideoRequest":
+        if self.video_type is VideoType.hook_lipsync and self.segments is None:
+            raise ValueError("hook_lipsync requires segments: send a first photo with a detectable face")
+        return self
+
+    @model_validator(mode="after")
     def _validate_lipsync_photos(self) -> "TaskVideoRequest":
         photos = self.lipsync_photos
         if self.video_type != VideoType.full_lipsync:
