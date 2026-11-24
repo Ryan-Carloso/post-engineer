@@ -1,6 +1,6 @@
 import { houseVoice } from '../support/voices';
 
-const PERSONA_ID = 'p-identity-card';
+const PERSONA_ID = '11111111-1111-4111-8111-111111111111';
 const PATH = `/persona?edit=${PERSONA_ID}`;
 const EMPTY_ACCOUNTS = {
   youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [],
