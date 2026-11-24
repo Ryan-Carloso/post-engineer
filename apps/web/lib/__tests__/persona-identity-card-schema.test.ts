@@ -112,6 +112,14 @@ describe('IdentityCardSchema', () => {
   ])('still rejects real identity words in %s (%s)', (slot, value) => {
     expect(IdentityCardSchema.safeParse(withPath(FIXTURE_CARD, ['defaults', 'outfit', slot], value)).success).toBe(false);
   });
+
+  it.each([
+    ['top', 'transparent glass-bead top'],
+    ['top', 'transparent glass-effect blouse'],
+    ['top', 'sheer curtains-style dress'],
+  ])('rejects see-through words hidden behind a hyphen in %s (%s)', (slot, value) => {
+    expect(IdentityCardSchema.safeParse(withPath(FIXTURE_CARD, ['defaults', 'outfit', slot], value)).success).toBe(false);
+  });
 });
 
 describe('SceneSchema', () => {

@@ -26,21 +26,28 @@ const IDENTITY_EXTRA_WORDS: ReadonlySet<string> = new Set([
   'cabelo', 'loiro', 'loira', 'ruivo', 'ruiva', 'careca', 'calvo',
 ]);
 
-const HARMLESS_PHRASES: readonly RegExp[] = [
+const HARMLESS_CLOTHING_WORDS: readonly RegExp[] = [
   /\b(?:body|bodies) of water\b/g,
   /\b(?:skinny|skintight|eyewear|eyeglasses|eyelet)\b/g,
+];
+
+const HARMLESS_SCENE_PHRASES: readonly RegExp[] = [
   /\bginger tea\b/g,
   /\bbald eagle\b/g,
   /\bsheer curtains\b/g,
   /\btransparent glass\b/g,
 ];
 
-function withoutHarmlessPhrases(value: string): string {
-  return HARMLESS_PHRASES.reduce((text, phrase) => text.replace(phrase, ' '), value.toLowerCase());
+function stripHarmless(value: string, scene: boolean): string {
+  const lowered = value.toLowerCase();
+  const stripped = HARMLESS_CLOTHING_WORDS.reduce((text, phrase) => text.replace(phrase, ' '), lowered);
+  return scene
+    ? HARMLESS_SCENE_PHRASES.reduce((text, phrase) => text.replace(phrase, ' '), stripped)
+    : stripped;
 }
 
-function mentionsIdentity(value: string): boolean {
-  return wordsOf(withoutHarmlessPhrases(value)).some(
+function mentionsIdentity(value: string, scene = false): boolean {
+  return wordsOf(stripHarmless(value, scene)).some(
     (word) =>
       IDENTITY_WORDS.has(word) ||
       IDENTITY_EXTRA_WORDS.has(word) ||
@@ -57,8 +64,8 @@ function wordsOf(value: string): string[] {
   return value.toLowerCase().split(/[^a-z]+/).filter((word) => word.length > 0);
 }
 
-function mentionsAny(value: string, words: ReadonlySet<string>): boolean {
-  return wordsOf(withoutHarmlessPhrases(value)).some((word) => words.has(word));
+function mentionsAny(value: string, words: ReadonlySet<string>, scene = false): boolean {
+  return wordsOf(stripHarmless(value, scene)).some((word) => words.has(word));
 }
 
 function mentionsSeeThrough(value: string): boolean {
@@ -81,10 +88,10 @@ const freeText = z
   .refine((value) => !hasControlCharacter(value), { message: 'must be a single line without control characters' });
 
 const sceneText = freeText
-  .refine((value) => !mentionsIdentity(value), {
+  .refine((value) => !mentionsIdentity(value, true), {
     message: 'must describe the scene only, not the person (face, hair, skin, body)',
   })
-  .refine((value) => !mentionsAny(value, SEXUALISED_WORDS) && !mentionsSeeThrough(value), {
+  .refine((value) => !mentionsAny(value, SEXUALISED_WORDS, true) && !mentionsSeeThrough(value), {
     message: 'nude or sexualised content is not allowed',
   });
 
