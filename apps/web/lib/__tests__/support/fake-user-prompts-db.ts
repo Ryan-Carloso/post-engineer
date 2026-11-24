@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/supabase/database.gen';
 import type { UserPromptRow } from '@/lib/user-prompts';
@@ -18,10 +18,14 @@ type Operation = 'select' | 'insert' | 'update' | 'delete';
 export interface FakePromptVersion {
   id: string;
   prompt_id: string | null;
+  owner_id: string;
   source: 'user';
   slug: string;
+  title: string;
   version: number;
   body: string;
+  body_hash: string;
+  created_at: string;
 }
 
 export interface FakeUserPromptsDb {
@@ -30,6 +34,7 @@ export interface FakeUserPromptsDb {
   versions: FakePromptVersion[];
   queries: string[];
   failNext: (code: string) => void;
+  beforeNextUpdate: (hook: () => void) => void;
 }
 
 export function createFakeUserPromptsDb(seed: Partial<UserPromptRow>[] = []): FakeUserPromptsDb {
@@ -37,6 +42,7 @@ export function createFakeUserPromptsDb(seed: Partial<UserPromptRow>[] = []): Fa
   const versions: FakePromptVersion[] = [];
   const queries: string[] = [];
   let pendingFailure: string | null = null;
+  let pendingUpdateHook: (() => void) | null = null;
   let clock = Date.now();
   const now = (): string => new Date(++clock).toISOString();
 
@@ -61,7 +67,18 @@ export function createFakeUserPromptsDb(seed: Partial<UserPromptRow>[] = []): Fa
   function recordVersion(row: UserPromptRow): void {
     const latest = versions.filter((entry) => entry.prompt_id === row.id).sort((a, b) => b.version - a.version)[0];
     if (latest !== undefined && latest.body === row.body) return;
-    versions.push({ id: randomUUID(), prompt_id: row.id, source: 'user', slug: row.slug, version: (latest?.version ?? 0) + 1, body: row.body });
+    versions.push({
+      id: randomUUID(),
+      prompt_id: row.id,
+      owner_id: row.owner_id,
+      source: 'user',
+      slug: row.slug,
+      title: row.title,
+      version: (latest?.version ?? 0) + 1,
+      body: row.body,
+      body_hash: createHash('sha256').update(row.body, 'utf8').digest('hex'),
+      created_at: now(),
+    });
   }
 
   for (const entry of seed) {
@@ -164,6 +181,11 @@ export function createFakeUserPromptsDb(seed: Partial<UserPromptRow>[] = []): Fa
 
     private run(): Outcome {
       queries.push(this.label.join(' '));
+      if (this.operation === 'update' && pendingUpdateHook !== null) {
+        const hook = pendingUpdateHook;
+        pendingUpdateHook = null;
+        hook();
+      }
       if (pendingFailure !== null) {
         const code = pendingFailure;
         pendingFailure = null;
@@ -192,7 +214,10 @@ export function createFakeUserPromptsDb(seed: Partial<UserPromptRow>[] = []): Fa
         }
         affected = updated;
       } else if (this.operation === 'delete') {
-        for (const row of matches) rows.splice(rows.indexOf(row), 1);
+        for (const row of matches) {
+          rows.splice(rows.indexOf(row), 1);
+          for (const entry of versions) if (entry.prompt_id === row.id) entry.prompt_id = null;
+        }
       }
       if (this.operation !== 'select' && !this.returning) return { data: null, error: null };
       const ordered = [...affected].sort((left, right) => {
@@ -220,39 +245,77 @@ export function createFakeUserPromptsDb(seed: Partial<UserPromptRow>[] = []): Fa
     }
   }
 
+  type VersionColumn = keyof FakePromptVersion;
+
   class VersionQuery implements PromiseLike<Outcome> {
-    private promptId: string | null = null;
+    private columns: VersionColumn[] | null = null;
+    private filters: Array<(entry: FakePromptVersion) => boolean> = [];
+    private descending = false;
+    private max: number | null = null;
+    private shape: 'many' | 'maybe' = 'many';
+    private label: string[] = ['prompt_versions'];
 
     select(columns: string): this {
-      queries.push(`prompt_versions select ${columns}`);
+      this.columns = columns.split(',').map((column) => column.trim() as VersionColumn);
+      this.label.push(`select ${columns}`);
       return this;
     }
 
-    eq(column: string, value: string): this {
-      if (column !== 'prompt_id') throw new Error(`unsupported prompt_versions filter ${column}`);
-      this.promptId = value;
+    eq(column: string, value: unknown): this {
+      if (column !== 'prompt_id' && column !== 'version') throw new Error(`unsupported prompt_versions filter ${column}`);
+      this.filters.push((entry) => entry[column] === value);
+      this.label.push(`eq ${column}=${String(value)}`);
       return this;
     }
 
-    order(): this {
+    lt(column: string, value: number): this {
+      if (column !== 'version') throw new Error(`unsupported prompt_versions filter ${column}`);
+      this.filters.push((entry) => entry.version < value);
+      this.label.push(`lt ${column}=${value}`);
       return this;
     }
 
-    limit(): this {
+    order(column: string, options: { ascending: boolean }): this {
+      if (column !== 'version') throw new Error(`unsupported prompt_versions order ${column}`);
+      this.descending = !options.ascending;
+      this.label.push(`order ${column} ${options.ascending ? 'asc' : 'desc'}`);
+      return this;
+    }
+
+    limit(count: number): this {
+      this.max = count;
+      this.label.push(`limit ${count}`);
       return this;
     }
 
     maybeSingle(): this {
+      this.shape = 'maybe';
       return this;
+    }
+
+    private run(): Outcome {
+      queries.push(this.label.join(' '));
+      if (pendingFailure !== null) {
+        const code = pendingFailure;
+        pendingFailure = null;
+        return { data: null, error: { code, message: 'forced failure' } };
+      }
+      const ordered = versions
+        .filter((entry) => this.filters.every((filter) => filter(entry)))
+        .sort((a, b) => (this.descending ? b.version - a.version : a.version - b.version));
+      const limited = this.max === null ? ordered : ordered.slice(0, this.max);
+      const columns = this.columns;
+      const project = (entry: FakePromptVersion): Partial<FakePromptVersion> =>
+        columns === null ? entry : Object.fromEntries(columns.map((column) => [column, entry[column]]));
+      if (this.shape === 'many') return { data: limited.map(project), error: null };
+      return { data: limited.length === 0 ? null : project(limited[0]), error: null };
     }
 
     then<Result1 = Outcome, Result2 = never>(
       onfulfilled?: ((value: Outcome) => Result1 | PromiseLike<Result1>) | null,
       onrejected?: ((reason: unknown) => Result2 | PromiseLike<Result2>) | null,
     ): PromiseLike<Result1 | Result2> {
-      const latest = versions.filter((entry) => entry.prompt_id === this.promptId).sort((a, b) => b.version - a.version)[0];
-      const outcome: Outcome = { data: latest === undefined ? null : { id: latest.id, version: latest.version }, error: null };
-      return Promise.resolve(outcome).then(onfulfilled, onrejected);
+      return Promise.resolve(this.run()).then(onfulfilled, onrejected);
     }
   }
 
@@ -271,6 +334,9 @@ export function createFakeUserPromptsDb(seed: Partial<UserPromptRow>[] = []): Fa
     queries,
     failNext: (code: string) => {
       pendingFailure = code;
+    },
+    beforeNextUpdate: (hook: () => void) => {
+      pendingUpdateHook = hook;
     },
   };
 }

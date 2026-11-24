@@ -16,6 +16,7 @@ import {
   promptDetailBody,
   promptNotFound,
   readJsonBody,
+  readPromptSlug,
   requireOwner,
   resolvePromptCaller,
   slugTaken,
@@ -28,19 +29,10 @@ const GET_ROUTE = 'GET /api/prompts/[slug]';
 const PATCH_ROUTE = 'PATCH /api/prompts/[slug]';
 const DELETE_ROUTE = 'DELETE /api/prompts/[slug]';
 
-async function readSlug(context: RouteContext, route: string): Promise<string | NextResponse> {
-  const { slug: rawSlug } = await context.params;
-  try {
-    return decodeURIComponent(rawSlug);
-  } catch {
-    return apiErrorResponse(400, 'Malformed prompt slug.', { route, code: ERROR_CODES.VALIDATION_FAILED });
-  }
-}
-
 async function getHandler(request: Request, context: RouteContext): Promise<NextResponse> {
   const caller = await resolvePromptCaller(request, GET_ROUTE, RATE_LIMITS.promptsRead, { allowAnonymous: true });
   if (caller instanceof NextResponse) return caller;
-  const slug = await readSlug(context, GET_ROUTE);
+  const slug = await readPromptSlug(context.params, GET_ROUTE);
   if (slug instanceof NextResponse) return slug;
 
   if (!USER_PROMPT_SLUG_PATTERN.test(slug)) return promptNotFound(GET_ROUTE);
@@ -67,7 +59,7 @@ async function patchHandler(request: Request, context: RouteContext): Promise<Ne
   if (caller instanceof NextResponse) return caller;
   const owner = requireOwner(caller, PATCH_ROUTE);
   if (owner instanceof NextResponse) return owner;
-  const slug = await readSlug(context, PATCH_ROUTE);
+  const slug = await readPromptSlug(context.params, PATCH_ROUTE);
   if (slug instanceof NextResponse) return slug;
   const parsed = await readJsonBody(request, UpdateUserPromptBodySchema, PATCH_ROUTE);
   if (!parsed.ok) return parsed.response;
@@ -95,7 +87,7 @@ async function deleteHandler(request: Request, context: RouteContext): Promise<N
   if (caller instanceof NextResponse) return caller;
   const owner = requireOwner(caller, DELETE_ROUTE);
   if (owner instanceof NextResponse) return owner;
-  const slug = await readSlug(context, DELETE_ROUTE);
+  const slug = await readPromptSlug(context.params, DELETE_ROUTE);
   if (slug instanceof NextResponse) return slug;
   if (!USER_PROMPT_SLUG_PATTERN.test(slug)) return promptNotFound(DELETE_ROUTE);
   try {

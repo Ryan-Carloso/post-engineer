@@ -208,10 +208,10 @@ describe('Accounts — UI', () => {
     cy.wait('@getAccounts');
 
     cy.get('[data-testid=youtube-disconnect-button]').first().click();
-    cy.get('[data-testid=disconnect-dialog]').should('be.visible');
-    cy.contains('[data-testid=disconnect-dialog-account]', 'Canal Alpha').should('be.visible');
-    cy.get('[data-testid=disconnect-cancel-button]').click();
-    cy.get('[data-testid=disconnect-dialog]').should('not.exist');
+    cy.get('[data-testid=confirm-dialog]').should('be.visible');
+    cy.contains('[data-testid=confirm-dialog-detail]', 'Canal Alpha').should('be.visible');
+    cy.get('[data-testid=confirm-dialog-cancel]').click();
+    cy.get('[data-testid=confirm-dialog]').should('not.exist');
     cy.contains('Canal Alpha').should('be.visible');
   });
 
@@ -296,8 +296,8 @@ describe('Accounts — UI', () => {
     });
 
     cy.get('[data-testid=youtube-disconnect-button]').scrollIntoView().click();
-    cy.get('[data-testid=disconnect-dialog]').should('be.visible');
-    cy.get('[data-testid=disconnect-confirm-button]').click();
+    cy.get('[data-testid=confirm-dialog]').should('be.visible');
+    cy.get('[data-testid=confirm-dialog-confirm]').click();
     cy.wait('@disconnectAccount');
     cy.get('[data-testid=disconnect-error]')
       .should('be.visible')

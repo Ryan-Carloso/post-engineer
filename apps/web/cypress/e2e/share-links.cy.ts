@@ -107,11 +107,11 @@ describe('Account — public share links', () => {
     cy.get('[data-testid=revoke-share-link-btn-expired-1]').should('not.exist');
 
     cy.get(`[data-testid=revoke-share-link-btn-${LINK_ID}]`).click();
-    cy.get('[data-testid=disconnect-cancel-button]').click();
-    cy.get('[data-testid=disconnect-dialog]').should('not.exist');
+    cy.get('[data-testid=confirm-dialog-cancel]').click();
+    cy.get('[data-testid=confirm-dialog]').should('not.exist');
 
     cy.get(`[data-testid=revoke-share-link-btn-${LINK_ID}]`).click();
-    cy.get('[data-testid=disconnect-confirm-button]').click();
+    cy.get('[data-testid=confirm-dialog-confirm]').click();
     cy.wait('@revoke');
     cy.get(`[data-testid=share-link-row-${LINK_ID}]`).should('contain', 'Revogado');
     cy.get(`[data-testid=revoke-share-link-btn-${LINK_ID}]`).should('not.exist');
@@ -138,7 +138,7 @@ describe('Account — public share links', () => {
     visitAccount();
 
     cy.get(`[data-testid=revoke-share-link-btn-${LINK_ID}]`).click();
-    cy.get('[data-testid=disconnect-confirm-button]').click();
+    cy.get('[data-testid=confirm-dialog-confirm]').click();
     cy.wait('@revoke');
     cy.get('[data-testid=share-links-error]').should('contain', 'Não foi possível revogar o link');
     cy.get(`[data-testid=share-link-row-${LINK_ID}]`).should('exist');

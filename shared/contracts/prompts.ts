@@ -86,6 +86,66 @@ export const ListPromptsQuerySchema = z
   })
   .strict();
 
+export const PROMPT_VERSION_LIST_LIMITS = { default: 20, max: 50 } as const;
+
+export const PROMPT_VERSION_PREVIEW_LENGTH = 280;
+
+export const PROMPT_VERSION_MAX = 999_999_999;
+
+export const PROMPT_VERSION_PATTERN = /^[1-9]\d{0,8}$/;
+
+export const ListPromptVersionsQuerySchema = z
+  .object({
+    limit: z.coerce.number().int().min(1).max(PROMPT_VERSION_LIST_LIMITS.max).optional(),
+    before: z.coerce.number().int().min(2).max(PROMPT_VERSION_MAX).optional(),
+  })
+  .strict();
+
+export const PromptVersionSummarySchema = z.object({
+  versionId: z.string().uuid(),
+  version: z.number().int().min(1),
+  title: z.string(),
+  createdAt: z.string(),
+  preview: z.string(),
+  previewTruncated: z.boolean(),
+  bodyLength: z.number().int().min(1),
+  current: z.boolean(),
+});
+
+export const ListPromptVersionsResponseSchema = z.object({
+  success: z.literal(true),
+  currentVersion: z.number().int().min(1),
+  versions: z.array(PromptVersionSummarySchema),
+  truncated: z.boolean(),
+  nextCursor: z.number().int().min(1).nullable(),
+});
+
+export const PromptVersionDetailSchema = z.object({
+  versionId: z.string().uuid(),
+  version: z.number().int().min(1),
+  title: z.string(),
+  createdAt: z.string(),
+  body: z.string(),
+  current: z.boolean(),
+});
+
+export const GetPromptVersionResponseSchema = z.object({
+  success: z.literal(true),
+  version: PromptVersionDetailSchema,
+});
+
+export const RestorePromptVersionBodySchema = z
+  .object({
+    expectedCurrentVersion: z.number().int().min(1),
+  })
+  .strict();
+
+export const RestorePromptVersionResponseSchema = z.object({
+  success: z.literal(true),
+  restored: z.boolean(),
+  prompt: PromptDetailSchema,
+});
+
 export const listPrompts = defineEndpoint({
   method: 'GET',
   path: '/api/prompts',
@@ -117,4 +177,24 @@ export const deleteUserPrompt = defineEndpoint({
   method: 'DELETE',
   path: '/api/prompts/:slug',
   response: DeleteUserPromptResponseSchema,
+});
+
+export const listPromptVersions = defineEndpoint({
+  method: 'GET',
+  path: '/api/prompts/:slug/versions',
+  query: ListPromptVersionsQuerySchema,
+  response: ListPromptVersionsResponseSchema,
+});
+
+export const getPromptVersion = defineEndpoint({
+  method: 'GET',
+  path: '/api/prompts/:slug/versions/:version',
+  response: GetPromptVersionResponseSchema,
+});
+
+export const restorePromptVersion = defineEndpoint({
+  method: 'POST',
+  path: '/api/prompts/:slug/versions/:version/restore',
+  body: RestorePromptVersionBodySchema,
+  response: RestorePromptVersionResponseSchema,
 });
