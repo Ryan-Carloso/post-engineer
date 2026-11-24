@@ -172,7 +172,7 @@ describe('parseIdentityCardJson and parseSceneJson', () => {
     const unknownKey = parseIdentityCardJson(JSON.stringify({ ...clone(FIXTURE_CARD), eyes: 'green-value' }));
     expect(unknownKey.ok).toBe(false);
     if (!unknownKey.ok) {
-      expect(unknownKey.error).toBe('identityCard: unknown field "eyes"');
+      expect(unknownKey.error).toBe('identityCard: unknown field');
       expect(unknownKey.error).not.toContain('green-value');
     }
     const badVersion = parseIdentityCardJson(JSON.stringify({ ...clone(FIXTURE_CARD), version: 2 }));

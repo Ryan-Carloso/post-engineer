@@ -1,17 +1,18 @@
 import { z } from 'zod';
 
 import { defineEndpoint } from './endpoint.js';
+import {
+  IDENTITY_CARD_MAX_BYTES,
+  IDENTITY_CARD_VERSION,
+  IDENTITY_TEXT_MAX_LENGTH,
+  OUTFIT_SLOTS,
+  SCENE_ASPECTS,
+  SCENE_FRAMING,
+  SCENE_LIGHTING,
+  SCENE_MAX_BYTES,
+} from './persona-identity-card-limits.js';
 
-export const IDENTITY_CARD_VERSION = 1;
-export const IDENTITY_CARD_MAX_BYTES = 4096;
-export const SCENE_MAX_BYTES = 2048;
-export const IDENTITY_TEXT_MAX_LENGTH = 80;
-export const IDENTITY_CARD_MISSING_CODE = 'IDENTITY_CARD_MISSING';
-
-export const OUTFIT_SLOTS = ['top', 'bottom', 'one_piece', 'outerwear', 'footwear', 'accessories'] as const;
-export const SCENE_LIGHTING = ['soft_daylight', 'golden_hour', 'overcast', 'studio', 'warm_indoor', 'night_city'] as const;
-export const SCENE_FRAMING = ['close_up', 'head_and_shoulders', 'waist_up', 'full_body'] as const;
-export const SCENE_ASPECTS = ['9:16', '4:5', '1:1', '16:9'] as const;
+export * from './persona-identity-card-limits.js';
 
 const IDENTITY_WORDS: ReadonlySet<string> = new Set([
   'hair', 'eye', 'eyes', 'skin', 'build', 'builds', 'height', 'heights', 'beard', 'bearded', 'muscular',
@@ -147,17 +148,11 @@ function pathLabel(root: string, path: ReadonlyArray<PropertyKey>): string {
   );
 }
 
-function safeKeyName(key: string): string {
-  return key.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40);
-}
-
 function describeIssue(root: string, issue: z.core.$ZodIssue): string {
   const label = pathLabel(root, issue.path);
   switch (issue.code) {
-    case 'unrecognized_keys': {
-      const names = issue.keys.map((key) => `"${safeKeyName(key)}"`).join(', ');
-      return `${label}: unknown ${issue.keys.length === 1 ? 'field' : 'fields'} ${names}`;
-    }
+    case 'unrecognized_keys':
+      return `${label}: unknown ${issue.keys.length === 1 ? 'field' : 'fields'}`;
     case 'too_big':
       return `${label}: at most ${String(issue.maximum)} characters`;
     case 'too_small':
@@ -176,7 +171,8 @@ function describeIssue(root: string, issue: z.core.$ZodIssue): string {
 function parseValue<T>(schema: z.ZodType<T>, value: unknown, root: string): ParsedCardInput<T> {
   const result = schema.safeParse(value);
   if (result.success) return { ok: true, value: result.data };
-  const [first] = result.error.issues;
+  const { issues } = result.error;
+  const first = issues.find((issue) => issue.code === 'unrecognized_keys') ?? issues[0];
   return { ok: false, error: first === undefined ? `${root}: invalid` : describeIssue(root, first) };
 }
 

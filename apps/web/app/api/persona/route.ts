@@ -38,7 +38,7 @@ import { trackApiEvent } from '@/lib/analytics';
 import { SAFE_TASK_ID } from '@/lib/video-urls';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
-import { personaPreferenceColumns } from './preference-columns';
+import { buildPersonaInsertRow } from './create-row';
 
 const ENGINE_CLEANUP_BUDGET_MS = 20_000;
 
@@ -153,16 +153,13 @@ async function postHandler(request: Request): Promise<NextResponse> {
 
   const { data: persona, error: insertError } = await createSupabaseServiceClient()
     .from('personas')
-    .insert({
-      id: personaId,
-      user_id: user.id,
-      name: (body.values.name ?? '').trim(),
-      photo_path: photoPathToRollback,
-      avatar_url: avatarUrl,
-      voice_id: body.values.voiceId,
-      ...personaPreferenceColumns(body.values),
-      recent_image_ids: [],
-    })
+    .insert(buildPersonaInsertRow({
+      personaId,
+      userId: user.id,
+      photoPath: photoPathToRollback,
+      avatarUrl,
+      values: body.values,
+    }))
     .select('id')
     .single();
 

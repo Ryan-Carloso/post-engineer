@@ -71,6 +71,18 @@
       "action": "update_image"
     }
   ],
+  "GET /api/persona/identity-card": [
+    {
+      "tool": "persona_media",
+      "action": "get_card"
+    }
+  ],
+  "POST /api/persona/identity-card": [
+    {
+      "tool": "persona_media",
+      "action": "render_prompt"
+    }
+  ],
   "GET /api/persona/list": [
     {
       "tool": "personas",

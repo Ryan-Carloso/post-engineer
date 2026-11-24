@@ -19,7 +19,7 @@ vi.mock('../analytics.js', async (importOriginal) => {
 const ACTIONS: Record<string, string[]> = {
   video_tasks: ['status', 'list_generations', 'get_generation'],
   personas: ['list', 'get', 'create', 'update', 'delete'],
-  persona_media: ['list_faces', 'list_images', 'add_image', 'update_image', 'remove_image'],
+  persona_media: ['list_faces', 'list_images', 'add_image', 'update_image', 'remove_image', 'get_card', 'render_prompt'],
   voices: ['list', 'preview', 'list_clones', 'create_clone', 'get_clone', 'preview_clone', 'delete_clone'],
   accounts: ['list', 'connect', 'disconnect', 'get_persona_publishing', 'set_persona_publishing', 'list_boards'],
   tool_config: ['get', 'save'],

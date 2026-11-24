@@ -38,7 +38,7 @@ const MCP_TOOL_CARDS: McpToolCard[] = [
   { id: 'video_tasks', actions: ['status', 'list_generations', 'get_generation'], descKey: 'apiKeys.toolDescVideoTasks', Icon: SpinnerIcon },
   { id: 'cancel_video', actions: [], descKey: 'apiKeys.toolDescCancelVideo', Icon: TrashIcon },
   { id: 'personas', actions: ['list', 'get', 'create', 'update', 'delete'], descKey: 'apiKeys.toolDescPersonas', Icon: SparklesIcon },
-  { id: 'persona_media', actions: ['list_faces', 'list_images', 'add_image', 'update_image', 'remove_image'], descKey: 'apiKeys.toolDescPersonaMedia', Icon: ImageIcon },
+  { id: 'persona_media', actions: ['list_faces', 'list_images', 'add_image', 'update_image', 'remove_image', 'get_card', 'render_prompt'], descKey: 'apiKeys.toolDescPersonaMedia', Icon: ImageIcon },
   { id: 'voices', actions: ['list', 'preview', 'list_clones', 'create_clone', 'get_clone', 'preview_clone', 'delete_clone'], descKey: 'apiKeys.toolDescVoices', Icon: MicIcon },
   { id: 'accounts', actions: ['list', 'connect', 'disconnect', 'get_persona_publishing', 'set_persona_publishing', 'list_boards'], descKey: 'apiKeys.toolDescAccounts', Icon: AccountsIcon },
   { id: 'tool_config', actions: ['get', 'save'], descKey: 'apiKeys.toolDescToolConfig', Icon: KeyIcon },

@@ -13,6 +13,8 @@ import {
   type PersonaDefaultAccounts,
 } from './persona-publishing-accounts';
 import { HOOK_PANEL_FORM_VALUES, invalidHookPanelMessage } from './hook-panel-form';
+import type { IdentityCard } from './contracts/persona-identity-card';
+import { parseIdentityCardField } from '@/app/api/persona/identity-card-field';
 
 export { FACE_QUALITIES, PERSONA_CTA_TYPES, PERSONA_CTA_URL_MAX_LENGTH, PERSONA_CTA_INSTRUCTION_MAX_LENGTH, VALID_VIDEO_ASPECTS, VIDEO_LAYOUTS };
 
@@ -90,6 +92,7 @@ export type ParsedPersonaForm = {
     niche: string | null;
     faceQuality: (typeof FACE_QUALITIES)[number] | null;
     videoSubject: string | null;
+    identityCard: IdentityCard | null;
     publishingAccounts: PersonaDefaultAccounts;
   };
   photo: File | null;
@@ -162,6 +165,11 @@ export function parsePersonaForm(formData: FormData, mode: PersonaFormMode): Par
     return { ok: false, error: binding.error };
   }
 
+  const identityCard = parseIdentityCardField(formData.get('identityCard'));
+  if (identityCard.status === 'invalid') {
+    return { ok: false, error: identityCard.error };
+  }
+
   return {
     ok: true,
     value: {
@@ -181,6 +189,7 @@ export function parsePersonaForm(formData: FormData, mode: PersonaFormMode): Par
         niche: values.niche ?? null,
         faceQuality: values.faceQuality ?? null,
         videoSubject,
+        identityCard: identityCard.status === 'set' ? identityCard.card : null,
         publishingAccounts: binding.ok ? binding.accounts : emptyPersonaDefaultAccounts(),
       },
       photo,
