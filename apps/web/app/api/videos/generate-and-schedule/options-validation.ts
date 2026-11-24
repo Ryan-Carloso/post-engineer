@@ -138,7 +138,7 @@ export function validateOptions(options: OptionsInput): Checked<ValidatedOptions
   }
   const hookTitleIssue = hookTitle === undefined ? null : checkHookTitle(hookTitle);
   if (hookTitleIssue !== null) {
-    issues.push(invalid(hookTitleIssueMessage(hookTitleIssue), 'options.hookTitle'));
+    issues.push(invalid(hookTitleIssueMessage(hookTitleIssue), 'options.hookTitle', hookTitleIssue));
   }
   if (hookPanel !== undefined && mode !== undefined && mode !== 'hook_lipsync') {
     issues.push(invalid(HOOK_PANEL_ONLY_HOOK_LIPSYNC_MESSAGE, 'options.hookPanel'));

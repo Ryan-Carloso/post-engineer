@@ -10,6 +10,10 @@ export interface ValidationIssue {
 
 export type Checked<T> = { ok: true; value: T } | { ok: false; issues: ValidationIssue[] };
 
-export function invalid(message: string, field?: string): ValidationIssue {
-  return { code: ERROR_CODES.VALIDATION_FAILED, message, field };
+export function invalid(
+  message: string,
+  field?: string,
+  code: ErrorCode = ERROR_CODES.VALIDATION_FAILED,
+): ValidationIssue {
+  return { code, message, field };
 }

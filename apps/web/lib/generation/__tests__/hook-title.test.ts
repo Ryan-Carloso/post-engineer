@@ -53,6 +53,11 @@ describe('hook title limits', () => {
     expect(normalizeHookTitle('  a   b  ')).toBe('a b');
   });
 
+  it('treats a byte-order mark as whitespace, as the engine normalizer does', () => {
+    expect(normalizeHookTitle('\uFEFFA\uFEFF\uFEFFB\uFEFF')).toBe('A B');
+    expect(checkHookTitle('\uFEFF \uFEFF')).toBe(HOOK_TITLE_CODES.empty);
+  });
+
   it('keeps punctuation and case as written', () => {
     expect(normalizeHookTitle('I entered the sea clothed?')).toBe('I entered the sea clothed?');
   });

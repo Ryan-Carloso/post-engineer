@@ -77,9 +77,15 @@ describe('POST /api/videos/generate-and-schedule hookTitle', () => {
     vi.stubGlobal('fetch', fetchSpy);
     const res = await post(bodyWithOptions({ hookTitle }));
     expect(res.status).toBe(400);
-    const payload = (await res.json()) as { field?: string; error?: string; message?: string };
+    const payload = (await res.json()) as {
+      field?: string;
+      code?: string;
+      errors?: Array<{ code: string; field?: string; message: string }>;
+    };
     expect(payload.field).toBe('options.hookTitle');
-    expect(JSON.stringify(payload)).toContain(code);
+    expect(payload.code).toBe(code);
+    expect(payload.errors).toEqual([expect.objectContaining({ code, field: 'options.hookTitle' })]);
+    expect(payload.errors?.[0].message.startsWith(`${code}: `)).toBe(true);
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 

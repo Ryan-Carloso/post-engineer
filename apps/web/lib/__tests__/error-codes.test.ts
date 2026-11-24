@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { ERROR_CODES, errorMessage, formatErrorMessage, isErrorCode } from '../error-codes';
+import { HOOK_TITLE_CODES, hookTitleMessage } from '../generation/hook-title';
 import { SCHEDULE_MAX_AHEAD_DAYS, SCHEDULE_MIN_ADVANCE_HOURS } from '../schedule-window';
 
 describe('error-codes', () => {
@@ -27,6 +28,14 @@ describe('error-codes', () => {
     for (const code of required) {
       expect(ERROR_CODES[code], code).toBe(code);
       expect(errorMessage(code).length, code).toBeGreaterThan(0);
+    }
+  });
+
+  it('exposes every stable hook title code with the shared rule text', () => {
+    for (const code of Object.values(HOOK_TITLE_CODES)) {
+      expect(isErrorCode(code), code).toBe(true);
+      expect(ERROR_CODES[code], code).toBe(code);
+      expect(errorMessage(code), code).toBe(hookTitleMessage(code));
     }
   });
 

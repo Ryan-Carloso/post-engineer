@@ -1,3 +1,5 @@
+import { HOOK_TITLE_CODES, hookTitleMessage } from '@/lib/generation/hook-title';
+
 export const ERROR_CODES = {
   PERSONA_NOT_FOUND: 'PERSONA_NOT_FOUND',
   PERSONA_ACCESS_DENIED: 'PERSONA_ACCESS_DENIED',
@@ -15,6 +17,10 @@ export const ERROR_CODES = {
   INSUFFICIENT_TOKENS: 'INSUFFICIENT_TOKENS',
   RATE_LIMIT_EXCEEDED: 'RATE_LIMIT_EXCEEDED',
   VALIDATION_FAILED: 'VALIDATION_FAILED',
+  HOOK_TITLE_EMPTY: HOOK_TITLE_CODES.empty,
+  HOOK_TITLE_TOO_MANY_WORDS: HOOK_TITLE_CODES.tooManyWords,
+  HOOK_TITLE_TOO_LONG: HOOK_TITLE_CODES.tooLong,
+  HOOK_TITLE_INVALID_CHARS: HOOK_TITLE_CODES.invalidChars,
   BLUESKY_CREDENTIAL_REJECTED: 'BLUESKY_CREDENTIAL_REJECTED',
   THREESPEAK_CREDENTIAL_REJECTED: 'THREESPEAK_CREDENTIAL_REJECTED',
   TELEGRAM_TOKEN_REJECTED: 'TELEGRAM_TOKEN_REJECTED',
@@ -57,6 +63,10 @@ const DEFAULT_MESSAGES: Record<ErrorCode, string> = {
   INSUFFICIENT_TOKENS: 'You need {need} tokens, but only have {have}.',
   RATE_LIMIT_EXCEEDED: 'Too many video generation requests. Please try again later.',
   VALIDATION_FAILED: 'Request validation failed.',
+  HOOK_TITLE_EMPTY: hookTitleMessage(HOOK_TITLE_CODES.empty),
+  HOOK_TITLE_TOO_MANY_WORDS: hookTitleMessage(HOOK_TITLE_CODES.tooManyWords),
+  HOOK_TITLE_TOO_LONG: hookTitleMessage(HOOK_TITLE_CODES.tooLong),
+  HOOK_TITLE_INVALID_CHARS: hookTitleMessage(HOOK_TITLE_CODES.invalidChars),
   BLUESKY_CREDENTIAL_REJECTED: 'Invalid Bluesky handle or app password.',
   THREESPEAK_CREDENTIAL_REJECTED: 'Invalid Hive username or posting key.',
   TELEGRAM_TOKEN_REJECTED: 'Telegram rejected the bot token. Copy a fresh token from @BotFather and try again.',
