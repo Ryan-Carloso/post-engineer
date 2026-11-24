@@ -37,7 +37,7 @@ export function firstSegmentMedia(segments: unknown): SegmentMediaRef | null {
   return null;
 }
 
-export type HookPhotoSource = 'segment' | 'persona' | 'upload';
+export type HookPhotoSource = 'segment' | 'upload' | 'none';
 
 export interface HookPhoto {
   url: string | null;
@@ -48,7 +48,7 @@ export interface HookPhoto {
 
 export function hookPhotoForSegments(segments: unknown): HookPhoto {
   const first = firstSegmentMedia(segments);
-  if (first === null) return { url: null, source: 'persona', segmentIndex: null, imageIndex: null };
+  if (first === null) return { url: null, source: 'none', segmentIndex: null, imageIndex: null };
   if (first.mediaId !== undefined) {
     return { url: null, source: 'upload', segmentIndex: first.segmentIndex, imageIndex: first.imageIndex };
   }
@@ -66,14 +66,14 @@ export function hookPhotoForSegments(segments: unknown): HookPhoto {
 export function narrowHookPhoto(value: unknown): HookPhoto {
   const fallback: HookPhoto = {
     url: null,
-    source: 'persona',
+    source: 'none',
     segmentIndex: null,
     imageIndex: null,
   };
   if (typeof value !== 'object' || value === null) return fallback;
   const record = value as Record<string, unknown>;
   const source = record.source;
-  if (source !== 'segment' && source !== 'persona' && source !== 'upload') return fallback;
+  if (source !== 'segment' && source !== 'upload' && source !== 'none') return fallback;
   const index = (key: string): number | null =>
     typeof record[key] === 'number' && Number.isFinite(record[key])
       ? (record[key] as number)

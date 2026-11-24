@@ -116,7 +116,7 @@ function slotPayload(
       stage: null,
       retryable: null,
       scriptAngle: null,
-      hookPhoto: { url: null, source: 'persona', segmentIndex: null, imageIndex: null },
+      hookPhoto: { url: null, source: 'none', segmentIndex: null, imageIndex: null },
       ...overrides,
     },
     schedule: SLOT_SCHEDULE,
@@ -527,21 +527,21 @@ describe('PostDetailPage', () => {
     expect(mockT).toHaveBeenCalledWith('posts.hookPhotoUploadNote', { segment: 2, image: 3 });
   });
 
-  it('explains the persona fallback when no segment photo was sent', () => {
+  it('explains that no photo was sent when no segment photo was sent', () => {
     mockQueries({ slot: slotPayload() });
     render(<DetailPage />);
 
     const section = screen.getByRole('region', { name: 'posts.hookPhotoLabel' });
     expect(within(section).queryByRole('img')).not.toBeInTheDocument();
-    expect(within(section).getByText('posts.hookPhotoPersonaNote')).toBeInTheDocument();
-    expect(mockT).toHaveBeenCalledWith('posts.hookPhotoPersonaNote');
+    expect(within(section).getByText('posts.hookPhotoNoneNote')).toBeInTheDocument();
+    expect(mockT).toHaveBeenCalledWith('posts.hookPhotoNoneNote');
   });
 
   it.each([
     ['both indices null', null, null],
     ['segment index null', null, 2],
     ['image index null', 0, null],
-  ])('falls back to the persona note when %s: no position, no image', (_label, segmentIndex, imageIndex) => {
+  ])('falls back to the none note when %s: no position, no image', (_label, segmentIndex, imageIndex) => {
     mockQueries({
       slot: slotPayload({
         hookPhoto: {
@@ -556,11 +556,11 @@ describe('PostDetailPage', () => {
 
     const section = screen.getByRole('region', { name: 'posts.hookPhotoLabel' });
     expect(within(section).queryByRole('img')).not.toBeInTheDocument();
-    expect(within(section).getByText('posts.hookPhotoPersonaNote')).toBeInTheDocument();
-    expect(mockT).toHaveBeenCalledWith('posts.hookPhotoPersonaNote');
+    expect(within(section).getByText('posts.hookPhotoNoneNote')).toBeInTheDocument();
+    expect(mockT).toHaveBeenCalledWith('posts.hookPhotoNoneNote');
   });
 
-  it('falls back to the persona note for a segment photo with no URL and no position', () => {
+  it('falls back to the none note for a segment photo with no URL and no position', () => {
     mockQueries({
       slot: slotPayload({
         hookPhoto: { url: null, source: 'segment', segmentIndex: null, imageIndex: null },
@@ -570,8 +570,8 @@ describe('PostDetailPage', () => {
 
     const section = screen.getByRole('region', { name: 'posts.hookPhotoLabel' });
     expect(within(section).queryByRole('img')).not.toBeInTheDocument();
-    expect(within(section).getByText('posts.hookPhotoPersonaNote')).toBeInTheDocument();
-    expect(mockT).toHaveBeenCalledWith('posts.hookPhotoPersonaNote');
+    expect(within(section).getByText('posts.hookPhotoNoneNote')).toBeInTheDocument();
+    expect(mockT).toHaveBeenCalledWith('posts.hookPhotoNoneNote');
   });
 
   it('never renders an image for an upload photo even when it carries a URL', () => {
@@ -593,12 +593,12 @@ describe('PostDetailPage', () => {
     expect(mockT).toHaveBeenCalledWith('posts.hookPhotoUploadNote', { segment: 2, image: 3 });
   });
 
-  it('never renders the upload note for a persona fallback even with a position', () => {
+  it('never renders the upload note for a none source even with a position', () => {
     mockQueries({
       slot: slotPayload({
         hookPhoto: {
           url: 'https://e.com/hook.jpg',
-          source: 'persona',
+          source: 'none',
           segmentIndex: 1,
           imageIndex: 2,
         },
@@ -608,11 +608,11 @@ describe('PostDetailPage', () => {
 
     const section = screen.getByRole('region', { name: 'posts.hookPhotoLabel' });
     expect(within(section).queryByRole('img')).not.toBeInTheDocument();
-    expect(within(section).getByText('posts.hookPhotoPersonaNote')).toBeInTheDocument();
-    expect(mockT).toHaveBeenCalledWith('posts.hookPhotoPersonaNote');
+    expect(within(section).getByText('posts.hookPhotoNoneNote')).toBeInTheDocument();
+    expect(mockT).toHaveBeenCalledWith('posts.hookPhotoNoneNote');
   });
 
-  it('falls back to the persona note for an upload with no position', () => {
+  it('falls back to the none note for an upload with no position', () => {
     mockQueries({
       slot: slotPayload({
         hookPhoto: { url: null, source: 'upload', segmentIndex: null, imageIndex: null },
@@ -622,8 +622,8 @@ describe('PostDetailPage', () => {
 
     const section = screen.getByRole('region', { name: 'posts.hookPhotoLabel' });
     expect(within(section).queryByRole('img')).not.toBeInTheDocument();
-    expect(within(section).getByText('posts.hookPhotoPersonaNote')).toBeInTheDocument();
-    expect(mockT).toHaveBeenCalledWith('posts.hookPhotoPersonaNote');
+    expect(within(section).getByText('posts.hookPhotoNoneNote')).toBeInTheDocument();
+    expect(mockT).toHaveBeenCalledWith('posts.hookPhotoNoneNote');
   });
 
   it('renders no hook photo section for a voiceover video', () => {
