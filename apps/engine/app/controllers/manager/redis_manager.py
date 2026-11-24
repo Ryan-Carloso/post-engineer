@@ -2,9 +2,11 @@ import json
 from typing import Dict
 
 import redis
+from loguru import logger
+from pydantic import ValidationError
 
 from app.controllers.manager.base_manager import TaskManager
-from app.models.schema import VideoParams
+from app.models.schema import TaskVideoRequest, VideoParams
 from app.services import remote_dispatch
 
 FUNC_MAP = {
@@ -47,12 +49,27 @@ class RedisTaskManager(TaskManager):
             if "params" in task_info["kwargs"] and isinstance(
                 task_info["kwargs"]["params"], dict
             ):
-                task_info["kwargs"]["params"] = VideoParams(
-                    **task_info["kwargs"]["params"]
-                )
+                try:
+                    task_info["kwargs"]["params"] = TaskVideoRequest(
+                        **task_info["kwargs"]["params"]
+                    )
+                except ValidationError as exc:
+                    self._fail_invalid_task(task_info, exc)
+                    return None
 
             return task_info
         return None
+
+    def _fail_invalid_task(self, task_info, exc):
+        from app.services.task_outcome import fail_or_stop
+
+        args = task_info.get("args") or []
+        task_id = args[0] if args else None
+        error = "; ".join(str(item["msg"]) for item in exc.errors())
+        if task_id is None:
+            logger.error(f"dropping invalid queued task with no task id: {error}")
+            return
+        fail_or_stop(task_id, f"invalid task params: {error}", stage="dispatch")
 
     def is_queue_empty(self):
         return self.redis_client.llen(self.queue) == 0
