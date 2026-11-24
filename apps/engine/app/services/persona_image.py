@@ -22,7 +22,8 @@ def is_engine_usable_persona_image_url(value: str) -> bool:
     - a house-face path (/caracter-samples/file-N.png);
     - a data:image/ URI with the payload separator the engine splits on;
     - an http(s) URL with a hostname, where a literal IP host must be
-      public (hostnames are left to the engine's resolve-and-check).
+      public (hostnames are accepted by shape only; the engine does not
+      fetch the avatar).
     Anything else (a relative non-asset path, a non-http scheme, a
     host-less URL) is guaranteed to fail the gate.
     """

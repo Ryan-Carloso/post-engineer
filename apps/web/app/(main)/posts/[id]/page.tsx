@@ -27,19 +27,10 @@ import type { PublishLink } from '@/lib/publish-links';
 import { PROVIDER_LABELS, scheduleAccountIds } from '@/lib/account-options';
 import { useI18n } from '@/lib/i18n/provider';
 import { useCopyText } from '@/lib/use-copy-text';
-import type { TranslationKey } from '@/lib/i18n';
+import { GENERATION_ERROR_KEY } from '@/lib/generation/generation-errors';
 import { Button } from '@/components/ui/button';
 import { STATUS_KEY, STATUS_STYLE } from '../status';
 import { PostFailureNotice } from './post-failure-notice';
-
-const GENERATION_ERROR_KEY: Record<string, TranslationKey> = {
-  custom_audio_invalid: 'posts.errorCustomAudio',
-  engine_unavailable: 'posts.errorEngineUnavailable',
-  engine_rejected: 'posts.errorEngineRejected',
-  no_task_id: 'posts.errorNoTaskId',
-  invalid_task_response: 'posts.errorInvalidTaskResponse',
-  unknown: 'posts.errorUnknown',
-};
 
 function videoUrlFor(taskId: string | null | undefined): string | null {
   return taskId ? `/api/persona/video-download/${encodeURIComponent(taskId)}/final-1.mp4` : null;

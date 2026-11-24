@@ -1223,6 +1223,23 @@ describe('PostDetailPage — direct generation progress', () => {
     expect(screen.queryByRole('region', { name: 'posts.detailsTitle' })?.querySelector('video')).toBeNull();
   });
 
+  it('shows the mapped failure for the newer generation error codes', () => {
+    const cases = [
+      ['no_first_photo', 'posts.errorNoFirstPhoto'],
+      ['engine_restart', 'posts.errorEngineRestart'],
+      ['images_do_not_cover_audio', 'posts.errorImagesDoNotCoverAudio'],
+    ] as const;
+    for (const [errorCode, key] of cases) {
+      mockQueries({
+        generation: directGeneration({ status: 'failed', errorCode, engineTaskId: 'task-3' }),
+      });
+      vi.mocked(useParams).mockReturnValue({ id: 'gen-3' });
+      const { unmount } = render(<DetailPage />);
+      expect(screen.getByText(key)).toBeInTheDocument();
+      unmount();
+    }
+  });
+
   it('falls back to the unknown error when the code is missing or unrecognized', () => {
     mockQueries({
       generation: directGeneration({ status: 'failed', errorCode: null, engineTaskId: null }),
