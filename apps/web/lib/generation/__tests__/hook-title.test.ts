@@ -5,6 +5,7 @@ import {
   HOOK_TITLE_MAX_WORDS,
   HOOK_TITLE_SECONDS,
   checkHookTitle,
+  hookTitleIssueMessage,
   hookTitleMessage,
   normalizeHookTitle,
 } from '../hook-title';
@@ -58,7 +59,8 @@ describe('hook title limits', () => {
 
   it('has a message for every code', () => {
     for (const code of Object.values(HOOK_TITLE_CODES)) {
-      expect(hookTitleMessage(code)).toContain('hook_title');
+      expect(hookTitleMessage(code)).toContain('hook title');
+      expect(hookTitleIssueMessage(code).startsWith(`${code}: `)).toBe(true);
     }
   });
 });

@@ -42,12 +42,17 @@ export function checkHookTitle(value: string): HookTitleCode | null {
 }
 
 const MESSAGES: Record<HookTitleCode, string> = {
-  HOOK_TITLE_EMPTY: 'hook_title must not be empty or only spaces.',
-  HOOK_TITLE_TOO_MANY_WORDS: `hook_title must have at most ${HOOK_TITLE_MAX_WORDS} words.`,
-  HOOK_TITLE_TOO_LONG: `hook_title must have at most ${HOOK_TITLE_MAX_CHARS} characters.`,
-  HOOK_TITLE_INVALID_CHARS: 'hook_title must not contain a newline or a control character.',
+  HOOK_TITLE_EMPTY: 'The hook title must not be empty or only spaces.',
+  HOOK_TITLE_TOO_MANY_WORDS: `The hook title must have at most ${HOOK_TITLE_MAX_WORDS} words.`,
+  HOOK_TITLE_TOO_LONG: `The hook title must have at most ${HOOK_TITLE_MAX_CHARS} characters.`,
+  HOOK_TITLE_INVALID_CHARS: 'The hook title must not contain a newline or a control character.',
 };
 
 export function hookTitleMessage(code: HookTitleCode): string {
   return MESSAGES[code];
+}
+
+/** The text a caller sees for a refused title: the stable code, then the rule. */
+export function hookTitleIssueMessage(code: HookTitleCode): string {
+  return `${code}: ${MESSAGES[code]}`;
 }
