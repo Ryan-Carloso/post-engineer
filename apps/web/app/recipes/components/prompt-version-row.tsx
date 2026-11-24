@@ -4,8 +4,8 @@ import { useQuery } from '@tanstack/react-query';
 import { useI18n } from '@/lib/i18n/provider';
 import { formatVersionDate } from '@/lib/relative-time';
 import { SpinnerIcon } from '@/lib/ui';
-import { fetchPromptVersion, promptFailureKey } from '@/lib/user-prompts-client';
-import { userPromptVersionKey } from '@/lib/use-user-prompts';
+import { promptFailureKey } from '@/lib/user-prompts-client';
+import { PromptVersionReadError, promptVersionQueryOptions } from '@/lib/use-user-prompts';
 import type { PromptVersionSummary } from '@/lib/user-prompts-types';
 
 const ACTION_CLASS =
@@ -33,27 +33,22 @@ export default function PromptVersionRow({
   onRestore,
 }: PromptVersionRowProps): React.ReactElement {
   const { t, locale } = useI18n();
-  const full = useQuery({
-    queryKey: userPromptVersionKey(slug, entry.version),
-    queryFn: () => fetchPromptVersion(slug, entry.version),
-    enabled: expanded,
-    staleTime: 60_000,
-  });
-  const canRestore = !entry.current && !(!entry.previewTruncated && entry.preview === currentBody);
+  const full = useQuery({ ...promptVersionQueryOptions(slug, entry.version), enabled: expanded });
+  const sameAsCurrent = entry.previewTruncated ? full.data?.version.body === currentBody : entry.preview === currentBody;
+  const canRestore = !entry.current && !sameAsCurrent;
 
   let fullText: React.ReactNode = null;
   if (expanded) {
-    const result = full.data;
-    if (result === undefined) {
+    if (full.isError) {
+      fullText = (
+        <p role="alert" data-testid={`prompt-version-full-error-${entry.version}`} className="mt-2 text-sm text-destructive">
+          {t(full.error instanceof PromptVersionReadError ? promptFailureKey(full.error.failure) : 'userPrompts.errorGeneric')}
+        </p>
+      );
+    } else if (full.data === undefined) {
       fullText = (
         <p className="mt-2 flex items-center gap-2 text-sm text-muted-text">
           <SpinnerIcon />
-        </p>
-      );
-    } else if (!result.success) {
-      fullText = (
-        <p role="alert" data-testid={`prompt-version-full-error-${entry.version}`} className="mt-2 text-sm text-destructive">
-          {t(promptFailureKey(result))}
         </p>
       );
     } else {
@@ -62,7 +57,7 @@ export default function PromptVersionRow({
           data-testid={`prompt-version-full-${entry.version}`}
           className="mt-2 max-h-96 overflow-auto rounded-xl bg-surface p-3 font-mono text-xs leading-relaxed wrap-break-word whitespace-pre-wrap text-ink-soft"
         >
-          {result.body.version.body}
+          {full.data.version.body}
         </pre>
       );
     }

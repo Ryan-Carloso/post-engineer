@@ -21,6 +21,14 @@ afterEach(() => {
 });
 
 describe('ConfirmDialog', () => {
+  it('keeps a side margin on small screens instead of sitting flush with the edges', () => {
+    render(<ConfirmDialog {...base} />);
+    const classes = screen.getByTestId('confirm-dialog').className.split(' ');
+    expect(classes).toContain('w-[calc(100%-2rem)]');
+    expect(classes).toContain('max-w-sm');
+    expect(classes).not.toContain('w-full');
+  });
+
   it('shows the title and the body', () => {
     render(<ConfirmDialog {...base} />);
     expect(screen.getByText('Restore version 2?')).toBeInTheDocument();

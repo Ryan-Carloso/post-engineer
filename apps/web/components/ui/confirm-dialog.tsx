@@ -54,7 +54,7 @@ export default function ConfirmDialog({
             event.preventDefault();
             cancelRef.current?.focus();
           }}
-          className="fixed top-1/2 left-1/2 z-50 w-full max-w-sm -translate-1/2 rounded-2xl bg-card p-6 shadow-xl"
+          className="fixed top-1/2 left-1/2 z-50 w-[calc(100%-2rem)] max-w-sm -translate-1/2 rounded-2xl bg-card p-6 shadow-xl"
         >
           <DialogPrimitive.Title className="text-lg font-bold tracking-tight text-ink">{title}</DialogPrimitive.Title>
           <DialogPrimitive.Description className="mt-2 text-sm leading-5 text-muted-text">{body}</DialogPrimitive.Description>

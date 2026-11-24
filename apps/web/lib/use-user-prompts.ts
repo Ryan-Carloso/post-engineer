@@ -2,10 +2,12 @@ import { useMutation, useQuery, useQueryClient, type UseMutationResult, type Use
 import {
   createPrompt,
   deletePrompt,
+  fetchPromptVersion,
   fetchPrompts,
   restorePromptVersion,
   updatePrompt,
   type PromptCall,
+  type PromptCallFailure,
   type PromptChanges,
   type PromptDraft,
 } from '@/lib/user-prompts-client';
@@ -19,6 +21,24 @@ export const userPromptDetailKey = (slug: string) => [...USER_PROMPTS_KEY, 'deta
 export const userPromptVersionsKey = (slug: string) => [...USER_PROMPTS_KEY, 'versions', slug] as const;
 
 export const userPromptVersionKey = (slug: string, version: number) => [...userPromptVersionsKey(slug), version] as const;
+
+export class PromptVersionReadError extends Error {
+  constructor(readonly failure: PromptCallFailure) {
+    super(`Reading a prompt version failed (status ${failure.status})`);
+    this.name = 'PromptVersionReadError';
+  }
+}
+
+export const promptVersionQueryOptions = (slug: string, version: number) => ({
+  queryKey: userPromptVersionKey(slug, version),
+  queryFn: async () => {
+    const result = await fetchPromptVersion(slug, version);
+    if (!result.success) throw new PromptVersionReadError(result);
+    return result.body;
+  },
+  retry: false,
+  staleTime: 60_000,
+});
 
 export function useUserPromptsQuery(): UseQueryResult<Listing, Error> {
   return useQuery<Listing, Error>({ queryKey: USER_PROMPTS_KEY, queryFn: fetchPrompts, staleTime: 30_000 });

@@ -7,8 +7,14 @@ import { useI18n } from '@/lib/i18n/provider';
 import type { TranslationKey } from '@/lib/i18n';
 import { SpinnerIcon } from '@/lib/ui';
 import { cn } from '@/lib/utils';
-import { fetchPromptVersion, fetchPromptVersions, promptFailureKey } from '@/lib/user-prompts-client';
-import { USER_PROMPTS_KEY, useRestorePromptVersionMutation, userPromptVersionKey, userPromptVersionsKey } from '@/lib/use-user-prompts';
+import { fetchPromptVersions, promptFailureKey } from '@/lib/user-prompts-client';
+import {
+  PromptVersionReadError,
+  USER_PROMPTS_KEY,
+  promptVersionQueryOptions,
+  useRestorePromptVersionMutation,
+  userPromptVersionsKey,
+} from '@/lib/use-user-prompts';
 import type { PromptVersionSummary } from '@/lib/user-prompts-types';
 import PromptVersionRow from './prompt-version-row';
 
@@ -75,21 +81,20 @@ export default function PromptVersionHistory({
     }
     setChecking(true);
     queryClient
-      .fetchQuery({
-        queryKey: userPromptVersionKey(slug, entry.version),
-        queryFn: () => fetchPromptVersion(slug, entry.version),
-        staleTime: 60_000,
-      })
+      .fetchQuery(promptVersionQueryOptions(slug, entry.version))
       .then((result) => {
-        if (!result.success) {
-          setNotice({ tone: 'error', key: promptFailureKey(result) });
-        } else if (result.body.version.body === currentBody) {
+        if (result.version.body === currentBody) {
           setNotice({ tone: 'info', key: 'userPrompts.restoreUnchanged' });
         } else {
           setTarget(entry);
         }
       })
-      .catch(() => setNotice({ tone: 'error', key: 'userPrompts.errorGeneric' }))
+      .catch((error: unknown) =>
+        setNotice({
+          tone: 'error',
+          key: error instanceof PromptVersionReadError ? promptFailureKey(error.failure) : 'userPrompts.errorGeneric',
+        }),
+      )
       .finally(() => setChecking(false));
   }
 

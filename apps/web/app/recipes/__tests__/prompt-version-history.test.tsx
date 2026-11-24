@@ -181,6 +181,51 @@ describe('PromptVersionHistory full text', () => {
   });
 });
 
+describe('PromptVersionHistory full text after a failed read', () => {
+  it('reads the version again when the row is collapsed and expanded after a failure', async () => {
+    let healthy = false;
+    route('GET', '/api/prompts/my-prompt/versions/2', () =>
+      healthy
+        ? Response.json({ success: true, version: { versionId: ID(2), version: 2, title: 'Old title', createdAt: NOW, body: 'the full text of version two', current: false } })
+        : Response.json({ success: false }, { status: 500 }),
+    );
+    renderHistory();
+    fireEvent.click(await screen.findByTestId('prompt-version-toggle-2'));
+    expect(await screen.findByTestId('prompt-version-full-error-2')).toBeInTheDocument();
+    healthy = true;
+    fireEvent.click(screen.getByTestId('prompt-version-toggle-2'));
+    fireEvent.click(screen.getByTestId('prompt-version-toggle-2'));
+    expect(await screen.findByTestId('prompt-version-full-2')).toHaveTextContent('the full text of version two');
+  });
+
+  it('hides Restore once the opened full text equals the current text', async () => {
+    route('GET', '/api/prompts/my-prompt/versions', () =>
+      Response.json({ ...PAGE, versions: [entry(3, { current: true }), entry(2, { preview: 'text of ver', previewTruncated: true })] }),
+    );
+    route('GET', '/api/prompts/my-prompt/versions/2', () =>
+      Response.json({ success: true, version: { versionId: ID(2), version: 2, title: 'Current title', createdAt: NOW, body: 'text of version two is long', current: false } }),
+    );
+    renderHistory({ currentBody: 'text of version two is long' });
+    expect(await screen.findByTestId('prompt-version-restore-2')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('prompt-version-toggle-2'));
+    await screen.findByTestId('prompt-version-full-2');
+    expect(screen.queryByTestId('prompt-version-restore-2')).not.toBeInTheDocument();
+  });
+
+  it('keeps Restore when the opened full text differs from the current text', async () => {
+    route('GET', '/api/prompts/my-prompt/versions', () =>
+      Response.json({ ...PAGE, versions: [entry(3, { current: true }), entry(2, { preview: 'text of ver', previewTruncated: true })] }),
+    );
+    route('GET', '/api/prompts/my-prompt/versions/2', () =>
+      Response.json({ success: true, version: { versionId: ID(2), version: 2, title: 'Current title', createdAt: NOW, body: 'text of version two is long', current: false } }),
+    );
+    renderHistory({ currentBody: 'something else' });
+    fireEvent.click(await screen.findByTestId('prompt-version-toggle-2'));
+    await screen.findByTestId('prompt-version-full-2');
+    expect(screen.getByTestId('prompt-version-restore-2')).toBeInTheDocument();
+  });
+});
+
 describe('PromptVersionHistory restore', () => {
   it('offers Restore on old rows, not on the current row', async () => {
     renderHistory();
@@ -250,6 +295,21 @@ describe('PromptVersionHistory restore', () => {
       expect(notice).toHaveTextContent('Something went wrong. Try again.');
       expect(notice).toHaveAttribute('data-tone', 'error');
       expect(screen.queryByTestId('confirm-dialog')).not.toBeInTheDocument();
+    });
+
+    it('reads the full text again on the next Restore click after a failed read', async () => {
+      let healthy = false;
+      route('GET', '/api/prompts/my-prompt/versions', cutPage);
+      route('GET', FULL_URL, () =>
+        healthy ? fullVersion('text of version two is long') : Response.json({ success: false }, { status: 500 }),
+      );
+      renderHistory({ currentBody: 'something else' });
+      fireEvent.click(await screen.findByTestId('prompt-version-restore-2'));
+      expect(await screen.findByTestId('prompt-version-notice')).toHaveAttribute('data-tone', 'error');
+      healthy = true;
+      fireEvent.click(await screen.findByTestId('prompt-version-restore-2'));
+      expect(await screen.findByTestId('confirm-dialog')).toBeInTheDocument();
+      expect(seen.filter((call) => call.url === FULL_URL)).toHaveLength(2);
     });
 
     it('disables the row controls while the full text is being read', async () => {
