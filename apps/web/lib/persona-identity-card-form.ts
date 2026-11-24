@@ -104,7 +104,7 @@ export type IdentityCardErrorKey =
   | 'identityCard.errGeneric';
 
 export function identityCardErrorKey(message: string): IdentityCardErrorKey {
-  if (message.includes('one_piece')) return 'identityCard.errOnePiece';
+  if (message.includes('cannot be combined with top or bottom')) return 'identityCard.errOnePiece';
   if (message.includes('at least one trait')) return 'identityCard.errNoTrait';
   if (message.includes('sexualised')) return 'identityCard.errContent';
   if (message.includes('clothing only')) return 'identityCard.errOutfitIdentity';

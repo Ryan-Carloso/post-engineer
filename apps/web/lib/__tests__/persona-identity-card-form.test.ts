@@ -81,7 +81,9 @@ describe('validateIdentityCardDraft', () => {
     ['outfit only', draftWith({ 'outfit.top': 'shirt' }), 'identityCard.errNoTrait'],
     ['one_piece with top', draftWith({ 'face.eyes': 'green', 'outfit.one_piece': 'dress', 'outfit.top': 'shirt' }), 'identityCard.errOnePiece'],
     ['identity words in the outfit', draftWith({ 'face.eyes': 'green', 'outfit.top': 'shirt over muscular body' }), 'identityCard.errOutfitIdentity'],
+    ['identity words in one_piece', draftWith({ 'face.eyes': 'green', 'outfit.one_piece': 'dress over muscular body' }), 'identityCard.errOutfitIdentity'],
     ['sexualised clothing', draftWith({ 'face.eyes': 'green', 'outfit.top': 'lingerie' }), 'identityCard.errContent'],
+    ['sexualised clothing in one_piece', draftWith({ 'face.eyes': 'green', 'outfit.one_piece': 'lingerie' }), 'identityCard.errContent'],
     ['a value over 80 characters', draftWith({ 'face.eyes': 'x'.repeat(81) }), 'identityCard.errField'],
   ])('maps %s to its localized key', (_name, draft, key) => {
     expect(validateIdentityCardDraft(draft)).toEqual({ ok: false, errorKey: key });
@@ -91,6 +93,8 @@ describe('validateIdentityCardDraft', () => {
 describe('identityCardErrorKey', () => {
   it('maps server messages to keys and never returns the raw text', () => {
     expect(identityCardErrorKey('identityCard.defaults.outfit.one_piece: cannot be combined with top or bottom')).toBe('identityCard.errOnePiece');
+    expect(identityCardErrorKey('identityCard.defaults.outfit.one_piece: must describe clothing only, not the person (face, hair, skin, body)')).toBe('identityCard.errOutfitIdentity');
+    expect(identityCardErrorKey('identityCard.defaults.outfit.one_piece: nude or sexualised clothing is not allowed')).toBe('identityCard.errContent');
     expect(identityCardErrorKey('identityCard.identity: must hold at least one trait')).toBe('identityCard.errNoTrait');
     expect(identityCardErrorKey('identityCard.defaults.outfit.top: nude or sexualised clothing is not allowed')).toBe('identityCard.errContent');
     expect(identityCardErrorKey('identityCard.identity.face.eyes: at most 80 characters')).toBe('identityCard.errField');
