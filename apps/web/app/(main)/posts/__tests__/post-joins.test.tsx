@@ -141,6 +141,22 @@ describe('usePostFilters passes', () => {
     expect(result.current.passes(makeSlot({ scheduleId: 's3' }))).toBe(true);
   });
 
+  it('keeps only faceless slots on the selected provider for the no-persona option', () => {
+    const { result } = renderHook(() => usePostFilters(makeJoins()));
+    act(() => {
+      result.current.setPersona(POSTS_NO_PERSONA);
+      result.current.setProvider('youtube');
+    });
+
+    expect(result.current.passes(makeSlot())).toBe(false);
+    expect(result.current.passes(makeSlot({ scheduleId: 's2' }))).toBe(false);
+    expect(result.current.passes(makeSlot({ scheduleId: 's3' }))).toBe(true);
+    act(() => {
+      result.current.setProvider('instagram');
+    });
+    expect(result.current.passes(makeSlot({ scheduleId: 's3' }))).toBe(false);
+  });
+
   it('combines the persona and provider predicates', () => {
     const { result } = renderHook(() => usePostFilters(makeJoins()));
     act(() => {
