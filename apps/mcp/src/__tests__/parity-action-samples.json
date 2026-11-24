@@ -689,5 +689,93 @@
         "cloneId": "c1"
       }
     }
+  ],
+  "experiments.create": [
+    {
+      "args": {
+        "action": "create",
+        "name": "Sample experiment",
+        "persona": "11111111-1111-4111-8111-111111111111",
+        "videoType": "voiceover",
+        "prompts": [
+          {
+            "promptVersionId": "11111111-1111-4111-8111-111111111111",
+            "videos": [
+              {
+                "title": "Sample video",
+                "description": "Sample publish copy."
+              },
+              {
+                "title": "Sample video",
+                "description": "Sample publish copy."
+              },
+              {
+                "title": "Sample video",
+                "description": "Sample publish copy."
+              },
+              {
+                "title": "Sample video",
+                "description": "Sample publish copy."
+              },
+              {
+                "title": "Sample video",
+                "description": "Sample publish copy."
+              }
+            ]
+          },
+          {
+            "promptVersionId": "22222222-2222-4222-8222-222222222222",
+            "videos": [
+              {
+                "title": "Sample video",
+                "description": "Sample publish copy."
+              },
+              {
+                "title": "Sample video",
+                "description": "Sample publish copy."
+              },
+              {
+                "title": "Sample video",
+                "description": "Sample publish copy."
+              },
+              {
+                "title": "Sample video",
+                "description": "Sample publish copy."
+              },
+              {
+                "title": "Sample video",
+                "description": "Sample publish copy."
+              }
+            ]
+          }
+        ],
+        "videosPerPrompt": 5,
+        "postsPerDay": 2,
+        "providers": [
+          "youtube"
+        ],
+        "startAt": "2026-12-01T00:00:00",
+        "times": [
+          "09:00",
+          "18:00"
+        ],
+        "timezone": "UTC"
+      }
+    }
+  ],
+  "experiments.list": [
+    {
+      "args": {
+        "action": "list"
+      }
+    }
+  ],
+  "experiments.cancel": [
+    {
+      "args": {
+        "action": "cancel",
+        "experimentId": "33333333-3333-4333-8333-333333333333"
+      }
+    }
   ]
 }

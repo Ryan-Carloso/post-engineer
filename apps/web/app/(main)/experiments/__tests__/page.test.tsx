@@ -11,6 +11,10 @@ vi.mock('@/lib/i18n/provider', () => {
 });
 
 vi.mock('@/lib/experiments/comparison-query', () => ({ usePromptComparisonQuery: vi.fn() }));
+vi.mock('@/lib/experiments/instances-query', () => ({
+  useExperimentsQuery: () => ({ data: { success: true, experiments: [] } }),
+  useCancelExperimentMutation: () => ({ mutate: vi.fn(), isPending: false, variables: undefined }),
+}));
 vi.mock('@/lib/api', () => ({ useSocialAccountsQuery: vi.fn() }));
 vi.mock('@/components/provider-icon', () => ({ ProviderIcon: ({ provider }: { provider: string }) => <span data-testid={`icon-${provider}`} /> }));
 vi.mock('@/components/ui/tabs', () => ({

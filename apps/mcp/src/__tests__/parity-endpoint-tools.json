@@ -385,5 +385,23 @@
       "tool": "experiments",
       "action": "results"
     }
+  ],
+  "POST /api/experiments": [
+    {
+      "tool": "experiments",
+      "action": "create"
+    }
+  ],
+  "GET /api/experiments/instances": [
+    {
+      "tool": "experiments",
+      "action": "list"
+    }
+  ],
+  "DELETE /api/experiments/instances": [
+    {
+      "tool": "experiments",
+      "action": "cancel"
+    }
   ]
 }

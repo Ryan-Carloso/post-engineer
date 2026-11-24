@@ -10,14 +10,14 @@ import { IMAGE_AS_SHORT_NOTE, IMAGE_PROVIDERS } from './contracts/providers.js';
 import { handlePublishExisting } from './tools-publish-existing.js';
 import { DESTRUCTIVE, MUTATING, READ_ONLY } from './tool-annotations.js';
 import { PublishVideoDirectShape, handlePublishVideoDirect } from './tools.js';
-import { PromptComparisonShape, handlePromptComparison } from './tools-experiments.js';
+import { CancelExperimentShape, CreateExperimentShape, ListExperimentsShape, PromptComparisonShape, handleCancelExperiment, handleCreateExperiment, handleListExperiments, handlePromptComparison } from './tools-experiments.js';
 import { UploadMediaRemoteShape } from './remote-shapes-images.js';
 import { CheckMediaShape, UploadMediaRemoteSchema, UploadMediaShape, handleCheckMedia, handleUploadMedia, handleUploadMediaFromUrl } from './tools-user-media.js';
 import { ValidateScriptSchema } from './single-video-shape.js';
 import { ScoreDraftShape, ValidateScriptShape, handleScoreDraft, handleValidateScript } from './tools-single-video.js';
 import { handleCompleteVideoUpload, handleCreateVideoUpload, handlePublishUploadedVideo } from './tools-publish-uploaded.js';
 
-const EXPERIMENTS_SPECS = { results: PromptComparisonShape };
+const EXPERIMENTS_SPECS = { results: PromptComparisonShape, create: CreateExperimentShape, list: ListExperimentsShape, cancel: CancelExperimentShape };
 
 const MEDIA_SPECS = { upload: UploadMediaShape, check: CheckMediaShape };
 
@@ -35,14 +35,17 @@ export function registerContentTools(server: McpServer, client: PostEngineerClie
   server.tool(
     'experiments',
     actionDescription(
-      'Experiments compare prompts. Every video generated with a promptVersionId (the versionId that prompts (action: get) returns) records that prompt version. results: per publishing account (never across accounts), each prompt version with its video count, median views, lift (each video\'s views divided by the median of the other videos of the same account; above 1 beats the account) and a sign-test label: insufficient (fewer than 5 videos), no_signal, indicative or clear. Videos made without a prompt form the "no prompt" group. The clear and indicative thresholds are corrected for the number of prompts compared: they are divided by the number of groups of the account with at least 5 videos (the "no prompt" group included), so each extra prompt needs a stronger lead. Never call a prompt the winner unless the label is clear. To compare any number of prompts fairly, rotate them round-robin on the same account, swap their posting times, and make at least 10 videos per prompt: 5 videos only lift a prompt out of insufficient, and even a unanimous lead needs 6 videos to be clear with one group and 8 with five.',
+      'create: schedule the whole sample of an experiment at once (2-5 prompts pinned by promptVersionId, 5-10 already-written scripts per prompt, interleaved A,B,A,B on the same accounts at 1-5 posts per day; one charge for the whole sample; returns the experiment id, every slot and the end date). list: experiments with per-prompt progress (published of total). cancel: cancel an experiment, deleting its pending videos and refunding them. Experiments compare prompts. Every video generated with a promptVersionId (the versionId that prompts (action: get) returns) records that prompt version. results: per publishing account (never across accounts), each prompt version with its video count, median views, lift (each video\'s views divided by the median of the other videos of the same account; above 1 beats the account) and a sign-test label: insufficient (fewer than 5 videos), no_signal, indicative or clear. Videos made without a prompt form the "no prompt" group. The clear and indicative thresholds are corrected for the number of prompts compared: they are divided by the number of groups of the account with at least 5 videos (the "no prompt" group included), so each extra prompt needs a stronger lead. Never call a prompt the winner unless the label is clear. To compare any number of prompts fairly, rotate them round-robin on the same account, swap their posting times, and make at least 10 videos per prompt: 5 videos only lift a prompt out of insufficient, and even a unanimous lead needs 6 videos to be clear with one group and 8 with five.',
       EXPERIMENTS_SPECS,
     ),
     actionShape(EXPERIMENTS_SPECS),
-    READ_ONLY,
+    MUTATING,
     byAction(
       {
         results: async (args) => handlePromptComparison(client, args),
+        create: async (args) => handleCreateExperiment(client, args),
+        list: async () => handleListExperiments(client),
+        cancel: async (args) => handleCancelExperiment(client, args),
       },
       EXPERIMENTS_SPECS,
       'experiments',

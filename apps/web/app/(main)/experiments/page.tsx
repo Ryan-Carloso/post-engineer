@@ -19,6 +19,7 @@ import { useI18n } from '@/lib/i18n/provider';
 import { isSocialProvider } from '@/lib/providers/registry';
 import { SpinnerIcon } from '@/lib/ui';
 import { cn } from '@/lib/utils';
+import { ExperimentList } from './experiment-list';
 
 type AccountView = PromptComparisonResponse['accounts'][number];
 type PromptView = AccountView['prompts'][number];
@@ -78,6 +79,8 @@ export default function ExperimentsPage(): React.ReactElement {
         </Tabs>
         <p className="text-xs text-muted-text">{t('experiments.howItWorks', { min: MIN_COMPARED_VIDEOS, recommended: RECOMMENDED_VIDEOS_PER_PROMPT })}</p>
       </section>
+
+      <ExperimentList />
 
       {query.isLoading ? (
         <div className="flex items-center justify-center py-20 text-muted-text"><SpinnerIcon /></div>
