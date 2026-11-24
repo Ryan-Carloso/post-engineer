@@ -23,14 +23,13 @@ const ACTIONS: Record<string, string[]> = {
   voices: ['list', 'preview', 'list_clones', 'create_clone', 'get_clone', 'preview_clone', 'delete_clone'],
   accounts: ['list', 'connect', 'disconnect', 'get_persona_publishing', 'set_persona_publishing', 'list_boards'],
   tool_config: ['get', 'save'],
-  prompt_library: ['create', 'update', 'delete', 'versions', 'restore'],
   schedules: ['list', 'cancel', 'get_slot', 'update_slot_title', 'delete_slot'],
   posts: ['list', 'get'],
   insights: ['post_metrics', 'last_day', 'retention_curve', 'share_link_create', 'share_link_list', 'share_link_revoke'],
   experiments: ['results'],
   media: ['upload', 'check'],
   billing: ['balance', 'transactions'],
-  prompts: ['list', 'get'],
+  prompts: ['create', 'update', 'delete', 'versions', 'restore', 'list', 'get'],
   check_script: ['validate', 'score'],
   publish_video: ['from_file', 'create_upload', 'complete_upload', 'publish_upload', 'publish_existing'],
 };
@@ -58,7 +57,7 @@ function actionsOf(tool: Tool | undefined): string[] {
 }
 
 describe('createPostEngineerMcpServer', () => {
-  it.each(['stdio', 'http'] as const)('registers exactly the 18 intent tools on the %s server', async (transport) => {
+  it.each(['stdio', 'http'] as const)('registers exactly the 17 intent tools on the %s server', async (transport) => {
     expect([...(await listTools(transport)).keys()].sort()).toEqual(EXPECTED_TOOLS);
   });
 

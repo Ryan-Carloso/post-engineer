@@ -3,6 +3,8 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { createPostEngineerMcpServer } from '../index.js';
 import { PostEngineerClient } from '../client.js';
+import { USER_PROMPT_SLUG_PATTERN } from '../contracts/prompts.js';
+import { MCP_SESSION_ID_HEADER } from '../recipe-session.js';
 
 const BASE = 'https://api.example.test';
 
@@ -28,13 +30,16 @@ const OWN = {
 function setup(routes: Record<string, unknown>): {
   call: (args: Record<string, unknown>) => Promise<{ isError: boolean; text: string }>;
   seen: Seen[];
+  headers: Array<Record<string, string>>;
 } {
   const seen: Seen[] = [];
+  const headers: Array<Record<string, string>> = [];
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string, init: RequestInit) => {
       const parsed = new URL(url);
       const method = init.method ?? 'GET';
+      headers.push(init.headers as Record<string, string>);
       seen.push({ method, path: parsed.pathname, body: typeof init.body === 'string' ? JSON.parse(init.body) : undefined });
       return Response.json(routes[`${method} ${parsed.pathname}`] ?? { success: true });
     }),
@@ -42,13 +47,14 @@ function setup(routes: Record<string, unknown>): {
   const api = new PostEngineerClient({ apiKey: 'pe_test', baseUrl: BASE });
   return {
     seen,
+    headers,
     async call(args) {
       const server = createPostEngineerMcpServer(api, 'stdio');
       const [a, b] = InMemoryTransport.createLinkedPair();
       const client = new Client({ name: 't', version: '0.0.0' });
       await Promise.all([server.connect(b), client.connect(a)]);
       try {
-        const result = await client.callTool({ name: 'prompt_library', arguments: args });
+        const result = await client.callTool({ name: 'prompts', arguments: args });
         const content = result.content as Array<{ type: string; text?: string }>;
         return { isError: result.isError === true, text: content.map((part) => part.text ?? '').join('\n') };
       } finally {
@@ -62,7 +68,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('prompt_library', () => {
+describe('prompts write actions', () => {
   it('create posts the prompt text as `prompt` and leaves visibility to the server default', async () => {
     const { call, seen } = setup({ 'POST /api/prompts': { success: true, prompt: OWN } });
     const result = await call({ action: 'create', slug: 'my-prompt', title: 'My prompt', description: 'About', prompt: 'Write it in three beats.' });
@@ -127,7 +133,7 @@ describe('prompt_library', () => {
     const client = new Client({ name: 't', version: '0.0.0' });
     await Promise.all([server.connect(b), client.connect(a)]);
     try {
-      const result = await client.callTool({ name: 'prompt_library', arguments: { action: 'update', slug: 'my-prompt', visibility: 'public' } });
+      const result = await client.callTool({ name: 'prompts', arguments: { action: 'update', slug: 'my-prompt', visibility: 'public' } });
       expect(result.isError).toBe(true);
       expect(JSON.stringify(result.content)).toContain('another public prompt uses it');
     } finally {
@@ -175,7 +181,7 @@ describe('prompt_library', () => {
       const client = new Client({ name: 't', version: '0.0.0' });
       await Promise.all([server.connect(b), client.connect(a)]);
       try {
-        await client.callTool({ name: 'prompt_library', arguments: { action: 'versions', slug: 'my-prompt', limit: 5, before: 9 } });
+        await client.callTool({ name: 'prompts', arguments: { action: 'versions', slug: 'my-prompt', limit: 5, before: 9 } });
       } finally {
         await client.close();
       }
@@ -267,7 +273,7 @@ describe('prompt_library', () => {
       await Promise.all([server.connect(b), client.connect(a)]);
       try {
         const result = await client.callTool({
-          name: 'prompt_library',
+          name: 'prompts',
           arguments: { action: 'restore', slug: 'my-prompt', version: 1, expectedCurrentVersion: 2 },
         });
         expect(result.isError).toBe(true);
@@ -278,6 +284,58 @@ describe('prompt_library', () => {
       } finally {
         await client.close();
       }
+    });
+  });
+
+  describe('merged tool surface', () => {
+    async function listPromptsTool(): Promise<{ description: string; properties: Record<string, { pattern?: string; maxLength?: number }> }> {
+      const api = new PostEngineerClient({ apiKey: 'pe_test', baseUrl: BASE });
+      const server = createPostEngineerMcpServer(api, 'stdio');
+      const [a, b] = InMemoryTransport.createLinkedPair();
+      const client = new Client({ name: 't', version: '0.0.0' });
+      await Promise.all([server.connect(b), client.connect(a)]);
+      try {
+        const { tools } = await client.listTools();
+        const tool = tools.find((candidate) => candidate.name === 'prompts');
+        if (tool === undefined) throw new Error('prompts tool is not registered');
+        const properties = tool.inputSchema.properties as Record<string, { pattern?: string; maxLength?: number }>;
+        return { description: tool.description ?? '', properties };
+      } finally {
+        await client.close();
+      }
+    }
+
+    it('advertises the strict slug schema shared by every action', async () => {
+      const { properties } = await listPromptsTool();
+      expect(properties.slug?.pattern).toBe(USER_PROMPT_SLUG_PATTERN.source);
+      expect(properties.slug?.maxLength).toBe(64);
+    });
+
+    it('describes the write actions and no longer names prompt_library', async () => {
+      const { description } = await listPromptsTool();
+      expect(description).toContain('list and get read prompts; create, update, delete, versions and restore write your own');
+      expect(description).toContain('create (slug, title, prompt)');
+      expect(description).toContain('restore (slug, version, expectedCurrentVersion)');
+      expect(description).not.toContain('prompt_library');
+    });
+
+    it('sends no session or recipe headers on a write but does on a list', async () => {
+      const { call, headers } = setup({ 'POST /api/prompts': { success: true, prompt: OWN }, 'GET /api/prompts': { success: true, prompts: [] } });
+      await call({ action: 'create', slug: 'my-prompt', title: 'T', prompt: 'P' });
+      await call({ action: 'list' });
+      const [writeHeaders, listHeaders] = headers;
+      expect(writeHeaders).toBeDefined();
+      expect(listHeaders).toBeDefined();
+      expect(Object.keys(writeHeaders ?? {}).filter((name) => name.startsWith('X-MCP-Recipe') || name === MCP_SESSION_ID_HEADER)).toEqual([]);
+      expect(listHeaders?.[MCP_SESSION_ID_HEADER]).toBeDefined();
+    });
+
+    it('prefixes a rejected write with the prompts tool name', async () => {
+      const { call, seen } = setup({});
+      const result = await call({ action: 'update', slug: 'my-prompt' });
+      expect(result.isError).toBe(true);
+      expect(result.text.startsWith('Error in prompts · update:')).toBe(true);
+      expect(seen).toEqual([]);
     });
   });
 });

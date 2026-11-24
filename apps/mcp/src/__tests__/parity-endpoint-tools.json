@@ -364,37 +364,37 @@
   ],
   "POST /api/prompts": [
     {
-      "tool": "prompt_library",
+      "tool": "prompts",
       "action": "create"
     }
   ],
   "PATCH /api/prompts/[slug]": [
     {
-      "tool": "prompt_library",
+      "tool": "prompts",
       "action": "update"
     }
   ],
   "DELETE /api/prompts/[slug]": [
     {
-      "tool": "prompt_library",
+      "tool": "prompts",
       "action": "delete"
     }
   ],
   "GET /api/prompts/[slug]/versions": [
     {
-      "tool": "prompt_library",
+      "tool": "prompts",
       "action": "versions"
     }
   ],
   "GET /api/prompts/[slug]/versions/[version]": [
     {
-      "tool": "prompt_library",
+      "tool": "prompts",
       "action": "versions"
     }
   ],
   "POST /api/prompts/[slug]/versions/[version]/restore": [
     {
-      "tool": "prompt_library",
+      "tool": "prompts",
       "action": "restore"
     }
   ],

@@ -76,7 +76,7 @@ export const RestorePromptShape = {
 };
 
 function invalid(action: string, message: string): McpToolResponse {
-  return { content: [{ type: 'text', text: `Error in prompt_library · ${action}: ${message}` }], isError: true };
+  return { content: [{ type: 'text', text: `Error in prompts · ${action}: ${message}` }], isError: true };
 }
 
 export async function handleCreatePrompt(
@@ -125,3 +125,14 @@ export async function handleRestorePrompt(
     (result) => (result.restored ? `Prompt restored as version ${result.prompt.version}` : 'Already the current text; nothing changed'),
   );
 }
+
+export const PROMPT_WRITE_SPECS = {
+  create: CreatePromptShape,
+  update: UpdatePromptShape,
+  delete: DeletePromptShape,
+  versions: VersionsPromptShape,
+  restore: RestorePromptShape,
+};
+
+export const PromptWriteDescription =
+  'list and get read prompts; create, update, delete, versions and restore write your own. Prompts are private by default and only the owner can change one. Set visibility public so anyone can read a prompt, private to keep it to this account. Unverified community prompts carry a notice, verified ones do not. versions lists the saved texts of your own prompt, newest first, with a short preview and the currentVersion (pass version to read one in full); only the owner can read the history. restore makes an old version the current text by writing it as a new version: pass the currentVersion from versions as expectedCurrentVersion, and the restore is refused if the prompt changed since. The title stays as it is. Experiment results count the new version separately from the old one, even with the same text.';
