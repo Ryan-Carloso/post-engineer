@@ -29,7 +29,7 @@ from loguru import logger
 from PIL import Image, ImageDraw, ImageFilter, ImageOps
 
 from app.models.schema import VideoAspect
-from app.services import hook_title, media_overlay, panel_motion, image_fetch, video
+from app.services import caption_layout, hook_title, media_overlay, panel_motion, image_fetch, video
 from app.utils import utils
 
 FACE_NONE = "none"
@@ -248,17 +248,22 @@ def read_title(task_id: str) -> Optional[hook_title.TitleLayer]:
     return None if stored is None else hook_title.TitleLayer(**stored)
 
 
-def caption_bands(task_id: str) -> list[tuple[float, float, int]]:
-    """(start, end, lowest caption pixel) for every panel on screen.
+def caption_bands(task_id: str) -> list[caption_layout.CaptionBand]:
+    """(start, end, lowest caption pixel) for every panel on screen, then the title floor.
 
     A full-frame photo covers the frame and imposes no band (caption_layout).
+    The hook title adds one TitleFloor while it shows: captions stay below it.
     """
     panels, _warnings = _read_manifest(task_id)
-    return [
+    bands: list[caption_layout.CaptionBand] = [
         (panel.start, panel.end, panel.caption_bottom)
         for panel in panels
         if panel.caption_bottom is not None
     ]
+    title = read_title(task_id)
+    if title is not None:
+        bands.append(caption_layout.TitleFloor(title.start, title.end, title.floor))
+    return bands
 
 
 def _clip_filter(input_label: str, panel: Panel, output_label: str) -> str:

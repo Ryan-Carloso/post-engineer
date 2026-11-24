@@ -16,7 +16,7 @@ import pytest
 from PIL import Image, ImageFont
 
 from app.models.schema import VideoAspect
-from app.services import hook_title, hook_title_stage, image_fetch, media_overlay, segment_panels, user_media
+from app.services import caption_layout, hook_title, hook_title_stage, image_fetch, media_overlay, segment_panels, user_media
 from app.services.segment_panels import Panel
 
 BLUE = (30, 30, 210)
@@ -172,6 +172,29 @@ def test_a_failed_panel_only_overlay_does_not_blame_a_title(task_dir):
     with patch.object(segment_panels.video, "_run_ffmpeg_bounded", side_effect=RuntimeError("boom")):
         segment_panels.overlay_onto("t", "/t/in.mp4", lambda task_id, **k: recorded.append(k))
     assert recorded[0]["media_warnings"] == [segment_panels.REASON_RENDER_FAILED]
+
+
+def test_the_manifest_title_becomes_a_caption_floor_next_to_the_panel_bands(task_dir):
+    layer = _title(task_dir, end=2.0)
+    panel = Panel(0, "/t/a.png", 0, 0, 1.0, 2.0, caption_bottom=1100)
+    segment_panels.write_manifest("t", [panel], [], layer)
+    bands = segment_panels.caption_bands("t")
+    assert bands == [(1.0, 2.0, 1100), caption_layout.TitleFloor(0.0, 2.0, layer.floor)]
+    assert caption_layout.cue_floor(bands, (0.5, 1.0)) == layer.floor
+    assert caption_layout.cue_bottom(bands, (1.2, 1.8)) == 1100
+
+
+def test_without_a_title_the_caption_bands_have_no_floor(task_dir):
+    segment_panels.write_manifest("t", [], [])
+    assert segment_panels.caption_bands("t") == []
+
+
+def test_a_failed_overlay_leaves_no_caption_floor_for_a_title_that_is_not_on_screen(task_dir):
+    segment_panels.write_manifest("t", [], [], _title(task_dir))
+    assert segment_panels.caption_bands("t") != []
+    with patch.object(segment_panels.video, "_run_ffmpeg_bounded", side_effect=RuntimeError("boom")):
+        segment_panels.overlay_onto("t", "/t/in.mp4", lambda *a, **k: None)
+    assert segment_panels.caption_bands("t") == []
 
 
 # --- the full-frame info card moves below the title ----------------------
