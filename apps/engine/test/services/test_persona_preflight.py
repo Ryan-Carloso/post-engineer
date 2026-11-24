@@ -16,6 +16,7 @@ from app.models.schema import PersonaParams, TaskVideoRequest, VideoParams
 from test.controllers.test_task_segments_request import valid_segments
 from app.services import face_detect, full_lipsync, lipsync_photos, longcat, persona_preflight
 from app.services import task as task_service
+from app.utils import ssrf
 
 _MAX_BYTES = 20 * 1024 * 1024
 
@@ -89,33 +90,12 @@ class ResolvePersonaImageReuseTests(unittest.TestCase):
                 handle.write(b"png-bytes")
             with (
                 patch.object(full_lipsync.utils, "task_dir", return_value=task_dir),
-                patch.object(full_lipsync.ssrf, "download_public_file") as download,
+                patch.object(ssrf, "download_public_file") as download,
                 patch.object(face_detect, "image_contains_face", return_value=True),
             ):
                 result = full_lipsync.resolve_persona_image("task-5", _params(), _MAX_BYTES)
         self.assertEqual(result, cached)
         download.assert_not_called()
-
-    def test_downloads_when_there_is_no_cached_file(self):
-        with tempfile.TemporaryDirectory() as task_dir:
-            with (
-                patch.object(full_lipsync.utils, "task_dir", return_value=task_dir),
-                patch.object(full_lipsync.ssrf, "download_public_file") as download,
-                patch.object(face_detect, "image_contains_face", return_value=True),
-            ):
-                full_lipsync.resolve_persona_image("task-6", _params(), _MAX_BYTES)
-        download.assert_called_once()
-
-    def test_redownloads_when_the_cached_file_is_empty(self):
-        with tempfile.TemporaryDirectory() as task_dir:
-            open(os.path.join(task_dir, "persona-lipsync-image.png"), "wb").close()
-            with (
-                patch.object(full_lipsync.utils, "task_dir", return_value=task_dir),
-                patch.object(full_lipsync.ssrf, "download_public_file") as download,
-                patch.object(face_detect, "image_contains_face", return_value=True),
-            ):
-                full_lipsync.resolve_persona_image("task-7", _params(), _MAX_BYTES)
-        download.assert_called_once()
 
 
 class StartAbortsOnDeadImageTests(unittest.TestCase):
@@ -155,41 +135,6 @@ if __name__ == "__main__":
     unittest.main()
 
 
-class DownloadFailureReasonTests(unittest.TestCase):
-    """The stored/alerted reason never carries the image URL (host, path, token)."""
-
-    def _resolve_with(self, error: BaseException) -> str:
-        with tempfile.TemporaryDirectory() as task_dir:
-            with (
-                patch.object(full_lipsync.utils, "task_dir", return_value=task_dir),
-                patch.object(full_lipsync.ssrf, "download_public_file", side_effect=error),
-            ):
-                with self.assertRaises(longcat.LongCatError) as ctx:
-                    full_lipsync.resolve_persona_image("task-url", _params(), _MAX_BYTES)
-        return str(ctx.exception)
-
-    def test_a_network_error_message_loses_the_request_url(self):
-        reason = self._resolve_with(
-            OSError(
-                "Max retries exceeded with url https://img.test/p.png?token=abc123 (Caused by X)"
-            )
-        )
-        self.assertIn("persona image download failed", reason)
-        self.assertNotIn("img.test", reason)
-        self.assertNotIn("abc123", reason)
-        self.assertIn("<url>", reason)
-
-    def test_the_http_status_stays_readable(self):
-        self.assertIn("HTTP 404", self._resolve_with(OSError("HTTP 404")))
-
-    def test_a_rejected_unsafe_url_loses_the_url_too(self):
-        reason = self._resolve_with(
-            full_lipsync.ssrf.UnsafeUrlError("blocked http://10.0.0.1/secret.png")
-        )
-        self.assertIn("persona image download rejected", reason)
-        self.assertNotIn("10.0.0.1", reason)
-
-
 class IntroOnlyJobsArePreflightedTests(unittest.TestCase):
     def test_a_dead_image_fails_an_intro_only_video_run_at_the_start(self):
         params = _params()
@@ -213,8 +158,9 @@ class ResolvePersonaImageFirstPhotoTests(unittest.TestCase):
     """Issue #589: the hook opens with the first photo of the video.
 
     When the job carries segments, their first photo is the lip-sync
-    image — not the persona avatar. Segment-less direct jobs and
-    text-only segments keep the persona photo.
+    image — not the persona avatar. A job with no usable first photo
+    fails with no_first_photo instead of falling back to the persona
+    photo.
     """
 
     def _task_params(self, hook_media):
@@ -240,7 +186,7 @@ class ResolvePersonaImageFirstPhotoTests(unittest.TestCase):
     def _resolve(self, task_dir, params, first_photo, has_face=True):
         with (
             patch.object(full_lipsync.utils, "task_dir", return_value=task_dir),
-            patch.object(full_lipsync.ssrf, "download_public_file") as download,
+            patch.object(ssrf, "download_public_file") as download,
             patch.object(
                 full_lipsync.user_media,
                 "resolve_first_segment_photo",
@@ -288,7 +234,7 @@ class ResolvePersonaImageFirstPhotoTests(unittest.TestCase):
                 self._resolve(task_dir, params, (asset, 0, 0, None))
                 self.assertTrue(os.path.exists(asset))
 
-    def test_no_segment_media_falls_back_to_the_persona_photo(self):
+    def test_no_segment_media_fails_with_no_first_photo(self):
         from types import SimpleNamespace
 
         with tempfile.TemporaryDirectory() as task_dir:
@@ -300,8 +246,33 @@ class ResolvePersonaImageFirstPhotoTests(unittest.TestCase):
                 ),
                 segments=[{"kind": "hook", "text": "Hi."}],
             )
-            _, download, _ = self._resolve(task_dir, params, ("", -1, -1, "no_segment_media"))
-            download.assert_called_once()
+            with (
+                patch.object(full_lipsync.utils, "task_dir", return_value=task_dir),
+                patch.object(ssrf, "download_public_file") as download,
+                patch.object(
+                    full_lipsync.user_media,
+                    "resolve_first_segment_photo",
+                    return_value=("", -1, -1, "no_segment_media"),
+                ),
+                patch.object(face_detect, "image_contains_face", return_value=True),
+            ):
+                with self.assertRaises(longcat.LongCatError) as ctx:
+                    full_lipsync.resolve_persona_image("task-hook", params, _MAX_BYTES)
+            self.assertIn("no_first_photo", str(ctx.exception))
+            download.assert_not_called()
+
+    def test_empty_cached_file_is_replaced_by_the_first_segment_photo(self):
+        with tempfile.TemporaryDirectory() as task_dir:
+            open(os.path.join(task_dir, "persona-lipsync-image.png"), "wb").close()
+            resolved = os.path.join(task_dir, "resolved.jpg")
+            with open(resolved, "wb") as handle:
+                handle.write(b"first-photo-bytes")
+            params = self._task_params([{"url": "https://e.com/a.jpg"}])
+            result, download, _ = self._resolve(task_dir, params, (resolved, 0, 0, None))
+            self.assertEqual(result, os.path.join(task_dir, "persona-lipsync-image.png"))
+            with open(result, "rb") as handle:
+                self.assertEqual(handle.read(), b"first-photo-bytes")
+            download.assert_not_called()
 
     def test_unresolvable_first_photo_fails_naming_the_segment_and_image(self):
         with tempfile.TemporaryDirectory() as task_dir:
