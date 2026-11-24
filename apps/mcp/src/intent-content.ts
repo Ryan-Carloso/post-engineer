@@ -6,7 +6,7 @@ import { optionalPersonaRefShape, withOptionalPersona } from './refs.js';
 import { withScriptOutcome, type RecipeSession } from './recipe-session.js';
 import { CompleteVideoUploadShape, CreateVideoUploadShape, PublishUploadedVideoShape } from './publish-uploaded-shape.js';
 import { PublishExistingLocalShape, PublishExistingRemoteShape, PublishExistingShape } from './publish-existing-shape.js';
-import { IMAGE_PROVIDERS } from './contracts/providers.js';
+import { IMAGE_AS_SHORT_NOTE, IMAGE_PROVIDERS } from './contracts/providers.js';
 import { handlePublishExisting } from './tools-publish-existing.js';
 import { DESTRUCTIVE, MUTATING, READ_ONLY } from './tool-annotations.js';
 import { PublishVideoDirectShape, handlePublishVideoDirect } from './tools.js';
@@ -93,7 +93,7 @@ export function registerContentTools(server: McpServer, client: PostEngineerClie
   server.tool(
     'publish_video',
     actionDescription(
-      `Publish media that already exists, with no generation and no charge. ${remote ? '' : 'from_file: a local video (.mp4 or .mov) is published now. '}create_upload → complete_upload → publish_upload: a signed upload, video or JPEG/PNG (PUT straight to storage, never via this server; expires in 15 min), published now; publishing consumes it. publish_existing: a finished generated video (taskId), a completed upload (uploadId)${remote ? '' : ' or a local image (imagePath)'}, to every network of its accounts in one call (images: ${IMAGE_PROVIDERS.join('/')}), with mode asap (now) or scheduled (once, at publishAt). YouTube needs title, description, tags and privacyStatus; Rumble and Fanvue title and description; the other networks a caption (publish_existing uses description). If a call times out, retry with the same idempotencyKey: the original result is replayed. A result with errorCode publish_unknown must NOT be retried: the post may be live, check the account first.`,
+      `Publish media that already exists, with no generation and no charge. ${remote ? '' : 'from_file: a local video (.mp4 or .mov) is published now. '}create_upload → complete_upload → publish_upload: a signed upload, video or JPEG/PNG (PUT straight to storage, never via this server; expires in 15 min), published now; publishing consumes it. publish_existing: a finished generated video (taskId), a completed upload (uploadId)${remote ? '' : ' or a local image (imagePath)'}, to every network of its accounts in one call (images: ${IMAGE_PROVIDERS.join('/')}; ${IMAGE_AS_SHORT_NOTE}), with mode asap (now) or scheduled (once, at publishAt). YouTube needs title, description, tags and privacyStatus; Rumble and Fanvue title and description; the other networks a caption (publish_existing uses description). If a call times out, retry with the same idempotencyKey: the original result is replayed. A result with errorCode publish_unknown must NOT be retried: the post may be live, check the account first.`,
       offeredSpecs(PUBLISH_SPECS, publishOptions),
     ),
     actionShape(offeredSpecs(PUBLISH_SPECS, publishOptions)),

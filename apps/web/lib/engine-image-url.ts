@@ -3,6 +3,7 @@ import { isIP } from 'node:net';
 import { SIGNED_URL_TTL_SECONDS } from '@/app/api/videos/generate-and-schedule/persona-prep';
 import { isHttpUrl, isPublicIp, unbracketIpLiteral } from '@/lib/generation/custom-audio';
 import { isPublicAssetPath } from '@/lib/image-source';
+import { appOrigin } from '@/lib/app-origin';
 
 const IMAGE_BUCKET = 'personas';
 const MAX_ASSET_BYTES = 5 * 1024 * 1024;
@@ -25,7 +26,6 @@ export interface EngineImageUrlDeps {
     };
   };
   userId: string;
-  origin: string;
   fetchImpl?: typeof fetch;
 }
 
@@ -67,7 +67,7 @@ export async function ensureEngineImageUrl(
     throw new Error('persona image is not usable by the engine and is not a site asset path');
   }
 
-  const origin = new URL(deps.origin).origin;
+  const origin = appOrigin();
   const resolved = new URL(candidate, origin);
   if (resolved.origin !== origin) {
     throw new Error('persona image is not usable by the engine and is not a site asset path');

@@ -270,6 +270,31 @@ def track_event(
         logger.warning("PostHog capture failed for %s: %s", event_name, type(exc).__name__)
 
 
+def subtitle_event_props(source: object) -> dict[str, object]:
+    """Caption placement for a generation event, from engine params or a task row.
+
+    Only a real placement travels; the custom height only travels with a
+    custom placement, so the event never carries a meaningless number.
+    Params objects carry custom_position; task rows carry the emitted
+    subtitle_custom_position key, falling back to the raw custom_position
+    key when a row was built from raw params.
+    """
+    if isinstance(source, dict):
+        position = source.get("subtitle_position")
+        custom = source.get("subtitle_custom_position")
+        if custom is None:
+            custom = source.get("custom_position")
+    else:
+        position = getattr(source, "subtitle_position", None)
+        custom = getattr(source, "custom_position", None)
+    if not isinstance(position, str) or not position:
+        return {}
+    props: dict[str, object] = {"subtitle_position": position}
+    if position == "custom" and isinstance(custom, (int, float)):
+        props["subtitle_custom_position"] = custom
+    return props
+
+
 def nonempty_error_reason(text: str, fallback: str, max_chars: int = 200) -> str:
     """Scrubbed failure why, never empty: empty text falls back to type name."""
     cleaned = scrub_error_text(text, max_chars=max_chars).strip()

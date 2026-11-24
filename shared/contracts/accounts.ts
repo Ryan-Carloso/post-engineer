@@ -208,6 +208,18 @@ export function parseDisconnectAccountQuery(params: URLSearchParams): {
   return { ok: true, query: { provider, providerAccountId } };
 }
 
+export const ACCOUNT_PROFILE_REFRESH_PARAM = 'refresh';
+
+export function parseListAccountsQuery(params: URLSearchParams): {
+  ok: true;
+  refresh: boolean;
+} | { ok: false; error: string; code: 'INVALID_PARAMS' } {
+  const values = params.getAll(ACCOUNT_PROFILE_REFRESH_PARAM);
+  if (values.length === 0) return { ok: true, refresh: false };
+  if (values.length === 1 && values[0] === '1') return { ok: true, refresh: true };
+  return { ok: false, error: 'refresh must be 1 when present.', code: 'INVALID_PARAMS' };
+}
+
 export function parseListPinterestBoardsQuery(params: URLSearchParams): { ok: true; accountId: string } | { ok: false; error: string } {
   const accountId = params.get('accountId');
   if (accountId === null || accountId.trim() === '') {

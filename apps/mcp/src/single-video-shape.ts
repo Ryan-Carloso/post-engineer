@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { isEnglishLanguage, ONLY_ENGLISH_VIDEOS_MESSAGE } from './language.js';
-import { GeneratePersonaVideoOptionsShape } from './schedule-shapes.js';
+import { GeneratePersonaVideoOptionsSchema } from './schedule-shapes.js';
 import { PersonaCtaShape } from './persona-cta-shape.js';
 import { RECIPE_SLUG_PATTERN } from './recipe-session.js';
 import { VIDEO_TYPES, VIDEO_TYPE_ERROR_SUFFIX, unknownVideoTypeMessage } from './video-type.js';
@@ -91,7 +91,7 @@ export const GeneratePersonaVideoShape = {
     .optional()
     .describe('Daily publish times in HH:MM 24-hour format. Required unless mode is \'asap\'.'),
   timezone: z.string().min(1).default('UTC').describe('IANA timezone for a naive startAt and the HH:MM times, e.g. "Europe/Lisbon". Defaults to UTC.'),
-  options: z.object(GeneratePersonaVideoOptionsShape).optional().describe('Generation options applied to this video.'),
+  options: GeneratePersonaVideoOptionsSchema.optional().describe('Generation options applied to this video.'),
   idempotencyKey: z.string().min(1).optional().describe('Idempotency key: retrying the call with the same key returns the original schedule (replayed: true) instead of generating again.'),
   promptVersionId: z
     .string()

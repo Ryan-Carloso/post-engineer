@@ -298,10 +298,10 @@ describe('publish_existing tool handler', () => {
   });
 
   it('rejects an image bound for a video-only network before reading it', async () => {
-    const { client, request } = fakeClient(async () => ASAP_REPLY);
-    const response = await handlePublishExisting(client, args({ mediaKind: 'image', taskId: undefined, imagePath: join(dir, 'missing.png'), accounts: ['UC1', 'ig-1'] }));
+    const { client, request } = fakeClient(async () => ASAP_REPLY, { rumble: ['rb-1'], instagram: ['ig-1'] });
+    const response = await handlePublishExisting(client, args({ mediaKind: 'image', taskId: undefined, imagePath: join(dir, 'missing.png'), accounts: undefined, personaId: PERSONA_ID }));
     expect(response.isError).toBe(true);
-    expect(textOf(response)).toContain('images go to instagram, bluesky, linkedin, threads, facebook, pinterest, telegram only; drop the youtube account(s).');
+    expect(textOf(response)).toContain('images go to youtube, instagram, bluesky, linkedin, threads, facebook, pinterest, telegram only; drop the rumble account(s).');
     expect(request.mock.calls.some(([path]) => path === '/api/media/publish-existing')).toBe(false);
   });
 

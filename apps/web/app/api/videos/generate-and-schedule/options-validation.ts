@@ -1,6 +1,6 @@
 import { isEnglishLanguage, ONLY_ENGLISH_VIDEOS_MESSAGE } from '@/lib/language-gate';
 import { isPublicHttpsWebhookUrl } from '@/lib/ssrf/webhook-url';
-import { VIDEO_TRANSITION_MODES, type VideoTransitionMode } from '@/lib/contracts/videos';
+import { SUBTITLE_POSITIONS, VIDEO_TRANSITION_MODES, type SubtitlePosition, type VideoTransitionMode } from '@/lib/contracts/videos';
 import { isHttpUrl } from '@/lib/generation/custom-audio';
 import { isMusicMood, MUSIC_MOOD_NONE, unknownMusicMoodMessage } from '@/lib/generation/music-moods';
 import {
@@ -32,6 +32,8 @@ export interface OptionsInput {
   videoClipDuration?: number;
   videoTransitionMode?: string;
   videoVariationSeed?: number;
+  subtitlePosition?: string;
+  subtitleCustomPosition?: number;
 }
 
 export interface ValidatedOptions {
@@ -51,6 +53,8 @@ export interface ValidatedOptions {
   videoClipDuration?: number;
   videoTransitionMode?: VideoTransitionMode;
   videoVariationSeed?: number;
+  subtitlePosition?: SubtitlePosition;
+  subtitleCustomPosition?: number;
 }
 
 const TRANSITION_MODES: readonly string[] = VIDEO_TRANSITION_MODES;
@@ -58,6 +62,15 @@ const TRANSITION_MODES: readonly string[] = VIDEO_TRANSITION_MODES;
 function isVideoTransitionMode(value: string): value is VideoTransitionMode {
   return TRANSITION_MODES.includes(value);
 }
+
+const SUBTITLE_POSITIONS_LIST: readonly string[] = SUBTITLE_POSITIONS;
+
+function isSubtitlePosition(value: string): value is SubtitlePosition {
+  return SUBTITLE_POSITIONS_LIST.includes(value);
+}
+
+export const SUBTITLE_CUSTOM_POSITION_ONLY_CUSTOM_MESSAGE =
+  "options.subtitleCustomPosition applies only with options.subtitlePosition 'custom'.";
 
 export const HOOK_PANEL_ONLY_HOOK_LIPSYNC_MESSAGE =
   "options.hookPanel applies only to videoType 'hook_lipsync': the other modes have no lip-sync hook.";
@@ -80,6 +93,8 @@ export function validateOptions(options: OptionsInput): Checked<ValidatedOptions
     videoClipDuration,
     videoTransitionMode,
     videoVariationSeed,
+    subtitlePosition,
+    subtitleCustomPosition,
   } = options;
   const issues: ValidationIssue[] = [];
   const mode = videoType !== undefined && isVideoType(videoType) ? videoType : undefined;
@@ -139,6 +154,25 @@ export function validateOptions(options: OptionsInput): Checked<ValidatedOptions
   if (videoVariationSeed !== undefined && !Number.isInteger(videoVariationSeed)) {
     issues.push(invalid('options.videoVariationSeed must be an integer.', 'options.videoVariationSeed'));
   }
+  let subtitle: SubtitlePosition | undefined;
+  if (subtitlePosition !== undefined) {
+    if (!isSubtitlePosition(subtitlePosition)) {
+      issues.push(
+        invalid(`options.subtitlePosition must be one of ${SUBTITLE_POSITIONS.join(', ')}.`, 'options.subtitlePosition'),
+      );
+    } else {
+      subtitle = subtitlePosition;
+    }
+  }
+  if (
+    subtitleCustomPosition !== undefined &&
+    (!Number.isInteger(subtitleCustomPosition) || subtitleCustomPosition < 0 || subtitleCustomPosition > 100)
+  ) {
+    issues.push(invalid('options.subtitleCustomPosition must be an integer between 0 and 100.', 'options.subtitleCustomPosition'));
+  }
+  if (subtitleCustomPosition !== undefined && subtitle !== 'custom') {
+    issues.push(invalid(SUBTITLE_CUSTOM_POSITION_ONLY_CUSTOM_MESSAGE, 'options.subtitleCustomPosition'));
+  }
   const photos = validateLipsyncPhotos(lipsyncPhotos, mode);
   if (!photos.ok) issues.push(...photos.issues);
   if (issues.length > 0 || !photos.ok) return { ok: false, issues };
@@ -164,6 +198,8 @@ export function validateOptions(options: OptionsInput): Checked<ValidatedOptions
       videoClipDuration,
       videoTransitionMode: transitionMode,
       videoVariationSeed,
+      subtitlePosition: subtitle,
+      subtitleCustomPosition,
     },
   };
 }

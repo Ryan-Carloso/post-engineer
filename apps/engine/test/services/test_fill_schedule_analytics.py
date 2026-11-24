@@ -174,3 +174,40 @@ def test_reconcile_music_mood_unknown_when_row_has_none():
     task_row = {"state": const.TASK_STATE_COMPLETE}
     props = _run_reconciler(slot, task_row)
     assert props["music_mood"] == "unknown"
+
+
+def test_reconcile_attaches_subtitle_position_for_batch():
+    """Batch video_generated carries the task row's caption placement."""
+    from app.models import const
+
+    slot = {"id": "slot-1", "task_id": "task-1", "schedules": {}}
+    task_row = {"state": const.TASK_STATE_COMPLETE, "subtitle_position": "top"}
+    props = _run_reconciler(slot, task_row)
+    assert props["subtitle_position"] == "top"
+    assert "subtitle_custom_position" not in props
+
+
+def test_reconcile_attaches_custom_subtitle_height_for_batch():
+    """Batch video_generated carries the custom height with a custom placement."""
+    from app.models import const
+
+    slot = {"id": "slot-1", "task_id": "task-1", "schedules": {}}
+    task_row = {
+        "state": const.TASK_STATE_COMPLETE,
+        "subtitle_position": "custom",
+        "subtitle_custom_position": 20,
+    }
+    props = _run_reconciler(slot, task_row)
+    assert props["subtitle_position"] == "custom"
+    assert props["subtitle_custom_position"] == 20
+
+
+def test_reconcile_omits_subtitle_position_when_row_has_none():
+    """A batch task without a stored placement reports no subtitle props."""
+    from app.models import const
+
+    slot = {"id": "slot-1", "task_id": "task-1", "schedules": {}}
+    task_row = {"state": const.TASK_STATE_COMPLETE}
+    props = _run_reconciler(slot, task_row)
+    assert "subtitle_position" not in props
+    assert "subtitle_custom_position" not in props

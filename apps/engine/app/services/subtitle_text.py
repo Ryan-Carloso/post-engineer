@@ -19,9 +19,14 @@ def wrap_text(text, max_width, font="Arial", fontsize=60):
         left, top, right, bottom = font.getbbox(inner_text)
         return right - left, bottom - top
 
-    width, height = get_text_size(text)
+    def block_height(line_count):
+        ascent, descent = font.getmetrics()
+        interline = int(fontsize * 0.25)
+        return line_count * (ascent + descent) + max(line_count - 1, 0) * interline
+
+    width, _ = get_text_size(text)
     if width <= max_width:
-        return text, height
+        return text, block_height(1)
 
     def split_long_token(token):
         lines = []
@@ -75,5 +80,5 @@ def wrap_text(text, max_width, font="Arial", fontsize=60):
             lines[index - 1] = lines[index - 1][:-1]
 
     result = "\n".join(line.strip() for line in lines if line.strip()).strip()
-    height = len(lines) * height
-    return result, height
+    emitted = len(result.split("\n")) if result else 0
+    return result, block_height(emitted)
