@@ -3,7 +3,7 @@ import { engineAuthHeaders, requireSupabaseSession } from '@/lib/request-auth';
 import { apiErrorResponse } from '@/lib/api-error';
 import { SAFE_TASK_ID } from '@/lib/video-urls';
 import { enforceScopedTaskRead } from '@/lib/video-task-scope';
-import { applyTaskPollLimit } from '@/lib/task-poll-limit';
+import { applyTaskPollLimit, taskPollCaller } from '@/lib/task-poll-limit';
 import { RATE_LIMITS } from '@/lib/rate-limit';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 
@@ -25,7 +25,7 @@ async function getHandler(
     return apiErrorResponse(400, 'Invalid taskId.', { route: 'GET /api/persona/video-events' });
   }
 
-  const streamLimited = await applyTaskPollLimit(request, auth, taskId, RATE_LIMITS.taskEventsStream);
+  const streamLimited = await applyTaskPollLimit(request, taskPollCaller(auth), taskId, RATE_LIMITS.taskEventsStream);
   if (streamLimited) return streamLimited;
 
   const scopeError = await enforceScopedTaskRead(
