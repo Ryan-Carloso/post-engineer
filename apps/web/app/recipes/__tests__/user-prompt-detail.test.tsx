@@ -27,6 +27,17 @@ import UserPromptRow from '../components/user-prompt-row';
 
 const VERSION_ID = '44444444-4444-4444-8444-444444444444';
 
+const VERSIONS_PAGE = {
+  success: true,
+  currentVersion: 3,
+  versions: [
+    { versionId: VERSION_ID, version: 3, title: 'Luna Summer: test A', createdAt: new Date().toISOString(), preview: 'Write a curiosity tease hook.', previewTruncated: false, bodyLength: 29, current: true },
+    { versionId: '44444444-4444-4444-8444-444444444443', version: 2, title: 'Luna Summer: test A', createdAt: new Date().toISOString(), preview: 'An older hook.', previewTruncated: false, bodyLength: 14, current: false },
+  ],
+  truncated: false,
+  nextCursor: null,
+};
+
 let requested: string[];
 let reply: { status: number; body: unknown };
 
@@ -62,6 +73,7 @@ beforeEach(() => {
     'fetch',
     vi.fn(async (url: string) => {
       requested.push(url);
+      if (url.endsWith('/versions')) return Response.json(VERSIONS_PAGE);
       return Response.json(reply.body, { status: reply.status });
     }),
   );
@@ -76,12 +88,20 @@ describe('prompt detail page for user prompts', () => {
   it('shows an own private prompt with its full text, version and copy block', async () => {
     renderPage('luna-spicy-sfw-a-tease');
     expect(await screen.findByRole('heading', { level: 1, name: 'Luna Summer: test A' })).toBeInTheDocument();
-    expect(requested).toEqual(['/api/prompts/luna-spicy-sfw-a-tease']);
+    expect(requested).toEqual(['/api/prompts/luna-spicy-sfw-a-tease', '/api/prompts/luna-spicy-sfw-a-tease/versions']);
     expect(screen.getByText('Private')).toBeInTheDocument();
     expect(screen.getByText('Version 3')).toBeInTheDocument();
     expect(screen.getByText('A/B test A for Luna Summer.')).toBeInTheDocument();
     expect(screen.getByTestId('full-prompt')).toHaveTextContent('Write a curiosity tease hook.');
     expect(screen.queryByText(/not verified by post-engineer/)).not.toBeInTheDocument();
+  });
+
+  it('shows the version history of an own prompt, with Restore only on the older version', async () => {
+    renderPage('luna-spicy-sfw-a-tease');
+    expect(await screen.findByTestId('prompt-version-history')).toBeInTheDocument();
+    expect(await screen.findByTestId('prompt-version-2')).toBeInTheDocument();
+    expect(screen.queryByTestId('prompt-version-restore-3')).not.toBeInTheDocument();
+    expect(screen.getByTestId('prompt-version-restore-2')).toBeInTheDocument();
   });
 
   it('marks a community prompt and warns that it is not verified', async () => {
@@ -90,6 +110,8 @@ describe('prompt detail page for user prompts', () => {
     expect(await screen.findByText('Community')).toBeInTheDocument();
     expect(screen.getByText(/not verified by post-engineer/)).toBeInTheDocument();
     expect(screen.queryByText('Public')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('prompt-version-history')).not.toBeInTheDocument();
+    expect(requested).toEqual(['/api/prompts/luna-spicy-sfw-a-tease']);
   });
 
   it('marks a verified prompt and shows no unverified warning', async () => {
@@ -98,6 +120,8 @@ describe('prompt detail page for user prompts', () => {
     expect(await screen.findByText('Verified')).toBeInTheDocument();
     expect(screen.queryByText('Community')).not.toBeInTheDocument();
     expect(screen.queryByText(/not verified by post-engineer/)).not.toBeInTheDocument();
+    expect(screen.queryByTestId('prompt-version-history')).not.toBeInTheDocument();
+    expect(requested).toEqual(['/api/prompts/luna-spicy-sfw-a-tease']);
   });
 
   it('shows not found for an unknown user prompt', async () => {
@@ -125,6 +149,7 @@ describe('prompt detail page for user prompts', () => {
     renderPage('daily-news');
     expect(await screen.findByTestId('full-prompt')).toHaveTextContent('Write a curiosity tease hook.');
     expect(requested).toEqual(['/api/prompts/daily-news']);
+    expect(screen.queryByTestId('prompt-version-history')).not.toBeInTheDocument();
   });
 
 });

@@ -9136,6 +9136,528 @@
         ]
       }
     },
+    "/api/prompts/{slug}/versions": {
+      "get": {
+        "operationId": "get_prompt_library_versions_versions",
+        "summary": "prompt library versions",
+        "tags": [
+          "prompts"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "currentVersion": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "versions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "versionId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "version": {
+                            "type": "integer",
+                            "minimum": 1
+                          },
+                          "title": {
+                            "type": "string",
+                            "description": "The title the prompt had when this version was saved."
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "preview": {
+                            "type": "string",
+                            "description": "The first 280 characters of the text."
+                          },
+                          "previewTruncated": {
+                            "type": "boolean",
+                            "description": "true when the text is longer than the preview."
+                          },
+                          "bodyLength": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "description": "Length of the full text in characters (code points)."
+                          },
+                          "current": {
+                            "type": "boolean",
+                            "description": "true for the version the prompt text is now."
+                          }
+                        },
+                        "required": [
+                          "versionId",
+                          "version",
+                          "title",
+                          "createdAt",
+                          "preview",
+                          "previewTruncated",
+                          "bodyLength",
+                          "current"
+                        ]
+                      }
+                    },
+                    "truncated": {
+                      "type": "boolean",
+                      "description": "true when older versions remain."
+                    },
+                    "nextCursor": {
+                      "type": "integer",
+                      "nullable": true,
+                      "description": "Pass it as before to read the next page; null on the last page."
+                    }
+                  },
+                  "required": [
+                    "success"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A persona-scoped API key cannot manage prompts.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown prompt, not yours, or unknown version (PROMPT_NOT_FOUND, PROMPT_VERSION_NOT_FOUND). The history is owner-only: a public prompt of another user has none to read.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "description": "Owner-only. Lists the saved texts of your own prompt, newest first. limit is 1 to 50 (default 20). before is a version number from 2 to 999999999: pass nextCursor to read the next page."
+      }
+    },
+    "/api/prompts/{slug}/versions/{version}": {
+      "get": {
+        "operationId": "get_prompt_library_versions__version_",
+        "summary": "prompt library versions",
+        "tags": [
+          "prompts"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "version": {
+                      "type": "object",
+                      "properties": {
+                        "versionId": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "version": {
+                          "type": "integer",
+                          "minimum": 1
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "body": {
+                          "type": "string",
+                          "description": "The full text of this version."
+                        },
+                        "current": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "versionId",
+                        "version",
+                        "title",
+                        "createdAt",
+                        "body",
+                        "current"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A persona-scoped API key cannot manage prompts.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown prompt, not yours, or unknown version (PROMPT_NOT_FOUND, PROMPT_VERSION_NOT_FOUND). The history is owner-only: a public prompt of another user has none to read.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "version",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "description": "Owner-only. Reads one saved text of your own prompt in full."
+      }
+    },
+    "/api/prompts/{slug}/versions/{version}/restore": {
+      "post": {
+        "operationId": "post_prompt_library_restore",
+        "summary": "prompt library restore",
+        "tags": [
+          "prompts"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "restored": {
+                      "type": "boolean"
+                    },
+                    "prompt": {
+                      "type": "object",
+                      "properties": {
+                        "slug": {
+                          "type": "string"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "source": {
+                          "type": "string",
+                          "enum": [
+                            "own",
+                            "community"
+                          ],
+                          "description": "own: written by the caller. community: a public prompt written by another user, not verified by post-engineer."
+                        },
+                        "visibility": {
+                          "type": "string",
+                          "enum": [
+                            "private",
+                            "public"
+                          ],
+                          "description": "Community prompts are public; an own prompt is private until its owner makes it public."
+                        },
+                        "verified": {
+                          "type": "boolean",
+                          "description": "true when Post Engineer checked the prompt. Only Post Engineer sets it."
+                        },
+                        "prompt": {
+                          "type": "string"
+                        },
+                        "body": {
+                          "type": "string",
+                          "description": "The stored prompt text as written, the text the edit form loads."
+                        },
+                        "versionId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "description": "The current version of this prompt text. Pass it as promptVersionId when generating a video from this prompt."
+                        },
+                        "version": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "description": "Version number: a new one each time the prompt text changes."
+                        }
+                      },
+                      "required": [
+                        "slug",
+                        "title",
+                        "description",
+                        "source",
+                        "visibility",
+                        "verified",
+                        "prompt",
+                        "body",
+                        "versionId",
+                        "version"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A persona-scoped API key cannot manage prompts.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown prompt, not yours, or unknown version (PROMPT_NOT_FOUND, PROMPT_VERSION_NOT_FOUND). The history is owner-only: a public prompt of another user has none to read.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The prompt changed since expectedCurrentVersion (PROMPT_VERSION_CONFLICT). Read the list again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "expectedCurrentVersion": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "The currentVersion you read from the list."
+                  }
+                },
+                "required": [
+                  "expectedCurrentVersion"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "version",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "description": "Owner-only. Makes an old version the current text by saving it as a new version; the title stays. Experiment results count the new version separately from the old one. restored is false, and nothing is written, when the text already is the current one."
+      }
+    },
     "/api/experiments": {
       "get": {
         "operationId": "get_experiments_results",

@@ -23,7 +23,7 @@ const ACTIONS: Record<string, string[]> = {
   voices: ['list', 'preview', 'list_clones', 'create_clone', 'get_clone', 'preview_clone', 'delete_clone'],
   accounts: ['list', 'connect', 'disconnect', 'get_persona_publishing', 'set_persona_publishing', 'list_boards'],
   tool_config: ['get', 'save'],
-  prompt_library: ['create', 'update', 'delete'],
+  prompt_library: ['create', 'update', 'delete', 'versions', 'restore'],
   schedules: ['list', 'cancel', 'get_slot', 'update_slot_title', 'delete_slot'],
   posts: ['list', 'get'],
   insights: ['post_metrics', 'last_day', 'retention_curve', 'share_link_create', 'share_link_list', 'share_link_revoke'],

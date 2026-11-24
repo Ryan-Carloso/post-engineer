@@ -436,8 +436,8 @@ describe('app/(main)/accounts/page — AccountsPage', () => {
     });
     render(<AccountsPage />, { wrapper: createWrapper() });
     fireEvent.click(screen.getByTestId('youtube-disconnect-button'));
-    await screen.findByTestId('disconnect-dialog');
-    fireEvent.click(screen.getByTestId('disconnect-confirm-button'));
+    await screen.findByTestId('confirm-dialog');
+    fireEvent.click(screen.getByTestId('confirm-dialog-confirm'));
     await waitFor(() => expect(mutateAsync).toHaveBeenCalledWith({ providerAccountId: 'ch1' }));
     expect(useDisconnectAccountMutation).toHaveBeenCalledWith('youtube');
     expect(reportAccountDisconnectFailed).not.toHaveBeenCalled();
@@ -452,9 +452,9 @@ describe('app/(main)/accounts/page — AccountsPage', () => {
     });
     render(<AccountsPage />, { wrapper: createWrapper() });
     fireEvent.click(screen.getByTestId('youtube-disconnect-button'));
-    expect(await screen.findByTestId('disconnect-dialog')).toBeVisible();
-    fireEvent.click(screen.getByTestId('disconnect-cancel-button'));
-    await waitFor(() => expect(screen.queryByTestId('disconnect-dialog')).not.toBeInTheDocument());
+    expect(await screen.findByTestId('confirm-dialog')).toBeVisible();
+    fireEvent.click(screen.getByTestId('confirm-dialog-cancel'));
+    await waitFor(() => expect(screen.queryByTestId('confirm-dialog')).not.toBeInTheDocument());
     expect(mutateAsync).not.toHaveBeenCalled();
     expect(reportAccountDisconnectFailed).not.toHaveBeenCalled();
   });
@@ -468,8 +468,8 @@ describe('app/(main)/accounts/page — AccountsPage', () => {
     });
     render(<AccountsPage />, { wrapper: createWrapper() });
     fireEvent.click(screen.getByTestId('youtube-disconnect-button'));
-    await screen.findByTestId('disconnect-dialog');
-    fireEvent.click(screen.getByTestId('disconnect-confirm-button'));
+    await screen.findByTestId('confirm-dialog');
+    fireEvent.click(screen.getByTestId('confirm-dialog-confirm'));
     await waitFor(() => expect(screen.getByTestId('disconnect-error')).toBeInTheDocument());
     expect(screen.getByTestId('disconnect-error')).toHaveTextContent('accounts.disconnectError');
     expect(reportAccountDisconnectFailed).toHaveBeenCalledWith('youtube', 'threw');
@@ -559,8 +559,8 @@ describe('app/(main)/accounts/page — AccountsPage', () => {
     });
     render(<AccountsPage />, { wrapper: createWrapper() });
     fireEvent.click(screen.getByTestId('youtube-disconnect-button'));
-    await screen.findByTestId('disconnect-dialog');
-    fireEvent.click(screen.getByTestId('disconnect-confirm-button'));
+    await screen.findByTestId('confirm-dialog');
+    fireEvent.click(screen.getByTestId('confirm-dialog-confirm'));
     await waitFor(() => expect(screen.getByTestId('disconnect-error')).toBeInTheDocument());
     expect(reportAccountDisconnectFailed).toHaveBeenCalledWith('youtube', 'rejected');
   });
@@ -574,8 +574,8 @@ describe('app/(main)/accounts/page — AccountsPage', () => {
     });
     render(<AccountsPage />, { wrapper: createWrapper() });
     fireEvent.click(screen.getByTestId('instagram-disconnect-button'));
-    await screen.findByTestId('disconnect-dialog');
-    fireEvent.click(screen.getByTestId('disconnect-confirm-button'));
+    await screen.findByTestId('confirm-dialog');
+    fireEvent.click(screen.getByTestId('confirm-dialog-confirm'));
     await waitFor(() => expect(mutateAsync).toHaveBeenCalledWith({ providerAccountId: 'ig1' }));
     expect(useDisconnectAccountMutation).toHaveBeenCalledWith('instagram');
   });
@@ -652,8 +652,8 @@ describe('app/(main)/accounts/page — AccountsPage', () => {
     });
     render(<AccountsPage />, { wrapper: createWrapper() });
     fireEvent.click(screen.getByTestId('bluesky-disconnect-button'));
-    await screen.findByTestId('disconnect-dialog');
-    fireEvent.click(screen.getByTestId('disconnect-confirm-button'));
+    await screen.findByTestId('confirm-dialog');
+    fireEvent.click(screen.getByTestId('confirm-dialog-confirm'));
     await waitFor(() => expect(mutateAsync).toHaveBeenCalledWith({ providerAccountId: 'did:plc:abc' }));
     expect(useDisconnectAccountMutation).toHaveBeenCalledWith('bluesky');
   });
@@ -670,8 +670,8 @@ describe('app/(main)/accounts/page — AccountsPage', () => {
     });
     render(<AccountsPage />, { wrapper: createWrapper() });
     fireEvent.click(screen.getByTestId('linkedin-disconnect-button'));
-    await screen.findByTestId('disconnect-dialog');
-    fireEvent.click(screen.getByTestId('disconnect-confirm-button'));
+    await screen.findByTestId('confirm-dialog');
+    fireEvent.click(screen.getByTestId('confirm-dialog-confirm'));
     await waitFor(() => expect(mutateAsync).toHaveBeenCalledWith({ providerAccountId: 'member-123' }));
     expect(useDisconnectAccountMutation).toHaveBeenCalledWith('linkedin');
   });
@@ -696,14 +696,14 @@ describe('app/(main)/accounts/page — AccountsPage', () => {
     });
     render(<AccountsPage />, { wrapper: createWrapper() });
     fireEvent.click(screen.getByTestId('instagram-disconnect-button'));
-    await screen.findByTestId('disconnect-dialog');
-    fireEvent.click(screen.getByTestId('disconnect-confirm-button'));
+    await screen.findByTestId('confirm-dialog');
+    fireEvent.click(screen.getByTestId('confirm-dialog-confirm'));
     fireEvent.click(screen.getByTestId('bluesky-disconnect-button'));
-    await screen.findByTestId('disconnect-dialog');
-    fireEvent.click(screen.getByTestId('disconnect-confirm-button'));
+    await screen.findByTestId('confirm-dialog');
+    fireEvent.click(screen.getByTestId('confirm-dialog-confirm'));
     fireEvent.click(screen.getByTestId('linkedin-disconnect-button'));
-    await screen.findByTestId('disconnect-dialog');
-    fireEvent.click(screen.getByTestId('disconnect-confirm-button'));
+    await screen.findByTestId('confirm-dialog');
+    fireEvent.click(screen.getByTestId('confirm-dialog-confirm'));
     await waitFor(() => expect(reportAccountDisconnectFailed).toHaveBeenCalledWith('linkedin', 'threw'));
     expect(reportAccountDisconnectFailed).toHaveBeenCalledWith('instagram', 'threw');
     expect(reportAccountDisconnectFailed).toHaveBeenCalledWith('bluesky', 'threw');
@@ -780,8 +780,8 @@ describe('Threads accounts section', () => {
     });
     render(<AccountsPage />, { wrapper: createWrapper() });
     fireEvent.click(screen.getByTestId('threads-disconnect-button'));
-    await screen.findByTestId('disconnect-dialog');
-    fireEvent.click(screen.getByTestId('disconnect-confirm-button'));
+    await screen.findByTestId('confirm-dialog');
+    fireEvent.click(screen.getByTestId('confirm-dialog-confirm'));
     await waitFor(() => expect(reportAccountDisconnectFailed).toHaveBeenCalledWith('threads', 'threw'));
   });
 });
@@ -873,8 +873,8 @@ describe('Facebook Pages accounts section', () => {
     });
     render(<AccountsPage />, { wrapper: createWrapper() });
     fireEvent.click(screen.getByTestId('facebook-disconnect-button'));
-    await screen.findByTestId('disconnect-dialog');
-    fireEvent.click(screen.getByTestId('disconnect-confirm-button'));
+    await screen.findByTestId('confirm-dialog');
+    fireEvent.click(screen.getByTestId('confirm-dialog-confirm'));
     await waitFor(() => expect(reportAccountDisconnectFailed).toHaveBeenCalledWith('facebook', 'rejected'));
   });
 
@@ -905,8 +905,8 @@ describe('Facebook Pages accounts section', () => {
     });
     render(<AccountsPage />, { wrapper: createWrapper() });
     fireEvent.click(screen.getByTestId('3speak-disconnect-button'));
-    await screen.findByTestId('disconnect-dialog');
-    fireEvent.click(screen.getByTestId('disconnect-confirm-button'));
+    await screen.findByTestId('confirm-dialog');
+    fireEvent.click(screen.getByTestId('confirm-dialog-confirm'));
     await waitFor(() => expect(mutateAsync).toHaveBeenCalledWith({ providerAccountId: 'alice' }));
     expect(useDisconnectAccountMutation).toHaveBeenCalledWith('3speak');
   });
@@ -1259,7 +1259,7 @@ describe('Rumble accounts section', () => {
     });
     render(<AccountsPage />, { wrapper: createWrapper() });
     fireEvent.click(screen.getByTestId('rumble-disconnect-button'));
-    expect(await screen.findByTestId('disconnect-dialog')).toHaveTextContent('My Channel');
+    expect(await screen.findByTestId('confirm-dialog')).toHaveTextContent('My Channel');
   });
 
   it('posts channelId + accessToken to /api/rumble-connect and shows the error on a 400', async () => {
@@ -1284,8 +1284,8 @@ describe('Rumble accounts section', () => {
     });
     render(<AccountsPage />, { wrapper: createWrapper() });
     fireEvent.click(screen.getByTestId('rumble-disconnect-button'));
-    await screen.findByTestId('disconnect-dialog');
-    fireEvent.click(screen.getByTestId('disconnect-confirm-button'));
+    await screen.findByTestId('confirm-dialog');
+    fireEvent.click(screen.getByTestId('confirm-dialog-confirm'));
     await waitFor(() => expect(reportAccountDisconnectFailed).toHaveBeenCalledWith('rumble', 'rejected'));
   });
 });
@@ -1615,11 +1615,11 @@ describe('error state wiring — broken cards offer reconnect, healthy cards kee
 describe('disconnect dialog names the account', () => {
   async function openDisconnect(buttonTestId: string): Promise<HTMLElement> {
     fireEvent.click(screen.getByTestId(buttonTestId));
-    return screen.findByTestId('disconnect-dialog');
+    return screen.findByTestId('confirm-dialog');
   }
 
   function dialogAccount(dialog: HTMLElement): string {
-    return within(dialog).getByTestId('disconnect-dialog-account').textContent ?? '';
+    return within(dialog).getByTestId('confirm-dialog-detail').textContent ?? '';
   }
 
   it('instagram: names the handle with @', async () => {
@@ -1646,11 +1646,11 @@ describe('disconnect dialog names the account', () => {
     render(<AccountsPage />, { wrapper: createWrapper() });
     const buttons = screen.getAllByTestId('linkedin-disconnect-button');
     fireEvent.click(buttons[0]);
-    expect(dialogAccount(await screen.findByTestId('disconnect-dialog'))).toBe('Ryan Carlos');
-    fireEvent.click(screen.getByTestId('disconnect-cancel-button'));
-    await waitFor(() => expect(screen.queryByTestId('disconnect-dialog')).not.toBeInTheDocument());
+    expect(dialogAccount(await screen.findByTestId('confirm-dialog'))).toBe('Ryan Carlos');
+    fireEvent.click(screen.getByTestId('confirm-dialog-cancel'));
+    await waitFor(() => expect(screen.queryByTestId('confirm-dialog')).not.toBeInTheDocument());
     fireEvent.click(buttons[1]);
-    expect(dialogAccount(await screen.findByTestId('disconnect-dialog'))).toBe('urn:li:organization:111');
+    expect(dialogAccount(await screen.findByTestId('confirm-dialog'))).toBe('urn:li:organization:111');
   });
 
   it('threads: names the account by its handle', async () => {
@@ -1689,7 +1689,7 @@ describe('disconnect dialog names the account', () => {
     render(<AccountsPage />, { wrapper: createWrapper() });
     const dialog = await openDisconnect('pinterest-disconnect-button');
     expect(dialogAccount(dialog)).toBe('My Pin');
-    fireEvent.click(screen.getByTestId('disconnect-confirm-button'));
+    fireEvent.click(screen.getByTestId('confirm-dialog-confirm'));
     await waitFor(() => expect(mutateAsync).toHaveBeenCalledWith({ providerAccountId: 'p1' }));
     expect(useDisconnectAccountMutation).toHaveBeenCalledWith('pinterest');
   });
@@ -1706,7 +1706,7 @@ describe('disconnect dialog names the account', () => {
     render(<AccountsPage />, { wrapper: createWrapper() });
     const dialog = await openDisconnect('fanvue-disconnect-button');
     expect(dialogAccount(dialog)).toBe('My Fan');
-    fireEvent.click(screen.getByTestId('disconnect-confirm-button'));
+    fireEvent.click(screen.getByTestId('confirm-dialog-confirm'));
     await waitFor(() => expect(mutateAsync).toHaveBeenCalledWith({ providerAccountId: 'f1' }));
     expect(useDisconnectAccountMutation).toHaveBeenCalledWith('fanvue');
   });

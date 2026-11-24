@@ -440,6 +440,33 @@
       }
     }
   ],
+  "prompt_library.versions": [
+    {
+      "args": {
+        "action": "versions",
+        "slug": "my-prompt",
+        "limit": 10,
+        "before": 5
+      }
+    },
+    {
+      "args": {
+        "action": "versions",
+        "slug": "my-prompt",
+        "version": 2
+      }
+    }
+  ],
+  "prompt_library.restore": [
+    {
+      "args": {
+        "action": "restore",
+        "slug": "my-prompt",
+        "version": 1,
+        "expectedCurrentVersion": 3
+      }
+    }
+  ],
   "prompts.get": [
     {
       "args": {
