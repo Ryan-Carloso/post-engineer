@@ -93,6 +93,25 @@ describe('IdentityCardSchema', () => {
     expect(IdentityCardSchema.safeParse(withPath(FIXTURE_CARD, ['defaults', 'outfit', 'top'], 'tank top showing a muscular build')).success).toBe(false);
     expect(IdentityCardSchema.safeParse(withPath(FIXTURE_CARD, ['defaults', 'outfit', 'top'], 'lingerie set')).success).toBe(false);
   });
+
+  it.each([
+    ['top', 'skinny jeans'],
+    ['bottom', 'skintight leggings'],
+    ['accessories', 'eyeglasses'],
+    ['accessories', 'eyewear'],
+    ['top', 'eyelet blouse'],
+  ])('accepts clothing words that share a stem with an identity word in %s (%s)', (slot, value) => {
+    expect(IdentityCardSchema.safeParse(withPath(FIXTURE_CARD, ['defaults', 'outfit', slot], value)).success).toBe(true);
+  });
+
+  it.each([
+    ['top', 'bare skin'],
+    ['top', 'blue eyes'],
+    ['top', 'bald head'],
+    ['top', 'long hair'],
+  ])('still rejects real identity words in %s (%s)', (slot, value) => {
+    expect(IdentityCardSchema.safeParse(withPath(FIXTURE_CARD, ['defaults', 'outfit', slot], value)).success).toBe(false);
+  });
 });
 
 describe('SceneSchema', () => {

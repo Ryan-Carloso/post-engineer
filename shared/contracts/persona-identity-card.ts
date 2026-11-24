@@ -26,9 +26,17 @@ const IDENTITY_EXTRA_WORDS: ReadonlySet<string> = new Set([
   'cabelo', 'loiro', 'loira', 'ruivo', 'ruiva', 'careca', 'calvo',
 ]);
 
+const HARMLESS_PHRASES: readonly RegExp[] = [
+  /\b(?:body|bodies) of water\b/g,
+  /\b(?:skinny|skintight|eyewear|eyeglasses|eyelet)\b/g,
+];
+
+function withoutHarmlessPhrases(value: string): string {
+  return HARMLESS_PHRASES.reduce((text, phrase) => text.replace(phrase, ' '), value.toLowerCase());
+}
+
 function mentionsIdentity(value: string): boolean {
-  const withoutWater = value.toLowerCase().replace(/\b(?:body|bodies) of water\b/g, ' ');
-  return wordsOf(withoutWater).some(
+  return wordsOf(withoutHarmlessPhrases(value)).some(
     (word) =>
       IDENTITY_WORDS.has(word) ||
       IDENTITY_EXTRA_WORDS.has(word) ||
