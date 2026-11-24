@@ -112,9 +112,9 @@ export function validateOptions(options: OptionsInput): Checked<ValidatedOptions
   if (imageId !== undefined && imageId.trim().length === 0) {
     issues.push(invalid('options.imageId must be a non-empty string.', 'options.imageId'));
   }
-  if (videoType === 'faceless' && imageId !== undefined) {
+  if (videoType === 'voiceover' && imageId !== undefined) {
     issues.push(
-      invalid('options.imageId cannot be used with faceless videos: there is no face to render.', 'options.imageId'),
+      invalid('options.imageId cannot be used with voiceover videos: there is no face to render.', 'options.imageId'),
     );
   }
   if (webhookUrl !== undefined && !isPublicHttpsWebhookUrl(webhookUrl)) {

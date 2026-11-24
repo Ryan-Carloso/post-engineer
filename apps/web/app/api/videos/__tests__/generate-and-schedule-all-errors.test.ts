@@ -161,7 +161,7 @@ describe('generate-and-schedule reports every validation problem in one 400 (#35
     });
   });
 
-  it('a request with no persona must be faceless and have a voice: both reported', async () => {
+  it('a request with no persona must be voiceover and have a voice: both reported', async () => {
     const res = await post(body({ personaId: undefined, options: { segments } }));
     expect(res.status).toBe(400);
     const json = (await res.json()) as { errors: Array<{ field: string }> };

@@ -26,7 +26,7 @@ class CreateTaskSegmentsDispatchTests(unittest.TestCase):
         body = TaskVideoRequest(
             video_title="Porto",
             video_description="Test description.",
-            video_type="faceless",
+            video_type="voiceover",
             segments=valid_segments(),
         )
         auth = SimpleNamespace(user_id="user-1")

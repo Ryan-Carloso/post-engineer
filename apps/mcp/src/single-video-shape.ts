@@ -38,7 +38,7 @@ export const GeneratePersonaVideoShape = {
     .string()
     .min(1, 'personaId must be a non-empty string when provided')
     .optional()
-    .describe('The persona to generate the video with. Omit for a faceless post with no persona: in that case set options.videoType to \'faceless\' and options.voiceId (or options.audioUrl).'),
+    .describe('The persona to generate the video with. Omit for a voiceover post with no persona: in that case set options.videoType to \'voiceover\' and options.voiceId (or options.audioUrl).'),
   segments: z
     .array(z.object(ScriptSegmentShape).strict())
     .min(1, 'Provide at least one segment')
@@ -127,7 +127,7 @@ export const ValidateScriptShape = {
       error: (issue) => unknownVideoTypeMessage(issue.input),
     })
     .optional()
-    .describe('The video mode the script is for: full_lipsync = media is optional (at most 6 images in total); hook_lipsync or faceless = images mode, which checks that every segment carries a media list. Omitted means hook_lipsync.'),
+    .describe('The video mode the script is for: full_lipsync = media is optional (at most 6 images in total); hook_lipsync or voiceover = images mode, which checks that every segment carries a media list. Omitted means hook_lipsync.'),
 };
 
 export const ValidateScriptSchema = z.object(ValidateScriptShape);

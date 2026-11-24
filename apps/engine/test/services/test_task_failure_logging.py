@@ -42,7 +42,7 @@ def _params_with_secret():
     return TaskVideoRequest(
         video_title="subject-with-s3cr3t-token",
         video_description="Test description.",
-        video_type="faceless",
+        video_type="voiceover",
         custom_audio_file="/tmp/signed-audio-url-with-secret",
     )
 
@@ -222,7 +222,7 @@ class StartCrashStageTests(unittest.TestCase):
         params = TaskVideoRequest(
             video_title="topic",
             video_description="Test description.",
-            video_type="faceless",
+            video_type="voiceover",
             voice_name="chatterbox:kokoro_af_heart",
         )
         task_id = "crash-task"
@@ -283,7 +283,7 @@ class StartCrashStageTests(unittest.TestCase):
         params = TaskVideoRequest(
             video_title="topic",
             video_description="Test description.",
-            video_type="faceless",
+            video_type="voiceover",
             voice_name="chatterbox:kokoro_af_heart",
         )
         task_id = "stage-task"

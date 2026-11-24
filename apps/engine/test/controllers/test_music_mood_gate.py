@@ -43,7 +43,7 @@ class CreateTaskMusicMoodGateTests(unittest.TestCase):
         body = TaskVideoRequest(
             video_title="subject",
             video_description="Test description.",
-            video_type="faceless",
+            video_type="voiceover",
             video_script="script",
             music_mood="finance",
         )
@@ -61,7 +61,7 @@ class CreateTaskMusicMoodGateTests(unittest.TestCase):
                 body = TaskVideoRequest(
                     video_title="subject",
                     video_description="Test description.",
-                    video_type="faceless",
+                    video_type="voiceover",
                     video_script="script",
                     music_mood=music_mood,
                 )

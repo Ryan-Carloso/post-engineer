@@ -30,7 +30,7 @@ describe('generatePersonaVideo pacing options', () => {
       times: ['20:00'],
       timezone: 'Europe/Lisbon',
       options: {
-        videoType: 'faceless',
+        videoType: 'voiceover',
         videoClipDuration: 4,
         videoTransitionMode: 'Crossfade',
         videoVariationSeed: 7,
@@ -54,7 +54,7 @@ describe('generatePersonaVideo pacing options', () => {
       times: ['20:00'],
       timezone: 'Europe/Lisbon',
       options: {
-        videoType: 'faceless',
+        videoType: 'voiceover',
         subtitlePosition: 'top',
       },
     });
@@ -71,7 +71,7 @@ describe('generatePersonaVideo pacing options', () => {
       times: ['20:00'],
       timezone: 'Europe/Lisbon',
       options: {
-        videoType: 'faceless',
+        videoType: 'voiceover',
         subtitlePosition: 'custom',
         subtitleCustomPosition: 20,
       },

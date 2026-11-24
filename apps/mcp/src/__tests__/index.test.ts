@@ -241,7 +241,7 @@ describe('every action runs its handler against the client', () => {
       },
       persona: null,
       generation: {
-        faceless: true, language: null, voiceId: null, videoAspect: '9:16',
+        voiceover: true, language: null, voiceId: null, videoAspect: '9:16',
         videoLayout: null, niche: null, paragraphNumber: null, faceQuality: null,
       },
     }],

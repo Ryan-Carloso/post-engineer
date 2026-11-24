@@ -31,7 +31,7 @@ export const CreatePersonaAvatarFields = {
     .url()
     .optional()
     .describe(
-      'Public URL to the persona avatar image (use persona_media (action: list_faces) for stock face URLs). Give exactly one of avatarUrl or avatarPath: every persona has a face; "no face" is chosen per video with generate_video options.videoType: \'faceless\'.',
+      'Public URL to the persona avatar image (use persona_media (action: list_faces) for stock face URLs). Give exactly one of avatarUrl or avatarPath: every persona has a face; a video without lip sync is chosen per video with generate_video options.videoType: \'voiceover\'.',
     ),
   avatarPath: z.string().min(1).optional().describe(AVATAR_PATH_DESCRIPTION),
 };
@@ -80,7 +80,7 @@ export async function appendPersonaAvatar(
   }
   if (required) {
     throw new Error(
-      'avatarUrl or avatarPath is required: every persona has a face. Use persona_media (action: list_faces) for a stock face URL, avatarPath for a local photo, and generate_video options.videoType: \'faceless\' for videos without a face.',
+      'avatarUrl or avatarPath is required: every persona has a face. Use persona_media (action: list_faces) for a stock face URL, avatarPath for a local photo, and generate_video options.videoType: \'voiceover\' for videos without a face.',
     );
   }
 }

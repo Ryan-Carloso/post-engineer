@@ -56,9 +56,9 @@ describe('stagePublishMedia', () => {
   });
 
   it('presigns the owner archive without storing a copy', async () => {
-    const staged = await stage(null, 'user-1/faceless/t/final-1.mp4');
+    const staged = await stage(null, 'user-1/voiceover/t/final-1.mp4');
     expect(staged).toEqual({ ok: true, kind: 'video', url: 'https://s.example/archive.mp4', usedArchive: true });
-    expect(presignPublishMedia).toHaveBeenCalledWith('user-1/faceless/t/final-1.mp4');
+    expect(presignPublishMedia).toHaveBeenCalledWith('user-1/voiceover/t/final-1.mp4');
     expect(uploadPublishMedia).not.toHaveBeenCalled();
   });
 

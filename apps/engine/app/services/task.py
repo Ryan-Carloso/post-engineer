@@ -11,7 +11,7 @@ from app.models import const
 from app.models.schema import VideoConcatMode, VideoParams
 from app.services import (
     audio_trim,
-    faceless_material,
+    voiceover_material,
     start_preflight,
     longcat,
     persona_hook,
@@ -571,7 +571,7 @@ def generate_subtitle(task_id, params, video_script, sub_maker, audio_file):
 
 
 def get_video_materials(task_id, params, audio_duration):
-    return faceless_material.images_canvas(utils.task_dir(task_id), audio_duration, params.video_aspect) or None
+    return voiceover_material.images_canvas(utils.task_dir(task_id), audio_duration, params.video_aspect) or None
 
 
 def generate_final_videos(
@@ -1009,7 +1009,7 @@ if __name__ == "__main__":
     params = VideoParams(
         video_title="金钱的作用",
         video_description="金钱的作用",
-        video_type="faceless",
+        video_type="voiceover",
         voice_name="zh-CN-XiaoyiNeural-Female",
         voice_rate=1.0,
     )

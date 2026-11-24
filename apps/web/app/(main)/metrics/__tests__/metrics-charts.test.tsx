@@ -277,7 +277,7 @@ describe('MetricsCharts', () => {
     expect(screen.getByText('Instagram · 250')).toBeInTheDocument();
   });
 
-  it('labels the faceless persona group with the no-persona copy in the persona view', () => {
+  it('labels the voiceover persona group with the no-persona copy in the persona view', () => {
     renderCharts([
       row({ postId: 'a', personaId: 'p1', views: 10 }),
       row({ postId: 'b', personaId: null, views: 20 }),

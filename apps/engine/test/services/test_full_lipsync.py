@@ -357,15 +357,15 @@ class CaptionParamsTest(unittest.TestCase):
             params = self._params(video_type="full_lipsync", subtitle_position=position)
             self.assertIs(full_lipsync.caption_params(params), params)
 
-    def test_faceless_keeps_center(self) -> None:
-        params = self._params(video_type="faceless", subtitle_position="center")
+    def test_voiceover_keeps_center(self) -> None:
+        params = self._params(video_type="voiceover", subtitle_position="center")
         self.assertIs(full_lipsync.caption_params(params), params)
 
     def test_no_persona_keeps_center(self) -> None:
         params = VideoParams(
             video_title="x",
             video_description="Test description.",
-            video_type="faceless",
+            video_type="voiceover",
             subtitle_position="center",
         )
         self.assertIs(full_lipsync.caption_params(params), params)

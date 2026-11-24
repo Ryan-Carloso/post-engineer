@@ -109,7 +109,7 @@ describe('preparePersona catalog fetch', () => {
     vi.mocked(fetchPersonaVoiceCatalogIds).mockResolvedValue(undefined);
   });
 
-  const opts = { videoType: 'faceless' as const };
+  const opts = { videoType: 'voiceover' as const };
 
   it.each([
     ['no-voice'],
@@ -177,8 +177,8 @@ describe('preparePersona face-mode photo check', () => {
     }
   });
 
-  it('passes a faceless post with the same photo-less persona (no face is sent)', async () => {
-    const result = await preparePersona(photoLessClient(), USER_ID, PERSONA_ID, { videoType: 'faceless' });
+  it('passes a voiceover post with the same photo-less persona (no face is sent)', async () => {
+    const result = await preparePersona(photoLessClient(), USER_ID, PERSONA_ID, { videoType: 'voiceover' });
     expect(result).not.toBeInstanceOf(Response);
   });
 

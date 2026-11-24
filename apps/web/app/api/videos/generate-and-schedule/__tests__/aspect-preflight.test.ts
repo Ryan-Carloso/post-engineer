@@ -65,7 +65,7 @@ const INPUT = {
 
 const PREP: PersonaPrep = {
   personaName: 'Porto Guide',
-  faceless: false,
+  voiceover: false,
   faceQuality: 'ok',
   avatarUrl: null,
   photoPath: null,
@@ -337,9 +337,9 @@ describe('checkFirstPhotoFace', () => {
     vi.unstubAllEnvs();
   });
 
-  it('passes faceless videos without an engine call: no face shows', async () => {
+  it('passes voiceover videos without an engine call: no face shows', async () => {
     const calls = stubFetch([engineBody('ok', 1080, 1920, true)]);
-    const result = await checkFirstPhotoFace({ ...INPUT, videoType: 'faceless' });
+    const result = await checkFirstPhotoFace({ ...INPUT, videoType: 'voiceover' });
     expect(result).toBeNull();
     expect(calls).toHaveLength(0);
   });
@@ -367,7 +367,7 @@ describe('checkFirstPhotoFace', () => {
     });
   });
 
-  it('rejects a faceless persona avatar with a 400 naming the persona photo', async () => {
+  it('rejects a voiceover persona avatar with a 400 naming the persona photo', async () => {
     stubFetch([engineBody('ok', 1080, 1920, false)]);
     const result = await checkFirstPhotoFace({
       ...INPUT,
@@ -443,7 +443,7 @@ describe('checkFirstPhotoFace', () => {
     expect(calls).toHaveLength(1);
   });
 
-  it('rejects a faceless first photo with a 400 naming segment and image', async () => {
+  it('rejects a voiceover first photo with a 400 naming segment and image', async () => {
     stubFetch([engineBody('ok', 1080, 1920, false)]);
     const result = await checkFirstPhotoFace(INPUT);
     expect(result).toBeInstanceOf(NextResponse);
@@ -742,7 +742,7 @@ describe('checkPreChargePreflights', () => {
     expect(calls).toHaveLength(0);
   });
 
-  it('returns the faceless-first-photo failure after the aspect check passes', async () => {
+  it('returns the voiceover-first-photo failure after the aspect check passes', async () => {
     const calls = stubFetch([
       engineBody('ok', 1080, 1920),
       engineBody('ok', 1080, 1920, false),
@@ -835,7 +835,7 @@ describe('checkPreChargePreflights', () => {
     expect(calls).toHaveLength(1);
   });
 
-  it('checks the hook photo in the aspect check for faceless videos even with a persona photo', async () => {
+  it('checks the hook photo in the aspect check for voiceover videos even with a persona photo', async () => {
     const calls = stubFetch([
       engineBody('wrong_aspect', 1920, 1080),
       engineBody('ok', 1080, 1920),
@@ -843,7 +843,7 @@ describe('checkPreChargePreflights', () => {
     vi.mocked(checkFullLipsyncNarration).mockResolvedValue(45);
     const result = await checkPreChargePreflights({
       ...COMBINED,
-      options: { ...OPTIONS, videoType: 'faceless' },
+      options: { ...OPTIONS, videoType: 'voiceover' },
       prep: { ...PREP, photoPath: '/tmp/persona.jpg' },
     });
     expect(result).not.toBeNull();

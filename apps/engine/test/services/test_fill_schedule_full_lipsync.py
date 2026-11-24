@@ -89,7 +89,7 @@ class _Store:
 
 class SlotVideoTypeTests(unittest.TestCase):
     def test_valid_video_types_pass_through(self):
-        for video_type in ("full_lipsync", "hook_lipsync", "faceless"):
+        for video_type in ("full_lipsync", "hook_lipsync", "voiceover"):
             self.assertEqual(slot_video_type({"video_type": video_type}), video_type)
 
     def test_missing_video_type_fails_with_the_valid_values(self):

@@ -33,7 +33,7 @@ def _no_persona(voice_name: str) -> VideoParams:
     return VideoParams(
         video_title="coffee",
         video_description="Test description.",
-        video_type="faceless",
+        video_type="voiceover",
         video_script="Hook. Body. Call to action.",
         voice_name=voice_name,
     )

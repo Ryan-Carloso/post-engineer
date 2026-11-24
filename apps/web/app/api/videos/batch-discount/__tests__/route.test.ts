@@ -105,7 +105,7 @@ describe('POST /api/videos/batch-discount', () => {
   });
 
   it('gives nothing below 6 face videos but still groups the batch', async () => {
-    const slots = [...sixFaces().slice(0, 5), slotRow('6', { faceless: true, charged_tokens: 1 })];
+    const slots = [...sixFaces().slice(0, 5), slotRow('6', { voiceover: true, charged_tokens: 1 })];
     const fake = setup(slots);
     const res = await post(bodyFor(slots));
     expect(res.status).toBe(200);

@@ -86,24 +86,24 @@ function mockClient() {
 
 describe('video_type error messages', () => {
   it('lists every mode with its cost', () => {
-    expect(VIDEO_TYPE_ERROR_SUFFIX).toBe('use full_lipsync (8/15), hook_lipsync (2/3) or faceless (1)');
+    expect(VIDEO_TYPE_ERROR_SUFFIX).toBe('use full_lipsync (8/15), hook_lipsync (2/3) or voiceover (1)');
     expect(VIDEO_TYPE_REQUIRED_MESSAGE).toBe(`videoType is required; ${VIDEO_TYPE_ERROR_SUFFIX}`);
   });
 
   it('names the offending value and stays under the 200-char relay cap', () => {
     const message = unknownVideoTypeMessage('sideways');
-    expect(message).toBe("unknown video_type 'sideways'; use full_lipsync (8/15), hook_lipsync (2/3) or faceless (1)");
+    expect(message).toBe("unknown video_type 'sideways'; use full_lipsync (8/15), hook_lipsync (2/3) or voiceover (1)");
     expect(message.length).toBeLessThan(200);
     expect(unknownVideoTypeMessage('x'.repeat(100)).length).toBeLessThan(200);
     expect(unknownVideoTypeMessage('x'.repeat(100))).toContain(`'${'x'.repeat(32)}'`);
-    expect(unknownVideoTypeMessage(null)).toBe("unknown video_type ''; use full_lipsync (8/15), hook_lipsync (2/3) or faceless (1)");
-    expect(unknownVideoTypeMessage(undefined)).toBe("unknown video_type ''; use full_lipsync (8/15), hook_lipsync (2/3) or faceless (1)");
+    expect(unknownVideoTypeMessage(null)).toBe("unknown video_type ''; use full_lipsync (8/15), hook_lipsync (2/3) or voiceover (1)");
+    expect(unknownVideoTypeMessage(undefined)).toBe("unknown video_type ''; use full_lipsync (8/15), hook_lipsync (2/3) or voiceover (1)");
   });
 
   it('narrows only the three modes', () => {
     expect(isVideoType('full_lipsync')).toBe(true);
     expect(isVideoType('hook_lipsync')).toBe(true);
-    expect(isVideoType('faceless')).toBe(true);
+    expect(isVideoType('voiceover')).toBe(true);
     expect(isVideoType('sideways')).toBe(false);
     expect(isVideoType(undefined)).toBe(false);
     expect(isVideoType(null)).toBe(false);
@@ -119,7 +119,7 @@ describe('video_type error messages', () => {
 
 describe('generate_persona_video videoType shape', () => {
   it('accepts each of the three modes', () => {
-    for (const videoType of ['full_lipsync', 'hook_lipsync', 'faceless'] as const) {
+    for (const videoType of ['full_lipsync', 'hook_lipsync', 'voiceover'] as const) {
       expect(GeneratePersonaVideoSchema.safeParse({ ...baseArgs, options: { videoType } }).success).toBe(true);
     }
   });
@@ -162,7 +162,7 @@ describe('generate_persona_video videoType shape', () => {
     if (!result.success) {
       const issue = result.error.issues.find((i) => i.path.join('.') === 'options.videoType');
       expect(issue).toBeDefined();
-      expect(issue?.message).toBe("unknown video_type 'sideways'; use full_lipsync (8/15), hook_lipsync (2/3) or faceless (1)");
+      expect(issue?.message).toBe("unknown video_type 'sideways'; use full_lipsync (8/15), hook_lipsync (2/3) or voiceover (1)");
     }
   });
 });
@@ -176,7 +176,7 @@ describe('validate_script videoType shape', () => {
     const result = ValidateScriptSchema.safeParse({ segments, videoType: 'sideways' });
     expect(result.success).toBe(false);
     if (!result.success) {
-      expect(result.error.issues[0].message).toBe("unknown video_type 'sideways'; use full_lipsync (8/15), hook_lipsync (2/3) or faceless (1)");
+      expect(result.error.issues[0].message).toBe("unknown video_type 'sideways'; use full_lipsync (8/15), hook_lipsync (2/3) or voiceover (1)");
     }
   });
 });
@@ -191,7 +191,7 @@ describe('generate_persona_video videoType guards (no charge)', () => {
       options: { videoType: 'full_lipsync' },
     });
     expect(response.isError).toBe(true);
-    expect(textOf(response)).toContain('must be faceless');
+    expect(textOf(response)).toContain('must be voiceover');
     expect(client.generatePersonaVideo).not.toHaveBeenCalled();
   });
 
@@ -200,25 +200,25 @@ describe('generate_persona_video videoType guards (no charge)', () => {
     const { personaId: _personaId, ...rest } = baseArgs;
     const response = await handleGeneratePersonaVideo(client, { ...rest, options: { videoType: 'hook_lipsync' } });
     expect(response.isError).toBe(true);
-    expect(textOf(response)).toContain('must be faceless');
+    expect(textOf(response)).toContain('must be voiceover');
     expect(client.generatePersonaVideo).not.toHaveBeenCalled();
   });
 
-  it('rejects a faceless post without a persona and without a voice before any client call', async () => {
+  it('rejects a voiceover post without a persona and without a voice before any client call', async () => {
     const client = mockClient();
     const { personaId: _personaId, ...rest } = baseArgs;
-    const response = await handleGeneratePersonaVideo(client, { ...rest, options: { videoType: 'faceless' } });
+    const response = await handleGeneratePersonaVideo(client, { ...rest, options: { videoType: 'voiceover' } });
     expect(response.isError).toBe(true);
     expect(textOf(response)).toContain('must have a voice');
     expect(client.generatePersonaVideo).not.toHaveBeenCalled();
   });
 
-  it('accepts a faceless post without a persona when a voice is given', async () => {
+  it('accepts a voiceover post without a persona when a voice is given', async () => {
     const client = mockClient();
     const { personaId: _personaId, ...rest } = baseArgs;
     const response = await handleGeneratePersonaVideo(client, {
       ...rest,
-      options: { videoType: 'faceless', voiceId: 'chatterbox:kokoro_af_heart' },
+      options: { videoType: 'voiceover', voiceId: 'chatterbox:kokoro_af_heart' },
     });
     expect(response.isError).toBeUndefined();
     expect(client.generatePersonaVideo).toHaveBeenCalledTimes(1);
@@ -226,14 +226,14 @@ describe('generate_persona_video videoType guards (no charge)', () => {
 });
 
 describe('validate_script videoType (no charge)', () => {
-  it('keeps media optional for full_lipsync and required for faceless', async () => {
+  it('keeps media optional for full_lipsync and required for voiceover', async () => {
     const client = mockClient();
     const bare = segments.map((segment) => ({ kind: segment.kind, text: segment.text }));
     const full = await handleValidateScript(client, { segments: bare, videoType: 'full_lipsync' });
     expect(full.isError).toBeUndefined();
-    const faceless = await handleValidateScript(client, { segments: bare, videoType: 'faceless' });
-    expect(faceless.isError).toBe(true);
-    expect(textOf(faceless)).toContain('segments.0.media');
+    const voiceover = await handleValidateScript(client, { segments: bare, videoType: 'voiceover' });
+    expect(voiceover.isError).toBe(true);
+    expect(textOf(voiceover)).toContain('segments.0.media');
   });
 });
 

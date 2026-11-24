@@ -66,7 +66,7 @@ const EXPECTED: Record<string, readonly string[]> = {
   schedules_publish_mode_check: GENERATION_PUBLISH_MODES,
   video_generations_publish_mode_check: GENERATION_PUBLISH_MODES,
   personas_video_layout_check: VIDEO_LAYOUTS,
-  scheduled_posts_faceless_material_check: ['images'],
+  scheduled_posts_voiceover_material_check: ['images'],
   scheduled_posts_video_type_check: VIDEO_TYPES,
   post_metrics_metrics_window_check: METRICS_WINDOWS,
   post_metrics_done_metrics_window_check: METRICS_WINDOWS,

@@ -74,10 +74,10 @@ describe('generate tool shape vs the videos contract', () => {
     const unknownTool = { ...TOOL_GENERATE, options: { videoType: 'sideways' } };
     const unknownContract = { ...CONTRACT_GENERATE, options: { videoType: 'sideways' } };
     expect(firstIssue(GeneratePersonaVideoSchema, unknownTool)).toBe(
-      "unknown video_type 'sideways'; use full_lipsync (8/15), hook_lipsync (2/3) or faceless (1)",
+      "unknown video_type 'sideways'; use full_lipsync (8/15), hook_lipsync (2/3) or voiceover (1)",
     );
     expect(firstIssue(GenerateAndScheduleBodySchema, unknownContract)).toBe(
-      "unknown video_type 'sideways'; use full_lipsync (8/15), hook_lipsync (2/3) or faceless (1)",
+      "unknown video_type 'sideways'; use full_lipsync (8/15), hook_lipsync (2/3) or voiceover (1)",
     );
   });
 
@@ -267,10 +267,10 @@ describe('generate response warnings are objects, not strings', () => {
 describe('validate tool shape vs the videos contract', () => {
   it('rejects an unknown videoType with the same message on both sides', () => {
     expect(firstIssue(ValidateScriptSchema, { segments: [VALID_SEGMENT], videoType: 'sideways' })).toBe(
-      "unknown video_type 'sideways'; use full_lipsync (8/15), hook_lipsync (2/3) or faceless (1)",
+      "unknown video_type 'sideways'; use full_lipsync (8/15), hook_lipsync (2/3) or voiceover (1)",
     );
     expect(firstIssue(ValidateScriptBodySchema, { segments: [VALID_SEGMENT], videoType: 'sideways' })).toBe(
-      "unknown video_type 'sideways'; use full_lipsync (8/15), hook_lipsync (2/3) or faceless (1)",
+      "unknown video_type 'sideways'; use full_lipsync (8/15), hook_lipsync (2/3) or voiceover (1)",
     );
   });
 
@@ -359,9 +359,9 @@ describe('videos contract duplicated literals stay pinned', () => {
     const contract = readFileSync(join(root, 'shared/contracts/videos.ts'), 'utf8');
     const webTokens = readFileSync(join(root, 'apps/web/lib/tokens.ts'), 'utf8');
     const mcpVideoType = readFileSync(join(root, 'apps/mcp/src/video-type.ts'), 'utf8');
-    expect(contract).toContain("export const VIDEO_TYPE_ERROR_SUFFIX =\n  'use full_lipsync (8/15), hook_lipsync (2/3) or faceless (1)';");
-    expect(webTokens).toContain("export const VIDEO_TYPE_ERROR_SUFFIX =\n  'use full_lipsync (8/15), hook_lipsync (2/3) or faceless (1)';");
-    expect(mcpVideoType).toContain('use full_lipsync (8/15), hook_lipsync (2/3) or faceless (1)');
+    expect(contract).toContain("export const VIDEO_TYPE_ERROR_SUFFIX =\n  'use full_lipsync (8/15), hook_lipsync (2/3) or voiceover (1)';");
+    expect(webTokens).toContain("export const VIDEO_TYPE_ERROR_SUFFIX =\n  'use full_lipsync (8/15), hook_lipsync (2/3) or voiceover (1)';");
+    expect(mcpVideoType).toContain('use full_lipsync (8/15), hook_lipsync (2/3) or voiceover (1)');
   });
 
   it('matches the segments caps in the shared script-segments source', () => {

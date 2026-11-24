@@ -2,7 +2,7 @@
 
 Only the FINAL video (final-1.mp4, post audio-mux) is archived — never
 intermediates (combined-1.mp4), caches, or pre-audio renders. Layout:
-    videos/{user_id}/{persona_id|faceless}/{task_id}/final-1.mp4
+    videos/{user_id}/{persona_id|voiceover}/{task_id}/final-1.mp4
 so R2 objects can be scoped to their owning user by path prefix.
 """
 
@@ -42,7 +42,7 @@ def _params(persona=None):
     return VideoParams(
         video_title="s",
         video_description="Test description.",
-        video_type="faceless",
+        video_type="voiceover",
         persona=persona,
     )
 
@@ -51,7 +51,7 @@ def _visual_persona(pid="persona-1"):
     return PersonaParams(id=pid, name="P", photo_url="https://x/y.jpg", voice_id="v1")
 
 
-def _faceless_persona(pid="persona-2"):
+def _voiceover_persona(pid="persona-2"):
     return PersonaParams(id=pid, name="F", voice_id="v1")
 
 
@@ -62,10 +62,10 @@ class StorageObjectPathTests(unittest.TestCase):
             "user-1/persona-9/task-7/final-1.mp4",
         )
 
-    def test_faceless_path(self):
+    def test_voiceover_path(self):
         self.assertEqual(
-            vs.storage_object_path("user-1", "faceless", "task-7"),
-            "user-1/faceless/task-7/final-1.mp4",
+            vs.storage_object_path("user-1", "voiceover", "task-7"),
+            "user-1/voiceover/task-7/final-1.mp4",
         )
 
 
@@ -77,11 +77,11 @@ class PersonaFolderTests(unittest.TestCase):
             "persona-9",
         )
 
-    def test_faceless_persona_goes_to_faceless_folder(self):
+    def test_voiceover_persona_goes_to_voiceover_folder(self):
         task = {"user_id": "u1", "persona_id": "persona-2"}
         self.assertEqual(
-            vs.persona_folder(task, _params(_faceless_persona("persona-2"))),
-            "faceless",
+            vs.persona_folder(task, _params(_voiceover_persona("persona-2"))),
+            "voiceover",
         )
 
     def test_persona_id_from_inline_params_when_task_row_lacks_it(self):
@@ -98,9 +98,9 @@ class PersonaFolderTests(unittest.TestCase):
         task = {"user_id": "u1", "persona_id": "persona-3"}
         self.assertEqual(vs.persona_folder(task, _params(persona)), "persona-3")
 
-    def test_no_persona_at_all_goes_to_faceless_folder(self):
-        self.assertEqual(vs.persona_folder({"user_id": "u1"}, _params()), "faceless")
-        self.assertEqual(vs.persona_folder({}, _params()), "faceless")
+    def test_no_persona_at_all_goes_to_voiceover_folder(self):
+        self.assertEqual(vs.persona_folder({"user_id": "u1"}, _params()), "voiceover")
+        self.assertEqual(vs.persona_folder({}, _params()), "voiceover")
 
 
 class R2ConfigurationTests(unittest.TestCase):
@@ -188,19 +188,19 @@ class R2UploadTests(unittest.TestCase):
         with patch("app.services.video_storage._r2_client", return_value=client):
             with patch("builtins.open", MagicMock()) as open_mock:
                 result = vs.upload_final_video_r2(
-                    "u1/faceless/task-7/final-1.mp4", "/tmp/final-1.mp4"
+                    "u1/voiceover/task-7/final-1.mp4", "/tmp/final-1.mp4"
                 )
-        self.assertEqual(result, "u1/faceless/task-7/final-1.mp4")
+        self.assertEqual(result, "u1/voiceover/task-7/final-1.mp4")
         open_mock.assert_called_once_with("/tmp/final-1.mp4", "rb")
         handle = open_mock.return_value.__enter__.return_value
         client.put_object.assert_called_once()
         kwargs = client.put_object.call_args.kwargs
         self.assertEqual(kwargs["Bucket"], vs.STORAGE_BUCKET)
-        self.assertEqual(kwargs["Key"], "u1/faceless/task-7/final-1.mp4")
+        self.assertEqual(kwargs["Key"], "u1/voiceover/task-7/final-1.mp4")
         self.assertIs(kwargs["Body"], handle)
         self.assertEqual(kwargs["ContentType"], "video/mp4")
         client.head_object.assert_called_once_with(
-            Bucket=vs.STORAGE_BUCKET, Key="u1/faceless/task-7/final-1.mp4"
+            Bucket=vs.STORAGE_BUCKET, Key="u1/voiceover/task-7/final-1.mp4"
         )
 
     def test_truncated_object_is_rejected_even_though_put_succeeded(self):
@@ -213,7 +213,7 @@ class R2UploadTests(unittest.TestCase):
         with patch("app.services.video_storage._r2_client", return_value=client):
             with patch("builtins.open", MagicMock()):
                 self.assertIsNone(
-                    vs.upload_final_video_r2("u1/faceless/t/final-1.mp4", "/tmp/f.mp4")
+                    vs.upload_final_video_r2("u1/voiceover/t/final-1.mp4", "/tmp/f.mp4")
                 )
 
     def test_verification_failure_returns_none(self):
@@ -222,7 +222,7 @@ class R2UploadTests(unittest.TestCase):
         with patch("app.services.video_storage._r2_client", return_value=client):
             with patch("builtins.open", MagicMock()):
                 self.assertIsNone(
-                    vs.upload_final_video_r2("u1/faceless/t/final-1.mp4", "/tmp/f.mp4")
+                    vs.upload_final_video_r2("u1/voiceover/t/final-1.mp4", "/tmp/f.mp4")
                 )
 
     def test_missing_content_length_counts_as_zero_bytes(self):
@@ -238,7 +238,7 @@ class R2UploadTests(unittest.TestCase):
         ):
             with patch("app.services.video_storage._r2_client") as factory:
                 self.assertIsNone(
-                    vs.upload_final_video_r2("u1/faceless/t/final-1.mp4", "/tmp/f.mp4")
+                    vs.upload_final_video_r2("u1/voiceover/t/final-1.mp4", "/tmp/f.mp4")
                 )
                 factory.assert_not_called()
 
@@ -248,7 +248,7 @@ class R2UploadTests(unittest.TestCase):
         with patch("app.services.video_storage._r2_client", return_value=client):
             with patch("builtins.open", MagicMock()):
                 self.assertIsNone(
-                    vs.upload_final_video_r2("u1/faceless/t/final-1.mp4", "/tmp/f.mp4")
+                    vs.upload_final_video_r2("u1/voiceover/t/final-1.mp4", "/tmp/f.mp4")
                 )
 
     def test_upload_skipped_when_not_configured(self):
@@ -285,19 +285,19 @@ class R2SignedUrlTests(unittest.TestCase):
             "https://acct.r2.cloudflarestorage.com/videos/p?X-Amz-Signature=abc"
         )
         with patch("app.services.video_storage._r2_client", return_value=client):
-            url = vs.create_signed_url_r2("u1/faceless/t/final-1.mp4", expires_in=600)
+            url = vs.create_signed_url_r2("u1/voiceover/t/final-1.mp4", expires_in=600)
         self.assertIn("X-Amz-Signature", url)
         self.assertEqual(client.generate_presigned_url.call_args[0][0], "get_object")
         kwargs = client.generate_presigned_url.call_args.kwargs
         self.assertEqual(kwargs["Params"]["Bucket"], vs.STORAGE_BUCKET)
-        self.assertEqual(kwargs["Params"]["Key"], "u1/faceless/t/final-1.mp4")
+        self.assertEqual(kwargs["Params"]["Key"], "u1/voiceover/t/final-1.mp4")
         self.assertEqual(kwargs["ExpiresIn"], 600)
 
     def test_failure_returns_none(self):
         client = MagicMock()
         client.generate_presigned_url.side_effect = RuntimeError("boom")
         with patch("app.services.video_storage._r2_client", return_value=client):
-            self.assertIsNone(vs.create_signed_url_r2("u1/faceless/t/final-1.mp4"))
+            self.assertIsNone(vs.create_signed_url_r2("u1/voiceover/t/final-1.mp4"))
 
     def test_not_configured_raises(self):
         with _isolated_environ({}):
@@ -309,7 +309,7 @@ class R2SignedUrlTests(unittest.TestCase):
     def test_serving_wrapper_returns_none_when_unconfigured(self):
         with _isolated_environ({}):
             with patch("app.services.video_storage._r2_client") as factory:
-                self.assertIsNone(vs.create_signed_url("u1/faceless/t/final-1.mp4"))
+                self.assertIsNone(vs.create_signed_url("u1/voiceover/t/final-1.mp4"))
                 factory.assert_not_called()
 
     def test_serving_wrapper_delegates_with_path_and_ttl(self):
@@ -336,11 +336,11 @@ class ArchiveFinalVideosAlertTests(unittest.TestCase):
             with patch.object(task_mod.video_storage, "upload_final_video", return_value=None):
                 with patch.object(task_mod, "_update_task") as update:
                     task_mod.archive_final_videos(
-                        "task-1", ["/tmp/final-1.mp4"], _params(_faceless_persona())
+                        "task-1", ["/tmp/final-1.mp4"], _params(_voiceover_persona())
                     )
         update.assert_called_once()
         kwargs = update.call_args.kwargs
-        self.assertEqual(kwargs["video_storage_error"], "u1/faceless/task-1/final-1.mp4")
+        self.assertEqual(kwargs["video_storage_error"], "u1/voiceover/task-1/final-1.mp4")
         self.assertNotIn("video_storage_path", kwargs)
 
     def test_verified_archive_records_path_and_no_error(self):
@@ -350,14 +350,14 @@ class ArchiveFinalVideosAlertTests(unittest.TestCase):
             with patch.object(
                 task_mod.video_storage,
                 "upload_final_video",
-                return_value="u1/faceless/task-1/final-1.mp4",
+                return_value="u1/voiceover/task-1/final-1.mp4",
             ):
                 with patch.object(task_mod, "_update_task") as update:
                     task_mod.archive_final_videos(
-                        "task-1", ["/tmp/final-1.mp4"], _params(_faceless_persona())
+                        "task-1", ["/tmp/final-1.mp4"], _params(_voiceover_persona())
                     )
         update.assert_called_once_with(
-            "task-1", video_storage_path="u1/faceless/task-1/final-1.mp4"
+            "task-1", video_storage_path="u1/voiceover/task-1/final-1.mp4"
         )
 
 

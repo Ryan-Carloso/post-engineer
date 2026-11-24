@@ -564,7 +564,7 @@ def test_supplied_segments_script_calls_no_llm():
     params = VideoParams(
         video_title="Porto",
         video_description="Test description.",
-        video_type="faceless",
+        video_type="voiceover",
         video_script=joined,
         video_language="en-US",
     )
@@ -775,7 +775,7 @@ def test_one_photo_in_a_long_take_still_fails_the_density_minimum():
     segments = _clip_segments()
     segments[0]["text"] = " ".join(["word"] * 40) + "."
     with pytest.raises(SegmentValidationError) as exc_info:
-        script_segments.validate_segments(segments, video_type="faceless")
+        script_segments.validate_segments(segments, video_type="voiceover")
     assert exc_info.value.field == "segments.0.media"
     assert exc_info.value.rule == (
         "segment has 40 words (~15s) and needs at least 8 images (one per 2s); it has 1."

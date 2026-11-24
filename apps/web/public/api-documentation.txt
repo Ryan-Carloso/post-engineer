@@ -47,7 +47,7 @@ RESPONSES AND ERRORS
 - Upload, destructive and fan-out routes are rate limited per caller.
 
 ================================================================================
-VIDEOS (cost prepaid tokens: faceless 1, ok 2, very_good 3)
+VIDEOS (cost prepaid tokens: voiceover 1, ok 2, very_good 3)
 ================================================================================
 
 Check the balance first: GET /api/billing/tokens.

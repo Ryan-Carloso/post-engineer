@@ -15,11 +15,11 @@ describe('buildGenerationRows', () => {
 
   it('keeps the optional facts after the face', () => {
     const rows = buildGenerationRows(
-      { ...narrowGeneration(null), faceless: true, language: 'en-US', paragraphNumber: 3 },
+      { ...narrowGeneration(null), voiceover: true, language: 'en-US', paragraphNumber: 3 },
       'Ana',
       t,
     );
-    expect(rows.map((r) => r.value)).toEqual(['Ana', 'posts.generationFaceless', 'en-US', '3']);
+    expect(rows.map((r) => r.value)).toEqual(['Ana', 'posts.generationVoiceover', 'en-US', '3']);
   });
 
   it('names the prompt version first when the video recorded one', () => {

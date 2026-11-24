@@ -169,7 +169,7 @@ class VideoParamsLayoutTest(unittest.TestCase):
 
     def test_default_layout_is_standard(self) -> None:
         params = VideoParams(
-            video_title="coins", video_description="Test description.", video_type="faceless"
+            video_title="coins", video_description="Test description.", video_type="voiceover"
         )
         self.assertEqual(params.video_layout, "standard")
 
@@ -178,7 +178,7 @@ class VideoParamsLayoutTest(unittest.TestCase):
             VideoParams(
                 video_title="coins",
                 video_description="Test description.",
-                video_type="faceless",
+                video_type="voiceover",
                 video_layout="cinematic",
             )
 
@@ -188,7 +188,7 @@ class VideoParamsLayoutTest(unittest.TestCase):
                 VideoParams(
                     video_title="coins",
                     video_description="Test description.",
-                    video_type="faceless",
+                    video_type="voiceover",
                     video_layout=value,
                 ).video_layout,
                 value,

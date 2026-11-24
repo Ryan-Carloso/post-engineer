@@ -41,7 +41,7 @@ def _row(**overrides):
         "params": {
             "video_title": "myth busting",
             "video_description": "Agent description.",
-            "video_type": "faceless",
+            "video_type": "voiceover",
             "generation_id": "g1",
         },
         "publish_mode": "asap",
@@ -203,7 +203,7 @@ class TriageRedispatchDirectTests(unittest.TestCase):
         params = {
             "video_title": "myth busting",
             "video_description": "Agent description.",
-            "video_type": "faceless",
+            "video_type": "voiceover",
             "generation_id": "g1",
             "webhook_url": "https://hooks.invalid.example/hook",
         }

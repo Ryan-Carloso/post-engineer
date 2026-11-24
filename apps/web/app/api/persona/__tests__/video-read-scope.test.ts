@@ -228,7 +228,7 @@ describe('GET /api/persona/video-status task visibility', () => {
       personaIds: [PERSONA_A],
       tables: {
         video_generations: EMPTY,
-        scheduled_posts: { data: { schedule_id: 'schedule-1', faceless: false }, error: null },
+        scheduled_posts: { data: { schedule_id: 'schedule-1', voiceover: false }, error: null },
         schedules: { data: { persona_id: PERSONA_B }, error: null },
       },
       status: 404,
@@ -240,7 +240,7 @@ describe('GET /api/persona/video-status task visibility', () => {
       personaIds: [PERSONA_A],
       tables: {
         video_generations: EMPTY,
-        scheduled_posts: { data: { schedule_id: 'schedule-1', faceless: false }, error: null },
+        scheduled_posts: { data: { schedule_id: 'schedule-1', voiceover: false }, error: null },
         schedules: { data: { persona_id: PERSONA_A }, error: null },
       },
       status: 200,
@@ -248,11 +248,11 @@ describe('GET /api/persona/video-status task visibility', () => {
       queriesGenerations: true,
     },
     {
-      name: 'faceless slot with a null schedule persona is visible',
+      name: 'voiceover slot with a null schedule persona is visible',
       personaIds: [PERSONA_A],
       tables: {
         video_generations: EMPTY,
-        scheduled_posts: { data: { schedule_id: 'schedule-1', faceless: true }, error: null },
+        scheduled_posts: { data: { schedule_id: 'schedule-1', voiceover: true }, error: null },
         schedules: { data: { persona_id: null }, error: null },
       },
       status: 200,
@@ -260,11 +260,11 @@ describe('GET /api/persona/video-status task visibility', () => {
       queriesGenerations: true,
     },
     {
-      name: 'non-faceless slot with a null schedule persona is hidden',
+      name: 'non-voiceover slot with a null schedule persona is hidden',
       personaIds: [PERSONA_A],
       tables: {
         video_generations: EMPTY,
-        scheduled_posts: { data: { schedule_id: 'schedule-1', faceless: false }, error: null },
+        scheduled_posts: { data: { schedule_id: 'schedule-1', voiceover: false }, error: null },
         schedules: { data: { persona_id: null }, error: null },
       },
       status: 404,
@@ -272,11 +272,11 @@ describe('GET /api/persona/video-status task visibility', () => {
       queriesGenerations: true,
     },
     {
-      name: 'deleted schedule that is not faceless is hidden',
+      name: 'deleted schedule that is not voiceover is hidden',
       personaIds: [PERSONA_A],
       tables: {
         video_generations: EMPTY,
-        scheduled_posts: { data: { schedule_id: 'schedule-1', faceless: false }, error: null },
+        scheduled_posts: { data: { schedule_id: 'schedule-1', voiceover: false }, error: null },
         schedules: EMPTY,
       },
       status: 404,
@@ -284,11 +284,11 @@ describe('GET /api/persona/video-status task visibility', () => {
       queriesGenerations: true,
     },
     {
-      name: 'deleted schedule that is faceless is visible',
+      name: 'deleted schedule that is voiceover is visible',
       personaIds: [PERSONA_A],
       tables: {
         video_generations: EMPTY,
-        scheduled_posts: { data: { schedule_id: 'schedule-1', faceless: true }, error: null },
+        scheduled_posts: { data: { schedule_id: 'schedule-1', voiceover: true }, error: null },
         schedules: EMPTY,
       },
       status: 200,
@@ -296,33 +296,33 @@ describe('GET /api/persona/video-status task visibility', () => {
       queriesGenerations: true,
     },
     {
-      name: 'schedule_id null and not faceless is hidden',
+      name: 'schedule_id null and not voiceover is hidden',
       personaIds: [PERSONA_A],
       tables: {
         video_generations: EMPTY,
-        scheduled_posts: { data: { schedule_id: null, faceless: false }, error: null },
+        scheduled_posts: { data: { schedule_id: null, voiceover: false }, error: null },
       },
       status: 404,
       fetch: false,
       queriesGenerations: true,
     },
     {
-      name: 'schedule_id null and faceless is visible',
+      name: 'schedule_id null and voiceover is visible',
       personaIds: [PERSONA_A],
       tables: {
         video_generations: EMPTY,
-        scheduled_posts: { data: { schedule_id: null, faceless: true }, error: null },
+        scheduled_posts: { data: { schedule_id: null, voiceover: true }, error: null },
       },
       status: 200,
       fetch: true,
       queriesGenerations: true,
     },
     {
-      name: 'an out-of-scope generation hides even a faceless slot',
+      name: 'an out-of-scope generation hides even a voiceover slot',
       personaIds: [PERSONA_A],
       tables: {
         video_generations: { data: { persona_id: PERSONA_B }, error: null },
-        scheduled_posts: { data: { schedule_id: null, faceless: true }, error: null },
+        scheduled_posts: { data: { schedule_id: null, voiceover: true }, error: null },
       },
       status: 404,
       fetch: false,

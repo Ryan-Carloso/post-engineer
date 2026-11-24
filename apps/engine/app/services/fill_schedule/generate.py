@@ -144,7 +144,7 @@ class BatchGenerator:
                     video_type=video_type,
                     video_quality=(
                         LipSyncQuality.very_good
-                        if video_type != "faceless" and identity.get("face_quality") == "very_good"
+                        if video_type != "voiceover" and identity.get("face_quality") == "very_good"
                         else LipSyncQuality.ok
                     ),
                     persona=build_persona_params(identity, self.store, video_type),

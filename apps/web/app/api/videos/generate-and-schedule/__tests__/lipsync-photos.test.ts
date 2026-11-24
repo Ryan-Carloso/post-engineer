@@ -39,7 +39,7 @@ describe('validateLipsyncPhotos', () => {
     }
   });
 
-  it.each(['hook_lipsync', 'faceless'] as const)('rejects the photos on %s', (mode) => {
+  it.each(['hook_lipsync', 'voiceover'] as const)('rejects the photos on %s', (mode) => {
     expect(validateLipsyncPhotos(photos(2), mode)).toEqual({
       ok: false,
       issues: [expect.objectContaining({ message: LIPSYNC_PHOTOS_ONLY_FULL_MESSAGE, field: 'options.lipsyncPhotos' })],

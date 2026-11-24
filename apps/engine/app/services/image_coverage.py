@@ -19,7 +19,7 @@ with IMAGES_DO_NOT_COVER_AUDIO naming how many more photos the window
 needs: the request really had too few photos.
 
 - the first full-frame photo starts where the face hands over (0 on a
-  faceless video, the hook's end on a hook-only persona video);
+  voiceover video, the hook's end on a hook-only persona video);
 - every surviving photo holds its fitted slice, back to back;
 - the last photo runs to the end of the audio, or the task fails.
 
@@ -138,7 +138,7 @@ def ensure_coverage(
 ) -> list[Panel]:
     """Lay surviving panels over the coverage window, or fail naming why.
 
-    In the images modes (faceless and hook-only lip sync) every sent
+    In the images modes (voiceover and hook-only lip sync) every sent
     photo must survive: any skipped photo fails the task with the
     aggregated skip reasons. Full lip sync shows the face the whole
     time, so media is optional there and a skipped photo never fails.

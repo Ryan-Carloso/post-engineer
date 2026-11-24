@@ -33,7 +33,7 @@ class WebhookUrlValidationTests(unittest.TestCase):
             TaskVideoRequest(
                 video_title="x",
                 video_description="Test description.",
-                video_type="faceless",
+                video_type="voiceover",
                 webhook_url="ftp://example.com/hook",
             )
 
@@ -42,7 +42,7 @@ class WebhookUrlValidationTests(unittest.TestCase):
             TaskVideoRequest(
                 video_title="x",
                 video_description="Test description.",
-                video_type="faceless",
+                video_type="voiceover",
                 webhook_url="not-a-url",
             )
 
@@ -55,14 +55,14 @@ class WebhookUrlValidationTests(unittest.TestCase):
                 TaskVideoRequest(
                     video_title="x",
                     video_description="Test description.",
-                    video_type="faceless",
+                    video_type="voiceover",
                     webhook_url="http://example.com/hook",
                 )
             self.assertIn("https", str(caught.exception))
             request = TaskVideoRequest(
                 video_title="x",
                 video_description="Test description.",
-                video_type="faceless",
+                video_type="voiceover",
                 webhook_url="https://example.com/hook",
             )
             self.assertEqual(request.webhook_url, "https://example.com/hook")
@@ -75,7 +75,7 @@ class WebhookUrlValidationTests(unittest.TestCase):
             request = TaskVideoRequest(
                 video_title="x",
                 video_description="Test description.",
-                video_type="faceless",
+                video_type="voiceover",
                 webhook_url="https://nonexistent.invalid/hook",
             )
             self.assertEqual(request.webhook_url, "https://nonexistent.invalid/hook")
@@ -96,14 +96,14 @@ class WebhookUrlValidationTests(unittest.TestCase):
                         TaskVideoRequest(
                             video_title="x",
                             video_description="Test description.",
-                            video_type="faceless",
+                            video_type="voiceover",
                             webhook_url=webhook_url,
                         )
 
     def test_webhook_url_defaults_to_none(self):
         self.assertIsNone(
             TaskVideoRequest(
-                video_title="x", video_description="Test description.", video_type="faceless"
+                video_title="x", video_description="Test description.", video_type="voiceover"
             ).webhook_url
         )
 
@@ -292,7 +292,7 @@ class FailTaskWebhookTests(unittest.TestCase):
             params = TaskVideoRequest(
                 video_title="x",
                 video_description="Test description.",
-                video_type="faceless",
+                video_type="voiceover",
                 webhook_url="https://example.com/hook",
             )
             task_service._fail_task("wt-1", "boom", params, stage="audio")
@@ -309,7 +309,7 @@ class FailTaskWebhookTests(unittest.TestCase):
         from app.services import task as task_service
 
         params = TaskVideoRequest(
-            video_title="x", video_description="Test description.", video_type="faceless"
+            video_title="x", video_description="Test description.", video_type="voiceover"
         )
         with (
             patch("app.services.task_webhook.ssrf.post_public_url") as mock_post,
@@ -333,7 +333,7 @@ class FailTaskWebhookTests(unittest.TestCase):
             params = TaskVideoRequest(
                 video_title="x",
                 video_description="Test description.",
-                video_type="faceless",
+                video_type="voiceover",
                 webhook_url="https://example.com/hook",
             )
             task_service.start(task_id, params, stop_at="script")
@@ -397,7 +397,7 @@ class PinnedWebhookTests(unittest.TestCase):
         return TaskVideoRequest(
             video_title="x",
             video_description="Test description.",
-            video_type="faceless",
+            video_type="voiceover",
             webhook_url=webhook_url,
         )
 

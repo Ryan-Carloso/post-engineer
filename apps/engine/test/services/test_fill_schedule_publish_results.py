@@ -58,7 +58,7 @@ class FillSchedulePublishResultsTests(TestCase):
             "title": "Porto coffee",
             "description": "Porto coffee description.",
             "task_id": "t-1",
-            "faceless": True,
+            "voiceover": True,
             "publish_attempts": 0,
             "schedules": {
                 "id": "sched-1",
@@ -85,7 +85,7 @@ class FillSchedulePublishResultsTests(TestCase):
         state.get_task.return_value = {
             "state": 1,
             "videos": [self.video_path],
-            "video_storage_path": "user-1/faceless/t-1/final-1.mp4",
+            "video_storage_path": "user-1/voiceover/t-1/final-1.mp4",
             **(task_extra or {}),
         }
         if update_task_side_effect is not None:

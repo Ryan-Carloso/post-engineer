@@ -3,7 +3,7 @@
 Where the persona's face is on screen the photo is a rounded panel with a
 white border and a soft shadow, 30px from the bottom edge and about 38% of
 the frame tall, so the face shows behind it and the captions sit above it.
-Everywhere else (faceless videos, the images after a hook-only lip-sync
+Everywhere else (voiceover videos, the images after a hook-only lip-sync
 intro) the photo is full frame: contained over a blurred copy of itself, so a
 photo that does not fill the frame never leaves black bars.
 

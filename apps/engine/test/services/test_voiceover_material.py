@@ -1,6 +1,6 @@
 import unittest
 
-from app.services import faceless_material as fm
+from app.services import voiceover_material as fm
 
 
 class TestImagesMaterial(unittest.TestCase):

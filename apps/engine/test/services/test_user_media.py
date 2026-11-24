@@ -1,4 +1,4 @@
-"""user_media: per-segment photos for faceless videos (MCP first, Phase 2).
+"""user_media: per-segment photos for voiceover videos (MCP first, Phase 2).
 
 A segment carries either a mediaId (an media (action: upload) temp asset) or a
 direct image URL. The photo occupies the segment's spoken interval, found
@@ -61,7 +61,7 @@ def _params(**overrides):
     values = {
         "video_title": "Porto trip",
         "video_description": "Test description.",
-        "video_type": "faceless",
+        "video_type": "voiceover",
     }
     values.update(overrides)
     return VideoParams(**values)
@@ -440,7 +440,7 @@ def test_check_media_detail_reports_has_face_for_a_url(tmp_path):
     assert result == {"code": "ok", "width": 1080, "height": 1920, "has_face": True}
 
 
-def test_check_media_detail_still_passes_a_faceless_photo(tmp_path, monkeypatch):
+def test_check_media_detail_still_passes_a_voiceover_photo(tmp_path, monkeypatch):
     monkeypatch.setattr(user_media, "_temp_assets_dir", lambda: str(tmp_path))
     portrait = tmp_path / "aabbccddeeff00112233445566778899.jpg"
     portrait.write_bytes(_jpeg(1080, 1920))

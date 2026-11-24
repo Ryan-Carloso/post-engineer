@@ -203,5 +203,5 @@ jobs:
         if: failure()
         env:
           TEST_FLIGHT_POSTHOG_KEY: ${{ secrets.TEST_FLIGHT_POSTHOG_KEY }}
-          TEST_FLIGHT_FACELESS: 'false'
+          TEST_FLIGHT_VOICEOVER: 'false'
         run: node .github/scripts/test-flight/report-posthog.mjs

@@ -34,7 +34,7 @@ async function loadPosts(
   for (const ids of chunks(postIds, ID_CHUNK)) {
     const { data, error } = await supabase
       .from('scheduled_posts')
-      .select('id, schedule_id, published_at, publish_outcomes, faceless')
+      .select('id, schedule_id, published_at, publish_outcomes, voiceover')
       .eq('user_id', userId)
       .in('id', ids)
       .limit(ids.length);
@@ -72,7 +72,7 @@ async function loadPosts(
       personaId: typeof record.schedule_id === 'string' ? (personaBySchedule.get(record.schedule_id) ?? null) : null,
       publishedAt: record.published_at,
       outcomes: Array.isArray(record.publish_outcomes) ? record.publish_outcomes : [],
-      faceless: record.faceless === true,
+      voiceover: record.voiceover === true,
     });
   }
   return posts;

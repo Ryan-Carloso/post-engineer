@@ -89,7 +89,7 @@ export function buildJobPayload(
     personaRecord,
   );
 
-  const showsFace = request.video_type !== 'faceless';
+  const showsFace = request.video_type !== 'voiceover';
   if (showsFace) {
     const hasQuality =
       typeof jobPayload.video_quality === 'string' &&

@@ -52,7 +52,7 @@ class TestPersonaImageDownloadSecurity(unittest.TestCase):
         return VideoParams(
             video_title="test",
             video_description="Test description.",
-            video_type="faceless",
+            video_type="voiceover",
             persona=persona,
         )
 

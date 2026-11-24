@@ -15,7 +15,7 @@ export interface PostPromptFacts {
 
 export interface GenerationFacts {
   prompt: PostPromptFacts | null;
-  faceless: boolean;
+  voiceover: boolean;
   language: string | null;
   voiceId: string | null;
   videoAspect: string | null;
@@ -69,7 +69,7 @@ export function narrowPostPrompt(value: unknown): PostPromptFacts | null {
 export function narrowGeneration(value: unknown): GenerationFacts {
   const fallback: GenerationFacts = {
     prompt: null,
-    faceless: false,
+    voiceover: false,
     language: null,
     voiceId: null,
     videoAspect: null,
@@ -85,7 +85,7 @@ export function narrowGeneration(value: unknown): GenerationFacts {
   const paragraphNumber = record.paragraphNumber;
   return {
     prompt: narrowPostPrompt(record.prompt),
-    faceless: record.faceless === true,
+    voiceover: record.voiceover === true,
     language: text('language'),
     voiceId: text('voiceId'),
     videoAspect: text('videoAspect'),

@@ -181,7 +181,7 @@ describe('handleFacebookUpload', () => {
 
   it('rejects an archive key that belongs to another user', async () => {
     const fd = new FormData();
-    fd.append('videoStoragePath', 'other-user/faceless/task-7/final-1.mp4');
+    fd.append('videoStoragePath', 'other-user/voiceover/task-7/final-1.mp4');
     fd.append('caption', 'my post');
     fd.append('facebookAccountIds', '111');
     const result = await handleFacebookUpload(fd, 'user-1');
@@ -192,7 +192,7 @@ describe('handleFacebookUpload', () => {
 
   it('rejects a request that sends both a file and an archive key', async () => {
     const fd = formData();
-    fd.append('videoStoragePath', 'user-1/faceless/task-7/final-1.mp4');
+    fd.append('videoStoragePath', 'user-1/voiceover/task-7/final-1.mp4');
     const result = await handleFacebookUpload(fd, 'user-1');
     expect(result.success).toBe(false);
     expect(result.results[0].error).toContain('either a file or videoStoragePath');

@@ -156,7 +156,7 @@ def validate_publish_plan(
     (issue #572). The binding is read at generate time, so an account
     unbound after scheduling fails here instead of publishing to an
     account the persona no longer owns. A persona with zero bound
-    accounts fails every account it names. Faceless schedules pass no
+    accounts fails every account it names. Voiceover schedules pass no
     binding and skip the check.
     """
     providers = [str(provider) for provider in schedule.get("providers", [])]

@@ -602,7 +602,7 @@ describe('DELETE /api/schedule cancels unpublished slots', () => {
   it('refunds the stored charged_tokens, never a recomputed list price', async () => {
     const db = mockSupabase({
       scheduleSlots: [
-        { id: 'slot-full', status: 'pending', faceless: false, full_lipsync: true, charged_tokens: 7, task_id: null },
+        { id: 'slot-full', status: 'pending', voiceover: false, full_lipsync: true, charged_tokens: 7, task_id: null },
       ],
       remove: { error: null },
     });

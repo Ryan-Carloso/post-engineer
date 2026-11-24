@@ -121,7 +121,7 @@ def _render_caption(tmp_path, monkeypatch, phrase, branch):
     params = VideoParams(
         video_title="x",
         video_description="Test description.",
-        video_type="faceless",
+        video_type="voiceover",
         video_aspect="9:16",
         font_size=FONT_SIZE,
         **BRANCHES[branch],

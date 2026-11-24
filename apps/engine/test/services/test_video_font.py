@@ -39,7 +39,7 @@ class TestMissingFontFallback:
             params = video.VideoParams(
                 video_title="test",
                 video_description="Test description.",
-                video_type="faceless",
+                video_type="voiceover",
                 font_name="STHeitiMedium.ttc",
                 subtitle_enabled=True,
             )
@@ -54,7 +54,7 @@ class TestMissingFontFallback:
             params = video.VideoParams(
                 video_title="test",
                 video_description="Test description.",
-                video_type="faceless",
+                video_type="voiceover",
                 font_name="STHeitiMedium.ttc",
                 subtitle_enabled=True,
             )

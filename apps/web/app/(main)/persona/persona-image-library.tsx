@@ -58,8 +58,8 @@ const ERROR_CLASS_PATTERNS: Array<{
     key: 'persona.libraryErrorFull',
   },
   {
-    test: (error) => error === 'Faceless persona must not include library images.',
-    key: 'persona.libraryErrorFaceless',
+    test: (error) => error === 'Voiceover persona must not include library images.',
+    key: 'persona.libraryErrorVoiceover',
   },
   {
     test: (error) => /^(tag|description) must be at most \d+ characters\.$/.test(error),

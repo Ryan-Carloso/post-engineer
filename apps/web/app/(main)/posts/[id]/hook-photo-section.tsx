@@ -7,13 +7,13 @@ import { useI18n } from '@/lib/i18n/provider';
 
 export const HookPhotoSection = ({
   hookPhoto,
-  faceless,
+  voiceover,
 }: {
   hookPhoto: HookPhoto;
-  faceless: boolean;
+  voiceover: boolean;
 }) => {
   const { t } = useI18n();
-  if (faceless) return null;
+  if (voiceover) return null;
   const position =
     hookPhoto.segmentIndex !== null && hookPhoto.imageIndex !== null
       ? { segment: hookPhoto.segmentIndex + 1, image: hookPhoto.imageIndex + 1 }

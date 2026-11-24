@@ -11,7 +11,7 @@ export const CreatePersonaRemoteShape = {
     .url()
     .optional()
     .describe(
-      'Public URL to the persona avatar image (use persona_media (action: list_faces) for stock face URLs). Required: every persona has a face; "no face" is chosen per video with generate_video options.videoType: \'faceless\'.',
+      'Public URL to the persona avatar image (use persona_media (action: list_faces) for stock face URLs). Required: every persona has a face; a video without lip sync is chosen per video with generate_video options.videoType: \'voiceover\'.',
     ),
   voiceId: CreatePersonaShape.voiceId,
   language: CreatePersonaShape.language,

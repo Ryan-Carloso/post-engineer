@@ -22,7 +22,7 @@ def _params() -> VideoParams:
     return VideoParams(
         video_title="cancel test",
         video_description="desc",
-        video_type="faceless",
+        video_type="voiceover",
         video_aspect="9:16",
         video_script="First paragraph. Second paragraph.",
     )

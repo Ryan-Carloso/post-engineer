@@ -73,7 +73,7 @@ const slotResult = object({
 
 const generateBody = object(
   {
-    personaId: { type: 'string', description: 'Optional: a faceless post needs no persona.' },
+    personaId: { type: 'string', description: 'Optional: a voiceover post needs no persona.' },
     title: { type: 'string', description: 'Slot label.' },
     publishing: object(
       {
@@ -89,8 +89,8 @@ const generateBody = object(
       ['providers'],
     ),
     options: object({
-      faceless: { type: 'boolean' },
-      fullLipsync: { type: 'boolean', description: 'Persona talks for the whole video, not only the hook. Not with faceless.' },
+      voiceover: { type: 'boolean' },
+      fullLipsync: { type: 'boolean', description: 'Persona talks for the whole video, not only the hook. Not with voiceover.' },
       audioUrl: str,
       imageId: str,
       segments: {

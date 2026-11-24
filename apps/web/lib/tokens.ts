@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export const VIDEO_TYPES = ['full_lipsync', 'hook_lipsync', 'faceless'] as const;
+export const VIDEO_TYPES = ['full_lipsync', 'hook_lipsync', 'voiceover'] as const;
 
 export type VideoType = (typeof VIDEO_TYPES)[number];
 
@@ -9,7 +9,7 @@ export function isVideoType(value: unknown): value is VideoType {
 }
 
 export const VIDEO_TYPE_ERROR_SUFFIX =
-  'use full_lipsync (8/15), hook_lipsync (2/3) or faceless (1)';
+  'use full_lipsync (8/15), hook_lipsync (2/3) or voiceover (1)';
 
 export function unknownVideoTypeMessage(value: unknown): string {
   const shown = value === null || value === undefined ? '' : String(value).slice(0, 32);
@@ -18,7 +18,7 @@ export function unknownVideoTypeMessage(value: unknown): string {
 
 export const VIDEO_TYPE_REQUIRED_MESSAGE = `videoType is required; ${VIDEO_TYPE_ERROR_SUFFIX}`;
 
-export const FACELESS_PRICE = 1;
+export const VOICEOVER_PRICE = 1;
 
 export const FACE_QUALITY_PRICES = {
   ok: 2,
@@ -59,7 +59,7 @@ export function computeVideoTokens(
   videoType: VideoType,
   faceQuality: FaceQuality,
 ): number {
-  if (videoType === 'faceless') return FACELESS_PRICE;
+  if (videoType === 'voiceover') return VOICEOVER_PRICE;
   if (videoType === 'full_lipsync') return FULL_LIPSYNC_PRICES[faceQuality];
   return FACE_QUALITY_PRICES[faceQuality];
 }

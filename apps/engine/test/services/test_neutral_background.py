@@ -1,7 +1,7 @@
 """neutral_background: the plain canvas under the agent's segment photos.
 
 The neutral PNG/clip renderer is shared with the images mode
-(faceless_material.images_canvas) (issue #542).
+(voiceover_material.images_canvas) (issue #542).
 """
 
 import os

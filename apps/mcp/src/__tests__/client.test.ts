@@ -481,7 +481,7 @@ describe('PostEngineerClient', () => {
     );
   });
 
-  it('updatePersona omits empty-string avatarUrl (consistent with createPersona faceless mode)', async () => {
+  it('updatePersona omits empty-string avatarUrl (consistent with createPersona voiceover mode)', async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
@@ -739,7 +739,7 @@ describe('PostEngineerClient', () => {
       },
       persona: null,
       generation: {
-        faceless: true,
+        voiceover: true,
         language: null,
         voiceId: null,
         videoAspect: '9:16',
@@ -1310,11 +1310,11 @@ describe('generate and schedule video client', () => {
     const { personaId: _personaId, ...rest } = baseInput;
     await client.generatePersonaVideo({
       ...rest,
-      options: { videoType: 'faceless', voiceId: 'calm', videoAspect: '16:9' },
+      options: { videoType: 'voiceover', voiceId: 'calm', videoAspect: '16:9' },
     });
     const body = lastRequestBody();
     expect('personaId' in body).toBe(false);
-    expect(body.options).toEqual({ videoType: 'faceless', voiceId: 'calm', videoAspect: '16:9' });
+    expect(body.options).toEqual({ videoType: 'voiceover', voiceId: 'calm', videoAspect: '16:9' });
   });
 
   it('sends an empty accounts record when no account arrays are provided', async () => {
@@ -1334,9 +1334,9 @@ describe('generate and schedule video client', () => {
   it('forwards options and omits the key when options are absent', async () => {
     await client.generatePersonaVideo({
       ...baseInput,
-      options: { videoType: 'faceless', voiceId: 'v-1' },
+      options: { videoType: 'voiceover', voiceId: 'v-1' },
     });
-    expect(lastRequestBody().options).toEqual({ videoType: 'faceless', voiceId: 'v-1' });
+    expect(lastRequestBody().options).toEqual({ videoType: 'voiceover', voiceId: 'v-1' });
 
     const { options: _options, ...withoutOptions } = baseInput;
     await client.generatePersonaVideo(withoutOptions);

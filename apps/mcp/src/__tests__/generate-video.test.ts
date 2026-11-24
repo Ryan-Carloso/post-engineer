@@ -189,9 +189,9 @@ describe('generate_video: one video', () => {
     expect(text(response)).toContain('no bound publishing accounts');
   });
 
-  it('keeps a faceless video (no persona) working with explicit providers', async () => {
+  it('keeps a voiceover video (no persona) working with explicit providers', async () => {
     const f = fakes();
-    const response = await handleGenerateVideo(f.client, parse({ videos: [video({ persona: undefined, providers: ['youtube'], segments: SEGMENTS.map((segment, index) => ({ ...segment, media: ['a', 'b', 'c', 'd', 'e', 'f'].map((name) => ({ url: `https://example.com/${index}-${name}.jpg` })) })), options: { videoType: 'faceless', audioUrl: 'https://example.com/voice.mp3' } })] }));
+    const response = await handleGenerateVideo(f.client, parse({ videos: [video({ persona: undefined, providers: ['youtube'], segments: SEGMENTS.map((segment, index) => ({ ...segment, media: ['a', 'b', 'c', 'd', 'e', 'f'].map((name) => ({ url: `https://example.com/${index}-${name}.jpg` })) })), options: { videoType: 'voiceover', audioUrl: 'https://example.com/voice.mp3' } })] }));
     expect(response.isError, text(response)).not.toBe(true);
     expect(f.generatePersonaVideo).toHaveBeenCalledTimes(1);
     expect(f.generatePersonaVideo.mock.calls[0][0].personaId).toBeUndefined();

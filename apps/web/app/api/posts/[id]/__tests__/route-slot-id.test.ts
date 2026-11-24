@@ -78,7 +78,7 @@ const SLOT_ROW = {
   error: null,
   published_at: null,
   task_id: 'task-1',
-  faceless: false,
+  voiceover: false,
 };
 
 const SCHEDULE_ROW = {

@@ -107,20 +107,20 @@ beforeEach(() => {
 });
 
 describe('generate_persona_video with the images material', () => {
-  it('strips a facelessMaterial option: it is no longer a choice', () => {
+  it('strips a voiceoverMaterial option: it is no longer a choice', () => {
     const parsed = GeneratePersonaVideoSchema.parse({
       ...baseArgs,
       segments: withMedia,
-      options: { videoType: 'hook_lipsync', facelessMaterial: 'images' },
+      options: { videoType: 'hook_lipsync', voiceoverMaterial: 'images' },
     });
-    expect(parsed.options).not.toHaveProperty('facelessMaterial');
+    expect(parsed.options).not.toHaveProperty('voiceoverMaterial');
     expect(parsed.options?.videoType).toBe('hook_lipsync');
   });
 
   it('rejects a segment without media before any client call', async () => {
     const client = mockClient();
     const response = await handleGeneratePersonaVideo(client, {
-      ...baseArgs, segments: bodyWithoutMedia, options: { videoType: 'faceless' },
+      ...baseArgs, segments: bodyWithoutMedia, options: { videoType: 'voiceover' },
     });
     expect(response.isError).toBe(true);
     expect(textOf(response)).toContain('segments.1.media: the images material needs media on every segment');
@@ -130,11 +130,11 @@ describe('generate_persona_video with the images material', () => {
   it('forwards the options to the client when every segment carries media', async () => {
     const client = mockClient();
     const response = await handleGeneratePersonaVideo(client, {
-      ...baseArgs, segments: withMedia, options: { videoType: 'faceless' },
+      ...baseArgs, segments: withMedia, options: { videoType: 'voiceover' },
     });
     expect(response.isError).toBeUndefined();
-    expect(vi.mocked(client.generatePersonaVideo).mock.calls[0][0].options).toMatchObject({ videoType: 'faceless' });
-    expect(vi.mocked(client.generatePersonaVideo).mock.calls[0][0].options).not.toHaveProperty('facelessMaterial');
+    expect(vi.mocked(client.generatePersonaVideo).mock.calls[0][0].options).toMatchObject({ videoType: 'voiceover' });
+    expect(vi.mocked(client.generatePersonaVideo).mock.calls[0][0].options).not.toHaveProperty('voiceoverMaterial');
   });
 
   it('sends the options without a material to generate-and-schedule', async () => {

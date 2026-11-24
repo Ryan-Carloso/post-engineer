@@ -612,10 +612,10 @@ export interface Database {
         published_at: string | null;
         created_at: string;
         updated_at: string;
-        faceless: boolean;
+        voiceover: boolean;
         publish_attempts: number;
         publish_not_before: string | null;
-        faceless_material: string;
+        voiceover_material: string;
         segments: Json | null;
         title: string | null;
         full_lipsync: boolean;
@@ -625,7 +625,7 @@ export interface Database {
         music_mood: string | null;
         publish_outcomes: Json;
         description: string | null;
-        video_type: 'full_lipsync' | 'hook_lipsync' | 'faceless';
+        video_type: 'full_lipsync' | 'hook_lipsync' | 'voiceover';
         media_kind: 'upload' | 'image' | null;
         media_ref: string | null;
         media_content_type: string | null;
@@ -644,10 +644,10 @@ export interface Database {
         published_at?: string | null;
         created_at?: string;
         updated_at?: string;
-        faceless?: boolean;
+        voiceover?: boolean;
         publish_attempts?: number;
         publish_not_before?: string | null;
-        faceless_material?: string;
+        voiceover_material?: string;
         segments?: Json | null;
         title?: string | null;
         full_lipsync?: boolean;
@@ -657,7 +657,7 @@ export interface Database {
         music_mood?: string | null;
         publish_outcomes?: Json;
         description?: string | null;
-        video_type?: 'full_lipsync' | 'hook_lipsync' | 'faceless';
+        video_type?: 'full_lipsync' | 'hook_lipsync' | 'voiceover';
         media_kind?: 'upload' | 'image' | null;
         media_ref?: string | null;
         media_content_type?: string | null;
@@ -676,10 +676,10 @@ export interface Database {
         published_at?: string | null;
         created_at?: string;
         updated_at?: string;
-        faceless?: boolean;
+        voiceover?: boolean;
         publish_attempts?: number;
         publish_not_before?: string | null;
-        faceless_material?: string;
+        voiceover_material?: string;
         segments?: Json | null;
         title?: string | null;
         full_lipsync?: boolean;
@@ -689,7 +689,7 @@ export interface Database {
         music_mood?: string | null;
         publish_outcomes?: Json;
         description?: string | null;
-        video_type?: 'full_lipsync' | 'hook_lipsync' | 'faceless';
+        video_type?: 'full_lipsync' | 'hook_lipsync' | 'voiceover';
         media_kind?: 'upload' | 'image' | null;
         media_ref?: string | null;
         media_content_type?: string | null;

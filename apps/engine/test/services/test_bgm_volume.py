@@ -21,7 +21,7 @@ class TestBgmVolumeDefault(unittest.TestCase):
     def test_default_is_0_09(self):
         self.assertEqual(
             VideoParams(
-                video_title="test", video_description="Test description.", video_type="faceless"
+                video_title="test", video_description="Test description.", video_type="voiceover"
             ).bgm_volume,
             0.09,
         )
@@ -39,7 +39,7 @@ class TestBgmVolumeDefault(unittest.TestCase):
             VideoParams(
                 video_title="test",
                 video_description="Test description.",
-                video_type="faceless",
+                video_type="voiceover",
                 bgm_volume=0.2,
             ).bgm_volume,
             0.2,
@@ -48,7 +48,7 @@ class TestBgmVolumeDefault(unittest.TestCase):
             VideoParams(
                 video_title="test",
                 video_description="Test description.",
-                video_type="faceless",
+                video_type="voiceover",
                 bgm_volume=0.3,
             ).bgm_volume,
             0.3,

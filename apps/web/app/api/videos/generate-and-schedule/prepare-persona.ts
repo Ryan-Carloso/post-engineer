@@ -110,13 +110,13 @@ export async function preparePersona(
   ) {
     return validationFailed(ERROR_CODES.VALIDATION_FAILED, 'Persona paragraph_number must be an integer between 1 and 10: update the persona.', 'personaId');
   }
-  const faceless = opts.videoType === 'faceless';
+  const voiceover = opts.videoType === 'voiceover';
   const avatarUrl = (persona.avatar_url as string | null) ?? null;
-  if (!faceless && !opts.imageId && avatarUrl && !isEngineUsablePersonaImageUrl(avatarUrl)) {
+  if (!voiceover && !opts.imageId && avatarUrl && !isEngineUsablePersonaImageUrl(avatarUrl)) {
     return validationFailed(ERROR_CODES.VALIDATION_FAILED, 'Persona image URL must be a valid http(s) URL or a data:image/ URI: update the persona.', 'personaId');
   }
   const photoPath = (persona.photo_path as string | null) ?? null;
-  if (!faceless && !opts.imageId && avatarUrl === null && photoPath === null) {
+  if (!voiceover && !opts.imageId && avatarUrl === null && photoPath === null) {
     return validationFailed(ERROR_CODES.VALIDATION_FAILED, `options.videoType ${opts.videoType} requires a persona with a photo.`, 'options.videoType');
   }
   const voiceAudioUrl = opts.audioUrl ?? (await signedUrl(supabase, (persona.voice_audio_path as string | null) ?? null));
@@ -167,7 +167,7 @@ export async function preparePersona(
   const faceQuality: FaceQuality = persona.face_quality === 'very_good' ? 'very_good' : 'ok';
   return {
     personaName: (persona.name as string) ?? 'Persona',
-    faceless,
+    voiceover,
     faceQuality,
     voiceAudioUrl,
     voiceIdValue,
@@ -185,7 +185,7 @@ export async function preparePersona(
     videoLayout: opts.videoLayout ?? ((persona.video_layout as string | null) ?? null),
     hookPanel: opts.hookPanel ?? persona.hook_panel !== false,
     paragraphNumber: opts.paragraphNumber ?? paragraphNumber,
-    photoRequired: !faceless,
+    photoRequired: !voiceover,
   };
 }
 

@@ -161,7 +161,7 @@ export function pickAngle(seed) {
 export function buildPrompt({ topic, angle, facts = '' }) {
   return [
     'You are a Porto travel guide writing a short spoken video script in English.',
-    'This video will publish for real on YouTube and Instagram, as a faceless video: a voiceover over stock footage of places, not a presenter on camera.',
+    'This video will publish for real on YouTube and Instagram, as a voiceover video: a voiceover over stock footage of places, not a presenter on camera.',
     `Topic: ${topic}`,
     `Angle for this run: ${angle}. Build the whole script around this angle, not around a generic Porto introduction.`,
     '',
@@ -176,7 +176,7 @@ export function buildPrompt({ topic, angle, facts = '' }) {
     'Hook: its only job is to make the viewer want the next sentence. Open with a specific moment, a surprising true fact, or a choice the viewer has to make. Draft three hooks on different angles in your head and keep the strongest. Never promise more than the video delivers.',
     'Body: one idea, developed in order. Give a route, a comparison, or a rule the viewer can actually follow in Porto. Do not list five unrelated tips.',
     'CTA: one specific action tied to this video, for example saving it for a Porto trip or answering which stop the viewer would try first. Never a generic ask to follow.',
-    'Faceless visuals: describe places, streets, food, and views that stock footage can show. Never write about the presenter, a face, a camera, looking at the viewer, or pointing.',
+    'Voiceover visuals: describe places, streets, food, and views that stock footage can show. Never write about the presenter, a face, a camera, looking at the viewer, or pointing.',
     'Cut these phrases and habits completely: unlock, elevate, seamless, game-changer, next-level, delve, the future of, a new era, it is not just X, it is Y, let us dive in, here is the thing, honestly, have you ever wondered, did you know, follow for more, forced groups of three, runs of fragments, upbeat closers, all-caps emphasis, stacked hedges, filler.',
     'No em dashes. No markdown, no emoji, no links, no hashtags, no brackets, no stage directions in any segment. Spoken text only.',
     'Test each line before you send it: could the viewer picture it, could it be proven true or false, and could another creator say it about another city? If yes to the last question, rewrite it.',

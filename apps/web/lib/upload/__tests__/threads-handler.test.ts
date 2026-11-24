@@ -122,12 +122,12 @@ describe('handleThreadsUpload', () => {
 
   it('presigns the engine archive instead of uploading a copy', async () => {
     const fd = new FormData();
-    fd.append('videoStoragePath', 'user-1/faceless/task-7/final-1.mp4');
+    fd.append('videoStoragePath', 'user-1/voiceover/task-7/final-1.mp4');
     fd.append('caption', 'my post');
     fd.append('threadsAccountIds', '42');
     const result = await handleThreadsUpload(fd, 'user-1');
     expect(result.success).toBe(true);
-    expect(presignPublishMedia).toHaveBeenCalledWith('user-1/faceless/task-7/final-1.mp4');
+    expect(presignPublishMedia).toHaveBeenCalledWith('user-1/voiceover/task-7/final-1.mp4');
     expect(uploadPublishMedia).not.toHaveBeenCalled();
     expect(cleanupPublishMedia).not.toHaveBeenCalled();
     expect(vi.mocked(publishThreadsMedia).mock.calls[0][0].media).toEqual({ kind: 'video', url: 'https://s.example/archive.mp4' });
@@ -135,7 +135,7 @@ describe('handleThreadsUpload', () => {
 
   it('rejects an archive key that belongs to another user', async () => {
     const fd = new FormData();
-    fd.append('videoStoragePath', 'other-user/faceless/task-7/final-1.mp4');
+    fd.append('videoStoragePath', 'other-user/voiceover/task-7/final-1.mp4');
     fd.append('caption', 'my post');
     fd.append('threadsAccountIds', '42');
     const result = await handleThreadsUpload(fd, 'user-1');
@@ -147,7 +147,7 @@ describe('handleThreadsUpload', () => {
 
   it('rejects a request that sends both a file and an archive key', async () => {
     const fd = formData();
-    fd.append('videoStoragePath', 'user-1/faceless/task-7/final-1.mp4');
+    fd.append('videoStoragePath', 'user-1/voiceover/task-7/final-1.mp4');
     const result = await handleThreadsUpload(fd, 'user-1');
     expect(result.success).toBe(false);
     expect(result.results[0].error).toContain('either a file or videoStoragePath');
