@@ -13,8 +13,5 @@
   { "file": "apps/web/app/api/billing/webhook/route.ts", "method": "POST", "kind": "signed-webhook", "reason": "Stripe webhook verified by the Stripe-Signature header; a 429 would make Stripe retry and delay paid token grants." },
   { "file": "apps/web/app/api/billing/check-tokens/route.ts", "method": "POST", "kind": "engine-callback", "reason": "Engine charges tokens for a generation, authenticated by MONEYPRINT_API_SECRET; a 429 would fail a paid batch mid-run." },
   { "file": "apps/web/app/api/logout/route.ts", "method": "POST", "kind": "session-teardown", "reason": "Browser-session sign-out only (no API key or OAuth path); a 429 would leave the user unable to sign out." },
-  { "file": "apps/web/app/api/coverage/route.ts", "method": "GET", "kind": "test-only", "reason": "Returns the in-memory Istanbul coverage map for E2E runs; 204 in production builds and no service call." },
-  { "file": "apps/web/app/api/persona/video-status/[taskId]/route.ts", "method": "GET", "kind": "limited-elsewhere", "reason": "Task-status polling limit lands in the parallel task-status rate-limit PR; delete this entry once it merges." },
-  { "file": "apps/web/app/api/persona/video-task/[taskId]/route.ts", "method": "DELETE", "kind": "limited-elsewhere", "reason": "Task-status polling limit lands in the parallel task-status rate-limit PR; delete this entry once it merges." },
-  { "file": "apps/web/app/api/persona/video-events/[taskId]/route.ts", "method": "GET", "kind": "limited-elsewhere", "reason": "Task-status polling limit lands in the parallel task-status rate-limit PR; delete this entry once it merges." }
+  { "file": "apps/web/app/api/coverage/route.ts", "method": "GET", "kind": "test-only", "reason": "Returns the in-memory Istanbul coverage map for E2E runs; 204 in production builds and no service call." }
 ]

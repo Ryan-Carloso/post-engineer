@@ -82,7 +82,7 @@ from `apps/mcp/`.
 Each request to the post-engineer API includes the calling tool's name and
 the server version, recorded against your account for product analytics.
 A tool call can make several requests (a `video_tasks (action: status)` wait
-checks status every 10 seconds), so each request also carries the call id
+checks status every 60 seconds), so each request also carries the call id
 (`X-MCP-Call-Id`) and its ordinal in the call (`X-MCP-Call-Request`, from 1).
 The web API records one `mcp_tool_called` per call, from the first request,
 and records a later request only when it fails, as `mcp_tool_request_failed`
@@ -192,7 +192,7 @@ The server offers **18 intent tools**, not one tool per API endpoint. A tool is 
 | Tool | Actions | What it is for |
 |---|---|---|
 | `generate_video` | — | Generate and schedule one video, or a batch of 2-12 (every 6 face videos, the cheapest is free). `persona` and `accounts` by name or id; the result echoes what was resolved. |
-| `video_tasks` | `status`, `list_generations`, `get_generation` | Follow videos: for the final outcome, `status` sets `waitSeconds` above 0 and blocks (up to 12 `taskIds`). `waitSeconds` 0 is only a progress snapshot: wait at least `nextPollInSeconds`. |
+| `video_tasks` | `status`, `list_generations`, `get_generation` | Follow videos: for the final outcome, `status` sets `waitSeconds` above 0 and blocks (up to 12 `taskIds`). `waitSeconds` 0 is only a progress snapshot: wait at least `nextPollInSeconds`. Each task can be polled at most once a minute (the API answers a faster poll with 429 and `Retry-After`); `status` waits out the `Retry-After` instead of failing. |
 | `cancel_video` | — | Cancel a video that is still generating. Separate so a client can allow status without cancel. |
 | `personas` | `list`, `get`, `create`, `update`, `delete` | Personas. `delete` previews first and needs the `confirmToken` of that preview to delete. |
 | `persona_media` | `list_faces`, `list_images`, `add_image`, `update_image`, `remove_image` | Stock faces and a persona's image library. |

@@ -1,6 +1,6 @@
-export const PROGRESS_POLL_FLOOR_SECONDS = 30;
+export const PROGRESS_POLL_FLOOR_SECONDS = 60;
 
-export const PROGRESS_POLL_EARLY_SECONDS = 90;
+export const PROGRESS_POLL_EARLY_SECONDS = 120;
 
 export function nextPollInSeconds(state: number | null, progress: number | null): number | undefined {
   if (state === 1 || state === -1) return undefined;

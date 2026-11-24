@@ -7,6 +7,7 @@ export interface RateLimitProfile {
   name: string;
   limit: number;
   windowMs: number;
+  message?: string;
 }
 
 export const RATE_LIMITS = {
@@ -70,6 +71,19 @@ export const RATE_LIMITS = {
   validateScript: { name: 'validate-script', limit: 60, windowMs: 60_000 },
   oauthAuthorize: { name: 'oauth-authorize', limit: 30, windowMs: 60_000 },
   oauthApprove: { name: 'oauth-approve', limit: 20, windowMs: 60_000 },
+  taskStatusPoll: {
+    name: 'task-status-poll',
+    limit: 1,
+    windowMs: 60_000,
+    message: 'Too many requests: poll a video task at most once per minute. Retry after the Retry-After seconds.',
+  },
+  taskEventsStream: {
+    name: 'task-events-stream',
+    limit: 1,
+    windowMs: 60_000,
+    message: 'Too many requests: open a video task progress stream at most once per minute. Retry after the Retry-After seconds.',
+  },
+  videoTaskCancel: { name: 'video-task-cancel', limit: 10, windowMs: 60_000 },
 } as const satisfies Record<string, RateLimitProfile>;
 
 export interface CallerRateLimitProfiles {
@@ -193,7 +207,7 @@ export async function applyRateLimit(
     return NextResponse.json(
       {
         success: false,
-        error: 'Too many requests. Please wait before trying again.',
+        error: profile.message ?? 'Too many requests. Please wait before trying again.',
         errorType: 'RATE_LIMITED',
         retryAfterSeconds: result.retryAfterSeconds,
       },

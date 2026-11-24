@@ -3817,7 +3817,7 @@
             }
           },
           "429": {
-            "description": "Rate limited.",
+            "description": "API-key and OAuth callers may poll one task at most once per minute; a faster poll answers errorType RATE_LIMITED and a Retry-After header with the seconds left. Wait that long before the next poll.",
             "content": {
               "application/json": {
                 "schema": {
@@ -6221,7 +6221,7 @@
             }
           },
           "429": {
-            "description": "Rate limited.",
+            "description": "At most 10 cancels per minute per user; a faster call answers errorType RATE_LIMITED and a Retry-After header with the seconds left.",
             "content": {
               "application/json": {
                 "schema": {

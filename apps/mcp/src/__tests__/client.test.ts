@@ -366,7 +366,7 @@ describe('PostEngineerClient', () => {
 
   it('throws when listing voices fails', async () => {
     global.fetch = vi.fn().mockResolvedValue({
-      ok: false,
+      ok: false, headers: new Headers(),
       status: 502,
       text: async () => 'Voices unavailable.',
     });
@@ -435,7 +435,7 @@ describe('PostEngineerClient', () => {
 
   it('throws when listing faces fails', async () => {
     global.fetch = vi.fn().mockResolvedValue({
-      ok: false,
+      ok: false, headers: new Headers(),
       status: 502,
       text: async () => 'Faces unavailable.',
     });
@@ -498,7 +498,7 @@ describe('PostEngineerClient', () => {
 
   it('throws when updating persona fails', async () => {
     global.fetch = vi.fn().mockResolvedValue({
-      ok: false,
+      ok: false, headers: new Headers(),
       status: 404,
       text: async () => 'Persona not found.',
     });
@@ -666,7 +666,7 @@ describe('PostEngineerClient', () => {
 
   it('throws a clear error when listing posts fails', async () => {
     global.fetch = vi.fn().mockResolvedValue({
-      ok: false,
+      ok: false, headers: new Headers(),
       status: 401,
       text: async () => 'Unauthorized',
     });
@@ -1422,7 +1422,7 @@ describe('generate and schedule video client', () => {
   it('throws a structured ApiError carrying code and field on API errors', async () => {
     const { ApiError } = await import('../errors.js');
     global.fetch = vi.fn().mockResolvedValue({
-      ok: false,
+      ok: false, headers: new Headers(),
       status: 422,
       text: async () =>
         JSON.stringify({
@@ -1449,7 +1449,7 @@ describe('generate and schedule video client', () => {
   it('surfaces every listed validation problem, not only the first (#351)', async () => {
     const { ApiError } = await import('../errors.js');
     global.fetch = vi.fn().mockResolvedValue({
-      ok: false,
+      ok: false, headers: new Headers(),
       status: 400,
       text: async () =>
         JSON.stringify({
@@ -1479,7 +1479,7 @@ describe('generate and schedule video client', () => {
   it('carries status and delivered into ApiError on a delivered 410', async () => {
     const { ApiError } = await import('../errors.js');
     global.fetch = vi.fn().mockResolvedValue({
-      ok: false,
+      ok: false, headers: new Headers(),
       status: 410,
       text: async () =>
         JSON.stringify({
@@ -1560,7 +1560,7 @@ describe('generate and schedule video client', () => {
 
   it('throws a clear error when the connect-url request fails', async () => {
     global.fetch = vi.fn().mockResolvedValue({
-      ok: false,
+      ok: false, headers: new Headers(),
       status: 401,
       text: async () => 'Authentication required.',
     });
@@ -1596,7 +1596,7 @@ describe('generate and schedule video client', () => {
 
   it('throws a clear error when the Bluesky connect request fails', async () => {
     global.fetch = vi.fn().mockResolvedValue({
-      ok: false,
+      ok: false, headers: new Headers(),
       status: 400,
       text: async () => 'Invalid handle or app password.',
     });
@@ -1631,7 +1631,7 @@ describe('generate and schedule video client', () => {
 
   it('throws a clear error when the 3Speak connect request fails', async () => {
     global.fetch = vi.fn().mockResolvedValue({
-      ok: false,
+      ok: false, headers: new Headers(),
       status: 422,
       text: async () => 'Invalid Hive posting key.',
     });
@@ -1666,7 +1666,7 @@ describe('generate and schedule video client', () => {
 
   it('throws a clear error when the Rumble connect request fails', async () => {
     global.fetch = vi.fn().mockResolvedValue({
-      ok: false,
+      ok: false, headers: new Headers(),
       status: 400,
       text: async () => 'Rumble access token must be the 40-character token issued by Rumble.',
     });
@@ -1709,7 +1709,7 @@ describe('generate and schedule video client', () => {
   it('redacts the bot token from a Telegram connect failure', async () => {
     const botToken = '123456789:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
     global.fetch = vi.fn().mockResolvedValue({
-      ok: false,
+      ok: false, headers: new Headers(),
       status: 422,
       text: async () => `Telegram rejected the bot token ${botToken}.`,
     });
@@ -1775,7 +1775,7 @@ describe('PostEngineerClient configuration', () => {
 
   it('never echoes the Bluesky app password when the API error body reflects the payload', async () => {
     global.fetch = vi.fn().mockResolvedValue({
-      ok: false,
+      ok: false, headers: new Headers(),
       status: 400,
       text: async () => `{"error":"invalid appPassword value 'hunter2-secret'"}`,
     });
@@ -1791,7 +1791,7 @@ describe('PostEngineerClient configuration', () => {
   it('never echoes the percent-encoded Bluesky app password either', async () => {
     const password = 'p@ss word/123';
     global.fetch = vi.fn().mockResolvedValue({
-      ok: false,
+      ok: false, headers: new Headers(),
       status: 400,
       text: async () => `{"error":"bad value '${encodeURIComponent(password)}'"}`,
     });
@@ -1807,7 +1807,7 @@ describe('PostEngineerClient configuration', () => {
   it('never echoes the JSON-escaped Bluesky app password either', async () => {
     const password = 'p@ss"word\\123';
     global.fetch = vi.fn().mockResolvedValue({
-      ok: false,
+      ok: false, headers: new Headers(),
       status: 400,
       text: async () => `{"error":"bad value '${JSON.stringify(password).slice(1, -1)}'"}`,
     });
@@ -1823,7 +1823,7 @@ describe('PostEngineerClient configuration', () => {
 
   it('never echoes the 3Speak posting key when the API error body reflects the payload', async () => {
     global.fetch = vi.fn().mockResolvedValue({
-      ok: false,
+      ok: false, headers: new Headers(),
       status: 422,
       text: async () => `{"error":"invalid postingKey value '5Ksecret-key'"}`,
     });
@@ -1839,7 +1839,7 @@ describe('PostEngineerClient configuration', () => {
   it('never echoes the Rumble access token when the API error body reflects the payload', async () => {
     const token = 'a'.repeat(40);
     global.fetch = vi.fn().mockResolvedValue({
-      ok: false,
+      ok: false, headers: new Headers(),
       status: 400,
       text: async () => `{"error":"invalid accessToken value '${token}'"}`,
     });
@@ -2099,7 +2099,7 @@ describe('PostEngineerClient error truncation', () => {
   it('truncates long upstream error bodies', async () => {
     const longBody = 'x'.repeat(5000);
     global.fetch = vi.fn().mockResolvedValue({
-      ok: false,
+      ok: false, headers: new Headers(),
       status: 500,
       text: async () => longBody,
     });

@@ -9,6 +9,7 @@ export class ApiError extends Error {
   readonly status: number | null;
   readonly delivered: boolean;
   readonly postUrl: string | null;
+  readonly retryAfterSeconds: number | null;
 
   constructor(
     message: string,
@@ -17,6 +18,7 @@ export class ApiError extends Error {
     status: number | null = null,
     delivered: boolean = false,
     postUrl: string | null = null,
+    retryAfterSeconds: number | null = null,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -25,6 +27,7 @@ export class ApiError extends Error {
     this.status = status;
     this.delivered = delivered;
     this.postUrl = postUrl;
+    this.retryAfterSeconds = retryAfterSeconds;
   }
 }
 
@@ -93,4 +96,18 @@ export function readApiFailure(errorText: string): {
   } catch {
   }
   return { detail, code, field, delivered, postUrl };
+}
+
+export function parseRetryAfterSeconds(header: string | null): number | null {
+  if (header === null || !/^\d+$/.test(header.trim())) return null;
+  return Number(header.trim());
+}
+
+export async function apiErrorFromResponse(response: Response, action: string): Promise<ApiError> {
+  const failure = readApiFailure(await response.text());
+  return new ApiError(
+    `Failed to ${action}: ${response.status} ${failure.detail}`,
+    failure.code, failure.field, response.status, failure.delivered, failure.postUrl,
+    parseRetryAfterSeconds(response.headers.get('retry-after')),
+  );
 }

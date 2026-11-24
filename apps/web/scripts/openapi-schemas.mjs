@@ -1,4 +1,4 @@
-import { metricsOperationSchemas } from './openapi-metrics-schemas.mjs'; import { videoOperationSchemas } from './openapi-videos-schemas.mjs'; import { promptOperationSchemas } from './openapi-prompts-schemas.mjs'; import { shareLinkOperationSchemas } from './openapi-share-links-schemas.mjs'; import { OAUTH_CONNECT_PROVIDERS, SCHEDULE_ACCOUNT_COLUMNS, SOCIAL_PROVIDERS as providers } from '../../../shared/contracts/providers.ts';
+import { metricsOperationSchemas } from './openapi-metrics-schemas.mjs'; import { videoTaskOperationSchemas } from './openapi-video-task-schemas.mjs'; import { videoOperationSchemas } from './openapi-videos-schemas.mjs'; import { promptOperationSchemas } from './openapi-prompts-schemas.mjs'; import { shareLinkOperationSchemas } from './openapi-share-links-schemas.mjs'; import { OAUTH_CONNECT_PROVIDERS, SCHEDULE_ACCOUNT_COLUMNS, SOCIAL_PROVIDERS as providers } from '../../../shared/contracts/providers.ts';
 
 const object = (properties, required = []) => ({
   type: 'object',
@@ -597,17 +597,7 @@ export const operationSchemas = {
       }),
     }),
   },
-  'GET /api/persona/video-status/[taskId]': {
-    response: engineEnvelope,
-    extraResponses: {
-      410: 'Terminal: the engine no longer has this task. Stop polling; GET /api/schedule/slots/{slotId} says whether the video was delivered or failed and refunded.',
-      502: 'Engine unavailable or state unverifiable; retry with backoff.',
-    },
-  },
-  'DELETE /api/persona/video-task/[taskId]': {
-    response: engineEnvelope,
-    extraResponses: { 502: 'Engine unavailable; retry with backoff.' },
-  },
+  ...videoTaskOperationSchemas({ engineEnvelope }),
   'GET /api/billing/transactions': {
     query: [{ name: 'limit', required: false }, { name: 'offset', required: false }],
     response: success({

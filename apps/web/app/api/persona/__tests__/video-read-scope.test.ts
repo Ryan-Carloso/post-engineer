@@ -79,7 +79,7 @@ function authFor(auth: Record<string, unknown>): void {
 }
 
 function scoped(): void {
-  authFor({ userId: USER_ID, accessToken: 'pe_live_key', isApiKey: true, personaIds: [PERSONA_A] });
+  authFor({ userId: USER_ID, accessToken: 'pe_live_key', isApiKey: true, keyId: 'key-1', personaIds: [PERSONA_A] });
 }
 
 const fetchMock = vi.fn<typeof fetch>();
@@ -370,6 +370,7 @@ describe('GET /api/persona/video-status task visibility', () => {
       accessToken: 'token',
       isApiKey: item.isApiKey !== false,
       isOAuth: item.isOAuth === true,
+      keyId: 'key-1',
       personaIds: item.personaIds,
     });
     const service = makeService(item.tables);
@@ -406,7 +407,7 @@ describe('download and events follow the same visibility rules', () => {
 
     vi.clearAllMocks();
     fetchMock.mockResolvedValue(new Response('video', { status: 200, headers: { 'Content-Type': 'video/mp4' } }));
-    authFor({ userId: USER_ID, accessToken: 'token', isApiKey: true, personaIds: null });
+    authFor({ userId: USER_ID, accessToken: 'token', isApiKey: true, keyId: 'key-1', personaIds: null });
     const service = makeService({});
     const unscoped = await getDownload();
     expect(unscoped.status).toBe(200);

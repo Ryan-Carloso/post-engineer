@@ -38,14 +38,14 @@ function statusBody(taskId: string, state: number, progress: number, stage: stri
 }
 
 describe('nextPollInSeconds', () => {
-  it('is larger at the start of a render and never below the floor', () => {
-    expect(PROGRESS_POLL_FLOOR_SECONDS).toBe(30);
-    expect(PROGRESS_POLL_EARLY_SECONDS).toBe(90);
-    expect(nextPollInSeconds(4, 0)).toBe(90);
-    expect(nextPollInSeconds(3, null)).toBe(90);
-    expect(nextPollInSeconds(4, 50)).toBe(60);
-    expect(nextPollInSeconds(4, 42)).toBe(65);
-    expect(nextPollInSeconds(4, 100)).toBe(30);
+  it('is larger at the start of a render and never below the one-minute floor', () => {
+    expect(PROGRESS_POLL_FLOOR_SECONDS).toBe(60);
+    expect(PROGRESS_POLL_EARLY_SECONDS).toBe(120);
+    expect(nextPollInSeconds(4, 0)).toBe(120);
+    expect(nextPollInSeconds(3, null)).toBe(120);
+    expect(nextPollInSeconds(4, 50)).toBe(90);
+    expect(nextPollInSeconds(4, 42)).toBe(95);
+    expect(nextPollInSeconds(4, 100)).toBe(60);
     expect(nextPollInSeconds(4, 0)).toBeGreaterThan(nextPollInSeconds(4, 80) ?? 0);
     expect(nextPollInSeconds(4, 150)).toBe(PROGRESS_POLL_FLOOR_SECONDS);
   });
@@ -80,13 +80,13 @@ describe('video_tasks status poll answer', () => {
     const late = results[1];
     const done = results[2];
     const failed = results[3];
-    expect(early?.nextPollInSeconds).toBe(90);
+    expect(early?.nextPollInSeconds).toBe(120);
     expect(late?.nextPollInSeconds).toBe(nextPollInSeconds(4, 80));
     expect(early?.nextPollInSeconds).toBeGreaterThan(late?.nextPollInSeconds ?? 0);
     expect(late?.nextPollInSeconds).toBeGreaterThanOrEqual(PROGRESS_POLL_FLOOR_SECONDS);
     expect(Object.hasOwn(done ?? {}, 'nextPollInSeconds')).toBe(false);
     expect(Object.hasOwn(failed ?? {}, 'nextPollInSeconds')).toBe(false);
-    expect(textOf(response)).toContain('"nextPollInSeconds": 90');
+    expect(textOf(response)).toContain('"nextPollInSeconds": 120');
     expect(JSON.stringify(done)).not.toContain('nextPollInSeconds');
     expect(JSON.stringify(failed)).not.toContain('nextPollInSeconds');
   });
@@ -101,10 +101,12 @@ describe('video_tasks status description', () => {
     expect(waitAt).toBeGreaterThanOrEqual(0);
     expect(snapshotAt).toBeGreaterThan(waitAt);
     expect(description).toContain('nextPollInSeconds');
+    expect(description).toContain('at most once a minute');
 
     const field = WaitForVideoTasksShape.waitSeconds.description ?? '';
     expect(field.indexOf('final outcome')).toBeGreaterThanOrEqual(0);
     expect(field.indexOf('final outcome')).toBeLessThan(field.indexOf('snapshot'));
     expect(field).toContain('nextPollInSeconds');
+    expect(field).toContain('at most once a minute');
   });
 });
