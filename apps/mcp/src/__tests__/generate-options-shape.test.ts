@@ -58,6 +58,21 @@ describe('generate_persona_video options (Phase 5-4)', () => {
   });
 });
 
+describe('videoType and imageId descriptions teach the no-fallback rule', () => {
+  it('tells the agent hook_lipsync needs a first photo in the segments, and the persona photo never shows', () => {
+    const description = GeneratePersonaVideoOptionsShape.videoType.description ?? '';
+    expect(description).toContain('hook_lipsync = lip sync on the hook only');
+    expect(description).toContain('a first photo in the segments');
+    expect(description).toContain("the persona's saved photo is never shown in the video");
+  });
+
+  it('tells the agent the pinned library photo is only a lip-sync-active check, never rendered', () => {
+    const description = GeneratePersonaVideoOptionsShape.imageId.description ?? '';
+    expect(description).toContain('only used for the lip-sync-active check');
+    expect(description).toContain('never rendered in the video');
+  });
+});
+
 describe('pacing options (per-photo duration, crossfade, per-video variation)', () => {
   it('accepts videoClipDuration, videoTransitionMode and videoVariationSeed', () => {
     const parsed = parseOptions({ videoClipDuration: 4, videoTransitionMode: 'Crossfade', videoVariationSeed: 7 });

@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 
 import { ERROR_CODES } from '@/lib/error-codes';
-import { isHttpUrl } from '@/lib/generation/custom-audio';
 import { firstSegmentMedia } from '@/lib/hook-photo';
 import type { SegmentMediaRef } from '@/lib/hook-photo';
 import type { VideoType } from '@/lib/tokens';
@@ -94,9 +93,6 @@ export interface FirstPhotoFaceInput {
   segments: unknown;
   videoAspect: VideoAspectOption;
   videoType: VideoType;
-  avatarUrl: string | null;
-  photoPathUrl: string | null;
-  libraryPhotoUrl: string | null;
 }
 
 const MECHANICAL_REJECTION_REASONS: Record<string, string> = {
@@ -109,104 +105,46 @@ function mechanicalRejectionReason(code: unknown): string | undefined {
   return typeof code === 'string' ? MECHANICAL_REJECTION_REASONS[code] : undefined;
 }
 
-async function checkFallbackPhotoUrl(
-  userId: string,
-  videoAspect: VideoAspectOption,
-  url: string,
-  subject: string,
-  field: string,
-): Promise<null | NextResponse> {
-  const record = await fetchMediaCheck(
-    { segmentIndex: 0, imageIndex: 0, url },
-    userId,
-    videoAspect,
-    'first-photo-face',
-  );
-  if (record instanceof NextResponse) return record;
-  if (record.code === 'not_image') {
-    return validationFailed(
-      ERROR_CODES.VALIDATION_FAILED,
-      `${subject} is not a readable image: lip sync needs a usable photo of the persona's face.`,
-      field,
-    );
-  }
-  if (record.has_face === false) {
-    return validationFailed(
-      ERROR_CODES.VALIDATION_FAILED,
-      `${subject} has no detectable face: lip sync needs a photo of the persona's face.`,
-      field,
-    );
-  }
-  return null;
-}
-
 export async function checkFirstPhotoFace(
   input: FirstPhotoFaceInput,
 ): Promise<null | NextResponse> {
   if (input.videoType === 'voiceover' || input.videoType === 'full_lipsync') return null;
   const first = firstSegmentMedia(input.segments);
-  if (first !== null) {
-    const record = await fetchMediaCheck(
-      first,
-      input.userId,
-      input.videoAspect,
-      'first-photo-face',
-    );
-    if (record instanceof NextResponse) return record;
-    const rejection = mechanicalRejectionReason(record.code);
-    if (rejection !== undefined) {
-      return validationFailed(
-        ERROR_CODES.VALIDATION_FAILED,
-        `Segment ${first.segmentIndex} image ${first.imageIndex} is the first photo of this video, but it ${rejection}: send a usable photo showing the persona's face.`,
-        'options.segments',
-      );
-    }
-    if (
-      record.code === 'blocked_403' ||
-      record.code === 'timeout' ||
-      record.code === 'media_expired'
-    ) {
-      return validationFailed(
-        ERROR_CODES.VALIDATION_FAILED,
-        `Segment ${first.segmentIndex} image ${first.imageIndex} is the first photo of this video, but it could not be loaded (${record.code}): send a usable photo showing the persona's face.`,
-        'options.segments',
-      );
-    }
-    if (record.has_face === false) {
-      return validationFailed(
-        ERROR_CODES.VALIDATION_FAILED,
-        `Segment ${first.segmentIndex} image ${first.imageIndex} is the first photo of this video, but no face was detected in it: send a photo showing the persona's face.`,
-        'options.segments',
-      );
-    }
-    return null;
-  }
-  if (input.libraryPhotoUrl !== null) {
-    return checkFallbackPhotoUrl(
-      input.userId,
-      input.videoAspect,
-      input.libraryPhotoUrl,
-      'The photo selected for this video',
-      'personaId',
-    );
-  }
-  if (input.avatarUrl === null && input.photoPathUrl !== null) {
-    return checkFallbackPhotoUrl(
-      input.userId,
-      input.videoAspect,
-      input.photoPathUrl,
-      'The persona photo',
-      'personaId',
-    );
-  }
-  if (input.avatarUrl === null || !isHttpUrl(input.avatarUrl)) return null;
-  return checkFallbackPhotoUrl(
+  if (first === null) return null;
+  const record = await fetchMediaCheck(
+    first,
     input.userId,
     input.videoAspect,
-    input.avatarUrl,
-    'The persona photo',
-    'personaId',
+    'first-photo-face',
   );
+  if (record instanceof NextResponse) return record;
+  const rejection = mechanicalRejectionReason(record.code);
+  if (rejection !== undefined) {
+    return validationFailed(
+      ERROR_CODES.VALIDATION_FAILED,
+      `Segment ${first.segmentIndex} image ${first.imageIndex} is the first photo of this video, but it ${rejection}: send a usable photo showing the persona's face.`,
+      'options.segments',
+    );
+  }
+  if (
+    record.code === 'blocked_403' ||
+    record.code === 'timeout' ||
+    record.code === 'media_expired'
+  ) {
+    return validationFailed(
+      ERROR_CODES.VALIDATION_FAILED,
+      `Segment ${first.segmentIndex} image ${first.imageIndex} is the first photo of this video, but it could not be loaded (${record.code}): send a usable photo showing the persona's face.`,
+      'options.segments',
+    );
+  }
+  if (record.has_face === false) {
+    return validationFailed(
+      ERROR_CODES.VALIDATION_FAILED,
+      `Segment ${first.segmentIndex} image ${first.imageIndex} is the first photo of this video, but no face was detected in it: send a photo showing the persona's face.`,
+      'options.segments',
+    );
+  }
+  return null;
 }
 
 export interface PreChargePreflightInput {
@@ -215,8 +153,6 @@ export interface PreChargePreflightInput {
   prep: PersonaPrep;
   options: ValidatedOptions;
   segments: unknown;
-  libraryPhotoUrl: string | null;
-  photoPathUrl: string | null;
 }
 
 export async function checkPreChargePreflights(
@@ -261,8 +197,5 @@ export async function checkPreChargePreflights(
     segments: input.segments,
     videoAspect,
     videoType: input.options.videoType,
-    avatarUrl: input.prep.avatarUrl,
-    libraryPhotoUrl: input.libraryPhotoUrl,
-    photoPathUrl: input.photoPathUrl,
   });
 }

@@ -120,7 +120,7 @@ export const GeneratePersonaVideoOptionsShape = {
           ? `options.videoType is required; ${VIDEO_TYPE_ERROR_SUFFIX}`
           : unknownVideoTypeMessage(issue.input),
     })
-    .describe('The one video mode: full_lipsync = the whole video is the persona talking (requires a persona with a photo and options.lipsyncPhotos; 8 tokens at face quality ok, 15 at very_good); hook_lipsync = lip sync on the hook only, agent images after (requires a persona with a photo; 2 tokens ok, 3 very_good); voiceover = the persona voice over the agent images, no lip sync and no persona on camera; the images may show people (persona optional — with one, its voice and niche still apply; 1 token). Required: the mode decides the render path and the price.'),
+    .describe('The one video mode: full_lipsync = the whole video is the persona talking (requires a persona with a photo and options.lipsyncPhotos; 8 tokens at face quality ok, 15 at very_good); hook_lipsync = lip sync on the hook only, agent images after (requires a persona with a photo, and a first photo in the segments — the hook photo; the persona\'s saved photo is never shown in the video; 2 tokens ok, 3 very_good); voiceover = the persona voice over the agent images, no lip sync and no persona on camera; the images may show people (persona optional — with one, its voice and niche still apply; 1 token). Required: the mode decides the render path and the price.'),
   musicMood: musicMoodField,
   lipsyncPhotos: z
     .array(
@@ -140,7 +140,7 @@ export const GeneratePersonaVideoOptionsShape = {
         'Each item is mediaId (from media (action: upload), a temporary asset, 1 hour) or url (a public image URL). Every photo must show a detectable face and no photo may repeat. Rejected for hook_lipsync and voiceover.',
     ),
   audioUrl: httpsUrlField('audioUrl').optional().describe('Public URL of custom audio for the videos (overrides the persona voice).'),
-  imageId: z.string().min(1, 'imageId must be a non-empty string').optional().describe('Library image ID to use for every video (overrides the deterministic per-video selection; see persona_media (action: list_images)).'),
+  imageId: z.string().min(1, 'imageId must be a non-empty string').optional().describe('Library image ID to pin for every video (overrides the deterministic per-video selection; see persona_media (action: list_images)). The pinned photo is only used for the lip-sync-active check and is never rendered in the video.'),
   voiceId: personaVoiceField().optional().describe('Voice ID override: id or label from voices (action: list). Never type a provider prefix.'),
   webhookUrl: webhookUrlField().optional().describe('Callback URL the server POSTs to when each video reaches a terminal state (completed/failed).'),
   videoAspect: z.enum(['9:16', '16:9', '1:1']).optional().describe('Frame shape. Overrides the persona when one is given; a post without a persona defaults to 9:16.'),

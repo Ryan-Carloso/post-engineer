@@ -1,6 +1,6 @@
-"""Fail a lip-sync job at the start when its persona image cannot be loaded.
+"""Fail a lip-sync job at the start when its hook image cannot be loaded.
 
-The persona image used to be downloaded only after the script, TTS
+The hook image used to be downloaded only after the script, TTS
 and material stages had already run, so a dead image URL (HTTP 404/400)
 failed the job late, after spending LLM and TTS cost. Downloading it first
 fails the job before any of that. The file lands in the task directory and
@@ -21,13 +21,12 @@ def preflight_persona_image(task_id: str, params: VideoParams, max_bytes: int) -
     path downloads the one hook image.
 
     When the job carries segments, resolve_persona_image downloads and
-    face-checks the first segment photo instead of the persona image; the
-    persona image is only fetched for segment-less jobs and text-only
-    segments.
+    face-checks the first segment photo; a job with no usable first photo
+    fails with no_first_photo instead of falling back to the persona photo.
 
     Raises ``longcat.LongCatError`` when the image is unusable; the reason
-    has every URL replaced (``resolve_persona_image`` scrubs it). A job
-    without an active lip-sync persona is untouched.
+    never carries a URL (the first-photo resolution returns code-mapped
+    reasons). A job without an active lip-sync persona is untouched.
 
     Intro-only jobs (``full_lipsync`` off) are preflighted too: a dead image
     already failed them whenever the hook was measurable, so failing at the

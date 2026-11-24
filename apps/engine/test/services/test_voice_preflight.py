@@ -173,7 +173,7 @@ class StartAbortsOnBadVoiceTests(unittest.TestCase):
         self.assertIn("unknown voice 'energetic'", fail_task.call_args.args[1])
 
     def test_dead_image_still_fails_at_stage_persona_image(self):
-        failure = longcat.LongCatError("persona image download failed: HTTP 404")
+        failure = longcat.LongCatError("first photo of the video (segment 0 image 0) could not be loaded: download blocked")
         generate_script, fail_task = self._start(_params(), image_failure=failure)
         generate_script.assert_not_called()
         self.assertEqual(fail_task.call_args.kwargs["stage"], "persona_image")

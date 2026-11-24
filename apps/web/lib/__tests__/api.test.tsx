@@ -825,7 +825,7 @@ describe('api', () => {
     });
   });
 
-  it('fetchPostDetail falls back to the persona hook photo when the route omits it', async () => {
+  it('fetchPostDetail falls back to the none hook photo when the route omits it', async () => {
     vi.mocked(fetch).mockResolvedValueOnce(
       jsonResponse({
         success: true,
@@ -840,7 +840,7 @@ describe('api', () => {
     if (payload?.kind !== 'slot') throw new Error('expected slot');
     expect(payload.slot.hookPhoto).toEqual({
       url: null,
-      source: 'persona',
+      source: 'none',
       segmentIndex: null,
       imageIndex: null,
     });
