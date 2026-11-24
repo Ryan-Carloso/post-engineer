@@ -104,20 +104,25 @@ describe('promptVersionQueryOptions', () => {
   });
 
   it('resolves the response body on a successful read', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => Response.json(VERSION_BODY)));
+    const fetchMock = vi.fn<typeof fetch>(async () => Response.json(VERSION_BODY));
+    vi.stubGlobal('fetch', fetchMock);
     const body = await new QueryClient().fetchQuery(promptVersionQueryOptions('my-prompt', 2));
     expect(body.version.body).toBe('older text');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe('/api/prompts/my-prompt/versions/2');
   });
 
   it('throws a PromptVersionReadError carrying the failure when the read fails', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => Response.json({ success: false, code: 'PROMPT_VERSION_NOT_FOUND' }, { status: 404 })),
+    const fetchMock = vi.fn<typeof fetch>(async () =>
+      Response.json({ success: false, code: 'PROMPT_VERSION_NOT_FOUND' }, { status: 404 }),
     );
+    vi.stubGlobal('fetch', fetchMock);
     const error: unknown = await new QueryClient()
       .fetchQuery(promptVersionQueryOptions('my-prompt', 2))
       .catch((caught: unknown) => caught);
     expect(error).toBeInstanceOf(PromptVersionReadError);
     expect(error instanceof PromptVersionReadError && error.failure.status).toBe(404);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe('/api/prompts/my-prompt/versions/2');
   });
 });
