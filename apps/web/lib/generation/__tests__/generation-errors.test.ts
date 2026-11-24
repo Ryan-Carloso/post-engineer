@@ -82,6 +82,18 @@ describe('categorizeGenerationError', () => {
     expect(isRetryableGenerationError('images_do_not_cover_audio: need 1 more photo')).toBe(false);
   });
 
+  it('maps the engine no-first-photo failure with its detail to its own code', () => {
+    expect(
+      categorizeGenerationError(
+        'no_first_photo: no usable first photo in segments; send a first photo with a detectable face',
+      ),
+    ).toBe('no_first_photo');
+    expect(categorizeGenerationError('no_first_photo')).toBe('no_first_photo');
+    expect(
+      isRetryableGenerationError('no_first_photo: no usable first photo in segments'),
+    ).toBe(false);
+  });
+
   it('falls back to unknown for empty or unrecognized text', () => {
     expect(categorizeGenerationError(null)).toBe('unknown');
     expect(categorizeGenerationError(undefined)).toBe('unknown');
@@ -155,6 +167,15 @@ describe('engine error-code contract', () => {
     );
     expect(coverage).toContain('IMAGES_DO_NOT_COVER_AUDIO = "images_do_not_cover_audio"');
     expect(GENERATION_ERROR_CODES).toContain('images_do_not_cover_audio');
+  });
+
+  it('pins the no-first-photo code to the engine raise', () => {
+    const fullLipsync = readFileSync(
+      join(findRepoRoot(import.meta.url), 'apps', 'engine', 'app', 'services', 'full_lipsync.py'),
+      'utf8',
+    );
+    expect(fullLipsync).toContain('"no_first_photo: no usable first photo in segments; "');
+    expect(GENERATION_ERROR_CODES).toContain('no_first_photo');
   });
 
   it('treats engine_restart as retryable (transient infra blip)', () => {
