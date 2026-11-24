@@ -169,6 +169,16 @@ class VideoParams(BaseModel):
             raise ValueError(unknown_video_type_message(value)) from None
 
     video_script: str = Field(default="", max_length=20000)
+    hook_title: Optional[str] = None
+
+    @field_validator("hook_title")
+    @classmethod
+    def _check_hook_title(cls, value: Optional[str]) -> Optional[str]:
+        """Refuse a bad headline before any charge; the stored form is the normalized one."""
+        from app.services import hook_title
+
+        return None if value is None else hook_title.check_text(value)
+
     video_aspect: Optional[VideoAspect] = VideoAspect.portrait.value
     video_concat_mode: Optional[VideoConcatMode] = VideoConcatMode.random.value
     video_layout: VideoLayout = VideoLayout.standard
