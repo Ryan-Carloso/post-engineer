@@ -1,4 +1,9 @@
+import { inspect } from 'node:util';
 import { describe, expect, it, vi } from 'vitest';
+
+vi.mock('@/lib/logger', () => ({
+  logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
+}));
 
 import {
   downloadPublicImage,
@@ -8,11 +13,14 @@ import {
   resolvePersonaAvatar,
   REMOTE_FACE_ERROR,
 } from '@/lib/persona-remote-face';
+import { logger } from '@/lib/logger';
 import { MAX_IMAGE_BYTES } from '@/lib/persona-images';
 
 const PNG_BYTES = Uint8Array.from([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
 ]);
+
+const ROW_SENTINEL = 'remote-face-row-sentinel-7f2a';
 
 function publicLookup() {
   return vi.fn(async () => [{ address: '1.2.3.4' }]);
@@ -355,6 +363,51 @@ describe('ingestRemotePersonaFaces', () => {
     });
     expect(result).toEqual({ migrated: 0, skipped: 0, failed: 1 });
     expect(remove).toHaveBeenCalledWith(['u1/ok/photo.png']);
+  });
+
+  it('logs only the error code when the persona update hits a constraint', async () => {
+    const remove = vi.fn(async () => ({ error: null }));
+    const supabase = {
+      from: vi.fn(() => ({
+        select: vi.fn(() => ({
+          order: vi.fn(() => ({
+            range: vi.fn(async () => ({
+              data: [{ id: 'ok', user_id: 'u1', avatar_url: 'https://cdn.example/ok.png', photo_path: null }],
+              error: null,
+            })),
+          })),
+        })),
+        update: vi.fn(() => ({
+          eq: vi.fn(() => ({
+            eq: vi.fn(async () => ({
+              error: {
+                code: '23514',
+                message: 'new row violates check constraint "personas_identity_card_object_check"',
+                details: `Failing row contains (ok, u1, ${ROW_SENTINEL})`,
+              },
+            })),
+          })),
+        })),
+      })),
+      storage: {
+        from: vi.fn(() => ({
+          upload: vi.fn(async (path: string) => ({ data: { path }, error: null })),
+          remove,
+        })),
+      },
+    };
+    vi.mocked(logger.error).mockClear();
+    const result = await ingestRemotePersonaFaces(supabase as never, {
+      fetchImpl: vi.fn(async () => pngResponse()) as never,
+      lookupImpl: publicLookup(),
+    });
+    expect(result).toEqual({ migrated: 0, skipped: 0, failed: 1 });
+    expect(remove).toHaveBeenCalledWith(['u1/ok/photo.png']);
+    expect(vi.mocked(logger.error)).toHaveBeenCalledWith('[persona-remote-face] update failed', {
+      personaId: 'ok',
+      code: '23514',
+    });
+    expect(inspect(vi.mocked(logger.error).mock.calls, { depth: 10 })).not.toContain(ROW_SENTINEL);
   });
 });
 
