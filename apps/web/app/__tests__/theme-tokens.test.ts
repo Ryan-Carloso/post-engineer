@@ -33,6 +33,16 @@ describe('theme tokens', () => {
     expect([...dark].filter((name) => !lightSet.has(name))).toEqual([]);
   });
 
+  it('defines the popover tokens in both themes and maps them in @theme', () => {
+    expect(light).toContain('--popover');
+    expect(light).toContain('--popover-foreground');
+    expect([...dark]).toContain('--popover');
+    expect([...dark]).toContain('--popover-foreground');
+    const theme = block('@theme inline');
+    expect(theme).toContain('--color-popover: var(--popover)');
+    expect(theme).toContain('--color-popover-foreground: var(--popover-foreground)');
+  });
+
   it('maps every @theme color to a variable defined in :root', () => {
     const theme = block('@theme inline');
     const refs = [...theme.matchAll(/--color-[a-z-]+:\s*var\((--[a-z0-9-]+)\)/g)].map((m) => m[1]);
