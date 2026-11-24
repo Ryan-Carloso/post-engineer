@@ -322,6 +322,16 @@ def test_a_title_that_cannot_be_drawn_is_a_warning_and_the_video_still_ships(tas
     assert panels, "the photos are still prepared"
 
 
+def test_a_skipped_title_warning_survives_a_failed_panel_overlay(task_dir, monkeypatch):
+    monkeypatch.setattr(hook_title_stage, "_font", lambda params: None)
+    monkeypatch.setattr(user_media, "_overlay_font", lambda params, segments: _font_for)
+    _prepare(task_dir, _params(hook_title="Porto?"))
+    recorded = []
+    with patch.object(segment_panels.video, "_run_ffmpeg_bounded", side_effect=RuntimeError("boom")):
+        segment_panels.overlay_onto("task-1", "/t/in.mp4", lambda task_id, **k: recorded.append(k))
+    assert recorded == [{"media_warnings": [hook_title.REASON_NO_FONT, segment_panels.REASON_RENDER_FAILED]}]
+
+
 def test_a_full_frame_photo_starting_in_the_window_gets_its_card_moved(task_dir, fonts):
     real = segment_panels.build_full
     seen = []

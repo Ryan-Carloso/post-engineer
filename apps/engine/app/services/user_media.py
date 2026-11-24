@@ -496,5 +496,5 @@ def prepare_segment_panels(task_id: str, params: Any, subtitle_path: str, audio_
         sent=sent, skipped=warnings,
         variation_seed=getattr(params, "video_variation_seed", None),
     )
-    segment_panels.write_manifest(task_id, panels, warnings, title)
+    segment_panels.write_manifest(task_id, panels, [*warnings, *notes], title)
     return [*warnings, *notes]

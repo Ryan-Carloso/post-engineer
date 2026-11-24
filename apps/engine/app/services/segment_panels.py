@@ -216,7 +216,7 @@ def write_manifest(
     warnings: Sequence[str],
     title: Optional[hook_title.TitleLayer] = None,
 ) -> None:
-    """Persist the prepared panels and hook title for the final-assembly step."""
+    """Persist the panels, hook title and every skip warning (title ones too) for the final-assembly step."""
     with open(_manifest_path(task_id), "w", encoding="utf-8") as handle:
         json.dump(
             {
