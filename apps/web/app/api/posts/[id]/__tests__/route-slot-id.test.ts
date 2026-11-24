@@ -53,6 +53,7 @@ vi.mock('@/lib/publish-links', () => ({
 import { GET } from '../route';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
+import { createSupabaseServerClient } from '@/lib/supabase/server';
 
 const USER_ID = 'user-1';
 const SLOT_ID = '11111111-1111-4111-8111-111111111111';
@@ -106,7 +107,14 @@ interface DbCall {
   args: unknown[];
 }
 
-function mockDb(rows: { generation?: Record<string, unknown> | null; slot?: boolean }) {
+interface DbRows {
+  generation?: Record<string, unknown> | null;
+  slot?: boolean;
+  slotRow?: Record<string, unknown>;
+  promptVersion?: { data: unknown; error: unknown };
+}
+
+function mockDb(rows: DbRows) {
   const calls: DbCall[] = [];
   const from = vi.fn((table: string) => {
     const filters: Array<[string, unknown]> = [];
@@ -146,9 +154,10 @@ function mockDb(rows: { generation?: Record<string, unknown> | null; slot?: bool
       }
       if (table === 'scheduled_posts') {
         return rows.slot === true
-          ? { data: SLOT_ROW, error: null }
+          ? { data: rows.slotRow ?? SLOT_ROW, error: null }
           : { data: null, error: { code: 'PGRST116', message: 'zero rows' } };
       }
+      if (table === 'prompt_versions') return rows.promptVersion ?? { data: null, error: null };
       if (table === 'schedules') return { data: SCHEDULE_ROW, error: null };
       if (table === 'personas') return { data: { id: PERSONA_ID, name: 'Viva Leve' }, error: null };
       return { data: [], error: null };
@@ -160,7 +169,7 @@ function mockDb(rows: { generation?: Record<string, unknown> | null; slot?: bool
   return { from, calls };
 }
 
-function install(rows: { generation?: Record<string, unknown> | null; slot?: boolean }) {
+function install(rows: DbRows) {
   const client = mockDb(rows);
   vi.mocked(requireSupabaseSession).mockResolvedValue({
     auth: { userId: USER_ID, isApiKey: true, isOAuth: false },
@@ -168,6 +177,18 @@ function install(rows: { generation?: Record<string, unknown> | null; slot?: boo
   } as never);
   vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
   return client;
+}
+
+function installCookieSession(session: DbRows, service: DbRows) {
+  const sessionClient = mockDb(session);
+  const serviceClient = mockDb(service);
+  vi.mocked(requireSupabaseSession).mockResolvedValue({
+    auth: { userId: USER_ID, isApiKey: false, isOAuth: false },
+    error: null,
+  } as never);
+  vi.mocked(createSupabaseServerClient).mockResolvedValue(sessionClient as never);
+  vi.mocked(createSupabaseServiceClient).mockReturnValue(serviceClient as never);
+  return { sessionClient, serviceClient };
 }
 
 function get(id: string) {
@@ -227,6 +248,33 @@ describe('GET /api/posts/[id] slot id normalization', () => {
     const response = await get(`batch:${SCHEDULE_ID}:slot:nope`);
     expect(response.status).toBe(404);
     expect(client.calls.filter((call) => call.table === 'scheduled_posts')).toEqual([]);
+  });
+
+  it('returns the prompt facts on the slot fallback for a cookie-session caller', async () => {
+    const versionId = '7b0e6c1e-0000-4000-8000-000000000001';
+    const slotRow = { ...SLOT_ROW, prompt_version_id: versionId };
+    const { sessionClient, serviceClient } = installCookieSession(
+      {
+        slot: true,
+        slotRow,
+        promptVersion: { data: null, error: { code: '42501', message: 'permission denied for table prompt_versions' } },
+      },
+      {
+        promptVersion: {
+          data: { slug: 'community-hook', title: 'Community hook', version: 2, source: 'user', owner_id: 'other-user' },
+          error: null,
+        },
+      },
+    );
+    const response = await get(SLOT_ID);
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { kind: string; generation: { prompt: unknown } };
+    expect(body.kind).toBe('slot');
+    expect(body.generation.prompt).toEqual({ slug: 'community-hook', title: 'Community hook', version: 2, source: 'user' });
+    expect(sessionClient.calls.filter((call) => call.table === 'prompt_versions')).toEqual([]);
+    expect(serviceClient.calls.filter((call) => call.table === 'prompt_versions' && call.op === 'eq')).toEqual([
+      { table: 'prompt_versions', op: 'eq', args: ['id', versionId] },
+    ]);
   });
 
   it('looks up a plain slot uuid after the generation miss', async () => {

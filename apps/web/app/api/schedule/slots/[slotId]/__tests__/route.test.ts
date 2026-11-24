@@ -49,6 +49,8 @@ function mockSlotsClient(options: {
   rpcResult?: string;
   rpcError?: unknown;
   updateConflict?: boolean;
+  promptVersion?: unknown;
+  promptVersionError?: unknown;
 }) {
   const calls: ChainCall[] = [];
   const makeChain = (table: string) => {
@@ -91,8 +93,15 @@ function mockSlotsClient(options: {
     data: options.historyError ? null : (options.history ?? []),
     error: options.historyError ?? null,
   }));
+  const promptVersionsChain = makeChain('prompt_versions');
+  (promptVersionsChain as Record<string, unknown>).maybeSingle = vi.fn(async () => ({
+    data: options.promptVersionError ? null : (options.promptVersion ?? null),
+    error: options.promptVersionError ?? null,
+  }));
   const from = vi.fn((table: string) =>
-    table === 'scheduled_posts'
+    table === 'prompt_versions'
+      ? promptVersionsChain
+      : table === 'scheduled_posts'
       ? postsChain
       : table === 'schedules'
         ? schedulesChain
@@ -680,6 +689,36 @@ describe('GET /api/schedule/slots/[slotId]', () => {
       timezone: 'Europe/Lisbon',
     });
     expect(body.persona).toEqual({ id: 'p1', name: 'Viva Leve' });
+  });
+
+  it('returns the prompt facts for a cookie-session caller', async () => {
+    const versionId = '7b0e6c1e-0000-4000-8000-000000000001';
+    const session = mockSlotsClient({
+      slot: { ...SLOT_DETAIL_ROW, prompt_version_id: versionId },
+      schedule: SCHEDULE_ROW,
+      persona: { id: 'p1', name: 'Viva Leve' },
+      promptVersionError: { code: '42501', message: 'permission denied for table prompt_versions' },
+    });
+    const service = mockSlotsClient({
+      promptVersion: { slug: 'community-hook', title: 'Community hook', version: 2, source: 'user', owner_id: 'other-user' },
+    });
+    vi.mocked(requireSupabaseSession).mockResolvedValue({
+      auth: { userId: USER_ID, accessToken: 'session-token', isApiKey: false, isOAuth: false },
+      error: null,
+    } as never);
+    vi.mocked(createSupabaseServerClient).mockResolvedValue(session as never);
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(service as never);
+
+    const response = await GET(new Request('https://example.com/api/schedule/slots/slot-1'), {
+      params: Promise.resolve({ slotId: SLOT_ID }),
+    });
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { generation: { prompt: unknown } };
+    expect(GetSlotResponseSchema.safeParse(body).success).toBe(true);
+    expect(body.generation.prompt).toEqual({ slug: 'community-hook', title: 'Community hook', version: 2, source: 'user' });
+    expect(session.from).not.toHaveBeenCalledWith('prompt_versions');
+    expect(service.from).toHaveBeenCalledWith('prompt_versions');
   });
 
   it('exposes the asap publish mode on the schedule payload', async () => {
