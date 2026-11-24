@@ -59,6 +59,5 @@ accounts are given by name or id.
   `publish_upload`), `prompts` (`list`, `get`, `create`, `update`, `delete`, `versions`, `restore`).
 - Tool configuration: `tool_config` (`get`, `save`) — the saved search tool and licensed stock
   sources; keys are stored encrypted and only presence + last 4 are ever returned.
-- Prompt library: `prompts` (`create`, `update`, `delete`, `versions`, `restore`) writes the caller's own prompts, lists their old versions and restores one; `list` and `get` read any prompt.
 - Prompts: `/daily-news` (daily news becomes a video), `/github-prs`
   (GitHub PRs become videos), `/full-setup` (full setup becomes videos).

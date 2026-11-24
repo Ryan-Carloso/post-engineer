@@ -32,4 +32,11 @@ describe('the MCP tool count is the same everywhere it is quoted', () => {
     expect(registered.length).toBe(registeredCount);
     expect(registered.filter((name) => !llms.includes(`\`${name}\``))).toEqual([]);
   });
+
+  it('introduces each tool with its actions only once in llms.txt', () => {
+    const toolsSection = read('apps/web/public/llms.txt').split('## MCP tools')[1] ?? '';
+    const introduced = [...toolsSection.matchAll(/`([a-z_]+)` \(/g)].map((match) => match[1]);
+    expect(introduced.length).toBeGreaterThan(0);
+    expect(new Set(introduced).size).toBe(introduced.length);
+  });
 });
