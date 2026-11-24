@@ -394,6 +394,59 @@ def test_resume_spawns_only_rows_that_never_got_a_call_id() -> None:
     assert started == 1
 
 
+def test_resume_spawn_failure_clears_the_remote_marker() -> None:
+    rows = [
+        {
+            "task_id": "boom",
+            "data": {
+                "remote_worker": dispatch.REMOTE_WORKER_VALUE,
+                "remote_call_id": "",
+                "job_params": _faceless(),
+                "pipeline": "video",
+            },
+        },
+        {
+            "task_id": "good",
+            "data": {
+                "remote_worker": dispatch.REMOTE_WORKER_VALUE,
+                "remote_call_id": "",
+                "job_params": _faceless(),
+                "pipeline": "video",
+            },
+        },
+    ]
+
+    class _Response:
+        def json(self) -> list[dict[str, object]]:
+            return rows
+
+    class _State:
+        def __init__(self) -> None:
+            self.updates: list[tuple[str, dict[str, object]]] = []
+
+        def _request(self, method: str, query: str) -> _Response:
+            return _Response()
+
+        def update_task(self, task_id: str, **kwargs: object) -> None:
+            self.updates.append((task_id, kwargs))
+
+    def _spawn(task_id: str, params: dict[str, object], stop_at: str) -> str:
+        if task_id == "boom":
+            raise RuntimeError("modal down")
+        return f"fc-{task_id}"
+
+    state = _State()
+    started = dispatch.resume_unspawned_cpu_jobs(state, spawn=_spawn)
+    assert started == 1
+    assert state.updates == [
+        (
+            "boom",
+            {"remote_worker": "", "remote_call_id": "", "job_params": None},
+        ),
+        ("good", {"remote_call_id": "fc-good"}),
+    ]
+
+
 def test_app_name_defaults_and_can_be_overridden(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv(dispatch.APP_NAME_ENV, raising=False)
     assert dispatch.worker_app_name() == "moneyprint-cpu-worker"

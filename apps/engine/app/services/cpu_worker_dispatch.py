@@ -431,7 +431,9 @@ def resume_unspawned_cpu_jobs(
     Rows that already have a call id are left for reconcile, which skips
     them while the call is running. Rows whose batch slot is no longer
     pending or generating are skipped: the slot was refunded or finished
-    without this row, so spawning it now would render a dead slot.
+    without this row, so spawning it now would render a dead slot. A row
+    whose spawn fails is unmarked, so the next boot does not retry it and
+    the boot triage settles it instead.
     """
     started = 0
     for row in _remote_rows(state):
@@ -465,6 +467,7 @@ def resume_unspawned_cpu_jobs(
             logger.error(
                 f"modal cpu resume failed for {task_id}: {type(exc).__name__}"
             )
+            _clear_remote(state, task_id)
             continue
         if not persist_state_update(state, task_id, remote_call_id=new_id):
             _untrack_spawned_call(state, task_id, new_id)

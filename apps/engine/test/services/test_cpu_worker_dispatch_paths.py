@@ -206,4 +206,10 @@ def test_resume_skips_unusable_rows_and_reports_a_spawn_failure() -> None:
     state = _State()
     started = dispatch.resume_unspawned_cpu_jobs(state, spawn=_spawn)
     assert started == 1
-    assert state.updates == [("good", {"remote_call_id": "fc-good"})]
+    assert state.updates == [
+        (
+            "boom",
+            {"remote_worker": "", "remote_call_id": "", "job_params": None},
+        ),
+        ("good", {"remote_call_id": "fc-good"}),
+    ]
