@@ -1,13 +1,17 @@
 """Security tests for app.services.task.
 
 Covers:
-- prepare_persona_lipsync_video: persona image download goes through the
-  SSRF-safe helper (private IPs / resolving hosts rejected, valid public
-  images accepted).
+- prepare_persona_lipsync_video: the first segment photo download goes
+  through the SSRF-safe helper (private IPs / resolving hosts rejected,
+  valid public images accepted). The persona avatar is never downloaded:
+  the hook image is the first photo of the video (issue #766).
+- resolve_persona_image_url: house-face paths resolve against
+  MPT_UPLOAD_API_BASE_URL, and fail clearly without it.
 - resolve_custom_audio_file: only files inside the task directory or the
   local_videos storage directory are accepted.
 """
 
+import io
 import os
 import shutil
 import socket
@@ -20,7 +24,31 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import app.services.task as tm
-from app.models.schema import PersonaParams, VideoParams
+from app.models.schema import PersonaParams, TaskVideoRequest
+from app.services.persona_image import resolve_persona_image_url
+
+HOOK = (
+    "Stop wasting your trip stuck in a ninety minute line for the original dish "
+    "when a better table is still waiting nearby for you today."
+)
+BODY = (
+    "Locals skip the famous house and walk two minutes to a smaller kitchen where "
+    "the sauce recipe has not changed since nineteen fifty three and the cook still "
+    "greets every table by name before the first plate arrives at your table tonight."
+)
+CTA = "Save this video before your next trip to Porto."
+
+
+def _photos(prefix, count):
+    return [{"url": f"https://example.com/{prefix}{i}.jpg"} for i in range(count)]
+
+
+def _valid_png_bytes():
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.new("RGB", (1080, 1920), (10, 20, 30)).save(buf, "PNG")
+    return buf.getvalue()
 
 
 def _addrinfo(*ips):
@@ -29,11 +57,11 @@ def _addrinfo(*ips):
 
 class _FakeImageResponse:
     def __init__(
-        self, status_code=200, content_type="image/png", chunks=(b"\x89PNG" + b"\x00" * 100,)
+        self, status_code=200, content_type="image/png", chunks=None
     ):
         self.status_code = status_code
         self.headers = {"Content-Type": content_type}
-        self._chunks = chunks
+        self._chunks = chunks if chunks is not None else (_valid_png_bytes(),)
 
     def iter_content(self, chunk_size=8192):
         yield from self._chunks
@@ -47,16 +75,21 @@ class TestPersonaImageDownloadSecurity(unittest.TestCase):
         self.tmp = tempfile.mkdtemp(prefix="task-security-test-")
         self.addCleanup(shutil.rmtree, self.tmp, True)
 
-    def _params(self, avatar_url):
-        persona = PersonaParams(id="p1", name="Test", avatar_url=avatar_url, voice_id="voice-1")
-        return VideoParams(
+    def _params(self, first_photo_url):
+        persona = PersonaParams(id="p1", name="Test", avatar_url=first_photo_url, voice_id="voice-1")
+        return TaskVideoRequest(
             video_title="test",
             video_description="Test description.",
             video_type="voiceover",
             persona=persona,
+            segments=[
+                {"kind": "hook", "text": HOOK, "media": [{"url": first_photo_url}, *_photos("h", 4)]},
+                {"kind": "content", "text": BODY, "media": _photos("b", 8)},
+                {"kind": "content", "text": CTA, "media": _photos("c", 2)},
+            ],
         )
 
-    def _run(self, avatar_url, resolved_ips=("93.184.216.34",), response=None):
+    def _run(self, first_photo_url, resolved_ips=("93.184.216.34",), response=None):
         patches = [
             patch.object(tm.utils, "task_dir", return_value=self.tmp),
             patch("socket.getaddrinfo", return_value=_addrinfo(*resolved_ips)),
@@ -79,7 +112,7 @@ class TestPersonaImageDownloadSecurity(unittest.TestCase):
             self.addCleanup(p.stop)
         return tm.prepare_persona_lipsync_video(
             "task-1",
-            self._params(avatar_url),
+            self._params(first_photo_url),
             "audio.mp3",
             "bg.mp4",
             0,
@@ -117,22 +150,18 @@ class TestPersonaImageDownloadSecurity(unittest.TestCase):
 
     def test_resolves_house_face_path_against_the_web_base_url(self):
         with patch.dict(os.environ, {"MPT_UPLOAD_API_BASE_URL": "https://web.example.com/"}):
-            result, _, _, _ = self._run("/caracter-samples/file-3.png")
-        self.assertEqual(result, "final.mp4")
-        pinned = self.started[2]
-        self.assertEqual(
-            pinned.call_args.args[1],
-            "https://web.example.com/caracter-samples/file-3.png",
-        )
+            self.assertEqual(
+                resolve_persona_image_url("/caracter-samples/file-3.png"),
+                "https://web.example.com/caracter-samples/file-3.png",
+            )
 
     def test_house_face_without_web_base_url_fails_with_a_clear_reason(self):
         with (
             patch.dict(os.environ, {"MPT_UPLOAD_API_BASE_URL": ""}),
             self.assertRaises(tm.longcat.LongCatError) as ctx,
         ):
-            self._run("/caracter-samples/file-3.png")
+            resolve_persona_image_url("/caracter-samples/file-3.png")
         self.assertIn("MPT_UPLOAD_API_BASE_URL", str(ctx.exception))
-        self.started[2].assert_not_called()
 
     def test_other_relative_paths_are_not_resolved(self):
         with (
