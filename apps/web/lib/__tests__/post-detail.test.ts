@@ -72,6 +72,7 @@ const SLOT_ROW = {
   published_at: null,
   task_id: 'task-1',
   voiceover: false, voiceover_material: 'images',
+  prompt_version_id: null,
 };
 
 const SCHEDULE_ROW = {
@@ -672,9 +673,16 @@ describe('getSlotPost prompt facts', () => {
   });
 
   it('does not create the service client for a slot with no prompt version', async () => {
-    const session = mockSupabase(sessionTables({ scheduled_posts: { data: SLOT_ROW, error: null } }));
+    const session = mockSupabase(sessionTables({ scheduled_posts: { data: { ...SLOT_ROW, prompt_version_id: null }, error: null } }));
     const detail = await getSlotPost(session.supabase, 'slot-1', 'user-1', null);
     expect(detail?.generation.prompt).toBeNull();
+    expect(createSupabaseServiceClient).not.toHaveBeenCalled();
+  });
+
+  it('does not touch the service client when the schedule is not the caller\'s', async () => {
+    const session = mockSupabase(sessionTables({ schedules: { data: null, error: null } }));
+    await expect(getSlotPost(session.supabase, 'slot-1', 'user-1', null)).resolves.toBeNull();
+    expect(session.chains['schedules'].eq.mock.calls).toContainEqual(['user_id', 'user-1']);
     expect(createSupabaseServiceClient).not.toHaveBeenCalled();
   });
 
