@@ -38,7 +38,7 @@ export async function readPostPromptFacts(db: SupabaseClient, versionId: string 
     return null;
   }
   if (data === null) {
-    logger.error('[prompt-versions] post prompt version missing', undefined, { versionId });
+    logger.error('[prompt-versions] post prompt version missing', new Error(`prompt version ${versionId} not found`), { versionId });
     return null;
   }
   const row = data as { slug: string; title: string; version: number; source: string };

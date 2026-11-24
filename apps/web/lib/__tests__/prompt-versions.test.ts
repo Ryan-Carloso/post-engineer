@@ -80,7 +80,7 @@ describe('readPostPromptFacts', () => {
 
   it('returns null and logs at error level when the version row is missing', async () => {
     expect(await readPostPromptFacts(tableDb({ data: null, error: null }).client, VERSION)).toBeNull();
-    expect(loggerError).toHaveBeenCalledWith('[prompt-versions] post prompt version missing', undefined, { versionId: VERSION });
+    expect(loggerError).toHaveBeenCalledWith('[prompt-versions] post prompt version missing', expect.any(Error), { versionId: VERSION });
   });
 
   it('returns null for an unknown source', async () => {
