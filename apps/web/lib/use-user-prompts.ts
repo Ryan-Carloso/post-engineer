@@ -3,6 +3,7 @@ import {
   createPrompt,
   deletePrompt,
   fetchPrompts,
+  restorePromptVersion,
   updatePrompt,
   type PromptCall,
   type PromptChanges,
@@ -12,6 +13,12 @@ import {
 type Listing = Awaited<ReturnType<typeof fetchPrompts>>;
 
 export const USER_PROMPTS_KEY = ['user-prompts'] as const;
+
+export const userPromptDetailKey = (slug: string) => [...USER_PROMPTS_KEY, 'detail', slug] as const;
+
+export const userPromptVersionsKey = (slug: string) => [...USER_PROMPTS_KEY, 'versions', slug] as const;
+
+export const userPromptVersionKey = (slug: string, version: number) => [...userPromptVersionsKey(slug), version] as const;
 
 export function useUserPromptsQuery(): UseQueryResult<Listing, Error> {
   return useQuery<Listing, Error>({ queryKey: USER_PROMPTS_KEY, queryFn: fetchPrompts, staleTime: 30_000 });
@@ -36,3 +43,8 @@ export const useUpdatePromptMutation = () =>
   useInvalidatingMutation((input: { slug: string; changes: PromptChanges }) => updatePrompt(input.slug, input.changes));
 
 export const useDeletePromptMutation = () => useInvalidatingMutation((slug: string) => deletePrompt(slug));
+
+export const useRestorePromptVersionMutation = () =>
+  useInvalidatingMutation((input: { slug: string; version: number; expectedCurrentVersion: number }) =>
+    restorePromptVersion(input.slug, input.version, input.expectedCurrentVersion),
+  );
