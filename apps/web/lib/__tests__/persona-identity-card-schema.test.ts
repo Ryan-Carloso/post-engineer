@@ -6,6 +6,7 @@ import {
   SCENE_MAX_BYTES,
   SceneSchema,
   parseIdentityCardJson,
+  parseIdentityCardValue,
   parseSceneJson,
   parseSceneValue,
 } from '@/lib/contracts/persona-identity-card';
@@ -79,6 +80,13 @@ describe('IdentityCardSchema', () => {
 
   it('rejects an empty outfit', () => {
     expect(IdentityCardSchema.safeParse(withPath(FIXTURE_CARD, ['defaults', 'outfit'], {})).success).toBe(false);
+  });
+
+  it('rejects an empty defaults object', () => {
+    expect(parseIdentityCardValue({ ...clone(FIXTURE_CARD), defaults: {} })).toEqual({
+      ok: false,
+      error: 'identityCard.defaults: must name an outfit',
+    });
   });
 
   it('rejects outfit slots that carry identity words or sexualised clothing', () => {

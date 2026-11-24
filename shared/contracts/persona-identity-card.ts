@@ -143,7 +143,12 @@ const IdentitySchema = z
 export const IdentityCardV1Schema = z.strictObject({
   version: z.literal(IDENTITY_CARD_VERSION),
   identity: IdentitySchema,
-  defaults: z.strictObject({ outfit: OutfitSchema.optional() }).optional(),
+  defaults: z
+    .strictObject({ outfit: OutfitSchema.optional() })
+    .optional()
+    .refine((defaults) => defaults === undefined || defaults.outfit !== undefined, {
+      message: 'must name an outfit',
+    }),
 });
 
 export const IdentityCardSchema = z.discriminatedUnion('version', [IdentityCardV1Schema]);
