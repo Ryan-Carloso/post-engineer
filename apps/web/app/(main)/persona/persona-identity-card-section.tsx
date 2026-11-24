@@ -98,7 +98,7 @@ export function PersonaIdentityCardSection({ personaId }: { personaId: string | 
   useEffect(() => {
     if (!query.isSuccess) return;
     usePersonaStore.getState().applyServerIdentityCard(cardToDraft(query.data));
-  }, [personaId, query.isSuccess, query.dataUpdatedAt, query.data]);
+  }, [personaId, query.isSuccess, query.dataUpdatedAt]);
 
   const isLoading = personaId !== null && storedDraft === null && !query.isError;
   return (
