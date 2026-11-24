@@ -182,7 +182,7 @@ describe('PostsPage', () => {
     expect(row.querySelector('[aria-label="instagram"]')).not.toBeNull();
     await user.click(screen.getByLabelText('posts.filterPersona'));
     expect(screen.getByRole('option', { name: 'Viva Leve' })).toBeInTheDocument();
-    expect(screen.queryByText('Past topic')).not.toBeInTheDocument();
+    expect(dayPanelCardText('Upcoming topic')).toBeInTheDocument();
   });
 
   it('shows the account notice on a publishing card before the slot is finished', () => {
