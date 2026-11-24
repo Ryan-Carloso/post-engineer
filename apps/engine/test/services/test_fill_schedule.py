@@ -678,7 +678,13 @@ class BatchScheduleTests(unittest.TestCase):
             video_description="Batch description.",
         )
 
-        with patch("app.controllers.v1.video.task_manager") as manager:
+        with (
+            patch(
+                "app.services.cpu_worker_dispatch._modal_spawn",
+                side_effect=RuntimeError("offline"),
+            ),
+            patch("app.controllers.v1.video.task_manager") as manager,
+        ):
             scheduler.generator._dispatch_generation(
                 "task-1",
                 request,

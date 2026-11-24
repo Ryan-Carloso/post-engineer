@@ -194,7 +194,13 @@ class BatchDispatchCapTests(unittest.TestCase):
         return BatchGenerator(store=store, task_state=MagicMock(), notify=MagicMock())
 
     def _run(self, generator: BatchGenerator):
-        with patch("app.services.fill_schedule.generate.tm.start", self._worker):
+        with (
+            patch(
+                "app.services.cpu_worker_dispatch._modal_spawn",
+                side_effect=RuntimeError("offline"),
+            ),
+            patch("app.services.fill_schedule.generate.tm.start", self._worker),
+        ):
             return generator.run(NOW)
 
     def _wait_started(self, count: int, timeout: float = 1.0) -> int:

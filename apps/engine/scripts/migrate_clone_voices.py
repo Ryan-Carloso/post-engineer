@@ -53,8 +53,11 @@ def classify(name: str, store: Any) -> str:
         return "no_row"
     try:
         payload = store.download_reference_wav(storage_path)
-    except Exception:
-        return "missing_object"
+    except Exception as exc:
+        response = getattr(exc, "response", None)
+        if getattr(response, "status_code", None) == 404:
+            return "missing_object"
+        raise
     if not payload:
         return "missing_object"
     return "present"

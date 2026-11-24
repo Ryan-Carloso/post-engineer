@@ -16,7 +16,9 @@ Chatterbox Nano is loaded only for those jobs. The container requests
 
 The secret ``cpu-worker`` must define ``SUPABASE_URL``,
 ``SUPABASE_SERVICE_ROLE_KEY``, ``R2_ACCOUNT_ID``, ``R2_ACCESS_KEY_ID``,
-``R2_SECRET_ACCESS_KEY``, and ``CHATTERBOX_HTTP_SECRET``.
+``R2_SECRET_ACCESS_KEY``, ``CHATTERBOX_HTTP_SECRET``, and ``HF_TOKEN``.
+``HF_TOKEN`` is required for the gated Chatterbox Nano download at
+clone-job runtime: the image pre-downloads only the house voices.
 
 The VPS engine needs ``MODAL_TOKEN_ID`` and ``MODAL_TOKEN_SECRET``.
 ``MPT_CPU_WORKER_APP_NAME`` is optional and defaults to

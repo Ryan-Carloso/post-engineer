@@ -101,8 +101,18 @@ def is_clone_voice(params: Any) -> bool:
 
 
 def should_dispatch(params: Any, stop_at: str) -> bool:
-    """True for every faceless render, including clone voices."""
+    """True for every faceless render, including clone voices.
+
+    A faceless job with a custom audio file stays on the VPS: the file
+    lives in the task directory or ``local_videos`` there, and the worker
+    image cannot see it.
+    """
     if stop_at != "video":
+        return False
+    custom_audio = getattr(params, "custom_audio_file", None)
+    if not custom_audio and isinstance(params, dict):
+        custom_audio = params.get("custom_audio_file")
+    if custom_audio:
         return False
     return _video_type(params) == "faceless"
 

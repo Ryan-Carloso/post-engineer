@@ -430,6 +430,7 @@ def test_worker_entrypoint_scales_to_zero_and_skips_boot() -> None:
     assert "def register_clone" not in modal_source
     assert "cpu-worker-voices" not in modal_source
     assert 'Secret.from_name("cpu-worker")' in modal_source
+    assert "HF_TOKEN" in modal_source
     assert "reconcile_orphaned_tasks" not in modal_source
     assert "reconcile_orphaned_tasks" not in run_source
     assert "asgi" not in run_source
@@ -624,3 +625,23 @@ def test_resume_call_id_write_failure_cancels_and_continues(
     )
     assert started == 1
     assert cancelled == ["fc-first"]
+
+
+def test_custom_audio_file_stays_on_the_vps() -> None:
+    assert (
+        dispatch.should_dispatch(
+            _faceless(custom_audio_file="narration.mp3"), "video"
+        )
+        is False
+    )
+    assert (
+        dispatch.should_dispatch(_faceless(custom_audio_file=""), "video")
+        is True
+    )
+    request = TaskVideoRequest(
+        video_type="faceless",
+        video_title="t",
+        video_description="d",
+        custom_audio_file="narration.mp3",
+    )
+    assert dispatch.should_dispatch(request, "video") is False
