@@ -108,13 +108,13 @@ def run_one(task_id: str, params: dict[str, Any], stop_at: str = "video") -> Non
 
     from app.services.cloned_voices.materialize import materialize_clone
 
-    materialize_clone(params, Path(os.environ["TTS_VOICES_DIR"]))
-    start_local_tts()
     from app.models.schema import TaskVideoRequest
     from app.services.task import start
 
     request = TaskVideoRequest.model_validate(params)
     try:
+        materialize_clone(params, Path(os.environ["TTS_VOICES_DIR"]))
+        start_local_tts()
         start(task_id, request, stop_at=stop_at)
     except Exception as exc:
         _fail_if_open(task_id, exc)

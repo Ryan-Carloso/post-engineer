@@ -186,6 +186,39 @@ def test_batch_on_accepted_runs_only_after_a_successful_spawn() -> None:
     assert ran == ["x"]
 
 
+def test_batch_spawn_failure_keeps_the_row_writable_for_the_local_fallback() -> None:
+    state = MemoryState()
+    state.update_task("task-1", state=3, progress=0)
+
+    def boom(task_id: str, params: dict[str, object], stop_at: str) -> str:
+        raise RuntimeError("modal down")
+
+    spawned, accepted = dispatch.try_remote_batch(
+        state, "task-1", _faceless(), "user-1", {}, spawn=boom
+    )
+    assert spawned is False
+    assert accepted is False
+    saved = state.get_task("task-1")
+    assert saved is not None
+    assert saved.get("remote_worker") == ""
+    assert saved.get("remote_call_id") == ""
+    assert saved.get("job_params") is None
+    state.update_task("task-1", state=3, progress=0)
+    assert state.get_task("task-1") is not None
+
+    def spawn(task_id: str, params: dict[str, object], stop_at: str) -> str:
+        return "fc-1"
+
+    spawned, accepted = dispatch.try_remote_batch(
+        state, "task-1", _faceless(), "user-1", {}, spawn=spawn
+    )
+    assert spawned is True
+    assert accepted is False
+    retried = state.get_task("task-1")
+    assert retried is not None
+    assert retried.get("remote_call_id") == "fc-1"
+
+
 def test_thirty_faceless_jobs_spawn_without_a_local_queue() -> None:
     state = MemoryState()
     seen: list[str] = []

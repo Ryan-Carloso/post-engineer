@@ -25,6 +25,17 @@ def test_configured_max_containers_rejects_a_non_integer(
         dispatch.configured_max_containers()
 
 
+def test_configured_max_containers_accepts_surrounding_whitespace(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(dispatch.MAX_CONTAINERS_ENV, " 40 ")
+    assert dispatch.configured_max_containers() == 40
+    monkeypatch.setenv(dispatch.MAX_CONTAINERS_ENV, " 30 ")
+    assert dispatch.configured_max_containers() == 30
+    monkeypatch.setenv(dispatch.MAX_CONTAINERS_ENV, "   ")
+    assert dispatch.configured_max_containers() == 30
+
+
 def test_voice_names_reads_a_persona_voice_id_from_a_dict() -> None:
     params = {"persona": {"voice_id": "chatterbox_nano:key-1"}}
     assert dispatch._voice_names(params) == ["chatterbox_nano:key-1"]

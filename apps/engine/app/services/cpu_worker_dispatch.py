@@ -45,7 +45,10 @@ def worker_app_name() -> str:
 def configured_max_containers() -> int:
     """Ceiling on concurrent CPU containers. Default 30. Never a warm pool."""
     raw = os.environ.get(MAX_CONTAINERS_ENV)
-    if raw is None or raw.strip() == "":
+    if raw is None:
+        return DEFAULT_MAX_CONTAINERS
+    raw = raw.strip()
+    if raw == "":
         return DEFAULT_MAX_CONTAINERS
     if not raw.isdecimal():
         raise RuntimeError(
@@ -279,9 +282,6 @@ def try_remote_batch(
             f"modal cpu spawn failed for {task_id}: {type(exc).__name__}"
         )
         _clear_remote(state, task_id)
-        delete = getattr(state, "delete_task", None)
-        if delete is not None:
-            delete(task_id)
         return False, False
     state.update_task(task_id, remote_call_id=call_id)
     accepted = False

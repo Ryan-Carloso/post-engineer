@@ -81,15 +81,21 @@ class BatchGenerator:
         from app.controllers.v1.video import task_manager
         from app.services.cpu_worker_dispatch import configured_max_containers
 
-        budget = max(free_running_slots(task_manager), configured_max_containers())
+        local_budget = free_running_slots(task_manager)
+        budget = max(local_budget, configured_max_containers())
         enqueued = 0
         enqueued_titles: list[str] = []
 
         for slot in read_pending_slots(self.store, now, budget):
+            faceless = slot.get("video_type") == "faceless"
+            if not faceless and local_budget <= 0:
+                continue
             label = self._generate_slot(slot)
             if label is not None:
                 enqueued += 1
                 enqueued_titles.append(label)
+                if not faceless:
+                    local_budget -= 1
 
         if enqueued:
             notify_safe(self.notify, notify_module.generation_batch_msg(enqueued, enqueued_titles))

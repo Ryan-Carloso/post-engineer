@@ -272,3 +272,53 @@ def test_run_one_marks_the_task_failed_and_re_raises(
     assert len(failed) == 1
     assert failed[0][0] == "task-1"
     assert isinstance(failed[0][1], RuntimeError)
+
+
+def test_run_one_marks_the_task_failed_when_clone_materialization_fails(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _env(monkeypatch, tmp_path)
+    monkeypatch.setattr(run, "prepare_worker_env", lambda: None)
+    monkeypatch.setattr(run, "start_local_tts", lambda: None)
+
+    def _boom(params: dict[str, Any], voices_dir: Path) -> None:
+        raise RuntimeError("clone missing")
+
+    monkeypatch.setattr(
+        "app.services.cloned_voices.materialize.materialize_clone",
+        _boom,
+    )
+    failed: list[tuple[str, BaseException]] = []
+    monkeypatch.setattr(
+        run, "_fail_if_open", lambda task_id, exc: failed.append((task_id, exc))
+    )
+    with pytest.raises(RuntimeError, match="clone missing"):
+        run.run_one("task-1", _params())
+    assert len(failed) == 1
+    assert failed[0][0] == "task-1"
+    assert isinstance(failed[0][1], RuntimeError)
+
+
+def test_run_one_marks_the_task_failed_when_tts_startup_fails(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _env(monkeypatch, tmp_path)
+    monkeypatch.setattr(run, "prepare_worker_env", lambda: None)
+    monkeypatch.setattr(
+        "app.services.cloned_voices.materialize.materialize_clone",
+        lambda params, voices_dir: None,
+    )
+
+    def _boom() -> None:
+        raise RuntimeError("tts unhealthy")
+
+    monkeypatch.setattr(run, "start_local_tts", _boom)
+    failed: list[tuple[str, BaseException]] = []
+    monkeypatch.setattr(
+        run, "_fail_if_open", lambda task_id, exc: failed.append((task_id, exc))
+    )
+    with pytest.raises(RuntimeError, match="tts unhealthy"):
+        run.run_one("task-1", _params())
+    assert len(failed) == 1
+    assert failed[0][0] == "task-1"
+    assert isinstance(failed[0][1], RuntimeError)

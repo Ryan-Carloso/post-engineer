@@ -235,6 +235,53 @@ class BatchDispatchCapTests(unittest.TestCase):
         self.assertEqual(statuses["slot-1"], SLOT_GENERATING)
         self.assertEqual(statuses["slot-2"], SLOT_PENDING)
 
+    def test_run_skips_non_faceless_slots_once_the_local_budget_is_spent(self):
+        manager = InMemoryTaskManager(max_concurrent_tasks=2, max_queued_tasks=10)
+        slots = [_slot(index) for index in range(7)]
+        for slot in slots[:5]:
+            slot["video_type"] = "full_lipsync"
+        store = _MemorySlots(slots)
+        generator = self._generator(store, manager)
+        attempted: list[str] = []
+
+        def _attempt(slot: dict) -> str:
+            attempted.append(slot["id"])
+            return f"label-{slot['id']}"
+
+        generator._generate_slot = MagicMock(side_effect=_attempt)
+
+        admitted = generator.run(NOW)
+
+        self.assertEqual(attempted, ["slot-0", "slot-1", "slot-5", "slot-6"])
+        self.assertEqual(admitted, 4)
+
+    def test_run_still_attempts_faceless_slots_when_no_local_slot_is_free(self):
+        manager = InMemoryTaskManager(max_concurrent_tasks=1, max_queued_tasks=10)
+        held = threading.Event()
+
+        def hold() -> None:
+            held.wait(5)
+
+        manager.add_task(hold)
+        self.addCleanup(held.set)
+        slots = [_slot(index) for index in range(3)]
+        for slot in slots[:2]:
+            slot["video_type"] = "full_lipsync"
+        store = _MemorySlots(slots)
+        generator = self._generator(store, manager)
+        attempted: list[str] = []
+
+        def _attempt(slot: dict) -> str:
+            attempted.append(slot["id"])
+            return f"label-{slot['id']}"
+
+        generator._generate_slot = MagicMock(side_effect=_attempt)
+
+        admitted = generator.run(NOW)
+
+        self.assertEqual(attempted, ["slot-2"])
+        self.assertEqual(admitted, 1)
+
     def test_later_tick_after_completions_admits_more_without_double_dispatch(self):
         concurrent = 2
         pending = 5
@@ -360,9 +407,14 @@ class BatchDispatchCapTests(unittest.TestCase):
         self.assertTrue(all(status == SLOT_PENDING for status in _statuses(store).values()))
         self.assertEqual(store.refund_batch_calls, [])
         for slot in store.slots.values():
-            self.assertIsNone(state.get_task(new_task_id(slot)))
+            row = state.get_task(new_task_id(slot))
+            self.assertIsNotNone(row)
+            assert row is not None
+            self.assertEqual(row.get("remote_worker"), "")
+            self.assertEqual(row.get("remote_call_id"), "")
+            self.assertIsNone(row.get("job_params"))
 
-    def test_rejected_admission_leaves_no_task_row_for_boot_triage(self):
+    def test_rejected_admission_leaves_an_inert_row_boot_triage_claims(self):
         manager = InMemoryTaskManager(max_concurrent_tasks=1, max_queued_tasks=0)
         manager.current_tasks = 1
         store = _MemorySlots([_slot(0)])
@@ -378,13 +430,18 @@ class BatchDispatchCapTests(unittest.TestCase):
         self.assertEqual(_statuses(store)["slot-0"], SLOT_PENDING)
         self.assertEqual(store.refund_batch_calls, [])
         task_id = new_task_id(store.slots["slot-0"])
-        self.assertIsNone(state.get_task(task_id))
+        row = state.get_task(task_id)
+        self.assertIsNotNone(row)
+        assert row is not None
+        self.assertEqual(row.get("remote_worker"), "")
+        self.assertEqual(row.get("remote_call_id"), "")
+        self.assertIsNone(row.get("job_params"))
 
         failed = _boot_triage(state, store)
         self.assertEqual(failed, [])
         self.assertEqual(store.refund_batch_calls, [])
         self.assertEqual(_statuses(store)["slot-0"], SLOT_PENDING)
-        self.assertIsNone(state.get_task(task_id))
+        self.assertIsNotNone(state.get_task(task_id))
 
     def test_task_row_write_failure_does_not_hold_a_running_slot(self):
         manager = InMemoryTaskManager(max_concurrent_tasks=1, max_queued_tasks=5)
