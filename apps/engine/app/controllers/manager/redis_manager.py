@@ -5,10 +5,10 @@ import redis
 
 from app.controllers.manager.base_manager import TaskManager
 from app.models.schema import VideoParams
-from app.services import task as tm
+from app.services import remote_dispatch
 
 FUNC_MAP = {
-    "start": tm.start,
+    "start": remote_dispatch.start,
 }
 
 

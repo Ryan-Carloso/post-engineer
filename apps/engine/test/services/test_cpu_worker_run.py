@@ -207,7 +207,7 @@ def test_const_helpers_return_the_task_states() -> None:
 
 def _params() -> dict[str, str]:
     return {
-        "video_type": "faceless",
+        "video_type": "voiceover",
         "voice_name": "chatterbox:kokoro_af_heart",
         "video_title": "t",
         "video_description": "d",
@@ -244,7 +244,7 @@ def test_run_one_renders_through_the_shared_pipeline(
     assert materialized == [(params, tmp_path)]
     assert len(started) == 1
     assert started[0][0] == "task-1"
-    assert started[0][1].video_type.value == "faceless"
+    assert started[0][1].video_type.value == "voiceover"
     assert started[0][2] == "video"
 
 
@@ -396,7 +396,7 @@ def test_run_one_marks_the_task_failed_when_validation_fails(
         run, "_fail_if_open", lambda task_id, exc: failed.append((task_id, exc))
     )
     with pytest.raises(ValidationError):
-        run.run_one("task-1", {"video_type": "faceless"})
+        run.run_one("task-1", {"video_type": "voiceover"})
     assert len(failed) == 1
     assert failed[0][0] == "task-1"
     assert isinstance(failed[0][1], ValidationError)

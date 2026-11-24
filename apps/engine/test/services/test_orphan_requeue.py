@@ -179,6 +179,47 @@ class TriageOrphanTests(unittest.TestCase):
         state.update_task.assert_not_called()
 
 
+class TriageLiveModalCallTests(unittest.TestCase):
+    def test_a_live_modal_call_is_adopted_before_any_requeue(self):
+        state = MagicMock()
+        store = MagicMock()
+        store.get_slot.return_value = {"id": "slot-1", "status": "generating"}
+        with patch("app.services.remote_dispatch.call_is_live", return_value=True), \
+                patch("app.services.remote_dispatch.threading.Thread") as thread, \
+                patch.object(orphan_requeue, "track_event"):
+            claimed = orphan_requeue.triage_orphan(
+                state, "t-1", _task_data(modal_call_id="fc-1"), store
+            )
+        self.assertTrue(claimed)
+        store.update_slot.assert_not_called()
+        state.update_task.assert_not_called()
+        thread.return_value.start.assert_called_once_with()
+
+    def test_an_ended_modal_call_falls_through_to_the_requeue(self):
+        state = MagicMock()
+        store = MagicMock()
+        store.get_slot.return_value = {"id": "slot-1", "status": "generating"}
+        with patch("app.services.remote_dispatch.call_is_live", return_value=False), \
+                patch.object(orphan_requeue, "track_event"):
+            claimed = orphan_requeue.triage_orphan(
+                state, "t-1", _task_data(modal_call_id="fc-1"), store
+            )
+        self.assertTrue(claimed)
+        store.update_slot.assert_called_once_with("slot-1", status="pending")
+
+    def test_a_live_cpu_worker_call_is_claimed_before_any_requeue(self):
+        state = MagicMock()
+        store = MagicMock()
+        store.get_slot.return_value = {"id": "slot-1", "status": "pending"}
+        data = _task_data(remote_worker="modal_cpu", remote_call_id="cpu-1")
+        with patch("app.services.cpu_worker_dispatch.modal_call_status", return_value="running"), \
+                patch.object(orphan_requeue, "track_event"):
+            claimed = orphan_requeue.triage_orphan(state, "t-1", data, store)
+        self.assertTrue(claimed)
+        store.update_slot.assert_called_once_with("slot-1", status="generating", task_id="t-1")
+        state.update_task.assert_not_called()
+
+
 class TriageRequeueStageGateTests(unittest.TestCase):
     def _slot_store(self, slot):
         store = MagicMock()

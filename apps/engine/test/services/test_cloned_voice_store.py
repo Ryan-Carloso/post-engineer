@@ -251,3 +251,29 @@ class ClonedVoiceStoreTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ReadyByEngineVoiceKeyTest(unittest.TestCase):
+    def _store(self, rows: list) -> tuple[ClonedVoiceStore, MagicMock]:
+        requests = MagicMock()
+        response = MagicMock()
+        response.raise_for_status = MagicMock()
+        response.json.return_value = rows
+        requests.request.return_value = response
+        store = ClonedVoiceStore(
+            url="https://supabase.example", service_key="service-key", requests_module=requests
+        )
+        return store, requests
+
+    def test_filters_ready_rows_by_engine_voice_key(self) -> None:
+        store, requests = self._store([{"storage_path": "u/cloned-voices/c/reference.wav", "language": "pt", "engine_voice_key": "uabc_def"}])
+        row = store.get_ready_by_engine_voice_key("uabc_def")
+        self.assertEqual(row, {"storage_path": "u/cloned-voices/c/reference.wav", "language": "pt", "engine_voice_key": "uabc_def"})
+        params = requests.request.call_args.kwargs["params"]
+        self.assertEqual(params["engine_voice_key"], "eq.uabc_def")
+        self.assertEqual(params["status"], "eq.ready")
+        self.assertEqual(params["select"], "storage_path,language,engine_voice_key")
+
+    def test_returns_none_without_a_ready_row(self) -> None:
+        store, _requests = self._store([])
+        self.assertIsNone(store.get_ready_by_engine_voice_key("uabc_def"))

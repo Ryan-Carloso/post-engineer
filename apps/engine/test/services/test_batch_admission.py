@@ -241,7 +241,7 @@ class BatchDispatchCapTests(unittest.TestCase):
         self.assertEqual(statuses["slot-1"], SLOT_GENERATING)
         self.assertEqual(statuses["slot-2"], SLOT_PENDING)
 
-    def test_run_skips_non_faceless_slots_once_the_local_budget_is_spent(self):
+    def test_run_skips_non_voiceover_slots_once_the_local_budget_is_spent(self):
         manager = InMemoryTaskManager(max_concurrent_tasks=2, max_queued_tasks=10)
         slots = [_slot(index) for index in range(7)]
         for slot in slots[:5]:
@@ -261,7 +261,7 @@ class BatchDispatchCapTests(unittest.TestCase):
         self.assertEqual(attempted, ["slot-0", "slot-1", "slot-5", "slot-6"])
         self.assertEqual(admitted, 4)
 
-    def test_run_still_attempts_faceless_slots_when_no_local_slot_is_free(self):
+    def test_run_still_attempts_voiceover_slots_when_no_local_slot_is_free(self):
         manager = InMemoryTaskManager(max_concurrent_tasks=1, max_queued_tasks=10)
         held = threading.Event()
 

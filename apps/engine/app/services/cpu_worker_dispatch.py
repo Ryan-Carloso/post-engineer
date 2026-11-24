@@ -1,6 +1,6 @@
 """Dispatch one image-only video onto a Modal CPU container.
 
-Every faceless video, house voice or ``chatterbox_nano:`` clone, is
+Every voiceover video, house voice or ``chatterbox_nano:`` clone, is
 spawned on ``moneyprint-cpu-worker``. Lip-sync stays on the VPS because
 it calls LongCat. A spawn failure falls back to the local thread.
 
@@ -102,9 +102,9 @@ def is_clone_voice(params: Any) -> bool:
 
 
 def should_dispatch(params: Any, stop_at: str) -> bool:
-    """True for every faceless render, including clone voices.
+    """True for every voiceover render, including clone voices.
 
-    A faceless job with a custom audio file stays on the VPS: the file
+    A voiceover job with a custom audio file stays on the VPS: the file
     lives in the task directory or ``local_videos`` there, and the worker
     image cannot see it.
     """
@@ -115,7 +115,7 @@ def should_dispatch(params: Any, stop_at: str) -> bool:
         custom_audio = params.get("custom_audio_file")
     if custom_audio:
         return False
-    return _video_type(params) == "faceless"
+    return _video_type(params) == "voiceover"
 
 
 def job_params_of(body: Any) -> dict[str, Any]:
@@ -242,6 +242,13 @@ def try_remote_dispatch(
     return True, accepted
 
 
+def _remote_pipeline_entry() -> Callable[..., Any]:
+    """Remote-first local fallback: a job the CPU worker does not take still renders in its own container."""
+    from app.services import remote_dispatch
+
+    return remote_dispatch.pipeline_entry()
+
+
 def accept_direct_task(
     task_manager: Any,
     task_id: str,
@@ -252,8 +259,14 @@ def accept_direct_task(
     tracking: dict[str, Any],
     spawn: Spawn | None = None,
     event_tracking: dict[str, Any] | None = None,
+    local_start: Callable[..., Any] | None = None,
 ) -> None:
-    """Queue a direct task locally, or spawn a CPU container."""
+    """Queue a direct task locally, or spawn a CPU container.
+
+    ``local_start`` replaces the local fallback; without it the fallback is
+    the remote pipeline entry, so a job the CPU worker does not take still
+    renders in its own container instead of on the VPS thread.
+    """
     from app.services import state as sm
     from app.services import task as tm
 
@@ -284,7 +297,7 @@ def accept_direct_task(
     if spawned:
         return
     task_manager.add_task(
-        tm.start,
+        local_start if local_start is not None else _remote_pipeline_entry(),
         task_id=task_id,
         params=body,
         stop_at=stop_at,

@@ -1,7 +1,7 @@
 """Dispatch paths the main dispatch suite does not drive.
 
 Covers the config guard, the request-object voice lookup, the real Modal
-spawn, the local fallback for non-faceless jobs, the in-flight guards,
+spawn, the local fallback for non-voiceover jobs, the in-flight guards,
 and every skip branch of the boot resume.
 """
 
@@ -73,7 +73,7 @@ def test_modal_spawn_returns_the_call_object_id(
         modal.Function, "from_name", lambda *args: function
     )
     assert (
-        dispatch._modal_spawn("task-1", {"video_type": "faceless"}, "video")
+        dispatch._modal_spawn("task-1", {"video_type": "voiceover"}, "video")
         == "fc-9"
     )
 
@@ -83,7 +83,7 @@ def test_spawn_rejects_an_empty_call_id() -> None:
         dispatch._spawn("task-1", {}, "video", lambda *args: "")
 
 
-def test_remote_dispatch_skips_a_non_faceless_job() -> None:
+def test_remote_dispatch_skips_a_non_voiceover_job() -> None:
     state = MagicMock()
     body = {"video_type": "hook_lipsync"}
     assert dispatch.try_remote_dispatch(state, "task-1", body, "video") == (
@@ -93,7 +93,7 @@ def test_remote_dispatch_skips_a_non_faceless_job() -> None:
     state.update_task.assert_not_called()
 
 
-def test_accept_direct_task_queues_a_non_faceless_job_locally() -> None:
+def test_accept_direct_task_queues_a_non_voiceover_job_locally() -> None:
     body = {"video_type": "hook_lipsync"}
     added: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
 
@@ -113,9 +113,59 @@ def test_accept_direct_task_queues_a_non_faceless_job_locally() -> None:
     assert kwargs["params"] is body
     assert kwargs["stop_at"] == "video"
     assert callable(kwargs["on_accepted"])
+    assert args[0] is dispatch._remote_pipeline_entry()
 
 
-def test_remote_batch_skips_a_non_faceless_slot() -> None:
+def test_accept_direct_task_defaults_the_local_start_to_the_remote_pipeline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.services import remote_dispatch
+
+    monkeypatch.setattr(
+        remote_dispatch, "app_name", lambda: "post-engineer-cpu-worker"
+    )
+    body = {"video_type": "hook_lipsync"}
+    added: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
+
+    class _Manager:
+        def add_task(self, *args: Any, **kwargs: Any) -> None:
+            added.append((args, kwargs))
+
+    try:
+        dispatch.accept_direct_task(
+            _Manager(), "task-default-start", body, "video", "user-1", {}, {}
+        )
+    finally:
+        sm.state.delete_task("task-default-start")
+    assert len(added) == 1
+    args, _kwargs = added[0]
+    assert args[0] is remote_dispatch.start
+
+
+def test_accept_direct_task_uses_the_given_local_start() -> None:
+    body = {"video_type": "hook_lipsync"}
+    added: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
+
+    class _Manager:
+        def add_task(self, *args: Any, **kwargs: Any) -> None:
+            added.append((args, kwargs))
+
+    def _local_start(*args: Any, **kwargs: Any) -> None:
+        raise AssertionError("the fake manager never runs the start function")
+
+    try:
+        dispatch.accept_direct_task(
+            _Manager(), "task-local-start", body, "video", "user-1", {}, {},
+            local_start=_local_start,
+        )
+    finally:
+        sm.state.delete_task("task-local-start")
+    assert len(added) == 1
+    args, _kwargs = added[0]
+    assert args[0] is _local_start
+
+
+def test_remote_batch_skips_a_non_voiceover_slot() -> None:
     state = MagicMock()
     request = {"video_type": "hook_lipsync"}
     assert dispatch.try_remote_batch(state, "task-1", request, "user-1", {}) == (
@@ -170,7 +220,7 @@ def test_resume_skips_unusable_rows_and_reports_a_spawn_failure() -> None:
             "data": {
                 "remote_worker": dispatch.REMOTE_WORKER_VALUE,
                 "remote_call_id": "",
-                "job_params": {"video_type": "faceless"},
+                "job_params": {"video_type": "voiceover"},
             },
         },
         {
@@ -178,7 +228,7 @@ def test_resume_skips_unusable_rows_and_reports_a_spawn_failure() -> None:
             "data": {
                 "remote_worker": dispatch.REMOTE_WORKER_VALUE,
                 "remote_call_id": "",
-                "job_params": {"video_type": "faceless"},
+                "job_params": {"video_type": "voiceover"},
             },
         },
     ]

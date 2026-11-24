@@ -11,7 +11,7 @@ from loguru import logger
 from app.models.schema import LipSyncQuality, TaskVideoRequest
 from app.models import const as model_const
 from app.services import notify as notify_module
-from app.services import task as tm
+from app.services import remote_dispatch, task as tm
 from app.services.analytics import nonempty_error_reason, scrub_secret_values, subtitle_event_props, track_event
 from app.services.fill_schedule.batch_admission import (
     SlotDeferred,
@@ -89,14 +89,14 @@ class BatchGenerator:
         enqueued_titles: list[str] = []
 
         for slot in read_pending_slots(self.store, now, budget):
-            faceless = slot.get("video_type") == "faceless"
-            if not faceless and local_budget <= 0:
+            voiceover = slot.get("video_type") == "voiceover"
+            if not voiceover and local_budget <= 0:
                 continue
             label = self._generate_slot(slot)
             if label is not None:
                 enqueued += 1
                 enqueued_titles.append(label)
-                if not faceless:
+                if not voiceover:
                     local_budget -= 1
 
         if enqueued:
@@ -300,13 +300,13 @@ class BatchGenerator:
     ) -> None:
         """Start one due slot on a free running slot of the shared manager.
 
-        A faceless slot first tries the Modal CPU worker, which writes the
+        A voiceover slot first tries the Modal CPU worker, which writes the
         task row with the remote marker before spawning; a spawn failure
         clears the marker and falls through to the local path, which writes
         the row again. Otherwise reserve the running slot first: the task
         row is written only after that reservation, outside the manager
         lock. ``SlotDeferred`` means no running slot was free: the caller
-        leaves the slot pending. After a faceless spawn failure the marker
+        leaves the slot pending. After a voiceover spawn failure the marker
         row written by ``try_remote_batch`` remains (PROCESSING, marker
         cleared) and is claimed by boot triage; only the local-reservation
         path is guaranteed row-free. A write that raises releases the
@@ -359,7 +359,7 @@ class BatchGenerator:
 
         submit_batch_start(
             task_manager,
-            tm.start,
+            remote_dispatch.pipeline_entry(),
             task_id=task_id,
             params=request,
             on_accepted=on_accepted,

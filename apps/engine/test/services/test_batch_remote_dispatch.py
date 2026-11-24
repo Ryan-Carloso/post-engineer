@@ -1,6 +1,6 @@
 """Batch dispatch through the Modal CPU worker.
 
-A faceless slot that spawns returns before touching the local task
+A voiceover slot that spawns returns before touching the local task
 manager; an acceptance reported without a spawn still runs the local
 path, but the acceptance callback is not run a second time.
 """
@@ -30,7 +30,7 @@ class BatchRemoteDispatchTests(unittest.TestCase):
 
     def _request(self):
         return TaskVideoRequest(
-            video_type="faceless",
+            video_type="voiceover",
             video_title="Batch topic one",
             video_description="Batch description.",
         )

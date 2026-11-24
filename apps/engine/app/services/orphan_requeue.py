@@ -2,8 +2,11 @@
 
 Historically ``SupabaseTaskState.reconcile_orphaned_tasks`` failed every
 non-terminal orphan and refunded its token. That is correct for genuinely
-dead work, but two cases can recover by themselves:
+dead work, but three cases can recover by themselves:
 
+- a row naming a Modal call that is still running is adopted and watched,
+  so the render is neither repeated nor refunded; an ended call falls
+  through to the cases below;
 - an orphan in a generation stage that belongs to a batch slot: the slot
   goes back to ``pending`` and the next fill-schedule tick re-dispatches it.
   Batch slots are prepaid at schedule creation, so no billing change;
@@ -132,9 +135,14 @@ def triage_orphan(
 
     Returns True when the orphan was claimed and the caller must NOT
     fail+refund it: the slot was requeued for the tick or a direct
-    generation was marked for restart. Returns False when the caller
+    generation was marked for restart, or its Modal worker is still
+    running and was adopted. Returns False when the caller
     falls through to the historical fail+refund.
     """
+    from app.services.remote_dispatch import adopt_live_call
+
+    if adopt_live_call(task_id, data):
+        return True
     from app.services.cpu_worker_dispatch import remote_worker_in_flight
 
     if remote_worker_in_flight(data):

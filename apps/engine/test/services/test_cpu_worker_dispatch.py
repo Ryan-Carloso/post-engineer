@@ -17,9 +17,9 @@ from app.services.state import MemoryState
 ENGINE = Path(__file__).resolve().parents[2]
 
 
-def _faceless(**overrides: object) -> dict[str, object]:
+def _voiceover(**overrides: object) -> dict[str, object]:
     payload: dict[str, object] = {
-        "video_type": "faceless",
+        "video_type": "voiceover",
         "voice_name": "chatterbox:kokoro_af_heart",
         "video_title": "t",
         "video_description": "d",
@@ -28,30 +28,30 @@ def _faceless(**overrides: object) -> dict[str, object]:
     return payload
 
 
-def test_faceless_dispatches_without_a_feature_flag() -> None:
-    assert dispatch.should_dispatch(_faceless(), "video") is True
+def test_voiceover_dispatches_without_a_feature_flag() -> None:
+    assert dispatch.should_dispatch(_voiceover(), "video") is True
 
 
-def test_faceless_house_voice_dispatches(
+def test_voiceover_house_voice_dispatches(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    assert dispatch.should_dispatch(_faceless(), "video") is True
+    assert dispatch.should_dispatch(_voiceover(), "video") is True
     assert dispatch.should_dispatch(
-        _faceless(persona={"voice_id": "chatterbox:kokoro_af_heart"}, voice_name=""),
+        _voiceover(persona={"voice_id": "chatterbox:kokoro_af_heart"}, voice_name=""),
         "video",
     ) is True
 
 
 def test_clone_dispatches_and_lipsync_stays_on_the_vps() -> None:
     assert dispatch.should_dispatch(
-        _faceless(voice_name=f"{dispatch.CLONE_PREFIX}mine"), "video"
+        _voiceover(voice_name=f"{dispatch.CLONE_PREFIX}mine"), "video"
     ) is True
     assert dispatch.should_dispatch(
-        _faceless(persona={"voice_id": f"{dispatch.CLONE_PREFIX}mine"}), "video"
+        _voiceover(persona={"voice_id": f"{dispatch.CLONE_PREFIX}mine"}), "video"
     ) is True
-    assert dispatch.should_dispatch(_faceless(video_type="hook_lipsync"), "video") is False
-    assert dispatch.should_dispatch(_faceless(video_type="full_lipsync"), "video") is False
-    assert dispatch.should_dispatch(_faceless(), "audio") is False
+    assert dispatch.should_dispatch(_voiceover(video_type="hook_lipsync"), "video") is False
+    assert dispatch.should_dispatch(_voiceover(video_type="full_lipsync"), "video") is False
+    assert dispatch.should_dispatch(_voiceover(), "audio") is False
 
 
 def test_clone_prefix_matches_the_registry_constant() -> None:
@@ -85,12 +85,12 @@ def test_spawn_records_the_call_id_and_a_failure_clears_the_marker() -> None:
 
     def spawn(task_id: str, params: dict[str, object], stop_at: str) -> str:
         assert task_id == "task-1"
-        assert params["video_type"] == "faceless"
+        assert params["video_type"] == "voiceover"
         assert stop_at == "video"
         return "fc-1"
 
     spawned, accepted = dispatch.try_remote_dispatch(
-        state, "task-1", _faceless(), "video", spawn=spawn
+        state, "task-1", _voiceover(), "video", spawn=spawn
     )
     assert spawned is True
     assert accepted is False
@@ -103,7 +103,7 @@ def test_spawn_records_the_call_id_and_a_failure_clears_the_marker() -> None:
         raise RuntimeError("modal down")
 
     spawned, _accepted = dispatch.try_remote_dispatch(
-        state, "task-1", _faceless(), "video", spawn=boom
+        state, "task-1", _voiceover(), "video", spawn=boom
     )
     assert spawned is False
     cleared = state.get_task("task-1")
@@ -123,7 +123,7 @@ def test_on_accepted_runs_only_after_a_successful_spawn() -> None:
     spawned, accepted = dispatch.try_remote_dispatch(
         state,
         "task-1",
-        _faceless(),
+        _voiceover(),
         "video",
         on_accepted=lambda: ran.append("x"),
         spawn=boom,
@@ -138,7 +138,7 @@ def test_on_accepted_runs_only_after_a_successful_spawn() -> None:
     spawned, accepted = dispatch.try_remote_dispatch(
         state,
         "task-1",
-        _faceless(),
+        _voiceover(),
         "video",
         on_accepted=lambda: ran.append("x"),
         spawn=spawn,
@@ -159,7 +159,7 @@ def test_batch_on_accepted_runs_only_after_a_successful_spawn() -> None:
     spawned, accepted = dispatch.try_remote_batch(
         state,
         "task-1",
-        _faceless(),
+        _voiceover(),
         "user-1",
         {},
         on_accepted=lambda: ran.append("x"),
@@ -175,7 +175,7 @@ def test_batch_on_accepted_runs_only_after_a_successful_spawn() -> None:
     spawned, accepted = dispatch.try_remote_batch(
         state,
         "task-1",
-        _faceless(),
+        _voiceover(),
         "user-1",
         {},
         on_accepted=lambda: ran.append("x"),
@@ -194,7 +194,7 @@ def test_batch_spawn_failure_keeps_the_row_writable_for_the_local_fallback() -> 
         raise RuntimeError("modal down")
 
     spawned, accepted = dispatch.try_remote_batch(
-        state, "task-1", _faceless(), "user-1", {}, spawn=boom
+        state, "task-1", _voiceover(), "user-1", {}, spawn=boom
     )
     assert spawned is False
     assert accepted is False
@@ -210,7 +210,7 @@ def test_batch_spawn_failure_keeps_the_row_writable_for_the_local_fallback() -> 
         return "fc-1"
 
     spawned, accepted = dispatch.try_remote_batch(
-        state, "task-1", _faceless(), "user-1", {}, spawn=spawn
+        state, "task-1", _voiceover(), "user-1", {}, spawn=spawn
     )
     assert spawned is True
     assert accepted is False
@@ -219,7 +219,7 @@ def test_batch_spawn_failure_keeps_the_row_writable_for_the_local_fallback() -> 
     assert retried.get("remote_call_id") == "fc-1"
 
 
-def test_thirty_faceless_jobs_spawn_without_a_local_queue() -> None:
+def test_thirty_voiceover_jobs_spawn_without_a_local_queue() -> None:
     state = MemoryState()
     seen: list[str] = []
 
@@ -229,7 +229,7 @@ def test_thirty_faceless_jobs_spawn_without_a_local_queue() -> None:
 
     for index in range(30):
         spawned, _accepted = dispatch.try_remote_dispatch(
-            state, f"task-{index}", _faceless(), "video", spawn=spawn
+            state, f"task-{index}", _voiceover(), "video", spawn=spawn
         )
         assert spawned is True
     assert seen == [f"task-{index}" for index in range(30)]
@@ -247,7 +247,7 @@ def test_direct_create_uses_modal_when_the_flag_is_on(
     body = TaskVideoRequest(
         video_title="subject",
         video_description="Test description.",
-        video_type="faceless",
+        video_type="voiceover",
         voice_name="chatterbox:kokoro_af_heart",
         video_script="script",
     )
@@ -286,7 +286,7 @@ def test_clone_create_goes_to_modal(monkeypatch: pytest.MonkeyPatch) -> None:
     body = TaskVideoRequest(
         video_title="subject",
         video_description="Test description.",
-        video_type="faceless",
+        video_type="voiceover",
         voice_name=f"{dispatch.CLONE_PREFIX}mine",
         video_script="script",
     )
@@ -358,7 +358,7 @@ def test_resume_spawns_only_rows_that_never_got_a_call_id() -> None:
             "data": {
                 "remote_worker": dispatch.REMOTE_WORKER_VALUE,
                 "remote_call_id": "",
-                "job_params": _faceless(),
+                "job_params": _voiceover(),
                 "pipeline": "video",
             },
         },
@@ -367,7 +367,7 @@ def test_resume_spawns_only_rows_that_never_got_a_call_id() -> None:
             "data": {
                 "remote_worker": dispatch.REMOTE_WORKER_VALUE,
                 "remote_call_id": "fc-keep",
-                "job_params": _faceless(),
+                "job_params": _voiceover(),
             },
         },
     ]
@@ -401,7 +401,7 @@ def test_resume_spawn_failure_clears_the_remote_marker() -> None:
             "data": {
                 "remote_worker": dispatch.REMOTE_WORKER_VALUE,
                 "remote_call_id": "",
-                "job_params": _faceless(),
+                "job_params": _voiceover(),
                 "pipeline": "video",
             },
         },
@@ -410,7 +410,7 @@ def test_resume_spawn_failure_clears_the_remote_marker() -> None:
             "data": {
                 "remote_worker": dispatch.REMOTE_WORKER_VALUE,
                 "remote_call_id": "",
-                "job_params": _faceless(),
+                "job_params": _voiceover(),
                 "pipeline": "video",
             },
         },
@@ -570,7 +570,7 @@ def test_call_id_write_failure_cancels_the_call_and_falls_back_locally(
     spawned, accepted = dispatch.try_remote_dispatch(
         state,
         "task-1",
-        _faceless(),
+        _voiceover(),
         "video",
         spawn=lambda task_id, params, stop_at: "fc-1",
     )
@@ -597,7 +597,7 @@ def test_batch_call_id_write_failure_cancels_the_call_and_falls_back_locally(
     spawned, accepted = dispatch.try_remote_batch(
         state,
         "task-1",
-        _faceless(),
+        _voiceover(),
         "user-1",
         {},
         spawn=lambda task_id, params, stop_at: "fc-1",
@@ -626,7 +626,7 @@ def test_call_id_write_failure_with_a_failing_cancel_still_falls_back(
     spawned, accepted = dispatch.try_remote_dispatch(
         state,
         "task-1",
-        _faceless(),
+        _voiceover(),
         "video",
         spawn=lambda task_id, params, stop_at: "fc-1",
     )
@@ -644,7 +644,7 @@ def test_resume_call_id_write_failure_cancels_and_continues(
             "data": {
                 "remote_worker": dispatch.REMOTE_WORKER_VALUE,
                 "remote_call_id": "",
-                "job_params": _faceless(),
+                "job_params": _voiceover(),
                 "pipeline": "video",
             },
         },
@@ -653,7 +653,7 @@ def test_resume_call_id_write_failure_cancels_and_continues(
             "data": {
                 "remote_worker": dispatch.REMOTE_WORKER_VALUE,
                 "remote_call_id": "",
-                "job_params": _faceless(),
+                "job_params": _voiceover(),
                 "pipeline": "video",
             },
         },
@@ -683,16 +683,16 @@ def test_resume_call_id_write_failure_cancels_and_continues(
 def test_custom_audio_file_stays_on_the_vps() -> None:
     assert (
         dispatch.should_dispatch(
-            _faceless(custom_audio_file="narration.mp3"), "video"
+            _voiceover(custom_audio_file="narration.mp3"), "video"
         )
         is False
     )
     assert (
-        dispatch.should_dispatch(_faceless(custom_audio_file=""), "video")
+        dispatch.should_dispatch(_voiceover(custom_audio_file=""), "video")
         is True
     )
     request = TaskVideoRequest(
-        video_type="faceless",
+        video_type="voiceover",
         video_title="t",
         video_description="d",
         custom_audio_file="narration.mp3",
@@ -785,7 +785,7 @@ def test_spawn_failure_with_a_failing_clear_still_falls_back_locally(
         raise RuntimeError("modal down")
 
     spawned, accepted = dispatch.try_remote_dispatch(
-        state, "task-1", _faceless(), "video", spawn=boom
+        state, "task-1", _voiceover(), "video", spawn=boom
     )
     assert spawned is False
     assert accepted is False
@@ -804,7 +804,7 @@ def test_resume_skips_a_row_whose_slot_failed(
             "data": {
                 "remote_worker": dispatch.REMOTE_WORKER_VALUE,
                 "remote_call_id": "",
-                "job_params": _faceless(),
+                "job_params": _voiceover(),
                 "pipeline": "video",
                 "slot_id": "slot-failed",
             },
@@ -814,7 +814,7 @@ def test_resume_skips_a_row_whose_slot_failed(
             "data": {
                 "remote_worker": dispatch.REMOTE_WORKER_VALUE,
                 "remote_call_id": "",
-                "job_params": _faceless(),
+                "job_params": _voiceover(),
                 "pipeline": "video",
                 "slot_id": "slot-pending",
             },
@@ -824,7 +824,7 @@ def test_resume_skips_a_row_whose_slot_failed(
             "data": {
                 "remote_worker": dispatch.REMOTE_WORKER_VALUE,
                 "remote_call_id": "",
-                "job_params": _faceless(),
+                "job_params": _voiceover(),
                 "pipeline": "video",
             },
         },

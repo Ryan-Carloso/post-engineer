@@ -169,9 +169,9 @@ def _load_pipeline_start() -> Any:
     module is imported while ``app.services.state`` is still initializing.
     Callers must run only after ``state`` is assigned.
     """
-    from app.services import task as tm
+    from app.services import remote_dispatch
 
-    return tm.start
+    return remote_dispatch.pipeline_entry()
 
 
 def start_pending_direct_redispatches(manager: Any | None = None) -> int:
