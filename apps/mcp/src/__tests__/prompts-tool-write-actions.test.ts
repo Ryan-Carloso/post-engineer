@@ -288,7 +288,7 @@ describe('prompts write actions', () => {
   });
 
   describe('merged tool surface', () => {
-    async function listPromptsTool(): Promise<{ description: string; properties: Record<string, { pattern?: string; maxLength?: number }> }> {
+    async function listPromptsTool(): Promise<{ description: string; properties: Record<string, { description?: string; pattern?: string; maxLength?: number }> }> {
       const api = new PostEngineerClient({ apiKey: 'pe_test', baseUrl: BASE });
       const server = createPostEngineerMcpServer(api, 'stdio');
       const [a, b] = InMemoryTransport.createLinkedPair();
@@ -298,7 +298,7 @@ describe('prompts write actions', () => {
         const { tools } = await client.listTools();
         const tool = tools.find((candidate) => candidate.name === 'prompts');
         if (tool === undefined) throw new Error('prompts tool is not registered');
-        const properties = tool.inputSchema.properties as Record<string, { pattern?: string; maxLength?: number }>;
+        const properties = tool.inputSchema.properties as Record<string, { description?: string; pattern?: string; maxLength?: number }>;
         return { description: tool.description ?? '', properties };
       } finally {
         await client.close();
@@ -309,6 +309,28 @@ describe('prompts write actions', () => {
       const { properties } = await listPromptsTool();
       expect(properties.slug?.pattern).toBe(USER_PROMPT_SLUG_PATTERN.source);
       expect(properties.slug?.maxLength).toBe(64);
+    });
+
+    it('advertises a slug description that fits reads as well as writes', async () => {
+      const { description, properties } = await listPromptsTool();
+      expect(properties.slug?.description).toBe('Prompt slug: lowercase letters, digits, hyphens.');
+      expect(description).toContain('A prompt slug cannot change after creation.');
+    });
+
+    it('advertises a version description that fits versions and restore', async () => {
+      const { properties } = await listPromptsTool();
+      expect(properties.version?.description).toContain('versions reads this version in full');
+      expect(properties.version?.description).toContain('restore makes it the current text');
+      expect(properties.version?.description).toContain('Leave it out to list the versions');
+    });
+
+    it('rejects a malformed get slug before any request, naming the slug pattern', async () => {
+      const { call, seen } = setup({});
+      const result = await call({ action: 'get', slug: 'My Prompt' });
+      expect(result.isError).toBe(true);
+      expect(result.text).toContain('must match pattern');
+      expect(result.text).toContain('at slug');
+      expect(seen).toEqual([]);
     });
 
     it('describes the write actions and no longer names prompt_library', async () => {
