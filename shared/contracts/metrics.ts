@@ -32,6 +32,7 @@ export function isMetricsWindow(value: unknown): value is MetricsWindow {
 
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+const LAST_24H_FILTERS = new Set(['persona', 'account', 'provider']);
 const KNOWN_PARAMS = new Set(['window', 'persona', 'account', 'provider', 'angle']);
 
 export interface MetricsQuery {
@@ -85,6 +86,34 @@ export function parseMetricsQuery(params: URLSearchParams): MetricsParseResult {
   };
 }
 
+export interface Last24hQuery {
+  personaId: string | null;
+  accountId: string | null;
+  provider: SocialProvider | null;
+}
+
+type Last24hParseResult = { ok: true; query: Last24hQuery } | { ok: false; error: string };
+
+export function parseLast24hQuery(params: URLSearchParams): Last24hParseResult {
+  for (const key of params.keys()) {
+    if (!LAST_24H_FILTERS.has(key)) return { ok: false, error: `Unknown parameter: ${key}.` };
+  }
+  const withWindow = new URLSearchParams(params);
+  withWindow.set('window', '24h');
+  const parsed = parseMetricsQuery(withWindow);
+  if (!parsed.ok) return parsed;
+  const { personaId, accountId, provider } = parsed.query;
+  return { ok: true, query: { personaId, accountId, provider } };
+}
+
+export function last24hSearchParams(query: Last24hQuery): URLSearchParams {
+  const params = new URLSearchParams();
+  if (query.personaId !== null) params.set('persona', query.personaId);
+  if (query.accountId !== null) params.set('account', query.accountId);
+  if (query.provider !== null) params.set('provider', query.provider);
+  return params;
+}
+
 export function metricsSearchParams(query: MetricsQuery): URLSearchParams {
   const params = new URLSearchParams({ window: query.window });
   if (query.personaId !== null) params.set('persona', query.personaId);
@@ -114,6 +143,12 @@ export const MetricsQueryParamsSchema = z.strictObject({
   account: z.string().optional(),
   provider: z.string().optional(),
   angle: z.string().optional(),
+});
+
+export const Last24hQueryParamsSchema = z.strictObject({
+  persona: z.string().optional(),
+  account: z.string().optional(),
+  provider: z.string().optional(),
 });
 
 export const RetentionCurveQuerySchema = z.strictObject({
@@ -169,6 +204,44 @@ export const MetricsResponseSchema = z.object({
 });
 export type MetricsResponse = z.infer<typeof MetricsResponseSchema>;
 
+export const LAST_24H_BASELINES = ['reading', 'lifetime'] as const;
+
+export const Last24hRowSchema = z.object({
+  postId: z.string(),
+  personaId: z.string().nullable(),
+  provider: z.enum(SOCIAL_PROVIDERS),
+  accountId: z.string(),
+  externalId: z.string(),
+  publishedAt: z.string(),
+  views: z.number().nullable(),
+  likes: z.number().nullable(),
+  comments: z.number().nullable(),
+  saves: z.number().nullable(),
+  baseline: z.enum(LAST_24H_BASELINES),
+  collectedAt: z.string(),
+  baselineCollectedAt: z.string().nullable(),
+});
+export type Last24hRowView = z.infer<typeof Last24hRowSchema>;
+
+export const Last24hResponseSchema = z.object({
+  success: z.literal(true),
+  rows: z.array(Last24hRowSchema),
+  totals: z.object({
+    views: z.number(),
+    engagement: z.number(),
+    videos: z.number(),
+    measurements: z.number(),
+  }),
+  skipped: z.object({
+    noBaseline: z.number(),
+    stale: z.number(),
+  }),
+  counterResets: z.number(),
+  truncated: z.boolean(),
+  asOf: z.string().nullable(),
+});
+export type Last24hResponse = z.infer<typeof Last24hResponseSchema>;
+
 export const RetentionPointSchema = z.object({
   ratio: z.number(),
   audienceWatchRatio: z.number(),
@@ -197,4 +270,11 @@ export const getRetentionCurve = defineEndpoint({
   path: '/api/metrics/retention-curve',
   query: RetentionCurveQuerySchema,
   response: RetentionCurveResponseSchema,
+});
+
+export const getLast24hMetrics = defineEndpoint({
+  method: 'GET',
+  path: '/api/metrics/last-24h',
+  query: Last24hQueryParamsSchema,
+  response: Last24hResponseSchema,
 });

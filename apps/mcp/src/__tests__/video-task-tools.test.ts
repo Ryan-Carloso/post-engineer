@@ -29,7 +29,7 @@ function parsed(response: McpToolResponse): {
   results: Array<{
     task_id: string | null;
     state: number | null;
-    outcome: 'completed' | 'failed' | 'running';
+    outcome: 'completed' | 'failed' | 'running' | 'queued';
     progress: number | null;
     stage: string | null;
     error: string | null;
@@ -429,5 +429,38 @@ describe('wait_for_video_tasks', () => {
     expect(result.allTerminal).toBe(false);
     expect(result.summary).toBe('Status now: 0 completed, 0 failed, 2 running.');
     expect(result.results.map((entry) => entry.outcome)).toEqual(['running', 'running']);
+  });
+
+  it('keeps polling a queued task until it completes', async () => {
+    const clock = fakeClock();
+    const sleep = vi.fn(clock.sleep);
+    vi.mocked(mockClient.getVideoStatus)
+      .mockResolvedValueOnce(statusBody('task-1', 3, 0, null))
+      .mockResolvedValueOnce(statusBody('task-1', 1, 100, null));
+    const args = WaitForVideoTasksSchema.parse({ taskIds: ['task-1'], waitSeconds: 120 });
+
+    const response = await handleWaitForVideoTasks(mockClient, args, { now: clock.now, sleep });
+
+    const result = parsed(response);
+    expect(mockClient.getVideoStatus).toHaveBeenCalledTimes(2);
+    expect(result.allTerminal).toBe(true);
+    expect(result.results[0]?.outcome).toBe('completed');
+    expect(result.results[0]?.state).toBe(1);
+  });
+
+  it('reports queued tasks distinctly from running ones and keeps polling them', async () => {
+    const clock = fakeClock();
+    const sleep = vi.fn(clock.sleep);
+    vi.mocked(mockClient.getVideoStatus)
+      .mockResolvedValueOnce(statusBody('task-1', 3, 0, null))
+      .mockResolvedValueOnce(statusBody('task-2', 4, 30, 'audio'));
+    const args = WaitForVideoTasksSchema.parse({ taskIds: ['task-1', 'task-2'], waitSeconds: 0 });
+
+    const response = await handleWaitForVideoTasks(mockClient, args, { now: clock.now, sleep });
+
+    const result = parsed(response);
+    expect(result.allTerminal).toBe(false);
+    expect(result.summary).toBe('Status now: 0 completed, 0 failed, 1 queued, 1 running.');
+    expect(result.results.map((entry) => entry.outcome)).toEqual(['queued', 'running']);
   });
 });

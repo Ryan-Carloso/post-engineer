@@ -1,6 +1,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
+
+const { warnMock } = vi.hoisted(() => ({ warnMock: vi.fn() }));
+vi.mock('@/lib/logger', () => ({ logger: { warn: warnMock } }));
+
 import {
+  API_KEY_LAST_USED_TOUCH_INTERVAL_MS,
   generateRawApiKey,
   hashApiKey,
   extractKeyPrefix,
@@ -39,12 +44,12 @@ describe('API Keys Utilities', () => {
     expect(validateApiKeyFormat('pe_live_short')).toBe(false);
   });
 
-  it('resolves active api key to user_id and updates last_used_at', async () => {
+  it('resolves active api key to user_id', async () => {
     const rawKey = 'pe_live_test_valid_key_1234567890abcdef';
     const keyHash = hashApiKey(rawKey);
 
     const mockUpdate = vi.fn().mockReturnValue({
-      eq: vi.fn().mockResolvedValue({ error: null }),
+      eq: vi.fn().mockReturnValue({ or: vi.fn().mockResolvedValue({ error: null }) }),
     });
 
     const mockSupabase = {
@@ -107,7 +112,7 @@ describe('API Keys Utilities', () => {
           }),
         }),
         update: vi.fn().mockReturnValue({
-          eq: vi.fn().mockResolvedValue({ error: null }),
+          eq: vi.fn().mockReturnValue({ or: vi.fn().mockResolvedValue({ error: null }) }),
         }),
       }),
     };
@@ -132,7 +137,7 @@ describe('API Keys Utilities', () => {
           }),
         }),
         update: vi.fn().mockReturnValue({
-          eq: vi.fn().mockResolvedValue({ error: null }),
+          eq: vi.fn().mockReturnValue({ or: vi.fn().mockResolvedValue({ error: null }) }),
         }),
       }),
     };
@@ -161,6 +166,107 @@ describe('API Keys Utilities', () => {
 
     const userId = await resolveApiKey(rawKey, mockSupabase as unknown as SupabaseClient);
     expect(userId).toBeNull();
+  });
+
+  describe('last_used_at touch throttle', () => {
+    const NOW = new Date('2026-11-23T12:00:00.000Z');
+    const RAW_KEY = 'pe_live_touch_key_1234567890abcdef1234';
+
+    interface TouchMock {
+      supabase: SupabaseClient;
+      selectColumns: ReturnType<typeof vi.fn>;
+      update: ReturnType<typeof vi.fn>;
+      updateEq: ReturnType<typeof vi.fn>;
+      updateOr: ReturnType<typeof vi.fn>;
+    }
+
+    function touchMock(lastUsedAt: string | null, updateError: { code: string; message: string } | null = null): TouchMock {
+      const updateOr = vi.fn().mockResolvedValue({ data: null, error: updateError });
+      const updateEq = vi.fn().mockReturnValue({ or: updateOr });
+      const update = vi.fn().mockReturnValue({ eq: updateEq });
+      const selectColumns = vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({
+          is: vi.fn().mockReturnValue({
+            single: vi.fn().mockResolvedValue({
+              data: { id: 'key-id-9', user_id: 'user-id-abc', persona_ids: null, revoked_at: null, last_used_at: lastUsedAt },
+              error: null,
+            }),
+          }),
+        }),
+      });
+      const supabase = { from: vi.fn().mockReturnValue({ select: selectColumns, update }) } as unknown as SupabaseClient;
+      return { supabase, selectColumns, update, updateEq, updateOr };
+    }
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.setSystemTime(NOW);
+      warnMock.mockReset();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('throttles to one write per hour', () => {
+      expect(API_KEY_LAST_USED_TOUCH_INTERVAL_MS).toBe(60 * 60 * 1000);
+    });
+
+    it('selects last_used_at in the key lookup', async () => {
+      const mock = touchMock(NOW.toISOString());
+      await resolveApiKey(RAW_KEY, mock.supabase);
+      expect(mock.selectColumns).toHaveBeenCalledWith('id, user_id, persona_ids, revoked_at, last_used_at');
+    });
+
+    it('does not write when the key was used less than an hour ago', async () => {
+      const fresh = new Date(NOW.getTime() - API_KEY_LAST_USED_TOUCH_INTERVAL_MS + 1000).toISOString();
+      const mock = touchMock(fresh);
+      const resolved = await resolveApiKey(RAW_KEY, mock.supabase);
+      expect(resolved).toEqual({ userId: 'user-id-abc', keyId: 'key-id-9', personaIds: null });
+      expect(mock.update).not.toHaveBeenCalled();
+    });
+
+    it('does not write when the key was used exactly an hour ago', async () => {
+      const boundary = new Date(NOW.getTime() - API_KEY_LAST_USED_TOUCH_INTERVAL_MS).toISOString();
+      const mock = touchMock(boundary);
+      await resolveApiKey(RAW_KEY, mock.supabase);
+      expect(mock.update).not.toHaveBeenCalled();
+    });
+
+    it('writes with a conditional predicate when the key was used more than an hour ago', async () => {
+      const stale = new Date(NOW.getTime() - API_KEY_LAST_USED_TOUCH_INTERVAL_MS - 1000).toISOString();
+      const mock = touchMock(stale);
+      const resolved = await resolveApiKey(RAW_KEY, mock.supabase);
+      expect(resolved?.keyId).toBe('key-id-9');
+      expect(mock.update).toHaveBeenCalledWith({ last_used_at: NOW.toISOString() });
+      expect(mock.updateEq).toHaveBeenCalledWith('id', 'key-id-9');
+      expect(mock.updateOr).toHaveBeenCalledWith('last_used_at.is.null,last_used_at.lt.2026-11-23T11:00:00.000Z');
+      expect(warnMock).not.toHaveBeenCalled();
+    });
+
+    it('writes when the key was never used', async () => {
+      const mock = touchMock(null);
+      await resolveApiKey(RAW_KEY, mock.supabase);
+      expect(mock.update).toHaveBeenCalledWith({ last_used_at: NOW.toISOString() });
+      expect(mock.updateOr).toHaveBeenCalledWith('last_used_at.is.null,last_used_at.lt.2026-11-23T11:00:00.000Z');
+    });
+
+    it('writes when the stored last_used_at is unparseable', async () => {
+      const mock = touchMock('not-a-date');
+      await resolveApiKey(RAW_KEY, mock.supabase);
+      expect(mock.update).toHaveBeenCalledTimes(1);
+    });
+
+    it('logs a failed write and still resolves the key', async () => {
+      const mock = touchMock(null, { code: '57014', message: 'canceling statement due to statement timeout' });
+      const resolved = await resolveApiKey(RAW_KEY, mock.supabase);
+      expect(resolved).toEqual({ userId: 'user-id-abc', keyId: 'key-id-9', personaIds: null });
+      expect(warnMock).toHaveBeenCalledWith('[api-keys] last_used_at touch failed', {
+        keyId: 'key-id-9',
+        code: '57014',
+        message: 'canceling statement due to statement timeout',
+      });
+    });
   });
 
   describe('isPersonaAllowed', () => {

@@ -30,6 +30,7 @@ from app.services import full_lipsync, lipsync_photos
 from app.services.music_mood import resolve_music_mood
 from app.services.task_cleanup import _first_http_url, abort_if_cancelled, cleanup_task_intermediates
 from app.services.task_outcome import crash_or_stop, fail_or_stop, finish_or_stop
+from app.services.tracking_props import tracking_context_from_task
 from app.services.pipeline_stage import PhaseTracker
 from app.services.intro_cost import IntroCostReport, completion_cost_kwargs, cost_event_props, report_from_job_cost
 from app.services.longcat_cost import ModalJobCost
@@ -40,7 +41,7 @@ from app.services.persona_hook import (
     _limit_generated_script,
 )
 from app.services.bgm_history import history_repository
-from app.services.analytics import nonempty_error_reason, track_event
+from app.services.analytics import nonempty_error_reason, subtitle_event_props, track_event
 from app.services.notify import safe_reason, send_discord, task_failed_msg
 from app.services.owner_alert import alert_failed_task
 from app.utils import file_security, ssrf, utils
@@ -206,10 +207,7 @@ def _task_tracking_context(task_id: str) -> dict[str, object]:
         "flow": task.get("flow") or "unknown",
         "pipeline": task.get("pipeline") or "unknown",
     }
-    for key in ("persona_id", "slot_id", "schedule_id", "generation_id"):
-        value = task.get(key)
-        if isinstance(value, str) and value:
-            context[key] = value
+    context.update(tracking_context_from_task(task))
     return context
 
 
@@ -292,8 +290,8 @@ def _complete_task(
     _progress_milestones.pop(task_id, None)
     context = _task_tracking_context(task_id)
     if context.get("flow") == "direct":
-        context.update(cost_event_props(kwargs))
-        context["music_mood"] = kwargs.get("music_mood") or "unknown"
+        context.update(cost_event_props(kwargs), music_mood=kwargs.get("music_mood") or "unknown")
+        context.update(subtitle_event_props(params))
         track_event("video_generated", context)
     task_webhook.notify_terminal_task(
         task_id,

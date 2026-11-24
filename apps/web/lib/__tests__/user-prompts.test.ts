@@ -131,6 +131,20 @@ describe('public reads', () => {
   });
 });
 
+describe('listing order', () => {
+  it('lists the newest prompts first and breaks a created_at tie by slug, so the order never depends on the database', async () => {
+    const createdAt = '2026-11-01T00:00:00.000Z';
+    const db = createFakeUserPromptsDb([
+      { owner_id: ALICE, slug: 'zeta', body: 'z', visibility: 'public', created_at: createdAt },
+      { owner_id: BOB, slug: 'alpha', body: 'a', visibility: 'public', created_at: createdAt },
+      { owner_id: ALICE, slug: 'newest', body: 'n', visibility: 'public', created_at: '2026-11-02T00:00:00.000Z' },
+      { owner_id: ALICE, slug: 'mike', body: 'm', visibility: 'public', created_at: createdAt },
+    ]);
+    expect((await listPublicUserPrompts(db.client)).map((row) => row.slug)).toEqual(['newest', 'alpha', 'mike', 'zeta']);
+    expect((await listOwnUserPrompts(db.client, ALICE)).map((row) => row.slug)).toEqual(['newest', 'mike', 'zeta']);
+  });
+});
+
 describe('database failures', () => {
   const failing: Array<[string, (db: ReturnType<typeof createFakeUserPromptsDb>) => Promise<unknown>]> = [
     ['finding an own prompt', (db) => findOwnUserPrompt(db.client, ALICE, 'mine')],

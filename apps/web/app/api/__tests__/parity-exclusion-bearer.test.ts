@@ -32,7 +32,7 @@ vi.mock('@/lib/oauth/config', async (importOriginal) => {
   return { ...actual, getMcpResource: () => 'https://example.com/mcp' };
 });
 
-// No cookie session: getUser() finds no user. Any data access fails loudly
+// No cookie session: getClaims() finds no session. Any data access fails loudly
 // so a handler that reaches the database before rejecting the caller shows
 // up as a 500 instead of passing.
 function noDataAccess(): never {
@@ -41,6 +41,7 @@ function noDataAccess(): never {
 vi.mock('@/lib/supabase/server', () => ({
   createSupabaseServerClient: vi.fn(async () => ({
     auth: {
+      getClaims: async () => ({ data: null, error: null }),
       getUser: async () => ({ data: { user: null }, error: null }),
       getSession: async () => ({ data: { session: null }, error: null }),
       signOut: noDataAccess,

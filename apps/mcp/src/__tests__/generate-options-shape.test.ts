@@ -1,4 +1,7 @@
 import { describe, it, expect } from 'vitest';
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { GeneratePersonaVideoOptionsShape } from '../schedule-shapes.js';
 import { GeneratePersonaVideoSchema } from '../single-video-shape.js';
 
@@ -85,6 +88,58 @@ describe('pacing options (per-photo duration, crossfade, per-video variation)', 
   });
 });
 
+describe('subtitle position options', () => {
+  it('accepts top, center, bottom and custom', () => {
+    for (const subtitlePosition of ['top', 'center', 'bottom', 'custom']) {
+      const parsed = parseOptions({ subtitlePosition, subtitleCustomPosition: subtitlePosition === 'custom' ? 20 : undefined });
+      expect(parsed.success).toBe(true);
+      if (parsed.success) {
+        expect(parsed.data.options?.subtitlePosition).toBe(subtitlePosition);
+      }
+    }
+  });
+
+  it('accepts a custom height of 0-100 with custom', () => {
+    for (const subtitleCustomPosition of [0, 20, 100]) {
+      const parsed = parseOptions({ subtitlePosition: 'custom', subtitleCustomPosition });
+      expect(parsed.success).toBe(true);
+      if (parsed.success) {
+        expect(parsed.data.options?.subtitleCustomPosition).toBe(subtitleCustomPosition);
+      }
+    }
+  });
+
+  it('rejects a custom height outside 0-100', () => {
+    for (const subtitleCustomPosition of [-1, 101, 12.5]) {
+      expect(parseOptions({ subtitlePosition: 'custom', subtitleCustomPosition }).success).toBe(false);
+    }
+  });
+
+  it('rejects an unknown subtitle position', () => {
+    const parsed = parseOptions({ subtitlePosition: 'side' });
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) {
+      expect(JSON.stringify(parsed.error.issues)).toContain('subtitlePosition');
+    }
+  });
+
+  it('rejects a custom height without a custom subtitle position', () => {
+    for (const subtitlePosition of [undefined, 'top', 'center', 'bottom']) {
+      const parsed = parseOptions({ subtitlePosition, subtitleCustomPosition: 20 });
+      expect(parsed.success).toBe(false);
+      if (!parsed.success) {
+        expect(JSON.stringify(parsed.error.issues)).toContain('subtitleCustomPosition');
+      }
+    }
+  });
+
+  it('teaches the agent the top placement and the one-knob A/B rule', () => {
+    const shape = GeneratePersonaVideoOptionsShape.subtitlePosition;
+    expect(shape.description).toContain('top keeps the caption near the top of the frame, clear of the face');
+    expect(shape.description).toContain('change one knob at a time');
+  });
+});
+
 const VIDEO = {
   title: 'Porto trip',
   description: 'Agent description.',
@@ -143,5 +198,54 @@ describe('webhookUrl rejects loopback and private literals', () => {
     const webhookUrl = 'https://[2606:4700:4700::1111]/hook';
     const parsed = parseOptions({ webhookUrl });
     expect(parsed.success).toBe(true);
+  });
+});
+
+describe('pacing option descriptions teach A/B testing', () => {
+  const clipDuration = GeneratePersonaVideoOptionsShape.videoClipDuration.description ?? '';
+  const transitionMode = GeneratePersonaVideoOptionsShape.videoTransitionMode.description ?? '';
+  const variationSeed = GeneratePersonaVideoOptionsShape.videoVariationSeed.description ?? '';
+
+  function contractSource(): string {
+    let dir = dirname(fileURLToPath(import.meta.url));
+    for (;;) {
+      if (existsSync(join(dir, 'pnpm-workspace.yaml'))) {
+        return readFileSync(join(dir, 'shared', 'contracts', 'videos.ts'), 'utf8');
+      }
+      const parent = dirname(dir);
+      if (parent === dir) throw new Error('findRepoRoot: pnpm-workspace.yaml not found');
+      dir = parent;
+    }
+  }
+
+  it('says the clip duration is a pacing weight, not exact seconds', () => {
+    expect(clipDuration).toContain('1-60');
+    expect(clipDuration).toContain('2s default');
+    expect(clipDuration).toContain('1.5x');
+    expect(clipDuration).toContain('not exact seconds');
+  });
+
+  it('tells the agent to A/B test one knob at a time', () => {
+    expect(clipDuration).toContain('one knob at a time');
+    expect(transitionMode).toContain('one knob at a time');
+  });
+
+  it('names what each transition does', () => {
+    expect(transitionMode).toContain('Crossfade');
+    expect(transitionMode).toContain('Shuffle');
+    expect(transitionMode).toContain('FadeIn');
+    expect(transitionMode).toContain('SlideIn');
+  });
+
+  it('says the seed repeats a pattern and changes the look without changing pacing', () => {
+    expect(variationSeed).toContain('same seed repeats the same pattern');
+    expect(variationSeed).toContain('without changing pacing');
+  });
+
+  it('keeps the three descriptions identical in the shared contract', () => {
+    const contract = contractSource();
+    expect(contract).toContain(clipDuration);
+    expect(contract).toContain(transitionMode);
+    expect(contract).toContain(variationSeed);
   });
 });

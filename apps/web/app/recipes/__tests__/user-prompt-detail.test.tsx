@@ -145,4 +145,20 @@ describe('user prompt card', () => {
     expect(link).toHaveAttribute('href', '/recipes/luna-spicy-sfw-b-pov');
     expect(link).toHaveTextContent('Luna test B');
   });
+
+  it('shows a visible View details button that opens the prompt detail page', () => {
+    render(
+      <ul>
+        <UserPromptRow
+          prompt={{ slug: 'daily-news', title: 'Daily news', description: '', source: 'community', visibility: 'public', verified: true }}
+          busy={false}
+          copied={false}
+          onCopy={vi.fn()}
+        />
+      </ul>,
+    );
+    const button = screen.getByTestId('user-prompt-details-daily-news');
+    expect(button).toHaveAttribute('href', '/recipes/daily-news');
+    expect(button).toHaveTextContent('View details');
+  });
 });

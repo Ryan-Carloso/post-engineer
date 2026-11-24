@@ -73,6 +73,11 @@ export default function UserPromptRow({
       </div>
       {prompt.description.length > 0 ? <p className="text-sm leading-relaxed text-ink-soft">{prompt.description}</p> : null}
       <div className="flex flex-wrap gap-2">
+        <Button asChild className={ACTION_CLASS}>
+          <Link href={`/recipes/${encodeURIComponent(prompt.slug)}`} data-testid={`user-prompt-details-${prompt.slug}`}>
+            {t('userPrompts.viewDetails')}
+          </Link>
+        </Button>
         <Button type="button" onClick={onCopy} disabled={busy} className={ACTION_CLASS}>
           {copied ? t('userPrompts.copied') : t('userPrompts.copy')}
         </Button>

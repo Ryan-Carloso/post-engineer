@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { isEnglishLanguage, ONLY_ENGLISH_VIDEOS_MESSAGE } from './language.js';
-import { GeneratePersonaVideoOptionsShape } from './schedule-shapes.js';
+import { GeneratePersonaVideoOptionsSchema } from './schedule-shapes.js';
 import { PersonaCtaShape } from './persona-cta-shape.js';
 import { RECIPE_SLUG_PATTERN } from './recipe-session.js';
 import { VIDEO_TYPES, VIDEO_TYPE_ERROR_SUFFIX, unknownVideoTypeMessage } from './video-type.js';
@@ -30,7 +30,7 @@ export const ScriptSegmentShape = {
     .array(z.object({ mediaId: z.string().min(1).optional(), url: z.string().min(1).optional(), duration: z.number().min(MIN_REQUESTED_PHOTO_SECONDS).max(MAX_REQUESTED_PHOTO_SECONDS).optional(), overlay: SegmentOverlayShape.optional() }).strict())
     .max(MAX_IMAGES_MODE_MEDIAS)
     .optional()
-    .describe('Photos for this segment. Each item is mediaId (from media (action: upload)) or url (a public image URL). One image per ~2s of speech (~5-6 words); a 60s video needs ~30 images, split across segments (max 30). Full lip sync: max 6 images total, shown as panels over the face (the face photos themselves go in options.lipsyncPhotos). Optional duration (0.5-6s): on-screen seconds for a full-frame photo; omit for the 2s default. Optional overlay: an info card (title, subtitle, badge), e.g. a place name, address and price; a spoken caption sits above it, never on the photo.'),
+    .describe('Photos for this segment. Each item is mediaId (from media (action: upload)) or url (a public image URL). One image per ~2s of speech (~5-6 words); a 60s video needs ~30 images, split across segments (max 30). Full lip sync: max 6 images total, shown as panels over the face (the face photos themselves go in options.lipsyncPhotos). Optional duration (0.5-6s): the relative pace of a full-frame photo; omit for the 2s default. The render shares the real spoken time of each segment among its photos in proportion to their durations (a 5s photo holds 2.5x a 2s one), so durations never need to match the voice exactly: a shorter voice compresses them and a longer one stretches them up to 1.5x. Optional overlay: an info card (title, subtitle, badge), e.g. a place name, address and price; a spoken caption sits above it, never on the photo.'),
 };
 
 export const GeneratePersonaVideoShape = {
@@ -91,7 +91,7 @@ export const GeneratePersonaVideoShape = {
     .optional()
     .describe('Daily publish times in HH:MM 24-hour format. Required unless mode is \'asap\'.'),
   timezone: z.string().min(1).default('UTC').describe('IANA timezone for a naive startAt and the HH:MM times, e.g. "Europe/Lisbon". Defaults to UTC.'),
-  options: z.object(GeneratePersonaVideoOptionsShape).optional().describe('Generation options applied to this video.'),
+  options: GeneratePersonaVideoOptionsSchema.optional().describe('Generation options applied to this video.'),
   idempotencyKey: z.string().min(1).optional().describe('Idempotency key: retrying the call with the same key returns the original schedule (replayed: true) instead of generating again.'),
   promptVersionId: z
     .string()

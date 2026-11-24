@@ -5,13 +5,14 @@ import { ViewerProvider } from './viewer-context';
 
 export default async function RecipesLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createSupabaseServerClient();
-  const { data, error } = await supabase.auth.getUser();
+  const { data, error } = await supabase.auth.getClaims();
   if (error !== null && error.name !== 'AuthSessionMissingError') {
-    console.error('[recipes] getUser failed, rendering public frame', {
+    console.error('[recipes] getClaims failed, rendering public frame', {
       message: error.message,
     });
   }
-  if (data.user !== null) {
+  const subject: unknown = data?.claims.sub;
+  if (error === null && typeof subject === 'string' && subject.length > 0) {
     return (
       <AppShell>
         <ViewerProvider signedIn>{children}</ViewerProvider>

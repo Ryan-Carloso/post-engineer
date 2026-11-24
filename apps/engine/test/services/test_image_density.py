@@ -8,7 +8,7 @@ time, and a photo that flashes for under a second is rejected too.
 import pytest
 
 from app.services import image_density
-from app.services.image_density import density_error, split_interval
+from app.services.image_density import density_error, media_weights, split_weighted
 from app.services.script_segments import SegmentValidationError, validate_segments
 
 
@@ -40,15 +40,36 @@ def test_a_short_segment_still_needs_one_photo_and_refuses_a_second_when_it_woul
     assert "at most 1 image" in rule
 
 
-def test_split_interval_covers_the_segment_without_a_gap_or_an_overlap():
-    slices = split_interval(0.0, 6.0, 2)
-    assert slices == [(0.0, 3.0), (3.0, 6.0)]
-    slices = split_interval(1.0, 4.0, 3)
+def test_equal_weights_split_the_segment_without_a_gap_or_an_overlap():
+    assert split_weighted(0.0, 6.0, [2.0, 2.0]) == [(0.0, 3.0), (3.0, 6.0)]
+    slices = split_weighted(1.0, 4.0, [2.0, 2.0, 2.0])
     assert slices[0][0] == 1.0
     assert slices[-1][1] == 4.0
     assert slices[1][0] == slices[0][1]
-    assert split_interval(1.0, 1.0, 2) == []
-    assert split_interval(0.0, 5.0, 0) == []
+    assert split_weighted(1.0, 1.0, [2.0, 2.0]) == []
+    assert split_weighted(0.0, 5.0, []) == []
+    assert split_weighted(0.0, 5.0, [0.0, 0.0]) == []
+
+
+def test_weights_share_the_real_spoken_time_in_proportion():
+    assert split_weighted(0.0, 11.0, [5.0, 5.0, 1.0]) == [(0.0, 5.0), (5.0, 10.0), (10.0, 11.0)]
+
+
+def test_requested_seconds_longer_than_the_real_voice_are_compressed_not_dropped():
+    slices = split_weighted(0.0, 12.0, [5.0, 5.0, 5.0])
+    assert [round(end - start, 6) for start, end in slices] == [4.0, 4.0, 4.0]
+
+
+def test_media_weights_use_the_requested_duration_or_the_two_second_pace():
+    media = [
+        {"mediaId": "a" * 32 + ".jpg", "duration": 5},
+        {"mediaId": "b" * 32 + ".jpg"},
+        {"mediaId": "c" * 32 + ".mp4"},
+        "not a dict",
+        {"mediaId": "d" * 32 + ".jpg", "duration": 99},
+    ]
+    assert media_weights(media) == [5.0, 2.0, 2.0, 2.0, 2.0]
+    assert media_weights(None) == []
 
 
 def test_validate_segments_reports_the_same_density_counts():

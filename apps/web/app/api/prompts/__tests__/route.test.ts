@@ -95,7 +95,12 @@ describe('GET /api/prompts', () => {
   });
 
   it('marks a prompt Post Engineer verified, to signed-in and anonymous callers alike', async () => {
-    seedDb([{ ...publicRow('00000000-0000-4000-8000-0000000000e1', 'daily-news', 'Daily news'), verified: true }, publicRow(BOB, 'bobs-shared')]);
+    const newer = new Date(Date.now() - 1000).toISOString();
+    const older = new Date(Date.now() - 2000).toISOString();
+    seedDb([
+      { ...publicRow('00000000-0000-4000-8000-0000000000e1', 'daily-news', 'Daily news'), verified: true, created_at: newer },
+      { ...publicRow(BOB, 'bobs-shared'), created_at: older },
+    ]);
     for (const signedIn of [true, false]) {
       if (signedIn) authenticatedAs(ALICE);
       else signedOut();

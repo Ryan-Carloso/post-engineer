@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { PostEngineerClient } from './client.js';
-import { getPost, getPostMetrics, getYouTubeRetentionCurve, listPostsInRange } from './client-posts.js';
+import { getLast24hMetrics, getPost, getPostMetrics, getYouTubeRetentionCurve, listPostsInRange } from './client-posts.js';
 import { ListPostsSchema } from './schedule-shapes.js';
 import {
   METRICS_FILTER_MAX_LENGTH,
@@ -49,6 +49,14 @@ export const GetPostMetricsShape = {
 
 export const GetPostMetricsSchema = z.object(GetPostMetricsShape);
 
+export const GetLast24hMetricsShape = {
+  persona: GetPostMetricsShape.persona,
+  account: GetPostMetricsShape.account,
+  provider: GetPostMetricsShape.provider,
+};
+
+export const GetLast24hMetricsSchema = z.object(GetLast24hMetricsShape);
+
 export const GetYouTubeRetentionCurveShape = {
   account: metricsFilter.describe('The YouTube account id (channel id) the video was published on: accountId from insights (action: post_metrics) rows.'),
   video: z
@@ -91,4 +99,11 @@ export async function handleListPosts(client: PostEngineerClient, args: unknown)
     return handleLibraryCall(() => listPostsInRange(client, { from, to }), 'listing posts');
   }
   return handleLibraryCall(() => client.listPosts(limit), 'listing posts');
+}
+
+export async function handleGetLast24hMetrics(
+  client: PostEngineerClient,
+  args: z.infer<typeof GetLast24hMetricsSchema>,
+): Promise<McpToolResponse> {
+  return handleLibraryCall(() => getLast24hMetrics(client, args), 'getting last 24 hours metrics');
 }

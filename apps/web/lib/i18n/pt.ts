@@ -1,4 +1,5 @@
 import { personaVoiceClonePt } from './voice-clone-i18n-pt';
+import { generationErrorsI18nPt } from './generation-errors-i18n-pt';
 import { mcpToolDescPt } from './mcp-tools-i18n-pt';
 import { accountI18nPt } from './account-i18n-pt';
 import { accountsI18nPt } from './accounts-i18n-pt';
@@ -53,13 +54,7 @@ export const ptDictionary = {
     generationsTitle: 'Gerações de vídeo',
     generationsEmpty: 'Nenhuma geração de vídeo ainda.',
     refundedBadge: 'Token reembolsado',
-    errorCustomAudio: 'O arquivo de áudio personalizado era inválido. Tente outro arquivo (MP3/OGG/WAV, até 1 minuto).',
-    errorEngineUnavailable: 'O serviço de vídeo estava indisponível. Tente novamente.',
-    errorEngineRejected: 'O serviço de vídeo recusou o trabalho. Tente novamente.',
-    errorNoTaskId: 'O serviço de vídeo não retornou uma tarefa. Tente novamente.',
-    errorInvalidTaskResponse: 'O serviço de vídeo retornou uma resposta inesperada. Tente novamente.',
-    errorEngineRestart: 'O motor reiniciou durante a geração do vídeo. Tente novamente.',
-    errorUnknown: 'O vídeo não pôde ser gerado. Tente novamente.',
+    ...generationErrorsI18nPt,
     detailsTitle: 'Detalhes do post',
     postIdLabel: 'ID do post',
     copyPostId: 'Copiar ID do post',

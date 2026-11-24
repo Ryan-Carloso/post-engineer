@@ -47,7 +47,7 @@ export const WaitForVideoTasksSchema = z.object(WaitForVideoTasksShape);
 export interface TaskWaitResult {
   task_id: string | null;
   state: number | null;
-  outcome: 'completed' | 'failed' | 'running';
+  outcome: 'completed' | 'failed' | 'running' | 'queued';
   progress: number | null;
   stage: string | null;
   error: string | null;
@@ -75,7 +75,7 @@ function toWaitResult(
   taskId: string,
   narrowed: { task_id: string | null; state: number | null; progress: number | null; stage: string | null; error: string | null; postUrl: string | null },
 ): TaskWaitResult {
-  const outcome = narrowed.state === 1 ? 'completed' : narrowed.state === -1 ? 'failed' : 'running';
+  const outcome = narrowed.state === 1 ? 'completed' : narrowed.state === -1 ? 'failed' : narrowed.state === 3 ? 'queued' : 'running';
   return attachPollHint({
     task_id: narrowed.task_id ?? taskId,
     state: narrowed.state,
@@ -113,8 +113,9 @@ export async function handleWaitForVideoTasks(
   const summarize = (results: TaskWaitResult[], timedOut: boolean): string => {
     const completed = results.filter((entry) => entry.outcome === 'completed').length;
     const failed = results.filter((entry) => entry.outcome === 'failed').length;
-    const running = results.length - completed - failed;
-    const counts = `${completed} completed, ${failed} failed, ${running} running`;
+    const queued = results.filter((entry) => entry.outcome === 'queued').length;
+    const running = results.length - completed - failed - queued;
+    const counts = `${completed} completed, ${failed} failed, ${queued > 0 ? `${queued} queued, ` : ''}${running} running`;
     if (args.waitSeconds === 0) return `Status now: ${counts}.`;
     return timedOut ? `Timed out after ${args.waitSeconds}s: ${counts}.` : `Wait finished: ${counts}.`;
   };
@@ -122,7 +123,7 @@ export async function handleWaitForVideoTasks(
   for (;;) {
     const unfinished = taskIds.filter((taskId) => {
       const known = last.get(taskId);
-      return known === undefined || known.outcome === 'running';
+      return known === undefined || known.outcome === 'running' || known.outcome === 'queued';
     });
     const settled = await Promise.allSettled(
       unfinished.map(async (taskId): Promise<PollOutcome> => {
@@ -222,7 +223,7 @@ export async function handleWaitForVideoTasks(
           rateLimited.get(taskId),
         ),
     );
-    const allTerminal = results.every((entry) => entry.outcome !== 'running');
+    const allTerminal = results.every((entry) => entry.outcome === 'completed' || entry.outcome === 'failed');
     if (allTerminal) {
       return handleLibraryCall(
         async () => ({ summary: summarize(results, false), allTerminal: true, timedOut: false, results }),

@@ -66,7 +66,7 @@ describe('GET /auth/callback', () => {
   it('redirects to login when no code is present', async () => {
     const res = await GET(makeRequest('http://localhost/auth/callback'));
     expect(res.status).toBe(307);
-    expect(res.headers.get('location')).toBe('http://localhost/login?error=auth');
+    expect(res.headers.get('location')).toBe('/login?error=auth');
   });
 
   it('maps provider access_denied to a cancelled login notice', async () => {
@@ -74,7 +74,7 @@ describe('GET /auth/callback', () => {
       makeRequest('http://localhost/auth/callback?error=access_denied&error_description=The+user+denied+access'),
     );
     expect(res.status).toBe(307);
-    expect(res.headers.get('location')).toBe('http://localhost/login?error=cancelled');
+    expect(res.headers.get('location')).toBe('/login?error=cancelled');
     expect(mockCreateServerClient).not.toHaveBeenCalled();
   });
 
@@ -83,7 +83,7 @@ describe('GET /auth/callback', () => {
       makeRequest('http://localhost/auth/callback?error=server_error'),
     );
     expect(res.status).toBe(307);
-    expect(res.headers.get('location')).toBe('http://localhost/login?error=auth');
+    expect(res.headers.get('location')).toBe('/login?error=auth');
     expect(mockCreateServerClient).not.toHaveBeenCalled();
   });
 
@@ -119,7 +119,7 @@ describe('GET /auth/callback', () => {
     cookiesCfg.set('sb-token', 'v', {});
     cookiesCfg.remove('sb-token', {});
     expect(res.status).toBe(307);
-    expect(res.headers.get('location')).toBe('http://localhost/');
+    expect(res.headers.get('location')).toBe('/');
   });
 
   it('redirects to next and returns response on successful exchange', async () => {
@@ -133,8 +133,25 @@ describe('GET /auth/callback', () => {
 
     const res = await GET(makeRequest(requestUrl));
     expect(res.status).toBe(307);
-    expect(res.headers.get('location')).toBe('http://localhost/dashboard');
+    expect(res.headers.get('location')).toBe('/dashboard');
     expect(mockCreateServerClient).toHaveBeenCalledTimes(1);
+  });
+
+  it('never sends the browser to the server bind address behind the proxy', async () => {
+    const requestUrl = `https://0.0.0.0:3000/auth/callback?code=abc&next=${encodeURIComponent('/posts')}`;
+    mockCreateServerClient.mockReturnValue({
+      auth: {
+        exchangeCodeForSession: vi.fn().mockResolvedValue({ error: null }),
+      },
+    });
+
+    const res = await GET(makeRequest(requestUrl));
+    const location = res.headers.get('location') ?? '';
+    expect(location).toBe('/posts');
+    expect(location).not.toContain('0.0.0.0');
+    const cookiesCfg = mockCreateServerClient.mock.calls[0][2].cookies;
+    cookiesCfg.set('sb-token', 'v', {});
+    expect(res.cookies.get('sb-token')?.value).toBe('v');
   });
 
   it('redirects to login when exchangeCodeForSession returns an error', async () => {
@@ -151,7 +168,7 @@ describe('GET /auth/callback', () => {
     const res = await GET(makeRequest(requestUrl));
     expect(res.status).toBe(307);
     expect(res.headers.get('location')).toBe(
-      'http://localhost/login?error=auth',
+      '/login?error=auth',
     );
   });
 });
@@ -182,7 +199,7 @@ describe('GET /auth/callback — Vercel preview relay', () => {
     });
 
     const res = await GET(makeRequest(requestUrl));
-    expect(res.headers.get('location')).toBe('https://post-engineer.com/');
+    expect(res.headers.get('location')).toBe('/');
     expect(mockCreateServerClient).toHaveBeenCalledTimes(1);
   });
 
@@ -196,7 +213,7 @@ describe('GET /auth/callback — Vercel preview relay', () => {
     });
 
     const res = await GET(makeRequest(requestUrl));
-    expect(res.headers.get('location')).toBe('https://post-engineer.com/');
+    expect(res.headers.get('location')).toBe('/');
     expect(mockCreateServerClient).toHaveBeenCalledTimes(1);
   });
 
@@ -210,7 +227,7 @@ describe('GET /auth/callback — Vercel preview relay', () => {
     });
 
     const res = await GET(makeRequest(requestUrl));
-    expect(res.headers.get('location')).toBe('https://post-engineer.com/');
+    expect(res.headers.get('location')).toBe('/');
     expect(mockCreateServerClient).toHaveBeenCalledTimes(1);
   });
 
@@ -226,7 +243,7 @@ describe('GET /auth/callback — Vercel preview relay', () => {
     const requestUrl = `https://post-engineer.com/auth/callback?code=abc&next=${encodeURIComponent(target)}`;
 
     const res = await GET(makeRequest(requestUrl));
-    expect(res.headers.get('location')).toBe('https://post-engineer.com/');
+    expect(res.headers.get('location')).toBe('/');
     expect(exchangeCodeForSession).toHaveBeenCalledWith('abc');
   });
 
@@ -240,7 +257,7 @@ describe('GET /auth/callback — Vercel preview relay', () => {
     });
 
     const res = await GET(makeRequest(requestUrl));
-    expect(res.headers.get('location')).toBe('https://post-engineer.com/');
+    expect(res.headers.get('location')).toBe('/');
     expect(mockCreateServerClient).toHaveBeenCalledTimes(1);
   });
 });
@@ -275,7 +292,7 @@ describe('GET /auth/callback — next redirect validation (open redirect)', () =
     const res = await GET(
       makeRequest('http://localhost/auth/callback?code=abc&next=/dashboard'),
     );
-    expect(res.headers.get('location')).toBe('http://localhost/dashboard');
+    expect(res.headers.get('location')).toBe('/dashboard');
   });
 
   it('does NOT redirect to an absolute external URL', async () => {
@@ -285,7 +302,7 @@ describe('GET /auth/callback — next redirect validation (open redirect)', () =
         `http://localhost/auth/callback?code=abc&next=${encodeURIComponent('https://evil.example/phish')}`,
       ),
     );
-    expect(res.headers.get('location')).toBe('http://localhost/');
+    expect(res.headers.get('location')).toBe('/');
   });
 
   it('does NOT redirect to a protocol-relative URL', async () => {
@@ -308,7 +325,7 @@ describe('GET /auth/callback — next redirect validation (open redirect)', () =
     );
     const location = res.headers.get('location') ?? '';
     expect(location).not.toContain('evil.example');
-    expect(location).toBe('http://localhost/');
+    expect(location).toBe('/');
   });
 
   it('does NOT redirect to a javascript: URL', async () => {

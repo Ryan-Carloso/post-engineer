@@ -37,7 +37,7 @@ import { logger } from '@/lib/logger';
 function mockSession(userId = 'u1') {
   vi.mocked(createSupabaseServerClient).mockResolvedValue({
     auth: {
-      getUser: vi.fn().mockResolvedValue({ data: { user: { id: userId } }, error: null }),
+      getClaims: vi.fn().mockResolvedValue({ data: { claims: { sub: userId } }, error: null }),
       getSession: vi.fn().mockResolvedValue({ data: { session: { access_token: 'sb-token' } }, error: null }),
     },
   } as never);
@@ -53,10 +53,10 @@ describe('GET /api/account', () => {
 
   it('returns 401 when no session', async () => {
     vi.mocked(createSupabaseServerClient).mockResolvedValue({
-      auth: { getUser: vi.fn().mockResolvedValue({ data: { user: null }, error: { message: 'no' } }) },
+      auth: { getClaims: vi.fn().mockResolvedValue({ data: null, error: { message: 'no' } }) },
     } as never);
 
-    const res = await GET();
+    const res = await GET(new Request('http://localhost/api/account'));
     expect(res.status).toBe(401);
     const body = (await res.json()) as { authenticated: boolean };
     expect(body.authenticated).toBe(false);
@@ -65,7 +65,7 @@ describe('GET /api/account', () => {
   it('maps youtube accounts with statistics', async () => {
     vi.mocked(createSupabaseServerClient).mockResolvedValue({
       auth: {
-        getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'u1' } }, error: null }),
+        getClaims: vi.fn().mockResolvedValue({ data: { claims: { sub: 'u1' } }, error: null }),
         getSession: vi.fn().mockResolvedValue({ data: { session: { access_token: 'sb-token' } }, error: null }),
       },
     } as never);
@@ -85,7 +85,7 @@ describe('GET /api/account', () => {
       },
     ] as never);
 
-    const res = await GET();
+    const res = await GET(new Request('http://localhost/api/account'));
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
       authenticated: boolean;
@@ -107,7 +107,7 @@ describe('GET /api/account', () => {
   it('maps instagram accounts with defaults for missing metadata', async () => {
     vi.mocked(createSupabaseServerClient).mockResolvedValue({
       auth: {
-        getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'u1' } }, error: null }),
+        getClaims: vi.fn().mockResolvedValue({ data: { claims: { sub: 'u1' } }, error: null }),
         getSession: vi.fn().mockResolvedValue({ data: { session: { access_token: 'sb-token' } }, error: null }),
       },
     } as never);
@@ -123,7 +123,7 @@ describe('GET /api/account', () => {
       },
     ] as never);
 
-    const res = await GET();
+    const res = await GET(new Request('http://localhost/api/account'));
     const body = (await res.json()) as {
       accounts: Array<{ provider: string; username: string; lastUsed: number }>;
     };
@@ -143,9 +143,9 @@ describe('GET /api/account', () => {
       ...stored, accountName: 'new_handle', accountMetadata: { profilePictureUrl: 'https://x.test/new.jpg' },
     } as never);
 
-    const res = await GET();
+    const res = await GET(new Request('http://localhost/api/account'));
     const body = (await res.json()) as { accounts: Array<{ username: string; profilePictureUrl?: string }> };
-    expect(syncAccountProfile).toHaveBeenCalledWith(expect.anything(), 'u1', stored);
+    expect(syncAccountProfile).toHaveBeenCalledWith(expect.anything(), 'u1', stored, { force: false });
     expect(body.accounts[0].username).toBe('new_handle');
     expect(body.accounts[0].profilePictureUrl).toBe('https://x.test/new.jpg');
   });
@@ -158,7 +158,7 @@ describe('GET /api/account', () => {
     }] as never);
     vi.mocked(syncAccountProfile).mockRejectedValue(new Error('token revoked'));
 
-    const res = await GET();
+    const res = await GET(new Request('http://localhost/api/account'));
     expect(res.status).toBe(200);
     const body = (await res.json()) as { accounts: Array<{ username: string }> };
     expect(body.accounts[0].username).toBe('kept_handle');
@@ -180,7 +180,7 @@ describe('GET /api/account', () => {
       return rec;
     });
 
-    const res = await GET();
+    const res = await GET(new Request('http://localhost/api/account'));
     expect(res.status).toBe(200);
     const body = (await res.json()) as { accounts: Array<{ recordId: string; status?: string }> };
     expect(body.accounts).toHaveLength(2);
@@ -208,7 +208,7 @@ describe('GET /api/account', () => {
       throw new TokenDecryptError('Invalid authentication tag length: 2');
     });
 
-    const res = await GET();
+    const res = await GET(new Request('http://localhost/api/account'));
     expect(res.status).toBe(200);
     const body = (await res.json()) as { accounts: Array<{ recordId: string; status?: string }> };
     expect(body.accounts).toHaveLength(3);
@@ -233,7 +233,7 @@ describe('GET /api/account', () => {
       throw Object.assign(new Error('invalid_credentials'), { name: 'BlueskyError', code: 'invalid_credentials' });
     });
 
-    const res = await GET();
+    const res = await GET(new Request('http://localhost/api/account'));
     expect(res.status).toBe(200);
     const body = (await res.json()) as { accounts: Array<{ recordId: string; status?: string }> };
     expect(body.accounts.find((account) => account.recordId === 'rec-401')?.status).toBe('error');
@@ -255,7 +255,7 @@ describe('GET /api/account', () => {
       row('rec-expired-401', { profileSyncFailedAt: old, profileSyncFailedReason: 'unauthorized' }),
     ] as never);
 
-    const res = await GET();
+    const res = await GET(new Request('http://localhost/api/account'));
     const body = (await res.json()) as { accounts: Array<{ recordId: string; status: string }> };
     const status = (id: string) => body.accounts.find((account) => account.recordId === id)?.status;
     expect(status('rec-held-401')).toBe('error');
@@ -285,7 +285,7 @@ describe('GET /api/account', () => {
       throw new Error('boom');
     });
 
-    const res = await GET();
+    const res = await GET(new Request('http://localhost/api/account'));
     expect(res.status).toBe(200);
     const body = (await res.json()) as { accounts: Array<{ recordId: string; status?: string }> };
     expect(body.accounts).toHaveLength(3);
@@ -306,7 +306,7 @@ describe('GET /api/account', () => {
     };
     vi.mocked(listSocialAccounts).mockResolvedValue([dead, healthy] as never);
 
-    const res = await GET();
+    const res = await GET(new Request('http://localhost/api/account'));
     expect(res.status).toBe(200);
     const body = (await res.json()) as { accounts: Array<{ recordId: string; status?: string; handle?: string }> };
     expect(body.accounts.find((account) => account.recordId === 'rec-dead')?.status).toBe('error');
@@ -324,7 +324,7 @@ describe('GET /api/account', () => {
       new AccountNotFoundError('Social account not found for youtube/chan-gone'),
     );
 
-    const res = await GET();
+    const res = await GET(new Request('http://localhost/api/account'));
     expect(res.status).toBe(200);
     const body = (await res.json()) as { accounts: Array<{ recordId: string; status?: string }> };
     expect(body.accounts).toHaveLength(1);
@@ -341,7 +341,7 @@ describe('GET /api/account', () => {
     vi.mocked(syncAccountProfile).mockRejectedValue(syncError);
     const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => 'test-log-id');
     try {
-      const res = await GET();
+      const res = await GET(new Request('http://localhost/api/account'));
       expect(res.status).toBe(200);
       expect(errorSpy).toHaveBeenCalledWith(
         '[ACCOUNT] Profile sync failed, keeping the stored profile',
@@ -356,7 +356,7 @@ describe('GET /api/account', () => {
   it('maps bluesky accounts with did and handle (nao vira instagram)', async () => {
     vi.mocked(createSupabaseServerClient).mockResolvedValue({
       auth: {
-        getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'u1' } }, error: null }),
+        getClaims: vi.fn().mockResolvedValue({ data: { claims: { sub: 'u1' } }, error: null }),
         getSession: vi.fn().mockResolvedValue({ data: { session: { access_token: 'sb-token' } }, error: null }),
       },
     } as never);
@@ -372,7 +372,7 @@ describe('GET /api/account', () => {
       },
     ] as never);
 
-    const res = await GET();
+    const res = await GET(new Request('http://localhost/api/account'));
     const body = (await res.json()) as {
       accounts: Array<{ provider: string; did: string; handle: string; igUserId?: string }>;
     };
@@ -386,7 +386,7 @@ describe('GET /api/account', () => {
   it('maps linkedin accounts with providerAccountId and metadata', async () => {
     vi.mocked(createSupabaseServerClient).mockResolvedValue({
       auth: {
-        getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'u1' } }, error: null }),
+        getClaims: vi.fn().mockResolvedValue({ data: { claims: { sub: 'u1' } }, error: null }),
         getSession: vi.fn().mockResolvedValue({ data: { session: { access_token: 'sb-token' } }, error: null }),
       },
     } as never);
@@ -402,7 +402,7 @@ describe('GET /api/account', () => {
       },
     ] as never);
 
-    const res = await GET();
+    const res = await GET(new Request('http://localhost/api/account'));
     const body = (await res.json()) as {
       accounts: Array<{
         provider: string;
@@ -421,7 +421,7 @@ describe('GET /api/account', () => {
   it('descarta registro com provider desconhecido e mantém o resto da lista', async () => {
     vi.mocked(createSupabaseServerClient).mockResolvedValue({
       auth: {
-        getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'u1' } }, error: null }),
+        getClaims: vi.fn().mockResolvedValue({ data: { claims: { sub: 'u1' } }, error: null }),
         getSession: vi.fn().mockResolvedValue({ data: { session: { access_token: 'sb-token' } }, error: null }),
       },
     } as never);
@@ -447,7 +447,7 @@ describe('GET /api/account', () => {
     ] as never);
 
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const res = await GET();
+    const res = await GET(new Request('http://localhost/api/account'));
     expect(res.status).toBe(200);
     const body = (await res.json()) as { accounts: Array<{ provider: string }> };
     expect(body.accounts).toHaveLength(1);
@@ -511,7 +511,7 @@ describe('GET /api/account', () => {
   it('returns 500 when listSocialAccounts throws', async () => {
     vi.mocked(createSupabaseServerClient).mockResolvedValue({
       auth: {
-        getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'u1' } }, error: null }),
+        getClaims: vi.fn().mockResolvedValue({ data: { claims: { sub: 'u1' } }, error: null }),
         getSession: vi.fn().mockResolvedValue({ data: { session: { access_token: 'sb-token' } }, error: null }),
       },
     } as never);
@@ -519,7 +519,7 @@ describe('GET /api/account', () => {
     vi.mocked(listSocialAccounts).mockRejectedValue(listError);
     const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => 'test-log-id');
     try {
-      const res = await GET();
+      const res = await GET(new Request('http://localhost/api/account'));
       expect(res.status).toBe(500);
       const body = (await res.json()) as { error: string };
       expect(body.error).toBe('LIST_ERROR');
@@ -542,7 +542,7 @@ describe('DELETE /api/account', () => {
 
   it('returns 401 when no session', async () => {
     vi.mocked(createSupabaseServerClient).mockResolvedValue({
-      auth: { getUser: vi.fn().mockResolvedValue({ data: { user: null }, error: { message: 'no' } }) },
+      auth: { getClaims: vi.fn().mockResolvedValue({ data: null, error: { message: 'no' } }) },
     } as never);
 
     const res = await DELETE(deleteRequest('provider=youtube&providerAccountId=ch1'));

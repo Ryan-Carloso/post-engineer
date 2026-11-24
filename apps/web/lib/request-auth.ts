@@ -88,11 +88,10 @@ export async function requireSupabaseSession(request?: Request): Promise<Supabas
   }
 
   const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
-  if (userError || !user) {
+  const { data: claimsData, error: claimsError } = await supabase.auth.getClaims();
+  const claims = claimsData?.claims;
+  const userId: unknown = claims?.sub;
+  if (claimsError !== null || claims === undefined || typeof userId !== 'string' || userId.length === 0) {
     return unauthorized();
   }
 
@@ -106,9 +105,9 @@ export async function requireSupabaseSession(request?: Request): Promise<Supabas
 
   return {
     auth: {
-      userId: user.id,
+      userId,
       accessToken,
-      displayName: displayNameFromUserMetadata(user.user_metadata),
+      displayName: displayNameFromUserMetadata(claims.user_metadata),
     },
     error: null,
   };

@@ -26,10 +26,10 @@ const APP_URL = 'https://post-engineer.test';
 function mockSession(opts?: { noSession?: boolean; noToken?: boolean }): void {
   const client = {
     auth: {
-      getUser: vi.fn(async () =>
+      getClaims: vi.fn(async () =>
         opts?.noSession
-          ? { data: { user: null }, error: null }
-          : { data: { user: { id: USER_ID } }, error: null },
+          ? { data: null, error: null }
+          : { data: { claims: { sub: USER_ID } }, error: null },
       ),
       getSession: vi.fn(async () =>
         opts?.noToken
