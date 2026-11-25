@@ -37,6 +37,7 @@ import { violatedConstraint, SCHEDULE_PK_CONSTRAINT, SCHEDULES_PERSONA_OWNER_CON
 import { dispatchSlot, type PublishMode, type SlotDispatchContext, type SlotResult } from './dispatch-slot';
 import { checkCustomAudioUrl } from '@/lib/generation/custom-audio';
 import { deleteInsertedSlots } from './rollback-slots';
+import { classifyDispatchFailure } from './dispatch-failure';
 import { resolveIdempotency } from '@/lib/idempotency';
 import { trackApiEvent } from '@/lib/analytics';
 import { logger } from '@/lib/logger';
@@ -484,10 +485,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
     ...(warnings.length > 0 ? { warnings } : {}),
   };
   if (failed > 0 && accepted === 0) {
-    const engineOutage = results.every((r) =>
-      ['engine_rejected', 'engine_unavailable', 'no_task_id'].includes(r.errorCode ?? ''),
-    );
-    const code = engineOutage ? ERROR_CODES.ENGINE_UNAVAILABLE : ERROR_CODES.INTERNAL_ERROR;
+    const { status, code } = classifyDispatchFailure(results);
     trackApiEvent('video_creation_failed', {
       userId,
       personaId,
@@ -500,7 +498,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
     });
     return NextResponse.json(
       { success: false, error: formatErrorMessage(code), code, ...envelope },
-      { status: 502 },
+      { status },
     );
   }
 

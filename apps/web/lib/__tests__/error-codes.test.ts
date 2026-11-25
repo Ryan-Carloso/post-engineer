@@ -24,6 +24,7 @@ describe('error-codes', () => {
       'VALIDATION_FAILED',
       'INTERNAL_ERROR',
       'ENGINE_UNAVAILABLE',
+      'ENGINE_REJECTED',
     ] as const;
     for (const code of required) {
       expect(ERROR_CODES[code], code).toBe(code);
