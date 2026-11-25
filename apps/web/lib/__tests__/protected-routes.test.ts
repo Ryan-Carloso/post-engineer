@@ -7,6 +7,20 @@ import { PUBLIC_PAGES } from '@/lib/seo';
 import { appRouteSegments, groupServesRoot } from '@/test/app-route-segments';
 import { findRepoRoot } from '@/test/repo-root';
 
+const PUBLIC_TOP_LEVEL_DIRECTORIES: readonly string[] = [
+  '/.well-known',
+  '/api',
+  '/auth',
+  '/landing',
+  '/login',
+  '/mcp',
+  '/oauth',
+  '/privacy',
+  '/recipes',
+  '/s',
+  '/terms',
+];
+
 describe('PROTECTED_PREFIXES', () => {
   it('lists exactly the top-level segments served by app/(main)', () => {
     expect([...PROTECTED_PREFIXES].sort()).toEqual(appRouteSegments(import.meta.url, '(main)'));
@@ -17,15 +31,17 @@ describe('PROTECTED_PREFIXES', () => {
     expect(isProtectedPath('/')).toBe(true);
   });
 
-  it('never overlaps a top-level route directory outside (main)', () => {
+  it('classifies every top-level app directory outside (main) as public', () => {
     const appDir = join(findRepoRoot(import.meta.url), 'apps', 'web', 'app');
     const outside = readdirSync(appDir)
       .filter((entry) => statSync(join(appDir, entry)).isDirectory())
       .filter((entry) => !entry.startsWith('(') && !entry.startsWith('_'))
-      .map((entry) => `/${entry}`);
-    expect(outside.length).toBeGreaterThan(0);
+      .map((entry) => `/${entry}`)
+      .sort();
+    expect(outside).toEqual([...PUBLIC_TOP_LEVEL_DIRECTORIES].sort());
     for (const segment of outside) {
       expect(PROTECTED_PREFIXES as readonly string[]).not.toContain(segment);
+      expect(isProtectedPath(segment)).toBe(false);
     }
   });
 
