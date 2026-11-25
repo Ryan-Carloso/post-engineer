@@ -1,5 +1,6 @@
 import type { CreateExperimentBody } from '@/lib/contracts/experiments';
 import {
+  EXPERIMENT_MAX_FULL_LIPSYNC_VIDEOS,
   EXPERIMENT_MAX_TOTAL_VIDEOS,
 } from '@/lib/contracts/experiments';
 import { ERROR_CODES } from '@/lib/error-codes';
@@ -29,6 +30,13 @@ export function shapeCountIssues(body: CreateExperimentBody): ValidationIssue[] 
     issues.push({
       code: ERROR_CODES.VALIDATION_FAILED,
       message: `An experiment holds at most ${EXPERIMENT_MAX_TOTAL_VIDEOS} videos in total; this one has ${total}.`,
+      field: 'variants',
+    });
+  }
+  if (body.videoType === 'full_lipsync' && total > EXPERIMENT_MAX_FULL_LIPSYNC_VIDEOS) {
+    issues.push({
+      code: ERROR_CODES.VALIDATION_FAILED,
+      message: `A full lip-sync experiment holds at most ${EXPERIMENT_MAX_FULL_LIPSYNC_VIDEOS} videos in total, so every narration can be checked before anything is charged; this one has ${total}: send fewer videos, or use hook_lipsync or voiceover for up to ${EXPERIMENT_MAX_TOTAL_VIDEOS}.`,
       field: 'variants',
     });
   }

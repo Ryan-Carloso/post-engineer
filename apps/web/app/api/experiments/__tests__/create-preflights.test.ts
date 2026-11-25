@@ -17,7 +17,9 @@ import { checkLipsyncPhotoFaces } from '../../videos/generate-and-schedule/lipsy
 import type { ValidatedOptions } from '../../videos/generate-and-schedule/options-validation';
 import type { PersonaPrep } from '../../videos/generate-and-schedule/persona-prep';
 import type { PlannedVideo } from '../create-plan';
-import { EXPERIMENT_PREFLIGHT_BUDGET_MS, PREFLIGHT_CONCURRENCY, checkExperimentPreflights } from '../create-preflights';
+import { EXPERIMENT_MAX_FULL_LIPSYNC_VIDEOS } from '@/lib/contracts/experiments';
+import { checkExperimentPreflights } from '../create-preflights';
+import { EXPERIMENT_PREFLIGHT_BUDGET_MS, PREFLIGHT_CONCURRENCY } from '../preflight-budget';
 import { segmentsFor } from './create-fixtures';
 
 const SUPABASE = { marker: 'db' } as unknown as SupabaseClient;
@@ -240,6 +242,21 @@ describe('checkExperimentPreflights', () => {
     expect(json.error).toContain('took longer than 1s');
     expect(json.error).toContain('before anything was charged');
     expect(checkPreChargePreflights).toHaveBeenCalledTimes(PREFLIGHT_CONCURRENCY);
+  });
+
+  it.each([
+    ['full_lipsync', true],
+    ['voiceover', false],
+  ])('names the full lip-sync video limit in the budget error only for %s', async (videoType, named) => {
+    vi.mocked(checkPreChargePreflights).mockImplementation(async (input) => {
+      await new Promise<void>((resolve) => input.shared?.signal.addEventListener('abort', () => resolve()));
+      return failure(502, { error: 'Video service is unavailable.', code: 'INTERNAL_ERROR' });
+    });
+    const options = { ...OPTIONS, videoType, lipsyncPhotos: LIPSYNC_PHOTOS } as unknown as ValidatedOptions;
+
+    const json = await (await run(videos(4), 'persona-1', options, { budgetMs: 20 }))?.json();
+
+    expect(json.error.includes(`holds at most ${EXPERIMENT_MAX_FULL_LIPSYNC_VIDEOS} videos`)).toBe(named);
   });
 
   it('starts no further batch once the budget ran out between batches', async () => {

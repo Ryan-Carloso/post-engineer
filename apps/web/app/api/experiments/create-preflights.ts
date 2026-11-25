@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { apiErrorResponse } from '@/lib/api-error';
+import { EXPERIMENT_MAX_FULL_LIPSYNC_VIDEOS } from '@/lib/contracts/experiments';
 import { ERROR_CODES } from '@/lib/error-codes';
 import { checkPreChargePreflights } from '../videos/generate-and-schedule/aspect-preflight';
 import { checkLipsyncPhotoFaces } from '../videos/generate-and-schedule/lipsync-photo-faces';
@@ -12,10 +13,7 @@ import { createPreflightShared, type PreflightShared } from '../videos/generate-
 import { resolveVideoAspect } from '../videos/generate-and-schedule/video-aspect';
 import { EXPERIMENT_ROUTE, SEGMENTS_FIELD } from './create-checks';
 import type { PlannedVideo } from './create-plan';
-
-export const PREFLIGHT_CONCURRENCY = 4;
-
-export const EXPERIMENT_PREFLIGHT_BUDGET_MS = 60_000;
+import { EXPERIMENT_PREFLIGHT_BUDGET_MS, PREFLIGHT_CONCURRENCY } from './preflight-budget';
 
 export interface ExperimentPreflightInput {
   userId: string;
@@ -43,10 +41,12 @@ async function locateFailure(failure: NextResponse, video: PlannedVideo): Promis
   });
 }
 
-function budgetExceeded(budgetMs: number): NextResponse {
+function budgetExceeded(budgetMs: number, videoType: ValidatedOptions['videoType']): NextResponse {
+  const lipsyncLimit =
+    videoType === 'full_lipsync' ? ` A full lip-sync experiment holds at most ${EXPERIMENT_MAX_FULL_LIPSYNC_VIDEOS} videos.` : '';
   return apiErrorResponse(
     504,
-    `Checking the media of this experiment took longer than ${Math.ceil(budgetMs / 1000)}s and was stopped before anything was charged: send fewer videos or fewer distinct media items, then try again.`,
+    `Checking the media of this experiment took longer than ${Math.ceil(budgetMs / 1000)}s and was stopped before anything was charged: send fewer videos or fewer distinct media items, then try again.${lipsyncLimit}`,
     { route: EXPERIMENT_ROUTE, code: ERROR_CODES.ENGINE_UNAVAILABLE },
   );
 }
@@ -70,7 +70,7 @@ async function checkVideosInBatches(
 ): Promise<NextResponse | null> {
   const { userId, prep, options, videos } = input;
   for (let start = 0; start < videos.length; start += PREFLIGHT_CONCURRENCY) {
-    if (shared.signal.aborted) return budgetExceeded(budgetMs);
+    if (shared.signal.aborted) return budgetExceeded(budgetMs, options.videoType);
     const batch = videos.slice(start, start + PREFLIGHT_CONCURRENCY);
     const outcomes = await Promise.all(
       batch.map((video) =>
@@ -111,6 +111,6 @@ export async function checkExperimentPreflights(
   const shared = createPreflightShared(budgetMs);
   const photos = await checkLipsyncPhotosOnce(userId, prep, options, shared);
   const failure = photos ?? (await checkVideosInBatches(input, shared, budgetMs));
-  if (failure !== null && failure.status >= 500 && shared.signal.aborted) return budgetExceeded(budgetMs);
+  if (failure !== null && failure.status >= 500 && shared.signal.aborted) return budgetExceeded(budgetMs, options.videoType);
   return failure;
 }

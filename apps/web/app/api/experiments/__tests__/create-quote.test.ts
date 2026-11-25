@@ -16,6 +16,7 @@ vi.mock('../../videos/generate-and-schedule/library-photo', () => ({ validatePre
 
 import { checkPreChargePreflights } from '../../videos/generate-and-schedule/aspect-preflight';
 import { validatePreChargeImageId } from '../../videos/generate-and-schedule/library-photo';
+import { EXPERIMENT_MAX_FULL_LIPSYNC_VIDEOS } from '@/lib/contracts/experiments';
 import { readPromptComparison } from '@/lib/experiments/read-comparison';
 import type { AccountResult, PromptResult, UnversionedAccount } from '@/lib/experiments/prompt-comparison';
 import { parseExperimentRequest } from '../create-plan';
@@ -271,6 +272,23 @@ describe('quoteExperiment prompt versions', () => {
 
     expect(response.status).toBe(400);
     expect(await response.json()).toMatchObject({ field: 'variants' });
+  });
+});
+
+describe('quoteExperiment full lip-sync cap', () => {
+  it('rejects a full lip-sync experiment over the cap before any media check, naming the limit', async () => {
+    const { response, json } = await quote({ videoType: 'full_lipsync' }, fakeDb(), EXPERIMENT_MAX_FULL_LIPSYNC_VIDEOS / 2 + 1);
+
+    expect(response.status).toBe(400);
+    expect(json.field).toBe('variants');
+    expect(json.error).toContain(`at most ${EXPERIMENT_MAX_FULL_LIPSYNC_VIDEOS} videos in total`);
+    expect(checkPreChargePreflights).not.toHaveBeenCalled();
+  });
+
+  it('accepts the same number of videos as a voiceover experiment', async () => {
+    const { response } = await quote({}, fakeDb(), EXPERIMENT_MAX_FULL_LIPSYNC_VIDEOS / 2 + 1);
+
+    expect(response.status).toBe(200);
   });
 });
 
