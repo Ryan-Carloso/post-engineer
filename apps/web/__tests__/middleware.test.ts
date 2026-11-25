@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { NextRequest } from 'next/server';
+import { unstable_doesMiddlewareMatch } from 'next/experimental/testing/server';
 
 const { getClaims, getUser } = vi.hoisted(() => ({
   getClaims: vi.fn(),
@@ -92,11 +93,6 @@ describe('middleware auth redirect', () => {
     const response = await middleware(requestFor(`/s/${'a'.repeat(43)}`));
 
     expect(response.headers.get('location')).toBeNull();
-  });
-
-  it('keeps the matcher from running auth on the public /s/ share pages', () => {
-    const source = config.matcher[0];
-    expect(source).toContain('recipes|s/)');
   });
 
   it('redirects to /landing when getClaims finds no session and no error', async () => {
@@ -206,27 +202,6 @@ describe('middleware auth redirect', () => {
     expect(warnCalls()).toHaveLength(0);
   });
 
-  it('sends an authenticated visitor from /landing to /', async () => {
-    getClaims.mockResolvedValue({ data: validClaims('user-1'), error: null });
-
-    const response = await middleware(requestFor('/landing'));
-
-    expect(response.status).toBe(307);
-    expect(response.headers.get('location')).toBe('http://localhost:3434/');
-  });
-
-  it('sends an authenticated visitor from /login to /', async () => {
-    getClaims.mockResolvedValue({
-      data: validClaims('user-1'),
-      error: null,
-    });
-
-    const response = await middleware(requestFor('/login'));
-
-    expect(response.status).toBe(307);
-    expect(response.headers.get('location')).toBe('http://localhost:3434/');
-  });
-
   it('does not redirect unauthenticated requests for public static assets (logo.png)', async () => {
     getClaims.mockResolvedValue({
       data: null,
@@ -281,13 +256,13 @@ describe('middleware auth redirect', () => {
     expect(getClaims).not.toHaveBeenCalled();
   });
 
-  it('still redirects unauthenticated requests for any other .xml path', async () => {
+  it('still redirects unauthenticated requests for any other .xml path under an app route', async () => {
     getClaims.mockResolvedValue({
       data: null,
       error: authError('AuthSessionMissingError', 400, 'Auth session missing!'),
     });
 
-    const response = await middleware(requestFor('/export.xml'));
+    const response = await middleware(requestFor('/posts/export.xml'));
 
     expect(response.status).toBe(307);
     expect(response.headers.get('location')).toBe('http://localhost:3434/landing');
@@ -312,5 +287,108 @@ describe('middleware auth redirect', () => {
 
   it('excludes /mcp from the matcher so the middleware never runs on it', () => {
     expect(config.matcher[0].includes('mcp$')).toBe(true);
+  });
+});
+
+describe('middleware app-route gate', () => {
+  const missingSession = authError('AuthSessionMissingError', 400, 'Auth session missing!');
+
+  beforeEach(() => {
+    getClaims.mockReset();
+    getUser.mockReset();
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://example.supabase.co');
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', 'test-anon-key');
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
+
+  it.each(['/some-unknown', '/landing-v2', '/termsxyz'])(
+    'lets a signed-out request for unknown path %s reach the 404 page',
+    async (pathname) => {
+      getClaims.mockResolvedValue({ data: null, error: missingSession });
+
+      const response = await middleware(requestFor(pathname));
+
+      expect(response.status).not.toBe(307);
+      expect(response.headers.get('location')).toBeNull();
+      expect(getClaims).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('redirects a signed-out request for / to /landing', async () => {
+    getClaims.mockResolvedValue({ data: null, error: missingSession });
+
+    const response = await middleware(requestFor('/'));
+
+    expect(response.status).toBe(307);
+    expect(response.headers.get('location')).toBe('http://localhost:3434/landing');
+  });
+
+  it('passes a signed-in request for an unknown path through', async () => {
+    getClaims.mockResolvedValue({ data: validClaims('user-1'), error: null });
+
+    const response = await middleware(requestFor('/some-unknown'));
+
+    expect(response.status).not.toBe(307);
+    expect(response.headers.get('location')).toBeNull();
+    expect(getClaims).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not warn about a transient auth error on an unknown path because the gate does not apply', async () => {
+    getClaims.mockResolvedValue({
+      data: null,
+      error: authError('AuthRetryableFetchError', 0, 'upstream down'),
+    });
+
+    const response = await middleware(requestFor('/some-unknown'));
+
+    expect(response.headers.get('location')).toBeNull();
+    expect(getClaims).toHaveBeenCalledTimes(1);
+    expect(warnCalls()).toHaveLength(0);
+  });
+});
+
+describe('middleware matcher', () => {
+  const matches = (pathname: string): boolean =>
+    unstable_doesMiddlewareMatch({ config, url: `http://localhost:3434${pathname}` });
+
+  it.each([
+    '/landing-v2',
+    '/termsxyz',
+    '/loginx',
+    '/privacy-old',
+    '/recipesfoo',
+    '/sx',
+    '/posts',
+    '/',
+    '/some-unknown',
+  ])('runs the middleware on %s', (pathname) => {
+    expect(matches(pathname)).toBe(true);
+  });
+
+  it.each([
+    '/landing',
+    '/landing/',
+    '/login',
+    '/terms',
+    '/privacy',
+    '/recipes',
+    '/recipes/daily-news',
+    '/s/abc',
+    '/llms.txt',
+    '/llms-full.txt',
+    '/robots.txt',
+    '/sitemap.xml',
+    '/openapi.json',
+    '/api/x',
+    '/auth/callback',
+    '/.well-known/x',
+    '/oauth/authorize',
+  ])('skips the middleware on %s', (pathname) => {
+    expect(matches(pathname)).toBe(false);
   });
 });

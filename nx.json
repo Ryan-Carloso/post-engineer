@@ -19,7 +19,12 @@
     },
     "test": {
       "cache": true,
-      "inputs": ["default", "{workspaceRoot}/shared/**/*", "{workspaceRoot}/scripts/sync-*.mjs"]
+      "inputs": [
+        "default",
+        "{workspaceRoot}/shared/**/*",
+        "{workspaceRoot}/scripts/sync-*.mjs",
+        "{workspaceRoot}/apps/mcp/src/**/*"
+      ]
     },
     "lint": {
       "cache": true,

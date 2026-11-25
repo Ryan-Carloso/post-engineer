@@ -26,6 +26,7 @@ import { onboardingStrings } from './onboarding-i18n';
 import { userPromptsStrings } from './user-prompts-i18n';
 import { shareLinksStrings } from './share-links-i18n';
 import { personaIdentityCardStrings } from './persona-identity-card-i18n';
+import { notFoundStrings } from './not-found-i18n';
 import type { Locale } from './types';
 
 export const ptDictionary = {
@@ -48,6 +49,7 @@ export const ptDictionary = {
   shareLinks: shareLinksStrings.pt.shareLinks,
   sharedView: shareLinksStrings.pt.sharedView,
   identityCard: personaIdentityCardStrings.pt.identityCard,
+  notFound: notFoundStrings.pt.notFound,
 };
 
 export const enDictionary = {
@@ -70,6 +72,7 @@ export const enDictionary = {
   shareLinks: shareLinksStrings.en.shareLinks,
   sharedView: shareLinksStrings.en.sharedView,
   identityCard: personaIdentityCardStrings.en.identityCard,
+  notFound: notFoundStrings.en.notFound,
 };
 
 type PublishingAccountsKeys = typeof publishingAccountsStrings.en;
@@ -93,6 +96,7 @@ type OnboardingKeys = typeof onboardingStrings.en;
 type UserPromptsKeys = typeof userPromptsStrings.en;
 type ShareLinksKeys = typeof shareLinksStrings.en;
 type IdentityCardKeys = typeof personaIdentityCardStrings.en;
+type NotFoundKeys = typeof notFoundStrings.en;
 export type Dictionary = BaseDictionary & {
   [Section in keyof ThreadsKeys]: {
     [Key in keyof ThreadsKeys[Section]]: string;
@@ -172,6 +176,10 @@ export type Dictionary = BaseDictionary & {
 } & {
   [Section in keyof IdentityCardKeys]: {
     [Key in keyof IdentityCardKeys[Section]]: string;
+  };
+} & {
+  [Section in keyof NotFoundKeys]: {
+    [Key in keyof NotFoundKeys[Section]]: string;
   };
 } & {
   [Section in keyof ThemeKeys]: {

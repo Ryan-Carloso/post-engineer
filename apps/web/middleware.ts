@@ -1,22 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
-
-const TRANSIENT_AUTH_STATUSES: ReadonlySet<number> = new Set([
-  429, 500, 501, 502, 503, 504, 520, 521, 522, 523, 524, 525, 526, 527, 528, 529, 530,
-])
-
-function isTransientAuthError(error: unknown): boolean {
-  if (typeof error !== 'object' || error === null) return false
-  if ('name' in error && error.name === 'AuthRetryableFetchError') return true
-  return 'status' in error && typeof error.status === 'number' && TRANSIENT_AUTH_STATUSES.has(error.status)
-}
-
-function authErrorLogFields(error: unknown): { name: string; status: number | null } {
-  if (typeof error !== 'object' || error === null) return { name: 'unknown', status: null }
-  const name = 'name' in error && typeof error.name === 'string' ? error.name : 'unknown'
-  const status = 'status' in error && typeof error.status === 'number' ? error.status : null
-  return { name, status }
-}
+import { authErrorLogFields, isTransientAuthError } from '@/lib/auth-error'
+import { isProtectedPath } from '@/lib/protected-routes'
 
 function hasSubjectClaim(claims: unknown): boolean {
   if (typeof claims !== 'object' || claims === null) return false
@@ -95,13 +80,7 @@ export async function middleware(request: NextRequest) {
   const { data, error } = await supabase.auth.getClaims()
   const signedIn = hasSubjectClaim(data?.claims)
 
-  const publicPaths = ['/landing', '/login', '/privacy', '/terms', '/recipes', '/s'];
-
-  const isPublicPath = publicPaths.some(
-    (publicPath) => pathname === publicPath || pathname.startsWith(`${publicPath}/`),
-  );
-
-  if (!signedIn && !isPublicPath) {
+  if (!signedIn && isProtectedPath(pathname)) {
     if (!isTransientAuthError(error)) {
       return NextResponse.redirect(new URL('/landing', request.url))
     }
@@ -111,15 +90,11 @@ export async function middleware(request: NextRequest) {
     })
   }
 
-  if (signedIn && (pathname === '/login' || pathname === '/landing')) {
-    return NextResponse.redirect(new URL('/', request.url))
-  }
-
   return response
 }
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:png|jpe?g|gif|webp|svg|ico|txt|mp3|woff2?|ttf)$|sitemap\\.xml$|openapi\\.json$|mcp$|api/|auth/|.well-known/|oauth/|login|landing|privacy|terms|recipes|s/).*)',
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:png|jpe?g|gif|webp|svg|ico|txt|mp3|woff2?|ttf)$|sitemap\\.xml$|openapi\\.json$|mcp$|api/|auth/|.well-known/|oauth/|(?:login|landing|privacy|terms|recipes|s)(?:/|$)).*)',
   ],
 }
