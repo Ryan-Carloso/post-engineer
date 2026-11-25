@@ -233,7 +233,7 @@ describe('identityCard on personas create and update', () => {
     expect(UpdatePersonaSchema.safeParse({ personaId: MARIA, identityCard: bad }).success).toBe(false);
     expect(UpdatePersonaRemoteSchema.safeParse({ personaId: MARIA, identityCard: bad }).success).toBe(false);
     expect(UpdatePersonaSchema.safeParse({ personaId: MARIA, identityCard: { ...CARD, extra: 1 } }).success).toBe(false);
-    expect(UpdatePersonaSchema.safeParse({ personaId: MARIA, identityCard: { ...CARD, version: 2 } }).success).toBe(false);
+    expect(UpdatePersonaSchema.safeParse({ personaId: MARIA, identityCard: { ...CARD, version: 3 } }).success).toBe(false);
     expect(UpdatePersonaSchema.safeParse({ personaId: MARIA, identityCard: CARD }).success).toBe(true);
     expect(UpdatePersonaSchema.safeParse({ personaId: MARIA, identityCard: null }).success).toBe(true);
     const create = { name: 'Maria', avatarUrl: 'https://example.com/a.png', voiceId: 'v1', accounts: { youtube: ['UC1'] } };

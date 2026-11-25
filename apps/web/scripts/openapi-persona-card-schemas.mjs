@@ -8,6 +8,7 @@ import {
   SCENE_LIGHTING,
   SCENE_MAX_BYTES,
 } from '../../../shared/contracts/persona-identity-card-limits.ts';
+import { CARD_STYLES } from '../../../shared/contracts/persona-identity-card-styles.ts';
 
 const text = { type: 'string', minLength: 1, maxLength: IDENTITY_TEXT_MAX_LENGTH };
 const strict = (properties, required = []) => ({
@@ -21,28 +22,24 @@ const outfit = strict(Object.fromEntries(OUTFIT_SLOTS.map((slot) => [slot, text]
 outfit.description =
   'Clothing only, one line per slot. one_piece cannot be combined with top or bottom. Nudity, sexualised clothing and words about the person (hair, skin, body) are rejected.';
 
+const leaves = (names) => Object.fromEntries(names.map((name) => [name, text]));
+
 const identityCard = strict(
   {
-    version: { type: 'integer', enum: [1] },
+    version: { type: 'integer', enum: [...IDENTITY_CARD_ACCEPTED_VERSIONS] },
     identity: strict({
       face: strict({
-        shape: text,
-        eyes: text,
-        eyebrows: text,
-        nose: text,
-        lips: text,
-        skin: text,
-        hair: strict({ color: text, style: text, length: text }),
-        facial_hair: text,
-        marks: text,
+        ...leaves(['shape', 'eyes', 'eye_color', 'eyebrows', 'nose', 'lips', 'teeth', 'smile', 'skin', 'jawline', 'cheekbones', 'chin', 'forehead', 'ears']),
+        hair: strict(leaves(['color', 'style', 'length', 'texture', 'parting'])),
+        ...leaves(['facial_hair', 'marks', 'tattoos']),
       }),
-      body: strict({ build: text, height: text, shoulders: text, hands: text }),
+      body: strict(leaves(['build', 'height', 'shoulders', 'arms', 'hands', 'waist', 'hips', 'legs', 'posture', 'proportions'])),
     }),
-    defaults: strict({ outfit }),
+    defaults: strict({ style: { type: 'string', enum: [...CARD_STYLES] }, outfit }),
   },
   ['version', 'identity'],
 );
-identityCard.description = `Versioned identity card (at most ${IDENTITY_CARD_MAX_BYTES} bytes, every level strict, at least one identity trait). It describes a real person's physical traits: fill it only with their consent. Advice for the agent's image tool, not enforcement.`;
+identityCard.description = `Versioned identity card (version 1 or 2; new cards are version 2; at most ${IDENTITY_CARD_MAX_BYTES} bytes once stored, every level strict, at least one identity trait). A version 1 card carries only the original leaves and no style; defaults must name a style or an outfit. It describes a real person's physical traits: fill it only with their consent. Advice for the agent's image tool, not enforcement.`;
 
 const scene = strict(
   {

@@ -1,4 +1,5 @@
 import {
+  IDENTITY_CARD_MAX_BYTES,
   OUTFIT_SLOTS,
   parseIdentityCardValue,
   type IdentityCard,
@@ -101,11 +102,17 @@ export type IdentityCardErrorKey =
   | 'identityCard.errContent'
   | 'identityCard.errOutfitIdentity'
   | 'identityCard.errField'
+  | 'identityCard.errTooLarge'
+  | 'identityCard.errStyleOrOutfit'
   | 'identityCard.errGeneric';
 
 export function identityCardErrorKey(message: string): IdentityCardErrorKey {
   if (message.includes('cannot be combined with top or bottom')) return 'identityCard.errOnePiece';
   if (message.includes('at least one trait')) return 'identityCard.errNoTrait';
+  if (message.includes('style or an outfit')) return 'identityCard.errStyleOrOutfit';
+  if (message.includes('too large to store') || message.includes(`at most ${IDENTITY_CARD_MAX_BYTES} bytes`)) {
+    return 'identityCard.errTooLarge';
+  }
   if (message.includes('sexualised')) return 'identityCard.errContent';
   if (message.includes('clothing only')) return 'identityCard.errOutfitIdentity';
   if (message.includes('at most 80 characters') || message.includes('must not be empty') || message.includes('single line')) {

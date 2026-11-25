@@ -99,7 +99,9 @@ describe('identityCardErrorKey', () => {
     expect(identityCardErrorKey('identityCard.defaults.outfit.top: nude or sexualised clothing is not allowed')).toBe('identityCard.errContent');
     expect(identityCardErrorKey('identityCard.identity.face.eyes: at most 80 characters')).toBe('identityCard.errField');
     expect(identityCardErrorKey('identityCard: not valid JSON')).toBe('identityCard.errGeneric');
-    expect(identityCardErrorKey('identityCard: at most 4096 bytes')).toBe('identityCard.errGeneric');
+    expect(identityCardErrorKey('identityCard: at most 4096 bytes')).toBe('identityCard.errTooLarge');
+    expect(identityCardErrorKey('identityCard: too large to store (at most 4096 bytes; accented or non-Latin text uses more bytes)')).toBe('identityCard.errTooLarge');
+    expect(identityCardErrorKey('identityCard.defaults: must name a style or an outfit')).toBe('identityCard.errStyleOrOutfit');
   });
 });
 

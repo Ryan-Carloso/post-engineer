@@ -1,4 +1,5 @@
 export const IDENTITY_CARD_ACCEPTED_VERSIONS = [1, 2] as const;
+export const IDENTITY_CARD_WRITE_VERSION = 2;
 export const IDENTITY_CARD_MAX_BYTES = 4096;
 export const SCENE_MAX_BYTES = 2048;
 export const IDENTITY_TEXT_MAX_LENGTH = 80;

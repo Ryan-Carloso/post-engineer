@@ -39,3 +39,19 @@ export function cardWithSentinel(): IdentityCard {
     identity: { face: { eyes: CARD_SENTINEL } },
   };
 }
+
+export const FIXTURE_CARD_V2: IdentityCard = {
+  version: 2,
+  identity: {
+    face: {
+      shape: 'oval',
+      eyes: 'almond, wide-set',
+      eye_color: 'hazel',
+      smile: 'closed-lip, slight asymmetry',
+      jawline: 'soft',
+      hair: { color: 'dark brown', style: 'wavy', length: 'shoulder length', texture: 'fine', parting: 'left side' },
+    },
+    body: { build: 'athletic, toned', height: 'tall', posture: 'upright', proportions: 'long legs, short torso' },
+  },
+  defaults: { style: 'business', outfit: { top: 'white shirt', footwear: 'black loafers' } },
+};

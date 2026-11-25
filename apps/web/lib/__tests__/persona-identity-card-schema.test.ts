@@ -74,7 +74,7 @@ describe('IdentityCardSchema', () => {
     }
   });
 
-  it.each([2, '1', 0, null, undefined])('rejects version %s', (version) => {
+  it.each([3, '1', 0, null, undefined])('rejects version %s', (version) => {
     expect(IdentityCardSchema.safeParse({ ...clone(FIXTURE_CARD), version }).success).toBe(false);
   });
 
@@ -297,7 +297,7 @@ describe('parseIdentityCardJson and parseSceneJson', () => {
       expect(unknownKey.error).toBe('identityCard: unknown field');
       expect(unknownKey.error).not.toContain('green-value');
     }
-    const badVersion = parseIdentityCardJson(JSON.stringify({ ...clone(FIXTURE_CARD), version: 2 }));
+    const badVersion = parseIdentityCardJson(JSON.stringify({ ...clone(FIXTURE_CARD), version: 3 }));
     expect(badVersion).toEqual({ ok: false, error: 'identityCard.version: unsupported version' });
   });
 
