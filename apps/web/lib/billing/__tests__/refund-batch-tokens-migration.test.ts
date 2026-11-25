@@ -124,8 +124,8 @@ describe('refund_batch_tokens call sites', () => {
   it('web generate-and-schedule dispatch refunds a failed slot through the shared helper', () => {
     const src = readFileSync(webDispatchPath, 'utf8');
     expect(src).toContain('refundSlotTokens({');
-    expect(src).toContain('scheduleId,');
-    expect(src).toContain('slotId: slot.id');
+    expect(src).toContain('validatedOptions, scheduleId } = ctx;');
+    expect(src).toContain('      userId,\n      scheduleId,\n      slotId: slot.id,');
     expect(src).toContain('amount: ctx.perVideoCost');
     expect(src).toContain("reason: 'Unified generate+schedule: slot dispatch failed; video refunded'");
     expect(src).toContain("kind: 'dispatch_failed'");
