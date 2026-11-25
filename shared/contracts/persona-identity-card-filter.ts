@@ -1,6 +1,7 @@
 const IDENTITY_WORDS: ReadonlySet<string> = new Set([
   'hair', 'eye', 'eyes', 'skin', 'build', 'builds', 'height', 'heights', 'beard', 'bearded', 'muscular',
   'tattoo', 'tattoos', 'tattooed', 'freckles', 'freckled', 'body', 'bodies', 'face', 'faces', 'taller', 'thinner',
+  'smile', 'teeth', 'arms', 'legs', 'hips', 'waist', 'posture', 'jawline', 'cheekbones', 'chin', 'forehead', 'ears',
 ]);
 
 const IDENTITY_STEMS: readonly string[] = ['hair', 'eye', 'skin', 'freckl', 'tattoo', 'beard'];
@@ -15,6 +16,14 @@ const HARMLESS_CLOTHING_WORDS: readonly RegExp[] = [
   /\b(?:skinny|skintight|eyewear|eyeglasses|eyelet)\b/g,
 ];
 
+const ALLOWED_POSE_OUTFIT_PHRASES: readonly RegExp[] = [
+  /\barms[\s-]+crossed\b/g,
+  /\blegs[\s-]+crossed\b/g,
+  /\bsmiling\b/g,
+  /\bsmile at the camera\b/g,
+  /\bhigh[\s-]+waist(?:ed)?\b/g,
+];
+
 const HARMLESS_SCENE_PHRASES: readonly RegExp[] = [
   /\bginger tea\b/g,
   /\bbald eagle\b/g,
@@ -26,7 +35,10 @@ const SCENE_IDENTITY_WORDS: ReadonlySet<string> = new Set(['skinny']);
 
 function stripHarmless(value: string, scene: boolean): string {
   const lowered = value.toLowerCase();
-  const stripped = HARMLESS_CLOTHING_WORDS.reduce((text, phrase) => text.replace(phrase, ' '), lowered);
+  const stripped = [...HARMLESS_CLOTHING_WORDS, ...ALLOWED_POSE_OUTFIT_PHRASES].reduce(
+    (text, phrase) => text.replace(phrase, ' '),
+    lowered,
+  );
   return scene
     ? HARMLESS_SCENE_PHRASES.reduce((text, phrase) => text.replace(phrase, ' '), stripped)
     : stripped;
