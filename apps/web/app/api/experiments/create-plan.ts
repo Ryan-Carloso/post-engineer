@@ -131,10 +131,13 @@ async function historyWarning(
   return [{ code: 'EXPERIMENT_SAMPLE_BELOW_CLEAR_MINIMUM', videosPerVariant: perVariant, minimumVideos, groups }];
 }
 
+export type ExperimentStage = 'quote' | 'confirm';
+
 export async function planExperiment(
   supabase: SupabaseClient,
   auth: SupabaseSessionAuth,
   body: CreateExperimentBody,
+  stage: ExperimentStage,
 ): Promise<ExperimentPlan | NextResponse> {
   const userId = auth.userId;
   const personaId = body.personaId?.trim() || null;
@@ -221,7 +224,7 @@ export async function planExperiment(
 
   const warnings: ExperimentWarning[] = [
     ...scheduleWarnings(prep.voiceFallback, validatedAccounts.reconnectWarning),
-    ...(await historyWarning(supabase, auth, body, perVariant)),
+    ...(stage === 'quote' ? await historyWarning(supabase, auth, body, perVariant) : []),
   ];
   return {
     userId,

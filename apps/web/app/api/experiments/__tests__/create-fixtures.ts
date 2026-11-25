@@ -62,6 +62,9 @@ export interface DbConfig {
   prompts?: Record<string, { visibility: string }>;
   accounts?: Array<{ provider: string; provider_account_id: string; needs_reconnect?: boolean }>;
   spend?: { spent: boolean; balance: number };
+  spendError?: { code?: string; message: string };
+  insertedOrder?: 'reversed';
+  insertedIds?: (ids: string[]) => string[];
   scheduleInsertError?: { code?: string; message: string };
   slotInsertError?: { message: string };
   ledger?: Array<{ type: string; amount: number; reference_id: string | null }>;
@@ -125,8 +128,12 @@ export function fakeDb(config: DbConfig = {}): FakeDb {
       case 'scheduled_posts:insert': {
         if (config.slotInsertError !== undefined) return { data: null, error: config.slotInsertError };
         const rows = call.payload as Array<Record<string, unknown>>;
-        state.slots = rows.map((row, index) => ({ ...row, id: `slot-${index}`, task_id: null }));
-        return { data: state.slots.map((row) => ({ id: row.id, slot_at: row.slot_at, title: row.title })), error: null };
+        state.slots = rows.map((row, index) => ({ ...row, id: row.id ?? `slot-${index}`, task_id: null }));
+        const returned = state.slots.map((row) => ({ id: row.id, slot_at: row.slot_at, title: row.title }));
+        const reordered = config.insertedOrder === 'reversed' ? [...returned].reverse() : returned;
+        if (config.insertedIds === undefined) return { data: reordered, error: null };
+        const ids = config.insertedIds(reordered.map((row) => String(row.id)));
+        return { data: reordered.map((row, index) => ({ ...row, id: ids[index] })), error: null };
       }
       case 'token_transactions:select':
         return { data: config.ledger ?? [], error: null };
@@ -174,7 +181,10 @@ export function fakeDb(config: DbConfig = {}): FakeDb {
 
   const rpc = vi.fn(async (name: string, args: Record<string, unknown>) => {
     rpcCalls.push({ name, args });
-    if (name === 'spend_tokens') return { data: config.spend ?? { spent: true, balance: 100 }, error: null };
+    if (name === 'spend_tokens') {
+      if (config.spendError !== undefined) return { data: null, error: config.spendError };
+      return { data: config.spend ?? { spent: true, balance: 100 }, error: null };
+    }
     if (name === 'refund_batch_tokens') return { data: { refunded: true }, error: null };
     return { data: null, error: null };
   });

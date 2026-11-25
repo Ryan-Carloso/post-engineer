@@ -6,13 +6,14 @@ import { ERROR_CODES, formatErrorMessage } from '@/lib/error-codes';
 import { isQuoteExpired } from '@/lib/experiments/quote-key';
 import { batchChargeId } from '@/lib/billing/batch-discount';
 import { deterministicUuid } from '@/lib/idempotency';
+import { trackApiEvent } from '@/lib/analytics';
 import { logger } from '@/lib/logger';
 import type { SupabaseSessionAuth } from '@/lib/request-auth';
 import { toFiniteNumber } from '@/lib/tokens';
 import { scheduleAccountColumns } from '../videos/generate-and-schedule/account-columns';
 import { dispatchSlot, type SlotDispatchContext, type SlotResult } from '../videos/generate-and-schedule/dispatch-slot';
 import { buildIdentitySnapshot } from '../videos/generate-and-schedule/identity-snapshot';
-import { violatedConstraint, SCHEDULE_PK_CONSTRAINT } from '../videos/generate-and-schedule/constraint-violations';
+import { violatedConstraint, SCHEDULE_PK_CONSTRAINT, SCHEDULES_PERSONA_OWNER_CONSTRAINT } from '../videos/generate-and-schedule/constraint-violations';
 import { persistVoiceSwap } from '../videos/generate-and-schedule/prepare-persona';
 import { resolvePriorSpend } from '../videos/generate-and-schedule/prior-spend';
 import { refundRollbackSpend } from '../videos/generate-and-schedule/rollback-refund';
@@ -30,12 +31,14 @@ export function experimentScheduleId(userId: string, quoteKey: string): string {
 async function replayWinner(supabase: SupabaseClient, plan: ExperimentPlan, scheduleId: string): Promise<NextResponse> {
   const rows = await fetchReplayRows(supabase, plan.userId, scheduleId);
   if (rows === null || rows.length === 0) return internalError();
+  trackApiEvent('video_creation_replayed', { userId: plan.userId, scheduleId });
   return replayResponse(scheduleId, rows, plan.warnings);
 }
 
 async function spendTotal(
   supabase: SupabaseClient,
   plan: ExperimentPlan,
+  scheduleId: string,
   generationId: string,
 ): Promise<NextResponse | null> {
   try {
@@ -50,12 +53,26 @@ async function spendTotal(
     p_reason: `Experiment create (${plan.videos.length} videos)`,
   });
   if (error) {
+    if (violatedConstraint(error) !== null) {
+      const rows = await fetchReplayRows(supabase, plan.userId, scheduleId);
+      if (rows !== null && rows.length > 0) {
+        trackApiEvent('video_creation_replayed', { userId: plan.userId, scheduleId });
+        return replayResponse(scheduleId, rows, plan.warnings);
+      }
+    }
     logger.error('[experiments-create] atomic spend failed', error, { userId: plan.userId, generationId });
+    trackApiEvent('video_creation_failed', { userId: plan.userId, errorCode: ERROR_CODES.INTERNAL_ERROR, failureStage: 'spend' });
     return internalError();
   }
   const record = (data ?? {}) as { spent?: boolean; balance?: unknown };
   if (record.spent === true) return null;
   const have = toFiniteNumber(record.balance, 0);
+  trackApiEvent('video_creation_validation_failed', {
+    userId: plan.userId,
+    personaId: plan.personaId,
+    errorCode: ERROR_CODES.INSUFFICIENT_TOKENS,
+    tokenCost: plan.totalTokens,
+  });
   return experimentError(
     402,
     ERROR_CODES.INSUFFICIENT_TOKENS,
@@ -90,8 +107,12 @@ function scheduleInsert(plan: ExperimentPlan, scheduleId: string) {
   };
 }
 
+function experimentSlotId(scheduleId: string, index: number): string {
+  return deterministicUuid(SCHEDULE_NAMESPACE, `${scheduleId}:slot:${index}`);
+}
+
 function slotRows(plan: ExperimentPlan, scheduleId: string) {
-  return plan.videos.flatMap((video) =>
+  return plan.videos.flatMap((video, index) =>
     buildSlotRows({
       slots: [video.slot],
       title: video.title,
@@ -105,7 +126,7 @@ function slotRows(plan: ExperimentPlan, scheduleId: string) {
       lipsyncPhotos: plan.options.lipsyncPhotos,
       hookTitle: plan.options.hookTitle,
       promptVersionId: video.versionId,
-    }),
+    }).map((row) => ({ ...row, id: experimentSlotId(scheduleId, index) })),
   );
 }
 
@@ -114,16 +135,20 @@ interface InsertedSlot {
   slot_at: string;
 }
 
-function pairInsertedSlots(plan: ExperimentPlan, inserted: InsertedSlot[] | null): Array<{ row: InsertedSlot; video: PlannedVideo }> | null {
+function pairInsertedSlots(
+  plan: ExperimentPlan,
+  scheduleId: string,
+  inserted: InsertedSlot[] | null,
+): Array<{ row: InsertedSlot; video: PlannedVideo }> | null {
   if (inserted === null || inserted.length !== plan.videos.length) return null;
-  const byTime = new Map(plan.videos.map((video) => [Date.parse(video.slot.slotAtISO), video]));
+  const rowsById = new Map(inserted.map((row) => [row.id, row]));
   const pairs: Array<{ row: InsertedSlot; video: PlannedVideo }> = [];
-  for (const row of inserted) {
-    const video = byTime.get(Date.parse(row.slot_at));
-    if (video === undefined) return null;
+  for (const [index, video] of plan.videos.entries()) {
+    const row = rowsById.get(experimentSlotId(scheduleId, index));
+    if (row === undefined) return null;
     pairs.push({ row, video });
   }
-  return pairs.sort((left, right) => Date.parse(left.row.slot_at) - Date.parse(right.row.slot_at));
+  return pairs;
 }
 
 export async function confirmExperiment(
@@ -142,23 +167,47 @@ export async function confirmExperiment(
 
   const existing = await resolveExistingSchedule(supabase, userId, scheduleId);
   if (existing instanceof NextResponse) return existing;
-  if (existing.replay !== null) return existing.replay;
+  if (existing.replay !== null) {
+    trackApiEvent('video_creation_replayed', { userId, scheduleId });
+    return existing.replay;
+  }
   if (isQuoteExpired(expiresAt, now)) {
     return experimentError(409, ERROR_CODES.QUOTE_EXPIRED, formatErrorMessage(ERROR_CODES.QUOTE_EXPIRED));
   }
-  const plan = await planExperiment(supabase, auth, body);
+  const plan = await planExperiment(supabase, auth, body, 'confirm');
   if (plan instanceof NextResponse) return plan;
   if (quoteKeyOf(plan, expiresAt) !== quoteKey) {
     return experimentError(409, ERROR_CODES.QUOTE_CHANGED, formatErrorMessage(ERROR_CODES.QUOTE_CHANGED));
   }
 
+  trackApiEvent('video_creation_validated', {
+    userId,
+    personaId: plan.personaId,
+    numberOfVideos: plan.videos.length,
+    providers: plan.providers,
+    videoType: plan.options.videoType,
+  });
+  trackApiEvent('video_tokens_calculated', {
+    userId,
+    personaId: plan.personaId,
+    numberOfVideos: plan.videos.length,
+    perVideoCost: plan.perVideoCost,
+    tokenCost: plan.totalTokens,
+  });
   const priorSpend = await resolvePriorSpend(supabase, { userId, scheduleId, generationId, scheduleWasLive: existing.live });
   if (!('alreadySpent' in priorSpend)) return priorSpend;
   const { alreadySpent } = priorSpend;
   if (!alreadySpent) {
-    const spendFailure = await spendTotal(supabase, plan, generationId);
+    const spendFailure = await spendTotal(supabase, plan, scheduleId, generationId);
     if (spendFailure !== null) return spendFailure;
   }
+  trackApiEvent('video_tokens_spent', {
+    userId,
+    personaId: plan.personaId,
+    numberOfVideos: plan.videos.length,
+    tokenCost: plan.totalTokens,
+    generationId,
+  });
 
   if (plan.prep.voiceFallback !== undefined && plan.personaId !== null) {
     await persistVoiceSwap(supabase, userId, plan.personaId, plan.prep.voiceFallback);
@@ -166,27 +215,54 @@ export async function confirmExperiment(
 
   const { error: scheduleError } = await supabase.from('schedules').insert(scheduleInsert(plan, scheduleId));
   if (scheduleError) {
-    if (violatedConstraint(scheduleError) === SCHEDULE_PK_CONSTRAINT) {
+    const constraint = violatedConstraint(scheduleError);
+    if (constraint === SCHEDULES_PERSONA_OWNER_CONSTRAINT) {
+      logger.error('[experiments-create] persona already has a schedule; refunding redundant spend', scheduleError, {
+        scheduleId,
+        userId,
+        personaId: plan.personaId,
+      });
+      if (!alreadySpent) await refundWhole(supabase, plan, generationId, 'Persona already scheduled; refunded redundant spend');
+      trackApiEvent('video_creation_failed', {
+        userId,
+        scheduleId,
+        errorCode: ERROR_CODES.PERSONA_ALREADY_SCHEDULED,
+        failureStage: 'schedule_insert',
+      });
+      return experimentError(409, ERROR_CODES.PERSONA_ALREADY_SCHEDULED, formatErrorMessage(ERROR_CODES.PERSONA_ALREADY_SCHEDULED));
+    }
+    if (constraint === SCHEDULE_PK_CONSTRAINT) {
       if (!alreadySpent) await refundWhole(supabase, plan, generationId, 'Experiment create: duplicate confirm; refunded redundant spend');
       return replayWinner(supabase, plan, scheduleId);
     }
     logger.error('[experiments-create] schedule insert failed after spend; refunding', scheduleError, { scheduleId, userId });
     await refundWhole(supabase, plan, generationId, 'Experiment create: schedule insert failed; tokens refunded');
+    trackApiEvent('video_creation_failed', { userId, errorCode: ERROR_CODES.INTERNAL_ERROR, failureStage: 'schedule_insert' });
     return internalError();
   }
+  trackApiEvent('video_schedule_created', {
+    userId,
+    personaId: plan.personaId,
+    scheduleId,
+    numberOfVideos: plan.videos.length,
+    providers: plan.providers,
+    publishMode: 'scheduled',
+  });
 
   const { data: inserted, error: slotsError } = await supabase
     .from('scheduled_posts')
     .insert(slotRows(plan, scheduleId))
     .select('id, slot_at');
-  const pairs = slotsError ? null : pairInsertedSlots(plan, inserted as InsertedSlot[] | null);
+  const pairs = slotsError ? null : pairInsertedSlots(plan, scheduleId, inserted as InsertedSlot[] | null);
   if (pairs === null) {
     logger.error('[experiments-create] slot insert failed; rolling back schedule', slotsError, { scheduleId, userId });
     await deleteInsertedSlots(supabase, userId, (inserted as InsertedSlot[] | null) ?? null);
     await supabase.from('schedules').delete().eq('id', scheduleId).eq('user_id', userId);
     await refundWhole(supabase, plan, generationId, 'Experiment create: slot insert failed; tokens refunded');
+    trackApiEvent('video_creation_failed', { userId, scheduleId, errorCode: ERROR_CODES.INTERNAL_ERROR, failureStage: 'slot_insert' });
     return internalError();
   }
+  trackApiEvent('video_slots_created', { userId, scheduleId, numberOfVideos: plan.videos.length });
 
   const context: SlotDispatchContext = {
     supabase,
@@ -216,6 +292,13 @@ export async function confirmExperiment(
   }
 
   const accepted = results.filter((result) => result.status !== 'failed').length;
+  trackApiEvent('video_tasks_created', {
+    userId,
+    personaId: plan.personaId,
+    scheduleId,
+    tasksAccepted: accepted,
+    tasksFailed: results.length - accepted,
+  });
   const refundedTokens = results.reduce((sum, result) => sum + (result.status === 'failed' && result.tokensRefunded === true ? plan.perVideoCost : 0), 0);
   const envelope = {
     stage: 'confirmed',
@@ -230,7 +313,25 @@ export async function confirmExperiment(
       ['engine_rejected', 'engine_unavailable', 'no_task_id'].includes(result.errorCode ?? ''),
     );
     const code = engineOutage ? ERROR_CODES.ENGINE_UNAVAILABLE : ERROR_CODES.INTERNAL_ERROR;
+    trackApiEvent('video_creation_failed', {
+      userId,
+      personaId: plan.personaId,
+      scheduleId,
+      errorCode: code,
+      failureStage: 'dispatch',
+      numberOfVideos: plan.videos.length,
+      refunded: results.every((result) => result.status !== 'failed' || result.tokensRefunded === true),
+    });
     return NextResponse.json({ success: false, error: formatErrorMessage(code), code, ...envelope }, { status: 502 });
   }
+  trackApiEvent('video_creation_completed', {
+    userId,
+    personaId: plan.personaId,
+    scheduleId,
+    numberOfVideos: plan.videos.length,
+    tasksAccepted: accepted,
+    tasksFailed: results.length - accepted,
+    tokenCost: plan.totalTokens,
+  });
   return NextResponse.json({ success: true, ...envelope });
 }

@@ -34,6 +34,7 @@ import { createHash } from 'node:crypto';
 import { canonicalJson } from '@/lib/experiments/quote-key';
 import { NextResponse } from 'next/server';
 import { checkPreChargePreflights } from '../../videos/generate-and-schedule/aspect-preflight';
+import { trackApiEvent } from '@/lib/analytics';
 import { readPromptComparison } from '@/lib/experiments/read-comparison';
 import { refundSlotTokens } from '@/lib/billing/refund-tokens';
 import { startEngineVideoTask } from '@/lib/generation/video-generation';
@@ -351,6 +352,164 @@ describe('confirmExperiment', () => {
     expect(json).toMatchObject({ replayed: true });
     expect(db.rpcCalls.find((call) => call.name === 'refund_batch_tokens')?.args).toMatchObject({ p_amount: TOTAL });
     expect(startEngineVideoTask).not.toHaveBeenCalled();
+  });
+
+  it('refunds the redundant charge and answers 409 when the persona already has a schedule', async () => {
+    const { confirmBody } = await quoted();
+    const db = fakeDb({
+      scheduleInsertError: { code: '23505', message: 'duplicate key value violates unique constraint "schedules_persona_owner"' },
+    });
+
+    const { response, json, db: used } = await confirm(confirmBody, db);
+
+    expect(response.status).toBe(409);
+    expect(json.code).toBe('PERSONA_ALREADY_SCHEDULED');
+    expect(used.rpcCalls.find((call) => call.name === 'refund_batch_tokens')?.args).toMatchObject({ p_amount: TOTAL });
+    expect(used.state.slots).toEqual([]);
+    expect(startEngineVideoTask).not.toHaveBeenCalled();
+  });
+
+  it('does not refund a persona-already-scheduled confirm that never charged', async () => {
+    const { confirmBody } = await quoted();
+    const db = fakeDb({
+      scheduleInsertError: { code: '23505', message: 'duplicate key value violates unique constraint "schedules_persona_owner"' },
+      ledger: [{ type: 'video_generation', amount: -TOTAL, reference_id: null }],
+    });
+
+    const { response, db: used } = await confirm(confirmBody, db);
+
+    expect(response.status).toBe(409);
+    expect(used.rpcCalls.map((call) => call.name)).not.toContain('refund_batch_tokens');
+  });
+
+  it('replays the winner when the spend collides with a confirm that already ran', async () => {
+    const { confirmBody } = await quoted();
+    const db = fakeDb({ spendError: { code: '23505', message: 'duplicate key value violates unique constraint "token_transactions_generation_key"' } });
+    db.state.slots = [
+      { id: 'winner-1', slot_at: '2030-01-01T09:00:00.000Z', title: 'A video 1', task_id: 't', status: 'generating', prompt_version_id: VERSION_A, charged_tokens: 1 },
+    ];
+
+    const { response, json } = await confirm(confirmBody, db);
+
+    expect(response.status).toBe(200);
+    expect(json).toMatchObject({ success: true, replayed: true, scheduleId: experimentScheduleId(USER_ID, confirmBody.quoteKey ?? '') });
+    expect(db.calls.filter((call) => call.op === 'insert')).toEqual([]);
+    expect(startEngineVideoTask).not.toHaveBeenCalled();
+  });
+
+  it('answers 500 and writes nothing when the spend fails for another reason', async () => {
+    const { confirmBody } = await quoted();
+    const db = fakeDb({ spendError: { code: '57014', message: 'canceling statement due to statement timeout' } });
+    db.state.slots = [
+      { id: 'other', slot_at: '2030-01-01T09:00:00.000Z', title: 'x', task_id: null, status: 'pending', prompt_version_id: null, charged_tokens: 0 },
+    ];
+
+    const { response, json } = await confirm(confirmBody, db);
+
+    expect(response.status).toBe(500);
+    expect(json.code).toBe('INTERNAL_ERROR');
+    expect(db.calls.filter((call) => call.op === 'insert')).toEqual([]);
+  });
+
+  it('answers 500 when the spend collides but no winner rows exist to replay', async () => {
+    const { confirmBody } = await quoted();
+    const db = fakeDb({ spendError: { code: '23505', message: 'duplicate key value violates unique constraint "token_transactions_generation_key"' } });
+
+    const { response } = await confirm(confirmBody, db);
+
+    expect(response.status).toBe(500);
+    expect(db.calls.filter((call) => call.op === 'insert')).toEqual([]);
+  });
+
+  it('pairs each inserted row with its own video by slot id, whatever order the insert returns them in', async () => {
+    const { confirmBody } = await quoted();
+    const db = fakeDb({ insertedOrder: 'reversed' });
+
+    const { response } = await confirm(confirmBody, db);
+
+    expect(response.status).toBe(200);
+    for (const call of vi.mocked(startEngineVideoTask).mock.calls) {
+      const payload = call[1] as { slot_id: string; video_title: string };
+      const row = db.state.slots.find((slot) => slot.id === payload.slot_id);
+      expect(row?.title).toBe(payload.video_title);
+    }
+    expect(vi.mocked(startEngineVideoTask)).toHaveBeenCalledTimes(TOTAL);
+  });
+
+  it('gives every slot an id derived from the schedule and its position, stable across retries', async () => {
+    const first = await quoted();
+    const dbOne = fakeDb();
+    const dbTwo = fakeDb();
+
+    await confirm(first.confirmBody, dbOne);
+    await confirm(first.confirmBody, dbTwo);
+
+    const ids = dbOne.state.slots.map((slot) => slot.id);
+    expect(new Set(ids).size).toBe(TOTAL);
+    expect(dbTwo.state.slots.map((slot) => slot.id)).toEqual(ids);
+  });
+
+  it('rolls back when the insert returns a row that is not one of its slots', async () => {
+    const { confirmBody } = await quoted();
+    const db = fakeDb({ insertedIds: (ids) => [...ids.slice(0, -1), 'someone-elses-slot'] });
+
+    const { response, db: used } = await confirm(confirmBody, db);
+
+    expect(response.status).toBe(500);
+    expect(used.state.schedule).toBeNull();
+    expect(used.rpcCalls.find((call) => call.name === 'refund_batch_tokens')?.args).toMatchObject({ p_amount: TOTAL });
+    expect(startEngineVideoTask).not.toHaveBeenCalled();
+  });
+
+  it('does not read the prompt history again at confirm: the quote already showed its warnings', async () => {
+    const { confirmBody } = await quoted();
+    vi.mocked(readPromptComparison).mockClear();
+
+    const { json } = await confirm(confirmBody);
+
+    expect(readPromptComparison).not.toHaveBeenCalled();
+    expect(json.warnings).toEqual([]);
+  });
+
+  it('reports the funnel from validation to completion and a replay on a retry', async () => {
+    const { confirmBody } = await quoted();
+    const db = fakeDb();
+
+    await confirm(confirmBody, db);
+    await confirm(confirmBody, db);
+
+    const events = vi.mocked(trackApiEvent).mock.calls.map((call) => call[0]);
+    expect(events).toEqual([
+      'video_creation_validated',
+      'video_tokens_calculated',
+      'video_tokens_spent',
+      'video_schedule_created',
+      'video_slots_created',
+      'video_tasks_created',
+      'video_creation_completed',
+      'video_creation_replayed',
+    ]);
+    expect(vi.mocked(trackApiEvent).mock.calls.find((call) => call[0] === 'video_creation_completed')?.[1]).toMatchObject({
+      userId: USER_ID,
+      numberOfVideos: TOTAL,
+      tasksAccepted: TOTAL,
+      tasksFailed: 0,
+      tokenCost: TOTAL,
+    });
+  });
+
+  it('reports a failed dispatch of every video as a failed creation', async () => {
+    vi.mocked(startEngineVideoTask).mockResolvedValue({ ok: false, response: new Response(null) as never, upstreamStatus: 503 });
+    const { confirmBody } = await quoted();
+    vi.mocked(trackApiEvent).mockClear();
+
+    await confirm(confirmBody);
+
+    expect(vi.mocked(trackApiEvent).mock.calls.find((call) => call[0] === 'video_creation_failed')?.[1]).toMatchObject({
+      errorCode: 'ENGINE_UNAVAILABLE',
+      failureStage: 'dispatch',
+      refunded: true,
+    });
   });
 
   it('rejects a confirm that carries no quote key', async () => {

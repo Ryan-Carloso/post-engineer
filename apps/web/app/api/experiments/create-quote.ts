@@ -12,7 +12,7 @@ export async function quoteExperiment(
   body: CreateExperimentBody,
   now: Date,
 ): Promise<NextResponse> {
-  const plan = await planExperiment(supabase, auth, body);
+  const plan = await planExperiment(supabase, auth, body, 'quote');
   if (plan instanceof NextResponse) return plan;
   const expiresAt = quoteExpiry(now);
   return NextResponse.json({
