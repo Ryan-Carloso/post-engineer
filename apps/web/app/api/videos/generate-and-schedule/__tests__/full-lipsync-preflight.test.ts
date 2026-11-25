@@ -6,6 +6,7 @@ import {
   checkFullLipsyncNarration,
   FULL_LIPSYNC_MAX_SECONDS,
 } from '../full-lipsync-preflight';
+import { logger } from '@/lib/logger';
 import { createPreflightShared } from '../preflight-shared';
 
 vi.mock('@/lib/logger', () => ({
@@ -41,6 +42,7 @@ const INPUT = {
 
 describe('checkFullLipsyncNarration', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     vi.stubEnv('MONEYPRINT_API_URL', 'https://engine.test');
     vi.stubEnv('MONEYPRINT_API_SECRET', 'engine-secret');
   });
@@ -130,6 +132,28 @@ describe('checkFullLipsyncNarration', () => {
     const result = await checkFullLipsyncNarration(INPUT);
     expect(result).toBeInstanceOf(NextResponse);
     expect((result as NextResponse).status).toBe(502);
+  });
+
+  it('logs a narration cut off by the time budget as a warning, not an engine error', async () => {
+    stubFetch(new Error('The operation was aborted'));
+    const budget = new AbortController();
+    budget.abort();
+    const shared = { ...createPreflightShared(60_000), signal: budget.signal };
+
+    const result = await checkFullLipsyncNarration({ ...INPUT, shared });
+
+    expect((result as NextResponse).status).toBe(502);
+    expect(logger.warn).toHaveBeenCalledWith('[full-lipsync-preflight] narration check stopped by the time budget');
+    expect(logger.error).not.toHaveBeenCalled();
+  });
+
+  it('keeps logging an unreachable engine as an error while the budget runs', async () => {
+    stubFetch(new Error('connect refused'));
+
+    await checkFullLipsyncNarration({ ...INPUT, shared: createPreflightShared(60_000) });
+
+    expect(logger.error).toHaveBeenCalledWith('[full-lipsync-preflight] engine unreachable', expect.any(Error));
+    expect(logger.warn).not.toHaveBeenCalled();
   });
 
   it('fails closed with 502 on a non-numeric duration', async () => {

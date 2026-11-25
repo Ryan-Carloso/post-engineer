@@ -6,6 +6,7 @@ vi.mock('@/lib/logger', () => ({
   logger: { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
+import { logger } from '@/lib/logger';
 import { fetchMediaCheck } from '../media-check';
 import { createPreflightShared } from '../preflight-shared';
 
@@ -26,6 +27,7 @@ const REF = { segmentIndex: 0, imageIndex: 0, mediaId: 'aabbccddeeff001122334455
 
 describe('fetchMediaCheck with a shared context', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     vi.stubEnv('MONEYPRINT_API_URL', 'https://engine.test');
     vi.stubEnv('MONEYPRINT_API_SECRET', 'engine-secret');
   });
@@ -91,5 +93,27 @@ describe('fetchMediaCheck with a shared context', () => {
     expect(result).toBeInstanceOf(NextResponse);
     if (!(result instanceof NextResponse)) throw new Error('expected a response');
     expect(result.status).toBe(502);
+  });
+
+  it('logs a check cut off by the time budget as a warning, not an engine error', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('The operation was aborted'); }));
+    const budget = new AbortController();
+    budget.abort();
+    const shared = { ...createPreflightShared(60_000), signal: budget.signal };
+
+    const outcome = await fetchMediaCheck(REF, 'user-1', '9:16', 'tag', shared);
+
+    expect(outcome).toBeInstanceOf(NextResponse);
+    expect(logger.warn).toHaveBeenCalledWith('[tag] media check stopped by the time budget');
+    expect(logger.error).not.toHaveBeenCalled();
+  });
+
+  it('keeps logging an unreachable engine as an error while the budget runs', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('connect refused'); }));
+
+    await fetchMediaCheck(REF, 'user-1', '9:16', 'tag', createPreflightShared(60_000));
+
+    expect(logger.error).toHaveBeenCalledWith('[tag] engine unreachable', expect.any(Error));
+    expect(logger.warn).not.toHaveBeenCalled();
   });
 });

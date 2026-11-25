@@ -5,7 +5,7 @@ import type { SegmentMediaRef } from '@/lib/hook-photo';
 import { engineAuthHeaders } from '@/lib/request-auth';
 import { logger } from '@/lib/logger';
 import { coded } from './prepare-persona';
-import { memoize, withBudget, type PreflightShared } from './preflight-shared';
+import { budgetExpired, budgetStoppedResponse, memoize, withBudget, type PreflightShared } from './preflight-shared';
 
 export const MEDIA_CHECK_TIMEOUT_MS = 30_000;
 
@@ -65,6 +65,10 @@ async function requestMediaCheck(
     });
   } catch (error) {
     clearTimeout(timeout);
+    if (budgetExpired(shared)) {
+      logger.warn(`[${logTag}] media check stopped by the time budget`);
+      return budgetStoppedResponse();
+    }
     logger.error(`[${logTag}] engine unreachable`, error);
     return coded(502, ERROR_CODES.INTERNAL_ERROR, 'Video service is unavailable.');
   }

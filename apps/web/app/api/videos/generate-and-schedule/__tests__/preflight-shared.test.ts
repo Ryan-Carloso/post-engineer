@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from 'vitest';
 
-import { createPreflightShared, memoize, withBudget } from '../preflight-shared';
+import { budgetExpired, createPreflightShared, memoize, withBudget } from '../preflight-shared';
 
 describe('memoize', () => {
   it('loads a key once and hands every caller the same pending result', async () => {
@@ -63,5 +63,19 @@ describe('withBudget', () => {
     local.abort();
 
     expect(combined.aborted).toBe(true);
+  });
+});
+
+describe('budgetExpired', () => {
+  it('is false without a shared context and while the budget runs', () => {
+    expect(budgetExpired(undefined)).toBe(false);
+    expect(budgetExpired(createPreflightShared(60_000))).toBe(false);
+  });
+
+  it('is true once the shared budget signal aborted', () => {
+    const budget = new AbortController();
+    budget.abort();
+
+    expect(budgetExpired({ ...createPreflightShared(60_000), signal: budget.signal })).toBe(true);
   });
 });

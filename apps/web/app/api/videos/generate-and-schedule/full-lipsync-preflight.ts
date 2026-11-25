@@ -2,7 +2,7 @@ import { ERROR_CODES, formatErrorMessage } from '@/lib/error-codes';
 import { engineAuthHeaders } from '@/lib/request-auth';
 import { logger } from '@/lib/logger';
 import { coded, validationFailed } from './prepare-persona';
-import { memoize, withBudget, type NarrationOutcome, type PreflightShared } from './preflight-shared';
+import { budgetExpired, budgetStoppedResponse, memoize, withBudget, type NarrationOutcome, type PreflightShared } from './preflight-shared';
 
 export const FULL_LIPSYNC_MAX_SECONDS = 60;
 
@@ -52,6 +52,10 @@ async function requestNarration(input: FullLipsyncPreflightInput): Promise<Narra
       signal: withBudget(controller.signal, input.shared),
     });
   } catch (error) {
+    if (budgetExpired(input.shared)) {
+      logger.warn('[full-lipsync-preflight] narration check stopped by the time budget');
+      return budgetStoppedResponse();
+    }
     logger.error('[full-lipsync-preflight] engine unreachable', error);
     return coded(502, ERROR_CODES.INTERNAL_ERROR, 'Video service is unavailable.');
   } finally {
