@@ -1,5 +1,3 @@
-import { PROMPT_VERSION_ID } from '../support/prompt-mocks';
-
 const SLUG = 'cold-brew-hook';
 const BODIES: Record<number, string> = {
   1: 'Write a short hook about coffee.',
@@ -7,8 +5,10 @@ const BODIES: Record<number, string> = {
   3: 'Write a punchy hook about cold brew coffee.',
 };
 
+const versionId = (version: number): string => `44444444-4444-4444-8444-44444444444${version}`;
+
 const summary = (version: number) => ({
-  versionId: PROMPT_VERSION_ID,
+  versionId: versionId(version),
   version,
   title: 'Cold brew hook',
   createdAt: new Date().toISOString(),
@@ -35,7 +35,7 @@ describe('Comparing prompt versions', () => {
           verified: false,
           prompt: BODIES[3],
           body: BODIES[3],
-          versionId: PROMPT_VERSION_ID,
+          versionId: versionId(3),
           version: 3,
         },
       },
@@ -49,7 +49,7 @@ describe('Comparing prompt versions', () => {
         statusCode: 200,
         body: {
           success: true,
-          version: { versionId: PROMPT_VERSION_ID, version, title: 'Cold brew hook', createdAt: new Date().toISOString(), body: BODIES[version], current: false },
+          version: { versionId: versionId(version), version, title: 'Cold brew hook', createdAt: new Date().toISOString(), body: BODIES[version], current: false },
         },
       }).as(`version${version}`);
     }
