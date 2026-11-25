@@ -32,6 +32,7 @@ export const ERROR_CODES = {
   UNKNOWN_VOICE: 'UNKNOWN_VOICE',
   INTERNAL_ERROR: 'INTERNAL_ERROR',
   ENGINE_UNAVAILABLE: 'ENGINE_UNAVAILABLE',
+  ENGINE_REJECTED: 'ENGINE_REJECTED',
   IMAGE_PROVIDER_UNSUPPORTED: 'IMAGE_PROVIDER_UNSUPPORTED',
   VIDEO_UPLOAD_CONSUMED: 'VIDEO_UPLOAD_CONSUMED',
   IDEMPOTENCY_KEY_CONSUMED: 'IDEMPOTENCY_KEY_CONSUMED',
@@ -80,6 +81,8 @@ const DEFAULT_MESSAGES: Record<ErrorCode, string> = {
     'Unknown voice "{attempt}". Not a house voice and not one of your clones. Pick one from GET /api/persona/voices.',
   INTERNAL_ERROR: 'Something went wrong. Please try again later.',
   ENGINE_UNAVAILABLE: 'Video generation is temporarily unavailable. Please try again later.',
+  ENGINE_REJECTED:
+    'The video service rejected this request. Check the video settings before trying again.',
   IMAGE_PROVIDER_UNSUPPORTED: 'Images can only be published to Instagram, Bluesky, LinkedIn, Threads, Facebook, Pinterest and Telegram.',
   VIDEO_UPLOAD_CONSUMED: 'This video upload was already used. Upload it again to publish.',
   IDEMPOTENCY_KEY_CONSUMED:

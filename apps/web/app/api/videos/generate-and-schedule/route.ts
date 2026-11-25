@@ -45,6 +45,7 @@ import { buildGenerateJobRequest } from './job-request';
 import { recordGenerationStart, recordGenerationUpdate, startEngineVideoTask } from '@/lib/generation/video-generation';
 import { checkCustomAudioUrl } from '@/lib/generation/custom-audio';
 import { deleteInsertedSlots } from './rollback-slots';
+import { classifyDispatchFailure, isEngineRejection } from './dispatch-failure';
 import { recordRecentImageId, resolveVideoImage } from '@/lib/persona-images';
 import { resolveIdempotency } from '@/lib/idempotency';
 import { trackApiEvent } from '@/lib/analytics';
@@ -537,7 +538,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
       const engineTask = await startEngineVideoTask(userId, payload);
       if (!engineTask.ok || !engineTask.taskId) {
         const errorCode = !engineTask.ok
-          ? engineTask.upstreamStatus !== undefined
+          ? isEngineRejection(engineTask.upstreamStatus)
             ? 'engine_rejected'
             : 'engine_unavailable'
           : 'no_task_id';
@@ -625,10 +626,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
     ...(warnings.length > 0 ? { warnings } : {}),
   };
   if (failed > 0 && accepted === 0) {
-    const engineOutage = results.every((r) =>
-      ['engine_rejected', 'engine_unavailable', 'no_task_id'].includes(r.errorCode ?? ''),
-    );
-    const code = engineOutage ? ERROR_CODES.ENGINE_UNAVAILABLE : ERROR_CODES.INTERNAL_ERROR;
+    const { status, code } = classifyDispatchFailure(results);
     trackApiEvent('video_creation_failed', {
       userId,
       personaId,
@@ -641,7 +639,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
     });
     return NextResponse.json(
       { success: false, error: formatErrorMessage(code), code, ...envelope },
-      { status: 502 },
+      { status },
     );
   }
 
