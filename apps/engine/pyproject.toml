@@ -20,7 +20,7 @@ dependencies = [
     "starlette==1.3.1",
     "cryptography==50.0.1",
     "uvicorn==0.32.1",
-    "pillow==12.3.0",
+    "pillow>=9.2.0,<12.0",
     "openai==2.24.0",
     "faster-whisper==1.1.0",
     "loguru==0.7.3",
@@ -49,12 +49,6 @@ packages = ["app"]
 [tool.uv]
 # The project is primarily an application, not a publishable Python package.
 package = false
-# moviepy 2.2.1 caps pillow at <12.0, but it only uses modern Pillow APIs
-# (Image.Resampling, ImageFont.truetype) that are stable in Pillow 12.
-# Override the transitive cap so the patched Pillow 12.3.0 resolves.
-override-dependencies = [
-    "pillow==12.3.0",
-]
 
 [dependency-groups]
 dev = [
