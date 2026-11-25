@@ -47,6 +47,14 @@ describe('isEngineRejection', () => {
     expect(isEngineRejection(503)).toBe(false);
   });
 
+  it('treats transient 4xx engine responses as retryable, not rejections', () => {
+    expect(isEngineRejection(401)).toBe(false);
+    expect(isEngineRejection(403)).toBe(false);
+    expect(isEngineRejection(408)).toBe(false);
+    expect(isEngineRejection(425)).toBe(false);
+    expect(isEngineRejection(429)).toBe(false);
+  });
+
   it('treats a missing status as transient', () => {
     expect(isEngineRejection(undefined)).toBe(false);
   });

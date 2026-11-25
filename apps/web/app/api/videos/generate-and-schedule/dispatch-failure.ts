@@ -11,8 +11,15 @@ export interface DispatchFailureClassification {
 
 const TRANSIENT_ENGINE_CODES = ['engine_unavailable', 'no_task_id'];
 
+const TRANSIENT_UPSTREAM_STATUSES: ReadonlySet<number> = new Set([401, 403, 408, 425, 429]);
+
 export function isEngineRejection(upstreamStatus: number | undefined): boolean {
-  return upstreamStatus !== undefined && upstreamStatus >= 400 && upstreamStatus < 500;
+  return (
+    upstreamStatus !== undefined &&
+    upstreamStatus >= 400 &&
+    upstreamStatus < 500 &&
+    !TRANSIENT_UPSTREAM_STATUSES.has(upstreamStatus)
+  );
 }
 
 export function classifyDispatchFailure(
