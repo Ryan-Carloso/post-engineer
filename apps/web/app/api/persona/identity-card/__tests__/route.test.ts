@@ -121,6 +121,13 @@ describe('GET /api/persona/identity-card', () => {
     expect(eqCalls).toEqual([['id', PERSONA_ID], ['user_id', USER_ID]]);
   });
 
+  it('returns a stored v1 card unchanged after the write version moved on', async () => {
+    setup({ row: { id: PERSONA_ID, identity_card: cardWithSentinel() } });
+    const res = await GET(getRequest());
+    expect(res.status).toBe(200);
+    expect(await json(res)).toEqual({ success: true, identityCard: cardWithSentinel() });
+  });
+
   it('returns null for a persona without a card', async () => {
     setup({ row: { id: PERSONA_ID, identity_card: null } });
     const body = await json(await GET(getRequest()));
@@ -219,6 +226,15 @@ describe('POST /api/persona/identity-card', () => {
     expect(body).toEqual({ success: true, prompt: expected.prompt, suggestedDescription: expected.suggestedDescription, cardVersion: 1 });
     expect(client.from).toHaveBeenCalledTimes(1);
     expect(Object.keys(client.from.mock.results[0].value)).not.toContain('update');
+  });
+
+  it('renders a stored v1 card and reports the stored card version', async () => {
+    setup({ row: { id: PERSONA_ID, identity_card: cardWithSentinel() } });
+    const res = await POST(postRequest({ personaId: PERSONA_ID, scene: FIXTURE_SCENE }));
+    const body = await json(res);
+    expect(res.status).toBe(200);
+    expect(body.cardVersion).toBe(cardWithSentinel().version);
+    expect(RenderIdentityPromptResponseSchema.safeParse(body).success).toBe(true);
   });
 
   it('answers 409 with the stable code when the persona has no card', async () => {

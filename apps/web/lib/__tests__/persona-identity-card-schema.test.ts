@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  IDENTITY_CARD_ACCEPTED_VERSIONS,
   IDENTITY_CARD_MAX_BYTES,
   IDENTITY_TEXT_MAX_LENGTH,
   IdentityCardSchema,
+  IdentityCardV1Schema,
+  RenderIdentityPromptResponseSchema,
   SCENE_MAX_BYTES,
   SceneSchema,
   parseIdentityCardJson,
@@ -53,6 +56,22 @@ describe('IdentityCardSchema', () => {
       ? { ...clone(FIXTURE_CARD), extra: 'x' }
       : withPath(FIXTURE_CARD, [...path, 'extra'], 'x');
     expect(IdentityCardSchema.safeParse(mutated).success).toBe(false);
+  });
+
+  it('keeps the v1 schema pinned to version 1, whatever versions the server accepts', () => {
+    expect(IdentityCardV1Schema.safeParse(FIXTURE_CARD).success).toBe(true);
+    expect(IdentityCardV1Schema.safeParse({ ...clone(FIXTURE_CARD), version: 2 }).success).toBe(false);
+  });
+
+  it('accepts exactly versions 1 and 2 as response card versions', () => {
+    expect(IDENTITY_CARD_ACCEPTED_VERSIONS).toEqual([1, 2]);
+    const base = { success: true, prompt: 'p', suggestedDescription: 'd' };
+    for (const cardVersion of IDENTITY_CARD_ACCEPTED_VERSIONS) {
+      expect(RenderIdentityPromptResponseSchema.safeParse({ ...base, cardVersion }).success).toBe(true);
+    }
+    for (const cardVersion of [0, 3, '1', null]) {
+      expect(RenderIdentityPromptResponseSchema.safeParse({ ...base, cardVersion }).success).toBe(false);
+    }
   });
 
   it.each([2, '1', 0, null, undefined])('rejects version %s', (version) => {

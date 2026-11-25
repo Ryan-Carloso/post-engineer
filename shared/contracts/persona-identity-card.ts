@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { defineEndpoint } from './endpoint.js';
 import {
   IDENTITY_CARD_MAX_BYTES,
-  IDENTITY_CARD_VERSION,
+  IDENTITY_CARD_ACCEPTED_VERSIONS,
   IDENTITY_TEXT_MAX_LENGTH,
   OUTFIT_SLOTS,
   SCENE_ASPECTS,
@@ -163,7 +163,7 @@ const IdentitySchema = z
   .refine((identity) => countLeaves(identity) > 0, { message: 'must hold at least one trait' });
 
 export const IdentityCardV1Schema = z.strictObject({
-  version: z.literal(IDENTITY_CARD_VERSION),
+  version: z.literal(1),
   identity: IdentitySchema,
   defaults: z
     .strictObject({ outfit: OutfitSchema.optional() })
@@ -269,7 +269,7 @@ export const RenderIdentityPromptResponseSchema = z.object({
   success: z.literal(true),
   prompt: z.string(),
   suggestedDescription: z.string(),
-  cardVersion: z.literal(IDENTITY_CARD_VERSION),
+  cardVersion: z.literal(IDENTITY_CARD_ACCEPTED_VERSIONS),
 });
 
 export const getPersonaIdentityCard = defineEndpoint({

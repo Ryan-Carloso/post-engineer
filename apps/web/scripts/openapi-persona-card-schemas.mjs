@@ -1,4 +1,5 @@
 import {
+  IDENTITY_CARD_ACCEPTED_VERSIONS,
   IDENTITY_CARD_MAX_BYTES,
   IDENTITY_TEXT_MAX_LENGTH,
   OUTFIT_SLOTS,
@@ -78,7 +79,7 @@ export function personaCardOperationSchemas({ success, object, str }) {
       response: success({
         prompt: { ...str, description: 'The deterministic edit prompt; identity text comes only from the card.' },
         suggestedDescription: { ...str, maxLength: 500, description: 'A library description made from the outfit, setting, lighting and framing, never from the identity.' },
-        cardVersion: { type: 'integer', enum: [1] },
+        cardVersion: { type: 'integer', enum: [...IDENTITY_CARD_ACCEPTED_VERSIONS] },
       }),
       extraResponses: {
         403: 'A persona-scoped API key that does not include this persona.',
