@@ -178,6 +178,13 @@ export async function confirmExperiment(
     return experimentError(400, ERROR_CODES.VALIDATION_FAILED, 'quoteKey and expiresAt are required to confirm.', 'quoteKey');
   }
   const userId = auth.userId;
+  trackApiEvent('video_creation_started', {
+    userId,
+    personaId: body.personaId?.trim() || null,
+    numberOfVideos: body.variants.reduce((sum, variant) => sum + variant.videos.length, 0),
+    providers: [body.account.provider],
+    videoType: body.videoType,
+  });
   const scheduleId = experimentScheduleId(userId, quoteKey);
   const generationId = batchChargeId(scheduleId);
 

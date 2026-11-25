@@ -555,6 +555,7 @@ describe('confirmExperiment', () => {
 
     const events = vi.mocked(trackApiEvent).mock.calls.map((call) => call[0]);
     expect(events).toEqual([
+      'video_creation_started',
       'video_creation_validated',
       'video_tokens_calculated',
       'video_tokens_spent',
@@ -562,8 +563,16 @@ describe('confirmExperiment', () => {
       'video_slots_created',
       'video_tasks_created',
       'video_creation_completed',
+      'video_creation_started',
       'video_creation_replayed',
     ]);
+    expect(vi.mocked(trackApiEvent).mock.calls.find((call) => call[0] === 'video_creation_started')?.[1]).toMatchObject({
+      userId: USER_ID,
+      personaId: null,
+      numberOfVideos: TOTAL,
+      providers: ['youtube'],
+      videoType: 'voiceover',
+    });
     expect(vi.mocked(trackApiEvent).mock.calls.find((call) => call[0] === 'video_creation_completed')?.[1]).toMatchObject({
       userId: USER_ID,
       numberOfVideos: TOTAL,
