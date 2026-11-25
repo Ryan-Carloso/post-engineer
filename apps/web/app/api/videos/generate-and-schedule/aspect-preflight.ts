@@ -8,6 +8,8 @@ import { validationFailed } from './prepare-persona';
 import { checkFullLipsyncNarration } from './full-lipsync-preflight';
 import { fetchMediaCheck, type VideoAspectOption } from './media-check';
 import { checkLipsyncPhotoFaces } from './lipsync-photo-faces';
+import type { PreflightShared } from './preflight-shared';
+import { resolveVideoAspect } from './video-aspect';
 import type { PersonaPrep } from './persona-prep';
 import type { ValidatedOptions } from './options-validation';
 
@@ -17,6 +19,7 @@ export interface SegmentMediaAspectInput {
   videoAspect: VideoAspectOption;
   hasFace: boolean;
   videoType: VideoType;
+  shared?: PreflightShared;
 }
 
 function ratioLabel(width: number, height: number): string {
@@ -69,6 +72,7 @@ export async function checkSegmentMediaAspect(
       input.userId,
       input.videoAspect,
       'segment-media-aspect',
+      input.shared,
     );
     if (record instanceof NextResponse) return record;
     if (record.code === 'wrong_aspect') {
@@ -93,6 +97,7 @@ export interface FirstPhotoFaceInput {
   segments: unknown;
   videoAspect: VideoAspectOption;
   videoType: VideoType;
+  shared?: PreflightShared;
 }
 
 const MECHANICAL_REJECTION_REASONS: Record<string, string> = {
@@ -116,6 +121,7 @@ export async function checkFirstPhotoFace(
     input.userId,
     input.videoAspect,
     'first-photo-face',
+    input.shared,
   );
   if (record instanceof NextResponse) return record;
   const rejection = mechanicalRejectionReason(record.code);
@@ -153,6 +159,8 @@ export interface PreChargePreflightInput {
   prep: PersonaPrep;
   options: ValidatedOptions;
   segments: unknown;
+  shared?: PreflightShared;
+  skipLipsyncPhotoFaces?: boolean;
 }
 
 export async function checkPreChargePreflights(
@@ -165,37 +173,31 @@ export async function checkPreChargePreflights(
       language: input.prep.language,
       voiceId: input.prep.voiceIdValue,
       voiceAudioUrl: input.prep.voiceAudioUrl,
+      shared: input.shared,
     });
     if (narration instanceof NextResponse) return narration;
   }
   if (input.segments === undefined) return null;
-  const effectiveAspect =
-    input.options.videoAspect ?? input.prep.videoAspect ?? '9:16';
-  const aspectIsKnown =
-    effectiveAspect === '9:16' ||
-    effectiveAspect === '16:9' ||
-    effectiveAspect === '1:1';
-  if (!aspectIsKnown) {
-    const message = `Persona video aspect is '${effectiveAspect}', expected 9:16, 16:9 or 1:1: update the persona.`;
-    return validationFailed(ERROR_CODES.VALIDATION_FAILED, message, 'personaId');
-  }
-  const videoAspect: VideoAspectOption =
-    effectiveAspect === '16:9' || effectiveAspect === '1:1' ? effectiveAspect : '9:16';
+  const videoAspect = resolveVideoAspect(input.options, input.prep);
+  if (videoAspect instanceof NextResponse) return videoAspect;
   const aspect = await checkSegmentMediaAspect({
     userId: input.userId,
     segments: input.segments,
     videoAspect,
     hasFace: input.options.videoType !== 'voiceover' && input.prep.photoPath !== null,
     videoType: input.options.videoType,
+    shared: input.shared,
   });
   if (aspect instanceof NextResponse) return aspect;
   if (input.options.videoType === 'full_lipsync') {
-    return checkLipsyncPhotoFaces(input.userId, input.options.lipsyncPhotos ?? [], videoAspect);
+    if (input.skipLipsyncPhotoFaces === true) return null;
+    return checkLipsyncPhotoFaces(input.userId, input.options.lipsyncPhotos ?? [], videoAspect, input.shared);
   }
   return checkFirstPhotoFace({
     userId: input.userId,
     segments: input.segments,
     videoAspect,
     videoType: input.options.videoType,
+    shared: input.shared,
   });
 }

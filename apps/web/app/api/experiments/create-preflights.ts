@@ -2,14 +2,20 @@ import { NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { apiErrorResponse } from '@/lib/api-error';
+import { ERROR_CODES } from '@/lib/error-codes';
 import { checkPreChargePreflights } from '../videos/generate-and-schedule/aspect-preflight';
+import { checkLipsyncPhotoFaces } from '../videos/generate-and-schedule/lipsync-photo-faces';
 import { validatePreChargeImageId } from '../videos/generate-and-schedule/library-photo';
 import type { ValidatedOptions } from '../videos/generate-and-schedule/options-validation';
 import type { PersonaPrep } from '../videos/generate-and-schedule/persona-prep';
+import { createPreflightShared, type PreflightShared } from '../videos/generate-and-schedule/preflight-shared';
+import { resolveVideoAspect } from '../videos/generate-and-schedule/video-aspect';
 import { EXPERIMENT_ROUTE, SEGMENTS_FIELD } from './create-checks';
 import type { PlannedVideo } from './create-plan';
 
 export const PREFLIGHT_CONCURRENCY = 4;
+
+export const EXPERIMENT_PREFLIGHT_BUDGET_MS = 60_000;
 
 export interface ExperimentPreflightInput {
   userId: string;
@@ -17,6 +23,7 @@ export interface ExperimentPreflightInput {
   prep: PersonaPrep;
   options: ValidatedOptions;
   videos: PlannedVideo[];
+  budgetMs?: number;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -29,11 +36,60 @@ async function locateFailure(failure: NextResponse, video: PlannedVideo): Promis
   if (!isRecord(body) || typeof body.error !== 'string') return failure;
   const prefix = `variants.${video.variantIndex}.videos.${video.videoIndex}`;
   const field = body.field === SEGMENTS_FIELD ? `${prefix}.segments` : body.field;
-  return apiErrorResponse(failure.status, `Video ${video.videoIndex + 1} of variant ${video.variantIndex}: ${body.error}`, {
+  return apiErrorResponse(failure.status, `Variant ${video.variantIndex} video ${video.videoIndex}: ${body.error}`, {
     route: EXPERIMENT_ROUTE,
     code: typeof body.code === 'string' ? body.code : undefined,
     field: typeof field === 'string' ? field : undefined,
   });
+}
+
+function budgetExceeded(budgetMs: number): NextResponse {
+  return apiErrorResponse(
+    504,
+    `Checking the media of this experiment took longer than ${Math.ceil(budgetMs / 1000)}s and was stopped before anything was charged: send fewer videos or fewer distinct media items, then try again.`,
+    { route: EXPERIMENT_ROUTE, code: ERROR_CODES.ENGINE_UNAVAILABLE },
+  );
+}
+
+async function checkLipsyncPhotosOnce(
+  userId: string,
+  prep: PersonaPrep,
+  options: ValidatedOptions,
+  shared: PreflightShared,
+): Promise<NextResponse | null> {
+  if (options.videoType !== 'full_lipsync') return null;
+  const videoAspect = resolveVideoAspect(options, prep);
+  if (videoAspect instanceof NextResponse) return videoAspect;
+  return checkLipsyncPhotoFaces(userId, options.lipsyncPhotos ?? [], videoAspect, shared);
+}
+
+async function checkVideosInBatches(
+  input: ExperimentPreflightInput,
+  shared: PreflightShared,
+  budgetMs: number,
+): Promise<NextResponse | null> {
+  const { userId, prep, options, videos } = input;
+  for (let start = 0; start < videos.length; start += PREFLIGHT_CONCURRENCY) {
+    if (shared.signal.aborted) return budgetExceeded(budgetMs);
+    const batch = videos.slice(start, start + PREFLIGHT_CONCURRENCY);
+    const outcomes = await Promise.all(
+      batch.map((video) =>
+        checkPreChargePreflights({
+          userId,
+          script: video.script,
+          prep,
+          options,
+          segments: video.segments,
+          shared,
+          skipLipsyncPhotoFaces: true,
+        }),
+      ),
+    );
+    for (const [offset, outcome] of outcomes.entries()) {
+      if (outcome !== null) return locateFailure(outcome, batch[offset]);
+    }
+  }
+  return null;
 }
 
 export async function checkExperimentPreflights(
@@ -41,6 +97,7 @@ export async function checkExperimentPreflights(
   input: ExperimentPreflightInput,
 ): Promise<NextResponse | null> {
   const { userId, personaId, prep, options, videos } = input;
+  const budgetMs = input.budgetMs ?? EXPERIMENT_PREFLIGHT_BUDGET_MS;
   const requestedImageId = personaId !== null ? options.imageId?.trim() || null : null;
   const imageCheck = await validatePreChargeImageId(supabase, {
     personaId,
@@ -51,14 +108,9 @@ export async function checkExperimentPreflights(
     prep,
   });
   if (imageCheck !== null) return imageCheck;
-  for (let start = 0; start < videos.length; start += PREFLIGHT_CONCURRENCY) {
-    const batch = videos.slice(start, start + PREFLIGHT_CONCURRENCY);
-    const outcomes = await Promise.all(
-      batch.map((video) => checkPreChargePreflights({ userId, script: video.script, prep, options, segments: video.segments })),
-    );
-    for (const [offset, outcome] of outcomes.entries()) {
-      if (outcome !== null) return locateFailure(outcome, batch[offset]);
-    }
-  }
-  return null;
+  const shared = createPreflightShared(budgetMs);
+  const photos = await checkLipsyncPhotosOnce(userId, prep, options, shared);
+  const failure = photos ?? (await checkVideosInBatches(input, shared, budgetMs));
+  if (failure !== null && shared.signal.aborted) return budgetExceeded(budgetMs);
+  return failure;
 }

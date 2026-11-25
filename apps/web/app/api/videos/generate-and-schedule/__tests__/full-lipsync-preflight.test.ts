@@ -6,6 +6,7 @@ import {
   checkFullLipsyncNarration,
   FULL_LIPSYNC_MAX_SECONDS,
 } from '../full-lipsync-preflight';
+import { createPreflightShared } from '../preflight-shared';
 
 vi.mock('@/lib/logger', () => ({
   logger: { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
@@ -25,7 +26,7 @@ function stubFetch(response: Response | Error): Array<{ url: string; init: Reque
     vi.fn(async (url: string, init: RequestInit) => {
       calls.push({ url, init });
       if (response instanceof Error) throw response;
-      return response;
+      return response.clone();
     }),
   );
   return calls;
@@ -51,6 +52,27 @@ describe('checkFullLipsyncNarration', () => {
 
   it('pins the cap at 60s, mirroring the engine full_lipsync cap', () => {
     expect(FULL_LIPSYNC_MAX_SECONDS).toBe(60);
+  });
+
+  it('measures the same script once and the next script again when a shared context is given', async () => {
+    const calls = stubFetch(engineBody(30));
+    const shared = createPreflightShared(60_000);
+
+    const first = await checkFullLipsyncNarration({ ...INPUT, shared });
+    const again = await checkFullLipsyncNarration({ ...INPUT, shared });
+    const other = await checkFullLipsyncNarration({ ...INPUT, script: 'Another script.', shared });
+
+    expect([first, again, other]).toEqual([30, 30, 30]);
+    expect(calls).toHaveLength(2);
+  });
+
+  it('measures the same script every time without a shared context', async () => {
+    const calls = stubFetch(engineBody(30));
+
+    await checkFullLipsyncNarration(INPUT);
+    await checkFullLipsyncNarration(INPUT);
+
+    expect(calls).toHaveLength(2);
   });
 
   it('passes a narration at exactly 60s and sends the video task inputs', async () => {
