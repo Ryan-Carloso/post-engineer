@@ -148,7 +148,7 @@ only_mutate = []
 # Files the test run needs inside mutants/, beyond mutmut's defaults
 # (test/, pyproject.toml, uv.lock, ...).
 # - modal_longcat.py / modal_longcat_gpu.py / modal_longcat_resident.py /
-#   modal_longcat_cost.py: the LongCat source-scan tests (test_longcat.py,
+#   modal_longcat_cost.py / modal_longcat_accel.py: the LongCat source-scan tests (test_longcat.py,
 #   test_longcat_modal_app.py, test_longcat_resident.py,
 #   test_modal_longcat_cost.py) read these files and import
 #   modal_longcat_gpu / modal_longcat_resident. Without these copies every
@@ -171,6 +171,7 @@ also_copy = [
     "modal_longcat_gpu.py",
     "modal_longcat_resident.py",
     "modal_longcat_cost.py",
+    "modal_longcat_accel.py",
     "modal_cpu_worker.py",
     "chatterbox_registry_volume.py",
     "modal_chatterbox_registry_routes.py",
