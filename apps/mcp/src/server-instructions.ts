@@ -22,4 +22,21 @@ export const POINTER_HISTORY =
 
 const ROUTING_POINTERS = [POINTER_PERSONA_ACCOUNTS, POINTER_IMAGES, POINTER_POSTS_SCHEDULES, POINTER_HISTORY];
 
-export const SERVER_INSTRUCTIONS = [...RECIPE_LINES, ROUTING_LIFECYCLE, ...ROUTING_POINTERS].join(' ');
+export const TESTING_WHEN =
+  'Recommend a test only when the user asks something comparative ("test", "which is better", "A vs B"); "make a video about X" means just generate it.';
+
+export const TESTING_PROMPT_FLOW =
+  'To compare prompts: create or update your own prompt for each variant (prompts (action: update) works only on your own prompts — copy a community prompt with prompts (action: create) first), take each versionId from prompts (action: get) (versions is keyed by version number, not versionId), pass it as promptVersionId on every video, rotate the variants round-robin on the same account, then read experiments (action: results).';
+
+export const TESTING_SAMPLE_RULES =
+  'Make at least 10 videos per variant; fewer than 5 is always insufficient, and 1-2 videos per variant is never a test. Call a prompt the winner only when results labels it clear. State the token cost before generating videos for a test, and prefer rotating variants across videos the user already plans to post. Run check_script (action: score) on each draft first: it is free.';
+
+export const TESTING_KNOBS =
+  'Knob comparisons (pacing, caption position, persona, hook) are not prompt versions: follow the one-knob-at-a-time rule in generate_video and read them with insights (action: post_metrics). promptVersionId is optional: videos made without a prompt are the "no prompt" baseline group.';
+
+export const TESTING_FOLLOW_UPS =
+  '"Which prompt won?" → experiments (action: results), only clear counts. "Now what?" → clear: keep using that version (prompts (action: restore) if it is an older one); insufficient or no_signal: keep rotating until each variant reaches 10.';
+
+const TESTING_LINES = [TESTING_WHEN, TESTING_PROMPT_FLOW, TESTING_SAMPLE_RULES, TESTING_KNOBS, TESTING_FOLLOW_UPS];
+
+export const SERVER_INSTRUCTIONS = [...RECIPE_LINES, ROUTING_LIFECYCLE, ...ROUTING_POINTERS, ...TESTING_LINES].join(' ');

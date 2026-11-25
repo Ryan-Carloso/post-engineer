@@ -11,6 +11,11 @@ import {
   POINTER_POSTS_SCHEDULES,
   ROUTING_LIFECYCLE,
   SERVER_INSTRUCTIONS,
+  TESTING_FOLLOW_UPS,
+  TESTING_KNOBS,
+  TESTING_PROMPT_FLOW,
+  TESTING_SAMPLE_RULES,
+  TESTING_WHEN,
 } from '../server-instructions.js';
 
 type Transport = 'stdio' | 'http';
@@ -88,5 +93,53 @@ describe.each(['stdio', 'http'] as const)('server instructions on the %s server'
 
   it('answers where generation history vs post status lives', () => {
     expect(SERVER_INSTRUCTIONS).toContain(POINTER_HISTORY);
+  });
+
+  it('routes a test to the versions → promptVersionId → results flow', () => {
+    const get = TESTING_PROMPT_FLOW.indexOf('prompts (action: get)');
+    const pass = TESTING_PROMPT_FLOW.indexOf('promptVersionId');
+    const read = TESTING_PROMPT_FLOW.indexOf('experiments (action: results)');
+    expect(SERVER_INSTRUCTIONS).toContain(TESTING_PROMPT_FLOW);
+    expect(get).toBeGreaterThan(-1);
+    expect(pass).toBeGreaterThan(get);
+    expect(read).toBeGreaterThan(pass);
+  });
+
+  it('states the sample-size rules', () => {
+    expect(TESTING_SAMPLE_RULES).toContain('at least 10');
+    expect(TESTING_SAMPLE_RULES).toContain('fewer than 5');
+    expect(TESTING_SAMPLE_RULES).toContain('only when results labels it clear');
+    expect(SERVER_INSTRUCTIONS).toContain(TESTING_SAMPLE_RULES);
+  });
+
+  it('asks for the token cost to be stated before a test is generated', () => {
+    expect(TESTING_SAMPLE_RULES).toContain('State the token cost before generating videos for a test');
+  });
+
+  it('recommends a test only for comparative requests', () => {
+    expect(SERVER_INSTRUCTIONS).toContain(TESTING_WHEN);
+    expect(TESTING_WHEN).toContain('"which is better"');
+    expect(TESTING_WHEN).toContain('just generate it');
+  });
+
+  it('points knob comparisons at generate_video and post_metrics without copying the knob list', () => {
+    expect(SERVER_INSTRUCTIONS).toContain(TESTING_KNOBS);
+    expect(TESTING_KNOBS).toContain('generate_video');
+    expect(TESTING_KNOBS).toContain('insights (action: post_metrics)');
+    expect(SERVER_INSTRUCTIONS).not.toContain('videoClipDuration');
+  });
+
+  it('explains the no prompt baseline group', () => {
+    expect(TESTING_KNOBS).toContain('"no prompt" baseline');
+  });
+
+  it('answers the follow-up questions after a test', () => {
+    expect(SERVER_INSTRUCTIONS).toContain(TESTING_FOLLOW_UPS);
+    expect(TESTING_FOLLOW_UPS).toContain('prompts (action: restore)');
+  });
+
+  it('does not route to an experiments create action', () => {
+    expect(SERVER_INSTRUCTIONS).not.toContain('experiments (action: create)');
+    expect(SERVER_INSTRUCTIONS).not.toContain('create an experiment');
   });
 });
