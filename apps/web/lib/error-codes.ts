@@ -41,6 +41,8 @@ export const ERROR_CODES = {
   PROMPT_SLUG_TAKEN: 'PROMPT_SLUG_TAKEN',
   PROMPT_VERSION_NOT_FOUND: 'PROMPT_VERSION_NOT_FOUND',
   PROMPT_VERSION_CONFLICT: 'PROMPT_VERSION_CONFLICT',
+  QUOTE_CHANGED: 'QUOTE_CHANGED',
+  QUOTE_EXPIRED: 'QUOTE_EXPIRED',
 } as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];
@@ -91,6 +93,8 @@ const DEFAULT_MESSAGES: Record<ErrorCode, string> = {
   PROMPT_SLUG_TAKEN: 'You already have a prompt with this slug, or another public prompt uses it.',
   PROMPT_VERSION_NOT_FOUND: 'Unknown prompt version.',
   PROMPT_VERSION_CONFLICT: 'The prompt changed since you loaded it. Reload and try again.',
+  QUOTE_CHANGED: 'The price or the plan changed since the quote. Ask for a new quote and confirm that one.',
+  QUOTE_EXPIRED: 'The quote expired. Ask for a new quote and confirm that one.',
 };
 
 export function errorMessage(code: ErrorCode): string {

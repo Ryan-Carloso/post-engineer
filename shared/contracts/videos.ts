@@ -113,7 +113,7 @@ const PublishingSchema = z.object({
   timezone: z.string().optional(),
 });
 
-const OptionsSchema = z
+export const VideoOptionsObjectSchema = z
   .object({
     videoType: z.enum(VIDEO_TYPES, {
       error: (issue) => (issue.input === undefined ? `options.videoType is required; ${VIDEO_TYPE_ERROR_SUFFIX}` : unknownVideoTypeMessage(issue.input)),
@@ -137,8 +137,9 @@ const OptionsSchema = z
     videoVariationSeed: z.number().int().optional().describe('Seed for per-video variation of the segment photos zoom direction; the same seed repeats the same pattern. Omitted keeps the fixed in/out alternation. Change it for a different look of the same script without changing pacing.'),
     subtitlePosition: z.enum(SUBTITLE_POSITIONS).optional().describe('Caption placement: top near the top of the frame, center in the middle, bottom near the bottom, custom at subtitleCustomPosition percent from the top. Omitted keeps the engine default.'),
     subtitleCustomPosition: z.number().int().min(0).max(100).optional().describe('Caption height as percent from the top (0-100). Only with subtitlePosition "custom"; rejected otherwise.'),
-  })
-  .optional();
+  });
+
+const OptionsSchema = VideoOptionsObjectSchema.optional();
 
 export const GenerateAndScheduleBodySchema = z.object({
   personaId: z.string().optional(),
