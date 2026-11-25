@@ -163,6 +163,30 @@ describe('confirmExperiment', () => {
     expect(json.replayed).toBe(false);
     expect(spends(db)).toHaveLength(0);
     expect(db.state.slots).toHaveLength(TOTAL);
+    const ledgerRead = db.calls.find((call) => call.table === 'token_transactions' && call.op === 'select');
+    expect(ledgerRead?.filters).toEqual(
+      expect.arrayContaining([
+        ['generation_id', `batch:${experimentScheduleId(USER_ID, confirmBody.quoteKey ?? '')}`],
+        ['user_id', USER_ID],
+      ]),
+    );
+  });
+
+  it('deletes an empty schedule left by an earlier confirm, then creates the experiment', async () => {
+    const { confirmBody } = await quoted();
+    const scheduleId = experimentScheduleId(USER_ID, confirmBody.quoteKey ?? '');
+    const db = fakeDb();
+    db.state.schedule = { id: scheduleId };
+
+    const { response, json } = await confirm(confirmBody, db);
+
+    expect(response.status).toBe(200);
+    expect(json.replayed).toBe(false);
+    const order = db.calls.filter((call) => call.table === 'schedules' && call.op !== 'select').map((call) => call.op);
+    expect(order).toEqual(['delete', 'insert']);
+    const removal = db.calls.find((call) => call.table === 'schedules' && call.op === 'delete');
+    expect(removal?.filters).toEqual([['id', scheduleId], ['user_id', USER_ID]]);
+    expect(db.state.slots).toHaveLength(TOTAL);
   });
 
   it('rejects a confirm after the quote expired and charges nothing', async () => {
@@ -310,6 +334,24 @@ describe('confirmExperiment', () => {
     expect(json.chargedTokens).toBe(TOTAL - 1);
     expect(json.slots.filter((slot: { status: string }) => slot.status === 'failed')).toHaveLength(1);
     expect(refundSlotTokens).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the charge of a failed video whose refund did not land', async () => {
+    vi.mocked(startEngineVideoTask).mockImplementation(async (_userId, payload) =>
+      (payload as { video_title: string }).video_title === 'A video 1'
+        ? { ok: false, response: new Response(null) as never }
+        : { ok: true, taskId: `task-${(payload as { slot_id: string }).slot_id}`, body: {} },
+    );
+    vi.mocked(refundSlotTokens).mockResolvedValue({ refunded: false, alreadyRefunded: false, error: 'rpc down' });
+    const { confirmBody } = await quoted();
+
+    const { response, json } = await confirm(confirmBody);
+
+    expect(response.status).toBe(200);
+    expect(json.chargedTokens).toBe(TOTAL);
+    expect(json.slots.filter((slot: { status: string }) => slot.status === 'failed')).toEqual([
+      expect.objectContaining({ tokensRefunded: false }),
+    ]);
   });
 
   it('refunds the whole charge and removes the schedule when the slots cannot be inserted', async () => {

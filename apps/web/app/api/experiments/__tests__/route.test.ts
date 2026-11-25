@@ -16,6 +16,10 @@ vi.mock('@/lib/rate-limit', async (importOriginal) => ({
 vi.mock('@/lib/experiments/read-comparison', () => ({ readPromptComparison }));
 vi.mock('../create-quote', () => ({ quoteExperiment }));
 vi.mock('../create-confirm', () => ({ confirmExperiment }));
+vi.mock('../create-plan', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../create-plan')>();
+  return { ...actual, parseExperimentRequest: vi.fn(actual.parseExperimentRequest) };
+});
 vi.mock('@/lib/logger', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/logger')>();
   return { ...actual, logger: { ...actual.logger, error: loggerError } };
@@ -27,6 +31,7 @@ vi.mock('@/lib/api-error-reporting', async (importOriginal) => ({
 }));
 
 import { GET, POST } from '../route';
+import { parseExperimentRequest } from '../create-plan';
 import { experimentBody } from './create-fixtures';
 import { PromptComparisonResponseSchema } from '@/lib/contracts/experiments';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
@@ -149,13 +154,34 @@ describe('POST /api/experiments', () => {
     expect(applyRateLimit).toHaveBeenCalledWith(expect.any(Request), RATE_LIMITS.experimentCreate, 'user-1');
   });
 
-  it('returns the rate-limit response before reading the body', async () => {
+  it('returns the rate-limit response before the body is parsed', async () => {
     vi.mocked(applyRateLimit).mockResolvedValueOnce(NextResponse.json({ error: 'slow down' }, { status: 429 }));
+    vi.mocked(parseExperimentRequest).mockClear();
 
     const response = await post(experimentBody());
 
     expect(response.status).toBe(429);
+    expect(parseExperimentRequest).not.toHaveBeenCalled();
     expect(quoteExperiment).not.toHaveBeenCalled();
+    expect(confirmExperiment).not.toHaveBeenCalled();
+  });
+
+  it('rejects an expiresAt without a quoteKey with 400 instead of quoting', async () => {
+    const response = await post({ ...experimentBody(), expiresAt: '2030-01-01T00:00:00.000Z' });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ code: 'VALIDATION_FAILED', field: 'quoteKey' });
+    expect(quoteExperiment).not.toHaveBeenCalled();
+    expect(confirmExperiment).not.toHaveBeenCalled();
+  });
+
+  it('rejects a quoteKey without an expiresAt with 400 instead of confirming', async () => {
+    const response = await post({ ...experimentBody(), quoteKey: 'a'.repeat(64) });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ code: 'VALIDATION_FAILED', field: 'quoteKey' });
+    expect(quoteExperiment).not.toHaveBeenCalled();
+    expect(confirmExperiment).not.toHaveBeenCalled();
   });
 
   it('answers the auth error unchanged', async () => {
