@@ -33,6 +33,7 @@ interface Group {
   agents: string[];
   allow: string[];
   disallow: string[];
+  crawlDelay: string[];
 }
 
 function directiveLines(): Array<{ directive: string; value: string }> {
@@ -57,7 +58,7 @@ function parseGroups(): Group[] {
     if (directive === 'sitemap') continue;
     if (directive === 'user-agent') {
       if (current === null || !collectingAgents) {
-        current = { agents: [], allow: [], disallow: [] };
+        current = { agents: [], allow: [], disallow: [], crawlDelay: [] };
         groups.push(current);
       }
       current.agents.push(value);
@@ -68,6 +69,7 @@ function parseGroups(): Group[] {
     if (current === null) throw new Error(`rule before any User-agent: ${directive}`);
     if (directive === 'allow') current.allow.push(value);
     if (directive === 'disallow') current.disallow.push(value);
+    if (directive === 'crawl-delay') current.crawlDelay.push(value);
   }
   return groups;
 }
@@ -95,6 +97,14 @@ describe('robots.txt', () => {
     'gives %s every Disallow rule of the wildcard group',
     (agent) => {
       expect(groupFor(agent).disallow).toEqual(expect.arrayContaining(wildcard.disallow));
+    },
+  );
+
+  it.each([...AI_CRAWLERS, ...SOCIAL_BOTS])(
+    'repeats the wildcard Crawl-delay in the %s group, which does not inherit it',
+    (agent) => {
+      expect(wildcard.crawlDelay).toEqual(['1']);
+      expect(groupFor(agent).crawlDelay).toEqual(wildcard.crawlDelay);
     },
   );
 

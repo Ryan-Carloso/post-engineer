@@ -32,6 +32,7 @@ Disallow: /.next/
 Disallow: /test/
 Disallow: /.env
 Disallow: /.env*
+Crawl-delay: 1
 
 User-agent: OAI-SearchBot
 Allow: /
@@ -47,6 +48,7 @@ Disallow: /.next/
 Disallow: /test/
 Disallow: /.env
 Disallow: /.env*
+Crawl-delay: 1
 
 User-agent: ChatGPT-User
 Allow: /
@@ -62,6 +64,7 @@ Disallow: /.next/
 Disallow: /test/
 Disallow: /.env
 Disallow: /.env*
+Crawl-delay: 1
 
 User-agent: ClaudeBot
 Allow: /
@@ -77,6 +80,7 @@ Disallow: /.next/
 Disallow: /test/
 Disallow: /.env
 Disallow: /.env*
+Crawl-delay: 1
 
 User-agent: Claude-User
 Allow: /
@@ -92,6 +96,7 @@ Disallow: /.next/
 Disallow: /test/
 Disallow: /.env
 Disallow: /.env*
+Crawl-delay: 1
 
 User-agent: Claude-SearchBot
 Allow: /
@@ -107,6 +112,7 @@ Disallow: /.next/
 Disallow: /test/
 Disallow: /.env
 Disallow: /.env*
+Crawl-delay: 1
 
 User-agent: PerplexityBot
 Allow: /
@@ -122,6 +128,7 @@ Disallow: /.next/
 Disallow: /test/
 Disallow: /.env
 Disallow: /.env*
+Crawl-delay: 1
 
 User-agent: Perplexity-User
 Allow: /
@@ -137,6 +144,7 @@ Disallow: /.next/
 Disallow: /test/
 Disallow: /.env
 Disallow: /.env*
+Crawl-delay: 1
 
 User-agent: Google-Extended
 Allow: /
@@ -152,6 +160,7 @@ Disallow: /.next/
 Disallow: /test/
 Disallow: /.env
 Disallow: /.env*
+Crawl-delay: 1
 
 User-agent: Applebot-Extended
 Allow: /
@@ -167,6 +176,7 @@ Disallow: /.next/
 Disallow: /test/
 Disallow: /.env
 Disallow: /.env*
+Crawl-delay: 1
 
 User-agent: CCBot
 Allow: /
@@ -182,6 +192,7 @@ Disallow: /.next/
 Disallow: /test/
 Disallow: /.env
 Disallow: /.env*
+Crawl-delay: 1
 
 User-agent: Meta-ExternalAgent
 Allow: /
@@ -197,6 +208,7 @@ Disallow: /.next/
 Disallow: /test/
 Disallow: /.env
 Disallow: /.env*
+Crawl-delay: 1
 
 User-agent: Amazonbot
 Allow: /
@@ -212,6 +224,7 @@ Disallow: /.next/
 Disallow: /test/
 Disallow: /.env
 Disallow: /.env*
+Crawl-delay: 1
 
 # social preview bots
 User-agent: facebookexternalhit
@@ -228,6 +241,7 @@ Disallow: /.next/
 Disallow: /test/
 Disallow: /.env
 Disallow: /.env*
+Crawl-delay: 1
 
 User-agent: Twitterbot
 Allow: /
@@ -243,6 +257,7 @@ Disallow: /.next/
 Disallow: /test/
 Disallow: /.env
 Disallow: /.env*
+Crawl-delay: 1
 
 User-agent: LinkedInBot
 Allow: /
@@ -258,6 +273,7 @@ Disallow: /.next/
 Disallow: /test/
 Disallow: /.env
 Disallow: /.env*
+Crawl-delay: 1
 
 User-agent: WhatsApp
 Allow: /
@@ -273,5 +289,6 @@ Disallow: /.next/
 Disallow: /test/
 Disallow: /.env
 Disallow: /.env*
+Crawl-delay: 1
 
 Sitemap: https://post-engineer.com/sitemap.xml
