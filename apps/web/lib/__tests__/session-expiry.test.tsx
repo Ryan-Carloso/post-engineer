@@ -1,9 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 
+import { config } from '../../middleware';
 import { currentRelativePath, isSessionExpiredError, loginRedirectTarget } from '../session-expiry';
-import { findRepoRoot } from '../../test/repo-root';
 import { HttpStatusError } from '../errors';
 
 describe('isSessionExpiredError', () => {
@@ -59,19 +57,14 @@ describe('loginRedirectTarget', () => {
 });
 
 describe('PUBLIC_PATH_PREFIXES — middleware parity', () => {
-  const middlewareSource = readFileSync(
-    join(findRepoRoot(import.meta.url), 'apps/web', 'middleware.ts'),
-    'utf8',
+  const matcherSource = config.matcher[0];
+  const groupMatch = /\(\?:([a-z|]+)\)\(\?:\/\|\$\)/.exec(matcherSource);
+  const middlewarePublicPaths = (groupMatch === null ? [] : groupMatch[1].split('|')).map(
+    (name) => `/${name}`,
   );
-  const start = middlewareSource.indexOf('const publicPaths = ');
-  const listBlock = middlewareSource.slice(start + 'const publicPaths = '.length, middlewareSource.indexOf('];', start));
-  const middlewarePublicPaths = listBlock
-    .split(',')
-    .map((entry) => entry.replace(/[[\] ']/g, ''))
-    .filter(Boolean);
 
-  it('extracts the middleware list (guard for this very pin)', () => {
-    expect(middlewarePublicPaths).toEqual(['/landing', '/login', '/privacy', '/terms', '/recipes', '/s']);
+  it('extracts the public page segments from the matcher (guard for this very pin)', () => {
+    expect(middlewarePublicPaths).toEqual(['/login', '/landing', '/privacy', '/terms', '/recipes', '/s']);
   });
 
   it.each(middlewarePublicPaths)('never redirects from the middleware-public %s', (prefix) => {

@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
+import { isProtectedPath } from '@/lib/protected-routes'
 
 const TRANSIENT_AUTH_STATUSES: ReadonlySet<number> = new Set([
   429, 500, 501, 502, 503, 504, 520, 521, 522, 523, 524, 525, 526, 527, 528, 529, 530,
@@ -95,13 +96,7 @@ export async function middleware(request: NextRequest) {
   const { data, error } = await supabase.auth.getClaims()
   const signedIn = hasSubjectClaim(data?.claims)
 
-  const publicPaths = ['/landing', '/login', '/privacy', '/terms', '/recipes', '/s'];
-
-  const isPublicPath = publicPaths.some(
-    (publicPath) => pathname === publicPath || pathname.startsWith(`${publicPath}/`),
-  );
-
-  if (!signedIn && !isPublicPath) {
+  if (!signedIn && isProtectedPath(pathname)) {
     if (!isTransientAuthError(error)) {
       return NextResponse.redirect(new URL('/landing', request.url))
     }
