@@ -174,9 +174,11 @@ export const IdentityCardV2Schema = z.strictObject({
 
 export const IdentityCardSchema = z.discriminatedUnion('version', [IdentityCardV1Schema, IdentityCardV2Schema]);
 export type IdentityCard = z.infer<typeof IdentityCardSchema>;
+export type IdentityLeaves = z.infer<typeof IdentityV2Schema>;
 export type Outfit = z.infer<typeof OutfitSchema>;
 
 export const SceneSchema = z.strictObject({
+  style: z.enum(CARD_STYLES).optional(),
   outfit: OutfitSchema.optional(),
   pose: sceneText.optional(),
   setting: sceneText.optional(),

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  CARD_STYLES,
   IDENTITY_CARD_ACCEPTED_VERSIONS,
   IDENTITY_CARD_MAX_BYTES,
   IDENTITY_TEXT_MAX_LENGTH,
@@ -149,6 +150,18 @@ describe('SceneSchema', () => {
 
   it.each(['identity', 'face', 'body', 'version', 'defaults'])('rejects the identity-side key %s', (key) => {
     expect(SceneSchema.safeParse({ ...clone(FIXTURE_SCENE), [key]: { eyes: 'green' } }).success).toBe(false);
+  });
+
+  it('accepts every card style as the scene style and rejects anything else', () => {
+    for (const style of CARD_STYLES) {
+      expect(SceneSchema.safeParse({ ...FIXTURE_SCENE, style }).success).toBe(true);
+    }
+    expect(SceneSchema.safeParse({ ...FIXTURE_SCENE, style: 'bikini' }).success).toBe(false);
+    expect(SceneSchema.safeParse({ ...FIXTURE_SCENE, style: 'Business' }).success).toBe(false);
+    expect(SceneSchema.safeParse({ ...FIXTURE_SCENE, style: '' }).success).toBe(false);
+    const result = parseSceneValue({ ...FIXTURE_SCENE, style: 'bikini' });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toBe('scene.style: not an allowed value');
   });
 
   it('rejects a full identity card passed as the scene', () => {

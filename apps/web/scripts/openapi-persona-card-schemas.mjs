@@ -43,6 +43,7 @@ identityCard.description = `Versioned identity card (version 1 or 2; new cards a
 
 const scene = strict(
   {
+    style: { type: 'string', enum: [...CARD_STYLES], description: 'Clothing style for this photo only. It overrides defaults.style and, without outfit slots, replaces the default outfit.' },
     outfit,
     pose: { ...text, description: 'Free text about the pose. Words about the person (hair, skin, body) are rejected.' },
     setting: { ...text, description: 'Free text about the place. Words about the person (hair, skin, body) are rejected.' },
@@ -52,7 +53,7 @@ const scene = strict(
   },
   ['lighting', 'framing'],
 );
-scene.description = `Scene only (at most ${SCENE_MAX_BYTES} bytes). Identity, face, body and version keys are rejected.`;
+scene.description = `Only what changes per photo: style, outfit slots, pose, setting, lighting, framing, aspect (at most ${SCENE_MAX_BYTES} bytes). Identity, face, body and version keys are rejected.`;
 
 export const personaCardFormFields = {
   identityCard: {

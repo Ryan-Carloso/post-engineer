@@ -2071,6 +2071,31 @@
                   "scene": {
                     "type": "object",
                     "properties": {
+                      "style": {
+                        "type": "string",
+                        "enum": [
+                          "casual",
+                          "business",
+                          "business_casual",
+                          "formal",
+                          "elegant",
+                          "romantic",
+                          "sensual",
+                          "sporty",
+                          "athleisure",
+                          "streetwear",
+                          "boho",
+                          "minimalist",
+                          "vintage",
+                          "glamorous",
+                          "edgy",
+                          "cozy",
+                          "beach",
+                          "party",
+                          "outdoor"
+                        ],
+                        "description": "Clothing style for this photo only. It overrides defaults.style and, without outfit slots, replaces the default outfit."
+                      },
                       "outfit": {
                         "type": "object",
                         "properties": {
@@ -2155,7 +2180,7 @@
                       "lighting",
                       "framing"
                     ],
-                    "description": "Scene only (at most 2048 bytes). Identity, face, body and version keys are rejected."
+                    "description": "Only what changes per photo: style, outfit slots, pose, setting, lighting, framing, aspect (at most 2048 bytes). Identity, face, body and version keys are rejected."
                   }
                 },
                 "required": [
