@@ -30,6 +30,7 @@ describe('app/not-found', () => {
   beforeEach(() => {
     getClaims.mockReset();
     vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -76,11 +77,11 @@ describe('app/not-found', () => {
     expect(screen.getByTestId('not-found-view')).toHaveAttribute('data-signed-in', 'false');
   });
 
-  it('logs only the name and status of an unexpected auth error and renders signed out', async () => {
+  it('logs only the name and status of a non-transient auth error as an error and renders signed out', async () => {
     const secret = 'api_key=super-secret-value';
     getClaims.mockResolvedValue({
       data: null,
-      error: { name: 'AuthApiError', status: 500, message: secret },
+      error: { name: 'AuthApiError', status: 400, message: secret },
     });
 
     await renderPage();
@@ -89,9 +90,27 @@ describe('app/not-found', () => {
     expect(console.error).toHaveBeenCalledTimes(1);
     expect(console.error).toHaveBeenCalledWith('[not-found] getClaims failed, rendering signed out', {
       name: 'AuthApiError',
-      status: 500,
+      status: 400,
     });
+    expect(console.warn).not.toHaveBeenCalled();
     expect(JSON.stringify(vi.mocked(console.error).mock.calls)).not.toContain(secret);
+  });
+
+  it.each([
+    { name: 'AuthApiError', status: 429 },
+    { name: 'AuthApiError', status: 503 },
+    { name: 'AuthRetryableFetchError', status: 0 },
+  ])('logs a transient auth failure ($name $status) as a warning, not an error', async (failure) => {
+    const secret = 'api_key=super-secret-value';
+    getClaims.mockResolvedValue({ data: null, error: { ...failure, message: secret } });
+
+    await renderPage();
+
+    expect(screen.getByTestId('not-found-view')).toHaveAttribute('data-signed-in', 'false');
+    expect(console.error).not.toHaveBeenCalled();
+    expect(console.warn).toHaveBeenCalledTimes(1);
+    expect(console.warn).toHaveBeenCalledWith('[not-found] getClaims failed, rendering signed out', failure);
+    expect(JSON.stringify(vi.mocked(console.warn).mock.calls)).not.toContain(secret);
   });
 
   it('keeps the 404 page out of search indexes', () => {
