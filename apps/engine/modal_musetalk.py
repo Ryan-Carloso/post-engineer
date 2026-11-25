@@ -1,17 +1,11 @@
-"""Modal runner for MuseTalk 1.5: the candidate ``cheap`` lip-sync tier.
+"""Modal runner for MuseTalk 1.5: the candidate ``very_cheap`` lip-sync tier.
 
-The ``cheap`` tier is for react videos, where the persona is a small window in
-a corner of the screen. LongCat (the ``ok`` / ``very_good`` renderer) costs
-about $0.58 of H100 per 12s window, because it generates whole frames with a
-13.6B video model. MuseTalk only repaints the mouth of an existing face clip,
-at 256x256, in one UNet step per frame, on an L4. The target is under $0.50
-for a 60s video (``modal_musetalk_job.TARGET_USD_PER_VIDEO``).
-
-This app is a measurement step, not wired into the engine yet: the
-``bench`` entry point renders one clip from a photo and an audio file, saves
-the MP4 to watch, and prints the GPU seconds and the price of a 60s video at
-that speed. The HTTP endpoints and the ``cheap`` quality come after the
-numbers are known.
+The cheapest of the two mouth-only renderers measured for react videos (see
+``modal_lipsync_job.py``): MuseTalk repaints only the mouth of the persona's
+base clip at 256x256, in one UNet step per frame, on an L4. Not wired into
+the engine yet: the ``bench`` entry point renders one clip, saves it, and
+prints the GPU seconds and the price of a 60s video at that speed, against
+the $0.50 target.
 
 One-time setup (DEV Modal account; it spends GPU time):
 
@@ -20,7 +14,7 @@ One-time setup (DEV Modal account; it spends GPU time):
 
 Measure:
 
-    uv run modal run modal_musetalk.py::bench --image face.png --audio voice.mp3 --out /tmp/musetalk
+    uv run modal run modal_musetalk.py::bench --image face.png --audio voice.mp3 --out /tmp/lipsync
 
 License: MuseTalk code is MIT. The Hugging Face card lists the weights as
 CreativeML OpenRAIL-M, which allows commercial use with use restrictions.
@@ -32,20 +26,18 @@ from __future__ import annotations
 
 import os
 import subprocess
-import tempfile
-import time
 from pathlib import Path
 
 import modal
 
-from modal_musetalk_job import (
-    GPU,
-    base_clip_args,
-    inference_args,
-    inference_config_yaml,
-    output_path,
-    usd_for_seconds,
-    usd_per_reference_video,
+from modal_lipsync_job import (
+    MUSETALK_GPU,
+    Runner,
+    musetalk_args,
+    musetalk_config_yaml,
+    musetalk_output_path,
+    render_clip,
+    save_bench_run,
 )
 
 MUSETALK_REPO_URL = "https://github.com/TMElyralab/MuseTalk.git"
@@ -85,7 +77,7 @@ MUSETALK_IMAGE = (
     )
     .pip_install("mmengine", "mmdet==3.1.0", "mmpose==1.1.0")
     .run_commands(f"ln -s {WEIGHTS_DIR} {CHECKOUT_DIR}/models")
-    .add_local_file(_HERE / "modal_musetalk_job.py", "/root/modal_musetalk_job.py", copy=True)
+    .add_local_file(_HERE / "modal_lipsync_job.py", "/root/modal_lipsync_job.py", copy=True)
 )
 
 app = modal.App("moneyprint-musetalk")
@@ -130,77 +122,30 @@ def download_weights() -> str:
     return f"MuseTalk weights ready: {total} files"
 
 
-def _run(args: list[str], cwd: str | None = None, timeout: int = 1800) -> subprocess.CompletedProcess[str]:
-    result = subprocess.run(args, cwd=cwd, capture_output=True, text=True, timeout=timeout)
-    if result.returncode != 0:
-        raise RuntimeError(f"{args[0]} failed: {(result.stderr or result.stdout)[-2000:]}")
-    return result
-
-
-def _audio_seconds(audio_path: str) -> float:
-    probe = _run(
-        ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", audio_path]
-    )
-    return float(probe.stdout.strip())
+def _musetalk(work: str, base_clip: str, audio_path: str, run: Runner) -> Path:
+    config_path = f"{work}/task.yaml"
+    Path(config_path).write_text(musetalk_config_yaml(base_clip, audio_path))
+    result_dir = f"{work}/results"
+    run(musetalk_args(config_path, result_dir), cwd=CHECKOUT_DIR)
+    return Path(musetalk_output_path(result_dir))
 
 
 @app.function(
     image=MUSETALK_IMAGE,
-    gpu=GPU,
+    gpu=MUSETALK_GPU,
     volumes={WEIGHTS_DIR: WEIGHTS_VOLUME},
     timeout=3600,
 )
 def render(image_bytes: bytes, audio_bytes: bytes) -> dict[str, object]:
     """Photo + narration to a lip-synced clip, with the GPU seconds it took."""
-    started = time.monotonic()
-    with tempfile.TemporaryDirectory(prefix="musetalk-") as work:
-        image_path = f"{work}/persona.png"
-        audio_path = f"{work}/voice.wav"
-        Path(image_path).write_bytes(image_bytes)
-        Path(f"{work}/voice.in").write_bytes(audio_bytes)
-        _run(["ffmpeg", "-y", "-i", f"{work}/voice.in", "-ac", "1", "-ar", "16000", audio_path])
-        audio_seconds = _audio_seconds(audio_path)
-
-        base_started = time.monotonic()
-        base_clip = f"{work}/base.mp4"
-        _run(base_clip_args(image_path, base_clip))
-        base_clip_s = time.monotonic() - base_started
-
-        config_path = f"{work}/task.yaml"
-        Path(config_path).write_text(inference_config_yaml(base_clip, audio_path))
-        result_dir = f"{work}/results"
-        inference_started = time.monotonic()
-        inference = _run(inference_args(config_path, result_dir), cwd=CHECKOUT_DIR)
-        inference_s = time.monotonic() - inference_started
-        result = Path(output_path(result_dir))
-        if not result.is_file():
-            raise RuntimeError(
-                "MuseTalk produced no video: " + (inference.stdout + inference.stderr)[-2000:]
-            )
-        video = result.read_bytes()
-    total_s = time.monotonic() - started
-    return {
-        "video": video,
-        "gpu": GPU,
-        "audio_seconds": round(audio_seconds, 3),
-        "base_clip_s": round(base_clip_s, 3),
-        "inference_s": round(inference_s, 3),
-        "total_s": round(total_s, 3),
-        "cost_usd": round(usd_for_seconds(total_s), 4),
-        "usd_per_60s_video": round(usd_per_reference_video(total_s, audio_seconds), 4),
-    }
+    return render_clip("very_cheap", image_bytes, audio_bytes, _musetalk)
 
 
 @app.local_entrypoint()
-def bench(image: str, audio: str, out: str = "musetalk-bench", repeats: int = 2) -> None:
+def bench(image: str, audio: str, out: str = "lipsync-bench", repeats: int = 2) -> None:
     """Render the clip ``repeats`` times (later runs usually reuse the warm container)."""
-    out_dir = Path(out)
-    out_dir.mkdir(parents=True, exist_ok=True)
     image_bytes = Path(image).read_bytes()
     audio_bytes = Path(audio).read_bytes()
     for index in range(1, repeats + 1):
-        result = render.remote(image_bytes, audio_bytes)
-        video = result.pop("video")
-        if isinstance(video, bytes):
-            (out_dir / f"musetalk-{index}.mp4").write_bytes(video)
-        print(f"run {index}/{repeats}: {result}", flush=True)
+        summary = save_bench_run(render.remote(image_bytes, audio_bytes), Path(out), index)
+        print(f"run {index}/{repeats}: {summary}", flush=True)
