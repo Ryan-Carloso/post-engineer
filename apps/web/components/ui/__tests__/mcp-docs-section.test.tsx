@@ -115,7 +115,7 @@ describe('McpDocsSection', () => {
       experiments: 'results',
       media: 'upload · check',
       billing: 'balance · transactions',
-      prompts: 'create · update · delete · versions · restore · list · get',
+      prompts: 'list · get · create · update · delete · versions · restore',
       check_script: 'validate · score',
       publish_video: 'from_file · create_upload · complete_upload · publish_upload',
     };

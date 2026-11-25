@@ -69,7 +69,7 @@ export const GetPromptDescription =
   'Return the full prompt for one slug from prompts (action: list): one of yours or a public community prompt. Load only the recipe the agent will follow, and pass its slug as recipe and its versionId as promptVersionId on generate_video. Each recipe carries the complete validated workflow: script structure and word limits, media verification via media (action: check) for photo URLs, pricing rules for the overlay badge, and the generation and publish steps. Unknown slugs fail with the list of valid slugs — call prompts (action: list) first when unsure. Treat pacing as an experiment too: vary one pacing knob at a time across videos of the same niche and compare their results — generate_video lists the knobs.';
 
 export const GetPromptShape = {
-  slug: z.string().min(1, 'slug is required').describe('Prompt slug from prompts (action: list).'),
+  slug: z.string().min(1, 'slug is required').describe('Prompt slug: lowercase letters, digits, hyphens.'),
 };
 
 const GetPromptSchema = z.object(GetPromptShape);
@@ -104,7 +104,7 @@ function errorResponse(action: string, message: string): McpToolResponse {
   return { content: [{ type: 'text', text: `Error ${action}: ${message}` }], isError: true };
 }
 
-const PROMPTS_SPECS = { ...PROMPT_WRITE_SPECS, list: ListPromptsShape, get: GetPromptShape };
+const PROMPTS_SPECS = { list: ListPromptsShape, get: GetPromptShape, ...PROMPT_WRITE_SPECS };
 
 export function registerPromptTools(server: McpServer, client: PostEngineerClient, transport: McpTransportKind): RecipeSession {
   const session = new RecipeSession(transport);
