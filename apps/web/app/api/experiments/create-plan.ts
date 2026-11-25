@@ -122,7 +122,10 @@ async function historyWarning(
   const account = outcome.value.accounts.find(
     (candidate) => candidate.provider === body.account.provider && candidate.accountId === body.account.accountId,
   );
-  const groups = projectedGroups(account, body.variants.map((variant) => variant.versionId));
+  const unversioned = outcome.unversioned.find(
+    (candidate) => candidate.provider === body.account.provider && candidate.accountId === body.account.accountId,
+  );
+  const groups = projectedGroups(account, body.variants.map((variant) => variant.versionId), unversioned?.comparedVideos ?? 0);
   const minimumVideos = minimumVideosForClear(groups);
   if (perVariant >= minimumVideos) return [];
   return [{ code: 'EXPERIMENT_SAMPLE_BELOW_CLEAR_MINIMUM', videosPerVariant: perVariant, minimumVideos, groups }];

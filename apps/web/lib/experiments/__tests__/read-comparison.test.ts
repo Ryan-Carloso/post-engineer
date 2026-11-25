@@ -61,6 +61,21 @@ describe('readPromptComparison', () => {
     expect(db.calls.find((call) => call.table === 'prompt_versions' && call.method === 'in')?.args).toEqual(['id', [A]]);
   });
 
+  it('also returns the accounts with no versioned video, left out of the comparison', async () => {
+    const db = fakeDb({
+      post_metrics: {
+        data: [row(100, null, 'yt-9'), row(200, null, 'yt-9'), row(300, null, 'yt-9'), row(10, A, 'yt-1'), row(20, null, 'yt-1')],
+        error: null,
+      },
+      prompt_versions: { data: [{ id: A, slug: 'calm-hook', title: 'Calm hook', version: 2, source: 'user' }], error: null },
+    });
+
+    const outcome = await readPromptComparison(db.client, { userId: 'user-1', window: '7d', personaIds: null });
+
+    expect(outcome.ok && outcome.value.accounts.map((account) => account.accountId)).toEqual(['yt-1']);
+    expect(outcome.ok && outcome.unversioned).toEqual([{ provider: 'youtube', accountId: 'yt-9', comparedVideos: 3 }]);
+  });
+
   it('limits a persona-scoped key to its personas', async () => {
     const db = fakeDb({ post_metrics: { data: [], error: null } });
     await readPromptComparison(db.client, { userId: 'user-1', window: '7d', personaIds: ['p-1'] });
@@ -70,7 +85,7 @@ describe('readPromptComparison', () => {
   it('answers an empty comparison for a scoped key with no persona, without any query', async () => {
     const db = fakeDb({});
     const outcome = await readPromptComparison(db.client, { userId: 'user-1', window: '7d', personaIds: [] });
-    expect(outcome).toEqual({ ok: true, value: { window: '7d', accounts: [], truncated: false } });
+    expect(outcome).toEqual({ ok: true, value: { window: '7d', accounts: [], truncated: false }, unversioned: [] });
     expect(db.calls).toEqual([]);
   });
 
@@ -85,7 +100,7 @@ describe('readPromptComparison', () => {
   it('skips the version read when no video names a prompt', async () => {
     const db = fakeDb({ post_metrics: { data: [row(10, null)], error: null } });
     const outcome = await readPromptComparison(db.client, { userId: 'user-1', window: '7d', personaIds: null });
-    expect(outcome).toEqual({ ok: true, value: { window: '7d', accounts: [], truncated: false } });
+    expect(outcome).toEqual({ ok: true, value: { window: '7d', accounts: [], truncated: false }, unversioned: [{ provider: 'youtube', accountId: 'yt-1', comparedVideos: 0 }] });
     expect(db.calls.some((call) => call.table === 'prompt_versions')).toBe(false);
   });
 

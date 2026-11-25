@@ -11,7 +11,7 @@ function rotationFor(variants: number, perVariant: number, times: string[], star
 }
 
 describe('latinSquareRotation', () => {
-  it('rotates variants by day plus time-of-day index', () => {
+  it('starts at the variant (dayIndex + timeIndex) modulo the variant count when the column quotas are tied', () => {
     const rotated = rotationFor(2, 4, ['09:00', '18:00']);
     expect(rotated.map((entry) => entry.variantIndex)).toEqual([0, 1, 1, 0, 0, 1, 1, 0]);
   });
@@ -40,10 +40,7 @@ describe('latinSquareRotation', () => {
             for (const entry of rotated) {
               if (entry.slot.timeIndex === timeIndex) counts[entry.variantIndex] += 1;
             }
-            const column = rotated.filter((entry) => entry.slot.timeIndex === timeIndex).length;
-            if (column >= variants) {
-              expect(Math.max(...counts) - Math.min(...counts), `${variants}x${perVariant} ${times.join(',')} t${timeIndex}`).toBeLessThanOrEqual(1);
-            }
+            expect(Math.max(...counts) - Math.min(...counts), `${variants}x${perVariant} ${times.join(',')} t${timeIndex}`).toBeLessThanOrEqual(1);
           }
         }
       }

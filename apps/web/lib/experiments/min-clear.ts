@@ -1,4 +1,4 @@
-import { CLEAR_P_VALUE, signTestPValue, type AccountResult } from './prompt-comparison';
+import { CLEAR_P_VALUE, MIN_COMPARED_VIDEOS, signTestPValue, type AccountResult } from './prompt-comparison';
 
 export function minimumVideosForClear(groups: number): number {
   if (!Number.isInteger(groups) || groups < 1) {
@@ -12,10 +12,15 @@ export function minimumVideosForClear(groups: number): number {
 
 const NO_PROMPT_KEY = '';
 
-export function projectedGroups(account: AccountResult | undefined, newVersionIds: string[]): number {
+export function projectedGroups(
+  account: AccountResult | undefined,
+  newVersionIds: string[],
+  unversionedComparedVideos: number,
+): number {
   const keys = new Set<string>(newVersionIds);
   for (const prompt of account?.prompts ?? []) {
     if (prompt.label !== 'insufficient') keys.add(prompt.versionId ?? NO_PROMPT_KEY);
   }
+  if (account === undefined && unversionedComparedVideos >= MIN_COMPARED_VIDEOS) keys.add(NO_PROMPT_KEY);
   return keys.size;
 }

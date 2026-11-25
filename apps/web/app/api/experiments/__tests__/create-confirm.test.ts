@@ -63,7 +63,7 @@ function spends(db: FakeDb) {
 beforeEach(() => {
   vi.clearAllMocks();
   price.perVideo = null;
-  vi.mocked(readPromptComparison).mockResolvedValue({ ok: true, value: { window: '7d', accounts: [], truncated: false } });
+  vi.mocked(readPromptComparison).mockResolvedValue({ ok: true, value: { window: '7d', accounts: [], truncated: false }, unversioned: [] });
   vi.mocked(startEngineVideoTask).mockImplementation(async (_userId, payload) => ({
     ok: true,
     taskId: `task-${(payload as { slot_id: string }).slot_id}`,

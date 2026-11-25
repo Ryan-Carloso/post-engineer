@@ -12,15 +12,15 @@ vi.mock('@/lib/persona-voice-validate', async (importOriginal) => {
 vi.mock('@/lib/experiments/read-comparison', () => ({ readPromptComparison: vi.fn() }));
 
 import { readPromptComparison } from '@/lib/experiments/read-comparison';
-import type { AccountResult, PromptResult } from '@/lib/experiments/prompt-comparison';
+import type { AccountResult, PromptResult, UnversionedAccount } from '@/lib/experiments/prompt-comparison';
 import { parseExperimentRequest } from '../create-plan';
 import { quoteExperiment } from '../create-quote';
 import { AUTH, USER_ID, VERSION_A, VERSION_B, VERSION_C, experimentBody, fakeDb, futureISO, segmentsFor, OFFICIAL_VERSIONS } from './create-fixtures';
 
 const NOW = new Date();
 
-function emptyComparison(accounts: AccountResult[] = []) {
-  vi.mocked(readPromptComparison).mockResolvedValue({ ok: true, value: { window: '7d', accounts, truncated: false } });
+function emptyComparison(accounts: AccountResult[] = [], unversioned: UnversionedAccount[] = []) {
+  vi.mocked(readPromptComparison).mockResolvedValue({ ok: true, value: { window: '7d', accounts, truncated: false }, unversioned });
 }
 
 function testedPrompt(versionId: string | null): PromptResult {
@@ -96,6 +96,26 @@ describe('quoteExperiment', () => {
     const { json } = await quote({}, fakeDb(), 7);
 
     expect(json.warnings).toContainEqual({
+      code: 'EXPERIMENT_SAMPLE_BELOW_CLEAR_MINIMUM',
+      videosPerVariant: 7,
+      minimumVideos: 8,
+      groups: 4,
+    });
+  });
+
+  it('counts the no-prompt group of an account whose first experiment this is, which the comparison leaves out', async () => {
+    const threeVariants = () => {
+      const body = experimentBody({}, 7);
+      body.variants.push({ versionId: VERSION_C, videos: structuredClone(body.variants[0].videos) });
+      return body;
+    };
+    const without = await (await quoteExperiment(fakeDb().client, AUTH, threeVariants(), NOW)).json();
+    emptyComparison([], [{ provider: 'youtube', accountId: 'acct-1', comparedVideos: 12 }]);
+
+    const withHistory = await (await quoteExperiment(fakeDb().client, AUTH, threeVariants(), NOW)).json();
+
+    expect(without.warnings).toEqual([]);
+    expect(withHistory.warnings).toContainEqual({
       code: 'EXPERIMENT_SAMPLE_BELOW_CLEAR_MINIMUM',
       videosPerVariant: 7,
       minimumVideos: 8,
