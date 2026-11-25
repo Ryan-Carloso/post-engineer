@@ -54,9 +54,9 @@ The hosted remote endpoint is `https://post-engineer.com/mcp`
 a remote MCP client — including ChatGPT, which requires a public HTTPS
 endpoint, OAuth, and tool annotations — at that URL and sign in; no
 local install or API key is needed. Every tool carries MCP annotations
-(`readOnlyHint` for `video_tasks`/`posts`/`insights`/`billing`/`prompts`/
+(`readOnlyHint` for `video_tasks`/`posts`/`insights`/`billing`/
 `check_script`, `destructiveHint` for `personas`/`persona_media`/`voices`/
-`accounts`/`schedules`/`publish_video`/`cancel_video`, `openWorldHint`
+`accounts`/`schedules`/`prompts`/`publish_video`/`cancel_video`, `openWorldHint`
 throughout) so annotation-aware clients can auto-approve reads and confirm
 writes. Annotations are per tool, so a tool with a destructive action is
 destructive for all its actions. The stdio package above
@@ -187,7 +187,7 @@ Run it before and after a change to tool schemas and put both outputs in the PR.
 
 ## Tools
 
-The server offers **18 intent tools**, not one tool per API endpoint. A tool is a complete abstraction of an intent: it takes what you would say ("the persona Maria", "my YouTube channel"), resolves the ids inside the call, and returns only what the agent needs for the next step. Most tools take an `action`; the schema is one flat object (a required `action` plus the fields of every action), and each tool's description lists the required fields per action. A field of another action, or a missing required field, is rejected before any request is sent, naming the tool, the action and the field.
+The server offers **17 intent tools**, not one tool per API endpoint. A tool is a complete abstraction of an intent: it takes what you would say ("the persona Maria", "my YouTube channel"), resolves the ids inside the call, and returns only what the agent needs for the next step. Most tools take an `action`; the schema is one flat object (a required `action` plus the fields of every action), and each tool's description lists the required fields per action. A field of another action, or a missing required field, is rejected before any request is sent, naming the tool, the action and the field.
 
 | Tool | Actions | What it is for |
 |---|---|---|
@@ -199,14 +199,13 @@ The server offers **18 intent tools**, not one tool per API endpoint. A tool is 
 | `voices` | `list`, `preview`, `list_clones`, `create_clone`, `get_clone`, `preview_clone`, `delete_clone` | House voices and voice clones. |
 | `accounts` | `list`, `connect`, `disconnect`, `get_persona_publishing`, `set_persona_publishing`, `list_boards` | Social accounts and the accounts each persona publishes to. |
 | `tool_config` | `get`, `save` | The saved research/stock tool configuration: which search tool (Tavily/Exa/own) and stock sources (Pexels/Pixabay/Coverr) the account has keys for. `save` replaces the whole set; keys are stored encrypted and are never returned in full — `get` shows presence and last 4 characters only. |
-| `prompt_library` | `create`, `update`, `delete`, `versions`, `restore` | The account's own prompts, private by default; only the owner can change one. `versions` lists a prompt's saved texts newest first (a short preview each, plus `currentVersion`; pass `version` to read one in full) and is owner-only. `restore` makes an old version the current text by writing it as a new version (pass the `currentVersion` as `expectedCurrentVersion`; the title stays, and experiment results count the new version separately). `visibility` `public` makes a prompt readable by anyone (no review while the product is in beta), `private` keeps it to the account. Read and follow prompts with `prompts`: `list` (optional `query` words and `source` own or community) and `get` return the account's own prompts (private ones included) and other users' public ones; unverified community prompts carry a notice, verified ones do not. |
 | `schedules` | `list`, `cancel`, `get_slot`, `update_slot_title`, `delete_slot` | Future slots. |
 | `posts` | `list`, `get` | Published and scheduled posts. |
 | `insights` | `post_metrics`, `last_day`, `retention_curve`, `share_link_create`, `share_link_list`, `share_link_revoke` | How posts performed, and a public read-only link to the metrics summary and this week's posts. |
 | `experiments` | `results` | Compares your prompts inside each publishing account: every video generated with a `promptVersionId` records its prompt version. Compare any number of prompts by rotating them round-robin on one account (at least 10 videos each; 5 only lift a prompt out of insufficient); the clear/indicative thresholds are corrected for the number of prompts compared. |
 | `media` | `upload`, `check` | Images for video segments. |
 | `billing` | `balance`, `transactions` | Prepaid tokens. |
-| `prompts` | `list`, `get` | The recipe prompts. |
+| `prompts` | `create`, `update`, `delete`, `versions`, `restore`, `list`, `get` | Read and write prompts. `list` (optional `query` words and `source` own or community) and `get` return the account's own prompts (private ones included) and other users' public ones; unverified community prompts carry a notice, verified ones do not. `create`, `update`, `delete`, `versions` and `restore` write the account's own prompts, private by default; only the owner can change one. `versions` lists a prompt's saved texts newest first (a short preview each, plus `currentVersion`; pass `version` to read one in full) and is owner-only. `restore` makes an old version the current text by writing it as a new version (pass the `currentVersion` as `expectedCurrentVersion`; the title stays, and experiment results count the new version separately). `visibility` `public` makes a prompt readable by anyone (no review while the product is in beta), `private` keeps it to the account. |
 | `check_script` | `validate`, `score` | Check a script before spending tokens. |
 | `publish_video` | `from_file`, `create_upload`, `complete_upload`, `publish_upload`, `publish_existing` | Publish media that already exists, with no generation and no charge. `publish_existing` takes a finished video (`taskId`), a completed upload (`uploadId`) or a local image (`imagePath`, stdio only; over HTTP an image goes through `create_upload` like a video, never as base64), sends it to every network of its `accounts` (names or ids, or the persona's bound accounts) in one call, and needs `mode`: `asap`, or `scheduled` once at `publishAt`. A retry with the same `idempotencyKey` replays the original result in both modes. Images (JPEG/PNG, 8 MB) post to Instagram, Bluesky (1 MB), LinkedIn, Threads, Facebook, Pinterest and Telegram; on YouTube an image becomes an 8-second vertical Short with background music (see [YouTube image posts](../../docs/youtube-image-posts.md)). |
 
@@ -228,7 +227,7 @@ Batch (2-12 videos) needs a `batchKey` and rejects `idempotencyKey`; one video t
 
 ### Measuring the size of `tools/list`
 
-See "Measuring the `tools/list` payload" above. The 18 tools weigh about 65 KB on the stdio server (the 56 tools they replace weighed about 102 KB).
+See "Measuring the `tools/list` payload" above. The 17 tools weigh about 60 KB on the stdio server (the 56 tools they replace weighed about 102 KB).
 
 ### Breaking change: the 56 old tool names are gone
 
@@ -254,6 +253,7 @@ There is no alias for the old names. Saved prompts, recipes and agent configurat
 | `upload_media`, `check_media` | `media` `upload`, `check` |
 | `get_token_balance`, `list_token_transactions` | `billing` `balance`, `transactions` |
 | `list_prompts`, `get_prompt` | `prompts` `list`, `get` |
+| `prompt_library` (every action) | `prompts` (same action names: `create`, `update`, `delete`, `versions`, `restore`) |
 | `validate_script`, `score_draft` | `check_script` `validate`, `score` |
 | `publish_video_direct`, `create_video_upload`, `complete_video_upload`, `publish_uploaded_video` | `publish_video` `from_file`, `create_upload`, `complete_upload`, `publish_upload` |
 
@@ -279,7 +279,7 @@ of `personas (action: create)`, `personas (action: list)`, `accounts (action: li
 `generate_video` gets a hint that recipes produce scripts that pass.
 
 To add a prompt, create it on https://post-engineer.com/recipes or with
-`prompt_library (action: create)`, and make it public to share it. The MCP
+`prompts (action: create)`, and make it public to share it. The MCP
 needs no change.
 
 ## Links

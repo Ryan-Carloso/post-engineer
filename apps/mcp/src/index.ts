@@ -9,7 +9,6 @@ import { registerAccountTools } from './intent-accounts.js';
 import { registerContentTools } from './intent-content.js';
 import { registerLibraryTools } from './intent-library.js';
 import { registerPersonaMediaTools, registerPersonaTools } from './intent-personas.js';
-import { registerPromptLibraryTools } from './intent-prompt-library.js';
 import { registerToolConfigTools } from './intent-tool-config.js';
 import { registerVideoTools } from './intent-video.js';
 import { registerVoiceTools } from './intent-voices.js';
@@ -42,7 +41,6 @@ export function createPostEngineerMcpServer(client?: PostEngineerClient, transpo
   registerVoiceTools(server, apiClient, remote);
   registerAccountTools(server, apiClient, recipeSession);
   registerToolConfigTools(server, apiClient);
-  registerPromptLibraryTools(server, apiClient);
   registerLibraryTools(server, apiClient, recipeSession);
   registerContentTools(server, apiClient, recipeSession, remote);
 

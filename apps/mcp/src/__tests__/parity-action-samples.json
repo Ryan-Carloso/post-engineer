@@ -391,7 +391,7 @@
       }
     }
   ],
-  "prompt_library.create": [
+  "prompts.create": [
     {
       "args": {
         "action": "create",
@@ -403,7 +403,7 @@
       }
     }
   ],
-  "prompt_library.update": [
+  "prompts.update": [
     {
       "args": {
         "action": "update",
@@ -412,7 +412,7 @@
       }
     }
   ],
-  "prompt_library.delete": [
+  "prompts.delete": [
     {
       "args": {
         "action": "delete",
@@ -420,7 +420,7 @@
       }
     }
   ],
-  "prompt_library.versions": [
+  "prompts.versions": [
     {
       "args": {
         "action": "versions",
@@ -437,7 +437,7 @@
       }
     }
   ],
-  "prompt_library.restore": [
+  "prompts.restore": [
     {
       "args": {
         "action": "restore",

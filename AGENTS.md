@@ -119,7 +119,7 @@
 - Secrets (bearer tokens, app passwords, URL userinfo, engine errors) never reach output/logs — redact raw, encoded, and JSON forms; cap upstream bodies.
 - HTTPS or loopback-only URLs, normalized; OAuth `auth_url` must be https.
 - Empty 2xx → `{ ok: true }`; non-JSON 2xx → error. Every fetch has an `AbortSignal` timeout (files: 120s).
-- Tools are intent tools (18, most with an `action`), not one per endpoint. A tool's schema is defined once next to its handlers, registered by its `intent-*.ts` module (index.ts only wires them) with `byAction({ action: handler }, SPECS, 'tool')` (`action-tool.ts`): one flat advertised schema (a root union advertises no fields), a strict per-action re-parse, defaults never on the flat shape. Persona and account fields take a name or an id (`refs.ts`: exact match, candidates on ambiguity, never a guess). Actions that read a local file are offered on stdio only (`unavailable`). Re-parse inside the handler when a `.refine` matters. Shared limits exported from one module.
+- Tools are intent tools (17, most with an `action`), not one per endpoint. A tool's schema is defined once next to its handlers, registered by its `intent-*.ts` module (index.ts only wires them) with `byAction({ action: handler }, SPECS, 'tool')` (`action-tool.ts`): one flat advertised schema (a root union advertises no fields), a strict per-action re-parse, defaults never on the flat shape. Persona and account fields take a name or an id (`refs.ts`: exact match, candidates on ambiguity, never a guess). Actions that read a local file are offered on stdio only (`unavailable`). Re-parse inside the handler when a `.refine` matters. Shared limits exported from one module.
 - Bounded memory: `stat()` before reading files, read sequentially; argument checks before any file read.
 - No test-only seams on production interfaces — inject via options (`now: () => Date`).
 
@@ -134,7 +134,7 @@
 
 ## Prompts — they live only in the database
 
-- Every prompt is a row in `user_prompts` (private or public, owned by one account); there are no official prompts and no prompt text in git. The web hub, the detail page `/recipes/[slug]`, and the MCP (`prompts`, slash commands) all read `GET /api/prompts` and `GET /api/prompts/[slug]`. To add or change a prompt, edit it in the app or with `prompt_library`, never in code.
+- Every prompt is a row in `user_prompts` (private or public, owned by one account); there are no official prompts and no prompt text in git. The web hub, the detail page `/recipes/[slug]`, and the MCP (`prompts`, slash commands) all read `GET /api/prompts` and `GET /api/prompts/[slug]`. To add or change a prompt, edit it in the app or with `prompts` (action: create or update), never in code.
 - Never put prompt text, steps, or a list of prompt slugs in code, docs, or tests as product data — a copy in git drifts the moment the row changes.
 
 ## Testing gotchas

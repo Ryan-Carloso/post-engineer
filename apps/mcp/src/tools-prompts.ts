@@ -6,7 +6,16 @@ import { PROMPT_SEARCH_MAX_LENGTH, PROMPT_SOURCES } from './contracts/prompts.js
 import type { McpToolResponse } from './tools-call.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { actionDescription, actionShape, byAction } from './action-tool.js';
-import { READ_ONLY } from './tool-annotations.js';
+import { DESTRUCTIVE } from './tool-annotations.js';
+import {
+  PROMPT_WRITE_SPECS,
+  PromptWriteDescription,
+  handleCreatePrompt,
+  handleDeletePrompt,
+  handleListPromptVersions,
+  handleRestorePrompt,
+  handleUpdatePrompt,
+} from './tools-prompt-library.js';
 import { RecipeSession, isRecipeSlug, recipeRunText, type McpTransportKind } from './recipe-session.js';
 
 export { withRecipeNudge, withScriptOutcome, type McpTransportKind } from './recipe-session.js';
@@ -95,17 +104,22 @@ function errorResponse(action: string, message: string): McpToolResponse {
   return { content: [{ type: 'text', text: `Error ${action}: ${message}` }], isError: true };
 }
 
-const PROMPTS_SPECS = { list: ListPromptsShape, get: GetPromptShape };
+const PROMPTS_SPECS = { ...PROMPT_WRITE_SPECS, list: ListPromptsShape, get: GetPromptShape };
 
 export function registerPromptTools(server: McpServer, client: PostEngineerClient, transport: McpTransportKind): RecipeSession {
   const session = new RecipeSession(transport);
   server.tool(
     'prompts',
-    actionDescription(`${ListPromptsDescription}\n${GetPromptDescription}`, PROMPTS_SPECS),
+    actionDescription(`${ListPromptsDescription}\n${GetPromptDescription}\n${PromptWriteDescription}`, PROMPTS_SPECS),
     actionShape(PROMPTS_SPECS),
-    READ_ONLY,
+    DESTRUCTIVE,
     byAction(
       {
+        create: async (args) => handleCreatePrompt(client, args),
+        update: async (args) => handleUpdatePrompt(client, args),
+        delete: async (args) => handleDeletePrompt(client, args),
+        versions: async (args) => handleListPromptVersions(client, args),
+        restore: async (args) => handleRestorePrompt(client, args),
         list: async (args) => {
           const listed = await session.run(undefined, () => fetchPromptList(client, args));
           if (listed.response.isError !== true && listed.listedAny) session.recordRecipesListed();
