@@ -1,13 +1,19 @@
 import '@testing-library/jest-dom/vitest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 
 import { enDictionary, ptDictionary } from '@/lib/i18n';
 import { usePersonaStore } from '@/lib/store';
-import { IDENTITY_CARD_FIELDS, cardToDraft } from '@/lib/persona-identity-card-form';
-import { FIXTURE_CARD } from '@/test/identity-card-fixtures';
-import type { IdentityCard } from '@/lib/contracts/persona-identity-card';
+import { IDENTITY_CARD_TEXT_FIELDS, cardToDraft } from '@/lib/persona-identity-card-form';
+import { FIXTURE_CARD, FIXTURE_CARD_V2 } from '@/test/identity-card-fixtures';
+import { CARD_STYLES, type IdentityCard } from '@/lib/contracts/persona-identity-card';
 import { PersonaIdentityCardSection } from '../persona-identity-card-section';
+
+window.HTMLElement.prototype.scrollIntoView = vi.fn();
+window.HTMLElement.prototype.hasPointerCapture = () => false;
+window.HTMLElement.prototype.setPointerCapture = () => {};
+window.HTMLElement.prototype.releasePointerCapture = () => {};
 
 const mocks = vi.hoisted(() => ({
   query: {
@@ -44,7 +50,7 @@ function setQuery(state: Partial<typeof mocks.query>): void {
   Object.assign(mocks.query, { isSuccess: false, isError: false, isFetching: false, data: null, dataUpdatedAt: 0 }, state);
 }
 
-function input(key: (typeof IDENTITY_CARD_FIELDS)[number]): HTMLInputElement {
+function input(key: (typeof IDENTITY_CARD_TEXT_FIELDS)[number]): HTMLInputElement {
   return screen.getByTestId(`identity-card-${key}`) as HTMLInputElement;
 }
 
@@ -59,8 +65,8 @@ beforeEach(() => {
 describe('PersonaIdentityCardSection', () => {
   it('renders one input per fixed slot with the 80 character limit', () => {
     render(<PersonaIdentityCardSection personaId={null} />);
-    expect(IDENTITY_CARD_FIELDS).toHaveLength(21);
-    for (const key of IDENTITY_CARD_FIELDS) {
+    expect(IDENTITY_CARD_TEXT_FIELDS).toHaveLength(38);
+    for (const key of IDENTITY_CARD_TEXT_FIELDS) {
       expect(input(key)).toHaveAttribute('maxlength', '80');
       expect(input(key)).toBeEnabled();
     }
@@ -103,7 +109,7 @@ describe('PersonaIdentityCardSection', () => {
   it('disables every input while the stored card loads', () => {
     render(<PersonaIdentityCardSection personaId="p1" />);
     expect(screen.getByText('Loading the identity card...')).toBeInTheDocument();
-    for (const key of IDENTITY_CARD_FIELDS) expect(input(key)).toBeDisabled();
+    for (const key of IDENTITY_CARD_TEXT_FIELDS) expect(input(key)).toBeDisabled();
   });
 
   it('fills the inputs from the stored card once it loads', () => {
@@ -128,7 +134,7 @@ describe('PersonaIdentityCardSection', () => {
     setQuery({ isError: true });
     render(<PersonaIdentityCardSection personaId="p1" />);
     expect(screen.getByText('We could not load the identity card.')).toBeInTheDocument();
-    for (const key of IDENTITY_CARD_FIELDS) expect(input(key)).toBeDisabled();
+    for (const key of IDENTITY_CARD_TEXT_FIELDS) expect(input(key)).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: /try again/i }));
     expect(mocks.query.refetch).toHaveBeenCalledTimes(1);
   });
@@ -136,9 +142,9 @@ describe('PersonaIdentityCardSection', () => {
   it('disables every input while the save is pending', () => {
     render(<PersonaIdentityCardSection personaId={null} />);
     act(() => usePersonaStore.getState().setSubmitting(true));
-    for (const key of IDENTITY_CARD_FIELDS) expect(input(key)).toBeDisabled();
+    for (const key of IDENTITY_CARD_TEXT_FIELDS) expect(input(key)).toBeDisabled();
     act(() => usePersonaStore.getState().setSubmitting(false));
-    for (const key of IDENTITY_CARD_FIELDS) expect(input(key)).toBeEnabled();
+    for (const key of IDENTITY_CARD_TEXT_FIELDS) expect(input(key)).toBeEnabled();
   });
 
   it('starts blank again when it mounts for another persona', () => {
@@ -157,5 +163,70 @@ describe('PersonaIdentityCardSection', () => {
     setQuery({ isSuccess: true, data: { ...FIXTURE_CARD }, dataUpdatedAt: 2 });
     rerender(<PersonaIdentityCardSection personaId="p1" />);
     expect(input('face.eyes')).toHaveValue('green');
+  });
+});
+
+describe('PersonaIdentityCardSection style select', () => {
+  it('starts on no style and offers every style plus the empty choice', async () => {
+    const user = userEvent.setup();
+    render(<PersonaIdentityCardSection personaId={null} />);
+    const trigger = screen.getByTestId('identity-card-style');
+    expect(trigger).toHaveTextContent('No style');
+    await user.click(trigger);
+    expect(screen.getAllByRole('option')).toHaveLength(CARD_STYLES.length + 1);
+    expect(screen.getByRole('option', { name: 'Beachwear' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Business casual' })).toBeInTheDocument();
+  });
+
+  it('labels the styles in Portuguese when the locale is pt', async () => {
+    mocks.locale = 'pt';
+    const user = userEvent.setup();
+    render(<PersonaIdentityCardSection personaId={null} />);
+    expect(screen.getByTestId('identity-card-style')).toHaveTextContent('Sem estilo');
+    await user.click(screen.getByTestId('identity-card-style'));
+    expect(screen.getAllByRole('option')).toHaveLength(CARD_STYLES.length + 1);
+    expect(screen.getByRole('option', { name: 'Executivo casual' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Ao ar livre' })).toBeInTheDocument();
+  });
+
+  it('writes the chosen style into the draft and clears it with the empty choice', async () => {
+    const user = userEvent.setup();
+    render(<PersonaIdentityCardSection personaId={null} />);
+    await user.click(screen.getByTestId('identity-card-style'));
+    await user.click(screen.getByRole('option', { name: 'Sporty' }));
+    expect(usePersonaStore.getState().identityCardDraft.style).toBe('sporty');
+    expect(screen.getByTestId('identity-card-style')).toHaveTextContent('Sporty');
+    await user.click(screen.getByTestId('identity-card-style'));
+    await user.click(screen.getByRole('option', { name: 'No style' }));
+    expect(usePersonaStore.getState().identityCardDraft.style).toBe('');
+  });
+
+  it('shows the style of the stored v2 card and none for a stored v1 card', () => {
+    setQuery({ isSuccess: true, data: FIXTURE_CARD_V2, dataUpdatedAt: 1 });
+    const { unmount } = render(<PersonaIdentityCardSection personaId="p1" />);
+    expect(screen.getByTestId('identity-card-style')).toHaveTextContent('Business');
+    expect(input('outfit.top')).toHaveValue('white shirt');
+    unmount();
+    usePersonaStore.getState().resetForm();
+    setQuery({ isSuccess: true, data: FIXTURE_CARD, dataUpdatedAt: 1 });
+    render(<PersonaIdentityCardSection personaId="p1" />);
+    expect(screen.getByTestId('identity-card-style')).toHaveTextContent('No style');
+    expect(input('outfit.top')).toHaveValue('sage-green t-shirt');
+  });
+
+  it('disables the style select while the stored card loads and when it fails to load', () => {
+    const { unmount } = render(<PersonaIdentityCardSection personaId="p1" />);
+    expect(screen.getByTestId('identity-card-style')).toBeDisabled();
+    unmount();
+    setQuery({ isError: true });
+    render(<PersonaIdentityCardSection personaId="p1" />);
+    expect(screen.getByTestId('identity-card-style')).toBeDisabled();
+  });
+
+  it('disables the style select while the save is pending', () => {
+    render(<PersonaIdentityCardSection personaId={null} />);
+    expect(screen.getByTestId('identity-card-style')).toBeEnabled();
+    act(() => usePersonaStore.getState().setSubmitting(true));
+    expect(screen.getByTestId('identity-card-style')).toBeDisabled();
   });
 });

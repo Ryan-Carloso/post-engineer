@@ -81,7 +81,7 @@ describe('PersonaSubmit with an identity card', () => {
     usePersonaStore.getState().setIdentityCardField('face.eyes', 'green');
     await submit();
     const formData = api.createPersona.mock.calls[0][0] as FormData;
-    expect(JSON.parse(String(formData.get('identityCard')))).toEqual({ version: 1, identity: { face: { eyes: 'green' } } });
+    expect(JSON.parse(String(formData.get('identityCard')))).toEqual({ version: 2, identity: { face: { eyes: 'green' } } });
     expect(api.submittingDuringCall).toEqual([true]);
     expect(usePersonaStore.getState().isSubmitting).toBe(false);
   });

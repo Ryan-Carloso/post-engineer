@@ -67,7 +67,7 @@ describe('persona store form data with an identity card', () => {
   it('puts the card JSON in the create form when the user filled it', () => {
     usePersonaStore.getState().setIdentityCardField('face.eyes', ' green ');
     const raw = usePersonaStore.getState().buildPersonaFormData('en-US').get('identityCard');
-    expect(JSON.parse(String(raw))).toEqual({ version: 1, identity: { face: { eyes: 'green' } } });
+    expect(JSON.parse(String(raw))).toEqual({ version: 2, identity: { face: { eyes: 'green' } } });
   });
 
   it('omits identityCard from the edit form when nothing changed', () => {

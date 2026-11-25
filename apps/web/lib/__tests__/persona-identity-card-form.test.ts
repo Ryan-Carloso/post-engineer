@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   IDENTITY_CARD_FIELDS,
+  IDENTITY_CARD_TEXT_FIELDS,
   cardToDraft,
   draftToCard,
   emptyIdentityCardDraft,
@@ -10,20 +11,54 @@ import {
   sameIdentityCardDraft,
   validateIdentityCardDraft,
 } from '../persona-identity-card-form';
-import { FIXTURE_CARD } from '@/test/identity-card-fixtures';
+import { FIXTURE_CARD, FIXTURE_CARD_V2 } from '@/test/identity-card-fixtures';
+import { CARD_STYLES, IdentityCardSchema, type IdentityCard } from '@/lib/contracts/persona-identity-card';
 
 function draftWith(values: Partial<Record<(typeof IDENTITY_CARD_FIELDS)[number], string>>) {
   return { ...emptyIdentityCardDraft(), ...values };
 }
 
 describe('identity card draft', () => {
-  it('lists every identity leaf and outfit slot exactly once', () => {
+  it('lists every identity leaf, outfit slot and the style exactly once', () => {
     expect(new Set(IDENTITY_CARD_FIELDS).size).toBe(IDENTITY_CARD_FIELDS.length);
-    expect(IDENTITY_CARD_FIELDS).toHaveLength(21);
+    expect(IDENTITY_CARD_TEXT_FIELDS).toHaveLength(38);
+    expect(IDENTITY_CARD_FIELDS).toEqual([...IDENTITY_CARD_TEXT_FIELDS, 'style']);
   });
 
-  it('round-trips a full card through the draft', () => {
-    expect(draftToCard(cardToDraft(FIXTURE_CARD))).toEqual(FIXTURE_CARD);
+  it('round-trips a v2 card through the draft', () => {
+    expect(draftToCard(cardToDraft(FIXTURE_CARD_V2))).toEqual(FIXTURE_CARD_V2);
+  });
+
+  it('reads a v1 card into the draft with no style and writes it back as v2 with the same content', () => {
+    const draft = cardToDraft(FIXTURE_CARD);
+    expect(draft.style).toBe('');
+    expect(draftToCard(draft)).toEqual({ ...FIXTURE_CARD, version: 2 });
+  });
+
+  it('reads the style of a v2 card into the draft', () => {
+    expect(cardToDraft(FIXTURE_CARD_V2).style).toBe('business');
+  });
+
+  it('keeps every style and leaf the contract accepts reachable from the draft', () => {
+    for (const style of CARD_STYLES) {
+      const card = draftToCard(draftWith({ 'face.eyes': 'green', style }));
+      expect(IdentityCardSchema.safeParse(card).success).toBe(true);
+      expect(card).toEqual({ version: 2, identity: { face: { eyes: 'green' } }, defaults: { style } });
+    }
+  });
+
+  it('writes a style and an outfit side by side under the defaults', () => {
+    expect(draftToCard(draftWith({ 'face.eyes': 'green', style: 'sporty', 'outfit.top': 'tee' }))).toEqual({
+      version: 2,
+      identity: { face: { eyes: 'green' } },
+      defaults: { style: 'sporty', outfit: { top: 'tee' } },
+    });
+  });
+
+  it('counts a style alone as a filled card so clearing every trait never reads as clearing the card', () => {
+    const card = draftToCard(draftWith({ style: 'casual' }));
+    expect(card).not.toBeNull();
+    expect(identityCardFormValue(draftWith({ style: 'casual' }), cardToDraft(FIXTURE_CARD))).not.toBe('null');
   });
 
   it('turns no card into a blank draft and a blank draft into no card', () => {
@@ -34,14 +69,14 @@ describe('identity card draft', () => {
 
   it('trims values and leaves blank fields out of the card', () => {
     expect(draftToCard(draftWith({ 'face.eyes': '  green ', 'body.height': 'tall' }))).toEqual({
-      version: 1,
+      version: 2,
       identity: { face: { eyes: 'green' }, body: { height: 'tall' } },
     });
   });
 
   it('builds nested hair and default outfit from their flat fields', () => {
     expect(draftToCard(draftWith({ 'face.hair.color': 'black', 'outfit.top': 'shirt' }))).toEqual({
-      version: 1,
+      version: 2,
       identity: { face: { hair: { color: 'black' } } },
       defaults: { outfit: { top: 'shirt' } },
     });
@@ -63,7 +98,15 @@ describe('identityCardFormValue', () => {
 
   it('sends the card JSON when the draft changed', () => {
     const value = identityCardFormValue(draftWith({ 'face.eyes': 'green' }), emptyIdentityCardDraft());
-    expect(JSON.parse(value ?? 'null')).toEqual({ version: 1, identity: { face: { eyes: 'green' } } });
+    expect(JSON.parse(value ?? 'null')).toEqual({ version: 2, identity: { face: { eyes: 'green' } } });
+  });
+
+  it('keeps a stored v1 card untouched until the user edits a field', () => {
+    const stored: IdentityCard = FIXTURE_CARD;
+    const loaded = cardToDraft(stored);
+    expect(identityCardFormValue(cardToDraft(stored), loaded)).toBeNull();
+    const edited = identityCardFormValue({ ...loaded, 'face.eyes': 'green' }, loaded);
+    expect(JSON.parse(edited ?? 'null')).toMatchObject({ version: 2 });
   });
 
   it('sends the JSON literal null when a stored card was emptied', () => {
@@ -79,6 +122,8 @@ describe('validateIdentityCardDraft', () => {
 
   it.each([
     ['outfit only', draftWith({ 'outfit.top': 'shirt' }), 'identityCard.errNoTrait'],
+    ['style only', draftWith({ style: 'business' }), 'identityCard.errNoTrait'],
+    ['an unknown style', draftWith({ 'face.eyes': 'green', style: 'bikini' }), 'identityCard.errGeneric'],
     ['one_piece with top', draftWith({ 'face.eyes': 'green', 'outfit.one_piece': 'dress', 'outfit.top': 'shirt' }), 'identityCard.errOnePiece'],
     ['identity words in the outfit', draftWith({ 'face.eyes': 'green', 'outfit.top': 'shirt over muscular body' }), 'identityCard.errOutfitIdentity'],
     ['identity words in one_piece', draftWith({ 'face.eyes': 'green', 'outfit.one_piece': 'dress over muscular body' }), 'identityCard.errOutfitIdentity'],

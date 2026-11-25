@@ -98,7 +98,7 @@ describe('Persona — identity card', () => {
     cy.wait('@patchPersona').then(() => {
       expect(state.patches).to.equal(1);
       expect(state.stored).to.deep.equal({
-        version: 1,
+        version: 2,
         identity: { face: { eyes: 'blue-grey', hair: { color: 'blonde' } }, body: { height: 'tall' } },
         defaults: { outfit: { top: 'sage-green t-shirt' } },
       });
