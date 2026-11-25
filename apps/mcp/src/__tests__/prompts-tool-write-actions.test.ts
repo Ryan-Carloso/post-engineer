@@ -356,7 +356,7 @@ describe('prompts write actions', () => {
 
     it('describes the write actions and no longer names prompt_library', async () => {
       const { description } = await listPromptsTool();
-      expect(description).toContain('list and get read prompts; create, update, delete, versions and restore write your own');
+      expect(description).toContain('list and get read prompts; create, update, delete and restore write your own; versions only reads your own history');
       expect(description).toContain('create (slug, title, prompt)');
       expect(description).toContain('restore (slug, version, expectedCurrentVersion)');
       expect(description).not.toContain('prompt_library');
