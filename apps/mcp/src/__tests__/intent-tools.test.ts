@@ -198,6 +198,55 @@ describe('experiments and check_script with a persona by name', () => {
   });
 });
 
+describe('experiments create over the server', () => {
+  const VERSION_A = '22222222-2222-4222-8222-222222222222';
+  const VERSION_B = '33333333-3333-4333-8333-333333333333';
+  const videos = (label: string) =>
+    Array.from({ length: 5 }, (_, index) => ({ title: `${label} ${index + 1}`, description: `${label} copy`, segments: [{ kind: 'hook', text: `${label} hook ${index + 1}.` }] }));
+  const QUOTE = {
+    success: true, stage: 'quote', quoteKey: 'a'.repeat(64), expiresAt: '2030-01-01T00:15:00.000Z',
+    perVideoTokens: 1, totalTokens: 10, videos: 10, slots: [], warnings: [],
+  };
+
+  it('sends the ids of a persona and an account given by name', async () => {
+    const { call, seen } = setup({ 'GET /api/persona/list': PERSONAS, 'GET /api/account': ACCOUNTS, 'POST /api/experiments': QUOTE });
+
+    const result = await call('experiments', {
+      action: 'create',
+      persona: 'Maria',
+      account: { provider: 'pinterest', accountId: 'Maria Pins' },
+      videoType: 'voiceover',
+      startAt: '2030-01-01T00:00:00.000Z',
+      times: ['09:00'],
+      timezone: 'UTC',
+      variants: [{ versionId: VERSION_A, videos: videos('A') }, { versionId: VERSION_B, videos: videos('B') }],
+    });
+
+    expect(result.isError).toBe(false);
+    expect(seen.find((request) => request.method === 'POST')?.body).toMatchObject({
+      personaId: MARIA,
+      account: { provider: 'pinterest', accountId: 'PIN1' },
+    });
+  });
+
+  it('sends nothing when the account name matches no account', async () => {
+    const { call, seen } = setup({ 'GET /api/account': ACCOUNTS, 'POST /api/experiments': QUOTE });
+
+    const result = await call('experiments', {
+      action: 'create',
+      account: { provider: 'youtube', accountId: 'Nobody' },
+      videoType: 'voiceover',
+      startAt: '2030-01-01T00:00:00.000Z',
+      times: ['09:00'],
+      timezone: 'UTC',
+      variants: [{ versionId: VERSION_A, videos: videos('A') }, { versionId: VERSION_B, videos: videos('B') }],
+    });
+
+    expect(result.isError).toBe(true);
+    expect(seen.some((request) => request.method === 'POST')).toBe(false);
+  });
+});
+
 describe('video_tasks over the server', () => {
   it('takes a snapshot of several tasks by default and tags the request with the action', async () => {
     const { call, seen } = setup({

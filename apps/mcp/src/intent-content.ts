@@ -11,7 +11,7 @@ import { handlePublishExisting } from './tools-publish-existing.js';
 import { DESTRUCTIVE, MUTATING, READ_ONLY } from './tool-annotations.js';
 import { POINTER_IMAGES } from './server-instructions.js';
 import { PublishVideoDirectShape, handlePublishVideoDirect } from './tools.js';
-import { CreateExperimentShape, PromptComparisonShape, handleCreateExperiment, handlePromptComparison } from './tools-experiments.js';
+import { CreateExperimentShape, PromptComparisonShape, handleCreateExperiment, handlePromptComparison, withExperimentRefs } from './tools-experiments.js';
 import { UploadMediaRemoteShape } from './remote-shapes-images.js';
 import { CheckMediaShape, UploadMediaRemoteSchema, UploadMediaShape, handleCheckMedia, handleUploadMedia, handleUploadMediaFromUrl } from './tools-user-media.js';
 import { ValidateScriptSchema } from './single-video-shape.js';
@@ -36,7 +36,7 @@ export function registerContentTools(server: McpServer, client: PostEngineerClie
   server.tool(
     'experiments',
     actionDescription(
-      'results: per account, each prompt version with video count, median views, lift and a label: insufficient (fewer than 5 videos), no_signal, indicative or clear; thresholds are corrected for the number of prompts compared (divided by the groups of the account with at least 5 videos); make at least 10 videos per prompt. create: quote (no quoteKey, no charge), then confirm (quoteKey, expiresAt); versions rotate over the posting times.',
+      'Experiments compare prompts. Every video generated with a promptVersionId (the versionId that prompts (action: get) returns) records that prompt version. results: per publishing account (never across accounts), each prompt version with its video count, median views, lift (views divided by the median of the account\'s other videos; above 1 beats the account) and a sign-test label: insufficient (fewer than 5 videos), no_signal, indicative or clear. Videos made without a prompt form the "no prompt" group. The clear and indicative thresholds are corrected for the number of prompts compared: they are divided by the number of groups of the account with at least 5 videos (the "no prompt" group included). Never call a prompt the winner unless the label is clear; make at least 10 videos per prompt (5 only lift a prompt out of insufficient). create: quote first (no quoteKey, nothing is charged), then confirm with the quoteKey and expiresAt of the quote; persona and account.accountId take a name or an id; the versions rotate over the posting times.',
       EXPERIMENTS_SPECS,
     ),
     actionShape(EXPERIMENTS_SPECS),
@@ -44,7 +44,7 @@ export function registerContentTools(server: McpServer, client: PostEngineerClie
     byAction(
       {
         results: async (args) => handlePromptComparison(client, args),
-        create: async (args) => handleCreateExperiment(client, args),
+        create: async (args) => withExperimentRefs(client, args, (resolved) => handleCreateExperiment(client, resolved)),
       },
       EXPERIMENTS_SPECS,
       'experiments',

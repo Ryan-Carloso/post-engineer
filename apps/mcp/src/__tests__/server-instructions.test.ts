@@ -146,6 +146,22 @@ describe.each(['stdio', 'http'] as const)('server instructions on the %s server'
     expect(SERVER_INSTRUCTIONS).toContain(TESTING_SAMPLE_RULES);
   });
 
+  it('does not send the agent to the manual rotation flow that experiments create replaced', () => {
+    expect(TESTING_SAMPLE_RULES).not.toContain('prefer rotating variants');
+    expect(SERVER_INSTRUCTIONS).not.toContain('prefer rotating variants');
+    expect(SERVER_INSTRUCTIONS).not.toContain('videos the user already plans to post');
+  });
+
+  it('says the create total is a ceiling, not an exact count', () => {
+    expect(TESTING_CREATE_RULES).toContain('at most 40 in total');
+    expect(TESTING_CREATE_RULES).not.toContain('(5-15 each, 40 in total)');
+  });
+
+  it('says persona and account take a name or an id', () => {
+    expect(TESTING_CREATE_RULES).toContain('persona (name or id)');
+    expect(TESTING_CREATE_RULES).toContain('accountId (name or id)');
+  });
+
   it('asks for the token cost to be stated before a test is generated', () => {
     expect(TESTING_SAMPLE_RULES).toContain('State the token cost before generating videos for a test');
   });

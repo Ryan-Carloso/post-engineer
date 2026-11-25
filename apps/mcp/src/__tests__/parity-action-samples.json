@@ -308,6 +308,22 @@
             ]
           }
         ]
+      },
+      "responses": {
+        "GET /api/account": {
+          "authenticated": true,
+          "accounts": [
+            {
+              "provider": "youtube",
+              "recordId": "rec-1",
+              "channelId": "acct-1",
+              "channelName": "Maria Cooks",
+              "connectedAt": 1700000000000,
+              "lastUsed": 1700000000000
+            }
+          ],
+          "message": "Accounts retrieved from Supabase"
+        }
       }
     }
   ],

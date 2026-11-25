@@ -8,6 +8,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const comparison = readFileSync(join(here, '..', '..', '..', 'web', 'lib', 'experiments', 'prompt-comparison.ts'), 'utf8');
 const description = readFileSync(join(here, '..', 'intent-content.ts'), 'utf8');
 const instructions = readFileSync(join(here, '..', 'server-instructions.ts'), 'utf8');
+const toolsSource = readFileSync(join(here, '..', 'tools-experiments.ts'), 'utf8');
 const readme = readFileSync(join(here, '..', '..', 'README.md'), 'utf8');
 
 function recommendedVideos(): number {
@@ -49,6 +50,21 @@ describe('experiments description sync with the prompt comparison', () => {
     expect(description).toContain('rotate over the posting times');
     expect(description).not.toContain('To test two prompts fairly');
     expect(readme).toContain('corrected for the number of prompts compared');
+  });
+
+  it('keeps what an agent needs to read results: the lift definition, the window and the per-account scope', () => {
+    expect(description).toContain('never across accounts');
+    expect(description).toContain("lift (views divided by the median of the account\\'s other videos; above 1 beats the account)");
+    expect(toolsSource).toContain("describe('Metrics window to compare: 24h, 7d (default) or 28d.')");
+  });
+
+  it('says persona and account names are resolved for create', () => {
+    expect(description).toContain('persona and account.accountId take a name or an id');
+    expect(readme).toContain('`persona` and `account.accountId` take a name or an id');
+  });
+
+  it('writes the create total as a ceiling in the README', () => {
+    expect(readme).toContain('5-15 each, at most 40 in total');
   });
 
   it('uses only result labels the comparison defines', () => {

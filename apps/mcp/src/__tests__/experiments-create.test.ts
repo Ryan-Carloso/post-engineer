@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PostEngineerClient } from '../client.js';
-import { handleCreateExperiment, type CreateExperimentArgs } from '../tools-experiments.js';
+import { handleCreateExperiment, withExperimentRefs, type CreateExperimentArgs, type CreateExperimentInput } from '../tools-experiments.js';
 
 vi.mock('../analytics.js', () => ({
   mcpTelemetryHeaders: () => ({}),
@@ -121,6 +121,8 @@ describe('experiments create handler', () => {
     await handleCreateExperiment(client(), args());
 
     const body = JSON.parse(String((fetchMock.mock.calls[0] as [string, RequestInit])[1].body));
+    const sent = args();
+    expect(body.variants).toEqual(sent.variants);
     const titles = body.variants.flatMap((variant: { videos: Array<{ title: string }> }) => variant.videos.map((video) => video.title));
     expect(new Set(titles).size).toBe(10);
   });
@@ -169,5 +171,104 @@ describe('experiments create handler', () => {
 
     expect(result.isError).toBe(true);
     expect((result.content[0] as { text: string }).text).toContain('Malformed response');
+  });
+});
+
+const PERSONA_ID = '33333333-3333-4333-8333-333333333333';
+
+function listings(client: PostEngineerClient, accountEntries: Array<Record<string, unknown>>): void {
+  vi.spyOn(client, 'listPersonas').mockResolvedValue({ authenticated: true, personas: [{ id: PERSONA_ID, name: 'Maria', niche: 'cooking' }] } as never);
+  vi.spyOn(client, 'listSocialAccounts').mockResolvedValue({ authenticated: true, accounts: accountEntries } as never);
+}
+
+function input(overrides: Partial<CreateExperimentInput> = {}): CreateExperimentInput {
+  const { personaId: _unused, ...rest } = args();
+  return { ...rest, ...overrides };
+}
+
+describe('experiments create refs', () => {
+  const run = vi.fn(async (_resolved: CreateExperimentArgs) => ({ content: [{ type: 'text' as const, text: 'ran' }] }));
+
+  beforeEach(() => {
+    run.mockClear();
+  });
+
+  it('resolves the persona and the account by name before anything is sent', async () => {
+    const api = client();
+    listings(api, [{ provider: 'youtube', channelId: 'UC-maria', channelName: 'Maria Cooks' }]);
+
+    const result = await withExperimentRefs(api, input({ persona: 'maria', account: { provider: 'youtube', accountId: 'Maria Cooks' } }), run);
+
+    expect(result.isError).toBeUndefined();
+    const resolved = run.mock.calls[0]?.[0];
+    expect(resolved?.personaId).toBe(PERSONA_ID);
+    expect(resolved?.account).toEqual({ provider: 'youtube', accountId: 'UC-maria' });
+    expect(resolved).not.toHaveProperty('persona');
+  });
+
+  it('passes an account id and a persona id through unchanged', async () => {
+    const api = client();
+    listings(api, [{ provider: 'youtube', channelId: 'UC-maria', channelName: 'Maria Cooks' }]);
+
+    await withExperimentRefs(api, input({ persona: PERSONA_ID, account: { provider: 'youtube', accountId: 'UC-maria' } }), run);
+
+    expect(run.mock.calls[0]?.[0]).toMatchObject({ personaId: PERSONA_ID, account: { provider: 'youtube', accountId: 'UC-maria' } });
+  });
+
+  it('keeps the account of the named provider when another network has the same name', async () => {
+    const api = client();
+    listings(api, [
+      { provider: 'youtube', channelId: 'UC-maria', channelName: 'Maria' },
+      { provider: 'instagram', igUserId: '9', username: 'maria' },
+    ]);
+
+    await withExperimentRefs(api, input({ account: { provider: 'instagram', accountId: 'Maria' } }), run);
+
+    expect(run.mock.calls[0]?.[0].account).toEqual({ provider: 'instagram', accountId: '9' });
+  });
+
+  it('answers an unknown account name with an error and runs nothing', async () => {
+    const api = client();
+    listings(api, [{ provider: 'youtube', channelId: 'UC-maria', channelName: 'Maria Cooks' }]);
+
+    const result = await withExperimentRefs(api, input({ account: { provider: 'youtube', accountId: 'Nobody' } }), run);
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as { text: string }).text).toContain('No account matches "Nobody"');
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it('answers an ambiguous account name with the candidates and runs nothing', async () => {
+    const api = client();
+    listings(api, [
+      { provider: 'youtube', channelId: 'UC-1', channelName: 'Maria' },
+      { provider: 'youtube', channelId: 'UC-2', channelName: 'maria' },
+    ]);
+
+    const result = await withExperimentRefs(api, input({ account: { provider: 'youtube', accountId: 'Maria' } }), run);
+
+    expect(JSON.parse((result.content[0] as { text: string }).text)).toMatchObject({ ambiguous: true, actionTaken: false });
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it('answers an unknown persona name with an error and runs nothing', async () => {
+    const api = client();
+    listings(api, []);
+
+    const result = await withExperimentRefs(api, input({ persona: 'Nobody' }), run);
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as { text: string }).text).toContain('No persona named "Nobody"');
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it('leaves an account without a provider string to the contract check', async () => {
+    const api = client();
+    const accounts = vi.spyOn(api, 'listSocialAccounts');
+
+    await withExperimentRefs(api, input({ account: { accountId: 'x' } }), run);
+
+    expect(accounts).not.toHaveBeenCalled();
+    expect(run).toHaveBeenCalledTimes(1);
   });
 });

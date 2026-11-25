@@ -3,10 +3,11 @@ import type { PostEngineerClient } from './client.js';
 import { createExperiment, getPromptComparison } from './client-experiments.js';
 import { CreateExperimentBodySchema } from './contracts/experiments.js';
 import { METRICS_WINDOWS } from './limits.js';
+import { optionalPersonaRefShape, resolveAccountRef, withOptionalPersona } from './refs.js';
 import { handleLibraryCall, type McpToolResponse } from './tools-call.js';
 
 export const PromptComparisonShape = {
-  window: z.enum(METRICS_WINDOWS).optional(),
+  window: z.enum(METRICS_WINDOWS).optional().describe('Metrics window to compare: 24h, 7d (default) or 28d.'),
 };
 export const PromptComparisonSchema = z.object(PromptComparisonShape);
 
@@ -19,9 +20,8 @@ export async function handlePromptComparison(
 
 const jsonObject = z.record(z.string(), z.unknown());
 
-export const CreateExperimentShape = {
-  personaId: z.string().optional(),
-  account: jsonObject.describe('{ provider, accountId }'),
+export const CreateExperimentShape = optionalPersonaRefShape({
+  account: jsonObject.describe('{ provider, accountId }: accountId is the account name or id (accounts (action: list) shows both)'),
   videoType: z.string(),
   options: jsonObject.optional(),
   startAt: z.string(),
@@ -30,9 +30,24 @@ export const CreateExperimentShape = {
   variants: z.array(jsonObject).describe('2-4 { versionId, videos }'),
   quoteKey: z.string().optional(),
   expiresAt: z.string().optional(),
-};
+});
 export const CreateExperimentSchema = z.object(CreateExperimentShape);
-export type CreateExperimentArgs = z.infer<typeof CreateExperimentSchema>;
+export type CreateExperimentInput = z.infer<typeof CreateExperimentSchema>;
+export type CreateExperimentArgs = Omit<CreateExperimentInput, 'persona'> & { personaId?: string };
+
+export async function withExperimentRefs(
+  client: PostEngineerClient,
+  args: CreateExperimentInput,
+  run: (resolved: CreateExperimentArgs) => Promise<McpToolResponse>,
+): Promise<McpToolResponse> {
+  return withOptionalPersona(client, args, async (resolved) => {
+    const { provider, accountId } = resolved.account;
+    if (typeof provider !== 'string' || typeof accountId !== 'string') return run(resolved);
+    const outcome = await resolveAccountRef(client, accountId, provider);
+    if (outcome.kind === 'response') return outcome.response;
+    return run({ ...resolved, account: { ...resolved.account, accountId: outcome.value.id } });
+  });
+}
 
 const QUOTE_NEXT =
   'Quote only: nothing was charged or scheduled. Show the user the plan, total tokens and warnings. To create it, call experiments (action: create) again with the same arguments plus this quoteKey and expiresAt; ask for a new quote when it expires or anything changes';
