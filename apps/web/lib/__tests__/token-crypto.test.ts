@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { encryptTokens, decryptTokens, encryptJson, decryptJson, TokenDecryptError } from '@/lib/token-crypto';
+import { encryptTokens, decryptTokens, encryptJson, decryptJson, deriveServerKey, TokenDecryptError } from '@/lib/token-crypto';
 
 const VALID_KEY = Buffer.alloc(32).toString('base64');
 const SHORT_KEY = Buffer.alloc(16).toString('base64');
@@ -155,6 +155,25 @@ describe('token-crypto', () => {
         'TOKEN_ENCRYPTION_KEY must decode to exactly 32 bytes',
       );
       expect(() => decryptTokens(encrypted)).not.toThrow(TokenDecryptError);
+    });
+  });
+
+  describe('deriveServerKey', () => {
+    it('derives a stable 32-byte key per purpose that is not the encryption key itself', () => {
+      process.env.TOKEN_ENCRYPTION_KEY = VALID_KEY;
+      const first = deriveServerKey('purpose-a');
+
+      expect(first).toHaveLength(32);
+      expect(deriveServerKey('purpose-a').equals(first)).toBe(true);
+      expect(deriveServerKey('purpose-b').equals(first)).toBe(false);
+      expect(first.equals(Buffer.from(VALID_KEY, 'base64'))).toBe(false);
+    });
+
+    it('throws when the encryption key is missing or the wrong length', () => {
+      vi.stubEnv('TOKEN_ENCRYPTION_KEY', undefined);
+      expect(() => deriveServerKey('purpose-a')).toThrow('TOKEN_ENCRYPTION_KEY is not defined');
+      vi.stubEnv('TOKEN_ENCRYPTION_KEY', SHORT_KEY);
+      expect(() => deriveServerKey('purpose-a')).toThrow('exactly 32 bytes');
     });
   });
 });

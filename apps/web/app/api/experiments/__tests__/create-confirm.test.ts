@@ -28,13 +28,15 @@ vi.mock('@/lib/billing/refund-tokens', () => ({
   refundSlotTokens: vi.fn().mockResolvedValue({ refunded: true, alreadyRefunded: false }),
 }));
 
+import { createHash } from 'node:crypto';
+import { canonicalJson } from '@/lib/experiments/quote-key';
 import { readPromptComparison } from '@/lib/experiments/read-comparison';
 import { refundSlotTokens } from '@/lib/billing/refund-tokens';
 import { startEngineVideoTask } from '@/lib/generation/video-generation';
 import type { CreateExperimentBody } from '@/lib/contracts/experiments';
 import { confirmExperiment, experimentScheduleId } from '../create-confirm';
 import { quoteExperiment } from '../create-quote';
-import { AUTH, USER_ID, VERSION_A, VERSION_B, OFFICIAL_VERSIONS, experimentBody, fakeDb, type DbConfig, type FakeDb } from './create-fixtures';
+import { TEST_ENCRYPTION_KEY, AUTH, USER_ID, VERSION_A, VERSION_B, OFFICIAL_VERSIONS, experimentBody, fakeDb, type DbConfig, type FakeDb } from './create-fixtures';
 
 const NOW = new Date();
 const TOTAL = 10;
@@ -44,11 +46,12 @@ interface Quoted {
   confirmBody: CreateExperimentBody;
   quoteKey: string;
   expiresAt: string;
+  slots: Array<{ slotAt: string; versionId: string }>;
 }
 
 async function quoted(body = experimentBody()): Promise<Quoted> {
   const json = await (await quoteExperiment(fakeDb().client, AUTH, body, NOW)).json();
-  return { body, confirmBody: { ...body, quoteKey: json.quoteKey, expiresAt: json.expiresAt }, quoteKey: json.quoteKey, expiresAt: json.expiresAt };
+  return { body, confirmBody: { ...body, quoteKey: json.quoteKey, expiresAt: json.expiresAt }, quoteKey: json.quoteKey, expiresAt: json.expiresAt, slots: json.slots };
 }
 
 async function confirm(confirmBody: CreateExperimentBody, db: FakeDb = fakeDb(), now = NOW) {
@@ -62,6 +65,7 @@ function spends(db: FakeDb) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.stubEnv('TOKEN_ENCRYPTION_KEY', TEST_ENCRYPTION_KEY);
   price.perVideo = null;
   vi.mocked(readPromptComparison).mockResolvedValue({ ok: true, value: { window: '7d', accounts: [], truncated: false }, unversioned: [] });
   vi.mocked(startEngineVideoTask).mockImplementation(async (_userId, payload) => ({
@@ -183,6 +187,40 @@ describe('confirmExperiment', () => {
     edited.variants[0].videos[0].description = 'Edited after the quote.';
 
     const { response, json, db } = await confirm(edited);
+
+    expect(response.status).toBe(409);
+    expect(json.code).toBe('QUOTE_CHANGED');
+    expect(spends(db)).toHaveLength(0);
+  });
+
+  it('rejects a key a caller computed itself for an expiry it chose', async () => {
+    const { body, expiresAt, slots } = await quoted();
+    const chosenExpiry = new Date(Date.parse(expiresAt) + 24 * 3_600_000).toISOString();
+    const selfSigned = createHash('sha256')
+      .update(
+        canonicalJson({
+          userId: USER_ID,
+          request: { ...body, quoteKey: undefined, expiresAt: undefined },
+          perVideoCost: 1,
+          totalTokens: TOTAL,
+          slots: slots.map((slot) => ({ slotAt: slot.slotAt, versionId: slot.versionId })),
+          expiresAt: chosenExpiry,
+        }),
+      )
+      .digest('hex');
+
+    const { response, json, db } = await confirm({ ...body, quoteKey: selfSigned, expiresAt: chosenExpiry });
+
+    expect(response.status).toBe(409);
+    expect(json.code).toBe('QUOTE_CHANGED');
+    expect(spends(db)).toHaveLength(0);
+  });
+
+  it('rejects a real key presented with a later expiry than the one it was issued for', async () => {
+    const { body, quoteKey, expiresAt } = await quoted();
+    const later = new Date(Date.parse(expiresAt) + 24 * 3_600_000).toISOString();
+
+    const { response, json, db } = await confirm({ ...body, quoteKey, expiresAt: later });
 
     expect(response.status).toBe(409);
     expect(json.code).toBe('QUOTE_CHANGED');

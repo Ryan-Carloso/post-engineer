@@ -1,5 +1,17 @@
-import { describe, expect, it } from 'vitest';
+import { createHash } from 'node:crypto';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { QUOTE_TTL_MS, canonicalJson, isQuoteExpired, quoteExpiry, quoteKeyFor } from '../quote-key';
+
+const SECRET = Buffer.alloc(32, 7).toString('base64');
+const OTHER_SECRET = Buffer.alloc(32, 9).toString('base64');
+
+beforeEach(() => {
+  vi.stubEnv('TOKEN_ENCRYPTION_KEY', SECRET);
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 const BASE = {
   userId: 'user-1',
@@ -33,11 +45,36 @@ describe('quoteKeyFor', () => {
   it('is a 64-character hex digest', () => {
     expect(quoteKeyFor(BASE)).toMatch(/^[0-9a-f]{64}$/);
   });
+
+  it('cannot be computed without the server secret: a plain SHA-256 of the same payload differs', () => {
+    expect(quoteKeyFor(BASE)).not.toBe(createHash('sha256').update(canonicalJson(BASE)).digest('hex'));
+  });
+
+  it('changes with the server secret', () => {
+    const first = quoteKeyFor(BASE);
+    vi.stubEnv('TOKEN_ENCRYPTION_KEY', OTHER_SECRET);
+
+    expect(quoteKeyFor(BASE)).not.toBe(first);
+  });
+
+  it('fails loudly when the server secret is not set', () => {
+    vi.stubEnv('TOKEN_ENCRYPTION_KEY', undefined);
+
+    expect(() => quoteKeyFor(BASE)).toThrow('TOKEN_ENCRYPTION_KEY');
+  });
+
+  it('tells two different dates apart', () => {
+    expect(quoteKeyFor({ at: new Date('2026-12-01T00:00:00.000Z') })).not.toBe(quoteKeyFor({ at: new Date('2026-12-02T00:00:00.000Z') }));
+  });
 });
 
 describe('canonicalJson', () => {
   it('sorts keys recursively and drops undefined values', () => {
     expect(canonicalJson({ b: 1, a: { d: undefined, c: [{ z: 1, y: 2 }] } })).toBe('{"a":{"c":[{"y":2,"z":1}]},"b":1}');
+  });
+
+  it('writes a Date as its ISO string, never as an empty object', () => {
+    expect(canonicalJson({ at: new Date('2026-12-01T00:00:00.000Z') })).toBe('{"at":"2026-12-01T00:00:00.000Z"}');
   });
 });
 

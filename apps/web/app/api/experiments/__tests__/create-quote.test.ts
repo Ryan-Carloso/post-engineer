@@ -15,7 +15,7 @@ import { readPromptComparison } from '@/lib/experiments/read-comparison';
 import type { AccountResult, PromptResult, UnversionedAccount } from '@/lib/experiments/prompt-comparison';
 import { parseExperimentRequest } from '../create-plan';
 import { quoteExperiment } from '../create-quote';
-import { AUTH, USER_ID, VERSION_A, VERSION_B, VERSION_C, experimentBody, fakeDb, futureISO, segmentsFor, OFFICIAL_VERSIONS } from './create-fixtures';
+import { TEST_ENCRYPTION_KEY, AUTH, USER_ID, VERSION_A, VERSION_B, VERSION_C, experimentBody, fakeDb, futureISO, segmentsFor, OFFICIAL_VERSIONS } from './create-fixtures';
 
 const NOW = new Date();
 
@@ -34,6 +34,7 @@ async function quote(overrides: Parameters<typeof experimentBody>[0] = {}, db = 
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.stubEnv('TOKEN_ENCRYPTION_KEY', TEST_ENCRYPTION_KEY);
   emptyComparison();
 });
 
