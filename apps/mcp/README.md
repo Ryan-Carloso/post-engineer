@@ -195,7 +195,7 @@ The server offers **17 intent tools**, not one tool per API endpoint. A tool is 
 | `video_tasks` | `status`, `list_generations`, `get_generation` | Follow videos: for the final outcome, `status` sets `waitSeconds` above 0 and blocks (up to 12 `taskIds`). `waitSeconds` 0 is only a progress snapshot: wait at least `nextPollInSeconds`. Each task can be polled at most once a minute (the API answers a faster poll with 429 and `Retry-After`); `status` waits out the `Retry-After` instead of failing. |
 | `cancel_video` | — | Cancel a video that is still generating. Separate so a client can allow status without cancel. |
 | `personas` | `list`, `get`, `create`, `update`, `delete` | Personas. `delete` previews first and needs the `confirmToken` of that preview to delete. |
-| `persona_media` | `list_faces`, `list_images`, `add_image`, `update_image`, `remove_image` | Stock faces and a persona's image library. |
+| `persona_media` | `list_faces`, `list_images`, `add_image`, `update_image`, `remove_image`, `get_card`, `render_prompt` | Stock faces, a persona's image library, and the identity card prompts (see "Identity card"). |
 | `voices` | `list`, `preview`, `list_clones`, `create_clone`, `get_clone`, `preview_clone`, `delete_clone` | House voices and voice clones. |
 | `accounts` | `list`, `connect`, `disconnect`, `get_persona_publishing`, `set_persona_publishing`, `list_boards` | Social accounts and the accounts each persona publishes to. |
 | `tool_config` | `get`, `save` | The saved research/stock tool configuration: which search tool (Tavily/Exa/own) and stock sources (Pexels/Pixabay/Coverr) the account has keys for. `save` replaces the whole set; keys are stored encrypted and are never returned in full — `get` shows presence and last 4 characters only. |
@@ -224,6 +224,24 @@ Actions that read a file from the disk (`publish_video` `from_file`, and a local
 `mode: "scheduled"` (the default) slots a video 3h-30d ahead (`startAt` and `times`); `mode: "asap"` publishes it when generation finishes.
 
 Batch (2-12 videos) needs a `batchKey` and rejects `idempotencyKey`; one video takes an `idempotencyKey` and rejects `batchKey`. A batch is created video by video: if one fails, the earlier videos stay created; call again with the same `batchKey` and the same videos and the created ones replay without a new charge. A key whose schedule was deleted while one of its videos was already delivered is spent: reusing it answers 409 `IDEMPOTENCY_KEY_CONSUMED` and generates nothing, so send a new key. A key whose video was cancelled and fully refunded can be reused and is charged again.
+
+### Identity card
+
+A persona can hold one **identity card**: the face and body traits that never change, plus a default outfit. Store it once, then render a deterministic image prompt for any scene, so your image tool stops inventing the traits the prompt leaves open.
+
+1. `personas` `update` with `identityCard` (`null` removes it). The card is `{ "version": 1, "identity": { "face": { ... }, "body": { ... } }, "defaults": { "outfit": { ... } } }`. Every level is strict: an unknown key is a 400. Every trait is one line of at most 80 characters, at least one trait is required, and the whole card is at most 4096 bytes. `personas` `create` takes the same field.
+2. `persona_media` `render_prompt` with a `scene` (`outfit`, `pose`, `setting`, `lighting`, `framing`, `aspect`). It returns `{ prompt, suggestedDescription, cardVersion }`. The scene holds only what changes per photo: an `identity`, `face`, `body` or `version` key is rejected, and so are words about the person (hair, eyes, skin, build, height, beard, tattoo, ...) in `pose`, `setting` and the outfit slots. A scene outfit replaces the card's default outfit completely. `persona_media` `get_card` reads the stored card.
+3. Make the image with **your own** image tool, using the persona's base photo as the reference and the returned `prompt` as the instruction. Always edit from the original base photo, never from a previous edit.
+4. `persona_media` `add_image` with `description` set to the returned `suggestedDescription`. It is built from the outfit, setting, lighting and framing only, so the per-video image selection keeps matching on the scene.
+5. Use the new photos in `generate_video` `options.lipsyncPhotos` for `full_lipsync` (2-5 photos of the same person).
+
+**This is advice, not enforcement.** The server stores the card and renders text. It generates no image, charges no tokens and calls no image model, so nothing stops your image tool from ignoring the prompt, and the word list on the scene is best effort: a paraphrase gets through. The prompt text lives in one place, `apps/web/lib/persona-identity-prompt.ts`; read it there instead of copying it.
+
+Content rules:
+
+- The card describes a real person's physical traits. Fill it only with that person's consent. It is read only through `get_card`: it is never in `personas` `list` and never on a share page, and it is kept out of logs, telemetry and error messages.
+- Outfit slots (`top`, `bottom`, `one_piece`, `outerwear`, `footwear`, `accessories`) take clothing only. `one_piece` cannot be combined with `top` or `bottom`.
+- Nudity and sexualised or see-through clothing are not allowed in an outfit, and the server rejects the obvious words. It cannot police what your image tool makes from a prompt that passes: that is your responsibility, and more so when the face may belong to a real person.
 
 ### Measuring the size of `tools/list`
 

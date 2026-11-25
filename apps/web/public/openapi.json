@@ -1581,6 +1581,484 @@
         }
       }
     },
+    "/api/persona/identity-card": {
+      "get": {
+        "operationId": "get_persona_media_get_card",
+        "summary": "persona media get card",
+        "tags": [
+          "persona"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "identityCard": {
+                      "type": "object",
+                      "properties": {
+                        "version": {
+                          "type": "integer",
+                          "enum": [
+                            1
+                          ]
+                        },
+                        "identity": {
+                          "type": "object",
+                          "properties": {
+                            "face": {
+                              "type": "object",
+                              "properties": {
+                                "shape": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 80
+                                },
+                                "eyes": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 80
+                                },
+                                "eyebrows": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 80
+                                },
+                                "nose": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 80
+                                },
+                                "lips": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 80
+                                },
+                                "skin": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 80
+                                },
+                                "hair": {
+                                  "type": "object",
+                                  "properties": {
+                                    "color": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 80
+                                    },
+                                    "style": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 80
+                                    },
+                                    "length": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 80
+                                    }
+                                  },
+                                  "additionalProperties": false
+                                },
+                                "facial_hair": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 80
+                                },
+                                "marks": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 80
+                                }
+                              },
+                              "additionalProperties": false
+                            },
+                            "body": {
+                              "type": "object",
+                              "properties": {
+                                "build": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 80
+                                },
+                                "height": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 80
+                                },
+                                "shoulders": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 80
+                                },
+                                "hands": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 80
+                                }
+                              },
+                              "additionalProperties": false
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        "defaults": {
+                          "type": "object",
+                          "properties": {
+                            "outfit": {
+                              "type": "object",
+                              "properties": {
+                                "top": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 80
+                                },
+                                "bottom": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 80
+                                },
+                                "one_piece": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 80
+                                },
+                                "outerwear": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 80
+                                },
+                                "footwear": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 80
+                                },
+                                "accessories": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 80
+                                }
+                              },
+                              "additionalProperties": false,
+                              "description": "Clothing only, one line per slot. one_piece cannot be combined with top or bottom. Nudity, sexualised clothing and words about the person (hair, skin, body) are rejected."
+                            }
+                          },
+                          "additionalProperties": false
+                        }
+                      },
+                      "additionalProperties": false,
+                      "required": [
+                        "version",
+                        "identity"
+                      ],
+                      "description": "Versioned identity card (at most 4096 bytes, every level strict, at least one identity trait). It describes a real person's physical traits: fill it only with their consent. Advice for the agent's image tool, not enforcement.",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "success"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A persona-scoped API key that does not include this persona.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "personaId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "description": "Reads the identity card of one persona. It is never part of the persona list or a share page."
+      },
+      "post": {
+        "operationId": "post_persona_media_render_prompt",
+        "summary": "persona media render prompt",
+        "tags": [
+          "persona"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "prompt": {
+                      "type": "string",
+                      "description": "The deterministic edit prompt; identity text comes only from the card."
+                    },
+                    "suggestedDescription": {
+                      "type": "string",
+                      "maxLength": 500,
+                      "description": "A library description made from the outfit, setting, lighting and framing, never from the identity."
+                    },
+                    "cardVersion": {
+                      "type": "integer",
+                      "enum": [
+                        1
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A persona-scoped API key that does not include this persona.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The persona has no identity card (IDENTITY_CARD_MISSING).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "personaId": {
+                    "type": "string"
+                  },
+                  "scene": {
+                    "type": "object",
+                    "properties": {
+                      "outfit": {
+                        "type": "object",
+                        "properties": {
+                          "top": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 80
+                          },
+                          "bottom": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 80
+                          },
+                          "one_piece": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 80
+                          },
+                          "outerwear": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 80
+                          },
+                          "footwear": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 80
+                          },
+                          "accessories": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 80
+                          }
+                        },
+                        "additionalProperties": false,
+                        "description": "Clothing only, one line per slot. one_piece cannot be combined with top or bottom. Nudity, sexualised clothing and words about the person (hair, skin, body) are rejected."
+                      },
+                      "pose": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80,
+                        "description": "Free text about the pose. Words about the person (hair, skin, body) are rejected."
+                      },
+                      "setting": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80,
+                        "description": "Free text about the place. Words about the person (hair, skin, body) are rejected."
+                      },
+                      "lighting": {
+                        "type": "string",
+                        "enum": [
+                          "soft_daylight",
+                          "golden_hour",
+                          "overcast",
+                          "studio",
+                          "warm_indoor",
+                          "night_city"
+                        ]
+                      },
+                      "framing": {
+                        "type": "string",
+                        "enum": [
+                          "close_up",
+                          "head_and_shoulders",
+                          "waist_up",
+                          "full_body"
+                        ]
+                      },
+                      "aspect": {
+                        "type": "string",
+                        "enum": [
+                          "9:16",
+                          "4:5",
+                          "1:1",
+                          "16:9"
+                        ]
+                      }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                      "lighting",
+                      "framing"
+                    ],
+                    "description": "Scene only (at most 2048 bytes). Identity, face, body and version keys are rejected."
+                  }
+                },
+                "required": [
+                  "personaId",
+                  "scene"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "description": "Renders the image prompt for one scene from the stored card. Nothing is generated or stored: the prompt is advice for the agent's own image tool."
+      }
+    },
     "/api/persona/list": {
       "get": {
         "operationId": "get_personas_list",
@@ -1817,6 +2295,10 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "identityCard": {
+                    "type": "string",
+                    "description": "The identity card as a JSON string (at most 4096 bytes). Send the JSON literal null on PATCH to clear it; omit the field to leave it unchanged."
+                  },
                   "name": {
                     "type": "string",
                     "description": "Required on create."
@@ -1982,6 +2464,10 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "identityCard": {
+                    "type": "string",
+                    "description": "The identity card as a JSON string (at most 4096 bytes). Send the JSON literal null on PATCH to clear it; omit the field to leave it unchanged."
+                  },
                   "name": {
                     "type": "string",
                     "description": "Required on create."

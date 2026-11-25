@@ -27,6 +27,8 @@ export function applyPersonaPatchFields(
   if (patch.paragraphNumber !== null) updates.paragraph_number = patch.paragraphNumber;
   if (patch.niche !== null) updates.niche = patch.niche;
   if (patch.faceQuality !== null) updates.face_quality = patch.faceQuality;
+  if (patch.identityCard.status === 'set') updates.identity_card = patch.identityCard.card;
+  if (patch.identityCard.status === 'clear') updates.identity_card = null;
   return resolveMergedCta(patch, stored, updates);
 }
 

@@ -2,6 +2,7 @@ import { FACE_QUALITIES, PERSONA_CTA_INSTRUCTION_MAX_LENGTH, PERSONA_CTA_TYPES, 
 import { isEnglishLanguage, ONLY_ENGLISH_VIDEOS_MESSAGE } from '@/lib/language-gate';
 import { isFileLike } from '@/lib/persona-images';
 import { invalidHookPanelMessage, parseHookPanelFormValue } from '@/lib/hook-panel-form';
+import { parseIdentityCardField, type IdentityCardField } from './identity-card-field';
 
 function isVideoLayout(value: string): value is (typeof VIDEO_LAYOUTS)[number] {
   return (VIDEO_LAYOUTS as readonly string[]).includes(value);
@@ -24,6 +25,7 @@ export interface PersonaPatchBody {
   paragraphNumber: number | null;
   niche: string | null;
   faceQuality: (typeof FACE_QUALITIES)[number] | null;
+  identityCard: IdentityCardField;
 }
 
 type ParsePatchResult =
@@ -126,6 +128,11 @@ export async function parsePatchBody(request: Request): Promise<ParsePatchResult
     };
   }
 
+  const identityCard = parseIdentityCardField(formData.get('identityCard'));
+  if (identityCard.status === 'invalid') {
+    return { ok: false, error: identityCard.error };
+  }
+
   return {
     ok: true,
     value: {
@@ -145,6 +152,7 @@ export async function parsePatchBody(request: Request): Promise<ParsePatchResult
       paragraphNumber,
       niche,
       faceQuality: faceQuality as (typeof FACE_QUALITIES)[number] | null,
+      identityCard,
     },
   };
 }

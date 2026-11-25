@@ -12,6 +12,7 @@ import { FACE_QUALITIES, VIDEO_ASPECTS } from './contracts/personas.js';
 import { isEnglishLanguage, ONLY_ENGLISH_VIDEOS_MESSAGE } from './language.js';
 import { CreatePersonaAvatarFields, refinePersonaAvatar } from './persona-avatar.js';
 import { PersonaCtaShape } from './persona-cta-shape.js';
+import { IdentityCardField } from './persona-card-actions.js';
 import { personaVoiceField } from './voice-filters.js';
 
 export const LibraryImageFields = {
@@ -44,6 +45,7 @@ export const CreatePersonaShape = {
   niche: z.string().optional().default('General').describe('Content niche'),
   faceQuality: z.enum(FACE_QUALITIES).default('very_good').describe('Face resolution of the rendered videos: ok (480p, 2 tokens/video) or very_good (720p, 3 tokens/video)'),
   cta: PersonaCtaShape.optional(),
+  identityCard: IdentityCardField.nullable().optional().describe('The identity card to store. null stores none (the same as leaving it out).'),
   accounts: createPersonaAccountsField,
   images: z.array(PersonaLibraryImageInputShape).max(MAX_LIBRARY_IMAGES).optional().describe(`Up to ${MAX_LIBRARY_IMAGES} local image files of the same person for the persona image library. Each video deterministically picks the best-matching image by tag.`),
   imagePrimaryIndex: z.number().int().min(0).max(MAX_LIBRARY_IMAGES - 1).optional().describe('Index into images[] marking the primary library image (no primary is set when omitted)'),

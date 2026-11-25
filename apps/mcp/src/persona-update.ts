@@ -6,6 +6,7 @@ import { FACE_QUALITIES, VIDEO_ASPECTS } from './contracts/personas.js';
 import { handleLibraryCall, type McpToolResponse } from './tools-call.js';
 import { isEnglishLanguage, ONLY_ENGLISH_VIDEOS_MESSAGE } from './language.js';
 import { PersonaCtaShape } from './persona-cta-shape.js';
+import { IdentityCardField } from './persona-card-actions.js';
 import { refinePersonaAvatar, UpdatePersonaAvatarFields } from './persona-avatar.js';
 import { personaVoiceField, withResolvedPersonaVoiceForUpdate } from './voice-filters.js';
 
@@ -33,6 +34,7 @@ export const UpdatePersonaShape = {
     .optional()
     .describe('New face resolution of the rendered videos: ok (480p, 2 tokens/video) or very_good (720p, 3 tokens/video). Future videos price at the new quality; already-scheduled posts keep the quality they were charged for.'),
   cta: PersonaCtaShape.optional(),
+  identityCard: IdentityCardField.nullable().optional().describe('New identity card (replaces the stored one), or null to remove it. Omit to leave it unchanged. See persona_media (action: render_prompt) to render prompts from it.'),
 };
 
 export const UpdatePersonaSchema = z.object(UpdatePersonaShape).superRefine(refinePersonaAvatar(false));

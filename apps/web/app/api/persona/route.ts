@@ -38,7 +38,7 @@ import { trackApiEvent } from '@/lib/analytics';
 import { SAFE_TASK_ID } from '@/lib/video-urls';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
-import { personaPreferenceColumns } from './preference-columns';
+import { buildPersonaInsertRow } from './create-row';
 
 const ENGINE_CLEANUP_BUDGET_MS = 20_000;
 
@@ -153,23 +153,20 @@ async function postHandler(request: Request): Promise<NextResponse> {
 
   const { data: persona, error: insertError } = await createSupabaseServiceClient()
     .from('personas')
-    .insert({
-      id: personaId,
-      user_id: user.id,
-      name: (body.values.name ?? '').trim(),
-      photo_path: photoPathToRollback,
-      avatar_url: avatarUrl,
-      voice_id: body.values.voiceId,
-      ...personaPreferenceColumns(body.values),
-      recent_image_ids: [],
-    })
+    .insert(buildPersonaInsertRow({
+      personaId,
+      userId: user.id,
+      photoPath: photoPathToRollback,
+      avatarUrl,
+      values: body.values,
+    }))
     .select('id')
     .single();
 
   if (insertError || !persona) {
     await rollbackStoragePath(supabase, photoPathToRollback);
     return errorResponse(500, 'Failed to create persona.', 'POST /api/persona', {
-      cause: insertError,
+      cause: insertError ? { code: insertError.code } : undefined,
     });
   }
 
@@ -303,7 +300,7 @@ async function patchHandler(request: Request): Promise<NextResponse> {
     .eq('id', personaId)
     .eq('user_id', user.id);
   if (updateError) {
-    logger.error('[api/persona] update failed', updateError);
+    logger.error('[api/persona] update failed', { personaId, code: updateError.code });
     if (replacementPhotoPath && replacementPhotoPath !== persona.photo_path) {
       await rollbackStoragePath(supabase, replacementPhotoPath);
     }

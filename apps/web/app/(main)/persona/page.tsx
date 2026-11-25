@@ -22,6 +22,7 @@ import { PersonaTokensSection } from './persona-tokens';
 import { PersonaImageLibrarySection, mapPersonaImageWarnings } from './persona-image-library';
 import { PersonaPreferencesSection } from './persona-preferences-section';
 import { PersonaCtaSection } from './persona-cta-section';
+import { PersonaIdentityCardSection } from './persona-identity-card-section';
 import { PersonaPublishingAccountsSection } from './persona-publishing-accounts-section';
 import { PersonaPageSkeleton } from './persona-page-skeleton';
 import { PersonaErrorDialog } from './persona-error-dialog';
@@ -147,6 +148,7 @@ const PersonaPageContent = () => {
           <section className="rounded-2xl border border-line bg-card p-5 shadow-sm sm:p-6">
             <PersonaCtaSection />
           </section>
+          <PersonaIdentityCardSection personaId={editingPersonaId} />
           <PersonaPublishingAccountsSection personaId={editingPersonaId ?? undefined} />
           <PersonaSubmit editId={editId} />
           <PersonaFeedback />

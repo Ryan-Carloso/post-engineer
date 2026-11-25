@@ -11,6 +11,8 @@ import {
   selectPersonaImage,
   type PersonaLibraryImage,
 } from '../persona-image-select';
+import { buildIdentityPrompt } from '../persona-identity-prompt';
+import { FIXTURE_CARD } from '@/test/identity-card-fixtures';
 
 const img = (
   id: string,
@@ -160,5 +162,39 @@ describe('shared upload limits', () => {
     const serverModule = await import('../persona-images');
     expect(serverModule.MAX_IMAGE_BYTES).toBe(MAX_IMAGE_BYTES);
     expect(serverModule.ALLOWED_IMAGE_MIME_TYPES).toBe(ALLOWED_IMAGE_MIME_TYPES);
+  });
+});
+
+describe('selectPersonaImage with a rendered suggestedDescription', () => {
+  const gym = buildIdentityPrompt(FIXTURE_CARD, {
+    lighting: 'warm_indoor',
+    framing: 'full_body',
+    setting: 'gym with mirrors',
+    outfit: { top: 'black tank', footwear: 'running shoes' },
+  }).suggestedDescription;
+  const street = buildIdentityPrompt(FIXTURE_CARD, {
+    lighting: 'golden_hour',
+    framing: 'waist_up',
+    setting: 'city street',
+    outfit: { top: 'navy blazer' },
+  }).suggestedDescription;
+  const library = [
+    img('img-gym', 'gym', gym),
+    img('img-street', 'street', street),
+    img('img-legacy', 'casual', 'woman in jeans and t-shirt at the park', true),
+  ];
+
+  it('scores a suggestedDescription on the scene keywords', () => {
+    expect(selectPersonaImage(library, { title: 'mirrors workout' }, [])?.id).toBe('img-gym');
+    expect(selectPersonaImage(library, { title: 'blazer on the street' }, [])?.id).toBe('img-street');
+  });
+
+  it('never matches on identity words because the description carries none', () => {
+    expect(selectPersonaImage(library, { title: 'blonde wavy hair' }, [])?.id).toBe('img-legacy');
+  });
+
+  it('still picks hand-written descriptions exactly as before', () => {
+    expect(selectPersonaImage(library, { title: 'park jeans' }, [])?.id).toBe('img-legacy');
+    expect(selectPersonaImage(LIBRARY, { title: 'summer vacation' }, [])?.id).toBe('img-beach');
   });
 });

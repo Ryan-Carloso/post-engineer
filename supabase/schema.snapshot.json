@@ -128,6 +128,12 @@
                     "type": "boolean",
                     "default": "true",
                     "notNull": true
+                },
+                {
+                    "name": "identity_card",
+                    "type": "jsonb",
+                    "default": null,
+                    "notNull": false
                 }
             ],
             "policies": {
@@ -143,6 +149,7 @@
                 "personas_video_layout_check": "CHECK (((video_layout IS NULL) OR (video_layout = ANY (ARRAY['standard'::text, 'react'::text]))))",
                 "personas_cta_url_length_check": "CHECK (((cta_url IS NULL) OR (char_length(cta_url) <= 2048)))",
                 "personas_visual_identity_check": "CHECK (((photo_path IS NULL) OR (avatar_url IS NULL))) NOT VALID",
+                "personas_identity_card_object_check": "CHECK (((identity_card IS NULL) OR (jsonb_typeof(identity_card) = 'object'::text)))",
                 "personas_cta_instruction_length_check": "CHECK (((cta_instruction IS NULL) OR (char_length(cta_instruction) <= 500)))"
             }
         },

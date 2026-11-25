@@ -5,6 +5,7 @@ import type { PostEngineerClient } from './client.js';
 import { getPersonaPublishingAccounts } from './client-publishing-accounts.js';
 import { MalformedContractResponseError } from './contract-response.js';
 import { handlePersonaDelete } from './persona-delete.js';
+import { GetCardShape, RenderPromptShape, handleGetPersonaCard, handleRenderPersonaPrompt } from './persona-card-actions.js';
 import { UpdatePersonaShape, handleUpdatePersona } from './persona-update.js';
 import { PERSONA_REF, personaRefShape, withPersona } from './refs.js';
 import { withRecipeNudge, type RecipeSession } from './recipe-session.js';
@@ -51,7 +52,7 @@ function personasOptions(remote: boolean): ActionOptions<typeof PERSONAS_SPECS> 
 export function personasDescription(remote: boolean): string {
   const face = remote ? 'avatarUrl (a public URL or a url from persona_media (action: list_faces))' : 'avatarUrl or avatarPath (a local photo, uploaded directly)';
   return actionDescription(
-    `Manage your personas (the on-camera presenter, voice and defaults). list: names and ids. get: one persona with its image count and bound publishing accounts. create: a face is REQUIRED (${face}) and at least one publishing account (accounts); a voiceover video is chosen per video, not per persona. update: only the given fields change. delete: preview first, then confirm with the token.`,
+    `Manage your personas (the on-camera presenter, voice and defaults). list: names and ids. get: one persona with its image count and bound publishing accounts. create: a face is REQUIRED (${face}) and at least one publishing account (accounts); a voiceover video is chosen per video, not per persona. update: only the given fields change (identityCard sets or, with null, removes the identity card; see persona_media get_card and render_prompt). delete: preview first, then confirm with the token.`,
     offeredSpecs(PERSONAS_SPECS, personasOptions(remote)),
   );
 }
@@ -103,6 +104,8 @@ const MEDIA_SPECS = {
   add_image: personaRefShape(AddPersonaImageShape),
   update_image: UpdatePersonaImageShape,
   remove_image: RemovePersonaImageShape,
+  get_card: personaRefShape(GetCardShape),
+  render_prompt: personaRefShape(RenderPromptShape),
 };
 
 export function registerPersonaMediaTools(server: McpServer, client: PostEngineerClient, remote: boolean): void {
@@ -111,7 +114,7 @@ export function registerPersonaMediaTools(server: McpServer, client: PostEnginee
   server.tool(
     'persona_media',
     actionDescription(
-      `A persona's face and image library. list_faces: the stock faces to pick an avatar from (id, url, description). list_images / add_image (${remote ? 'downloads a public https imageUrl' : 'reads a local file'}) / update_image / remove_image: the library images used for the per-video image selection.`,
+      `A persona's face and image library. list_faces: the stock faces to pick an avatar from (id, url, description). list_images / add_image (${remote ? 'downloads a public https imageUrl' : 'reads a local file'}) / update_image / remove_image: the library images used for the per-video image selection. get_card: the persona's identity card (set with personas update identityCard), or null. render_prompt: renders a deterministic image-edit prompt from the card plus a scene (outfit, pose, setting, lighting, framing) and returns { prompt, suggestedDescription }; it is advice for YOUR image tool, nothing is generated or stored. Workflow: render_prompt, make the image with your own tool using the persona's base photo as the reference, add_image with description = suggestedDescription, then use the new photos in generate_video options.lipsyncPhotos for full_lipsync. The card describes a real person's physical traits: nude or sexualised clothing is rejected, and the server cannot police what your image tool makes.`,
       offered,
     ),
     actionShape(offered),
@@ -123,6 +126,8 @@ export function registerPersonaMediaTools(server: McpServer, client: PostEnginee
         add_image: (args) => withPersona(client, args, (resolved) => (remote ? handleAddPersonaImageFromUrl(client, AddPersonaImageRemoteSchema.parse(resolved)) : handleAddPersonaImage(client, resolved))),
         update_image: async (args) => handleUpdatePersonaImage(client, args),
         remove_image: async (args) => handleRemovePersonaImage(client, args),
+        get_card: (args) => withPersona(client, args, (resolved) => handleGetPersonaCard(client, resolved)),
+        render_prompt: (args) => withPersona(client, args, (resolved) => handleRenderPersonaPrompt(client, resolved)),
       },
       MEDIA_SPECS,
       'persona_media',

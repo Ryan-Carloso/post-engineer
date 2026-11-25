@@ -202,9 +202,10 @@ export async function persistVoiceSwap(
       .eq('id', personaId)
       .eq('user_id', userId);
     if (error) {
-      logger.error('[generate-and-schedule] failed to persist the swapped persona voice', error, {
+      logger.error('[generate-and-schedule] failed to persist the swapped persona voice', {
         personaId,
         userId,
+        code: error.code,
       });
     }
     const props = scrubSecrets({
@@ -218,9 +219,17 @@ export async function persistVoiceSwap(
     }
     getPostHogServer()?.captureAs(userId, VOICE_FALLBACK_WARNING_CODE, props);
   } catch (error) {
-    logger.error('[generate-and-schedule] persistVoiceSwap threw; swap persisted no-op', error, {
+    const code =
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      typeof error.code === 'string'
+        ? error.code
+        : undefined;
+    logger.error('[generate-and-schedule] persistVoiceSwap threw; swap persisted no-op', {
       personaId,
       userId,
+      ...(code === undefined ? {} : { code }),
     });
   }
 }

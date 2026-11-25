@@ -13,6 +13,7 @@ export function appendCreatePersonaFields(formData: FormData, input: CreatePerso
   formData.set('niche', input.niche ?? 'General');
   formData.set('faceQuality', input.faceQuality ?? 'very_good');
   appendPersonaCtaFields(formData, input.cta);
+  if (input.identityCard !== undefined) formData.set('identityCard', JSON.stringify(input.identityCard));
 }
 
 export function appendUpdatePersonaFields(formData: FormData, input: UpdatePersonaInput): void {
@@ -26,4 +27,5 @@ export function appendUpdatePersonaFields(formData: FormData, input: UpdatePerso
   if (input.niche !== undefined) formData.set('niche', input.niche);
   if (input.faceQuality !== undefined) formData.set('faceQuality', input.faceQuality);
   appendPersonaCtaFields(formData, input.cta);
+  if (input.identityCard !== undefined) formData.set('identityCard', JSON.stringify(input.identityCard));
 }
