@@ -24,7 +24,7 @@ export const SPECS_TO_TOOL = {
 const TOOL_REGISTRATION = /server\.tool\(\s*(['"])([a-z_]+)\1/g;
 const ASSIGNMENT_OPEN_BRACE = /\s*=\s*\{/y;
 const SPECS_SPREAD = /\.\.\.([A-Z_]+_SPECS)\b/g;
-const SPEC_KEY = /(?:^|[{,\s])([a-z][a-z_]*)\s*:/g;
+const SPEC_KEY = /(?:^|[{,])\s*([a-z][a-z_]*)\s*:/gm;
 
 function sourceFiles(dir, prefix = '') {
   const files = [];

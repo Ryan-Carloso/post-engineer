@@ -88,6 +88,28 @@ describe('mcp tool inventory reader', () => {
     expect(() => specKeys(dir, 'intent-personas.ts', 'MISSING_SPECS')).toThrow(/not found/);
   });
 
+  it('reads keys after a comma, an opening brace or a line break, never a ternary arm', () => {
+    const dir = fixtureRoot({
+      'tools-x.ts': [
+        'const X_SPECS = {',
+        '  first: A,',
+        '  mode: flag ? alpha : beta,',
+        '  second: { nested_key: B },',
+        '  ...MORE_SPECS,',
+        '  third: C };',
+      ].join('\n'),
+      'more.ts': 'const MORE_SPECS = {\n  spread_key: A };',
+    });
+
+    expect(specKeys(dir, 'tools-x.ts', 'X_SPECS')).toEqual([
+      'first',
+      'mode',
+      'second',
+      'third',
+      'spread_key',
+    ]);
+  });
+
   it('follows a spread spec object into the file that declares it', () => {
     const dir = fixtureRoot({
       'tools-prompts.ts': 'const PROMPTS_SPECS = { list: A, ...MORE_SPECS };',
