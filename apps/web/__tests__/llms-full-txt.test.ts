@@ -2,10 +2,11 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { registeredToolActions, registeredToolNames } from '@/test/mcp-tool-names';
+import { registeredToolActions, registeredToolNames } from '@/scripts/mcp-tool-inventory.mjs';
 import { findRepoRoot } from '@/test/repo-root';
 
-const publicDir = join(findRepoRoot(import.meta.url), 'apps', 'web', 'public');
+const repoRoot = findRepoRoot(import.meta.url);
+const publicDir = join(repoRoot, 'apps', 'web', 'public');
 const llms = readFileSync(join(publicDir, 'llms.txt'), 'utf8');
 const llmsFull = readFileSync(join(publicDir, 'llms-full.txt'), 'utf8');
 const apiDocs = readFileSync(join(publicDir, 'api-documentation.txt'), 'utf8');
@@ -67,16 +68,16 @@ describe('llms-full.txt', () => {
 
   it('lists exactly the tools the MCP server registers', () => {
     const documented = [...toolBullets().keys()].sort();
-    expect(documented).toEqual(registeredToolNames(import.meta.url));
+    expect(documented).toEqual(registeredToolNames(repoRoot));
   });
 
   it('states the registered tool count in the section intro', () => {
-    expect(llmsFull).toContain(`${registeredToolNames(import.meta.url).length} intent tools`);
+    expect(llmsFull).toContain(`${registeredToolNames(repoRoot).length} intent tools`);
   });
 
   it('lists exactly the actions each registered tool offers', () => {
     const documented = toolBullets();
-    for (const [tool, actions] of Object.entries(registeredToolActions(import.meta.url))) {
+    for (const [tool, actions] of Object.entries(registeredToolActions(repoRoot))) {
       expect([...(documented.get(tool) ?? [])].sort(), tool).toEqual([...actions].sort());
     }
   });
