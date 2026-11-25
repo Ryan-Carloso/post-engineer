@@ -24,7 +24,7 @@ export const GetCardShape = {};
 
 export const RenderPromptShape = {
   scene: SceneSchema.describe(
-    'Only what changes per photo: outfit (slots top, bottom, one_piece, outerwear, footwear, accessories), pose, setting, lighting, framing, aspect. Identity, face, body and version keys are rejected, and so are words about the person (hair, skin, body) in the free text.',
+    'Only what changes per photo: style, outfit slots, pose, setting, lighting, framing, aspect. Send style alone to change the clothing and name outfit slots only for a garment the user asked for; never write a style word in outfit, pose or setting. Identity, face, body and version keys are rejected, and so are words about the person (hair, skin, body) in the free text.',
   ),
 };
 

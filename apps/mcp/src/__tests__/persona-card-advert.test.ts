@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
@@ -75,5 +76,16 @@ describe('identityCard as advertised on personas create and update', () => {
   ])('rejects %s before any request is sent', (_name, card) => {
     expect(UpdatePersonaSchema.safeParse({ personaId: MARIA, identityCard: card }).success).toBe(false);
     expect(UpdatePersonaRemoteSchema.safeParse({ personaId: MARIA, identityCard: card }).success).toBe(false);
+  });
+});
+
+describe('the README identity card section', () => {
+  const readme = readFileSync(new URL('../../README.md', import.meta.url), 'utf8');
+  const section = readme.slice(readme.indexOf('### Identity card'));
+
+  it('names every v2 leaf, every style and every outfit slot of the contract', () => {
+    const names = new Set([...leafNames(z.toJSONSchema(IdentityCardV2Schema)), ...OUTFIT_SLOTS, ...CARD_STYLES]);
+    expect(names.size).toBeGreaterThan(40);
+    for (const name of names) expect(section).toContain(`\`${name}\``);
   });
 });

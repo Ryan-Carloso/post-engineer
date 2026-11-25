@@ -21,6 +21,14 @@ const CARD = {
   },
   defaults: { outfit: { top: 'sage-green t-shirt', bottom: 'jeans' } },
 } as const;
+const CARD_V2 = {
+  version: 2,
+  identity: {
+    face: { eyes: 'blue-grey, wide-set', jawline: 'soft', hair: { color: 'blonde', texture: 'fine', parting: 'left side' } },
+    body: { build: 'athletic', posture: 'upright', proportions: 'long legs, short torso' },
+  },
+  defaults: { style: 'business', outfit: { footwear: 'black loafers' } },
+} as const;
 const SCENE = { lighting: 'golden_hour', framing: 'waist_up', setting: 'city street', outfit: { top: 'navy blazer' } } as const;
 
 interface Seen {
@@ -117,6 +125,28 @@ describe('persona_media get_card', () => {
     expect(JSON.parse(result.text)).toEqual({ success: true, identityCard: CARD });
   });
 
+  it.each([
+    ['a v1 card', CARD],
+    ['a v2 card with a style', CARD_V2],
+    ['a v2 card with only a style default', { ...CARD_V2, defaults: { style: 'sensual' } }],
+  ])('reads %s without altering it', async (_name, card) => {
+    const { call } = setup({ 'GET /api/persona/identity-card': { success: true, identityCard: card } });
+    const result = await call('persona_media', { action: 'get_card', persona: MARIA });
+    expect(result.isError).toBe(false);
+    expect(JSON.parse(result.text)).toEqual({ success: true, identityCard: card });
+  });
+
+  it.each([
+    ['a v2 card with empty defaults', { ...CARD_V2, defaults: {} }],
+    ['a v2 card with an unknown style', { ...CARD_V2, defaults: { style: 'bikini' } }],
+    ['a v1 card with a style', { ...CARD, defaults: { style: 'business' } }],
+  ])('reports %s as a malformed response', async (_name, card) => {
+    const { call } = setup({ 'GET /api/persona/identity-card': { success: true, identityCard: card } });
+    const result = await call('persona_media', { action: 'get_card', persona: MARIA });
+    expect(result.isError).toBe(true);
+    expect(result.text).toContain('Malformed response');
+  });
+
   it('returns null for a persona without a card', async () => {
     const { call } = setup({ 'GET /api/persona/identity-card': { success: true, identityCard: null } });
     const result = await call('persona_media', { action: 'get_card', persona: MARIA });
@@ -140,6 +170,40 @@ describe('persona_media render_prompt', () => {
     expect(result.isError).toBe(false);
     expect(seen).toEqual([{ method: 'POST', path: '/api/persona/identity-card', body: { personaId: MARIA, scene: SCENE }, form: undefined }]);
     expect(JSON.parse(result.text)).toEqual(rendered);
+  });
+
+  it.each([1, 2])('returns cardVersion %i as the server reports it', async (cardVersion) => {
+    const { call } = setup({ 'POST /api/persona/identity-card': { ...rendered, cardVersion } });
+    const result = await call('persona_media', { action: 'render_prompt', persona: MARIA, scene: SCENE });
+    expect(result.isError).toBe(false);
+    expect(JSON.parse(result.text)).toEqual({ ...rendered, cardVersion });
+  });
+
+  it('reports a card version the contract does not know as a malformed response', async () => {
+    const { call } = setup({ 'POST /api/persona/identity-card': { ...rendered, cardVersion: 3 } });
+    const result = await call('persona_media', { action: 'render_prompt', persona: MARIA, scene: SCENE });
+    expect(result.isError).toBe(true);
+    expect(result.text).toContain('Malformed response');
+  });
+
+  it('posts a scene that holds only a style and every pose phrase the filter allows', async () => {
+    const { call, seen } = setup({ 'POST /api/persona/identity-card': { ...rendered, cardVersion: 2 } });
+    const scene = { style: 'streetwear', lighting: 'golden_hour', framing: 'waist_up', pose: 'arms crossed, smiling' };
+    const result = await call('persona_media', { action: 'render_prompt', persona: MARIA, scene });
+    expect(result.isError).toBe(false);
+    expect(seen[0].body).toEqual({ personaId: MARIA, scene });
+  });
+
+  it.each([
+    ['an unknown style', { ...SCENE, style: 'bikini' }],
+    ['a style with the wrong case', { ...SCENE, style: 'Business' }],
+    ['a bare identity claim in the pose', { ...SCENE, pose: 'long legs' }],
+    ['a one-piece with a top in the scene outfit', { ...SCENE, outfit: { one_piece: 'dress', top: 'tee' } }],
+  ])('rejects a scene with %s before any request', async (_name, scene) => {
+    const { call, seen } = setup({});
+    const result = await call('persona_media', { action: 'render_prompt', persona: MARIA, scene });
+    expect(result.isError).toBe(true);
+    expect(seen).toHaveLength(0);
   });
 
   it('rejects a full identity card passed as the scene before any request', async () => {
@@ -203,6 +267,20 @@ describe('identityCard on personas create and update', () => {
     expect(seen[0].method).toBe('PATCH');
     expect(seen[0].path).toBe(`/api/persona?personaId=${MARIA}`);
     expect(JSON.parse(seen[0].form?.identityCard ?? 'null')).toEqual(CARD);
+  });
+
+  it('sends a v2 card with a style as a JSON string in the multipart update', async () => {
+    const { call, seen } = setup({ 'PATCH /api/persona': { success: true } });
+    const result = await call('personas', { action: 'update', persona: MARIA, identityCard: CARD_V2 });
+    expect(result.isError).toBe(false);
+    expect(JSON.parse(seen[0].form?.identityCard ?? 'null')).toEqual(CARD_V2);
+  });
+
+  it('refuses a v2 card without a style or an outfit before any request', async () => {
+    const { call, seen } = setup({ 'PATCH /api/persona': { success: true } });
+    const result = await call('personas', { action: 'update', persona: MARIA, identityCard: { ...CARD_V2, defaults: {} } });
+    expect(result.isError).toBe(true);
+    expect(seen).toHaveLength(0);
   });
 
   it('sends the JSON literal null to remove the card', async () => {
