@@ -20,6 +20,8 @@ import {
 
 type Transport = 'stdio' | 'http';
 
+const POINTER_DESCRIPTION_TOOLS = ['personas', 'persona_media', 'media', 'posts', 'schedules'];
+
 const LIFECYCLE_TOOLS = ['generate_video', 'publish_video', 'video_tasks', 'schedules', 'posts', 'insights', 'experiments', 'check_script'];
 
 const ACTION_REFERENCE = /`?([a-z_]+) \(action: ([a-z_]+)\)/g;
@@ -141,5 +143,35 @@ describe.each(['stdio', 'http'] as const)('server instructions on the %s server'
   it('does not route to an experiments create action', () => {
     expect(SERVER_INSTRUCTIONS).not.toContain('experiments (action: create)');
     expect(SERVER_INSTRUCTIONS).not.toContain('create an experiment');
+  });
+
+  it('points the persona tool at accounts for rebinding publishing accounts', async () => {
+    const { tools } = await connect(transport);
+    expect(tools.get('personas')?.description).toContain(POINTER_PERSONA_ACCOUNTS);
+    expect(tools.get('personas')?.description).toContain('accounts (action: set_persona_publishing)');
+  });
+
+  it('points media and persona_media at each other for images', async () => {
+    const { tools } = await connect(transport);
+    expect(tools.get('media')?.description).toContain(POINTER_IMAGES);
+    expect(tools.get('persona_media')?.description).toContain(POINTER_IMAGES);
+  });
+
+  it('points posts and schedules at the read vs change split', async () => {
+    const { tools } = await connect(transport);
+    expect(tools.get('posts')?.description).toContain(POINTER_POSTS_SCHEDULES);
+    expect(tools.get('schedules')?.description).toContain(POINTER_POSTS_SCHEDULES);
+  });
+
+  it('only references tool actions that exist in the pointer-bearing tool descriptions', async () => {
+    const { tools } = await connect(transport);
+    let checked = 0;
+    for (const name of POINTER_DESCRIPTION_TOOLS) {
+      for (const { tool, action } of actionReferences(tools.get(name)?.description ?? '')) {
+        expect(actionsOf(tools.get(tool)), `${name}: ${tool} (action: ${action})`).toContain(action);
+        checked += 1;
+      }
+    }
+    expect(checked).toBeGreaterThan(0);
   });
 });

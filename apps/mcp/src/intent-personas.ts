@@ -12,6 +12,7 @@ import { withRecipeNudge, type RecipeSession } from './recipe-session.js';
 import { CreatePersonaRemoteSchema, CreatePersonaRemoteShape, UpdatePersonaRemoteSchema, UpdatePersonaRemoteShape } from './remote-shapes.js';
 import { AddPersonaImageRemoteShape } from './remote-shapes-images.js';
 import { DESTRUCTIVE } from './tool-annotations.js';
+import { POINTER_IMAGES, POINTER_PERSONA_ACCOUNTS } from './server-instructions.js';
 import { AddPersonaImageRemoteSchema, handleAddPersonaImageFromUrl } from './tools-persona-image-url.js';
 import {
   AddPersonaImageShape,
@@ -52,7 +53,7 @@ function personasOptions(remote: boolean): ActionOptions<typeof PERSONAS_SPECS> 
 export function personasDescription(remote: boolean): string {
   const face = remote ? 'avatarUrl (a public URL or a url from persona_media (action: list_faces))' : 'avatarUrl or avatarPath (a local photo, uploaded directly)';
   return actionDescription(
-    `Manage your personas (the on-camera presenter, voice and defaults). list: names and ids. get: one persona with its image count and bound publishing accounts. create: a face is REQUIRED (${face}) and at least one publishing account (accounts); a voiceover video is chosen per video, not per persona. update: only the given fields change (identityCard sets or, with null, removes the identity card; see persona_media get_card and render_prompt). delete: preview first, then confirm with the token.`,
+    `Manage your personas (the on-camera presenter, voice and defaults). list: names and ids. get: one persona with its image count and bound publishing accounts. create: a face is REQUIRED (${face}) and at least one publishing account (accounts); a voiceover video is chosen per video, not per persona. update: only the given fields change (identityCard sets or, with null, removes the identity card; see persona_media get_card and render_prompt). delete: preview first, then confirm with the token. ${POINTER_PERSONA_ACCOUNTS}`,
     offeredSpecs(PERSONAS_SPECS, personasOptions(remote)),
   );
 }
@@ -114,7 +115,7 @@ export function registerPersonaMediaTools(server: McpServer, client: PostEnginee
   server.tool(
     'persona_media',
     actionDescription(
-      `A persona's face and image library. list_faces: the stock faces to pick an avatar from (id, url, description). list_images / add_image (${remote ? 'downloads a public https imageUrl' : 'reads a local file'}) / update_image / remove_image: the library images used for the per-video image selection. get_card: the persona's identity card (set with personas update identityCard), or null. render_prompt: renders a deterministic image-edit prompt from the card plus a scene (outfit, pose, setting, lighting, framing) and returns { prompt, suggestedDescription }; it is advice for YOUR image tool, nothing is generated or stored. Workflow: render_prompt, make the image with your own tool using the persona's base photo as the reference, add_image with description = suggestedDescription, then use the new photos in generate_video options.lipsyncPhotos for full_lipsync. The card describes a real person's physical traits: nude or sexualised clothing is rejected, and the server cannot police what your image tool makes.`,
+      `A persona's face and image library. list_faces: the stock faces to pick an avatar from (id, url, description). list_images / add_image (${remote ? 'downloads a public https imageUrl' : 'reads a local file'}) / update_image / remove_image: the library images used for the per-video image selection. get_card: the persona's identity card (set with personas update identityCard), or null. render_prompt: renders a deterministic image-edit prompt from the card plus a scene (outfit, pose, setting, lighting, framing) and returns { prompt, suggestedDescription }; it is advice for YOUR image tool, nothing is generated or stored. Workflow: render_prompt, make the image with your own tool using the persona's base photo as the reference, add_image with description = suggestedDescription, then use the new photos in generate_video options.lipsyncPhotos for full_lipsync. The card describes a real person's physical traits: nude or sexualised clothing is rejected, and the server cannot police what your image tool makes. ${POINTER_IMAGES}`,
       offered,
     ),
     actionShape(offered),

@@ -3,6 +3,7 @@ import { actionDescription, actionShape, byAction } from './action-tool.js';
 import type { PostEngineerClient } from './client.js';
 import { withRecipeNudge, type RecipeSession } from './recipe-session.js';
 import { DESTRUCTIVE, READ_ONLY } from './tool-annotations.js';
+import { POINTER_POSTS_SCHEDULES } from './server-instructions.js';
 import {
   CreateShareLinkShape,
   ListShareLinksShape,
@@ -64,7 +65,7 @@ export function registerLibraryTools(server: McpServer, client: PostEngineerClie
   server.tool(
     'schedules',
     actionDescription(
-      'Your scheduled videos (future slots). list: the schedules. get_slot / update_slot_title / delete_slot: one slot of a schedule. cancel: cancels a whole schedule: unpublished slots are removed, but only slots whose generation never ran get their prepaid tokens back (a generating or ready slot keeps its charge, the GPU cost is spent); a post already publishing or published is not recalled; a cancelled video of a discounted batch gives back the discount the batch no longer earns.',
+      `Your scheduled videos (future slots). list: the schedules. get_slot / update_slot_title / delete_slot: one slot of a schedule. cancel: cancels a whole schedule: unpublished slots are removed, but only slots whose generation never ran get their prepaid tokens back (a generating or ready slot keeps its charge, the GPU cost is spent); a post already publishing or published is not recalled; a cancelled video of a discounted batch gives back the discount the batch no longer earns. ${POINTER_POSTS_SCHEDULES}`,
       SCHEDULES_SPECS,
     ),
     actionShape(SCHEDULES_SPECS),
@@ -84,7 +85,7 @@ export function registerLibraryTools(server: McpServer, client: PostEngineerClie
 
   server.tool(
     'posts',
-    actionDescription('Your published and scheduled posts. list: the recent posts with their status and links. get: one post by slot id or generation id, with its publish results.', POSTS_SPECS),
+    actionDescription(`Your published and scheduled posts. list: the recent posts with their status and links. get: one post by slot id or generation id, with its publish results. ${POINTER_POSTS_SCHEDULES}`, POSTS_SPECS),
     actionShape(POSTS_SPECS),
     READ_ONLY,
     byAction(
