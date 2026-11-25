@@ -24,7 +24,7 @@ const POINTER_DESCRIPTION_TOOLS = ['personas', 'persona_media', 'media', 'posts'
 
 const LIFECYCLE_TOOLS = ['generate_video', 'publish_video', 'video_tasks', 'schedules', 'posts', 'insights', 'experiments', 'check_script'];
 
-const ACTION_REFERENCE = /`?([a-z_]+) \(action: ([a-z_]+)\)/g;
+const ACTION_REFERENCE = /([a-z_]+) \(action: ([a-z_]+)\)/g;
 
 interface Connected {
   instructions: string | undefined;
@@ -44,9 +44,17 @@ async function connect(transport: Transport): Promise<Connected> {
   }
 }
 
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((entry) => typeof entry === 'string');
+}
+
 function actionsOf(tool: Tool | undefined): string[] {
-  const action = (tool?.inputSchema.properties as Record<string, { enum?: string[] }> | undefined)?.action;
-  return action?.enum ?? [];
+  const properties = tool?.inputSchema.properties;
+  if (typeof properties !== 'object' || properties === null) return [];
+  if (!('action' in properties)) return [];
+  const action = properties.action;
+  if (typeof action !== 'object' || action === null || !('enum' in action)) return [];
+  return isStringArray(action.enum) ? action.enum : [];
 }
 
 function actionReferences(text: string): Array<{ tool: string; action: string }> {
