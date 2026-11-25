@@ -13,6 +13,7 @@ import {
 } from './persona-identity-card-limits.js';
 
 export * from './persona-identity-card-limits.js';
+export * from './persona-identity-card-styles.js';
 
 const IDENTITY_WORDS: ReadonlySet<string> = new Set([
   'hair', 'eye', 'eyes', 'skin', 'build', 'builds', 'height', 'heights', 'beard', 'bearded', 'muscular',
