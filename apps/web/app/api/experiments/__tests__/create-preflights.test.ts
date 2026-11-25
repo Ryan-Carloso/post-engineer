@@ -199,6 +199,32 @@ describe('checkExperimentPreflights', () => {
     expect(vi.mocked(checkLipsyncPhotoFaces).mock.calls[0]?.[2]).toBe('16:9');
   });
 
+  it('checks the lipsync photos before the first video narration, for every full_lipsync experiment', async () => {
+    const order: string[] = [];
+    vi.mocked(checkLipsyncPhotoFaces).mockImplementation(async () => {
+      order.push('photos');
+      return null;
+    });
+    vi.mocked(checkPreChargePreflights).mockImplementation(async () => {
+      order.push('video');
+      return null;
+    });
+
+    await run(videos(5), 'persona-1', LIPSYNC_OPTIONS);
+
+    expect(order[0]).toBe('photos');
+    expect(order.filter((step) => step === 'photos')).toHaveLength(1);
+    expect(order.filter((step) => step === 'video')).toHaveLength(5);
+  });
+
+  it('hands every video its segments, so the aspect and photo checks never skip as they do for a video without segments', async () => {
+    await run(videos(6), 'persona-1', LIPSYNC_OPTIONS);
+
+    const calls = vi.mocked(checkPreChargePreflights).mock.calls.map((call) => call[0]);
+    expect(calls).toHaveLength(6);
+    expect(calls.every((call) => Array.isArray(call.segments) && call.segments.length > 0)).toBe(true);
+  });
+
   it('does not check lipsync photos for any other video type', async () => {
     await run(videos(3));
 

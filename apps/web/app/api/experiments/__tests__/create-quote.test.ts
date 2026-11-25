@@ -355,6 +355,16 @@ describe('parseExperimentRequest', () => {
     expect((parsed as Response).status).toBe(400);
   });
 
+  it('rejects a video without segments, so every experiment video reaches the aspect and photo checks', async () => {
+    const body = experimentBody();
+    const videos: Array<Record<string, unknown>> = body.variants[0].videos;
+    delete videos[2].segments;
+
+    const parsed = await parseExperimentRequest(requestOf(body));
+
+    expect((parsed as Response).status).toBe(400);
+  });
+
   it('rejects a quoteKey without its expiresAt', async () => {
     const parsed = await parseExperimentRequest(requestOf({ ...experimentBody(), quoteKey: 'a'.repeat(64) }));
 
