@@ -72,7 +72,8 @@ def caption_y(
     """
     if min_top is not None:
         bottom_y = video_height * 0.95 - clip_height
-        return max(min_top, bottom_y if max_bottom is None else max(MIN_MARGIN, max_bottom - clip_height))
+        ceiling_y = bottom_y if max_bottom is None else max(MIN_MARGIN, max_bottom - clip_height)
+        return max(min_top, ceiling_y)
     if position == "top":
         return video_height * 0.05
     if max_bottom is not None:
