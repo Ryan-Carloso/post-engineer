@@ -10,7 +10,7 @@ import { getMcpResource } from '@/lib/oauth/config';
 import { noteMcpToolCaller } from '@/lib/mcp-tool-telemetry';
 import { checkMcpVersion } from '@/lib/mcp-version-gate';
 
-interface SupabaseSessionAuth {
+export interface SupabaseSessionAuth {
   userId: string;
   accessToken: string;
   isApiKey?: boolean;

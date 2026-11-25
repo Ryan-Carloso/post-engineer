@@ -37,7 +37,7 @@ export function actionShape(specs: ActionSpecs): ActionShape {
   const names = Object.keys(specs);
   if (names.length === 0) throw new Error('an action tool needs at least one action');
   const shape: ActionShape = {
-    [ACTION_FIELD]: z.enum(names as [string, ...string[]]).describe(`What to do: ${names.join(' | ')}. The description lists the fields each action needs.`),
+    [ACTION_FIELD]: z.enum(names as [string, ...string[]]).describe('The description lists the fields each action needs.'),
   };
   for (const spec of Object.values(specs)) {
     for (const [field, schema] of Object.entries(spec)) {

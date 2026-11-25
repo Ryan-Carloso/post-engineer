@@ -26,17 +26,20 @@ export const TESTING_WHEN =
   'Recommend a test only when the user asks something comparative ("test", "which is better", "A vs B"); "make a video about X" means just generate it.';
 
 export const TESTING_PROMPT_FLOW =
-  'To compare prompts: create or update your own prompt for each variant (prompts (action: update) works only on your own prompts — copy a community prompt with prompts (action: create) first), take each versionId from prompts (action: get) (versions is keyed by version number, not versionId), pass it as promptVersionId on every video, rotate the variants round-robin on the same account, then read experiments (action: results).';
+  'To compare prompts: create or update your own prompt for each variant (prompts (action: update) works only on your own prompts — copy a community prompt with prompts (action: create) first), take each versionId from prompts (action: get) (versions is keyed by version number, not versionId), write one script per video, call experiments (action: create) without quoteKey for a quote (nothing is charged), show the user the plan and the total tokens, confirm with the same arguments plus quoteKey and expiresAt, then read experiments (action: results); cancel with schedules (action: cancel).';
+
+export const TESTING_CREATE_RULES =
+  'experiments (action: create) takes 2-4 variants, each { versionId, videos: [{ title, description, segments }] } with the same number of videos (5-15 each, at most 40 in total, at most 20 for full_lipsync) and a different script for every video: never post one script several times. persona (name or id), videoType, options, account { provider, accountId (name or id) } and the posting times (times, startAt, timezone: ask the user, the best hours depend on the account) are set once for all videos, and the versions are rotated over the posting times. Segment media must be public URLs. A quote lasts 15 minutes: QUOTE_CHANGED or QUOTE_EXPIRED means ask for a new quote. Retrying a confirm with the same quoteKey is safe and never charges twice.';
 
 export const TESTING_SAMPLE_RULES =
-  'Make at least 10 videos per variant; fewer than 5 is always insufficient. Call a prompt the winner only when results labels it clear. State the token cost before generating videos for a test, and prefer rotating variants across videos the user already plans to post. Run check_script (action: score) on each draft first: it is free.';
+  'Make at least 10 videos per variant; fewer than 5 is always insufficient. Call a prompt the winner only when results labels it clear. State the token cost before generating videos for a test. Run check_script (action: score) on each draft first: it is free.';
 
 export const TESTING_KNOBS =
   'Knob comparisons are not prompt versions: follow the one-knob-at-a-time rule in generate_video and read them with insights (action: post_metrics). promptVersionId is optional: videos made without a prompt are the "no prompt" baseline group.';
 
 export const TESTING_FOLLOW_UPS =
-  '"Which prompt won?" → experiments (action: results), only clear counts. "Now what?" → clear: keep using that version (prompts (action: restore) if it is an older one); insufficient or no_signal: keep rotating until each variant reaches 10.';
+  '"Which prompt won?" → experiments (action: results), only clear counts. "Now what?" → clear: keep using that version (prompts (action: restore) if it is an older one); insufficient or no_signal: run another experiments (action: create) until each variant reaches 10.';
 
-const TESTING_LINES = [TESTING_WHEN, TESTING_PROMPT_FLOW, TESTING_SAMPLE_RULES, TESTING_KNOBS, TESTING_FOLLOW_UPS];
+const TESTING_LINES = [TESTING_WHEN, TESTING_PROMPT_FLOW, TESTING_CREATE_RULES, TESTING_SAMPLE_RULES, TESTING_KNOBS, TESTING_FOLLOW_UPS];
 
 export const SERVER_INSTRUCTIONS = [...RECIPE_LINES, ROUTING_LIFECYCLE, ...ROUTING_POINTERS, ...TESTING_LINES].join(' ');

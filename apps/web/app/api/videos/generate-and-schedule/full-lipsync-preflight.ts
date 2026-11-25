@@ -1,9 +1,8 @@
-import type { NextResponse } from 'next/server';
-
 import { ERROR_CODES, formatErrorMessage } from '@/lib/error-codes';
 import { engineAuthHeaders } from '@/lib/request-auth';
 import { logger } from '@/lib/logger';
 import { coded, validationFailed } from './prepare-persona';
+import { budgetExpired, budgetStoppedResponse, memoize, withBudget, type NarrationOutcome, type PreflightShared } from './preflight-shared';
 
 export const FULL_LIPSYNC_MAX_SECONDS = 60;
 
@@ -15,11 +14,20 @@ export interface FullLipsyncPreflightInput {
   language: string | null;
   voiceId?: string;
   voiceAudioUrl?: string;
+  shared?: PreflightShared;
 }
 
-export async function checkFullLipsyncNarration(
-  input: FullLipsyncPreflightInput,
-): Promise<number | NextResponse> {
+export function checkFullLipsyncNarration(input: FullLipsyncPreflightInput): Promise<NarrationOutcome> {
+  const { shared } = input;
+  if (shared === undefined) return requestNarration(input);
+  return memoize(shared.narrations, narrationKey(input), () => requestNarration(input));
+}
+
+function narrationKey(input: FullLipsyncPreflightInput): string {
+  return JSON.stringify([input.script, input.language, input.voiceId ?? null, input.voiceAudioUrl ?? null]);
+}
+
+async function requestNarration(input: FullLipsyncPreflightInput): Promise<NarrationOutcome> {
   const baseUrl = process.env.MONEYPRINT_API_URL;
   if (!baseUrl || !process.env.MONEYPRINT_API_SECRET) {
     logger.error('[full-lipsync-preflight] engine URL or secret is not defined');
@@ -41,9 +49,13 @@ export async function checkFullLipsyncNarration(
         voice_name: input.voiceId ?? '',
         voice_audio_url: input.voiceAudioUrl ?? null,
       }),
-      signal: controller.signal,
+      signal: withBudget(controller.signal, input.shared),
     });
   } catch (error) {
+    if (budgetExpired(input.shared)) {
+      logger.warn('[full-lipsync-preflight] narration check stopped by the time budget');
+      return budgetStoppedResponse();
+    }
     logger.error('[full-lipsync-preflight] engine unreachable', error);
     return coded(502, ERROR_CODES.INTERNAL_ERROR, 'Video service is unavailable.');
   } finally {

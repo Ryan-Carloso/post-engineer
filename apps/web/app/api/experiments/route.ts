@@ -9,8 +9,12 @@ import { readPromptComparison } from '@/lib/experiments/read-comparison';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { requireSupabaseSession } from '@/lib/request-auth';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
+import { confirmExperiment } from './create-confirm';
+import { parseExperimentRequest } from './create-plan';
+import { quoteExperiment } from './create-quote';
 
 const ROUTE = 'GET /api/experiments';
+const POST_ROUTE = 'POST /api/experiments';
 
 async function getHandler(request: Request): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);
@@ -33,4 +37,18 @@ async function getHandler(request: Request): Promise<NextResponse> {
   return NextResponse.json({ success: true, ...outcome.value });
 }
 
+async function postHandler(request: Request): Promise<NextResponse> {
+  const { auth, error: authError } = await requireSupabaseSession(request);
+  if (authError || !auth) return authError;
+  const limited = await applyRateLimit(request, RATE_LIMITS.experimentCreate, auth.userId);
+  if (limited) return limited;
+  const body = await parseExperimentRequest(request);
+  if (body instanceof NextResponse) return body;
+  const supabase = createSupabaseServiceClient();
+  return body.quoteKey === undefined
+    ? quoteExperiment(supabase, auth, body, new Date())
+    : confirmExperiment(supabase, auth, body, new Date());
+}
+
 export const GET = withApiErrorReporting(ROUTE, getHandler, { getUserId: resolveReportingUserId });
+export const POST = withApiErrorReporting(POST_ROUTE, postHandler, { getUserId: resolveReportingUserId });

@@ -21,7 +21,7 @@ const engineStorePath = join(
   'store.py',
 );
 
-const webRoutePath = join(
+const webDispatchPath = join(
   repoRoot,
   'apps',
   'web',
@@ -29,7 +29,7 @@ const webRoutePath = join(
   'api',
   'videos',
   'generate-and-schedule',
-  'route.ts',
+  'dispatch-slot.ts',
 );
 
 const webRefundHelperPath = join(
@@ -121,12 +121,12 @@ describe('refund_batch_tokens call sites', () => {
     }
   });
 
-  it('web generate-and-schedule route refunds a failed dispatch through the shared helper', () => {
-    const src = readFileSync(webRoutePath, 'utf8');
+  it('web generate-and-schedule dispatch refunds a failed slot through the shared helper', () => {
+    const src = readFileSync(webDispatchPath, 'utf8');
     expect(src).toContain('refundSlotTokens({');
-    expect(src).toContain('scheduleId: idem.scheduleId');
-    expect(src).toContain('slotId: slot.id');
-    expect(src).toContain('amount: perVideoCost');
+    expect(src).toContain('validatedOptions, scheduleId } = ctx;');
+    expect(src.split(/\s+/).join(' ')).toContain('userId, scheduleId, slotId: slot.id,');
+    expect(src).toContain('amount: ctx.perVideoCost');
     expect(src).toContain("reason: 'Unified generate+schedule: slot dispatch failed; video refunded'");
     expect(src).toContain("kind: 'dispatch_failed'");
   });

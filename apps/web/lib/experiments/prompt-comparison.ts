@@ -130,17 +130,43 @@ function compareAccount(provider: string, accountId: string, videos: ComparedVid
   return { provider, accountId, videos: videos.length, baselineViews: median(videos.map((video) => video.views)), prompts };
 }
 
-export function comparePrompts(videos: ComparedVideo[], versions: PromptVersionFacts[]): AccountResult[] {
-  const byVersion = new Map(versions.map((facts) => [facts.versionId, facts]));
-  const accounts = new Map<string, { provider: string; accountId: string; videos: ComparedVideo[] }>();
+interface AccountVideos {
+  provider: string;
+  accountId: string;
+  videos: ComparedVideo[];
+}
+
+function groupByAccount(videos: ComparedVideo[]): AccountVideos[] {
+  const accounts = new Map<string, AccountVideos>();
   for (const video of videos) {
     const key = `${video.provider}\u0000${video.accountId}`;
     const account = accounts.get(key) ?? { provider: video.provider, accountId: video.accountId, videos: [] };
     account.videos.push(video);
     accounts.set(key, account);
   }
-  return [...accounts.values()]
+  return [...accounts.values()];
+}
+
+export function comparePrompts(videos: ComparedVideo[], versions: PromptVersionFacts[]): AccountResult[] {
+  const byVersion = new Map(versions.map((facts) => [facts.versionId, facts]));
+  return groupByAccount(videos)
     .filter((account) => account.videos.some((video) => video.promptVersionId !== null))
     .map((account) => compareAccount(account.provider, account.accountId, account.videos, byVersion))
     .sort((left, right) => right.videos - left.videos || left.provider.localeCompare(right.provider) || left.accountId.localeCompare(right.accountId));
+}
+
+export interface UnversionedAccount {
+  provider: string;
+  accountId: string;
+  comparedVideos: number;
+}
+
+export function unversionedAccounts(videos: ComparedVideo[]): UnversionedAccount[] {
+  return groupByAccount(videos)
+    .filter((account) => account.videos.every((video) => video.promptVersionId === null))
+    .map((account) => ({
+      provider: account.provider,
+      accountId: account.accountId,
+      comparedVideos: account.videos.filter((_, index) => liftOf(account.videos, index) !== null).length,
+    }));
 }

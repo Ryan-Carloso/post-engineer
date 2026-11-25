@@ -9864,6 +9864,266 @@
             }
           }
         ]
+      },
+      "post": {
+        "operationId": "post_experiments_create",
+        "summary": "experiments create",
+        "tags": [
+          "experiments"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "stage": {
+                      "type": "string",
+                      "enum": [
+                        "quote",
+                        "confirmed"
+                      ]
+                    },
+                    "quoteKey": {
+                      "type": "string"
+                    },
+                    "expiresAt": {
+                      "type": "string"
+                    },
+                    "perVideoTokens": {
+                      "type": "number"
+                    },
+                    "totalTokens": {
+                      "type": "number"
+                    },
+                    "scheduleId": {
+                      "type": "string"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "chargedTokens": {
+                      "type": "number"
+                    },
+                    "slots": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "warnings": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    }
+                  },
+                  "required": [
+                    "success"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Not enough tokens for the whole experiment (INSUFFICIENT_TOKENS).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The quote expired (QUOTE_EXPIRED) or the price or plan changed since the quote (QUOTE_CHANGED): ask for a new quote.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "personaId": {
+                    "type": "string"
+                  },
+                  "account": {
+                    "type": "object",
+                    "properties": {
+                      "provider": {
+                        "type": "string"
+                      },
+                      "accountId": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "provider",
+                      "accountId"
+                    ],
+                    "additionalProperties": false,
+                    "description": "The one account that posts every video."
+                  },
+                  "videoType": {
+                    "type": "string",
+                    "enum": [
+                      "full_lipsync",
+                      "hook_lipsync",
+                      "voiceover"
+                    ]
+                  },
+                  "options": {
+                    "type": "object",
+                    "description": "Shared video options: the generate-and-schedule options without videoType and segments."
+                  },
+                  "startAt": {
+                    "type": "string",
+                    "description": "ISO date-time of the earliest first post."
+                  },
+                  "times": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "minItems": 1,
+                    "maxItems": 5,
+                    "description": "Posting times of day, HH:MM, in timezone."
+                  },
+                  "timezone": {
+                    "type": "string"
+                  },
+                  "variants": {
+                    "type": "array",
+                    "minItems": 2,
+                    "maxItems": 4,
+                    "description": "Prompt versions to compare. Each has the same number of videos (5-15, at most 40 in total, at most 20 when videoType is full_lipsync), each with its own script.",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "versionId": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "videos": {
+                          "type": "array",
+                          "minItems": 5,
+                          "maxItems": 15,
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "title": {
+                                "type": "string"
+                              },
+                              "description": {
+                                "type": "string"
+                              },
+                              "segments": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object"
+                                }
+                              }
+                            },
+                            "required": [
+                              "title",
+                              "description",
+                              "segments"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "versionId",
+                        "videos"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "quoteKey": {
+                    "type": "string",
+                    "description": "The quoteKey of the quote to confirm. Send it with expiresAt, or send neither to get a quote."
+                  },
+                  "expiresAt": {
+                    "type": "string",
+                    "description": "The expiresAt of that quote."
+                  }
+                },
+                "required": [
+                  "account",
+                  "videoType",
+                  "startAt",
+                  "times",
+                  "timezone",
+                  "variants"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "description": "Runs a prompt comparison in two calls. Without quoteKey it is a quote: nothing is charged and the response carries the plan (one slot per video, the prompt versions rotated over the posting times), the total tokens, warnings, a quoteKey and its expiresAt (15 minutes). With the quoteKey and expiresAt of a quote it is the confirm: the total is charged once, one schedule with a slot per video is created and every video is started. A retry with the same quoteKey replays and never charges twice."
       }
     }
   }

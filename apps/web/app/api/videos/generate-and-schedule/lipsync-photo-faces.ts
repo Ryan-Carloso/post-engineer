@@ -4,6 +4,7 @@ import { ERROR_CODES } from '@/lib/error-codes';
 import { fetchMediaCheck, type VideoAspectOption } from './media-check';
 import type { LipsyncPhotoRef } from './lipsync-photos';
 import { validationFailed } from './prepare-persona';
+import type { PreflightShared } from './preflight-shared';
 
 const UNUSABLE_REASONS: Record<string, string> = {
   not_image: 'is not a readable image',
@@ -18,6 +19,7 @@ export async function checkLipsyncPhotoFaces(
   userId: string,
   photos: LipsyncPhotoRef[],
   videoAspect: VideoAspectOption,
+  shared?: PreflightShared,
 ): Promise<null | NextResponse> {
   for (const [index, photo] of photos.entries()) {
     const record = await fetchMediaCheck(
@@ -25,6 +27,7 @@ export async function checkLipsyncPhotoFaces(
       userId,
       videoAspect,
       'lipsync-photo-face',
+      shared,
     );
     if (record instanceof NextResponse) return record;
     const field = `options.lipsyncPhotos.${index}`;

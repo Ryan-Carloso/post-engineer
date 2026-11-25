@@ -64,6 +64,7 @@ table['PATCH /api/persona'] = 'persona_updated';
 table['PATCH /api/prompts/[slug]'] = 'prompt_updated';
 table['PATCH /api/persona/images'] = 'persona_image_updated';
 table['PATCH /api/schedule/slots/[slotId]'] = 'schedule_slot_updated';
+table['POST /api/experiments'] = 'experiment_created';
 table['POST /api/share-links'] = 'share_link_created';
 table['POST /api/account/connect-url'] = 'connect_url_created';
 table['POST /api/prompts'] = 'prompt_created';

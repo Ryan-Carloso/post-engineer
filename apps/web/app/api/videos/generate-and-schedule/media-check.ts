@@ -5,6 +5,7 @@ import type { SegmentMediaRef } from '@/lib/hook-photo';
 import { engineAuthHeaders } from '@/lib/request-auth';
 import { logger } from '@/lib/logger';
 import { coded } from './prepare-persona';
+import { budgetExpired, budgetStoppedResponse, memoize, withBudget, type PreflightShared } from './preflight-shared';
 
 export const MEDIA_CHECK_TIMEOUT_MS = 30_000;
 
@@ -17,12 +18,29 @@ export interface MediaCheckRecord {
   has_face?: unknown;
 }
 
-export async function fetchMediaCheck(
+export type MediaCheckOutcome = (MediaCheckRecord & { code: string }) | NextResponse;
+
+export function fetchMediaCheck(
   ref: SegmentMediaRef,
   userId: string,
   videoAspect: VideoAspectOption,
   logTag: string,
-): Promise<(MediaCheckRecord & { code: string }) | NextResponse> {
+  shared?: PreflightShared,
+): Promise<MediaCheckOutcome> {
+  if (shared === undefined) return requestMediaCheck(ref, userId, videoAspect, logTag);
+  const source = ref.mediaId !== undefined ? `id:${ref.mediaId}` : `url:${ref.url}`;
+  return memoize(shared.mediaChecks, `${videoAspect}|${source}`, () =>
+    requestMediaCheck(ref, userId, videoAspect, logTag, shared),
+  );
+}
+
+async function requestMediaCheck(
+  ref: SegmentMediaRef,
+  userId: string,
+  videoAspect: VideoAspectOption,
+  logTag: string,
+  shared?: PreflightShared,
+): Promise<MediaCheckOutcome> {
   const baseUrl = process.env.MONEYPRINT_API_URL;
   if (!baseUrl || !process.env.MONEYPRINT_API_SECRET) {
     logger.error(`[${logTag}] engine URL or secret is not defined`);
@@ -43,10 +61,14 @@ export async function fetchMediaCheck(
           ? { media_id: ref.mediaId, video_aspect: videoAspect }
           : { url: ref.url, video_aspect: videoAspect },
       ),
-      signal: controller.signal,
+      signal: withBudget(controller.signal, shared),
     });
   } catch (error) {
     clearTimeout(timeout);
+    if (budgetExpired(shared)) {
+      logger.warn(`[${logTag}] media check stopped by the time budget`);
+      return budgetStoppedResponse();
+    }
     logger.error(`[${logTag}] engine unreachable`, error);
     return coded(502, ERROR_CODES.INTERNAL_ERROR, 'Video service is unavailable.');
   }

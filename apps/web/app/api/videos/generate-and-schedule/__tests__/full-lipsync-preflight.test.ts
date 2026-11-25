@@ -6,6 +6,8 @@ import {
   checkFullLipsyncNarration,
   FULL_LIPSYNC_MAX_SECONDS,
 } from '../full-lipsync-preflight';
+import { logger } from '@/lib/logger';
+import { createPreflightShared } from '../preflight-shared';
 
 vi.mock('@/lib/logger', () => ({
   logger: { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
@@ -25,7 +27,7 @@ function stubFetch(response: Response | Error): Array<{ url: string; init: Reque
     vi.fn(async (url: string, init: RequestInit) => {
       calls.push({ url, init });
       if (response instanceof Error) throw response;
-      return response;
+      return response.clone();
     }),
   );
   return calls;
@@ -40,6 +42,7 @@ const INPUT = {
 
 describe('checkFullLipsyncNarration', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     vi.stubEnv('MONEYPRINT_API_URL', 'https://engine.test');
     vi.stubEnv('MONEYPRINT_API_SECRET', 'engine-secret');
   });
@@ -51,6 +54,41 @@ describe('checkFullLipsyncNarration', () => {
 
   it('pins the cap at 60s, mirroring the engine full_lipsync cap', () => {
     expect(FULL_LIPSYNC_MAX_SECONDS).toBe(60);
+  });
+
+  it('measures the same script once and the next script again when a shared context is given', async () => {
+    const calls = stubFetch(engineBody(30));
+    const shared = createPreflightShared(60_000);
+
+    const first = await checkFullLipsyncNarration({ ...INPUT, shared });
+    const again = await checkFullLipsyncNarration({ ...INPUT, shared });
+    const other = await checkFullLipsyncNarration({ ...INPUT, script: 'Another script.', shared });
+
+    expect([first, again, other]).toEqual([30, 30, 30]);
+    expect(calls).toHaveLength(2);
+  });
+
+  it.each([
+    ['language', { language: 'pt-BR' }],
+    ['voice', { voiceId: 'chatterbox:kokoro_pf_dora' }],
+    ['voice audio', { voiceId: undefined, voiceAudioUrl: 'https://e.com/narration.mp3' }],
+  ])('measures the same script again when the %s differs inside one shared context', async (_label, change) => {
+    const calls = stubFetch(engineBody(30));
+    const shared = createPreflightShared(60_000);
+
+    await checkFullLipsyncNarration({ ...INPUT, shared });
+    await checkFullLipsyncNarration({ ...INPUT, ...change, shared });
+
+    expect(calls).toHaveLength(2);
+  });
+
+  it('measures the same script every time without a shared context', async () => {
+    const calls = stubFetch(engineBody(30));
+
+    await checkFullLipsyncNarration(INPUT);
+    await checkFullLipsyncNarration(INPUT);
+
+    expect(calls).toHaveLength(2);
   });
 
   it('passes a narration at exactly 60s and sends the video task inputs', async () => {
@@ -94,6 +132,28 @@ describe('checkFullLipsyncNarration', () => {
     const result = await checkFullLipsyncNarration(INPUT);
     expect(result).toBeInstanceOf(NextResponse);
     expect((result as NextResponse).status).toBe(502);
+  });
+
+  it('logs a narration cut off by the time budget as a warning, not an engine error', async () => {
+    stubFetch(new Error('The operation was aborted'));
+    const budget = new AbortController();
+    budget.abort();
+    const shared = { ...createPreflightShared(60_000), signal: budget.signal };
+
+    const result = await checkFullLipsyncNarration({ ...INPUT, shared });
+
+    expect((result as NextResponse).status).toBe(502);
+    expect(logger.warn).toHaveBeenCalledWith('[full-lipsync-preflight] narration check stopped by the time budget');
+    expect(logger.error).not.toHaveBeenCalled();
+  });
+
+  it('keeps logging an unreachable engine as an error while the budget runs', async () => {
+    stubFetch(new Error('connect refused'));
+
+    await checkFullLipsyncNarration({ ...INPUT, shared: createPreflightShared(60_000) });
+
+    expect(logger.error).toHaveBeenCalledWith('[full-lipsync-preflight] engine unreachable', expect.any(Error));
+    expect(logger.warn).not.toHaveBeenCalled();
   });
 
   it('fails closed with 502 on a non-numeric duration', async () => {

@@ -177,6 +177,7 @@ POST   /api/share-links                                       create public read
 GET    /api/share-links                                       list share links
 DELETE /api/share-links/{id}                                  revoke share link
 GET    /api/experiments                                       compare prompts per account
+POST   /api/experiments                                       quote then create a prompt experiment
 GET    /api/billing/tokens                                    get token balance
 GET    /api/billing/transactions                              list token transactions
 GET    /api/prompts                                           list recipe prompts
@@ -243,7 +244,7 @@ See docs/SELF_HOSTING.md in https://github.com/Ryan-Carloso/post-engineer.
 - `posts` — List published posts and read one. Actions: `list`, `get`.
 - `insights` — Post metrics, the last-24-hours metrics, the YouTube retention curve, and public share links for metrics (create, list, revoke). Actions: `post_metrics`, `last_day`, `retention_curve`, `share_link_create`, `share_link_list`, `share_link_revoke`.
 - `billing` — Read the prepaid token balance and the token transactions. Check the balance before generating. Actions: `balance`, `transactions`.
-- `experiments` — Compare your prompts inside each publishing account: per account, each prompt version with its results. Actions: `results`.
+- `experiments` — Compare your prompts inside each publishing account: per account, each prompt version with its results, and run the comparison: a quote first, then a confirm that charges once and schedules every video. Actions: `results`, `create`.
 - `check_script` — Check a script mechanically (`validate`) or score a draft (`score`). No tokens are spent. Actions: `validate`, `score`.
 - `media` — Images for video segments: upload an image or mechanically check a public image URL. Actions: `upload`, `check`.
 - `publish_video` — Publish a finished video file you already have, directly or through a staged upload, or publish an existing generation. Actions: `from_file`, `create_upload`, `complete_upload`, `publish_upload`, `publish_existing`.

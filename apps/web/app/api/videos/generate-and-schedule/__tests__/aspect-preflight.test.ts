@@ -9,6 +9,7 @@ import {
 } from '../aspect-preflight';
 import { MEDIA_CHECK_TIMEOUT_MS } from '../media-check';
 import { checkFullLipsyncNarration } from '../full-lipsync-preflight';
+import { createPreflightShared } from '../preflight-shared';
 import { logger } from '@/lib/logger';
 import type { PersonaPrep } from '../persona-prep';
 import type { ValidatedOptions } from '../options-validation';
@@ -516,6 +517,48 @@ describe('checkPreChargePreflights', () => {
       { url: 'https://e.com/face-0.jpg', video_aspect: '9:16' },
       { media_id: 'ffeeddccbbaa99887766554433221100.jpg', video_aspect: '9:16' },
     ]);
+  });
+
+  it('leaves the lipsync photo faces to the caller when asked to skip them, still checking the narration', async () => {
+    const calls = stubFetch([engineBody('ok', 1080, 1920, true)]);
+    vi.mocked(checkFullLipsyncNarration).mockResolvedValue(45);
+    const result = await checkPreChargePreflights({
+      ...COMBINED,
+      options: { ...OPTIONS, videoType: 'full_lipsync', lipsyncPhotos: LIPSYNC_PHOTOS },
+      skipLipsyncPhotoFaces: true,
+    });
+    expect(result).toBeNull();
+    expect(checkFullLipsyncNarration).toHaveBeenCalledTimes(1);
+    expect(calls).toHaveLength(0);
+  });
+
+  it('hands the shared context to the narration check', async () => {
+    stubFetch([engineBody('ok', 1080, 1920, true)]);
+    vi.mocked(checkFullLipsyncNarration).mockResolvedValue(45);
+    const shared = createPreflightShared(60_000);
+    await checkPreChargePreflights({
+      ...COMBINED,
+      options: { ...OPTIONS, videoType: 'full_lipsync', lipsyncPhotos: LIPSYNC_PHOTOS },
+      shared,
+    });
+    expect(vi.mocked(checkFullLipsyncNarration).mock.calls[0]?.[0].shared).toBe(shared);
+  });
+
+  it('asks the engine once per distinct photo across videos that use one shared context, the first photo included', async () => {
+    const calls = stubFetch([engineBody('ok', 1080, 1920, true)]);
+    const shared = createPreflightShared(60_000);
+    const first = await checkPreChargePreflights({ ...COMBINED, shared });
+    const second = await checkPreChargePreflights({ ...COMBINED, shared });
+    expect(first).toBeNull();
+    expect(second).toBeNull();
+    expect(calls).toHaveLength(3);
+  });
+
+  it('asks the engine for the first photo of each video again when no context is shared', async () => {
+    const calls = stubFetch([engineBody('ok', 1080, 1920, true)]);
+    await checkPreChargePreflights(COMBINED);
+    await checkPreChargePreflights(COMBINED);
+    expect(calls).toHaveLength(8);
   });
 
   it('skips the narration check when full lip-sync is off', async () => {

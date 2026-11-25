@@ -11,6 +11,7 @@ import {
   POINTER_POSTS_SCHEDULES,
   ROUTING_LIFECYCLE,
   SERVER_INSTRUCTIONS,
+  TESTING_CREATE_RULES,
   TESTING_FOLLOW_UPS,
   TESTING_KNOBS,
   TESTING_PROMPT_FLOW,
@@ -109,20 +110,32 @@ describe.each(['stdio', 'http'] as const)('server instructions on the %s server'
     expect(SERVER_INSTRUCTIONS).toContain('posts (action: list)');
   });
 
-  describe('manual test flow replaced by experiments create in #779', () => {
-    it('routes a test to the versions → promptVersionId → results flow', () => {
+  describe('test flow routes to experiments create (#779)', () => {
+    it('routes a test through versionId → create quote → confirm → results', () => {
       const get = TESTING_PROMPT_FLOW.indexOf('prompts (action: get)');
-      const pass = TESTING_PROMPT_FLOW.indexOf('promptVersionId');
+      const create = TESTING_PROMPT_FLOW.indexOf('experiments (action: create)');
+      const confirm = TESTING_PROMPT_FLOW.indexOf('quoteKey and expiresAt');
       const read = TESTING_PROMPT_FLOW.indexOf('experiments (action: results)');
       expect(SERVER_INSTRUCTIONS).toContain(TESTING_PROMPT_FLOW);
       expect(get).toBeGreaterThan(-1);
-      expect(pass).toBeGreaterThan(get);
-      expect(read).toBeGreaterThan(pass);
+      expect(create).toBeGreaterThan(get);
+      expect(confirm).toBeGreaterThan(create);
+      expect(read).toBeGreaterThan(confirm);
+      expect(TESTING_PROMPT_FLOW).toContain('schedules (action: cancel)');
     });
 
-    it('does not route to an experiments create action', () => {
-      expect(SERVER_INSTRUCTIONS).not.toContain('experiments (action: create)');
-      expect(SERVER_INSTRUCTIONS).not.toContain('create an experiment');
+    it('no longer routes the agent to rotate variants by hand', () => {
+      expect(TESTING_PROMPT_FLOW).not.toContain('rotate the variants round-robin');
+      expect(TESTING_PROMPT_FLOW).not.toContain('pass it as promptVersionId on every video');
+      expect(TESTING_FOLLOW_UPS).toContain('run another experiments (action: create)');
+      expect(TESTING_FOLLOW_UPS).not.toContain('keep rotating');
+    });
+
+    it('states the create rules the tool description leaves out', () => {
+      expect(SERVER_INSTRUCTIONS).toContain(TESTING_CREATE_RULES);
+      for (const rule of ['one script', 'never post one script several times', 'public URLs', 'QUOTE_CHANGED', 'QUOTE_EXPIRED', 'never charges twice']) {
+        expect(TESTING_CREATE_RULES).toContain(rule);
+      }
     });
   });
 
@@ -131,6 +144,22 @@ describe.each(['stdio', 'http'] as const)('server instructions on the %s server'
     expect(TESTING_SAMPLE_RULES).toContain('fewer than 5');
     expect(TESTING_SAMPLE_RULES).toContain('only when results labels it clear');
     expect(SERVER_INSTRUCTIONS).toContain(TESTING_SAMPLE_RULES);
+  });
+
+  it('does not send the agent to the manual rotation flow that experiments create replaced', () => {
+    expect(TESTING_SAMPLE_RULES).not.toContain('prefer rotating variants');
+    expect(SERVER_INSTRUCTIONS).not.toContain('prefer rotating variants');
+    expect(SERVER_INSTRUCTIONS).not.toContain('videos the user already plans to post');
+  });
+
+  it('says the create total is a ceiling, not an exact count', () => {
+    expect(TESTING_CREATE_RULES).toContain('at most 40 in total');
+    expect(TESTING_CREATE_RULES).not.toContain('(5-15 each, 40 in total)');
+  });
+
+  it('says persona and account take a name or an id', () => {
+    expect(TESTING_CREATE_RULES).toContain('persona (name or id)');
+    expect(TESTING_CREATE_RULES).toContain('accountId (name or id)');
   });
 
   it('asks for the token cost to be stated before a test is generated', () => {
