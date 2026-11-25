@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { COMPARISON_LABELS } from '../contracts/experiments.js';
+import { COMPARISON_LABELS, EXPERIMENT_MAX_FULL_LIPSYNC_VIDEOS } from '../contracts/experiments.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const comparison = readFileSync(join(here, '..', '..', '..', 'web', 'lib', 'experiments', 'prompt-comparison.ts'), 'utf8');
@@ -10,6 +10,7 @@ const description = readFileSync(join(here, '..', 'intent-content.ts'), 'utf8');
 const instructions = readFileSync(join(here, '..', 'server-instructions.ts'), 'utf8');
 const toolsSource = readFileSync(join(here, '..', 'tools-experiments.ts'), 'utf8');
 const readme = readFileSync(join(here, '..', '..', 'README.md'), 'utf8');
+const openapiSchemas = readFileSync(join(here, '..', '..', '..', 'web', 'scripts', 'openapi-prompts-schemas.mjs'), 'utf8');
 
 function recommendedVideos(): number {
   const match = /export const RECOMMENDED_VIDEOS_PER_PROMPT = (\d+);/.exec(comparison);
@@ -65,6 +66,14 @@ describe('experiments description sync with the prompt comparison', () => {
 
   it('writes the create total as a ceiling in the README', () => {
     expect(readme).toContain('5-15 each, at most 40 in total');
+  });
+
+  it('states the full lip-sync video cap everywhere an agent reads about create', () => {
+    const cap = EXPERIMENT_MAX_FULL_LIPSYNC_VIDEOS;
+    expect(description).toContain(`at most ${cap} when videoType is full_lipsync`);
+    expect(instructions).toContain(`at most ${cap} for full_lipsync`);
+    expect(readme).toContain(`at most ${cap} when \`videoType\` is \`full_lipsync\``);
+    expect(openapiSchemas).toContain(`at most ${cap} when videoType is full_lipsync`);
   });
 
   it('uses only result labels the comparison defines', () => {

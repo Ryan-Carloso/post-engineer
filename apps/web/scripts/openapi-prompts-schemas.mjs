@@ -151,7 +151,7 @@ export function promptOperationSchemas({ success, object, str }) {
               type: 'array',
               minItems: 2,
               maxItems: 4,
-              description: 'Prompt versions to compare. Each has the same number of videos (5-15, at most 40 in total), each with its own script.',
+              description: 'Prompt versions to compare. Each has the same number of videos (5-15, at most 40 in total, at most 20 when videoType is full_lipsync), each with its own script.',
               items: {
                 ...object(
                   {
