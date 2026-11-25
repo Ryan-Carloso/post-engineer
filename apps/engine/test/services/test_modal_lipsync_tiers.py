@@ -1,7 +1,6 @@
 """Tests for the cheap lip-sync tier helpers and their two Modal apps."""
 
 import ast
-import math
 import subprocess
 import tempfile
 import unittest
@@ -100,12 +99,6 @@ class BaseClipArgsTests(unittest.TestCase):
         self.assertIn(f"1+{job.ZOOM_AMPLITUDE / 2}*(1-cos(2*PI*on/{frames}))", video_filter)
         self.assertIn(f"fps={job.MODEL_FPS}", video_filter)
         self.assertIn(f"s={job.BASE_CLIP_SIZE}x{job.BASE_CLIP_SIZE}", video_filter)
-
-    def test_zoom_starts_and_ends_at_one_so_the_clip_loops(self):
-        frames = job.BASE_CLIP_SECONDS * job.MODEL_FPS
-        for on in (0, frames):
-            zoom = 1 + job.ZOOM_AMPLITUDE / 2 * (1 - math.cos(2 * math.pi * on / frames))
-            self.assertAlmostEqual(zoom, 1.0)
 
 
 class ModelArgsTests(unittest.TestCase):
