@@ -109,6 +109,7 @@ export const CALLER_RATE_LIMITS = {
   scheduleList: callerProfiles('schedule-list', 120, 20),
   scheduleStatus: callerProfiles('schedule-status', 240, 20),
   personaImagesRead: callerProfiles('persona-images-read', 120, 20),
+  personaIdentityCard: callerProfiles('persona-identity-card', 120, 20),
   clonedVoiceRead: callerProfiles('cloned-voice-read', 120, 20),
 } as const satisfies Record<string, CallerRateLimitProfiles>;
 

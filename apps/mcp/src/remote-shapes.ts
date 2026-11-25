@@ -23,6 +23,7 @@ export const CreatePersonaRemoteShape = {
   niche: CreatePersonaShape.niche,
   faceQuality: CreatePersonaShape.faceQuality,
   cta: CreatePersonaShape.cta,
+  identityCard: CreatePersonaShape.identityCard,
   accounts: CreatePersonaShape.accounts,
 };
 
@@ -45,6 +46,7 @@ export const UpdatePersonaRemoteShape = {
   niche: UpdatePersonaShape.niche,
   faceQuality: UpdatePersonaShape.faceQuality,
   cta: UpdatePersonaShape.cta,
+  identityCard: UpdatePersonaShape.identityCard,
 };
 
 export const UpdatePersonaRemoteSchema = z

@@ -3,7 +3,6 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { createPostEngineerMcpServer } from '../index.js';
 import { PostEngineerClient } from '../client.js';
-import { USER_PROMPT_SLUG_PATTERN } from '../contracts/prompts.js';
 import { MCP_SESSION_ID_HEADER } from '../recipe-session.js';
 
 const BASE = 'https://api.example.test';
@@ -305,10 +304,10 @@ describe('prompts write actions', () => {
       }
     }
 
-    it('advertises the strict slug schema shared by every action', async () => {
+    it('advertises the loose get slug schema shared by every action', async () => {
       const { properties } = await listPromptsTool();
-      expect(properties.slug?.pattern).toBe(USER_PROMPT_SLUG_PATTERN.source);
-      expect(properties.slug?.maxLength).toBe(64);
+      expect(properties.slug?.pattern).toBeUndefined();
+      expect(properties.slug?.maxLength).toBeUndefined();
     });
 
     it('advertises a slug description that fits reads as well as writes', async () => {
@@ -324,18 +323,40 @@ describe('prompts write actions', () => {
       expect(properties.version?.description).toContain('Leave it out to list the versions');
     });
 
-    it('rejects a malformed get slug before any request, naming the slug pattern', async () => {
-      const { call, seen } = setup({});
-      const result = await call({ action: 'get', slug: 'My Prompt' });
-      expect(result.isError).toBe(true);
-      expect(result.text).toContain('must match pattern');
-      expect(result.text).toContain('at slug');
-      expect(seen).toEqual([]);
+    it('reaches the handler on a malformed get slug and fails with the valid-slug list, not the SDK pattern error', async () => {
+      const seen: string[] = [];
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (url: string) => {
+          const parsed = new URL(url);
+          seen.push(parsed.pathname);
+          if (parsed.pathname === '/api/prompts/Place%20Spotlight') {
+            return Response.json({ success: false, error: 'Prompt not found.', code: 'PROMPT_NOT_FOUND' }, { status: 404 });
+          }
+          return Response.json({ success: true, prompts: [OWN] });
+        }),
+      );
+      const api = new PostEngineerClient({ apiKey: 'pe_test', baseUrl: BASE });
+      const server = createPostEngineerMcpServer(api, 'stdio');
+      const [a, b] = InMemoryTransport.createLinkedPair();
+      const client = new Client({ name: 't', version: '0.0.0' });
+      await Promise.all([server.connect(b), client.connect(a)]);
+      try {
+        const result = await client.callTool({ name: 'prompts', arguments: { action: 'get', slug: 'Place Spotlight' } });
+        const text = (result.content as Array<{ text?: string }>).map((part) => part.text ?? '').join('\n');
+        expect(result.isError).toBe(true);
+        expect(text).toContain('unknown prompt slug "Place Spotlight"');
+        expect(text).toContain('Valid slugs: my-prompt');
+        expect(text).not.toContain('must match pattern');
+        expect(seen).toContain('/api/prompts/Place%20Spotlight');
+      } finally {
+        await client.close();
+      }
     });
 
     it('describes the write actions and no longer names prompt_library', async () => {
       const { description } = await listPromptsTool();
-      expect(description).toContain('list and get read prompts; create, update, delete, versions and restore write your own');
+      expect(description).toContain('list and get read prompts; create, update, delete and restore write your own; versions only reads your own history');
       expect(description).toContain('create (slug, title, prompt)');
       expect(description).toContain('restore (slug, version, expectedCurrentVersion)');
       expect(description).not.toContain('prompt_library');

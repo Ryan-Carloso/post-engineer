@@ -99,6 +99,8 @@ GET    /api/persona/images                                    list persona image
 POST   /api/persona/images                                    add persona image
 PATCH  /api/persona/images                                    update persona image
 DELETE /api/persona/images                                    remove persona image
+GET    /api/persona/identity-card                             read a persona's identity card
+POST   /api/persona/identity-card                             render the image prompt for a scene from the card
 GET    /api/persona/voices                                    list voices
 GET    /api/persona/cloned-voices                             list cloned voices
 POST   /api/persona/cloned-voices                             create cloned voice

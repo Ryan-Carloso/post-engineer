@@ -12,7 +12,7 @@ interface Snapshot {
 }
 
 const root = findRepoRoot(import.meta.url);
-const migration = readFileSync(join(root, 'supabase/migrations/084_scheduled-posts-hook-title.sql'), 'utf8');
+const migration = readFileSync(join(root, 'supabase/migrations/085_scheduled-posts-hook-title.sql'), 'utf8');
 const snapshot = JSON.parse(readFileSync(join(root, 'supabase/schema.snapshot.json'), 'utf8')) as Snapshot;
 const readme = readFileSync(join(root, 'supabase/README.md'), 'utf8');
 
@@ -39,6 +39,6 @@ describe('scheduled_posts.hook_title migration', () => {
   });
 
   it('is listed in the supabase README', () => {
-    expect(readme).toContain('`migrations/084_scheduled-posts-hook-title.sql`');
+    expect(readme).toContain('`migrations/085_scheduled-posts-hook-title.sql`');
   });
 });

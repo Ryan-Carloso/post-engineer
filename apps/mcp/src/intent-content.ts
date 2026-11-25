@@ -9,6 +9,7 @@ import { PublishExistingLocalShape, PublishExistingRemoteShape, PublishExistingS
 import { IMAGE_AS_SHORT_NOTE, IMAGE_PROVIDERS } from './contracts/providers.js';
 import { handlePublishExisting } from './tools-publish-existing.js';
 import { DESTRUCTIVE, MUTATING, READ_ONLY } from './tool-annotations.js';
+import { POINTER_IMAGES } from './server-instructions.js';
 import { PublishVideoDirectShape, handlePublishVideoDirect } from './tools.js';
 import { PromptComparisonShape, handlePromptComparison } from './tools-experiments.js';
 import { UploadMediaRemoteShape } from './remote-shapes-images.js';
@@ -53,7 +54,7 @@ export function registerContentTools(server: McpServer, client: PostEngineerClie
   server.tool(
     'media',
     actionDescription(
-      `Images for video segments. check: mechanically check one public image URL (no LLM, relevance is for you to judge): returns one code (ok, blocked_403 when the host blocks the download — ${remote ? 'use another public URL for that photo' : 'then use upload with bytes fetched on your own machine'} — and the size, type and aspect failures). upload: ${remote ? 'a public https imageUrl is downloaded by the server' : 'a local image'} and becomes a mediaId for a segment (a temporary asset, 1 hour: upload shortly before generating).`,
+      `Images for video segments. check: mechanically check one public image URL (no LLM, relevance is for you to judge): returns one code (ok, blocked_403 when the host blocks the download — ${remote ? 'use another public URL for that photo' : 'then use upload with bytes fetched on your own machine'} — and the size, type and aspect failures). upload: ${remote ? 'a public https imageUrl is downloaded by the server' : 'a local image'} and becomes a mediaId for a segment (a temporary asset, 1 hour: upload shortly before generating). ${POINTER_IMAGES}`,
       offeredSpecs(MEDIA_SPECS, mediaOptions),
     ),
     actionShape(offeredSpecs(MEDIA_SPECS, mediaOptions)),

@@ -84,7 +84,7 @@ describe('POST /api/persona insert failure', () => {
     expect(logger.error).toHaveBeenCalledTimes(1);
     expect(logger.error).toHaveBeenCalledWith(
       '[POST /api/persona] 500 Failed to create persona.',
-      dbError,
+      { code: '23505' },
       expect.objectContaining({ route: 'POST /api/persona' }),
     );
   });

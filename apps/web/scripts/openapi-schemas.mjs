@@ -1,4 +1,4 @@
-import { metricsOperationSchemas } from './openapi-metrics-schemas.mjs'; import { videoTaskOperationSchemas } from './openapi-video-task-schemas.mjs'; import { videoOperationSchemas } from './openapi-videos-schemas.mjs'; import { promptOperationSchemas } from './openapi-prompts-schemas.mjs'; import { shareLinkOperationSchemas } from './openapi-share-links-schemas.mjs'; import { OAUTH_CONNECT_PROVIDERS, SCHEDULE_ACCOUNT_COLUMNS, SOCIAL_PROVIDERS as providers } from '../../../shared/contracts/providers.ts';
+import { personaCardFormFields, personaCardOperationSchemas } from './openapi-persona-card-schemas.mjs'; import { metricsOperationSchemas } from './openapi-metrics-schemas.mjs'; import { videoTaskOperationSchemas } from './openapi-video-task-schemas.mjs'; import { videoOperationSchemas } from './openapi-videos-schemas.mjs'; import { promptOperationSchemas } from './openapi-prompts-schemas.mjs'; import { shareLinkOperationSchemas } from './openapi-share-links-schemas.mjs'; import { OAUTH_CONNECT_PROVIDERS, SCHEDULE_ACCOUNT_COLUMNS, SOCIAL_PROVIDERS as providers } from '../../../shared/contracts/providers.ts';
 
 const object = (properties, required = []) => ({
   type: 'object',
@@ -125,7 +125,7 @@ const generateBody = object(
 );
 
 
-const personaFields = {
+const personaFields = { ...personaCardFormFields,
   name: { type: 'string', description: 'Required on create.' },
   avatarUrl: { type: 'string', description: 'Exactly one of photo or avatarUrl on create.' },
   photo: { type: 'string', format: 'binary', description: 'PNG, JPEG or WebP.' },
@@ -508,7 +508,7 @@ export const operationSchemas = {
     request: object({ url: { type: 'string', format: 'uri', description: 'http(s) URL.' } }, ['url']),
     response: success({ code: str }),
   },
-  ...metricsOperationSchemas({ success, object, anyObject, str }), ...videoOperationSchemas({ success, object, str }), ...promptOperationSchemas({ success, object, str }), ...shareLinkOperationSchemas({ success, object, str }),
+  ...metricsOperationSchemas({ success, object, anyObject, str }), ...videoOperationSchemas({ success, object, str }), ...promptOperationSchemas({ success, object, str }), ...shareLinkOperationSchemas({ success, object, str }), ...personaCardOperationSchemas({ success, object, str }),
   'GET /api/posts/[id]': {
     response: success({
       kind: { type: 'string', enum: ['generation', 'slot'] },

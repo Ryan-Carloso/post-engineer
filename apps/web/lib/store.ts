@@ -16,6 +16,13 @@ import {
   emptyPersonaDefaultAccounts,
   type PersonaDefaultAccounts,
 } from '@/lib/persona-publishing-accounts';
+import {
+  emptyIdentityCardDraft,
+  identityCardFormValue,
+  sameIdentityCardDraft,
+  type IdentityCardDraft,
+  type IdentityCardFieldKey,
+} from '@/lib/persona-identity-card-form';
 
 function emptySelection(): Record<SocialProvider, string[]> {
   const selection = {} as Record<SocialProvider, string[]>;
@@ -185,6 +192,13 @@ interface PersonaFormState {
   publishingAccounts: PersonaDefaultAccounts;
   publishingAccountsLoaded: boolean;
   loadedPublishingAccounts: PersonaDefaultAccounts | null;
+  identityCardDraft: IdentityCardDraft;
+  identityCardLoaded: IdentityCardDraft;
+  isSubmitting: boolean;
+  setIdentityCardField: (key: IdentityCardFieldKey, value: string) => void;
+  applyServerIdentityCard: (draft: IdentityCardDraft) => void;
+  resetIdentityCard: () => void;
+  setSubmitting: (value: boolean) => void;
   setPublishingAccounts: (accounts: PersonaDefaultAccounts) => void;
   setPublishingAccountsLoaded: (loaded: boolean) => void;
   setLoadedPublishingAccounts: (accounts: PersonaDefaultAccounts) => void;
@@ -232,6 +246,9 @@ const initialPersonaState = {
   publishingAccounts: emptyPersonaDefaultAccounts(),
   publishingAccountsLoaded: true,
   loadedPublishingAccounts: null,
+  identityCardDraft: emptyIdentityCardDraft(),
+  identityCardLoaded: emptyIdentityCardDraft(),
+  isSubmitting: false,
 };
 
 export const usePersonaStore = create<PersonaFormState>()(
@@ -270,6 +287,14 @@ export const usePersonaStore = create<PersonaFormState>()(
     setPublishingAccounts: (publishingAccounts) => set({ publishingAccounts }),
     setPublishingAccountsLoaded: (publishingAccountsLoaded) => set({ publishingAccountsLoaded }),
     setLoadedPublishingAccounts: (loadedPublishingAccounts) => set({ loadedPublishingAccounts }),
+    setIdentityCardField: (key, value) => set((s) => ({ identityCardDraft: { ...s.identityCardDraft, [key]: value } })),
+    applyServerIdentityCard: (draft) =>
+      set((s) => ({
+        identityCardLoaded: draft,
+        identityCardDraft: sameIdentityCardDraft(s.identityCardDraft, s.identityCardLoaded) ? draft : s.identityCardDraft,
+      })),
+    resetIdentityCard: () => set({ identityCardDraft: emptyIdentityCardDraft(), identityCardLoaded: emptyIdentityCardDraft() }),
+    setSubmitting: (isSubmitting) => set({ isSubmitting }),
     resetForm: () => set({ ...initialPersonaState, publishingAccounts: emptyPersonaDefaultAccounts() }),
     buildPersonaFormData: (language?: string) => {
       const s = get();
@@ -297,6 +322,8 @@ export const usePersonaStore = create<PersonaFormState>()(
       if (s.niche.trim()) formData.append('niche', s.niche.trim());
       const videoSubject = s.niche.trim() || s.scriptPrompt.trim();
       if (videoSubject) formData.append('video_subject', videoSubject);
+      const identityCard = identityCardFormValue(s.identityCardDraft, s.identityCardLoaded);
+      if (identityCard !== null) formData.append('identityCard', identityCard);
       return formData;
     },
     buildPersonaEditFormData: () => {
@@ -314,6 +341,8 @@ export const usePersonaStore = create<PersonaFormState>()(
       formData.append('ctaInstruction', s.ctaInstruction.trim());
       if (s.niche.trim()) formData.append('niche', s.niche.trim());
       formData.append('faceQuality', s.faceQuality);
+      const identityCard = identityCardFormValue(s.identityCardDraft, s.identityCardLoaded);
+      if (identityCard !== null) formData.append('identityCard', identityCard);
       return formData;
     },
   }),

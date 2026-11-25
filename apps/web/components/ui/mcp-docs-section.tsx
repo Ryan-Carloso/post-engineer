@@ -38,7 +38,7 @@ const MCP_TOOL_CARDS: McpToolCard[] = [
   { id: 'video_tasks', actions: ['status', 'list_generations', 'get_generation'], descKey: 'apiKeys.toolDescVideoTasks', Icon: SpinnerIcon },
   { id: 'cancel_video', actions: [], descKey: 'apiKeys.toolDescCancelVideo', Icon: TrashIcon },
   { id: 'personas', actions: ['list', 'get', 'create', 'update', 'delete'], descKey: 'apiKeys.toolDescPersonas', Icon: SparklesIcon },
-  { id: 'persona_media', actions: ['list_faces', 'list_images', 'add_image', 'update_image', 'remove_image'], descKey: 'apiKeys.toolDescPersonaMedia', Icon: ImageIcon },
+  { id: 'persona_media', actions: ['list_faces', 'list_images', 'add_image', 'update_image', 'remove_image', 'get_card', 'render_prompt'], descKey: 'apiKeys.toolDescPersonaMedia', Icon: ImageIcon },
   { id: 'voices', actions: ['list', 'preview', 'list_clones', 'create_clone', 'get_clone', 'preview_clone', 'delete_clone'], descKey: 'apiKeys.toolDescVoices', Icon: MicIcon },
   { id: 'accounts', actions: ['list', 'connect', 'disconnect', 'get_persona_publishing', 'set_persona_publishing', 'list_boards'], descKey: 'apiKeys.toolDescAccounts', Icon: AccountsIcon },
   { id: 'tool_config', actions: ['get', 'save'], descKey: 'apiKeys.toolDescToolConfig', Icon: KeyIcon },
@@ -48,7 +48,7 @@ const MCP_TOOL_CARDS: McpToolCard[] = [
   { id: 'experiments', actions: ['results'], descKey: 'apiKeys.toolDescExperiments', Icon: ComposeIcon },
   { id: 'media', actions: ['upload', 'check'], descKey: 'apiKeys.toolDescMedia', Icon: UploadIcon },
   { id: 'billing', actions: ['balance', 'transactions'], descKey: 'apiKeys.toolDescBilling', Icon: CoinsIcon },
-  { id: 'prompts', actions: ['create', 'update', 'delete', 'versions', 'restore', 'list', 'get'], descKey: 'apiKeys.toolDescPrompts', Icon: GlobeIcon },
+  { id: 'prompts', actions: ['list', 'get', 'create', 'update', 'delete', 'versions', 'restore'], descKey: 'apiKeys.toolDescPrompts', Icon: GlobeIcon },
   { id: 'check_script', actions: ['validate', 'score'], descKey: 'apiKeys.toolDescCheckScript', Icon: CheckIcon },
   { id: 'publish_video', actions: ['from_file', 'create_upload', 'complete_upload', 'publish_upload'], descKey: 'apiKeys.toolDescPublishVideo', Icon: KeyIcon },
 ];

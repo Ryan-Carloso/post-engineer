@@ -1,5 +1,5 @@
 -- ============================================================================
--- 084 — scheduled_posts.hook_title: the on-screen headline of a slot's video.
+-- 085 — scheduled_posts.hook_title: the on-screen headline of a slot's video.
 --
 -- A scheduled slot is rendered later by the engine, so the optional hook title
 -- (a short headline over the first seconds, issue #768) must be stored with

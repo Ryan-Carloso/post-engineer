@@ -10,6 +10,8 @@ import { useI18n } from '@/lib/i18n/provider';
 import { scrollToErrorField } from '@/lib/scroll-to-error';
 import { notifyIfSessionExpired } from '@/lib/session-expiry';
 import { surfaceAppErrorMessage } from '@/lib/errors';
+import { localizeIdentityCardResult, validateIdentityCardDraft } from '@/lib/persona-identity-card-form';
+import { PERSONA_IDENTITY_CARD_QUERY_KEY } from '@/lib/persona-identity-card-api';
 import { totalBoundAccounts, type PersonaDefaultAccounts, samePublishingAccounts } from '@/lib/persona-publishing-accounts';
 import { SpinnerIcon } from '@/lib/ui';
 
@@ -82,17 +84,28 @@ export const PersonaSubmit = ({ editId }: { editId: string | null }) => {
       return;
     }
 
+    const cardCheck = validateIdentityCardDraft(state.identityCardDraft);
+    if (!cardCheck.ok) {
+      state.setResult({ success: false, error: t(cardCheck.errorKey) });
+      scrollToErrorField('identity-card');
+      return;
+    }
+
     const language = resolveScriptLanguage(locale);
 
     state.setResult(null);
     setIsPending(true);
+    state.setSubmitting(true);
     try {
       const personaId = editingPersonaId;
       if (personaId) {
         const formData = state.buildPersonaEditFormData();
-        const result = await updateMutation.mutateAsync({ personaId, formData });
+        const result = localizeIdentityCardResult(await updateMutation.mutateAsync({ personaId, formData }), t);
         usePersonaStore.getState().setResult(result);
         if (result.success) {
+          await queryClient.invalidateQueries({
+            queryKey: [PERSONA_IDENTITY_CARD_QUERY_KEY, personaId],
+          });
           if (loadedAccounts === null || !samePublishingAccounts(state.publishingAccounts, loadedAccounts)) {
             try {
               await savePublishingAccounts(personaId, state.publishingAccounts, t('persona.publishingAccountsSaveError'));
@@ -112,7 +125,7 @@ export const PersonaSubmit = ({ editId }: { editId: string | null }) => {
           scrollToErrorField('script');
         }
       } else {
-        const result = await createPersona(state.buildPersonaFormData(language));
+        const result = localizeIdentityCardResult(await createPersona(state.buildPersonaFormData(language)), t);
         const createResult = result.success || result.error ? result : { success: false, error: t('persona.errServer') };
         usePersonaStore.getState().setResult(createResult);
         if (result.success) {
@@ -129,6 +142,7 @@ export const PersonaSubmit = ({ editId }: { editId: string | null }) => {
       });
     } finally {
       setIsPending(false);
+      usePersonaStore.getState().setSubmitting(false);
     }
   };
 

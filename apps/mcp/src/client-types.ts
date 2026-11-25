@@ -4,6 +4,7 @@ import type { PersonaCtaType } from './contracts/personas.js';
 import type { VideoType } from './video-type.js';
 import type { SubtitlePosition, VideoTransitionMode } from './contracts/videos.js';
 import type { SocialProvider } from './contracts/providers.js';
+import type { IdentityCard } from './contracts/persona-identity-card.js';
 
 export type { VideoType } from './video-type.js';
 
@@ -42,6 +43,7 @@ export interface CreatePersonaInput {
   niche?: string;
   faceQuality?: FaceQuality;
   cta?: PersonaCtaInput;
+  identityCard?: IdentityCard | null;
   accounts: Record<string, string[]>;
   images?: PersonaLibraryImageInput[];
   imagePrimaryIndex?: number;
@@ -114,6 +116,7 @@ export interface UpdatePersonaInput {
   niche?: string;
   faceQuality?: FaceQuality;
   cta?: PersonaCtaInput;
+  identityCard?: IdentityCard | null;
 }
 
 export interface PublishVideoDirectInput {
