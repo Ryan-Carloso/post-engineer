@@ -1,0 +1,106 @@
+// @vitest-environment node
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { describe, expect, it } from 'vitest';
+import { registeredToolActions, registeredToolNames } from '@/test/mcp-tool-names';
+import { findRepoRoot } from '@/test/repo-root';
+
+const publicDir = join(findRepoRoot(import.meta.url), 'apps', 'web', 'public');
+const llms = readFileSync(join(publicDir, 'llms.txt'), 'utf8');
+const llmsFull = readFileSync(join(publicDir, 'llms-full.txt'), 'utf8');
+const apiDocs = readFileSync(join(publicDir, 'api-documentation.txt'), 'utf8');
+
+const TOOLS_HEADING = '## MCP tools';
+const PLATFORM_HEADING = '## Platform';
+
+function between(text: string, from: string, to: string | null): string {
+  const start = text.indexOf(from);
+  expect(start).toBeGreaterThanOrEqual(0);
+  const end = to === null ? text.length : text.indexOf(to, start);
+  expect(end).toBeGreaterThan(start);
+  return text.slice(start, end);
+}
+
+function collapse(text: string): string {
+  return text.replace(/\s+/g, ' ').trim();
+}
+
+function toolBullets(): Map<string, string[]> {
+  const section = between(llmsFull, TOOLS_HEADING, '\n## More');
+  const tools = new Map<string, string[]>();
+  for (const line of section.split('\n')) {
+    const head = /^- `([a-z_]+)`/.exec(line);
+    if (head === null) continue;
+    const actionsAt = line.indexOf('Actions:');
+    const actions =
+      actionsAt === -1
+        ? []
+        : [...line.slice(actionsAt).matchAll(/`([a-z_]+)`/g)].map((match) => match[1]);
+    tools.set(head[1], actions);
+  }
+  return tools;
+}
+
+describe('llms-full.txt', () => {
+  it('contains every link of llms.txt', () => {
+    const urls = [...llms.matchAll(/\]\((https?:\/\/[^)\s]+)\)/g)].map((match) => match[1]);
+    expect(urls.length).toBeGreaterThan(0);
+    for (const url of urls) {
+      expect(llmsFull).toContain(url);
+    }
+  });
+
+  it('starts with the llms.txt title, intro and link lists, unchanged', () => {
+    const head = between(llms, '# Post Engineer', `\n${TOOLS_HEADING}`);
+    expect(head).toContain(PLATFORM_HEADING);
+    expect(llmsFull.startsWith(head)).toBe(true);
+  });
+
+  it('embeds api-documentation.txt as one unbroken block', () => {
+    const block = between(
+      llmsFull,
+      '=== BEGIN api-documentation.txt ===\n',
+      '=== END api-documentation.txt ===',
+    );
+    expect(block).toBe(`=== BEGIN api-documentation.txt ===\n${apiDocs.trimEnd()}\n`);
+  });
+
+  it('lists exactly the tools the MCP server registers', () => {
+    const documented = [...toolBullets().keys()].sort();
+    expect(documented).toEqual(registeredToolNames(import.meta.url));
+  });
+
+  it('states the registered tool count in the section intro', () => {
+    expect(llmsFull).toContain(`${registeredToolNames(import.meta.url).length} intent tools`);
+  });
+
+  it('lists exactly the actions each registered tool offers', () => {
+    const documented = toolBullets();
+    for (const [tool, actions] of Object.entries(registeredToolActions(import.meta.url))) {
+      expect([...(documented.get(tool) ?? [])].sort(), tool).toEqual([...actions].sort());
+    }
+  });
+
+  it('keeps every action that llms.txt names for a tool', () => {
+    const section = collapse(between(llms, TOOLS_HEADING, null));
+    const documented = toolBullets();
+    let checked = 0;
+    for (const match of section.matchAll(/`([a-z_]+)` \(([^)]*)\)/g)) {
+      const tool = match[1];
+      if (!documented.has(tool)) continue;
+      const actions = [...match[2].matchAll(/`([a-z_]+)`/g)].map((token) => token[1]);
+      for (const action of actions) {
+        expect(documented.get(tool), `${tool}.${action}`).toContain(action);
+      }
+      checked += 1;
+    }
+    expect(checked).toBeGreaterThan(5);
+  });
+
+  it('links the OpenAPI spec, the MCP README and the prompt hub', () => {
+    const more = between(llmsFull, '## More', null);
+    expect(more).toContain('https://post-engineer.com/openapi.json');
+    expect(more).toContain('https://github.com/Ryan-Carloso/post-engineer/tree/main/apps/mcp');
+    expect(more).toContain('https://post-engineer.com/recipes');
+  });
+});
