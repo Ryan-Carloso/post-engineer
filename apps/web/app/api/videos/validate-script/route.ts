@@ -9,6 +9,7 @@ import {
   HOOK_MIN_SECONDS,
   validateSegments,
 } from '@/lib/generation/script-segments';
+import { checkHookTitle, hookTitleIssueMessage } from '@/lib/generation/hook-title';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 
@@ -32,7 +33,7 @@ async function postHandler(request: Request): Promise<NextResponse> {
       route: ROUTE,
     });
   }
-  const fields = typeof body === 'object' && body !== null ? (body as { segments?: unknown; videoType?: unknown }) : {};
+  const fields = typeof body === 'object' && body !== null ? (body as { segments?: unknown; videoType?: unknown; hookTitle?: unknown }) : {};
   let videoType: VideoType = 'hook_lipsync';
   if (fields.videoType !== undefined) {
     if (!isVideoType(fields.videoType)) {
@@ -43,6 +44,23 @@ async function postHandler(request: Request): Promise<NextResponse> {
       });
     }
     videoType = fields.videoType;
+  }
+  if (fields.hookTitle !== undefined) {
+    if (typeof fields.hookTitle !== 'string') {
+      return apiErrorResponse(400, 'hookTitle must be a string.', {
+        code: ERROR_CODES.VALIDATION_FAILED,
+        field: 'hookTitle',
+        route: ROUTE,
+      });
+    }
+    const hookTitleCode = checkHookTitle(fields.hookTitle);
+    if (hookTitleCode !== null) {
+      return apiErrorResponse(400, hookTitleIssueMessage(hookTitleCode), {
+        code: hookTitleCode,
+        field: 'hookTitle',
+        route: ROUTE,
+      });
+    }
   }
   const result = validateSegments(fields.segments, videoType);
   if (!result.ok) {

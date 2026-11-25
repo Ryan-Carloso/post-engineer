@@ -1447,6 +1447,12 @@
                     "type": "jsonb",
                     "default": null,
                     "notNull": false
+                },
+                {
+                    "name": "hook_title",
+                    "type": "text",
+                    "default": null,
+                    "notNull": false
                 }
             ],
             "policies": {
@@ -1464,6 +1470,7 @@
                 "scheduled_posts_charged_tokens_check": "CHECK ((charged_tokens >= 0))",
                 "scheduled_posts_discount_tokens_check": "CHECK ((discount_tokens >= 0))",
                 "scheduled_posts_prompt_version_id_fkey": "FOREIGN KEY (prompt_version_id) REFERENCES prompt_versions(id) ON DELETE SET NULL",
+                "scheduled_posts_hook_title_length_check": "CHECK (((hook_title IS NULL) OR ((char_length(hook_title) >= 1) AND (char_length(hook_title) <= 60))))",
                 "scheduled_posts_voiceover_material_check": "CHECK ((voiceover_material = 'images'::text))"
             }
         },

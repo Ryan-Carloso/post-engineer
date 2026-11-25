@@ -635,6 +635,7 @@ export interface Database {
         media_claimed_at: string | null;
         prompt_version_id: string | null;
         lipsync_photos: Json | null;
+        hook_title: string | null;
         };
         Insert: {
         id?: string;
@@ -667,6 +668,7 @@ export interface Database {
         media_claimed_at?: string | null;
         prompt_version_id?: string | null;
         lipsync_photos?: Json | null;
+        hook_title?: string | null;
         };
         Update: {
         id?: string;
@@ -699,6 +701,7 @@ export interface Database {
         media_claimed_at?: string | null;
         prompt_version_id?: string | null;
         lipsync_photos?: Json | null;
+        hook_title?: string | null;
         };
         Relationships: [];
       };

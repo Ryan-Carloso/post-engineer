@@ -435,13 +435,13 @@ export class PostEngineerClient {
     return parseContractResponse(disconnectAccountContract, raw);
   }
 
-  async validateScript(segments: unknown, videoType: VideoType = 'hook_lipsync'): Promise<ResponseOf<typeof validateScriptContract>> {
+  async validateScript(segments: unknown, videoType: VideoType = 'hook_lipsync', hookTitle?: string): Promise<ResponseOf<typeof validateScriptContract>> {
     const raw = await this.request(
       '/api/videos/validate-script',
       {
         method: 'POST',
         headers: this.getHeaders(),
-        body: JSON.stringify({ segments, videoType }),
+        body: JSON.stringify({ segments, videoType, hookTitle }),
       },
       'validate script'
     );

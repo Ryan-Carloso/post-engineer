@@ -29,7 +29,7 @@ from loguru import logger
 from PIL import Image, ImageDraw, ImageFilter, ImageOps
 
 from app.models.schema import VideoAspect
-from app.services import media_overlay, panel_motion, image_fetch, video
+from app.services import caption_layout, hook_title, media_overlay, panel_motion, image_fetch, video
 from app.utils import utils
 
 FACE_NONE = "none"
@@ -55,6 +55,7 @@ CAPTION_GAP = 24
 MANIFEST_NAME = "segment-panels.json"
 OVERLAY_TIMEOUT_SECONDS = 600
 REASON_RENDER_FAILED = "segment photos were not added to the video: render failed"
+REASON_TITLE_RENDER_FAILED = "hook title not added: overlay render failed"
 
 
 @dataclass(frozen=True)
@@ -99,11 +100,14 @@ def panel_rect(width: int, height: int) -> tuple[int, int, int, int]:
     return (width - panel_width) // 2, height - edge - panel_height, panel_width, panel_height
 
 
-def full_card_rect(width: int, height: int) -> tuple[int, int, int, int]:
-    """The rectangle the info card is laid out in on a full-frame photo."""
+def full_card_rect(width: int, height: int, top: Optional[int] = None) -> tuple[int, int, int, int]:
+    """The rectangle the info card is laid out in on a full-frame photo.
+
+    `top` moves the card down (below the hook title) while the title shows.
+    """
     side = round(FULL_CARD_SIDE * _scale(width, height))
-    top = round(height * FULL_CARD_TOP_FRACTION)
-    return side, top, width - side, top + round(height * FULL_CARD_HEIGHT_FRACTION)
+    top = round(height * FULL_CARD_TOP_FRACTION) if top is None else top
+    return side, top, width - side, min(height, top + round(height * FULL_CARD_HEIGHT_FRACTION))
 
 
 def build_full(
@@ -112,12 +116,14 @@ def build_full(
     font_for: Optional[media_overlay.FontFor],
     aspect: VideoAspect,
     out_path: str,
+    card_top: Optional[int] = None,
 ) -> Optional[BuiltPanel]:
     """Draw one full-frame photo as an opaque PNG; None when it cannot be read.
 
     The whole photo is contained over a blurred copy of itself (the same
     composition place photos use), so nothing is cropped away and a photo
-    that does not fill the frame leaves no black bars.
+    that does not fill the frame leaves no black bars. `card_top` lays the
+    info card out lower, below the hook title, for a photo on screen with it.
     """
     width, height = aspect.to_resolution()
     still_path = f"{out_path}.still.jpg"
@@ -132,7 +138,7 @@ def build_full(
                 card_reason = media_overlay.REASON_NO_FONT
             else:
                 card_reason = media_overlay.paint_card(
-                    layer, overlay, font_for, _scale(width, height), full_card_rect(width, height)
+                    layer, overlay, font_for, _scale(width, height), full_card_rect(width, height, card_top)
                 )
         layer.convert("RGB").save(out_path, "PNG")
     except (OSError, ValueError, Image.DecompressionBombError) as exc:
@@ -204,10 +210,22 @@ def _manifest_path(task_id: str) -> str:
     return os.path.join(utils.task_dir(task_id), MANIFEST_NAME)
 
 
-def write_manifest(task_id: str, panels: Sequence[Panel], warnings: Sequence[str]) -> None:
-    """Persist the prepared panels for the final-assembly step."""
+def write_manifest(
+    task_id: str,
+    panels: Sequence[Panel],
+    warnings: Sequence[str],
+    title: Optional[hook_title.TitleLayer] = None,
+) -> None:
+    """Persist the panels, hook title and every skip warning (title ones too) for the final-assembly step."""
     with open(_manifest_path(task_id), "w", encoding="utf-8") as handle:
-        json.dump({"panels": [asdict(panel) for panel in panels], "warnings": list(warnings)}, handle)
+        json.dump(
+            {
+                "panels": [asdict(panel) for panel in panels],
+                "warnings": list(warnings),
+                "title": None if title is None else asdict(title),
+            },
+            handle,
+        )
 
 
 def _read_manifest(task_id: str) -> tuple[list[Panel], list[str]]:
@@ -219,17 +237,33 @@ def _read_manifest(task_id: str) -> tuple[list[Panel], list[str]]:
     return [Panel(**item) for item in data["panels"]], list(data["warnings"])
 
 
-def caption_bands(task_id: str) -> list[tuple[float, float, int]]:
-    """(start, end, lowest caption pixel) for every panel on screen.
+def read_title(task_id: str) -> Optional[hook_title.TitleLayer]:
+    """The hook title drawn at the materials stage, if one is on the manifest."""
+    path = _manifest_path(task_id)
+    if not os.path.exists(path):
+        return None
+    with open(path, encoding="utf-8") as handle:
+        data = json.load(handle)
+    stored = data.get("title")
+    return None if stored is None else hook_title.TitleLayer(**stored)
+
+
+def caption_bands(task_id: str) -> list[caption_layout.CaptionBand]:
+    """(start, end, lowest caption pixel) for every panel on screen, then the title floor.
 
     A full-frame photo covers the frame and imposes no band (caption_layout).
+    The hook title adds one TitleFloor while it shows: captions stay below it.
     """
     panels, _warnings = _read_manifest(task_id)
-    return [
+    bands: list[caption_layout.CaptionBand] = [
         (panel.start, panel.end, panel.caption_bottom)
         for panel in panels
         if panel.caption_bottom is not None
     ]
+    title = read_title(task_id)
+    if title is not None:
+        bands.append(caption_layout.TitleFloor(title.start, title.end, title.floor))
+    return bands
 
 
 def _clip_filter(input_label: str, panel: Panel, output_label: str) -> str:
@@ -259,8 +293,12 @@ def overlay_command(
     ffmpeg: str,
     frame_size: Optional[tuple[int, int]] = None,
     transition_mode: object = None,
+    title: Optional[hook_title.TitleLayer] = None,
 ) -> list[str]:
     """ffmpeg argv overlaying each panel for its seconds, in segment order.
+
+    The hook title is the last input and the last overlay, so it is drawn
+    above every panel, with or without panels, for its seconds only.
 
     A still panel is a looped image (shortest=1 ends it with the video). A
     panel with motion is a single image zoompan turns into a finite clip of
@@ -280,6 +318,8 @@ def overlay_command(
             command += ["-i", panel.path]
         else:
             command += ["-loop", "1", "-i", panel.path]
+    if title is not None:
+        command += ["-loop", "1", "-i", title.path]
     crossfade = transition_mode == "Crossfade"
     steps: list[str] = []
     source = "0:v"
@@ -316,6 +356,12 @@ def overlay_command(
             f":enable='between(t,{panel.start - lead:.3f},{panel.end:.3f})':{ending}[{target}]"
         )
         source = target
+    if title is not None:
+        steps.append(
+            f"[{source}][{len(panels) + 1}:v]overlay={title.x}:{title.y}"
+            f":enable='between(t,{title.start:.3f},{title.end:.3f})':shortest=1[vt]"
+        )
+        source = "vt"
     return command + [
         "-filter_complex", ";".join(steps),
         "-map", f"[{source}]",
@@ -344,17 +390,19 @@ def _frame_size(panels: Sequence[Panel]) -> Optional[tuple[int, int]]:
 def overlay_onto(
     task_id: str, video_path: str, record: Callable[..., None], transition_mode: object = None
 ) -> str:
-    """The video with its segment panels.
+    """The video with its segment panels and hook title.
 
-    Without a manifest or without panels the video passes through untouched.
-    A failed render keeps the video without photos and calls
+    Without a manifest, or with neither panels nor a title, the video passes
+    through untouched. A failed render keeps the video without them and calls
     `record(task_id, media_warnings=...)` with the stored warnings plus the
     render failure, so the status endpoint still tells the caller the photos
-    are missing. No panel landed, so the manifest then carries none and the
-    final encode imposes no caption band for a photo that is not there.
+    or the title are missing. Nothing landed, so the manifest then carries
+    neither and the final encode imposes no caption band or floor for an
+    overlay that is not there.
     """
     panels, warnings = _read_manifest(task_id)
-    if not panels:
+    title = read_title(task_id)
+    if not panels and title is None:
         return video_path
     output_path = f"{os.path.splitext(video_path)[0]}-panels.mp4"
     try:
@@ -367,11 +415,14 @@ def overlay_onto(
             utils.get_ffmpeg_binary(),
             frame_size=_frame_size(panels),
             transition_mode=transition_mode,
+            title=title,
         )
         video._run_ffmpeg_bounded(command, timeout=OVERLAY_TIMEOUT_SECONDS, failure_message="segment panel overlay failed")
     except (RuntimeError, subprocess.TimeoutExpired, OSError) as exc:
         logger.error(f"segment panel overlay failed: {type(exc).__name__}")
-        record(task_id, media_warnings=[*warnings, REASON_RENDER_FAILED])
+        lost = [REASON_RENDER_FAILED] if panels else []
+        lost += [REASON_TITLE_RENDER_FAILED] if title is not None else []
+        record(task_id, media_warnings=[*warnings, *lost])
         write_manifest(task_id, [], warnings)
         return video_path
     return output_path

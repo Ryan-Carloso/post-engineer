@@ -167,7 +167,7 @@ describe('validate_script with videoType', () => {
     const client = mockClient();
     const response = await handleValidateScript(client, { segments: bare, videoType: 'full_lipsync' });
     expect(response.isError).toBeUndefined();
-    expect(vi.mocked(client.validateScript)).toHaveBeenCalledWith(bare, 'full_lipsync');
+    expect(vi.mocked(client.validateScript)).toHaveBeenCalledWith(bare, 'full_lipsync', undefined);
   });
 
   it('accepts videoType in the schema and posts it in the body', async () => {

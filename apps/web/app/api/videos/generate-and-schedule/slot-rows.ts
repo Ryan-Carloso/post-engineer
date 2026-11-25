@@ -14,6 +14,7 @@ export interface SlotRowInput {
   chargedTokens: number;
   segments: ScriptSegment[] | undefined;
   lipsyncPhotos?: LipsyncPhotoRef[];
+  hookTitle?: string;
   promptVersionId?: string;
 }
 
@@ -32,6 +33,7 @@ export function buildSlotRows(input: SlotRowInput) {
     charged_tokens: input.chargedTokens,
     segments: input.segments ?? null,
     lipsync_photos: input.lipsyncPhotos ?? null,
+    hook_title: input.hookTitle ?? null,
     prompt_version_id: input.promptVersionId ?? null,
   }));
 }

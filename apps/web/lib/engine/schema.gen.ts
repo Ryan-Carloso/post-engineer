@@ -970,6 +970,8 @@ export interface components {
              * @default true
              */
             hook_panel?: boolean;
+            /** Hook Title */
+            hook_title?: string | null;
             /** Lipsync Photos */
             lipsync_photos?: components["schemas"]["LipsyncPhoto"][] | null;
             /** Music Mood */

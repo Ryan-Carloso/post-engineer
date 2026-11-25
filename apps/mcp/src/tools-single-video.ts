@@ -14,6 +14,7 @@ import {
 import { GeneratePersonaVideoSchema, ValidateScriptSchema } from './single-video-shape.js';
 import { resolvePersonaVoiceId } from './voice-filters.js';
 import { PUBLISH_NETWORKS } from './contracts/videos.js';
+import { checkHookTitle, hookTitleIssueMessage } from './hook-title.js';
 
 export { GeneratePersonaVideoShape, ValidateScriptShape } from './single-video-shape.js';
 
@@ -41,9 +42,13 @@ export async function handleValidateScript(
       `Script validation failed: ${result.error.field}: ${result.error.rule} Fix: ${result.error.fix}`,
     );
   }
+  const hookTitleCode = args.hookTitle === undefined ? null : checkHookTitle(args.hookTitle);
+  if (hookTitleCode !== null) {
+    return errorResponse(`Script validation failed: hookTitle: ${hookTitleIssueMessage(hookTitleCode)}`);
+  }
   let payload: ValidatedScriptPayload;
   try {
-    const result = await client.validateScript(args.segments, args.videoType ?? 'hook_lipsync');
+    const result = await client.validateScript(args.segments, args.videoType ?? 'hook_lipsync', args.hookTitle);
     payload = {
       segmentCount: result.segmentCount,
       totalWords: result.totalWords,

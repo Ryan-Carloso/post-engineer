@@ -25,6 +25,7 @@ export function buildGenerateJobRequest(input: GenerateJobRequestInput): Record<
     music_mood: validatedOptions.musicMood,
     segments,
     lipsync_photos: validatedOptions.lipsyncPhotos,
+    hook_title: validatedOptions.hookTitle,
     video_clip_duration: validatedOptions.videoClipDuration,
     video_transition_mode: validatedOptions.videoTransitionMode,
     video_variation_seed: validatedOptions.videoVariationSeed,
