@@ -148,9 +148,12 @@ describe('POST /api/experiments', () => {
     expect(quoteExperiment.mock.calls[0]?.[1]).toMatchObject({ isApiKey: true, personaIds: [PERSONA] });
   });
 
-  it('rate limits per user with the experimentCreate profile', async () => {
+  it('rate limits per user with the experimentCreate profile, then parses the body on the normal path', async () => {
+    vi.mocked(parseExperimentRequest).mockClear();
+
     await post(experimentBody());
 
+    expect(parseExperimentRequest).toHaveBeenCalledTimes(1);
     expect(applyRateLimit).toHaveBeenCalledWith(expect.any(Request), RATE_LIMITS.experimentCreate, 'user-1');
   });
 

@@ -172,23 +172,27 @@ describe('persona CTA take', () => {
 describe('voice fallback', () => {
   const fallback = { fromVoice: 'chatterbox:gone', toVoice: 'chatterbox:kokoro_af_heart', reason: VOICE_FALLBACK_REASONS.VOICE_MISSING };
 
-  async function confirmed(personaId: string | null) {
+  async function confirmed(personaId: string | null, db = fakeDb()) {
     const body = experimentBody(personaId === null ? {} : { personaId });
     const quote = await (await quoteExperiment(fakeDb().client, AUTH, body, NOW)).json();
-    const db = fakeDb();
     const response = await confirmExperiment(db.client, AUTH, { ...body, quoteKey: quote.quoteKey, expiresAt: quote.expiresAt }, NOW);
     return { response, db };
   }
 
   it('persists the swapped voice on the persona after the charge', async () => {
     vi.mocked(preparePost).mockResolvedValue(prep({ voiceFallback: fallback }));
+    const db = fakeDb();
+    let spendsBeforePersist: number | null = null;
+    vi.mocked(persistVoiceSwap).mockImplementationOnce(async () => {
+      spendsBeforePersist = db.rpcCalls.filter((call) => call.name === 'spend_tokens').length;
+    });
 
-    const { response, db } = await confirmed(PERSONA);
+    const { response } = await confirmed(PERSONA, db);
 
     expect(response.status).toBe(200);
     expect(persistVoiceSwap).toHaveBeenCalledTimes(1);
     expect(persistVoiceSwap).toHaveBeenCalledWith(db.client, USER_ID, PERSONA, fallback);
-    expect(db.rpcCalls.map((call) => call.name)).toContain('spend_tokens');
+    expect(spendsBeforePersist).toBe(1);
   });
 
   it('warns about the swapped voice in the quote', async () => {

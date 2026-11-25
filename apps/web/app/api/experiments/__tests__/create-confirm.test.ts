@@ -444,7 +444,7 @@ describe('confirmExperiment', () => {
     expect(startEngineVideoTask).not.toHaveBeenCalled();
   });
 
-  it('does not refund a persona-already-scheduled confirm that never charged', async () => {
+  it('does not refund a persona-already-scheduled confirm when an earlier attempt already charged', async () => {
     const { confirmBody } = await quoted();
     const db = fakeDb({
       scheduleInsertError: { code: '23505', message: 'duplicate key value violates unique constraint "schedules_persona_owner"' },
