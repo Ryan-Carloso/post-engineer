@@ -28,7 +28,8 @@ export function canonicalJson(value: unknown): string {
 }
 
 export function quoteKeyFor(value: unknown): string {
-  return createHmac('sha256', deriveServerKey(QUOTE_KEY_PURPOSE)).update(canonicalJson(value)).digest('hex'); // codeql[js/insufficient-password-hash]
+  // codeql[js/insufficient-password-hash]
+  return createHmac('sha256', deriveServerKey(QUOTE_KEY_PURPOSE)).update(canonicalJson(value)).digest('hex');
 }
 
 export function quoteExpiry(now: Date): string {

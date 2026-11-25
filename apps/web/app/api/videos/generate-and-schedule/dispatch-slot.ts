@@ -16,6 +16,7 @@ import {
 import { logger } from '@/lib/logger';
 import { recordRecentImageId, resolveVideoImage } from '@/lib/persona-images';
 import type { ResolvedCta } from './cta-validation';
+import { isEngineRejection } from './dispatch-failure';
 import { buildGenerateJobRequest } from './job-request';
 import type { ValidatedOptions } from './options-validation';
 import { signedUrl, type PersonaPrep } from './persona-prep';
@@ -140,7 +141,7 @@ export async function dispatchSlot(
     const engineTask = await startEngineVideoTask(userId, payload);
     if (!engineTask.ok || !engineTask.taskId) {
       const errorCode = !engineTask.ok
-        ? engineTask.upstreamStatus !== undefined
+        ? isEngineRejection(engineTask.upstreamStatus)
           ? 'engine_rejected'
           : 'engine_unavailable'
         : 'no_task_id';
