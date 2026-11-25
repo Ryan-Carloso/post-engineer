@@ -15,9 +15,9 @@ vi.mock('../analytics.js', () => ({
   },
 }));
 
-const READ_ONLY_TOOLS = ['video_tasks', 'posts', 'billing', 'check_script', 'experiments'];
+const READ_ONLY_TOOLS = ['video_tasks', 'posts', 'billing', 'check_script'];
 
-const DESTRUCTIVE_TOOLS = ['cancel_video', 'insights', 'personas', 'persona_media', 'voices', 'accounts', 'schedules', 'publish_video', 'tool_config', 'prompts'];
+const DESTRUCTIVE_TOOLS = ['cancel_video', 'insights', 'personas', 'persona_media', 'voices', 'accounts', 'schedules', 'publish_video', 'tool_config', 'prompts', 'experiments'];
 
 const MUTATING_TOOLS = ['generate_video', 'media'];
 

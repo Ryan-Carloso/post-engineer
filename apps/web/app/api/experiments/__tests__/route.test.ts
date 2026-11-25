@@ -4,6 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const readPromptComparison = vi.hoisted(() => vi.fn());
 const loggerError = vi.hoisted(() => vi.fn());
+const quoteExperiment = vi.hoisted(() => vi.fn());
+const confirmExperiment = vi.hoisted(() => vi.fn());
 
 vi.mock('@/lib/supabase/service', () => ({ createSupabaseServiceClient: vi.fn(() => ({ marker: 'db' })) }));
 vi.mock('@/lib/request-auth', () => ({ requireSupabaseSession: vi.fn() }));
@@ -12,6 +14,8 @@ vi.mock('@/lib/rate-limit', async (importOriginal) => ({
   applyRateLimit: vi.fn(async () => null),
 }));
 vi.mock('@/lib/experiments/read-comparison', () => ({ readPromptComparison }));
+vi.mock('../create-quote', () => ({ quoteExperiment }));
+vi.mock('../create-confirm', () => ({ confirmExperiment }));
 vi.mock('@/lib/logger', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/logger')>();
   return { ...actual, logger: { ...actual.logger, error: loggerError } };
@@ -22,7 +26,8 @@ vi.mock('@/lib/api-error-reporting', async (importOriginal) => ({
   resolveReportingUserId: vi.fn(),
 }));
 
-import { GET } from '../route';
+import { GET, POST } from '../route';
+import { experimentBody } from './create-fixtures';
 import { PromptComparisonResponseSchema } from '@/lib/contracts/experiments';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { requireSupabaseSession } from '@/lib/request-auth';
@@ -97,5 +102,76 @@ describe('GET /api/experiments', () => {
     expect(response.status).toBe(500);
     expect(await response.json()).toMatchObject({ success: false, code: 'INTERNAL_ERROR' });
     expect(loggerError).toHaveBeenCalledWith('[GET /api/experiments] 500 Failed to load the prompt comparison.', cause, expect.objectContaining({ code: 'INTERNAL_ERROR' }));
+  });
+});
+
+function post(body: unknown): Promise<Response> {
+  return POST(new Request('https://post-engineer.test/api/experiments', { method: 'POST', body: JSON.stringify(body) }));
+}
+
+describe('POST /api/experiments', () => {
+  beforeEach(() => {
+    quoteExperiment.mockReset();
+    confirmExperiment.mockReset();
+    quoteExperiment.mockResolvedValue(NextResponse.json({ stage: 'quote' }));
+    confirmExperiment.mockResolvedValue(NextResponse.json({ stage: 'confirmed' }));
+  });
+
+  it('answers a body without a quote key with a quote and never confirms', async () => {
+    const response = await post(experimentBody());
+
+    expect(await response.json()).toEqual({ stage: 'quote' });
+    expect(quoteExperiment).toHaveBeenCalledTimes(1);
+    expect(confirmExperiment).not.toHaveBeenCalled();
+    expect(quoteExperiment.mock.calls[0]?.[0]).toEqual({ marker: 'db' });
+    expect(quoteExperiment.mock.calls[0]?.[1]).toMatchObject({ userId: 'user-1' });
+  });
+
+  it('confirms when the body carries the quote key and its expiry', async () => {
+    const response = await post({ ...experimentBody(), quoteKey: 'a'.repeat(64), expiresAt: '2030-01-01T00:00:00.000Z' });
+
+    expect(await response.json()).toEqual({ stage: 'confirmed' });
+    expect(confirmExperiment).toHaveBeenCalledTimes(1);
+    expect(quoteExperiment).not.toHaveBeenCalled();
+  });
+
+  it('hands an API key caller to the handlers with its persona scope', async () => {
+    signedIn({ isApiKey: true, personaIds: [PERSONA] });
+
+    await post(experimentBody());
+
+    expect(quoteExperiment.mock.calls[0]?.[1]).toMatchObject({ isApiKey: true, personaIds: [PERSONA] });
+  });
+
+  it('rate limits per user with the experimentCreate profile', async () => {
+    await post(experimentBody());
+
+    expect(applyRateLimit).toHaveBeenCalledWith(expect.any(Request), RATE_LIMITS.experimentCreate, 'user-1');
+  });
+
+  it('returns the rate-limit response before reading the body', async () => {
+    vi.mocked(applyRateLimit).mockResolvedValueOnce(NextResponse.json({ error: 'slow down' }, { status: 429 }));
+
+    const response = await post(experimentBody());
+
+    expect(response.status).toBe(429);
+    expect(quoteExperiment).not.toHaveBeenCalled();
+  });
+
+  it('answers the auth error unchanged', async () => {
+    vi.mocked(requireSupabaseSession).mockResolvedValue({ auth: null, error: NextResponse.json({ error: 'no' }, { status: 401 }) } as never);
+
+    const response = await post(experimentBody());
+
+    expect(response.status).toBe(401);
+    expect(quoteExperiment).not.toHaveBeenCalled();
+  });
+
+  it('rejects a body that breaks the contract with 400 before any handler', async () => {
+    const response = await post({ ...experimentBody(), surprise: true });
+
+    expect(response.status).toBe(400);
+    expect(quoteExperiment).not.toHaveBeenCalled();
+    expect(confirmExperiment).not.toHaveBeenCalled();
   });
 });

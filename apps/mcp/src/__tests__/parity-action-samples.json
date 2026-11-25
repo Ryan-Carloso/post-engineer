@@ -178,6 +178,139 @@
       }
     }
   ],
+  "experiments.create": [
+    {
+      "args": {
+        "action": "create",
+        "account": {
+          "provider": "youtube",
+          "accountId": "acct-1"
+        },
+        "videoType": "voiceover",
+        "options": {
+          "voiceId": "chatterbox:kokoro_af_heart"
+        },
+        "startAt": "2030-01-01T00:00:00.000Z",
+        "times": [
+          "09:00",
+          "18:00"
+        ],
+        "timezone": "UTC",
+        "variants": [
+          {
+            "versionId": "11111111-1111-4111-8111-111111111111",
+            "videos": [
+              {
+                "title": "A 1",
+                "description": "Copy",
+                "segments": [
+                  {
+                    "kind": "hook",
+                    "text": "Hook text."
+                  }
+                ]
+              },
+              {
+                "title": "A 2",
+                "description": "Copy",
+                "segments": [
+                  {
+                    "kind": "hook",
+                    "text": "Hook text."
+                  }
+                ]
+              },
+              {
+                "title": "A 3",
+                "description": "Copy",
+                "segments": [
+                  {
+                    "kind": "hook",
+                    "text": "Hook text."
+                  }
+                ]
+              },
+              {
+                "title": "A 4",
+                "description": "Copy",
+                "segments": [
+                  {
+                    "kind": "hook",
+                    "text": "Hook text."
+                  }
+                ]
+              },
+              {
+                "title": "A 5",
+                "description": "Copy",
+                "segments": [
+                  {
+                    "kind": "hook",
+                    "text": "Hook text."
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "versionId": "22222222-2222-4222-8222-222222222222",
+            "videos": [
+              {
+                "title": "B 1",
+                "description": "Copy",
+                "segments": [
+                  {
+                    "kind": "hook",
+                    "text": "Hook text."
+                  }
+                ]
+              },
+              {
+                "title": "B 2",
+                "description": "Copy",
+                "segments": [
+                  {
+                    "kind": "hook",
+                    "text": "Hook text."
+                  }
+                ]
+              },
+              {
+                "title": "B 3",
+                "description": "Copy",
+                "segments": [
+                  {
+                    "kind": "hook",
+                    "text": "Hook text."
+                  }
+                ]
+              },
+              {
+                "title": "B 4",
+                "description": "Copy",
+                "segments": [
+                  {
+                    "kind": "hook",
+                    "text": "Hook text."
+                  }
+                ]
+              },
+              {
+                "title": "B 5",
+                "description": "Copy",
+                "segments": [
+                  {
+                    "kind": "hook",
+                    "text": "Hook text."
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
   "experiments.results": [
     {
       "args": {

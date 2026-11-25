@@ -134,5 +134,58 @@ export function promptOperationSchemas({ success, object, str }) {
         truncated: { type: 'boolean' },
       }),
     },
+    'POST /api/experiments': {
+      description:
+        'Runs a prompt comparison in two calls. Without quoteKey it is a quote: nothing is charged and the response carries the plan (one slot per video, the prompt versions rotated over the posting times), the total tokens, warnings, a quoteKey and its expiresAt (15 minutes). With the quoteKey and expiresAt of a quote it is the confirm: the total is charged once, one schedule with a slot per video is created and every video is started. A retry with the same quoteKey replays and never charges twice.',
+      request: {
+        ...object(
+          {
+            personaId: { type: 'string' },
+            account: { ...object({ provider: str, accountId: str }, ['provider', 'accountId']), additionalProperties: false, description: 'The one account that posts every video.' },
+            videoType: { type: 'string', enum: ['full_lipsync', 'hook_lipsync', 'voiceover'] },
+            options: { type: 'object', description: 'Shared video options: the generate-and-schedule options without videoType and segments.' },
+            startAt: { type: 'string', description: 'ISO date-time of the earliest first post.' },
+            times: { type: 'array', items: str, minItems: 1, maxItems: 5, description: 'Posting times of day, HH:MM, in timezone.' },
+            timezone: str,
+            variants: {
+              type: 'array',
+              minItems: 2,
+              maxItems: 4,
+              description: 'Prompt versions to compare. Each has the same number of videos (5-15, at most 40 in total), each with its own script.',
+              items: {
+                ...object(
+                  {
+                    versionId: { type: 'string', format: 'uuid' },
+                    videos: { type: 'array', minItems: 5, maxItems: 15, items: object({ title: str, description: str, segments: { type: 'array', items: { type: 'object' } } }, ['title', 'description', 'segments']) },
+                  },
+                  ['versionId', 'videos'],
+                ),
+                additionalProperties: false,
+              },
+            },
+            quoteKey: { type: 'string', description: 'The quoteKey of the quote to confirm. Send it with expiresAt, or send neither to get a quote.' },
+            expiresAt: { type: 'string', description: 'The expiresAt of that quote.' },
+          },
+          ['account', 'videoType', 'startAt', 'times', 'timezone', 'variants'],
+        ),
+        additionalProperties: false,
+      },
+      response: success({
+        stage: { type: 'string', enum: ['quote', 'confirmed'] },
+        quoteKey: str,
+        expiresAt: str,
+        perVideoTokens: { type: 'number' },
+        totalTokens: { type: 'number' },
+        scheduleId: str,
+        replayed: { type: 'boolean' },
+        chargedTokens: { type: 'number' },
+        slots: { type: 'array', items: { type: 'object' } },
+        warnings: { type: 'array', items: { type: 'object' } },
+      }),
+      extraResponses: {
+        402: 'Not enough tokens for the whole experiment (INSUFFICIENT_TOKENS).',
+        409: 'The quote expired (QUOTE_EXPIRED) or the price or plan changed since the quote (QUOTE_CHANGED): ask for a new quote.',
+      },
+    },
   };
 }

@@ -10,7 +10,7 @@ export const TOOL_DESCRIPTIONS = [
   ['posts', 'List published posts and read one.'],
   ['insights', 'Post metrics, the last-24-hours metrics, the YouTube retention curve, and public share links for metrics (create, list, revoke).'],
   ['billing', 'Read the prepaid token balance and the token transactions. Check the balance before generating.'],
-  ['experiments', 'Compare your prompts inside each publishing account: per account, each prompt version with its results.'],
+  ['experiments', 'Compare your prompts inside each publishing account: per account, each prompt version with its results, and run the comparison: a quote first, then a confirm that charges once and schedules every video.'],
   ['check_script', 'Check a script mechanically (`validate`) or score a draft (`score`). No tokens are spent.'],
   ['media', 'Images for video segments: upload an image or mechanically check a public image URL.'],
   ['publish_video', 'Publish a finished video file you already have, directly or through a staged upload, or publish an existing generation.'],

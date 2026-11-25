@@ -134,6 +134,7 @@ POST   /api/share-links                                       create public read
 GET    /api/share-links                                       list share links
 DELETE /api/share-links/{id}                                  revoke share link
 GET    /api/experiments                                       compare prompts per account
+POST   /api/experiments                                       quote then create a prompt experiment
 GET    /api/billing/tokens                                    get token balance
 GET    /api/billing/transactions                              list token transactions
 GET    /api/prompts                                           list recipe prompts

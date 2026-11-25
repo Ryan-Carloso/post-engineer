@@ -46,7 +46,7 @@ describe('experiments description sync with the prompt comparison', () => {
     expect(comparison).toContain('pValue < CLEAR_P_VALUE / comparisons');
     expect(comparison).toContain('pValue < INDICATIVE_P_VALUE / comparisons');
     expect(description).toContain('corrected for the number of prompts compared');
-    expect(description).toContain('rotate them round-robin on the same account, swap their posting times');
+    expect(description).toContain('rotate over the posting times');
     expect(description).not.toContain('To test two prompts fairly');
     expect(readme).toContain('corrected for the number of prompts compared');
   });
