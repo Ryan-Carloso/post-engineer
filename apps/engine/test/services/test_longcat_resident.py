@@ -33,6 +33,24 @@ class TestClipArithmeticSync(unittest.TestCase):
                 )
 
 
+class TestStageTimings(unittest.TestCase):
+    def test_rounds_every_stage_and_keeps_one_entry_per_segment(self):
+        self.assertEqual(
+            resident.stage_timings(1.23456, [100.00049, 90.1234], 3.0001),
+            {
+                "audio_embed_s": 1.235,
+                "segment_s": [100.0, 90.123],
+                "encode_s": 3.0,
+            },
+        )
+
+    def test_render_returns_the_stage_timings(self):
+        source = _source("modal_longcat_resident.py")
+        self.assertIn("return stage_timings(", source)
+        self.assertIn("segment_s.append(segment_done - segment_started)", source)
+        self.assertIn("**stages,", _source("modal_longcat_gpu.py"))
+
+
 class TestPaddingSamples(unittest.TestCase):
     def test_pads_silent_audio_to_the_full_clip(self):
         self.assertEqual(

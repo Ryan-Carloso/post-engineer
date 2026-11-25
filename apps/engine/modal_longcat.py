@@ -66,6 +66,7 @@ import modal
 from fastapi import File, Form, Request, UploadFile
 from fastapi.responses import JSONResponse, Response
 
+from modal_longcat_accel import ACCEL_ENV, parse_accel
 from modal_longcat_cost import TRACKER, scaledown_cost_usd
 from modal_longcat_gpu import (
     AVATAR_WEIGHTS_DIR,
@@ -101,6 +102,7 @@ if not _MODAL_APP_NAME:
         "LONGCAT_MODAL_APP_NAME is not set; it is required to build the "
         "LongCat Modal endpoint URLs"
     )
+ACCEL = parse_accel(os.environ.get(ACCEL_ENV, ""))
 STATUS_ENDPOINT = f"https://{_MODAL_APP_NAME}--longcat-http-server-status.modal.run"
 DOWNLOAD_ENDPOINT = f"https://{_MODAL_APP_NAME}--longcat-http-server-download.modal.run"
 
@@ -189,6 +191,7 @@ LONGCAT_API_IMAGE = (
     .pip_install("fastapi[standard]", "loguru")
     .add_local_file(_HERE / "modal_longcat_gpu.py", "/root/modal_longcat_gpu.py", copy=True)
     .add_local_file(_HERE / "modal_longcat_cost.py", "/root/modal_longcat_cost.py", copy=True)
+    .add_local_file(_HERE / "modal_longcat_accel.py", "/root/modal_longcat_accel.py", copy=True)
     .env({"LONGCAT_MODAL_APP_NAME": _MODAL_APP_NAME})
 )
 
@@ -240,7 +243,9 @@ class GenerateAvatar:
         """Load the model once per container; every job after reuses it."""
         from modal_longcat_resident import ResidentRenderer
 
-        self.renderer = ResidentRenderer(AVATAR_WEIGHTS_DIR, BASE_WEIGHTS_DIR)
+        self.renderer = ResidentRenderer(
+            AVATAR_WEIGHTS_DIR, BASE_WEIGHTS_DIR, ACCEL
+        )
 
     @modal.method()
     def generate_bytes(
@@ -284,10 +289,8 @@ class GenerateAvatar:
             RESULTS_VOLUME.commit()
             job_gpu_s = time.monotonic() - handler_started
             uptime_s = time.monotonic() - _CONTAINER_START
-            timings: dict[str, float | None] = {
-                "inference_s": phase_timings["inference_s"],
-                "normalize_s": phase_timings["normalize_s"],
-                "peak_vram_gb": phase_timings["peak_vram_gb"],
+            timings: dict[str, object] = {
+                **phase_timings,
                 "total_gpu_s": round(job_gpu_s, 3),
                 "container_uptime_s": round(uptime_s, 3),
             }
@@ -301,6 +304,7 @@ class GenerateAvatar:
                     "num_segments": num_segments,
                     "timings": timings,
                     "gpu": active_gpu_name() or GPU_PREFERENCE[0],
+                    "accel": self.renderer.accel.label,
                     "cost_usd": round(job_gpu_s * _rate(), 4), "container_cost_usd": round(uptime_s * _rate(), 4),
                     "container_id": TRACKER.container_id, "jobs_served_in_container": TRACKER.note_job(round(job_gpu_s * _rate(), 4)),
                     "container_overhead_usd": TRACKER.container_overhead_usd(round(uptime_s * _rate(), 4)),

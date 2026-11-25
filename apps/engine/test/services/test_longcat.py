@@ -401,6 +401,25 @@ class TestGenerateIntroTracking(unittest.TestCase):
         self.assertTrue(props["success"])
         self.assertEqual(props["cost_usd"], 0.07)
 
+    def test_success_tracks_render_stats_from_the_done_status(self):
+        status = _response(
+            200,
+            b'{"status":"done","cost_usd":0.6,"resolution":"480p","num_segments":4,'
+            b'"gpu":"H100","accel":"bf16+merge_lora",'
+            b'"timings":{"inference_s":500.0,"segment_s":[140.0,120.0,118.0,116.0]}}',
+        )
+        with patch.object(longcat, "track_ai_request") as track:
+            self._run([SUBMIT_OK, status, DOWNLOAD_OK])
+
+        props = track.call_args[0][0]
+        self.assertEqual(props["accel"], "bf16+merge_lora")
+        self.assertEqual(props["resolution"], "480p")
+        self.assertEqual(props["gpu"], "H100")
+        self.assertEqual(props["num_segments"], 4)
+        self.assertEqual(props["inference_s"], 500.0)
+        self.assertEqual(props["segment_s_avg"], 123.5)
+        self.assertEqual(props["cost_per_segment_usd"], 0.15)
+
     def test_success_omits_cost_usd_when_absent(self):
         status = _response(200, b'{"status":"done"}')
         with patch.object(longcat, "track_ai_request") as track:

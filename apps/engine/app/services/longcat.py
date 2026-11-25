@@ -34,6 +34,7 @@ from app.config import config
 from app.models.schema import LipSyncQuality
 from app.services.analytics import scrub_error_text, track_ai_request
 from app.services.longcat_cost import ModalJobCost, parse_modal_job_cost
+from app.services.longcat_render_stats import render_stats_props
 
 
 class LongCatError(RuntimeError):
@@ -261,7 +262,7 @@ def _generate_intro_tracked(
     start = time.monotonic()
     job_ids: list[str] = []
     try:
-        output_path, job_id, cost_usd, job_cost = _generate_intro_impl(
+        output_path, job_id, cost_usd, job_cost, render_stats = _generate_intro_impl(
             image_path,
             audio_path,
             quality,
@@ -291,6 +292,7 @@ def _generate_intro_tracked(
         "duration_ms": int((time.monotonic() - start) * 1000),
         "success": True,
         "error": "",
+        **render_stats,
     }
     if cost_usd is not None:
         success_props["cost_usd"] = cost_usd
@@ -347,13 +349,13 @@ def _generate_intro_impl(
     request: Request = requests.request,
     duration_seconds: float | None = None,
     job_id_holder: list[str] | None = None,
-) -> tuple[str, str, float | None, ModalJobCost | None]:
+) -> tuple[str, str, float | None, ModalJobCost | None, dict[str, object]]:
     """Submit/poll/download the intro video.
 
-    Returns (output_path, job_id, cost_usd, job_cost): the Modal GPU cost
-    in USD from the completed job's status payload, or None when it
-    reports none, plus the full container snapshot (or None when the
-    done payload carried none). Appends the submitted job_id to
+    Returns (output_path, job_id, cost_usd, job_cost, render_stats): the
+    Modal GPU cost in USD from the completed job's status payload, or None
+    when it reports none, the full container snapshot (or None when the
+    done payload carried none), and the render telemetry for ai_request. Appends the submitted job_id to
     job_id_holder as soon as the submit succeeds, so callers can report
     it even when polling/download fails.
     """
@@ -405,6 +407,7 @@ def _generate_intro_impl(
     deadline = time.monotonic() + timeout_seconds
     cost_usd: float | None = None
     job_cost: ModalJobCost | None = None
+    render_stats: dict[str, object] = {}
     while time.monotonic() < deadline:
         response = request(
             "POST", status_url, data={"job_id": job_id}, headers=headers, timeout=60
@@ -415,6 +418,7 @@ def _generate_intro_impl(
         if state == "done":
             cost_usd = _modal_cost_usd(status)
             job_cost = parse_modal_job_cost(status)
+            render_stats = render_stats_props(status)
             break
         if state == "failed":
             error = status.get("error", "unknown error")
@@ -431,4 +435,4 @@ def _generate_intro_impl(
         raise LongCatError("LongCat returned an empty video")
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
     Path(output_path).write_bytes(response.content)
-    return output_path, job_id, cost_usd, job_cost
+    return output_path, job_id, cost_usd, job_cost, render_stats

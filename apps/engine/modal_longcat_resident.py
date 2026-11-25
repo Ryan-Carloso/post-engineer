@@ -38,8 +38,11 @@ import math
 import os
 import socket
 import subprocess
+import time
 from pathlib import Path
 from typing import Final
+
+from modal_longcat_accel import AccelConfig
 
 MODEL_TYPE: Final = "avatar-v1.5"
 SAVE_FPS: Final = 25
@@ -115,10 +118,93 @@ def _decode_speech(audio_path: Path, work_dir: Path) -> Path:
     return target
 
 
+def stage_timings(
+    audio_embed_s: float, segment_s: list[float], encode_s: float
+) -> dict[str, object]:
+    """Per-stage seconds of one clip, rounded for the job status payload."""
+    return {
+        "audio_embed_s": round(audio_embed_s, 3),
+        "segment_s": [round(seconds, 3) for seconds in segment_s],
+        "encode_s": round(encode_s, 3),
+    }
+
+
+def _gpu_clock() -> float:
+    """Monotonic time after every queued kernel finished, so stages do not bleed."""
+    import torch
+
+    torch.cuda.synchronize()
+    return time.monotonic()
+
+
+def _load_dit(checkpoint_dir: str, cp_split_hw: object, accel: AccelConfig) -> object:
+    """The avatar DiT with the DMD distill LoRA, built as ``accel`` asks."""
+    import torch
+    from longcat_video.modules.avatar.longcat_video_dit_avatar import (
+        LongCatVideoAvatarTransformer3DModel,
+    )
+    from longcat_video.modules.quantization import load_quantized_dit
+
+    if accel.bf16:
+        dit = LongCatVideoAvatarTransformer3DModel.from_pretrained(
+            checkpoint_dir, subfolder="base_model",
+            cp_split_hw=cp_split_hw, torch_dtype=torch.bfloat16,
+        ).to(0)
+    else:
+        dit = load_quantized_dit(
+            checkpoint_dir, subfolder="base_model_int8", cp_split_hw=cp_split_hw
+        )
+    distill_lora = os.path.join(checkpoint_dir, "lora", "dmd_lora.safetensors")
+    if not os.path.exists(distill_lora):
+        raise FileNotFoundError(f"DMD distill LoRA missing: {distill_lora}")
+    if accel.merge_lora:
+        dit.merge_lora(
+            distill_lora, lora_key="dmd", multiplier=1.0,
+            lora_network_dim=128, lora_network_alpha=64,
+        )
+    else:
+        dit.load_lora(
+            distill_lora, "dmd", multiplier=1.0,
+            lora_network_dim=128, lora_network_alpha=64,
+        )
+        dit.enable_loras(["dmd"])
+    if accel.compile_dit:
+        torch._dynamo.config.cache_size_limit = 128
+        torch._dynamo.config.accumulated_cache_size_limit = 1024
+        for index, block in enumerate(dit.blocks):
+            dit.blocks[index] = torch.compile(
+                block,
+                fullgraph=False,
+                dynamic=False,
+                options={
+                    "triton.cudagraphs": False,
+                    "epilogue_fusion": False,
+                    "emulate_precision_casts": True,
+                },
+            )
+    return dit
+
+
+def _compile_vae(vae: object) -> None:
+    """Upstream's ``--compile_vae``: fused padding, cache views, compiled halves."""
+    import torch
+
+    torch.backends.cudnn.benchmark = True
+    vae.enable_encoder_fused_padding()
+    vae.enable_encoder_cache_views()
+    vae.enable_decoder_fused_padding()
+    vae.enable_decoder_cache_views()
+    options = {"triton.cudagraphs": False}
+    vae.encoder = torch.compile(vae.encoder, fullgraph=False, dynamic=False, options=options)
+    vae.decoder = torch.compile(vae.decoder, fullgraph=False, dynamic=False, options=options)
+
+
 class ResidentRenderer:
     """Holds the LongCat pipeline in GPU memory and renders clips on demand."""
 
-    def __init__(self, checkpoint_dir: str, base_dir: str) -> None:
+    def __init__(
+        self, checkpoint_dir: str, base_dir: str, accel: AccelConfig = AccelConfig()
+    ) -> None:
         import torch
         import torch.distributed as dist
         from longcat_video.audio_process import (
@@ -127,7 +213,6 @@ class ResidentRenderer:
         )
         from longcat_video.context_parallel import context_parallel_util
         from longcat_video.modules.autoencoder_kl_wan import AutoencoderKLWan
-        from longcat_video.modules.quantization import load_quantized_dit
         from longcat_video.modules.scheduling_flow_match_euler_discrete import (
             FlowMatchEulerDiscreteScheduler,
         )
@@ -162,17 +247,8 @@ class ResidentRenderer:
         scheduler = FlowMatchEulerDiscreteScheduler.from_pretrained(
             checkpoint_dir, subfolder="scheduler", torch_dtype=torch.bfloat16
         )
-        dit = load_quantized_dit(
-            checkpoint_dir, subfolder="base_model_int8", cp_split_hw=cp_split_hw
-        )
-        distill_lora = os.path.join(checkpoint_dir, "lora", "dmd_lora.safetensors")
-        if not os.path.exists(distill_lora):
-            raise FileNotFoundError(f"DMD distill LoRA missing: {distill_lora}")
-        dit.load_lora(
-            distill_lora, "dmd", multiplier=1.0,
-            lora_network_dim=128, lora_network_alpha=64,
-        )
-        dit.enable_loras(["dmd"])
+        self.accel = accel
+        dit = _load_dit(checkpoint_dir, cp_split_hw, accel)
 
         audio_checkpoint = os.path.join(checkpoint_dir, "whisper-large-v3")
         audio_encoder = get_audio_encoder(audio_checkpoint, MODEL_TYPE).to(0)
@@ -191,6 +267,8 @@ class ResidentRenderer:
             model_type=MODEL_TYPE,
         )
         self._pipe.to(0)
+        if accel.compile_vae:
+            _compile_vae(self._pipe.vae)
 
     def render(
         self,
@@ -199,14 +277,16 @@ class ResidentRenderer:
         resolution: str,
         num_segments: int,
         output_dir: Path,
-    ) -> None:
-        """Render one clip to ``output_dir/clip.mp4``."""
+    ) -> dict[str, object]:
+        """Render one clip to ``output_dir/clip.mp4``; return its stage timings."""
         if resolution not in SUPPORTED_RESOLUTIONS:
             raise ValueError(f"unsupported resolution: {resolution!r}")
         if num_segments < 1:
             raise ValueError(f"num_segments must be at least 1: {num_segments}")
         try:
-            self._render(image_path, audio_path, resolution, num_segments, output_dir)
+            return self._render(
+                image_path, audio_path, resolution, num_segments, output_dir
+            )
         finally:
             import torch
 
@@ -220,7 +300,7 @@ class ResidentRenderer:
         resolution: str,
         num_segments: int,
         output_dir: Path,
-    ) -> None:
+    ) -> dict[str, object]:
         import librosa
         import numpy as np
         import torch
@@ -228,6 +308,7 @@ class ResidentRenderer:
         from longcat_video.audio_process.torch_utils import save_video_ffmpeg
 
         pipe = self._pipe
+        started = _gpu_clock()
         generator = torch.Generator(device=0)
         generator.manual_seed(SEED)
 
@@ -246,6 +327,8 @@ class ResidentRenderer:
         )
         if torch.isnan(full_audio_emb).any():
             raise ValueError("broken audio embedding with nan values")
+        audio_embedded = _gpu_clock()
+        segment_s: list[float] = []
 
         window = torch.arange(2 * 2 + 1) - 2
 
@@ -275,6 +358,8 @@ class ResidentRenderer:
         )
         video = _to_pil_frames(output[0])
         del output
+        segment_done = _gpu_clock()
+        segment_s.append(segment_done - audio_embedded)
 
         width, height = video[0].size
         current_video = video
@@ -310,6 +395,8 @@ class ResidentRenderer:
             del output
             all_frames.extend(new_video[NUM_COND_FRAMES:])
             current_video = new_video
+            segment_started, segment_done = segment_done, _gpu_clock()
+            segment_s.append(segment_done - segment_started)
 
         save_video_ffmpeg(
             torch.from_numpy(np.array(all_frames)),
@@ -317,4 +404,7 @@ class ResidentRenderer:
             str(audio_path),
             fps=SAVE_FPS,
             quality=5,
+        )
+        return stage_timings(
+            audio_embedded - started, segment_s, time.monotonic() - segment_done
         )

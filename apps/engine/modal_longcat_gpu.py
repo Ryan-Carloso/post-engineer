@@ -28,10 +28,13 @@ from typing import TYPE_CHECKING, Final
 
 import modal
 
+from modal_longcat_accel import ACCEL_ENV
+
 if TYPE_CHECKING:
     from modal_longcat_resident import ResidentRenderer
 
 LONGCAT_REPO_URL = "https://github.com/meituan-longcat/LongCat-Video.git"
+LONGCAT_REPO_COMMIT = "58eb336edc5c8c63389838727e40b8c18434e54e"
 
 WEIGHTS_DIR = "/weights"
 BASE_WEIGHTS_DIR = f"{WEIGHTS_DIR}/LongCat-Video"
@@ -108,7 +111,11 @@ LONGCAT_IMAGE = (
         "flash_attn==2.7.4.post1",
         extra_options="--no-build-isolation",
     )
-    .run_commands(f"git clone --depth 1 {LONGCAT_REPO_URL} /LongCat-Video")
+    .run_commands(
+        f"git init -q /LongCat-Video && cd /LongCat-Video"
+        f" && git fetch -q --depth 1 {LONGCAT_REPO_URL} {LONGCAT_REPO_COMMIT}"
+        " && git checkout -q FETCH_HEAD"
+    )
     .run_commands("pip install -r /LongCat-Video/requirements.txt")
     .run_commands(
         "grep -vE '^(libsndfile1|tritonserverclient)'"
@@ -130,12 +137,18 @@ LONGCAT_IMAGE = (
         "/root/modal_longcat_cost.py",
         copy=True,
     )
+    .add_local_file(
+        Path(__file__).resolve().parent / "modal_longcat_accel.py",
+        "/root/modal_longcat_accel.py",
+        copy=True,
+    )
     .env(
         {
             "PYTHONPATH": "/LongCat-Video",
             "LONGCAT_MODAL_APP_NAME": os.environ.get(
                 "LONGCAT_MODAL_APP_NAME", ""
             ),
+            ACCEL_ENV: os.environ.get(ACCEL_ENV, ""),
         }
     )
 )
@@ -169,7 +182,7 @@ def run_longcat(
     audio_bytes: bytes,
     resolution: str,
     num_segments: int = 1,
-) -> tuple[bytes, dict[str, float | None]]:
+) -> tuple[bytes, dict[str, object]]:
     """Generate one avatar clip and return vertical MP4 bytes plus timings.
 
     ``num_segments`` is upstream's documented Video Continuation knob and the
@@ -192,7 +205,9 @@ def run_longcat(
         output_dir.mkdir()
 
         inference_started = time.monotonic()
-        renderer.render(image_path, audio_path, resolution, num_segments, output_dir)
+        stages = renderer.render(
+            image_path, audio_path, resolution, num_segments, output_dir
+        )
         inference_s = time.monotonic() - inference_started
 
         outputs = sorted(
@@ -225,4 +240,5 @@ def run_longcat(
             "inference_s": round(inference_s, 3),
             "normalize_s": round(normalize_s, 3),
             "peak_vram_gb": peak_vram_gb(),
+            **stages,
         }
