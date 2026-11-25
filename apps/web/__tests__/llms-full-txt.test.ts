@@ -82,13 +82,15 @@ describe('llms-full.txt', () => {
     }
   });
 
-  it('keeps every action that llms.txt names for a tool', () => {
+  it('keeps every action that llms.txt names for a tool, and every such tool is documented', () => {
     const section = collapse(between(llms, TOOLS_HEADING, null));
     const documented = toolBullets();
+    const registered = registeredToolNames(repoRoot);
     let checked = 0;
     for (const match of section.matchAll(/`([a-z_]+)` \(([^)]*)\)/g)) {
       const tool = match[1];
-      if (!documented.has(tool)) continue;
+      expect(registered, `llms.txt names ${tool} as a tool`).toContain(tool);
+      expect(documented.has(tool), `llms-full.txt documents ${tool}`).toBe(true);
       const actions = [...match[2].matchAll(/`([a-z_]+)`/g)].map((token) => token[1]);
       for (const action of actions) {
         expect(documented.get(tool), `${tool}.${action}`).toContain(action);
@@ -96,6 +98,21 @@ describe('llms-full.txt', () => {
       checked += 1;
     }
     expect(checked).toBeGreaterThan(5);
+  });
+
+  it('only names registered tools and real actions between backticks in the llms.txt tool section', () => {
+    const section = between(llms, TOOLS_HEADING, null);
+    const tokens = new Set([...section.matchAll(/`([a-z_]+)`/g)].map((match) => match[1]));
+    const tools = registeredToolNames(repoRoot);
+    const actions = new Set(Object.values(registeredToolActions(repoRoot)).flat());
+    for (const token of tokens) {
+      expect(tools.includes(token) || actions.has(token) || token === 'action', token).toBe(true);
+    }
+    for (const tool of tools.filter((name) => tokens.has(name))) {
+      expect(toolBullets().has(tool), `llms-full.txt documents ${tool}`).toBe(true);
+    }
+    expect(tokens.has('generate_video')).toBe(true);
+    expect(tokens.has('cancel_video')).toBe(true);
   });
 
   it('links the OpenAPI spec, the MCP README and the prompt hub', () => {
