@@ -1,3 +1,5 @@
+import { timingSafeEqual } from 'node:crypto';
+
 import { NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
@@ -19,7 +21,15 @@ import { resolvePriorSpend } from '../videos/generate-and-schedule/prior-spend';
 import { refundRollbackSpend } from '../videos/generate-and-schedule/rollback-refund';
 import { deleteInsertedSlots } from '../videos/generate-and-schedule/rollback-slots';
 import { buildSlotRows } from '../videos/generate-and-schedule/slot-rows';
-import { experimentError, internalError, planExperiment, quoteKeyOf, type ExperimentPlan, type PlannedVideo } from './create-plan';
+import {
+  buildExperimentPlan,
+  experimentError,
+  internalError,
+  preflightExperiment,
+  quoteKeyOf,
+  type ExperimentPlan,
+  type PlannedVideo,
+} from './create-plan';
 import { fetchReplayRows, replayResponse, resolveExistingSchedule } from './create-replay';
 
 const SCHEDULE_NAMESPACE = 'experiments-create/v1';
@@ -151,6 +161,12 @@ function pairInsertedSlots(
   return pairs;
 }
 
+function quoteKeysMatch(computed: string, provided: string): boolean {
+  const left = Buffer.from(computed);
+  const right = Buffer.from(provided);
+  return left.length === right.length && timingSafeEqual(left, right);
+}
+
 export async function confirmExperiment(
   supabase: SupabaseClient,
   auth: SupabaseSessionAuth,
@@ -174,11 +190,13 @@ export async function confirmExperiment(
   if (isQuoteExpired(expiresAt, now)) {
     return experimentError(409, ERROR_CODES.QUOTE_EXPIRED, formatErrorMessage(ERROR_CODES.QUOTE_EXPIRED));
   }
-  const plan = await planExperiment(supabase, auth, body, 'confirm');
+  const plan = await buildExperimentPlan(supabase, auth, body, 'confirm');
   if (plan instanceof NextResponse) return plan;
-  if (quoteKeyOf(plan, expiresAt) !== quoteKey) {
+  if (!quoteKeysMatch(quoteKeyOf(plan, expiresAt), quoteKey)) {
     return experimentError(409, ERROR_CODES.QUOTE_CHANGED, formatErrorMessage(ERROR_CODES.QUOTE_CHANGED));
   }
+  const preflight = await preflightExperiment(supabase, plan);
+  if (preflight !== null) return preflight;
 
   trackApiEvent('video_creation_validated', {
     userId,

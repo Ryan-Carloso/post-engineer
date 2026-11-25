@@ -34,6 +34,7 @@ import { createHash } from 'node:crypto';
 import { canonicalJson } from '@/lib/experiments/quote-key';
 import { NextResponse } from 'next/server';
 import { checkPreChargePreflights } from '../../videos/generate-and-schedule/aspect-preflight';
+import { validatePreChargeImageId } from '../../videos/generate-and-schedule/library-photo';
 import { trackApiEvent } from '@/lib/analytics';
 import { readPromptComparison } from '@/lib/experiments/read-comparison';
 import { refundSlotTokens } from '@/lib/billing/refund-tokens';
@@ -264,6 +265,38 @@ describe('confirmExperiment', () => {
 
     expect(response.status).toBe(409);
     expect(json.code).toBe('QUOTE_CHANGED');
+  });
+
+  it('runs no media preflight for a forged key, a stale price or a key of the wrong length', async () => {
+    const { confirmBody } = await quoted();
+    price.perVideo = 2;
+    vi.mocked(checkPreChargePreflights).mockClear();
+    vi.mocked(validatePreChargeImageId).mockClear();
+
+    const stale = await confirm(confirmBody);
+    price.perVideo = null;
+    const forged = await confirm({ ...confirmBody, quoteKey: 'f'.repeat(64) });
+    const short = await confirm({ ...confirmBody, quoteKey: 'abc' });
+
+    expect([stale.json.code, forged.json.code, short.json.code]).toEqual(['QUOTE_CHANGED', 'QUOTE_CHANGED', 'QUOTE_CHANGED']);
+    expect(checkPreChargePreflights).not.toHaveBeenCalled();
+    expect(validatePreChargeImageId).not.toHaveBeenCalled();
+  });
+
+  it('runs the media preflights of a matching key before it charges, and charges nothing when one fails', async () => {
+    const { confirmBody } = await quoted();
+    vi.mocked(checkPreChargePreflights).mockClear();
+    vi.mocked(checkPreChargePreflights).mockResolvedValue(
+      NextResponse.json({ success: false, error: 'Segment 0 image 0 is 1:1.', code: 'VALIDATION_FAILED', field: 'options.segments' }, { status: 400 }),
+    );
+
+    const { response, json, db } = await confirm(confirmBody);
+
+    expect(response.status).toBe(400);
+    expect(json.field).toMatch(/^variants\.\d+\.videos\.\d+\.segments$/);
+    expect(checkPreChargePreflights).toHaveBeenCalled();
+    expect(spends(db)).toHaveLength(0);
+    expect(db.calls.filter((call) => call.op === 'insert')).toEqual([]);
   });
 
   it('re-checks every prompt version: one deleted after the quote is a 404 with nothing charged', async () => {

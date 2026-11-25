@@ -133,7 +133,7 @@ async function historyWarning(
 
 export type ExperimentStage = 'quote' | 'confirm';
 
-export async function planExperiment(
+export async function buildExperimentPlan(
   supabase: SupabaseClient,
   auth: SupabaseSessionAuth,
   body: CreateExperimentBody,
@@ -219,9 +219,6 @@ export async function planExperiment(
     };
   });
 
-  const preflight = await checkExperimentPreflights(supabase, { userId, personaId, prep, options, videos });
-  if (preflight !== null) return preflight;
-
   const warnings: ExperimentWarning[] = [
     ...scheduleWarnings(prep.voiceFallback, validatedAccounts.reconnectWarning),
     ...(stage === 'quote' ? await historyWarning(supabase, auth, body, perVariant) : []),
@@ -242,4 +239,26 @@ export async function planExperiment(
     warnings,
     body,
   };
+}
+
+export function preflightExperiment(supabase: SupabaseClient, plan: ExperimentPlan): Promise<NextResponse | null> {
+  return checkExperimentPreflights(supabase, {
+    userId: plan.userId,
+    personaId: plan.personaId,
+    prep: plan.prep,
+    options: plan.options,
+    videos: plan.videos,
+  });
+}
+
+export async function planExperiment(
+  supabase: SupabaseClient,
+  auth: SupabaseSessionAuth,
+  body: CreateExperimentBody,
+  stage: ExperimentStage,
+): Promise<ExperimentPlan | NextResponse> {
+  const plan = await buildExperimentPlan(supabase, auth, body, stage);
+  if (plan instanceof NextResponse) return plan;
+  const preflight = await preflightExperiment(supabase, plan);
+  return preflight ?? plan;
 }
