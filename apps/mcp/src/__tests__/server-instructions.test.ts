@@ -147,7 +147,9 @@ describe.each(['stdio', 'http'] as const)('server instructions on the %s server'
     expect(SERVER_INSTRUCTIONS).toContain(TESTING_KNOBS);
     expect(TESTING_KNOBS).toContain('generate_video');
     expect(TESTING_KNOBS).toContain('insights (action: post_metrics)');
-    expect(TESTING_KNOBS).not.toContain('(pacing, caption position, persona, hook)');
+    for (const knob of ['pacing', 'caption position', 'persona', 'hook']) {
+      expect(TESTING_KNOBS).not.toContain(knob);
+    }
     expect(SERVER_INSTRUCTIONS).not.toContain('videoClipDuration');
   });
 

@@ -25,7 +25,7 @@ function minComparedVideos(): number {
 function comparisonLabels(): string[] {
   const match = /export type ComparisonLabel = ([^;]+);/.exec(comparison);
   if (match === null || match[1] === undefined) throw new Error('ComparisonLabel not found in prompt-comparison.ts');
-  return match[1].split(' | ').map((label) => label.trim().replaceAll("'", ''));
+  return match[1].split('|').map((label) => label.replace(/^['"\s]+|['"\s]+$/g, ''));
 }
 
 describe('experiments description sync with the prompt comparison', () => {
@@ -54,9 +54,10 @@ describe('experiments description sync with the prompt comparison', () => {
   it('uses only result labels the comparison defines', () => {
     const labels = comparisonLabels();
     expect([...labels].sort()).toEqual([...COMPARISON_LABELS].sort());
+    const instructionWords = instructions.split(/[^a-z_]+/);
     for (const label of ['clear', 'insufficient', 'no_signal']) {
       expect(COMPARISON_LABELS).toContain(label);
-      expect(instructions).toContain(label);
+      expect(instructionWords).toContain(label);
     }
     for (const label of COMPARISON_LABELS) {
       expect(description).toContain(label);
