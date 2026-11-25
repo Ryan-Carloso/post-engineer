@@ -72,7 +72,9 @@ describe.each(['stdio', 'http'] as const)('server instructions on the %s server'
     const { tools } = await connect(transport);
     for (const name of LIFECYCLE_TOOLS) {
       expect(tools.has(name), `${name} is registered`).toBe(true);
-      expect(ROUTING_LIFECYCLE.includes(name), `${name} is in the lifecycle line`).toBe(true);
+      const clause = `; ${name} `;
+      const firstClause = `: ${name} `;
+      expect(ROUTING_LIFECYCLE.includes(clause) || ROUTING_LIFECYCLE.includes(firstClause), `${name} has its own lifecycle clause`).toBe(true);
     }
   });
 
@@ -95,16 +97,25 @@ describe.each(['stdio', 'http'] as const)('server instructions on the %s server'
 
   it('answers where generation history vs post status lives', () => {
     expect(SERVER_INSTRUCTIONS).toContain(POINTER_HISTORY);
+    expect(SERVER_INSTRUCTIONS).toContain('video_tasks (action: list_generations)');
+    expect(SERVER_INSTRUCTIONS).toContain('posts (action: list)');
   });
 
-  it('routes a test to the versions → promptVersionId → results flow', () => {
-    const get = TESTING_PROMPT_FLOW.indexOf('prompts (action: get)');
-    const pass = TESTING_PROMPT_FLOW.indexOf('promptVersionId');
-    const read = TESTING_PROMPT_FLOW.indexOf('experiments (action: results)');
-    expect(SERVER_INSTRUCTIONS).toContain(TESTING_PROMPT_FLOW);
-    expect(get).toBeGreaterThan(-1);
-    expect(pass).toBeGreaterThan(get);
-    expect(read).toBeGreaterThan(pass);
+  describe('manual test flow replaced by experiments create in #779', () => {
+    it('routes a test to the versions → promptVersionId → results flow', () => {
+      const get = TESTING_PROMPT_FLOW.indexOf('prompts (action: get)');
+      const pass = TESTING_PROMPT_FLOW.indexOf('promptVersionId');
+      const read = TESTING_PROMPT_FLOW.indexOf('experiments (action: results)');
+      expect(SERVER_INSTRUCTIONS).toContain(TESTING_PROMPT_FLOW);
+      expect(get).toBeGreaterThan(-1);
+      expect(pass).toBeGreaterThan(get);
+      expect(read).toBeGreaterThan(pass);
+    });
+
+    it('does not route to an experiments create action', () => {
+      expect(SERVER_INSTRUCTIONS).not.toContain('experiments (action: create)');
+      expect(SERVER_INSTRUCTIONS).not.toContain('create an experiment');
+    });
   });
 
   it('states the sample-size rules', () => {
@@ -128,7 +139,13 @@ describe.each(['stdio', 'http'] as const)('server instructions on the %s server'
     expect(SERVER_INSTRUCTIONS).toContain(TESTING_KNOBS);
     expect(TESTING_KNOBS).toContain('generate_video');
     expect(TESTING_KNOBS).toContain('insights (action: post_metrics)');
+    expect(TESTING_KNOBS).not.toContain('(pacing, caption position, persona, hook)');
     expect(SERVER_INSTRUCTIONS).not.toContain('videoClipDuration');
+  });
+
+  it('points knob comparisons at the one-knob rule in generate_video', async () => {
+    const { tools } = await connect(transport);
+    expect(tools.get('generate_video')?.description).toContain('change one knob at a time');
   });
 
   it('explains the no prompt baseline group', () => {
@@ -138,11 +155,6 @@ describe.each(['stdio', 'http'] as const)('server instructions on the %s server'
   it('answers the follow-up questions after a test', () => {
     expect(SERVER_INSTRUCTIONS).toContain(TESTING_FOLLOW_UPS);
     expect(TESTING_FOLLOW_UPS).toContain('prompts (action: restore)');
-  });
-
-  it('does not route to an experiments create action', () => {
-    expect(SERVER_INSTRUCTIONS).not.toContain('experiments (action: create)');
-    expect(SERVER_INSTRUCTIONS).not.toContain('create an experiment');
   });
 
   it('points the persona tool at accounts for rebinding publishing accounts', async () => {
