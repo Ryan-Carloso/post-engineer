@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { NextRequest } from 'next/server';
+import { unstable_doesMiddlewareMatch } from 'next/experimental/testing/server';
 
 const { getClaims, getUser } = vi.hoisted(() => ({
   getClaims: vi.fn(),
@@ -92,11 +93,6 @@ describe('middleware auth redirect', () => {
     const response = await middleware(requestFor(`/s/${'a'.repeat(43)}`));
 
     expect(response.headers.get('location')).toBeNull();
-  });
-
-  it('keeps the matcher from running auth on the public /s/ share pages', () => {
-    const source = config.matcher[0];
-    expect(source).toContain('recipes|s/)');
   });
 
   it('redirects to /landing when getClaims finds no session and no error', async () => {
@@ -312,5 +308,46 @@ describe('middleware auth redirect', () => {
 
   it('excludes /mcp from the matcher so the middleware never runs on it', () => {
     expect(config.matcher[0].includes('mcp$')).toBe(true);
+  });
+});
+
+describe('middleware matcher', () => {
+  const matches = (pathname: string): boolean =>
+    unstable_doesMiddlewareMatch({ config, url: `http://localhost:3434${pathname}` });
+
+  it.each([
+    '/landing-v2',
+    '/termsxyz',
+    '/loginx',
+    '/privacy-old',
+    '/recipesfoo',
+    '/sx',
+    '/posts',
+    '/',
+    '/some-unknown',
+  ])('runs the middleware on %s', (pathname) => {
+    expect(matches(pathname)).toBe(true);
+  });
+
+  it.each([
+    '/landing',
+    '/landing/',
+    '/login',
+    '/terms',
+    '/privacy',
+    '/recipes',
+    '/recipes/daily-news',
+    '/s/abc',
+    '/llms.txt',
+    '/llms-full.txt',
+    '/robots.txt',
+    '/sitemap.xml',
+    '/openapi.json',
+    '/api/x',
+    '/auth/callback',
+    '/.well-known/x',
+    '/oauth/authorize',
+  ])('skips the middleware on %s', (pathname) => {
+    expect(matches(pathname)).toBe(false);
   });
 });
