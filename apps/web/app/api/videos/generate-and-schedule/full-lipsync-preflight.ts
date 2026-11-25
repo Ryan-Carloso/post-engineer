@@ -1,4 +1,3 @@
-
 import { ERROR_CODES, formatErrorMessage } from '@/lib/error-codes';
 import { engineAuthHeaders } from '@/lib/request-auth';
 import { logger } from '@/lib/logger';
@@ -21,7 +20,11 @@ export interface FullLipsyncPreflightInput {
 export function checkFullLipsyncNarration(input: FullLipsyncPreflightInput): Promise<NarrationOutcome> {
   const { shared } = input;
   if (shared === undefined) return requestNarration(input);
-  return memoize(shared.narrations, input.script, () => requestNarration(input));
+  return memoize(shared.narrations, narrationKey(input), () => requestNarration(input));
+}
+
+function narrationKey(input: FullLipsyncPreflightInput): string {
+  return JSON.stringify([input.script, input.language, input.voiceId ?? null, input.voiceAudioUrl ?? null]);
 }
 
 async function requestNarration(input: FullLipsyncPreflightInput): Promise<NarrationOutcome> {

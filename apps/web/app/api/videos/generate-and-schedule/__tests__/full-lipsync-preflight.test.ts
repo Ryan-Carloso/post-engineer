@@ -66,6 +66,20 @@ describe('checkFullLipsyncNarration', () => {
     expect(calls).toHaveLength(2);
   });
 
+  it.each([
+    ['language', { language: 'pt-BR' }],
+    ['voice', { voiceId: 'chatterbox:kokoro_pf_dora' }],
+    ['voice audio', { voiceId: undefined, voiceAudioUrl: 'https://e.com/narration.mp3' }],
+  ])('measures the same script again when the %s differs inside one shared context', async (_label, change) => {
+    const calls = stubFetch(engineBody(30));
+    const shared = createPreflightShared(60_000);
+
+    await checkFullLipsyncNarration({ ...INPUT, shared });
+    await checkFullLipsyncNarration({ ...INPUT, ...change, shared });
+
+    expect(calls).toHaveLength(2);
+  });
+
   it('measures the same script every time without a shared context', async () => {
     const calls = stubFetch(engineBody(30));
 
