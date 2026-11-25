@@ -14,7 +14,7 @@ import pytest
 from PIL import Image
 
 from app.models.schema import PersonaParams, VideoParams
-from app.services import full_lipsync, segment_panels
+from app.services import caption_layout, full_lipsync, segment_panels
 from app.services import video as vd
 
 BLUE = (30, 30, 210)
@@ -188,3 +188,19 @@ def test_captions_use_the_frame_scaled_font_size_and_leave_the_callers_params_al
     assert scaled_calls == [(50, 1080, 1920)]
     assert sizes and set(sizes) == {33}, "every caption clip uses the scaled size"
     assert params.font_size == 50, "scaling must not compound across videos"
+
+
+def test_a_title_floor_pushes_the_caption_below_the_hook_title(tmp_path, monkeypatch):
+    _stub_bundled_font(tmp_path, monkeypatch)
+    floor = 1500
+    output = _render(tmp_path, [caption_layout.TitleFloor(0.0, 3.0, floor)], "floor.mp4")
+    top, bottom = _text_rows(output, tmp_path)
+    assert top >= floor, "the cue shown while the title is on screen never starts above its floor"
+    assert bottom < 1920, "and the whole caption is still on the frame"
+
+
+def test_a_title_window_that_ended_leaves_the_caption_where_it_was(tmp_path, monkeypatch):
+    _stub_bundled_font(tmp_path, monkeypatch)
+    ended = _render(tmp_path, [caption_layout.TitleFloor(0.0, 0.1, 1500)], "ended.mp4")
+    free = _render(tmp_path, (), "free.mp4")
+    assert _text_rows(ended, tmp_path) == _text_rows(free, tmp_path)

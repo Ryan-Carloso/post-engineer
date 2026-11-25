@@ -1102,6 +1102,17 @@
             "title": "Hook Panel",
             "type": "boolean"
           },
+          "hook_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hook Title"
+          },
           "lipsync_photos": {
             "anyOf": [
               {

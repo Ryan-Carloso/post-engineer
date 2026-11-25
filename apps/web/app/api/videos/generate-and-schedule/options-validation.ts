@@ -12,6 +12,7 @@ import {
 import { MAX_TITLE_CHARS } from './prepare-persona';
 import { invalid, type Checked, type ValidationIssue } from './validation-issues';
 import { validateLipsyncPhotos, type LipsyncPhotoRef } from './lipsync-photos';
+import { checkHookTitle, hookTitleIssueMessage, normalizeHookTitle } from '@/lib/generation/hook-title';
 
 const MAX_LANGUAGE_CHARS = 32;
 
@@ -29,6 +30,7 @@ export interface OptionsInput {
   paragraphNumber?: number;
   language?: string;
   niche?: string;
+  hookTitle?: string;
   videoClipDuration?: number;
   videoTransitionMode?: string;
   videoVariationSeed?: number;
@@ -50,6 +52,7 @@ export interface ValidatedOptions {
   paragraphNumber?: number;
   language?: string;
   niche?: string;
+  hookTitle?: string;
   videoClipDuration?: number;
   videoTransitionMode?: VideoTransitionMode;
   videoVariationSeed?: number;
@@ -90,6 +93,7 @@ export function validateOptions(options: OptionsInput): Checked<ValidatedOptions
     paragraphNumber,
     language,
     niche,
+    hookTitle,
     videoClipDuration,
     videoTransitionMode,
     videoVariationSeed,
@@ -131,6 +135,10 @@ export function validateOptions(options: OptionsInput): Checked<ValidatedOptions
   }
   if (niche !== undefined && niche.length > MAX_TITLE_CHARS) {
     issues.push(invalid(`options.niche must be at most ${MAX_TITLE_CHARS} characters.`, 'options.niche'));
+  }
+  const hookTitleIssue = hookTitle === undefined ? null : checkHookTitle(hookTitle);
+  if (hookTitleIssue !== null) {
+    issues.push(invalid(hookTitleIssueMessage(hookTitleIssue), 'options.hookTitle', hookTitleIssue));
   }
   if (hookPanel !== undefined && mode !== undefined && mode !== 'hook_lipsync') {
     issues.push(invalid(HOOK_PANEL_ONLY_HOOK_LIPSYNC_MESSAGE, 'options.hookPanel'));
@@ -195,6 +203,7 @@ export function validateOptions(options: OptionsInput): Checked<ValidatedOptions
       paragraphNumber,
       language,
       niche,
+      hookTitle: hookTitle === undefined ? undefined : normalizeHookTitle(hookTitle),
       videoClipDuration,
       videoTransitionMode: transitionMode,
       videoVariationSeed,

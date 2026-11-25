@@ -85,6 +85,7 @@ export interface GeneratePersonaVideoInput {
     paragraphNumber?: number;
     language?: string;
     niche?: string;
+    hookTitle?: string;
     videoClipDuration?: number;
     videoTransitionMode?: VideoTransitionMode;
     videoVariationSeed?: number;

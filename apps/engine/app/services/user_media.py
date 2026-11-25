@@ -41,8 +41,8 @@ from loguru import logger
 
 from app.models.schema import VideoAspect
 from app.services import (
-    face_detect, image_coverage, media_overlay, persona_hook, image_fetch, segment_panels, subtitle, video,
-    photo_content, segment_video,
+    face_detect, hook_title, hook_title_stage, image_coverage, media_overlay, persona_hook, image_fetch, segment_panels,
+    subtitle, video, photo_content, segment_video,
 )
 from app.services.image_density import media_weights, split_weighted
 from app.services.lipsync_active import persona_lipsync_active
@@ -367,6 +367,7 @@ def prepare_segment_media(
     session=None,
     font_for: Optional[media_overlay.FontFor] = None,
     hook_panel: bool = True,
+    title: Optional[hook_title.TitleLayer] = None,
 ) -> tuple[list[Panel], list[str]]:
     """Drawn photos (panels or full frame) with spoken intervals, plus skip warnings.
 
@@ -442,7 +443,9 @@ def prepare_segment_media(
                 if on_face:
                     built = segment_panels.build_panel(photo, overlay, font_for, aspect, out_path)
                 else:
-                    built = segment_panels.build_full(photo, overlay, font_for, aspect, out_path)
+                    built = segment_panels.build_full(
+                        photo, overlay, font_for, aspect, out_path, hook_title.card_top(title, slice_start)
+                    )
             finally:
                 if downloaded:
                     with contextlib.suppress(OSError):
@@ -467,13 +470,16 @@ def prepare_segment_panels(task_id: str, params: Any, subtitle_path: str, audio_
     sent photo was skipped at render, naming the skip reasons. Full lip sync
     keeps the lenient behavior: a skipped photo is a warning there.
     """
-    segments = getattr(params, "segments", None)
-    if not segments:
-        return []
     try:
         aspect = VideoAspect(params.video_aspect)
     except (ValueError, TypeError, AttributeError):
         aspect = VideoAspect.portrait
+    title, notes = hook_title_stage.prepare_title(params, subtitle_path, audio_duration, aspect, utils.task_dir(task_id))
+    segments = getattr(params, "segments", None)
+    if not segments:
+        if title is not None:
+            segment_panels.write_manifest(task_id, [], [], title)
+        return notes
     face = _face_mode(params)
     video_script = getattr(params, "video_script", "") or ""
     panels, warnings = prepare_segment_media(
@@ -481,6 +487,7 @@ def prepare_segment_panels(task_id: str, params: Any, subtitle_path: str, audio_
         face=face, video_script=video_script,
         font_for=_overlay_font(params, segments),
         hook_panel=getattr(params, "hook_panel", True) is not False,
+        title=title,
     )
     hook_end = _hook_end(video_script, subtitle_path, audio_duration) if face == segment_panels.FACE_HOOK else 0.0
     sent = sum(len(_media_list(_segment_dict(s).get("media"))) for s in segments)
@@ -489,5 +496,5 @@ def prepare_segment_panels(task_id: str, params: Any, subtitle_path: str, audio_
         sent=sent, skipped=warnings,
         variation_seed=getattr(params, "video_variation_seed", None),
     )
-    segment_panels.write_manifest(task_id, panels, warnings)
-    return warnings
+    segment_panels.write_manifest(task_id, panels, [*warnings, *notes], title)
+    return [*warnings, *notes]

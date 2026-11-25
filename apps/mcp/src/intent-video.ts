@@ -16,7 +16,7 @@ const VIDEO_TASKS_SPECS = {
 };
 
 export const VideoTasksDescription = actionDescription(
-  'For the final outcome, call status with waitSeconds above 0 (one server-side wait). A snapshot (waitSeconds 0) is only progress: wait at least nextPollInSeconds; each task can be polled at most once a minute. On timeout, call again with unfinished taskIds. list_generations / get_generation: generation history.',
+  'For the final outcome, call status with waitSeconds above 0 (one server-side wait). A snapshot (waitSeconds 0) is only progress: wait at least nextPollInSeconds; each task can be polled at most once a minute. On timeout, call again with unfinished taskIds. list_generations / get_generation: history.',
   VIDEO_TASKS_SPECS,
 );
 
@@ -47,7 +47,7 @@ export function registerVideoTools(server: McpServer, client: PostEngineerClient
 
   server.tool(
     'cancel_video',
-    'Cancel a video that is still generating (your own task only). Kept apart from video_tasks so a client can allow status checks without allowing cancellation.',
+    'Cancel a video that is still generating (your own task only). Separate from video_tasks so a client can allow status without allowing cancellation.',
     CancelVideoTaskShape,
     DESTRUCTIVE,
     withTracking('cancel_video', async (args) => handleCancelVideoTask(client, args)),

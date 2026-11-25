@@ -39,8 +39,30 @@ describe('buildSlotRows', () => {
         { kind: 'content', text: 'Follow for more.' },
       ],
       lipsync_photos: null,
+      hook_title: null,
       prompt_version_id: null,
     });
+  });
+
+  it('stores the hook title on every slot row, null when none was asked for', () => {
+    const input = {
+      slots: [
+        { slotAtISO: '2026-09-08T09:00:00.000Z', dayIndex: 0, timeIndex: 0 },
+        { slotAtISO: '2026-09-09T09:00:00.000Z', dayIndex: 1, timeIndex: 0 },
+      ],
+      title: 'Porto walks',
+      description: 'Agent description.',
+      scheduleId: 'sched-1',
+      userId: 'user-1',
+      videoType: 'voiceover' as const,
+      chargedTokens: 1,
+      segments: undefined,
+    };
+    expect(buildSlotRows({ ...input, hookTitle: 'I entered the sea clothed?' }).map((row) => row.hook_title)).toEqual([
+      'I entered the sea clothed?',
+      'I entered the sea clothed?',
+    ]);
+    expect(buildSlotRows(input).map((row) => row.hook_title)).toEqual([null, null]);
   });
 
   it('stores the full lip-sync face photos for the batch pipeline', () => {

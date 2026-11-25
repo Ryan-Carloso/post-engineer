@@ -58,7 +58,7 @@ def _clean(value: object) -> str:
     return _SPACES.sub(" ", value).strip() if isinstance(value, str) else ""
 
 
-def _wrap(text: str, font: ImageFont.FreeTypeFont, max_width: float) -> Optional[list[str]]:
+def wrap(text: str, font: ImageFont.FreeTypeFont, max_width: float) -> Optional[list[str]]:
     """Greedy word wrap; None when a single word is wider than the line."""
     lines: list[str] = []
     current = ""
@@ -76,19 +76,19 @@ def _wrap(text: str, font: ImageFont.FreeTypeFont, max_width: float) -> Optional
     return lines
 
 
-def _fit(
+def fit(
     text: str, font_for: FontFor, sizes: tuple[int, ...], scale: float, max_width: float, max_lines: int
 ) -> Optional[tuple[int, list[str]]]:
     """The largest size whose wrapped text fits: (pixel size, lines)."""
     for size in sizes:
         pixels = round(size * scale)
-        lines = _wrap(text, font_for(pixels), max_width)
+        lines = wrap(text, font_for(pixels), max_width)
         if lines is not None and len(lines) <= max_lines:
             return pixels, lines
     return None
 
 
-def _line_height(font: ImageFont.FreeTypeFont, scale: float) -> int:
+def line_height(font: ImageFont.FreeTypeFont, scale: float) -> int:
     ascent, descent = font.getmetrics()
     return ascent + descent + round(LINE_GAP * scale)
 
@@ -99,25 +99,25 @@ def _layout(overlay: dict, font_for: FontFor, scale: float, box_width: int, max_
     title = _clean(overlay.get("title"))
     subtitle = _clean(overlay.get("subtitle"))
     badge = _clean(overlay.get("badge"))
-    title_fit = _fit(title, font_for, TITLE_SIZES, scale, inner, MAX_TITLE_LINES)
+    title_fit = fit(title, font_for, TITLE_SIZES, scale, inner, MAX_TITLE_LINES)
     if title_fit is None:
         return None
     layout: dict = {"title": title_fit, "subtitle": None, "badge": None}
     total = 2 * round(PADDING * scale)
-    total += len(title_fit[1]) * _line_height(font_for(title_fit[0]), scale)
+    total += len(title_fit[1]) * line_height(font_for(title_fit[0]), scale)
     if subtitle:
-        subtitle_fit = _fit(subtitle, font_for, SUBTITLE_SIZES, scale, inner, MAX_SUBTITLE_LINES)
+        subtitle_fit = fit(subtitle, font_for, SUBTITLE_SIZES, scale, inner, MAX_SUBTITLE_LINES)
         if subtitle_fit is None:
             return None
         layout["subtitle"] = subtitle_fit
         total += round(BLOCK_GAP * scale)
-        total += len(subtitle_fit[1]) * _line_height(font_for(subtitle_fit[0]), scale)
+        total += len(subtitle_fit[1]) * line_height(font_for(subtitle_fit[0]), scale)
     if badge:
         badge_font = font_for(round(BADGE_SIZE * scale))
         if badge_font.getlength(badge) + 2 * round(BADGE_PAD_X * scale) > inner:
             return None
         layout["badge"] = (round(BADGE_SIZE * scale), badge)
-        total += _line_height(badge_font, scale) + 2 * round(BADGE_PAD_Y * scale) + round(BLOCK_GAP * scale)
+        total += line_height(badge_font, scale) + 2 * round(BADGE_PAD_Y * scale) + round(BLOCK_GAP * scale)
     if total > max_height:
         return None
     layout["height"] = total
@@ -170,7 +170,7 @@ def _draw_text(draw: ImageDraw.ImageDraw, layout: dict, font_for: FontFor, scale
         size, text = layout["badge"]
         font = font_for(size)
         pad_x, pad_y = round(BADGE_PAD_X * scale), round(BADGE_PAD_Y * scale)
-        line = _line_height(font, scale)
+        line = line_height(font, scale)
         pill = (x, cursor, x + round(font.getlength(text)) + 2 * pad_x, cursor + line + 2 * pad_y)
         draw.rounded_rectangle(pill, radius=(pill[3] - pill[1]) // 2, fill=BADGE_FILL)
         draw.text((x + pad_x, cursor + pad_y), text, font=font, fill=BADGE_TEXT)
@@ -179,11 +179,11 @@ def _draw_text(draw: ImageDraw.ImageDraw, layout: dict, font_for: FontFor, scale
     font = font_for(size)
     for text in lines:
         draw.text((x, cursor), text, font=font, fill=TEXT_COLOR)
-        cursor += _line_height(font, scale)
+        cursor += line_height(font, scale)
     if layout["subtitle"] is not None:
         cursor += round(BLOCK_GAP * scale)
         size, lines = layout["subtitle"]
         font = font_for(size)
         for text in lines:
             draw.text((x, cursor), text, font=font, fill=SUBTITLE_COLOR)
-            cursor += _line_height(font, scale)
+            cursor += line_height(font, scale)

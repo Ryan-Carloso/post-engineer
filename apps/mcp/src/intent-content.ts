@@ -9,6 +9,7 @@ import { PublishExistingLocalShape, PublishExistingRemoteShape, PublishExistingS
 import { IMAGE_AS_SHORT_NOTE, IMAGE_PROVIDERS } from './contracts/providers.js';
 import { handlePublishExisting } from './tools-publish-existing.js';
 import { DESTRUCTIVE, MUTATING, READ_ONLY } from './tool-annotations.js';
+import { POINTER_IMAGES } from './server-instructions.js';
 import { PublishVideoDirectShape, handlePublishVideoDirect } from './tools.js';
 import { PromptComparisonShape, handlePromptComparison } from './tools-experiments.js';
 import { UploadMediaRemoteShape } from './remote-shapes-images.js';
@@ -35,7 +36,7 @@ export function registerContentTools(server: McpServer, client: PostEngineerClie
   server.tool(
     'experiments',
     actionDescription(
-      'Experiments compare prompts. Every video generated with a promptVersionId (the versionId that prompts (action: get) returns) records that prompt version. results: per publishing account (never across accounts), each prompt version with its video count, median views, lift (each video\'s views divided by the median of the other videos of the same account; above 1 beats the account) and a sign-test label: insufficient (fewer than 5 videos), no_signal, indicative or clear. Videos made without a prompt form the "no prompt" group. The clear and indicative thresholds are corrected for the number of prompts compared: they are divided by the number of groups of the account with at least 5 videos (the "no prompt" group included), so each extra prompt needs a stronger lead. Never call a prompt the winner unless the label is clear. To compare any number of prompts fairly, rotate them round-robin on the same account, swap their posting times, and make at least 10 videos per prompt: 5 videos only lift a prompt out of insufficient, and even a unanimous lead needs 6 videos to be clear with one group and 8 with five.',
+      'Experiments compare prompts. Every video generated with a promptVersionId (the versionId that prompts (action: get) returns) records that prompt version. results: per publishing account (never across accounts), each prompt version with its video count, median views, lift (views divided by the median of the account\'s other videos; above 1 beats the account) and a sign-test label: insufficient (fewer than 5 videos), no_signal, indicative or clear. Videos made without a prompt form the "no prompt" group. The clear and indicative thresholds are corrected for the number of prompts compared: they are divided by the number of groups of the account with at least 5 videos (the "no prompt" group included). Never call a prompt the winner unless the label is clear. To compare any number of prompts fairly, rotate them round-robin on the same account, swap their posting times, and make at least 10 videos per prompt: 5 videos only lift a prompt out of insufficient, and even a unanimous lead needs 6 videos to be clear with one group and 8 with five.',
       EXPERIMENTS_SPECS,
     ),
     actionShape(EXPERIMENTS_SPECS),
@@ -53,7 +54,7 @@ export function registerContentTools(server: McpServer, client: PostEngineerClie
   server.tool(
     'media',
     actionDescription(
-      `Images for video segments. check: mechanically check one public image URL (no LLM, relevance is for you to judge): returns one code (ok, blocked_403 when the host blocks the download — ${remote ? 'use another public URL for that photo' : 'then use upload with bytes fetched on your own machine'} — and the size, type and aspect failures). upload: ${remote ? 'a public https imageUrl is downloaded by the server' : 'a local image'} and becomes a mediaId for a segment (a temporary asset, 1 hour: upload shortly before generating).`,
+      `Images for video segments. check: mechanically check one public image URL (no LLM, relevance is for you to judge): returns one code (ok, blocked_403 when the host blocks the download — ${remote ? 'use another public URL for that photo' : 'then use upload with bytes fetched on your own machine'} — plus size, type and aspect failures). upload: ${remote ? 'a public https imageUrl is downloaded by the server' : 'a local image'} and becomes a mediaId for a segment (temporary, 1 hour: upload shortly before generating). ${POINTER_IMAGES}`,
       offeredSpecs(MEDIA_SPECS, mediaOptions),
     ),
     actionShape(offeredSpecs(MEDIA_SPECS, mediaOptions)),
@@ -72,7 +73,7 @@ export function registerContentTools(server: McpServer, client: PostEngineerClie
   server.tool(
     'check_script',
     actionDescription(
-      'Check a script before spending tokens. validate: the mechanical rules (hook first, exactly one hook, no placeholders/links/markdown/emoji/stage directions, hook terminal punctuation, word limits: total 60-200, content at least 30, hook 25-40 words; a CTA is a content take, placed anywhere), no tokens spent. score: a 0-100 score of a draft against your own measured posts, every point explained.',
+      'Check a script before spending tokens. validate: the mechanical rules (hook first, exactly one hook, no placeholders/links/markdown/emoji/stage directions, hook terminal punctuation, word limits: total 60-200, content at least 30, hook 25-40 words; a CTA is a content take, placed anywhere; an optional hookTitle is checked with the same stable HOOK_TITLE_* codes generate_video returns), no tokens spent. score: a 0-100 score of a draft against your own measured posts, every point explained.',
       CHECK_SCRIPT_SPECS,
     ),
     actionShape(CHECK_SCRIPT_SPECS),
@@ -93,7 +94,7 @@ export function registerContentTools(server: McpServer, client: PostEngineerClie
   server.tool(
     'publish_video',
     actionDescription(
-      `Publish media that already exists, with no generation and no charge. ${remote ? '' : 'from_file: a local video (.mp4 or .mov) is published now. '}create_upload → complete_upload → publish_upload: a signed upload, video or JPEG/PNG (PUT straight to storage, never via this server; expires in 15 min), published now; publishing consumes it. publish_existing: a finished generated video (taskId), a completed upload (uploadId)${remote ? '' : ' or a local image (imagePath)'}, to every network of its accounts in one call (images: ${IMAGE_PROVIDERS.join('/')}; ${IMAGE_AS_SHORT_NOTE}), with mode asap (now) or scheduled (once, at publishAt). YouTube needs title, description, tags and privacyStatus; Rumble and Fanvue title and description; the other networks a caption (publish_existing uses description). If a call times out, retry with the same idempotencyKey: the original result is replayed. A result with errorCode publish_unknown must NOT be retried: the post may be live, check the account first.`,
+      `Publish media that already exists, with no generation and no charge. ${remote ? '' : 'from_file: a local video (.mp4 or .mov) is published now. '}create_upload → complete_upload → publish_upload: a signed upload, video or JPEG/PNG (PUT straight to storage, never via this server; expires in 15 min), published now; publishing consumes it. publish_existing: a finished video (taskId), a completed upload (uploadId)${remote ? '' : ' or a local image (imagePath)'}, to every network of its accounts in one call (images: ${IMAGE_PROVIDERS.join('/')}; ${IMAGE_AS_SHORT_NOTE}), with mode asap (now) or scheduled (once, at publishAt). YouTube needs title, description, tags and privacyStatus; Rumble and Fanvue title and description; the other networks a caption (publish_existing uses description). If a call times out, retry with the same idempotencyKey: the original result is replayed. A result with errorCode publish_unknown must NOT be retried: the post may be live, check the account first.`,
       offeredSpecs(PUBLISH_SPECS, publishOptions),
     ),
     actionShape(offeredSpecs(PUBLISH_SPECS, publishOptions)),
