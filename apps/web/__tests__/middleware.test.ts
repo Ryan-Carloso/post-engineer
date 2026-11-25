@@ -202,27 +202,6 @@ describe('middleware auth redirect', () => {
     expect(warnCalls()).toHaveLength(0);
   });
 
-  it('sends an authenticated visitor from /landing to /', async () => {
-    getClaims.mockResolvedValue({ data: validClaims('user-1'), error: null });
-
-    const response = await middleware(requestFor('/landing'));
-
-    expect(response.status).toBe(307);
-    expect(response.headers.get('location')).toBe('http://localhost:3434/');
-  });
-
-  it('sends an authenticated visitor from /login to /', async () => {
-    getClaims.mockResolvedValue({
-      data: validClaims('user-1'),
-      error: null,
-    });
-
-    const response = await middleware(requestFor('/login'));
-
-    expect(response.status).toBe(307);
-    expect(response.headers.get('location')).toBe('http://localhost:3434/');
-  });
-
   it('does not redirect unauthenticated requests for public static assets (logo.png)', async () => {
     getClaims.mockResolvedValue({
       data: null,

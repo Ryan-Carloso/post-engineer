@@ -106,10 +106,6 @@ export async function middleware(request: NextRequest) {
     })
   }
 
-  if (signedIn && (pathname === '/login' || pathname === '/landing')) {
-    return NextResponse.redirect(new URL('/', request.url))
-  }
-
   return response
 }
 
