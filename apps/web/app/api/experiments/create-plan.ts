@@ -29,9 +29,8 @@ import { rejectInvalidRequest, shapeIssues } from '../videos/generate-and-schedu
 import { scheduleWarnings, type ScheduleWarning } from '../videos/generate-and-schedule/schedule-warnings';
 import { validateSlots, type SlotFieldNames } from '../videos/generate-and-schedule/slot-validation';
 import { validateAccounts } from '../videos/generate-and-schedule/validate-accounts';
-import { checkExperimentSemantics, mediaIdIssue, shapeCountIssues } from './create-checks';
-
-export const EXPERIMENT_ROUTE = 'POST /api/experiments';
+import { EXPERIMENT_ROUTE, checkExperimentSemantics, mediaIdIssue, shapeCountIssues } from './create-checks';
+import { checkExperimentPreflights } from './create-preflights';
 
 const SLOT_FIELDS: SlotFieldNames = { times: 'times', timezone: 'timezone', startAt: 'startAt', window: 'startAt' };
 
@@ -57,6 +56,7 @@ export type ExperimentWarning =
 export interface PlannedVideo {
   slot: DistributedSlot;
   variantIndex: number;
+  videoIndex: number;
   versionId: string;
   title: string;
   description: string;
@@ -207,6 +207,7 @@ export async function planExperiment(
     return {
       slot,
       variantIndex,
+      videoIndex,
       versionId: variant.versionId,
       title: checked.checked.title,
       description: checked.checked.description,
@@ -214,6 +215,9 @@ export async function planExperiment(
       segments: variant.videos[videoIndex].segments,
     };
   });
+
+  const preflight = await checkExperimentPreflights(supabase, { userId, personaId, prep, options, videos });
+  if (preflight !== null) return preflight;
 
   const warnings: ExperimentWarning[] = [
     ...scheduleWarnings(prep.voiceFallback, validatedAccounts.reconnectWarning),

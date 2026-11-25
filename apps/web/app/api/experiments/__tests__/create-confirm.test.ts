@@ -12,6 +12,8 @@ vi.mock('@/lib/persona-voice-validate', async (importOriginal) => {
   return { ...actual, validatePersonaVoiceInput: vi.fn().mockResolvedValue(null) };
 });
 vi.mock('@/lib/experiments/read-comparison', () => ({ readPromptComparison: vi.fn() }));
+vi.mock('../../videos/generate-and-schedule/aspect-preflight', () => ({ checkPreChargePreflights: vi.fn().mockResolvedValue(null) }));
+vi.mock('../../videos/generate-and-schedule/library-photo', () => ({ validatePreChargeImageId: vi.fn().mockResolvedValue(null) }));
 vi.mock('@/lib/tokens', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/tokens')>();
   return {
@@ -30,6 +32,8 @@ vi.mock('@/lib/billing/refund-tokens', () => ({
 
 import { createHash } from 'node:crypto';
 import { canonicalJson } from '@/lib/experiments/quote-key';
+import { NextResponse } from 'next/server';
+import { checkPreChargePreflights } from '../../videos/generate-and-schedule/aspect-preflight';
 import { readPromptComparison } from '@/lib/experiments/read-comparison';
 import { refundSlotTokens } from '@/lib/billing/refund-tokens';
 import { startEngineVideoTask } from '@/lib/generation/video-generation';
@@ -66,6 +70,7 @@ function spends(db: FakeDb) {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.stubEnv('TOKEN_ENCRYPTION_KEY', TEST_ENCRYPTION_KEY);
+  vi.mocked(checkPreChargePreflights).mockResolvedValue(null);
   price.perVideo = null;
   vi.mocked(readPromptComparison).mockResolvedValue({ ok: true, value: { window: '7d', accounts: [], truncated: false }, unversioned: [] });
   vi.mocked(startEngineVideoTask).mockImplementation(async (_userId, payload) => ({
@@ -246,6 +251,21 @@ describe('confirmExperiment', () => {
     expect(json).toMatchObject({ code: 'PROMPT_NOT_FOUND', field: 'variants.1.versionId' });
     expect(spends(db)).toHaveLength(0);
     expect(db.calls.filter((call) => call.op === 'insert')).toEqual([]);
+  });
+
+  it('re-runs the media preflights at confirm: a video that fails one is refused with nothing charged', async () => {
+    const { confirmBody } = await quoted();
+    vi.mocked(checkPreChargePreflights).mockResolvedValue(
+      NextResponse.json({ success: false, error: 'Segment 0 image 0 is too small.', code: 'VALIDATION_FAILED', field: 'options.segments' }, { status: 400 }),
+    );
+
+    const { response, json, db } = await confirm(confirmBody);
+
+    expect(response.status).toBe(400);
+    expect(json.field).toMatch(/^variants\.\d+\.videos\.\d+\.segments$/);
+    expect(spends(db)).toHaveLength(0);
+    expect(db.calls.filter((call) => call.op === 'insert')).toEqual([]);
+    expect(startEngineVideoTask).not.toHaveBeenCalled();
   });
 
   it('answers 402 and writes nothing when the balance is short', async () => {

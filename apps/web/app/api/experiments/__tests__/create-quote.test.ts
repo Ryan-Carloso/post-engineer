@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { NextResponse } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/lib/logger', () => ({
@@ -10,7 +11,11 @@ vi.mock('@/lib/persona-voice-validate', async (importOriginal) => {
   return { ...actual, validatePersonaVoiceInput: vi.fn().mockResolvedValue(null) };
 });
 vi.mock('@/lib/experiments/read-comparison', () => ({ readPromptComparison: vi.fn() }));
+vi.mock('../../videos/generate-and-schedule/aspect-preflight', () => ({ checkPreChargePreflights: vi.fn().mockResolvedValue(null) }));
+vi.mock('../../videos/generate-and-schedule/library-photo', () => ({ validatePreChargeImageId: vi.fn().mockResolvedValue(null) }));
 
+import { checkPreChargePreflights } from '../../videos/generate-and-schedule/aspect-preflight';
+import { validatePreChargeImageId } from '../../videos/generate-and-schedule/library-photo';
 import { readPromptComparison } from '@/lib/experiments/read-comparison';
 import type { AccountResult, PromptResult, UnversionedAccount } from '@/lib/experiments/prompt-comparison';
 import { parseExperimentRequest } from '../create-plan';
@@ -35,6 +40,8 @@ async function quote(overrides: Parameters<typeof experimentBody>[0] = {}, db = 
 beforeEach(() => {
   vi.clearAllMocks();
   vi.stubEnv('TOKEN_ENCRYPTION_KEY', TEST_ENCRYPTION_KEY);
+  vi.mocked(checkPreChargePreflights).mockResolvedValue(null);
+  vi.mocked(validatePreChargeImageId).mockResolvedValue(null);
   emptyComparison();
 });
 
@@ -152,6 +159,47 @@ describe('quoteExperiment', () => {
 
     expect(response.status).toBe(400);
     expect(json.code).toBe('SCHEDULE_OUT_OF_RANGE');
+  });
+});
+
+describe('quoteExperiment pre-charge preflights', () => {
+  it('runs the media preflights for every video before it returns a price', async () => {
+    const { response } = await quote();
+
+    expect(response.status).toBe(200);
+    expect(checkPreChargePreflights).toHaveBeenCalledTimes(10);
+    expect(validatePreChargeImageId).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses to quote a video whose media fails a preflight, naming it', async () => {
+    const body = experimentBody();
+    body.variants[1].videos[3].segments = segmentsFor().map((segment, index) =>
+      index === 0 ? { ...segment, media: [{ url: 'https://e.com/MARK.jpg' }, ...(segment.media ?? []).slice(1)] } : segment,
+    );
+    vi.mocked(checkPreChargePreflights).mockImplementation(async (input) =>
+      JSON.stringify(input.segments).includes('MARK')
+        ? NextResponse.json({ success: false, error: 'Segment 0 image 1 is 1:1.', code: 'VALIDATION_FAILED', field: 'options.segments' }, { status: 400 })
+        : null,
+    );
+    const db = fakeDb();
+
+    const response = await quoteExperiment(db.client, AUTH, body, NOW);
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ code: 'VALIDATION_FAILED', field: 'variants.1.videos.3.segments' });
+    expect(db.calls.filter((call) => call.op !== 'select')).toEqual([]);
+  });
+
+  it('refuses to quote when the requested persona image fails its check', async () => {
+    vi.mocked(validatePreChargeImageId).mockResolvedValue(
+      NextResponse.json({ success: false, error: 'Unknown image.', code: 'VALIDATION_FAILED', field: 'options.imageId' }, { status: 404 }),
+    );
+
+    const { response, json } = await quote();
+
+    expect(response.status).toBe(404);
+    expect(json.field).toBe('options.imageId');
+    expect(checkPreChargePreflights).not.toHaveBeenCalled();
   });
 });
 

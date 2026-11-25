@@ -8,6 +8,8 @@ import type { CheckedRequest } from '../videos/generate-and-schedule/request-val
 import type { ValidationIssue } from '../videos/generate-and-schedule/validation-issues';
 import type { LipsyncPhotoRef } from '../videos/generate-and-schedule/lipsync-photos';
 
+export const EXPERIMENT_ROUTE = 'POST /api/experiments';
+
 export const SEGMENTS_FIELD = 'options.segments';
 
 export function shapeCountIssues(body: CreateExperimentBody): ValidationIssue[] {
