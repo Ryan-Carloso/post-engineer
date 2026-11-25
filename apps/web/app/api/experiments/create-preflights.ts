@@ -85,9 +85,9 @@ async function checkVideosInBatches(
         }),
       ),
     );
-    for (const [offset, outcome] of outcomes.entries()) {
-      if (outcome !== null) return locateFailure(outcome, batch[offset]);
-    }
+    const failed = outcomes.flatMap((outcome, offset) => (outcome === null ? [] : [{ outcome, video: batch[offset] }]));
+    const decisive = failed.find(({ outcome }) => outcome.status < 500) ?? failed[0];
+    if (decisive !== undefined) return locateFailure(decisive.outcome, decisive.video);
   }
   return null;
 }
@@ -111,6 +111,6 @@ export async function checkExperimentPreflights(
   const shared = createPreflightShared(budgetMs);
   const photos = await checkLipsyncPhotosOnce(userId, prep, options, shared);
   const failure = photos ?? (await checkVideosInBatches(input, shared, budgetMs));
-  if (failure !== null && shared.signal.aborted) return budgetExceeded(budgetMs);
+  if (failure !== null && failure.status >= 500 && shared.signal.aborted) return budgetExceeded(budgetMs);
   return failure;
 }

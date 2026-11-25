@@ -262,6 +262,25 @@ describe('checkExperimentPreflights', () => {
     expect(response?.status).toBe(400);
   });
 
+  it.each([
+    ['before', 'Script 0', 'Script 1', 'variants.0.videos.1.segments'],
+    ['after', 'Script 1', 'Script 0', 'variants.0.videos.0.segments'],
+  ])('keeps a real validation failure over the budget error when the hung check comes %s it', async (_order, hungScript, badScript, field) => {
+    vi.mocked(checkPreChargePreflights).mockImplementation(async (input) => {
+      if (input.script === badScript) return failure(400, { error: 'bad aspect', code: 'VALIDATION_FAILED', field: 'options.segments' });
+      if (input.script !== hungScript) return null;
+      await new Promise<void>((resolve) => input.shared?.signal.addEventListener('abort', () => resolve()));
+      return failure(502, { error: 'Video service is unavailable.', code: 'INTERNAL_ERROR' });
+    });
+
+    const response = await run(videos(4), 'persona-1', OPTIONS, { budgetMs: 30 });
+
+    expect(response?.status).toBe(400);
+    const json = await response?.json();
+    expect(json.field).toBe(field);
+    expect(json.error).toContain('bad aspect');
+  });
+
   it('reports a budget that expired during the lipsync photo checks', async () => {
     vi.mocked(checkLipsyncPhotoFaces).mockImplementation(async (_userId, _photos, _aspect, shared) => {
       await new Promise<void>((resolve) => shared?.signal.addEventListener('abort', () => resolve()));
