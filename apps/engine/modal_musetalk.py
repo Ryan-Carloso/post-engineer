@@ -53,7 +53,7 @@ _HERE = Path(__file__).resolve().parent
 
 MUSETALK_IMAGE = (
     modal.Image.debian_slim(python_version="3.10")
-    .apt_install("git", "ffmpeg", "libgl1", "libglib2.0-0")
+    .apt_install("git", "ffmpeg", "libgl1", "libglib2.0-0", "curl")
     .pip_install(
         "torch==2.0.1",
         "torchvision==0.15.2",

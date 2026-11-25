@@ -1,5 +1,6 @@
 """Tests for the cheap lip-sync tier helpers and their two Modal apps."""
 
+import ast
 import math
 import subprocess
 import tempfile
@@ -13,6 +14,57 @@ ENGINE_DIR = Path(__file__).resolve().parents[2]
 
 def _source(name: str) -> str:
     return (ENGINE_DIR / name).read_text()
+
+
+def _package_name(spec: str) -> str:
+    name = spec.split("[")[0]
+    for sep in ("==", ">=", "<=", "!=", "~=", ">", "<"):
+        name = name.split(sep)[0]
+    return name.strip()
+
+
+def _installed_binaries(source: str) -> set[str]:
+    tree = ast.parse(source)
+    installed = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if not isinstance(func, ast.Attribute) or func.attr not in ("apt_install", "pip_install"):
+            continue
+        for arg in node.args:
+            if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                installed.add(_package_name(arg.value))
+    return installed
+
+
+def _shelled_binaries(source: str) -> set[str]:
+    tree = ast.parse(source)
+    binaries = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if not (
+            isinstance(func, ast.Attribute)
+            and func.attr in ("run", "check_call", "check_output", "Popen")
+            and isinstance(func.value, ast.Name)
+            and func.value.id == "subprocess"
+        ):
+            continue
+        assert node.args, "subprocess call without arguments"
+        first = node.args[0]
+        if isinstance(first, ast.List) and first.elts:
+            head = first.elts[0]
+            assert isinstance(head, ast.Constant) and isinstance(head.value, str), (
+                "subprocess command is not a literal list of strings"
+            )
+            binaries.add(head.value)
+        elif isinstance(first, ast.Constant) and isinstance(first.value, str):
+            binaries.add(first.value.split()[0])
+        else:
+            raise AssertionError("subprocess command is not a literal")
+    return binaries
 
 
 def _completed(stdout: str = "") -> subprocess.CompletedProcess[str]:
@@ -215,6 +267,13 @@ class ModalWiringTests(unittest.TestCase):
             source,
         )
         self.assertIn("if digest != FACE_LANDMARKER_SHA256:", source)
+
+    def test_every_binary_the_app_shells_out_to_is_installed_in_its_image(self):
+        for name in ("modal_musetalk.py", "modal_tbdub.py"):
+            with self.subTest(app=name):
+                source = _source(name)
+                missing = _shelled_binaries(source) - _installed_binaries(source)
+                self.assertEqual(missing, set())
 
 
 if __name__ == "__main__":
