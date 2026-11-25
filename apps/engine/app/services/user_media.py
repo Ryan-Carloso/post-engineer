@@ -124,7 +124,7 @@ def resolve_first_segment_photo(
     """Download the first photo of the video: (path, segment index, image index, reason).
 
     reason is None on success, "no_segment_media" when no segment
-    carries a usable photo (the caller falls back to the persona photo), or
+    carries a usable photo (the caller fails the task with no_first_photo), or
     the per-photo failure (expired media id, blocked download,
     unusable file) — the caller fails the task naming the segment and
     image. The downloaded file is the caller's to remove once copied.

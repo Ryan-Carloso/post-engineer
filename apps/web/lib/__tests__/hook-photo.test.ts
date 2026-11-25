@@ -84,12 +84,12 @@ describe('hookPhotoForSegments', () => {
     ).toEqual({ url: null, source: 'upload', segmentIndex: 0, imageIndex: 0 });
   });
 
-  it('falls back to the persona photo when every media item is a clip', () => {
+  it('returns no photo when every media item is a clip', () => {
     expect(
       hookPhotoForSegments([
         { kind: 'hook', text: 'Welcome.', media: [{ url: 'https://e.com/broll.mp4' }] },
       ]),
-    ).toEqual({ url: null, source: 'persona', segmentIndex: null, imageIndex: null });
+    ).toEqual({ url: null, source: 'none', segmentIndex: null, imageIndex: null });
   });
 
   it('prefers the media id over the URL when the first photo carries both', () => {
@@ -104,10 +104,10 @@ describe('hookPhotoForSegments', () => {
     ).toEqual({ url: null, source: 'upload', segmentIndex: 0, imageIndex: 0 });
   });
 
-  it('returns the persona source when no segment carries a photo', () => {
+  it('returns the none source when no segment carries a photo', () => {
     expect(hookPhotoForSegments([{ kind: 'hook', text: 'Welcome.' }])).toEqual({
       url: null,
-      source: 'persona',
+      source: 'none',
       segmentIndex: null,
       imageIndex: null,
     });
@@ -137,22 +137,31 @@ describe('narrowHookPhoto', () => {
     ).toEqual({ url: null, source: 'upload', segmentIndex: 1, imageIndex: 2 });
   });
 
-  it('falls back to the persona source for null, non-objects and unknown sources', () => {
-    const fallback = { url: null, source: 'persona', segmentIndex: null, imageIndex: null };
+  it('falls back to the none source for null, non-objects and unknown sources', () => {
+    const fallback = { url: null, source: 'none', segmentIndex: null, imageIndex: null };
     expect(narrowHookPhoto(null)).toEqual(fallback);
     expect(narrowHookPhoto('segment')).toEqual(fallback);
     expect(narrowHookPhoto({ source: 'avatar' })).toEqual(fallback);
+    expect(narrowHookPhoto({ source: 'persona' })).toEqual(fallback);
   });
 
   it('normalizes a non-segment source to the shape the server produces for it', () => {
     expect(
       narrowHookPhoto({
         url: 'https://e.com/hook.jpg',
-        source: 'persona',
+        source: 'upload',
         segmentIndex: 0,
         imageIndex: 0,
       }),
-    ).toEqual({ url: null, source: 'persona', segmentIndex: null, imageIndex: null });
+    ).toEqual({ url: null, source: 'upload', segmentIndex: 0, imageIndex: 0 });
+    expect(
+      narrowHookPhoto({
+        url: 'https://e.com/hook.jpg',
+        source: 'none',
+        segmentIndex: 0,
+        imageIndex: 0,
+      }),
+    ).toEqual({ url: null, source: 'none', segmentIndex: null, imageIndex: null });
     expect(narrowHookPhoto({ url: 42, source: 'segment', segmentIndex: '0' })).toEqual({
       url: null,
       source: 'segment',

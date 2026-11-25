@@ -187,7 +187,7 @@ describe('getSlotPost', () => {
     });
   });
 
-  it('returns the persona hook photo source when no segment carries a photo', async () => {
+  it('returns no hook photo source when no segment carries a photo', async () => {
     const { supabase } = mockSupabase({
       scheduled_posts: { data: SLOT_ROW, error: null },
       schedules: { data: SCHEDULE_ROW, error: null },
@@ -197,7 +197,7 @@ describe('getSlotPost', () => {
     const detail = await getSlotPost(supabase, 'slot-1', 'user-1', null);
     expect(detail?.slot.hookPhoto).toEqual({
       url: null,
-      source: 'persona',
+      source: 'none',
       segmentIndex: null,
       imageIndex: null,
     });

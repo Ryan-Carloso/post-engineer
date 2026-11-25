@@ -8000,8 +8000,8 @@
         ]
       },
       "post": {
-        "operationId": "post_prompt_library_create",
-        "summary": "prompt library create",
+        "operationId": "post_prompts_create",
+        "summary": "prompts create",
         "tags": [
           "prompts"
         ],
@@ -8352,8 +8352,8 @@
         ]
       },
       "patch": {
-        "operationId": "patch_prompt_library_update",
-        "summary": "prompt library update",
+        "operationId": "patch_prompts_update",
+        "summary": "prompts update",
         "tags": [
           "prompts"
         ],
@@ -8555,8 +8555,8 @@
         ]
       },
       "delete": {
-        "operationId": "delete_prompt_library_delete",
-        "summary": "prompt library delete",
+        "operationId": "delete_prompts_delete",
+        "summary": "prompts delete",
         "tags": [
           "prompts"
         ],
@@ -8652,8 +8652,8 @@
     },
     "/api/prompts/{slug}/versions": {
       "get": {
-        "operationId": "get_prompt_library_versions_versions",
-        "summary": "prompt library versions",
+        "operationId": "get_prompts_versions_versions",
+        "summary": "prompts versions",
         "tags": [
           "prompts"
         ],
@@ -8830,8 +8830,8 @@
     },
     "/api/prompts/{slug}/versions/{version}": {
       "get": {
-        "operationId": "get_prompt_library_versions__version_",
-        "summary": "prompt library versions",
+        "operationId": "get_prompts_versions__version_",
+        "summary": "prompts versions",
         "tags": [
           "prompts"
         ],
@@ -8971,8 +8971,8 @@
     },
     "/api/prompts/{slug}/versions/{version}/restore": {
       "post": {
-        "operationId": "post_prompt_library_restore",
-        "summary": "prompt library restore",
+        "operationId": "post_prompts_restore",
+        "summary": "prompts restore",
         "tags": [
           "prompts"
         ],

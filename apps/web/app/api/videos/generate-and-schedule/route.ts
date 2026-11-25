@@ -21,7 +21,7 @@ import { buildIdentitySnapshot } from './identity-snapshot';
 import { resolveEffectiveCta, validateCtaTake } from './cta-validation';
 import { scheduleAccountColumns } from './account-columns';
 import { checkPreChargePreflights } from './aspect-preflight';
-import { resolvePreChargeFallbackPhotos } from './library-photo';
+import { validatePreChargeImageId } from './library-photo';
 import { loadBoundPublishingAccounts, resolvePublishingAccounts, signedUrl } from './persona-prep';
 import { scheduleWarnings } from './schedule-warnings';
 import { validateAccounts } from './validate-accounts';
@@ -209,16 +209,15 @@ async function postHandler(request: Request): Promise<NextResponse> {
 
   const requestedImageId =
     personaId !== null ? (validatedOptions.imageId?.trim() || null) : null;
-  const fallbackPhotos = await resolvePreChargeFallbackPhotos(supabase, {
+  const imageIdCheck = await validatePreChargeImageId(supabase, {
     personaId,
     userId,
     title,
     script: segmentsScript,
-    videoType: validatedOptions.videoType,
     requestedImageId,
     prep,
   });
-  if (fallbackPhotos instanceof NextResponse) return fallbackPhotos;
+  if (imageIdCheck instanceof NextResponse) return imageIdCheck;
 
   const preflight = await checkPreChargePreflights({
     userId,
@@ -226,8 +225,6 @@ async function postHandler(request: Request): Promise<NextResponse> {
     prep,
     options: validatedOptions,
     segments: options?.segments,
-    libraryPhotoUrl: fallbackPhotos.libraryPhotoUrl,
-    photoPathUrl: fallbackPhotos.photoPathUrl,
   });
   if (preflight instanceof NextResponse) return preflight;
 

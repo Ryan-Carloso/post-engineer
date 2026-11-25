@@ -94,7 +94,7 @@ describe('handleMcpWebRequest', () => {
 
       expect(httpNames).toEqual(memoryNames);
       expect(stdioNames).toEqual(httpNames);
-      expect(httpNames).toHaveLength(18);
+      expect(httpNames).toHaveLength(17);
       const actionsOf = (name: string): string[] =>
         (httpTools.tools.find((tool) => tool.name === name)?.inputSchema.properties as { action?: { enum?: string[] } } | undefined)?.action?.enum ?? [];
       for (const [tool, action] of FILE_ONLY_ACTIONS) {

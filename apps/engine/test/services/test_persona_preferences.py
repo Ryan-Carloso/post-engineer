@@ -10,7 +10,7 @@ class TestPersonaPreferences(unittest.TestCase):
         request = TaskVideoRequest(
             video_title="Morning in Lisbon",
             video_description="Test description.",
-            video_type="hook_lipsync",
+            video_type="voiceover",
             video_language="pt",
             video_aspect="16:9",
             paragraph_number=3,
@@ -30,7 +30,7 @@ class TestPersonaPreferences(unittest.TestCase):
         request = TaskVideoRequest(
             video_title="Morning in Lisbon",
             video_description="Test description.",
-            video_type="hook_lipsync",
+            video_type="voiceover",
             persona={
                 "name": "Ana",
                 "photo_url": "https://cdn.example.test/ana.png",
@@ -50,7 +50,7 @@ class TestPersonaPreferences(unittest.TestCase):
         request = TaskVideoRequest(
             video_title="Morning in Lisbon",
             video_description="Test description.",
-            video_type="hook_lipsync",
+            video_type="voiceover",
             persona={
                 "name": "Ana",
                 "photo_url": "https://cdn.example.test/ana.png",

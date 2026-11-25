@@ -6,7 +6,7 @@ import { useSchedulesQuery, usePersonaListQuery, type ScheduleConfig, type Sched
 import { SOCIAL_PROVIDERS, type SocialProvider } from '@/lib/contracts/providers';
 import { useSocialAccountsQuery } from '@/lib/social-accounts-queries';
 import { useI18n } from '@/lib/i18n/provider';
-import { PROVIDER_LABELS, accountOption, type AccountOption, scheduleAccountIds } from '@/lib/account-options';
+import { PROVIDER_LABELS, accountOption, type AccountOption } from '@/lib/account-options';
 import { Button } from '@/components/ui/button';
 import {
   Select,
@@ -22,13 +22,7 @@ import type { PersonaPhoto } from './calendar-days';
 
 export type ProviderFilter = 'all' | SocialProvider;
 
-function resolveAccountFilter(accountId: string, provider: ProviderFilter, accounts: AccountOption[]): string {
-  if (accountId === 'all') return 'all';
-  const account = accounts.find((item) => item.id === accountId);
-  if (!account) return 'all';
-  if (provider !== 'all' && account.provider !== provider) return 'all';
-  return accountId;
-}
+export const POSTS_NO_PERSONA = '^@none';
 
 export interface PostJoins {
   scheduleById: Map<string, ScheduleConfig>;
@@ -95,50 +89,40 @@ export function usePostJoins(): PostJoins {
 
 export interface PostFilters {
   provider: ProviderFilter;
-  account: string;
-  visibleAccounts: AccountOption[];
+  persona: string;
+  personas: { id: string; name: string }[];
   hasActiveFilter: boolean;
   setProvider: (next: ProviderFilter) => void;
-  setAccount: (next: string) => void;
+  setPersona: (next: string) => void;
   clear: () => void;
   passes: (slot: ScheduledSlot) => boolean;
 }
 
 export function usePostFilters(joins: PostJoins): PostFilters {
-  const { scheduleById, accountOptions } = joins;
-  const [provider, setProviderState] = useState<ProviderFilter>('all');
-  const [accountState, setAccount] = useState<string>('all');
-  const account = useMemo(
-    () => resolveAccountFilter(accountState, provider, accountOptions),
-    [accountState, provider, accountOptions],
-  );
-  const visibleAccounts = useMemo(
-    () => (provider === 'all' ? accountOptions : accountOptions.filter((item) => item.provider === provider)),
-    [accountOptions, provider],
-  );
-  const setProvider = useCallback(
-    (next: ProviderFilter) => {
-      setProviderState(next);
-      setAccount((current) => resolveAccountFilter(current, next, accountOptions));
-    },
-    [accountOptions],
+  const { scheduleById, personaNameById } = joins;
+  const [provider, setProvider] = useState<ProviderFilter>('all');
+  const [persona, setPersona] = useState<string>('all');
+  const personas = useMemo(
+    () => [...personaNameById.entries()].map(([id, name]) => ({ id, name })),
+    [personaNameById],
   );
   const passes = useCallback(
     (slot: ScheduledSlot): boolean => {
       const schedule = scheduleById.get(slot.scheduleId);
       if (!schedule) return false;
       if (provider !== 'all' && !schedule.providers.includes(provider)) return false;
-      if (account !== 'all' && !new Set(scheduleAccountIds(schedule)).has(account)) return false;
+      if (persona === POSTS_NO_PERSONA) return schedule.personaId === null;
+      if (persona !== 'all' && schedule.personaId !== persona) return false;
       return true;
     },
-    [scheduleById, provider, account],
+    [scheduleById, provider, persona],
   );
   const clear = useCallback(() => {
-    setProviderState('all');
-    setAccount('all');
+    setProvider('all');
+    setPersona('all');
   }, []);
-  const hasActiveFilter = provider !== 'all' || account !== 'all';
-  return { provider, account, visibleAccounts, hasActiveFilter, setProvider, setAccount, clear, passes };
+  const hasActiveFilter = provider !== 'all' || persona !== 'all';
+  return { provider, persona, personas, hasActiveFilter, setProvider, setPersona, clear, passes };
 }
 
 const TRIGGER_CLASS =
@@ -199,13 +183,13 @@ export function PostFiltersBar({
         </Select>
       </div>
       <div className={LABEL_CLASS}>
-        <span>{t('posts.filterAccount')}</span>
-        <Select value={filters.account} disabled={inert} onValueChange={(value) => filters.setAccount(value)}>
+        <span>{t('posts.filterPersona')}</span>
+        <Select value={filters.persona} disabled={inert} onValueChange={(value) => filters.setPersona(value)}>
           <SelectTrigger
-            aria-label={t('posts.filterAccount')}
+            aria-label={t('posts.filterPersona')}
             className={cn(
               TRIGGER_CLASS,
-              filters.account !== 'all' && !unavailable && SELECT_ACTIVE_CLASS,
+              filters.persona !== 'all' && !unavailable && SELECT_ACTIVE_CLASS,
               inert && SELECT_DISABLED_CLASS,
               inert && SELECT_CHEVRON_HIDDEN_CLASS,
             )}
@@ -213,12 +197,13 @@ export function PostFiltersBar({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">{t('posts.allAccounts')}</SelectItem>
-            {filters.visibleAccounts.map((item) => (
-              <SelectItem key={`${item.provider}:${item.id}`} value={item.id}>
-                {item.label}
+            <SelectItem value="all">{t('posts.allPersonas')}</SelectItem>
+            {filters.personas.map((item) => (
+              <SelectItem key={item.id} value={item.id}>
+                {item.name}
               </SelectItem>
             ))}
+            <SelectItem value={POSTS_NO_PERSONA}>{t('posts.noPersona')}</SelectItem>
           </SelectContent>
         </Select>
       </div>

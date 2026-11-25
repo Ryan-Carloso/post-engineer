@@ -202,11 +202,13 @@ describe('SERVER_INSTRUCTIONS', () => {
 });
 
 describe('prompt tools over MCP', () => {
-  it('registers one prompts tool with the list and get actions, a query and source for list, and a slug for get', async () => {
+  it('registers one prompts tool with the read and write actions and the union of their fields', async () => {
     await withMcpClient(async (mcp) => {
       const { tools } = await mcp.listTools();
       const prompts = tools.find((tool) => tool.name === 'prompts');
-      expect(Object.keys(prompts?.inputSchema.properties ?? {}).sort()).toEqual(['action', 'query', 'slug', 'source']);
+      expect(Object.keys(prompts?.inputSchema.properties ?? {}).sort()).toEqual([
+        'action', 'before', 'description', 'expectedCurrentVersion', 'limit', 'prompt', 'query', 'slug', 'source', 'title', 'version', 'visibility',
+      ]);
       expect(prompts?.inputSchema.required).toEqual(['action']);
       expect(prompts?.description).toContain('get (slug)');
       expect(tools.some((tool) => tool.name === 'list_prompts' || tool.name === 'get_prompt')).toBe(false);

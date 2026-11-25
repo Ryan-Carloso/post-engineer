@@ -4,7 +4,7 @@ invalid segments fail at request validation, before any task row is created."""
 import pytest
 from pydantic import ValidationError
 
-from app.models.schema import TaskVideoRequest
+from app.models.schema import PersonaParams, TaskVideoRequest
 
 HOOK = (
     "Stop wasting your trip stuck in a ninety minute line for the original dish "
@@ -227,3 +227,46 @@ def test_stray_cta_marker_without_cta_type_is_rejected():
             video_type="voiceover",
             segments=segments,
         )
+
+
+def _hook_persona():
+    return PersonaParams(
+        name="Ana",
+        photo_url="https://example.com/ana.jpg",
+        voice_id="chatterbox:kokoro_af_heart",
+    )
+
+
+def test_hook_lipsync_without_segments_is_rejected():
+    with pytest.raises(ValidationError, match="hook_lipsync requires segments"):
+        TaskVideoRequest(
+            video_title="Porto",
+            video_description="Test description.",
+            video_type="hook_lipsync",
+            persona=_hook_persona(),
+        )
+
+
+def test_hook_lipsync_with_segments_passes():
+    request = TaskVideoRequest(
+        video_title="Porto",
+        video_description="Test description.",
+        video_type="hook_lipsync",
+        persona=_hook_persona(),
+        segments=valid_segments(),
+    )
+    assert request.video_script == f"{HOOK}\n\n{BODY}\n\n{CTA}"
+
+
+def test_full_lipsync_without_segments_still_valid():
+    request = TaskVideoRequest(
+        video_title="Porto",
+        video_description="Test description.",
+        video_type="full_lipsync",
+        persona=_hook_persona(),
+        lipsync_photos=[
+            {"url": "https://example.com/a.jpg"},
+            {"url": "https://example.com/b.jpg"},
+        ],
+    )
+    assert request.segments is None

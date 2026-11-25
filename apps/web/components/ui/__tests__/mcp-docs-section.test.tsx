@@ -76,7 +76,7 @@ describe('McpDocsSection', () => {
     expect(screen.queryByTestId('mcp-docs-help-cta')).toBeNull();
   });
 
-  it('renders the tools grid with the 18 intent tools and the actions of each', () => {
+  it('renders the tools grid with the 17 intent tools and the actions of each', () => {
     render(<McpDocsSection apiKey={null} />);
 
     const grid = screen.getByTestId('mcp-tools-grid');
@@ -91,7 +91,6 @@ describe('McpDocsSection', () => {
       'voices',
       'accounts',
       'tool_config',
-      'prompt_library',
       'schedules',
       'posts',
       'insights',
@@ -110,14 +109,13 @@ describe('McpDocsSection', () => {
       persona_media: 'list_faces · list_images · add_image · update_image · remove_image',
       voices: 'list · preview · list_clones · create_clone · get_clone · preview_clone · delete_clone',
       accounts: 'list · connect · disconnect · get_persona_publishing · set_persona_publishing · list_boards',
-      prompt_library: 'create · update · delete · versions · restore',
       schedules: 'list · cancel · get_slot · update_slot_title · delete_slot',
       posts: 'list · get',
       insights: 'post_metrics · last_day · retention_curve · share_link_create · share_link_list · share_link_revoke',
       experiments: 'results',
       media: 'upload · check',
       billing: 'balance · transactions',
-      prompts: 'list · get',
+      prompts: 'create · update · delete · versions · restore · list · get',
       check_script: 'validate · score',
       publish_video: 'from_file · create_upload · complete_upload · publish_upload',
     };
@@ -138,7 +136,6 @@ describe('McpDocsSection', () => {
       'apiKeys.toolDescPersonaMedia',
       'apiKeys.toolDescVoices',
       'apiKeys.toolDescAccounts',
-      'apiKeys.toolDescPromptLibrary',
       'apiKeys.toolDescSchedules',
       'apiKeys.toolDescPosts',
       'apiKeys.toolDescInsights',
