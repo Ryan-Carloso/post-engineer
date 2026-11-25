@@ -140,6 +140,8 @@ interface DbConfig {
   scheduleInsertDetails?: string;
   slotInsertFails?: boolean;
   engineFailSubjects?: string[];
+  engineRejectedSubjects?: string[];
+  engineRateLimitedSubjects?: string[];
   engineUnavailableSubjects?: string[];
   signUrlError?: boolean;
   signUrlThrows?: boolean;
@@ -377,6 +379,12 @@ function setup(cfg: DbConfig = {}): void {
     const subject = (payload as { video_title?: string }).video_title ?? '';
     if (cfg.engineFailSubjects?.includes(subject)) {
       return { ok: false, response: NextResponse.json({}), upstreamStatus: 500, body: null };
+    }
+    if (cfg.engineRejectedSubjects?.includes(subject)) {
+      return { ok: false, response: NextResponse.json({}), upstreamStatus: 400, body: null };
+    }
+    if (cfg.engineRateLimitedSubjects?.includes(subject)) {
+      return { ok: false, response: NextResponse.json({}), upstreamStatus: 429, body: null };
     }
     if (cfg.engineUnavailableSubjects?.includes(subject)) {
       return { ok: false, response: NextResponse.json({}), body: null };
@@ -2546,7 +2554,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
       setup({ ...DEFAULT_CFG, updateErrorTables: ['scheduled_posts'] });
       const res = await post(baseBody());
       const json = await res.json();
-      expect(res.status).toBe(502);
+      expect(res.status).toBe(500);
       expect(json.success).toBe(false);
       expect(json.code).toBe('INTERNAL_ERROR');
       expect(json.slots).toHaveLength(1);
@@ -2564,11 +2572,32 @@ describe('POST /api/videos/generate-and-schedule', () => {
       expect(json.slots[0]).toMatchObject({ title: 'Porto trip', status: 'failed', errorCode: 'engine_unavailable' });
     });
 
+    it('returns 400 ENGINE_REJECTED when the engine rejects every slot with a 4xx status', async () => {
+      setup({ ...DEFAULT_CFG, engineRejectedSubjects: ['Porto trip'] });
+      const res = await post(baseBody());
+      const json = await res.json();
+      expect(res.status).toBe(400);
+      expect(json.success).toBe(false);
+      expect(json.code).toBe('ENGINE_REJECTED');
+      expect(json.slots).toHaveLength(1);
+      expect(json.slots[0]).toMatchObject({ title: 'Porto trip', status: 'failed', errorCode: 'engine_rejected' });
+    });
+
+    it('returns 502 ENGINE_UNAVAILABLE when the engine rate-limits every slot', async () => {
+      setup({ ...DEFAULT_CFG, engineRateLimitedSubjects: ['Porto trip'] });
+      const res = await post(baseBody());
+      const json = await res.json();
+      expect(res.status).toBe(502);
+      expect(json.success).toBe(false);
+      expect(json.code).toBe('ENGINE_UNAVAILABLE');
+      expect(json.slots[0]).toMatchObject({ title: 'Porto trip', status: 'failed', errorCode: 'engine_unavailable' });
+    });
+
     it('marks the slot image_resolve_failed when dispatch-time resolution fails', async () => {
       vi.mocked(resolveVideoImage).mockResolvedValue({ ok: false, error: 'library down', status: 500 });
       const res = await post(baseBody());
       const json = await res.json();
-      expect(res.status).toBe(502);
+      expect(res.status).toBe(500);
       expect(json.success).toBe(false);
       expect(json.code).toBe('INTERNAL_ERROR');
       expect(json.slots[0]).toMatchObject({ title: 'Porto trip', status: 'failed', errorCode: 'image_resolve_failed' });
@@ -2582,7 +2611,7 @@ describe('POST /api/videos/generate-and-schedule', () => {
       });
       const res = await post(baseBody());
       const json = await res.json();
-      expect(res.status).toBe(502);
+      expect(res.status).toBe(500);
       expect(json.success).toBe(false);
       expect(json.slots[0]).toMatchObject({ title: 'Porto trip', status: 'failed', errorCode: 'image_sign_failed' });
     });
