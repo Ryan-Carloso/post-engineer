@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { apiErrorResponse } from '@/lib/api-error';
-import { EXPERIMENT_MAX_FULL_LIPSYNC_VIDEOS } from '@/lib/contracts/experiments';
 import { ERROR_CODES } from '@/lib/error-codes';
 import { checkPreChargePreflights } from '../videos/generate-and-schedule/aspect-preflight';
 import { checkLipsyncPhotoFaces } from '../videos/generate-and-schedule/lipsync-photo-faces';
@@ -43,7 +42,7 @@ async function locateFailure(failure: NextResponse, video: PlannedVideo): Promis
 
 function budgetExceeded(budgetMs: number, videoType: ValidatedOptions['videoType']): NextResponse {
   const lipsyncLimit =
-    videoType === 'full_lipsync' ? ` A full lip-sync experiment holds at most ${EXPERIMENT_MAX_FULL_LIPSYNC_VIDEOS} videos.` : '';
+    videoType === 'full_lipsync' ? ' Full lip-sync checks the narration of every video, which is the slowest check, so fewer videos helps most.' : '';
   return apiErrorResponse(
     504,
     `Checking the media of this experiment took longer than ${Math.ceil(budgetMs / 1000)}s and was stopped before anything was charged: send fewer videos or fewer distinct media items, then try again.${lipsyncLimit}`,
