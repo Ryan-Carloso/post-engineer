@@ -31,6 +31,15 @@ describe('PROTECTED_PREFIXES', () => {
     expect(isProtectedPath('/')).toBe(true);
   });
 
+  it('has no route group other than (main), so a new group must be classified here first', () => {
+    const appDir = join(findRepoRoot(import.meta.url), 'apps', 'web', 'app');
+    const groups = readdirSync(appDir)
+      .filter((entry) => statSync(join(appDir, entry)).isDirectory())
+      .filter((entry) => entry.startsWith('(') && entry.endsWith(')'))
+      .sort();
+    expect(groups).toEqual(['(main)']);
+  });
+
   it('classifies every top-level app directory outside (main) as public', () => {
     const appDir = join(findRepoRoot(import.meta.url), 'apps', 'web', 'app');
     const outside = readdirSync(appDir)
