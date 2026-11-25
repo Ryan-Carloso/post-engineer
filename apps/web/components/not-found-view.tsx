@@ -15,7 +15,7 @@ export function NotFoundView({ signedIn }: { signedIn: boolean }) {
       <AppLogo size={56} />
       <p className="text-sm font-semibold text-brand">404</p>
       <h1 className="text-2xl font-semibold text-ink">{t('notFound.title')}</h1>
-      <p className="text-sm text-muted-text">{t('notFound.description')}</p>
+      <p className="text-sm text-muted-text">{t(signedIn ? 'notFound.descriptionSignedIn' : 'notFound.description')}</p>
       <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
         {signedIn ? (
           <Button asChild>

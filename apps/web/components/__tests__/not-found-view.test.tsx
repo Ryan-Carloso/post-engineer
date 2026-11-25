@@ -41,6 +41,7 @@ describe('NotFoundView', () => {
       '/landing',
     );
     expect(linkHrefs()).toEqual(['/login', '/api-documentation.txt', '/landing']);
+    expect(screen.getByText(/Crie uma conta para começar a publicar/)).toBeInTheDocument();
   });
 
   it('offers the dashboard instead of sign-up when signed in', () => {
@@ -50,6 +51,16 @@ describe('NotFoundView', () => {
     expect(screen.queryByRole('link', { name: 'Criar conta' })).not.toBeInTheDocument();
     expect(linkHrefs()).toEqual(['/', '/api-documentation.txt', '/landing']);
     expect(linkHrefs()).not.toContain('/login');
+    expect(screen.getByText(/Volte para o seu painel/)).toBeInTheDocument();
+    expect(screen.queryByText(/Crie uma conta/)).not.toBeInTheDocument();
+  });
+
+  it('keeps the account pitch out of the signed-in English copy', async () => {
+    window.localStorage.setItem(STORAGE_KEY, 'en');
+    renderView(true);
+
+    expect(await screen.findByText(/Head back to your dashboard/)).toBeInTheDocument();
+    expect(screen.queryByText(/Create an account/)).not.toBeInTheDocument();
   });
 
   it('renders the English copy when the stored locale is en', async () => {
