@@ -55,6 +55,13 @@ describe('DayListRow', () => {
     expect(screen.getByText('posts.unknownTitle')).toBeInTheDocument();
   });
 
+  it('labels a cancelled slot Cancelled instead of Scheduled', () => {
+    render(<DayListRow slot={{ ...rowSlot, status: 'cancelled' }} joins={rowJoins} />);
+
+    expect(screen.getByText('posts.statusCancelled')).toBeInTheDocument();
+    expect(screen.queryByText('posts.groupScheduled')).not.toBeInTheDocument();
+  });
+
   it('shows the no-persona fallback when the schedule has no persona', () => {
     const voiceoverJoins: PostJoins = {
       ...rowJoins,
