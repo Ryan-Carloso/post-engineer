@@ -23,4 +23,4 @@ def notify_safe(notify: Any, message: str) -> None:
     try:
         notify(message)
     except Exception as exc:
-        logger.warning(f"fill_schedule: notify failed: {exc}")
+        logger.warning(f"publisher: notify failed: {exc}")

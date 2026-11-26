@@ -187,7 +187,7 @@ def publish_slot_accounts(
                 if not result.first_error:
                     result.first_error = str(exc)
                 logger.warning(
-                    f"fill_schedule: slot {slot.get('id')} provider {provider_name} "
+                    f"publisher: slot {slot.get('id')} provider {provider_name} "
                     f"publish failed: {exc}"
                 )
             except OSError as exc:

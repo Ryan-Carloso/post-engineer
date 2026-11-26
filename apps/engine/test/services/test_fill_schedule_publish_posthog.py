@@ -78,7 +78,7 @@ class FillSchedulePublishPostHogTests(TestCase):
     def _scheduler(self, store, publish_mock):
         from app.services.publisher import scheduler as scheduler_module
 
-        sched = scheduler_module.FillScheduleScheduler(
+        sched = scheduler_module.PublishScheduler(
             store=store,
             publish_video=publish_mock,
         )

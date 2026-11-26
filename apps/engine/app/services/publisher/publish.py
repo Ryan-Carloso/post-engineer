@@ -81,7 +81,7 @@ class BatchPublisher:
         account that already has a recorded success.
         """
         if not self.base_url or not self.api_secret:
-            logger.warning("fill_schedule: publish skipped — MPT_UPLOAD_API_BASE_URL/MONEYPRINT_API_SECRET missing")
+            logger.warning("publisher: publish skipped — MPT_UPLOAD_API_BASE_URL/MONEYPRINT_API_SECRET missing")
             return 0
         resumable: list[dict[str, Any]] = []
         fetch = getattr(self.store, "resumable_publishing_slots", None)
@@ -90,7 +90,7 @@ class BatchPublisher:
                 resumable = [row for row in fetch(now) if isinstance(row, dict)]
             except Exception as exc:
                 logger.warning(
-                    f"fill_schedule: resumable publish lookup failed: {notify_module.safe_diagnostic(exc)}"
+                    f"publisher: resumable publish lookup failed: {notify_module.safe_diagnostic(exc)}"
                 )
         published = 0
         for slot in self.store.ready_due_slots(now):
@@ -117,7 +117,7 @@ class BatchPublisher:
                 bound = self.store.persona_bound_accounts(persona_id)
             except Exception as exc:
                 logger.warning(
-                    f"fill_schedule: slot {slot['id']} binding read failed, "
+                    f"publisher: slot {slot['id']} binding read failed, "
                     f"leaving it for the next tick: {notify_module.safe_diagnostic(exc)}"
                 )
                 return 0
@@ -175,7 +175,7 @@ class BatchPublisher:
         )
         if account_result.transport_error is not None:
             logger.warning(
-                f"fill_schedule: slot {slot['id']} video read failed: "
+                f"publisher: slot {slot['id']} video read failed: "
                 f"{notify_module.safe_diagnostic(account_result.transport_error)}"
             )
             track_event(

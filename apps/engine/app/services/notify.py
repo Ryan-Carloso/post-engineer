@@ -197,7 +197,7 @@ def _clip(text: str, max_chars: int) -> str:
 
 
 def scheduler_started_msg() -> str:
-    return "🗓️ Fill schedule scheduler started"
+    return "🗓️ Publish scheduler started"
 
 
 def slot_published_msg(persona: str, title: str, providers: list[str]) -> str:

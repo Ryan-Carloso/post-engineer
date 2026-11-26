@@ -6,8 +6,8 @@ the user uploaded. The scheduler publishes each one at its time.
 Components:
 - store: Supabase read/write client (ScheduleStore).
 - publish: BatchPublisher — publishes ready slots whose time has come.
-- scheduler: FillScheduleScheduler — runs the publish stage one tick at a
-  time; start_fill_schedule_thread runs the tick loop.
+- scheduler: PublishScheduler — runs the publish stage one tick at a
+  time; start_publisher_thread runs the tick loop.
 - support: shared helpers (slot_user_id, notify_safe).
 - metadata: provider metadata mapping + publish-plan validation.
 - constants: shared constants.
@@ -23,8 +23,8 @@ from app.services.publisher.constants import (
 from app.services.publisher.metadata import metadata_for, validate_publish_plan
 from app.services.publisher.publish import BatchPublisher
 from app.services.publisher.scheduler import (
-    FillScheduleScheduler,
-    start_fill_schedule_thread,
+    PublishScheduler,
+    start_publisher_thread,
 )
 from app.services.publisher.store import ScheduleStore, SupabaseAuthError
 from app.services.publisher.support import notify_safe, slot_user_id
@@ -36,12 +36,12 @@ __all__ = [
     "SLOT_READY",
     "TICK_SECONDS",
     "BatchPublisher",
-    "FillScheduleScheduler",
+    "PublishScheduler",
     "ScheduleStore",
     "SupabaseAuthError",
     "metadata_for",
     "notify_safe",
     "slot_user_id",
-    "start_fill_schedule_thread",
+    "start_publisher_thread",
     "validate_publish_plan",
 ]

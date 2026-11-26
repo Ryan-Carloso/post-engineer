@@ -11,7 +11,7 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
-from app.services.publisher import FillScheduleScheduler
+from app.services.publisher import PublishScheduler
 from app.services.publisher import publish as publish_module
 from app.services.publisher.account_outcomes import classify_failure, next_delay_seconds
 from app.services.upload_publisher import PublishError
@@ -110,7 +110,7 @@ class AccountRetryTests(unittest.TestCase):
         }
 
     def _scheduler(self, store: _MemoryStore, publish, notify=None):
-        scheduler = FillScheduleScheduler(
+        scheduler = PublishScheduler(
             store=store,
             publish_video=publish,
             notify=notify or MagicMock(),

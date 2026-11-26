@@ -73,7 +73,7 @@ class ContinueOnProviderFailureTests(unittest.TestCase):
         }
 
     def _scheduler(self, store, publish):
-        scheduler = fs.FillScheduleScheduler(
+        scheduler = fs.PublishScheduler(
             store=store,
             publish_video=publish,
         )

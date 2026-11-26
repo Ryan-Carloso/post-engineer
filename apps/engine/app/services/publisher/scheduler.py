@@ -21,7 +21,7 @@ from app.services.publisher.store import CONNECT_RETRIES, ScheduleStore
 
 OUTAGE_REMINDER_SECONDS = 30 * 60
 
-class FillScheduleScheduler:
+class PublishScheduler:
     """Publishes due slots, one tick at a time."""
 
     def __init__(
@@ -58,19 +58,19 @@ class FillScheduleScheduler:
                     connection_failed = True
                     self._report_outage(stage_name, diagnostic, now)
                 else:
-                    logger.error(f"fill_schedule: stage {stage_name} failed: {diagnostic}")
+                    logger.error(f"publisher: stage {stage_name} failed: {diagnostic}")
                 results[stage_name] = -1
                 self.store.set_connect_retries(0)
         if not connection_failed and self._outage_since is not None:
             logger.warning(
-                f"fill_schedule: connection outage over after {self._outage_seconds(now)}s "
+                f"publisher: connection outage over after {self._outage_seconds(now)}s "
                 f"and {self._outage_failures} failed stages"
             )
             self._outage_since = None
             self._outage_reported_at = None
             self._outage_failures = 0
         if any(value != 0 for value in results.values()):
-            logger.info(f"fill_schedule tick: {results}")
+            logger.info(f"publisher tick: {results}")
         return results
 
     def _report_outage(self, stage_name: str, diagnostic: str, now: datetime) -> None:
@@ -79,16 +79,16 @@ class FillScheduleScheduler:
         if self._outage_reported_at is None:
             self._outage_since = now
             self._outage_reported_at = now
-            logger.error(f"fill_schedule: connection outage started in stage {stage_name}: {diagnostic}")
+            logger.error(f"publisher: connection outage started in stage {stage_name}: {diagnostic}")
             return
         if now - self._outage_reported_at >= timedelta(seconds=OUTAGE_REMINDER_SECONDS):
             self._outage_reported_at = now
             logger.error(
-                f"fill_schedule: connection outage ongoing for {self._outage_seconds(now)}s, "
+                f"publisher: connection outage ongoing for {self._outage_seconds(now)}s, "
                 f"{self._outage_failures} failed stages, last in stage {stage_name}: {diagnostic}"
             )
             return
-        logger.warning(f"fill_schedule: stage {stage_name} failed during connection outage: {diagnostic}")
+        logger.warning(f"publisher: stage {stage_name} failed during connection outage: {diagnostic}")
 
     def _outage_seconds(self, now: datetime) -> int:
         if self._outage_since is None:
@@ -96,7 +96,7 @@ class FillScheduleScheduler:
         return int((now - self._outage_since).total_seconds())
 
 
-def start_fill_schedule_thread(scheduler: FillScheduleScheduler) -> threading.Thread:
+def start_publisher_thread(scheduler: PublishScheduler) -> threading.Thread:
     """Daemon thread that runs the tick."""
     import time
 
@@ -105,9 +105,9 @@ def start_fill_schedule_thread(scheduler: FillScheduleScheduler) -> threading.Th
             try:
                 scheduler.run_once(datetime.now(timezone.utc))
             except Exception:
-                logger.exception("fill_schedule tick failed")
+                logger.exception("publisher tick failed")
             time.sleep(TICK_SECONDS)
 
-    thread = threading.Thread(target=loop, name="fill-schedule-scheduler", daemon=True)
+    thread = threading.Thread(target=loop, name="publisher-scheduler", daemon=True)
     thread.start()
     return thread

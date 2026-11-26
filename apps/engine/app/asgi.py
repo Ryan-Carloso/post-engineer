@@ -12,9 +12,9 @@ from app.config import config
 from app.router import root_api_router
 from app.services.analytics import scrub_secret_values, track_event, warm_client
 from app.services.publisher import (
-    FillScheduleScheduler,
+    PublishScheduler,
     ScheduleStore,
-    start_fill_schedule_thread,
+    start_publisher_thread,
 )
 from app.services import notify
 
@@ -188,21 +188,21 @@ else:
     logger.warning("POSTHOG_API_KEY is not set — PostHog error tracking disabled")
 
 
-def start_fill_schedule_scheduler() -> None:
-    """Automatic Fill Schedule — starts with the app (no env flag).
+def start_publisher_scheduler() -> None:
+    """Automatic publish scheduler — starts with the app (no env flag).
 
     Only depends on the Supabase envs: without them the ScheduleStore fails
     and the scheduler is skipped with a log, without breaking boot.
     """
 
     try:
-        scheduler = FillScheduleScheduler(store=ScheduleStore())
+        scheduler = PublishScheduler(store=ScheduleStore())
     except RuntimeError as exc:
-        logger.warning(f"fill schedule scheduler skipped: {exc}")
+        logger.warning(f"publish scheduler skipped: {exc}")
         return
-    start_fill_schedule_thread(scheduler)
+    start_publisher_thread(scheduler)
     notify.send_discord(notify.scheduler_started_msg())
-    logger.info("fill schedule scheduler started")
+    logger.info("publish scheduler started")
 
 
 def get_application() -> FastAPI:
@@ -306,4 +306,4 @@ def startup_event():
         f"pr {build['pr']} build {build['build']} commit {build['commit']})"
     )
     warm_client()
-    start_fill_schedule_scheduler()
+    start_publisher_scheduler()

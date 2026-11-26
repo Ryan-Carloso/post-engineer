@@ -51,9 +51,9 @@ class ScheduleStore:
         base_url = url or os.getenv("SUPABASE_URL")
         key = service_key or os.getenv("SUPABASE_SERVICE_ROLE_KEY")
         if not base_url:
-            raise RuntimeError("SUPABASE_URL is required for fill_schedule")
+            raise RuntimeError("SUPABASE_URL is required for publisher")
         if not key:
-            raise RuntimeError("SUPABASE_SERVICE_ROLE_KEY is required for fill_schedule")
+            raise RuntimeError("SUPABASE_SERVICE_ROLE_KEY is required for publisher")
         self._requests = requests_module if requests_module is not None else build_retrying_session()
         self.connect_retries = CONNECT_RETRIES
         self._base_url = base_url.rstrip("/")
@@ -250,7 +250,7 @@ class ScheduleStore:
             response.raise_for_status()
         except Exception as exc:
             logger.warning(
-                f"fill_schedule: storage object removal failed for {bucket}/{path}: {exc}"
+                f"publisher: storage object removal failed for {bucket}/{path}: {exc}"
             )
             return False
         return True

@@ -4,13 +4,13 @@ from unittest.mock import MagicMock, patch
 
 import requests
 
-from app.services.publisher.scheduler import FillScheduleScheduler
+from app.services.publisher.scheduler import PublishScheduler
 
 NOW = datetime(2026, 11, 26, 12, 0, tzinfo=timezone.utc)
 
 
-def _scheduler(publish_due) -> FillScheduleScheduler:
-    scheduler = FillScheduleScheduler(store=MagicMock(), publish_video=MagicMock(), notify=MagicMock())
+def _scheduler(publish_due) -> PublishScheduler:
+    scheduler = PublishScheduler(store=MagicMock(), publish_video=MagicMock(), notify=MagicMock())
     scheduler.publisher.run = publish_due
     return scheduler
 

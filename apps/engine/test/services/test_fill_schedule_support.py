@@ -27,7 +27,7 @@ class NotifySafeTests(unittest.TestCase):
         notify = MagicMock(side_effect=RuntimeError("discord down"))
         with patch("app.services.publisher.support.logger") as logger:
             notify_safe(notify, "hello")
-        logger.warning.assert_called_once_with("fill_schedule: notify failed: discord down")
+        logger.warning.assert_called_once_with("publisher: notify failed: discord down")
 
 
 if __name__ == "__main__":

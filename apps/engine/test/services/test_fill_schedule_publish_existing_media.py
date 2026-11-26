@@ -15,7 +15,7 @@ import requests
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from app.services.publisher import FillScheduleScheduler
+from app.services.publisher import PublishScheduler
 from app.services.publisher.publish import BatchPublisher
 from app.services.publisher.publish_accounts import AccountPublishResult
 from app.services.publisher.publish_existing_media import (
@@ -808,7 +808,7 @@ class PublishExistingMediaSchedulerTests(unittest.TestCase):
                 "results": [{"accountId": "ig-1", "success": True, "postId": "ig-post-1"}],
             }
 
-        scheduler = FillScheduleScheduler(
+        scheduler = PublishScheduler(
             store=store,
             publish_video=publish_video,
             notify=MagicMock(),
