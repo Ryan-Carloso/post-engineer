@@ -73,7 +73,7 @@ export function breakdownBy(rows: MetricsRowView[], group: BreakdownGroup): Brea
   const totals = new Map<string, number>();
   for (const row of rows) {
     if (row.views === null) continue;
-    const key = group === 'provider' ? row.provider : (row.personaId ?? 'voiceover');
+    const key = group === 'provider' ? row.provider : (row.personaId ?? 'no-persona');
     totals.set(key, (totals.get(key) ?? 0) + row.views);
   }
   return [...totals.entries()]

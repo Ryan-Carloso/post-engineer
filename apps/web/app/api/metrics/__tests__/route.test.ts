@@ -201,10 +201,9 @@ describe('GET /api/metrics', () => {
       {
         scheduled_posts: {
           data: [
-            { id: 'post-own', schedule_id: 'sched-own', user_id: 'user-1', status: 'published', published_at: publishedAt, publish_outcomes: [youtube], voiceover: false },
-            { id: 'post-other', schedule_id: 'sched-other', user_id: 'user-1', status: 'published', published_at: publishedAt, publish_outcomes: [youtube], voiceover: false },
-            { id: 'post-orphan', schedule_id: 'sched-gone', user_id: 'user-1', status: 'published', published_at: publishedAt, publish_outcomes: [youtube], voiceover: false },
-            { id: 'post-voiceover', schedule_id: 'sched-gone', user_id: 'user-1', status: 'published', published_at: publishedAt, publish_outcomes: [youtube], voiceover: true },
+            { id: 'post-own', schedule_id: 'sched-own', user_id: 'user-1', status: 'published', published_at: publishedAt, publish_outcomes: [youtube] },
+            { id: 'post-other', schedule_id: 'sched-other', user_id: 'user-1', status: 'published', published_at: publishedAt, publish_outcomes: [youtube] },
+            { id: 'post-orphan', schedule_id: 'sched-gone', user_id: 'user-1', status: 'published', published_at: publishedAt, publish_outcomes: [youtube] },
           ],
           error: null,
         },
@@ -220,7 +219,7 @@ describe('GET /api/metrics', () => {
       },
     );
     const body = await (await get('?window=24h')).json();
-    expect(body.coverage.map((item: { postId: string }) => item.postId).sort()).toEqual(['post-own', 'post-voiceover']);
+    expect(body.coverage.map((item: { postId: string }) => item.postId).sort()).toEqual(['post-own']);
   });
 
   it('drops malformed stored persona ids before building the scope filter', async () => {

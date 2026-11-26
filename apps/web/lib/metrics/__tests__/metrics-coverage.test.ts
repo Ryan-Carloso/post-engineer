@@ -33,7 +33,6 @@ function post(overrides: Partial<CoveragePostInput> = {}): CoveragePostInput {
     personaId: PERSONA,
     publishedAt: '2026-10-21T12:00:00.000Z',
     outcomes: [YT_OUTCOME],
-    voiceover: false,
     ...overrides,
   };
 }
@@ -163,37 +162,27 @@ describe('computeCoverage', () => {
     expect(twoPosts).toHaveLength(2);
   });
 
-  it('drops out-of-scope personas for a scoped caller, keeps its own and persona-less posts', () => {
+  it('keeps only its own personas for a scoped caller and hides persona-less posts', () => {
     const posts = [
       post({ id: 'post-own', personaId: PERSONA }),
       post({ id: 'post-other', personaId: 'other-persona' }),
-      post({ id: 'post-voiceover', personaId: null, voiceover: true }),
+      post({ id: 'post-orphan', personaId: null }),
     ];
     const { items } = compute({ posts, personaIds: [PERSONA] });
-    expect(items.map((item) => item.postId).sort()).toEqual(['post-own', 'post-voiceover']);
+    expect(items.map((item) => item.postId)).toEqual(['post-own']);
   });
 
-  it('keeps only persona-less posts when the scope is empty', () => {
+  it('shows nothing when the scope is empty', () => {
     const posts = [
       post({ id: 'post-own', personaId: PERSONA }),
-      post({ id: 'post-voiceover', personaId: null, voiceover: true }),
+      post({ id: 'post-orphan', personaId: null }),
     ];
     const { items } = compute({ posts, personaIds: [] });
-    expect(items.map((item) => item.postId)).toEqual(['post-voiceover']);
+    expect(items).toEqual([]);
   });
 
-  it('hides an orphaned post (deleted schedule, not voiceover) from a scoped caller', () => {
-    const posts = [
-      post({ id: 'post-own', personaId: PERSONA }),
-      post({ id: 'post-orphan', personaId: null, voiceover: false }),
-      post({ id: 'post-voiceover', personaId: null, voiceover: true }),
-    ];
-    const { items } = compute({ posts, personaIds: [PERSONA] });
-    expect(items.map((item) => item.postId).sort()).toEqual(['post-own', 'post-voiceover']);
-  });
-
-  it('keeps an orphaned post for an unrestricted caller', () => {
-    const posts = [post({ id: 'post-orphan', personaId: null, voiceover: false })];
+  it('keeps a persona-less post for an unrestricted caller', () => {
+    const posts = [post({ id: 'post-orphan', personaId: null })];
     expect(compute({ posts }).items.map((item) => item.postId)).toEqual(['post-orphan']);
   });
 
@@ -213,10 +202,10 @@ describe('computeCoverage', () => {
   it('shows persona-less posts under the none persona filter, hides persona posts', () => {
     const posts = [
       post({ id: 'post-own', personaId: PERSONA }),
-      post({ id: 'post-voiceover', personaId: null }),
+      post({ id: 'post-none', personaId: null }),
     ];
     const { items } = compute({ posts, query: query({ personaId: METRICS_NONE }) });
-    expect(items.map((item) => item.postId)).toEqual(['post-voiceover']);
+    expect(items.map((item) => item.postId)).toEqual(['post-none']);
   });
 
   it('skips non-object entries and failed entries with unknown providers or no account', () => {
@@ -382,21 +371,17 @@ describe('fetchCoverage', () => {
     expect(items.map((item) => item.postId)).toEqual(['post-own']);
   });
 
-  it('hides an orphaned post from a scoped caller but keeps a voiceover one', async () => {
+  it('hides a persona-less post (deleted schedule) from a scoped caller', async () => {
     const { client } = fakeClient({
       scheduled_posts: {
         data: [
           {
             id: 'post-own', schedule_id: 'sched-own', user_id: 'user-1', status: 'published',
-            published_at: '2026-10-21T12:00:00.000Z', publish_outcomes: [YT_OUTCOME], voiceover: false,
+            published_at: '2026-10-21T12:00:00.000Z', publish_outcomes: [YT_OUTCOME],
           },
           {
             id: 'post-orphan', schedule_id: 'sched-gone', user_id: 'user-1', status: 'published',
-            published_at: '2026-10-21T12:00:00.000Z', publish_outcomes: [YT_OUTCOME], voiceover: false,
-          },
-          {
-            id: 'post-voiceover', schedule_id: 'sched-gone', user_id: 'user-1', status: 'published',
-            published_at: '2026-10-21T12:00:00.000Z', publish_outcomes: [YT_OUTCOME], voiceover: true,
+            published_at: '2026-10-21T12:00:00.000Z', publish_outcomes: [YT_OUTCOME],
           },
         ],
         error: null,
@@ -406,7 +391,7 @@ describe('fetchCoverage', () => {
       post_metrics: { data: [], error: null },
     });
     const { items } = await fetchCoverage(client, 'user-1', query(), NOW, { personaIds: [PERSONA] });
-    expect(items.map((item) => item.postId).sort()).toEqual(['post-own', 'post-voiceover']);
+    expect(items.map((item) => item.postId)).toEqual(['post-own']);
   });
 
   it('reads only the schedules the posts reference, so a scoped key cannot leak a post past a cap', async () => {

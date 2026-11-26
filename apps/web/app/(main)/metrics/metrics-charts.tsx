@@ -109,7 +109,7 @@ export function MetricsCharts({ rows, isLoading, isError, truncated, personaLabe
   const breakdownLabel = (key: string): string =>
     breakdownGroup === 'provider'
       ? (isSocialProvider(key) ? PROVIDER_LABELS[key] : key)
-      : key === 'voiceover' ? t('metrics.noPersona') : personaLabel(key);
+      : key === 'no-persona' ? t('metrics.noPersona') : personaLabel(key);
   const withoutViews = countWithoutViews(rows);
 
   const top = useMemo(() => topVideosByViews(rows), [rows]);
