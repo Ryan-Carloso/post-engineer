@@ -192,10 +192,10 @@ async function getHandler(request: Request): Promise<NextResponse> {
     presentedAwaiting.length === 0
       ? presentedAwaiting
       : await withAwaitingMedia(
-          presentedAwaiting,
-          auth.isApiKey === true || auth.isOAuth === true ? supabase : createSupabaseServiceClient(),
-          userId,
-        );
+        presentedAwaiting,
+        auth.isApiKey === true || auth.isOAuth === true ? supabase : createSupabaseServiceClient(),
+        userId,
+      );
   const upcomingEnriched = withPostUrl(
     mergeBySlotAt(
       mergeBySlotAt(

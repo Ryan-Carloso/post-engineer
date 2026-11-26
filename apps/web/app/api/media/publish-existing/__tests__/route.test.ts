@@ -236,10 +236,10 @@ function fakeSupabase(config: FakeConfig = {}) {
             selected === null
               ? inserted
               : inserted.map((row) =>
-                  Object.fromEntries(
-                    selected.filter((column) => column in row).map((column) => [column, row[column]]),
-                  ),
+                Object.fromEntries(
+                  selected.filter((column) => column in row).map((column) => [column, row[column]]),
                 ),
+              ),
           error: config.slotInsertError ?? null,
         };
       } else if (this.op === 'insert') {
