@@ -16,6 +16,7 @@ import {
   userPromptVersionsKey,
 } from '@/lib/use-user-prompts';
 import type { PromptVersionSummary } from '@/lib/user-prompts-types';
+import PromptVersionCompare, { type VersionPair } from './prompt-version-compare';
 import PromptVersionRow from './prompt-version-row';
 
 interface Notice {
@@ -50,6 +51,7 @@ export default function PromptVersionHistory({
   const [expanded, setExpanded] = useState<ReadonlySet<number>>(new Set());
   const [notice, setNotice] = useState<Notice | null>(null);
   const [checking, setChecking] = useState(false);
+  const [compare, setCompare] = useState<VersionPair | null>(null);
 
   const history = useInfiniteQuery({
     queryKey: userPromptVersionsKey(slug),
@@ -140,6 +142,27 @@ export default function PromptVersionHistory({
         {entries.every((entry) => entry.current) ? (
           <p className="mt-4 text-sm text-muted-text">{t('userPrompts.historyEmpty')}</p>
         ) : null}
+        {compare === null ? (
+          currentVersion > 1 ? (
+            <button
+              type="button"
+              data-testid="prompt-version-compare-open"
+              className="mt-4 rounded-lg border border-line bg-card px-3 py-1.5 text-xs font-semibold text-ink transition-colors hover:border-ink"
+              onClick={() => setCompare({ from: currentVersion - 1, to: currentVersion })}
+            >
+              {t('userPrompts.historyCompare')}
+            </button>
+          ) : null
+        ) : (
+          <PromptVersionCompare
+            slug={slug}
+            currentVersion={currentVersion}
+            currentBody={currentBody}
+            pair={compare}
+            onChange={setCompare}
+            onClose={() => setCompare(null)}
+          />
+        )}
         <ul className="mt-4 flex flex-col gap-3">
           {entries.map((entry) => (
             <PromptVersionRow
@@ -152,6 +175,7 @@ export default function PromptVersionHistory({
               disabled={busy}
               onToggle={() => toggle(entry.version)}
               onRestore={() => requestRestore(entry)}
+              onCompare={() => setCompare({ from: entry.version - 1, to: entry.version })}
             />
           ))}
         </ul>
