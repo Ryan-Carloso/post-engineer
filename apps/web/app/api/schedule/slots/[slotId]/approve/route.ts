@@ -15,6 +15,7 @@ import { readTrialEndsAt } from '@/lib/trial';
 import { computeTrialStatus } from '@/lib/trial-status';
 import { createSupabaseVideoUploadStore } from '@/lib/videos/signed-upload';
 import { SCHEDULED_UPLOAD_EXPIRY_MS } from '@/lib/videos/upload-expiry';
+import { publishHeldSlot } from './publish-held';
 
 const ROUTE = 'POST /api/schedule/slots/[slotId]/approve';
 const APPROVAL_SLOT_GRACE_MS = 5 * 60 * 1000;
@@ -76,6 +77,10 @@ async function postHandler(
       route: ROUTE,
       code: ERROR_CODES.SLOT_EXPIRED,
     });
+  }
+
+  if (publishMode === 'asap') {
+    return publishHeldSlot({ request, serviceClient, userId: auth.userId, slot, route: ROUTE });
   }
 
   if (slot.media_kind === 'upload' && slot.media_ref !== null) {

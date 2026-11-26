@@ -17,9 +17,11 @@ interface SlotRow {
   schedule_id: string;
   status: string;
   title: string | null;
+  description: string | null;
   slot_at: string;
   media_ref: string | null;
   media_kind: string | null;
+  media_content_type: string | null;
 }
 
 interface ScheduleRow {
@@ -37,7 +39,7 @@ export async function loadOwnedSlot(
 ): Promise<{ slot: SlotRow; publishMode: 'scheduled' | 'asap' } | { error: NextResponse }> {
   const { data: slot, error } = await supabase
     .from('scheduled_posts')
-    .select('id, schedule_id, status, title, slot_at, media_ref, media_kind')
+    .select('id, schedule_id, status, title, description, slot_at, media_ref, media_kind, media_content_type')
     .eq('id', slotId)
     .eq('user_id', userId)
     .single();

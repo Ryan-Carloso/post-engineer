@@ -677,6 +677,126 @@ describe('POST /api/media/publish-existing', () => {
     expect(slot.status).toBe('awaiting_approval');
   });
 
+  it('creates an awaiting_approval holding slot for an approval-key ASAP upload instead of publishing inline', async () => {
+    const client = fakeSupabase({
+      socialRows: [{ provider: 'youtube', provider_account_id: 'UC1' }],
+    });
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+    const { store } = mockUploadStore({ uploadRow: uploadRow() });
+    authAs(null, true, 'approval');
+
+    const response = await POST(
+      jsonRequest({
+        media: { kind: 'upload', uploadId: UPLOAD_ID },
+        title: 'Hold video',
+        description: 'Approve it later.',
+        publishing: { mode: 'asap', providers: ['youtube'], accounts: { youtube: ['UC1'] } },
+        tags: ['ready'],
+        privacyStatus: 'public',
+        idempotencyKey: 'hold-key-1',
+      }),
+    );
+    const body = await response.json();
+    expect(response.status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(body.mode).toBe('asap');
+    expect(body.approvalRequired).toBe(true);
+    expect(body.slot).toMatchObject({ id: 'slot-1', status: 'awaiting_approval' });
+    expect(body.slot.slotAt).toEqual(expect.any(String));
+    expect(client.__insertedSchedules).toHaveLength(1);
+    const insertedSchedule = client.__insertedSchedules[0] ?? {};
+    expect(insertedSchedule.publish_mode).toBe('asap');
+    const insertedTimes = insertedSchedule.times as string[];
+    expect(insertedTimes).toHaveLength(1);
+    const insertedSlot = client.__insertedSlots[0] ?? {};
+    expect(insertedSlot.status).toBe('awaiting_approval');
+    expect(insertedSlot.media_kind).toBe('upload');
+    expect(insertedSlot.media_ref).toBe(UPLOAD_ID);
+    expect(insertedTimes[0]).toBe(String(insertedSlot.slot_at).slice(11, 16));
+    expect(store.updateUpload).toHaveBeenCalledWith(UPLOAD_ID, 'ready', {
+      expires_at: new Date(Date.parse(String(insertedSlot.slot_at)) + 24 * 60 * 60 * 1000).toISOString(),
+    });
+    expect(vi.mocked(dispatchPublish)).not.toHaveBeenCalled();
+    expect(vi.mocked(claimUploadForPublish)).not.toHaveBeenCalled();
+    expect(client.__rpcCalls).toHaveLength(0);
+  });
+
+  it('replays an approval-key ASAP hold with the same idempotency key', async () => {
+    const scheduleId = deterministicUuid('publish-existing/v1', `${USER_ID}:replay-key-2`);
+    const client = fakeSupabase({
+      socialRows: [{ provider: 'youtube', provider_account_id: 'UC1' }],
+      existingSchedule: { id: scheduleId, user_id: USER_ID, publish_mode: 'asap' },
+      existingSlots: [
+        {
+          id: 'slot-1',
+          schedule_id: scheduleId,
+          user_id: USER_ID,
+          title: 'Hold video',
+          slot_at: '2026-11-20T18:00:00Z',
+          status: 'awaiting_approval',
+          media_ref: UPLOAD_ID,
+          media_kind: 'upload',
+        },
+      ],
+    });
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+    authAs(null, true, 'approval');
+
+    const response = await POST(
+      jsonRequest({
+        media: { kind: 'upload', uploadId: UPLOAD_ID },
+        title: 'Hold video',
+        description: 'Approve it later.',
+        publishing: { mode: 'asap', providers: ['youtube'], accounts: { youtube: ['UC1'] } },
+        tags: ['ready'],
+        privacyStatus: 'public',
+        idempotencyKey: 'replay-key-2',
+      }),
+    );
+    const body = await response.json();
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      success: true,
+      mode: 'asap',
+      approvalRequired: true,
+      replayed: true,
+      slot: { id: 'slot-1', status: 'awaiting_approval' },
+    });
+    expect(client.__insertedSchedules).toHaveLength(0);
+    expect(client.__insertedSlots).toHaveLength(0);
+    expect(vi.mocked(dispatchPublish)).not.toHaveBeenCalled();
+    expect(vi.mocked(claimUploadForPublish)).not.toHaveBeenCalled();
+    expect(client.__rpcCalls).toHaveLength(0);
+  });
+
+  it('stores an approval-key ASAP image for the later approval instead of publishing inline', async () => {
+    const client = fakeSupabase({
+      socialRows: [{ provider: 'instagram', provider_account_id: 'ig-1' }],
+    });
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+    authAs(null, true, 'approval');
+    const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01]);
+
+    const response = await POST(
+      jsonRequest({
+        media: { kind: 'image', imageData: jpeg.toString('base64'), contentType: 'image/jpeg' },
+        title: 'Hold photo',
+        description: 'Approve it later.',
+        publishing: { mode: 'asap', providers: ['instagram'], accounts: { instagram: ['ig-1'] } },
+        idempotencyKey: 'hold-key-3',
+      }),
+    );
+    const body = await response.json();
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({ success: true, mode: 'asap', approvalRequired: true, slot: { status: 'awaiting_approval' } });
+    expect(client.__uploadedPaths).toHaveLength(1);
+    const insertedSlot = client.__insertedSlots[0] ?? {};
+    expect(insertedSlot.media_kind).toBe('image');
+    expect(insertedSlot.media_ref).toBe(client.__uploadedPaths[0]);
+    expect(vi.mocked(dispatchPublish)).not.toHaveBeenCalled();
+    expect(client.__rpcCalls).toHaveLength(0);
+  });
+
   it('replays the winner of a schedule primary-key race instead of failing', async () => {
     const publishAt = futurePublishAt(48);
     const scheduleId = deterministicUuid('publish-existing/v1', `${USER_ID}:key-race`);

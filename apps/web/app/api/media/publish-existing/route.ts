@@ -42,6 +42,7 @@ import {
   releaseAsapLedger,
   type AsapLedger,
 } from './asap';
+import { replayAsapHold, scheduleAsapHold } from './asap-hold';
 import type { PublishExistingContext } from './context';
 import {
   checkPublishExistingSemantics,
@@ -268,11 +269,15 @@ async function postHandler(request: Request): Promise<NextResponse> {
     const replay = await replaySchedule(supabase, idem.scheduleId, userId, ROUTE, reconnectWarning);
     if (replay !== null) return replay;
   }
+  if (input.publishing.mode === 'asap' && auth.approvalMode === 'approval') {
+    const holdReplay = await replayAsapHold(supabase, idem.scheduleId, userId, ROUTE);
+    if (holdReplay !== null) return holdReplay;
+  }
   if (resolved instanceof NextResponse) return resolved;
   const { accountIds } = resolved;
 
   let ledger: AsapLedger | null = null;
-  if (input.publishing.mode === 'asap' && idem.clientSupplied) {
+  if (input.publishing.mode === 'asap' && idem.clientSupplied && auth.approvalMode !== 'approval') {
     try {
       ledger = await claimAsapLedger(asapScopeKey(idem.scheduleId), userId, input.publishing.providers, accountIds);
     } catch (error) {
@@ -313,6 +318,9 @@ async function postHandler(request: Request): Promise<NextResponse> {
   const ctx: PublishExistingContext = { route: ROUTE, supabase, userId, request, input, accountIds, reconnectWarning, aiLabel, approvalMode: auth.approvalMode ?? 'yolo', ...verified, logId, startTime };
   if (input.publishing.mode === 'scheduled') {
     return scheduleExistingMedia(ctx);
+  }
+  if (ctx.approvalMode === 'approval') {
+    return scheduleAsapHold(ctx, idem.scheduleId);
   }
   return publishExistingMediaAsap(ctx, ledger);
 }

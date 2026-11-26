@@ -34,7 +34,7 @@ export interface AsapLedger {
   partitions: Map<Provider, PublishLedgerPartition>;
 }
 
-interface ProviderPublish {
+export interface ProviderPublish {
   provider: string;
   success: boolean;
   results: ContentUploadAccountResult[];
@@ -142,8 +142,8 @@ function mediaErrorResponse(error: unknown, ctx: PublishExistingContext): NextRe
   return buildUploadErrorResponse(error, ctx.logId, ctx.startTime);
 }
 
-export async function publishExistingMediaAsap(ctx: PublishExistingContext, ledger: AsapLedger | null): Promise<NextResponse> {
-  const { userId, input, logId } = ctx;
+export async function publishHeldMedia(ctx: PublishExistingContext, ledger: AsapLedger | null): Promise<ProviderPublish[]> {
+  const { userId, input } = ctx;
   const providers: Provider[] = input.publishing.providers;
   const publishes: ProviderPublish[] = [];
 
@@ -155,7 +155,7 @@ export async function publishExistingMediaAsap(ctx: PublishExistingContext, ledg
       claimed = await claimUploadForPublish(store, storage, userId, ctx.uploadRow.id, new Date(), providers);
     } catch (error) {
       if (ledger !== null) await releaseAsapLedger(ledger, error);
-      return mediaErrorResponse(error, ctx);
+      throw error;
     }
     try {
       for (const provider of providers) {
@@ -167,7 +167,7 @@ export async function publishExistingMediaAsap(ctx: PublishExistingContext, ledg
         logger.error('[publish-existing] claimed upload cleanup failed', removeError, { uploadId: ctx.uploadRow.id, userId });
       }
     }
-    return asapResponse(input, userId, logId, publishes, false);
+    return publishes;
   }
 
   let media: { buffer: Buffer; contentType: string };
@@ -179,10 +179,19 @@ export async function publishExistingMediaAsap(ctx: PublishExistingContext, ledg
     }
   } catch (error) {
     if (ledger !== null) await releaseAsapLedger(ledger, error);
-    return mediaErrorResponse(error, ctx);
+    throw error;
   }
   for (const provider of providers) {
     publishes.push(await publishToProvider(provider, media, ctx, ledger));
   }
-  return asapResponse(input, userId, logId, publishes, false);
+  return publishes;
+}
+
+export async function publishExistingMediaAsap(ctx: PublishExistingContext, ledger: AsapLedger | null): Promise<NextResponse> {
+  try {
+    const publishes = await publishHeldMedia(ctx, ledger);
+    return asapResponse(ctx.input, ctx.userId, ctx.logId, publishes, false);
+  } catch (error) {
+    return mediaErrorResponse(error, ctx);
+  }
 }

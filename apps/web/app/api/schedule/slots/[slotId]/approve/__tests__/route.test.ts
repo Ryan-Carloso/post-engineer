@@ -19,6 +19,13 @@ vi.mock('@/lib/rate-limit', async (importOriginal) => {
   return { ...actual, applyRateLimit: vi.fn().mockResolvedValue(null) };
 });
 
+const mockPublishHeldSlot = vi.hoisted(() =>
+  vi.fn(
+    async (_options: { request: Request; serviceClient: unknown; userId: string; slot: unknown; route: string }) =>
+      NextResponse.json({ success: true, status: 'published', publishes: [] }),
+  ),
+);
+vi.mock('../publish-held', () => ({ publishHeldSlot: mockPublishHeldSlot }));
 const mockReadTrialEndsAt = vi.hoisted(() =>
   vi.fn(async () => new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()),
 );
@@ -326,7 +333,7 @@ describe('POST /api/schedule/slots/[slotId]/approve', () => {
   });
 
   it('approves an ASAP holding row past its slot time without the expiry check', async () => {
-    mockOwnedClients({
+    const { serviceClient } = mockOwnedClients({
       slot: { ...awaitingSlot, slot_at: new Date(Date.now() - 10 * 60 * 1000).toISOString() },
       schedule: { id: 's1', user_id: USER_ID, publish_mode: 'asap' },
     });
@@ -335,6 +342,28 @@ describe('POST /api/schedule/slots/[slotId]/approve', () => {
     const response = await postApprove(SLOT_ID);
 
     expect(response.status).toBe(200);
+    expect(mockPublishHeldSlot).toHaveBeenCalledTimes(1);
+    const heldArgs = mockPublishHeldSlot.mock.calls[0]?.[0] as
+      | { serviceClient?: unknown; userId?: string; slot?: { id?: string }; route?: string }
+      | undefined;
+    expect(heldArgs?.serviceClient).toBe(serviceClient);
+    expect(heldArgs?.userId).toBe(USER_ID);
+    expect(heldArgs?.slot?.id).toBe('slot-1');
+    expect(heldArgs?.route).toBe('POST /api/schedule/slots/[slotId]/approve');
+    expect(mockUpdateUpload).not.toHaveBeenCalled();
+  });
+
+  it('does not publish a scheduled slot through the held path', async () => {
+    mockOwnedClients({
+      slot: awaitingSlot,
+      schedule: { id: 's1', user_id: USER_ID },
+    });
+    mockSession();
+
+    const response = await postApprove(SLOT_ID);
+
+    expect(response.status).toBe(200);
+    expect(mockPublishHeldSlot).not.toHaveBeenCalled();
   });
 
   it('extends the video upload expiry to the slot time plus 24 hours', async () => {
