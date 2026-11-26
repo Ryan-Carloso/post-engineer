@@ -163,7 +163,7 @@ async function scheduleExistingMedia(ctx: PublishExistingContext): Promise<NextR
   const { data: inserted, error: slotsError } = await supabase
     .from('scheduled_posts')
     .insert(rows)
-    .select('id, slot_at, title');
+    .select('id, slot_at, title, status');
   if (slotsError || inserted === null) {
     const uploadTaken = violatedConstraint(slotsError) === UPLOAD_SLOT_REFERENCE_INDEX;
     if (!uploadTaken) logger.error('[publish-existing] slot insert failed', slotsError, { scheduleId, userId });

@@ -151,12 +151,15 @@ function fakeSupabase(config: FakeConfig = {}) {
     private op: 'select' | 'insert' | 'delete' | 'update' = 'select';
     private values: unknown = null;
     private liveUploadRead = false;
+    private selectedColumns: string[] | null = null;
 
     constructor(table: string) {
       this.table = table;
     }
 
-    select(): this {
+    select(columns?: string): this {
+      this.selectedColumns =
+        typeof columns === 'string' ? columns.split(',').map((column) => column.trim()) : null;
       return this;
     }
 
@@ -226,8 +229,17 @@ function fakeSupabase(config: FakeConfig = {}) {
     ): Promise<TResult1 | TResult2> {
       let result: { data: unknown; error: unknown };
       if (this.op === 'insert' && this.table === 'scheduled_posts') {
+        const inserted = config.slotInsertRows ?? [{ id: 'slot-1', slot_at: '2026-11-20T18:00:00Z', title: 'Ready video' }];
+        const selected = this.selectedColumns;
         result = {
-          data: config.slotInsertRows ?? [{ id: 'slot-1', slot_at: '2026-11-20T18:00:00Z', title: 'Ready video' }],
+          data:
+            selected === null
+              ? inserted
+              : inserted.map((row) =>
+                  Object.fromEntries(
+                    selected.filter((column) => column in row).map((column) => [column, row[column]]),
+                  ),
+                ),
           error: config.slotInsertError ?? null,
         };
       } else if (this.op === 'insert') {
@@ -649,6 +661,7 @@ describe('POST /api/media/publish-existing', () => {
     const publishAt = futurePublishAt(48);
     const client = fakeSupabase({
       socialRows: [{ provider: 'youtube', provider_account_id: 'UC1' }],
+      slotInsertRows: [{ id: 'slot-1', slot_at: publishAt, title: 'Held video', status: 'awaiting_approval' }],
     });
     vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
     mockUploadStore({ uploadRow: uploadRow() });
@@ -673,6 +686,7 @@ describe('POST /api/media/publish-existing', () => {
     const body = await response.json();
     expect(response.status).toBe(200);
     expect(body.success).toBe(true);
+    expect(body.slots[0].status).toBe('awaiting_approval');
     const slot = client.__insertedSlots[0] as Record<string, unknown>;
     expect(slot.status).toBe('awaiting_approval');
   });
