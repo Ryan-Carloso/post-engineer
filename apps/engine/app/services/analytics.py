@@ -1,14 +1,11 @@
 """PostHog product-analytics for the engine.
 
-Tracks the video lifecycle funnel as PostHog events:
-- video_generation_requested (funnel entry, before the pipeline starts)
-- video_generation_started / video_generation_failed / video_generated
-- video_generation_progress (50% and 70% milestones only)
+Tracks the publish funnel as PostHog events:
 - video_publish_started / video_published / video_publish_failed
 - video_publish_partial_failure (some providers published, others failed)
 
 Safety rules:
-- Never raises: telemetry must never break video generation.
+- Never raises: telemetry must never break publishing.
 - No-op when POSTHOG_API_KEY is missing (warns once).
 - Secret-bearing property keys are redacted before capture.
 - Never log PII, credentials, or raw request bodies in properties.

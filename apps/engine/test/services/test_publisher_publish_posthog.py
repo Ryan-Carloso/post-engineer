@@ -1,6 +1,6 @@
 """PostHog publish_provider_failed event in the publisher publish path.
 
-The publisher publisher (apps/engine/app/services/publisher/publish.py)
+The publisher (apps/engine/app/services/publisher/publish.py)
 is the single publish path. A provider failure here emits the
 publish_provider_failed diagnostic event (provider, status_code,
 response_body) so failures are visible in PostHog.

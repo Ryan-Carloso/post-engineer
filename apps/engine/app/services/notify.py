@@ -1,4 +1,4 @@
-"""Discord notifier for the fill schedule — fire-and-forget.
+"""Discord notifier for the publish scheduler — fire-and-forget.
 
 Reads ``DISCORD_WEBHOOK_URL`` from the environment. Without the variable
 set it's a no-op — a deployment without a webhook keeps working. NEVER
