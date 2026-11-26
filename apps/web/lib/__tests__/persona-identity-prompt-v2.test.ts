@@ -151,6 +151,14 @@ describe('buildIdentityPrompt for a v2 card', () => {
     expect(line(prompt, 'Style:')).toBeUndefined();
   });
 
+  it('keeps the default style line and its filler when a scene outfit merges over a default style and outfit', () => {
+    const { prompt } = buildIdentityPrompt(FIXTURE_CARD_V2, { ...BASE_SCENE, outfit: { top: 'black tee' } });
+    expect(line(prompt, 'Style:')).toBe('Style: business (tailored suit, formal office wear).');
+    expect(line(prompt, 'Outfit:')).toBe(
+      'Outfit: top: black tee; footwear: black loafers; other garments in business style.',
+    );
+  });
+
   it('removes the default top and bottom when the scene brings a one-piece', () => {
     const card: IdentityCard = {
       ...FIXTURE_CARD_V2,
