@@ -3,7 +3,7 @@
   "info": {
     "title": "Post Engineer API",
     "version": "1.4.0",
-    "description": "Generate and schedule short videos for social accounts. Authenticate with an API key created in the dashboard: Authorization: Bearer <key>."
+    "description": "Schedule and publish short videos for social accounts. Authenticate with an API key created in the dashboard: Authorization: Bearer <key>."
   },
   "servers": [
     {
@@ -5473,7 +5473,7 @@
                         "versionId": {
                           "type": "string",
                           "format": "uuid",
-                          "description": "The current version of this prompt text. Pass it as promptVersionId when generating a video from this prompt."
+                          "description": "The current version of this prompt text. Pass it as promptVersionId when publishing a post from this prompt."
                         },
                         "version": {
                           "type": "integer",
@@ -5677,7 +5677,7 @@
                         "versionId": {
                           "type": "string",
                           "format": "uuid",
-                          "description": "The current version of this prompt text. Pass it as promptVersionId when generating a video from this prompt."
+                          "description": "The current version of this prompt text. Pass it as promptVersionId when publishing a post from this prompt."
                         },
                         "version": {
                           "type": "integer",
@@ -5825,7 +5825,7 @@
                         "versionId": {
                           "type": "string",
                           "format": "uuid",
-                          "description": "The current version of this prompt text. Pass it as promptVersionId when generating a video from this prompt."
+                          "description": "The current version of this prompt text. Pass it as promptVersionId when publishing a post from this prompt."
                         },
                         "version": {
                           "type": "integer",
@@ -6447,7 +6447,7 @@
                         "versionId": {
                           "type": "string",
                           "format": "uuid",
-                          "description": "The current version of this prompt text. Pass it as promptVersionId when generating a video from this prompt."
+                          "description": "The current version of this prompt text. Pass it as promptVersionId when publishing a post from this prompt."
                         },
                         "version": {
                           "type": "integer",
