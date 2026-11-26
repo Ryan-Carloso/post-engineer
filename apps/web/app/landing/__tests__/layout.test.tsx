@@ -2,6 +2,7 @@ import '@testing-library/jest-dom/vitest';
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { ptDictionary } from '@/lib/i18n/pt';
+import { buildFaqJsonLd } from '@/lib/seo';
 import LandingLayout from '../layout';
 
 describe('app/landing/layout — FAQ structured data', () => {
@@ -37,5 +38,22 @@ describe('app/landing/layout — FAQ structured data', () => {
       ptDictionary.landing.faq2A,
       ptDictionary.landing.faq4A,
     ]);
+  });
+
+  it('emits FAQPage JSON-LD identical to buildFaqJsonLd of the landing FAQ', () => {
+    render(
+      <LandingLayout>
+        <span>landing</span>
+      </LandingLayout>,
+    );
+    const script = document.querySelector('script[type="application/ld+json"]');
+    expect(script).not.toBeNull();
+    expect(JSON.parse(script?.textContent ?? '')).toEqual(
+      buildFaqJsonLd([
+        { question: ptDictionary.landing.faq1Q, answer: ptDictionary.landing.faq1A },
+        { question: ptDictionary.landing.faq2Q, answer: ptDictionary.landing.faq2A },
+        { question: ptDictionary.landing.faq4Q, answer: ptDictionary.landing.faq4A },
+      ]),
+    );
   });
 });

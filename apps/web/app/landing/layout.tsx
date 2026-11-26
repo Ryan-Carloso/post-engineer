@@ -6,6 +6,7 @@ import {
   OG_IMAGE_PATH,
   SITE_URL,
   buildFaqJsonLd,
+  serializeJsonLd,
 } from '@/lib/seo';
 
 export const metadata: Metadata = {
@@ -48,7 +49,7 @@ export default function LandingLayout({ children }: { children: React.ReactNode 
       {children}
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(buildFaqJsonLd(LANDING_FAQ)) }}
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(buildFaqJsonLd(LANDING_FAQ)) }}
       />
     </>
   );

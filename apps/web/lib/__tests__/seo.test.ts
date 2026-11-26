@@ -7,6 +7,7 @@ import {
   SITE_URL,
   buildFaqJsonLd,
   publicPageUrls,
+  serializeJsonLd,
 } from '@/lib/seo';
 
 describe('lib/seo — public search metadata', () => {
@@ -61,5 +62,17 @@ describe('lib/seo — public search metadata', () => {
 
   it('builds an empty FAQPage for zero items instead of crashing', () => {
     expect(buildFaqJsonLd([]).mainEntity).toEqual([]);
+  });
+
+  it('serializeJsonLd escapes </script> so the payload cannot close its tag', () => {
+    const serialized = serializeJsonLd({ text: '</script><script>alert(1)</script>' });
+    expect(serialized).not.toContain('</script>');
+    expect(serialized).not.toContain('<');
+    expect(serialized).toContain('\\u003c/script\\u003e');
+  });
+
+  it('serializeJsonLd output parses back to the same object', () => {
+    const value = { name: 'Post & Engineer <3', note: 'line\u2028break' };
+    expect(JSON.parse(serializeJsonLd(value))).toEqual(value);
   });
 });
