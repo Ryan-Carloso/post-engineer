@@ -1,11 +1,11 @@
-"""Direct tests for fill_schedule/account_outcomes.py (issue #500)."""
+"""Direct tests for publisher/account_outcomes.py (issue #500)."""
 
 from __future__ import annotations
 
 import unittest
 from datetime import datetime, timezone
 
-from app.services.fill_schedule.account_outcomes import (
+from app.services.publisher.account_outcomes import (
     MAX_IN_PROGRESS_WAIT_SECONDS,
     USER_CODES,
     _account_ids,

@@ -11,9 +11,9 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
-from app.services.fill_schedule import FillScheduleScheduler
-from app.services.fill_schedule import publish as publish_module
-from app.services.fill_schedule.account_outcomes import classify_failure, next_delay_seconds
+from app.services.publisher import FillScheduleScheduler
+from app.services.publisher import publish as publish_module
+from app.services.publisher.account_outcomes import classify_failure, next_delay_seconds
 from app.services.upload_publisher import PublishError
 
 UTC = timezone.utc
@@ -302,7 +302,7 @@ class AccountRetryTests(unittest.TestCase):
 
         scheduler = self._scheduler(store, publish, notify=notify)
         with patch(
-            "app.services.fill_schedule.account_outcomes.MAX_IN_PROGRESS_WAIT_SECONDS", 120
+            "app.services.publisher.account_outcomes.MAX_IN_PROGRESS_WAIT_SECONDS", 120
         ):
             scheduler.publish_due(NOW)
             outcome = store.slot["publish_outcomes"][0]

@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import requests
 
-from app.services.fill_schedule.scheduler import FillScheduleScheduler
+from app.services.publisher.scheduler import FillScheduleScheduler
 
 NOW = datetime(2026, 11, 26, 12, 0, tzinfo=timezone.utc)
 
@@ -24,7 +24,7 @@ class RunOnceTests(unittest.TestCase):
 
     def test_a_failing_stage_reports_minus_one_and_drops_the_retry_budget(self) -> None:
         scheduler = _scheduler(MagicMock(side_effect=ValueError("bad row")))
-        with patch("app.services.fill_schedule.scheduler.logger") as logger:
+        with patch("app.services.publisher.scheduler.logger") as logger:
             self.assertEqual(scheduler.run_once(NOW), {"published": -1})
         logger.error.assert_called_once()
         self.assertIn("stage published failed", logger.error.call_args.args[0])
@@ -33,7 +33,7 @@ class RunOnceTests(unittest.TestCase):
     def test_connection_outage_is_one_incident_until_it_recovers(self) -> None:
         stage = MagicMock(side_effect=requests.exceptions.ConnectionError("dns"))
         scheduler = _scheduler(stage)
-        with patch("app.services.fill_schedule.scheduler.logger") as logger:
+        with patch("app.services.publisher.scheduler.logger") as logger:
             scheduler.run_once(NOW)
             scheduler.run_once(NOW + timedelta(minutes=1))
             self.assertEqual(logger.error.call_count, 1)

@@ -10,8 +10,8 @@ burning GPU on a publish that YouTube would 400.
 import unittest
 
 from app.services import upload_publisher
-from app.services.fill_schedule import metadata as fs_metadata
-from app.services.fill_schedule.youtube_tags import derive_tags_from_title
+from app.services.publisher import metadata as fs_metadata
+from app.services.publisher.youtube_tags import derive_tags_from_title
 
 
 def _youtube_metadata(**overrides):

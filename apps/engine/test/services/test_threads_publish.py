@@ -8,7 +8,7 @@ import unittest
 
 from app.providers import SOCIAL_PROVIDERS
 from app.services import upload_publisher
-from app.services.fill_schedule.metadata import metadata_for, validate_publish_plan
+from app.services.publisher.metadata import metadata_for, validate_publish_plan
 
 
 class ThreadsPublisherTest(unittest.TestCase):

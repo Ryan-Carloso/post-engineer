@@ -8,7 +8,7 @@ from app.services import upload_publisher
 from app.services.caption_text import truncate_bluesky_caption
 from app.services.publish_facebook import FACEBOOK_CAPTION_MAX_LENGTH
 from app.services.publish_rumble import RUMBLE_TITLE_MAX_LENGTH
-from app.services.fill_schedule.youtube_tags import derive_tags_from_title
+from app.services.publisher.youtube_tags import derive_tags_from_title
 from app.services.publish_fanvue import FANVUE_DESCRIPTION_MAX_LENGTH, FANVUE_TITLE_MAX_LENGTH, validate_fanvue_metadata
 from app.services.publish_pinterest import PINTEREST_DESCRIPTION_MAX_LENGTH, PINTEREST_TITLE_MAX_LENGTH, validate_pinterest_metadata
 from app.services.publish_telegram import TELEGRAM_CAPTION_MAX_LENGTH, validate_telegram_metadata

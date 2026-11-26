@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
-from app.services.fill_schedule.support import notify_safe, slot_user_id
+from app.services.publisher.support import notify_safe, slot_user_id
 
 
 class SlotUserIdTests(unittest.TestCase):
@@ -25,7 +25,7 @@ class NotifySafeTests(unittest.TestCase):
 
     def test_a_failing_notifier_only_logs(self) -> None:
         notify = MagicMock(side_effect=RuntimeError("discord down"))
-        with patch("app.services.fill_schedule.support.logger") as logger:
+        with patch("app.services.publisher.support.logger") as logger:
             notify_safe(notify, "hello")
         logger.warning.assert_called_once_with("fill_schedule: notify failed: discord down")
 

@@ -9,7 +9,7 @@ from typing import Any
 import requests
 from loguru import logger
 
-from app.services.fill_schedule.constants import (
+from app.services.publisher.constants import (
     SLOT_PUBLISHING,
     SLOT_READY,
 )

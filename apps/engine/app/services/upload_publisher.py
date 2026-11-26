@@ -19,15 +19,15 @@ application/x-www-form-urlencoded when ``videoStoragePath`` replaces it):
 - Threads: ``provider=threads``, ``video`` xor ``videoStoragePath``, ``caption``,
   ``aiLabel`` (true|false), repeated ``threadsAccountIds`` fields.
 - Facebook: ``provider=facebook``, ``video`` xor ``videoStoragePath``, ``caption``,
-  ``aiLabel`` (true|false), repeated ``facebookAccountIds`` fields (see ``publish_facebook``). Pinterest: ``provider=pinterest``, ``video`` (file), ``title``, ``description``, ``boardId``, ``aiLabel`` (true|false), repeated ``pinterestAccountIds`` fields (see ``publish_pinterest``; validated by ``fill_schedule/metadata.py``).
+  ``aiLabel`` (true|false), repeated ``facebookAccountIds`` fields (see ``publish_facebook``). Pinterest: ``provider=pinterest``, ``video`` (file), ``title``, ``description``, ``boardId``, ``aiLabel`` (true|false), repeated ``pinterestAccountIds`` fields (see ``publish_pinterest``; validated by ``publisher/metadata.py``).
 - 3Speak: ``provider=3speak``, ``video`` (file), ``caption``,
   repeated ``threespeakAccountIds`` fields (see ``publish_threespeak``).
 - Rumble: ``provider=rumble``, ``video`` (file), ``title``,
   ``description``, ``license_type`` (``0`` = Personal Use), repeated
   ``rumbleAccountIds`` fields (see ``publish_rumble``).
 - Fanvue: ``provider=fanvue``, ``video`` (file), ``title``, ``description``,
-  repeated ``fanvueAccountIds`` fields (see ``publish_fanvue``; validated by ``fill_schedule/metadata.py``).
-- Telegram: ``provider=telegram``, ``video`` (file), ``caption``, repeated ``telegramAccountIds`` fields (see ``publish_telegram``; validated by ``fill_schedule/metadata.py``).
+  repeated ``fanvueAccountIds`` fields (see ``publish_fanvue``; validated by ``publisher/metadata.py``).
+- Telegram: ``provider=telegram``, ``video`` (file), ``caption``, repeated ``telegramAccountIds`` fields (see ``publish_telegram``; validated by ``publisher/metadata.py``).
 
 This module owns only types, validation and form-data part builders
 (multipart when a file part is sent, urlencoded when ``videoStoragePath``
@@ -181,7 +181,7 @@ def validate_publish_metadata(
 
     Raises:
         ValueError: when providers are unknown/empty, or a selected provider other than
-            pinterest/fanvue/telegram (gated in fill_schedule/metadata.py) has no metadata,
+            pinterest/fanvue/telegram (gated in publisher/metadata.py) has no metadata,
             or metadata violates the contract.
     """
     if not providers:

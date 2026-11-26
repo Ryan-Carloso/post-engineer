@@ -10,7 +10,7 @@ import unittest
 
 from app.providers import SOCIAL_PROVIDERS
 from app.services import publish_fanvue, upload_publisher
-from app.services.fill_schedule.metadata import metadata_for, validate_publish_plan
+from app.services.publisher.metadata import metadata_for, validate_publish_plan
 
 
 class PublishFanvueModuleTest(unittest.TestCase):
@@ -100,7 +100,7 @@ class FanvueFillScheduleTest(unittest.TestCase):
             validate_publish_plan({"providers": ["fanvue"]}, "title", "Agent description.")
 
     def test_slot_select_reads_the_fanvue_columns(self) -> None:
-        from app.services.fill_schedule.store import ScheduleStore
+        from app.services.publisher.store import ScheduleStore
 
         columns = ScheduleStore.SLOT_IDENTITY_SELECT.split(",")
         self.assertIn("fanvue_account_ids", columns)

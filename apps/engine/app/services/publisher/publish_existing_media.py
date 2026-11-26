@@ -15,8 +15,8 @@ from typing import Any, Callable
 from loguru import logger
 
 from app.services.analytics import scrub_error_text
-from app.services.fill_schedule.account_outcomes import lease_iso
-from app.services.fill_schedule.support import slot_user_id
+from app.services.publisher.account_outcomes import lease_iso
+from app.services.publisher.support import slot_user_id
 
 FailPermanently = Callable[[str], None]
 

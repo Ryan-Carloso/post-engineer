@@ -10,7 +10,7 @@ import unittest
 
 from app.providers import SOCIAL_PROVIDERS
 from app.services import publish_threespeak, upload_publisher
-from app.services.fill_schedule.metadata import metadata_for, validate_publish_plan
+from app.services.publisher.metadata import metadata_for, validate_publish_plan
 
 
 class PublishThreespeakModuleTest(unittest.TestCase):
@@ -86,7 +86,7 @@ class ThreespeakFillScheduleTest(unittest.TestCase):
             validate_publish_plan({"providers": ["3speak"]}, "title", "Agent description.")
 
     def test_slot_select_reads_the_threespeak_column(self) -> None:
-        from app.services.fill_schedule.store import ScheduleStore
+        from app.services.publisher.store import ScheduleStore
 
         columns = ScheduleStore.SLOT_IDENTITY_SELECT.split(",")
         self.assertIn("threespeak_account_ids", columns)

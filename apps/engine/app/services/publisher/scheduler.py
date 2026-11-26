@@ -15,9 +15,9 @@ from loguru import logger
 
 from app.services import notify as notify_module
 from app.services import upload_publisher
-from app.services.fill_schedule.constants import CONNECTION_FAILURES, TICK_SECONDS
-from app.services.fill_schedule.publish import BatchPublisher
-from app.services.fill_schedule.store import CONNECT_RETRIES, ScheduleStore
+from app.services.publisher.constants import CONNECTION_FAILURES, TICK_SECONDS
+from app.services.publisher.publish import BatchPublisher
+from app.services.publisher.store import CONNECT_RETRIES, ScheduleStore
 
 OUTAGE_REMINDER_SECONDS = 30 * 60
 

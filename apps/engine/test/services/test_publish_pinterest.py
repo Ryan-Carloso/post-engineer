@@ -10,7 +10,7 @@ import unittest
 
 from app.providers import SOCIAL_PROVIDERS
 from app.services import publish_pinterest, upload_publisher
-from app.services.fill_schedule.metadata import metadata_for, validate_publish_plan
+from app.services.publisher.metadata import metadata_for, validate_publish_plan
 
 
 class PublishPinterestModuleTest(unittest.TestCase):
@@ -110,7 +110,7 @@ class PinterestFillScheduleTest(unittest.TestCase):
             validate_publish_plan({"providers": ["pinterest"], "pinterest_account_ids": ["user-9"]}, "title", "Agent description.")
 
     def test_slot_select_reads_the_pinterest_columns(self) -> None:
-        from app.services.fill_schedule.store import ScheduleStore
+        from app.services.publisher.store import ScheduleStore
 
         columns = ScheduleStore.SLOT_IDENTITY_SELECT.split(",")
         self.assertIn("pinterest_account_ids", columns)

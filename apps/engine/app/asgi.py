@@ -11,7 +11,7 @@ from loguru import logger
 from app.config import config
 from app.router import root_api_router
 from app.services.analytics import scrub_secret_values, track_event, warm_client
-from app.services.fill_schedule import (
+from app.services.publisher import (
     FillScheduleScheduler,
     ScheduleStore,
     start_fill_schedule_thread,

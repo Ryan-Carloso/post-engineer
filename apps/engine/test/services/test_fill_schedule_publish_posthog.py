@@ -1,6 +1,6 @@
 """PostHog publish_provider_failed event in the fill-schedule publish path.
 
-The fill-schedule publisher (apps/engine/app/services/fill_schedule/publish.py)
+The fill-schedule publisher (apps/engine/app/services/publisher/publish.py)
 is the single publish path. A provider failure here emits the
 publish_provider_failed diagnostic event (provider, status_code,
 response_body) so failures are visible in PostHog.
@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 from unittest import TestCase
 from unittest.mock import MagicMock, patch
 
-from app.services.fill_schedule import publish as publish_module
+from app.services.publisher import publish as publish_module
 
 
 UPLOAD_ID = "22222222-2222-4222-8222-222222222222"
@@ -76,7 +76,7 @@ class FillSchedulePublishPostHogTests(TestCase):
         return slot
 
     def _scheduler(self, store, publish_mock):
-        from app.services.fill_schedule import scheduler as scheduler_module
+        from app.services.publisher import scheduler as scheduler_module
 
         sched = scheduler_module.FillScheduleScheduler(
             store=store,

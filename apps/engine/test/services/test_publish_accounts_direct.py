@@ -36,8 +36,8 @@ class PublishSlotAccountsDirectTests(unittest.TestCase):
         self.addCleanup(os.unlink, self.video_path)
 
     def _run(self, slot, schedule, publish, metadata_error=False):
-        from app.services.fill_schedule import publish_accounts as accounts_module
-        from app.services.fill_schedule.publish_accounts import publish_slot_accounts
+        from app.services.publisher import publish_accounts as accounts_module
+        from app.services.publisher.publish_accounts import publish_slot_accounts
 
         def persist(saved, fields):
             slot["publish_outcomes"] = [dict(item) for item in saved]

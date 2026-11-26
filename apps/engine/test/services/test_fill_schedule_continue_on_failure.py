@@ -12,8 +12,8 @@ import unittest
 from datetime import datetime, timezone
 from unittest.mock import patch
 
-from app.services import fill_schedule as fs
-from app.services.fill_schedule import publish as pub_module
+from app.services import publisher as fs
+from app.services.publisher import publish as pub_module
 from app.services.upload_publisher import PublishError
 
 UTC = timezone.utc

@@ -1,4 +1,4 @@
-"""Tests for the PostgREST ScheduleStore (app/services/fill_schedule.py).
+"""Tests for the PostgREST ScheduleStore (app/services/publisher.py).
 
 The store is the fill schedule data layer: reads ``schedules`` (with embedded
 personas) and writes ``scheduled_posts`` to Supabase via PostgREST using the
@@ -21,7 +21,7 @@ from urllib3.exceptions import NameResolutionError, ProtocolError
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from app.services import fill_schedule as fs
+from app.services import publisher as fs
 
 UTC = timezone.utc
 

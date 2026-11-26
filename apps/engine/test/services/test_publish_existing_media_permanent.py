@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 
 import requests
 
-from app.services.fill_schedule.publish_existing_media import resolve_existing_media
+from app.services.publisher.publish_existing_media import resolve_existing_media
 
 NOW = datetime(2026, 11, 14, 12, 0, tzinfo=timezone.utc)
 UPLOAD_ID = "22222222-2222-4222-8222-222222222222"
