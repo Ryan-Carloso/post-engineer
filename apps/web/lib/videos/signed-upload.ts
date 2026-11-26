@@ -15,6 +15,8 @@ import {
   type VideoUploadContentType,
 } from '@/lib/contracts/videos';
 import { IMAGE_PROVIDERS, isImageProvider } from '@/lib/contracts/providers';
+import { SCHEDULED_UPLOAD_EXPIRY_MS } from '@/lib/videos/upload-expiry';
+import { listLiveUploadSlotTimes } from '@/lib/videos/scheduled-upload-slots';
 
 export { MAX_VIDEO_UPLOAD_BYTES, VIDEO_UPLOAD_CONTENT_TYPES, type UploadContentType, type VideoUploadContentType };
 
@@ -59,6 +61,7 @@ export interface VideoUploadStore {
   ): Promise<boolean>;
   deleteUpload(id: string): Promise<void>;
   listExpired(now: Date, limit: number): Promise<Array<Pick<VideoUploadRow, 'id' | 'storage_path'>>>;
+  listLiveSlotTimes(uploadIds: readonly string[]): Promise<Map<string, string>>;
 }
 
 export interface VideoUploadStorage {
@@ -174,6 +177,12 @@ async function discardObject(storage: VideoUploadStorage, path: string): Promise
   }
 }
 
+async function keepScheduledUpload(store: VideoUploadStore, id: string, slotAt: string, now: Date): Promise<void> {
+  const base = Math.max(Date.parse(slotAt), now.getTime());
+  const expiresAt = new Date(base + SCHEDULED_UPLOAD_EXPIRY_MS).toISOString();
+  await store.updateUpload(id, 'ready', { expires_at: expiresAt });
+}
+
 export async function sweepExpiredVideoUploads(
   store: VideoUploadStore,
   storage: VideoUploadStorage,
@@ -181,8 +190,14 @@ export async function sweepExpiredVideoUploads(
   limit: number = VIDEO_UPLOAD_SWEEP_LIMIT,
 ): Promise<number> {
   const expired = await store.listExpired(now, limit);
+  const liveSlotTimes = await store.listLiveSlotTimes(expired.map((row) => row.id));
   let removed = 0;
   for (const row of expired) {
+    const slotAt = liveSlotTimes.get(row.id);
+    if (slotAt !== undefined) {
+      await keepScheduledUpload(store, row.id, slotAt, now);
+      continue;
+    }
     try {
       const { error } = await storage.remove([row.storage_path]);
       if (error !== null) continue;
@@ -376,6 +391,9 @@ export function createSupabaseVideoUploadStore(): VideoUploadStore {
     async deleteUpload(id) {
       const { error } = await table().delete().eq('id', id);
       if (error !== null) throw new Error(`Failed to remove the video upload: ${error.message}`);
+    },
+    async listLiveSlotTimes(uploadIds) {
+      return listLiveUploadSlotTimes(supabase, uploadIds);
     },
     async listExpired(now, limit) {
       const { data, error } = await table()

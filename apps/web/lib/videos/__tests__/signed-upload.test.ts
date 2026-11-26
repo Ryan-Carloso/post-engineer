@@ -21,10 +21,16 @@ const OTHER = 'user-uuid-2';
 const MP4 = Buffer.from([0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d, 1, 2, 3, 4]);
 const MOV = Buffer.from([0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70, 0x71, 0x74, 0x20, 0x20, 1, 2, 3, 4]);
 
-function makeStore(rows: VideoUploadRow[] = []): VideoUploadStore & { rows: Map<string, VideoUploadRow> } {
+function makeStore(
+  rows: VideoUploadRow[] = [],
+  liveSlots: Map<string, string> = new Map(),
+): VideoUploadStore & { rows: Map<string, VideoUploadRow> } {
   const map = new Map(rows.map((r) => [r.id, { ...r }]));
   return {
     rows: map,
+    async listLiveSlotTimes(uploadIds) {
+      return new Map([...liveSlots].filter(([id]) => uploadIds.includes(id)));
+    },
     async insertUpload(row) {
       map.set(row.id, { ...row });
       return { ...row };
@@ -217,6 +223,50 @@ describe('sweepExpiredVideoUploads', () => {
     expect(store.rows.has('busy')).toBe(true);
     expect(await sweepExpiredVideoUploads(store, storage, NOW)).toBe(1);
     expect([...store.rows.keys()].sort()).toEqual(['busy', 'throws']);
+  });
+});
+
+describe('sweepExpiredVideoUploads with scheduled uploads', () => {
+  const HOUR = 60 * 60 * 1000;
+
+  it('keeps an expired upload a live slot still uses and moves its expiry to 24h after the post time', async () => {
+    const slotAt = new Date(NOW.getTime() + 3 * 24 * HOUR).toISOString();
+    const store = makeStore(
+      [
+        row({ id: 'scheduled', status: 'ready', storage_path: 'u/scheduled.mp4', expires_at: new Date(NOW.getTime() - 1_000).toISOString() }),
+        row({ id: 'abandoned', status: 'ready', storage_path: 'u/abandoned.mp4', expires_at: new Date(NOW.getTime() - 2_000).toISOString() }),
+      ],
+      new Map([['scheduled', slotAt]]),
+    );
+    const storage = makeStorage();
+    expect(await sweepExpiredVideoUploads(store, storage, NOW)).toBe(1);
+    expect(storage.removed).toEqual([['u/abandoned.mp4']]);
+    expect(store.rows.get('scheduled')?.expires_at).toBe(new Date(Date.parse(slotAt) + 24 * HOUR).toISOString());
+    expect(store.rows.has('abandoned')).toBe(false);
+  });
+
+  it('keeps an overdue scheduled upload alive for 24h from now so a late publish still finds it', async () => {
+    const store = makeStore(
+      [row({ id: 'late', status: 'ready', storage_path: 'u/late.mp4', expires_at: new Date(NOW.getTime() - 1_000).toISOString() })],
+      new Map([['late', new Date(NOW.getTime() - 48 * HOUR).toISOString()]]),
+    );
+    const storage = makeStorage();
+    expect(await sweepExpiredVideoUploads(store, storage, NOW)).toBe(0);
+    expect(storage.removed).toEqual([]);
+    expect(store.rows.get('late')?.expires_at).toBe(new Date(NOW.getTime() + 24 * HOUR).toISOString());
+  });
+
+  it('removes nothing when the scheduled-slot lookup fails', async () => {
+    const store = makeStore([
+      row({ id: 'maybe', status: 'ready', storage_path: 'u/maybe.mp4', expires_at: new Date(NOW.getTime() - 1_000).toISOString() }),
+    ]);
+    store.listLiveSlotTimes = async () => {
+      throw new Error('db down');
+    };
+    const storage = makeStorage();
+    await expect(sweepExpiredVideoUploads(store, storage, NOW)).rejects.toThrow('db down');
+    expect(storage.removed).toEqual([]);
+    expect(store.rows.has('maybe')).toBe(true);
   });
 });
 

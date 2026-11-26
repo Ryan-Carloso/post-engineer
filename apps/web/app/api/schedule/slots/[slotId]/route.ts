@@ -11,15 +11,12 @@ import { validateScheduleWindow } from '@/lib/schedule-window';
 import { hasExplicitOffset } from '@/lib/timezone';
 import { logger } from '@/lib/logger';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
-import { SCHEDULED_UPLOAD_EXPIRY_MS } from '@/lib/videos/upload-expiry';
 
 interface SlotRow {
   id: string;
   schedule_id: string;
   status: string;
   title: string | null;
-  media_kind: string | null;
-  media_ref: string | null;
 }
 
 interface ScheduleRow {
@@ -37,7 +34,7 @@ async function loadOwnedSlot(
 ): Promise<{ slot: SlotRow; publishMode: 'scheduled' | 'asap' } | { error: NextResponse }> {
   const { data: slot, error } = await supabase
     .from('scheduled_posts')
-    .select('id, schedule_id, status, title, media_kind, media_ref')
+    .select('id, schedule_id, status, title')
     .eq('id', slotId)
     .eq('user_id', userId)
     .single();
@@ -81,43 +78,6 @@ async function loadOwnedSlot(
   }
   const publishMode = scheduleRow.publish_mode === 'asap' ? 'asap' : 'scheduled';
   return { slot: row, publishMode };
-}
-
-async function extendScheduledUploadExpiry(slot: SlotRow, slotAt: string, userId: string): Promise<NextResponse | null> {
-  if (slot.media_kind !== 'upload' || typeof slot.media_ref !== 'string' || slot.media_ref.length === 0) return null;
-  const service = createSupabaseServiceClient();
-  const { data, error } = await service
-    .from('video_uploads')
-    .select('id, user_id, status')
-    .eq('id', slot.media_ref)
-    .maybeSingle();
-  if (error) {
-    logger.error('[api/schedule/slots] upload expiry lookup failed', error);
-    return apiErrorResponse(500, 'Failed to reschedule slot.', { route: 'PATCH /api/schedule/slots', cause: error });
-  }
-  const upload: Record<string, unknown> = typeof data === 'object' && data !== null ? { ...data } : {};
-  if (upload.user_id !== userId || upload.status !== 'ready') {
-    return apiErrorResponse(409, 'The uploaded video for this post is no longer available, so it cannot be rescheduled.', {
-      route: 'PATCH /api/schedule/slots',
-    });
-  }
-  const expiresAt = new Date(Date.parse(slotAt) + SCHEDULED_UPLOAD_EXPIRY_MS).toISOString();
-  const { data: updated, error: updateError } = await service
-    .from('video_uploads')
-    .update({ expires_at: expiresAt })
-    .eq('id', slot.media_ref)
-    .eq('status', 'ready')
-    .select('id');
-  if (updateError) {
-    logger.error('[api/schedule/slots] upload expiry extension failed', updateError);
-    return apiErrorResponse(500, 'Failed to reschedule slot.', { route: 'PATCH /api/schedule/slots', cause: updateError });
-  }
-  if (!Array.isArray(updated) || updated.length === 0) {
-    return apiErrorResponse(409, 'The uploaded video for this post is no longer available, so it cannot be rescheduled.', {
-      route: 'PATCH /api/schedule/slots',
-    });
-  }
-  return null;
 }
 
 async function getHandler(
@@ -306,8 +266,6 @@ async function patchHandler(
     }
     slotAt = new Date(rawSlotAt).toISOString();
     patch.slot_at = slotAt;
-    const expiryError = await extendScheduledUploadExpiry(slot, slotAt, auth.userId);
-    if (expiryError) return expiryError;
   }
 
   const { error: updateError } = await createSupabaseServiceClient()
