@@ -1,8 +1,12 @@
+import { DOC_PAGES, docLocales, docPath } from '@/lib/docs/registry';
+
 export const SITE_URL = 'https://post-engineer.com';
 
 export const GITHUB_URL = 'https://github.com/Ryan-Carloso/post-engineer';
 
 export const OG_IMAGE_PATH = '/og.png';
+
+export const LEGAL_UPDATED_AT = '2026-09-10';
 
 export const LANDING_TITLE =
   'Post Engineer — Vídeos com IA publicados automaticamente no YouTube e Instagram';
@@ -10,7 +14,12 @@ export const LANDING_TITLE =
 export const LANDING_DESCRIPTION =
   'Crie vídeos com IA usando personas e publique automaticamente no YouTube e Instagram, todos os dias, nos horários que escolher. Agendamento automático, com ou sem rosto.';
 
-export const PUBLIC_PAGES = ['/landing', '/recipes', '/privacy', '/terms'] as const;
+const STATIC_PAGES = ['/landing', '/recipes', '/privacy', '/terms'] as const;
+
+export const PUBLIC_PAGES: readonly string[] = [
+  ...STATIC_PAGES,
+  ...DOC_PAGES.flatMap((page) => docLocales(page).map((locale) => docPath(page, locale))),
+];
 
 export function publicPageUrls(): string[] {
   return PUBLIC_PAGES.map((page) => `${SITE_URL}${page}`);

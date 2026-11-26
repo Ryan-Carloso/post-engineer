@@ -17,12 +17,43 @@ describe('lib/seo — public search metadata', () => {
   });
 
   it('lists every top-level public page, and no auth-only page', () => {
-    expect(PUBLIC_PAGES).toEqual(['/landing', '/recipes', '/privacy', '/terms']);
+    expect(PUBLIC_PAGES).toEqual([
+      '/landing',
+      '/recipes',
+      '/privacy',
+      '/terms',
+      '/docs',
+      '/docs/mcp',
+      '/docs/api',
+      '/docs/use-cases',
+      '/docs/integrations',
+      '/help',
+      '/en/help',
+      '/help/primeiros-passos',
+      '/en/help/primeiros-passos',
+      '/help/tokens',
+      '/en/help/tokens',
+      '/help/conectar-contas',
+      '/en/help/conectar-contas',
+    ]);
     expect(publicPageUrls()).toEqual([
       'https://post-engineer.com/landing',
       'https://post-engineer.com/recipes',
       'https://post-engineer.com/privacy',
       'https://post-engineer.com/terms',
+      'https://post-engineer.com/docs',
+      'https://post-engineer.com/docs/mcp',
+      'https://post-engineer.com/docs/api',
+      'https://post-engineer.com/docs/use-cases',
+      'https://post-engineer.com/docs/integrations',
+      'https://post-engineer.com/help',
+      'https://post-engineer.com/en/help',
+      'https://post-engineer.com/help/primeiros-passos',
+      'https://post-engineer.com/en/help/primeiros-passos',
+      'https://post-engineer.com/help/tokens',
+      'https://post-engineer.com/en/help/tokens',
+      'https://post-engineer.com/help/conectar-contas',
+      'https://post-engineer.com/en/help/conectar-contas',
     ]);
   });
 
