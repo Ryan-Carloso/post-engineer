@@ -1,6 +1,28 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { findRepoRoot } from '@/test/repo-root';
 import { APPROVAL_SLOT_GRACE_MS, awaitingSlots, isSlotExpired } from '@/lib/approval-queue';
 import type { ScheduledSlot } from '@/lib/api';
+
+function graceLiteral(source: string, file: string): string {
+  const match = /APPROVAL_SLOT_GRACE_MS = ([^;]+);/.exec(source);
+  if (match === null) throw new Error(`${file} does not define APPROVAL_SLOT_GRACE_MS`);
+  return match[1].trim();
+}
+
+describe('APPROVAL_SLOT_GRACE_MS sync', () => {
+  it('matches the approve route grace so both sides expire slots together', () => {
+    const root = findRepoRoot(import.meta.url);
+    const queueSource = readFileSync(join(root, 'apps/web/lib/approval-queue.ts'), 'utf8');
+    const routeSource = readFileSync(
+      join(root, 'apps/web/app/api/schedule/slots/[slotId]/approve/route.ts'),
+      'utf8',
+    );
+    expect(graceLiteral(routeSource, 'approve/route.ts')).toBe(graceLiteral(queueSource, 'lib/approval-queue.ts'));
+    expect(APPROVAL_SLOT_GRACE_MS).toBe(5 * 60 * 1000);
+  });
+});
 
 function slot(partial: Partial<ScheduledSlot> = {}): ScheduledSlot {
   return {
