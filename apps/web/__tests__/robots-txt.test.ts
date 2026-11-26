@@ -80,6 +80,35 @@ function groupFor(agent: string): Group {
   return found[0];
 }
 
+function resolveGroup(agent: string): Group {
+  const found = parseGroups().filter((group) => group.agents.includes(agent));
+  if (found.length === 1) return found[0];
+  return groupFor('*');
+}
+
+function patternToRegExp(pattern: string): RegExp {
+  let source = '';
+  for (const char of pattern) {
+    if (char === '*') source += '.*';
+    else if (char === '$') source += '$';
+    else source += char.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+  return new RegExp(`^${source}`);
+}
+
+function isAllowed(group: Group, path: string): boolean {
+  let bestAllow = -1;
+  let bestDisallow = -1;
+  for (const pattern of group.allow) {
+    if (patternToRegExp(pattern).test(path)) bestAllow = Math.max(bestAllow, pattern.length);
+  }
+  for (const pattern of group.disallow) {
+    if (patternToRegExp(pattern).test(path)) bestDisallow = Math.max(bestDisallow, pattern.length);
+  }
+  if (bestAllow === -1 && bestDisallow === -1) return true;
+  return bestAllow >= bestDisallow;
+}
+
 describe('robots.txt', () => {
   const wildcard = groupFor('*');
 
@@ -126,4 +155,30 @@ describe('robots.txt', () => {
   it('keeps the sitemap reference', () => {
     expect(robots).toContain('Sitemap: https://post-engineer.com/sitemap.xml');
   });
+
+  it('has exactly 18 groups', () => {
+    expect(parseGroups()).toHaveLength(18);
+  });
+
+  it('contains no Disallow for /docs/', () => {
+    expect(robots).not.toContain('Disallow: /docs/');
+  });
+
+  it('falls back to the wildcard group for unnamed agents', () => {
+    expect(resolveGroup('Googlebot')).toStrictEqual(groupFor('*'));
+    expect(resolveGroup('Bingbot')).toStrictEqual(groupFor('*'));
+  });
+
+  it.each([...AI_CRAWLERS, ...SOCIAL_BOTS, '*'])(
+    'allows /docs and /help paths for %s and still blocks /api and /admin',
+    (agent) => {
+      const group = resolveGroup(agent);
+      for (const path of ['/docs', '/docs/', '/docs/mcp', '/help', '/help/primeiros-passos']) {
+        expect(isAllowed(group, path), path).toBe(true);
+      }
+      for (const path of ['/api/x', '/admin/x']) {
+        expect(isAllowed(group, path), path).toBe(false);
+      }
+    },
+  );
 });

@@ -36,6 +36,14 @@ export const SlotPostSchema = z.object({
   userNotices: z.array(PublishUserNoticeSchema),
   providerFailures: z.array(PublishProviderFailureSchema),
   postUrl: z.string().nullable(),
+  media: z
+    .object({
+      kind: z.enum(['upload', 'image']),
+      url: z.string().nullable(),
+      contentType: z.string().nullable(),
+    })
+    .nullable()
+    .optional(),
 });
 
 export const SlotScheduleSchema = z.object({

@@ -12,8 +12,9 @@ import {
   type PostDetail,
 } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
-import AccountCard from '@/components/account-card';
 import { ScheduleSection } from './schedule-section';
+import { PostAccountsSection } from './post-accounts-section';
+import { SlotImagePreview } from './slot-image-preview';
 import { RescheduleSection } from './reschedule-section';
 import { PromptSection } from './prompt-section';
 import type { PostPromptFacts } from '@/lib/slot-detail';
@@ -212,6 +213,13 @@ export const SlotDetail = ({
 
   return (
     <section aria-label={t('posts.detailsTitle')} className="mt-6">
+      {slot.media?.kind === 'image' && slot.media.url ? (
+        <SlotImagePreview src={slot.media.url} />
+      ) : slot.media?.kind === 'upload' && slot.media.url ? (
+        <div className="mt-4 overflow-hidden rounded-2xl bg-black">
+          <video src={slot.media.url} controls className="mx-auto h-auto max-h-[70vh] w-full" />
+        </div>
+      ) : null}
       <PostFailureNotice status={slot.status} error={slot.error} userNotices={slot.userNotices} />
       <div className="mt-6">
         <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">{t('posts.captionLabel')}</p>
@@ -260,25 +268,7 @@ export const SlotDetail = ({
 
       <RescheduleSection slot={slot} timezone={timezone} publishMode={publishMode} />
 
-      {accounts.length > 0 && (
-        <section aria-label={t('posts.accountsLabel')} className="mt-6">
-          <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-            {t('posts.accountsLabel')}
-          </p>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            {accounts.map((account) => (
-              <AccountCard
-                key={`${account.type}:${account.id}`}
-                type={account.type}
-                name={account.name}
-                email={account.email}
-                thumbnail={account.thumbnail}
-                handle={account.handle}
-              />
-            ))}
-          </div>
-        </section>
-      )}
+      <PostAccountsSection accounts={accounts} />
 
       <PublishLinks links={publishLinks} />
 

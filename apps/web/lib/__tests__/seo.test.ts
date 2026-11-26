@@ -7,6 +7,7 @@ import {
   SITE_URL,
   buildFaqJsonLd,
   publicPageUrls,
+  serializeJsonLd,
 } from '@/lib/seo';
 
 describe('lib/seo — public search metadata', () => {
@@ -16,12 +17,39 @@ describe('lib/seo — public search metadata', () => {
   });
 
   it('lists every top-level public page, and no auth-only page', () => {
-    expect(PUBLIC_PAGES).toEqual(['/landing', '/recipes', '/privacy', '/terms']);
+    expect(PUBLIC_PAGES).toEqual([
+      '/landing',
+      '/recipes',
+      '/privacy',
+      '/terms',
+      '/docs',
+      '/docs/mcp',
+      '/docs/api',
+      '/docs/use-cases',
+      '/docs/integrations',
+      '/help',
+      '/en/help',
+      '/help/primeiros-passos',
+      '/en/help/primeiros-passos',
+      '/help/conectar-contas',
+      '/en/help/conectar-contas',
+    ]);
     expect(publicPageUrls()).toEqual([
       'https://post-engineer.com/landing',
       'https://post-engineer.com/recipes',
       'https://post-engineer.com/privacy',
       'https://post-engineer.com/terms',
+      'https://post-engineer.com/docs',
+      'https://post-engineer.com/docs/mcp',
+      'https://post-engineer.com/docs/api',
+      'https://post-engineer.com/docs/use-cases',
+      'https://post-engineer.com/docs/integrations',
+      'https://post-engineer.com/help',
+      'https://post-engineer.com/en/help',
+      'https://post-engineer.com/help/primeiros-passos',
+      'https://post-engineer.com/en/help/primeiros-passos',
+      'https://post-engineer.com/help/conectar-contas',
+      'https://post-engineer.com/en/help/conectar-contas',
     ]);
   });
 
@@ -61,5 +89,17 @@ describe('lib/seo — public search metadata', () => {
 
   it('builds an empty FAQPage for zero items instead of crashing', () => {
     expect(buildFaqJsonLd([]).mainEntity).toEqual([]);
+  });
+
+  it('serializeJsonLd escapes </script> so the payload cannot close its tag', () => {
+    const serialized = serializeJsonLd({ text: '</script><script>alert(1)</script>' });
+    expect(serialized).not.toContain('</script>');
+    expect(serialized).not.toContain('<');
+    expect(serialized).toContain('\\u003c/script\\u003e');
+  });
+
+  it('serializeJsonLd output parses back to the same object', () => {
+    const value = { name: 'Post & Engineer <3', note: 'line\u2028break' };
+    expect(JSON.parse(serializeJsonLd(value))).toEqual(value);
   });
 });

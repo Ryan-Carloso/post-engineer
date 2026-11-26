@@ -267,7 +267,7 @@ describe('POST /api/persona', () => {
     expect(inserted[0]?.id).toMatch(/^[0-9a-f-]{36}$/);
     expect(uploaded).toEqual([]);
     expect(inserted[0]).toMatchObject({ user_id: USER_ID, name: 'Ana', photo_path: null });
-    expect(Object.keys(inserted[0] ?? {}).sort()).toEqual(['id', 'identity_card', 'name', 'photo_path', 'user_id']);
+    expect(Object.keys(inserted[0] ?? {}).sort()).toEqual(['ai_label', 'id', 'identity_card', 'name', 'photo_path', 'user_id']);
   });
 
   it('creates a persona with an uploaded photo: uploads to Storage and inserts the path', async () => {

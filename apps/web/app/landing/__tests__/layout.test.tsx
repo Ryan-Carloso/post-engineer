@@ -2,7 +2,18 @@ import '@testing-library/jest-dom/vitest';
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { ptDictionary } from '@/lib/i18n/pt';
+import { buildFaqJsonLd } from '@/lib/seo';
 import LandingLayout from '../layout';
+
+function scriptByType(type: string): unknown {
+  const scripts = [...document.querySelectorAll('script[type="application/ld+json"]')];
+  const found = scripts.find((script) => {
+    const parsed = JSON.parse(script.textContent ?? '') as { '@type'?: string };
+    return parsed['@type'] === type;
+  });
+  expect(found).not.toBeUndefined();
+  return JSON.parse(found?.textContent ?? '');
+}
 
 describe('app/landing/layout — FAQ structured data', () => {
   it('renders children unchanged', () => {
@@ -20,9 +31,7 @@ describe('app/landing/layout — FAQ structured data', () => {
         <span>landing</span>
       </LandingLayout>,
     );
-    const script = document.querySelector('script[type="application/ld+json"]');
-    expect(script).not.toBeNull();
-    const jsonLd = JSON.parse(script?.textContent ?? '') as {
+    const jsonLd = scriptByType('FAQPage') as {
       '@type': string;
       mainEntity: Array<{ name: string; acceptedAnswer: { text: string } }>;
     };
@@ -37,5 +46,33 @@ describe('app/landing/layout — FAQ structured data', () => {
       ptDictionary.landing.faq2A,
       ptDictionary.landing.faq4A,
     ]);
+  });
+
+  it('emits FAQPage JSON-LD identical to buildFaqJsonLd of the landing FAQ', () => {
+    render(
+      <LandingLayout>
+        <span>landing</span>
+      </LandingLayout>,
+    );
+    expect(scriptByType('FAQPage')).toEqual(
+      buildFaqJsonLd([
+        { question: ptDictionary.landing.faq1Q, answer: ptDictionary.landing.faq1A },
+        { question: ptDictionary.landing.faq2Q, answer: ptDictionary.landing.faq2A },
+        { question: ptDictionary.landing.faq4Q, answer: ptDictionary.landing.faq4A },
+      ]),
+    );
+  });
+
+  it('emits FAQPage, Organization, WebSite and SoftwareApplication, one script each', () => {
+    render(
+      <LandingLayout>
+        <span>landing</span>
+      </LandingLayout>,
+    );
+    const scripts = [...document.querySelectorAll('script[type="application/ld+json"]')];
+    const types = scripts.map(
+      (script) => (JSON.parse(script.textContent ?? '') as { '@type': string })['@type'],
+    );
+    expect(types).toEqual(['FAQPage', 'Organization', 'WebSite', 'SoftwareApplication']);
   });
 });

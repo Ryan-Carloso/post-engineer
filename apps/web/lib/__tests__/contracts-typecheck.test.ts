@@ -228,6 +228,7 @@ describe('contracts typecheck', () => {
       personas: [
         {
           id: 'p1',
+          aiLabel: false,
           name: 'Ava',
           createdAt: '2026-01-01T00:00:00Z',
           boundAccounts: {

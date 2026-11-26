@@ -29,7 +29,7 @@ async function getHandler(request: Request): Promise<NextResponse> {
   const supabase = createSupabaseServiceClient();
   let query = supabase
     .from('personas')
-    .select('id, name, photo_path, avatar_url, created_at')
+    .select('id, name, photo_path, avatar_url, created_at, ai_label')
     .eq('user_id', auth.userId);
 
   const scopedIds = auth.personaIds;
@@ -73,6 +73,7 @@ async function getHandler(request: Request): Promise<NextResponse> {
       createdAt: record.created_at,
       avatarUrl: toSameOriginAssetPath(record.avatar_url) ?? undefined,
       photoUrl: await signedPhotoUrl(supabase, record.photo_path),
+      aiLabel: record.ai_label === true,
       boundAccounts: bindingsByPersona.get(record.id) ?? emptyPersonaDefaultAccounts(),
     })),
   );

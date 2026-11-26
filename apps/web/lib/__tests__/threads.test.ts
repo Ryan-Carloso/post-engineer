@@ -96,6 +96,27 @@ describe('publishThreadsMedia', () => {
     expect(containerBody.get('video_url')).toBe(input.media.url);
   });
 
+  it('marks the container as made with AI only when aiLabel is set', async () => {
+    mockFetch
+      .mockResolvedValueOnce(jsonResponse({ id: 'c1' }))
+      .mockResolvedValueOnce(jsonResponse({ status: 'FINISHED' }))
+      .mockResolvedValueOnce(jsonResponse({ id: 'p1' }))
+      .mockResolvedValueOnce(jsonResponse({ permalink: 'https://www.threads.net/@a/post/x' }));
+    await publishThreadsMedia({ ...input, aiLabel: true });
+    const labelled = new URLSearchParams(String((mockFetch.mock.calls[0][1] as RequestInit).body));
+    expect(labelled.get('is_made_with_ai')).toBe('true');
+
+    mockFetch.mockClear();
+    mockFetch
+      .mockResolvedValueOnce(jsonResponse({ id: 'c1' }))
+      .mockResolvedValueOnce(jsonResponse({ status: 'FINISHED' }))
+      .mockResolvedValueOnce(jsonResponse({ id: 'p1' }))
+      .mockResolvedValueOnce(jsonResponse({ permalink: 'https://www.threads.net/@a/post/x' }));
+    await publishThreadsMedia(input);
+    const unlabelled = new URLSearchParams(String((mockFetch.mock.calls[0][1] as RequestInit).body));
+    expect(unlabelled.has('is_made_with_ai')).toBe(false);
+  });
+
   it('creates an IMAGE container with image_url for an image, and no video_url', async () => {
     mockFetch
       .mockResolvedValueOnce(jsonResponse({ id: 'c1' }))

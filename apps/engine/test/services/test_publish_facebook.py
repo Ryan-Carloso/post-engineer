@@ -37,10 +37,17 @@ class PublishFacebookModuleTest(unittest.TestCase):
             [
                 ("provider", "facebook"),
                 ("caption", "post"),
+                ("aiLabel", "false"),
                 ("facebookAccountIds", "1"),
                 ("facebookAccountIds", "2"),
             ],
         )
+
+    def test_fields_carry_the_ai_label(self) -> None:
+        fields = publish_facebook.facebook_fields(
+            publish_facebook.FacebookMetadata(caption="post", account_ids=("1",), ai_label=True)
+        )
+        self.assertIn(("aiLabel", "true"), fields)
 
 
 class FacebookPublisherWiringTest(unittest.TestCase):

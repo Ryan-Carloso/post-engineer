@@ -960,7 +960,7 @@ describe('migration 026 (post metrics dimensions)', () => {
 
   it('adds the persona_id column the web reads, while 086 drops the generation-only script_angle', () => {
     expect(sql.includes('add column if not exists persona_id uuid')).toBe(true);
-    const sql086 = readFileSync(join(findRepoRoot(import.meta.url), 'supabase', 'migrations', '086_remove-generation-and-tokens.sql'), 'utf8');
+    const sql086 = readFileSync(join(findRepoRoot(import.meta.url), 'supabase', 'migrations', '087_remove-generation-and-tokens.sql'), 'utf8');
     expect(sql086).toContain('alter table public.post_metrics drop column if exists script_angle;');
   });
 

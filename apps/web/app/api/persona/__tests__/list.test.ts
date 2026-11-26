@@ -213,7 +213,7 @@ describe('GET /api/persona/list', () => {
       avatarUrl: 'data:image/png;base64,IA',
     });
     expect(robo.photoUrl).toBeUndefined();
-    expect(Object.keys(ana).sort()).toEqual(['boundAccounts', 'createdAt', 'id', 'name', 'photoUrl']);
+    expect(Object.keys(ana).sort()).toEqual(['aiLabel', 'boundAccounts', 'createdAt', 'id', 'name', 'photoUrl']);
   });
 
   it('returns the bound publishing accounts per persona', async () => {

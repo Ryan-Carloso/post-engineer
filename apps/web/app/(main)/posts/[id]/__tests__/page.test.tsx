@@ -48,6 +48,8 @@ vi.mock('@/lib/fanvue-accounts', () => ({
 vi.mock('@/lib/ui', () => ({
   SpinnerIcon: () => <span data-testid="icon-spinner" />,
   ExternalLinkIcon: () => <span data-testid="icon-external-link" />,
+  GoogleIcon: () => <span data-testid="icon-google" />,
+  InstagramIcon: () => <span data-testid="icon-instagram" />,
 }));
 
 vi.mock('@/lib/i18n/provider', () => {

@@ -122,6 +122,11 @@
 - Every prompt is a row in `user_prompts` (private or public, owned by one account); there are no official prompts and no prompt text in git. The web hub, the detail page `/recipes/[slug]`, and the MCP (`prompts`, slash commands) all read `GET /api/prompts` and `GET /api/prompts/[slug]`. To add or change a prompt, edit it in the app or with `prompts` (action: create or update), never in code.
 - Never put prompt text, steps, or a list of prompt slugs in code, docs, or tests as product data — a copy in git drifts the moment the row changes.
 
+## Docs (/docs, /help)
+
+- Docs facts are imported from their source of truth, never retyped: tool names from `TOOL_DESCRIPTIONS`, setup from `buildInstallPrompt`, networks from the providers contract.
+- Editing a docs page bumps `updatedAt` and `contentHash` together; the freshness test pins both.
+
 ## Testing gotchas
 
 - Tests must not pass vacuously: assert the path under test was actually taken; mutation-verify new pins (revert the fix, the test must fail). Test names match their assertions.

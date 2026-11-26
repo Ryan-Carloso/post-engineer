@@ -9,6 +9,7 @@ export const PersonaListItemSchema = z.object({
   createdAt: z.string(),
   avatarUrl: z.string().optional(),
   photoUrl: z.string().optional(),
+  aiLabel: z.boolean(),
   boundAccounts: PersonaPublishingAccountsSchema,
 });
 export type PersonaListItem = z.infer<typeof PersonaListItemSchema>;
@@ -50,6 +51,7 @@ export const DeletePersonaResponseSchema = z.object({
 
 export const CreatePersonaBodySchema = z.object({
   name: z.string().trim().min(1),
+  aiLabel: z.enum(['true', 'false']).optional(),
   publishingAccounts: z.string().optional(),
 });
 
@@ -62,6 +64,7 @@ const optionalFormText = <T extends z.ZodType>(schema: T) =>
 export const UpdatePersonaBodySchema = z
   .object({
     name: optionalFormText(z.string().trim().min(1)),
+    aiLabel: optionalFormText(z.enum(['true', 'false'])),
   })
   .refine((v) => Object.keys(v).length > 0, { message: 'Nothing to update.' });
 

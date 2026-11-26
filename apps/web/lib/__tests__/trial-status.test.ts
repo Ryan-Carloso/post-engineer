@@ -31,7 +31,7 @@ describe('computeTrialStatus', () => {
 
   it('grants the same number of days as the migration default and backfill', () => {
     const migration = readFileSync(
-      join(findRepoRoot(import.meta.url), 'supabase', 'migrations', '086_remove-generation-and-tokens.sql'),
+      join(findRepoRoot(import.meta.url), 'supabase', 'migrations', '087_remove-generation-and-tokens.sql'),
       'utf8',
     );
     expect(migration).toContain(`set trial_ends_at = created_at + interval '${TRIAL_DAYS} days'`);

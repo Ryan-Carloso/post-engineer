@@ -1,8 +1,8 @@
 """Facebook Pages publish contract for the internal upload API.
 
 Wire contract (multipart/form-data, ``POST /api/upload-content``):
-``provider=facebook``, ``video`` (file), ``caption``, repeated
-``facebookAccountIds`` fields (Facebook Page ids).
+``provider=facebook``, ``video`` (file), ``caption``, ``aiLabel``
+(true|false), repeated ``facebookAccountIds`` fields (Facebook Page ids).
 
 Kept out of ``upload_publisher`` (which imports the provider contract from here) so that
 module stays under the file-size cap; it owns only the Facebook types,
@@ -23,6 +23,7 @@ class FacebookMetadata:
 
     caption: str
     account_ids: tuple[str, ...]
+    ai_label: bool = False
 
     def __post_init__(self) -> None:
         self.account_ids = tuple(self.account_ids)
@@ -46,5 +47,6 @@ def facebook_fields(metadata: FacebookMetadata) -> list[tuple[str, str]]:
     return [
         ("provider", FACEBOOK_PROVIDER),
         ("caption", metadata.caption),
+        ("aiLabel", "true" if metadata.ai_label else "false"),
         *(("facebookAccountIds", account_id) for account_id in metadata.account_ids),
     ]

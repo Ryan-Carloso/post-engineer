@@ -24,12 +24,12 @@ describe('usePersonaStore', () => {
     }
   });
 
-  it('buildPersonaFormData sends the trimmed name and the binding, and no photo when none is staged', () => {
+  it('buildPersonaFormData sends the trimmed name, the AI label and the binding, and no photo when none is staged', () => {
     usePersonaStore.getState().setName('  Ana  ');
     const formData = usePersonaStore.getState().buildPersonaFormData();
     expect(formData.get('name')).toBe('Ana');
     expect(formData.has('photo')).toBe(false);
-    expect([...formData.keys()].sort()).toEqual(['name', 'publishingAccounts']);
+    expect([...formData.keys()].sort()).toEqual(['aiLabel', 'name', 'publishingAccounts']);
   });
 
   it('buildPersonaFormData and buildPersonaEditFormData send the staged photo', () => {

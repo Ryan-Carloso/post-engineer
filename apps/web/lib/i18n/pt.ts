@@ -38,6 +38,7 @@ export const ptDictionary = {
     statusPublished: 'Publicado',
     statusFailed: 'Falhou',
     unknownTitle: 'Sem título',
+    generationUploadedImage: 'Imagem enviada',
     unknownCaption: 'Sem legenda',
     personaFallback: 'Persona removida',
     noPersona: 'Sem persona',
@@ -277,6 +278,8 @@ export const ptDictionary = {
   },
 
   footer: {
+    docs: 'Documentação',
+    help: 'Ajuda',
     privacy: 'Política de Privacidade',
     terms: 'Termos de Serviço',
     support: 'Suporte',

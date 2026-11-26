@@ -3,6 +3,7 @@ import {
   parsePublishingAccountsField,
   type PersonaDefaultAccounts,
 } from './persona-publishing-accounts';
+import { AI_LABEL_FORM_VALUES, invalidAiLabelMessage } from './ai-label-form';
 import type { IdentityCard } from './contracts/persona-identity-card';
 import { parseIdentityCardField } from '@/app/api/persona/identity-card-field';
 
@@ -17,13 +18,30 @@ const optionalText = <T extends z.ZodType>(schema: T) =>
 
 export const personaFormSchema = z.object({
   name: optionalText(z.string().trim().min(1)),
+  aiLabel: optionalText(z.enum(AI_LABEL_FORM_VALUES)),
 });
+
+const FIELD_ERRORS: Record<string, (value: unknown) => string> = {
+  aiLabel: (value) => invalidAiLabelMessage(value),
+};
+
+function fieldErrorMessage(error: z.ZodError, entries: Record<string, unknown>): string {
+  for (const issue of error.issues) {
+    const key = String(issue.path[0] ?? '');
+    const builder = FIELD_ERRORS[key];
+    if (builder) return builder(entries[key]);
+  }
+  return 'Invalid persona form payload.';
+}
+
+export type PersonaFormMode = 'create' | 'debug';
 
 export type PersonaFormValues = z.infer<typeof personaFormSchema>;
 
 export type ParsedPersonaForm = {
   values: {
     name: string;
+    aiLabel: boolean | null;
     identityCard: IdentityCard | null;
     publishingAccounts: PersonaDefaultAccounts;
   };
@@ -44,13 +62,14 @@ function fileFrom(formData: FormData, key: string): File | null {
   return value instanceof File ? value : null;
 }
 
-export function parsePersonaForm(formData: FormData): ParsePersonaFormResult {
+export function parsePersonaForm(formData: FormData, mode?: PersonaFormMode): ParsePersonaFormResult {
+  void mode;
   const entries = Object.fromEntries(
     Array.from(formData.entries()).filter(([, value]) => typeof value === 'string'),
   );
   const parsed = personaFormSchema.safeParse(entries);
   if (!parsed.success) {
-    return { ok: false, error: 'Invalid persona form payload.' };
+    return { ok: false, error: fieldErrorMessage(parsed.error, entries) };
   }
   const values = parsed.data;
 
@@ -77,6 +96,7 @@ export function parsePersonaForm(formData: FormData): ParsePersonaFormResult {
     value: {
       values: {
         name: values.name,
+        aiLabel: values.aiLabel === undefined ? null : values.aiLabel === 'true',
         identityCard: identityCard.status === 'set' ? identityCard.card : null,
         publishingAccounts: binding.accounts,
       },

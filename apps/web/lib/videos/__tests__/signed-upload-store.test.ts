@@ -170,6 +170,12 @@ describe('createSupabaseVideoUploadStore', () => {
     );
   });
 
+  it('answers an empty live-slot lookup without querying', async () => {
+    installClient({});
+    const times = await createSupabaseVideoUploadStore().listLiveSlotTimes([]);
+    expect(times.size).toBe(0);
+  });
+
   it('deletes a row and surfaces a database error', async () => {
     const client = installClient({});
     await expect(createSupabaseVideoUploadStore().deleteUpload(ROW.id)).resolves.toBeUndefined();

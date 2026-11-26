@@ -16,6 +16,7 @@ export function presentSlotDetail(detail: ResponseOf<typeof getSlotContract>) {
       publishLinks: slot.publishLinks,
       userNotices: slot.userNotices,
       providerFailures: slot.providerFailures,
+      media: slot.media,
     },
     schedule: {
       id: schedule.id,

@@ -20,7 +20,7 @@ function sourceFiles(dir: string): string[] {
 const READERS_OF_THE_COLUMN = [
   'app/api/persona/create-row.ts',
   'app/api/persona/identity-card/route.ts',
-  'app/api/persona/route.ts',
+  'app/api/persona/patch-updates.ts',
   'lib/api-telemetry-names.ts',
   'lib/schema-expectations.gen.ts',
   'lib/supabase/database.gen.ts',

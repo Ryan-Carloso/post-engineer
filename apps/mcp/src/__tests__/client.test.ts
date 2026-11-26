@@ -43,7 +43,7 @@ describe('PostEngineerClient', () => {
     expect([...formData.keys()]).toEqual(['name']);
   });
 
-  it('createPersona posts the name and the binding with no photo when no avatarPath is given', async () => {
+  it('createPersona posts the name, the AI label and the binding with no photo when no avatarPath is given', async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
@@ -57,7 +57,7 @@ describe('PostEngineerClient', () => {
     expect(formData.get('name')).toBe('No Photo');
     expect(JSON.parse(String(formData.get('publishingAccounts')))).toEqual({ youtube: ['acct-1'] });
     expect(formData.has('photo')).toBe(false);
-    expect([...formData.keys()].sort()).toEqual(['name', 'publishingAccounts']);
+    expect([...formData.keys()].sort()).toEqual(['aiLabel', 'name', 'publishingAccounts']);
     expect(result).toEqual({ success: true, personaId: 'persona-123' });
   });
 
@@ -89,8 +89,8 @@ describe('PostEngineerClient', () => {
     const mockList = {
       authenticated: true,
       personas: [
-        { id: 'p1', name: 'Persona 1', createdAt: '2026-01-01T00:00:00Z', boundAccounts: emptyAccounts },
-        { id: 'p2', name: 'Persona 2', createdAt: '2026-01-02T00:00:00Z', boundAccounts: emptyAccounts },
+        { id: 'p1', name: 'Persona 1', createdAt: '2026-01-01T00:00:00Z', aiLabel: false, boundAccounts: emptyAccounts },
+        { id: 'p2', name: 'Persona 2', createdAt: '2026-01-02T00:00:00Z', aiLabel: false, boundAccounts: emptyAccounts },
       ],
     };
 

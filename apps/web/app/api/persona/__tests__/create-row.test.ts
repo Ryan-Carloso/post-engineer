@@ -7,6 +7,7 @@ import { buildPersonaInsertRow } from '../create-row';
 function values(overrides: Partial<ParsedPersonaForm['values']> = {}): ParsedPersonaForm['values'] {
   return {
     name: '  Maria  ',
+    aiLabel: null,
     identityCard: null,
     publishingAccounts: emptyPersonaDefaultAccounts(),
     ...overrides,
@@ -24,6 +25,7 @@ describe('buildPersonaInsertRow', () => {
       name: 'Maria',
       photo_path: 'u1/p1/photo.png',
       identity_card: null,
+      ai_label: false,
     });
   });
 

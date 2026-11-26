@@ -81,6 +81,7 @@ describe('GET /api/posts/[id]', () => {
         userNotices: [],
         providerFailures: [],
         postUrl: 'https://example.com/posts/slot-1',
+        media: null,
       },
       schedule: {
         id: 'sched-1',

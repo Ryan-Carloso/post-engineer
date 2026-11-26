@@ -35,6 +35,20 @@
 - [Repository](https://github.com/Ryan-Carloso/post-engineer): the Post Engineer
   monorepo (web, engine, MCP server).
 
+## Docs
+
+- [Documentation](https://post-engineer.com/docs): agent guides for Post Engineer.
+- [MCP server](https://post-engineer.com/docs/mcp): connect Claude and other agents with the MCP server, locally or remotely.
+- [HTTP API](https://post-engineer.com/docs/api): call the HTTP API with a bearer key.
+- [Use cases](https://post-engineer.com/docs/use-cases): daily videos, series and scheduled campaigns.
+- [Integrations](https://post-engineer.com/docs/integrations): every network Post Engineer publishes to.
+- [Help](https://post-engineer.com/help): guides for using Post Engineer, in Portuguese and English.
+- [First steps](https://post-engineer.com/help/primeiros-passos): create a persona, upload a first video and publish it.
+- [Connect accounts](https://post-engineer.com/help/conectar-contas): connect social accounts to publish videos to them.
+- [Help in English](https://post-engineer.com/en/help): guides for using Post Engineer.
+- [First steps in English](https://post-engineer.com/en/help/primeiros-passos): create a persona, upload a first video and publish it.
+- [Connect accounts in English](https://post-engineer.com/en/help/conectar-contas): connect social accounts to publish videos to them.
+
 ## MCP tools
 
 10 intent tools; each takes an `action`. Personas and accounts are given by name or id.

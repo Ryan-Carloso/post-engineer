@@ -44,7 +44,7 @@ function setup(routes: Record<string, unknown>): { call: (name: string, args: Re
   };
 }
 
-const PERSONAS = { authenticated: true, personas: [{ id: MARIA, name: 'Maria', createdAt: '2026-01-01T00:00:00Z', boundAccounts: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [], telegram: [] } }] };
+const PERSONAS = { authenticated: true, personas: [{ id: MARIA, name: 'Maria', createdAt: '2026-01-01T00:00:00Z', aiLabel: false, boundAccounts: { youtube: [], instagram: [], bluesky: [], linkedin: [], threads: [], facebook: [], pinterest: [], '3speak': [], rumble: [], fanvue: [], telegram: [] } }] };
 
 describe('personas get', () => {
   it('joins the persona and its bound accounts in one call', async () => {

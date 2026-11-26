@@ -7,6 +7,7 @@ import type { ExistingMediaFormFields } from './publish-form';
 import type { ImageContentType, PublishExistingRequest } from './schema';
 
 export interface PublishExistingContext {
+  aiLabel: boolean;
   route: string;
   supabase: SupabaseClient;
   userId: string;
@@ -24,6 +25,7 @@ export function fieldsFor(
   input: PublishExistingRequest,
   provider: Provider,
   accountIds: string[],
+  aiLabel = false,
 ): ExistingMediaFormFields {
   const caption = input.caption?.trim() ? input.caption.trim() : input.description;
   return {
@@ -33,6 +35,7 @@ export function fieldsFor(
     tags: input.tags ?? [],
     privacyStatus: input.privacyStatus ?? 'public',
     boardId: input.publishing.pinterestBoardId ?? '',
+    aiLabel,
     accountIds,
   };
 }

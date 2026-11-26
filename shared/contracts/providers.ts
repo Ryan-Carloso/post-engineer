@@ -43,6 +43,13 @@ export function isTitleProvider(value: unknown): value is TitleProvider {
   return typeof value === 'string' && (TITLE_PROVIDERS as readonly string[]).includes(value);
 }
 
+export const AI_LABEL_PROVIDERS = ['youtube', 'instagram', 'threads', 'facebook', 'pinterest'] as const satisfies readonly SocialProvider[];
+export type AiLabelProvider = (typeof AI_LABEL_PROVIDERS)[number];
+
+export function isAiLabelProvider(value: unknown): value is AiLabelProvider {
+  return typeof value === 'string' && (AI_LABEL_PROVIDERS as readonly string[]).includes(value);
+}
+
 export const PUBLISH_ACCOUNT_FIELDS: Record<SocialProvider, string> = {
   youtube: 'accountIds',
   instagram: 'igAccountIds',

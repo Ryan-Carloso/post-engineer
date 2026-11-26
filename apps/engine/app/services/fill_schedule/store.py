@@ -37,7 +37,7 @@ class ScheduleStore:
         "instagram_account_ids,linkedin_account_ids,bluesky_account_ids,threads_account_ids,"
         "facebook_account_ids,pinterest_account_ids,pinterest_board_id,threespeak_account_ids,"
         "rumble_account_ids,fanvue_account_ids,telegram_account_ids,"
-        "personas(name)"
+        "personas(name,ai_label)"
     )
 
     SLOT_SELECT = "*,schedules!left(" + SLOT_IDENTITY_SELECT + ")"

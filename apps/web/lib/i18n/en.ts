@@ -39,6 +39,7 @@ export const enDictionary: Dictionary = {
     statusPublished: 'Published',
     statusFailed: 'Failed',
     unknownTitle: 'No title',
+    generationUploadedImage: 'Uploaded image',
     unknownCaption: 'No caption',
     personaFallback: 'Removed persona',
     noPersona: 'No persona',
@@ -279,6 +280,8 @@ export const enDictionary: Dictionary = {
   },
 
   footer: {
+    docs: 'Documentation',
+    help: 'Help',
     privacy: 'Privacy Policy',
     terms: 'Terms of Service',
     support: 'Support',

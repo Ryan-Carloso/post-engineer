@@ -10,6 +10,7 @@ import { usePersonaStore } from '@/lib/store';
 import { personaFormSchema } from '@/lib/persona-schema';
 import { useI18n } from '@/lib/i18n/provider';
 import { PersonaIdentityCardSection } from './persona-identity-card-section';
+import { PersonaPreferencesSection } from './persona-preferences-section';
 import { PersonaPublishingAccountsSection } from './persona-publishing-accounts-section';
 import { PersonaPageSkeleton } from './persona-page-skeleton';
 import { PersonaErrorDialog } from './persona-error-dialog';
@@ -53,6 +54,7 @@ const PersonaPageContent = () => {
     store.setName(persona.name);
     store.setPhoto(null);
     store.setStoredPhotoUrl(persona.photoUrl ?? persona.avatarUrl ?? null);
+    store.setAiLabel(persona.aiLabel === true);
     store.setResult(null);
     methods.setValue('name', persona.name);
   }, [editingPersona, methods]);
@@ -88,6 +90,7 @@ const PersonaPageContent = () => {
             <PersonaAvatarSection />
           </section>
           <PersonaIdentityCardSection personaId={editingPersonaId} />
+          <PersonaPreferencesSection />
           <PersonaPublishingAccountsSection personaId={editingPersonaId ?? undefined} />
           <PersonaSubmit editId={editId} />
           <PersonaFeedback />

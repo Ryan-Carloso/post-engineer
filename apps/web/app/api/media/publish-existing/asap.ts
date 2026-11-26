@@ -118,7 +118,7 @@ async function publishToProvider(
   }
   const stopHeartbeat = ledger !== null && partition !== null ? startLedgerHeartbeat(ledger.client, partition) : null;
   try {
-    const form = buildExistingMediaForm(provider, fieldsFor(ctx.input, provider, accountIds), media.buffer, media.contentType);
+    const form = buildExistingMediaForm(provider, fieldsFor(ctx.input, provider, accountIds, ctx.aiLabel), media.buffer, media.contentType);
     let response;
     try {
       response = await dispatchPublish(provider, form, ctx.userId, ctx.logId, ctx.startTime);

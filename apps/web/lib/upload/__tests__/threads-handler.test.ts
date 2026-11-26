@@ -9,6 +9,7 @@ vi.mock('@/lib/upload/publish-media', () => ({
   presignPublishMedia: vi.fn(async () => 'https://s.example/archive.mp4'),
   cleanupPublishMedia: vi.fn(async () => 0),
 }));
+vi.mock('@/lib/logger', () => ({ logger: { warn: vi.fn(), info: vi.fn(), error: vi.fn() } }));
 vi.mock('@/lib/analytics', () => ({ trackApiEvent: vi.fn() }));
 vi.mock('@/lib/threads', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/threads')>()),
@@ -17,6 +18,7 @@ vi.mock('@/lib/threads', async (importOriginal) => ({
 
 import { trackApiEvent } from '@/lib/analytics';
 import { ThreadsError } from '@/lib/errors';
+import { logger } from '@/lib/logger';
 import { handleThreadsUpload } from '@/lib/upload/threads-handler';
 import { getSocialAccountTokens, touchSocialAccount } from '@/lib/social-accounts';
 import { cleanupPublishMedia, presignPublishMedia, uploadPublishMedia } from '@/lib/upload/publish-media';
@@ -79,6 +81,40 @@ describe('handleThreadsUpload', () => {
     });
     expect(touchSocialAccount).toHaveBeenCalledWith(expect.anything(), 'user-1', 'threads', '42');
     expect(cleanupPublishMedia).toHaveBeenCalledWith('threads');
+  });
+
+  it('rejects an aiLabel that is not true or false before storing anything', async () => {
+    const fd = formData();
+    fd.set('aiLabel', 'yes');
+    const result = await handleThreadsUpload(fd, 'user-1');
+    expect(result.success).toBe(false);
+    expect(result.results[0].error).toContain('Invalid aiLabel');
+    expect(uploadPublishMedia).not.toHaveBeenCalled();
+    expect(publishThreadsMedia).not.toHaveBeenCalled();
+  });
+
+  it('passes aiLabel through to Threads', async () => {
+    const fd = formData();
+    fd.set('aiLabel', 'true');
+    const result = await handleThreadsUpload(fd, 'user-1');
+    expect(result.success).toBe(true);
+    expect(vi.mocked(publishThreadsMedia).mock.calls[0][0]).toMatchObject({ aiLabel: true });
+  });
+
+  it('passes aiLabel false when the form omits it', async () => {
+    await handleThreadsUpload(formData(), 'user-1');
+    expect(vi.mocked(publishThreadsMedia).mock.calls[0][0]).toMatchObject({ aiLabel: false });
+  });
+
+  it('logs a failed permalink read without failing the publish', async () => {
+    await handleThreadsUpload(formData(), 'user-1');
+    const { onPermalinkError } = vi.mocked(publishThreadsMedia).mock.calls[0][0];
+    expect(typeof onPermalinkError).toBe('function');
+    onPermalinkError?.(new Error('THREADS_PERMALINK_FAILED: nope'));
+    expect(logger.warn).toHaveBeenCalledWith('upload-content/threads: permalink read failed', {
+      accountId: '42',
+      error: 'Error: THREADS_PERMALINK_FAILED: nope',
+    });
   });
 
   it.each([

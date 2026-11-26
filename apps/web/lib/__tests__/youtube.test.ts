@@ -146,8 +146,15 @@ describe('createVideoMetadata', () => {
       status: {
         privacyStatus: 'unlisted',
         selfDeclaredMadeForKids: false,
+        containsSyntheticMedia: false,
       },
     });
+  });
+
+  it('marks the video as synthetic media only when aiLabel is set', () => {
+    expect(createVideoMetadata({ title: 'T', aiLabel: true }).status.containsSyntheticMedia).toBe(true);
+    expect(createVideoMetadata({ title: 'T', aiLabel: false }).status.containsSyntheticMedia).toBe(false);
+    expect(createVideoMetadata({ title: 'T' }).status.containsSyntheticMedia).toBe(false);
   });
 
   it('applies defaults for optional fields', () => {

@@ -178,6 +178,7 @@ class PublishPartsContractTest(unittest.TestCase):
         self.assertEqual(fields.get("title"), "My title")
         self.assertEqual(fields.get("description"), "My description")
         self.assertEqual(fields.get("privacyStatus"), "unlisted")
+        self.assertEqual(fields.get("aiLabel"), "false")
         self.assertEqual(parts.fields.count(("accountIds", "acc_1")), 1)
         self.assertEqual(parts.fields.count(("accountIds", "acc_2")), 1)
         self.assertEqual(len(parts.tags), 1)
@@ -195,8 +196,30 @@ class PublishPartsContractTest(unittest.TestCase):
         fields = {name: value for name, value in parts.fields}
         self.assertEqual(fields.get("provider"), "instagram")
         self.assertEqual(fields.get("caption"), "cap")
+        self.assertEqual(fields.get("aiLabel"), "false")
         self.assertEqual(parts.fields.count(("igAccountIds", "ig_1")), 1)
         self.assertEqual(parts.fields.count(("igAccountIds", "ig_2")), 1)
+
+    def test_ai_label_fields_carry_true(self) -> None:
+        youtube = upload_publisher.build_youtube_parts(
+            metadata=upload_publisher.YouTubeMetadata(
+                title="t",
+                description="d",
+                tags=["x"],
+                privacy_status="public",
+                account_ids=["a"],
+                ai_label=True,
+            ),
+        )
+        instagram = upload_publisher.build_instagram_parts(
+            metadata=upload_publisher.InstagramMetadata(
+                caption="c",
+                account_ids=["i"],
+                ai_label=True,
+            ),
+        )
+        self.assertEqual({n: v for n, v in youtube.fields}.get("aiLabel"), "true")
+        self.assertEqual({n: v for n, v in instagram.fields}.get("aiLabel"), "true")
 
 
 class PublishVideoFileContractTest(unittest.TestCase):

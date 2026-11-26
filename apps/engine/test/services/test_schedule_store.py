@@ -168,10 +168,10 @@ class SlotSelectTests(unittest.TestCase):
     def test_slot_select_includes_bluesky_account_ids(self):
         self.assertIn("bluesky_account_ids", fs.ScheduleStore.SLOT_SELECT)
 
-    def test_slot_select_reads_no_column_migration_086_dropped(self):
+    def test_slot_select_reads_no_column_migration_087_dropped(self):
         for column in ("post_voice_id", "post_niche", "post_language", "post_video_aspect", "voice_id", "niche", "task_id"):
             self.assertNotIn(column, fs.ScheduleStore.SLOT_SELECT)
-        self.assertIn("personas(name)", fs.ScheduleStore.SLOT_SELECT)
+        self.assertIn("personas(name,ai_label)", fs.ScheduleStore.SLOT_SELECT)
 
 
 class _JsonHandler(BaseHTTPRequestHandler):

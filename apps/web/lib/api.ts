@@ -10,7 +10,7 @@ import { HttpStatusError } from '@/lib/errors';
 import { notifyIfSessionExpired } from '@/lib/session-expiry';
 import type { PublishLink } from '@/lib/publish-links';
 import type { PublishProviderFailure, PublishUserNotice } from '@/lib/publish-user-notice';
-import { narrowPostPrompt, narrowPublishLinks, type PostPromptFacts } from './slot-detail';
+import { narrowPostPrompt, narrowSlotFields, type PostPromptFacts, type SlotMedia } from './slot-detail';
 import { parseJsonBody, throwForBadResponse } from './api-response';
 import type { PersonaRecord } from './persona-record';
 
@@ -323,6 +323,7 @@ export interface SlotDetailPayload {
     publishLinks: PublishLink[];
     userNotices?: PublishUserNotice[];
     providerFailures?: PublishProviderFailure[];
+    media: SlotMedia | null;
   };
   schedule: {
     id: string;
@@ -361,7 +362,7 @@ export async function fetchPostDetail(id: string): Promise<PostDetail | null> {
   if (!payload.slot || !payload.schedule) throw new Error('Failed to load post.');
   const rawSchedule = payload.schedule as SlotDetailPayload['schedule'] & { publishMode?: unknown };
   return {
-    slot: { ...payload.slot, publishLinks: narrowPublishLinks(payload.slot.publishLinks) },
+    slot: { ...payload.slot, ...narrowSlotFields(payload.slot) },
     schedule: { ...payload.schedule, publishMode: rawSchedule.publishMode === 'asap' ? 'asap' : 'scheduled' },
     persona: payload.persona ?? null,
     prompt: narrowPostPrompt((data as Record<string, unknown>).prompt),

@@ -1,6 +1,9 @@
-export const SITE_URL = 'https://post-engineer.com';
+import { DOC_PAGES, docLocales, docPath } from '@/lib/docs/registry';
+import { GITHUB_URL, OG_IMAGE_PATH, SITE_URL } from './site-urls';
 
-export const OG_IMAGE_PATH = '/og.png';
+export { GITHUB_URL, OG_IMAGE_PATH, SITE_URL };
+
+export const LEGAL_UPDATED_AT = '2026-11-26';
 
 export const LANDING_TITLE =
   'Post Engineer — Vídeos com IA publicados automaticamente no YouTube e Instagram';
@@ -8,10 +11,24 @@ export const LANDING_TITLE =
 export const LANDING_DESCRIPTION =
   'Crie vídeos com IA usando personas e publique automaticamente no YouTube e Instagram, todos os dias, nos horários que escolher. Agendamento automático, com ou sem rosto.';
 
-export const PUBLIC_PAGES = ['/landing', '/recipes', '/privacy', '/terms'] as const;
+const STATIC_PAGES = ['/landing', '/recipes', '/privacy', '/terms'] as const;
+
+export const PUBLIC_PAGES: readonly string[] = [
+  ...STATIC_PAGES,
+  ...DOC_PAGES.flatMap((page) => docLocales(page).map((locale) => docPath(page, locale))),
+];
 
 export function publicPageUrls(): string[] {
   return PUBLIC_PAGES.map((page) => `${SITE_URL}${page}`);
+}
+
+export function serializeJsonLd(value: unknown): string {
+  return JSON.stringify(value)
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/&/g, '\\u0026')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
 }
 
 export interface FaqItem {

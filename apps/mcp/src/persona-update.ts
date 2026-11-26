@@ -9,6 +9,7 @@ export const UpdatePersonaShape = {
   personaId: z.string().min(1, 'personaId is required').describe('The ID of the persona to update'),
   name: z.string().min(1).optional().describe('New name for the persona'),
   ...PersonaAvatarFields,
+  aiLabel: z.boolean().optional().describe('Mark this persona\'s videos as AI-generated when publishing (YouTube, Instagram, Threads, Facebook, Pinterest).'),
   identityCard: IdentityCardField.nullable().optional().describe('New identity card (replaces the stored one), or null to remove it. Omit to leave it unchanged. See persona_media (action: render_prompt) to render prompts from it.'),
 };
 

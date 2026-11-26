@@ -10,6 +10,7 @@ export interface PostEngineerClientOptions {
 
 export interface CreatePersonaInput {
   name: string;
+  aiLabel?: boolean;
   avatarPath?: string;
   identityCard?: IdentityCard | null;
   accounts: Record<string, string[]>;
@@ -18,6 +19,7 @@ export interface CreatePersonaInput {
 export interface UpdatePersonaInput {
   personaId: string;
   name?: string;
+  aiLabel?: boolean;
   avatarPath?: string;
   identityCard?: IdentityCard | null;
 }

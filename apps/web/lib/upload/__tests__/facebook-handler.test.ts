@@ -42,7 +42,7 @@ function tokens(value: Record<string, unknown>): never {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(getSocialAccountTokens).mockResolvedValue(tokens({ access_token: 'page-tok' }));
-  vi.mocked(publishFacebookMedia).mockResolvedValue({ postId: 'vid-1', permalink: 'https://www.facebook.com/111/videos/vid-1/' });
+  vi.mocked(publishFacebookMedia).mockResolvedValue({ postId: 'vid-1', permalink: 'https://www.facebook.com/111/videos/vid-1/', aiLabelApplied: false });
 });
 
 describe('handleFacebookUpload', () => {
@@ -95,7 +95,7 @@ describe('handleFacebookUpload', () => {
   });
 
   it('omits the permalink when Facebook returned none', async () => {
-    vi.mocked(publishFacebookMedia).mockResolvedValue({ postId: 'vid-1', permalink: null });
+    vi.mocked(publishFacebookMedia).mockResolvedValue({ postId: 'vid-1', permalink: null, aiLabelApplied: false });
     const result = await handleFacebookUpload(formData(), 'user-1');
     expect(result.results[0]).toEqual({ accountId: '111', success: true, postId: 'vid-1' });
   });
@@ -108,6 +108,37 @@ describe('handleFacebookUpload', () => {
       accountId: '111',
       error: 'Error: FACEBOOK_PERMALINK_FAILED: nope',
     });
+  });
+
+  it('rejects an aiLabel that is not true or false before storing anything', async () => {
+    const fd = formData();
+    fd.set('aiLabel', 'yes');
+    const result = await handleFacebookUpload(fd, 'user-1');
+    expect(result.success).toBe(false);
+    expect(result.results[0].error).toContain('Invalid aiLabel');
+    expect(uploadPublishMedia).not.toHaveBeenCalled();
+    expect(publishFacebookMedia).not.toHaveBeenCalled();
+  });
+
+  it('passes aiLabel through to Facebook and reports a failed label edit', async () => {
+    const fd = formData();
+    fd.set('aiLabel', 'true');
+    const result = await handleFacebookUpload(fd, 'user-1');
+    expect(result.success).toBe(true);
+    expect(vi.mocked(publishFacebookMedia).mock.calls[0][0]).toMatchObject({ aiLabel: true });
+    const { onAiLabelError } = vi.mocked(publishFacebookMedia).mock.calls[0][0];
+    expect(typeof onAiLabelError).toBe('function');
+    onAiLabelError?.(new Error('FACEBOOK_AI_LABEL_FAILED: boom'));
+    expect(logger.error).toHaveBeenCalledWith(
+      'upload-content/facebook: AI label edit failed; the post is live without the AI disclosure',
+      expect.any(Error),
+      { accountId: '111' },
+    );
+  });
+
+  it('passes aiLabel false when the form omits it', async () => {
+    await handleFacebookUpload(formData(), 'user-1');
+    expect(vi.mocked(publishFacebookMedia).mock.calls[0][0]).toMatchObject({ aiLabel: false });
   });
 
   it.each([

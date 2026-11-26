@@ -154,6 +154,7 @@ export const useUploadStore = create<UploadFormState>()(
 
 interface PersonaFormState {
   name: string;
+  aiLabel: boolean;
   photo: File | null;
   storedPhotoUrl: string | null;
   result: CreatePersonaResult | null;
@@ -171,6 +172,7 @@ interface PersonaFormState {
   setPublishingAccountsLoaded: (loaded: boolean) => void;
   setLoadedPublishingAccounts: (accounts: PersonaDefaultAccounts) => void;
   setName: (value: string) => void;
+  setAiLabel: (value: boolean) => void;
   setPhoto: (file: File | null) => void;
   setStoredPhotoUrl: (url: string | null) => void;
   setResult: (result: CreatePersonaResult | null) => void;
@@ -181,6 +183,7 @@ interface PersonaFormState {
 
 const initialPersonaState = {
   name: '',
+  aiLabel: false,
   photo: null,
   storedPhotoUrl: null,
   result: null,
@@ -196,6 +199,7 @@ export const usePersonaStore = create<PersonaFormState>()(
   (set, get) => ({
     ...initialPersonaState,
     setName: (name) => set({ name }),
+    setAiLabel: (aiLabel) => set({ aiLabel }),
     setPhoto: (photo) => set({ photo }),
     setStoredPhotoUrl: (storedPhotoUrl) => set({ storedPhotoUrl }),
     setResult: (result) => set({ result }),
@@ -216,6 +220,7 @@ export const usePersonaStore = create<PersonaFormState>()(
       const formData = new FormData();
       formData.append('name', s.name.trim());
       formData.append('publishingAccounts', JSON.stringify(s.publishingAccounts));
+      formData.append('aiLabel', String(s.aiLabel));
       if (s.photo) formData.append('photo', s.photo);
       const identityCard = identityCardFormValue(s.identityCardDraft, s.identityCardLoaded);
       if (identityCard !== null) formData.append('identityCard', identityCard);
@@ -225,6 +230,7 @@ export const usePersonaStore = create<PersonaFormState>()(
       const s = get();
       const formData = new FormData();
       formData.append('name', s.name.trim());
+      formData.append('aiLabel', String(s.aiLabel));
       if (s.photo) formData.append('photo', s.photo);
       const identityCard = identityCardFormValue(s.identityCardDraft, s.identityCardLoaded);
       if (identityCard !== null) formData.append('identityCard', identityCard);

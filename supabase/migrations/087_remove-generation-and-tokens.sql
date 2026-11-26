@@ -1,5 +1,5 @@
 -- ============================================================================
--- 086 — Scheduling-only Post Engineer (issue #788).
+-- 087 — Scheduling-only Post Engineer (issue #788).
 -- Video generation and the token economy are gone: video is made outside and
 -- uploaded, and a 7-day free trial replaces the free-token grant.
 --

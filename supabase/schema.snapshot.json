@@ -46,6 +46,12 @@
                     "type": "jsonb",
                     "default": null,
                     "notNull": false
+                },
+                {
+                    "name": "ai_label",
+                    "type": "boolean",
+                    "default": "false",
+                    "notNull": true
                 }
             ],
             "policies": {

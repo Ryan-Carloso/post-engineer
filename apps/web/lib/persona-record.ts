@@ -6,5 +6,6 @@ export interface PersonaRecord {
   createdAt: string;
   avatarUrl?: string;
   photoUrl?: string;
+  aiLabel: boolean;
   boundAccounts?: PersonaDefaultAccounts;
 }

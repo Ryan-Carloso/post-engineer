@@ -14,6 +14,7 @@ import { rumbleStrings } from './rumble-i18n';
 import { telegramStrings } from './telegram-i18n';
 import { promptsStrings } from './nav-prompts-i18n';
 import { personaBoundAccountsStrings } from './persona-bound-accounts-i18n';
+import { personaLayoutHintStrings } from './persona-layout-hint-i18n';
 import { pricingContactStrings } from './pricing-contact-i18n';
 import { themeStrings } from './theme-i18n';
 import { postsCalendarStrings } from './posts-calendar-i18n';
@@ -35,7 +36,7 @@ export const ptDictionary = {
   postPrompt: experimentsStrings.pt.postPrompt,
   accounts: { ...basePtDictionary.accounts, ...threadsStrings.pt.accounts, ...facebookStrings.pt.accounts, ...pinterestStrings.pt.accounts, ...fanvueStrings.pt.accounts, ...rumbleStrings.pt.accounts, ...telegramStrings.pt.accounts },
   posts: { ...basePtDictionary.posts, ...postsCalendarStrings.pt.posts },
-  personas: { ...basePtDictionary.personas, ...personaBoundAccountsStrings.pt.personas },
+  personas: { ...basePtDictionary.personas, ...personaLayoutHintStrings.pt.personas, ...personaBoundAccountsStrings.pt.personas },
   landing: { ...basePtDictionary.landing, ...pricingContactStrings.pt.landing },
   theme: themeStrings.pt.theme,
   onboarding: onboardingStrings.pt.onboarding,
@@ -57,7 +58,7 @@ export const enDictionary = {
   postPrompt: experimentsStrings.en.postPrompt,
   accounts: { ...baseEnDictionary.accounts, ...threadsStrings.en.accounts, ...facebookStrings.en.accounts, ...pinterestStrings.en.accounts, ...fanvueStrings.en.accounts, ...rumbleStrings.en.accounts, ...telegramStrings.en.accounts },
   posts: { ...baseEnDictionary.posts, ...postsCalendarStrings.en.posts },
-  personas: { ...baseEnDictionary.personas, ...personaBoundAccountsStrings.en.personas },
+  personas: { ...baseEnDictionary.personas, ...personaLayoutHintStrings.en.personas, ...personaBoundAccountsStrings.en.personas },
   landing: { ...baseEnDictionary.landing, ...pricingContactStrings.en.landing },
   theme: themeStrings.en.theme,
   onboarding: onboardingStrings.en.onboarding,
@@ -77,6 +78,7 @@ type MetricsFiltersKeys = typeof metricsFiltersStrings.en;
 type MetricsChartsKeys = typeof metricsChartsStrings.en;
 type ThreadsKeys = typeof threadsStrings.en & typeof facebookStrings.en & typeof pinterestStrings.en & typeof fanvueStrings.en & typeof rumbleStrings.en & typeof telegramStrings.en;
 type PromptsKeys = typeof promptsStrings.en;
+type PersonaLayoutHintKeys = typeof personaLayoutHintStrings.en;
 type PersonaBoundAccountsKeys = typeof personaBoundAccountsStrings.en;
 type PricingContactKeys = typeof pricingContactStrings.en;
 type ThemeKeys = typeof themeStrings.en;
@@ -118,6 +120,10 @@ export type Dictionary = BaseDictionary & {
 } & {
   [Section in keyof PromptsKeys]: {
     [Key in keyof PromptsKeys[Section]]: string;
+  };
+} & {
+  [Section in keyof PersonaLayoutHintKeys]: {
+    [Key in keyof PersonaLayoutHintKeys[Section]]: string;
   };
 } & {
   [Section in keyof PersonaBoundAccountsKeys]: {

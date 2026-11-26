@@ -1,4 +1,5 @@
 import type { ParsedPersonaForm } from '@/lib/persona-schema';
+import { personaPreferenceColumns } from './preference-columns';
 import type { Database } from '@/lib/supabase/database.gen';
 
 type PersonaInsert = Database['public']['Tables']['personas']['Insert'];
@@ -18,5 +19,6 @@ export function buildPersonaInsertRow(input: PersonaInsertInput): PersonaInsert 
     name: values.name.trim(),
     photo_path: input.photoPath,
     identity_card: values.identityCard,
+    ...personaPreferenceColumns(values),
   };
 }

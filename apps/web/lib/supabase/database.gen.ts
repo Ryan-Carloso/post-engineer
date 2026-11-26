@@ -174,6 +174,7 @@ export interface Database {
         avatar_url: string | null;
         created_at: string;
         identity_card: Json | null;
+        ai_label: boolean;
         };
         Insert: {
         id?: string;
@@ -183,6 +184,7 @@ export interface Database {
         avatar_url?: string | null;
         created_at?: string;
         identity_card?: Json | null;
+        ai_label?: boolean;
         };
         Update: {
         id?: string;
@@ -192,6 +194,7 @@ export interface Database {
         avatar_url?: string | null;
         created_at?: string;
         identity_card?: Json | null;
+        ai_label?: boolean;
         };
         Relationships: [];
       };

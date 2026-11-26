@@ -21,6 +21,7 @@ import { trackApiEvent } from '@/lib/analytics';
 import { applyRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
 import { buildPersonaInsertRow } from './create-row';
+import { applyPersonaPatchFields } from './patch-updates';
 
 async function postHandler(request: Request): Promise<NextResponse> {
   const { auth, error: authError } = await requireSupabaseSession(request);
@@ -125,8 +126,8 @@ async function patchHandler(request: Request): Promise<NextResponse> {
   if (patch.name !== null) {
     updates.name = patch.name.trim();
   }
-  if (patch.identityCard.status === 'set') updates.identity_card = patch.identityCard.card;
-  if (patch.identityCard.status === 'clear') updates.identity_card = null;
+  const patchError = applyPersonaPatchFields(patch, updates, {});
+  if (patchError !== null) return personaValidationError(patchError, 'PATCH /api/persona');
 
   if (patch.photo && patch.photoExtension) {
     const photoPath = await uploadFile(supabase, user.id, personaId, patch.photo, patch.photoExtension);
