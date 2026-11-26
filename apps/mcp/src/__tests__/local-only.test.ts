@@ -28,6 +28,15 @@ async function isHttpListening(port: number): Promise<boolean> {
   }
 }
 
+async function waitForListening(port: number, timeoutMs: number): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await isHttpListening(port)) return true;
+    await delay(100);
+  }
+  return isHttpListening(port);
+}
+
 async function spawnServer(args: string[], extraEnv: NodeJS.ProcessEnv): Promise<ChildProcess> {
   const entry = path.resolve(
     path.dirname(fileURLToPath(import.meta.url)),
@@ -89,7 +98,7 @@ describe('local-only transport', () => {
     const testPort = await reserveEphemeralPort();
     const child = await spawnServer(['--http-transport', '--http-port', String(testPort)], {});
     try {
-      expect(await isHttpListening(testPort)).toBe(true);
+      expect(await waitForListening(testPort, 10000)).toBe(true);
     } finally {
       child.kill('SIGKILL');
     }
