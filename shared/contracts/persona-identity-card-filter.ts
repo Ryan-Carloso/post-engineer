@@ -37,6 +37,12 @@ const HARMLESS_SCENE_PHRASES: readonly RegExp[] = [
   /\bbald eagle\b/g,
   /\bsheer curtains\b/g,
   /\btransparent glass\b/g,
+  /\bhairpin turn\b/g,
+  /\barm wrestling\b/g,
+  /\bleg day\b/g,
+  /\bsweet tooth\b/g,
+  /\bchair leg\b/g,
+  /\bleg room\b/g,
 ];
 
 const SCENE_IDENTITY_WORDS: ReadonlySet<string> = new Set(['skinny']);
