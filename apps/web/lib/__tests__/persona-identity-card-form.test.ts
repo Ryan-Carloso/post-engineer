@@ -12,7 +12,7 @@ import {
   validateIdentityCardDraft,
 } from '../persona-identity-card-form';
 import { FIXTURE_CARD, FIXTURE_CARD_V2 } from '@/test/identity-card-fixtures';
-import { CARD_STYLES, IdentityCardSchema, type IdentityCard } from '@/lib/contracts/persona-identity-card';
+import { CARD_STYLES, IdentityCardSchema, parseIdentityCardJson, parseIdentityCardValue, type IdentityCard, type ParsedCardInput } from '@/lib/contracts/persona-identity-card';
 
 function draftWith(values: Partial<Record<(typeof IDENTITY_CARD_FIELDS)[number], string>>) {
   return { ...emptyIdentityCardDraft(), ...values };
@@ -147,6 +147,61 @@ describe('identityCardErrorKey', () => {
     expect(identityCardErrorKey('identityCard: at most 4096 bytes')).toBe('identityCard.errTooLarge');
     expect(identityCardErrorKey('identityCard: too large to store (at most 4096 bytes; accented or non-Latin text uses more bytes)')).toBe('identityCard.errTooLarge');
     expect(identityCardErrorKey('identityCard.defaults: must name a style or an outfit')).toBe('identityCard.errStyleOrOutfit');
+  });
+});
+
+describe('identityCardErrorKey stays in sync with the real parsers', () => {
+  function keyOf(result: ParsedCardInput<IdentityCard>): string {
+    expect(result.ok).toBe(false);
+    if (result.ok) return 'identityCard.errGeneric';
+    return identityCardErrorKey(result.error);
+  }
+
+  it.each([
+    ['a one-piece with a top', { version: 2, identity: { face: { eyes: 'green' } }, defaults: { outfit: { one_piece: 'dress', top: 'tee' } } }, 'identityCard.errOnePiece'],
+    ['a card with no trait', { version: 2, identity: {}, defaults: { style: 'casual' } }, 'identityCard.errNoTrait'],
+    ['a card with neither style nor outfit', { version: 2, identity: { face: { eyes: 'green' } }, defaults: {} }, 'identityCard.errStyleOrOutfit'],
+    ['sexualised clothing', { version: 2, identity: { face: { eyes: 'green' } }, defaults: { outfit: { top: 'lingerie' } } }, 'identityCard.errContent'],
+    ['identity words in the outfit', { version: 2, identity: { face: { eyes: 'green' } }, defaults: { outfit: { top: 'shirt over muscular body' } } }, 'identityCard.errOutfitIdentity'],
+    ['an empty value', { version: 2, identity: { face: { eyes: '' } }, defaults: { style: 'casual' } }, 'identityCard.errField'],
+    ['a value over 80 characters', { version: 2, identity: { face: { eyes: 'x'.repeat(81) } }, defaults: { style: 'casual' } }, 'identityCard.errField'],
+    ['a value with a control character', { version: 2, identity: { face: { eyes: 'a\nb' } }, defaults: { style: 'casual' } }, 'identityCard.errField'],
+  ])('maps %s to %s', (_name, card, key) => {
+    expect(keyOf(parseIdentityCardValue(card))).toBe(key);
+  });
+
+  it('maps an oversized stored value to errTooLarge', () => {
+    const longValue = 'あ'.repeat(80);
+    const card = {
+      version: 2,
+      identity: {
+        face: {
+          eyes: longValue, eye_color: longValue, eyebrows: longValue, nose: longValue, lips: longValue,
+          teeth: longValue, smile: longValue, skin: longValue, jawline: longValue, cheekbones: longValue,
+          chin: longValue, forehead: longValue, ears: longValue,
+          hair: { color: longValue, style: longValue, texture: longValue, parting: longValue },
+          facial_hair: longValue, marks: longValue, tattoos: longValue,
+        },
+        body: {
+          build: longValue, height: longValue, shoulders: longValue, arms: longValue, hands: longValue,
+          waist: longValue, hips: longValue, legs: longValue, posture: longValue, proportions: longValue,
+        },
+      },
+      defaults: { style: 'casual', outfit: { top: longValue, bottom: longValue, footwear: longValue, accessories: longValue } },
+    };
+    const result = parseIdentityCardValue(card);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toContain('too large to store');
+    expect(keyOf(result)).toBe('identityCard.errTooLarge');
+  });
+
+  it('maps an oversized raw JSON string to errTooLarge', () => {
+    const raw = `${JSON.stringify(FIXTURE_CARD_V2)}${' '.repeat(5000)}`;
+    expect(keyOf(parseIdentityCardJson(raw))).toBe('identityCard.errTooLarge');
+  });
+
+  it('maps unparseable JSON to errGeneric', () => {
+    expect(keyOf(parseIdentityCardJson('not json'))).toBe('identityCard.errGeneric');
   });
 });
 
