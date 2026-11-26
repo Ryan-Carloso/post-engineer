@@ -2,6 +2,7 @@ const IDENTITY_WORDS: ReadonlySet<string> = new Set([
   'hair', 'eye', 'eyes', 'skin', 'build', 'builds', 'height', 'heights', 'beard', 'bearded', 'muscular',
   'tattoo', 'tattoos', 'tattooed', 'freckles', 'freckled', 'body', 'bodies', 'face', 'faces', 'taller', 'thinner',
   'smile', 'teeth', 'arms', 'legs', 'hips', 'waist', 'posture', 'jawline', 'cheekbones', 'chin', 'forehead', 'ears',
+  'arm', 'leg', 'hip', 'ear', 'tooth',
 ]);
 
 const IDENTITY_STEMS: readonly string[] = ['hair', 'eye', 'skin', 'freckl', 'tattoo', 'beard'];
@@ -22,6 +23,9 @@ const ALLOWED_POSE_OUTFIT_PHRASES: readonly RegExp[] = [
   /\bsmiling\b/g,
   /\bsmile at the camera\b/g,
   /\bhigh[\s-]+waist(?:ed)?\b/g,
+  /\bhip[\s-]+bag\b/g,
+  /\b(?:arm|leg)[\s-]+warmers\b/g,
+  /\bear[\s-]+muffs\b/g,
 ];
 
 const HARMLESS_SCENE_PHRASES: readonly RegExp[] = [
@@ -33,8 +37,12 @@ const HARMLESS_SCENE_PHRASES: readonly RegExp[] = [
 
 const SCENE_IDENTITY_WORDS: ReadonlySet<string> = new Set(['skinny']);
 
+function normalizeText(value: string): string {
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
 function stripHarmless(value: string, scene: boolean): string {
-  const lowered = value.toLowerCase();
+  const lowered = normalizeText(value).toLowerCase();
   const stripped = [...HARMLESS_CLOTHING_WORDS, ...ALLOWED_POSE_OUTFIT_PHRASES].reduce(
     (text, phrase) => text.replace(phrase, ' '),
     lowered,
@@ -60,7 +68,7 @@ export const SEXUALISED_WORDS: ReadonlySet<string> = new Set([
 ]);
 
 function wordsOf(value: string): string[] {
-  return value.toLowerCase().split(/[^a-z]+/).filter((word) => word.length > 0);
+  return normalizeText(value).toLowerCase().split(/[^a-z]+/).filter((word) => word.length > 0);
 }
 
 export function mentionsAny(value: string, words: ReadonlySet<string>, scene = false): boolean {

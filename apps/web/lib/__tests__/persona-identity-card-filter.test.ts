@@ -16,6 +16,11 @@ const NEW_IDENTITY_CLAIMS = [
   'small ears',
   'toned arms',
   'good posture',
+  'long leg',
+  'big hip',
+  'toned arm',
+  'small ear',
+  'crooked tooth',
 ];
 
 const ALLOWED_PHRASES = [
@@ -79,11 +84,22 @@ describe('scene filter for the v2 identity words', () => {
     expect(parseSceneValue({ ...FIXTURE_SCENE, pose: text }).ok).toBe(false);
   });
 
-  it.each(['earrings', 'leggings', 'chinos', 'armband', 'smiley badge', 'hip bag'])(
+  it.each(['earrings', 'leggings', 'chinos', 'armband', 'smiley badge', 'hip bag', 'ear muffs', 'leg warmers', 'arm warmers'])(
     'does not mistake the clothing word "%s" for an identity word',
     (text) => {
       expect(mentionsIdentity(text)).toBe(false);
       expect(parseSceneValue({ ...FIXTURE_SCENE, outfit: { accessories: text } }).ok).toBe(true);
     },
   );
+
+  it.each(['loíra', 'cabelo loíro', 'ruíva', 'cabelo ruívo'])(
+    'rejects the accented identity word "%s" in a pose',
+    (text) => {
+      expect(parseSceneValue({ ...FIXTURE_SCENE, pose: text }).ok).toBe(false);
+    },
+  );
+
+  it('rejects the accented identity word in an outfit slot', () => {
+    expect(parseSceneValue({ ...FIXTURE_SCENE, outfit: { top: 'loíra' } }).ok).toBe(false);
+  });
 });
