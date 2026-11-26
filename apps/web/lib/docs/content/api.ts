@@ -8,12 +8,12 @@ export const apiGuide: DocPage = {
     en: 'Call the Post Engineer HTTP API with a bearer key: auth, endpoints and the OpenAPI contract.',
   },
   updatedAt: '2026-11-26',
-  contentHash: '9bc8c20cea52dd1a7182aeb16e5cdf84884db9db1bb94086e3aa0997c12dc21c',
+  contentHash: '35ada0bff1e0edf2651fc4a26fafedd265b4be59e3d0076e58ee933dfd724c80',
   blocks: [
     {
       kind: 'paragraph',
       text: {
-        en: 'The HTTP API is the same surface the MCP server calls. Every request carries your API key as a bearer token, and every response uses the same envelope.',
+        en: 'The HTTP API is the same surface the MCP server calls. Every request carries your API key as a bearer token; the API documentation lists the response shape of each route.',
       },
     },
     { kind: 'heading', level: 2, text: { en: 'Authentication' } },
