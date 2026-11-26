@@ -17,6 +17,8 @@ const REFERENCE_LINE = "Edit the reference photo. Keep the person's face and bod
 const CLOSING_LINE_V1 = 'Do not change the face, hair, eyes, skin, body build or height.';
 const CLOSING_LINE_V2 =
   'Do not change the face, hair, eyes, skin, body build, height, jawline, resting posture or proportions.';
+const CLOSING_LINE_V2_POSE =
+  'Do not change the face, hair, eyes, skin, body build, height, jawline or proportions.';
 const KEEP_OUTFIT_LINE = 'Outfit: keep the outfit from the reference photo.';
 const SUGGESTED_DESCRIPTION_MAX = 500;
 
@@ -160,6 +162,12 @@ function clampDescription(words: string[]): string {
   return (boundary > 0 ? cut.slice(0, boundary) : cut).replace(/[,\s]+$/, '');
 }
 
+function closingLine(card: IdentityCard, scene: Scene): string {
+  if (card.version === 1) return CLOSING_LINE_V1;
+  if (scene.pose !== undefined) return CLOSING_LINE_V2_POSE;
+  return CLOSING_LINE_V2;
+}
+
 export function buildIdentityPrompt(card: IdentityCard, scene: Scene): IdentityPrompt {
   const { style, outfit } = resolveStyleOutfit(card, scene);
   const lines: string[] = [REFERENCE_LINE];
@@ -177,7 +185,7 @@ export function buildIdentityPrompt(card: IdentityCard, scene: Scene): IdentityP
       ? `Framing: ${FRAMING_SHOTS[scene.framing]}.`
       : `Framing: ${FRAMING_SHOTS[scene.framing]}, ${scene.aspect} aspect ratio.`,
   );
-  lines.push(card.version === 1 ? CLOSING_LINE_V1 : CLOSING_LINE_V2);
+  lines.push(closingLine(card, scene));
 
   const descriptionWords = [
     ...(outfit === undefined ? [] : outfitValues(outfit)),

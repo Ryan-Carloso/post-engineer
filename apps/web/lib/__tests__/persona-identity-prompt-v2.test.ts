@@ -71,8 +71,20 @@ describe('buildIdentityPrompt for a v2 card', () => {
     expect(line(prompt, 'Person:')).toContain('posture: d9');
     expect(line(prompt, 'Pose:')).toBe('Pose: arms crossed.');
     expect(prompt.endsWith(
-      'Do not change the face, hair, eyes, skin, body build, height, jawline, resting posture or proportions.',
+      'Do not change the face, hair, eyes, skin, body build, height, jawline or proportions.',
     )).toBe(true);
+    expect(prompt).not.toContain('resting posture');
+  });
+
+  it('drops the resting posture clause from the closing line for a stance-changing pose', () => {
+    const { prompt } = buildIdentityPrompt(FULL_CARD, { ...BASE_SCENE, pose: 'sitting' });
+    expect(line(prompt, 'Person:')).toContain('smile: a8');
+    expect(line(prompt, 'Person:')).toContain('posture: d9');
+    expect(line(prompt, 'Pose:')).toBe('Pose: sitting.');
+    expect(prompt.endsWith(
+      'Do not change the face, hair, eyes, skin, body build, height, jawline or proportions.',
+    )).toBe(true);
+    expect(prompt).not.toContain('resting posture');
   });
 
   it('renders the style line with its safe description and a style-only scene as the clothing', () => {
