@@ -289,6 +289,18 @@ describe('scene filter for the v2 identity words', () => {
     expect(parseSceneValue({ ...FIXTURE_SCENE, setting: text }).ok).toBe(true);
   });
 
+  it.each(['skinny jeans', 'skinny-leg jeans'])('rejects "%s" in a pose', (text) => {
+    expect(parseSceneValue({ ...FIXTURE_SCENE, pose: text }).ok).toBe(false);
+  });
+
+  it.each(['skinny jeans', 'skinny-leg jeans'])('rejects "%s" in a scene setting', (text) => {
+    expect(parseSceneValue({ ...FIXTURE_SCENE, setting: text }).ok).toBe(false);
+  });
+
+  it('accepts "skintight dress" in a pose', () => {
+    expect(parseSceneValue({ ...FIXTURE_SCENE, pose: 'skintight dress' }).ok).toBe(true);
+  });
+
   it('still rejects "long leg" in an outfit slot', () => {
     expect(parseSceneValue({ ...FIXTURE_SCENE, outfit: { bottom: 'long leg' } }).ok).toBe(false);
   });
