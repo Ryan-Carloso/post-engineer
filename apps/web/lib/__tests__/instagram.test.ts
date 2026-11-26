@@ -509,6 +509,19 @@ describe('InstagramService', () => {
             params: expect.objectContaining({ is_ai_generated: true }),
           }),
         );
+
+        mockPost.mockClear();
+        mockPost
+          .mockResolvedValueOnce({ data: { id: 'c2' } })
+          .mockResolvedValueOnce({ data: { id: 'p2' } });
+        mockGet
+          .mockResolvedValueOnce({ data: { status_code: 'FINISHED' } })
+          .mockResolvedValueOnce({ data: {} });
+
+        await service.publishMedia('user', 'tok', 'cap', 'https://example.com/vid.mp4', true, false);
+
+        const params = (mockPost.mock.calls[0]?.[2] as { params?: Record<string, unknown> }).params ?? {};
+        expect(params).not.toHaveProperty('is_ai_generated');
       });
 
       it('throws InstagramApiError when container status is ERROR', async () => {

@@ -17,9 +17,9 @@ application/x-www-form-urlencoded when ``videoStoragePath`` replaces it):
 - LinkedIn: ``provider=linkedin``, ``video`` (file), ``caption``,
   repeated ``linkedinAccountIds`` fields.
 - Threads: ``provider=threads``, ``video`` xor ``videoStoragePath``, ``caption``,
-  repeated ``threadsAccountIds`` fields.
+  ``aiLabel`` (true|false), repeated ``threadsAccountIds`` fields.
 - Facebook: ``provider=facebook``, ``video`` xor ``videoStoragePath``, ``caption``,
-  repeated ``facebookAccountIds`` fields (see ``publish_facebook``). Pinterest: ``provider=pinterest``, ``video`` (file), ``title``, ``description``, ``boardId``, repeated ``pinterestAccountIds`` fields (see ``publish_pinterest``; validated by ``fill_schedule/metadata.py``).
+  ``aiLabel`` (true|false), repeated ``facebookAccountIds`` fields (see ``publish_facebook``). Pinterest: ``provider=pinterest``, ``video`` (file), ``title``, ``description``, ``boardId``, ``aiLabel`` (true|false), repeated ``pinterestAccountIds`` fields (see ``publish_pinterest``; validated by ``fill_schedule/metadata.py``).
 - 3Speak: ``provider=3speak``, ``video`` (file), ``caption``,
   repeated ``threespeakAccountIds`` fields (see ``publish_threespeak``).
 - Rumble: ``provider=rumble``, ``video`` (file), ``title``,
