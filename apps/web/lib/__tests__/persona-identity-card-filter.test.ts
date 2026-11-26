@@ -311,6 +311,13 @@ describe('scene filter for the v2 identity words', () => {
     },
   );
 
+  it.each(['gold hairpin', 'hair tie', 'hair clip', 'hairclip', 'ear cuff', 'eye mask'])(
+    'accepts the accessory "%s" in an accessories slot',
+    (text) => {
+      expect(parseSceneValue({ ...FIXTURE_SCENE, outfit: { accessories: text } }).ok).toBe(true);
+    },
+  );
+
   it.each(['loíra', 'cabelo loíro', 'ruíva', 'cabelo ruívo'])(
     'rejects the accented identity word "%s" in a pose',
     (text) => {

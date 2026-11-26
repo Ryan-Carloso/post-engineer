@@ -30,6 +30,11 @@ const ALLOWED_POSE_OUTFIT_PHRASES: readonly RegExp[] = [
   /\b(?!(?:long|short|big|small|thin|thick|fat|muscular|toned|bare|shapely|hairy|smooth|strong|weak|left|right|broken|injured|swollen|sore|pale|tanned)[\s-]+leg\b)[a-z]+[\s-]+leg\b/g,
   /\b(?:arm|leg)[\s-]+warmers\b/g,
   /\bear[\s-]+muffs\b/g,
+  /\bhairpin\b/g,
+  /\bhair[\s-]*clip\b/g,
+  /\bhair[\s-]*tie\b/g,
+  /\bear[\s-]+cuff\b/g,
+  /\beye[\s-]+mask\b/g,
 ];
 
 const HARMLESS_SCENE_PHRASES: readonly RegExp[] = [
