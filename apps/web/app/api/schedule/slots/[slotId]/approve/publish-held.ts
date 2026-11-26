@@ -26,6 +26,8 @@ import { ExistingMediaError, SCHEDULED_IMAGE_BUCKET } from '@/app/api/media/publ
 import type { PublishExistingRequest } from '@/app/api/media/publish-existing/schema';
 import type { Provider } from '@/app/api/media/publish-existing/providers-validation';
 
+const HELD_PUBLISH_LEASE_MS = 30 * 60 * 1000;
+
 export interface HeldSlot {
   id: string;
   schedule_id: string;
@@ -255,7 +257,10 @@ export async function publishHeldSlot(options: {
 
   const { error: claimError } = await serviceClient
     .from('scheduled_posts')
-    .update({ status: 'publishing' })
+    .update({
+      status: 'publishing',
+      publish_not_before: new Date(Date.now() + HELD_PUBLISH_LEASE_MS).toISOString(),
+    })
     .eq('id', slot.id)
     .eq('user_id', userId)
     .in('status', ['awaiting_approval'])
@@ -310,7 +315,7 @@ export async function publishHeldSlot(options: {
     }
     await serviceClient
       .from('scheduled_posts')
-      .update({ status: 'awaiting_approval' })
+      .update({ status: 'awaiting_approval', publish_not_before: null })
       .eq('id', slot.id)
       .eq('user_id', userId)
       .in('status', ['publishing']);

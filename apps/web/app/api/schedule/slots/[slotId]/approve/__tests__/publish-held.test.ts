@@ -199,6 +199,8 @@ describe('publishHeldSlot', () => {
     expect((ledgerArgs?.[3] as Record<string, string[]>)?.youtube).toEqual(['UC1']);
     const claim = updates[0]?.patch as Record<string, unknown>;
     expect(claim.status).toBe('publishing');
+    const leaseAt = Date.parse(String(claim.publish_not_before ?? ''));
+    expect(Math.abs(leaseAt - (Date.now() + 30 * 60 * 1000))).toBeLessThan(60_000);
     const final = updates[1]?.patch as Record<string, unknown>;
     expect(final.status).toBe('published');
     expect(final.published_at).toEqual(expect.any(String));
@@ -329,6 +331,7 @@ describe('publishHeldSlot', () => {
     expect(body.code).toBe('VIDEO_UPLOAD_EXPIRED');
     expect(updates).toHaveLength(2);
     expect((updates[1]?.patch as Record<string, unknown>).status).toBe('awaiting_approval');
+    expect((updates[1]?.patch as Record<string, unknown>).publish_not_before).toBeNull();
     const claimedLedger = await mockClaimAsapLedger.mock.results[0]?.value;
     expect(mockReleaseAsapLedger).toHaveBeenCalledTimes(1);
     expect(mockReleaseAsapLedger).toHaveBeenCalledWith(

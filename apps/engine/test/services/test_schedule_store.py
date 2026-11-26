@@ -121,6 +121,17 @@ class StoreRequestsTests(unittest.TestCase):
         )
         self.assertEqual(kwargs["params"]["order"], "slot_at.asc")
 
+    def test_web_claimed_held_slot_stays_hidden_until_its_lease_elapses(self):
+        self.requests.request.return_value = _response(json_data=[])
+        now = datetime(2026, 9, 7, 12, 10, tzinfo=timezone.utc)
+        rows = self.store.resumable_publishing_slots(now)
+        self.assertEqual(rows, [])
+        _, _, kwargs = self._last_call()
+        self.assertEqual(
+            kwargs["params"]["or"],
+            f"(publish_not_before.is.null,publish_not_before.lte.{now.isoformat()})",
+        )
+
     def test_claim_resumable_slot_moves_the_lease_only_while_due(self):
         self.requests.request.return_value = _response(json_data=[{"id": "slot-9"}])
         self.assertTrue(self.store.claim_resumable_slot("slot-9", "NOW", "LEASE"))
