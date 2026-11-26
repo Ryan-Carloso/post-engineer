@@ -765,6 +765,72 @@ describe('PostEngineerClient', () => {
     expect(result).toEqual(mockSlot);
   });
 
+  it('gets one slot from a web that predates the media fields', async () => {
+    const mockSlot = {
+      success: true,
+      slot: {
+        id: 'slot-1',
+        scheduleId: 'sched-1',
+        slotAt: '2026-10-10T20:00:00Z',
+        status: 'awaiting',
+        title: 'Hello',
+        taskId: null,
+        progress: 0,
+        stage: null,
+        error: null,
+        publishedAt: null,
+        postUrl: null,
+        publishLinks: [],
+        progressHistory: [],
+        scriptAngle: null,
+        retryable: null,
+        queuePosition: null,
+        queueTotal: null,
+        userNotices: [],
+        providerFailures: [],
+      },
+      schedule: {
+        id: 'sched-1',
+        personaId: null,
+        providers: ['youtube'],
+        youtubeAccountIds: [],
+        instagramAccountIds: [],
+        linkedinAccountIds: [],
+        blueskyAccountIds: [],
+        threadsAccountIds: [],
+        facebookAccountIds: [],
+        pinterestAccountIds: [],
+        pinterestBoardId: null,
+        threespeakAccountIds: [],
+        rumbleAccountIds: [],
+        fanvueAccountIds: [],
+        telegramAccountIds: [],
+        timezone: 'UTC',
+        publishMode: 'scheduled',
+      },
+      persona: null,
+      generation: {
+        voiceover: true,
+        language: null,
+        voiceId: null,
+        videoAspect: '9:16',
+        videoLayout: null,
+        niche: null,
+        paragraphNumber: null,
+        faceQuality: null,
+      },
+    };
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify(mockSlot),
+    });
+
+    const result = await client.getSlot('slot-1');
+    expect(result.slot.media).toBeUndefined();
+    expect(result.generation.mediaKind).toBeUndefined();
+  });
+
   it('updates a slot title with a PATCH body', async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,

@@ -45,7 +45,8 @@ export const SlotPostSchema = z.object({
       url: z.string().nullable(),
       contentType: z.string().nullable(),
     })
-    .nullable(),
+    .nullable()
+    .optional(),
   progress: z.number(),
   stage: z.string().nullable(),
   retryable: z.boolean().nullable(),
@@ -81,7 +82,7 @@ export const SlotScheduleSchema = z.object({
 
 export const SlotGenerationSchema = z.object({
   voiceover: z.boolean(),
-  mediaKind: z.enum(['upload', 'image']).nullable(),
+  mediaKind: z.enum(['upload', 'image']).nullable().optional(),
   language: z.string().nullable(),
   voiceId: z.string().nullable(),
   videoAspect: z.string().nullable(),
