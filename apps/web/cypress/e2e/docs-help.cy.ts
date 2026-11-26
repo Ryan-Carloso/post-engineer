@@ -39,7 +39,7 @@ describe('Docs and help — public crawlable pages', () => {
     for (const [path, title] of articles) {
       cy.visit(path);
       cy.contains('h1', title).should('be.visible');
-      cy.get('a[href="/help"]').should('contain', 'Ajuda');
+      cy.get('main a[href="/help"]').should('contain', 'Ajuda');
     }
   });
 
