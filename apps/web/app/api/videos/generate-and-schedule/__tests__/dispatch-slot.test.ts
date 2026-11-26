@@ -28,6 +28,7 @@ vi.mock('@/lib/billing/refund-tokens', () => ({
 }));
 
 import { dispatchSlot, type SlotDispatchContext, type SlotDispatchInput } from '../dispatch-slot';
+import { SlotDispatchError } from '../prepare-persona';
 import { recordGenerationStart, recordGenerationUpdate, startEngineVideoTask } from '@/lib/generation/video-generation';
 import { refundSlotTokens } from '@/lib/billing/refund-tokens';
 import { recordRecentImageId, resolveVideoImage } from '@/lib/persona-images';
@@ -350,5 +351,16 @@ describe('dispatchSlot', () => {
     expect(result.status).toBe('generating');
     expect(recordRecentImageId).toHaveBeenCalledWith(client, 'persona-1', 'img-1', 'user-1');
     expect(ctx.recentIds).toEqual(['img-1']);
+  });
+});
+
+describe('SlotDispatchError', () => {
+  it('carries the error code, message, reason and name', () => {
+    const error = new SlotDispatchError('engine_rejected', 'boom', 'some reason');
+    expect(error.errorCode).toBe('engine_rejected');
+    expect(error.message).toBe('boom');
+    expect(error.reason).toBe('some reason');
+    expect(error.name).toBe('SlotDispatchError');
+    expect(new SlotDispatchError('engine_unavailable', 'boom').reason).toBeUndefined();
   });
 });

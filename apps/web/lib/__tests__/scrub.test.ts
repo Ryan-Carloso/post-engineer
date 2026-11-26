@@ -96,6 +96,15 @@ describe('sanitizeEngineReason', () => {
     );
   });
 
+  it('reduces a path at the start of the string', () => {
+    expect(sanitizeEngineReason('/home/user/photos/a.mp4')).toBe('a.mp4');
+    expect(sanitizeEngineReason('C:\\Users\\ryan\\secret.mp4')).toBe('secret.mp4');
+  });
+
+  it('reduces a trailing-slash path to its last directory', () => {
+    expect(sanitizeEngineReason('see /home/user/')).toBe('see user');
+  });
+
   it('leaves URL paths alone, redacting only secret query params', () => {
     expect(sanitizeEngineReason('see https://host.example/a/b.mp4?token=secret')).toBe(
       'see https://host.example/a/b.mp4?token=[redacted]',

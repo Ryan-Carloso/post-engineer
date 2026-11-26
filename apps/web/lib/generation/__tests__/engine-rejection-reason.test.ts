@@ -75,6 +75,33 @@ describe('extractEngineRejectionReason', () => {
     expect(out).toBe('segments.1.media: bad media');
   });
 
+  it('drops non-string and non-number loc parts', () => {
+    const out = extractEngineRejectionReason({
+      status: 400,
+      message: 'field required',
+      body: [{ type: 'value_error', loc: ['body', 'video_type', {}], msg: 'bad value' }],
+    });
+    expect(out).toBe('video_type: bad value');
+  });
+
+  it('keeps a loc that does not start with "body"', () => {
+    const out = extractEngineRejectionReason({
+      status: 400,
+      message: 'field required',
+      body: [{ type: 'value_error', loc: ['query', 'limit'], msg: 'too big' }],
+    });
+    expect(out).toBe('query.limit: too big');
+  });
+
+  it('returns just the msg when loc is only "body"', () => {
+    const out = extractEngineRejectionReason({
+      status: 400,
+      message: 'field required',
+      body: [{ type: 'value_error', loc: ['body'], msg: 'bare msg' }],
+    });
+    expect(out).toBe('bare msg');
+  });
+
   it('returns just the msg when loc is missing or not an array', () => {
     expect(
       extractEngineRejectionReason({

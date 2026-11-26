@@ -20,21 +20,21 @@ describe('classifyDispatchFailure', () => {
   });
 
   it('returns no reason when rejected slots disagree on the reason', () => {
-    expect(
-      classifyDispatchFailure([
-        { errorCode: 'engine_rejected', reason: 'first reason' },
-        { errorCode: 'engine_rejected', reason: 'second reason' },
-      ]),
-    ).toEqual({ status: 400, code: 'ENGINE_REJECTED' });
+    const result = classifyDispatchFailure([
+      { errorCode: 'engine_rejected', reason: 'first reason' },
+      { errorCode: 'engine_rejected', reason: 'second reason' },
+    ]);
+    expect(result).toEqual({ status: 400, code: 'ENGINE_REJECTED' });
+    expect(result).not.toHaveProperty('reason');
   });
 
   it('returns no reason when a rejected slot carries no reason', () => {
-    expect(
-      classifyDispatchFailure([
-        { errorCode: 'engine_rejected', reason: 'video_type: unknown video_type' },
-        { errorCode: 'engine_rejected' },
-      ]),
-    ).toEqual({ status: 400, code: 'ENGINE_REJECTED' });
+    const result = classifyDispatchFailure([
+      { errorCode: 'engine_rejected', reason: 'video_type: unknown video_type' },
+      { errorCode: 'engine_rejected' },
+    ]);
+    expect(result).toEqual({ status: 400, code: 'ENGINE_REJECTED' });
+    expect(result).not.toHaveProperty('reason');
   });
 
   it('returns no reason on the transient 502 branch even when a rejected slot has one', () => {
