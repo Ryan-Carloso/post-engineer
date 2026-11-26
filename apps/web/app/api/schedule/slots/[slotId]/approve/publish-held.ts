@@ -16,6 +16,7 @@ import {
   claimAsapLedger,
   hasGrantedAccounts,
   publishHeldMedia,
+  releaseAsapLedger,
   type AsapLedger,
   type ProviderPublish,
 } from '@/app/api/media/publish-existing/asap';
@@ -259,6 +260,7 @@ export async function publishHeldSlot(options: {
     .select('id')
     .single();
   if (claimError) {
+    await releaseAsapLedger(ledger, claimError);
     if ((claimError as { code?: string }).code === 'PGRST116') {
       return apiErrorResponse(409, 'Only an awaiting-approval slot can be approved.', {
         route,
@@ -282,6 +284,7 @@ export async function publishHeldSlot(options: {
       .eq('id', slot.id)
       .eq('user_id', userId)
       .in('status', ['publishing']);
+    await releaseAsapLedger(ledger, error);
     return mediaErrorResponse(error, route);
   }
 

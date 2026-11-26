@@ -13,6 +13,7 @@ const mockClaimAsapLedger = vi.hoisted(() =>
   vi.fn(async (_scopeKey: string, _userId: string, _providers: unknown, _accountIds: unknown) => ({ client: {}, partitions: new Map() })),
 );
 const mockHasGrantedAccounts = vi.hoisted(() => vi.fn(() => true));
+const mockReleaseAsapLedger = vi.hoisted(() => vi.fn(async (_ledger: unknown, _error: unknown) => {}));
 const mockPublishHeldMedia = vi.hoisted(() =>
   vi.fn(async (_ctx: unknown, _ledger: unknown): Promise<ProviderPublish[]> => [
     {
@@ -29,6 +30,7 @@ vi.mock('@/app/api/media/publish-existing/asap', async (importOriginal) => {
     claimAsapLedger: mockClaimAsapLedger,
     hasGrantedAccounts: mockHasGrantedAccounts,
     publishHeldMedia: mockPublishHeldMedia,
+    releaseAsapLedger: mockReleaseAsapLedger,
   };
 });
 
@@ -269,6 +271,9 @@ describe('publishHeldSlot', () => {
     expect(response.status).toBe(409);
     expect(updates).toHaveLength(1);
     expect(mockPublishHeldMedia).not.toHaveBeenCalled();
+    const claimedLedger = await mockClaimAsapLedger.mock.results[0]?.value;
+    expect(mockReleaseAsapLedger).toHaveBeenCalledTimes(1);
+    expect(mockReleaseAsapLedger).toHaveBeenCalledWith(claimedLedger, { code: 'PGRST116' });
   });
 
   it('returns 409 when no accounts are granted, without claiming the slot', async () => {
@@ -306,6 +311,12 @@ describe('publishHeldSlot', () => {
     expect(body.code).toBe('VIDEO_UPLOAD_EXPIRED');
     expect(updates).toHaveLength(2);
     expect((updates[1]?.patch as Record<string, unknown>).status).toBe('awaiting_approval');
+    const claimedLedger = await mockClaimAsapLedger.mock.results[0]?.value;
+    expect(mockReleaseAsapLedger).toHaveBeenCalledTimes(1);
+    expect(mockReleaseAsapLedger).toHaveBeenCalledWith(
+      claimedLedger,
+      expect.objectContaining({ code: 'VIDEO_UPLOAD_EXPIRED' }),
+    );
   });
 
   it('downloads a held image and publishes it with the stored bytes', async () => {
