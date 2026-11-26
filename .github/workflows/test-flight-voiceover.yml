@@ -126,7 +126,7 @@ permissions:
 jobs:
   flight:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 90 # video generation takes minutes; polling caps at 60
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 pinned 2026-09-25
         with:

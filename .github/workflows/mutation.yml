@@ -367,11 +367,13 @@ jobs:
     needs: [mutation-engine-changes]
     if: needs.mutation-engine-changes.outputs.files_json != '[]'
     runs-on: ubuntu-latest
-    # 240 min: the 180 min cap cancelled run 44977390118 mid-shard, and a
-    # cancelled job skips actions/cache's save, so the next run would start
-    # over. The step below stops mutmut at 225 min so a slow shard fails
-    # with the partial mutants/ tree still cached. (180 approved by Ryan,
-    # 2026-10-24; raised after that cancel.)
+    # 240 min: video.py alone generates ~1800 mutants. A source edit inside
+    # generate_video invalidates that function (~428 mutants) and they take
+    # about 200 minutes on a 4-core runner. The 180 min cap cancelled run
+    # 44977390118 at 383/428, and a cancelled job skips actions/cache's
+    # save, so the next run would start over. The step below stops mutmut
+    # at 225 min so a slow shard fails with the partial mutants/ tree still
+    # cached. (180 approved by Ryan, 2026-10-24; raised after that cancel.)
     timeout-minutes: 240
     permissions:
       contents: read
