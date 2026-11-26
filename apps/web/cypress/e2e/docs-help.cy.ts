@@ -47,7 +47,7 @@ describe('Docs and help — public crawlable pages', () => {
     cy.get('a[href="/en/help/primeiros-passos"]').should('be.visible');
     cy.get('a[href="/en/help/conectar-contas"]').should('be.visible');
     cy.visit('/en/help/conectar-contas');
-    cy.contains('h1', 'Conectar contas').should('be.visible');
+    cy.contains('h1', 'Connect accounts').should('be.visible');
     cy.get('a[href="/en/help"]').should('contain', 'Help');
   });
 
