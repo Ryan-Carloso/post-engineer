@@ -28,6 +28,9 @@ async function postHandler(request: Request): Promise<NextResponse> {
 
   const limited = await applyRateLimit(request, RATE_LIMITS.publishById, auth.userId);
   if (limited) return limited;
+  if (auth.isApiKey === true && auth.approvalMode === 'approval') {
+    return apiErrorResponse(403, 'Approval-mode API keys cannot publish directly.', { route: ROUTE });
+  }
   const trialBlocked = await assertTrialActive(auth.userId, { route: ROUTE });
   if (trialBlocked) return trialBlocked;
 
