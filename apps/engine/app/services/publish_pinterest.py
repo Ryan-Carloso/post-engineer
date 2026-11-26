@@ -3,8 +3,9 @@
 Wire contract (multipart/form-data, ``POST /api/upload-content``):
 ``provider=pinterest``, ``video`` (file), ``title``, ``description``,
 ``boardId`` (one board for the whole batch — a schedule carries exactly
-one ``pinterest_board_id``), repeated ``pinterestAccountIds`` fields
-(Pinterest user ids), optional ``coverImageUrl``.
+one ``pinterest_board_id``), ``aiLabel`` (true|false), repeated
+``pinterestAccountIds`` fields (Pinterest user ids), optional
+``coverImageUrl``.
 
 Kept out of ``upload_publisher`` (which imports the provider contract from here) so that
 module stays under the file-size cap; it owns only the Pinterest types,
@@ -28,6 +29,7 @@ class PinterestMetadata:
     description: str
     board_id: str
     account_ids: tuple[str, ...]
+    ai_label: bool = False
 
     def __post_init__(self) -> None:
         self.account_ids = tuple(self.account_ids)
@@ -60,5 +62,6 @@ def pinterest_fields(metadata: PinterestMetadata) -> list[tuple[str, str]]:
         ("title", metadata.title),
         ("description", metadata.description),
         ("boardId", metadata.board_id),
+        ("aiLabel", "true" if metadata.ai_label else "false"),
         *(("pinterestAccountIds", account_id) for account_id in metadata.account_ids),
     ]

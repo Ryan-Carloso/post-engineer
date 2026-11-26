@@ -231,7 +231,7 @@ describe('publishFacebookMedia', () => {
       .mockResolvedValueOnce(jsonResponse({ id: 'photo-1', post_id: '111_9' }))
       .mockResolvedValueOnce(jsonResponse({ permalink_url: 'https://www.facebook.com/photo/?fbid=1' }));
     const image = { ...input, media: { kind: 'image' as const, url: 'https://s.example/i.png' } };
-    await expect(publishFacebookMedia(image)).resolves.toEqual({ postId: 'photo-1', permalink: 'https://www.facebook.com/photo/?fbid=1' });
+    await expect(publishFacebookMedia(image)).resolves.toEqual({ postId: 'photo-1', permalink: 'https://www.facebook.com/photo/?fbid=1', aiLabelApplied: false });
     const publish = call(0);
     expect(publish.url.toString()).toBe('https://graph.facebook.com/v23.0/111/photos');
     expect(authHeader(publish.init)).toBe('Bearer ptok');
@@ -249,6 +249,7 @@ describe('publishFacebookMedia', () => {
     await expect(publishFacebookMedia(input)).resolves.toEqual({
       postId: 'vid-1',
       permalink: 'https://www.facebook.com/111/videos/vid-1/',
+      aiLabelApplied: false,
     });
     const publish = call(0);
     expect(publish.url.toString()).toBe('https://graph-video.facebook.com/v23.0/111/videos');
@@ -269,15 +270,46 @@ describe('publishFacebookMedia', () => {
     expect((await publishFacebookMedia(input)).permalink).toBe('https://www.facebook.com/watch/?v=1');
   });
 
+  it('applies the AI disclosure with a post edit on Graph v27 when aiLabel is set', async () => {
+    const onAiLabelError = vi.fn();
+    mockFetch
+      .mockResolvedValueOnce(jsonResponse({ id: 'vid-1' }))
+      .mockResolvedValueOnce(jsonResponse({ success: true }))
+      .mockResolvedValueOnce(jsonResponse({ permalink_url: '/111/videos/vid-1/' }));
+    await expect(publishFacebookMedia({ ...input, aiLabel: true, onAiLabelError })).resolves.toEqual({
+      postId: 'vid-1',
+      permalink: 'https://www.facebook.com/111/videos/vid-1/',
+      aiLabelApplied: true,
+    });
+    const edit = call(1);
+    expect(edit.url.toString()).toBe('https://graph.facebook.com/v27.0/vid-1');
+    expect(new URLSearchParams(String(edit.init.body)).get('is_ai_generated')).toBe('true');
+    expect(onAiLabelError).not.toHaveBeenCalled();
+  });
+
+  it('keeps the post live and reports the error when the AI disclosure edit fails', async () => {
+    const onAiLabelError = vi.fn();
+    mockFetch
+      .mockResolvedValueOnce(jsonResponse({ id: 'vid-1' }))
+      .mockResolvedValueOnce(jsonResponse({ error: { message: 'no edit' } }, 400))
+      .mockResolvedValueOnce(jsonResponse({ permalink_url: '/111/videos/vid-1/' }));
+    await expect(publishFacebookMedia({ ...input, aiLabel: true, onAiLabelError })).resolves.toEqual({
+      postId: 'vid-1',
+      permalink: 'https://www.facebook.com/111/videos/vid-1/',
+      aiLabelApplied: false,
+    });
+    expect(onAiLabelError).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps a published video successful when the permalink read fails', async () => {
     mockFetch.mockResolvedValueOnce(jsonResponse({ id: 'vid-1' })).mockResolvedValueOnce(jsonResponse({ error: { message: 'nope' } }, 500));
-    await expect(publishFacebookMedia(input)).resolves.toEqual({ postId: 'vid-1', permalink: null });
+    await expect(publishFacebookMedia(input)).resolves.toEqual({ postId: 'vid-1', permalink: null, aiLabelApplied: false });
     expect(input.onPermalinkError).toHaveBeenCalledWith(expect.objectContaining({ message: 'FACEBOOK_PERMALINK_FAILED: nope' }));
   });
 
   it('returns a null permalink when Graph has none', async () => {
     mockFetch.mockResolvedValueOnce(jsonResponse({ id: 'vid-1' })).mockResolvedValueOnce(jsonResponse({}));
-    await expect(publishFacebookMedia(input)).resolves.toEqual({ postId: 'vid-1', permalink: null });
+    await expect(publishFacebookMedia(input)).resolves.toEqual({ postId: 'vid-1', permalink: null, aiLabelApplied: false });
   });
 
   it('throws when the publish is rejected or returns no id', async () => {

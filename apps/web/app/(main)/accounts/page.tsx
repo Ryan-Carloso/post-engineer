@@ -24,12 +24,11 @@ import { useThreadsOAuth } from '@/lib/oauth/threads-handler';
 import { useFacebookOAuth } from '@/lib/oauth/facebook-handler';
 import { usePinterestOAuth } from '@/lib/oauth/pinterest-handler';
 import { useFanvueOAuth } from '@/lib/oauth/fanvue-handler';
-import { ProviderIcon } from '@/components/provider-icon';
+import { ProviderBrandIcon } from '@/components/provider-brand-icon';
 import { useAccountListErrorTelemetry } from '@/lib/account-card-telemetry';
 import { useI18n } from '@/lib/i18n/provider';
-import { GoogleIcon, InstagramIcon } from '@/lib/ui';
 import { AccountsHeader } from './accounts-header';
-import { BrandIcon, connectedLabel, errorLabel, useDisconnectFlow } from './accounts-section-helpers';
+import { connectedLabel, errorLabel, useDisconnectFlow } from './accounts-section-helpers';
 import { ThreespeakAccountsSection } from './threespeak-accounts-section';
 import { TelegramAccountsSection } from './telegram-accounts-section';
 
@@ -66,7 +65,7 @@ function YoutubeAccountsSection(): ReactNode {
   useAccountListErrorTelemetry('youtube', query.error?.message ?? null);
   return (
     <SocialAccountsSection
-      icon={<BrandIcon className="bg-destructive-soft text-destructive"><GoogleIcon /></BrandIcon>}
+      icon={<ProviderBrandIcon provider="youtube" />}
       label={t('accounts.youtubeLabel')}
       description={t('accounts.youtubeDescription')}
       connectedLabel={connectedLabel(t, accounts.length)}
@@ -99,7 +98,7 @@ function InstagramAccountsSection(): ReactNode {
   useAccountListErrorTelemetry('instagram', query.error?.message ?? null);
   return (
     <SocialAccountsSection
-      icon={<BrandIcon className="bg-brand-soft text-brand"><InstagramIcon /></BrandIcon>}
+      icon={<ProviderBrandIcon provider="instagram" />}
       label={t('accounts.instagramLabel')}
       description={t('accounts.instagramDescription')}
       connectedLabel={connectedLabel(t, accounts.length)}
@@ -132,7 +131,7 @@ function LinkedinAccountsSection(): ReactNode {
   useAccountListErrorTelemetry('linkedin', query.error?.message ?? null);
   return (
     <SocialAccountsSection
-      icon={<BrandIcon className="bg-info-soft text-info"><LinkedinIcon /></BrandIcon>}
+      icon={<ProviderBrandIcon provider="linkedin" />}
       label={t('accounts.linkedinLabel')}
       description={t('accounts.linkedinDescription')}
       connectedLabel={connectedLabel(t, accounts.length)}
@@ -164,7 +163,7 @@ function ThreadsAccountsSection(): ReactNode {
   useAccountListErrorTelemetry('threads', query.error?.message ?? null);
   return (
     <SocialAccountsSection
-      icon={<BrandIcon className="bg-muted text-foreground"><ProviderIcon provider="threads" /></BrandIcon>}
+      icon={<ProviderBrandIcon provider="threads" />}
       label={t('accounts.threadsLabel')}
       description={t('accounts.threadsDescription')}
       connectedLabel={connectedLabel(t, accounts.length)}
@@ -195,7 +194,7 @@ function FacebookAccountsSection(): ReactNode {
   useAccountListErrorTelemetry('facebook', query.error?.message ?? null);
   return (
     <SocialAccountsSection
-      icon={<BrandIcon className="bg-muted"><ProviderIcon provider="facebook" /></BrandIcon>}
+      icon={<ProviderBrandIcon provider="facebook" />}
       label={t('accounts.facebookLabel')}
       description={t('accounts.facebookDescription')}
       connectedLabel={connectedLabel(t, accounts.length)}
@@ -226,7 +225,7 @@ function PinterestAccountsSection(): ReactNode {
   useAccountListErrorTelemetry('pinterest', query.error?.message ?? null);
   return (
     <SocialAccountsSection
-      icon={<BrandIcon className="bg-muted"><ProviderIcon provider="pinterest" /></BrandIcon>}
+      icon={<ProviderBrandIcon provider="pinterest" />}
       label={t('accounts.pinterestLabel')}
       description={t('accounts.pinterestDescription')}
       connectedLabel={connectedLabel(t, accounts.length)}
@@ -257,7 +256,7 @@ function FanvueAccountsSection(): ReactNode {
   useAccountListErrorTelemetry('fanvue', query.error?.message ?? null);
   return (
     <SocialAccountsSection
-      icon={<BrandIcon className="bg-muted"><ProviderIcon provider="fanvue" /></BrandIcon>}
+      icon={<ProviderBrandIcon provider="fanvue" />}
       label={t('accounts.fanvueLabel')}
       description={t('accounts.fanvueDescription')}
       connectedLabel={connectedLabel(t, accounts.length)}
@@ -284,6 +283,3 @@ function LinkedinAccountCard({ name, thumbnail, storedDisplayName, labelOrigin, 
 }
 
 
-function LinkedinIcon(): ReactNode {
-  return <svg viewBox="0 0 24 24" className="size-5" fill="currentColor" aria-hidden="true"><path d="M20.45 20.45h-3.55v-5.57c0-1.33-.03-3.04-1.85-3.04-1.86 0-2.14 1.45-2.14 2.94v5.67H9.35V9h3.41v1.56h.05c.47-.9 1.63-1.85 3.36-1.85 3.6 0 4.27 2.37 4.27 5.46v6.28zM5.34 7.43a2.06 2.06 0 1 1 0-4.12 2.06 2.06 0 0 1 0 4.12zM7.12 20.45H3.56V9h3.56v11.45z" /></svg>;
-}

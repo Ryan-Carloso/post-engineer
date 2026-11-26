@@ -1,6 +1,6 @@
 import { HttpStatusError } from './errors';
 
-const PUBLIC_PATH_PREFIXES = ['/login', '/auth/', '/landing', '/privacy', '/terms', '/recipes', '/oauth/', '/s/'];
+const PUBLIC_PATH_PREFIXES = ['/login', '/auth/', '/landing', '/privacy', '/terms', '/recipes', '/oauth/', '/s/', '/docs', '/help', '/en/help'];
 const PUBLIC_EXACT_PATHS = ['/s'];
 
 export function isSessionExpiredError(error: unknown): boolean {

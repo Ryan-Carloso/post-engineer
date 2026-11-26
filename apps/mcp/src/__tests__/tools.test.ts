@@ -117,6 +117,7 @@ const FULL_SLOT_DETAIL: ResponseOf<typeof getSlotContract> = {
     status: 'awaiting',
     title: 'Launch day',
     taskId: 'task-1',
+    media: { kind: 'upload', url: 'https://signed.test/video.mp4', contentType: 'video/mp4' },
     progress: 0,
     stage: null,
     error: null,
@@ -1392,6 +1393,7 @@ describe('slot tools', () => {
     expect(text).toContain('awaiting');
     expect(text).toContain('"title": "Launch day"');
     expect(text).toContain('"postUrl": "https://post-engineer.com/posts/slot-1"');
+    expect(text).toContain('https://signed.test/video.mp4');
     expect(text).not.toContain('extraUnpinnedField');
     expect(text).toContain('"userNotices": []');
   });

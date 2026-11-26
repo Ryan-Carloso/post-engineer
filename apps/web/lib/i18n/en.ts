@@ -74,6 +74,9 @@ export const enDictionary: Dictionary = {
     generationPersonaLabel: 'Persona',
     generationFaceLabel: 'Face',
     generationVoiceover: 'Voiceover',
+    generationMediaLabel: 'Media',
+    generationUploadedVideo: 'Uploaded video',
+    generationUploadedImage: 'Uploaded image',
     generationWithFace: "With the persona's face",
     generationLanguageLabel: 'Language',
     generationVoiceLabel: 'Voice',
@@ -475,6 +478,8 @@ export const enDictionary: Dictionary = {
   },
 
   footer: {
+    docs: 'Docs',
+    help: 'Help',
     privacy: 'Privacy Policy',
     terms: 'Terms of Service',
     support: 'Support',

@@ -13,6 +13,7 @@ export interface PersonaRecord {
   videoAspect?: string;
   videoLayout?: string;
   hookPanel?: boolean;
+  aiLabel?: boolean;
   scriptPrompt?: string;
   ctaType?: string;
   ctaUrl?: string;

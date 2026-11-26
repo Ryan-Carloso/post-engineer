@@ -2,6 +2,7 @@ import { FACE_QUALITIES, PERSONA_CTA_INSTRUCTION_MAX_LENGTH, PERSONA_CTA_TYPES, 
 import { isEnglishLanguage, ONLY_ENGLISH_VIDEOS_MESSAGE } from '@/lib/language-gate';
 import { isFileLike } from '@/lib/persona-images';
 import { invalidHookPanelMessage, parseHookPanelFormValue } from '@/lib/hook-panel-form';
+import { invalidAiLabelMessage, parseAiLabelFormValue } from '@/lib/ai-label-form';
 import { parseIdentityCardField, type IdentityCardField } from './identity-card-field';
 
 function isVideoLayout(value: string): value is (typeof VIDEO_LAYOUTS)[number] {
@@ -18,6 +19,7 @@ export interface PersonaPatchBody {
   videoAspect: string | null;
   videoLayout: (typeof VIDEO_LAYOUTS)[number] | null;
   hookPanel: boolean | null;
+  aiLabel: boolean | null;
   scriptPrompt: string | null;
   ctaType: (typeof PERSONA_CTA_TYPES)[number] | null;
   ctaUrl: string | null;
@@ -77,6 +79,11 @@ export async function parsePatchBody(request: Request): Promise<ParsePatchResult
   const hookPanel = parseHookPanelFormValue(rawHookPanel);
   if (!hookPanel.ok) {
     return { ok: false, error: invalidHookPanelMessage(rawHookPanel), logMessage: 'Invalid hookPanel. Use true or false.' };
+  }
+  const rawAiLabel = optionalString(formData.get('aiLabel'));
+  const aiLabel = parseAiLabelFormValue(rawAiLabel);
+  if (!aiLabel.ok) {
+    return { ok: false, error: invalidAiLabelMessage(rawAiLabel), logMessage: 'Invalid aiLabel. Use true or false.' };
   }
   const scriptPrompt = optionalString(formData.get('scriptPrompt'));
   const ctaType = optionalString(formData.get('ctaType'));
@@ -145,6 +152,7 @@ export async function parsePatchBody(request: Request): Promise<ParsePatchResult
       videoAspect,
       videoLayout,
       hookPanel: hookPanel.value,
+      aiLabel: aiLabel.value,
       scriptPrompt,
       ctaType: ctaType as (typeof PERSONA_CTA_TYPES)[number] | null,
       ctaUrl,

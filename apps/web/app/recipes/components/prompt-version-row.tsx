@@ -20,6 +20,7 @@ export interface PromptVersionRowProps {
   disabled: boolean;
   onToggle: () => void;
   onRestore: () => void;
+  onCompare: () => void;
 }
 
 export default function PromptVersionRow({
@@ -31,6 +32,7 @@ export default function PromptVersionRow({
   disabled,
   onToggle,
   onRestore,
+  onCompare,
 }: PromptVersionRowProps): React.ReactElement {
   const { t, locale } = useI18n();
   const full = useQuery({ ...promptVersionQueryOptions(slug, entry.version), enabled: expanded });
@@ -86,6 +88,17 @@ export default function PromptVersionRow({
           >
             {t(expanded ? 'userPrompts.historyHideFull' : 'userPrompts.historyViewFull')}
           </button>
+          {entry.version > 1 ? (
+            <button
+              type="button"
+              data-testid={`prompt-version-changes-${entry.version}`}
+              className={ACTION_CLASS}
+              disabled={disabled}
+              onClick={onCompare}
+            >
+              {t('userPrompts.historyChanges')}
+            </button>
+          ) : null}
           {canRestore ? (
             <button
               type="button"

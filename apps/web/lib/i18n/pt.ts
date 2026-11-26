@@ -73,6 +73,9 @@ export const ptDictionary = {
     generationPersonaLabel: 'Persona',
     generationFaceLabel: 'Rosto',
     generationVoiceover: 'Voiceover',
+    generationMediaLabel: 'Mídia',
+    generationUploadedVideo: 'Vídeo enviado',
+    generationUploadedImage: 'Imagem enviada',
     generationWithFace: 'Com o rosto da persona',
     generationLanguageLabel: 'Idioma',
     generationVoiceLabel: 'Voz',
@@ -479,6 +482,8 @@ export const ptDictionary = {
   },
 
   footer: {
+    docs: 'Documentação',
+    help: 'Ajuda',
     privacy: 'Política de Privacidade',
     terms: 'Termos de Serviço',
     support: 'Suporte',

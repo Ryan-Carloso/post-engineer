@@ -11,13 +11,10 @@ import { useRumbleAccountsQuery } from '@/lib/social-accounts-queries';
 import { useAccountListErrorTelemetry } from '@/lib/account-card-telemetry';
 import { useI18n } from '@/lib/i18n/provider';
 import { notifyIfSessionExpired } from '@/lib/session-expiry';
-import { ProviderIcon } from '@/components/provider-icon';
+import { ProviderBrandIcon } from '@/components/provider-brand-icon';
 
-import { BrandIcon, connectedLabel, errorLabel, useDisconnectFlow } from './accounts-section-helpers';
+import { connectedLabel, errorLabel, useDisconnectFlow } from './accounts-section-helpers';
 
-function BlueskyIcon(): ReactNode {
-  return <svg viewBox="0 0 24 24" className="size-5" fill="currentColor" aria-hidden="true"><path d="M12 10.8c-1.087-2.114-4.046-6.033-6.798-7.978C2.566 1.01.562 1.098.064 1.855c-.499.757.06 3.708 1.277 5.196.76.93 1.883 2.022 3.19 2.904-1.538-.24-3.02.052-3.585.754-.79.982.294 3.029 2.424 4.573 1.187.86 2.662 1.5 4.082 1.788-1.555.288-3.04 1.017-3.575 2.015-.72 1.343.682 2.72 3.125 3.076 2.1.307 4.653-.355 5.998-1.71 1.345 1.355 3.898 2.017 5.998 1.71 2.443-.356 3.845-1.733 3.125-3.076-.535-.998-2.02-1.727-3.575-2.015 1.42-.288 2.895-.928 4.082-1.788 2.13-1.544 3.214-3.591 2.424-4.573-.565-.702-2.047-.994-3.585-.754 1.307-.882 2.43-1.974 3.19-2.904 1.217-1.488 1.776-4.439 1.277-5.196-.498-.757-2.502-.845-5.138.967C16.046 4.767 13.087 8.686 12 10.8z" /></svg>;
-}
 
 export function BlueskyAccountsSection(): ReactNode {
   const { t } = useI18n();
@@ -61,7 +58,7 @@ export function BlueskyAccountsSection(): ReactNode {
 
   return (
     <SocialAccountsSection
-      icon={<BrandIcon className="bg-info-soft text-info"><BlueskyIcon /></BrandIcon>}
+      icon={<ProviderBrandIcon provider="bluesky" />}
       label={t('accounts.blueskyLabel')}
       description={t('accounts.blueskyDescription')}
       connectedLabel={connectedLabel(t, accounts.length)}
@@ -129,7 +126,7 @@ export function RumbleAccountsSection(): ReactNode {
 
   return (
     <SocialAccountsSection
-      icon={<BrandIcon className="bg-muted"><ProviderIcon provider="rumble" /></BrandIcon>}
+      icon={<ProviderBrandIcon provider="rumble" />}
       label={t('accounts.rumbleLabel')}
       description={t('accounts.rumbleDescription')}
       connectedLabel={connectedLabel(t, accounts.length)}

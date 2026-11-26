@@ -39,6 +39,14 @@ export const SlotPostSchema = z.object({
   error: z.string().nullable(),
   publishedAt: z.string().nullable(),
   taskId: z.string().nullable(),
+  media: z
+    .object({
+      kind: z.enum(['upload', 'image']),
+      url: z.string().nullable(),
+      contentType: z.string().nullable(),
+    })
+    .nullable()
+    .optional(),
   progress: z.number(),
   stage: z.string().nullable(),
   retryable: z.boolean().nullable(),
@@ -74,6 +82,7 @@ export const SlotScheduleSchema = z.object({
 
 export const SlotGenerationSchema = z.object({
   voiceover: z.boolean(),
+  mediaKind: z.enum(['upload', 'image']).nullable().optional(),
   language: z.string().nullable(),
   voiceId: z.string().nullable(),
   videoAspect: z.string().nullable(),

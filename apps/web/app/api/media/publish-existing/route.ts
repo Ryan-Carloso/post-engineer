@@ -16,6 +16,7 @@ import {
   createSupabaseVideoUploadStore,
   type VideoUploadRow,
 } from '@/lib/videos/signed-upload';
+import { SCHEDULED_UPLOAD_EXPIRY_MS } from '@/lib/videos/upload-expiry';
 import {
   UPLOAD_SLOT_REFERENCE_INDEX,
   assertUploadNotScheduled,
@@ -90,7 +91,7 @@ async function scheduleExistingMedia(ctx: PublishExistingContext): Promise<NextR
       mediaRef = ctx.uploadRow.id;
       mediaContentType = ctx.uploadRow.declared_content_type ?? ctx.uploadRow.detected_content_type ?? 'video/mp4';
       const extended = await uploadStore.updateUpload(ctx.uploadRow.id, 'ready', {
-        expires_at: new Date(Date.parse(slotAt) + 24 * 60 * 60 * 1000).toISOString(),
+        expires_at: new Date(Date.parse(slotAt) + SCHEDULED_UPLOAD_EXPIRY_MS).toISOString(),
       });
       if (!extended) {
         return apiErrorResponse(409, formatErrorMessage(ERROR_CODES.VIDEO_UPLOAD_CONSUMED), {
@@ -285,7 +286,26 @@ async function postHandler(request: Request): Promise<NextResponse> {
     return verified;
   }
 
-  const ctx: PublishExistingContext = { route: ROUTE, supabase, userId, request, input, accountIds, reconnectWarning, ...verified, logId, startTime };
+  let aiLabel = false;
+  if (personaId !== null && input.publishing.mode === 'asap') {
+    const { data: personaRow, error: personaError } = await supabase
+      .from('personas')
+      .select('ai_label')
+      .eq('id', personaId)
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (personaError) {
+      if (ledger !== null) await releaseAsapLedger(ledger, personaError);
+      logger.error('[publish-existing] persona ai_label lookup failed', personaError, { userId });
+      return apiErrorResponse(500, formatErrorMessage(ERROR_CODES.INTERNAL_ERROR), {
+        route: ROUTE,
+        code: ERROR_CODES.INTERNAL_ERROR,
+      });
+    }
+    aiLabel = personaRow?.ai_label === true;
+  }
+
+  const ctx: PublishExistingContext = { route: ROUTE, supabase, userId, request, input, accountIds, reconnectWarning, aiLabel, ...verified, logId, startTime };
   if (input.publishing.mode === 'scheduled') {
     return scheduleExistingMedia(ctx);
   }

@@ -58,13 +58,23 @@ describe('loginRedirectTarget', () => {
 
 describe('PUBLIC_PATH_PREFIXES — middleware parity', () => {
   const matcherSource = config.matcher[0];
-  const groupMatch = /\(\?:([a-z|]+)\)\(\?:\/\|\$\)/.exec(matcherSource);
+  const groupMatch = /\(\?:([a-z|/]+)\)\(\?:\/\|\$\)/.exec(matcherSource);
   const middlewarePublicPaths = (groupMatch === null ? [] : groupMatch[1].split('|')).map(
     (name) => `/${name}`,
   );
 
   it('extracts the public page segments from the matcher (guard for this very pin)', () => {
-    expect(middlewarePublicPaths).toEqual(['/login', '/landing', '/privacy', '/terms', '/recipes', '/s']);
+    expect(middlewarePublicPaths).toEqual([
+      '/login',
+      '/landing',
+      '/privacy',
+      '/terms',
+      '/recipes',
+      '/s',
+      '/docs',
+      '/help',
+      '/en/help',
+    ]);
   });
 
   it.each(middlewarePublicPaths)('never redirects from the middleware-public %s', (prefix) => {

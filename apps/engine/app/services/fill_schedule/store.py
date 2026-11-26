@@ -44,7 +44,7 @@ class ScheduleStore:
         "post_voice_id,post_niche,post_language,"
         "post_video_aspect,post_video_layout,post_hook_panel,post_paragraph_number,post_face_quality,"
         "post_voice_audio_url,post_cta_type,"
-        "personas(name,niche,cta_type,language,video_aspect,video_layout,hook_panel,"
+        "personas(name,niche,cta_type,language,video_aspect,video_layout,hook_panel,ai_label,"
         "photo_path,avatar_url,voice_id,voice_audio_path,paragraph_number,face_quality)"
     )
 

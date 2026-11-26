@@ -5,7 +5,6 @@ Allow: /$
 Disallow: /api/
 Disallow: /logs/
 Disallow: /uploads/
-Disallow: /docs/
 Disallow: /admin/
 Disallow: /secret/
 Disallow: /.git/
@@ -23,7 +22,6 @@ Allow: /
 Disallow: /api/
 Disallow: /logs/
 Disallow: /uploads/
-Disallow: /docs/
 Disallow: /admin/
 Disallow: /secret/
 Disallow: /.git/
@@ -39,7 +37,6 @@ Allow: /
 Disallow: /api/
 Disallow: /logs/
 Disallow: /uploads/
-Disallow: /docs/
 Disallow: /admin/
 Disallow: /secret/
 Disallow: /.git/
@@ -55,7 +52,6 @@ Allow: /
 Disallow: /api/
 Disallow: /logs/
 Disallow: /uploads/
-Disallow: /docs/
 Disallow: /admin/
 Disallow: /secret/
 Disallow: /.git/
@@ -71,7 +67,6 @@ Allow: /
 Disallow: /api/
 Disallow: /logs/
 Disallow: /uploads/
-Disallow: /docs/
 Disallow: /admin/
 Disallow: /secret/
 Disallow: /.git/
@@ -87,7 +82,6 @@ Allow: /
 Disallow: /api/
 Disallow: /logs/
 Disallow: /uploads/
-Disallow: /docs/
 Disallow: /admin/
 Disallow: /secret/
 Disallow: /.git/
@@ -103,7 +97,6 @@ Allow: /
 Disallow: /api/
 Disallow: /logs/
 Disallow: /uploads/
-Disallow: /docs/
 Disallow: /admin/
 Disallow: /secret/
 Disallow: /.git/
@@ -119,7 +112,6 @@ Allow: /
 Disallow: /api/
 Disallow: /logs/
 Disallow: /uploads/
-Disallow: /docs/
 Disallow: /admin/
 Disallow: /secret/
 Disallow: /.git/
@@ -135,7 +127,6 @@ Allow: /
 Disallow: /api/
 Disallow: /logs/
 Disallow: /uploads/
-Disallow: /docs/
 Disallow: /admin/
 Disallow: /secret/
 Disallow: /.git/
@@ -151,7 +142,6 @@ Allow: /
 Disallow: /api/
 Disallow: /logs/
 Disallow: /uploads/
-Disallow: /docs/
 Disallow: /admin/
 Disallow: /secret/
 Disallow: /.git/
@@ -167,7 +157,6 @@ Allow: /
 Disallow: /api/
 Disallow: /logs/
 Disallow: /uploads/
-Disallow: /docs/
 Disallow: /admin/
 Disallow: /secret/
 Disallow: /.git/
@@ -183,7 +172,6 @@ Allow: /
 Disallow: /api/
 Disallow: /logs/
 Disallow: /uploads/
-Disallow: /docs/
 Disallow: /admin/
 Disallow: /secret/
 Disallow: /.git/
@@ -199,7 +187,6 @@ Allow: /
 Disallow: /api/
 Disallow: /logs/
 Disallow: /uploads/
-Disallow: /docs/
 Disallow: /admin/
 Disallow: /secret/
 Disallow: /.git/
@@ -215,7 +202,6 @@ Allow: /
 Disallow: /api/
 Disallow: /logs/
 Disallow: /uploads/
-Disallow: /docs/
 Disallow: /admin/
 Disallow: /secret/
 Disallow: /.git/
@@ -232,7 +218,6 @@ Allow: /
 Disallow: /api/
 Disallow: /logs/
 Disallow: /uploads/
-Disallow: /docs/
 Disallow: /admin/
 Disallow: /secret/
 Disallow: /.git/
@@ -248,7 +233,6 @@ Allow: /
 Disallow: /api/
 Disallow: /logs/
 Disallow: /uploads/
-Disallow: /docs/
 Disallow: /admin/
 Disallow: /secret/
 Disallow: /.git/
@@ -264,7 +248,6 @@ Allow: /
 Disallow: /api/
 Disallow: /logs/
 Disallow: /uploads/
-Disallow: /docs/
 Disallow: /admin/
 Disallow: /secret/
 Disallow: /.git/
@@ -280,7 +263,6 @@ Allow: /
 Disallow: /api/
 Disallow: /logs/
 Disallow: /uploads/
-Disallow: /docs/
 Disallow: /admin/
 Disallow: /secret/
 Disallow: /.git/

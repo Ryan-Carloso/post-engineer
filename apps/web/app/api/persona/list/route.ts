@@ -33,7 +33,7 @@ async function getHandler(request: Request): Promise<NextResponse> {
   let query = supabase
     .from('personas')
     .select(
-      'id, name, photo_path, avatar_url, voice_id, voice_audio_path, created_at, language, video_aspect, video_layout, hook_panel, script_prompt, cta_type, cta_url, cta_instruction, paragraph_number, niche, face_quality',
+      'id, name, photo_path, avatar_url, voice_id, voice_audio_path, created_at, language, video_aspect, video_layout, hook_panel, ai_label, script_prompt, cta_type, cta_url, cta_instruction, paragraph_number, niche, face_quality',
     )
     .eq('user_id', auth.userId);
 
@@ -122,6 +122,7 @@ async function getHandler(request: Request): Promise<NextResponse> {
         videoAspect,
         videoLayout,
         hookPanel: record.hook_panel !== false,
+        aiLabel: record.ai_label === true,
         scriptPrompt,
         ctaType,
         ctaUrl,
