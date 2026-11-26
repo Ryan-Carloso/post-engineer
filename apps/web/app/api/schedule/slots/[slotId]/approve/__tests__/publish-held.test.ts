@@ -269,6 +269,8 @@ describe('publishHeldSlot', () => {
     const response = await publishHeldSlot({ request: request(), serviceClient: client as never, userId: USER_ID, slot: awaitingSlot, route: ROUTE });
 
     expect(response.status).toBe(409);
+    const body = (await response.json()) as { code?: string };
+    expect(body.code).toBe('SLOT_NOT_AWAITING_APPROVAL');
     expect(updates).toHaveLength(1);
     expect(mockPublishHeldMedia).not.toHaveBeenCalled();
     const claimedLedger = await mockClaimAsapLedger.mock.results[0]?.value;

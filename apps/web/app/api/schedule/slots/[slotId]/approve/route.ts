@@ -47,6 +47,7 @@ async function postHandler(
   if (slot.status !== 'awaiting_approval') {
     return apiErrorResponse(409, 'Only an awaiting-approval slot can be approved.', {
       route: ROUTE,
+      code: ERROR_CODES.SLOT_NOT_AWAITING_APPROVAL,
       metadata: { status: slot.status },
     });
   }
@@ -108,6 +109,7 @@ async function postHandler(
     if ((updateError as { code?: string }).code === 'PGRST116') {
       return apiErrorResponse(409, 'Only an awaiting-approval slot can be approved.', {
         route: ROUTE,
+        code: ERROR_CODES.SLOT_NOT_AWAITING_APPROVAL,
         metadata: { status: slot.status },
       });
     }

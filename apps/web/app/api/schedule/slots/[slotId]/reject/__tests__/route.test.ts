@@ -151,6 +151,8 @@ describe('POST /api/schedule/slots/[slotId]/reject', () => {
 
     expect(response.status).toBe(409);
     expect(serviceClient.calls.some((c) => c.op === 'update')).toBe(false);
+    const body = (await response.json()) as { code?: string };
+    expect(body.code).toBe('SLOT_NOT_AWAITING_APPROVAL');
   });
 
   it('returns 409 when the guarded update loses the race', async () => {
@@ -164,6 +166,8 @@ describe('POST /api/schedule/slots/[slotId]/reject', () => {
     const response = await postReject(SLOT_ID);
 
     expect(response.status).toBe(409);
+    const raceBody = (await response.json()) as { code?: string };
+    expect(raceBody.code).toBe('SLOT_NOT_AWAITING_APPROVAL');
   });
 
   it('returns 403 for an API-key caller without touching the database', async () => {

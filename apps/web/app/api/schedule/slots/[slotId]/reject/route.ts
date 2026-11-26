@@ -8,6 +8,7 @@ import { personaScopeOf } from '@/lib/post-detail';
 import { resolveSlotUuid } from '@/lib/schedule-slot-id';
 import { loadOwnedSlot } from '../route';
 import { withApiErrorReporting, resolveReportingUserId } from '@/lib/api-error-reporting';
+import { ERROR_CODES } from '@/lib/error-codes';
 
 const ROUTE = 'POST /api/schedule/slots/[slotId]/reject';
 
@@ -38,6 +39,7 @@ async function postHandler(
   if (slot.status !== 'awaiting_approval') {
     return apiErrorResponse(409, 'Only an awaiting-approval slot can be rejected.', {
       route: ROUTE,
+      code: ERROR_CODES.SLOT_NOT_AWAITING_APPROVAL,
       metadata: { status: slot.status },
     });
   }
@@ -54,6 +56,7 @@ async function postHandler(
     if ((updateError as { code?: string }).code === 'PGRST116') {
       return apiErrorResponse(409, 'Only an awaiting-approval slot can be rejected.', {
         route: ROUTE,
+        code: ERROR_CODES.SLOT_NOT_AWAITING_APPROVAL,
         metadata: { status: slot.status },
       });
     }

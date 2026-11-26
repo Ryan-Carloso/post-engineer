@@ -266,6 +266,7 @@ export async function publishHeldSlot(options: {
     if ((claimError as { code?: string }).code === 'PGRST116') {
       return apiErrorResponse(409, 'Only an awaiting-approval slot can be approved.', {
         route,
+        code: ERROR_CODES.SLOT_NOT_AWAITING_APPROVAL,
         metadata: { status: slot.status },
       });
     }
