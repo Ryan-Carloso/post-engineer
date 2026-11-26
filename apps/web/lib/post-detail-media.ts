@@ -54,7 +54,10 @@ export async function resolveSlotMedia(
   if (!PREVIEW_STATUSES.has(row.status)) return media;
   try {
     if (storageKind === 'image') {
-      if (!row.media_ref.startsWith(`scheduled-media/${userId}/`)) return media;
+      const prefix = `scheduled-media/${userId}/`;
+      if (!row.media_ref.startsWith(prefix)) return media;
+      const rest = row.media_ref.slice(prefix.length);
+      if (rest.includes('..') || rest.includes('\\')) return media;
       media.url = await signMediaUrl(service, 'uploads', row.media_ref, slotId);
       return media;
     }
