@@ -52,10 +52,17 @@ class ThreadsPublisherTest(unittest.TestCase):
             [
                 ("provider", "threads"),
                 ("caption", "post"),
+                ("aiLabel", "false"),
                 ("threadsAccountIds", "1"),
                 ("threadsAccountIds", "2"),
             ],
         )
+
+    def test_parts_carry_the_ai_label(self) -> None:
+        parts = upload_publisher.build_threads_parts(
+            upload_publisher.ThreadsMetadata(caption="post", account_ids=("1",), ai_label=True)
+        )
+        self.assertIn(("aiLabel", "true"), parts.fields)
         self.assertIn("threads", SOCIAL_PROVIDERS)
         self.assertIn("threads", upload_publisher._PART_BUILDERS)
 

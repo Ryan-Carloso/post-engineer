@@ -32,6 +32,7 @@ const PERSONAS = [
     language: 'pt',
     video_aspect: '9:16',
     hook_panel: true,
+    ai_label: true,
     script_prompt: 'Storytelling.',
     paragraph_number: 2,
     niche: 'finanças pessoais',
@@ -47,6 +48,7 @@ const PERSONAS = [
     language: null,
     video_aspect: null,
     hook_panel: false,
+    ai_label: false,
     script_prompt: null,
     paragraph_number: null,
   },
@@ -140,6 +142,7 @@ function mockSupabase(
       language: string | null;
       video_aspect: string | null;
       hook_panel: boolean;
+      ai_label: boolean;
       script_prompt: string | null;
       paragraph_number: number | null;
       niche?: string;
@@ -301,6 +304,7 @@ describe('GET /api/persona/list', () => {
       language: 'pt',
       videoAspect: '9:16',
       hookPanel: true,
+      aiLabel: true,
       scriptPrompt: 'Storytelling.',
       paragraphNumber: 2,
     });
@@ -354,6 +358,7 @@ describe('GET /api/persona/list', () => {
           language: null,
           video_aspect: null,
           hook_panel: true,
+          ai_label: false,
           script_prompt: null,
           paragraph_number: null,
         },
@@ -423,6 +428,7 @@ describe('GET /api/persona/list', () => {
       language: 'pt',
       videoAspect: '9:16',
       hookPanel: true,
+      aiLabel: true,
       scriptPrompt: 'Storytelling.',
       paragraphNumber: 2,
       niche: 'finanças pessoais',
@@ -436,6 +442,7 @@ describe('GET /api/persona/list', () => {
       libraryUrl: `https://supabase.test/signed/${USER_ID}/p-2/other.png`,
       voiceAudioUrl: `https://supabase.test/signed/${USER_ID}/voz.mp3`,
       hookPanel: false,
+      aiLabel: false,
       boundAccounts: { ...EMPTY_BINDING, youtube: ['yt-2'] },
     });
     expect(signed.sort()).toEqual(
@@ -531,6 +538,7 @@ describe('GET /api/persona/list', () => {
           language: null,
           video_aspect: null,
           hook_panel: true,
+          ai_label: false,
           script_prompt: null,
           paragraph_number: null,
         },
@@ -578,6 +586,7 @@ describe('GET /api/persona/list', () => {
           language: null,
           video_aspect: null,
           hook_panel: true,
+          ai_label: false,
           script_prompt: null,
           paragraph_number: null,
         },

@@ -8,6 +8,7 @@ export function appendCreatePersonaFields(formData: FormData, input: CreatePerso
   formData.set('videoAspect', input.videoAspect ?? '9:16');
   formData.set('videoLayout', input.videoLayout ?? 'standard');
   formData.set('hookPanel', String(input.hookPanel ?? true));
+  formData.set('aiLabel', String(input.aiLabel ?? false));
   if (input.scriptPrompt !== undefined) formData.set('scriptPrompt', input.scriptPrompt);
   formData.set('paragraphNumber', String(input.paragraphNumber ?? 1));
   formData.set('niche', input.niche ?? 'General');
@@ -22,6 +23,7 @@ export function appendUpdatePersonaFields(formData: FormData, input: UpdatePerso
   if (input.videoAspect !== undefined) formData.set('videoAspect', input.videoAspect);
   if (input.videoLayout !== undefined) formData.set('videoLayout', input.videoLayout);
   if (input.hookPanel !== undefined) formData.set('hookPanel', String(input.hookPanel));
+  if (input.aiLabel !== undefined) formData.set('aiLabel', String(input.aiLabel));
   if (input.scriptPrompt !== undefined) formData.set('scriptPrompt', input.scriptPrompt);
   if (input.paragraphNumber !== undefined) formData.set('paragraphNumber', String(input.paragraphNumber));
   if (input.niche !== undefined) formData.set('niche', input.niche);

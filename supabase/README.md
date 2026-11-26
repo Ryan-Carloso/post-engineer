@@ -91,6 +91,7 @@ the order — you never need to guess or read docs to know what comes next:
 | 083 | `migrations/083_scheduled-posts-voiceover.sql` | The `faceless` video mode is renamed `voiceover` (the persona's voice over the agent images, no lip sync; the images may show people): `video_type` rows and check move to `'voiceover'`, `scheduled_posts.faceless` → `voiceover`, `faceless_material` → `voiceover_material` (check renamed to match). |
 | 084 | `migrations/084_persona-identity-card.sql` | `personas.identity_card jsonb` (nullable, no default, `jsonb_typeof = 'object'` check): the versioned identity card `{ version, identity, defaults }` the server renders into an image prompt for the agent's own image tool. The per-photo `scene` is not stored. Read only through `GET /api/persona/identity-card`, never in the persona list or on share pages. |
 | 085 | `migrations/085_scheduled-posts-hook-title.sql` | `scheduled_posts.hook_title` (nullable text, 1-60 characters): the optional on-screen headline of a scheduled video, stored with the slot so the batch dispatch can forward it to the engine. The 60 mirrors `HOOK_TITLE_MAX_CHARS` in `shared/script-segments/hook-title.ts`. |
+| 086 | `migrations/086_persona-ai-label.sql` | `personas.ai_label` (NOT NULL DEFAULT false): the persona marks its videos as AI-generated when publishing (YouTube `containsSyntheticMedia`, Instagram `is_ai_generated`). Read live at publish time, so editing the persona changes pending slots. |
 
 ## Schema snapshot
 

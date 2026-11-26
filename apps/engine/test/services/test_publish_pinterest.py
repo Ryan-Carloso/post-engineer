@@ -78,10 +78,17 @@ class PublishPinterestModuleTest(unittest.TestCase):
                 ("title", "t"),
                 ("description", "d"),
                 ("boardId", "b1"),
+                ("aiLabel", "false"),
                 ("pinterestAccountIds", "1"),
                 ("pinterestAccountIds", "2"),
             ],
         )
+
+    def test_fields_carry_the_ai_label(self) -> None:
+        fields = publish_pinterest.pinterest_fields(
+            publish_pinterest.PinterestMetadata(title="t", description="d", board_id="b1", account_ids=("1",), ai_label=True)
+        )
+        self.assertIn(("aiLabel", "true"), fields)
 
 
 class PinterestPublisherWiringTest(unittest.TestCase):

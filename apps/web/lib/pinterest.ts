@@ -202,6 +202,7 @@ export interface PublishPinterestVideoInput {
   contentType: string;
   title?: string;
   description?: string;
+  aiLabel?: boolean;
   coverImageUrl?: string;
   coverImageKeyFrameTime?: number;
   maxPolls?: number;
@@ -290,6 +291,7 @@ export async function publishPinterestVideo(
   };
   if (typeof input.title === 'string' && input.title !== '') pinBody.title = input.title;
   if (typeof input.description === 'string' && input.description !== '') pinBody.description = input.description;
+  if (input.aiLabel === true) pinBody.ai_disclosures = { values: ['SYNTHETIC_PERFORMER'] };
   if (typeof input.coverImageUrl === 'string' && input.coverImageUrl !== '') {
     pinBody.cover_image_url = input.coverImageUrl;
   } else {
@@ -320,6 +322,7 @@ export interface PublishPinterestImageInput {
   contentType: 'image/jpeg' | 'image/png';
   title?: string;
   description?: string;
+  aiLabel?: boolean;
 }
 
 export async function publishPinterestImage(input: PublishPinterestImageInput): Promise<PinterestPublishResult> {
@@ -329,5 +332,6 @@ export async function publishPinterestImage(input: PublishPinterestImageInput): 
   };
   if (typeof input.title === 'string' && input.title !== '') pinBody.title = input.title;
   if (typeof input.description === 'string' && input.description !== '') pinBody.description = input.description;
+  if (input.aiLabel === true) pinBody.ai_disclosures = { values: ['SYNTHETIC_PERFORMER'] };
   return createPin(input.accessToken, pinBody);
 }

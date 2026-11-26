@@ -38,6 +38,7 @@ export interface CreatePersonaInput {
   videoAspect?: VideoAspect;
   videoLayout?: VideoLayout;
   hookPanel?: boolean;
+  aiLabel?: boolean;
   scriptPrompt?: string;
   paragraphNumber?: number;
   niche?: string;
@@ -111,6 +112,7 @@ export interface UpdatePersonaInput {
   videoAspect?: VideoAspect;
   videoLayout?: VideoLayout;
   hookPanel?: boolean;
+  aiLabel?: boolean;
   scriptPrompt?: string;
   paragraphNumber?: number;
   niche?: string;

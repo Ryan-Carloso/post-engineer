@@ -309,7 +309,8 @@ export class InstagramService {
     accessToken: string,
     caption: string,
     mediaUrl: string,
-    isVideo: boolean
+    isVideo: boolean,
+    aiLabel = false
   ): Promise<InstagramPublishResult> {
     const mediaType = isVideo ? 'REELS' : 'IMAGE';
 
@@ -322,7 +323,7 @@ export class InstagramService {
             caption,
             access_token: accessToken,
             ...(isVideo
-              ? { media_type: 'REELS', video_url: mediaUrl }
+              ? { media_type: 'REELS', video_url: mediaUrl, ...(aiLabel ? { is_ai_generated: true } : {}) }
               : { image_url: mediaUrl }),
           },
         }

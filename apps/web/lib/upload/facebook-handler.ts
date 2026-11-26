@@ -31,6 +31,10 @@ export async function handleFacebookUpload(
   ownerUserId: string,
 ): Promise<FacebookUploadResponse> {
   const accountIds = getAccountIdsFromFormData(formData, 'facebookAccountIds');
+  const aiLabelRaw = formData.get('aiLabel');
+  if (aiLabelRaw !== null && aiLabelRaw !== 'true' && aiLabelRaw !== 'false') {
+    return rejected('Invalid aiLabel. Use "true" or "false"');
+  }
   const captionRaw = formData.get('caption');
   const rawFile = formData.get('video');
 
@@ -71,7 +75,9 @@ export async function handleFacebookUpload(
         pageId: accountId,
         media,
         description: caption,
+        aiLabel: aiLabelRaw === 'true',
         onPermalinkError: (error) => logger.warn('upload-content/facebook: permalink read failed', { accountId, error: String(error) }),
+        onAiLabelError: (error) => logger.error('upload-content/facebook: AI label edit failed; the post is live without the AI disclosure', error, { accountId }),
       });
 
       await touchSocialAccount(supabase, ownerUserId, 'facebook', accountId);

@@ -491,6 +491,39 @@ describe('InstagramService', () => {
         );
       });
 
+      it('labels the reel as AI-generated only when aiLabel is set', async () => {
+        mockPost
+          .mockResolvedValueOnce({ data: { id: 'c1' } })
+          .mockResolvedValueOnce({ data: { id: 'p1' } });
+        mockGet
+          .mockResolvedValueOnce({ data: { status_code: 'FINISHED' } })
+          .mockResolvedValueOnce({ data: {} });
+
+        const service = new InstagramService();
+        await service.publishMedia('user', 'tok', 'cap', 'https://example.com/vid.mp4', true, true);
+
+        expect(mockPost).toHaveBeenCalledWith(
+          expect.stringContaining('/media'),
+          null,
+          expect.objectContaining({
+            params: expect.objectContaining({ is_ai_generated: true }),
+          }),
+        );
+
+        mockPost.mockClear();
+        mockPost
+          .mockResolvedValueOnce({ data: { id: 'c2' } })
+          .mockResolvedValueOnce({ data: { id: 'p2' } });
+        mockGet
+          .mockResolvedValueOnce({ data: { status_code: 'FINISHED' } })
+          .mockResolvedValueOnce({ data: {} });
+
+        await service.publishMedia('user', 'tok', 'cap', 'https://example.com/vid.mp4', true, false);
+
+        const params = (mockPost.mock.calls[0]?.[2] as { params?: Record<string, unknown> }).params ?? {};
+        expect(params).not.toHaveProperty('is_ai_generated');
+      });
+
       it('throws InstagramApiError when container status is ERROR', async () => {
         mockPost.mockResolvedValueOnce({ data: { id: 'err-container' } });
         mockGet.mockResolvedValueOnce({ data: { status_code: 'ERROR' } });

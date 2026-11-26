@@ -467,6 +467,36 @@ describe('handleInstagramUpload', () => {
     const fd = makeFormData({ caption: 'Test', videoStoragePath: 'u1/voiceover/task-7/final-1.mp4' }, file);
     await expect(handleInstagramUpload(fd, OWNER_USER_ID, logId, startTime)).rejects.toThrow(ValidationError);
   });
+
+  it('throws ValidationError for an aiLabel that is not true or false', async () => {
+    const file = new File([new Uint8Array(50)], 'img.jpg', { type: 'image/jpeg' });
+    const fd = makeFormData({ caption: 'Test', aiLabel: 'yes' }, file);
+    await expect(handleInstagramUpload(fd, OWNER_USER_ID, logId, startTime)).rejects.toThrow(
+      'Invalid aiLabel. Use "true" or "false"',
+    );
+  });
+
+  it('passes aiLabel through to Instagram publishMedia', async () => {
+    const { InstagramService } = await import('@/lib/instagram');
+    const publishMedia = vi.fn(async (..._args: unknown[]) => ({ postId: 'p1', mediaId: 'm1', permalink: 'https://instagram.com/p/1' }));
+    vi.mocked(InstagramService).mockImplementationOnce(function () {
+      return { publishMedia } as never;
+    });
+    const file = new File([new Uint8Array(50)], 'img.jpg', { type: 'image/jpeg' });
+    await handleInstagramUpload(makeFormData({ caption: 'Test', aiLabel: 'true' }, file), OWNER_USER_ID, logId, startTime);
+    expect(publishMedia.mock.calls[0][5]).toBe(true);
+  });
+
+  it('passes aiLabel false when the form omits it', async () => {
+    const { InstagramService } = await import('@/lib/instagram');
+    const publishMedia = vi.fn(async (..._args: unknown[]) => ({ postId: 'p1', mediaId: 'm1', permalink: 'https://instagram.com/p/1' }));
+    vi.mocked(InstagramService).mockImplementationOnce(function () {
+      return { publishMedia } as never;
+    });
+    const file = new File([new Uint8Array(50)], 'img.jpg', { type: 'image/jpeg' });
+    await handleInstagramUpload(makeFormData({ caption: 'Test' }, file), OWNER_USER_ID, logId, startTime);
+    expect(publishMedia.mock.calls[0][5]).toBe(false);
+  });
 });
 
 describe('handleYoutubeUpload', () => {
@@ -832,6 +862,39 @@ describe('handleYoutubeUpload', () => {
       'youtube',
       'ch-1',
     );
+  });
+
+  it('throws ValidationError for an aiLabel that is not true or false', async () => {
+    const file = new File([new Uint8Array(100)], 'v.mp4', { type: 'video/mp4' });
+    const fd = makeVideoFormData({ ...validFields, accountIds: 'ch-1', aiLabel: 'yes' }, file);
+
+    await expect(handleYoutubeUpload(fd, OWNER_USER_ID, logId, startTime)).rejects.toThrow(
+      'Invalid aiLabel. Use "true" or "false"',
+    );
+  });
+
+  it('marks the video metadata as AI-labelled when aiLabel is true', async () => {
+    const { createVideoMetadata } = await import('@/lib/youtube');
+    vi.mocked(createVideoMetadata).mockClear();
+    const file = new File([new Uint8Array(100)], 'v.mp4', { type: 'video/mp4' });
+    const fd = makeVideoFormData({ ...validFields, accountIds: 'ch-1', aiLabel: 'true' }, file);
+
+    const response = await handleYoutubeUpload(fd, OWNER_USER_ID, logId, startTime);
+
+    expect(response.success).toBe(true);
+    expect(vi.mocked(createVideoMetadata).mock.calls[0][0]).toMatchObject({ aiLabel: true });
+  });
+
+  it('marks the video metadata as not AI-labelled when aiLabel is absent', async () => {
+    const { createVideoMetadata } = await import('@/lib/youtube');
+    vi.mocked(createVideoMetadata).mockClear();
+    const file = new File([new Uint8Array(100)], 'v.mp4', { type: 'video/mp4' });
+    const fd = makeVideoFormData({ ...validFields, accountIds: 'ch-1' }, file);
+
+    const response = await handleYoutubeUpload(fd, OWNER_USER_ID, logId, startTime);
+
+    expect(response.success).toBe(true);
+    expect(vi.mocked(createVideoMetadata).mock.calls[0][0]).toMatchObject({ aiLabel: false });
   });
 
 });

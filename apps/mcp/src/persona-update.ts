@@ -26,6 +26,7 @@ export const UpdatePersonaShape = {
     .boolean()
     .optional()
     .describe('New hook_lipsync default: true shows the photo panel under the face during the hook, false keeps the face alone.'),
+  aiLabel: z.boolean().optional(),
   scriptPrompt: z.string().optional().describe('New system prompt instructions for video scripts'),
   paragraphNumber: z.number().int().min(1).max(10).optional().describe('New number of paragraphs'),
   niche: z.string().max(300).optional().describe('New content niche'),
