@@ -115,6 +115,13 @@ describe('sanitizeEngineReason', () => {
     expect(out).toContain('Bearer [redacted]');
   });
 
+  it('scrubs a bare sk- key before truncating, so no key fragment survives past the boundary', () => {
+    const key = 'sk-' + 'b'.repeat(25);
+    const out = sanitizeEngineReason('y'.repeat(192) + ` ${key}`);
+    expect(out).not.toContain('sk-');
+    expect(out).not.toContain(key);
+  });
+
   it('collapses whitespace and trims', () => {
     expect(sanitizeEngineReason('  a\n  b\t c  ')).toBe('a b c');
   });
