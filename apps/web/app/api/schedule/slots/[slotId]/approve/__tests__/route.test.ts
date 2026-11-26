@@ -273,7 +273,7 @@ describe('POST /api/schedule/slots/[slotId]/approve', () => {
     expect(response.status).toBe(429);
   });
 
-  it('returns 403 when the trial lapsed, without moving the slot or touching its media', async () => {
+  it('returns 402 when the trial lapsed, without moving the slot or touching its media', async () => {
     const { serviceClient } = mockOwnedClients({
       slot: awaitingSlot,
       schedule: { id: 's1', user_id: USER_ID },
@@ -283,7 +283,7 @@ describe('POST /api/schedule/slots/[slotId]/approve', () => {
 
     const response = await postApprove(SLOT_ID);
 
-    expect(response.status).toBe(403);
+    expect(response.status).toBe(402);
     const body = (await response.json()) as { code?: string };
     expect(body.code).toBe('TRIAL_EXPIRED');
     expect(serviceClient.calls.some((c) => c.op === 'update')).toBe(false);
