@@ -13,7 +13,7 @@ import { assertTrialActive } from '../trial';
 import { logger } from '@/lib/logger';
 
 const NOW = new Date('2026-11-20T12:00:00.000Z');
-const CONTACT = 'https://wa.me/000000000';
+const CONTACT = 'https://wa.me/351962248268';
 
 interface FakeOptions {
   upsertError?: { message: string } | null;
@@ -36,7 +36,6 @@ function fakeClient(options: FakeOptions = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.stubEnv('NEXT_PUBLIC_CONTACT_WHATSAPP_URL', CONTACT);
 });
 
 describe('assertTrialActive', () => {

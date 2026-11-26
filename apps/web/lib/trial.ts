@@ -3,7 +3,7 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { NextResponse } from 'next/server';
 import { apiErrorResponse } from '@/lib/api-error';
-import { contactWhatsappUrl } from '@/lib/contact-whatsapp';
+import { CONTACT_WHATSAPP_URL } from '@/lib/contact';
 import { ERROR_CODES, errorMessage } from '@/lib/error-codes';
 import { logger } from '@/lib/logger';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
@@ -51,6 +51,6 @@ export async function assertTrialActive(
   return apiErrorResponse(402, errorMessage(ERROR_CODES.TRIAL_EXPIRED), {
     route: options.route,
     code: ERROR_CODES.TRIAL_EXPIRED,
-    extra: { contactUrl: contactWhatsappUrl(), trialEndedAt: endsAt },
+    extra: { contactUrl: CONTACT_WHATSAPP_URL, trialEndedAt: endsAt },
   });
 }
