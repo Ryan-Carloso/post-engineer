@@ -2,6 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { DOC_PAGES, docLocales, docPath } from '@/lib/docs/registry';
 import { registeredToolActions, registeredToolNames } from '@/scripts/mcp-tool-inventory.mjs';
 import { findRepoRoot } from '@/test/repo-root';
 
@@ -120,5 +121,13 @@ describe('llms-full.txt', () => {
     expect(more).toContain('https://post-engineer.com/openapi.json');
     expect(more).toContain('https://github.com/Ryan-Carloso/post-engineer/tree/main/apps/mcp');
     expect(more).toContain('https://post-engineer.com/recipes');
+  });
+
+  it('links every docs and help page', () => {
+    for (const page of DOC_PAGES) {
+      for (const locale of docLocales(page)) {
+        expect(llms).toContain(`https://post-engineer.com${docPath(page, locale)}`);
+      }
+    }
   });
 });

@@ -479,6 +479,8 @@ export const ptDictionary = {
   },
 
   footer: {
+    docs: 'Documentação',
+    help: 'Ajuda',
     privacy: 'Política de Privacidade',
     terms: 'Termos de Serviço',
     support: 'Suporte',
