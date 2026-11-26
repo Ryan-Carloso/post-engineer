@@ -271,6 +271,24 @@ describe('scene filter for the v2 identity words', () => {
     expect(parseSceneValue({ ...FIXTURE_SCENE, setting: text }).ok).toBe(true);
   });
 
+  it.each([
+    'wooden table leg',
+    'metal bed leg',
+    'desk leg',
+    'sofa leg',
+    'arm day at the gym',
+    'leg press machine',
+    'leg curl machine',
+    'hair dryer on the table',
+    'tooth fairy decoration',
+    'eagle eye view',
+    'eye candy on the wall',
+    'arm chair in the corner',
+    'arm rest on the sofa',
+  ])('accepts the allowlisted phrase "%s" in a scene setting', (text) => {
+    expect(parseSceneValue({ ...FIXTURE_SCENE, setting: text }).ok).toBe(true);
+  });
+
   it('still rejects "long leg" in an outfit slot', () => {
     expect(parseSceneValue({ ...FIXTURE_SCENE, outfit: { bottom: 'long leg' } }).ok).toBe(false);
   });
