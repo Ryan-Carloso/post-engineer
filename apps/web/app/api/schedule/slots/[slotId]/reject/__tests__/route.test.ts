@@ -129,7 +129,12 @@ describe('POST /api/schedule/slots/[slotId]/reject', () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ success: true, status: 'cancelled' });
     const updateCall = serviceClient.calls.find((c) => c.op === 'update');
-    expect(updateCall?.args?.[0]).toEqual({ status: 'cancelled', media_ref: null });
+    expect(updateCall?.args?.[0]).toEqual({
+      status: 'cancelled',
+      media_ref: null,
+      media_kind: null,
+      media_content_type: null,
+    });
     const inCall = serviceClient.calls.find((c) => c.op === 'in');
     expect(inCall?.args).toEqual(['status', ['awaiting_approval']]);
     expect(vi.mocked(applyRateLimit)).toHaveBeenCalledWith(expect.any(Request), RATE_LIMITS.slotApprove, USER_ID);

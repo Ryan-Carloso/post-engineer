@@ -44,7 +44,7 @@ async function postHandler(
 
   const { error: updateError } = await createSupabaseServiceClient()
     .from('scheduled_posts')
-    .update({ status: 'cancelled', media_ref: null })
+    .update({ status: 'cancelled', media_ref: null, media_kind: null, media_content_type: null })
     .eq('id', slot.id)
     .eq('user_id', auth.userId)
     .in('status', ['awaiting_approval'])
