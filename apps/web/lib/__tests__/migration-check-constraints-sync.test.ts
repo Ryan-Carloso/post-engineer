@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { findRepoRoot } from '@/test/repo-root';
 import { SOCIAL_PROVIDERS } from '@/lib/providers/registry';
+import { APPROVAL_MODES } from '@/lib/api-keys';
 import { ScheduleRowSchema } from '@/lib/contracts/schedule';
 import { PUBLISH_LEDGER_STATUSES } from '@/lib/upload/publish-ledger';
 import { ANALYTICS_STATUSES, METRICS_WINDOWS } from '@/lib/metrics/metrics-query';
@@ -73,6 +74,7 @@ const EXPECTED: Record<string, readonly string[]> = {
   user_tool_configs_stock_sources_check: TOOL_CONFIG_STOCK_SOURCES,
   user_prompts_visibility_check: PROMPT_VISIBILITIES,
   prompt_versions_source_check: PROMPT_VERSION_SOURCES,
+  user_api_keys_approval_mode_check: APPROVAL_MODES,
 };
 
 describe('database enum checks match the code', () => {

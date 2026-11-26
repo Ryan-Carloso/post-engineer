@@ -6,6 +6,13 @@ const KEY_PREFIX = 'pe_live_';
 const MIN_KEY_LENGTH = 32;
 export const API_KEY_LAST_USED_TOUCH_INTERVAL_MS = 60 * 60 * 1000;
 
+export const APPROVAL_MODES = ['yolo', 'approval'] as const;
+export type ApprovalMode = (typeof APPROVAL_MODES)[number];
+
+export function isApprovalMode(value: unknown): value is ApprovalMode {
+  return value === 'yolo' || value === 'approval';
+}
+
 export function generateRawApiKey(): string {
   const bytes = randomBytes(24).toString('hex');
   return `${KEY_PREFIX}${bytes}`;
