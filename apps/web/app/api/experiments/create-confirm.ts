@@ -13,6 +13,7 @@ import { logger } from '@/lib/logger';
 import type { SupabaseSessionAuth } from '@/lib/request-auth';
 import { toFiniteNumber } from '@/lib/tokens';
 import { scheduleAccountColumns } from '../videos/generate-and-schedule/account-columns';
+import { classifyDispatchFailure } from '../videos/generate-and-schedule/dispatch-failure';
 import { dispatchSlot, type SlotDispatchContext, type SlotResult } from '../videos/generate-and-schedule/dispatch-slot';
 import { buildIdentitySnapshot } from '../videos/generate-and-schedule/identity-snapshot';
 import { violatedConstraint, SCHEDULE_PK_CONSTRAINT, SCHEDULES_PERSONA_OWNER_CONSTRAINT } from '../videos/generate-and-schedule/constraint-violations';
@@ -334,10 +335,7 @@ export async function confirmExperiment(
     warnings: plan.warnings,
   };
   if (accepted === 0) {
-    const engineOutage = results.every((result) =>
-      ['engine_rejected', 'engine_unavailable', 'no_task_id'].includes(result.errorCode ?? ''),
-    );
-    const code = engineOutage ? ERROR_CODES.ENGINE_UNAVAILABLE : ERROR_CODES.INTERNAL_ERROR;
+    const { status, code, reason } = classifyDispatchFailure(results);
     trackApiEvent('video_creation_failed', {
       userId,
       personaId: plan.personaId,
@@ -347,7 +345,10 @@ export async function confirmExperiment(
       numberOfVideos: plan.videos.length,
       refunded: results.every((result) => result.status !== 'failed' || result.tokensRefunded === true),
     });
-    return NextResponse.json({ success: false, error: formatErrorMessage(code), code, ...envelope }, { status: 502 });
+    return NextResponse.json(
+      { success: false, error: formatErrorMessage(code), code, ...(reason !== undefined ? { reason } : {}), ...envelope },
+      { status: status === 500 ? 502 : status },
+    );
   }
   trackApiEvent('video_creation_completed', {
     userId,

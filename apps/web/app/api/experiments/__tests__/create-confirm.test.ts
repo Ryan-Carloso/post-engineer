@@ -1,4 +1,6 @@
 // @vitest-environment node
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { price } = vi.hoisted(() => ({ price: { perVideo: null as number | null } }));
@@ -31,6 +33,7 @@ vi.mock('@/lib/billing/refund-tokens', () => ({
 }));
 
 import { createHash } from 'node:crypto';
+import { findRepoRoot } from '@/test/repo-root';
 import { canonicalJson } from '@/lib/experiments/quote-key';
 import { NextResponse } from 'next/server';
 import { checkPreChargePreflights } from '../../videos/generate-and-schedule/aspect-preflight';
@@ -46,6 +49,19 @@ import { TEST_ENCRYPTION_KEY, AUTH, USER_ID, VERSION_A, VERSION_B, OFFICIAL_VERS
 
 const NOW = new Date();
 const TOTAL = 10;
+
+const ENGINE_400_FIXTURE = JSON.parse(
+  readFileSync(
+    path.join(
+      findRepoRoot(import.meta.url),
+      'apps/web/lib/generation/__tests__/fixtures/engine-400-unknown-video-type.json',
+    ),
+    'utf8',
+  ),
+) as unknown;
+
+const ENGINE_REASON =
+  "video_type: unknown video_type 'voiceover'; use full_lipsync (8/15), hook_lipsync (2/3) or faceless (1)";
 
 interface Quoted {
   body: CreateExperimentBody;
@@ -350,6 +366,47 @@ describe('confirmExperiment', () => {
     expect(refunded).toHaveLength(TOTAL);
     expect(new Set(refunded).size).toBe(TOTAL);
     expect(vi.mocked(refundSlotTokens).mock.calls.every((call) => call[0].amount === 1)).toBe(true);
+  });
+
+  it('answers 400 ENGINE_REJECTED with the engine reason when the engine rejects every video', async () => {
+    vi.mocked(startEngineVideoTask).mockResolvedValue({
+      ok: false,
+      response: new Response(null) as never,
+      upstreamStatus: 400,
+      upstreamBody: ENGINE_400_FIXTURE,
+    });
+    const { confirmBody } = await quoted();
+
+    const { response, json } = await confirm(confirmBody);
+
+    expect(response.status).toBe(400);
+    expect(json).toMatchObject({ success: false, code: 'ENGINE_REJECTED', chargedTokens: 0, reason: ENGINE_REASON });
+    expect(json.slots).toHaveLength(TOTAL);
+    expect(json.slots.every((slot: { errorCode: string; reason: string }) => slot.errorCode === 'engine_rejected' && slot.reason === ENGINE_REASON)).toBe(true);
+    const refunded = vi.mocked(refundSlotTokens).mock.calls.map((call) => call[0].slotId);
+    expect(refunded).toHaveLength(TOTAL);
+  });
+
+  it('answers 400 ENGINE_REJECTED without a reason when the engine rejects every video with no body', async () => {
+    vi.mocked(startEngineVideoTask).mockResolvedValue({ ok: false, response: new Response(null) as never, upstreamStatus: 400 });
+    const { confirmBody } = await quoted();
+
+    const { response, json } = await confirm(confirmBody);
+
+    expect(response.status).toBe(400);
+    expect(json).toMatchObject({ success: false, code: 'ENGINE_REJECTED', chargedTokens: 0 });
+    expect(json).not.toHaveProperty('reason');
+  });
+
+  it('keeps 502 for a non-engine total failure', async () => {
+    vi.mocked(startEngineVideoTask).mockRejectedValue(new Error('boom'));
+    const { confirmBody } = await quoted();
+
+    const { response, json } = await confirm(confirmBody);
+
+    expect(response.status).toBe(502);
+    expect(json).toMatchObject({ success: false, code: 'INTERNAL_ERROR', chargedTokens: 0 });
+    expect(json).not.toHaveProperty('reason');
   });
 
   it('keeps the experiment when only some videos fail, refunding just those', async () => {
