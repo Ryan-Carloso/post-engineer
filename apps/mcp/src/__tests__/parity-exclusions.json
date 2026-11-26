@@ -64,6 +64,12 @@
     "POST /api/logout": {
       "kind": "session-only"
     },
+    "POST /api/schedule/slots/[slotId]/approve": {
+      "kind": "bearer-rejected"
+    },
+    "POST /api/schedule/slots/[slotId]/reject": {
+      "kind": "bearer-rejected"
+    },
     "GET /api/version": {
       "kind": "ops-public"
     }

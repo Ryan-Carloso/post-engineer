@@ -26,7 +26,7 @@ interface ScheduleRow {
   publish_mode: string | null;
 }
 
-async function loadOwnedSlot(
+export async function loadOwnedSlot(
   supabase: ReturnType<typeof createSupabaseServiceClient>,
   slotId: string,
   userId: string,
