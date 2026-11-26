@@ -8,7 +8,7 @@ export const apiGuide: DocPage = {
     en: 'Call the Post Engineer HTTP API with a bearer key: auth, endpoints and the OpenAPI contract.',
   },
   updatedAt: '2026-11-26',
-  contentHash: '7854b1375e6b090789bfc0d7f9e6e1569a2e8bd0b7087bd24d93359a5f6f78af',
+  contentHash: '9bc8c20cea52dd1a7182aeb16e5cdf84884db9db1bb94086e3aa0997c12dc21c',
   blocks: [
     {
       kind: 'paragraph',
@@ -35,7 +35,7 @@ export const apiGuide: DocPage = {
         en: 'The full contract lives in the OpenAPI document and the plain-text API documentation. Both list every route, its inputs and its errors.',
       },
     },
-    { kind: 'link', href: '/openapi.json', text: { en: 'OpenAPI contract' } },
-    { kind: 'link', href: '/api-documentation.txt', text: { en: 'API documentation (plain text)' } },
+    { kind: 'link', href: { en: '/openapi.json' }, text: { en: 'OpenAPI contract' } },
+    { kind: 'link', href: { en: '/api-documentation.txt' }, text: { en: 'API documentation (plain text)' } },
   ],
 };

@@ -14,7 +14,7 @@ export type DocBlock =
   | { kind: 'paragraph'; text: LocalizedText }
   | { kind: 'list'; items: LocalizedText[] }
   | { kind: 'code'; language: string; code: string }
-  | { kind: 'link'; href: string; text: LocalizedText }
+  | { kind: 'link'; href: LocalizedText; text: LocalizedText }
   | { kind: 'toolList' }
   | { kind: 'providerList'; providers: readonly SocialProvider[] }
   | { kind: 'tokenCostTable' };

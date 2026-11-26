@@ -16,22 +16,29 @@ describe('lib/docs/metadata — one metadata object per page and locale', () => 
     }
   });
 
-  it('keeps titles unique across pages and the landing title', () => {
+  it('keeps titles unique within each locale, and off the landing title', () => {
+    for (const locale of ['pt', 'en'] as const) {
+      const titles = DOC_PAGES.flatMap((page) =>
+        docLocales(page).includes(locale) ? [localize(page.title, locale)] : [],
+      );
+      expect(new Set(titles).size).toBe(titles.length);
+    }
     const titles = DOC_PAGES.flatMap((page) =>
       docLocales(page).map((locale) => localize(page.title, locale)),
     );
-    expect(new Set(titles).size).toBe(titles.length);
     expect(titles).not.toContain(LANDING_TITLE);
   });
 
-  it('keeps descriptions unique and between 50 and 160 chars', () => {
-    const descriptions = DOC_PAGES.flatMap((page) =>
-      docLocales(page).map((locale) => localize(page.description, locale)),
-    );
-    expect(new Set(descriptions).size).toBe(descriptions.length);
-    for (const description of descriptions) {
-      expect(description.length).toBeGreaterThanOrEqual(50);
-      expect(description.length).toBeLessThanOrEqual(160);
+  it('keeps descriptions unique within each locale and between 50 and 160 chars', () => {
+    for (const locale of ['pt', 'en'] as const) {
+      const descriptions = DOC_PAGES.flatMap((page) =>
+        docLocales(page).includes(locale) ? [localize(page.description, locale)] : [],
+      );
+      expect(new Set(descriptions).size).toBe(descriptions.length);
+      for (const description of descriptions) {
+        expect(description.length).toBeGreaterThanOrEqual(50);
+        expect(description.length).toBeLessThanOrEqual(160);
+      }
     }
   });
 

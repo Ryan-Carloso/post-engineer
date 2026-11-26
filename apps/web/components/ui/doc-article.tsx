@@ -1,19 +1,20 @@
 import Link from 'next/link';
 import { PROVIDER_LABELS } from '@/lib/account-options';
-import { localize, type DocBlock, type DocLocale, type DocPage } from '@/lib/docs/types';
+import { localize, type DocBlock, type DocLocale, type DocPage, type LocalizedText } from '@/lib/docs/types';
 import { VIDEO_TYPES, computeVideoTokens, type FaceQuality } from '@/lib/tokens';
 import { TOOL_DESCRIPTIONS } from '@/scripts/llms-full-content.mjs';
 
-function DocLink({ href, text }: { href: string; text: string }) {
-  if (href.startsWith('/')) {
+function DocLink({ href, text, locale }: { href: LocalizedText; text: string; locale: DocLocale }) {
+  const url = localize(href, locale);
+  if (url.startsWith('/')) {
     return (
-      <Link href={href} className="font-medium text-brand hover:underline">
+      <Link href={url} className="font-medium text-brand hover:underline">
         {text}
       </Link>
     );
   }
   return (
-    <a href={href} target="_blank" rel="noreferrer" className="font-medium text-brand hover:underline">
+    <a href={url} target="_blank" rel="noreferrer" className="font-medium text-brand hover:underline">
       {text}
     </a>
   );
@@ -63,7 +64,7 @@ function renderBlock(block: DocBlock, locale: DocLocale, key: string) {
   if (block.kind === 'link') {
     return (
       <p key={key} className="mt-4 leading-relaxed">
-        <DocLink href={block.href} text={localize(block.text, locale)} />
+        <DocLink href={block.href} text={localize(block.text, locale)} locale={locale} />
       </p>
     );
   }
@@ -128,11 +129,15 @@ function renderBlock(block: DocBlock, locale: DocLocale, key: string) {
 }
 
 export default function DocArticle({ page, locale }: { page: DocPage; locale: DocLocale }) {
+  const indexPath =
+    page.section === 'docs' ? '/docs' : locale === 'en' ? '/en/help' : '/help';
+  const indexLabel =
+    page.section === 'docs' ? 'Documentation' : locale === 'en' ? 'Help' : 'Ajuda';
   return (
     <div>
       {page.slug !== null && (
-        <Link href="/docs" className="text-sm text-muted-text hover:text-ink">
-          ← Documentation
+        <Link href={indexPath} className="text-sm text-muted-text hover:text-ink">
+          ← {indexLabel}
         </Link>
       )}
       <h1 className="mt-6 text-3xl font-bold tracking-tight text-ink sm:text-4xl">

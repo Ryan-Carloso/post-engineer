@@ -5,7 +5,7 @@ import { TOOL_DESCRIPTIONS } from '@/scripts/llms-full-content.mjs';
 import { registeredToolActions, registeredToolNames } from '@/scripts/mcp-tool-inventory.mjs';
 import { findRepoRoot } from '@/test/repo-root';
 import { DOC_PAGES } from '../registry';
-import type { DocBlock, LocalizedText } from '../types';
+import { localize, type DocBlock, type LocalizedText } from '../types';
 
 function collectProse(blocks: DocBlock[]): string {
   const parts: string[] = [];
@@ -45,7 +45,10 @@ describe('lib/docs — docs facts are imported, never retyped', () => {
   it('never links to /recipes/<slug>', () => {
     for (const page of DOC_PAGES) {
       for (const block of page.blocks) {
-        if (block.kind === 'link') expect(block.href).not.toMatch(/^\/recipes\//);
+        if (block.kind === 'link') {
+          expect(localize(block.href, 'pt')).not.toMatch(/^\/recipes\//);
+          expect(localize(block.href, 'en')).not.toMatch(/^\/recipes\//);
+        }
       }
     }
   });

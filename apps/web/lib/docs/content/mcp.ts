@@ -9,7 +9,7 @@ export const mcpGuide: DocPage = {
     en: 'Connect Claude and other agents to Post Engineer with the MCP server, locally or remotely.',
   },
   updatedAt: '2026-11-26',
-  contentHash: '0edb4a77b8567175aade8a91d777bbb493e578744ac094e78327c2616b2f774e',
+  contentHash: 'b75a3c447604110209f1c1fece489c9761e432c500f75620772f8e4fa30c65b5',
   blocks: [
     {
       kind: 'paragraph',
@@ -34,7 +34,7 @@ export const mcpGuide: DocPage = {
     },
     {
       kind: 'link',
-      href: 'https://post-engineer.com/mcp',
+      href: { en: 'https://post-engineer.com/mcp' },
       text: { en: 'Remote MCP server' },
     },
     { kind: 'heading', level: 2, text: { en: 'Tools' } },
