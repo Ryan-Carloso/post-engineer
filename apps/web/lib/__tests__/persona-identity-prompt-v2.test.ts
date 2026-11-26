@@ -65,6 +65,16 @@ describe('buildIdentityPrompt for a v2 card', () => {
     )).toBe(true);
   });
 
+  it('keeps posture and smile on the Person line when a pose is set', () => {
+    const { prompt } = buildIdentityPrompt(FULL_CARD, { ...BASE_SCENE, pose: 'arms crossed' });
+    expect(line(prompt, 'Person:')).toContain('smile: a8');
+    expect(line(prompt, 'Person:')).toContain('posture: d9');
+    expect(line(prompt, 'Pose:')).toBe('Pose: arms crossed.');
+    expect(prompt.endsWith(
+      'Do not change the face, hair, eyes, skin, body build, height, jawline, resting posture or proportions.',
+    )).toBe(true);
+  });
+
   it('renders the style line with its safe description and a style-only scene as the clothing', () => {
     const { prompt } = buildIdentityPrompt(FIXTURE_CARD_V2, { ...BASE_SCENE, style: 'streetwear' });
     expect(prompt).toMatchInlineSnapshot(`
