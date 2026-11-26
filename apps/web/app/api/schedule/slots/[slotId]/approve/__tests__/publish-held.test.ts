@@ -35,15 +35,25 @@ vi.mock('@/app/api/media/publish-existing/asap', async (importOriginal) => {
 });
 
 const mockGetUpload = vi.hoisted(() =>
-  vi.fn(async () => ({
-    id: 'upload-1',
-    user_id: 'user-1',
-    storage_path: 'user-1/direct-uploads/upload-1.mp4',
-    declared_content_type: 'video/mp4',
-    detected_content_type: 'video/mp4',
-    status: 'ready',
-    expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
-  })),
+  vi.fn(
+    async (): Promise<{
+      id: string;
+      user_id: string;
+      storage_path: string;
+      declared_content_type: string;
+      detected_content_type: string;
+      status: string;
+      expires_at: string;
+    } | null> => ({
+      id: 'upload-1',
+      user_id: 'user-1',
+      storage_path: 'user-1/direct-uploads/upload-1.mp4',
+      declared_content_type: 'video/mp4',
+      detected_content_type: 'video/mp4',
+      status: 'ready',
+      expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+    }),
+  ),
 );
 const mockUpdateUpload = vi.hoisted(() =>
   vi.fn(async (_id: string, _expected: string, _patch: Record<string, unknown>) => true),
@@ -403,6 +413,82 @@ describe('publishHeldSlot', () => {
 
   it('answers 500 when the publish schedule lookup fails', async () => {
     const { client } = mockServiceClient({ scheduleError: { message: 'connection reset' } });
+
+    const response = await publishHeldSlot({ request: request(), serviceClient: client as never, userId: USER_ID, slot: awaitingSlot, route: ROUTE });
+
+    expect(response.status).toBe(500);
+    expect(mockPublishHeldMedia).not.toHaveBeenCalled();
+  });
+
+  it('answers 404 when the held upload is gone', async () => {
+    mockGetUpload.mockResolvedValueOnce(null);
+    const { client } = mockServiceClient();
+
+    const response = await publishHeldSlot({ request: request(), serviceClient: client as never, userId: USER_ID, slot: awaitingSlot, route: ROUTE });
+
+    expect(response.status).toBe(404);
+    const body = (await response.json()) as { code?: string };
+    expect(body.code).toBe('VIDEO_UPLOAD_NOT_FOUND');
+    expect(mockPublishHeldMedia).not.toHaveBeenCalled();
+  });
+
+  it('answers 400 when the held slot has no media', async () => {
+    const { client } = mockServiceClient();
+    const noMediaSlot: HeldSlot = { ...awaitingSlot, media_kind: null, media_ref: null };
+
+    const response = await publishHeldSlot({ request: request(), serviceClient: client as never, userId: USER_ID, slot: noMediaSlot, route: ROUTE });
+
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as { code?: string };
+    expect(body.code).toBe('VIDEO_UPLOAD_NOT_FOUND');
+    expect(mockPublishHeldMedia).not.toHaveBeenCalled();
+  });
+
+  it('answers 500 when the held image has an unknown content type', async () => {
+    const { client } = mockServiceClient();
+    const badImageSlot: HeldSlot = { ...awaitingSlot, media_kind: 'image', media_ref: 'scheduled-media/user-1/img.gif', media_content_type: 'image/gif' };
+
+    const response = await publishHeldSlot({ request: request(), serviceClient: client as never, userId: USER_ID, slot: badImageSlot, route: ROUTE });
+
+    expect(response.status).toBe(500);
+    const body = (await response.json()) as { code?: string };
+    expect(body.code).toBe('MEDIA_CONTENT_TYPE_UNKNOWN');
+    expect(mockPublishHeldMedia).not.toHaveBeenCalled();
+  });
+
+  it('answers 400 when the held image download fails', async () => {
+    const { client } = mockServiceClient({ download: { data: null, error: { message: 'gone' } } });
+    const imageSlot: HeldSlot = { ...awaitingSlot, media_kind: 'image', media_ref: 'scheduled-media/user-1/img.jpg', media_content_type: 'image/jpeg' };
+
+    const response = await publishHeldSlot({ request: request(), serviceClient: client as never, userId: USER_ID, slot: imageSlot, route: ROUTE });
+
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as { code?: string };
+    expect(body.code).toBe('VIDEO_UPLOAD_FILE_MISSING');
+    expect(mockPublishHeldMedia).not.toHaveBeenCalled();
+  });
+
+  it('answers 500 when the schedule has no providers', async () => {
+    const { client } = mockServiceClient({ schedule: { ...scheduleRow, providers: [] } });
+
+    const response = await publishHeldSlot({ request: request(), serviceClient: client as never, userId: USER_ID, slot: awaitingSlot, route: ROUTE });
+
+    expect(response.status).toBe(500);
+    expect(mockPublishHeldMedia).not.toHaveBeenCalled();
+  });
+
+  it('answers 500 when the persona lookup fails', async () => {
+    const { client } = mockServiceClient({ personaError: { message: 'db down' } });
+
+    const response = await publishHeldSlot({ request: request(), serviceClient: client as never, userId: USER_ID, slot: awaitingSlot, route: ROUTE });
+
+    expect(response.status).toBe(500);
+    expect(mockPublishHeldMedia).not.toHaveBeenCalled();
+  });
+
+  it('answers 500 when the ledger claim throws', async () => {
+    mockClaimAsapLedger.mockRejectedValueOnce(new Error('redis down'));
+    const { client } = mockServiceClient();
 
     const response = await publishHeldSlot({ request: request(), serviceClient: client as never, userId: USER_ID, slot: awaitingSlot, route: ROUTE });
 
