@@ -173,6 +173,26 @@ describe('GET auth', () => {
     });
   });
 
+  it('keeps far-future awaiting slots when nearer ready slots fill the limit', async () => {
+    const ready = [
+      { id: 'up-1', slot_at: '2026-09-24T10:00:00Z', status: 'ready', title: 'First', schedule_id: 's1', error: null, published_at: null },
+      { id: 'up-2', slot_at: '2026-09-24T11:00:00Z', status: 'ready', title: 'Second', schedule_id: 's1', error: null, published_at: null },
+    ];
+    const awaiting = [
+      { id: 'aw-1', slot_at: '2026-10-24T10:00:00Z', status: 'awaiting_approval', title: 'Held', schedule_id: 's1', error: null, published_at: null },
+    ];
+    const client = mockPostsClient(ready, [], [], [], awaiting);
+    mockAuthSession({ userId: USER_ID, accessToken: 'pe_test_key', isApiKey: true }, null);
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await GET(new Request('https://example.com/api/schedule/status?limit=2'));
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(ListPostsResponseSchema.safeParse(body).success).toBe(true);
+    expect(body.upcoming.map((slot: { id: string }) => slot.id)).toEqual(['up-1', 'up-2', 'aw-1']);
+  });
+
   it('builds postUrl from the public app URL, not the proxy request origin', async () => {
     const client = mockPostsClient(upcoming, recent);
     mockAuthSession({ userId: USER_ID, accessToken: 'pe_test_key', isApiKey: true }, null);

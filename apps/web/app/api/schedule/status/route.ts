@@ -154,11 +154,16 @@ async function getHandler(request: Request): Promise<NextResponse> {
       { status: 500 },
     );
   }
+  const awaitingRows = presentPublishRows(awaiting.data ?? []);
   const upcomingEnriched = withPostUrl(
     mergeBySlotAt(
-      presentPublishRows(publishing.data),
-      presentPublishRows([...(upcoming.data ?? []), ...(awaiting.data ?? [])]),
-      limit,
+      mergeBySlotAt(
+        presentPublishRows(publishing.data),
+        presentPublishRows(upcoming.data ?? []),
+        limit,
+      ),
+      awaitingRows,
+      limit + awaitingRows.length,
     ),
   );
   const recentEnriched = withPostUrl(presentPublishRows(recent.data));
