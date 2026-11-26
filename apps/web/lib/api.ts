@@ -318,6 +318,7 @@ export interface SlotDetailPayload {
     slotAt: string;
     status: ScheduledSlot['status'];
     title: string | null;
+    description: string | null;
     error: string | null;
     publishedAt: string | null;
     publishLinks: PublishLink[];
