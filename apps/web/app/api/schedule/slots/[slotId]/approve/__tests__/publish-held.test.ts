@@ -285,6 +285,12 @@ describe('publishHeldSlot', () => {
     expect(response.status).toBe(409);
     expect(updates).toHaveLength(0);
     expect(mockPublishHeldMedia).not.toHaveBeenCalled();
+    const claimedLedger = await mockClaimAsapLedger.mock.results[0]?.value;
+    expect(mockReleaseAsapLedger).toHaveBeenCalledTimes(1);
+    expect(mockReleaseAsapLedger).toHaveBeenCalledWith(claimedLedger, expect.any(Error));
+    expect((mockReleaseAsapLedger.mock.calls[0]?.[1] as Error).message).toBe(
+      'The accounts for this post are busy with another publish.',
+    );
   });
 
   it('returns 409 when the upload extension fails, without claiming the slot', async () => {

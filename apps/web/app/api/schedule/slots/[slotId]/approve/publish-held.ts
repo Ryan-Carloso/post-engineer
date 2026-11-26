@@ -246,6 +246,7 @@ export async function publishHeldSlot(options: {
     });
   }
   if (!hasGrantedAccounts(ledger)) {
+    await releaseAsapLedger(ledger, new Error('The accounts for this post are busy with another publish.'));
     return apiErrorResponse(409, 'The accounts for this post are busy with another publish. Try again in a moment.', {
       route,
     });
