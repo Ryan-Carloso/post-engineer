@@ -65,6 +65,24 @@ function narrowPublishExistingResult(value: unknown): PublishExistingResult {
       ...(warnings === undefined ? {} : { warnings }),
     };
   }
+  if (value.mode === 'asap' && value.approvalRequired === true) {
+    if (
+      !isRecord(value.slot) ||
+      typeof value.slot.id !== 'string' ||
+      typeof value.slot.slotAt !== 'string' ||
+      typeof value.slot.status !== 'string'
+    ) {
+      throw new Error('Malformed publish-existing response from the API.');
+    }
+    return {
+      mode: 'asap',
+      success: true,
+      replayed: value.replayed === true,
+      held: true,
+      approvalRequired: true,
+      slot: { id: value.slot.id, slotAt: value.slot.slotAt, status: value.slot.status },
+    };
+  }
   if (
     typeof value.mediaKind !== 'string' ||
     !['upload', 'image'].includes(value.mediaKind) ||
@@ -88,6 +106,7 @@ function narrowPublishExistingResult(value: unknown): PublishExistingResult {
     mode: 'asap',
     success: value.success === true,
     replayed: value.replayed === true,
+    held: false,
     mediaKind: value.mediaKind as 'upload' | 'image',
     publishes,
     logId: value.logId,

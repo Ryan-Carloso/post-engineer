@@ -207,6 +207,37 @@ describe('publish_existing client call', () => {
     expect(result).toMatchObject({ mode: 'asap', success: true, replayed: true, mediaKind: 'upload', logId: 'log-1' });
   });
 
+  it('narrows an asap hold from an approval-mode key instead of reporting success', async () => {
+    const { client } = fakeClient(async () => ({
+      success: true,
+      mode: 'asap',
+      approvalRequired: true,
+      replayed: true,
+      slot: { id: 'slot-9', slotAt: '2026-12-01T20:00:00.000Z', status: 'awaiting_approval' },
+    }));
+    const result = await publishExisting(client, { ...BASE, mode: 'asap', publishAt: undefined });
+    expect(result).toEqual({
+      mode: 'asap',
+      success: true,
+      replayed: true,
+      held: true,
+      approvalRequired: true,
+      slot: { id: 'slot-9', slotAt: '2026-12-01T20:00:00.000Z', status: 'awaiting_approval' },
+    });
+  });
+
+  it('rejects an asap hold without a well-formed slot', async () => {
+    const { client } = fakeClient(async () => ({
+      success: true,
+      mode: 'asap',
+      approvalRequired: true,
+      slot: { id: 'slot-9' },
+    }));
+    await expect(publishExisting(client, { ...BASE, mode: 'asap', publishAt: undefined })).rejects.toThrow(
+      /Malformed publish-existing/,
+    );
+  });
+
   it('defaults a slot status to ready', async () => {
     const { client } = fakeClient(async () => ({ ...SCHEDULED_REPLY, slots: [{ id: 'slot-1', slot_at: '2026-12-01T20:00:00.000Z', title: 'T' }] }));
     const result = await publishExisting(client, BASE);
@@ -288,6 +319,21 @@ describe('publish_existing tool handler', () => {
     expect(text).toContain('"scheduleId":"sched-1"');
     const replay = fakeClient(async () => ({ ...SCHEDULED_REPLY, replayed: true }));
     expect(textOf(await handlePublishExisting(replay.client, args()))).toContain('(replayed: the same request was already scheduled)');
+  });
+
+  it('summarizes an asap hold for approval instead of a publish', async () => {
+    const { client } = fakeClient(async () => ({
+      success: true,
+      mode: 'asap',
+      approvalRequired: true,
+      slot: { id: 'slot-9', slotAt: '2026-12-01T20:00:00.000Z', status: 'awaiting_approval' },
+    }));
+    const text = textOf(await handlePublishExisting(client, args({ mode: 'asap', publishAt: undefined })));
+    expect(text).toContain(
+      'Held existing upload for approval.\nSlot slot-9 at 2026-12-01T20:00:00.000Z (awaiting_approval)',
+    );
+    expect(text).toContain('"held":true');
+    expect(text).not.toContain('Published existing');
   });
 
   it('summarizes an asap replay and mixed per-account outcomes', async () => {

@@ -94,6 +94,20 @@ function summary(result: PublishExistingResult, mediaKind: string, resolvedNote:
       })
     );
   }
+  if (result.mode === 'asap' && result.held) {
+    return (
+      `${resolved}Held existing ${mediaKind} for approval${result.replayed ? ' (replayed: the same request was already held)' : ''}.\n` +
+      `Slot ${result.slot.id} at ${result.slot.slotAt} (${result.slot.status}) — approve it in Posts before it publishes.\n` +
+      JSON.stringify({
+        success: true,
+        mode: 'asap',
+        replayed: result.replayed,
+        held: true,
+        approvalRequired: true,
+        slot: result.slot,
+      })
+    );
+  }
   const lines = result.publishes.map((publish) => {
     const accounts = publish.results
       .map((account) => {
