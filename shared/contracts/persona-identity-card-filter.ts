@@ -26,7 +26,7 @@ const ALLOWED_POSE_OUTFIT_PHRASES: readonly RegExp[] = [
   /\bhip[\s-]+bag\b/g,
   /\bhip[\s-]+length\b/g,
   /\bhip[\s-]+hop\b/g,
-  /\bhip[\s-]+(?:hugger|pocket|seam)\b/g,
+  /\bhip[\s-]+(?:hugger|pocket|seam|slung|yoke|belt)\b/g,
   /\b(?!(?:long|short|big|small|thin|thick|fat|muscular|toned|bare|shapely|hairy|smooth|strong|weak|left|right|broken|injured|swollen|sore|pale|tanned)[\s-]+leg\b)[a-z]+[\s-]+leg\b/g,
   /\b(?:arm|leg)[\s-]+warmers\b/g,
   /\bear[\s-]+muffs\b/g,

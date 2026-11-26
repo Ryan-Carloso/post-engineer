@@ -230,6 +230,32 @@ describe('scene filter for the v2 identity words', () => {
     },
   );
 
+  it.each(['hip-slung jeans', 'hip yoke skirt', 'hip belt jeans'])(
+    'accepts the allowlisted phrase "%s" in an outfit slot',
+    (text) => {
+      expect(parseSceneValue({ ...FIXTURE_SCENE, outfit: { bottom: text } }).ok).toBe(true);
+    },
+  );
+
+  it.each(['hip-slung jeans', 'hip yoke skirt', 'hip belt jeans'])(
+    'accepts the allowlisted phrase "%s" in a default outfit slot',
+    (text) => {
+      const result = parseIdentityCardValue({
+        version: 2,
+        identity: { face: { eyes: 'green' } },
+        defaults: { outfit: { bottom: text } },
+      });
+      expect(result.ok).toBe(true);
+    },
+  );
+
+  it.each(['hip curve', 'high-hip', 'low hip', 'hip line'])(
+    'still rejects the body description "%s" in an outfit slot',
+    (text) => {
+      expect(parseSceneValue({ ...FIXTURE_SCENE, outfit: { bottom: text } }).ok).toBe(false);
+    },
+  );
+
   it.each(['hip-hop concert', 'hip-hop street'])('accepts the allowlisted phrase "%s" in a scene setting', (text) => {
     expect(parseSceneValue({ ...FIXTURE_SCENE, setting: text }).ok).toBe(true);
   });
