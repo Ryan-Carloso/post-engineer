@@ -174,3 +174,17 @@ def test_built_at_from_baked_file(tmp_path, monkeypatch):
     monkeypatch.setattr(asgi, "BUILT_AT_FILE", str(baked))
     _clear_build_env(monkeypatch)
     assert _get_json("/version")["builtAt"] == "2026-11-01T00:00:00Z"
+
+def test_ping_answers_pong():
+    from app.controllers import ping
+
+    response = TestClient(asgi.app).get("/ping")
+    assert response.status_code == 200
+    assert response.json() == "pong"
+    assert ping.ping(None) == "pong"
+
+
+def test_router_serves_no_generation_route():
+    from app.router import root_api_router
+
+    assert [route.path for route in root_api_router.routes] == ["/ping"]

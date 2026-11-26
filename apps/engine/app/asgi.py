@@ -5,15 +5,10 @@ import traceback
 from types import TracebackType
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, Request
-from fastapi.encoders import jsonable_encoder
-from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi import FastAPI
 from loguru import logger
 
 from app.config import config
-from app.models.exception import HttpException
 from app.router import root_api_router
 from app.services.analytics import scrub_secret_values, track_event, warm_client
 from app.services.fill_schedule import (
@@ -22,8 +17,6 @@ from app.services.fill_schedule import (
     start_fill_schedule_thread,
 )
 from app.services import notify
-from app.services import state as sm
-from app.utils import utils
 
 load_dotenv()
 
@@ -203,45 +196,13 @@ def start_fill_schedule_scheduler() -> None:
     """
 
     try:
-        scheduler = FillScheduleScheduler(
-            store=ScheduleStore(),
-            task_state=sm.state,
-        )
+        scheduler = FillScheduleScheduler(store=ScheduleStore())
     except RuntimeError as exc:
         logger.warning(f"fill schedule scheduler skipped: {exc}")
         return
     start_fill_schedule_thread(scheduler)
     notify.send_discord(notify.scheduler_started_msg())
     logger.info("fill schedule scheduler started")
-
-
-def exception_handler(request: Request, e: HttpException):
-    return JSONResponse(
-        status_code=e.status_code,
-        content=utils.get_response(e.status_code, message=e.message),
-    )
-
-
-def _with_stable_code(error: dict) -> dict:
-    """The error entry plus a top-level `code` when its validator raised an error with a stable one.
-
-    A hook title refused for its length carries `HOOK_TITLE_TOO_LONG` in the
-    raised error (`ctx.error.code`); lifting it makes it as easy to branch on
-    as the web API's `errors[].code`.
-    """
-    code = getattr(error.get("ctx", {}).get("error"), "code", None)
-    return {**error, "code": code} if isinstance(code, str) else error
-
-
-def validation_exception_handler(request: Request, e: RequestValidationError):
-    return JSONResponse(
-        status_code=400,
-        content=utils.get_response(
-            status=400,
-            body=jsonable_encoder([_with_stable_code(error) for error in e.errors()]),
-            message="field required",
-        ),
-    )
 
 
 def get_application() -> FastAPI:
@@ -258,8 +219,6 @@ def get_application() -> FastAPI:
         debug=False,
     )
     instance.include_router(root_api_router)
-    instance.add_exception_handler(HttpException, exception_handler)
-    instance.add_exception_handler(RequestValidationError, validation_exception_handler)
     return instance
 
 
@@ -337,19 +296,6 @@ def health() -> dict[str, str | int | None]:
     """Public liveness + build probe (no auth): identifies the live build."""
     return {"status": "ok", **get_build_info()}
 
-public_dir = utils.public_dir()
-app.mount("/", StaticFiles(directory=public_dir, html=True), name="")
-
-
-@app.on_event("shutdown")
-def shutdown_event():
-    logger.info("shutdown event")
-    try:
-        from app.services import engine_heartbeat
-
-        engine_heartbeat.mark_clean_shutdown()
-    except Exception as exc:
-        logger.warning(f"clean-shutdown stamp failed: {exc}")
 
 
 @app.on_event("startup")
@@ -360,38 +306,4 @@ def startup_event():
         f"pr {build['pr']} build {build['build']} commit {build['commit']})"
     )
     warm_client()
-    try:
-        from app.services.cpu_worker_dispatch import resume_unspawned_cpu_jobs
-        from app.services.orphan_requeue import slot_store_or_none
-
-        resumed = resume_unspawned_cpu_jobs(
-            sm.state, slot_store=slot_store_or_none()
-        )
-        if resumed:
-            logger.info(f"resumed {resumed} modal cpu dispatch(es) at boot")
-    except Exception as exc:
-        logger.warning(f"modal cpu resume failed: {exc}")
-    try:
-        reconcile = getattr(sm.state, "reconcile_orphaned_tasks", None)
-        if callable(reconcile):
-            failed = reconcile()
-            if failed:
-                logger.info(f"marked {failed} orphaned task(s) failed at boot")
-        from app.services import engine_heartbeat
-
-        engine_heartbeat.start_heartbeat_after_autopsy(sm.state)
-    except Exception as exc:
-        logger.warning(f"engine heartbeat/boot event failed: {exc}")
     start_fill_schedule_scheduler()
-    try:
-        from app.services.direct_redispatch import start_pending_direct_redispatches
-
-        start_pending_direct_redispatches()
-    except Exception as exc:
-        logger.warning(f"direct orphan redispatch failed: {exc}")
-    try:
-        from app.services.cloned_voices.service import reconcile_pending_registrations
-
-        reconcile_pending_registrations()
-    except Exception as exc:
-        logger.warning(f"cloned voice pending reconcile failed: {exc}")

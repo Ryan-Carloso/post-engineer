@@ -7,30 +7,10 @@ fill-schedule mapping for the facebook provider.
 
 import unittest
 
-from pydantic import ValidationError
 
 from app.providers import SOCIAL_PROVIDERS
-from app.models.publish import FacebookPublish, PublishParams
 from app.services import publish_facebook, upload_publisher
 from app.services.fill_schedule.metadata import metadata_for, validate_publish_plan
-
-
-class FacebookPublishParamsTest(unittest.TestCase):
-    def test_accepts_facebook_publish(self) -> None:
-        params = PublishParams(
-            providers=["facebook"],
-            facebook=FacebookPublish(caption="post", account_ids=["123"]),
-        )
-        self.assertEqual(params.facebook.account_ids, ["123"])
-
-    def test_rejects_provider_without_metadata(self) -> None:
-        with self.assertRaisesRegex(ValidationError, "facebook provider requires facebook metadata"):
-            PublishParams(providers=["facebook"])
-
-    def test_rejects_caption_over_limit(self) -> None:
-        FacebookPublish(caption="a" * 63206, account_ids=["123"])
-        with self.assertRaises(ValidationError):
-            FacebookPublish(caption="a" * 63207, account_ids=["123"])
 
 
 class PublishFacebookModuleTest(unittest.TestCase):

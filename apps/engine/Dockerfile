@@ -1,17 +1,13 @@
-# Engine CPU image — ffmpeg pipeline only, no CUDA/torch/GPU deps.
+# Engine image — the publish worker. It renders nothing.
 # Python version pinned to match pyproject (>=3.11,<3.13) and uv.lock.
 FROM python:3.11-slim-bookworm
 
 # uv pinned for reproducible dependency installs from uv.lock.
 COPY --from=ghcr.io/astral-sh/uv:0.8.24 /uv /uvx /bin/
 
-# System deps: ffmpeg (render/concat), libgomp1 (ctranslate2/faster-whisper),
-# ca-certificates (outbound HTTPS), tzdata (deterministic timezone).
+# System deps: ca-certificates (outbound HTTPS), tzdata (deterministic timezone).
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        curl \
-        ffmpeg \
-        libgomp1 \
         ca-certificates \
         tzdata \
     && rm -rf /var/lib/apt/lists/*
@@ -28,13 +24,9 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 
-# Application code and static assets (fonts are required by the render
-# path; songs are the CC0 BGM catalog from resource/songs/catalog.toml).
-# config.toml is NOT copied: it may contain provider API keys, so it is
-# mounted at runtime instead (see docker-compose.yml).
+# Application code. config.toml is NOT copied: it is mounted at runtime
+# instead (see docker-compose.yml).
 COPY app ./app
-COPY resource/fonts ./resource/fonts
-COPY resource/songs ./resource/songs
 COPY main.py ./
 
 # builtAt: ISO UTC, written AFTER ARG COMMIT/BUILD so Docker does not
@@ -45,20 +37,17 @@ ARG BUILD=""
 ARG COMMIT=""
 RUN date -u +"%Y-%m-%dT%H:%M:%SZ" > /app/BUILT_AT
 
-# Non-root runtime user; storage must be writable for tasks/ and caches.
+# Non-root runtime user.
 RUN useradd --create-home --uid 10001 engine \
-    && mkdir -p /app/storage /app/logs /app/models \
     && chown -R engine:engine /app
 USER engine
 
 # config.toml is mounted at runtime (contains no secrets in the image).
-# Required env (Supabase, upload API, LongCat endpoint) is injected by
-# docker-compose; the app fails explicitly when something mandatory is absent.
-ENV MPT_STORAGE_DIR=/app/storage
-
+# Required env (Supabase, upload API) is injected by docker-compose; the app
+# fails explicitly when something mandatory is absent.
 EXPOSE 8080
 
-# Healthcheck validates the API is serving without rendering anything.
+# Healthcheck validates the API is serving.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD python -c "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=4).status < 500 else 1)"
 

@@ -237,14 +237,6 @@ class SendDiscordTests(unittest.TestCase):
             exc = RuntimeError("x" * 500 + " failed calling https://discord/hook")
             self.assertEqual(nf.safe_diagnostic(exc), "RuntimeError")
 
-    def test_long_messages_are_truncated_to_discord_limit(self):
-        message = nf.generation_batch_msg(3, ["t" * 900] * 3)
-        self.assertLessEqual(len(message), 2000)
-        message = nf.slot_published_msg("p" * 1500, "t" * 1500, ["youtube"])
-        self.assertLessEqual(len(message), 2000)
-        message = nf.task_failed_msg("task-1", "e" * 1500, "s" * 1500)
-        self.assertLessEqual(len(message), 2000)
-
 
 def os_environ():
     import os
@@ -293,11 +285,6 @@ class MessageBuilderTests(unittest.TestCase):
         message = nf.scheduler_started_msg()
         self.assertIn("scheduler started", message)
 
-    def test_generation_batch_lists_titles(self):
-        message = nf.generation_batch_msg(2, ["Tokyo coffee", "Lisbon trams"])
-        self.assertIn("2", message)
-        self.assertIn("Tokyo coffee", message)
-        self.assertIn("Lisbon trams", message)
 
     def test_slot_published_includes_persona_title_providers(self):
         message = nf.slot_published_msg("Ana", "Tokyo coffee", ["youtube", "instagram"])
@@ -317,12 +304,6 @@ class MessageBuilderTests(unittest.TestCase):
         self.assertIn("Ana", message)
         self.assertIn("boom", message)
 
-    def test_task_failed_includes_task_id_subject_and_error(self):
-        """Failure alert carries the task id, subject and error for triage."""
-        message = nf.task_failed_msg("task-42", "ffmpeg crashed", "Lisbon trams")
-        self.assertIn("task-42", message)
-        self.assertIn("Lisbon trams", message)
-        self.assertIn("ffmpeg crashed", message)
 
     def test_partial_publish_lists_failed_providers_only(self):
         message = nf.partial_publish_msg("slot-7", ["youtube", "linkedin"])
@@ -331,12 +312,6 @@ class MessageBuilderTests(unittest.TestCase):
         self.assertIn("youtube", message)
         self.assertIn("linkedin", message)
         self.assertNotIn("error", message.lower())
-
-    def test_task_failed_handles_empty_subject(self):
-        message = nf.task_failed_msg("task-42", "boom")
-        self.assertIn("task-42", message)
-        self.assertIn("boom", message)
-        self.assertNotIn("subject:", message)
 
 
 if __name__ == "__main__":

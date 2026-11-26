@@ -1,9 +1,8 @@
-"""Batch scheduling pipeline orchestrator.
+"""Publishing scheduler.
 
-Tick (every TICK_SECONDS): batch generation → reconciliation → publishing.
-Only unified generate+schedule operations (created by POST
-/api/videos/generate-and-schedule) are processed — there is no automatic
-recurring scheduling.
+Tick (every TICK_SECONDS): publish the ready slots whose time has come.
+Slots are created by POST /api/media/publish-existing with media the user
+uploaded; Post Engineer does not generate media.
 """
 
 from __future__ import annotations
@@ -17,42 +16,26 @@ from loguru import logger
 from app.services import notify as notify_module
 from app.services import upload_publisher
 from app.services.fill_schedule.constants import CONNECTION_FAILURES, TICK_SECONDS
-from app.services.fill_schedule.generate import BatchGenerator
 from app.services.fill_schedule.publish import BatchPublisher
-from app.services.fill_schedule.reconcile import BatchReconciler
 from app.services.fill_schedule.store import CONNECT_RETRIES, ScheduleStore
 
 OUTAGE_REMINDER_SECONDS = 30 * 60
 
 class FillScheduleScheduler:
-    """Orchestrates batch generation → reconciliation → publishing, one tick at a time."""
+    """Publishes due slots, one tick at a time."""
 
     def __init__(
         self,
         store: ScheduleStore,
-        task_state: Any,
         publish_video: Any = upload_publisher.publish_video,
         notify: Any = notify_module.send_discord,
     ) -> None:
         self.store = store
-        self.task_state = task_state
         self.notify = notify
-        self.generator = BatchGenerator(store=store, task_state=task_state, notify=notify)
-        self.reconciler = BatchReconciler(store=store, task_state=task_state)
-        self.publisher = BatchPublisher(
-            store=store, task_state=task_state, publish_video=publish_video, notify=notify
-        )
+        self.publisher = BatchPublisher(store=store, publish_video=publish_video, notify=notify)
         self._outage_since: datetime | None = None
         self._outage_reported_at: datetime | None = None
         self._outage_failures = 0
-
-    def generate(self, now: datetime) -> int:
-        """Dispatch video generation for pending batch slots."""
-        return self.generator.run(now)
-
-    def reconcile(self, now: datetime) -> int:
-        """Advance generating slots whose tasks finished."""
-        return self.reconciler.run(now)
 
     def publish_due(self, now: datetime) -> int:
         """Publish ready batch slots whose time has come."""
@@ -61,17 +44,12 @@ class FillScheduleScheduler:
     def run_once(self, now: datetime) -> dict[str, int]:
         """One full tick (called by the thread every TICK_SECONDS).
 
-        M1 — each stage isolated: a failure in one doesn't block the others.
         A stage that raises reports -1 in the result.
         """
         results: dict[str, int] = {}
         self.store.set_connect_retries(CONNECT_RETRIES)
         connection_failed = False
-        for stage_name, stage in (
-            ("generated", self.generate),
-            ("reconciled", self.reconcile),
-            ("published", self.publish_due),
-        ):
+        for stage_name, stage in (("published", self.publish_due),):
             try:
                 results[stage_name] = stage(now)
             except Exception as exc:

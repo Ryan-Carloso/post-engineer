@@ -25,7 +25,6 @@ from app.services.notify import running_under_test
 from app.services.owner_alert_lookups import (
     TIMEOUT_SECONDS,
     lookup_account_names,
-    lookup_persona_name,
     provider_label,
     supabase_rest,
 )
@@ -34,27 +33,6 @@ RESEND_URL = "https://api.resend.com/emails"
 USER_AGENT = "post-engineer/owner-alert"
 DEFAULT_ORIGIN = "https://post-engineer.com"
 REASON_CHARS = 300
-
-
-def direct_task_email_user(task: dict | None) -> str | None:
-    """User to email for a task that is not a batch slot.
-
-    Slot failures are emailed by the scheduler (generate / reconcile),
-    not from the task failure path, so a row with ``slot_id`` returns
-    None. ``unknown`` is the tracking sentinel, not an account.
-    """
-    if not isinstance(task, dict):
-        return None
-    slot_id = task.get("slot_id")
-    if isinstance(slot_id, str) and slot_id.strip():
-        return None
-    user_id = task.get("user_id")
-    if not isinstance(user_id, str):
-        return None
-    user_id = user_id.strip()
-    if not user_id or user_id == "unknown":
-        return None
-    return user_id
 
 
 def _from_address() -> str:
@@ -314,49 +292,6 @@ def notify_owner_async(target: Callable[..., None], /, *args: Any, **kwargs: Any
     threading.Thread(target=target, args=args, kwargs=kwargs, daemon=True).start()
 
 
-def notify_generation_failed(
-    user_id: str | None,
-    *,
-    slot_id: str | None,
-    title: str,
-    reason: str,
-    persona: str | None = None,
-    schedule_id: str | None = None,
-    dedup_key: str | None = None,
-    session: Any = None,
-) -> None:
-    """Email once for a generation that will not be retried.
-
-    The persona rides along when the caller knows it; the reconciler only
-    has the schedule id, so the name is looked up best-effort instead.
-    """
-    key = dedup_key or (f"generate:{slot_id}" if slot_id else "")
-    if not user_id or not key:
-        return
-    label = _clean(title) or "A scheduled post"
-    subject = "A post could not be generated"
-    detail = _reason(reason, "The video could not be generated.")
-    if persona is None and schedule_id:
-        persona = lookup_persona_name(session, schedule_id)
-    bits = [label]
-    if isinstance(persona, str) and _clean(persona):
-        bits.append(f"Persona: {_clean(persona)}")
-    bits.append(f"What happened: {detail}")
-    html_body, text = _render(
-        subject,
-        bits,
-        [("Open the post", _post_link(slot_id))],
-    )
-    send_owner_email(
-        user_id=user_id,
-        dedup_key=key,
-        subject=subject,
-        html_body=html_body,
-        text=text,
-        session=session,
-    )
-
-
 def notify_publish_failed(
     user_id: str | None,
     *,
@@ -441,53 +376,3 @@ def notify_publish_partial(
         text=text,
         session=session,
     )
-
-
-def _email_direct_generation_failure(task_id: str, error: str, params: Any) -> None:
-    from app.services import state as state_module
-
-    try:
-        task = state_module.state.get_task(task_id) or {}
-    except Exception as exc:
-        logger.warning(f"owner alert task read failed: {type(exc).__name__}")
-        return
-    user_id = direct_task_email_user(task if isinstance(task, dict) else None)
-    if user_id is None:
-        return
-    title = ""
-    if params is not None:
-        raw_title = getattr(params, "video_title", "")
-        if isinstance(raw_title, str):
-            title = raw_title
-    notify_generation_failed(
-        user_id,
-        slot_id=None,
-        title=title,
-        reason=str(error),
-        dedup_key=f"generate-task:{task_id}",
-    )
-
-
-def alert_failed_task(
-    task_id: str,
-    error: str,
-    params: Any,
-    should_alert: Any,
-    release: Any,
-    send: Any,
-    message: Any,
-) -> None:
-    """Discord alert extracted from ``_fail_task`` so that file does not grow.
-
-    ``send`` and ``message`` are the task module's ``send_discord`` and
-    ``task_failed_msg``, passed in so tests that patch those names still
-    intercept the alert. A direct generation (no slot) also emails the
-    owner. Slot failures are emailed by the scheduler instead.
-    """
-    if not running_under_test():
-        _email_direct_generation_failure(task_id, error, params)
-    if not should_alert(task_id):
-        return
-    subject = params.video_title if params else ""
-    if not send(message(task_id, error, subject)):
-        release(task_id)

@@ -35,7 +35,7 @@ class PublishSlotAccountsDirectTests(unittest.TestCase):
             video_file.write(b"fake-video-bytes")
         self.addCleanup(os.unlink, self.video_path)
 
-    def _run(self, slot, schedule, publish, record_results=None, metadata_error=False):
+    def _run(self, slot, schedule, publish, metadata_error=False):
         from app.services.fill_schedule import publish_accounts as accounts_module
         from app.services.fill_schedule.publish_accounts import publish_slot_accounts
 
@@ -48,7 +48,6 @@ class PublishSlotAccountsDirectTests(unittest.TestCase):
             "api_secret": "s3cr3t",
             "publish_video": publish,
             "persist_outcomes": persist,
-            "record_results": record_results,
         }
         if metadata_error:
             with patch.object(accounts_module, "_metadata", side_effect=RuntimeError("metadata boom")):
@@ -137,23 +136,6 @@ class PublishSlotAccountsDirectTests(unittest.TestCase):
         outcome = slot["publish_outcomes"][0]
         self.assertEqual(outcome["attempts"], 4)
 
-    def test_state_write_failed_clears_when_a_later_write_succeeds(self) -> None:
-        slot, schedule = self._slot(["bluesky", "threads"])
-        calls: list[bool] = []
-
-        def record_results(entries):
-            calls.append(True)
-            return len(calls) > 1
-
-        result = self._run(slot, schedule, self._ok, record_results=record_results)
-        self.assertEqual(len(calls), 2)
-        self.assertFalse(result.state_write_failed)
-        self.assertTrue(result.any_published)
-
-    def test_state_write_failed_stays_when_every_write_fails(self) -> None:
-        slot, schedule = self._slot(["bluesky", "threads"])
-        result = self._run(slot, schedule, self._ok, record_results=lambda entries: False)
-        self.assertTrue(result.state_write_failed)
 
     def test_partial_publish_names_the_retrying_accounts_in_the_reason(self) -> None:
         slot, schedule = self._slot(["bluesky", "threads"])

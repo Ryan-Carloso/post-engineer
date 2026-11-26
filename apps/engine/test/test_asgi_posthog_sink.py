@@ -13,7 +13,6 @@ from unittest.mock import patch
 from loguru import logger
 
 from app import asgi
-from app.models.exception import HttpException
 
 
 def _message(**record_overrides):
@@ -212,25 +211,6 @@ def _log_scheduler_failure(task_id: str) -> None:
     logger.error(f"fill_schedule: stage generated failed for {task_id}")
 
 
-def _raise_http_from_storage(task_id: str) -> None:
-    raise HttpException(task_id=task_id, status_code=500, message="storage blew up")
-
-
-def _raise_http_from_scheduler(task_id: str) -> None:
-    raise HttpException(task_id=task_id, status_code=500, message="scheduler blew up")
-
-
-def _raise_http_with_status(task_id: str, status_code: int) -> None:
-    raise HttpException(task_id=task_id, status_code=status_code, message="boom")
-
-
-def _swallow_http_exception(raise_fn, *args) -> None:
-    try:
-        raise_fn(*args)
-    except HttpException:
-        pass
-
-
 def _log_fail_task_stage(task_id: str, stage: str) -> None:
     logger.bind(task_id=task_id, stage=stage, error_type="TaskError").error(
         "video task failed at stage {stage}: boom", stage=stage
@@ -247,10 +227,6 @@ def _captured_properties(*log_calls) -> list[dict]:
     finally:
         logger.remove(handler_id)
     return [call.args[1] for call in track_event.call_args_list]
-
-
-def _running_under_mutmut() -> bool:
-    return "mutmut.mutation.trampoline" in sys.modules
 
 
 class FlatLogGroupingTests(unittest.TestCase):
@@ -300,29 +276,6 @@ class FlatLogGroupingTests(unittest.TestCase):
         _, properties = track_event.call_args[0]
         assert "$exception_fingerprint" not in properties
 
-    @unittest.skipIf(
-        _running_under_mutmut(),
-        "mutmut's trampoline sits one frame above __init__, so opt(depth=1) "
-        "attributes there instead of the raise site",
-    )
-    def test_http_exception_fingerprint_uses_raise_site_not_init(self):
-        storage, scheduler = _captured_properties(
-            lambda: _swallow_http_exception(_raise_http_from_storage, "task-1"),
-            lambda: _swallow_http_exception(_raise_http_from_scheduler, "task-1"),
-        )
-        assert storage["$exception_fingerprint"] != scheduler["$exception_fingerprint"]
-        assert "_raise_http_from_storage" in storage["$exception_fingerprint"]
-        assert "__init__" not in storage["$exception_fingerprint"]
-
-    def test_http_exception_fingerprint_includes_status_code(self):
-        err_500, err_502 = _captured_properties(
-            lambda: _swallow_http_exception(_raise_http_with_status, "task-1", 500),
-            lambda: _swallow_http_exception(_raise_http_with_status, "task-1", 502),
-        )
-        assert err_500["$exception_fingerprint"] != err_502["$exception_fingerprint"]
-        assert ":500:" in err_500["$exception_fingerprint"]
-        assert ":502:" in err_502["$exception_fingerprint"]
-
     def test_fail_task_stages_get_separate_fingerprints(self):
         upload, script = _captured_properties(
             lambda: _log_fail_task_stage("task-1", "upload"),
@@ -356,109 +309,14 @@ class FlatLogGroupingTests(unittest.TestCase):
 
 
 class StartupWarmClientTests(unittest.TestCase):
-    def test_startup_event_warms_posthog_client(self):
-        with (
-            patch("app.asgi.warm_client") as warm,
-            patch("app.asgi.start_fill_schedule_scheduler"),
-            patch(
-                "app.services.engine_heartbeat.start_heartbeat_after_autopsy"
-            ) as heartbeat,
-        ):
-            asgi.startup_event()
-        warm.assert_called_once_with()
-        heartbeat.assert_called_once_with(asgi.sm.state)
-
-    def test_startup_event_reconciles_before_the_boot_autopsy(self):
-        from unittest.mock import MagicMock
-
+    def test_startup_event_warms_posthog_then_starts_the_publish_scheduler(self):
         calls: list[str] = []
-        mock_state = MagicMock()
-        mock_state.reconcile_orphaned_tasks.side_effect = lambda: calls.append("reconcile") or 0
         with (
-            patch("app.asgi.warm_client"),
-            patch("app.asgi.start_fill_schedule_scheduler"),
+            patch("app.asgi.warm_client", side_effect=lambda: calls.append("warm")),
             patch(
-                "app.services.engine_heartbeat.start_heartbeat_after_autopsy",
-                side_effect=lambda state: calls.append("autopsy"),
-            ),
-            patch.object(asgi.sm, "state", mock_state),
-        ):
-            asgi.startup_event()
-        self.assertEqual(calls, ["reconcile", "autopsy"])
-
-    def test_startup_event_runs_orphan_reconcile(self):
-        from unittest.mock import MagicMock
-
-        mock_state = MagicMock()
-        mock_state.reconcile_orphaned_tasks.return_value = 0
-        with (
-            patch("app.asgi.warm_client"),
-            patch("app.asgi.start_fill_schedule_scheduler"),
-            patch("app.services.engine_heartbeat.start_heartbeat_after_autopsy"),
-            patch.object(asgi.sm, "state", mock_state),
-        ):
-            asgi.startup_event()
-        mock_state.reconcile_orphaned_tasks.assert_called_once_with()
-
-    def test_startup_event_skips_reconcile_without_method(self):
-        from types import SimpleNamespace
-
-        plain_state = SimpleNamespace()
-        with (
-            patch("app.asgi.warm_client"),
-            patch("app.asgi.start_fill_schedule_scheduler"),
-            patch("app.services.engine_heartbeat.start_heartbeat_after_autopsy"),
-            patch.object(asgi.sm, "state", plain_state),
-        ):
-            asgi.startup_event()
-
-    def test_startup_event_logs_failed_orphan_count(self):
-        from unittest.mock import MagicMock
-
-        mock_state = MagicMock()
-        mock_state.reconcile_orphaned_tasks.return_value = 3
-        with (
-            patch("app.asgi.warm_client"),
-            patch("app.asgi.start_fill_schedule_scheduler"),
-            patch("app.services.engine_heartbeat.start_heartbeat_after_autopsy"),
-            patch.object(asgi.sm, "state", mock_state),
-        ):
-            asgi.startup_event()
-        mock_state.reconcile_orphaned_tasks.assert_called_once_with()
-
-    def test_startup_event_resumes_unspawned_cpu_dispatches(self):
-        from unittest.mock import MagicMock
-
-        mock_state = MagicMock()
-        mock_state.reconcile_orphaned_tasks.return_value = 0
-        with (
-            patch("app.asgi.warm_client"),
-            patch("app.asgi.start_fill_schedule_scheduler"),
-            patch("app.services.engine_heartbeat.start_heartbeat_after_autopsy"),
-            patch.object(asgi.sm, "state", mock_state),
-            patch(
-                "app.services.cpu_worker_dispatch.resume_unspawned_cpu_jobs",
-                return_value=2,
-            ) as resume,
-        ):
-            asgi.startup_event()
-        resume.assert_called_once_with(mock_state, slot_store=None)
-        mock_state.reconcile_orphaned_tasks.assert_called_once_with()
-
-    def test_startup_event_survives_a_failed_cpu_resume(self):
-        from unittest.mock import MagicMock
-
-        mock_state = MagicMock()
-        mock_state.reconcile_orphaned_tasks.return_value = 0
-        with (
-            patch("app.asgi.warm_client"),
-            patch("app.asgi.start_fill_schedule_scheduler"),
-            patch("app.services.engine_heartbeat.start_heartbeat_after_autopsy"),
-            patch.object(asgi.sm, "state", mock_state),
-            patch(
-                "app.services.cpu_worker_dispatch.resume_unspawned_cpu_jobs",
-                side_effect=RuntimeError("modal down"),
+                "app.asgi.start_fill_schedule_scheduler",
+                side_effect=lambda: calls.append("scheduler"),
             ),
         ):
             asgi.startup_event()
-        mock_state.reconcile_orphaned_tasks.assert_called_once_with()
+        self.assertEqual(calls, ["warm", "scheduler"])

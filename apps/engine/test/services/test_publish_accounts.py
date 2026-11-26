@@ -7,13 +7,10 @@ transient error waits 30s, then 2min, then fails once.
 
 from __future__ import annotations
 
-import os
-import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
-from app.services import video_storage
 from app.services.fill_schedule import FillScheduleScheduler
 from app.services.fill_schedule import publish as publish_module
 from app.services.fill_schedule.account_outcomes import classify_failure, next_delay_seconds
@@ -21,6 +18,8 @@ from app.services.upload_publisher import PublishError
 
 UTC = timezone.utc
 NOW = datetime(2026, 9, 7, 12, 0, tzinfo=UTC)
+UPLOAD_ID = "22222222-2222-4222-8222-222222222222"
+CLAIMED_AT = "2026-09-07T12:00:00+00:00"
 EMAIL = (
     "Bluesky did not publish because the email on this account is not verified. "
     "This is a problem with your account. Only you can fix it: verify the email on Bluesky."
@@ -31,7 +30,15 @@ class _MemoryStore:
     def __init__(self, slot: dict):
         self.slot = slot
         self.updates: list[tuple[str, dict]] = []
-        self.refund_batch_calls: list[tuple] = []
+        self.upload = {
+            "id": UPLOAD_ID,
+            "user_id": "user-1",
+            "storage_path": f"user-1/direct-uploads/{UPLOAD_ID}.mp4",
+            "declared_content_type": "video/mp4",
+            "status": "ready",
+            "consumed_at": None,
+        }
+        self.removed: list[tuple[str, str]] = []
 
     def ready_due_slots(self, now: datetime) -> list[dict]:
         status = self.slot.get("status", "ready")
@@ -66,31 +73,32 @@ class _MemoryStore:
         self.updates.append((slot_id, dict(fields)))
         self.slot.update(fields)
 
-    def refund_batch_tokens(self, *args, **kwargs) -> bool:
-        self.refund_batch_calls.append(args)
+    def get_video_upload(self, upload_id: str) -> dict | None:
+        return dict(self.upload) if upload_id == self.upload["id"] else None
+
+    def claim_video_upload(self, upload_id: str) -> dict | None:
+        if upload_id != self.upload["id"] or self.upload["status"] != "ready":
+            return None
+        self.upload.update(status="consumed", consumed_at=CLAIMED_AT)
+        return dict(self.upload)
+
+    def download_storage_object(self, bucket: str, path: str) -> bytes:
+        return b"fake-video-bytes"
+
+    def remove_storage_object(self, bucket: str, path: str) -> bool:
+        self.removed.append((bucket, path))
         return True
 
 
 class AccountRetryTests(unittest.TestCase):
-    def setUp(self) -> None:
-        from app.services import video_storage
-        from unittest.mock import patch
-
-        storage = patch.object(video_storage, "read_final_video_r2", return_value=b"fake-video-bytes")
-        storage.start()
-        self.addCleanup(storage.stop)
-        handle, self.video_path = tempfile.mkstemp(suffix=".mp4")
-        with os.fdopen(handle, "wb") as video_file:
-            video_file.write(b"fake-video-bytes")
-        self.addCleanup(os.unlink, self.video_path)
-
     def _slot(self, providers: list[str]) -> dict:
         return {
             "id": "slot-1",
             "title": "Porto coffee",
             "description": "Porto coffee description.",
-            "task_id": "t-1",
-            "charged_tokens": 1,
+            "user_id": "user-1",
+            "media_kind": "upload",
+            "media_ref": UPLOAD_ID,
             "publish_attempts": 0,
             "schedules": {
                 "id": "sched-1",
@@ -102,15 +110,8 @@ class AccountRetryTests(unittest.TestCase):
         }
 
     def _scheduler(self, store: _MemoryStore, publish, notify=None):
-        state = MagicMock()
-        state.get_task.return_value = {
-            "state": 1,
-            "videos": [self.video_path],
-            "video_storage_path": "user-1/voiceover/t-1/final-1.mp4",
-        }
         scheduler = FillScheduleScheduler(
             store=store,
-            task_state=state,
             publish_video=publish,
             notify=notify or MagicMock(),
         )
@@ -142,7 +143,6 @@ class AccountRetryTests(unittest.TestCase):
         scheduler.publish_due(NOW + timedelta(minutes=31))
         self.assertEqual(calls, ["BlueskyMetadata"])
         self.assertEqual(store.slot["status"], "published")
-        self.assertEqual(store.refund_batch_calls, [])
         youtube = next(item for item in store.slot["publish_outcomes"] if item["provider"] == "youtube")
         self.assertEqual(youtube["status"], "published")
         self.assertEqual(youtube["videoUrl"], "https://youtu.be/abc")
@@ -181,7 +181,6 @@ class AccountRetryTests(unittest.TestCase):
         calls.clear()
         scheduler.publish_due(NOW + timedelta(seconds=30))
         self.assertEqual(calls, ["YouTubeMetadata"])
-        self.assertEqual(store.refund_batch_calls, [])
 
     def test_three_transient_failures_notify_once_without_the_user_sentence(self) -> None:
         store = _MemoryStore(self._slot(["youtube"]))
@@ -211,10 +210,8 @@ class AccountRetryTests(unittest.TestCase):
         self.assertIn("❌", message)
         self.assertIn("quota exceeded", message)
         self.assertNotIn("Only you can fix", message)
-        self.assertEqual(len(store.refund_batch_calls), 1)
-        self.assertIn("3 attempts", store.refund_batch_calls[0][4])
 
-    def test_partial_success_does_not_refund_or_republish(self) -> None:
+    def test_partial_success_does_not_republish(self) -> None:
         store = _MemoryStore(self._slot(["youtube", "bluesky"]))
         calls: list[str] = []
 
@@ -228,7 +225,6 @@ class AccountRetryTests(unittest.TestCase):
         scheduler = self._scheduler(store, publish)
         self.assertEqual(scheduler.publish_due(NOW), 0)
         self.assertEqual(store.slot["status"], "publishing")
-        self.assertEqual(store.refund_batch_calls, [])
 
         calls.clear()
         scheduler.publish_due(NOW + timedelta(seconds=30))
@@ -268,7 +264,6 @@ class AccountRetryTests(unittest.TestCase):
         self.assertEqual(outcome["attempts"], 0)
         self.assertEqual(store.slot["status"], "publishing")
         self.assertEqual(store.slot["publish_not_before"], "2026-09-07T12:01:00+00:00")
-        self.assertEqual(store.refund_batch_calls, [])
 
         scheduler.publish_due(NOW + timedelta(seconds=60))
         outcome = store.slot["publish_outcomes"][0]
@@ -281,13 +276,12 @@ class AccountRetryTests(unittest.TestCase):
         self.assertEqual(outcome["status"], "published")
         self.assertEqual(outcome["postId"], "ig-post-1")
         self.assertEqual(store.slot["status"], "published")
-        self.assertEqual(store.refund_batch_calls, [])
 
-        expected_key = f"slot:slot-1:video:{os.path.basename(self.video_path)}"
+        expected_key = f"slot:slot-1:video:{UPLOAD_ID}.mp4"
         self.assertEqual(len(calls), 3)
         self.assertTrue(all(item.get("publish_scope_key") == expected_key for item in calls))
 
-    def test_in_progress_wait_capped_as_unknown_without_refund(self) -> None:
+    def test_in_progress_wait_capped_as_unknown(self) -> None:
         slot = self._slot(["instagram"])
         slot["schedules"]["instagram_account_ids"] = ["ig-1"]
         store = _MemoryStore(slot)
@@ -322,9 +316,8 @@ class AccountRetryTests(unittest.TestCase):
             self.assertEqual(outcome["code"], "publish_unknown")
             self.assertTrue(outcome["requiresUser"])
             self.assertIn("may already have published", outcome["notice"])
-            self.assertIn("token was not refunded", outcome["notice"])
+            self.assertIn("will not retry on its own", outcome["notice"])
             self.assertEqual(store.slot["status"], "failed")
-            self.assertEqual(store.refund_batch_calls, [])
             self.assertEqual(notify.call_count, 2)
             self.assertIn("may already have published", notify.call_args_list[0].args[0])
             self.assertIn("❌ Slot failed", notify.call_args_list[1].args[0])
@@ -392,48 +385,6 @@ class AccountRetryTests(unittest.TestCase):
         scheduler.publish_due(NOW + timedelta(minutes=5))
         self.assertEqual(calls, ["bluesky"])
 
-    def test_video_read_failure_on_resume_never_fails_a_slot_with_a_live_account(self) -> None:
-        store = _MemoryStore(self._slot(["youtube", "bluesky"]))
-        calls: list[str] = []
-
-        def publish(**kwargs):
-            name = type(kwargs["metadata"]).__name__
-            calls.append(name)
-            if name == "YouTubeMetadata":
-                return {"success": True, "results": [{"success": True, "videoUrl": "https://youtu.be/abc"}]}
-            raise PublishError("upload API returned HTTP 503", status_code=503)
-
-        scheduler = self._scheduler(store, publish)
-        scheduler.publish_due(NOW)
-        self.assertEqual(store.slot["status"], "publishing")
-
-        calls.clear()
-        with patch.object(video_storage, "read_final_video_r2", side_effect=OSError("r2 down")):
-            scheduler.publish_due(NOW + timedelta(seconds=30))
-            self.assertEqual(store.slot["status"], "publishing")
-            scheduler.publish_due(NOW + timedelta(seconds=150))
-        self.assertEqual(calls, [])
-        self.assertEqual(store.slot["status"], "published")
-        self.assertEqual(store.refund_batch_calls, [])
-        by_provider = {item["provider"]: item for item in store.slot["publish_outcomes"]}
-        self.assertEqual(by_provider["youtube"]["status"], "published")
-        self.assertEqual(by_provider["bluesky"]["code"], "retries_exhausted")
-        self.assertEqual(by_provider["bluesky"]["attempts"], 3)
-
-    def test_video_read_failure_before_any_account_uses_the_account_budget(self) -> None:
-        store = _MemoryStore(self._slot(["youtube"]))
-        publish = MagicMock()
-        scheduler = self._scheduler(store, publish)
-        with patch.object(video_storage, "read_final_video_r2", side_effect=OSError("r2 down")):
-            scheduler.publish_due(NOW)
-            outcome = store.slot["publish_outcomes"][0]
-            self.assertEqual((outcome["status"], outcome["attempts"]), ("retrying", 1))
-            scheduler.publish_due(NOW + timedelta(seconds=30))
-            scheduler.publish_due(NOW + timedelta(seconds=150))
-        publish.assert_not_called()
-        self.assertEqual(store.slot["status"], "failed")
-        self.assertEqual(store.slot["publish_outcomes"][0]["code"], "retries_exhausted")
-        self.assertEqual(len(store.refund_batch_calls), 1)
 
     def test_resumes_do_not_fire_publish_started_again(self) -> None:
         store = _MemoryStore(self._slot(["youtube"]))
@@ -450,7 +401,7 @@ class AccountRetryTests(unittest.TestCase):
         self.assertEqual(len(started), 1)
         self.assertEqual(store.slot["status"], "failed")
 
-    def test_unknown_publish_parks_the_account_without_refund_or_retry(self) -> None:
+    def test_unknown_publish_parks_the_account_without_retry(self) -> None:
         slot = self._slot(["instagram"])
         slot["schedules"]["instagram_account_ids"] = ["ig-1"]
         store = _MemoryStore(slot)
@@ -475,40 +426,13 @@ class AccountRetryTests(unittest.TestCase):
         self.assertIn("may already have published", outcome["notice"])
         self.assertIsNone(outcome["retryAt"])
         self.assertEqual(store.slot["status"], "failed")
-        self.assertEqual(store.refund_batch_calls, [])
 
         messages = [str(call.args[0]) for call in notify.call_args_list]
         self.assertTrue(any("may already have published" in message for message in messages))
 
         scheduler.publish_due(NOW + timedelta(seconds=30))
         self.assertEqual(store.slot["status"], "failed")
-        self.assertEqual(store.refund_batch_calls, [])
 
-    def test_instagram_publish_sends_archive_path_without_reading_bytes(self) -> None:
-        slot = self._slot(["instagram"])
-        slot["schedules"]["instagram_account_ids"] = ["ig-1"]
-        store = _MemoryStore(slot)
-        publish = MagicMock(return_value={"success": True, "results": [{"success": True}]})
-        scheduler = self._scheduler(store, publish)
-        with patch.object(video_storage, "read_final_video_r2") as read_mock:
-            published = scheduler.publish_due(NOW)
-        self.assertEqual(published, 1)
-        read_mock.assert_not_called()
-        kwargs = publish.call_args.kwargs
-        self.assertIsNone(kwargs["video_bytes"])
-        self.assertEqual(kwargs["r2_object_path"], "user-1/voiceover/t-1/final-1.mp4")
-
-    def test_youtube_publish_still_reads_bytes_with_archive_path_present(self) -> None:
-        store = _MemoryStore(self._slot(["youtube"]))
-        publish = MagicMock(return_value={"success": True, "results": [{"success": True}]})
-        scheduler = self._scheduler(store, publish)
-        with patch.object(video_storage, "read_final_video_r2", return_value=b"fake-video-bytes") as read_mock:
-            published = scheduler.publish_due(NOW)
-        self.assertEqual(published, 1)
-        read_mock.assert_called_once_with("user-1/voiceover/t-1/final-1.mp4")
-        kwargs = publish.call_args.kwargs
-        self.assertEqual(kwargs["video_bytes"], b"fake-video-bytes")
-        self.assertIsNone(kwargs["r2_object_path"])
 
     def test_delay_and_classification_trust_the_code_not_the_text(self) -> None:
         self.assertEqual(next_delay_seconds(1), 30)

@@ -1,10 +1,8 @@
 """Publish/schedule existing media (issue #384) — engine tick.
 
-A ready slot with no engine task but with media columns publishes from
-stored media instead of a generation task: a signed-upload video is
+A ready slot publishes from stored media: a signed-upload video is
 downloaded from the ``videos`` bucket and claimed once; a scheduled image
-is downloaded from the ``uploads`` bucket. No generation tokens are
-charged on this path, so a failed media slot never refunds.
+is downloaded from the ``uploads`` bucket.
 """
 
 import sys
@@ -173,7 +171,6 @@ class VideoUploadStoreTests(unittest.TestCase):
 def _media_slot(**overrides):
     slot = {
         "id": "slot-1",
-        "task_id": None,
         "title": "Ready video",
         "description": "Edited outside.",
         "user_id": USER_ID,
@@ -208,9 +205,7 @@ def _published_result(providers=("youtube",)):
 
 class PublishExistingMediaTests(unittest.TestCase):
     def _publisher(self, store):
-        task_state = MagicMock()
-        task_state.get_task.return_value = None
-        publisher = BatchPublisher(store, task_state, notify=MagicMock())
+        publisher = BatchPublisher(store, notify=MagicMock())
         publisher.base_url = "https://post-engineer.com"
         publisher.api_secret = "secret"
         return publisher
@@ -252,7 +247,6 @@ class PublishExistingMediaTests(unittest.TestCase):
         store.remove_storage_object.assert_called_once_with(
             "videos", f"{USER_ID}/direct-uploads/{UPLOAD_ID}.mp4"
         )
-        store.refund_batch_tokens.assert_not_called()
 
     def test_image_slot_publishes_from_the_uploads_bucket(self):
         store = MagicMock()
@@ -287,7 +281,6 @@ class PublishExistingMediaTests(unittest.TestCase):
         store.remove_storage_object.assert_called_once_with(
             "uploads", "scheduled-media/user-1/a.jpg"
         )
-        store.refund_batch_tokens.assert_not_called()
 
     def test_resumed_upload_slot_retries_and_cleans_up(self):
         store = MagicMock()
@@ -432,7 +425,6 @@ class PublishExistingMediaTests(unittest.TestCase):
             any(call.kwargs.get("status") == "failed" for call in store.update_slot.call_args_list)
         )
         store.remove_storage_object.assert_not_called()
-        store.refund_batch_tokens.assert_not_called()
 
     def test_image_path_outside_scheduled_media_fails_without_download(self):
         store = MagicMock()
@@ -483,7 +475,7 @@ class PublishExistingMediaTests(unittest.TestCase):
             any("publish_not_before" in call.kwargs for call in store.update_slot.call_args_list)
         )
 
-    def test_taskless_slot_without_media_fails_exactly_as_before(self):
+    def test_slot_without_media_fails_permanently(self):
         store = MagicMock()
         store.claim_ready_slot.return_value = True
         publisher = self._publisher(store)
@@ -504,7 +496,7 @@ class PublishExistingMediaTests(unittest.TestCase):
             if call.kwargs.get("status") == "failed"
         ]
         self.assertEqual(len(failed), 1)
-        self.assertEqual(failed[0].kwargs.get("error"), "task has no finished videos")
+        self.assertEqual(failed[0].kwargs.get("error"), "slot has no uploaded media")
 
 
 class ResolveExistingMediaDirectTests(unittest.TestCase):
@@ -742,7 +734,6 @@ class PublishAccountsContentTypeTests(unittest.TestCase):
             api_secret="secret",
             publish_video=publish_video,
             persist_outcomes=lambda _outcomes, _fields: None,
-            record_results=None,
             content_type="image/jpeg",
         )
         self.assertTrue(result.any_published)
@@ -782,14 +773,13 @@ class PublishAccountsContentTypeTests(unittest.TestCase):
             api_secret="secret",
             publish_video=publish_video,
             persist_outcomes=lambda _outcomes, _fields: None,
-            record_results=None,
         )
         self.assertTrue(result.any_published)
         self.assertEqual(calls[0]["content_type"], "video/mp4")
 
 
 class PublishExistingMediaSchedulerTests(unittest.TestCase):
-    """End to end through the scheduler: a media slot publishes with no task."""
+    """End to end through the scheduler: a media slot publishes."""
 
     def test_image_slot_publishes_through_the_real_account_loop(self):
         slot = _media_slot(
@@ -809,8 +799,6 @@ class PublishExistingMediaSchedulerTests(unittest.TestCase):
         store.claim_ready_slot.return_value = True
         store.resumable_publishing_slots.return_value = []
         store.download_storage_object.return_value = b"image-bytes"
-        task_state = MagicMock()
-        task_state.get_task.return_value = None
         calls: list[dict] = []
 
         def publish_video(**kwargs):
@@ -822,7 +810,6 @@ class PublishExistingMediaSchedulerTests(unittest.TestCase):
 
         scheduler = FillScheduleScheduler(
             store=store,
-            task_state=task_state,
             publish_video=publish_video,
             notify=MagicMock(),
         )

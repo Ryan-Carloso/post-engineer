@@ -7,37 +7,10 @@ fill-schedule mapping for the pinterest provider.
 
 import unittest
 
-from pydantic import ValidationError
 
 from app.providers import SOCIAL_PROVIDERS
-from app.models.publish import PinterestPublish, PublishParams
 from app.services import publish_pinterest, upload_publisher
 from app.services.fill_schedule.metadata import metadata_for, validate_publish_plan
-
-
-class PinterestPublishParamsTest(unittest.TestCase):
-    def test_accepts_pinterest_publish(self) -> None:
-        params = PublishParams(
-            providers=["pinterest"],
-            pinterest=PinterestPublish(
-                title="My pin", description="The description", board_id="b1", account_ids=["user-9"]
-            ),
-        )
-        self.assertEqual(params.pinterest.account_ids, ["user-9"])
-
-    def test_rejects_provider_without_metadata(self) -> None:
-        with self.assertRaisesRegex(ValidationError, "pinterest provider requires pinterest metadata"):
-            PublishParams(providers=["pinterest"])
-
-    def test_rejects_title_over_limit(self) -> None:
-        PinterestPublish(title="a" * 100, description="d", board_id="b1", account_ids=["user-9"])
-        with self.assertRaises(ValidationError):
-            PinterestPublish(title="a" * 101, description="d", board_id="b1", account_ids=["user-9"])
-
-    def test_rejects_description_over_limit(self) -> None:
-        PinterestPublish(title="t", description="a" * 800, board_id="b1", account_ids=["user-9"])
-        with self.assertRaises(ValidationError):
-            PinterestPublish(title="t", description="a" * 801, board_id="b1", account_ids=["user-9"])
 
 
 class PublishPinterestModuleTest(unittest.TestCase):

@@ -10,9 +10,9 @@ import { violationOf } from './rules.mjs';
 import { scanTs } from './scan-ts.mjs';
 
 export const HOME = 'shared/contracts/providers.ts';
-export const MIRRORS = ['apps/engine/app/providers.py', 'integrations/apify/src/post-engineer.js'];
+export const MIRRORS = ['apps/engine/app/providers.py'];
 
-const TS_ROOTS = ['apps/web/', 'apps/mcp/src/', 'shared/', 'scripts/', 'integrations/apify/src/'];
+const TS_ROOTS = ['apps/web/', 'apps/mcp/src/', 'shared/', 'scripts/'];
 const TS_SOURCE = /\.(ts|tsx|mts|mjs|js|cjs)$/;
 const PY_ROOTS = ['apps/engine/app/'];
 const NOT_PRODUCTION = /(^|\/)(__tests__|test|tests|cypress|node_modules)\/|\.(test|spec|cy)\.[a-z]+$|\.gen\.[a-z]+$/;

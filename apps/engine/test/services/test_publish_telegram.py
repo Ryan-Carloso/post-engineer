@@ -10,9 +10,7 @@ import re
 import unittest
 from pathlib import Path
 
-from pydantic import ValidationError
 
-from app.models.publish import PublishParams, TelegramPublish
 from app.providers import SOCIAL_PROVIDERS
 from app.services import publish_telegram, upload_publisher
 from app.services.fill_schedule.account_outcomes import _account_ids
@@ -24,30 +22,6 @@ def _repo_root() -> Path:
         if (parent / "apps/web/lib/telegram.ts").is_file():
             return parent
     raise AssertionError("repo root not found from the test file location")
-
-
-class TelegramPublishParamsTest(unittest.TestCase):
-    def test_accepts_telegram_publish(self) -> None:
-        params = PublishParams(
-            providers=["telegram"],
-            telegram=TelegramPublish(caption="The caption", account_ids=["-1001234567890"]),
-        )
-        self.assertEqual(params.telegram.account_ids, ["-1001234567890"])
-
-    def test_rejects_provider_without_metadata(self) -> None:
-        with self.assertRaisesRegex(ValidationError, "telegram provider requires telegram metadata"):
-            PublishParams(providers=["telegram"])
-
-    def test_rejects_caption_over_limit(self) -> None:
-        TelegramPublish(caption="a" * 1024, account_ids=["-100"])
-        with self.assertRaises(ValidationError):
-            TelegramPublish(caption="a" * 1025, account_ids=["-100"])
-
-    def test_rejects_empty_caption_and_accounts(self) -> None:
-        with self.assertRaises(ValidationError):
-            TelegramPublish(caption="", account_ids=["-100"])
-        with self.assertRaises(ValidationError):
-            TelegramPublish(caption="c", account_ids=[])
 
 
 class PublishTelegramModuleTest(unittest.TestCase):

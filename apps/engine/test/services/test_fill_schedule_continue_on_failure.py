@@ -8,22 +8,29 @@ through the retry/fail path. Partial success emits video_publish_partial_failure
 
 from __future__ import annotations
 
-import os
-import tempfile
 import unittest
 from datetime import datetime, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from app.services import fill_schedule as fs
 from app.services.fill_schedule import publish as pub_module
 from app.services.upload_publisher import PublishError
 
 UTC = timezone.utc
+UPLOAD_ID = "22222222-2222-4222-8222-222222222222"
 
 
 class _FakeStore:
     def __init__(self):
         self.updates = []
+        self.upload = {
+            "id": UPLOAD_ID,
+            "user_id": "user-1",
+            "storage_path": f"user-1/direct-uploads/{UPLOAD_ID}.mp4",
+            "declared_content_type": "video/mp4",
+            "status": "ready",
+            "consumed_at": None,
+        }
 
     def claim_ready_slot(self, slot_id, now_utc=None):
         return True
@@ -31,30 +38,32 @@ class _FakeStore:
     def update_slot(self, slot_id, **fields):
         self.updates.append((slot_id, fields))
 
-    def refund_batch_tokens(self, *args, **kwargs):
+    def get_video_upload(self, upload_id):
+        return dict(self.upload) if upload_id == self.upload["id"] else None
+
+    def claim_video_upload(self, upload_id):
+        if upload_id != self.upload["id"] or self.upload["status"] != "ready":
+            return None
+        self.upload.update(status="consumed", consumed_at="2026-09-07T12:00:00+00:00")
+        return dict(self.upload)
+
+    def download_storage_object(self, bucket, path):
+        return b"fake-video-bytes"
+
+    def remove_storage_object(self, bucket, path):
         return True
 
 
+
 class ContinueOnProviderFailureTests(unittest.TestCase):
-    def setUp(self) -> None:
-        from app.services import video_storage
-
-        storage_patcher = patch.object(
-            video_storage, "read_final_video_r2", return_value=b"fake-video-bytes"
-        )
-        storage_patcher.start()
-        self.addCleanup(storage_patcher.stop)
-        handle, self.video_path = tempfile.mkstemp(suffix=".mp4")
-        with os.fdopen(handle, "wb") as video_file:
-            video_file.write(b"fake-video-bytes")
-        self.addCleanup(os.unlink, self.video_path)
-
     def _slot(self, providers=("youtube", "bluesky")):
         return {
             "id": "slot-1",
             "title": "Porto food",
             "description": "Porto food description.",
-            "task_id": "t-1",
+            "user_id": "user-1",
+            "media_kind": "upload",
+            "media_ref": UPLOAD_ID,
             "schedules": {
                 "id": "sched-1",
                 "user_id": "user-1",
@@ -63,22 +72,14 @@ class ContinueOnProviderFailureTests(unittest.TestCase):
             },
         }
 
-    def _scheduler(self, store, state, publish):
+    def _scheduler(self, store, publish):
         scheduler = fs.FillScheduleScheduler(
-            store=store, task_state=state,
+            store=store,
             publish_video=publish,
         )
         scheduler.publisher.base_url = "https://post-engineer.com"
         scheduler.publisher.api_secret = "secret"
         return scheduler
-
-    def _task_state(self):
-        state = MagicMock()
-        state.get_task.return_value = {
-            "state": 1, "videos": [self.video_path],
-            "video_storage_path": "user-1/voiceover/t-1/final-1.mp4",
-        }
-        return state
 
     def test_one_provider_fails_other_still_publishes(self):
         """YouTube 401 does not cancel the Bluesky post."""
@@ -95,7 +96,7 @@ class ContinueOnProviderFailureTests(unittest.TestCase):
             return {"postId": "at://did/post/abc"}
 
         with patch.object(pub_module, "track_event") as track:
-            scheduler = self._scheduler(store, self._task_state(), fake_publish)
+            scheduler = self._scheduler(store, fake_publish)
             published = scheduler.publish_due(
                 datetime(2026, 9, 7, 12, 0, tzinfo=UTC)
             )
@@ -128,7 +129,7 @@ class ContinueOnProviderFailureTests(unittest.TestCase):
             raise PublishError("upload API returned HTTP 500", status_code=500)
 
         with patch.object(pub_module, "track_event"):
-            scheduler = self._scheduler(store, self._task_state(), fake_publish)
+            scheduler = self._scheduler(store, fake_publish)
             published = scheduler.publish_due(
                 datetime(2026, 9, 7, 12, 0, tzinfo=UTC)
             )
@@ -148,7 +149,7 @@ class ContinueOnProviderFailureTests(unittest.TestCase):
                 raise PublishError("boom", status_code=400)
             return {"postId": "ok"}
 
-        scheduler = self._scheduler(store, self._task_state(), fake_publish)
+        scheduler = self._scheduler(store, fake_publish)
         scheduler.publish_due(datetime(2026, 9, 7, 12, 0, tzinfo=UTC))
 
         statuses = [u[1]["status"] for u in store.updates if "status" in u[1]]

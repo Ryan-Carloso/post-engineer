@@ -102,9 +102,7 @@ def test_live_spec_is_deterministic_and_carries_the_contract():
     assert text == current_spec_text()
     spec = json.loads(text)
     assert spec["info"] == CONTRACT_INFO
-    assert "/api/v1/videos" in spec["paths"]
-    assert "TaskVideoRequest" in spec["components"]["schemas"]
-    assert "PersonaParams" in spec["components"]["schemas"]
+    assert sorted(spec["paths"]) == ["/health", "/ping", "/version"]
 
 
 def test_committed_snapshot_matches_the_live_contract():

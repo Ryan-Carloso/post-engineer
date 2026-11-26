@@ -14,21 +14,15 @@ from typing import Any, Callable
 
 from loguru import logger
 
-from app.services import video_storage
 from app.services.analytics import scrub_error_text
 from app.services.fill_schedule.account_outcomes import lease_iso
 from app.services.fill_schedule.support import slot_user_id
 
-FailPermanently = Callable[[str, str], None]
+FailPermanently = Callable[[str], None]
 
 MediaCleanup = tuple[str, str] | None
 
 MediaResolution = tuple[list[str], Callable[[], bytes], str, MediaCleanup]
-
-
-def r2_reader(object_path: str) -> Callable[[], bytes]:
-    """Reader for a generated video's verified R2 archive."""
-    return lambda: video_storage.read_final_video_r2(object_path)
 
 
 def _parse_instant(value: Any) -> datetime | None:
@@ -165,17 +159,11 @@ def resolve_existing_media(
     media_ref = slot.get("media_ref")
     if media_kind == "upload":
         if not isinstance(media_ref, str) or not media_ref:
-            fail_permanently(
-                "scheduled video upload id is missing",
-                "Publish failed: scheduled video upload is missing; video refunded",
-            )
+            fail_permanently("scheduled video upload id is missing")
             return None
         row = store.get_video_upload(media_ref)
         if row is None or row.get("user_id") != slot_user_id(slot):
-            fail_permanently(
-                "scheduled video upload not found",
-                "Publish failed: scheduled video upload not found; video refunded",
-            )
+            fail_permanently("scheduled video upload not found")
             return None
         if (
             row.get("status") == "consumed"
@@ -184,28 +172,19 @@ def resolve_existing_media(
         ):
             already_claimed = True
         elif row.get("status") != "ready":
-            fail_permanently(
-                "scheduled video upload is no longer ready",
-                "Publish failed: scheduled video upload is no longer ready; video refunded",
-            )
+            fail_permanently("scheduled video upload is no longer ready")
             return None
         else:
             already_claimed = False
         storage_path = row.get("storage_path")
         if not isinstance(storage_path, str) or not storage_path:
-            fail_permanently(
-                "scheduled video upload has no stored file",
-                "Publish failed: scheduled video upload has no stored file; video refunded",
-            )
+            fail_permanently("scheduled video upload has no stored file")
             return None
         try:
             video_bytes = store.download_storage_object("videos", storage_path)
         except Exception as exc:
             if _is_not_found(exc):
-                fail_permanently(
-                    "scheduled video upload file is gone",
-                    "Publish failed: scheduled video upload file is gone; video refunded",
-                )
+                fail_permanently("scheduled video upload file is gone")
                 return None
             logger.warning(
                 f"fill_schedule: slot {slot['id']} scheduled upload download failed, "
@@ -218,10 +197,7 @@ def resolve_existing_media(
         else:
             claimed = store.claim_video_upload(media_ref)
         if claimed is None:
-            fail_permanently(
-                "scheduled video upload was already used",
-                "Publish failed: scheduled video upload was already used; video refunded",
-            )
+            fail_permanently("scheduled video upload was already used")
             return None
         if not already_claimed:
             claimed_at = claimed.get("consumed_at")
@@ -240,10 +216,7 @@ def resolve_existing_media(
     if media_kind == "image":
         cleanup = image_cleanup(slot)
         if cleanup is None:
-            fail_permanently(
-                "scheduled image path is invalid",
-                "Publish failed: scheduled image path is invalid; video refunded",
-            )
+            fail_permanently("scheduled image path is invalid")
             return None
         content_type = str(slot.get("media_content_type") or "image/jpeg")
         extension = "png" if content_type == "image/png" else "jpg"
@@ -251,10 +224,7 @@ def resolve_existing_media(
             image_bytes = store.download_storage_object("uploads", str(slot["media_ref"]))
         except Exception as exc:
             if _is_not_found(exc):
-                fail_permanently(
-                    "scheduled image file is gone",
-                    "Publish failed: scheduled image file is gone; video refunded",
-                )
+                fail_permanently("scheduled image file is gone")
                 return None
             logger.warning(
                 f"fill_schedule: slot {slot['id']} scheduled image download failed, "

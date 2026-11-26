@@ -58,7 +58,7 @@ from app.services.publish_threespeak import (
 )
 from app.services.publish_rumble import RUMBLE_PROVIDER, RumbleMetadata, rumble_fields, validate_rumble_metadata
 from app.services.upload_publisher_failure import application_failure_reason
-from app.providers import SOCIAL_PROVIDERS, URL_MEDIA_PROVIDERS
+from app.providers import SOCIAL_PROVIDERS
 
 VALID_PRIVACY_STATUSES: tuple[str, ...] = ("public", "private", "unlisted")
 
@@ -378,7 +378,6 @@ def publish_video(
     sleep: Callable[[float], None] = time.sleep,
     surface_application_failure: bool = False,
     publish_scope_key: str | None = None,
-    r2_object_path: str | None = None,
 ) -> dict[str, Any]:
     """Publish one finished video through the internal upload API.
 
@@ -388,8 +387,6 @@ def publish_video(
     transient errors (408/429/5xx) with linear backoff of ``attempt``
     seconds. Client errors (4xx auth/validation) fail immediately. The
     service key is never included in error messages.
-    Meta providers with ``r2_object_path`` send ``videoStoragePath`` instead
-    of the file part; the web presigns the archive.
     """
     import requests
 
@@ -406,24 +403,19 @@ def publish_video(
     if publish_scope_key:
         parts.fields.append(("publishScopeKey", publish_scope_key))
 
-    if r2_object_path is not None and provider in URL_MEDIA_PROVIDERS:
-        parts.fields.append(("videoStoragePath", r2_object_path))
-        file_field, fileobj, file_content_type = "", None, ""
-    elif video_bytes is None:
+    if video_bytes is None:
         raise PublishError("video bytes are required for this provider")
-    else:
-        file_field, fileobj, file_content_type = build_video_file_part(
-            fileobj=io.BytesIO(video_bytes), filename=video_path, content_type=content_type, provider=provider
-        )
+    file_field, fileobj, file_content_type = build_video_file_part(
+        fileobj=io.BytesIO(video_bytes), filename=video_path, content_type=content_type, provider=provider
+    )
 
     headers: dict[str, str] = {"Authorization": f"Bearer {api_secret}"}
 
     url = f"{base_url.rstrip('/')}{DEFAULT_UPLOAD_PATH}"
     last_error: PublishError | None = None
     for attempt in range(1, max_attempts + 1):
-        if fileobj is not None:
-            fileobj.seek(0)
-        files = {file_field: (video_path, fileobj, file_content_type)} if fileobj is not None else None
+        fileobj.seek(0)
+        files = {file_field: (video_path, fileobj, file_content_type)}
         try:
             response = requests.post(
                 url,

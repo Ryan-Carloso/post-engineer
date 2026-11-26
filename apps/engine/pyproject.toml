@@ -9,36 +9,17 @@ build-backend = "hatchling.build"
 [project]
 name = "moneyprinterturbo"
 version = "1.28.0"
-description = "Generate short videos from prompts, local assets, subtitles, and TTS."
+description = "Post Engineer publish worker: publishes scheduled uploaded media."
 readme = "README-en.md"
 requires-python = ">=3.11,<3.13"
 license = { text = "MIT" }
 dependencies = [
     "toml==0.10.2",
-    "moviepy==2.2.1",
     "fastapi==0.136.3",
     "starlette==1.3.1",
-    "cryptography==50.0.1",
     "uvicorn==0.32.1",
-    "pillow==12.3.0",
-    "openai==2.24.0",
-    "faster-whisper==1.1.0",
     "loguru==0.7.3",
-    "google-generativeai==0.8.6",
-    "dashscope==1.20.14",
-    "azure-cognitiveservices-speech==1.41.1",
-    "redis==5.2.0",
-    "python-multipart==0.0.32",
-    "pyyaml==6.0.3",
     "requests==2.33.1",
-    # S3 client for the optional Cloudflare R2 video archive backend. R2
-    # requires AWS Signature V4, which requests cannot produce on its own.
-    "boto3==1.40.72",
-    "socksio==1.0.0",
-    "pydub==0.25.1",
-    "litellm==1.86.2",
-    "modal>=1.5.5",
-    "opencv-python-headless==4.12.0.88",
     "posthog>=3.0.0",
     "python-dotenv>=1.0.0",
 ]
@@ -52,9 +33,6 @@ package = false
 # moviepy 2.2.1 caps pillow at <12.0, but it only uses modern Pillow APIs
 # (Image.Resampling, ImageFont.truetype) that are stable in Pillow 12.
 # Override the transitive cap so the patched Pillow 12.3.0 resolves.
-override-dependencies = [
-    "pillow==12.3.0",
-]
 
 [dependency-groups]
 dev = [
@@ -91,27 +69,9 @@ disable_error_code = [
 # green instead of going red on an unrelated dependency bump.
 [[tool.mypy.overrides]]
 module = [
-    "moviepy.*",
-    "pydub.*",
-    "faster_whisper.*",
-    "imageio_ffmpeg.*",
     "requests.*",
-    "azure.*",
-    "dashscope.*",
-    "litellm.*",
     "loguru.*",
-    "boto3.*",
-    "botocore.*",
-    "PIL.*",
-    "cv2.*",
     "toml.*",
-    "onnxruntime.*",
-    "tokenizers.*",
-    "ptts.*",
-    "espeakng_loader.*",
-    "kokoro.*",
-    "chatterbox.*",
-    "soundfile.*",
 ]
 ignore_missing_imports = true
 
@@ -147,46 +107,11 @@ source_paths = [
 only_mutate = []
 # Files the test run needs inside mutants/, beyond mutmut's defaults
 # (test/, pyproject.toml, uv.lock, ...).
-# - modal_longcat.py / modal_longcat_gpu.py / modal_longcat_resident.py /
-#   modal_longcat_cost.py: the LongCat source-scan tests (test_longcat.py,
-#   test_longcat_modal_app.py, test_longcat_resident.py,
-#   test_modal_longcat_cost.py) read these files and import
-#   modal_longcat_gpu / modal_longcat_resident. Without these copies every
-#   engine mutation shard fails with FileNotFoundError / ImportError on
-#   the first modal test, since the mutants/ working copy holds only
-#   app/ + test/.
-# - modal_musetalk.py / modal_tbdub.py / modal_lipsync_job.py:
-#   test_modal_lipsync_tiers.py reads both apps and imports the job helpers.
-# - modal_cpu_worker.py: test_modal_cpu_worker_app.py reads it.
-# - chatterbox_registry_volume.py / modal_chatterbox_registry_routes.py:
-#   the registry volume and routes tests import both top-level modules.
-# - local_tts/__init__.py / routing.py / backends.py: the local TTS routing
-#   and backend tests (test/services/test_local_tts_*.py) import them.
-# - scripts/changed_functions.py: test/scripts/test_changed_functions.py
-#   imports it; without the copy test collection errors and every shard fails.
-# - scripts/audit_secrets.py: same failure class as changed_functions.py —
-#   test/scripts/test_audit_secrets.py imports it.
+# - scripts/*.py: test/scripts/ imports them; without the copies test
+#   collection errors and every shard fails.
 also_copy = [
     "config.example.toml",
     "main.py",
-    "modal_musetalk.py",
-    "modal_tbdub.py",
-    "modal_lipsync_job.py",
-    "modal_longcat.py",
-    "modal_longcat_gpu.py",
-    "modal_longcat_resident.py",
-    "modal_longcat_cost.py",
-    "modal_cpu_worker.py",
-    "chatterbox_registry_volume.py",
-    "modal_chatterbox_registry_routes.py",
-    "modal_cpu_worker.py",
-    "Dockerfile.cpu-worker",
-    "local_tts/requirements-house.txt",
-    "scripts/cpu_worker_burst.py",
-    "scripts/migrate_clone_voices.py",
-    "local_tts/__init__.py",
-    "local_tts/routing.py",
-    "local_tts/backends.py",
     "scripts/ast_changed.py",
     "scripts/changed_functions.py",
     "scripts/audit_secrets.py",

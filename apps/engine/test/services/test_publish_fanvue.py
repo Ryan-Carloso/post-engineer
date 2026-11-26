@@ -7,37 +7,10 @@ fill-schedule mapping for the fanvue provider.
 
 import unittest
 
-from pydantic import ValidationError
 
 from app.providers import SOCIAL_PROVIDERS
-from app.models.publish import FanvuePublish, PublishParams
 from app.services import publish_fanvue, upload_publisher
 from app.services.fill_schedule.metadata import metadata_for, validate_publish_plan
-
-
-class FanvuePublishParamsTest(unittest.TestCase):
-    def test_accepts_fanvue_publish(self) -> None:
-        params = PublishParams(
-            providers=["fanvue"],
-            fanvue=FanvuePublish(
-                title="My post", description="The description", account_ids=["user-9"]
-            ),
-        )
-        self.assertEqual(params.fanvue.account_ids, ["user-9"])
-
-    def test_rejects_provider_without_metadata(self) -> None:
-        with self.assertRaisesRegex(ValidationError, "fanvue provider requires fanvue metadata"):
-            PublishParams(providers=["fanvue"])
-
-    def test_rejects_title_over_limit(self) -> None:
-        FanvuePublish(title="a" * 100, description="d", account_ids=["user-9"])
-        with self.assertRaises(ValidationError):
-            FanvuePublish(title="a" * 101, description="d", account_ids=["user-9"])
-
-    def test_rejects_description_over_limit(self) -> None:
-        FanvuePublish(title="t", description="a" * 800, account_ids=["user-9"])
-        with self.assertRaises(ValidationError):
-            FanvuePublish(title="t", description="a" * 801, account_ids=["user-9"])
 
 
 class PublishFanvueModuleTest(unittest.TestCase):

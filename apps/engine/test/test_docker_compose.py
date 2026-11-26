@@ -1,14 +1,12 @@
-"""docker-compose.yml: the engine service persists its Whisper models.
+"""docker-compose.yml and the Dockerfile run only the publish worker.
 
-The faster-whisper model downloads from HuggingFace on first subtitle use
-and lives under /app/models in the container. Without a named volume a
-redeploy wipes it and the next render re-downloads it (~3 GB for large-v3).
+The engine no longer renders video or speech: the `tts` service is gone (so
+`docker compose up --remove-orphans` stops `mpt-tts-cpu` on the next deploy),
+and the image carries no ffmpeg, fonts, songs or model volumes.
 """
 
 import unittest
 from pathlib import Path
-
-import yaml
 
 
 def _compose_path() -> Path:
@@ -20,34 +18,35 @@ def _compose_path() -> Path:
     raise FileNotFoundError("docker-compose.yml not found above the test file")
 
 
-def _load_compose() -> dict:
-    return yaml.safe_load(_compose_path().read_text(encoding="utf-8"))
+def _compose() -> str:
+    return _compose_path().read_text(encoding="utf-8")
 
 
-def _dockerfile_path() -> Path:
-    return _compose_path().with_name("Dockerfile")
+def _dockerfile() -> str:
+    return _compose_path().with_name("Dockerfile").read_text(encoding="utf-8")
 
 
 class DockerComposeTest(unittest.TestCase):
-    def test_engine_service_mounts_whisper_models_volume(self) -> None:
-        compose = _load_compose()
-        volumes = compose["services"]["engine"]["volumes"]
-        self.assertIn("whisper_models:/app/models", volumes)
+    def test_runs_only_the_engine_service(self) -> None:
+        compose = _compose()
+        self.assertIn("\n  engine:\n", compose)
+        self.assertNotIn("\n  tts:\n", compose)
+        self.assertNotIn("mpt-tts-cpu", compose)
+        self.assertNotIn("depends_on", compose)
 
-    def test_whisper_models_volume_is_declared(self) -> None:
-        compose = _load_compose()
-        self.assertIn("whisper_models", compose["volumes"])
+    def test_passes_no_tts_or_model_settings(self) -> None:
+        compose = _compose()
+        for name in ("CHATTERBOX", "CLONED_VOICES", "whisper_models", "tts_voices", "tts_models", "MPT_STATE_BACKEND"):
+            self.assertNotIn(name, compose)
 
-    def test_dockerfile_creates_the_models_dir_before_dropping_privileges(self) -> None:
-        """A named volume mounted on a path the image lacks is root-owned.
+    def test_health_check_uses_the_health_route(self) -> None:
+        self.assertIn("http://127.0.0.1:8080/health", _compose())
+        self.assertIn("http://127.0.0.1:8080/health", _dockerfile())
 
-        The engine runs as uid 10001, so the mount point must exist in the
-        image (owned by that user) or the model download fails with EACCES.
-        """
-        dockerfile = _dockerfile_path().read_text(encoding="utf-8")
-        mkdir_line = next(line for line in dockerfile.splitlines() if "mkdir -p" in line)
-        self.assertIn("/app/models", mkdir_line)
-        self.assertLess(dockerfile.index("/app/models"), dockerfile.index("USER engine"))
+    def test_image_ships_no_render_assets(self) -> None:
+        dockerfile = _dockerfile()
+        for asset in ("ffmpeg", "resource/fonts", "resource/songs", "/app/models"):
+            self.assertNotIn(asset, dockerfile)
 
 
 if __name__ == "__main__":
