@@ -87,11 +87,39 @@ describe('scene filter for the v2 identity words', () => {
     },
   );
 
+  it.each(['wide-leg trousers', 'wide leg jeans', 'straight-leg jeans', 'hip-length jacket'])(
+    'accepts the allowlisted phrase "%s" in an outfit slot',
+    (text) => {
+      expect(parseSceneValue({ ...FIXTURE_SCENE, outfit: { bottom: text } }).ok).toBe(true);
+    },
+  );
+
+  it.each(['wide-leg trousers', 'wide leg jeans', 'straight-leg jeans', 'hip-length jacket'])(
+    'accepts the allowlisted phrase "%s" in a default outfit slot',
+    (text) => {
+      const result = parseIdentityCardValue({
+        version: 2,
+        identity: { face: { eyes: 'green' } },
+        defaults: { outfit: { bottom: text } },
+      });
+      expect(result.ok).toBe(true);
+    },
+  );
+
+  it.each(['hip-hop concert', 'hip-hop street'])('accepts the allowlisted phrase "%s" in a scene setting', (text) => {
+    expect(parseSceneValue({ ...FIXTURE_SCENE, setting: text }).ok).toBe(true);
+  });
+
+  it('still rejects "long leg" in an outfit slot', () => {
+    expect(parseSceneValue({ ...FIXTURE_SCENE, outfit: { bottom: 'long leg' } }).ok).toBe(false);
+  });
+
   it.each([
     'arms crossed, long legs',
     'smiling with perfect teeth',
     'legs crossed, wide hips',
     'arms crossed and a strong jawline',
+    'wide-leg trousers, long legs',
   ])('still rejects an identity claim next to an allowlisted phrase in "%s"', (text) => {
     expect(parseSceneValue({ ...FIXTURE_SCENE, pose: text }).ok).toBe(false);
   });

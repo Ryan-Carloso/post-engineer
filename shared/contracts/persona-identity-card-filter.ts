@@ -24,6 +24,9 @@ const ALLOWED_POSE_OUTFIT_PHRASES: readonly RegExp[] = [
   /\bsmile at the camera\b/g,
   /\bhigh[\s-]+waist(?:ed)?\b/g,
   /\bhip[\s-]+bag\b/g,
+  /\b(?:wide|straight)[\s-]+leg\b/g,
+  /\bhip[\s-]+length\b/g,
+  /\bhip[\s-]+hop\b/g,
   /\b(?:arm|leg)[\s-]+warmers\b/g,
   /\bear[\s-]+muffs\b/g,
 ];
