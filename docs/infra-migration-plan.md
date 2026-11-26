@@ -5,6 +5,10 @@ document also implements it (see "What this PR implements"). It does
 not change the deploy: the worker is off until the production config
 names it.
 
+> Historical note: this plan describes the video-task rendering
+> architecture removed by #799. It is kept as a planning record; the
+> product no longer generates videos.
+
 The first draft of this file recommended leaving the CPU stack on one
 VPS. That is the wrong shape for the goal that replaced it: every
 video renders in its own container instead of waiting on one box.
