@@ -194,6 +194,14 @@ describe('persona_media render_prompt', () => {
     expect(seen[0].body).toEqual({ personaId: MARIA, scene });
   });
 
+  it('posts a scene outfit that holds a high waist phrase', async () => {
+    const { call, seen } = setup({ 'POST /api/persona/identity-card': { ...rendered, cardVersion: 2 } });
+    const scene = { ...SCENE, outfit: { bottom: 'high waist trousers' } };
+    const result = await call('persona_media', { action: 'render_prompt', persona: MARIA, scene });
+    expect(result.isError).toBe(false);
+    expect(seen[0].body).toEqual({ personaId: MARIA, scene });
+  });
+
   it.each([
     ['an unknown style', { ...SCENE, style: 'bikini' }],
     ['a style with the wrong case', { ...SCENE, style: 'Business' }],

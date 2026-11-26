@@ -75,6 +75,18 @@ describe('scene filter for the v2 identity words', () => {
     },
   );
 
+  it.each(['high waist trousers', 'high-waisted jeans', 'High Waist skirt'])(
+    'accepts the allowlisted phrase "%s" in a default outfit slot',
+    (text) => {
+      const result = parseIdentityCardValue({
+        version: 2,
+        identity: { face: { eyes: 'green' } },
+        defaults: { outfit: { bottom: text } },
+      });
+      expect(result.ok).toBe(true);
+    },
+  );
+
   it.each([
     'arms crossed, long legs',
     'smiling with perfect teeth',
