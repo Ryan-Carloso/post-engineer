@@ -80,6 +80,7 @@ export const ptDictionary = {
     approvalMediaVideo: 'Vídeo',
     approvalMediaUnknown: 'Média',
     approvalNavBadge: '{count} publicações à espera de aprovação',
+    approvalTruncated: 'A mostrar {shown} de {count} publicações à espera de aprovação',
   },
   publishing: {
     mustSelectAccount: 'Selecione pelo menos uma conta para publicar.',

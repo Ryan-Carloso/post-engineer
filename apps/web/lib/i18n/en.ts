@@ -81,6 +81,7 @@ export const enDictionary: Dictionary = {
     approvalMediaVideo: 'Video',
     approvalMediaUnknown: 'Media',
     approvalNavBadge: '{count} posts awaiting approval',
+    approvalTruncated: 'Showing {shown} of {count} posts awaiting approval',
   },
   publishing: {
     mustSelectAccount: 'Select at least one account to publish to.',

@@ -203,6 +203,11 @@ export function ApprovalQueue({ joins }: { joins: PostJoins }) {
           <ApprovalQueueRow key={slot.id} slot={slot} joins={joins} />
         ))}
       </div>
+      {queue.count > queue.slots.length && (
+        <p data-testid="approval-queue-truncated" className="mt-2 text-xs text-muted-foreground">
+          {t('posts.approvalTruncated', { shown: queue.slots.length, count: queue.count })}
+        </p>
+      )}
     </section>
   );
 }

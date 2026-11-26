@@ -5,11 +5,16 @@ import userEvent from '@testing-library/user-event';
 import type { ScheduledSlot } from '@/lib/api';
 
 vi.mock('@/lib/i18n/provider', () => ({
-  useI18n: () => ({ locale: 'en', t: (key: string) => key }),
+  useI18n: () => ({
+    locale: 'en',
+    t: (key: string, vars?: Record<string, string | number>) =>
+      vars === undefined ? key : `${key} ${JSON.stringify(vars)}`,
+  }),
 }));
 
 const queueState = vi.hoisted(() => ({
   slots: [] as ScheduledSlot[],
+  count: null as number | null,
   isLoading: false,
   isError: false,
 }));
@@ -19,7 +24,7 @@ vi.mock('@/lib/approval-queue', async (importOriginal) => {
     ...actual,
     useApprovalQueue: vi.fn(() => ({
       slots: queueState.slots,
-      count: queueState.slots.length,
+      count: queueState.count ?? queueState.slots.length,
       isLoading: queueState.isLoading,
       isError: queueState.isError,
     })),
@@ -130,6 +135,7 @@ describe('ApprovalQueue', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     queueState.slots = [];
+    queueState.count = null;
     queueState.isLoading = false;
     queueState.isError = false;
     approvalErrors.approve = false;
@@ -177,6 +183,24 @@ describe('ApprovalQueue', () => {
 
     const image = screen.getByRole('img', { name: 'Held video' });
     expect(image).toHaveAttribute('src', 'https://example.com/signed.jpg');
+  });
+
+  it('says how many it shows when the server count passes the row cap', () => {
+    queueState.slots = [slot()];
+    queueState.count = 201;
+    renderQueue();
+
+    expect(screen.getByTestId('approval-queue-count')).toHaveTextContent('201');
+    expect(screen.getByTestId('approval-queue-truncated')).toHaveTextContent(
+      'posts.approvalTruncated {"shown":1,"count":201}',
+    );
+  });
+
+  it('shows no truncation note when every awaiting slot fits on screen', () => {
+    queueState.slots = [slot()];
+    renderQueue();
+
+    expect(screen.queryByTestId('approval-queue-truncated')).not.toBeInTheDocument();
   });
 
   it('calls the approve mutation with the slot id', async () => {
