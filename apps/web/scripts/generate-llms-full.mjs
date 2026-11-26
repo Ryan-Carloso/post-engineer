@@ -53,7 +53,7 @@ export function buildLlmsFull({ llms, apiDocs, toolNames, toolActions }) {
   const bullets = TOOL_DESCRIPTIONS.map(([tool, description]) =>
     toolBullet(tool, description, toolActions[tool]),
   );
-  const intro = `${toolNames.length} intent tools; each takes an \`action\`, except \`generate_video\` and \`cancel_video\`. Personas and accounts are given by name or id. Every tool and every action is listed below.`;
+  const intro = `${toolNames.length} intent tools; each takes an \`action\`. Personas and accounts are given by name or id. Every tool and every action is listed below.`;
   return [
     llmsHead(llms),
     '',

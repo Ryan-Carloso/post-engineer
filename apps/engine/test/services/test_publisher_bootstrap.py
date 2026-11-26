@@ -1,4 +1,4 @@
-"""Tests for the fill schedule bootstrap in asgi (app/asgi.py).
+"""Tests for the publisher bootstrap in asgi (app/asgi.py).
 
 The scheduler starts on its own at app boot — no env flag — when the
 Supabase envs are present. Without the envs → skip with a log, never a
@@ -23,7 +23,7 @@ SUPABASE_ENV = {
 }
 
 
-class StartFillScheduleSchedulerTests(unittest.TestCase):
+class StartPublishSchedulerTests(unittest.TestCase):
     def _import_asgi(self):
         from app import asgi
 
@@ -33,8 +33,8 @@ class StartFillScheduleSchedulerTests(unittest.TestCase):
         asgi = self._import_asgi()
         env = {"SUPABASE_URL": "", "SUPABASE_SERVICE_ROLE_KEY": ""}
         with patch.dict(os.environ, env, clear=False):
-            with patch.object(asgi, "start_fill_schedule_thread") as thread:
-                asgi.start_fill_schedule_scheduler()
+            with patch.object(asgi, "start_publisher_thread") as thread:
+                asgi.start_publisher_scheduler()
         thread.assert_not_called()
 
     def test_starts_thread_and_notifies_discord(self):
@@ -42,10 +42,10 @@ class StartFillScheduleSchedulerTests(unittest.TestCase):
         notifications = []
         with patch.dict(os.environ, SUPABASE_ENV, clear=False):
             with patch.object(asgi, "ScheduleStore") as store_cls, \
-                 patch.object(asgi, "FillScheduleScheduler") as scheduler_cls, \
-                 patch.object(asgi, "start_fill_schedule_thread") as thread, \
+                 patch.object(asgi, "PublishScheduler") as scheduler_cls, \
+                 patch.object(asgi, "start_publisher_thread") as thread, \
                  patch("app.services.notify.send_discord", side_effect=lambda m: notifications.append(m) or True):
-                asgi.start_fill_schedule_scheduler()
+                asgi.start_publisher_scheduler()
         store_cls.assert_called_once()
         scheduler_cls.assert_called_once()
         thread.assert_called_once()
@@ -53,14 +53,14 @@ class StartFillScheduleSchedulerTests(unittest.TestCase):
 
     def test_scheduler_starts_without_a_queue_dependency(self):
         asgi = self._import_asgi()
-        self.assertFalse(hasattr(asgi, "fill_schedule_queue"))
+        self.assertFalse(hasattr(asgi, "publisher_queue"))
         notifications = []
         with patch.dict(os.environ, SUPABASE_ENV, clear=False):
             with patch.object(asgi, "ScheduleStore") as store_cls, \
-                 patch.object(asgi, "FillScheduleScheduler") as scheduler_cls, \
-                 patch.object(asgi, "start_fill_schedule_thread") as thread, \
+                 patch.object(asgi, "PublishScheduler") as scheduler_cls, \
+                 patch.object(asgi, "start_publisher_thread") as thread, \
                  patch("app.services.notify.send_discord", side_effect=lambda m: notifications.append(m) or True):
-                asgi.start_fill_schedule_scheduler()
+                asgi.start_publisher_scheduler()
         store_cls.assert_called_once()
         scheduler_cls.assert_called_once()
         thread.assert_called_once()

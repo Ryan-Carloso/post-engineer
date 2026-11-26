@@ -12,32 +12,32 @@ from loguru import logger
 from app.services import notify as notify_module
 from app.services import upload_publisher
 from app.services.analytics import scrub_error_text, track_event
-from app.services.fill_schedule.constants import (
+from app.services.publisher.constants import (
     SLOT_FAILED,
     SLOT_PUBLISHED,
     SLOT_PUBLISHING,
 )
-from app.services.fill_schedule.metadata import AccountNotBoundError, validate_publish_plan
-from app.services.fill_schedule.publish_accounts import (
+from app.services.publisher.metadata import AccountNotBoundError, validate_publish_plan
+from app.services.publisher.publish_accounts import (
     lease_iso,
     next_delay_seconds,
     publish_slot_accounts,
 )
-from app.services.fill_schedule.publish_existing_media import (
+from app.services.publisher.publish_existing_media import (
     claimed_upload_cleanup,
     cleanup_existing_media,
     image_cleanup,
     resolve_existing_media,
 )
-from app.services.fill_schedule.publish_events import (
+from app.services.publisher.publish_events import (
     partial_failure_properties,
     provider_failed_properties,
     publish_failed_properties,
     publish_tracking_context,
 )
 from app.services.owner_alert import notify_owner_async, notify_publish_failed, notify_publish_partial
-from app.services.fill_schedule.store import ScheduleStore
-from app.services.fill_schedule.support import notify_safe, slot_user_id
+from app.services.publisher.store import ScheduleStore
+from app.services.publisher.support import notify_safe, slot_user_id
 
 
 def _failed_outcomes(
@@ -81,7 +81,7 @@ class BatchPublisher:
         account that already has a recorded success.
         """
         if not self.base_url or not self.api_secret:
-            logger.warning("fill_schedule: publish skipped — MPT_UPLOAD_API_BASE_URL/MONEYPRINT_API_SECRET missing")
+            logger.warning("publisher: publish skipped — MPT_UPLOAD_API_BASE_URL/MONEYPRINT_API_SECRET missing")
             return 0
         resumable: list[dict[str, Any]] = []
         fetch = getattr(self.store, "resumable_publishing_slots", None)
@@ -90,7 +90,7 @@ class BatchPublisher:
                 resumable = [row for row in fetch(now) if isinstance(row, dict)]
             except Exception as exc:
                 logger.warning(
-                    f"fill_schedule: resumable publish lookup failed: {notify_module.safe_diagnostic(exc)}"
+                    f"publisher: resumable publish lookup failed: {notify_module.safe_diagnostic(exc)}"
                 )
         published = 0
         for slot in self.store.ready_due_slots(now):
@@ -117,7 +117,7 @@ class BatchPublisher:
                 bound = self.store.persona_bound_accounts(persona_id)
             except Exception as exc:
                 logger.warning(
-                    f"fill_schedule: slot {slot['id']} binding read failed, "
+                    f"publisher: slot {slot['id']} binding read failed, "
                     f"leaving it for the next tick: {notify_module.safe_diagnostic(exc)}"
                 )
                 return 0
@@ -175,7 +175,7 @@ class BatchPublisher:
         )
         if account_result.transport_error is not None:
             logger.warning(
-                f"fill_schedule: slot {slot['id']} video read failed: "
+                f"publisher: slot {slot['id']} video read failed: "
                 f"{notify_module.safe_diagnostic(account_result.transport_error)}"
             )
             track_event(

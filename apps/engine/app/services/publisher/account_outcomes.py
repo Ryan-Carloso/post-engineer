@@ -1,4 +1,4 @@
-"""Account outcome rules for fill-schedule publish (issue #500)."""
+"""Account outcome rules for publisher publish (issue #500)."""
 
 from __future__ import annotations
 
@@ -9,12 +9,12 @@ from typing import Any
 from app.providers import PROVIDER_LABELS, SCHEDULE_ACCOUNT_COLUMNS
 from app.services.analytics import scrub_error_text
 from app.services.upload_publisher import RETRYABLE_STATUS_CODES
-from app.services.fill_schedule.constants import (
+from app.services.publisher.constants import (
     MAX_PUBLISH_ATTEMPTS,
     PUBLISH_IN_PROGRESS_DELAY_SECONDS,
     PUBLISH_RETRY_DELAY_SECONDS,
 )
-from app.services.fill_schedule.metadata import metadata_for
+from app.services.publisher.metadata import metadata_for
 
 ATTEMPT_LEASE_SECONDS = 30 * 60
 

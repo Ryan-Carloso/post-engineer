@@ -8,7 +8,7 @@ from app.services import upload_publisher
 from app.services.caption_text import truncate_bluesky_caption
 from app.services.publish_facebook import FACEBOOK_CAPTION_MAX_LENGTH
 from app.services.publish_rumble import RUMBLE_TITLE_MAX_LENGTH
-from app.services.fill_schedule.youtube_tags import derive_tags_from_title
+from app.services.publisher.youtube_tags import derive_tags_from_title
 from app.services.publish_fanvue import FANVUE_DESCRIPTION_MAX_LENGTH, FANVUE_TITLE_MAX_LENGTH, validate_fanvue_metadata
 from app.services.publish_pinterest import PINTEREST_DESCRIPTION_MAX_LENGTH, PINTEREST_TITLE_MAX_LENGTH, validate_pinterest_metadata
 from app.services.publish_telegram import TELEGRAM_CAPTION_MAX_LENGTH, validate_telegram_metadata
@@ -155,15 +155,14 @@ def validate_publish_plan(
     description: str,
     bound_accounts: dict[str, list[str]] | None = None,
 ) -> None:
-    """Pre-flight of the publish plan BEFORE generating the video.
+    """Pre-flight of the publish plan before publishing.
 
     Validates providers, accounts and caption limits with the real title;
-    any problem fails the slot here, without spending tokens/money
-    on a generation that could never be published.
+    any problem fails the slot here, before it reaches the providers.
 
     When bound_accounts is given (a schedule with a persona), every
     account the schedule publishes to must be bound to that persona
-    (issue #572). The binding is read at generate time, so an account
+    (issue #572). The binding is read at publish time, so an account
     unbound after scheduling fails here instead of publishing to an
     account the persona no longer owns. A persona with zero bound
     accounts fails every account it names. Voiceover schedules pass no

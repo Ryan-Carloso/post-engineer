@@ -18,7 +18,7 @@ function block(source: string, start: string, end: string): string {
 }
 
 describe('publish code sync (web ↔ engine)', () => {
-  const outcomes = read('apps/engine/app/services/fill_schedule/account_outcomes.py');
+  const outcomes = read('apps/engine/app/services/publisher/account_outcomes.py');
 
   it('engine USER_CODES match the web user-account codes', () => {
     const body = block(outcomes, 'USER_CODES = frozenset({', '})');

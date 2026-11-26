@@ -203,7 +203,7 @@ See docs/SELF_HOSTING.md in https://github.com/Ryan-Carloso/post-engineer.
 
 ## MCP tools
 
-10 intent tools; each takes an `action`, except `generate_video` and `cancel_video`. Personas and accounts are given by name or id. Every tool and every action is listed below.
+10 intent tools; each takes an `action`. Personas and accounts are given by name or id. Every tool and every action is listed below.
 
 - `personas` — List, read, create, update and delete personas (avatar, language, niche). Writes are previewed first, then confirmed. Personas are given by name or id. Actions: `list`, `get`, `create`, `update`, `delete`.
 - `persona_media` — A persona's identity card and the image prompts rendered from it, for your own image tool. Actions: `get_card`, `render_prompt`.
@@ -215,7 +215,7 @@ See docs/SELF_HOSTING.md in https://github.com/Ryan-Carloso/post-engineer.
 - `publish_video` — Publish a finished video or image you made elsewhere, directly or through a staged upload, now or at a scheduled time. Actions: `from_file`, `create_upload`, `complete_upload`, `publish_upload`, `publish_existing`.
 - `prompts` — The prompt library: list and read prompts, and create, update, delete and restore your own, with version history. Actions: `list`, `get`, `create`, `update`, `delete`, `versions`, `restore`.
 - `tool_config` — Read and save the search tool and the licensed stock sources. Keys are stored encrypted and only their presence and last 4 characters are ever returned. Actions: `get`, `save`.
-- Prompts: `/daily-news` (daily news becomes a video), `/github-prs` (GitHub PRs become videos), `/full-setup` (full setup becomes videos).
+- Prompts: `/daily-news` (daily news becomes a post), `/github-prs` (GitHub PRs become posts), `/full-setup` (full setup becomes posts).
 
 ## More
 

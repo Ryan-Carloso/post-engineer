@@ -1,6 +1,6 @@
 import unittest
 
-from app.services.fill_schedule.publish_events import (
+from app.services.publisher.publish_events import (
     partial_failure_properties,
     provider_failed_properties,
     publish_failed_properties,

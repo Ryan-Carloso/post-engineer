@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.Ryan-Carloso/post-engineer",
   "title": "Post Engineer",
-  "description": "Create AI personas, generate short videos and schedule posts to YouTube, Instagram and more.",
+  "description": "Create AI personas and schedule posts to YouTube, Instagram and more.",
   "websiteUrl": "https://post-engineer.com",
   "repository": {
     "url": "https://github.com/Ryan-Carloso/post-engineer",

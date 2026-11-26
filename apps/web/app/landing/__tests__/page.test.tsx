@@ -57,4 +57,13 @@ describe('app/landing/page — Landing', () => {
     expect(enDictionary.landing.ctaFinalSubtitle.includes('hundreds')).toBe(false);
     expect(enDictionary.landing.ctaFinalSubtitle.includes('500')).toBe(false);
   });
+
+  it('renders the publish feature card with its title, hint and icon background', () => {
+    render(<Landing />);
+    expect(screen.getByText('landing.featurePublish')).toBeInTheDocument();
+    expect(screen.getByText('landing.featurePublishHint')).toBeInTheDocument();
+    const title = screen.getByText('landing.featurePublish');
+    const card = title.closest('div')?.parentElement;
+    expect(card?.querySelector('span')).toHaveClass('bg-[#eef2ff]');
+  });
 });

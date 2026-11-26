@@ -40,7 +40,7 @@ export default async function OAuthConsentPage({
           Conectar {displayName}?
         </h1>
         <p className="mt-3 text-sm leading-relaxed text-muted-text">
-          Este aplicativo quer agir no seu Post Engineer (criar personas, gerar vídeos e agendar
+          Este aplicativo quer agir no seu Post Engineer (criar personas, publicar e agendar
           posts) com a sua conta <span className="font-medium text-ink">{user.email}</span>.
         </p>
         <ul className="mt-5 space-y-2">

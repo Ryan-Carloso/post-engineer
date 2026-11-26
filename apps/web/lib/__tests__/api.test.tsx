@@ -414,7 +414,7 @@ describe('api', () => {
     });
 
     const invalidatedKeys = invalidateSpy.mock.calls.map((c) => (c[0] as { queryKey: unknown[] })?.queryKey);
-    expect(invalidatedKeys).toContainEqual(['fill-schedule-status']);
+    expect(invalidatedKeys).toContainEqual(['schedule-status']);
     expect(invalidatedKeys).toContainEqual(['post-detail', 'slot-1']);
     invalidateSpy.mockRestore();
   });

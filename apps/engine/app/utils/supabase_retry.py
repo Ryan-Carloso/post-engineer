@@ -1,6 +1,6 @@
 """Shared ``requests`` session that retries Supabase connect failures.
 
-Both Supabase clients in the engine (the fill-schedule store and the
+Both Supabase clients in the engine (the publisher store and the
 task-state backend) hit the same PostgREST host from the same tick, so a
 transient DNS/connect blip fails both. They share one retry policy here so
 the two cannot drift apart.

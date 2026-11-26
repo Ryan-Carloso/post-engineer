@@ -15,8 +15,8 @@ from typing import Any, Callable
 from loguru import logger
 
 from app.services.analytics import scrub_error_text
-from app.services.fill_schedule.account_outcomes import lease_iso
-from app.services.fill_schedule.support import slot_user_id
+from app.services.publisher.account_outcomes import lease_iso
+from app.services.publisher.support import slot_user_id
 
 FailPermanently = Callable[[str], None]
 
@@ -104,7 +104,7 @@ def claimed_upload_cleanup(store: Any, slot: dict[str, Any], resumed: bool) -> M
         row = store.get_video_upload(str(slot.get("media_ref")))
     except Exception as exc:
         logger.warning(
-            f"fill_schedule: slot {slot['id']} claimed-upload lookup failed, "
+            f"publisher: slot {slot['id']} claimed-upload lookup failed, "
             f"leaving the bytes in place: {scrub_error_text(str(exc), max_chars=200)}"
         )
         return None
@@ -129,7 +129,7 @@ def cleanup_existing_media(store: Any, slot: dict[str, Any], cleanup: MediaClean
     bucket, path = cleanup
     if not store.remove_storage_object(bucket, path):
         logger.warning(
-            f"fill_schedule: slot {slot['id']} stored media {bucket}/{path} could not be removed"
+            f"publisher: slot {slot['id']} stored media {bucket}/{path} could not be removed"
         )
 
 
@@ -187,7 +187,7 @@ def resolve_existing_media(
                 fail_permanently("scheduled video upload file is gone")
                 return None
             logger.warning(
-                f"fill_schedule: slot {slot['id']} scheduled upload download failed, "
+                f"publisher: slot {slot['id']} scheduled upload download failed, "
                 f"retrying later: {scrub_error_text(str(exc), max_chars=200)}"
             )
             store.update_slot(slot["id"], publish_not_before=lease_iso(now))
@@ -227,7 +227,7 @@ def resolve_existing_media(
                 fail_permanently("scheduled image file is gone")
                 return None
             logger.warning(
-                f"fill_schedule: slot {slot['id']} scheduled image download failed, "
+                f"publisher: slot {slot['id']} scheduled image download failed, "
                 f"retrying later: {scrub_error_text(str(exc), max_chars=200)}"
             )
             store.update_slot(slot["id"], publish_not_before=lease_iso(now))
