@@ -183,8 +183,10 @@ export function promptOperationSchemas({ success, object, str }) {
         warnings: { type: 'array', items: { type: 'object' } },
       }),
       extraResponses: {
+        400: 'ENGINE_REJECTED: the engine rejected every video; reason names what to fix.',
         402: 'Not enough tokens for the whole experiment (INSUFFICIENT_TOKENS).',
         409: 'The quote expired (QUOTE_EXPIRED) or the price or plan changed since the quote (QUOTE_CHANGED): ask for a new quote.',
+        502: 'unreachable or transient engine error (401/403/429/5xx); no reason',
       },
     },
   };

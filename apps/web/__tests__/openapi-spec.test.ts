@@ -10,6 +10,11 @@ const specPath = join(root, 'apps/web/public/openapi.json');
 
 type Spec = { paths: Record<string, Record<string, { operationId: string }>> };
 
+type ResponseEntry = {
+  description?: string;
+  content?: Record<string, { schema: { properties: Record<string, { items: { properties: Record<string, unknown> } }> } }>;
+};
+
 const mapping: Record<string, Array<{ tool: string; action?: string }>> = JSON.parse(readFileSync(mappingPath, 'utf8'));
 const spec: Spec = JSON.parse(readFileSync(specPath, 'utf8'));
 
@@ -88,8 +93,31 @@ describe('public/openapi.json', () => {
   it('documents the route-specific statuses clients must handle', () => {
     const ops = spec.paths as unknown as Record<string, Record<string, { responses: Record<string, unknown> }>>;
     const statuses = (path: string, method: string): string[] => Object.keys(ops[path][method].responses);
-    expect(statuses('/api/videos/generate-and-schedule', 'post')).toEqual(expect.arrayContaining(['402', '409', '502']));
+    expect(statuses('/api/videos/generate-and-schedule', 'post')).toEqual(expect.arrayContaining(['400', '402', '409', '502']));
     expect(statuses('/api/persona/video-status/{taskId}', 'get')).toEqual(expect.arrayContaining(['410', '502']));
+    expect(statuses('/api/experiments', 'post')).toEqual(expect.arrayContaining(['400', '402', '409', '502']));
+  });
+
+  it('documents the engine reason on ENGINE_REJECTED and on failed slots', () => {
+    const ops = spec.paths as unknown as Record<
+      string,
+      Record<string, { responses: Record<string, ResponseEntry> }>
+    >;
+    const errorProps = (
+      spec as unknown as { components: { schemas: { Error: { properties: Record<string, unknown> } } } }
+    ).components.schemas.Error.properties;
+    expect(Object.keys(errorProps)).toEqual(expect.arrayContaining(['reason']));
+    const generate = ops['/api/videos/generate-and-schedule'].post.responses;
+    expect(generate['400'].description).toContain('ENGINE_REJECTED');
+    expect(generate['400'].description).toContain('reason');
+    expect(generate['502'].description).toContain('no reason');
+    const slotProps =
+      generate['200'].content?.['application/json']?.schema.properties.slots.items.properties;
+    expect(Object.keys(slotProps ?? {})).toEqual(expect.arrayContaining(['reason']));
+    const experiments = ops['/api/experiments'].post.responses;
+    expect(experiments['400'].description).toContain('ENGINE_REJECTED');
+    expect(experiments['400'].description).toContain('reason');
+    expect(experiments['502'].description).toContain('no reason');
   });
 
   it('documents the score-draft result fields, not just success', () => {

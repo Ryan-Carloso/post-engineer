@@ -34,6 +34,10 @@
             "type": "string",
             "description": "Stable error code."
           },
+          "reason": {
+            "type": "string",
+            "description": "The engine rejection reason, on 400 ENGINE_REJECTED only (capped at 200 chars, secrets and local paths redacted)."
+          },
           "field": {
             "type": "string",
             "description": "Offending request field, when known."
@@ -7519,6 +7523,10 @@
                           },
                           "status": {
                             "type": "string"
+                          },
+                          "reason": {
+                            "type": "string",
+                            "description": "The engine rejection reason, on a failed slot the engine rejected."
                           }
                         }
                       }
@@ -7546,7 +7554,7 @@
             }
           },
           "400": {
-            "description": "Invalid input.",
+            "description": "ENGINE_REJECTED: the engine rejected every video; reason names what to fix.",
             "content": {
               "application/json": {
                 "schema": {
@@ -7606,7 +7614,7 @@
             }
           },
           "502": {
-            "description": "The engine did not accept any video (each one refunded); retry with backoff.",
+            "description": "unreachable or transient engine error (401/403/429/5xx); no reason",
             "content": {
               "application/json": {
                 "schema": {
@@ -9939,7 +9947,7 @@
             }
           },
           "400": {
-            "description": "Invalid input.",
+            "description": "ENGINE_REJECTED: the engine rejected every video; reason names what to fix.",
             "content": {
               "application/json": {
                 "schema": {
@@ -9990,6 +9998,16 @@
           },
           "429": {
             "description": "Rate limited.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "unreachable or transient engine error (401/403/429/5xx); no reason",
             "content": {
               "application/json": {
                 "schema": {

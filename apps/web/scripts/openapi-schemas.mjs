@@ -16,6 +16,7 @@ export const componentSchemas = {
       success: { type: 'boolean', enum: [false] },
       error: str,
       code: { type: 'string', description: 'Stable error code.' },
+      reason: { type: 'string', description: 'The engine rejection reason, on 400 ENGINE_REJECTED only (capped at 200 chars, secrets and local paths redacted).' },
       field: { type: 'string', description: 'Offending request field, when known.' },
       errors: {
         type: 'array',
@@ -69,6 +70,7 @@ const slotResult = object({
   title: str,
   taskId: { type: 'string', nullable: true },
   status: str,
+  reason: { type: 'string', description: 'The engine rejection reason, on a failed slot the engine rejected.' },
 });
 
 const generateBody = object(
@@ -204,9 +206,10 @@ const toolConfigPresence = {
 export const operationSchemas = {
   'POST /api/videos/generate-and-schedule': {
     extraResponses: {
+      400: 'ENGINE_REJECTED: the engine rejected every video; reason names what to fix.',
       402: 'INSUFFICIENT_TOKENS: the balance does not cover the video.',
       409: 'PERSONA_ALREADY_SCHEDULED: this persona already has an active schedule. IDEMPOTENCY_KEY_CONSUMED: the idempotency key belongs to a deleted schedule; send a new key.',
-      502: 'The engine did not accept any video (each one refunded); retry with backoff.',
+      502: 'unreachable or transient engine error (401/403/429/5xx); no reason',
     },
     request: generateBody,
     response: success({
