@@ -17,7 +17,6 @@ import { checkLipsyncPhotoFaces } from '../../videos/generate-and-schedule/lipsy
 import type { ValidatedOptions } from '../../videos/generate-and-schedule/options-validation';
 import type { PersonaPrep } from '../../videos/generate-and-schedule/persona-prep';
 import type { PlannedVideo } from '../create-plan';
-import { EXPERIMENT_MAX_FULL_LIPSYNC_VIDEOS } from '@/lib/contracts/experiments';
 import { checkExperimentPreflights } from '../create-preflights';
 import { EXPERIMENT_PREFLIGHT_BUDGET_MS, PREFLIGHT_CONCURRENCY } from '../preflight-budget';
 import { segmentsFor } from './create-fixtures';
@@ -273,7 +272,7 @@ describe('checkExperimentPreflights', () => {
   it.each([
     ['full_lipsync', true],
     ['voiceover', false],
-  ])('names the full lip-sync video limit in the budget error only for %s', async (videoType, named) => {
+  ])('explains the narration checks in the budget error only for %s', async (videoType, named) => {
     vi.mocked(checkPreChargePreflights).mockImplementation(async (input) => {
       await new Promise<void>((resolve) => input.shared?.signal.addEventListener('abort', () => resolve()));
       return failure(502, { error: 'Video service is unavailable.', code: 'INTERNAL_ERROR' });
@@ -282,7 +281,8 @@ describe('checkExperimentPreflights', () => {
 
     const json = await (await run(videos(4), 'persona-1', options, { budgetMs: 20 }))?.json();
 
-    expect(json.error.includes(`holds at most ${EXPERIMENT_MAX_FULL_LIPSYNC_VIDEOS} videos`)).toBe(named);
+    expect(json.error.includes('checks the narration of every video')).toBe(named);
+    expect(json.error).not.toContain('holds at most');
   });
 
   it('starts no further batch once the budget ran out between batches', async () => {

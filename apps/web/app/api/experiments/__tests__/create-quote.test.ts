@@ -361,8 +361,10 @@ describe('parseExperimentRequest', () => {
     delete videos[2].segments;
 
     const parsed = await parseExperimentRequest(requestOf(body));
+    const json: { field?: unknown } = await (parsed as Response).json();
 
     expect((parsed as Response).status).toBe(400);
+    expect(json.field).toBe('variants.0.videos.2.segments');
   });
 
   it('rejects a quoteKey without its expiresAt', async () => {

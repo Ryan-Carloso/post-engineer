@@ -55,7 +55,7 @@ describe('shapeCountIssues full lip-sync cap', () => {
     expect(shapeCountIssues(experimentBody({ videoType: 'full_lipsync' }, PER_VARIANT))).toEqual([]);
   });
 
-  it('rejects one video over the cap and names the number and the other video types', () => {
+  it('rejects two videos over the cap, one more in each variant, and names the number and the other video types', () => {
     const body = experimentBody({ videoType: 'full_lipsync' }, PER_VARIANT);
     body.variants.forEach((variant) => variant.videos.push(structuredClone(variant.videos[0])));
 

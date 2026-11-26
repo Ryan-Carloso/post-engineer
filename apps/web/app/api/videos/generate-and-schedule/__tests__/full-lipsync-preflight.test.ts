@@ -71,7 +71,7 @@ describe('checkFullLipsyncNarration', () => {
   it.each([
     ['language', { language: 'pt-BR' }],
     ['voice', { voiceId: 'chatterbox:kokoro_pf_dora' }],
-    ['voice audio', { voiceId: undefined, voiceAudioUrl: 'https://e.com/narration.mp3' }],
+    ['voice audio', { voiceAudioUrl: 'https://e.com/narration.mp3' }],
   ])('measures the same script again when the %s differs inside one shared context', async (_label, change) => {
     const calls = stubFetch(engineBody(30));
     const shared = createPreflightShared(60_000);
