@@ -27,6 +27,7 @@ const ALLOWED_POSE_OUTFIT_PHRASES: readonly RegExp[] = [
   /\b(?:wide|straight|flared|tapered|bootcut|cropped|slim|skinny)[\s-]+leg\b/g,
   /\bhip[\s-]+length\b/g,
   /\bhip[\s-]+hop\b/g,
+  /\bhip[\s-]+(?:hugger|pocket|seam)\b/g,
   /\b(?:arm|leg)[\s-]+warmers\b/g,
   /\bear[\s-]+muffs\b/g,
 ];

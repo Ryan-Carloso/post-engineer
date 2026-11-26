@@ -135,6 +135,25 @@ describe('scene filter for the v2 identity words', () => {
     expect(result.ok).toBe(true);
   });
 
+  it.each(['hip-hugger jeans', 'hip pocket jeans', 'hip seam skirt'])(
+    'accepts the allowlisted phrase "%s" in an outfit slot',
+    (text) => {
+      expect(parseSceneValue({ ...FIXTURE_SCENE, outfit: { bottom: text } }).ok).toBe(true);
+    },
+  );
+
+  it.each(['hip-hugger jeans', 'hip pocket jeans', 'hip seam skirt'])(
+    'accepts the allowlisted phrase "%s" in a default outfit slot',
+    (text) => {
+      const result = parseIdentityCardValue({
+        version: 2,
+        identity: { face: { eyes: 'green' } },
+        defaults: { outfit: { bottom: text } },
+      });
+      expect(result.ok).toBe(true);
+    },
+  );
+
   it.each(['hip-hop concert', 'hip-hop street'])('accepts the allowlisted phrase "%s" in a scene setting', (text) => {
     expect(parseSceneValue({ ...FIXTURE_SCENE, setting: text }).ok).toBe(true);
   });
