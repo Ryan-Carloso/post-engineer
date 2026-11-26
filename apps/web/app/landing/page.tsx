@@ -426,7 +426,7 @@ const LandingHowItWorks = () => {
 const LandingFeatures = () => {
   const { t } = useI18n();
   const features = [
-    { titleKey: 'featureGenerate' as const, hintKey: 'featureGenerateHint' as const, icon: <Sparkles className="size-5 text-[#6366f1]" />, bg: 'bg-[#eef2ff]' },
+    { titleKey: 'featurePublish' as const, hintKey: 'featurePublishHint' as const, icon: <Sparkles className="size-5 text-[#6366f1]" />, bg: 'bg-[#eef2ff]' },
     { titleKey: 'featureSchedule' as const, hintKey: 'featureScheduleHint' as const, icon: <CalendarDays className="size-5 text-[#6366f1]" />, bg: 'bg-[#eef2ff]' },
     { titleKey: 'featureGrow' as const, hintKey: 'featureGrowHint' as const, icon: <ChartBar className="size-5 text-[#6366f1]" />, bg: 'bg-[#eef2ff]' },
   ];
