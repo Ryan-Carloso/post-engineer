@@ -309,6 +309,8 @@ describe('identityCard on personas create and update', () => {
     const { api, seen } = setup({ 'POST /api/persona': { success: true, personaId: MARIA, imageIds: [] } });
     await api.createPersona({ name: 'Maria', avatarUrl: 'https://example.com/a.png', voiceId: 'v1', accounts: { youtube: ['UC1'] }, identityCard: CARD });
     expect(JSON.parse(seen[0].form?.identityCard ?? 'null')).toEqual(CARD);
+    await api.createPersona({ name: 'Maria', avatarUrl: 'https://example.com/a.png', voiceId: 'v1', accounts: { youtube: ['UC1'] }, identityCard: CARD_V2 });
+    expect(JSON.parse(seen[1].form?.identityCard ?? 'null')).toEqual(CARD_V2);
     seen.length = 0;
     await api.createPersona({ name: 'Maria', avatarUrl: 'https://example.com/a.png', voiceId: 'v1', accounts: { youtube: ['UC1'] } });
     expect(seen[0].form).not.toHaveProperty('identityCard');
