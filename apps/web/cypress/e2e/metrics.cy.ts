@@ -5,21 +5,21 @@ const PUBLISHED_AT = '2026-10-20T12:00:00Z';
 const ROWS = [
   {
     postId: 'post-1', personaId: PERSONA_ID, provider: 'youtube', accountId: 'UC1',
-    externalId: 'video-1', scriptAngle: 'myth-busting', publishedAt: PUBLISHED_AT, views: 1200, likes: 90,
+    externalId: 'video-1', publishedAt: PUBLISHED_AT, views: 1200, likes: 90,
     comments: 12, saves: 4, collectedAt: '2026-10-21T12:00:00Z',
     analyticsViews: 1000, engagedViews: 641, stayedToWatchPct: 64.1, averageViewDurationSeconds: 21.4,
     averageViewPercentage: 78.2, contentType: 'SHORTS', analyticsStatus: 'ok', provisional: true,
   },
   {
     postId: 'post-2', personaId: null, provider: 'youtube', accountId: 'UC1',
-    externalId: 'video-2', scriptAngle: null, publishedAt: PUBLISHED_AT, views: 300, likes: 10,
+    externalId: 'video-2', publishedAt: PUBLISHED_AT, views: 300, likes: 10,
     comments: 1, saves: 0, collectedAt: '2026-10-21T12:00:00Z',
     analyticsViews: null, engagedViews: null, stayedToWatchPct: null, averageViewDurationSeconds: null,
     averageViewPercentage: null, contentType: null, analyticsStatus: null, provisional: false,
   },
   {
     postId: 'post-3', personaId: PERSONA_ID, provider: 'youtube', accountId: 'UC1',
-    externalId: 'video-3', scriptAngle: 'tutorial', publishedAt: PUBLISHED_AT, views: null, likes: null,
+    externalId: 'video-3', publishedAt: PUBLISHED_AT, views: null, likes: null,
     comments: null, saves: null, collectedAt: '2026-10-21T12:00:00Z',
     analyticsViews: null, engagedViews: null, stayedToWatchPct: null, averageViewDurationSeconds: null,
     averageViewPercentage: null, contentType: null, analyticsStatus: null, provisional: false,
@@ -66,9 +66,8 @@ describe('metrics dashboard', () => {
     cy.get('.recharts-wrapper').should('exist');
     cy.contains('button', 'Lista').click();
     cy.get('.recharts-wrapper').should('not.exist');
-    cy.contains('myth-busting').should('be.visible');
+    cy.contains('p', '1.200').should('be.visible');
     cy.contains('YouTube · 21 de out. de 2026').scrollIntoView().should('be.visible');
-    cy.contains('Sem ângulo').should('not.exist');
     cy.contains('Mostrando só as').scrollIntoView().should('be.visible');
     cy.contains('n/d').scrollIntoView().should('be.visible');
 
@@ -107,7 +106,7 @@ describe('metrics dashboard', () => {
     cy.contains('1 vídeo sem dados de views').scrollIntoView().should('be.visible');
     cy.get('.recharts-wrapper').should('have.length', 3);
     cy.get('.recharts-wrapper').last().find('.recharts-bar-rectangle').first().click();
-    cy.contains('myth-busting').scrollIntoView().should('be.visible');
+    cy.contains('p', '1.200').scrollIntoView().should('be.visible');
     cy.contains('button', 'Lista').should('have.attr', 'data-state', 'active');
     cy.window().then((win) => {
       expect(win.localStorage.getItem('metrics-view-mode')).to.not.equal('list');
@@ -194,7 +193,7 @@ describe('metrics dashboard', () => {
     cy.contains('button', 'Tentar de novo').click();
     cy.wait('@getMetricsFlaky');
     cy.contains('Medições').scrollIntoView().should('be.visible');
-    cy.contains('myth-busting').scrollIntoView().should('be.visible');
+    cy.contains('p', '1.200').scrollIntoView().should('be.visible');
   });
 });
 

@@ -40,7 +40,7 @@ describe('Landing — Mobile (390px)', () => {
   });
 
   it('hero e CTA principal continuam visíveis em 390px', () => {
-    cy.contains('h1', 'Seu canal do YouTube e Instagram, sempre ativo.').should('be.visible');
+    cy.contains('h1', 'Suas redes sociais, sempre ativas.').should('be.visible');
     cy.get('main a[href="/login"]').first().should('be.visible').and('contain', 'Começar agora');
   });
 

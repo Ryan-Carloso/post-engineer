@@ -3,7 +3,7 @@ describe('Login — UI', () => {
     cy.visit('/login');
 
     cy.contains('h2', 'Bem-vindo de volta').should('be.visible');
-    cy.contains('Conecte suas contas e continue a criar').should('be.visible');
+    cy.contains('Conecte suas contas e continue agendando e publicando').should('be.visible');
     cy.contains('button', 'Continuar com GitHub').should('be.visible');
   });
 
