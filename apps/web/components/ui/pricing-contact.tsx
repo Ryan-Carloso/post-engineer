@@ -2,10 +2,10 @@
 
 import type { ReactNode } from 'react';
 import { useI18n } from '@/lib/i18n/provider';
+import { GITHUB_URL } from '@/lib/seo';
 import { whatsappUrl } from '@/lib/whatsapp';
 
 export const SUPPORT_EMAIL = 'madebyryandev@gmail.com';
-export const GITHUB_URL = 'https://github.com/Ryan-Carloso/post-engineer';
 
 export function PricingContactCard(): ReactNode {
   const { t } = useI18n();
