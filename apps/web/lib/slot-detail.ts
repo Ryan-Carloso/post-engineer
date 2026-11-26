@@ -1,4 +1,6 @@
 import { isPublishProvider, type PublishLink } from '@/lib/publish-links';
+import { narrowScriptAngle } from './script-angle';
+import { narrowHookPhoto, type HookPhoto } from './hook-photo';
 
 export interface ProgressHistoryEntry {
   progress: number;
@@ -16,6 +18,7 @@ export interface PostPromptFacts {
 export interface GenerationFacts {
   prompt: PostPromptFacts | null;
   voiceover: boolean;
+  mediaKind: 'upload' | 'image' | null;
   language: string | null;
   voiceId: string | null;
   videoAspect: string | null;
@@ -70,6 +73,7 @@ export function narrowGeneration(value: unknown): GenerationFacts {
   const fallback: GenerationFacts = {
     prompt: null,
     voiceover: false,
+    mediaKind: null,
     language: null,
     voiceId: null,
     videoAspect: null,
@@ -86,6 +90,7 @@ export function narrowGeneration(value: unknown): GenerationFacts {
   return {
     prompt: narrowPostPrompt(record.prompt),
     voiceover: record.voiceover === true,
+    mediaKind: record.mediaKind === 'upload' || record.mediaKind === 'image' ? record.mediaKind : null,
     language: text('language'),
     voiceId: text('voiceId'),
     videoAspect: text('videoAspect'),
@@ -96,5 +101,43 @@ export function narrowGeneration(value: unknown): GenerationFacts {
         ? paragraphNumber
         : null,
     faceQuality: text('faceQuality'),
+  };
+}
+
+export type SlotMediaKind = 'upload' | 'image';
+
+export interface SlotMedia {
+  kind: SlotMediaKind;
+  url: string | null;
+  contentType: string | null;
+}
+
+export function narrowSlotMedia(value: unknown): SlotMedia | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const record: Record<string, unknown> = { ...value };
+  if (record.kind !== 'upload' && record.kind !== 'image') return null;
+  return {
+    kind: record.kind,
+    url: typeof record.url === 'string' && record.url.length > 0 ? record.url : null,
+    contentType: typeof record.contentType === 'string' ? record.contentType : null,
+  };
+}
+
+export interface NarrowedSlotFields {
+  scriptAngle: string | null;
+  hookPhoto: HookPhoto;
+  publishLinks: PublishLink[];
+  progressHistory: ProgressHistoryEntry[];
+  media: SlotMedia | null;
+}
+
+export function narrowSlotFields(slot: object): NarrowedSlotFields {
+  const record: Record<string, unknown> = { ...slot };
+  return {
+    scriptAngle: narrowScriptAngle(record.scriptAngle),
+    hookPhoto: narrowHookPhoto(record.hookPhoto),
+    publishLinks: narrowPublishLinks(record.publishLinks),
+    progressHistory: narrowProgressHistory(record.progressHistory),
+    media: narrowSlotMedia(record.media),
   };
 }

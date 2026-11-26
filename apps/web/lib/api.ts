@@ -17,9 +17,9 @@ import { notifyIfSessionExpired } from '@/lib/session-expiry';
 import type { PublishLink } from '@/lib/publish-links';
 import type { VideoGenerationRow as VideoGeneration } from '@/lib/contracts/video-tasks';
 import type { PublishProviderFailure, PublishUserNotice } from '@/lib/publish-user-notice';
-import { narrowGeneration, narrowProgressHistory, narrowPublishLinks, type GenerationFacts, type ProgressHistoryEntry } from './slot-detail';
+import { narrowGeneration, narrowSlotFields, type GenerationFacts, type ProgressHistoryEntry, type SlotMedia } from './slot-detail';
 import { narrowScriptAngle } from './script-angle';
-import { narrowHookPhoto, type HookPhoto } from './hook-photo';
+import type { HookPhoto } from './hook-photo';
 import { parseJsonBody, throwForBadResponse } from './api-response';
 import type { PersonaRecord } from './persona-record';
 
@@ -590,6 +590,7 @@ export interface SlotDetailPayload {
     error: string | null;
     publishedAt: string | null;
     taskId: string | null;
+    media: SlotMedia | null;
     progress: number;
     stage: string | null;
     retryable: boolean | null;
@@ -650,13 +651,7 @@ export async function fetchPostDetail(id: string): Promise<PostDetail | null> {
     const rawSchedule = payload.schedule as SlotDetailPayload['schedule'] & { publishMode?: unknown };
     return {
       kind: 'slot',
-      slot: {
-        ...payload.slot,
-        scriptAngle: narrowScriptAngle((payload.slot as { scriptAngle?: unknown }).scriptAngle),
-        hookPhoto: narrowHookPhoto((payload.slot as { hookPhoto?: unknown }).hookPhoto),
-        publishLinks: narrowPublishLinks(payload.slot.publishLinks),
-        progressHistory: narrowProgressHistory(payload.slot.progressHistory),
-      },
+      slot: { ...payload.slot, ...narrowSlotFields(payload.slot) },
       schedule: { ...payload.schedule, publishMode: rawSchedule.publishMode === 'asap' ? 'asap' : 'scheduled' },
       persona: payload.persona ?? null,
       generation: narrowGeneration(payload.generation),

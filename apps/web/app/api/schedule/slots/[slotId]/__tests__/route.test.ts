@@ -51,6 +51,7 @@ function mockSlotsClient(options: {
   updateConflict?: boolean;
   promptVersion?: unknown;
   promptVersionError?: unknown;
+  upload?: unknown;
 }) {
   const calls: ChainCall[] = [];
   const makeChain = (table: string) => {
@@ -78,7 +79,10 @@ function mockSlotsClient(options: {
           error: (table === 'personas' ? options.persona : options.slot) ? null : { code: 'PGRST116' },
         };
       }),
-      maybeSingle: vi.fn(async () => ({ data: options.schedule ?? null, error: null })),
+      maybeSingle: vi.fn(async () => ({
+        data: table === 'video_uploads' ? (options.upload ?? null) : (options.schedule ?? null),
+        error: null,
+      })),
       delete: track('delete'),
       update: track('update'),
       limit: vi.fn(async () => ({ data: options.remaining ?? [], error: null })),
@@ -93,6 +97,15 @@ function mockSlotsClient(options: {
     data: options.historyError ? null : (options.history ?? []),
     error: options.historyError ?? null,
   }));
+  const uploadsChain = makeChain('video_uploads');
+  (uploadsChain as Record<string, unknown>).select = vi.fn((...args: unknown[]) => {
+    calls.push({ table: 'video_uploads', op: 'select', args });
+    const sawUpdate = calls.some((c) => c.table === 'video_uploads' && c.op === 'update');
+    if (sawUpdate) {
+      return Promise.resolve({ data: options.upload ? [{ id: 'upload-1' }] : [], error: null });
+    }
+    return uploadsChain;
+  });
   const promptVersionsChain = makeChain('prompt_versions');
   (promptVersionsChain as Record<string, unknown>).maybeSingle = vi.fn(async () => ({
     data: options.promptVersionError ? null : (options.promptVersion ?? null),
@@ -101,13 +114,15 @@ function mockSlotsClient(options: {
   const from = vi.fn((table: string) =>
     table === 'prompt_versions'
       ? promptVersionsChain
-      : table === 'scheduled_posts'
-        ? postsChain
-        : table === 'schedules'
-          ? schedulesChain
-          : table === 'scheduled_post_progress_history'
-            ? historyChain
-            : personasChain,
+      : table === 'video_uploads'
+        ? uploadsChain
+        : table === 'scheduled_posts'
+          ? postsChain
+          : table === 'schedules'
+            ? schedulesChain
+            : table === 'scheduled_post_progress_history'
+              ? historyChain
+              : personasChain,
   );
   const rpc = vi.fn(async () => ({
     data: options.rpcResult ?? 'deleted',
@@ -419,6 +434,43 @@ describe('PATCH /api/schedule/slots/[slotId]', () => {
     expect(response.status).toBe(200);
     const body = (await response.json()) as { success: boolean; slotAt: string };
     expect(body).toEqual({ success: true, slotAt });
+  });
+
+  it('extends the upload expiry to 24h after the new time when rescheduling an uploaded video', async () => {
+    const slotAt = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
+    const client = mockSlotsClient({
+      slot: { id: 'slot-1', schedule_id: 's1', status: 'ready', title: 'Old', media_kind: 'upload', media_ref: 'upload-1' },
+      schedule: { id: 's1', user_id: USER_ID },
+      upload: { id: 'upload-1', user_id: USER_ID, status: 'ready' },
+    });
+    mockAuth();
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await patchSlot(SLOT_ID, { slotAt });
+
+    expect(response.status).toBe(200);
+    const uploadUpdate = client.calls.find((c) => c.table === 'video_uploads' && c.op === 'update');
+    expect(uploadUpdate?.args?.[0]).toEqual({
+      expires_at: new Date(Date.parse(slotAt) + 24 * 60 * 60 * 1000).toISOString(),
+    });
+    const slotUpdate = client.calls.find((c) => c.table === 'scheduled_posts' && c.op === 'update');
+    expect(slotUpdate?.args?.[0]).toEqual({ slot_at: slotAt });
+  });
+
+  it('refuses to reschedule an uploaded video whose upload is no longer ready and leaves the slot untouched', async () => {
+    const slotAt = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
+    const client = mockSlotsClient({
+      slot: { id: 'slot-1', schedule_id: 's1', status: 'ready', title: 'Old', media_kind: 'upload', media_ref: 'upload-1' },
+      schedule: { id: 's1', user_id: USER_ID },
+      upload: { id: 'upload-1', user_id: USER_ID, status: 'consumed' },
+    });
+    mockAuth();
+    vi.mocked(createSupabaseServiceClient).mockReturnValue(client as never);
+
+    const response = await patchSlot(SLOT_ID, { slotAt });
+
+    expect(response.status).toBe(409);
+    expect(client.calls.some((c) => c.table === 'scheduled_posts' && c.op === 'update')).toBe(false);
   });
 
   it('edits the title and reschedules in one call', async () => {
@@ -1105,7 +1157,7 @@ describe('GET /api/schedule/slots/[slotId] generation facts', () => {
       SNAPSHOT_SCHEDULE_ROW,
     );
     expect(generation).toEqual({
-      prompt: null, voiceover: true,
+      prompt: null, voiceover: true, mediaKind: null,
       language: 'pt-BR',
       voiceId: 'ana_neural',
       videoAspect: '9:16',
@@ -1126,7 +1178,7 @@ describe('GET /api/schedule/slots/[slotId] generation facts', () => {
   it('omits nothing when the snapshot columns are null', async () => {
     const generation = await getGeneration(SLOT_DETAIL_ROW, SCHEDULE_ROW);
     expect(generation).toEqual({
-      prompt: null, voiceover: false,
+      prompt: null, voiceover: false, mediaKind: null,
       language: null,
       voiceId: null,
       videoAspect: null,
@@ -1385,7 +1437,7 @@ describe('slot id normalization', () => {
       client.calls
         .filter((c) => c.table === 'scheduled_posts' && c.op === 'select')
         .map((c) => c.args),
-    ).toEqual([['id, schedule_id, slot_at, status, title, error, published_at, task_id, voiceover, publish_outcomes, segments, prompt_version_id']]);
+    ).toEqual([['id, schedule_id, slot_at, status, title, error, published_at, task_id, voiceover, publish_outcomes, segments, prompt_version_id, media_kind, media_ref, media_content_type']]);
     expect(
       client.calls
         .filter((c) => c.table === 'scheduled_posts' && c.op === 'eq')

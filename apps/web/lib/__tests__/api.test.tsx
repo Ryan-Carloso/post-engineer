@@ -771,6 +771,7 @@ describe('api', () => {
         generation: {
           prompt: { slug: 'story-first', title: 'Story first', version: 3, source: 'official' },
           voiceover: true,
+          mediaKind: 'upload',
           language: 'pt-BR',
           voiceId: 'ana_neural',
           videoAspect: '9:16',
@@ -786,6 +787,7 @@ describe('api', () => {
     expect(payload.generation).toEqual({
       prompt: { slug: 'story-first', title: 'Story first', version: 3, source: 'official' },
       voiceover: true,
+      mediaKind: 'upload',
       language: 'pt-BR',
       voiceId: 'ana_neural',
       videoAspect: '9:16',
@@ -869,6 +871,7 @@ describe('api', () => {
     expect(payload.generation).toEqual({
       prompt: null,
       voiceover: false,
+      mediaKind: null,
       language: null,
       voiceId: null,
       videoAspect: null,
@@ -895,6 +898,7 @@ describe('api', () => {
     expect(payload.generation).toEqual({
       prompt: null,
       voiceover: false,
+      mediaKind: null,
       language: null,
       voiceId: null,
       videoAspect: null,

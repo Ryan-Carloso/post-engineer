@@ -16,10 +16,15 @@ export function buildGenerationRows(
       ? []
       : [{ label: t('postPrompt.label'), value: `${generation.prompt.title} · v${generation.prompt.version}` }]),
     { label: t('posts.generationPersonaLabel'), value: personaName },
-    {
-      label: t('posts.generationFaceLabel'),
-      value: generation.voiceover ? t('posts.generationVoiceover') : t('posts.generationWithFace'),
-    },
+    ...(generation.mediaKind !== null
+      ? [{
+        label: t('posts.generationMediaLabel'),
+        value: generation.mediaKind === 'image' ? t('posts.generationUploadedImage') : t('posts.generationUploadedVideo'),
+      }]
+      : [{
+        label: t('posts.generationFaceLabel'),
+        value: generation.voiceover ? t('posts.generationVoiceover') : t('posts.generationWithFace'),
+      }]),
   ];
   if (generation.language !== null) {
     rows.push({ label: t('posts.generationLanguageLabel'), value: generation.language });

@@ -16,6 +16,7 @@ import {
   createSupabaseVideoUploadStore,
   type VideoUploadRow,
 } from '@/lib/videos/signed-upload';
+import { SCHEDULED_UPLOAD_EXPIRY_MS } from '@/lib/videos/upload-expiry';
 import {
   UPLOAD_SLOT_REFERENCE_INDEX,
   assertUploadNotScheduled,
@@ -90,7 +91,7 @@ async function scheduleExistingMedia(ctx: PublishExistingContext): Promise<NextR
       mediaRef = ctx.uploadRow.id;
       mediaContentType = ctx.uploadRow.declared_content_type ?? ctx.uploadRow.detected_content_type ?? 'video/mp4';
       const extended = await uploadStore.updateUpload(ctx.uploadRow.id, 'ready', {
-        expires_at: new Date(Date.parse(slotAt) + 24 * 60 * 60 * 1000).toISOString(),
+        expires_at: new Date(Date.parse(slotAt) + SCHEDULED_UPLOAD_EXPIRY_MS).toISOString(),
       });
       if (!extended) {
         return apiErrorResponse(409, formatErrorMessage(ERROR_CODES.VIDEO_UPLOAD_CONSUMED), {

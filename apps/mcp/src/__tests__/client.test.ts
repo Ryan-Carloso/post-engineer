@@ -704,6 +704,7 @@ describe('PostEngineerClient', () => {
         status: 'awaiting',
         title: 'Hello',
         taskId: null,
+        media: null,
         progress: 0,
         stage: null,
         error: null,
@@ -740,6 +741,7 @@ describe('PostEngineerClient', () => {
       persona: null,
       generation: {
         voiceover: true,
+        mediaKind: null,
         language: null,
         voiceId: null,
         videoAspect: '9:16',

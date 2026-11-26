@@ -105,6 +105,7 @@ describe('GET /api/posts/[id]', () => {
         error: null,
         publishedAt: null,
         taskId: 'task-1',
+        media: null,
         progress: 42,
         stage: 'video',
         retryable: null,
@@ -141,6 +142,7 @@ describe('GET /api/posts/[id]', () => {
       generation: {
         prompt: null,
         voiceover: false,
+        mediaKind: null,
         language: null,
         voiceId: null,
         videoAspect: null,
